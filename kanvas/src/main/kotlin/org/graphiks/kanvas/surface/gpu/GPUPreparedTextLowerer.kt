@@ -52,14 +52,14 @@ internal object GPUPreparedTextLowerer {
         operationIndex: Int,
         target: GPUTargetFacts,
         capabilities: GPUCapabilities,
-        materialPlan: GPUPreparedTextMaterialPlan? = null,
+        materialBridge: W5aPreparedTextMaterialBridge? = null,
     ): GPUPreparedTextLowering = lower(
         operation = operation,
         operationIndex = operationIndex,
         target = target,
         capabilities = capabilities,
         fontResolver = GPUPreparedFontTypefaceResolver,
-        materialPlan = materialPlan,
+        materialBridge = materialBridge,
     )
 
     /**
@@ -74,7 +74,7 @@ internal object GPUPreparedTextLowerer {
         target: GPUTargetFacts,
         capabilities: GPUCapabilities,
         fontResolver: GPUPreparedTextFontResolver,
-        materialPlan: GPUPreparedTextMaterialPlan? = null,
+        materialBridge: W5aPreparedTextMaterialBridge? = null,
     ): GPUPreparedTextLowering {
         val fontResolution = try {
             fontResolver.resolve(operation.blob.typeface)
@@ -359,6 +359,15 @@ internal object GPUPreparedTextLowerer {
                 ),
             )
             representations += preparedRepresentation
+        }
+        // W5a owns only homogeneous A8 sub-runs.  Color glyphs retain their historical material
+        // route because their resolved layers are not an A8 coverage multiplier.
+        val materialPlan = if (
+            representations.all { it == GPUPreparedTextRepresentation.A8_MASK }
+        ) {
+            materialBridge?.materialFor(operationIndex)
+        } else {
+            null
         }
 
         val clipProof = when (

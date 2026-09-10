@@ -86,7 +86,7 @@ internal object GPUPreparedTextFramePreparer {
                     operationIndex = operationIndex,
                     target = target,
                     capabilities = capabilities,
-                    materialPlan = materialBridge?.materialFor(operationIndex),
+                    materialBridge = materialBridge,
                 )
             ) {
                 is GPUPreparedTextLowering.Ready -> {

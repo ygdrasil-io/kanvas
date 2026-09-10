@@ -1,12 +1,8 @@
 package org.graphiks.kanvas.surface.gpu
 
-import java.util.Collections
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.gpu.plan.EffectiveMaterialPlanner
-import org.graphiks.kanvas.gpu.plan.MaterialPlanEntry
-import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
-import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.render.ir.DisplayOpSceneAdapter
@@ -15,18 +11,36 @@ import org.graphiks.kanvas.render.ir.SceneCommand
 import org.graphiks.kanvas.render.ir.SceneExtent
 
 /**
- * Captures only the W5a text material subset before prepared glyph lowering.
+ * Captures only W5a text candidates before prepared glyph lowering.
  *
- * Text keeps its established glyph, atlas, and coverage preparation.  This bridge owns only
- * the immutable Solid/Opacity material pair, so later W5 material kinds remain outside text
- * ownership and follow their historical admission path.
+ * Text keeps its established glyph, atlas, and coverage preparation.  A sealed W5a material
+ * pair is issued only after the lowerer has proved that the whole prepared run is A8 coverage.
+ * Thus color or mixed runs never acquire a material-plan authority and retain their historical
+ * material route.
  */
-internal data class W5aPreparedTextMaterialBridge(
-    val table: MaterialPlanTable,
-    private val refsByOperationIndex: Map<Int, MaterialPlanRef>,
+internal class W5aPreparedTextMaterialBridge private constructor(
+    private val candidatesByOperationIndex: Map<Int, DisplayOp.DrawText>,
+    private val width: Int,
+    private val height: Int,
 ) {
-    fun materialFor(operationIndex: Int): GPUPreparedTextMaterialPlan? =
-        refsByOperationIndex[operationIndex]?.let { ref -> GPUPreparedTextMaterialPlan(table, ref) }
+    fun materialFor(operationIndex: Int): GPUPreparedTextMaterialPlan? {
+        val operation = candidatesByOperationIndex[operationIndex] ?: return null
+        // Scene capture is an optional W5a admission step. Invalid/non-finite inputs must
+        // continue to prepared-text validation so its typed diagnostic is preserved rather
+        // than being replaced by a generic frame error.
+        val captured = runCatching {
+            DisplayOpSceneAdapter.capture(
+                operations = listOf(operation),
+                extent = SceneExtent(width, height),
+                colorSpace = ColorSpace.SRGB,
+            )
+        }.getOrNull() as? SceneCaptureResult.Captured ?: return null
+        val draw = captured.scene.singleOrNull() as? SceneCommand.Draw ?: return null
+        // W5b and later material kinds never acquire W5a text ownership.
+        val planned = EffectiveMaterialPlanner.plan(draw.node)
+            as? EffectiveMaterialPlanner.Result.Ready ?: return null
+        return GPUPreparedTextMaterialPlan(planned.table, planned.root)
+    }
 
     internal companion object {
         fun capture(
@@ -34,30 +48,18 @@ internal data class W5aPreparedTextMaterialBridge(
             width: Int,
             height: Int,
         ): W5aPreparedTextMaterialBridge? {
-            val entries = mutableListOf<MaterialPlanEntry>()
-            val refs = linkedMapOf<Int, MaterialPlanRef>()
+            val candidates = linkedMapOf<Int, DisplayOp.DrawText>()
             operations.forEachIndexed { operationIndex, operation ->
                 if (operation !is DisplayOp.DrawText || !operation.isW5aPreparedTextCandidate()) {
                     return@forEachIndexed
                 }
-                val captured = DisplayOpSceneAdapter.capture(
-                    operations = listOf(operation),
-                    extent = SceneExtent(width, height),
-                    colorSpace = ColorSpace.SRGB,
-                ) as? SceneCaptureResult.Captured ?: error("invalid.material.w5a_text_capture")
-                val draw = captured.scene.singleOrNull() as? SceneCommand.Draw
-                    ?: error("invalid.material.w5a_text_draw")
-                // W5b and later material kinds must not acquire W5a text ownership.
-                val planned = EffectiveMaterialPlanner.plan(draw.node)
-                    as? EffectiveMaterialPlanner.Result.Ready ?: return@forEachIndexed
-                val offset = entries.size
-                entries += planned.table.entries()
-                refs[operationIndex] = MaterialPlanRef(offset + planned.root.indexI32)
+                candidates[operationIndex] = operation
             }
-            if (entries.isEmpty()) return null
+            if (candidates.isEmpty()) return null
             return W5aPreparedTextMaterialBridge(
-                table = MaterialPlanTable.of(entries),
-                refsByOperationIndex = Collections.unmodifiableMap(LinkedHashMap(refs)),
+                candidatesByOperationIndex = candidates,
+                width = width,
+                height = height,
             )
         }
 

@@ -700,4 +700,55 @@ class W5aMaterialSurfacePixelTest {
         )
     }
 
+    @Test
+    fun `Picture playback retains prepared A8 glyph snapshots after caller list mutation`() {
+        val glyphs = mutableListOf(GPUPreparedTextTestFixtures.A8_GLYPH_ID.toUShort())
+        val positions = mutableListOf(Point2F32(0f, 0f))
+        val blob = TextBlob(
+            glyphRuns = listOf(KanvasGlyphRun(glyphs, positions, fontSize = 48f)),
+            typeface = FontTypeface(
+                GPUPreparedTextTestFixtures.colrFontBytesWithForegroundLayer(),
+                "W5a Picture A8 snapshot fixture",
+            ),
+            fontSize = 48f,
+        )
+        val paints = listOf(
+            Paint(
+                color = ColorARGB.of(149, 1, 2, 3),
+                shader = Shader.Opacity(Shader.SolidColor(ColorARGB.of(211, 231, 83, 37)), 0.625f),
+            ),
+            Paint(
+                color = ColorARGB.of(173, 4, 5, 6),
+                shader = Shader.Opacity(Shader.SolidColor(ColorARGB.of(197, 67, 191, 113)), 0.5f),
+            ),
+            Paint(
+                color = ColorARGB.of(137, 7, 8, 9),
+                shader = Shader.Opacity(Shader.SolidColor(ColorARGB.of(229, 37, 149, 223)), 0.4f),
+            ),
+        )
+        fun record(): Picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 40f, 80f)).also { canvas ->
+                paints.forEach { paint -> canvas.drawText(blob, 4.25f, 58.5f, paint) }
+            }
+        }.finishRecordingAsPicture()
+
+        val baseline = record()
+        val captured = record()
+        glyphs[0] = 999u
+        positions[0] = Point2F32(Float.NaN, Float.NaN)
+        val expectedSurface = Surface(40, 80)
+        expectedSurface.canvas { baseline.playback(this) }
+        val actualSurface = Surface(40, 80)
+        actualSurface.canvas { captured.playback(this) }
+
+        val expectedPixels = expectedSurface.render().pixels
+        // The 4.25 / 58.5 placement makes this rectangle glyph's leading corner partially A8
+        // covered; it also ensures playback retained visible geometry before comparison.
+        assertTrue(
+            expectedPixels.copyOfRange((40 * 40 + 4) * 4, (40 * 40 + 5) * 4)
+                .any { channel -> channel != 0u.toUByte() },
+        )
+        assertContentEquals(expectedPixels, actualSurface.render().pixels)
+    }
+
 }
