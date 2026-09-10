@@ -82,6 +82,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipPassAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.W3SessionScratchV1
 import org.graphiks.kanvas.gpu.renderer.passes.W4aSessionScratchV1
 import org.graphiks.kanvas.gpu.renderer.passes.W4bSessionScratchV1
+import org.graphiks.kanvas.gpu.renderer.passes.W5aAnalyticRRectSessionScratchV2
+import org.graphiks.kanvas.gpu.renderer.passes.W5aAnalyticRectSessionScratchV2
 import org.graphiks.kanvas.gpu.renderer.passes.W4cSessionScratchV1
 import org.graphiks.kanvas.gpu.renderer.passes.W4dSessionScratchV1
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
@@ -1033,6 +1035,19 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 scratch = w4cScratch,
             )
         }
+        val w5aRRectScratch = candidateRenderSteps.flatMap { it.drawPackets }
+            .mapNotNull { it.corePrimitivePreparedAuthority?.w5aAnalyticRRectSessionScratch }
+            .firstOrNull()
+        if (w5aRRectScratch != null) {
+            if (!w5aRRectScratch.validatesMaterialPlanVersion()) return refused(
+                "invalid.native-core-primitive.w5a-rrect-material",
+                "W5a RRect material-plan version witness is invalid during materialization.",
+            )
+            val render = candidateRenderSteps.singleOrNull() ?: return refused(
+                "invalid.native-core-primitive.w5a-rrect-material", "W5a RRect requires one render envelope.",
+            )
+            return materializeW4bSessionScratch(framePlan, encoderPlan, resources, generationSeal, render, w5aRRectScratch.payloadFacts)
+        }
         if (framePlan.hasSealedW4bSessionMarker()) {
             val w4bRender = candidateRenderSteps.singleOrNull()
                 ?: return refused(
@@ -1064,6 +1079,19 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 w4bRender,
                 w4bScratch,
             )
+        }
+        val w5aRectScratch = candidateRenderSteps.flatMap { it.drawPackets }
+            .mapNotNull { it.corePrimitivePreparedAuthority?.w5aAnalyticRectSessionScratch }
+            .firstOrNull()
+        if (w5aRectScratch != null) {
+            if (!w5aRectScratch.validatesMaterialPlanVersion()) return refused(
+                "invalid.native-core-primitive.w5a-rect-material",
+                "W5a Rect material-plan version witness is invalid during materialization.",
+            )
+            val render = candidateRenderSteps.singleOrNull() ?: return refused(
+                "invalid.native-core-primitive.w5a-rect-material", "W5a Rect requires one render envelope.",
+            )
+            return materializeW4aSessionScratch(framePlan, encoderPlan, resources, generationSeal, render, w5aRectScratch.payloadFacts)
         }
         if (framePlan.hasSealedW4aSessionMarker()) {
             val w4aRender = candidateRenderSteps.singleOrNull()
@@ -5165,7 +5193,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 } else {
                     org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.ScissorOnly(scissor)
                 }
-                authority.w4bSessionScratch !== scratch || authority.w3SessionScratch != null ||
+                (authority.w4bSessionScratch !== scratch &&
+                    authority.w5aAnalyticRRectSessionScratch?.payloadFacts !== scratch) || authority.w3SessionScratch != null ||
                     authority.w4aSessionScratch != null || authority.uniformSlabSeal != null ||
                     authority.analyticClipUniformSeal != null || authority.analyticIntersectionUniformSeal != null ||
                     authority.coverageMaskUniformSlabSeal != null || authority.structuralPipelineKey != scratch.structuralPipelineKey ||
@@ -5505,7 +5534,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                             coverage.bounds.bottom == scissorBounds.bottom.toFloat()
                     else -> false
                 }
-                authority.w4aSessionScratch !== scratch || authority.w3SessionScratch != null ||
+                (authority.w4aSessionScratch !== scratch &&
+                    authority.w5aAnalyticRectSessionScratch?.payloadFacts !== scratch) || authority.w3SessionScratch != null ||
                     authority.uniformSlabSeal != null || authority.analyticClipUniformSeal != null ||
                     authority.analyticIntersectionUniformSeal != null ||
                     authority.coverageMaskUniformSlabSeal != null ||

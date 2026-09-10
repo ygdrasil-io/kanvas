@@ -33,6 +33,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStr
 import org.graphiks.kanvas.gpu.renderer.passes.W3SessionScratchV1
 import org.graphiks.kanvas.gpu.renderer.passes.W4aSessionScratchV1
 import org.graphiks.kanvas.gpu.renderer.passes.W4bSessionScratchV1
+import org.graphiks.kanvas.gpu.renderer.passes.W5aAnalyticRRectSessionScratchV2
+import org.graphiks.kanvas.gpu.renderer.passes.W5aAnalyticRectSessionScratchV2
 import org.graphiks.kanvas.gpu.renderer.passes.W4cSessionScratchV1
 import org.graphiks.kanvas.gpu.renderer.passes.W4dSessionScratchV1
 import org.graphiks.kanvas.gpu.renderer.passes.w4dGeneralCoverageMaskConsumerUniform64
@@ -429,10 +431,30 @@ internal class GPUFramePreflighter(
         val hasW4bSessionMarker = framePlan.hasSealedW4bSessionMarker()
         val hasW4cSessionMarker = framePlan.hasSealedW4cSessionMarker()
         val hasW4dSessionMarker = framePlan.hasSealedW4dSessionMarker()
+        val w5aRectScratch = renderPackets
+            .mapNotNull { it.corePrimitivePreparedAuthority?.w5aAnalyticRectSessionScratch }
+            .firstOrNull()
+        if (w5aRectScratch != null &&
+            (renderPackets.any { it.corePrimitivePreparedAuthority?.w5aAnalyticRectSessionScratch !== w5aRectScratch } ||
+                !w5aRectScratch.validatesMaterialPlanVersion() ||
+                !hasExactW4aSessionScratch(framePlan, w5aRectScratch.payloadFacts))
+        ) return GPUFramePreflightResult.Refused(
+            diagnostic("invalid.preflight.w5a_rect_material", "W5a Rect material-plan V2 authority is invalid."),
+        )
+        val w5aRRectScratch = renderPackets
+            .mapNotNull { it.corePrimitivePreparedAuthority?.w5aAnalyticRRectSessionScratch }
+            .firstOrNull()
+        if (w5aRRectScratch != null &&
+            (renderPackets.any { it.corePrimitivePreparedAuthority?.w5aAnalyticRRectSessionScratch !== w5aRRectScratch } ||
+                !w5aRRectScratch.validatesMaterialPlanVersion() ||
+                !hasExactW4bSessionScratch(framePlan, w5aRRectScratch.payloadFacts))
+        ) return GPUFramePreflightResult.Refused(
+            diagnostic("invalid.preflight.w5a_rrect_material", "W5a RRect material-plan V2 authority is invalid."),
+        )
         val w4aScratch = renderPackets
             .mapNotNull { packet -> packet.corePrimitivePreparedAuthority?.w4aSessionScratch }
             .firstOrNull()
-        if (hasW4aSessionMarker &&
+        if (hasW4aSessionMarker && w5aRectScratch == null &&
             (w4aScratch == null ||
                 renderPackets.any { packet ->
                     packet.corePrimitivePreparedAuthority?.w4aSessionScratch !== w4aScratch
@@ -449,7 +471,7 @@ internal class GPUFramePreflighter(
         val w4bScratch = renderPackets
             .mapNotNull { packet -> packet.corePrimitivePreparedAuthority?.w4bSessionScratch }
             .firstOrNull()
-        if (hasW4bSessionMarker &&
+        if (hasW4bSessionMarker && w5aRRectScratch == null &&
             (w4bScratch == null ||
                 renderPackets.any { packet ->
                     packet.corePrimitivePreparedAuthority?.w4bSessionScratch !== w4bScratch
@@ -5119,7 +5141,8 @@ internal class GPUFramePreflighter(
                         coverage.bounds.right == scissor.right.toFloat() && coverage.bounds.bottom == scissor.bottom.toFloat()
                 else -> false
             }
-            if (authority.w4bSessionScratch !== scratch || authority.w3SessionScratch != null ||
+            if ((authority.w4bSessionScratch !== scratch &&
+                    authority.w5aAnalyticRRectSessionScratch?.payloadFacts !== scratch) || authority.w3SessionScratch != null ||
                 authority.w4aSessionScratch != null || authority.uniformSlabSeal != null ||
                 authority.analyticClipUniformSeal != null || authority.analyticIntersectionUniformSeal != null ||
                 authority.coverageMaskUniformSlabSeal != null ||
@@ -5355,7 +5378,8 @@ internal class GPUFramePreflighter(
                         coverage.bounds.bottom == scissor.bottom.toFloat()
                 else -> false
             }
-            if (authority.w4aSessionScratch !== scratch || authority.w3SessionScratch != null ||
+            if ((authority.w4aSessionScratch !== scratch &&
+                    authority.w5aAnalyticRectSessionScratch?.payloadFacts !== scratch) || authority.w3SessionScratch != null ||
                 authority.uniformSlabSeal != null || authority.analyticClipUniformSeal != null ||
                 authority.analyticIntersectionUniformSeal != null || authority.coverageMaskUniformSlabSeal != null ||
                 authority.structuralPipelineKey != scratch.structuralPipelineKey ||
@@ -8930,6 +8954,40 @@ internal class GPUFramePreflighter(
                             "$lane.${plannedPathScratch.planId}.scratch.uniform.${packet.commandIdValue}",
                         ),
                     )
+                }
+                val w5aRRectScratch = step.drawPackets.firstOrNull()
+                    ?.corePrimitivePreparedAuthority?.w5aAnalyticRRectSessionScratch
+                if (w5aRRectScratch != null && step.drawPackets.all {
+                        it.corePrimitivePreparedAuthority?.w5aAnalyticRRectSessionScratch === w5aRRectScratch
+                    }
+                ) {
+                    val facts = w5aRRectScratch.payloadFacts
+                    return listOf(
+                        key(GPUPreparedNativeOperandRole.RenderColorTarget, GPUPreparedNativeOperandKind.TextureView, targetResourceLabel),
+                        key(GPUPreparedNativeOperandRole.RenderPipeline, GPUPreparedNativeOperandKind.RenderPipeline, "w4b.${facts.planId}.pipeline"),
+                        key(GPUPreparedNativeOperandRole.RenderVertexBuffer, GPUPreparedNativeOperandKind.Buffer, "w4b.${facts.planId}.scratch.vertex"),
+                        key(GPUPreparedNativeOperandRole.RenderIndexBuffer, GPUPreparedNativeOperandKind.Buffer, "w4b.${facts.planId}.scratch.index"),
+                    ) + step.drawPackets.map { packet ->
+                        key(GPUPreparedNativeOperandRole.RenderBindGroup, GPUPreparedNativeOperandKind.BindGroup,
+                            "w4b.${facts.planId}.scratch.uniform.${packet.commandIdValue}")
+                    }
+                }
+                val w5aRectScratch = step.drawPackets.firstOrNull()
+                    ?.corePrimitivePreparedAuthority?.w5aAnalyticRectSessionScratch
+                if (w5aRectScratch != null && step.drawPackets.all {
+                        it.corePrimitivePreparedAuthority?.w5aAnalyticRectSessionScratch === w5aRectScratch
+                    }
+                ) {
+                    val facts = w5aRectScratch.payloadFacts
+                    return listOf(
+                        key(GPUPreparedNativeOperandRole.RenderColorTarget, GPUPreparedNativeOperandKind.TextureView, targetResourceLabel),
+                        key(GPUPreparedNativeOperandRole.RenderPipeline, GPUPreparedNativeOperandKind.RenderPipeline, "w4a.${facts.planId}.pipeline"),
+                        key(GPUPreparedNativeOperandRole.RenderVertexBuffer, GPUPreparedNativeOperandKind.Buffer, "w4a.${facts.planId}.scratch.vertex"),
+                        key(GPUPreparedNativeOperandRole.RenderIndexBuffer, GPUPreparedNativeOperandKind.Buffer, "w4a.${facts.planId}.scratch.index"),
+                    ) + step.drawPackets.map { packet ->
+                        key(GPUPreparedNativeOperandRole.RenderBindGroup, GPUPreparedNativeOperandKind.BindGroup,
+                            "w4a.${facts.planId}.scratch.uniform.${packet.commandIdValue}")
+                    }
                 }
                 val w4bScratch = step.drawPackets.firstOrNull()
                     ?.corePrimitivePreparedAuthority?.w4bSessionScratch

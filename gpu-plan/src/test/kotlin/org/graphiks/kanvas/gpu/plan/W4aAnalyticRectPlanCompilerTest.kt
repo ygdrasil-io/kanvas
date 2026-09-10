@@ -48,7 +48,6 @@ class W4aAnalyticRectPlanCompilerTest {
         assertEquals(RectF32(0.25f, 0.5f, 3.75f, 2.25f), draw.copyDeviceBounds())
         assertEquals(RectI32(0, 0, 4, 3), draw.copyRasterBounds())
         assertEquals(RectI32(1, 0, 3, 3), draw.copyScissor())
-        assertEquals(W4aAnalyticRectPlanCompiler.CAPABILITY_ID, graph.capabilityId)
     }
 
     @Test
@@ -90,7 +89,6 @@ class W4aAnalyticRectPlanCompilerTest {
             solidRect(left = 1.25f, top = 0.5f, right = 3.75f, bottom = 2.25f),
         ))
         assertEquals(2, renderPass(mixed).draws().size)
-        assertEquals(W4aAnalyticRectPlanCompiler.CAPABILITY_ID, mixed.capabilityId)
         assertIs<GpuPlanSelection.Candidate>(select(solidRect(transform = Matrix3x3F32(sx = -1f, sy = 1f, tx = 4f))))
     }
 

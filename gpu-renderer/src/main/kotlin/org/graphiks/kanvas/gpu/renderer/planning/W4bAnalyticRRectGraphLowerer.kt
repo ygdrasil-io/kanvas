@@ -50,6 +50,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.W4bSessionScratchDrawV1
 import org.graphiks.kanvas.gpu.renderer.passes.W4bSessionScratchV1
+import org.graphiks.kanvas.gpu.renderer.passes.W5aMaterialPlanVersionWitnessV2
 import org.graphiks.kanvas.gpu.renderer.passes.buildCorePrimitiveAnalyticShapeUniform
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStructuralKey
@@ -227,6 +228,14 @@ internal class W4bAnalyticRRectGraphLowerer {
                 copyBytesPerRowAlignment = request.graph.capabilities.copyBytesPerRowAlignment.toLong(),
                 readbackBytesPerRow = graph.readback.bytesPerRow,
                 scratch = scratch,
+                w5aMaterialWitness = if (request.graph.capabilityId == W4bAnalyticRRectPlanCompiler.CAPABILITY_ID) {
+                    W5aMaterialPlanVersionWitnessV2.issue(
+                        graph.materialPlanTable,
+                        graph.draws.map(AnalyticRRectDraw::materialAuthority),
+                    ) ?: return invalid("W5a RRect material-plan version witness is invalid.")
+                } else {
+                    null
+                },
             ),
         )) {
             is GPUCorePrimitivePreparedFrameResult.Recorded ->

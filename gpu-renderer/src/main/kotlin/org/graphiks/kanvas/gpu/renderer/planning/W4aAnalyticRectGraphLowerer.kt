@@ -48,6 +48,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard
 import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.W4aSessionScratchDrawV1
+import org.graphiks.kanvas.gpu.renderer.passes.W5aMaterialPlanVersionWitnessV2
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveStructuralColorFormat
@@ -212,6 +213,14 @@ internal class W4aAnalyticRectGraphLowerer {
                 maxBufferSize = maxBufferSize,
                 maxDynamicUniformBuffersPerPipelineLayout = maxDynamicUniformBuffers,
                 drawSnapshots = builtPackets.map(W4aBuiltPacket::scratchDraw),
+                w5aMaterialWitness = if (request.graph.capabilityId == W4aAnalyticRectPlanCompiler.CAPABILITY_ID) {
+                    W5aMaterialPlanVersionWitnessV2.issue(
+                        graph.materialPlanTable,
+                        graph.draws.map(AnalyticRectDraw::materialAuthority),
+                    ) ?: return invalid("W5a Rect material-plan version witness is invalid.")
+                } else {
+                    null
+                },
             ),
         )) {
             is GPUCorePrimitivePreparedFrameResult.Recorded ->

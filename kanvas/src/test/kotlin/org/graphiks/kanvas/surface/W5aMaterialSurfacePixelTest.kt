@@ -163,6 +163,23 @@ class W5aMaterialSurfacePixelTest {
     fun `fractional Rect applies nested shader opacity and Paint alpha after SrcOver coverage`() {
         val destinationColor = ColorARGB.of(211, 41, 167, 83)
         val sourceColor = ColorARGB.of(197, 233, 89, 31)
+        val recorder = PictureRecorder()
+        val recordedPaint = Paint(
+            color = ColorARGB.of(153, 11, 13, 17),
+            shader = Shader.Opacity(Shader.Opacity(Shader.SolidColor(sourceColor), 0.5f), 0.8f),
+            antiAlias = true,
+        )
+        recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f)).drawRect(
+            RectF32.ofLTRB(0.25f, 0.25f, 1.25f, 1.25f),
+            recordedPaint,
+        )
+        // Paint and the Solid/Opacity graph are immutable. Rebinding this caller reference after
+        // capture is the strongest public snapshot boundary those value inputs expose.
+        val callerReboundPaint = Paint(shader = Shader.SolidColor(ColorARGB.of(255, 1, 2, 3)))
+        callerReboundPaint.hashCode()
+        val restoredForeground = requireNotNull(
+            Picture.fromByteArray(recorder.finishRecordingAsPicture().toByteArray()),
+        )
         val surface = Surface(4, 4)
         surface.canvas {
             drawRect(
@@ -173,14 +190,7 @@ class W5aMaterialSurfacePixelTest {
                     antiAlias = true,
                 ),
             )
-            drawRect(
-                RectF32.ofLTRB(0.25f, 0.25f, 1.25f, 1.25f),
-                Paint(
-                    color = ColorARGB.of(153, 11, 13, 17),
-                    shader = Shader.Opacity(Shader.Opacity(Shader.SolidColor(sourceColor), 0.5f), 0.8f),
-                    antiAlias = true,
-                ),
-            )
+            restoredForeground.playback(this)
         }
 
         val result = surface.render()
@@ -203,9 +213,26 @@ class W5aMaterialSurfacePixelTest {
     fun `nontrivial fractional RRect applies nested shader opacity and Paint alpha after SrcOver coverage`() {
         val destinationColor = ColorARGB.of(203, 29, 109, 227)
         val sourceColor = ColorARGB.of(191, 239, 71, 43)
-        val surface = Surface(4, 4)
         val background = RRectF32.of(RectF32.ofLTRB(0f, 0f, 4f, 4f), CornerRadiiF32.of(0.5f))
         val foreground = RRectF32.of(RectF32.ofLTRB(0.25f, 0.25f, 3.75f, 3.75f), CornerRadiiF32.of(0.5f))
+        val recorder = PictureRecorder()
+        val recordedPaint = Paint(
+            color = ColorARGB.of(149, 31, 37, 41),
+            shader = Shader.Opacity(Shader.Opacity(Shader.SolidColor(sourceColor), 0.5f), 0.8f),
+            antiAlias = true,
+        )
+        recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f)).drawRRect(foreground, recordedPaint)
+        // Immutable value inputs cannot be mutated after capture; rebinding demonstrates the
+        // caller boundary while serialize/restore/playback proves the public snapshot path.
+        val callerReboundForeground = RRectF32.of(
+            RectF32.ofLTRB(0f, 0f, 1f, 1f),
+            CornerRadiiF32.of(0f),
+        )
+        callerReboundForeground.hashCode()
+        val restoredForeground = requireNotNull(
+            Picture.fromByteArray(recorder.finishRecordingAsPicture().toByteArray()),
+        )
+        val surface = Surface(4, 4)
         surface.canvas {
             drawRRect(
                 background,
@@ -215,14 +242,7 @@ class W5aMaterialSurfacePixelTest {
                     antiAlias = true,
                 ),
             )
-            drawRRect(
-                foreground,
-                Paint(
-                    color = ColorARGB.of(149, 31, 37, 41),
-                    shader = Shader.Opacity(Shader.Opacity(Shader.SolidColor(sourceColor), 0.5f), 0.8f),
-                    antiAlias = true,
-                ),
-            )
+            restoredForeground.playback(this)
         }
 
         val result = surface.render()

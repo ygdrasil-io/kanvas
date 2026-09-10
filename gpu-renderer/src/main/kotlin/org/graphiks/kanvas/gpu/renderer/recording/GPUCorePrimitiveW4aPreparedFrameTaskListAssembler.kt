@@ -25,6 +25,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchAdjacency
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
 import org.graphiks.kanvas.gpu.renderer.passes.W4aSessionScratchDrawV1
 import org.graphiks.kanvas.gpu.renderer.passes.W4aSessionScratchV1
+import org.graphiks.kanvas.gpu.renderer.passes.W5aAnalyticRectSessionScratchV2
+import org.graphiks.kanvas.gpu.renderer.passes.W5aMaterialPlanVersionWitnessV2
 import org.graphiks.kanvas.gpu.renderer.passes.buildCorePrimitiveAnalyticShapeUniform
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStructuralKey
@@ -83,6 +85,7 @@ internal data class GPUCorePrimitiveW4aPreparedFrameRequest(
     val maxBufferSize: Long,
     val maxDynamicUniformBuffersPerPipelineLayout: Long,
     val drawSnapshots: List<W4aSessionScratchDrawV1>,
+    val w5aMaterialWitness: W5aMaterialPlanVersionWitnessV2? = null,
 )
 
 /**
@@ -250,6 +253,9 @@ internal class GPUCorePrimitiveW4aPreparedFrameTaskListAssembler {
         } catch (_: IllegalArgumentException) {
             return null
         }
+        val w5aScratch = request.w5aMaterialWitness?.let { witness ->
+            W5aAnalyticRectSessionScratchV2.issue(scratch, witness) ?: return null
+        }
 
         return sealedPayloads.map { payload ->
             val packet = payload.packet
@@ -273,12 +279,15 @@ internal class GPUCorePrimitiveW4aPreparedFrameTaskListAssembler {
             }
             try {
                 packet.attachCorePrimitivePreparedAuthority(
-                    GPUCorePrimitivePreparedPacketAuthority.plannedW4a(
-                        structuralPipelineKey = structuralKey,
-                        renderPipelineKey = publicPipelineKey,
-                        analyticShapeUniformSeal = seal,
-                        scratch = scratch,
-                    ),
+                    if (w5aScratch == null) {
+                        GPUCorePrimitivePreparedPacketAuthority.plannedW4a(
+                            structuralKey, publicPipelineKey, seal, scratch,
+                        )
+                    } else {
+                        GPUCorePrimitivePreparedPacketAuthority.plannedW5aRect(
+                            structuralKey, publicPipelineKey, seal, w5aScratch,
+                        )
+                    },
                 )
             } catch (_: IllegalArgumentException) {
                 return null

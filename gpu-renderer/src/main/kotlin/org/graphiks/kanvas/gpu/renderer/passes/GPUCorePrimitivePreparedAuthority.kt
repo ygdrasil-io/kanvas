@@ -1796,6 +1796,8 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
     val w3SessionScratch: W3SessionScratchV1? = null,
     val w4aSessionScratch: W4aSessionScratchV1? = null,
     val w4bSessionScratch: W4bSessionScratchV1? = null,
+    val w5aAnalyticRectSessionScratch: W5aAnalyticRectSessionScratchV2? = null,
+    val w5aAnalyticRRectSessionScratch: W5aAnalyticRRectSessionScratchV2? = null,
     val w4cSessionScratch: W4cSessionScratchV1? = null,
     val w4dSessionScratch: W4dSessionScratchV1? = null,
     private val scratchLane: ScratchLane,
@@ -1824,6 +1826,8 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
         null,
         null,
         null,
+        null,
+        null,
         ScratchLane.Legacy,
     )
 
@@ -1832,6 +1836,8 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
             w3SessionScratch,
             w4aSessionScratch,
             w4bSessionScratch,
+            w5aAnalyticRectSessionScratch,
+            w5aAnalyticRRectSessionScratch,
             w4cSessionScratch,
             w4dSessionScratch,
         ).count { it != null }
@@ -1850,22 +1856,37 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
             }
             ScratchLane.W3 -> require(
                 w3SessionScratch != null && w4aSessionScratch == null && w4bSessionScratch == null &&
+                    w5aAnalyticRectSessionScratch == null && w5aAnalyticRRectSessionScratch == null &&
                     w4cSessionScratch == null && w4dSessionScratch == null,
             ) { "A W3 CorePrimitive prepared packet requires its W3 session scratch" }
             ScratchLane.W4a -> require(
                 w3SessionScratch == null && w4aSessionScratch != null && w4bSessionScratch == null &&
+                    w5aAnalyticRectSessionScratch == null && w5aAnalyticRRectSessionScratch == null &&
                     w4cSessionScratch == null && w4dSessionScratch == null,
             ) { "A W4a CorePrimitive prepared packet requires its W4a session scratch" }
             ScratchLane.W4b -> require(
                 w3SessionScratch == null && w4aSessionScratch == null && w4bSessionScratch != null &&
+                    w5aAnalyticRectSessionScratch == null && w5aAnalyticRRectSessionScratch == null &&
                     w4cSessionScratch == null && w4dSessionScratch == null,
             ) { "A W4b CorePrimitive prepared packet requires its W4b session scratch" }
+            ScratchLane.W5aRect -> require(
+                w3SessionScratch == null && w4aSessionScratch == null && w4bSessionScratch == null &&
+                    w5aAnalyticRectSessionScratch != null && w5aAnalyticRRectSessionScratch == null &&
+                    w4cSessionScratch == null && w4dSessionScratch == null,
+            ) { "A W5a Rect CorePrimitive packet requires its V2 material scratch" }
+            ScratchLane.W5aRRect -> require(
+                w3SessionScratch == null && w4aSessionScratch == null && w4bSessionScratch == null &&
+                    w5aAnalyticRectSessionScratch == null && w5aAnalyticRRectSessionScratch != null &&
+                    w4cSessionScratch == null && w4dSessionScratch == null,
+            ) { "A W5a RRect CorePrimitive packet requires its V2 material scratch" }
             ScratchLane.W4c -> require(
                 w3SessionScratch == null && w4aSessionScratch == null && w4bSessionScratch == null &&
+                    w5aAnalyticRectSessionScratch == null && w5aAnalyticRRectSessionScratch == null &&
                     w4cSessionScratch != null && w4dSessionScratch == null,
             ) { "A W4c CorePrimitive prepared packet requires its W4c session scratch" }
             ScratchLane.W4d -> require(
                 w3SessionScratch == null && w4aSessionScratch == null && w4bSessionScratch == null &&
+                    w5aAnalyticRectSessionScratch == null && w5aAnalyticRRectSessionScratch == null &&
                     w4cSessionScratch == null && w4dSessionScratch != null,
             ) { "A W4d CorePrimitive prepared packet requires its W4d session scratch" }
         }
@@ -1902,6 +1923,8 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
             w3SessionScratch,
             w4aSessionScratch,
             w4bSessionScratch,
+            w5aAnalyticRectSessionScratch,
+            w5aAnalyticRRectSessionScratch,
             w4cSessionScratch,
             w4dSessionScratch,
             scratchLane,
@@ -1922,6 +1945,8 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
             null,
             null,
             scratch,
+            null,
+            null,
             null,
             null,
             null,
@@ -1947,6 +1972,8 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
             null,
             null,
             null,
+            null,
+            null,
             ScratchLane.W4a,
         )
 
@@ -1967,7 +1994,28 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
             scratch,
             null,
             null,
+            null,
+            null,
             ScratchLane.W4b,
+        )
+
+        fun plannedW5aRect(
+            structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+            renderPipelineKey: GPURenderPipelineKey,
+            analyticShapeUniformSeal: GPUCorePrimitiveAnalyticShapeUniformSeal,
+            scratch: W5aAnalyticRectSessionScratchV2,
+        ): GPUCorePrimitivePreparedPacketAuthority = GPUCorePrimitivePreparedPacketAuthority(
+            structuralPipelineKey, renderPipelineKey, null, analyticShapeUniformSeal, null, null, null,
+            null, null, null, scratch, null, null, null, ScratchLane.W5aRect,
+        )
+
+        fun plannedW5aRRect(
+            structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+            renderPipelineKey: GPURenderPipelineKey,
+            scratch: W5aAnalyticRRectSessionScratchV2,
+        ): GPUCorePrimitivePreparedPacketAuthority = GPUCorePrimitivePreparedPacketAuthority(
+            structuralPipelineKey, renderPipelineKey, null, null, null, null, null,
+            null, null, null, null, scratch, null, null, ScratchLane.W5aRRect,
         )
 
         fun plannedW4c(
@@ -1990,6 +2038,8 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
             return GPUCorePrimitivePreparedPacketAuthority(
                 structuralPipelineKey,
                 renderPipelineKey,
+                null,
+                null,
                 null,
                 null,
                 null,
@@ -2033,6 +2083,8 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
                 null,
                 null,
                 null,
+                null,
+                null,
                 scratch,
                 ScratchLane.W4d,
             )
@@ -2066,6 +2118,8 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
                 null,
                 null,
                 null,
+                null,
+                null,
                 ScratchLane.Legacy,
                 authority,
                 materialization,
@@ -2078,6 +2132,8 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
         W3,
         W4a,
         W4b,
+        W5aRect,
+        W5aRRect,
         W4c,
         W4d,
     }
