@@ -18,6 +18,10 @@ import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
+import org.graphiks.kanvas.surface.gpu.GPUPreparedTextTestFixtures
+import org.graphiks.kanvas.text.FontTypeface
+import org.graphiks.kanvas.text.KanvasGlyphRun
+import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.PointMode
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
@@ -655,6 +659,44 @@ class W5aMaterialSurfacePixelTest {
         assertTrue(
             failure.message.orEmpty().contains("unsupported.core_primitive.point.round_cap_exact_lowering"),
             failure.message,
+        )
+    }
+
+    @Test
+    fun `public prepared A8 text applies nested shader opacity and Paint alpha once`() {
+        val source = ColorARGB.of(197, 231, 83, 37)
+        val paint = Paint(
+            color = ColorARGB.of(149, 7, 11, 13),
+            shader = Shader.Opacity(Shader.Opacity(Shader.SolidColor(source), 0.625f), 0.4f),
+            antiAlias = false,
+        )
+        val blob = TextBlob(
+            glyphRuns = listOf(
+                KanvasGlyphRun(
+                    glyphs = listOf(GPUPreparedTextTestFixtures.A8_GLYPH_ID.toUShort()),
+                    positions = listOf(Point2F32(0f, 0f)),
+                    fontSize = 48f,
+                ),
+            ),
+            typeface = FontTypeface(
+                GPUPreparedTextTestFixtures.colrFontBytesWithForegroundLayer(),
+                "W5a prepared A8 text fixture",
+            ),
+            fontSize = 48f,
+        )
+        val surface = Surface(40, 80)
+        surface.canvas { drawText(blob, 4f, 58f, paint) }
+
+        val result = surface.render()
+
+        WgslFloatEnvelopeV1Oracle.assertAdmits(
+            W5aSolidOpacityCpuOracle.draw(
+                source,
+                shaderOpacityOuterF32 = 0.4f,
+                shaderOpacityInnerF32 = 0.625f,
+                paintAlphaF32 = 149f / 255f,
+            ),
+            result.pixels.copyOfRange((40 * 40 + 10) * 4, (40 * 40 + 11) * 4),
         )
     }
 

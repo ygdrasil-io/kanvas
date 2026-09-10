@@ -52,12 +52,14 @@ internal object GPUPreparedTextLowerer {
         operationIndex: Int,
         target: GPUTargetFacts,
         capabilities: GPUCapabilities,
+        materialPlan: GPUPreparedTextMaterialPlan? = null,
     ): GPUPreparedTextLowering = lower(
         operation = operation,
         operationIndex = operationIndex,
         target = target,
         capabilities = capabilities,
         fontResolver = GPUPreparedFontTypefaceResolver,
+        materialPlan = materialPlan,
     )
 
     /**
@@ -72,6 +74,7 @@ internal object GPUPreparedTextLowerer {
         target: GPUTargetFacts,
         capabilities: GPUCapabilities,
         fontResolver: GPUPreparedTextFontResolver,
+        materialPlan: GPUPreparedTextMaterialPlan? = null,
     ): GPUPreparedTextLowering {
         val fontResolution = try {
             fontResolver.resolve(operation.blob.typeface)
@@ -462,7 +465,20 @@ internal object GPUPreparedTextLowerer {
             )
         }
 
-        val mapped = runCatching { paint.toPreparedMaterialMapping() }.getOrElse {
+        val materialResult = materialPlan?.let { planned ->
+            GPUPreparedMaterialProgramCompiler.compileW5a(
+                table = planned.table,
+                root = planned.ref,
+                context = preparedTextMaterialContext(target, capabilities),
+            )
+        } ?: runCatching {
+            val mapped = paint.toPreparedMaterialMapping()
+            GPUPreparedMaterialProgramCompiler.compile(
+                descriptor = mapped.descriptor,
+                paintAlpha = mapped.paintAlpha,
+                context = preparedTextMaterialContext(target, capabilities),
+            )
+        }.getOrElse {
             return refused(
                 GPUTextRefusalCodes.MATERIAL_UNSUPPORTED,
                 operationIndex,
@@ -476,13 +492,7 @@ internal object GPUPreparedTextLowerer {
                 ),
             )
         }
-        val material = when (
-            val result = GPUPreparedMaterialProgramCompiler.compile(
-                descriptor = mapped.descriptor,
-                paintAlpha = mapped.paintAlpha,
-                context = preparedTextMaterialContext(target, capabilities),
-            )
-        ) {
+        val material = when (val result = materialResult) {
             is GPUPreparedMaterialProgramResult.Ready -> result.program
             is GPUPreparedMaterialProgramResult.Refused ->
                 return refused(
@@ -530,6 +540,7 @@ internal object GPUPreparedTextLowerer {
                 clip = clipProof.clip,
                 paint = paint.snapshotForPreparedText(),
                 material = material,
+                materialPlan = materialPlan,
                 blendPlan = blendPlan,
                 targetColorFormat = target.colorFormat,
                 capabilitySnapshotHash = capabilitySnapshotHash,

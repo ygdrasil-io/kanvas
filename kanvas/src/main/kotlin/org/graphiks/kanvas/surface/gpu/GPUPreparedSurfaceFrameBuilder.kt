@@ -218,11 +218,17 @@ internal object GPUPreparedSurfaceFrameBuilder {
             } else {
                 0
             }
+            val textMaterials = if (request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul) {
+                W5aPreparedTextMaterialBridge.capture(
+                    operations, request.targetBounds.width, request.targetBounds.height,
+                )
+            } else null
             val textPreparation = GPUPreparedTextFramePreparer.prepareInventory(
                 operations = operations,
                 target = request.targetFacts,
                 capabilities = request.capabilities,
                 generation = GPUTextArtifactGeneration(frameGeneration),
+                materialBridge = textMaterials,
             )
             if (textPreparation is GPUPreparedTextFrameInventoryPreparation.Refused) {
                 val refusal = textPreparation.refusal

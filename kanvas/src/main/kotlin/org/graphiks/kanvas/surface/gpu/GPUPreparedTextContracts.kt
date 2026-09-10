@@ -8,6 +8,8 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.glyph.GlyphStrikeKey
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
+import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
@@ -60,6 +62,16 @@ internal enum class GPUPreparedTextSourceRepresentation {
 internal enum class GPUPreparedTextRepresentation {
     A8_MASK,
     COLRV0,
+}
+
+/** Sealed W5a material authority selected before prepared glyph lowering starts. */
+internal data class GPUPreparedTextMaterialPlan(
+    val table: MaterialPlanTable,
+    val ref: MaterialPlanRef,
+) {
+    init {
+        table.entry(ref)
+    }
 }
 
 /** Per-draw representation selection in exact flattened glyph order. */
@@ -136,6 +148,7 @@ internal class GPUPreparedTextDraw private constructor(
     clip: ClipStack,
     paint: Paint,
     val material: GPUPreparedMaterialProgram,
+    val materialPlan: GPUPreparedTextMaterialPlan?,
     val blendPlan: GPUBlendPlan,
     val targetColorFormat: String,
     val capabilitySnapshotHash: String,
@@ -182,6 +195,7 @@ internal class GPUPreparedTextDraw private constructor(
             clip: ClipStack,
             paint: Paint,
             material: GPUPreparedMaterialProgram,
+            materialPlan: GPUPreparedTextMaterialPlan? = null,
             blendPlan: GPUBlendPlan,
             targetColorFormat: String,
             capabilitySnapshotHash: String,
@@ -207,6 +221,7 @@ internal class GPUPreparedTextDraw private constructor(
             clip = clip,
             paint = paint,
             material = material,
+            materialPlan = materialPlan,
             blendPlan = blendPlan,
             targetColorFormat = targetColorFormat,
             capabilitySnapshotHash = capabilitySnapshotHash,

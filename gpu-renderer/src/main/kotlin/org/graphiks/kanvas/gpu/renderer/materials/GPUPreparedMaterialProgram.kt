@@ -3,6 +3,8 @@ package org.graphiks.kanvas.gpu.renderer.materials
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
+import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
+import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedBlenderChildDescriptor
@@ -28,6 +30,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.hasMaterialColorFunctionSignature
 import org.graphiks.kanvas.gpu.renderer.wgsl.reflectWgslModule
+import org.graphiks.kanvas.gpu.renderer.planning.W5aMaterialPlanLowerer
+import org.graphiks.math.color.ColorF32
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
 
@@ -71,6 +75,44 @@ object GPUPreparedMaterialProgramCompiler {
         } else {
             GPUSourceAlphaClassification.Translucent
         }
+        return compilePrepared(
+            prepared = prepared,
+            paintAlpha = paintAlpha,
+            preCoverageSourceAlpha = preCoverageSourceAlpha,
+            context = context,
+        )
+    }
+
+    /** Compiles the sealed W5a source result without reassembling a legacy descriptor. */
+    fun compileW5a(
+        table: MaterialPlanTable,
+        root: MaterialPlanRef,
+        context: GPUMaterialLoweringContext,
+    ): GPUPreparedMaterialProgramResult {
+        val color = W5aMaterialPlanLowerer().lower(table, root) ?: return refused(
+            code = "unsupported.material.w5a_plan",
+            sourceKind = GPUMaterialSourceKind.SolidColor,
+            message = "The sealed W5a material table has no evaluable Solid/Opacity result",
+        )
+        val prepared = prepareW5aSolid(color)
+        return compilePrepared(
+            prepared = prepared,
+            paintAlpha = 1f,
+            preCoverageSourceAlpha = if (color.alpha == 1f) {
+                GPUSourceAlphaClassification.ProvenOpaque
+            } else {
+                GPUSourceAlphaClassification.Translucent
+            },
+            context = context,
+        )
+    }
+
+    private fun compilePrepared(
+        prepared: PreparedSource,
+        paintAlpha: Float,
+        preCoverageSourceAlpha: GPUSourceAlphaClassification,
+        context: GPUMaterialLoweringContext,
+    ): GPUPreparedMaterialProgramResult {
         val finalReflection = when (
             val validation = validateFinalModule(prepared)
         ) {
@@ -209,6 +251,32 @@ object GPUPreparedMaterialProgramCompiler {
                     "lowererKey=${lowererKey.value}",
                     "solidSemantics=linear-premultiplied-rgba-f32",
                 ),
+            ),
+        )
+    }
+
+    /** W5a bindings are already linear premultiplied; applying the legacy sRGB path again is invalid. */
+    private fun prepareW5aSolid(color: ColorF32): PreparedSource {
+        val uniforms = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN).apply {
+            putFloat(color.red)
+            putFloat(color.green)
+            putFloat(color.blue)
+            putFloat(color.alpha)
+        }.array()
+        return PreparedSource(
+            wgslSource = solidMaterialWgsl(),
+            entryPoint = FINAL_FRAGMENT_ENTRY_POINT,
+            composableDeclarationsWgsl = solidComposableDeclarationsWgsl(),
+            sourceFunction = MATERIAL_SOURCE_FUNCTION,
+            sourceColorContract = PreparedSourceColorContract.LinearPremultipliedRgba,
+            uniformBytes = uniforms,
+            sampledResources = emptyList(),
+            sourceKind = GPUMaterialSourceKind.SolidColor,
+            uniformLayoutHash = GPUSolidMaterialDictionary.SolidMaterialLayoutHash,
+            abiExpectation = solidAbiExpectation(),
+            keyFacts = listOf(
+                "w5aMaterialPlan=solid-opacity-linear-premultiplied-rgba-f32",
+                "solidSemantics=linear-premultiplied-rgba-f32",
             ),
         )
     }
