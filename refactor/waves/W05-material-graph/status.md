@@ -1,6 +1,6 @@
 # État W05 — material graph, W5a Solid/Opacity
 
-Révision de production vérifiée : `7dbaf8cdf672e836f6ec6d77b1734cb68b6669db` (« admit W5a frame materials after geometry validation »), le 10 septembre 2026, continuation du correctif global `39ff21985bd1407958d3ba1e909a74bbedf50010` sur `e0b1f39ce23a8badbd10074eb308908a26725280`. Les cinq findings Important, les minors et les résidus d'admission/noms publics de la scoped re-review sont traités dans cette même vague. Les reviews spec et qualité de Task 7 étaient `READY`; les deux re-reviews globales Task 8 restent en attente. Les tests verts ne constituent pas leur approbation et W5a n'est pas déclarée globalement close.
+Révision de production initiale : `7dbaf8cdf672e836f6ec6d77b1734cb68b6669db` (« admit W5a frame materials after geometry validation »), continuation du correctif global `39ff21985bd1407958d3ba1e909a74bbedf50010` sur `e0b1f39ce23a8badbd10074eb308908a26725280`. La vérification de cette vague couvre aussi les commits de recovery `64e6429c`, `582606d7`, `cbd8ab5e`, `33c54c09` et `9891e117`. Les cinq findings Important, les minors et les résidus d'admission/noms publics de la scoped re-review sont traités dans cette même vague. Les reviews spec et qualité de Task 7 étaient `READY`; les deux re-reviews globales Task 8 restent en attente. Les tests verts ne constituent pas leur approbation et W5a n'est pas déclarée globalement close.
 
 ## Gates publiques W5a
 
@@ -78,7 +78,7 @@ La première propagation des bornes officielles a rendu 13 anciennes fixtures mu
 
 ## Vérification
 
-Vérification JVM du correctif global Task 8 et de sa continuation, fraîche et sérielle, sur le contenu de `7dbaf8c` :
+Vérification JVM du correctif global Task 8 et de sa continuation, fraîche et sérielle, sur la série `7dbaf8c` → `9891e11` :
 
 ```bash
 rtk proxy ./gradlew :gpu-plan:compileKotlin :gpu-renderer:compileKotlin :kanvas:compileKotlin --no-parallel --max-workers=1
