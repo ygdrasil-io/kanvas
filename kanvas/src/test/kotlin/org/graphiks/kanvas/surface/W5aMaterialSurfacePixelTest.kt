@@ -284,12 +284,9 @@ class W5aMaterialSurfacePixelTest {
                 antiAlias = false,
             ),
         )
-        // Path is a public mutable facade.  Add a second, separately closed contour which
-        // covers (3,3); playback must retain only the contour present at capture time.
-        path.moveTo(2.5f, 2.5f)
-        path.lineTo(3.5f, 2.5f)
-        path.lineTo(2.5f, 3.5f)
-        path.close()
+        // Path is a public mutable facade.  Add a second, separately closed rectangle whose
+        // interior fully covers (3,3); playback must retain only the pre-capture triangle.
+        path.addRect(RectF32.ofLTRB(3f, 3f, 4f, 4f))
         val captured = recorder.finishRecordingAsPicture()
         val surface = Surface(4, 4)
         surface.canvas { captured.playback(this) }

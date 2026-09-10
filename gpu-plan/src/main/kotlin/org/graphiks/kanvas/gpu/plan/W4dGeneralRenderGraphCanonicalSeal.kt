@@ -9,30 +9,34 @@ import org.graphiks.math.geometry.RectI32
 /** Canonical, raw-bit-stable snapshot used only by the opaque W4d.2 compiler witness. */
 @JvmSynthetic
 internal fun canonicalW4dGeneralGraphDigest(graph: RenderGraph): ByteArray {
+    val materialV2 = W4dGeneralPathPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)
     return canonicalGraphDigest(
         graph,
-        if (W4dGeneralPathPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) {
+        if (materialV2) {
             "w4d-general-render-graph-witness-w5a-material-v2"
         } else {
             "w4d-general-render-graph-witness-v1"
         },
+        materialV2,
     )
 }
 
 /** Canonical W4e inventory seal.  It shares W4d.2's path/pass serialization seam. */
 @JvmSynthetic
 internal fun canonicalW4eGraphDigest(graph: RenderGraph): ByteArray {
+    val materialV2 = W4eClipPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)
     return canonicalGraphDigest(
         graph,
-        if (W4eClipPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) {
+        if (materialV2) {
             "w4e-complex-clip-render-graph-witness-w5a-material-v2"
         } else {
             "w4e-complex-clip-render-graph-witness-v1"
         },
+        materialV2,
     )
 }
 
-private fun canonicalGraphDigest(graph: RenderGraph, schema: String): ByteArray {
+private fun canonicalGraphDigest(graph: RenderGraph, schema: String, materialV2: Boolean): ByteArray {
     val writer = W4dGeneralGraphDigestWriter()
     writer.text("schema", schema)
     writer.text("plan.id", graph.id.value)
@@ -44,10 +48,10 @@ private fun canonicalGraphDigest(graph: RenderGraph, schema: String): ByteArray 
     writer.i64("budget.frame-local-bytes", graph.budget.maxFrameLocalBytes)
     writer.i32("draw-count", graph.visualCommandCount)
     writer.i64("peak-frame-local-bytes", graph.peakFrameLocalBytes)
-    graph.materialPlanTableOrNull()?.let(writer::materialTable) ?: writer.text("material-table", "none")
+    if (materialV2) writer.materialTable(requireNotNull(graph.materialPlanTableOrNull()))
 
     graph.resources().forEachIndexed { index, resource -> writer.resource("resources[$index]", resource) }
-    graph.passes().forEachIndexed { index, pass -> writer.pass("passes[$index]", pass) }
+    graph.passes().forEachIndexed { index, pass -> writer.pass("passes[$index]", pass, materialV2) }
     graph.dependencies().forEachIndexed { index, dependency ->
         writer.text("dependencies[$index].before", dependency.before.value)
         writer.text("dependencies[$index].after", dependency.after.value)
@@ -141,7 +145,7 @@ private class W4dGeneralGraphDigestWriter {
         i32("$prefix.last-pass-exclusive", resource.lastPassIndexExclusive)
     }
 
-    fun pass(prefix: String, pass: PlanPass) {
+    fun pass(prefix: String, pass: PlanPass, materialV2: Boolean) {
         text("$prefix.id", pass.id.value)
         text("$prefix.role", pass.role.name)
         i32("$prefix.ordinal", pass.ordinal)
@@ -157,7 +161,7 @@ private class W4dGeneralGraphDigestWriter {
                 text("$prefix.kind", "path-render")
                 text("$prefix.target", pass.target.value)
                 text("$prefix.phase", pass.phase.name)
-                pathDraw("$prefix.draw", pass.draw)
+                pathDraw("$prefix.draw", pass.draw, materialV2)
                 drawData("$prefix.draw-data", pass.drawDataResources)
                 nullableText("$prefix.atomic-group", pass.atomicGroup?.value)
                 nullableText("$prefix.depth-stencil", pass.depthStencil?.value)
@@ -237,27 +241,27 @@ private class W4dGeneralGraphDigestWriter {
         text("$prefix.uniform", resources.uniform.value)
     }
 
-    private fun pathDraw(prefix: String, draw: PathRenderDraw) {
+    private fun pathDraw(prefix: String, draw: PathRenderDraw, materialV2: Boolean) {
         when (draw) {
             is GeneralPathDraw -> {
                 text("$prefix.kind", "general")
-                generalPathDraw(prefix, draw)
+                generalPathDraw(prefix, draw, materialV2)
             }
             is ClippedGeneralPathDraw -> {
                 text("$prefix.kind", "clipped-general")
-                generalPathDraw("$prefix.source", draw.source)
+                generalPathDraw("$prefix.source", draw.source, materialV2)
                 clipStrategy("$prefix.clip", draw.clip)
             }
             is BinaryMaskedPathDraw -> {
                 text("$prefix.kind", "binary-masked")
-                generalPathDraw("$prefix.producer", draw.producer)
+                generalPathDraw("$prefix.producer", draw.producer, materialV2)
                 text("$prefix.mask", draw.mask.value)
                 text("$prefix.mask-fetch", draw.maskFetch.name)
                 i32("$prefix.broadcast-sample-count", draw.broadcastSampleCountI32)
             }
             is ClippedBinaryMaskedPathDraw -> {
                 text("$prefix.kind", "clipped-binary-masked")
-                pathDraw("$prefix.source", draw.source)
+                pathDraw("$prefix.source", draw.source, materialV2)
                 clipStrategy("$prefix.clip", draw.clip)
             }
         }
@@ -299,21 +303,25 @@ private class W4dGeneralGraphDigestWriter {
         }
     }
 
-    private fun generalPathDraw(prefix: String, draw: GeneralPathDraw) {
+    private fun generalPathDraw(prefix: String, draw: GeneralPathDraw, materialV2: Boolean) {
         i32("$prefix.command-index", draw.commandIndex)
-        when (val authority = draw.materialAuthority) {
-            is PlanDrawMaterialAuthority.LegacyColorV1 -> {
-                val color = authority.copyColorF32()
-                text("$prefix.material-authority", "legacy-color-v1")
+        if (materialV2) {
+            when (val authority = draw.materialAuthority) {
+                is PlanDrawMaterialAuthority.MaterialV1 -> {
+                    text("$prefix.material-authority", "material-v1")
+                    i32("$prefix.material-ref", authority.ref.indexI32)
+                }
+                is PlanDrawMaterialAuthority.LegacyColorV1 ->
+                    throw IllegalArgumentException("W5a v2 seal requires a material authority")
+            }
+        } else {
+            val color = (draw.materialAuthority as? PlanDrawMaterialAuthority.LegacyColorV1)
+                ?.copyColorF32()
+                ?: throw IllegalArgumentException("Historical v1 seal requires a legacy color authority")
                 f32("$prefix.color.red", color.red)
                 f32("$prefix.color.green", color.green)
                 f32("$prefix.color.blue", color.blue)
                 f32("$prefix.color.alpha", color.alpha)
-            }
-            is PlanDrawMaterialAuthority.MaterialV1 -> {
-                text("$prefix.material-authority", "material-v1")
-                i32("$prefix.material-ref", authority.ref.indexI32)
-            }
         }
         text("$prefix.strategy", draw.strategy.name)
         text("$prefix.coverage", draw.coverage.name)
