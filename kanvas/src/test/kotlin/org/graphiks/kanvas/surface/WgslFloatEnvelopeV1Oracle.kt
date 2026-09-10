@@ -377,9 +377,14 @@ internal object WgslFloatEnvelopeV1Oracle {
     private fun exactLog2(value: Interval): Interval {
         val lower = naturalLog(value.lower)
         val upper = naturalLog(value.upper)
-        return Interval(
-            downDivide(lower.lower, LN_TWO.upper),
-            upDivide(upper.upper, LN_TWO.lower),
+        // ln(x) is negative below one, so a fixed lower/upper denominator
+        // choice is not sign-safe. Directed pair evaluation selects the
+        // outward quotient across the full ln(x) and ln(2) intervals.
+        return directedBinary(
+            Interval(lower.lower, upper.upper),
+            LN_TWO,
+            ::downDivide,
+            ::upDivide,
         )
     }
 
