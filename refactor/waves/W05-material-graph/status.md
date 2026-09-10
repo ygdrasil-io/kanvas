@@ -1,6 +1,6 @@
 # État W05 — material graph, W5a Solid/Opacity
 
-Révision de production vérifiée : `39ff21985bd1407958d3ba1e909a74bbedf50010` (« execute sealed W5a source DAG across authentic lanes »), le 10 septembre 2026, correctif global sur `e0b1f39ce23a8badbd10074eb308908a26725280`. Les cinq findings Important et les minors des deux reviews globales sont traités dans cette vague. Les reviews spec et qualité de Task 7 étaient `READY`; les deux re-reviews globales Task 8 restent en attente. Les tests verts ne constituent pas leur approbation et W5a n'est pas déclarée globalement close.
+Révision de production vérifiée : `7dbaf8cdf672e836f6ec6d77b1734cb68b6669db` (« admit W5a frame materials after geometry validation »), le 10 septembre 2026, continuation du correctif global `39ff21985bd1407958d3ba1e909a74bbedf50010` sur `e0b1f39ce23a8badbd10074eb308908a26725280`. Les cinq findings Important, les minors et les résidus d'admission/noms publics de la scoped re-review sont traités dans cette même vague. Les reviews spec et qualité de Task 7 étaient `READY`; les deux re-reviews globales Task 8 restent en attente. Les tests verts ne constituent pas leur approbation et W5a n'est pas déclarée globalement close.
 
 ## Gates publiques W5a
 
@@ -17,12 +17,12 @@ W5a implémente `Transparent`, `Solid` et `Opacity` sous `SRC_OVER`. Chaque draw
 | Vertices, avec/sans couleurs vertex | fixtures Picture et mutation des tableaux publics (Task 6) |
 | Prepared frames mixtes | Rect → Point → Rect, Rect → A8 Text → Rect, Rect → Vertices → Rect et public Mesh sans programme : trois sources/opacités distinctes, ordre observé par l'oracle et mutation des collections publiques après capture |
 | RRect + stroke/hairline | RRect → Path stroke ou hairline → RRect, géométrie W4d native, mutation du Path après Picture et pixels de composition |
-| Bornes publiques | 512 runs natifs rendus, 513 refusés précocement puis récupération sur la même Surface; 683 matériaux point identiques dédupliqués, 683 chaînes distinctes de trois entrées refusées à la vraie borne 2048 |
-| Admission avant interning | 683 candidats Vertices avec transform non finie gardent `unsupported.vertices.transform`, sans épuiser une table qu'ils ne sont pas admis à rejoindre |
+| Bornes publiques | 512 runs natifs rendus avant/après le refus précoce de 513 runs sur une autre Surface du même runtime/backend; 683 matériaux point identiques dédupliqués, 683 chaînes distinctes de trois entrées refusées à la vraie borne 2048 |
+| Admission avant interning | 683 Rect hors cible à chaînes distinctes sont élidées avant la table commune et seul le Point valide rend; Rect non finie + Point conserve `unsupported.core_primitive.geometry.non_finite_transform`; 683 candidats Vertices non finis gardent `unsupported.vertices.transform` |
 | Frame Rect + RRect + Path | `Picture playback composes planned Rect RRect and Path bindings in recorded order` : trois bindings distincts, composition indépendante, observation AA, puis comparaison de tous les bytes après mutation du Path |
 | Ordre intercalé et stencil | `native mixed stencil frame preserves interleaved Rect bindings and captured mutation` : Rect → RRect → Path stencil-cover → Rect, réutilisation d'un binding et comparaison de tous les bytes après mutation |
 | Opacité identique, children distincts | `native mixed equal opacity preserves distinct Solid children and nested chains` : Rect rouge et RRect bleu à opacité 0.5, puis Path rouge et Rect bleu avec chaînes shader/Paint imbriquées et children réutilisés non adjacents; quatre observations pixel indépendantes |
-| Refus puis récupération | `public W5b gradient refusal leaves the runtime able to render a later W5a frame` : W5a valide → gradient refusé `unsupported.material.w5a.kind` → W5a valide, sans dispose entre les trois frames, et pixels avant/après identiques |
+| Refus puis récupération sur la même Surface | `public W5b gradient refusal leaves the runtime able to render a later W5a frame` : W5a valide → gradient refusé `unsupported.material.w5a.kind` → W5a valide, sur une unique Surface sans dispose entre les trois frames, et pixels avant/après identiques |
 | Absence d'ownership W5a | `hard edge gradient RRect outside W5a retains legacy pixels after caller stop mutation` : RRect hard-edge hors admission W4b, gradient rouge/bleu capturé en Picture, mutation des stops vers vert, pixels legacy rouge/bleu conservés |
 
 ## Composition native Task 7
@@ -33,7 +33,9 @@ La capability distincte `w5a-native-rect-rrect-path-composite-v1` est sélection
 
 Correction d'interning : la clé d'une entrée inclut son child canonique et donc toute sa chaîne de bindings accessible, pas seulement sa structure et son alpha local. Puisque V1 désigne le child à `ref - 1`, toute nouvelle chaîne dont le child réutilisé n'est pas adjacent est copiée contiguë avant son parent. Les remaps canoniques restent déterministes, les bindings copiés défensivement et la borne de 2048 entrées contrôlée avant chaque ajout. La preuve RED Task 7 a produit du rouge dans le pixel bleu (`channel=0 observed=188 expected=[0]`); elle reste verte avec les chaînes imbriquées et le nouveau fragment.
 
-Le registre prepared de frame interne également les sources Rect/RRect/Path/Points et les seules admissions authentiques A8 Text et Vertices/Mesh sans programme. Text et Vertices sont abaissés une fois par leurs lowerers existants; les émissions sont ensuite remappées sur la table commune en authentifiant l'identité exacte du source-stage. La préparation des atlas, inventaires et artifacts n'est pas rejouée. Les glyphs couleur/non-A8 et les géométries refusées n'acquièrent pas d'ownership W5a.
+`W5aPreparedFrameMaterialRegistry` remplace le bridge historiquement nommé CorePoint. Ses candidats Core locaux capturent uniquement le paint, sans acquisition de la table de frame ni admission géométrique implicite. Le mapper/lowerer existant, le recorder, la collecte des sémantiques et le preflight prepared vertices effectuent l'admission réelle : élision hors cible, transform, tessellation, limites et autres refus précèdent l'interning. Tous les `geometryRefusal` du lowerer sont propagés avant le recorder, sans filtre ad hoc; une Rect non finie conserve ainsi son diagnostic géométrique exact au lieu de devenir un refus de capture material ou de contrat de frame.
+
+Seuls les payloads réellement admis Rect/RRect/Path/Points/A8 Text/Vertices et Mesh sans programme rejoignent ensuite la table commune. Text et Vertices sont abaissés une fois; leurs payloads sont remappés uniquement côté material, en authentifiant l'identité exacte du source-stage. Le witness Core vérifie également l'identité de la source locale et de sa ref globale. Aucune géométrie, tessellation, préparation d'atlas, inventaire ou artifact n'est rejoué. Les glyphs couleur/non-A8 et les géométries refusées n'acquièrent pas d'ownership W5a.
 
 Correction de l'ownership des refus : les compilers natifs conservent séparément leurs refus de material et continuent les contrôles de géométrie, couverture, clip, état, provenance et limites sémantiques de toute la scène. Seule leur réussite complète permet d'émettre `GpuPlanSelection.MaterialOnlyRefusal`, lié à la scène, à la cible et à la capability. Les seams W4e et composite propagent ce résultat après leur propre admission; le backend vérifie l'identité scène/cible. Un `GapNotMigrated` ordinaire reste legacy : le routeur ne rescane plus les shaders et ne transforme plus des diagnostics accumulés en ownership. La nouvelle preuve RED échouait sur le faux terminal `unsupported.material.w5a.kind`; elle est GREEN sans modifier la géométrie ni substituer un material.
 
@@ -62,9 +64,21 @@ Le seal géométrique historique reste inchangé; une partition material V2 dér
 
 Cet audit porte sur le code de production. Les assertions W5a ajoutées dans les tests compiler/lowerer, SceneArchiveCodec et DisplayOpSceneAdapter ont été retirées du diff complet de branche; seules des adaptations mécaniques de tests historiques restent, sans servir de preuve W5a et sans exécuter de suite codec/infrastructure. Les preuves conservées sont exclusivement publiques. Si CPU et GPU sont tous deux dans l'enveloppe, aucun RED black-box ne distingue honnêtement l'architecture : la review de production prouve alors DAG→fragment, les tests prouvent pixels/enveloppe/mutation.
 
+L'audit exhaustif des déclarations publiques ajoutées depuis la base empilée inclut les nombres dans les collections, maps, tableaux et types nullables. Les résidus `MaterializedSolidV2.premultipliedRgbaF32` et `issue(refsByCommandIdI32, sourcePlansByCommandIdI32)` sont corrigés; les KDoc décrivent le slot géométrique neutre et le source-stage fragment. Les signatures historiques inchangées et les overrides imposés par Kotlin ne sont pas présentés comme de nouvelles APIs W5a.
+
+## Enveloppe numérique des preuves publiques
+
+Le cas public Rect puis Point à source ARGB `(197, 211, 79, 41)`, opacité shader `0.5` et paint `173/255` a isolé le RED `channel=2 observed=18 expected=[17]`. L'audit de la disposition brute, du binding et de l'expression DAG n'a pas révélé de divergence : l'oracle appliquait à tort la précision du `pow` WGSL à la conversion sRGB fixed-function de l'attachement. Le cas reste une régression publique; il n'est pas masqué par le choix d'une autre couleur.
+
+L'oracle indépendant distingue désormais les deux étapes. La source reste bornée par les opérations F32/WGSL du DAG. La conversion d'attachement utilise la référence sRGB réelle, calculée par arithmétique décimale dirigée et racines rationnelles, puis les bornes officielles : erreur totale d'encodage RGB strictement inférieure à un code et erreur de décodage, mesurée après ré-encodage exact, au plus un demi-code ([Metal, §8.7.7, 4 juin 2026](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf)). Cette enveloppe contient l'encodage D3D limité à `0.6` code; l'alpha linéaire conserve aussi la borne FLOAT→UNORM de `0.6` code ([D3D 11.3, §3.2.3.6–8](https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm)). Il ne s'agit pas d'une tolérance ajoutée à un arrondi préalable. Le bleu de la régression admet analytiquement les seuls codes adjacents `{17, 18}`.
+
+Le décodage est propagé entre draws. L'oracle garde la destination comme une même variable affine dans source-over et coverage, au lieu de traiter les occurrences de `D + C × (B − D)` comme des valeurs indépendantes. Les formes ordinaires/FMA, les erreurs F32 dirigées sur tout l'intervalle et FTZ restent incluses. Aucune mesure empirique ni seuil de similarité n'entre dans cette dérivation.
+
+La première propagation des bornes officielles a rendu 13 anciennes fixtures multi-draw `Unbounded`. Après autorisation explicite, leurs couleurs/alphas non triviaux ont été reformulés, sans changer géométrie, ordre ni mutations, pour que chaque preuve retenue satisfasse encore la règle stricte : un singleton ou deux codes adjacents par canal. Un contre-exemple public en ordre inversé est explicitement rejeté dans la preuve à trois Points. Toutes les preuves multi-draw ont été réexécutées après propagation encode/decode et alpha. Les conversions fixed-function peuvent élargir au-delà de deux codes l'enveloppe d'une scène arbitraire; ces fixtures sélectionnées ne prouvent pas une borne universelle. Un tel résultat reste `Unbounded`, jamais un succès assoupli. Aucun pipeline destination-read n'a été ajouté.
+
 ## Vérification
 
-Vérification JVM du correctif global Task 8, fraîche et sérielle, sur le contenu de `39ff219` :
+Vérification JVM du correctif global Task 8 et de sa continuation, fraîche et sérielle, sur le contenu de `7dbaf8c` :
 
 ```bash
 rtk proxy ./gradlew :gpu-plan:compileKotlin :gpu-renderer:compileKotlin :kanvas:compileKotlin --no-parallel --max-workers=1
@@ -72,7 +86,7 @@ rtk proxy ./gradlew :kanvas:test --tests '*W5aMaterialSurfacePixelTest' --tests 
 rtk git diff --check
 ```
 
-Résultat : les deux commandes Gradle sont `BUILD SUCCESSFUL`; 117 tests publics, 114 passés, 0 failure/error, 3 skips AA4 authentiques. Répartition : W5a 46 tests (45 passés, 1 skip); GPUPlan 71 tests (69 passés, 2 skips), avec les deux fixtures 512, W4e inverse et toutes les nouvelles frames mixtes. Les XML finaux sont datés du 10 septembre 2026, 16:39:44 UTC (GPUPlan) et 16:39:48 UTC (W5a). `rtk git diff --check` est propre.
+Résultat : les deux commandes Gradle sont `BUILD SUCCESSFUL`; 120 tests publics, 117 passés, 0 failure/error, 3 skips AA4 authentiques. Répartition : W5a 49 tests (48 passés, 1 skip); GPUPlan 71 tests (69 passés, 2 skips), avec les deux fixtures 512, W4e inverse, toutes les frames mixtes et les trois nouvelles régressions admission/numérique. Les XML finaux sont datés du 10 septembre 2026, 17:51:34.534 UTC (GPUPlan) et 17:51:38.242 UTC (W5a). `rtk git diff --check` est propre.
 
 Skips exacts : `public mixed AA4 frame keeps a hard Path binary cover materialized only at color output` (`w4d.general.texture-sample-support-unavailable`), `W4e public Path AA4 uses only binary fixtures after its exact native capability boundary` et `W4e public mixed hard and Path AA4 inverse consumers keep distinct D24S8 domains` (tous deux `w4e.clip.sample-count-unavailable`).
 
@@ -82,6 +96,7 @@ La commande planifiée `:kanvas:jsNodeTest` est absente : `:kanvas` applique `bu
 
 - Les trois skips AA4 restent attachés à l'indisponibilité native documentée; aucune capability ni réussite AA4 n'est simulée.
 - SolidColor, Opacity et Paint sont immuables. La mutation publique observable porte sur Path, tableaux vertices et listes glyphs après capture.
+- Les preuves numériques multi-draw concernent les entrées dont l'enveloppe indépendante officielle reste bornée à deux codes adjacents; les autres entrées restent explicitement `Unbounded`, sans affaiblissement de l'assertion ni prétention de conformance exhaustive de tous les backends.
 - Les dépendances font se compilent transitivement, mais aucune suite font/codec/GM/dashboard/baseline/Skia/`jpg-color-cube` n'a été exécutée. Les fixtures text utilisent seulement des glyphs déjà résolus.
 - Aucun test d'infrastructure n'a servi de preuve. Les deux re-reviews globales Sol indépendantes de Task 8 restent en attente après cette correction.
 - Le run public final émet aussi `Context leak detected, CoreAnalytics returned false`, sans failure/error ni correspondance dans les sources du repository; warning natif non attribué à un défaut du correctif, conservé explicitement dans le rapport plutôt que présenté comme absent.
