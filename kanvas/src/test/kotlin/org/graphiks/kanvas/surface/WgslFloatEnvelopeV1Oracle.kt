@@ -14,8 +14,11 @@ import org.graphiks.kanvas.gpu.plan.NumericOperationGraphV1
 /**
  * Independent W5a oracle. All node values are intervals over real arithmetic,
  * rounded outward to the predecessor/successor F32 values. It enumerates both
- * preserved-subnormal and FTZ results, plus fused, unfused, and reassociated
- * blend/coverage expressions. The source transfer is bounded from WGSL `pow`
+ * preserved-subnormal and FTZ results. Coverage multiplies the source in the
+ * fragment before fixed-function blending, exactly as in the native pipeline.
+ * D3D11.3 §17.5 permits target-format precision for UNORM blending, not only F32;
+ * the blend envelope therefore includes fixed-point inputs, factors and arithmetic.
+ * The source transfer is bounded from WGSL `pow`
  * as `exp2(y * log2(x))`, using arbitrary-precision directed series bounds.
  * The attachment transfer is fixed-function, not WGSL: Metal 4 §8.7.7 permits
  * an encoding error strictly below one RGBA8 code, and a decoding error whose
@@ -182,64 +185,78 @@ internal object WgslFloatEnvelopeV1Oracle {
     private fun sourceOver(source: Interval, destination: Interval, inverseAlpha: Interval): Interval =
         sumOfProducts(source, Interval.ONE, destination, inverseAlpha)
 
-    /**
-     * The normative coverage expression is
-     * `destination + coverage * (blended - destination)`. The direct form is
-     * closed over its ordinary and FMA evaluations. The second branch is the
-     * fixed-function SrcOver equivalent `destination*(1-coverage) +
-     * blended*coverage`, closed over both ordinary and permitted FMA forms.
-     */
+    /** The authenticated native partition emits coverage*source in WGSL, then One/InvSrcAlpha. */
     private fun blendAndCoverage(source: Interval, alpha: Interval, destination: Interval, coverage: Interval): Interval {
-        // One destination value occurs repeatedly in the exact algebra. An ordinary interval
-        // for each occurrence would treat D+(B-D) as three independent values and invent
-        // several codes after attachment decoding. Keep D symbolic; only rounding errors
-        // are independent. Every ordinary and FMA evaluation remains in the closure below.
-        data class Affine(val constant: Interval, val coefficient: Interval, val error: BigDecimal)
-        fun addExact(a: Interval, b: Interval) = directedBinary(a, b, ::downAdd, ::upAdd)
-        fun multiplyExact(a: Interval, b: Interval) = directedBinary(a, b, ::downMultiply, ::upMultiply)
-        fun magnitude(value: Interval) = maxOf(value.lower.abs(), value.upper.abs())
-        fun range(value: Affine) = expandAbsolute(addExact(value.constant,
-            multiplyExact(value.coefficient, destination)), value.error)
-        fun rounded(value: Affine): Affine {
-            val exact = range(value)
-            // Bound every interior rounding, not only the endpoint residues. Two ULPs
-            // cover adjacent-F32 rounding plus the oracle's outward neighbor guard;
-            // the maximum endpoint binade spacing bounds the entire finite interval.
-            var error = upMultiply(BigDecimal.TWO, maxOf(f32UlpAt(exact.lower), f32UlpAt(exact.upper)))
-            if (exact.lower < F32_MIN_NORMAL && exact.upper > F32_MIN_NORMAL.negate()) {
-                error = maxOf(error, F32_MIN_NORMAL)
-            }
-            return value.copy(error = upAdd(value.error, error))
+        val coveredSource = if (source == Interval.ZERO || coverage == Interval.ZERO) Interval.ZERO
+            else (source * coverage).clamp01()
+        val coveredAlpha = if (alpha == Interval.ZERO || coverage == Interval.ZERO) Interval.ZERO
+            else (alpha * coverage).clamp01()
+        val clampedDestination = destination.clamp01()
+        val floating = sourceOver(coveredSource, clampedDestination, Interval.ONE - coveredAlpha).clamp01()
+        return floating.hull(fixedFunctionSourceOver(coveredSource, coveredAlpha, clampedDestination))
+    }
+
+    /**
+     * D3D11.3 §17.5 (UNORM8 precision floor), §3.2.3.6 and §3.2.4.1 (input
+     * conversion <=0.6 destination LSB). The coarsest allowed quantum is 1/255;
+     * binary fixed-point with eight fractional bits is finer. Input and factor
+     * precision may differ from arithmetic precision, so enclose all finer
+     * conversions instead of sampling only one implementation's bit allocation.
+     *
+     * Fixed-point ADD/SUB are integer-exact at a common precision (§3.2.4).
+     * Product rescaling can discard at most one fractional LSB; this enclosure
+     * includes truncation and both adjacent roundings. Fused multiply/add skips
+     * that intermediate rounding and is included separately. No empirical error.
+     */
+    private fun fixedFunctionSourceOver(source: Interval, alpha: Interval, destination: Interval): Interval {
+        fun exactAdd(a: Interval, b: Interval) = directedBinary(a, b, ::downAdd, ::upAdd)
+        fun exactMultiply(a: Interval, b: Interval) = directedBinary(a, b, ::downMultiply, ::upMultiply)
+        fun product(a: Interval, b: Interval): Interval = when {
+            a == Interval.ZERO || b == Interval.ZERO -> Interval.ZERO
+            a == Interval.ONE -> b
+            b == Interval.ONE -> a
+            else -> fixedPrecisionEnvelope(exactMultiply(a, b), conversion = false)
         }
-        fun add(a: Affine, b: Affine) = rounded(Affine(addExact(a.constant, b.constant),
-            addExact(a.coefficient, b.coefficient), upAdd(a.error, b.error)))
-        fun multiply(a: Affine, b: Interval) = rounded(Affine(multiplyExact(a.constant, b),
-            multiplyExact(a.coefficient, b), upMultiply(a.error, magnitude(b))))
-        fun fused(a: Affine, b: Interval, c: Affine) = rounded(Affine(
-            addExact(multiplyExact(a.constant, b), c.constant),
-            addExact(multiplyExact(a.coefficient, b), c.coefficient),
-            upAdd(upMultiply(a.error, magnitude(b)), c.error),
-        ))
-        val src = Affine(source, Interval.ZERO, BigDecimal.ZERO)
-        val dst = Affine(Interval.ZERO, Interval.ONE, BigDecimal.ZERO)
-        val negativeDst = Affine(Interval.ZERO, Interval.point(BigDecimal.ONE.negate()), BigDecimal.ZERO)
-        val inverseAlpha = Interval.ONE - alpha
-        val left = multiply(src, Interval.ONE)
-        val right = multiply(dst, inverseAlpha)
-        val blends = listOf(add(left, right), fused(src, Interval.ONE, right), fused(dst, inverseAlpha, left))
-        val inverseCoverage = Interval.ONE - coverage
-        return hull(*blends.flatMap { blended ->
-            val coveredDst = multiply(dst, inverseCoverage)
-            val coveredBlend = multiply(blended, coverage)
-            val delta = add(blended, negativeDst)
-            listOf(
-                add(coveredDst, coveredBlend),
-                fused(dst, inverseCoverage, coveredBlend),
-                fused(blended, coverage, coveredDst),
-                add(dst, multiply(delta, coverage)),
-                fused(delta, coverage, dst),
-            ).map(::range)
-        }.toTypedArray())
+        // §17.5 only permits the *blend operation* to use target-format
+        // precision. It does not authorize a prior FLOAT->UNORM conversion of
+        // the fragment source or of the decoded attachment. ONE consequently
+        // preserves the WGSL source exactly; only INV_SRC_ALPHA and its
+        // destination product take the fixed-point branch. This also keeps the
+        // stored destination as the same value throughout the term.
+        val inverseAlpha = fixedPrecisionEnvelope(
+            directedBinary(Interval.ONE, alpha, ::downSubtract, ::upSubtract),
+            conversion = true,
+        )
+        return exactAdd(source, product(destination, inverseAlpha)).clamp01()
+    }
+
+    /**
+     * Keep the coarse quantization lattice explicit: replacing its rounding by
+     * an unconditional +/-LSB would invent errors for exact zero and one.
+     * Enumerate UNORM and binary fixed-point precisions 8..24; all finer grids
+     * are enclosed by the directed 1/(2^25-1) remainder, and F32 is unioned by the
+     * caller. The finite cut changes only enclosure tightness, never admission.
+     */
+    private fun fixedPrecisionEnvelope(value: Interval, conversion: Boolean): Interval {
+        val clamped = value.clamp01()
+        if (clamped == Interval.ZERO || clamped == Interval.ONE) return clamped
+        var result = clamped
+        for (bits in 8..24) {
+            val binary = BigDecimal(1L shl bits)
+            for (denominator in listOf(binary - BigDecimal.ONE, binary)) {
+                val low = downMultiply(clamped.lower, denominator)
+                val high = upMultiply(clamped.upper, denominator)
+                val first = if (conversion) downSubtract(low, UNORM_CODE_ERROR).setScale(0, RoundingMode.CEILING)
+                    else low.setScale(0, RoundingMode.FLOOR)
+                val last = if (conversion) upAdd(high, UNORM_CODE_ERROR).setScale(0, RoundingMode.FLOOR)
+                    else high.setScale(0, RoundingMode.CEILING)
+                result = result.hull(Interval(downDivide(first.max(BigDecimal.ZERO), denominator),
+                    upDivide(last.min(denominator), denominator)))
+            }
+        }
+        val finerQuantum = upDivide(BigDecimal.ONE, BigDecimal((1L shl 25) - 1L))
+        val finerError = if (conversion) upMultiply(UNORM_CODE_ERROR, finerQuantum) else finerQuantum
+        return result.hull(expandAbsolute(clamped, finerError)).clamp01()
     }
 
     /** All legal f32 evaluation forms of `a*b + c*d`. */
@@ -361,10 +378,19 @@ internal object WgslFloatEnvelopeV1Oracle {
     private fun f32Envelope(exact: Interval): Interval = hull(preserveF32(exact), flushSubnormal(exact))
 
     /** Containment expands rounded endpoints to adjacent F32 values, never a Double ULP. */
-    private fun preserveF32(exact: Interval): Interval = Interval(
-        decimal(java.lang.Math.nextDown(exact.lower.toFloat())),
-        decimal(java.lang.Math.nextUp(exact.upper.toFloat())),
-    )
+    private fun preserveF32(exact: Interval): Interval {
+        if (exact.lower.compareTo(exact.upper) == 0) {
+            if (exact.lower.signum() == 0) return Interval.ZERO
+            if (exact.lower.compareTo(BigDecimal.ONE) == 0) return Interval.ONE
+            val candidate = exact.lower.toFloat()
+            // IEEE arithmetic cannot change a representable exact result under
+            // any rounding mode. BigDecimal(Double) checks the exact binary value,
+            // not the shortest decimal display spelling of that value.
+            if (candidate.isFinite() && BigDecimal(candidate.toDouble()).compareTo(exact.lower) == 0) return exact
+        }
+        return Interval(decimal(java.lang.Math.nextDown(exact.lower.toFloat())),
+            decimal(java.lang.Math.nextUp(exact.upper.toFloat())))
+    }
 
     private fun flushSubnormal(exact: Interval): Interval = if (
         exact.lower.abs() < F32_MIN_NORMAL || exact.upper.abs() < F32_MIN_NORMAL
