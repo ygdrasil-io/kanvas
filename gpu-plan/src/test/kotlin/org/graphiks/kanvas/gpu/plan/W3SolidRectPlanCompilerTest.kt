@@ -213,6 +213,28 @@ class W3SolidRectPlanCompilerTest {
     }
 
     @Test
+    fun `deep coherent opacity authorities are rejected without overflowing`() {
+        val depth = 20_000
+        val draw = solidDrawNode().copy(
+            material = opacityChain(depth),
+            paint = w3Paint().copy(shader = opacityChain(depth)),
+        )
+
+        assertGap(sceneOf(SceneCommand.Draw(draw)))
+    }
+
+    @Test
+    fun `deep late divergent opacity authorities are refused without overflowing`() {
+        val depth = 20_000
+        val draw = solidDrawNode().copy(
+            material = opacityChain(depth, ColorARGB.Red),
+            paint = w3Paint().copy(shader = opacityChain(depth, ColorARGB.Blue)),
+        )
+
+        assertGap(sceneOf(SceneCommand.Draw(draw)))
+    }
+
+    @Test
     fun `each unsupported paint filter and effect remains a semantic gap`() {
         val draw = solidDrawNode()
         val invalids = listOf(
@@ -527,6 +549,12 @@ class W3SolidRectPlanCompilerTest {
         origin = DrawOrigin.RECT,
         paint = w3Paint(ColorARGB.fromPackedUInt(color)),
     )
+
+    private fun opacityChain(depth: Int, color: ColorARGB = ColorARGB.White): MaterialNode {
+        var material: MaterialNode = MaterialNode.Solid(color)
+        repeat(depth) { material = MaterialNode.Opacity(material, 0.5f) }
+        return material
+    }
 
     private fun w3Paint(color: ColorARGB = ColorARGB.White): PaintNode = PaintNode(
         color = color,

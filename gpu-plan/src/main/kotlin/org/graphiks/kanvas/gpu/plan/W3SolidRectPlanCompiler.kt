@@ -314,7 +314,8 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
     private fun materialMatchesPaintAuthority(node: DrawNode): Boolean {
         if (node.origin in imageOrigins) return true
         val paint = node.paint ?: return false
-        return node.material == (paint.shader ?: MaterialNode.Solid(paint.color))
+        val paintMaterial = paint.shader ?: MaterialNode.Solid(paint.color)
+        return node.material.canonicalId == paintMaterial.canonicalId
     }
 
     private fun linearPremultiplied(color: ColorARGB): ColorF32 {
