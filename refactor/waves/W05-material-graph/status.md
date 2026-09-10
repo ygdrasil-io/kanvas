@@ -86,7 +86,7 @@ rtk proxy ./gradlew :kanvas:test --tests '*W5aMaterialSurfacePixelTest' --tests 
 rtk git diff --check
 ```
 
-Résultat : les deux commandes Gradle sont `BUILD SUCCESSFUL`; 119 tests publics, 116 passés, 0 failure/error, 3 skips AA4 authentiques. Répartition : W5a 48 tests (47 passés, 1 skip); GPUPlan 71 tests (69 passés, 2 skips), avec les deux fixtures 512, W4e inverse, toutes les frames mixtes et les régressions admission/numérique. Les XML finaux recovery sont datés du 10 septembre 2026, 18:52:30.322 UTC (W5a) et 18:52:45.053 UTC (GPUPlan). `rtk git diff --check` est propre.
+Résultat : les deux commandes Gradle sont `BUILD SUCCESSFUL`; 119 tests publics, 116 passés, 0 failure/error, 3 skips AA4 authentiques. Répartition : W5a 48 tests (47 passés, 1 skip); GPUPlan 71 tests (69 passés, 2 skips), avec les deux fixtures 512, W4e inverse, toutes les frames mixtes et les régressions admission/numérique. Les compteurs ci-dessus sont la source de vérification; les timestamps XML ne sont pas une source documentaire. `rtk git diff --check` est propre.
 
 Skips exacts : `public mixed AA4 frame keeps a hard Path binary cover materialized only at color output` (`w4d.general.texture-sample-support-unavailable`), `W4e public Path AA4 uses only binary fixtures after its exact native capability boundary` et `W4e public mixed hard and Path AA4 inverse consumers keep distinct D24S8 domains` (tous deux `w4e.clip.sample-count-unavailable`).
 
