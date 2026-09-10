@@ -42,6 +42,7 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 - [Plan W4d.2 — transforms généraux et path AA](plans/2026-09-06-w4d-general-transform-aa-implementation-plan.md)
 - [Plan W4e — clips complexes et inverse paths](plans/2026-09-06-w4e-complex-clips-implementation-plan.md)
 - [Plan W5a — Solid/Opacity](plans/2026-09-09-w5a-solid-opacity-implementation-plan.md)
+- [Plan W5b — final blends communs](plans/2026-09-10-w5b-final-blends-implementation-plan.md)
 
 ### État et rapports finaux
 
