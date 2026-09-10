@@ -260,7 +260,7 @@ internal class W4aAnalyticRectGraphLowerer {
                 }
             } || when (graph.capabilityId) {
                 W4aAnalyticRectPlanCompiler.HISTORICAL_CAPABILITY_ID ->
-                    draws.any { it.materialAuthority !is PlanDrawMaterialAuthority.LegacyColorV1 }
+                    table != null || draws.any { it.materialAuthority !is PlanDrawMaterialAuthority.LegacyColorV1 }
                 W4aAnalyticRectPlanCompiler.CAPABILITY_ID ->
                     table == null || draws.any { it.materialAuthority !is PlanDrawMaterialAuthority.MaterialV1 }
                 else -> true

@@ -15,20 +15,26 @@ import org.graphiks.math.color.ColorTransferFunction
  * blend state, Rect raster coverage, and `rgba8unorm-srgb` attachment.
  */
 internal class W5aMaterialPlanLowerer {
-    fun lower(table: MaterialPlanTable, root: MaterialPlanRef): ColorF32? = lower(table, root, 0)
-
-    private fun lower(table: MaterialPlanTable, ref: MaterialPlanRef, depth: Int): ColorF32? {
-        if (depth > table.sizeI32) return null
-        val entry = try {
-            table.entry(ref)
-        } catch (_: IllegalArgumentException) {
-            return null
+    fun lower(table: MaterialPlanTable, root: MaterialPlanRef): ColorF32? {
+        if (table.sizeI32 !in 1..MaterialPlanTable.MAX_ENTRIES_I32 ||
+            root.indexI32 !in 0 until table.sizeI32
+        ) return null
+        val chain = ArrayList<Pair<NumericOperationGraphV1.Node, MaterialBindingPlan>>()
+        var ref = root
+        while (true) {
+            if (chain.size >= MaterialPlanTable.MAX_ENTRIES_I32) return null
+            val entry = try { table.entry(ref) } catch (_: IllegalArgumentException) { return null }
+            val source = sourceForCorePrimitive(entry.program.copyNumericOperationGraphV1()) ?: return null
+            chain += source to entry.bindings
+            if (entry.bindings !is MaterialBindingPlan.OpacityF32V1) break
+            if (ref.indexI32 == 0) return null
+            ref = MaterialPlanRef(ref.indexI32 - 1)
         }
-        val graph = entry.program.copyNumericOperationGraphV1()
-        val source = sourceForCorePrimitive(graph) ?: return null
-        return evaluateSource(source, entry.bindings) {
-            if (ref.indexI32 == 0) null else lower(table, MaterialPlanRef(ref.indexI32 - 1), depth + 1)
+        var value: ColorF32? = null
+        for ((source, bindings) in chain.asReversed()) {
+            value = evaluateSource(source, bindings) { value } ?: return null
         }
+        return value
     }
 
     /**

@@ -437,7 +437,7 @@ internal class GPUFramePreflighter(
         if (w5aRectScratch != null &&
             (renderPackets.any { it.corePrimitivePreparedAuthority?.w5aAnalyticRectSessionScratch !== w5aRectScratch } ||
                 !w5aRectScratch.validatesMaterialPlanVersion() ||
-                !hasExactW4aSessionScratch(framePlan, w5aRectScratch.payloadFacts))
+                !hasExactW4aSessionScratch(framePlan, w5aRectScratch.payloadFacts, w5aRectScratch))
         ) return GPUFramePreflightResult.Refused(
             diagnostic("invalid.preflight.w5a_rect_material", "W5a Rect material-plan V2 authority is invalid."),
         )
@@ -447,7 +447,7 @@ internal class GPUFramePreflighter(
         if (w5aRRectScratch != null &&
             (renderPackets.any { it.corePrimitivePreparedAuthority?.w5aAnalyticRRectSessionScratch !== w5aRRectScratch } ||
                 !w5aRRectScratch.validatesMaterialPlanVersion() ||
-                !hasExactW4bSessionScratch(framePlan, w5aRRectScratch.payloadFacts))
+                !hasExactW4bSessionScratch(framePlan, w5aRRectScratch.payloadFacts, w5aRRectScratch))
         ) return GPUFramePreflightResult.Refused(
             diagnostic("invalid.preflight.w5a_rrect_material", "W5a RRect material-plan V2 authority is invalid."),
         )
@@ -5001,6 +5001,7 @@ internal class GPUFramePreflighter(
     private fun hasExactW4bSessionScratch(
         framePlan: GPUFramePlan,
         scratch: W4bSessionScratchV1,
+        expectedW5aScratch: W5aAnalyticRRectSessionScratchV2? = null,
     ): Boolean {
         val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().singleOrNull() ?: return false
         val readback = framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>().singleOrNull() ?: return false
@@ -5141,8 +5142,11 @@ internal class GPUFramePreflighter(
                         coverage.bounds.right == scissor.right.toFloat() && coverage.bounds.bottom == scissor.bottom.toFloat()
                 else -> false
             }
-            if ((authority.w4bSessionScratch !== scratch &&
-                    authority.w5aAnalyticRRectSessionScratch?.payloadFacts !== scratch) || authority.w3SessionScratch != null ||
+            if ((if (expectedW5aScratch == null) {
+                    authority.w4bSessionScratch !== scratch || authority.w5aAnalyticRRectSessionScratch != null
+                } else {
+                    authority.w4bSessionScratch != null || authority.w5aAnalyticRRectSessionScratch !== expectedW5aScratch
+                }) || authority.w3SessionScratch != null ||
                 authority.w4aSessionScratch != null || authority.uniformSlabSeal != null ||
                 authority.analyticClipUniformSeal != null || authority.analyticIntersectionUniformSeal != null ||
                 authority.coverageMaskUniformSlabSeal != null ||
@@ -5243,6 +5247,7 @@ internal class GPUFramePreflighter(
     private fun hasExactW4aSessionScratch(
         framePlan: GPUFramePlan,
         scratch: W4aSessionScratchV1,
+        expectedW5aScratch: W5aAnalyticRectSessionScratchV2? = null,
     ): Boolean {
         val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             .singleOrNull() ?: return false
@@ -5378,8 +5383,11 @@ internal class GPUFramePreflighter(
                         coverage.bounds.bottom == scissor.bottom.toFloat()
                 else -> false
             }
-            if ((authority.w4aSessionScratch !== scratch &&
-                    authority.w5aAnalyticRectSessionScratch?.payloadFacts !== scratch) || authority.w3SessionScratch != null ||
+            if ((if (expectedW5aScratch == null) {
+                    authority.w4aSessionScratch !== scratch || authority.w5aAnalyticRectSessionScratch != null
+                } else {
+                    authority.w4aSessionScratch != null || authority.w5aAnalyticRectSessionScratch !== expectedW5aScratch
+                }) || authority.w3SessionScratch != null ||
                 authority.uniformSlabSeal != null || authority.analyticClipUniformSeal != null ||
                 authority.analyticIntersectionUniformSeal != null || authority.coverageMaskUniformSlabSeal != null ||
                 authority.structuralPipelineKey != scratch.structuralPipelineKey ||

@@ -1046,7 +1046,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             val render = candidateRenderSteps.singleOrNull() ?: return refused(
                 "invalid.native-core-primitive.w5a-rrect-material", "W5a RRect requires one render envelope.",
             )
-            return materializeW4bSessionScratch(framePlan, encoderPlan, resources, generationSeal, render, w5aRRectScratch.payloadFacts)
+            return materializeW4bSessionScratch(framePlan, encoderPlan, resources, generationSeal, render,
+                w5aRRectScratch.payloadFacts, w5aRRectScratch)
         }
         if (framePlan.hasSealedW4bSessionMarker()) {
             val w4bRender = candidateRenderSteps.singleOrNull()
@@ -1091,7 +1092,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             val render = candidateRenderSteps.singleOrNull() ?: return refused(
                 "invalid.native-core-primitive.w5a-rect-material", "W5a Rect requires one render envelope.",
             )
-            return materializeW4aSessionScratch(framePlan, encoderPlan, resources, generationSeal, render, w5aRectScratch.payloadFacts)
+            return materializeW4aSessionScratch(framePlan, encoderPlan, resources, generationSeal, render,
+                w5aRectScratch.payloadFacts, w5aRectScratch)
         }
         if (framePlan.hasSealedW4aSessionMarker()) {
             val w4aRender = candidateRenderSteps.singleOrNull()
@@ -5103,6 +5105,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         generationSeal: GPUPreparedGenerationSeal,
         renderStep: GPUFrameStep.RenderPassStep,
         scratch: W4bSessionScratchV1,
+        expectedW5aScratch: W5aAnalyticRRectSessionScratchV2? = null,
     ): GPUPreparedNativeFramePayloadMaterialization {
         val packets = renderStep.drawPackets
         val semantics = packets.map { it.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive }
@@ -5193,8 +5196,11 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 } else {
                     org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.ScissorOnly(scissor)
                 }
-                (authority.w4bSessionScratch !== scratch &&
-                    authority.w5aAnalyticRRectSessionScratch?.payloadFacts !== scratch) || authority.w3SessionScratch != null ||
+                (if (expectedW5aScratch == null) {
+                    authority.w4bSessionScratch !== scratch || authority.w5aAnalyticRRectSessionScratch != null
+                } else {
+                    authority.w4bSessionScratch != null || authority.w5aAnalyticRRectSessionScratch !== expectedW5aScratch
+                }) || authority.w3SessionScratch != null ||
                     authority.w4aSessionScratch != null || authority.uniformSlabSeal != null ||
                     authority.analyticClipUniformSeal != null || authority.analyticIntersectionUniformSeal != null ||
                     authority.coverageMaskUniformSlabSeal != null || authority.structuralPipelineKey != scratch.structuralPipelineKey ||
@@ -5405,6 +5411,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         generationSeal: GPUPreparedGenerationSeal,
         renderStep: GPUFrameStep.RenderPassStep,
         scratch: W4aSessionScratchV1,
+        expectedW5aScratch: W5aAnalyticRectSessionScratchV2? = null,
     ): GPUPreparedNativeFramePayloadMaterialization {
         val packets = renderStep.drawPackets
         val semantics = packets.map { it.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive }
@@ -5534,8 +5541,11 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                             coverage.bounds.bottom == scissorBounds.bottom.toFloat()
                     else -> false
                 }
-                (authority.w4aSessionScratch !== scratch &&
-                    authority.w5aAnalyticRectSessionScratch?.payloadFacts !== scratch) || authority.w3SessionScratch != null ||
+                (if (expectedW5aScratch == null) {
+                    authority.w4aSessionScratch !== scratch || authority.w5aAnalyticRectSessionScratch != null
+                } else {
+                    authority.w4aSessionScratch != null || authority.w5aAnalyticRectSessionScratch !== expectedW5aScratch
+                }) || authority.w3SessionScratch != null ||
                     authority.uniformSlabSeal != null || authority.analyticClipUniformSeal != null ||
                     authority.analyticIntersectionUniformSeal != null ||
                     authority.coverageMaskUniformSlabSeal != null ||

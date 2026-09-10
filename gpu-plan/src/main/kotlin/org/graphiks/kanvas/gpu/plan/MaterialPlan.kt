@@ -93,8 +93,13 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
     public fun entries(): List<MaterialPlanEntry> = storedEntries.indices.map { entry(MaterialPlanRef(it)) }
 
     public companion object {
+        /** Public bound for a closed W5a material table; rendering fails closed beyond it. */
+        public const val MAX_ENTRIES_I32: Int = 2048
+
         public fun of(entries: List<MaterialPlanEntry>): MaterialPlanTable {
-            require(entries.isNotEmpty()) { "A material table must contain a root entry" }
+            require(entries.isNotEmpty() && entries.size <= MAX_ENTRIES_I32) {
+                "A material table must contain at most $MAX_ENTRIES_I32 entries"
+            }
             entries.forEachIndexed { index, entry ->
                 when (val program = entry.program) {
                     MaterialProgramPlan.TransparentV1 -> require(entry.bindings is MaterialBindingPlan.EmptyV1) {
