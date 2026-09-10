@@ -197,6 +197,9 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         if (!w3Blend(node.blend) || node.effects !is EffectStack.Empty || node.resource != null || node.operationBlendMode != null || !w3Paint(node.paint, isW5aMaterial)) {
             return semanticGap("Draw state is outside W3")
         }
+        if (!materialMatchesPaintAuthority(node)) {
+            return semanticGap("Draw material disagrees with paint authority")
+        }
         if (node.coverage != CoverageRequest.HARD_EDGE && node.coverage != CoverageRequest.ANTIALIASED) return semanticGap("Coverage is outside W3")
         val sourceBounds = geometryNode.copyBounds()
         if (!finite(sourceBounds) || !finite(node.transform)) {
@@ -304,6 +307,16 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
             paint.blendMode == BlendMode.SRC_OVER
         )
 
+    /**
+     * Material is normalized from Paint for every non-image draw.  Reject an
+     * externally assembled DrawNode when its two public authorities disagree.
+     */
+    private fun materialMatchesPaintAuthority(node: DrawNode): Boolean {
+        if (node.origin in imageOrigins) return true
+        val paint = node.paint ?: return false
+        return node.material == (paint.shader ?: MaterialNode.Solid(paint.color))
+    }
+
     private fun linearPremultiplied(color: ColorARGB): ColorF32 {
         val alpha = color.alphaNormalized
         return ColorF32.of(
@@ -313,6 +326,13 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
             alpha,
         )
     }
+
+    private val imageOrigins: Set<DrawOrigin> = setOf(
+        DrawOrigin.IMAGE,
+        DrawOrigin.IMAGE_NINE,
+        DrawOrigin.IMAGE_LATTICE,
+        DrawOrigin.ATLAS,
+    )
 
     private fun appendMaterialPlan(
         entries: MutableList<MaterialPlanEntry>,

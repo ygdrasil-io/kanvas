@@ -85,7 +85,7 @@ class W3SolidRectPlanCompilerTest {
 
         val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(result).plan
         assertEquals(2, graph.visualCommandCount)
-        assertEquals(W3SolidRectPlanCompiler.CAPABILITY_ID, graph.capabilityId)
+        assertEquals(W3SolidRectPlanCompiler.W5A_CAPABILITY_ID, graph.capabilityId)
     }
 
     @Test
@@ -193,7 +193,6 @@ class W3SolidRectPlanCompilerTest {
         val draw = solidDrawNode()
         val invalids = listOf(
             draw.copy(paint = w3Paint().copy(style = PaintStyleNode.STROKE)),
-            draw.copy(paint = w3Paint().copy(shader = MaterialNode.Solid(ColorARGB.Blue))),
             draw.copy(paint = w3Paint().copy(blendMode = BlendMode.SRC)),
             draw.copy(paint = w3Paint().copy(blender = org.graphiks.kanvas.render.ir.BlenderNode.Mode(BlendMode.SRC_OVER))),
             draw.copy(resource = org.graphiks.kanvas.render.ir.ImageResourceSnapshot.rgba8(1, 1, byteArrayOf(0, 0, 0, 0), ColorSpace.SRGB)),
@@ -202,6 +201,15 @@ class W3SolidRectPlanCompilerTest {
             draw.copy(material = MaterialNode.Transparent),
         )
         invalids.forEach { assertGap(sceneOf(SceneCommand.Draw(it))) }
+    }
+
+    @Test
+    fun `contradictory paint shader and material are refused`() {
+        val contradictory = solidDrawNode().copy(
+            paint = w3Paint().copy(shader = MaterialNode.Solid(ColorARGB.Blue)),
+        )
+
+        assertGap(sceneOf(SceneCommand.Draw(contradictory)))
     }
 
     @Test
