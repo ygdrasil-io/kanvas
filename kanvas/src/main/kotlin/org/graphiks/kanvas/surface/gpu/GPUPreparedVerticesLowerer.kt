@@ -12,6 +12,7 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialLoweringContext
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramCompiler
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramResult
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedVerticesW5aProgramResult
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
@@ -285,19 +286,23 @@ internal object GPUPreparedVerticesLowerer {
                 result.code, operationIndex, "geometry", result.facts["reason"] ?: "packer_refused", result.facts,
             )
         }
-        val resolvedMaterial = material ?: materialPlan?.let { planned ->
-            when (val compiled = GPUPreparedMaterialProgramCompiler.compileW5a(
+        val w5aResult = materialPlan?.let { planned ->
+            when (val compiled = GPUPreparedMaterialProgramCompiler.compileW5aForPreparedVertices(
                 table = planned.table,
                 root = planned.ref,
                 context = materialContext(target, capabilities),
             )) {
-                is GPUPreparedMaterialProgramResult.Ready -> compiled.program
-                is GPUPreparedMaterialProgramResult.Refused -> return refused(
+                is GPUPreparedVerticesW5aProgramResult.Ready -> compiled
+                is GPUPreparedVerticesW5aProgramResult.Refused -> return refused(
                     GPUPreparedVerticesRefusalCodes.Material, operationIndex, "material-plan", "compiler_refused",
-                    mapOf("compilerCode" to compiled.code, "sourceKind" to compiled.sourceKind.name),
+                    mapOf(
+                        "compilerCode" to compiled.refusal.code,
+                        "sourceKind" to compiled.refusal.sourceKind.name,
+                    ),
                 )
             }
-        } ?: when (val compiled = compilePaint(paint, target, capabilities)) {
+        }
+        val resolvedMaterial = material ?: w5aResult?.program ?: when (val compiled = compilePaint(paint, target, capabilities)) {
             is MaterialResult.Ready -> compiled.material
             is MaterialResult.Refused -> return refused(
                 GPUPreparedVerticesRefusalCodes.Material, operationIndex, "material", compiled.reason, compiled.facts,
@@ -349,6 +354,7 @@ internal object GPUPreparedVerticesLowerer {
                 operationKind = operationKind,
                 material = resolvedMaterial,
                 materialPlan = materialPlan,
+                materialPlanEmission = w5aResult?.emission,
                 transform = transform,
                 clip = clip,
                 clipSnapshot = preparedClip,

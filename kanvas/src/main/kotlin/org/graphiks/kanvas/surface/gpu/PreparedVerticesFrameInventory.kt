@@ -91,6 +91,10 @@ internal class PreparedVerticesFrameCommand internal constructor(
     /** The sealed W5a authority travels with the inventory command, never as a descriptor. */
     val materialPlan: GPUPreparedVerticesMaterialPlan?
         get() = draw.materialPlan
+
+    /** Compiler-issued seed, bound to the mapped command only when gathering its payload. */
+    val materialPlanEmission
+        get() = draw.materialPlanEmission
 }
 
 internal class PreparedVerticesMappedCommand internal constructor(

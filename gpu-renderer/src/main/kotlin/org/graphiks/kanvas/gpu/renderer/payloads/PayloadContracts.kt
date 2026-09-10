@@ -1769,8 +1769,7 @@ sealed interface GPUDrawSemanticPayload {
         val artifact = snapshot.artifact
         val material = snapshot.material
         val materialIdentity = snapshot.materialIdentity
-        val materialPlanTable = snapshot.materialPlanTable
-        val materialPlanRef = snapshot.materialPlanRef
+        val materialPlanProvenance = snapshot.materialPlanProvenance
         val topologyIdentity: GPUPreparedVerticesTopologyIdentity = snapshot.topologyIdentity
         val transformBytes: List<Int> = snapshot.transformBytes
         val targetBounds = snapshot.targetBounds

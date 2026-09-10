@@ -2381,8 +2381,8 @@ internal class GPUPreparedSurfaceNativePreflight(
                     topology = semantic.artifact.topology,
                     material = semantic.material,
                     hasPrimitiveColor = semantic.primitiveColorPresent,
-                    materialPlanTable = semantic.materialPlanTable,
-                    materialPlanRef = semantic.materialPlanRef,
+                    materialPlanProvenance = semantic.materialPlanProvenance,
+                    commandIdValue = semantic.payloadRef.commandIdValue,
                 )
             ) {
                 is GPUPreparedVerticesShaderResult.Ready -> null
@@ -3484,8 +3484,8 @@ internal class GPUPreparedSurfaceNativePreflight(
                                 topology = semantic.artifact.topology,
                                 material = semantic.material,
                                 hasPrimitiveColor = semantic.primitiveColorPresent,
-                                materialPlanTable = semantic.materialPlanTable,
-                                materialPlanRef = semantic.materialPlanRef,
+                                materialPlanProvenance = semantic.materialPlanProvenance,
+                                commandIdValue = semantic.payloadRef.commandIdValue,
                             )
                         ) {
                             is GPUPreparedVerticesShaderResult.Ready ->
@@ -5806,15 +5806,11 @@ private fun preparedVerticesArtifactKeyOfUpload(upload: GPUFrameStep.UploadResou
 
 private val PREPARED_VERTICES_ABI_HASH_PATTERN = Regex("sha256:[0-9a-f]{64}")
 
-/** The native seam accepts a W5a draw only with its sealed table/reference pair intact. */
+/** The native seam accepts W5a vertices only with its sealed table/program/command witness. */
 private fun GPUDrawSemanticPayload.Vertices.hasValidW5aMaterialPlanProvenance(): Boolean {
-    val table = materialPlanTable
-    val ref = materialPlanRef
-    if (table == null || ref == null) return table == null && ref == null
-    return runCatching {
-        val entry = table.entry(ref)
-        entry.program.versionI32 == 1 && entry.bindings.versionI32 == 1
-    }.getOrDefault(false)
+    val provenance = materialPlanProvenance
+    return (provenance == null) == (material.preparedVerticesW5aAdmissionToken == null) &&
+        (provenance == null || provenance.validates(payloadRef.commandIdValue, material))
 }
 
 private inline fun <T> List<T>.anyIndexed(predicate: (Int, T) -> Boolean): Boolean {

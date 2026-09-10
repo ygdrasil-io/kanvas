@@ -56,6 +56,17 @@ sealed interface GPUPreparedTextW5aProgramResult {
     data class Refused(val refusal: GPUPreparedMaterialProgramResult.Refused) : GPUPreparedTextW5aProgramResult
 }
 
+/** Compiler-only W5a emission used to bind prepared vertices provenance without reconstruction. */
+sealed interface GPUPreparedVerticesW5aProgramResult {
+    data class Ready(
+        val program: GPUPreparedMaterialProgram,
+        val emission: GPUPreparedVerticesMaterialPlanEmission,
+    ) : GPUPreparedVerticesW5aProgramResult
+
+    data class Refused(val refusal: GPUPreparedMaterialProgramResult.Refused) :
+        GPUPreparedVerticesW5aProgramResult
+}
+
 /**
  * Unforgeable-by-content runtime witness. Its private constructor confines issuance to the
  * prepared-text compiler entry point below; snapshots preserve identity without serializing it.
@@ -63,6 +74,13 @@ sealed interface GPUPreparedTextW5aProgramResult {
 public class GPUPreparedTextW5aAdmissionToken private constructor() {
     internal companion object {
         fun issue(): GPUPreparedTextW5aAdmissionToken = GPUPreparedTextW5aAdmissionToken()
+    }
+}
+
+/** Unforgeable-by-content witness issued only by the prepared-vertices compiler entry point. */
+public class GPUPreparedVerticesW5aAdmissionToken private constructor() {
+    internal companion object {
+        fun issue(): GPUPreparedVerticesW5aAdmissionToken = GPUPreparedVerticesW5aAdmissionToken()
     }
 }
 
@@ -152,6 +170,27 @@ object GPUPreparedMaterialProgramCompiler {
             )
         }
         is GPUPreparedMaterialProgramResult.Refused -> GPUPreparedTextW5aProgramResult.Refused(result)
+    }
+
+    /** Emits the exact W5a vertices program with its immutable table/ref provenance seed. */
+    fun compileW5aForPreparedVertices(
+        table: MaterialPlanTable,
+        root: MaterialPlanRef,
+        context: GPUMaterialLoweringContext,
+    ): GPUPreparedVerticesW5aProgramResult = when (val result = compileW5a(table, root, context)) {
+        is GPUPreparedMaterialProgramResult.Ready -> {
+            val token = GPUPreparedVerticesW5aAdmissionToken.issue()
+            val program = result.program.authenticatedPreparedVerticesW5aSnapshot(token)
+            GPUPreparedVerticesW5aProgramResult.Ready(
+                program = program,
+                emission = GPUPreparedVerticesMaterialPlanEmission(
+                    table = table,
+                    ref = root,
+                    program = program.authenticatedSnapshot(),
+                ),
+            )
+        }
+        is GPUPreparedMaterialProgramResult.Refused -> GPUPreparedVerticesW5aProgramResult.Refused(result)
     }
 
     private fun compilePrepared(

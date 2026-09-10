@@ -7,6 +7,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.picture.Picture
@@ -789,7 +790,10 @@ class W5aMaterialSurfacePixelTest {
         val positions = mutableListOf(
             Point2F32(-1f, -1f), Point2F32(5f, -1f), Point2F32(-1f, 5f),
         )
-        val colors = mutableListOf(ColorARGB.White, ColorARGB.White, ColorARGB.White)
+        // A uniform but non-neutral premultiplied color makes the observed pixel depend on the
+        // documented material × vertex composition, while keeping interpolation out of scope.
+        val vertexColor = ColorARGB.of(255, 143, 97, 41)
+        val colors = mutableListOf(vertexColor, vertexColor, vertexColor)
         val vertices = Vertices(VertexMode.TRIANGLES, positions, colors = colors)
         val source = ColorARGB.of(211, 71, 199, 127)
         val paint = Paint(
@@ -809,9 +813,35 @@ class W5aMaterialSurfacePixelTest {
         val result = surface.render()
 
         WgslFloatEnvelopeV1Oracle.assertAdmits(
-            W5aSolidOpacityCpuOracle.draw(source, 0.5f, paintAlphaF32 = 173f / 255f),
+            W5aSolidOpacityCpuOracle.drawVertexColorModulated(
+                color = source,
+                vertexColor = vertexColor,
+                shaderOpacityOuterF32 = 0.5f,
+                paintAlphaF32 = 173f / 255f,
+            ),
             result.pixels.copyOfRange(0, 4),
         )
+    }
+
+    @Test
+    fun `public W5a vertex candidate with a color filter keeps the typed material refusal`() {
+        val surface = Surface(4, 4)
+        surface.canvas {
+            drawVertices(
+                Vertices(
+                    VertexMode.TRIANGLES,
+                    listOf(Point2F32(-1f, -1f), Point2F32(5f, -1f), Point2F32(-1f, 5f)),
+                ),
+                Paint(
+                    shader = Shader.Opacity(Shader.SolidColor(ColorARGB.of(211, 71, 199, 127)), 0.5f),
+                    colorFilter = ColorFilter.HighContrast,
+                    antiAlias = false,
+                ),
+            )
+        }
+
+        val failure = assertFailsWith<IllegalStateException> { surface.render() }
+        assertTrue(failure.message.orEmpty().contains("unsupported.vertices.material"), failure.message)
     }
 
 }

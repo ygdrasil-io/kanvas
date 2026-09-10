@@ -60,13 +60,26 @@ internal object GPUPreparedVerticesFramePreparer {
             if (operation !is DisplayOp.DrawVertices && operation !is DisplayOp.DrawMesh) {
                 return@forEachIndexed
             }
+            val materialPlan = when (val bridgeResult = materialBridge.materialFor(operationIndex)) {
+                W5aPreparedVerticesMaterialBridge.Result.NotCandidate -> null
+                is W5aPreparedVerticesMaterialBridge.Result.Ready -> bridgeResult.materialPlan
+                is W5aPreparedVerticesMaterialBridge.Result.Refused ->
+                    return GPUPreparedVerticesFramePreparation.Refused(
+                        GPUPreparedOperationRefusal(
+                            commandId = operationIndex,
+                            operationIndex = operationIndex,
+                            code = bridgeResult.code,
+                            facts = bridgeResult.facts,
+                        ),
+                    )
+            }
             when (
                 val lowered = GPUPreparedVerticesLowerer.lower(
                     operation = operation,
                     operationIndex = operationIndex,
                     target = target,
                     capabilities = capabilities,
-                    materialPlan = materialBridge?.materialFor(operationIndex),
+                    materialPlan = materialPlan,
                 )
             ) {
                 is GPUPreparedVerticesLowering.Ready -> draws += lowered.draw

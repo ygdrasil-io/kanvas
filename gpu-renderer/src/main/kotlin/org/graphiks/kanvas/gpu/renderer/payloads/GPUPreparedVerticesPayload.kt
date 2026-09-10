@@ -8,9 +8,9 @@ import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFrameIdentityAuthority
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFrameSnapshot
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgram
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedVerticesMaterialPlanEmission
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedVerticesMaterialPlanProvenance
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
-import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
-import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 
 const val PREPARED_VERTICES_RENDER_STEP_IDENTITY: String = "vertices.draw.prepared"
 
@@ -37,8 +37,7 @@ data class GPUPreparedVerticesPayloadInput(
     val artifact: GPUPreparedVerticesUploadArtifact,
     val material: GPUPreparedMaterialProgram,
     val materialFrameSnapshot: GPUPreparedMaterialFrameSnapshot? = null,
-    val materialPlanTable: MaterialPlanTable? = null,
-    val materialPlanRef: MaterialPlanRef? = null,
+    val materialPlanEmission: GPUPreparedVerticesMaterialPlanEmission? = null,
     val topologyIdentity: GPUPreparedVerticesTopologyIdentity,
     val transformBytes: List<Int>,
     val targetBounds: GPUPixelBounds,
@@ -86,8 +85,16 @@ internal class GPUPreparedVerticesPayloadSnapshot(
     } ?: GPUPreparedMaterialFrameIdentityAuthority.authenticate(input.material)
     val material = authenticatedMaterial.program
     val materialIdentity = authenticatedMaterial.identity.bucketKey
-    val materialPlanTable = input.materialPlanTable
-    val materialPlanRef = input.materialPlanRef
+    val materialPlanProvenance = input.materialPlanEmission?.bind(payloadRef.commandIdValue, material)
+        ?: input.materialPlanEmission?.let {
+            throw IllegalArgumentException("Prepared vertices W5a emission does not match its command or program")
+        }
+    init {
+        require((materialPlanProvenance == null) ==
+            (material.preparedVerticesW5aAdmissionToken == null)) {
+            "Prepared vertices W5a provenance must match its compiler-issued program"
+        }
+    }
     val topologyIdentity = input.topologyIdentity
     val transformBytes = immutableList(input.transformBytes)
     val targetBounds = input.targetBounds.copy()
@@ -131,9 +138,8 @@ internal class GPUPreparedVerticesPayloadSnapshot(
             .bytes("artifact.vertexBytes", artifact.vertexBytesForUpload())
             .bytes("artifact.indexBytes", artifact.indexBytesForUpload() ?: byteArrayOf())
             .text("material.authenticatedIdentity", materialIdentity)
-            .boolean("material.w5aPlan.present", materialPlanTable != null)
-            .int("material.w5aPlan.ref", materialPlanRef?.indexI32 ?: -1)
-            .text("material.w5aPlan.identity", materialPlanIdentity(materialPlanTable, materialPlanRef))
+            .boolean("material.w5aPlan.present", materialPlanProvenance != null)
+            .text("material.w5aPlan.identity", materialPlanProvenance?.canonicalIdentity() ?: "none")
             .text("topology", topologyIdentity.sourceLabel)
             .int("transform.count", transformBytes.size)
         transformBytes.forEachIndexed { index, bits ->
@@ -289,16 +295,6 @@ object GPUPreparedVerticesPayloadGatherer {
         if (input.drawProvenance.isBlank()) {
             return refused("invalid.renderer.prepared.vertices-provenance", "blank_provenance")
         }
-        if ((input.materialPlanTable == null) != (input.materialPlanRef == null)) {
-            return refused("invalid.renderer.prepared.vertices-material", "w5a_plan_pair_mismatch")
-        }
-        if (input.materialPlanTable != null && input.materialPlanRef != null) {
-            val entry = runCatching { input.materialPlanTable.entry(input.materialPlanRef) }.getOrNull()
-                ?: return refused("invalid.renderer.prepared.vertices-material", "w5a_plan_ref_invalid")
-            if (entry.program.versionI32 != 1 || entry.bindings.versionI32 != 1) {
-                return refused("invalid.renderer.prepared.vertices-material", "w5a_plan_version")
-            }
-        }
         return null
     }
 
@@ -313,10 +309,4 @@ object GPUPreparedVerticesPayloadGatherer {
             "reason" to reason,
         ).apply { putAll(extra) },
     )
-}
-
-private fun materialPlanIdentity(table: MaterialPlanTable?, ref: MaterialPlanRef?): String {
-    if (table == null || ref == null) return "none"
-    val entry = table.entry(ref)
-    return "${entry.program.structuralId.value}:${entry.program.versionI32}:${entry.bindings.versionI32}"
 }
