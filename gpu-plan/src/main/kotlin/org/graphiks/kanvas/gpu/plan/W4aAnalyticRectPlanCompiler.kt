@@ -42,6 +42,7 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
         }
         if (target.colorSpace != ColorSpace.SRGB) return notCandidate("W4a supports only sRGB targets")
         return when (val recognition = recognize(scene)) {
+            is Recognition.MaterialRefused -> GpuPlanSelection.MaterialOnlyRefusal(W5A_CAPABILITY_ID, scene.canonicalId, target, recognition.refusals)
             is Recognition.Accepted -> GpuPlanSelection.Candidate(
                 W4aCandidate(this, scene.canonicalId, target, recognition.draws, recognition.materialPlanTable, recognition.capabilityId),
             )
@@ -123,8 +124,11 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
         val target = RectF32(0f, 0f, scene.extent.width.toFloat(), scene.extent.height.toFloat())
         val draws = mutableListOf<SealedDraw>()
         val materialEntries = mutableListOf<MaterialPlanEntry>()
+        val materialRefusals = mutableListOf<EffectiveMaterialPlanner.Result.Refused>()
+        var refusedFractionalEdge = false
         for ((index, command) in scene.withIndex()) when (command) {
             is SceneCommand.Draw -> when (val draw = recognizeDraw(command.node, index, target, materialEntries)) {
+                is DrawRecognition.MaterialRefused -> { materialRefusals += draw.refusal; refusedFractionalEdge = refusedFractionalEdge || draw.fractionalEdge }
                 is DrawRecognition.Accepted -> draws += draw.draw
                 is DrawRecognition.Gap -> return Recognition.Gap(draw.message)
                 is DrawRecognition.Invalid -> return Recognition.Invalid(draw.message)
@@ -138,9 +142,10 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
             is SceneCommand.Annotation -> if (!finite(command.copyBounds())) return Recognition.Invalid("Annotation bounds are non-finite")
             else -> return Recognition.Gap("Scene command is outside W4a")
         }
-        if (draws.isEmpty()) return Recognition.Gap("W4a requires at least one visible draw")
-        if (draws.size > MAX_DRAWS) return Recognition.Gap("W4a accepts at most 512 visual draws")
-        if (draws.none { hasFractionalEdge(it.deviceBounds) }) return Recognition.Gap("W4a requires a fractional device edge")
+        if (draws.isEmpty() && materialRefusals.isEmpty()) return Recognition.Gap("W4a requires at least one visible draw")
+        if (draws.size + materialRefusals.size > MAX_DRAWS) return Recognition.Gap("W4a accepts at most 512 visual draws")
+        if (!refusedFractionalEdge && draws.none { hasFractionalEdge(it.deviceBounds) }) return Recognition.Gap("W4a requires a fractional device edge")
+        if (materialRefusals.isNotEmpty()) return Recognition.MaterialRefused(materialRefusals)
         return Recognition.Accepted(draws, MaterialPlanTable.of(materialEntries), W5A_CAPABILITY_ID)
     }
 
@@ -151,11 +156,8 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
         materialEntries: MutableList<MaterialPlanEntry>,
     ): DrawRecognition {
         val geometry = node.geometry as? GeometryNode.Rect ?: return DrawRecognition.Gap("Draw geometry is outside W4a")
-        val material = node.material
-        val isW5aMaterial = material is MaterialNode.Solid || material is MaterialNode.Opacity || material == MaterialNode.Transparent
-        if (!isW5aMaterial) return DrawRecognition.Gap("Draw material is outside W4a")
         if (node.origin != DrawOrigin.RECT) return DrawRecognition.Gap("Draw origin is outside W4a")
-        if (!w4aPaint(node.paint, isW5aMaterial) || !w4aBlend(node.blend) || node.effects !is EffectStack.Empty || node.resource != null || node.operationBlendMode != null) {
+        if (!w4aPaint(node.paint, true) || !w4aBlend(node.blend) || node.effects !is EffectStack.Empty || node.resource != null || node.operationBlendMode != null) {
             return DrawRecognition.Gap("Draw state is outside W4a")
         }
         if (!materialMatchesPaintAuthority(node)) return DrawRecognition.Gap("Draw material disagrees with paint authority")
@@ -175,7 +177,7 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
             ?: return DrawRecognition.Gap("Draw is fully clipped out")
         if (visible.isEmpty) return DrawRecognition.Gap("Draw is fully clipped out")
         return when (val planned = EffectiveMaterialPlanner.plan(node)) {
-            is EffectiveMaterialPlanner.Result.Refused -> DrawRecognition.Gap("W5a material is outside the Solid/Opacity subset")
+            is EffectiveMaterialPlanner.Result.Refused -> DrawRecognition.MaterialRefused(planned, hasFractionalEdge(device))
             is EffectiveMaterialPlanner.Result.Ready -> DrawRecognition.Accepted(
                 SealedDraw(index, appendMaterialPlan(materialEntries, planned.table, planned.root), device, clip),
             )
@@ -299,6 +301,7 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
     }
 
     private sealed interface Recognition {
+        data class MaterialRefused(val refusals: List<EffectiveMaterialPlanner.Result.Refused>) : Recognition
         data class Accepted(
             val draws: List<SealedDraw>,
             val materialPlanTable: MaterialPlanTable,
@@ -307,7 +310,7 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
         data class Gap(val message: String) : Recognition
         data class Invalid(val message: String) : Recognition
     }
-    private sealed interface DrawRecognition { data class Accepted(val draw: SealedDraw) : DrawRecognition; data class Gap(val message: String) : DrawRecognition; data class Invalid(val message: String) : DrawRecognition }
+    private sealed interface DrawRecognition { data class MaterialRefused(val refusal: EffectiveMaterialPlanner.Result.Refused, val fractionalEdge: Boolean) : DrawRecognition; data class Accepted(val draw: SealedDraw) : DrawRecognition; data class Gap(val message: String) : DrawRecognition; data class Invalid(val message: String) : DrawRecognition }
     private sealed interface ClipRecognition { data class Accepted(val bounds: RectI32?) : ClipRecognition; data class Gap(val message: String) : ClipRecognition; data class Invalid(val message: String) : ClipRecognition }
     private data class SealedDraw(val commandIndex: Int, val material: MaterialPlanRef, val deviceBounds: RectF32, val clip: RectI32?)
     private class W4aCandidate(

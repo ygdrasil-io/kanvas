@@ -127,6 +127,10 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             is Preflight.Limit -> return limit(preflight.message)
         }
         return when (val recognized = recognize(scene)) {
+            is Recognition.MaterialRefused -> GpuPlanSelection.MaterialOnlyRefusal(
+                if (forceAaFrame || scene.any { it is SceneCommand.Draw && it.node.coverage == CoverageRequest.ANTIALIASED }) W5A_AA_CAPABILITY_ID else W5A_HARD_CAPABILITY_ID,
+                scene.canonicalId, target, recognized.refusals,
+            )
             is Recognition.Ready -> GpuPlanSelection.Candidate(Candidate(this, scene.canonicalId, target, recognized.draws, recognized.materialPlanTable))
             is Recognition.Gap -> gap(recognized.message)
             is Recognition.Invalid -> invalid(recognized.message)
@@ -185,6 +189,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         val targetBounds = RectI32(0, 0, scene.extent.width, scene.extent.height)
         val draws = mutableListOf<SealedDraw>()
         val materialEntries = mutableListOf<MaterialPlanEntry>()
+        val materialRefusals = mutableListOf<EffectiveMaterialPlanner.Result.Refused>()
         var visualDrawCountI32 = 0
         var frameWorkUsageI64 = PathStrokeWorkUsageI64()
         scene.withIndex().forEach { (commandIndex, command) ->
@@ -193,6 +198,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                     if (visualDrawCountI32 >= MAX_DRAWS) return Recognition.Limit("W4d.2 accepts at most 512 visual path draws")
                     visualDrawCountI32 = Math.addExact(visualDrawCountI32, 1)
                     when (val result = recognizeDraw(command.node, commandIndex, targetBounds, frameWorkUsageI64, materialEntries)) {
+                        is DrawResult.MaterialRefused -> { materialRefusals += result.refusal; frameWorkUsageI64 = result.frameWorkUsageI64 }
                         is DrawResult.Ready -> {
                             draws += result.draw
                             frameWorkUsageI64 = result.frameWorkUsageI64
@@ -210,6 +216,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                 else -> return Recognition.Gap("Scene command is outside W4d.2")
             }
         }
+        if (materialRefusals.isNotEmpty()) return Recognition.MaterialRefused(materialRefusals)
         return if (draws.isEmpty()) Recognition.Limit("W4d.2 retained no visible prepared geometry") else Recognition.Ready(draws, MaterialPlanTable.of(materialEntries))
     }
 
@@ -236,7 +243,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                     prepared.geometry.emittedNonZeroClosedEdgeCountI32 > UByte.MAX_VALUE.toInt()
                 ) return DrawResult.Limit("W4d.2 winding path exceeds the stencil edge limit")
                 val material = when (val planned = EffectiveMaterialPlanner.plan(node.copy(effects = EffectStack.Empty))) {
-                    is EffectiveMaterialPlanner.Result.Refused -> return DrawResult.Gap("W5a material is outside the Solid/Opacity subset")
+                    is EffectiveMaterialPlanner.Result.Refused -> return DrawResult.MaterialRefused(planned, prepared.frameWorkUsageI64)
                     is EffectiveMaterialPlanner.Result.Ready -> appendMaterialPlan(materialEntries, planned.table, planned.root)
                 }
                 DrawResult.Ready(
@@ -1023,7 +1030,6 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             value == PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing
 
     private fun solid(node: DrawNode, paint: PaintNode): Boolean =
-        (node.material is MaterialNode.Solid || node.material is MaterialNode.Opacity || node.material == MaterialNode.Transparent) &&
         effectsMatchPaintPathEffect(node.effects, paint.pathEffect) && node.resource == null &&
         node.operationBlendMode == null && w4Blend(node.blend) && paint.blender == null &&
         paint.colorFilter == null && paint.maskFilter == null && paint.imageFilter == null &&
@@ -1139,13 +1145,13 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     private fun diag(code: org.graphiks.kanvas.render.ir.RenderDiagnosticCode, domain: RenderDiagnosticDomain, message: String): RenderDiagnostic = W4dGeneralPlanDiagnostics.diagnostic(code, domain, message)
 
     private sealed interface Preflight { data object Member : Preflight; data object Outside : Preflight; data class Invalid(val message: String) : Preflight; data class Limit(val message: String) : Preflight }
-    private sealed interface Recognition { data class Ready(val draws: List<SealedDraw>, val materialPlanTable: MaterialPlanTable) : Recognition; data class Gap(val message: String) : Recognition; data class Invalid(val message: String) : Recognition; data class Horizon(val message: String) : Recognition; data class Limit(val message: String) : Recognition }
+    private sealed interface Recognition { data class MaterialRefused(val refusals: List<EffectiveMaterialPlanner.Result.Refused>) : Recognition; data class Ready(val draws: List<SealedDraw>, val materialPlanTable: MaterialPlanTable) : Recognition; data class Gap(val message: String) : Recognition; data class Invalid(val message: String) : Recognition; data class Horizon(val message: String) : Recognition; data class Limit(val message: String) : Recognition }
     private sealed interface DrawScope {
         data class Ready(val path: PathF32, val matrixF64: Matrix3x3F64, val transformClass: PathTransformClass, val clip: RectI32?, val fill: Boolean, val mode: PathStrokeDrawMode?, val styleF64: PathStrokeStyleF64?, val requestsAntiAlias: Boolean) : DrawScope
         data class Gap(val message: String) : DrawScope
         data class Invalid(val message: String) : DrawScope
     }
-    private sealed interface DrawResult { data class Ready(val draw: SealedDraw, val frameWorkUsageI64: PathStrokeWorkUsageI64) : DrawResult; data class Empty(val frameWorkUsageI64: PathStrokeWorkUsageI64) : DrawResult; data class Gap(val message: String) : DrawResult; data class Invalid(val message: String) : DrawResult; data class Horizon(val message: String) : DrawResult; data class Limit(val message: String) : DrawResult }
+    private sealed interface DrawResult { data class MaterialRefused(val refusal: EffectiveMaterialPlanner.Result.Refused, val frameWorkUsageI64: PathStrokeWorkUsageI64) : DrawResult; data class Ready(val draw: SealedDraw, val frameWorkUsageI64: PathStrokeWorkUsageI64) : DrawResult; data class Empty(val frameWorkUsageI64: PathStrokeWorkUsageI64) : DrawResult; data class Gap(val message: String) : DrawResult; data class Invalid(val message: String) : DrawResult; data class Horizon(val message: String) : DrawResult; data class Limit(val message: String) : DrawResult }
     private sealed interface Prepared { data class Ready(val geometry: org.graphiks.math.geometry.PathFillGeometryF32, val pathGeometry: PathDrawGeometry, val frameWorkUsageI64: PathStrokeWorkUsageI64) : Prepared; data class Empty(val frameWorkUsageI64: PathStrokeWorkUsageI64) : Prepared; data class Invalid(val message: String) : Prepared; data class Horizon(val message: String) : Prepared; data class Limit(val message: String) : Prepared }
     private data class SealedDraw(val commandIndex: Int, val material: MaterialPlanRef, val geometry: PathDrawGeometry, val strategy: PathFillStrategy, val scissorI32: RectI32, val requestsAntiAlias: Boolean)
     private data class ResourceLife(val ordinal: Int, val first: Int, val last: Int)

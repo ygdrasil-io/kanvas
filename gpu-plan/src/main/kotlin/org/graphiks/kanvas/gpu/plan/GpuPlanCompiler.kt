@@ -18,6 +18,25 @@ public interface GpuPlanCandidate {
 public sealed interface GpuPlanSelection {
     public data class Candidate(public val candidate: GpuPlanCandidate) : GpuPlanSelection
 
+    /** Issued only after every non-material scene admission check succeeded in a native compiler. */
+    public class MaterialOnlyRefusal internal constructor(
+        public val capabilityId: String,
+        public val sceneCanonicalId: CanonicalId,
+        public val target: RenderTargetDescriptor,
+        refusals: List<EffectiveMaterialPlanner.Result.Refused>,
+    ) : GpuPlanSelection {
+        private val values = immutableDiagnostics(refusals.map { refusal ->
+            org.graphiks.kanvas.render.ir.RenderDiagnostic(
+                org.graphiks.kanvas.render.ir.RenderDiagnosticCode(refusal.diagnosticCode),
+                org.graphiks.kanvas.render.ir.RenderDiagnosticDomain.SCENE,
+                org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity.ERROR,
+                "Native capability $capabilityId admits the scene except for its W5a material.",
+            )
+        })
+        internal val materialRefusals = refusals.toList()
+        public fun diagnostics(): List<RenderDiagnostic> = values
+    }
+
     public class NotCandidate(diagnostics: List<RenderDiagnostic>) : GpuPlanSelection {
         private val values: List<RenderDiagnostic> = immutableDiagnostics(diagnostics)
 

@@ -152,6 +152,10 @@ public class W4eClipPlanCompiler(
         val forceAaFrame = preparedByKey.values.any { it.requiresAaFrame }
         val constructionSeam = if (forceAaFrame) w4dAaSeam else w4dHardSeam
         val base = when (val selected = constructionSeam.select(normalizedScene, target)) {
+            is GpuPlanSelection.MaterialOnlyRefusal -> return GpuPlanSelection.MaterialOnlyRefusal(
+                if (selected.capabilityId == W4dGeneralPathPlanCompiler.W5A_AA_CAPABILITY_ID) W5A_AA_CAPABILITY_ID else W5A_HARD_CAPABILITY_ID,
+                scene.canonicalId, target, selected.materialRefusals,
+            )
             is GpuPlanSelection.Candidate -> selected.candidate
             is GpuPlanSelection.NotCandidate -> return gap("W4e draw scope is outside the W4d.2 construction seam")
             is GpuPlanSelection.InvalidScene -> return invalid("W4d.2 rejected normalized W4e draw facts")

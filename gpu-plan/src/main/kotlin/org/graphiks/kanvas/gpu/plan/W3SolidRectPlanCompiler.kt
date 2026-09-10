@@ -45,6 +45,9 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
             return notCandidate(diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W3 accepts at most 512 total commands"))
         }
         when (val recognition = recognize(scene)) {
+            is Recognition.MaterialRefused -> return if (target.colorSpace == ColorSpace.SRGB) {
+                GpuPlanSelection.MaterialOnlyRefusal(W5A_CAPABILITY_ID, scene.canonicalId, target, recognition.refusals)
+            } else notCandidate(diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.TARGET, "W3 supports only sRGB targets"))
             is Recognition.Gap -> return notCandidate(recognition.diagnostic)
             is Recognition.Invalid -> return invalidSelection(recognition.diagnostic)
             is Recognition.Accepted -> return if (target.colorSpace != ColorSpace.SRGB) {
@@ -139,14 +142,17 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         val targetBounds = RectI32(0, 0, scene.extent.width, scene.extent.height)
         val draws = mutableListOf<SolidRectDraw>()
         val materialEntries = mutableListOf<MaterialPlanEntry>()
+        val materialRefusals = mutableListOf<EffectiveMaterialPlanner.Result.Refused>()
         for ((index, command) in scene.withIndex()) {
             when (command) {
                 is SceneCommand.Draw -> when (val result = recognizeDraw(command.node, index, targetBounds, materialEntries)) {
+                    is DrawRecognition.MaterialRefused -> materialRefusals += result.refusal
                     is DrawRecognition.Accepted -> draws += result.draw
                     is DrawRecognition.Gap -> return Recognition.Gap(result.diagnostic)
                     is DrawRecognition.Invalid -> return Recognition.Invalid(result.diagnostic)
                 }
                 is SceneCommand.DrawColor -> when (val result = recognizeDrawColor(command, index, targetBounds)) {
+                    is DrawRecognition.MaterialRefused -> materialRefusals += result.refusal
                     is DrawRecognition.Accepted -> draws += result.draw
                     is DrawRecognition.Gap -> return Recognition.Gap(result.diagnostic)
                     is DrawRecognition.Invalid -> return Recognition.Invalid(result.diagnostic)
@@ -169,6 +175,12 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
                 )
             }
         }
+        if (materialRefusals.isNotEmpty()) {
+            if (draws.any { it.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1 }) return Recognition.Gap(
+                diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W5a graphs cannot mix legacy colours and material references"),
+            )
+            return Recognition.MaterialRefused(materialRefusals)
+        }
         return if (draws.isEmpty()) Recognition.Gap(
             diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W3 requires at least one visible draw"),
         ) else if (materialEntries.isNotEmpty() && draws.any { it.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1 }) {
@@ -188,21 +200,10 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
     ): DrawRecognition {
         val geometryNode = node.geometry as? GeometryNode.Rect
             ?: return semanticGap("Draw geometry or material is outside W3")
-        val material = node.material
-        val isW5aMaterial = material is MaterialNode.Solid || material is MaterialNode.Opacity || material == MaterialNode.Transparent
-        if (!isW5aMaterial) {
-            return DrawRecognition.Gap(
-                diag(
-                    org.graphiks.kanvas.render.ir.RenderDiagnosticCode(W5aPlanDiagnostics.UnsupportedMaterial),
-                    RenderDiagnosticDomain.SCENE,
-                    "W5a material is outside the Solid/Opacity subset",
-                ),
-            )
-        }
         if (node.origin != DrawOrigin.RECT) {
             return semanticGap("Draw geometry or material is outside W3")
         }
-        if (!w3Blend(node.blend) || node.effects !is EffectStack.Empty || node.resource != null || node.operationBlendMode != null || !w3Paint(node.paint, isW5aMaterial)) {
+        if (!w3Blend(node.blend) || node.effects !is EffectStack.Empty || node.resource != null || node.operationBlendMode != null || !w3Paint(node.paint, true)) {
             return semanticGap("Draw state is outside W3")
         }
         if (!materialMatchesPaintAuthority(node)) {
@@ -224,7 +225,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         val clipped = if (clip == null) visible else intersect(visible, clip)
             ?: return semanticGap("Draw is fully clipped out")
         return when (val planned = EffectiveMaterialPlanner.plan(node)) {
-                is EffectiveMaterialPlanner.Result.Refused -> semanticGap("W5a material is outside the Solid/Opacity subset")
+                is EffectiveMaterialPlanner.Result.Refused -> DrawRecognition.MaterialRefused(planned)
                 is EffectiveMaterialPlanner.Result.Ready -> {
                     val root = appendMaterialPlan(materialEntries, planned.table, planned.root)
                     DrawRecognition.Accepted(
@@ -412,6 +413,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
     }
 
     private sealed interface Recognition {
+        data class MaterialRefused(val refusals: List<EffectiveMaterialPlanner.Result.Refused>) : Recognition
         data class Accepted(
             val draws: List<SolidRectDraw>,
             val materialPlanTable: MaterialPlanTable?,
@@ -437,6 +439,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
             capabilityId in setOf(CAPABILITY_ID, W5A_CAPABILITY_ID) && sceneCanonicalId == sceneFingerprint && target.canonicalId == targetFingerprint
     }
     private sealed interface DrawRecognition {
+        data class MaterialRefused(val refusal: EffectiveMaterialPlanner.Result.Refused) : DrawRecognition
         data class Accepted(val draw: SolidRectDraw) : DrawRecognition
         data class Gap(val diagnostic: RenderDiagnostic) : DrawRecognition
         data class Invalid(val diagnostic: RenderDiagnostic) : DrawRecognition

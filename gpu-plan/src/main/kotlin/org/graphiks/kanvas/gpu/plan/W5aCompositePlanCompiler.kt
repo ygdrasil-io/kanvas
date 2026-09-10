@@ -35,6 +35,7 @@ public class W5aCompositePlanCompiler : GpuPlanCompiler {
             runs.last() += draw
         }
         val lanes = mutableListOf<Lane>()
+        val materialRefusals = mutableListOf<EffectiveMaterialPlanner.Result.Refused>()
         for (run in runs) {
             val indices = run.map { it.index }.toSet()
             // Metadata placeholders retain the original command indices, never geometry conversions.
@@ -50,8 +51,13 @@ public class W5aCompositePlanCompiler : GpuPlanCompiler {
             }
             when (val selection = compiler.select(laneScene, target)) {
                 is GpuPlanSelection.Candidate -> lanes += Lane(compiler, selection.candidate)
+                is GpuPlanSelection.MaterialOnlyRefusal -> materialRefusals += selection.materialRefusals
                 else -> return selection
             }
+        }
+        if (materialRefusals.isNotEmpty()) {
+            if (runs.size > MAX_LANES_I32) return GpuPlanSelection.ResourceLimitExceeded(listOf(diagnostic("Composite lane count exceeds its bound")))
+            return GpuPlanSelection.MaterialOnlyRefusal(CAPABILITY_ID, scene.canonicalId, target, materialRefusals)
         }
         return GpuPlanSelection.Candidate(Candidate(this, scene.canonicalId, target, lanes.toList()))
     }

@@ -60,6 +60,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
             return notCandidate("W4c supports only sRGB targets")
         }
         return when (val recognition = recognize(scene)) {
+            is Recognition.MaterialRefused -> GpuPlanSelection.MaterialOnlyRefusal(CAPABILITY_ID, scene.canonicalId, target, recognition.refusals)
             is Recognition.Accepted -> GpuPlanSelection.Candidate(
                 W4cCandidate(this, scene.canonicalId, target, recognition.draws, recognition.materialPlanTable),
             )
@@ -74,11 +75,12 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
         val targetBounds = RectI32(0, 0, scene.extent.width, scene.extent.height)
         val draws = mutableListOf<SealedDraw>()
         val materialEntries = mutableListOf<MaterialPlanEntry>()
+        val materialRefusals = mutableListOf<EffectiveMaterialPlanner.Result.Refused>()
         var frameAttemptedEdgesBeforeI32 = 0
         for ((commandIndex, command) in scene.withIndex()) {
             when (command) {
                 is SceneCommand.Draw -> {
-                    if (draws.size == MAX_DRAWS) {
+                    if (draws.size + materialRefusals.size == MAX_DRAWS) {
                         return Recognition.Gap("W4c accepts at most 512 visual path draws")
                     }
                     when (
@@ -90,6 +92,10 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
                             materialEntries = materialEntries,
                         )
                     ) {
+                        is DrawRecognition.MaterialRefused -> {
+                            materialRefusals += draw.refusal
+                            frameAttemptedEdgesBeforeI32 = draw.frameAttemptedEdgesAfterI32
+                        }
                         is DrawRecognition.Accepted -> {
                             draws += draw.draw
                             frameAttemptedEdgesBeforeI32 = draw.frameAttemptedEdgesAfterI32
@@ -111,6 +117,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
                 else -> return Recognition.Gap("Scene command is outside W4c")
             }
         }
+        if (materialRefusals.isNotEmpty()) return Recognition.MaterialRefused(materialRefusals)
         return if (draws.isEmpty()) {
             Recognition.Gap("W4c requires at least one visual path draw")
         } else {
@@ -195,7 +202,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
                     return DrawRecognition.ResourceLimit("Frame attempted-edge count overflowed")
                 }
                 val material = when (val planned = EffectiveMaterialPlanner.plan(node)) {
-                    is EffectiveMaterialPlanner.Result.Refused -> return DrawRecognition.Gap("W5a material is outside the Solid/Opacity subset")
+                    is EffectiveMaterialPlanner.Result.Refused -> return DrawRecognition.MaterialRefused(planned, attemptedAfter)
                     is EffectiveMaterialPlanner.Result.Ready -> appendMaterialPlan(materialEntries, planned.table, planned.root)
                 }
                 DrawRecognition.Accepted(
@@ -216,7 +223,6 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
 
     private fun supportsSolidFill(node: DrawNode): Boolean {
         if (
-            (node.material !is MaterialNode.Solid && node.material !is MaterialNode.Opacity && node.material != MaterialNode.Transparent) ||
             node.effects !is EffectStack.Empty ||
             node.resource != null ||
             node.operationBlendMode != null ||
@@ -721,6 +727,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
     }
 
     private sealed interface Recognition {
+        data class MaterialRefused(val refusals: List<EffectiveMaterialPlanner.Result.Refused>) : Recognition
         data class Accepted(val draws: List<SealedDraw>, val materialPlanTable: MaterialPlanTable) : Recognition
         data class Gap(val message: String) : Recognition
         data class Invalid(val message: String) : Recognition
@@ -728,6 +735,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
     }
 
     private sealed interface DrawRecognition {
+        data class MaterialRefused(val refusal: EffectiveMaterialPlanner.Result.Refused, val frameAttemptedEdgesAfterI32: Int) : DrawRecognition
         data class Accepted(
             val draw: SealedDraw,
             val frameAttemptedEdgesAfterI32: Int,

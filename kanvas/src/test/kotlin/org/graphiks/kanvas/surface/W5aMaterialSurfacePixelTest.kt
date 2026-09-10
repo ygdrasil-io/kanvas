@@ -1001,6 +1001,24 @@ class W5aMaterialSurfacePixelTest {
     }
 
     @Test
+    fun `hard edge gradient RRect outside W5a retains legacy pixels after caller stop mutation`() {
+        val stops = mutableListOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue))
+        val recorder = PictureRecorder()
+        recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 8f, 8f)).drawRRect(
+            RRectF32.of(RectF32.ofLTRB(0f, 0f, 8f, 8f), CornerRadiiF32.of(1f)),
+            Paint(shader = Shader.LinearGradient(Point2F32(2f, 0f), Point2F32(6f, 0f), stops), antiAlias = false),
+        )
+        val picture = recorder.finishRecordingAsPicture()
+        stops[0] = GradientStop(0f, ColorARGB.Green)
+        stops[1] = GradientStop(1f, ColorARGB.Green)
+        val surface = Surface(8, 8)
+        surface.canvas { picture.playback(this) }
+        val pixels = surface.render().pixels
+        assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u), pixels.copyOfRange((4 * 8 + 1) * 4, (4 * 8 + 2) * 4))
+        assertContentEquals(ubyteArrayOf(0u, 0u, 255u, 255u), pixels.copyOfRange((4 * 8 + 6) * 4, (4 * 8 + 7) * 4))
+    }
+
+    @Test
     fun `public W5b gradient refusal leaves the runtime able to render a later W5a frame`() {
         val color = ColorARGB.of(197, 71, 199, 127)
         val expected = W5aSolidOpacityCpuOracle.draw(color, 0.5f, paintAlphaF32 = 173f / 255f)
