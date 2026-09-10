@@ -67,20 +67,15 @@ internal object WgslFloatEnvelopeV1Oracle {
         is DrawResult.Unbounded -> error("WgslFloatEnvelopeV1 is unbounded: ${result.reason}")
     }
 
-    /** Closes a fixed-function DST_OVER attachment blend over the evaluated W5 material source. */
-    fun drawDstOver(
+    /** Closes SRC_IN against the stored attachment left by the preceding draw. */
+    fun drawSrcIn(
         table: MaterialPlanTable,
         root: MaterialPlanRef,
-        destinationTable: MaterialPlanTable,
-        destinationRoot: MaterialPlanRef,
-        coverageF32: Float = 1f,
+        destination: AttachmentState,
     ): DrawResult {
-        if (!coverageF32.isFinite()) return DrawResult.Unbounded("Non-finite coverage")
         val blended = try {
-            val clear = Array(4) { Interval.ZERO }
-            val source = evaluateMaterialSource(table, root, clear, Interval.input(coverageF32))
-            val destination = evaluateMaterialSource(destinationTable, destinationRoot, clear, Interval.input(coverageF32))
-            Array(4) { channel -> fixedFunctionDstOver(source[channel], destination[channel], destination[3]).clamp01() }
+            val source = evaluateMaterialSource(table, root, destination.linearPremul, Interval.ONE)
+            Array(4) { channel -> fixedFunctionSrcIn(source[channel].clamp01(), destination.linearPremul[3].clamp01()) }
         } catch (failure: IllegalArgumentException) {
             return DrawResult.Unbounded(failure.message.orEmpty())
         } catch (failure: ArithmeticException) {
@@ -284,24 +279,20 @@ internal object WgslFloatEnvelopeV1Oracle {
         return exactAdd(sourceTimesOne, product(destination, inverseAlpha)).clamp01()
     }
 
-    /** Same F32/FTZ/fusion and fixed-precision closure as SrcOver, with DST_OVER factors. */
-    private fun fixedFunctionDstOver(source: Interval, destination: Interval, destinationAlpha: Interval): Interval {
-        fun exactAdd(a: Interval, b: Interval) = directedBinary(a, b, ::downAdd, ::upAdd)
-        fun exactMultiply(a: Interval, b: Interval) = directedBinary(a, b, ::downMultiply, ::upMultiply)
-        fun product(a: Interval, b: Interval): Interval = when {
-            a == Interval.ZERO || b == Interval.ZERO -> Interval.ZERO
-            a == Interval.ONE -> b
-            b == Interval.ONE -> a
-            else -> fixedPrecisionEnvelope(exactMultiply(a, b), conversion = false)
+    /** SRC_IN is source * destination.a; the ZERO destination term admits no extra fusion. */
+    private fun fixedFunctionSrcIn(source: Interval, destinationAlpha: Interval): Interval {
+        if (source == Interval.ZERO || destinationAlpha == Interval.ZERO) return Interval.ZERO
+        val floating = source * destinationAlpha
+        val fixedSource = fixedPrecisionEnvelope(source, conversion = true)
+        val fixedAlpha = fixedPrecisionEnvelope(destinationAlpha, conversion = true)
+        val fixed = when {
+            fixedAlpha == Interval.ONE -> fixedSource
+            fixedSource == Interval.ONE -> fixedAlpha
+            else -> fixedPrecisionEnvelope(
+                directedBinary(fixedSource, fixedAlpha, ::downMultiply, ::upMultiply), conversion = false,
+            )
         }
-        val sourceFactor = fixedPrecisionEnvelope(
-            directedBinary(Interval.ONE, destinationAlpha, ::downSubtract, ::upSubtract),
-            conversion = true,
-        )
-        val destinationTimesOne = if (destination == Interval.ZERO || destination == Interval.ONE) destination
-            else fixedPrecisionEnvelope(destination, conversion = true)
-        val floating = sumOfProducts(source, Interval.ONE - destinationAlpha, destination, Interval.ONE).clamp01()
-        return floating.hull(exactAdd(product(source, sourceFactor), destinationTimesOne)).clamp01()
+        return floating.hull(fixed).clamp01()
     }
 
     /**
