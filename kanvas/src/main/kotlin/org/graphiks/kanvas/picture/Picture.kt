@@ -366,13 +366,17 @@ private class Reader(
         default: T,
     ): T {
         val id = byte()
-        val value = if (formatVersion == STABLE_WIRE_VERSION) stable(id) else legacy.getOrNull(id.toInt())
+        val value = if (usesStableDiscriminators) stable(id) else legacy.getOrNull(id.toInt())
         if (value == null) {
             valid = false
             return default
         }
         return value
     }
+
+    /** Version 8 introduced the stable wire ids that version 9 continues to use. */
+    private val usesStableDiscriminators: Boolean
+        get() = formatVersion == HISTORICAL_WIRE_VERSION_V8 || formatVersion == STABLE_WIRE_VERSION
 
     private fun fillType(): FillType = discriminator(FillType.entries, ::stableFillTypeFromId, FillType.WINDING)
     private fun pathVerb(): PathVerb = discriminator(PathVerb.entries, ::stablePathVerbFromId, PathVerb.MOVE)
@@ -575,12 +579,12 @@ private class Reader(
         val attrCount = int()
         val attrs = List(attrCount) { VertexAttribute(vertexFormat(), int(), int()) }
         val stride = int()
-        val stepMode = if (formatVersion == STABLE_WIRE_VERSION) {
+        val stepMode = if (usesStableDiscriminators) {
             vertexStepMode()
         } else {
             VertexStepMode.entries[byte().toInt()]
         }
-        if (formatVersion != STABLE_WIRE_VERSION) {
+        if (!usesStableDiscriminators) {
             // Versions 1–7 could not reconstruct private ShaderModule state.
             if (uniforms.isNotEmpty() || textures.isNotEmpty() || attrs.isNotEmpty()) valid = false
             return ShaderModule.fromSource(source, entry)

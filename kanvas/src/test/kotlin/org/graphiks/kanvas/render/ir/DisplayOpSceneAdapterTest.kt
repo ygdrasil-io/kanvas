@@ -36,6 +36,7 @@ import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 
 class DisplayOpSceneAdapterTest {
@@ -109,6 +110,24 @@ class DisplayOpSceneAdapterTest {
         )
 
         assertEquals("graph-node-limit", assertInstanceOf(SceneCaptureResult.Invalid::class.java, result).diagnostics.single().code.value)
+    }
+
+    @Test
+    fun `capture rejects a deep public opacity chain without overflowing`() {
+        var shader: org.graphiks.kanvas.paint.Shader = org.graphiks.kanvas.paint.Shader.SolidColor(ColorARGB.Red)
+        repeat(10_000) { shader = org.graphiks.kanvas.paint.Shader.Opacity(shader, 0.5f) }
+
+        val failure = assertThrows(RuntimeException::class.java) {
+            PaintSceneAdapter.capture(
+                Paint(shader = shader),
+                SceneCaptureLimits(graphLimits = GraphLimits(maxDepth = 64, maxNodes = 4_096)),
+            )
+        }
+
+        assertEquals(
+            "Paint, effect, or material graph exceeds configured depth",
+            failure.message,
+        )
     }
 
     @Test

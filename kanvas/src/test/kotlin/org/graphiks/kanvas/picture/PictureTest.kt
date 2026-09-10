@@ -127,6 +127,25 @@ class PictureTest {
     }
 
     @Test
+    fun `reader keeps v8 stable discriminators and runtime vertex layouts`() {
+        val picture = requireNotNull(Picture.fromByteArray(historicalTask8RuntimeEffectPayload()))
+
+        val draw = assertIs<DisplayOp.DrawRect>(picture.ops.single())
+        assertEquals(BlendMode.SRC_OVER, draw.paint.blendMode)
+        assertEquals(PaintStyle.FILL, draw.paint.style)
+        assertEquals(StrokeCap.BUTT, draw.paint.strokeCap)
+        assertEquals(StrokeJoin.MITER, draw.paint.strokeJoin)
+
+        val layout = assertIs<Shader.RuntimeEffect>(draw.paint.shader).effect.module.vertexLayout
+        assertEquals(VertexStepMode.INSTANCE, layout.stepMode)
+        assertEquals(8, layout.stride)
+        assertEquals(
+            listOf(VertexAttribute(VertexFormat.FLOAT32x2, offset = 0, shaderLocation = 7)),
+            layout.attributes,
+        )
+    }
+
+    @Test
     fun `reader rejects a historical task 8 payload with trailing data`() {
         val trailing = historicalTask8ClearPayload().copyOf(34).also { it[33] = 0x7F }
 
@@ -953,6 +972,47 @@ private fun historicalTask8ClearPayload(): ByteArray = ByteBuffer.allocate(33)
     .put(14) // historical OP_CLEAR
     .putInt(ColorARGB.Blue.toPackedInt())
     .array()
+
+private fun historicalTask8RuntimeEffectPayload(): ByteArray = ByteArrayOutputStream().also { bytes ->
+    DataOutputStream(bytes).use { out ->
+        out.write("KPIC".encodeToByteArray())
+        out.writeInt(8)
+        out.writeFloat(0f); out.writeFloat(0f); out.writeFloat(8f); out.writeFloat(8f)
+        out.writeInt(1)
+        out.writeByte(0) // OP_DRAW_RECT
+        out.writeFloat(1f); out.writeFloat(1f); out.writeFloat(7f); out.writeFloat(7f)
+
+        out.writeInt(ColorARGB.Red.toPackedInt())
+        out.writeByte(7) // Shader.RuntimeEffect
+        out.writeUTF("v8-stable-runtime-${System.nanoTime()}")
+        out.writeUTF("v8-stable-runtime-module")
+        out.writeUTF("main")
+        out.writeInt(0) // module uniforms
+        out.writeInt(0) // module textures
+        out.writeInt(1) // module vertex attributes
+        out.writeByte(2) // stable VertexFormat.FLOAT32x2
+        out.writeInt(0)
+        out.writeInt(7)
+        out.writeInt(8)
+        out.writeByte(2) // stable VertexStepMode.INSTANCE
+        out.writeInt(0) // uniform layout
+        out.writeInt(0) // child slots
+        out.writeInt(0) // uniform block
+        out.writeInt(0) // runtime shader children
+        out.writeByte(4) // stable BlendMode.SRC_OVER
+        repeat(5) { out.writeByte(0xFF) } // optional filters and blender
+        out.writeByte(1) // stable PaintStyle.FILL
+        out.writeFloat(0f)
+        out.writeByte(1) // stable StrokeCap.BUTT
+        out.writeByte(1) // stable StrokeJoin.MITER
+        out.writeFloat(4f)
+        out.writeBoolean(false)
+        out.writeFloat(1f); out.writeFloat(0f); out.writeFloat(0f)
+        out.writeFloat(0f); out.writeFloat(1f); out.writeFloat(0f)
+        out.writeFloat(0f); out.writeFloat(0f); out.writeFloat(1f)
+        out.writeByte(0) // ClipStack.WideOpen
+    }
+}.toByteArray()
 
 private fun shaderModuleWithVertexLayout(vertexLayout: VertexLayout): ShaderModule {
     val constructor = ShaderModule::class.java.declaredConstructors.single { it.parameterCount == 5 }
