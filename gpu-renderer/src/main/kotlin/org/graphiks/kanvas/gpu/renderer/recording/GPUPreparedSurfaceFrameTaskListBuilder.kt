@@ -560,6 +560,8 @@ class GPUPreparedTextBindingPreflightSeal(
     val materialEntryPoint: String,
     val materialAbiHash: String,
     val materialUniformContentHash: String,
+    /** Null for historical text materials; otherwise seals the exact W5a table/ref authority. */
+    val materialPlanProvenanceIdentity: String? = null,
     materialSampledResourceFacts: List<String>,
     val targetBounds: GPUPixelBounds,
     val scissorBounds: GPUPixelBounds,
@@ -588,6 +590,7 @@ class GPUPreparedTextBindingPreflightSeal(
         require(materialEntryPoint.isNotBlank())
         require(materialAbiHash.isNotBlank())
         require(materialUniformContentHash.isNotBlank())
+        require(materialPlanProvenanceIdentity == null || materialPlanProvenanceIdentity.isNotBlank())
         require(clipIdentity.isNotBlank())
         require(blendPlanIdentity.isNotBlank())
         require(capabilitySnapshotHash.isNotBlank())
@@ -4727,6 +4730,9 @@ private fun GPUDrawSemanticPayload.preparedTextPreflightSeal(
             .map(Int::toByte)
             .toByteArray()
             .sha256Hex(),
+        materialPlanProvenanceIdentity = (this as? GPUDrawSemanticPayload.TextA8)
+            ?.materialPlanProvenance
+            ?.canonicalIdentity(),
         materialSampledResourceFacts = material.sampledResources.flatMap { resource ->
             resource.identityFacts()
         },

@@ -1467,6 +1467,8 @@ data class GPUPreparedTextA8PayloadInput(
     val pageIndex: Int,
     val instances: List<GPUTextA8Instance>,
     val material: GPUPreparedMaterialProgram,
+    val materialPlanProvenance:
+        org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextMaterialPlanProvenance? = null,
     val deviceToLocal: GPUPreparedTextDeviceToLocalAffine,
     val targetBounds: GPUPixelBounds,
     val scissorBounds: GPUPixelBounds,
@@ -1794,6 +1796,8 @@ sealed interface GPUDrawSemanticPayload {
         val pageIndex: Int,
         instances: List<GPUTextA8Instance>,
         material: GPUPreparedMaterialProgram,
+        materialPlanProvenance:
+            org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextMaterialPlanProvenance? = null,
         deviceToLocal: GPUPreparedTextDeviceToLocalAffine,
         val targetBounds: GPUPixelBounds,
         val scissorBounds: GPUPixelBounds,
@@ -1807,6 +1811,7 @@ sealed interface GPUDrawSemanticPayload {
         override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
         val instances: List<GPUTextA8Instance> = immutableList(instances)
         val material: GPUPreparedMaterialProgram = material.preparedTextSnapshot()
+        val materialPlanProvenance = materialPlanProvenance
         val deviceToLocal: GPUPreparedTextDeviceToLocalAffine = deviceToLocal.copy()
 
         internal fun hasCanonicalHashIntegrity(): Boolean =
@@ -1817,6 +1822,7 @@ sealed interface GPUDrawSemanticPayload {
                 pageIndex = pageIndex,
                 instances = instances,
                 material = material,
+                materialPlanProvenance = materialPlanProvenance,
                 deviceToLocal = deviceToLocal,
                 targetBounds = targetBounds,
                 scissorBounds = scissorBounds,
@@ -2065,6 +2071,9 @@ class GPUPreparedTextPayloadGatherer {
         )
         val instances = immutableList(input.instances)
         val material = input.material.preparedTextSnapshot()
+        require(input.materialPlanProvenance?.validates(input.commandIdValue, material) != false) {
+            "Prepared text W5a material provenance does not match its command or program"
+        }
         return GPUDrawSemanticPayload.TextA8(
             payloadRef = payloadRef,
             atlas = input.atlas,
@@ -2072,6 +2081,7 @@ class GPUPreparedTextPayloadGatherer {
             pageIndex = input.pageIndex,
             instances = instances,
             material = material,
+            materialPlanProvenance = input.materialPlanProvenance,
             deviceToLocal = input.deviceToLocal.copy(),
             targetBounds = input.targetBounds,
             scissorBounds = input.scissorBounds,
@@ -2086,6 +2096,7 @@ class GPUPreparedTextPayloadGatherer {
                 pageIndex = input.pageIndex,
                 instances = instances,
                 material = material,
+                materialPlanProvenance = input.materialPlanProvenance,
                 deviceToLocal = input.deviceToLocal,
                 targetBounds = input.targetBounds,
                 scissorBounds = input.scissorBounds,
@@ -3583,6 +3594,8 @@ private fun preparedTextA8CanonicalHash(
     pageIndex: Int,
     instances: List<GPUTextA8Instance>,
     material: GPUPreparedMaterialProgram,
+    materialPlanProvenance:
+        org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextMaterialPlanProvenance?,
     deviceToLocal: GPUPreparedTextDeviceToLocalAffine,
     targetBounds: GPUPixelBounds,
     scissorBounds: GPUPixelBounds,
@@ -3631,6 +3644,9 @@ private fun preparedTextA8CanonicalHash(
         appendCanonicalField("material.paintAlpha", material.paintAlpha.toRawBits().toString())
         appendCanonicalField("material.sourceKind", material.sourceKind.name)
         appendCanonicalField("material.abiHash", material.abiHash)
+        materialPlanProvenance?.let { provenance ->
+            appendCanonicalField("material.w5aProvenance", provenance.canonicalIdentity())
+        }
         appendCanonicalField(
             "deviceToLocal",
             deviceToLocal.rawBits().joinToString(","),

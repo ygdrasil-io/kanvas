@@ -21,9 +21,43 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialLoweringContext
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramCompiler
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramResult
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextMaterialPlanProvenance
+import org.graphiks.kanvas.gpu.plan.MaterialBindingPlan
+import org.graphiks.kanvas.gpu.plan.MaterialPlanEntry
+import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
+import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
+import org.graphiks.kanvas.gpu.plan.MaterialProgramPlan
 import kotlin.uuid.Uuid
 
 class GPUPreparedTextPayloadTest {
+    @Test
+    fun `public TextA8 payload refuses a W5a provenance command mismatch`() {
+        val input = input()
+        val provenance = requireNotNull(
+            GPUPreparedTextMaterialPlanProvenance.issue(
+                table = MaterialPlanTable.of(
+                    listOf(
+                        MaterialPlanEntry(
+                            MaterialProgramPlan.SolidLinearPremulV1,
+                            MaterialBindingPlan.SolidRgbaF32V1.of(
+                                org.graphiks.math.color.ColorF32.of(1f, 0f, 0f, 1f),
+                            ),
+                        ),
+                    ),
+                ),
+                ref = MaterialPlanRef(0),
+                commandIdValue = input.commandIdValue + 1,
+                program = input.material,
+            ),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            GPUPreparedTextPayloadGatherer().gather(
+                input.copy(materialPlanProvenance = provenance),
+            )
+        }
+    }
+
     @Test
     fun `prepared material snapshots its uniform bytes before payload gathering`() {
         val mutableUniforms = mutableListOf(1, 2, 3, 4)

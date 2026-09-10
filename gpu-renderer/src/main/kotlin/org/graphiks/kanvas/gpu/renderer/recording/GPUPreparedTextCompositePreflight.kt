@@ -99,6 +99,14 @@ internal object GPUPreparedTextCompositePreflight {
                 "Prepared TextA8 semantic, capability, binding, and frame identities diverged.",
             )
         }
+        val materialPlan = semantic.materialPlanProvenance
+        if (materialPlan?.validates(semantic.payloadRef.commandIdValue, semantic.material) == false ||
+            binding.preflightSeal.materialPlanProvenanceIdentity != materialPlan?.canonicalIdentity()
+        ) {
+            return bindingLayoutRefusal(
+                "Prepared TextA8 sealed W5a material table, reference, version, or command changed.",
+            )
+        }
         val compositeSeal = binding.preflightSeal.textA8Composite
             ?: return bindingLayoutRefusal(
                 "Prepared TextA8 binding requires one composite preflight seal.",

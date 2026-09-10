@@ -20,6 +20,7 @@ public object W5aMaterialPlanEvaluator {
         while (true) {
             if (chain.size >= MaterialPlanTable.MAX_ENTRIES_I32) return null
             val entry = try { table.entry(ref) } catch (_: IllegalArgumentException) { return null }
+            if (!entry.bindings.hasFiniteW5aBinding()) return null
             val source = sourceForCorePrimitive(entry.program.copyNumericOperationGraphV1()) ?: return null
             chain += source to entry.bindings
             if (entry.bindings !is MaterialBindingPlan.OpacityF32V1) break
@@ -30,7 +31,9 @@ public object W5aMaterialPlanEvaluator {
         for ((source, bindings) in chain.asReversed()) {
             value = evaluateSource(source, bindings) { value } ?: return null
         }
-        return value
+        return value?.takeIf { color ->
+            listOf(color.red, color.green, color.blue, color.alpha).all(Float::isFinite)
+        }
     }
 
     private fun sourceForCorePrimitive(graph: NumericOperationGraphV1): NumericOperationGraphV1.Node? {
@@ -94,4 +97,12 @@ public object W5aMaterialPlanEvaluator {
         NumericOperationGraphV1.Operation.QUANTIZE_UNORM8,
         -> null
     }
+}
+
+private fun MaterialBindingPlan.hasFiniteW5aBinding(): Boolean = when (this) {
+    is MaterialBindingPlan.SolidRgbaF32V1 -> copyRgbaF32().let { color ->
+        listOf(color.red, color.green, color.blue, color.alpha).all(Float::isFinite)
+    }
+    is MaterialBindingPlan.OpacityF32V1 -> alphaF32.isFinite()
+    MaterialBindingPlan.EmptyV1 -> true
 }

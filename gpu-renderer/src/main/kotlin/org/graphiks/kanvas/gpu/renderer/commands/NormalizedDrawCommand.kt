@@ -3824,6 +3824,9 @@ sealed interface NormalizedDrawCommand {
         override val layer: GPULayerFacts,
         override val material: GPUMaterialDescriptor? = null,
         val preparedMaterial: GPUPreparedMaterialProgram? = null,
+        /** Sealed W5a table/ref witness for prepared A8 text; absent on historical material paths. */
+        val preparedW5aMaterialProvenance:
+            org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextMaterialPlanProvenance? = null,
         override val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
         /** Exact prepared blend authority when this command came from a prepared text sub-run. */
         val preparedBlendPlan: GPUBlendPlan? = null,
@@ -3834,6 +3837,10 @@ sealed interface NormalizedDrawCommand {
         init {
             require((material == null) != (preparedMaterial == null)) {
                 "DrawTextRun requires exactly one legacy descriptor or prepared material program"
+            }
+            require(preparedW5aMaterialProvenance == null ||
+                (preparedMaterial != null && preparedW5aMaterialProvenance.validates(commandId.value, preparedMaterial))) {
+                "DrawTextRun W5a provenance must match its prepared material and command"
             }
         }
 

@@ -103,7 +103,11 @@ internal object GPUPreparedTextSemanticBuilder {
                 normalized == null ||
                 normalized.bounds != expectedBounds ||
                 normalized.material != null ||
-                normalized.preparedMaterial !== subRun.draw.material
+                normalized.preparedMaterial !== subRun.draw.material ||
+                normalized.preparedW5aMaterialProvenance?.validates(
+                    commandId,
+                    subRun.draw.material,
+                ) == false
             ) {
                 return GPUPreparedTextSemanticGatherResult.Refused(
                     code = "invalid.surface.prepared.text-command-facts",
@@ -152,6 +156,7 @@ internal object GPUPreparedTextSemanticBuilder {
                                 pageIndex = page.pageIndex,
                                 instances = subRun.instances,
                                 material = subRun.draw.material,
+                                materialPlanProvenance = normalized.preparedW5aMaterialProvenance,
                                 deviceToLocal = deviceToLocal,
                                 targetBounds = targetBounds,
                                 scissorBounds = scissor,

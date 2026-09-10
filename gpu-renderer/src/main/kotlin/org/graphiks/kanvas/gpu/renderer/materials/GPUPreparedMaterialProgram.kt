@@ -5,6 +5,7 @@ import java.nio.ByteOrder
 import java.security.MessageDigest
 import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
 import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
+import org.graphiks.kanvas.gpu.plan.W5aPlanDiagnostics
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedBlenderChildDescriptor
@@ -89,6 +90,11 @@ object GPUPreparedMaterialProgramCompiler {
         root: MaterialPlanRef,
         context: GPUMaterialLoweringContext,
     ): GPUPreparedMaterialProgramResult {
+        if (table.hasNonFiniteW5aBindings(root)) return refused(
+            code = W5aPlanDiagnostics.NonFiniteBinding,
+            sourceKind = GPUMaterialSourceKind.SolidColor,
+            message = "The sealed W5a material table contains non-finite Solid or Opacity bindings",
+        )
         val color = W5aMaterialPlanLowerer().lower(table, root) ?: return refused(
             code = "unsupported.material.w5a_plan",
             sourceKind = GPUMaterialSourceKind.SolidColor,
@@ -1042,6 +1048,25 @@ object GPUPreparedMaterialProgramCompiler {
             GPUMaterialSourceKind.ShaderBlend,
             message,
         )
+}
+
+private fun MaterialPlanTable.hasNonFiniteW5aBindings(root: MaterialPlanRef): Boolean {
+    var index = root.indexI32
+    while (index >= 0) {
+        val entry = runCatching { entry(MaterialPlanRef(index)) }.getOrNull() ?: return false
+        when (val bindings = entry.bindings) {
+            is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.SolidRgbaF32V1 -> {
+                val color = bindings.copyRgbaF32()
+                return listOf(color.red, color.green, color.blue, color.alpha).any { !it.isFinite() }
+            }
+            is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.OpacityF32V1 -> {
+                if (!bindings.alphaF32.isFinite()) return true
+            }
+            org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.EmptyV1 -> return false
+        }
+        index--
+    }
+    return false
 }
 
 private data class PreparedSource(

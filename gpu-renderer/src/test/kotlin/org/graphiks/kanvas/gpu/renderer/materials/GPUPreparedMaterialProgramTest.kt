@@ -11,6 +11,12 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.plan.MaterialBindingPlan
+import org.graphiks.kanvas.gpu.plan.MaterialPlanEntry
+import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
+import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
+import org.graphiks.kanvas.gpu.plan.MaterialProgramPlan
+import org.graphiks.kanvas.gpu.plan.W5aPlanDiagnostics
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptorAssemblySession
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedBlenderChildDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedColorFilterChildDescriptor
@@ -33,6 +39,26 @@ class GPUPreparedMaterialProgramTest {
         dictionaryVersion = "material-dictionary:prepared-material:v1",
         runtimeEffectResolver = KanvasPreparedRuntimeEffectResolver(),
     )
+
+    @Test
+    fun `public forged W5a non finite Solid binding refuses before shader payload`() {
+        val table = MaterialPlanTable.of(
+            listOf(
+                MaterialPlanEntry(
+                    MaterialProgramPlan.SolidLinearPremulV1,
+                    MaterialBindingPlan.SolidRgbaF32V1.of(
+                        org.graphiks.math.color.ColorF32.of(Float.NaN, 0f, 0f, 1f),
+                    ),
+                ),
+            ),
+        )
+
+        val refusal = assertIs<GPUPreparedMaterialProgramResult.Refused>(
+            compiler.compileW5a(table, MaterialPlanRef(0), context),
+        )
+
+        assertEquals(W5aPlanDiagnostics.NonFiniteBinding, refusal.code)
+    }
 
     @Test
     fun `frame identity authority is snapshot stable and exact across resource bytes and runtime payload`() {
