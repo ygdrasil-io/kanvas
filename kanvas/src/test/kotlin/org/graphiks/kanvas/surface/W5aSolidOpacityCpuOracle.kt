@@ -16,6 +16,7 @@ internal object W5aSolidOpacityCpuOracle {
         shaderOpacityInnerF32: Float = 1f,
         paintAlphaF32: Float = 1f,
         destination: WgslFloatEnvelopeV1Oracle.AttachmentState = WgslFloatEnvelopeV1Oracle.clearAttachment(),
+        coverageF32: Float = 1f,
     ): WgslFloatEnvelopeV1Oracle.DrawResult {
         val shaderAlpha = shaderOpacityInnerF32 * shaderOpacityOuterF32
         if (shaderAlpha == 0f || paintAlphaF32 == 0f) {
@@ -23,6 +24,7 @@ internal object W5aSolidOpacityCpuOracle {
                 MaterialPlanTable.of(listOf(MaterialPlanEntry(MaterialProgramPlan.TransparentV1, MaterialBindingPlan.EmptyV1))),
                 MaterialPlanRef(0),
                 destination,
+                coverageF32,
             )
         }
         val entries = mutableListOf(
@@ -45,6 +47,11 @@ internal object W5aSolidOpacityCpuOracle {
                 MaterialBindingPlan.OpacityF32V1.of(paintAlphaF32),
             )
         }
-        return WgslFloatEnvelopeV1Oracle.draw(MaterialPlanTable.of(entries), MaterialPlanRef(entries.lastIndex), destination)
+        return WgslFloatEnvelopeV1Oracle.draw(
+            MaterialPlanTable.of(entries),
+            MaterialPlanRef(entries.lastIndex),
+            destination,
+            coverageF32,
+        )
     }
 }

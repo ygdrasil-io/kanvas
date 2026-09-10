@@ -41,7 +41,7 @@ class W4bAnalyticRRectPlanCompilerTest {
         val graph = ready(rrect(transform = Matrix3x3F32(sx = -1f, sy = 1f, tx = 4f)))
 
         val draw = assertIs<AnalyticRRectDraw>(renderPass(graph).draws().single())
-        assertEquals("solid-rect-rrect-scalar-aa-simple-scissor-src-over-srgb-v1", graph.capabilityId)
+        assertEquals(W4bAnalyticRRectPlanCompiler.CAPABILITY_ID, graph.capabilityId)
         assertEquals(DrawOrigin.RRECT, draw.origin)
         assertEquals(
             RRectF32.of(
@@ -116,7 +116,7 @@ class W4bAnalyticRRectPlanCompilerTest {
             compiler.plan(candidate, capabilities(), PlanBudget(1L shl 20)),
         ).plan
 
-        assertEquals("solid-rect-rrect-scalar-aa-simple-scissor-src-over-srgb-v1", graph.capabilityId)
+        assertEquals(W4bAnalyticRRectPlanCompiler.CAPABILITY_ID, graph.capabilityId)
         assertIs<GpuPlanSelection.NotCandidate>(compiler.select(rejected, target(rejected)))
     }
 

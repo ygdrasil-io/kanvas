@@ -7,6 +7,8 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
@@ -155,5 +157,87 @@ class W5aMaterialSurfacePixelTest {
         )
 
         WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(0, 4))
+    }
+
+    @Test
+    fun `fractional Rect applies nested shader opacity and Paint alpha after SrcOver coverage`() {
+        val destinationColor = ColorARGB.of(211, 41, 167, 83)
+        val sourceColor = ColorARGB.of(197, 233, 89, 31)
+        val surface = Surface(4, 4)
+        surface.canvas {
+            drawRect(
+                RectF32.ofLTRB(0f, 0f, 4f, 4f),
+                Paint(
+                    color = ColorARGB.of(179, 3, 5, 7),
+                    shader = Shader.Opacity(Shader.SolidColor(destinationColor), 0.625f),
+                    antiAlias = true,
+                ),
+            )
+            drawRect(
+                RectF32.ofLTRB(0.25f, 0.25f, 1.25f, 1.25f),
+                Paint(
+                    color = ColorARGB.of(153, 11, 13, 17),
+                    shader = Shader.Opacity(Shader.Opacity(Shader.SolidColor(sourceColor), 0.5f), 0.8f),
+                    antiAlias = true,
+                ),
+            )
+        }
+
+        val result = surface.render()
+        val destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(
+            W5aSolidOpacityCpuOracle.draw(destinationColor, 0.625f, paintAlphaF32 = 179f / 255f),
+        ))
+        val expected = W5aSolidOpacityCpuOracle.draw(
+            sourceColor,
+            shaderOpacityOuterF32 = 0.8f,
+            shaderOpacityInnerF32 = 0.5f,
+            paintAlphaF32 = 153f / 255f,
+            destination = destination,
+            coverageF32 = 0.5625f,
+        )
+
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(0, 4))
+    }
+
+    @Test
+    fun `nontrivial fractional RRect applies nested shader opacity and Paint alpha after SrcOver coverage`() {
+        val destinationColor = ColorARGB.of(203, 29, 109, 227)
+        val sourceColor = ColorARGB.of(191, 239, 71, 43)
+        val surface = Surface(4, 4)
+        val background = RRectF32.of(RectF32.ofLTRB(0f, 0f, 4f, 4f), CornerRadiiF32.of(0.5f))
+        val foreground = RRectF32.of(RectF32.ofLTRB(0.25f, 0.25f, 3.75f, 3.75f), CornerRadiiF32.of(0.5f))
+        surface.canvas {
+            drawRRect(
+                background,
+                Paint(
+                    color = ColorARGB.of(173, 19, 23, 29),
+                    shader = Shader.Opacity(Shader.SolidColor(destinationColor), 0.75f),
+                    antiAlias = true,
+                ),
+            )
+            drawRRect(
+                foreground,
+                Paint(
+                    color = ColorARGB.of(149, 31, 37, 41),
+                    shader = Shader.Opacity(Shader.Opacity(Shader.SolidColor(sourceColor), 0.5f), 0.8f),
+                    antiAlias = true,
+                ),
+            )
+        }
+
+        val result = surface.render()
+        val destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(
+            W5aSolidOpacityCpuOracle.draw(destinationColor, 0.75f, paintAlphaF32 = 173f / 255f),
+        ))
+        val expected = W5aSolidOpacityCpuOracle.draw(
+            sourceColor,
+            shaderOpacityOuterF32 = 0.8f,
+            shaderOpacityInnerF32 = 0.5f,
+            paintAlphaF32 = 149f / 255f,
+            destination = destination,
+            coverageF32 = 0.75f,
+        )
+
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(4, 8))
     }
 }

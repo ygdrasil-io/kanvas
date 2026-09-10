@@ -352,7 +352,7 @@ public class SolidRectDraw private constructor(
 
 public class AnalyticRectDraw private constructor(
     override public val commandIndex: Int,
-    override public val color: ColorF32,
+    override public val materialAuthority: PlanDrawMaterialAuthority,
     deviceBounds: RectF32,
     rasterBounds: RectI32,
     scissor: RectI32,
@@ -368,6 +368,11 @@ public class AnalyticRectDraw private constructor(
     public fun copyRasterBounds(): RectI32 = storedRasterBounds.copy()
     public fun copyScissor(): RectI32 = storedScissor.copy()
 
+    /** Legacy-only compatibility view. W5 draws never carry a duplicated colour value. */
+    override public val color: ColorF32
+        get() = (materialAuthority as? PlanDrawMaterialAuthority.LegacyColorV1)?.copyColorF32()
+            ?: throw IllegalStateException("W5 material draws have no legacy colour authority")
+
     public companion object {
         public fun of(
             commandIndex: Int,
@@ -380,14 +385,40 @@ public class AnalyticRectDraw private constructor(
             require(!deviceBounds.isEmpty && !rasterBounds.isEmpty && !scissor.isEmpty) {
                 "Draw rectangles must be non-empty"
             }
-            return AnalyticRectDraw(commandIndex, color, deviceBounds, rasterBounds, scissor)
+            return AnalyticRectDraw(
+                commandIndex,
+                PlanDrawMaterialAuthority.LegacyColorV1.of(color),
+                deviceBounds,
+                rasterBounds,
+                scissor,
+            )
+        }
+
+        public fun ofMaterial(
+            commandIndex: Int,
+            material: MaterialPlanRef,
+            deviceBounds: RectF32,
+            rasterBounds: RectI32,
+            scissor: RectI32,
+        ): AnalyticRectDraw {
+            require(commandIndex >= 0) { "Command index must not be negative" }
+            require(!deviceBounds.isEmpty && !rasterBounds.isEmpty && !scissor.isEmpty) {
+                "Draw rectangles must be non-empty"
+            }
+            return AnalyticRectDraw(
+                commandIndex,
+                PlanDrawMaterialAuthority.MaterialV1(material),
+                deviceBounds,
+                rasterBounds,
+                scissor,
+            )
         }
     }
 }
 
 public class AnalyticRRectDraw private constructor(
     override public val commandIndex: Int,
-    override public val color: ColorF32,
+    override public val materialAuthority: PlanDrawMaterialAuthority,
     public val origin: DrawOrigin,
     deviceShape: RRectF32,
     rasterBounds: RectI32,
@@ -416,6 +447,11 @@ public class AnalyticRRectDraw private constructor(
     public fun copyRasterBounds(): RectI32 = storedRasterBounds.copy()
     public fun copyScissor(): RectI32 = storedScissor.copy()
 
+    /** Legacy-only compatibility view. W5 draws never carry a duplicated colour value. */
+    override public val color: ColorF32
+        get() = (materialAuthority as? PlanDrawMaterialAuthority.LegacyColorV1)?.copyColorF32()
+            ?: throw IllegalStateException("W5 material draws have no legacy colour authority")
+
     public companion object {
         public fun of(
             commandIndex: Int,
@@ -432,7 +468,39 @@ public class AnalyticRRectDraw private constructor(
             require(!deviceShape.rect.isEmpty && !rasterBounds.isEmpty && !scissor.isEmpty) {
                 "Draw rectangles must be non-empty"
             }
-            return AnalyticRRectDraw(commandIndex, color, origin, deviceShape, rasterBounds, scissor)
+            return AnalyticRRectDraw(
+                commandIndex,
+                PlanDrawMaterialAuthority.LegacyColorV1.of(color),
+                origin,
+                deviceShape,
+                rasterBounds,
+                scissor,
+            )
+        }
+
+        public fun ofMaterial(
+            commandIndex: Int,
+            material: MaterialPlanRef,
+            origin: DrawOrigin,
+            deviceShape: RRectF32,
+            rasterBounds: RectI32,
+            scissor: RectI32,
+        ): AnalyticRRectDraw {
+            require(commandIndex >= 0) { "Command index must not be negative" }
+            require(origin == DrawOrigin.RECT || origin == DrawOrigin.RRECT) {
+                "Analytic rrect draws require RECT or RRECT origin"
+            }
+            require(!deviceShape.rect.isEmpty && !rasterBounds.isEmpty && !scissor.isEmpty) {
+                "Draw rectangles must be non-empty"
+            }
+            return AnalyticRRectDraw(
+                commandIndex,
+                PlanDrawMaterialAuthority.MaterialV1(material),
+                origin,
+                deviceShape,
+                rasterBounds,
+                scissor,
+            )
         }
     }
 }
