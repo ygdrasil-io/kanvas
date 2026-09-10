@@ -13,16 +13,7 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 internal object W5bBlendPlanLowerer {
     fun lower(plan: BlendPlan): GPUBlendPlan = when (plan) {
         BlendPlan.LegacySrcOverV1 -> legacySrcOver()
-        BlendPlan.NoOpV1 -> GPUBlendPlan.FixedFunctionBlend(
-            mode = GPUBlendMode.DST,
-            state = GPUFixedFunctionBlendState(
-                stateId = "w5b.dst-noop@v1",
-                color = GPUFixedFunctionBlendComponent("zero", "one", "add"),
-                alpha = GPUFixedFunctionBlendComponent("zero", "one", "add"),
-                writeMask = "rgba",
-            ),
-            sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
-        )
+        BlendPlan.NoOpV1 -> GPUBlendPlan.NoOp(GPUBlendMode.DST, "sealed-w5b-dst-noop")
         is BlendPlan.FixedFunctionV1 -> GPUBlendPlan.FixedFunctionBlend(
             mode = GPUBlendMode.valueOf(plan.mode.name),
             state = GPUFixedFunctionBlendState(

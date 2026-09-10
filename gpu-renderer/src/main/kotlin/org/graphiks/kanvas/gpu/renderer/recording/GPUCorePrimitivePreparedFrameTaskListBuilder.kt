@@ -1780,6 +1780,23 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         val base = request.baseTaskList.tasks.singleOrNull() as? GPUTask.Render
             ?: return refused("invalid.w5b.preplanned", "W5b packing envelope is missing.")
         val packets = base.drawPackets.associateBy { it.commandIdValue }
+        base.w5bInitialClearV3?.clearOnly?.let { witness ->
+            if (witness.graph !== graph || graph.id != request.planId || witness.target != request.target ||
+                witness.staging != request.staging || witness.capabilitySealHash != request.baseTaskList.capabilitySeal.sealHash ||
+                graph.peakFrameLocalBytes != request.memoryBudget.targetResidentBytes + request.memoryBudget.peakFrameTransientBytes) {
+                return refused("invalid.w5b.clear-only", "W5b clear-only graph authority changed.")
+            }
+            val prepare = GPUTask.PrepareResources(GPUTaskID("task.w5b.${graph.id.value}.prepare"), base.recordingId,
+                GPUTaskPhase.Prepare, listOf(request.targetPreparation, request.stagingPreparation))
+            val readback = GPUTask.Readback(GPUTaskID("task.w5b.${graph.id.value}.readback"), base.recordingId,
+                GPUTaskPhase.Readback, request.target, request.staging, request.readbackRequest)
+            val tasks = listOf(prepare, base, readback)
+            return GPUCorePrimitivePreparedFrameResult.Recorded(GPUTaskList(request.baseTaskList.frameId,
+                request.baseTaskList.capabilitySeal, request.baseTaskList.recordingSeals, request.baseTaskList.expectedReplayKeyHash,
+                tasks, tasks.zipWithNext { before, after -> GPUTaskDependency(before.taskId, after.taskId, "w5b-clear-order",
+                    GPUTaskUseToken("${before.taskId.value}->${after.taskId.value}"), "w5b-clear-order") },
+                request.baseTaskList.phaseOrder, request.memoryBudget))
+        }
         val witness = base.drawPackets.firstOrNull()?.corePrimitivePreparedAuthority?.w5bFrameWitnessV3
             ?: return refused("invalid.w5b.preplanned", "W5b graph witness is missing.")
         if (witness.graph !== graph || graph.id != request.planId || graph.capabilities.deviceGeneration !=

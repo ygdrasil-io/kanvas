@@ -1613,7 +1613,7 @@ internal class PreparedGPUFrame(
                 require(sealedW4e || stream.sourcePacketIds == step.expectedRenderCommandPacketIds(scope)) {
                     "PreparedGPUFrame render command stream must have exact per-packet command structure"
                 }
-                val expectedPassIds = step.w5bInitialClearV3?.let { listOf("w5b.${it.witness.graph.id.value}.initial-clear") }
+                val expectedPassIds = step.w5bInitialClearV3?.let { listOf("w5b.${it.graph.id.value}.initial-clear") }
                     ?: step.drawPackets.map { it.passId }.distinct()
                 require(stream.sourcePassIds == expectedPassIds) {
                     "PreparedGPUFrame render command stream must retain original pass identities"

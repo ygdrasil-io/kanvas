@@ -38,6 +38,16 @@ internal object WgslFloatEnvelopeV1Oracle {
 
     fun clearAttachment(): AttachmentState = AttachmentState(Array(4) { Interval.ZERO })
 
+    /** Exclusion proof only: deliberately not a DrawResult and never admitted by assertAdmits. */
+    class ConservativeExclusion internal constructor(internal val channels: List<Set<Int>>)
+
+    fun sourceOverExclusion(table: MaterialPlanTable, root: MaterialPlanRef, destination: AttachmentState): ConservativeExclusion {
+        val values = evaluateProgram(table, root, destination.linearPremul, Interval.ONE)
+        return ConservativeExclusion(values.mapIndexed { channel, value ->
+            if (channel < 3) codesForSrgbAttachment(value) else codesFor(value)
+        })
+    }
+
     /** Interprets the published program/binding graph and produces its direct RGBA8 code sets. */
     fun draw(
         table: MaterialPlanTable,
@@ -115,24 +125,37 @@ internal object WgslFloatEnvelopeV1Oracle {
             fun unpremul(value: Interval, alpha: Interval) = if (alpha == Interval.ZERO) Interval.ZERO else wgslDivide(value, alpha)
             val blended = Array(4) { channel ->
                 if (channel == 3) sourceOver(src[3], dst[3], Interval.ONE - src[3]) else {
-                    val s = unpremul(src[channel], src[3])
-                    val d = unpremul(dst[channel], dst[3])
-                    val color = when (mode) {
-                        org.graphiks.kanvas.paint.BlendMode.MULTIPLY -> s * d
-                        org.graphiks.kanvas.paint.BlendMode.DIFFERENCE -> (d - s).let {
-                            Interval(if (it.lower.signum() <= 0 && it.upper.signum() >= 0) BigDecimal.ZERO else minOf(it.lower.abs(), it.upper.abs()),
-                                maxOf(it.lower.abs(), it.upper.abs()))
-                        }
-                        else -> error("No independent destination proof for $mode")
+                    // Shared destination terms must not lose their correlation through a
+                    // wide interval. Directed domain subdivision tightens the enclosure;
+                    // it adds no tolerance and covers every original destination value.
+                    val original = dst[channel]
+                    val partitionsI32 = 64
+                    val width = upSubtract(original.upper, original.lower)
+                    val bounds = (0..partitionsI32).map { partI32 ->
+                        if (partI32 == 0) original.lower else if (partI32 == partitionsI32) original.upper else
+                            downAdd(original.lower, downDivide(downMultiply(width, BigDecimal(partI32)), BigDecimal(partitionsI32)))
                     }
-                    val left = src[channel] * (Interval.ONE - dst[3])
-                    val right = dst[channel] * (Interval.ONE - src[3])
-                    val product = hull((src[3] * dst[3]) * color, src[3] * (dst[3] * color))
-                    hull((left + right) + product, left + (right + product), (left + product) + right,
-                        fma(src[channel], Interval.ONE - dst[3], right + product),
-                        fma(dst[channel], Interval.ONE - src[3], left + product),
-                        fma(src[3] * dst[3], color, left + right),
-                        fma(src[3], dst[3] * color, left + right))
+                    hull(*bounds.zipWithNext().map { (lower, upper) ->
+                        val destinationChannel = Interval(lower, upper)
+                        val s = unpremul(src[channel], src[3])
+                        val d = unpremul(destinationChannel, dst[3])
+                        val color = when (mode) {
+                            org.graphiks.kanvas.paint.BlendMode.MULTIPLY -> s * d
+                            org.graphiks.kanvas.paint.BlendMode.DIFFERENCE -> (d - s).let {
+                                Interval(if (it.lower.signum() <= 0 && it.upper.signum() >= 0) BigDecimal.ZERO else minOf(it.lower.abs(), it.upper.abs()),
+                                    maxOf(it.lower.abs(), it.upper.abs()))
+                            }
+                            else -> error("No independent destination proof for $mode")
+                        }
+                        val left = src[channel] * (Interval.ONE - dst[3])
+                        val right = destinationChannel * (Interval.ONE - src[3])
+                        val product = hull((src[3] * dst[3]) * color, src[3] * (dst[3] * color))
+                        hull((left + right) + product, left + (right + product), (left + product) + right,
+                            fma(src[channel], Interval.ONE - dst[3], right + product),
+                            fma(destinationChannel, Interval.ONE - src[3], left + product),
+                            fma(src[3] * dst[3], color, left + right),
+                            fma(src[3], dst[3] * color, left + right))
+                    }.toTypedArray())
                 }
             }
             Array(4) { channel ->

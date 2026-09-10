@@ -16,6 +16,7 @@ internal object W5bDestinationGraphSealer {
         stagingBytesI64: Long,
         rowBytesI64: Long,
     ): RenderGraph {
+        require(draws.none { it.blend == BlendPlan.NoOpV1 }) { "NoOp draws must be elided before graph issuance" }
         require(capabilities.maxBindGroupsI32?.let { it >= 3 } == true &&
             capabilities.maxBindingsPerBindGroupI32?.let { it >= 2 } == true &&
             capabilities.maxSampledTexturesPerShaderStageI32?.let { it >= 1 } == true &&
@@ -88,6 +89,7 @@ internal fun validateW5bDestinationVersions(passes: List<PlanPass>) {
     passes.forEachIndexed { indexI32, pass ->
         when (pass) {
             is PlanPass.RenderPass -> {
+                require(pass.draws().none { it.blend == BlendPlan.NoOpV1 }) { "invalid.w5b.noop-write" }
                 val initialClear = indexI32 == 0 && pass.draws().isEmpty() && pass.load == AttachmentLoadPlan.ClearTransparent
                 require(pass.destinationVersionAfter?.valueI64 == if (initialClear) 0L else Math.addExact(versionI64, 1L)) { "invalid.w5b.destination-version" }
                 pass.draws().forEach { draw ->

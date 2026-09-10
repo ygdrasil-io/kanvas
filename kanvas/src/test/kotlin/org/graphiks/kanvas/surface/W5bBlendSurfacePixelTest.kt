@@ -11,11 +11,13 @@ import org.graphiks.kanvas.gpu.plan.MaterialBindingPlan
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.color.ColorF32
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.geometry.Point2F32
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 
@@ -46,31 +48,43 @@ class W5bBlendSurfacePixelTest {
     }
 
     @Test
-    fun `Picture multiplies captured half opaque black by opaque black`() {
+    fun `Surface DST only returns clear without admitting its unused source`() {
+        val source = Shader.LinearGradient(Point2F32(0f, 0f), Point2F32(4f, 0f),
+            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)))
+        val surface = Surface(4, 4, config = RenderConfig(frameLocalBudgetBytes = 1088L))
+        surface.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f),
+            Paint(shader = source, antiAlias = false, blendMode = BlendMode.DST)) }
+        val pixels = surface.render().pixels
+        require(pixels.contentEquals(UByteArray(4 * 4 * 4)))
+    }
+
+    @Test
+    fun `Picture multiply is disjoint from SRC OVER for the same captured source`() {
+        val source = ColorARGB.of(255, 120, 0, 0)
+        val destination = ColorARGB.Green
         val picture = record(listOf(
-            W5bBlendCpuOracle.Draw(ColorARGB.Black, 1f, BlendMode.SRC_OVER),
-            W5bBlendCpuOracle.Draw(ColorARGB.Black, .5f, BlendMode.MULTIPLY),
+            W5bBlendCpuOracle.Draw(destination, 1f, BlendMode.SRC_OVER),
+            W5bBlendCpuOracle.Draw(source, .75f, BlendMode.MULTIPLY),
         ))
-        val black = W5aSolidOpacityCpuOracle.draw(ColorARGB.Black, 1f)
-        val expected = WgslFloatEnvelopeV1Oracle.drawDestination(halfSolidSource(ColorF32.of(0f, 0f, 0f, 1f)),
-            MaterialPlanRef(1), requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(black)), BlendMode.MULTIPLY)
+        val background = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(W5aSolidOpacityCpuOracle.draw(destination, 1f)))
+        val material = solidSource(ColorF32.of(120f / 255f, 0f, 0f, 1f), .75f)
+        val expected = WgslFloatEnvelopeV1Oracle.drawDestination(material, MaterialPlanRef(1), background, BlendMode.MULTIPLY)
+        assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.sourceOverExclusion(material, MaterialPlanRef(1), background))
         WgslFloatEnvelopeV1Oracle.assertAdmits(expected, render(picture))
     }
 
     @Test
-    fun `Picture differences the same captured half opaque white against opaque black`() {
+    fun `Picture difference is disjoint from SRC OVER for the same captured source`() {
+        val source = ColorARGB.White
+        val destination = ColorARGB.Green
         val picture = record(listOf(
-            W5bBlendCpuOracle.Draw(ColorARGB.Black, 1f, BlendMode.SRC_OVER),
-            W5bBlendCpuOracle.Draw(ColorARGB.White, .5f, BlendMode.DIFFERENCE),
+            W5bBlendCpuOracle.Draw(destination, 1f, BlendMode.SRC_OVER),
+            W5bBlendCpuOracle.Draw(source, .45f, BlendMode.DIFFERENCE),
         ))
-        // S + D - 2*min(S*Da,D*Sa) = (.5,.5,.5), with alpha 1.
-        // Close the shader formula directly: a fixed-function SRC_OVER surrogate
-        // admits an additional coarse blend precision which is absent here.
-        val background = W5aSolidOpacityCpuOracle.draw(ColorARGB.Black, 1f)
-        val expected = WgslFloatEnvelopeV1Oracle.drawDestination(
-            halfWhiteSource(), MaterialPlanRef(1),
-            requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(background)), BlendMode.DIFFERENCE,
-        )
+        val background = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(W5aSolidOpacityCpuOracle.draw(destination, 1f)))
+        val material = solidSource(ColorF32.of(1f, 1f, 1f, 1f), .45f)
+        val expected = WgslFloatEnvelopeV1Oracle.drawDestination(material, MaterialPlanRef(1), background, BlendMode.DIFFERENCE)
+        assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.sourceOverExclusion(material, MaterialPlanRef(1), background))
         WgslFloatEnvelopeV1Oracle.assertAdmits(expected, render(picture))
     }
 
@@ -86,13 +100,19 @@ class W5bBlendSurfacePixelTest {
     fun `Picture destination read observes write between two snapshots`() {
         val picture = record(listOf(
             W5bBlendCpuOracle.Draw(ColorARGB.Blue, 1f, BlendMode.SRC_OVER),
-            W5bBlendCpuOracle.Draw(ColorARGB.White, .5f, BlendMode.MULTIPLY),
-            W5bBlendCpuOracle.Draw(ColorARGB.Black, 1f, BlendMode.SRC),
-            W5bBlendCpuOracle.Draw(ColorARGB.White, .5f, BlendMode.DIFFERENCE),
+            W5bBlendCpuOracle.Draw(ColorARGB.of(255, 120, 0, 0), .5f, BlendMode.MULTIPLY),
+            W5bBlendCpuOracle.Draw(ColorARGB.Green, 1f, BlendMode.SRC),
+            W5bBlendCpuOracle.Draw(ColorARGB.Red, 1f, BlendMode.DST),
+            W5bBlendCpuOracle.Draw(ColorARGB.White, .45f, BlendMode.DIFFERENCE),
         ))
-        val black = W5aSolidOpacityCpuOracle.draw(ColorARGB.Black, 1f)
-        val expected = WgslFloatEnvelopeV1Oracle.drawDestination(halfWhiteSource(), MaterialPlanRef(1),
-            requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(black)), BlendMode.DIFFERENCE)
+        val material = solidSource(ColorF32.of(1f, 1f, 1f, 1f), .45f)
+        val green = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, 1f)))
+        val blue = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(W5aSolidOpacityCpuOracle.draw(ColorARGB.Blue, 1f)))
+        val expected = WgslFloatEnvelopeV1Oracle.drawDestination(material, MaterialPlanRef(1), green, BlendMode.DIFFERENCE)
+        val stale = WgslFloatEnvelopeV1Oracle.drawDestination(material, MaterialPlanRef(1), blue, BlendMode.DIFFERENCE)
+        check(stale is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded)
+        assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.ConservativeExclusion(stale.channels))
+        assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.sourceOverExclusion(material, MaterialPlanRef(1), green))
         WgslFloatEnvelopeV1Oracle.assertAdmits(expected, render(picture))
     }
 
@@ -100,19 +120,21 @@ class W5bBlendSurfacePixelTest {
     fun `Surface destination read preserves integral scissor and outside destination`() {
         val surface = Surface(4, 4)
         surface.canvas {
-            drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), Paint(shader = Shader.SolidColor(ColorARGB.Black), antiAlias = false))
+            drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), Paint(shader = Shader.SolidColor(ColorARGB.Green), antiAlias = false))
             clipRect(RectF32.ofLTRB(1f, 1f, 3f, 3f), antiAlias = false)
-            drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), .5f),
+            drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), .45f),
                 antiAlias = false, blendMode = BlendMode.DIFFERENCE))
         }
         val pixels = surface.render().pixels
-        val black = W5aSolidOpacityCpuOracle.draw(ColorARGB.Black, 1f)
-        val inside = WgslFloatEnvelopeV1Oracle.drawDestination(halfWhiteSource(), MaterialPlanRef(1),
-            requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(black)), BlendMode.DIFFERENCE)
+        val green = W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, 1f)
+        val background = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(green))
+        val material = solidSource(ColorF32.of(1f, 1f, 1f, 1f), .45f)
+        val inside = WgslFloatEnvelopeV1Oracle.drawDestination(material, MaterialPlanRef(1), background, BlendMode.DIFFERENCE)
+        assertDisjoint(inside, WgslFloatEnvelopeV1Oracle.sourceOverExclusion(material, MaterialPlanRef(1), background))
         for (yI32 in 0 until 4) for (xI32 in 0 until 4) {
             val offsetI32 = (yI32 * 4 + xI32) * 4
             try {
-                WgslFloatEnvelopeV1Oracle.assertAdmits(if (xI32 in 1..2 && yI32 in 1..2) inside else black,
+                WgslFloatEnvelopeV1Oracle.assertAdmits(if (xI32 in 1..2 && yI32 in 1..2) inside else green,
                     pixels.copyOfRange(offsetI32, offsetI32 + 4))
             } catch (failure: IllegalArgumentException) {
                 throw AssertionError("Pixel ($xI32,$yI32): ${failure.message}", failure)
@@ -122,11 +144,20 @@ class W5bBlendSurfacePixelTest {
 
     private fun halfWhiteSource() = halfSolidSource(ColorF32.of(1f, 1f, 1f, 1f))
 
-    private fun halfSolidSource(color: ColorF32) = MaterialPlanTable.of(listOf(
+    private fun halfSolidSource(color: ColorF32) = solidSource(color, .5f)
+
+    private fun assertDisjoint(expected: WgslFloatEnvelopeV1Oracle.DrawResult, counterfactual: WgslFloatEnvelopeV1Oracle.ConservativeExclusion) {
+        check(expected is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { "Expected: $expected" }
+        check(expected.channels.zip(counterfactual.channels).any { (a, b) -> a.intersect(b).isEmpty() }) {
+            "Counterfactual overlaps: ${expected.channels} versus ${counterfactual.channels}"
+        }
+    }
+
+    private fun solidSource(color: ColorF32, opacityF32: Float) = MaterialPlanTable.of(listOf(
         MaterialPlanEntry(MaterialProgramPlan.SolidLinearPremulV1,
             MaterialBindingPlan.SolidRgbaF32V1.of(color)),
         MaterialPlanEntry(MaterialProgramPlan.OpacityV1(MaterialProgramPlan.SolidLinearPremulV1),
-            MaterialBindingPlan.OpacityF32V1.of(.5f)),
+            MaterialBindingPlan.OpacityF32V1.of(opacityF32)),
     ))
 
     private fun render(picture: Picture): UByteArray = Surface(4, 4).also { surface ->

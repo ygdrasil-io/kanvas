@@ -21,6 +21,7 @@ public object EffectiveMaterialPlanner {
     public fun plan(draw: DrawNode): Result = plan(draw, BlendTargetClampV1.Unavailable)
 
     internal sealed interface Normalization {
+        data object NoOp : Normalization
         data class Source(val table: MaterialPlanTable, val root: MaterialPlanRef, val blend: BlendPlan) : Normalization
         data class Refused(val diagnosticCode: String) : Normalization
     }
@@ -28,6 +29,7 @@ public object EffectiveMaterialPlanner {
     /** Compatibility boundary: existing owners cannot promote destination-read draws. */
     public fun plan(draw: DrawNode, targetClamp: BlendTargetClampV1): Result =
         when (val source = normalize(draw, targetClamp)) {
+            Normalization.NoOp -> error("Compatibility normalization cannot elide draws")
             is Normalization.Refused -> Result.Refused(source.diagnosticCode)
             is Normalization.Source -> if (source.blend is BlendPlan.DestinationReadV1) {
                 Result.Refused("unsupported.w5b.destination-read.task-2")
@@ -40,6 +42,7 @@ public object EffectiveMaterialPlanner {
         if (blend is BlendPlan.DestinationReadV1 && !allowDestinationCandidate) {
             return Normalization.Refused("unsupported.w5b.destination-read.task-2")
         }
+        if (allowDestinationCandidate && blend == BlendPlan.NoOpV1) return Normalization.NoOp
         if (draw.effects !is EffectStack.Empty || draw.resource != null || draw.operationBlendMode != null) {
             return Normalization.Refused(W5aPlanDiagnostics.UnsupportedDrawState)
         }

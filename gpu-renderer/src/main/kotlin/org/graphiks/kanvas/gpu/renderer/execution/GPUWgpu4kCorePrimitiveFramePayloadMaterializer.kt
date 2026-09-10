@@ -1066,6 +1066,9 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         }
 
         val candidateRenderSteps = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        candidateRenderSteps.mapNotNull { it.w5bInitialClearV3?.clearOnly }.firstOrNull()?.let { witness ->
+            return materializeW5bClearOnly(framePlan, encoderPlan, resources, generationSeal, witness)
+        }
         val w4ePackets = candidateRenderSteps.flatMap(GPUFrameStep.RenderPassStep::drawPackets)
             .filter { packet -> packet.role == GPUDrawPacketRole.W4ePrepared }
         if (w4ePackets.isNotEmpty()) {
@@ -6057,6 +6060,76 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
      * Materializes the closed W3 encoder scratch.  Its V/I/U buffers are physical pooled
      * resources, never logical frame-plan resources or memory-budget allocations.
      */
+    private fun materializeW5bClearOnly(
+        framePlan: GPUFramePlan,
+        encoderPlan: GPUCommandEncoderPlan,
+        resources: GPUPreparedResourceSet,
+        generationSeal: GPUPreparedGenerationSeal,
+        witness: org.graphiks.kanvas.gpu.renderer.passes.W5bClearOnlyFrameWitnessV3,
+    ): GPUPreparedNativeFramePayloadMaterialization {
+        val renderStep = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().singleOrNull()
+        val readbackStep = framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>().singleOrNull()
+        val renderScope = encoderPlan.scopes.singleOrNull { it.operationKind == GPUEncoderOperationKind.Render }
+        val readbackScope = encoderPlan.scopes.singleOrNull { it.operationKind == GPUEncoderOperationKind.Readback }
+        val staging = resources.outputOwnedReadbacks.singleOrNull()
+        if (!witness.validates(framePlan) || renderStep == null || readbackStep == null ||
+            renderScope == null || readbackScope == null || encoderPlan.scopes.size != 2 || staging == null ||
+            renderScope.sourceStepIndex != framePlan.steps.indexOf(renderStep) ||
+            readbackScope.sourceStepIndex != framePlan.steps.indexOf(readbackStep) ||
+            generationSeal.capabilitySealHash != witness.capabilitySealHash ||
+            preparedSceneTarget.deviceGeneration != generationSeal.deviceGeneration ||
+            preparedSceneTarget.targetGeneration != generationSeal.targetGeneration ||
+            preparedSceneTarget.width != witness.graph.targetExtent.width ||
+            preparedSceneTarget.height != witness.graph.targetExtent.height ||
+            framePlan.corePrimitiveSceneTargetDescriptor(witness.target)?.format != GPUColorFormat.RGBA8UnormSrgb ||
+            resources.ordinaryResources.singleOrNull()?.let { it.logicalResource == witness.target &&
+                it.role == GPUFrameResourceRole.SceneTarget && it.deviceGeneration == generationSeal.deviceGeneration } != true ||
+            staging.stagingResource != witness.staging || staging.request != readbackStep.request ||
+            staging.layout.width != witness.graph.targetExtent.width || staging.layout.height != witness.graph.targetExtent.height ||
+            staging.stagingLease.backingBufferBytes < staging.layout.totalBufferBytes) {
+            return refused("invalid.native-core-primitive.w5b-clear-only", "W5b clear-only authority is stale.")
+        }
+        synchronized(this) {
+            if (closed) return refused("unsupported.native-core-primitive.materializer-state", "The materializer is closed.")
+            materializing = true
+        }
+        return try {
+            val (targetTexture, targetView) = preparedSceneTarget.borrow()
+            val stagingBuffer = device.createBuffer(BufferDescriptor(
+                size = staging.stagingLease.backingBufferBytes.toULong(),
+                usage = GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst,
+                mappedAtCreation = false, label = "Kanvas.frame.w5b.clear-only.readback")).tracked()
+            val generation = generationSeal.deviceGeneration
+            val render = GPUPreparedNativeScopeOperand.Render(renderScope.sourceStepIndex,
+                GPUPreparedNativeRenderPassConfig(
+                    GPUPreparedNativeTextureViewOperand(targetView, generation, GPUPreparedNativeOperandOwnership.Borrowed),
+                    loadOperation = GPUPreparedNativeLoadOperation.Clear, storeOperation = GPUPreparedNativeStoreOperation.Store,
+                    clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)),
+                emptyList(), emptyList(), w5bInitialClearV3 = renderStep.w5bInitialClearV3)
+            val readback = GPUPreparedNativeScopeOperand.Readback(readbackScope.sourceStepIndex,
+                GPUPreparedNativeTextureOperand(targetTexture, generation, GPUPreparedNativeOperandOwnership.Borrowed),
+                GPUPreparedNativeBufferOperand(stagingBuffer, generation, GPUPreparedNativeOperandOwnership.OutputOwnedReadback),
+                GPUPreparedNativeReadbackLayout(staging.request.sourceBounds.left, staging.request.sourceBounds.top,
+                    staging.layout.width, staging.layout.height, staging.layout.paddedBytesPerRow, staging.layout.rowsPerImage,
+                    staging.layout.bufferOffset, staging.layout.totalBufferBytes, GPUTextureFormat.RGBA8UnormSrgb))
+            val operandKeys = encoderPlan.scopes.map { it.nativeOperandKeys }
+            val keys = encoderPlan.scopes.mapIndexed { index, scope -> GPUPreparedNativeScopeKey(
+                scope.sourceStepIndex, scope.operationKind, scope.resourceGenerationLabels, operandKeys[index]) }
+            val payload = GPUPreparedNativeFramePayload(GPUPreparedNativeFrameIdentity(framePlan.frameId,
+                encoderPlan.contextIdentity, encoderPlan.planId, generation, generationSeal.targetGeneration, keys),
+                listOf(render, readback), operandKeys)
+            synchronized(this) {
+                check(!closed) { "Native clear-only materializer closed during materialization" }
+                preRegistrationHandles.transferAll()
+                materializing = false
+            }
+            GPUPreparedNativeFramePayloadMaterialization.Materialized(GPUPreparedNativeFrameDraft(payload))
+        } catch (failure: Throwable) {
+            synchronized(this) { materializing = false; preRegistrationHandles.closeRetainingFailures() }
+            refused("failed.native-core-primitive.w5b-clear-only", "Clear-only native materialization failed: ${failure.message.orEmpty()}.")
+        }
+    }
+
     private fun materializeW3SessionScratch(
         framePlan: GPUFramePlan,
         encoderPlan: GPUCommandEncoderPlan,

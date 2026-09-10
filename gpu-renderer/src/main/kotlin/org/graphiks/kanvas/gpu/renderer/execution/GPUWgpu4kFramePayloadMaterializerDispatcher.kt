@@ -382,8 +382,12 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
         val semantics = reusableFramePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             .flatMap { step -> step.drawPackets.mapNotNull { it.semanticPayload } }
         val hasDestinationCopy = reusableFramePlan.steps.any { it is GPUFrameStep.CopyDestinationStep }
+        val clearOnlyWitness = reusableFramePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .mapNotNull { it.w5bInitialClearV3?.clearOnly }.singleOrNull()
         return when (
-            val route = selectWgpu4kPreparedFramePayloadRoute(
+            val route = if (clearOnlyWitness?.validates(reusableFramePlan) == true) {
+                GPUWgpu4kPreparedFramePayloadRoute.CorePrimitive
+            } else selectWgpu4kPreparedFramePayloadRoute(
                 semantics.map { it::class },
                 hasDestinationCopy,
             )

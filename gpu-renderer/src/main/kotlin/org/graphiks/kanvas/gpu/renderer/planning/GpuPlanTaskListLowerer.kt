@@ -199,6 +199,17 @@ public class GpuPlanTaskListLowerer {
         }
         val replay = "w3:${request.graph.id.value}"
         val seal = GPUFrameCapabilitySeal.capture(request.frameId, request.deviceGeneration, request.capabilities)
+        if (graph.draws.isEmpty()) {
+            val witness = org.graphiks.kanvas.gpu.renderer.passes.W5bClearOnlyFrameWitnessV3(
+                requireNotNull(graph.destinationGraph), target, staging, seal.sealHash)
+            val render = GPUTask.Render(GPUTaskID("task.w5b.${request.graph.id.value}.initial-clear"),
+                request.recordingId, GPUTaskPhase.Render, target, GPULoadStorePlan("clear", GPUStorePlan.Store),
+                GPUSamplePlan.SingleSampleFrame, drawPackets = emptyList(), batchEligibilityByPacketId = emptyMap(),
+                w5bInitialClearV3 = org.graphiks.kanvas.gpu.renderer.passes.W5bInitialClearV3(witness))
+            return W3BaseTaskListResult.Ready(GPUTaskList(request.frameId, seal,
+                listOf(GPURecordingSeal(request.recordingId, 0L, replay, replay, seal.sealHash)), replay,
+                listOf(render), emptyList(), GPUTaskPhase.entries, memory))
+        }
         val scratch = when (val sealed = sealW3Scratch(request, target, staging, targetBounds, seal.sealHash, packets)) {
             is W3SessionScratchSealResult.Sealed -> sealed.scratch
             is W3SessionScratchSealResult.Unsupported -> return W3BaseTaskListResult.Unsupported(sealed.diagnostic)
@@ -371,7 +382,7 @@ public class GpuPlanTaskListLowerer {
 
     private fun memoryBudget(capabilities: GPUCapabilities, graph: RenderGraph, shape: W3Graph, bounds: GPUPixelBounds, generation: org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID, compositeSessionIdentity: String?): GPUFrameMemoryBudgetPlan? {
         val limits = capabilities.limits ?: return null
-        val snapshotBytes = if (shape.destinationGraph != null) shape.target.byteSize else 0L
+        val snapshotBytes = if (graph.resources().any { it.role == PlanResourceRole.DestinationSnapshot }) shape.target.byteSize else 0L
         val transientBytesI64 = try { Math.addExact(shape.staging.byteSize, snapshotBytes) } catch (_: ArithmeticException) { return null }
         val totalBytesI64 = try { Math.addExact(shape.target.byteSize, transientBytesI64) } catch (_: ArithmeticException) { return null }
         if (totalBytesI64 != graph.peakFrameLocalBytes || graph.peakFrameLocalBytes > graph.budget.maxFrameLocalBytes) return null
@@ -422,7 +433,7 @@ public class GpuPlanTaskListLowerer {
         val planDraws = render.draws()
         if (planDraws.any { it !is SolidRectDraw }) return null
         val draws = planDraws.filterIsInstance<SolidRectDraw>()
-        if (staging.id != expectedStagingResource.id || staging.ordinal != 0 || staging.kind != PlanResourceKind.Buffer || staging.format != null || staging.copyExtent() != null || staging.byteSize != expectedStaging || staging.usages() != setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead) || staging.lifetime != PlanResourceLifetime.FrameLocal || staging.firstPassIndex != 1 || staging.lastPassIndexExclusive != 2 || render.ordinal != 0 || readback.ordinal != 0 || render.id != expectedRenderId || readback.id != expectedReadbackId || render.target != target.id || readback.source != target.id || readback.staging != staging.id || readback.bytesPerRow != expectedRow || render.load != AttachmentLoadPlan.ClearTransparent || render.store != AttachmentStorePlan.Store || render.drawDataResources != null || graph.dependencies().singleOrNull()?.let { it.before == render.id && it.after == readback.id } != true || graph.visualCommandCount != draws.size || draws.size !in 1..512 || graph.peakFrameLocalBytes != expectedTargetBytes + expectedStaging) return null
+        if (staging.id != expectedStagingResource.id || staging.ordinal != 0 || staging.kind != PlanResourceKind.Buffer || staging.format != null || staging.copyExtent() != null || staging.byteSize != expectedStaging || staging.usages() != setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead) || staging.lifetime != PlanResourceLifetime.FrameLocal || staging.firstPassIndex != 1 || staging.lastPassIndexExclusive != 2 || render.ordinal != 0 || readback.ordinal != 0 || render.id != expectedRenderId || readback.id != expectedReadbackId || render.target != target.id || readback.source != target.id || readback.staging != staging.id || readback.bytesPerRow != expectedRow || render.load != AttachmentLoadPlan.ClearTransparent || render.store != AttachmentStorePlan.Store || render.drawDataResources != null || graph.dependencies().singleOrNull()?.let { it.before == render.id && it.after == readback.id } != true || graph.visualCommandCount != draws.size || (draws.size !in 1..512 && !(draws.isEmpty() && render.destinationVersionAfter?.valueI64 == 0L && graph.materialPlanTableOrNull() == null)) || graph.peakFrameLocalBytes != expectedTargetBytes + expectedStaging) return null
         val targetRect = org.graphiks.math.geometry.RectI32(0, 0, graph.targetExtent.width, graph.targetExtent.height)
         if (draws.any { draw -> draw.coverage != CoveragePlan.FullOrScissor || draw.sample != SamplePlan.SingleSample || draw.copyVisibleBounds().isEmpty || draw.copyScissor().isEmpty || !targetRect.copy().intersect(draw.copyVisibleBounds()) || !draw.copyVisibleBounds().copy().intersect(draw.copyScissor()) || draw.copyScissor() != draw.copyVisibleBounds() }) return null
         val table = graph.materialPlanTableOrNull()
@@ -442,7 +453,7 @@ public class GpuPlanTaskListLowerer {
             ) return null
             else -> return null
         }
-        return W3Graph(target, staging, render, readback, draws, table)
+        return W3Graph(target, staging, render, readback, draws, table, graph.takeIf { draws.isEmpty() })
     }
 
     private data class W3Graph(

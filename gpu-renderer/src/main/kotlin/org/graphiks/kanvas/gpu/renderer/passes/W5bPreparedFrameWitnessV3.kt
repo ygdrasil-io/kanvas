@@ -9,14 +9,47 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 
 /** Unforgeable renderer token for the sealed initial clear, never a synthetic draw. */
-class W5bInitialClearV3 internal constructor(internal val witness: W5bPreparedFrameWitnessV3) {
+class W5bInitialClearV3 private constructor(
+    internal val witness: W5bPreparedFrameWitnessV3?,
+    internal val clearOnly: W5bClearOnlyFrameWitnessV3?,
+) {
+    internal constructor(witness: W5bPreparedFrameWitnessV3) : this(witness, null)
+    internal constructor(witness: W5bClearOnlyFrameWitnessV3) : this(null, witness)
+    internal val graph: RenderGraph get() = witness?.graph ?: requireNotNull(clearOnly).graph
     internal fun matches(target: GPUFrameTargetRef,
         loadStore: GPULoadStorePlan, sample: GPUSamplePlan): Boolean {
-        val first = witness.graph.passes().firstOrNull() as? PlanPass.RenderPass ?: return false
+        val first = graph.passes().firstOrNull() as? PlanPass.RenderPass ?: return false
         return first.draws().isEmpty() && first.destinationVersionAfter?.valueI64 == 0L &&
             first.load == org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan.ClearTransparent &&
-            target == witness.scratch.target && loadStore.loadOp == "clear" &&
+            target == (witness?.scratch?.target ?: clearOnly?.target) && loadStore.loadOp == "clear" &&
             sample == GPUSamplePlan.SingleSampleFrame
+    }
+}
+
+/** Output initialization only: no material, geometry scratch, pipeline or destination snapshot. */
+internal class W5bClearOnlyFrameWitnessV3(
+    val graph: RenderGraph,
+    val target: GPUFrameTargetRef,
+    val staging: org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef,
+    val capabilitySealHash: String,
+) {
+    init {
+        require(graph.visualCommandCount == 0 && graph.materialPlanTableOrNull() == null)
+        require(graph.passes().size == 2 && graph.resources().size == 2)
+        val clear = graph.passes().first() as PlanPass.RenderPass
+        require(clear.draws().isEmpty() && clear.destinationVersionAfter?.valueI64 == 0L)
+        require(clear.load == org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan.ClearTransparent)
+        require(graph.passes().last() is PlanPass.ReadbackPass)
+    }
+
+    fun validates(frame: GPUFramePlan): Boolean {
+        val clear = frame.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().singleOrNull() ?: return false
+        val readback = frame.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>().singleOrNull() ?: return false
+        return frame.capabilitySeal.sealHash == capabilitySealHash && clear.w5bInitialClearV3?.clearOnly === this &&
+            clear.drawPackets.isEmpty() && clear.target == target && clear.loadStore.loadOp == "clear" &&
+            readback.source == target && readback.staging == staging &&
+            readback.request.requestId.value == "w3.${graph.id.value}.readback" &&
+            frame.steps.filter { it.executionKind == org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStepExecutionKind.Encoder } == listOf(clear, readback)
     }
 }
 

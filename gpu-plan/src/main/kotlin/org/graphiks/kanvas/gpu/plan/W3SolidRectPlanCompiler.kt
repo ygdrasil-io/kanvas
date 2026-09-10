@@ -120,6 +120,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
             )
             val render = PlanPass.RenderPass(
                 0, logicalTarget.id, selected.draws, AttachmentLoadPlan.ClearTransparent, AttachmentStorePlan.Store,
+                destinationVersionAfter = if (selected.draws.isEmpty()) DestinationVersionI64(0L) else null,
             )
             val readback = PlanPass.ReadbackPass(0, logicalTarget.id, staging.id, withinBudget.readbackBytesPerRow)
             RenderPlanResult.Ready(
@@ -156,15 +157,18 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         val draws = mutableListOf<SolidRectDraw>()
         val materialEntries = mutableListOf<MaterialPlanEntry>()
         val materialRefusals = mutableListOf<EffectiveMaterialPlanner.Result.Refused>()
+        var elidedNoOpsI32 = 0
         for ((index, command) in scene.withIndex()) {
             when (command) {
                 is SceneCommand.Draw -> when (val result = recognizeDraw(command.node, index, targetBounds, materialEntries, targetClamp)) {
+                    DrawRecognition.NoOp -> elidedNoOpsI32++
                     is DrawRecognition.MaterialRefused -> materialRefusals += result.refusal
                     is DrawRecognition.Accepted -> draws += result.draw
                     is DrawRecognition.Gap -> return Recognition.Gap(result.diagnostic)
                     is DrawRecognition.Invalid -> return Recognition.Invalid(result.diagnostic)
                 }
                 is SceneCommand.DrawColor -> when (val result = recognizeDrawColor(command, index, targetBounds)) {
+                    DrawRecognition.NoOp -> elidedNoOpsI32++
                     is DrawRecognition.MaterialRefused -> materialRefusals += result.refusal
                     is DrawRecognition.Accepted -> draws += result.draw
                     is DrawRecognition.Gap -> return Recognition.Gap(result.diagnostic)
@@ -194,7 +198,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
             )
             return Recognition.MaterialRefused(materialRefusals)
         }
-        return if (draws.isEmpty()) Recognition.Gap(
+        return if (draws.isEmpty() && elidedNoOpsI32 == 0) Recognition.Gap(
             diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W3 requires at least one visible draw"),
         ) else if (materialEntries.isNotEmpty() && draws.any { it.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1 }) {
             Recognition.Gap(diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W5a graphs cannot mix legacy colours and material references"))
@@ -239,6 +243,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         val clipped = if (clip == null) visible else intersect(visible, clip)
             ?: return semanticGap("Draw is fully clipped out")
         return when (val planned = EffectiveMaterialPlanner.normalize(node, targetClamp, allowDestinationCandidate = true)) {
+                EffectiveMaterialPlanner.Normalization.NoOp -> DrawRecognition.NoOp
                 is EffectiveMaterialPlanner.Normalization.Refused -> DrawRecognition.MaterialRefused(EffectiveMaterialPlanner.Result.Refused(planned.diagnosticCode))
                 is EffectiveMaterialPlanner.Normalization.Source -> {
                     val root = appendMaterialPlan(materialEntries, planned.table, planned.root)
@@ -453,6 +458,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
             capabilityId in setOf(CAPABILITY_ID, W5A_CAPABILITY_ID) && sceneCanonicalId == sceneFingerprint && target.canonicalId == targetFingerprint
     }
     private sealed interface DrawRecognition {
+        data object NoOp : DrawRecognition
         data class MaterialRefused(val refusal: EffectiveMaterialPlanner.Result.Refused) : DrawRecognition
         data class Accepted(val draw: SolidRectDraw) : DrawRecognition
         data class Gap(val diagnostic: RenderDiagnostic) : DrawRecognition

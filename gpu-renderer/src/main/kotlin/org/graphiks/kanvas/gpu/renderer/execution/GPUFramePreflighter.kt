@@ -5682,6 +5682,10 @@ internal class GPUFramePreflighter(
         val coreRenders = renders.filter { render ->
             render.drawPackets.any { it.semanticPayload is GPUDrawSemanticPayload.CorePrimitive }
         }
+        renders.mapNotNull { it.w5bInitialClearV3?.clearOnly }.firstOrNull()?.let { witness ->
+            return if (witness.validates(framePlan)) null else diagnostic(
+                "invalid.preflight.w5b-clear-only", "W5b clear-only graph changed before native allocation.")
+        }
         if (coreRenders.isEmpty()) return null
         if (coreRenders.any { render ->
                 render.samplePlan == GPUSamplePlan.MultisampleFrame(4) &&
@@ -8569,11 +8573,10 @@ internal class GPUFramePreflighter(
                         passId = passPlan.passId,
                         commands = listOf(
                             org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand.BeginRenderPass(
-                                framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
-                                    .flatMap { it.drawPackets }.first().targetStateHash,
+                                corePrimitiveTargetStateHash(1, GPUColorFormat.RGBA8UnormSrgb),
                                 step.loadStore.dumpLabel()),
                             org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand.EndRenderPass(passPlan.passId)),
-                        sourcePassIds = listOf("w5b.${step.w5bInitialClearV3.witness.graph.id.value}.initial-clear"))
+                        sourcePassIds = listOf("w5b.${step.w5bInitialClearV3.graph.id.value}.initial-clear"))
                 } else if (step.drawPackets.all { packet ->
                         packet.role == GPUDrawPacketRole.W4ePrepared
                     }
