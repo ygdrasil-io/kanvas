@@ -170,59 +170,70 @@ internal object WgslFloatEnvelopeV1Oracle {
         destination + coverage * (blended - destination),
         (Interval.ONE - coverage) * destination + coverage * blended,
         fma(coverage, blended - destination, destination),
+        fma(Interval.ONE - coverage, destination, coverage * blended),
+        fma(coverage, blended, (Interval.ONE - coverage) * destination),
     )
 
     private fun fma(a: Interval, b: Interval, c: Interval): Interval = f32Envelope(
-        exactBinary(exactBinary(a, b, BigDecimal::multiply), c, BigDecimal::add),
+        directedTernary(a, b, c),
     )
 
-    private fun toLinear(value: Interval): Interval = f32Envelope(piecewiseTransfer(
+    private fun toLinear(value: Interval): Interval = f32Envelope(wgslTransferError(piecewiseTransfer(
         value,
         SRGB_BREAK,
-        { x -> x.divide(SRGB_LINEAR_SCALE, MC) },
-        { x -> rationalPower(x.add(SRGB_OFFSET, MC).divide(SRGB_ENCODE_SCALE, MC), 12, 5) },
-    ))
+        { x -> directedDivide(x, SRGB_LINEAR_SCALE) },
+        { x -> directedAdd(x, SRGB_OFFSET).let { shifted ->
+            rationalPower(Interval(downDivide(shifted.lower, SRGB_ENCODE_SCALE), upDivide(shifted.upper, SRGB_ENCODE_SCALE)), 12, 5)
+        } },
+    )))
 
-    private fun toEncoded(value: Interval): Interval = f32Envelope(piecewiseTransfer(
+    private fun toEncoded(value: Interval): Interval = f32Envelope(wgslTransferError(piecewiseTransfer(
         value,
         LINEAR_BREAK,
-        { x -> x.multiply(SRGB_LINEAR_SCALE, MC) },
-        { x -> rationalPower(x, 5, 12).let { power ->
+        { x -> directedMultiply(x, SRGB_LINEAR_SCALE) },
+        { x -> rationalPower(Interval(x, x), 5, 12).let { power ->
             Interval(
-                power.lower.multiply(SRGB_ENCODE_SCALE, MC).subtract(SRGB_OFFSET, MC),
-                power.upper.multiply(SRGB_ENCODE_SCALE, MC).subtract(SRGB_OFFSET, MC),
+                downSubtract(downMultiply(power.lower, SRGB_ENCODE_SCALE), SRGB_OFFSET),
+                upSubtract(upMultiply(power.upper, SRGB_ENCODE_SCALE), SRGB_OFFSET),
             )
         } },
-    ))
+    )))
 
-    private fun piecewiseTransfer(value: Interval, split: BigDecimal, lower: (BigDecimal) -> BigDecimal, upper: (BigDecimal) -> Interval): Interval = when {
-        value.upper <= split -> Interval(lower(value.lower), lower(value.upper))
+    private fun piecewiseTransfer(value: Interval, split: BigDecimal, lower: (BigDecimal) -> Interval, upper: (BigDecimal) -> Interval): Interval = when {
+        value.upper <= split -> Interval(lower(value.lower).lower, lower(value.upper).upper)
         value.lower >= split -> upper(value.lower).hull(upper(value.upper))
-        else -> hull(Interval(lower(value.lower), lower(split)), upper(split).hull(upper(value.upper)))
+        else -> hull(Interval(lower(value.lower).lower, lower(split).upper), upper(split).hull(upper(value.upper)))
     }
 
-    /** Positive rational powers are enclosed with BigDecimal bisection, not Double math. */
-    private fun rationalPower(value: BigDecimal, numerator: Int, denominator: Int): Interval {
-        require(value >= BigDecimal.ZERO)
-        val root = nthRoot(value, denominator)
-        return Interval(root.lower.pow(numerator, MC), root.upper.pow(numerator, MC))
+    /**
+     * Positive rational powers use 512 directed-rounding bisection steps at
+     * 160 decimal digits.  The remaining root width is below 2^-512; the
+     * explicit WGSL implementation budget below dominates it.
+     */
+    private fun rationalPower(value: Interval, numerator: Int, denominator: Int): Interval {
+        require(value.lower >= BigDecimal.ZERO)
+        val lowerRoot = nthRoot(value.lower, denominator).lower
+        val upperRoot = nthRoot(value.upper, denominator).upper
+        return wgslPowError(Interval(powDown(lowerRoot, numerator), powUp(upperRoot, numerator)))
     }
 
     private fun nthRoot(value: BigDecimal, degree: Int): Interval {
         if (value == BigDecimal.ZERO) return Interval.ZERO
         var low = BigDecimal.ZERO
         var high = value.max(BigDecimal.ONE)
-        repeat(260) {
-            val middle = low.add(high, MC).divide(BigDecimal.TWO, MC)
-            if (middle.pow(degree, MC) <= value) low = middle else high = middle
+        repeat(ROOT_BISECTION_STEPS) {
+            val middle = downDivide(downAdd(low, high), BigDecimal.TWO)
+            // If directed upper power cannot prove middle is below the root,
+            // retain it as an upper bound. This is conservative by construction.
+            if (powUp(middle, degree) <= value) low = middle else high = middle
         }
         return Interval(low, high)
     }
 
     private fun decodeStoredAttachment(codes: List<Set<Int>>): Array<Interval> = Array(4) { channel ->
         val encoded = Interval(
-            BigDecimal(codes[channel].minOrNull()!!).divide(UNORM_MAX, MC),
-            BigDecimal(codes[channel].maxOrNull()!!).divide(UNORM_MAX, MC),
+            downDivide(BigDecimal(codes[channel].minOrNull()!!), UNORM_MAX),
+            upDivide(BigDecimal(codes[channel].maxOrNull()!!), UNORM_MAX),
         )
         if (channel < 3) toLinear(encoded) else encoded
     }
@@ -230,9 +241,9 @@ internal object WgslFloatEnvelopeV1Oracle {
     private fun codesFor(value: Interval): Set<Int>? {
         val clamped = value.clamp01()
         // rgba8unorm stores the nearest code: boundaries are k + 1/2, not k.
-        val first = clamped.lower.multiply(UNORM_MAX, MC).subtract(HALF, MC)
+        val first = downSubtract(downMultiply(clamped.lower, UNORM_MAX), HALF)
             .setScale(0, RoundingMode.CEILING).toInt().coerceIn(0, 255)
-        val last = clamped.upper.multiply(UNORM_MAX, MC).add(HALF, MC)
+        val last = upAdd(upMultiply(clamped.upper, UNORM_MAX), HALF)
             .setScale(0, RoundingMode.FLOOR).toInt().coerceIn(0, 255)
         return (first..last).toSet().takeIf { it.size <= 2 && it.maxOrNull()!! - it.minOrNull()!! <= 1 }
     }
@@ -249,20 +260,53 @@ internal object WgslFloatEnvelopeV1Oracle {
         exact.lower.abs() < F32_MIN_NORMAL || exact.upper.abs() < F32_MIN_NORMAL
     ) hull(preserveF32(exact), Interval.ZERO) else preserveF32(exact)
 
-    private fun exactBinary(left: Interval, right: Interval, operation: (BigDecimal, BigDecimal) -> BigDecimal): Interval {
-        val values = listOf(
-            operation(left.lower, right.lower), operation(left.lower, right.upper),
-            operation(left.upper, right.lower), operation(left.upper, right.upper),
-        )
-        return Interval(values.minOrNull()!!, values.maxOrNull()!!)
+    private fun directedTernary(a: Interval, b: Interval, c: Interval): Interval {
+        val lows = mutableListOf<BigDecimal>()
+        val highs = mutableListOf<BigDecimal>()
+        listOf(a.lower, a.upper).forEach { x -> listOf(b.lower, b.upper).forEach { y -> listOf(c.lower, c.upper).forEach { z ->
+            lows += downAdd(downMultiply(x, y), z)
+            highs += upAdd(upMultiply(x, y), z)
+        } } }
+        return Interval(lows.minOrNull()!!, highs.maxOrNull()!!)
     }
 
-    private operator fun Interval.plus(other: Interval): Interval = f32Envelope(exactBinary(this, other) { a, b -> a.add(b, MC) })
-    private operator fun Interval.minus(other: Interval): Interval = f32Envelope(exactBinary(this, other) { a, b -> a.subtract(b, MC) })
-    private operator fun Interval.times(other: Interval): Interval = f32Envelope(exactBinary(this, other) { a, b -> a.multiply(b, MC) })
+    private fun directedBinary(left: Interval, right: Interval, lower: (BigDecimal, BigDecimal) -> BigDecimal, upper: (BigDecimal, BigDecimal) -> BigDecimal): Interval {
+        val pairs = listOf(left.lower to right.lower, left.lower to right.upper, left.upper to right.lower, left.upper to right.upper)
+        return Interval(pairs.minOf { lower(it.first, it.second) }, pairs.maxOf { upper(it.first, it.second) })
+    }
+
+    private operator fun Interval.plus(other: Interval): Interval = f32Envelope(directedBinary(this, other, ::downAdd, ::upAdd))
+    private operator fun Interval.minus(other: Interval): Interval = f32Envelope(directedBinary(this, other, ::downSubtract, ::upSubtract))
+    private operator fun Interval.times(other: Interval): Interval = f32Envelope(directedBinary(this, other, ::downMultiply, ::upMultiply))
     private fun Interval.clamp01(): Interval = Interval(lower.max(BigDecimal.ZERO), upper.min(BigDecimal.ONE))
     private fun Interval.hull(other: Interval): Interval = hull(this, other)
     private fun hull(vararg intervals: Interval): Interval = Interval(intervals.minOf { it.lower }, intervals.maxOf { it.upper })
+
+    private fun directedAdd(value: BigDecimal, addend: BigDecimal): Interval = Interval(downAdd(value, addend), upAdd(value, addend))
+    private fun directedMultiply(value: BigDecimal, factor: BigDecimal): Interval = Interval(downMultiply(value, factor), upMultiply(value, factor))
+    private fun directedDivide(value: BigDecimal, divisor: BigDecimal): Interval = Interval(downDivide(value, divisor), upDivide(value, divisor))
+
+    /** WGSL pow is budgeted at 2^-12 relative + 2^-18 absolute; transfer algebra gets 2^-18 absolute. */
+    private fun wgslPowError(value: Interval): Interval = Interval(
+        downSubtract(downMultiply(value.lower, ONE_MINUS_POW_RELATIVE_ERROR), POW_ABSOLUTE_ERROR),
+        upAdd(upMultiply(value.upper, ONE_PLUS_POW_RELATIVE_ERROR), POW_ABSOLUTE_ERROR),
+    )
+
+    private fun wgslTransferError(value: Interval): Interval = Interval(
+        downSubtract(value.lower, TRANSFER_ABSOLUTE_ERROR),
+        upAdd(value.upper, TRANSFER_ABSOLUTE_ERROR),
+    )
+
+    private fun downAdd(a: BigDecimal, b: BigDecimal): BigDecimal = a.add(b, MC_DOWN)
+    private fun upAdd(a: BigDecimal, b: BigDecimal): BigDecimal = a.add(b, MC_UP)
+    private fun downSubtract(a: BigDecimal, b: BigDecimal): BigDecimal = a.subtract(b, MC_DOWN)
+    private fun upSubtract(a: BigDecimal, b: BigDecimal): BigDecimal = a.subtract(b, MC_UP)
+    private fun downMultiply(a: BigDecimal, b: BigDecimal): BigDecimal = a.multiply(b, MC_DOWN)
+    private fun upMultiply(a: BigDecimal, b: BigDecimal): BigDecimal = a.multiply(b, MC_UP)
+    private fun downDivide(a: BigDecimal, b: BigDecimal): BigDecimal = a.divide(b, MC_DOWN)
+    private fun upDivide(a: BigDecimal, b: BigDecimal): BigDecimal = a.divide(b, MC_UP)
+    private fun powDown(value: BigDecimal, exponent: Int): BigDecimal = value.pow(exponent, MC_DOWN)
+    private fun powUp(value: BigDecimal, exponent: Int): BigDecimal = value.pow(exponent, MC_UP)
 
     internal data class Interval(val lower: BigDecimal, val upper: BigDecimal) {
         init { require(lower <= upper) }
@@ -281,7 +325,8 @@ internal object WgslFloatEnvelopeV1Oracle {
         return BigDecimal.valueOf(value.toDouble())
     }
 
-    private val MC = MathContext(120, RoundingMode.HALF_EVEN)
+    private val MC_DOWN = MathContext(160, RoundingMode.FLOOR)
+    private val MC_UP = MathContext(160, RoundingMode.CEILING)
     private val SRGB_BREAK = BigDecimal("0.04045")
     private val LINEAR_BREAK = BigDecimal("0.0031308")
     private val SRGB_LINEAR_SCALE = BigDecimal("12.92")
@@ -290,4 +335,14 @@ internal object WgslFloatEnvelopeV1Oracle {
     private val F32_MIN_NORMAL = BigDecimal("1.17549435e-38")
     private val UNORM_MAX = BigDecimal("255")
     private val HALF = BigDecimal("0.5")
+    // These binary budgets deliberately exceed the implementation accuracy the
+    // oracle needs to admit. They are expressed as powers of two so the proof
+    // has an unambiguous real-number interpretation before the adjacent-F32
+    // expansion in f32Envelope.
+    private val POW_RELATIVE_ERROR = BigDecimal.ONE.divide(BigDecimal.TWO.pow(12), MC_UP)
+    private val POW_ABSOLUTE_ERROR = BigDecimal.ONE.divide(BigDecimal.TWO.pow(18), MC_UP)
+    private val TRANSFER_ABSOLUTE_ERROR = BigDecimal.ONE.divide(BigDecimal.TWO.pow(18), MC_UP)
+    private val ONE_MINUS_POW_RELATIVE_ERROR = BigDecimal.ONE.subtract(POW_RELATIVE_ERROR)
+    private val ONE_PLUS_POW_RELATIVE_ERROR = BigDecimal.ONE.add(POW_RELATIVE_ERROR)
+    private const val ROOT_BISECTION_STEPS = 512
 }
