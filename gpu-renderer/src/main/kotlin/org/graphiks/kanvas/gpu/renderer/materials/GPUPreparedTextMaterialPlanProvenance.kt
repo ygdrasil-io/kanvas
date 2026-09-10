@@ -16,12 +16,19 @@ public class GPUPreparedTextMaterialPlanEmission internal constructor(
     private val ref: MaterialPlanRef,
     private val program: GPUPreparedMaterialProgram,
 ) {
+    private val admissionToken: GPUPreparedTextW5aAdmissionToken =
+        requireNotNull(program.preparedTextW5aAdmissionToken) {
+        "Prepared text W5a emission requires a compiler-issued admission token"
+    }
+
     /** Binds this compiler-issued material result to its one normalized command. */
     public fun bind(
         commandIdValue: Int,
         candidate: GPUPreparedMaterialProgram,
     ): GPUPreparedTextMaterialPlanProvenance? {
-        if (commandIdValue < 0 || candidate != program) return null
+        if (commandIdValue < 0 || candidate != program ||
+            candidate.preparedTextW5aAdmissionToken !== admissionToken
+        ) return null
         val entry = runCatching { table.entry(ref) }.getOrNull() ?: return null
         if (entry.program.versionI32 != 1 || entry.bindings.versionI32 != 1) return null
         return GPUPreparedTextMaterialPlanProvenance(
@@ -29,6 +36,7 @@ public class GPUPreparedTextMaterialPlanEmission internal constructor(
             ref = ref,
             commandIdValue = commandIdValue,
             program = program,
+            admissionToken = admissionToken,
             programVersionI32 = entry.program.versionI32,
             bindingVersionI32 = entry.bindings.versionI32,
         )
@@ -40,9 +48,16 @@ public class GPUPreparedTextMaterialPlanProvenance internal constructor(
     val ref: MaterialPlanRef,
     private val commandIdValue: Int,
     private val program: GPUPreparedMaterialProgram,
+    private val admissionToken: GPUPreparedTextW5aAdmissionToken,
     private val programVersionI32: Int,
     private val bindingVersionI32: Int,
 ) {
+    init {
+        require(program.preparedTextW5aAdmissionToken === admissionToken) {
+            "Prepared text W5a provenance requires its compiler-issued admission token"
+        }
+    }
+
     fun canonicalIdentity(): String =
         "w5a-text-plan-v1:command=$commandIdValue:ref=${ref.indexI32}:" +
             "program=$programVersionI32:binding=$bindingVersionI32:" +
@@ -51,12 +66,16 @@ public class GPUPreparedTextMaterialPlanProvenance internal constructor(
     fun validates(commandIdValue: Int, candidate: GPUPreparedMaterialProgram): Boolean =
         commandIdValue == this.commandIdValue &&
             candidate == program &&
+            candidate.preparedTextW5aAdmissionToken === admissionToken &&
             runCatching {
                 val entry = table.entry(ref)
                 entry.program.versionI32 == programVersionI32 &&
                     entry.bindings.versionI32 == bindingVersionI32 &&
                     programVersionI32 == 1 && bindingVersionI32 == 1
             }.getOrDefault(false)
+
+    internal fun matchesAdmissionToken(candidate: GPUPreparedTextW5aAdmissionToken?): Boolean =
+        admissionToken === candidate
 
     private fun tableSnapshotIdentity(): String = table.entries().joinToString("|") { entry ->
         val binding = when (val value = entry.bindings) {

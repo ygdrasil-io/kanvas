@@ -562,6 +562,9 @@ class GPUPreparedTextBindingPreflightSeal(
     val materialUniformContentHash: String,
     /** Null for historical text materials; otherwise seals the exact W5a table/ref authority. */
     val materialPlanProvenanceIdentity: String? = null,
+    /** Runtime-only compiler witness; not serializable or structurally substitutable. */
+    internal val materialPlanAdmissionToken:
+        org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextW5aAdmissionToken? = null,
     materialSampledResourceFacts: List<String>,
     val targetBounds: GPUPixelBounds,
     val scissorBounds: GPUPixelBounds,
@@ -4733,6 +4736,12 @@ private fun GPUDrawSemanticPayload.preparedTextPreflightSeal(
         materialPlanProvenanceIdentity = (this as? GPUDrawSemanticPayload.TextA8)
             ?.materialPlanProvenance
             ?.canonicalIdentity(),
+        materialPlanAdmissionToken = (this as? GPUDrawSemanticPayload.TextA8)
+            ?.materialPlanProvenance
+            ?.let { provenance ->
+                material.preparedTextW5aAdmissionToken
+                    ?.takeIf(provenance::matchesAdmissionToken)
+            },
         materialSampledResourceFacts = material.sampledResources.flatMap { resource ->
             resource.identityFacts()
         },

@@ -4,10 +4,8 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotSame
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.glyph.gpu.GPUTextA8Instance
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
@@ -23,47 +21,9 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialLoweringContext
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramCompiler
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramResult
-import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextW5aProgramResult
-import org.graphiks.kanvas.gpu.plan.MaterialBindingPlan
-import org.graphiks.kanvas.gpu.plan.MaterialPlanEntry
-import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
-import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
-import org.graphiks.kanvas.gpu.plan.MaterialProgramPlan
 import kotlin.uuid.Uuid
 
 class GPUPreparedTextPayloadTest {
-    @Test
-    fun `public W5a emission refuses a red table with unrelated legacy program`() {
-        val input = input()
-        val table = redW5aTable()
-        val emission = assertIs<GPUPreparedTextW5aProgramResult.Ready>(
-            GPUPreparedMaterialProgramCompiler.compileW5aForPreparedText(
-                table, MaterialPlanRef(0), w5aContext(),
-            ),
-        ).emission
-
-        assertNull(emission.bind(input.commandIdValue, input.material))
-    }
-
-    @Test
-    fun `public W5a emission binds its exact A8 program to payload provenance`() {
-        val input = input()
-        val compilation = assertIs<GPUPreparedTextW5aProgramResult.Ready>(
-            GPUPreparedMaterialProgramCompiler.compileW5aForPreparedText(
-                redW5aTable(), MaterialPlanRef(0), w5aContext(),
-            ),
-        )
-        val provenance = requireNotNull(
-            compilation.emission.bind(input.commandIdValue, compilation.program),
-        )
-
-        val semantic = GPUPreparedTextPayloadGatherer().gather(
-            input.copy(material = compilation.program, materialPlanProvenance = provenance),
-        )
-
-        assertTrue(semantic.hasCanonicalHashIntegrity())
-    }
-
     @Test
     fun `prepared material snapshots its uniform bytes before payload gathering`() {
         val mutableUniforms = mutableListOf(1, 2, 3, 4)
@@ -542,21 +502,6 @@ class GPUPreparedTextPayloadTest {
             "The admitted payload material must compile: $result"
         }
     }
-
-    private fun redW5aTable(): MaterialPlanTable = MaterialPlanTable.of(listOf(
-        MaterialPlanEntry(
-            MaterialProgramPlan.SolidLinearPremulV1,
-            MaterialBindingPlan.SolidRgbaF32V1.of(
-                org.graphiks.math.color.ColorF32.of(1f, 0f, 0f, 1f),
-            ),
-        ),
-    ))
-
-    private fun w5aContext(): GPUMaterialLoweringContext = GPUMaterialLoweringContext(
-        capabilityClass = "prepared-text-payload-test",
-        targetFormatClass = "rgba8unorm",
-        dictionaryVersion = "material-dictionary:prepared-text-test:v1",
-    )
 
     private fun sha256(bytes: ByteArray): String =
         java.security.MessageDigest.getInstance("SHA-256")

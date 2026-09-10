@@ -2071,7 +2071,11 @@ class GPUPreparedTextPayloadGatherer {
         )
         val instances = immutableList(input.instances)
         val material = input.material.preparedTextSnapshot()
-        require(input.materialPlanProvenance?.validates(input.commandIdValue, material) != false) {
+        require(
+            (input.materialPlanProvenance == null) ==
+                (material.preparedTextW5aAdmissionToken == null) &&
+                input.materialPlanProvenance?.validates(input.commandIdValue, material) != false,
+        ) {
             "Prepared text W5a material provenance does not match its command or program"
         }
         return GPUDrawSemanticPayload.TextA8(

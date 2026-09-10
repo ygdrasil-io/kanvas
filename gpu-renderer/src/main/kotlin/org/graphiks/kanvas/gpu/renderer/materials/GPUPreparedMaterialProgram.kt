@@ -56,6 +56,16 @@ sealed interface GPUPreparedTextW5aProgramResult {
     data class Refused(val refusal: GPUPreparedMaterialProgramResult.Refused) : GPUPreparedTextW5aProgramResult
 }
 
+/**
+ * Unforgeable-by-content runtime witness. Its private constructor confines issuance to the
+ * prepared-text compiler entry point below; snapshots preserve identity without serializing it.
+ */
+public class GPUPreparedTextW5aAdmissionToken private constructor() {
+    internal companion object {
+        fun issue(): GPUPreparedTextW5aAdmissionToken = GPUPreparedTextW5aAdmissionToken()
+    }
+}
+
 object GPUPreparedMaterialProgramCompiler {
     private val blendPlanner = GPUBlendPlanner()
 
@@ -129,14 +139,18 @@ object GPUPreparedMaterialProgramCompiler {
         root: MaterialPlanRef,
         context: GPUMaterialLoweringContext,
     ): GPUPreparedTextW5aProgramResult = when (val result = compileW5a(table, root, context)) {
-        is GPUPreparedMaterialProgramResult.Ready -> GPUPreparedTextW5aProgramResult.Ready(
-            program = result.program,
-            emission = GPUPreparedTextMaterialPlanEmission(
+        is GPUPreparedMaterialProgramResult.Ready -> {
+            val token = GPUPreparedTextW5aAdmissionToken.issue()
+            val program = result.program.authenticatedPreparedTextW5aSnapshot(token)
+            GPUPreparedTextW5aProgramResult.Ready(
+                program = program,
+                emission = GPUPreparedTextMaterialPlanEmission(
                 table = table,
                 ref = root,
-                program = result.program.authenticatedSnapshot(),
-            ),
-        )
+                program = program.authenticatedSnapshot(),
+                ),
+            )
+        }
         is GPUPreparedMaterialProgramResult.Refused -> GPUPreparedTextW5aProgramResult.Refused(result)
     }
 

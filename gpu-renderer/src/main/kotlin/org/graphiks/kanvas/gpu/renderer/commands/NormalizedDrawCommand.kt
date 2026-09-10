@@ -3838,6 +3838,12 @@ sealed interface NormalizedDrawCommand {
             require((material == null) != (preparedMaterial == null)) {
                 "DrawTextRun requires exactly one legacy descriptor or prepared material program"
             }
+            require(
+                (preparedW5aMaterialProvenance == null) ==
+                    (preparedMaterial?.preparedTextW5aAdmissionToken == null),
+            ) {
+                "DrawTextRun W5a provenance and compiler admission token must be paired"
+            }
             require(preparedW5aMaterialProvenance == null ||
                 (preparedMaterial != null && preparedW5aMaterialProvenance.validates(commandId.value, preparedMaterial))) {
                 "DrawTextRun W5a provenance must match its prepared material and command"

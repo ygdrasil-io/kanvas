@@ -1840,19 +1840,17 @@ internal class GPUPreparedSurfaceNativePreflight(
                 )
             }
         }
-        capabilities?.let { observed ->
-            textPackets.zip(bindings).forEach { (evidence, binding) ->
-                val semantic = evidence.semantic as? GPUDrawSemanticPayload.TextA8
-                    ?: return@forEach
-                GPUPreparedTextCompositePreflight.validate(
-                    binding = binding,
-                    semantic = semantic,
-                    capabilities = observed,
-                    framePlan = framePlan,
-                    renderSourceStepIndex = evidence.renderIndex,
-                )?.let { refusal ->
-                    return refused(refusal.code, refusal.message)
-                }
+        textPackets.zip(bindings).forEach { (evidence, binding) ->
+            val semantic = evidence.semantic as? GPUDrawSemanticPayload.TextA8
+                ?: return@forEach
+            GPUPreparedTextCompositePreflight.validate(
+                binding = binding,
+                semantic = semantic,
+                capabilities = capabilities,
+                framePlan = framePlan,
+                renderSourceStepIndex = evidence.renderIndex,
+            )?.let { refusal ->
+                return refused(refusal.code, refusal.message)
             }
         }
 
