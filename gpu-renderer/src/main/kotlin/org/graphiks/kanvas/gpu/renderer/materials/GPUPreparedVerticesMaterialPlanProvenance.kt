@@ -15,13 +15,6 @@ public class GPUPreparedVerticesMaterialPlanEmission internal constructor(
             "Prepared vertices W5a emission requires a compiler-issued admission token"
         }
 
-    /** Rebase only an identical sealed source; retain the original compiler-issued program. */
-    public fun remap(table: MaterialPlanTable, ref: MaterialPlanRef): GPUPreparedVerticesMaterialPlanEmission {
-        require(requireNotNull(W5aMaterialSourceStage.lower(this.table, this.ref)).canonicalIdentity ==
-            requireNotNull(W5aMaterialSourceStage.lower(table, ref)).canonicalIdentity)
-        return GPUPreparedVerticesMaterialPlanEmission(table, ref, program)
-    }
-
     public fun bind(
         commandIdValueI32: Int,
         candidate: GPUPreparedMaterialProgram,
@@ -48,6 +41,13 @@ public class GPUPreparedVerticesMaterialPlanProvenance internal constructor(
     private val programVersionI32: Int,
     private val bindingVersionI32: Int,
 ) {
+    public val sourcePlanTable: MaterialPlanTable get() = table
+
+    public fun remappedEmission(table: MaterialPlanTable, ref: MaterialPlanRef): GPUPreparedVerticesMaterialPlanEmission {
+        require(requireNotNull(W5aMaterialSourceStage.lower(this.table, this.ref)).canonicalIdentity ==
+            requireNotNull(W5aMaterialSourceStage.lower(table, ref)).canonicalIdentity)
+        return GPUPreparedVerticesMaterialPlanEmission(table, ref, program)
+    }
     init {
         require(program.preparedVerticesW5aAdmissionToken === admissionToken) {
             "Prepared vertices W5a provenance requires its compiler-issued admission token"

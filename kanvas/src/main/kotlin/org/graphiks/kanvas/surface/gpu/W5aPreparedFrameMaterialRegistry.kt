@@ -13,53 +13,78 @@ import org.graphiks.kanvas.render.ir.SceneCaptureResult
 import org.graphiks.kanvas.render.ir.SceneCommand
 import org.graphiks.kanvas.render.ir.SceneExtent
 import org.graphiks.kanvas.types.PointMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
+import org.graphiks.kanvas.canvas.ClipStack
+import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.matrix.Matrix3x3F32
 
 /**
  * Interns immutable W5a sources for authentic prepared core, A8 text and vertices lanes.
  *
- * Individual public draws are captured only to obtain their immutable DrawNode.  Their entries
- * are then interned into one frame-owned [MaterialPlanTable]; all native families receive
- * only the rebased [MaterialPlanRef].
+ * Only completed mapper/lowerer admissions may enter the frame table. Local paint candidates
+ * are not frame ownership and never consume the aggregate table capacity.
  */
-internal data class W5aPreparedCorePointMaterialBridge(
+internal data class W5aPreparedFrameMaterialRegistry(
     val table: MaterialPlanTable,
-    val refsByOperationIndex: Map<Int, MaterialPlanRef>,
+    val refsByCommandId: Map<Int, MaterialPlanRef>,
 ) {
     internal companion object {
-        fun capture(
+        fun captureCoreCandidates(
             operations: List<DisplayOp>,
             width: Int,
             height: Int,
-            admittedTextDraws: List<GPUPreparedTextDraw>,
-            admittedVerticesDraws: List<GPUPreparedVerticesDraw>,
-        ): W5aPreparedCorePointMaterialBridge? {
+        ): Map<Int, EffectiveMaterialPlanner.Result.Ready> {
             val plannedByOperationIndex = linkedMapOf<Int, EffectiveMaterialPlanner.Result.Ready>()
             operations.forEachIndexed { operationIndex, operation ->
-                if (operation.corePointGeometryRefusalOrNull() != null) return@forEachIndexed
-                if (!operation.isW5aPreparedCorePointCandidate()) return@forEachIndexed
-                val captured = DisplayOpSceneAdapter.capture(
-                    operations = listOf(operation),
+                if (!operation.isW5aCoreMaterialCandidate()) return@forEachIndexed
+                val paint = when (operation) {
+                    is DisplayOp.DrawRect -> operation.paint
+                    is DisplayOp.DrawRRect -> operation.paint
+                    is DisplayOp.DrawPath -> operation.paint
+                    is DisplayOp.DrawPoint -> operation.paint
+                    is DisplayOp.DrawPoints -> operation.paint
+                    else -> return@forEachIndexed
+                }
+                // Material-only candidate capture, exactly as in prepared Vertices. The real
+                // mapper owns all geometry/state validation and can discard this local source.
+                val captured = runCatching { DisplayOpSceneAdapter.capture(
+                    operations = listOf(DisplayOp.DrawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f),
+                        paint, Matrix3x3F32.Identity, ClipStack.WideOpen)),
                     extent = SceneExtent(width, height),
                     colorSpace = ColorSpace.SRGB,
-                ) as? SceneCaptureResult.Captured
-                    ?: error("invalid.material.w5a_core_capture")
+                ) }.getOrNull() as? SceneCaptureResult.Captured ?: return@forEachIndexed
                 val draw = captured.scene.singleOrNull() as? SceneCommand.Draw
-                    ?: error("invalid.material.w5a_core_draw")
-                // Unsupported effects/material kinds retain their pre-W5 admission contract;
-                // a Ready result is the point at which this frame owns the material.
+                    ?: return@forEachIndexed
                 val planned = EffectiveMaterialPlanner.plan(draw.node)
                     as? EffectiveMaterialPlanner.Result.Ready ?: return@forEachIndexed
                 plannedByOperationIndex[operationIndex] = planned
             }
-            // Only actual lowerer admissions enter the table. In particular, non-A8 text and
-            // invalid vertices cannot consume capacity or preempt geometry diagnostics.
-            admittedTextDraws.forEach { draw -> draw.materialPlan?.let { material ->
-                plannedByOperationIndex[draw.operationIndex] = EffectiveMaterialPlanner.Result.Ready(material.table, material.ref)
-            } }
-            admittedVerticesDraws.forEach { draw -> draw.materialPlan?.let { material ->
-                plannedByOperationIndex[draw.operationIndex] = EffectiveMaterialPlanner.Result.Ready(material.table, material.ref)
-            } }
-            val orderedPlans = plannedByOperationIndex.toSortedMap()
+            return java.util.Collections.unmodifiableMap(plannedByOperationIndex)
+        }
+
+        fun seal(
+            semantics: Map<Int, GPUDrawSemanticPayload>,
+            corePlansByCommandId: Map<Int, EffectiveMaterialPlanner.Result.Ready>,
+        ): W5aPreparedFrameMaterialRegistry? {
+            val orderedPlans = sortedMapOf<Int, EffectiveMaterialPlanner.Result.Ready>()
+            semantics.forEach { (commandId, semantic) ->
+                val planned = when (semantic) {
+                    is GPUDrawSemanticPayload.CorePrimitive -> {
+                        val material = semantic.material as? GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1
+                            ?: return@forEach
+                        requireNotNull(corePlansByCommandId[commandId]).also { require(it.root == material.ref) }
+                    }
+                    is GPUDrawSemanticPayload.TextA8 -> semantic.materialPlanProvenance?.let {
+                        EffectiveMaterialPlanner.Result.Ready(it.sourcePlanTable, it.ref)
+                    }
+                    is GPUDrawSemanticPayload.Vertices -> semantic.materialPlanProvenance?.let {
+                        EffectiveMaterialPlanner.Result.Ready(it.sourcePlanTable, it.ref)
+                    }
+                    else -> null
+                }
+                if (planned != null) orderedPlans[commandId] = planned
+            }
             if (orderedPlans.isEmpty()) return null
             // Once at least one source selects W5a, an invalid aggregate table is terminal.
             val interned = try {
@@ -75,13 +100,13 @@ internal data class W5aPreparedCorePointMaterialBridge(
             val refs = orderedPlans.entries.mapIndexed { laneOrdinalI32, (operationIndex, planned) ->
                 operationIndex to interned.remap(laneOrdinalI32, planned.root)
             }.toMap()
-            return W5aPreparedCorePointMaterialBridge(
+            return W5aPreparedFrameMaterialRegistry(
                 table = interned.table,
-                refsByOperationIndex = java.util.Collections.unmodifiableMap(LinkedHashMap(refs)),
+                refsByCommandId = java.util.Collections.unmodifiableMap(LinkedHashMap(refs)),
             )
         }
 
-        private fun DisplayOp.isW5aPreparedCorePointCandidate(): Boolean = when (this) {
+        private fun DisplayOp.isW5aCoreMaterialCandidate(): Boolean = when (this) {
             is DisplayOp.DrawRect -> !paint.isStroke() && paint.blendMode == BlendMode.SRC_OVER &&
                 paint.shader.isW5aSolidOpacity()
             is DisplayOp.DrawRRect -> !paint.isStroke() && paint.blendMode == BlendMode.SRC_OVER &&

@@ -261,7 +261,7 @@ sealed interface GPUCorePrimitiveMaterialPayload {
 
         internal constructor(
             authority: org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2.MaterializedSolidV2,
-        ) : this(authority.premultipliedRgba, authority)
+        ) : this(authority.premultipliedRgbaF32, authority)
 
         val premultipliedRgba: List<Float> = immutableList(premultipliedRgba)
         override val kind: GPUCorePrimitiveMaterialKind = GPUCorePrimitiveMaterialKind.SolidColor
@@ -1785,6 +1785,11 @@ sealed interface GPUDrawSemanticPayload {
         val frameProvenance = snapshot.frameProvenance
         val canonicalHash = snapshot.canonicalHash
 
+        fun withW5aFrameMaterial(
+            table: org.graphiks.kanvas.gpu.plan.MaterialPlanTable,
+            ref: org.graphiks.kanvas.gpu.plan.MaterialPlanRef,
+        ): Vertices = Vertices(snapshot.withW5aFrameMaterial(table, ref))
+
         fun hasCanonicalHashIntegrity(): Boolean =
             canonicalHash == snapshot.canonicalHash()
     }
@@ -1814,6 +1819,20 @@ sealed interface GPUDrawSemanticPayload {
         val material: GPUPreparedMaterialProgram = material.preparedTextSnapshot()
         val materialPlanProvenance = materialPlanProvenance
         val deviceToLocal: GPUPreparedTextDeviceToLocalAffine = deviceToLocal.copy()
+
+        fun withW5aFrameMaterial(
+            table: org.graphiks.kanvas.gpu.plan.MaterialPlanTable,
+            ref: org.graphiks.kanvas.gpu.plan.MaterialPlanRef,
+        ): TextA8 {
+            val provenance = requireNotNull(materialPlanProvenance).remap(table, ref)
+            return TextA8(payloadRef, atlas, atlasGeneration, pageIndex, instances, material,
+                provenance, deviceToLocal, targetBounds, scissorBounds, clipIdentity, blendPlanIdentity,
+                capabilitySnapshotHash, frameProvenance, preparedTextA8CanonicalHash(
+                    payloadRef, atlas, atlasGeneration, pageIndex, instances, material, provenance,
+                    deviceToLocal, targetBounds, scissorBounds, clipIdentity, blendPlanIdentity,
+                    capabilitySnapshotHash, frameProvenance,
+                ))
+        }
 
         internal fun hasCanonicalHashIntegrity(): Boolean =
             canonicalHash == preparedTextA8CanonicalHash(
@@ -2275,7 +2294,8 @@ class GPUCorePrimitivePayloadGatherer {
 /**
  * Resolves one sealed W5a core material at the prepared-frame color-writing boundary.
  * Geometry, coverage, clip, blend, and ordering authorities are copied verbatim; only the
- * material reference becomes the existing native solid uniform payload.
+ * material reference acquires the frame source-stage witness and a neutral geometry
+ * uniform slot. Its actual color is evaluated from raw bindings in the fragment.
  */
 internal fun GPUDrawSemanticPayload.CorePrimitive.materializeW5aSolid(
     authority: org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2.MaterializedSolidV2,
@@ -2283,10 +2303,10 @@ internal fun GPUDrawSemanticPayload.CorePrimitive.materializeW5aSolid(
     require(material is GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1) {
         "Only a sealed W5a core material reference may materialize through this bridge"
     }
-    require(authority.validates(payloadRef.commandIdValue) && material.ref == authority.ref) {
+    require(authority.validates(payloadRef.commandIdValue) && material.ref == authority.sourceRef) {
         "W5a material authority must retain the exact frame command and material reference"
     }
-    val premultipliedRgba = authority.premultipliedRgba
+    val premultipliedRgba = authority.premultipliedRgbaF32
     require(premultipliedRgba.isPremultipliedRgba()) {
         "W5a material lowering must produce finite premultiplied RGBA"
     }

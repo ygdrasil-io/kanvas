@@ -49,14 +49,12 @@ internal object GPUPreparedVerticesFramePreparer {
         operations: List<DisplayOp>,
         target: GPUTargetFacts,
         capabilities: GPUCapabilities,
-        frameMaterials: W5aPreparedCorePointMaterialBridge? = null,
     ): GPUPreparedVerticesDrawPreparation {
         val operationSnapshot = operations.toList()
         val materialBridge = W5aPreparedVerticesMaterialBridge.capture(
             operations = operationSnapshot,
             width = target.width,
             height = target.height,
-            frameMaterials = frameMaterials,
         )
         val draws = ArrayList<GPUPreparedVerticesDraw>()
         operationSnapshot.forEachIndexed { operationIndex, operation ->
@@ -107,13 +105,11 @@ internal object GPUPreparedVerticesFramePreparer {
         capabilities: GPUCapabilities,
         limits: PreparedVerticesFrameInventoryLimits = defaultLimits(capabilities),
         preparedTextInventory: PreparedTextFrameInventory? = null,
-        frameMaterials: W5aPreparedCorePointMaterialBridge? = null,
-        admittedDraws: List<GPUPreparedVerticesDraw>? = null,
         mappingBoundary: GPUPreparedFrameMappingBoundary = canonicalPreparedFrameMappingBoundary,
     ): GPUPreparedVerticesFramePreparation {
         val operationSnapshot = operations.toList()
-        val draws = admittedDraws ?: when (val lowered = lowerDraws(
-            operationSnapshot, target, capabilities, frameMaterials,
+        val draws = when (val lowered = lowerDraws(
+            operationSnapshot, target, capabilities,
         )) {
             is GPUPreparedVerticesDrawPreparation.Ready -> lowered.draws
             is GPUPreparedVerticesDrawPreparation.Refused ->

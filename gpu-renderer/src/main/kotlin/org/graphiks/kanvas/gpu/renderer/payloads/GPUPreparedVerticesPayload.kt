@@ -110,6 +110,21 @@ internal class GPUPreparedVerticesPayloadSnapshot(
     val frameProvenance = input.frameProvenance
     val canonicalHash = canonicalHash()
 
+    fun withW5aFrameMaterial(
+        table: org.graphiks.kanvas.gpu.plan.MaterialPlanTable,
+        ref: org.graphiks.kanvas.gpu.plan.MaterialPlanRef,
+    ): GPUPreparedVerticesPayloadSnapshot = GPUPreparedVerticesPayloadSnapshot(GPUPreparedVerticesPayloadInput(
+        payloadRef = payloadRef, artifact = artifact, material = material,
+        materialFrameSnapshot = authenticatedMaterial,
+        materialPlanEmission = requireNotNull(materialPlanProvenance).remappedEmission(table, ref),
+        topologyIdentity = topologyIdentity, transformBytes = transformBytes,
+        targetBounds = targetBounds, scissorBounds = scissorBounds, targetFormat = targetFormat,
+        clipIdentity = clipIdentity, clipCoverageIdentity = clipCoverageIdentity,
+        primitiveColorPresent = primitiveColorPresent, primitiveBlendIdentity = primitiveBlendIdentity,
+        finalBlendIdentity = finalBlendIdentity, capabilitySnapshotHash = capabilitySnapshotHash,
+        drawProvenance = drawProvenance, frameProvenance = frameProvenance,
+    ))
+
     fun canonicalHash(): String {
         val layout = artifact.layout
         val encoder = ExactUtf16CanonicalIdentityDigestEncoder(

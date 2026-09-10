@@ -636,15 +636,6 @@ internal object GPUOpMapper {
                         return@forEachIndexed
                     }
                     lowered.geometryRefusal
-                        ?.takeIf { refusal ->
-                            refusal.code == "geometry.path.fan_budget_exceeded" ||
-                                refusal.code == "geometry.path.memory_budget_exceeded" ||
-                                refusal.code == "geometry.path.fan_budget_config_exceeded" ||
-                                refusal.code == "geometry.path.memory_budget_config_exceeded" ||
-                                refusal.code == "geometry.path.fan_budget_config_out_of_int_range" ||
-                                refusal.code == "geometry.path.memory_budget_config_out_of_int_range" ||
-                                refusal.code == "unsupported.core_primitive.path_vertex_budget_config_out_of_int_range"
-                        }
                         ?.let { refusal ->
                         return GPUOpMapping(
                             visualCommands = emptyList(),

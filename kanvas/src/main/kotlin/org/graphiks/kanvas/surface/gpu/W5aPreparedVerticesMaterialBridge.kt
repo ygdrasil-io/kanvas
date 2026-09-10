@@ -24,7 +24,6 @@ internal class W5aPreparedVerticesMaterialBridge private constructor(
     private val operations: List<DisplayOp>,
     private val width: Int,
     private val height: Int,
-    private val frameMaterials: W5aPreparedCorePointMaterialBridge?,
 ) {
     sealed interface Result {
         data object NotCandidate : Result
@@ -35,9 +34,6 @@ internal class W5aPreparedVerticesMaterialBridge private constructor(
     fun materialFor(operationIndex: Int): Result {
         val operation = operations.getOrNull(operationIndex) ?: return Result.NotCandidate
         if (!operation.isW5aPreparedVerticesCandidate()) return Result.NotCandidate
-        frameMaterials?.refsByOperationIndex?.get(operationIndex)?.let { ref ->
-            return Result.Ready(GPUPreparedVerticesMaterialPlan(frameMaterials.table, ref))
-        }
         // W5a owns paint material only. Capture it against neutral geometry/state so transform,
         // clip, bounds, and public geometry validation retain their established lowerer authority.
         val materialCaptureOperation = operation.materialCaptureOperation()
@@ -83,9 +79,8 @@ internal class W5aPreparedVerticesMaterialBridge private constructor(
             operations: List<DisplayOp>,
             width: Int,
             height: Int,
-            frameMaterials: W5aPreparedCorePointMaterialBridge? = null,
         ): W5aPreparedVerticesMaterialBridge =
-            W5aPreparedVerticesMaterialBridge(operations.toList(), width, height, frameMaterials)
+            W5aPreparedVerticesMaterialBridge(operations.toList(), width, height)
 
         private fun DisplayOp.isW5aPreparedVerticesCandidate(): Boolean = when (this) {
             is DisplayOp.DrawVertices -> paint.blendMode == BlendMode.SRC_OVER &&

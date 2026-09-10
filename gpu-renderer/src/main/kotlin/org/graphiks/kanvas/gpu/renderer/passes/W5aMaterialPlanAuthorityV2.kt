@@ -40,25 +40,27 @@ internal class W5aMaterialPlanVersionWitnessV2 private constructor(
 }
 
 /**
- * Frame-owned W5a authority for the historical prepared CorePrimitive point route.
+ * Frame-owned W5a authority for authentic prepared CorePrimitive lanes.
  *
- * The immutable table is snapshot once at frame capture. Draw commands retain only a
- * [MaterialPlanRef]; the table is consulted when CorePrimitive first writes a color uniform.
+ * The immutable table is sealed after geometry admission. CorePrimitive retains a neutral
+ * geometry uniform slot; the fragment source-stage consumes this table's raw bindings.
  */
 class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
     private val table: MaterialPlanTable,
-    refsByCommandId: Map<Int, MaterialPlanRef>,
+    refsByCommandIdI32: Map<Int, MaterialPlanRef>,
+    private val sourceRefsByCommandIdI32: Map<Int, MaterialPlanRef>,
     private val materialWitness: W5aMaterialPlanVersionWitnessV2,
 ) {
     private val refsByCommandId: Map<Int, MaterialPlanRef> =
-        java.util.Collections.unmodifiableMap(LinkedHashMap(refsByCommandId))
+        java.util.Collections.unmodifiableMap(LinkedHashMap(refsByCommandIdI32))
 
     /** Material-only witness retained by the native solid payload, independent of geometry. */
     sealed interface MaterializedSolidV2 {
         val commandIdI32: Int
         val ref: MaterialPlanRef
+        val sourceRef: MaterialPlanRef
         val sourcePlanTable: MaterialPlanTable
-        val premultipliedRgba: List<Float>
+        val premultipliedRgbaF32: List<Float>
         fun validates(commandIdI32: Int): Boolean
     }
 
@@ -69,7 +71,8 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
         private val frameAuthority: W5aCorePrimitiveMaterialAuthorityV2,
     ) : MaterializedSolidV2 {
         override val sourcePlanTable: MaterialPlanTable get() = frameAuthority.table
-        override val premultipliedRgba: List<Float> =
+        override val sourceRef: MaterialPlanRef get() = frameAuthority.sourceRefsByCommandIdI32.getValue(commandIdI32)
+        override val premultipliedRgbaF32: List<Float> =
             java.util.Collections.unmodifiableList(ArrayList(rgba))
 
         override fun validates(commandIdI32: Int): Boolean =
@@ -106,9 +109,9 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
             val core = semantic as? GPUDrawSemanticPayload.CorePrimitive ?: return null
             val materialRef = (core.material as? GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1)
                 ?.ref ?: return null
-            if (materialRef != expectedRef || !validates(commandId, materialRef) || !core.hasStructuralIntegrity()) return null
+            if (materialRef != sourceRefsByCommandIdI32[commandId] || !validates(commandId, expectedRef) || !core.hasStructuralIntegrity()) return null
             result[commandId] = core.materializeW5aSolid(
-                materializeSource(commandId, materialRef) ?: return null,
+                materializeSource(commandId, expectedRef) ?: return null,
             )
         }
         return java.util.Collections.unmodifiableMap(result)
@@ -117,9 +120,21 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
     companion object {
         fun issue(
             sourceTable: MaterialPlanTable,
-            refsByCommandId: Map<Int, MaterialPlanRef>,
+            refsByCommandIdI32: Map<Int, MaterialPlanRef>,
+            sourcePlansByCommandIdI32: Map<Int, Pair<MaterialPlanTable, MaterialPlanRef>> =
+                refsByCommandIdI32.mapValues { sourceTable to it.value },
         ): W5aCorePrimitiveMaterialAuthorityV2? {
+            val refsByCommandId = refsByCommandIdI32
             if (refsByCommandId.isEmpty() || refsByCommandId.keys.any { it < 0 }) return null
+            if (sourcePlansByCommandIdI32.keys != refsByCommandId.keys) return null
+            val sourceRefs = linkedMapOf<Int, MaterialPlanRef>()
+            refsByCommandId.forEach { (commandIdI32, ref) ->
+                val source = sourcePlansByCommandIdI32.getValue(commandIdI32)
+                val original = org.graphiks.kanvas.gpu.renderer.materials.W5aMaterialSourceStage.lower(source.first, source.second) ?: return null
+                val rebased = org.graphiks.kanvas.gpu.renderer.materials.W5aMaterialSourceStage.lower(sourceTable, ref) ?: return null
+                if (original.canonicalIdentity != rebased.canonicalIdentity) return null
+                sourceRefs[commandIdI32] = source.second
+            }
             // MaterialPlanTable is immutable and was defensively snapshot at frame capture.
             val ownedTable = sourceTable
             val authorities = refsByCommandId.values.map { ref ->
@@ -132,7 +147,8 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
             }
             val witness = W5aMaterialPlanVersionWitnessV2.issue(ownedTable, authorities)
                 ?: return null
-            return W5aCorePrimitiveMaterialAuthorityV2(ownedTable, refsByCommandId, witness)
+            return W5aCorePrimitiveMaterialAuthorityV2(ownedTable, refsByCommandId,
+                java.util.Collections.unmodifiableMap(sourceRefs), witness)
         }
     }
 }

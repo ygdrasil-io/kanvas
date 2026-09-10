@@ -20,13 +20,6 @@ public class GPUPreparedTextMaterialPlanEmission internal constructor(
         "Prepared text W5a emission requires a compiler-issued admission token"
     }
 
-    /** Rebase only an identical sealed source; retain the original compiler-issued program. */
-    public fun remap(table: MaterialPlanTable, ref: MaterialPlanRef): GPUPreparedTextMaterialPlanEmission {
-        require(requireNotNull(W5aMaterialSourceStage.lower(this.table, this.ref)).canonicalIdentity ==
-            requireNotNull(W5aMaterialSourceStage.lower(table, ref)).canonicalIdentity)
-        return GPUPreparedTextMaterialPlanEmission(table, ref, program)
-    }
-
     /** Binds this compiler-issued material result to its one normalized command. */
     public fun bind(
         commandIdValueI32: Int,
@@ -58,6 +51,14 @@ public class GPUPreparedTextMaterialPlanProvenance internal constructor(
     private val programVersionI32: Int,
     private val bindingVersionI32: Int,
 ) {
+    public val sourcePlanTable: MaterialPlanTable get() = table
+
+    public fun remap(table: MaterialPlanTable, ref: MaterialPlanRef): GPUPreparedTextMaterialPlanProvenance {
+        require(requireNotNull(W5aMaterialSourceStage.lower(this.table, this.ref)).canonicalIdentity ==
+            requireNotNull(W5aMaterialSourceStage.lower(table, ref)).canonicalIdentity)
+        return GPUPreparedTextMaterialPlanProvenance(table, ref, commandIdValueI32, program,
+            admissionToken, programVersionI32, bindingVersionI32)
+    }
     init {
         require(program.preparedTextW5aAdmissionToken === admissionToken) {
             "Prepared text W5a provenance requires its compiler-issued admission token"

@@ -15,9 +15,12 @@ import org.graphiks.kanvas.gpu.plan.NumericOperationGraphV1
  * Independent W5a oracle. All node values are intervals over real arithmetic,
  * rounded outward to the predecessor/successor F32 values. It enumerates both
  * preserved-subnormal and FTZ results, plus fused, unfused, and reassociated
- * blend/coverage expressions. The transfer functions are independently bounded
- * from their WGSL definitions (`pow(x, 2.4)` and `pow(x, 1/2.4)`) as
- * `exp2(y * log2(x))`, using arbitrary-precision directed series bounds.
+ * blend/coverage expressions. The source transfer is bounded from WGSL `pow`
+ * as `exp2(y * log2(x))`, using arbitrary-precision directed series bounds.
+ * The attachment transfer is fixed-function, not WGSL: Metal 4 §8.7.7 permits
+ * an encoding error strictly below one RGBA8 code, and a decoding error whose
+ * exact re-encoding differs by at most half a code. These bounds include the
+ * narrower D3D FLOAT/SRGB conversion bounds; they are propagated separately.
  */
 internal object WgslFloatEnvelopeV1Oracle {
     sealed interface DrawResult {
@@ -25,7 +28,7 @@ internal object WgslFloatEnvelopeV1Oracle {
             internal val channels: List<Set<Int>>,
             internal val state: AttachmentState,
         ) : DrawResult
-        data object Unbounded : DrawResult
+        data class Unbounded(val reason: String) : DrawResult
     }
 
     internal class AttachmentState internal constructor(internal val linearPremul: Array<Interval>)
@@ -39,27 +42,32 @@ internal object WgslFloatEnvelopeV1Oracle {
         destination: AttachmentState = clearAttachment(),
         coverageF32: Float = 1f,
     ): DrawResult {
-        if (!coverageF32.isFinite()) return DrawResult.Unbounded
+        if (!coverageF32.isFinite()) return DrawResult.Unbounded("Non-finite coverage")
         val encoded = try {
             evaluateProgram(table, root, destination.linearPremul, Interval.input(coverageF32))
-        } catch (_: IllegalArgumentException) {
-            return DrawResult.Unbounded
-        } catch (_: ArithmeticException) {
-            return DrawResult.Unbounded
+        } catch (failure: IllegalArgumentException) {
+            return DrawResult.Unbounded(failure.message.orEmpty())
+        } catch (failure: ArithmeticException) {
+            return DrawResult.Unbounded(failure.message.orEmpty())
         }
-        val codes = encoded.map(::codesFor)
-        if (codes.any { it == null }) return DrawResult.Unbounded
-        val exactCodes = codes.filterNotNull()
-        if (exactCodes.any { it.size > 2 || it.maxOrNull()!! - it.minOrNull()!! > 1 }) return DrawResult.Unbounded
-        return DrawResult.Bounded(exactCodes, AttachmentState(decodeStoredAttachment(exactCodes)))
+        val codes = encoded.mapIndexed { channel, value ->
+            if (channel < 3) codesForSrgbAttachment(value) else codesFor(value)
+        }
+        if (codes.any { it.isEmpty() || it.size > 2 || it.maxOrNull()!! - it.minOrNull()!! > 1 }) {
+            return DrawResult.Unbounded("Attachment code sets exceed two adjacent codes: $codes")
+        }
+        return DrawResult.Bounded(codes, AttachmentState(decodeStoredAttachment(codes)))
     }
 
-    fun nextAttachment(result: DrawResult): AttachmentState? = (result as? DrawResult.Bounded)?.state
+    fun nextAttachment(result: DrawResult): AttachmentState? = when (result) {
+        is DrawResult.Bounded -> result.state
+        is DrawResult.Unbounded -> error("WgslFloatEnvelopeV1 is unbounded: ${result.reason}")
+    }
 
     fun assertAdmits(expected: DrawResult, observedRgba8: UByteArray) {
         require(observedRgba8.size == 4)
         val bounded = expected as? DrawResult.Bounded
-            ?: error("WgslFloatEnvelopeV1 is unbounded; it cannot prove an RGBA8 envelope")
+            ?: error("WgslFloatEnvelopeV1 is unbounded; it cannot prove an RGBA8 envelope: $expected")
         bounded.channels.forEachIndexed { channel, codes ->
             require(observedRgba8[channel].toInt() in codes) {
                 "channel=$channel observed=${observedRgba8[channel]} expected=$codes"
@@ -150,12 +158,14 @@ internal object WgslFloatEnvelopeV1Oracle {
         }
         NumericOperationGraphV1.Operation.APPLY_COVERAGE_F32 -> {
             val dst = evaluate(node.inputs[0], inputs).rgba()
-            val blended = evaluate(node.inputs[1], inputs).rgba()
             val coverage = evaluate(node.inputs[2], inputs).scalar()
-            Rgba(Array(4) { applyCoverage(dst[it], blended[it], coverage) })
+            val blend = node.inputs[1]
+            require(blend.operation == NumericOperationGraphV1.Operation.SRC_OVER && blend.inputs[1] == node.inputs[0])
+            val source = evaluate(blend.inputs[0], inputs).rgba()
+            Rgba(Array(4) { blendAndCoverage(source[it], source[3], dst[it], coverage) })
         }
         NumericOperationGraphV1.Operation.LINEAR_TO_SRGB_ATTACHMENT -> evaluate(node.inputs.single(), inputs).rgba().let {
-            Rgba(arrayOf(toEncoded(it[0]), toEncoded(it[1]), toEncoded(it[2]), it[3]))
+            Rgba(arrayOf(attachmentEncode(it[0]), attachmentEncode(it[1]), attachmentEncode(it[2]), it[3]))
         }
         NumericOperationGraphV1.Operation.CLAMP_01 -> evaluate(node.inputs.single(), inputs).rgba().let {
             Rgba(Array(4) { index -> it[index].clamp01() })
@@ -179,12 +189,57 @@ internal object WgslFloatEnvelopeV1Oracle {
      * fixed-function SrcOver equivalent `destination*(1-coverage) +
      * blended*coverage`, closed over both ordinary and permitted FMA forms.
      */
-    private fun applyCoverage(destination: Interval, blended: Interval, coverage: Interval): Interval {
+    private fun blendAndCoverage(source: Interval, alpha: Interval, destination: Interval, coverage: Interval): Interval {
+        // One destination value occurs repeatedly in the exact algebra. An ordinary interval
+        // for each occurrence would treat D+(B-D) as three independent values and invent
+        // several codes after attachment decoding. Keep D symbolic; only rounding errors
+        // are independent. Every ordinary and FMA evaluation remains in the closure below.
+        data class Affine(val constant: Interval, val coefficient: Interval, val error: BigDecimal)
+        fun addExact(a: Interval, b: Interval) = directedBinary(a, b, ::downAdd, ::upAdd)
+        fun multiplyExact(a: Interval, b: Interval) = directedBinary(a, b, ::downMultiply, ::upMultiply)
+        fun magnitude(value: Interval) = maxOf(value.lower.abs(), value.upper.abs())
+        fun range(value: Affine) = expandAbsolute(addExact(value.constant,
+            multiplyExact(value.coefficient, destination)), value.error)
+        fun rounded(value: Affine): Affine {
+            val exact = range(value)
+            // Bound every interior rounding, not only the endpoint residues. Two ULPs
+            // cover adjacent-F32 rounding plus the oracle's outward neighbor guard;
+            // the maximum endpoint binade spacing bounds the entire finite interval.
+            var error = upMultiply(BigDecimal.TWO, maxOf(f32UlpAt(exact.lower), f32UlpAt(exact.upper)))
+            if (exact.lower < F32_MIN_NORMAL && exact.upper > F32_MIN_NORMAL.negate()) {
+                error = maxOf(error, F32_MIN_NORMAL)
+            }
+            return value.copy(error = upAdd(value.error, error))
+        }
+        fun add(a: Affine, b: Affine) = rounded(Affine(addExact(a.constant, b.constant),
+            addExact(a.coefficient, b.coefficient), upAdd(a.error, b.error)))
+        fun multiply(a: Affine, b: Interval) = rounded(Affine(multiplyExact(a.constant, b),
+            multiplyExact(a.coefficient, b), upMultiply(a.error, magnitude(b))))
+        fun fused(a: Affine, b: Interval, c: Affine) = rounded(Affine(
+            addExact(multiplyExact(a.constant, b), c.constant),
+            addExact(multiplyExact(a.coefficient, b), c.coefficient),
+            upAdd(upMultiply(a.error, magnitude(b)), c.error),
+        ))
+        val src = Affine(source, Interval.ZERO, BigDecimal.ZERO)
+        val dst = Affine(Interval.ZERO, Interval.ONE, BigDecimal.ZERO)
+        val negativeDst = Affine(Interval.ZERO, Interval.point(BigDecimal.ONE.negate()), BigDecimal.ZERO)
+        val inverseAlpha = Interval.ONE - alpha
+        val left = multiply(src, Interval.ONE)
+        val right = multiply(dst, inverseAlpha)
+        val blends = listOf(add(left, right), fused(src, Interval.ONE, right), fused(dst, inverseAlpha, left))
         val inverseCoverage = Interval.ONE - coverage
-        return hull(
-            sumOfProducts(destination, inverseCoverage, blended, coverage),
-            addProduct(destination, coverage, blended - destination),
-        )
+        return hull(*blends.flatMap { blended ->
+            val coveredDst = multiply(dst, inverseCoverage)
+            val coveredBlend = multiply(blended, coverage)
+            val delta = add(blended, negativeDst)
+            listOf(
+                add(coveredDst, coveredBlend),
+                fused(dst, inverseCoverage, coveredBlend),
+                fused(blended, coverage, coveredDst),
+                add(dst, multiply(delta, coverage)),
+                fused(delta, coverage, dst),
+            ).map(::range)
+        }.toTypedArray())
     }
 
     /** All legal f32 evaluation forms of `a*b + c*d`. */
@@ -197,12 +252,6 @@ internal object WgslFloatEnvelopeV1Oracle {
             fma(c, d, left),
         )
     }
-
-    /** All legal f32 evaluation forms of `addend + multiplier*multiplicand`. */
-    private fun addProduct(addend: Interval, multiplier: Interval, multiplicand: Interval): Interval = hull(
-        addend + multiplier * multiplicand,
-        fma(multiplier, multiplicand, addend),
-    )
 
     private fun fma(a: Interval, b: Interval, c: Interval): Interval = f32Envelope(
         directedTernary(a, b, c),
@@ -218,15 +267,32 @@ internal object WgslFloatEnvelopeV1Oracle {
         ) },
     )
 
-    private fun toEncoded(value: Interval): Interval = piecewiseTransfer(
-        value,
-        LINEAR_BREAK,
-        { x -> Interval.point(x) * Interval.point(SRGB_LINEAR_SCALE) },
-        { x -> wgslPow(
-            Interval.point(x),
-            wgslDivide(Interval.ONE, Interval.point(SRGB_TO_LINEAR_EXPONENT)),
-        ) * Interval.point(SRGB_ENCODE_SCALE) - Interval.point(SRGB_OFFSET) },
+    /** Exact real sRGB reference, before the attachment's documented integer-code error. */
+    private fun attachmentEncode(value: Interval): Interval = piecewiseTransfer(
+        value.clamp01(),
+        BigDecimal("0.0031308"),
+        { x -> Interval(downMultiply(x, BigDecimal("12.92")), upMultiply(x, BigDecimal("12.92"))) },
+        { x -> exactRationalPower(x, 5, 12).let { power -> Interval(
+            downSubtract(downMultiply(BigDecimal("1.055"), power.lower), BigDecimal("0.055")),
+            upSubtract(upMultiply(BigDecimal("1.055"), power.upper), BigDecimal("0.055")),
+        ) } },
     )
+
+    private fun attachmentDecode(value: Interval): Interval = piecewiseTransfer(
+        value.clamp01(),
+        BigDecimal("0.04045"),
+        { x -> Interval(downDivide(x, BigDecimal("12.92")), upDivide(x, BigDecimal("12.92"))) },
+        { x ->
+            val base = Interval(downDivide(downAdd(x, BigDecimal("0.055")), BigDecimal("1.055")),
+                upDivide(upAdd(x, BigDecimal("0.055")), BigDecimal("1.055")))
+            Interval(exactRationalPower(base.lower, 12, 5).lower,
+                exactRationalPower(base.upper, 12, 5).upper)
+        },
+    )
+
+    private fun exactRationalPower(value: BigDecimal, numerator: Int, denominator: Int): Interval =
+        Interval(requireNotNull(nthRoot(powDown(value, numerator), denominator)).lower,
+            requireNotNull(nthRoot(powUp(value, numerator), denominator)).upper)
 
     private fun piecewiseTransfer(value: Interval, split: BigDecimal, lower: (BigDecimal) -> Interval, upper: (BigDecimal) -> Interval): Interval = when {
         value.upper <= split -> Interval(lower(value.lower).lower, lower(value.upper).upper)
@@ -256,21 +322,40 @@ internal object WgslFloatEnvelopeV1Oracle {
     }
 
     private fun decodeStoredAttachment(codes: List<Set<Int>>): Array<Interval> = Array(4) { channel ->
-        val encoded = Interval(
-            downDivide(BigDecimal(codes[channel].minOrNull()!!), UNORM_MAX),
-            upDivide(BigDecimal(codes[channel].maxOrNull()!!), UNORM_MAX),
-        )
-        if (channel < 3) toLinear(encoded) else encoded
+        val lowerCode = BigDecimal(codes[channel].minOrNull()!!)
+        val upperCode = BigDecimal(codes[channel].maxOrNull()!!)
+        if (channel < 3) {
+            // Invert Metal's exact re-encoding bound |255*encode(decoded)-storedCode| <= 0.5.
+            attachmentDecode(Interval(downDivide(downSubtract(lowerCode, HALF), UNORM_MAX),
+                upDivide(upAdd(upperCode, HALF), UNORM_MAX)))
+        } else f32Envelope(Interval(downDivide(lowerCode, UNORM_MAX), upDivide(upperCode, UNORM_MAX)))
     }
 
-    private fun codesFor(value: Interval): Set<Int>? {
+    /**
+     * Metal 4 (2026-06-04), §8.7.7, p381:
+     * https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf
+     * The total fixed-function encode/quantize error is |reference-code| < 1,
+     * not nearest rounding plus another one-code allowance. Strict endpoints
+     * are retained, and a three-code result still fails the public proof gate.
+     */
+    private fun codesForSrgbAttachment(value: Interval): Set<Int> {
         val clamped = value.clamp01()
-        // rgba8unorm stores the nearest code: boundaries are k + 1/2, not k.
-        val first = downSubtract(downMultiply(clamped.lower, UNORM_MAX), HALF)
+        val first = downSubtract(downMultiply(clamped.lower, UNORM_MAX), BigDecimal.ONE)
+            .setScale(0, RoundingMode.FLOOR).toInt().plus(1).coerceIn(0, 255)
+        val last = upAdd(upMultiply(clamped.upper, UNORM_MAX), BigDecimal.ONE)
+            .setScale(0, RoundingMode.CEILING).toInt().minus(1).coerceIn(0, 255)
+        return (first..last).toSet()
+    }
+
+    private fun codesFor(value: Interval): Set<Int> {
+        val clamped = value.clamp01()
+        // D3D 11.3 §3.2.3.6 permits <=0.6 code error for FLOAT -> UNORM;
+        // this also contains Metal's correctly-rounded (<=0.5) linear alpha.
+        val first = downSubtract(downMultiply(clamped.lower, UNORM_MAX), UNORM_CODE_ERROR)
             .setScale(0, RoundingMode.CEILING).toInt().coerceIn(0, 255)
-        val last = upAdd(upMultiply(clamped.upper, UNORM_MAX), HALF)
+        val last = upAdd(upMultiply(clamped.upper, UNORM_MAX), UNORM_CODE_ERROR)
             .setScale(0, RoundingMode.FLOOR).toInt().coerceIn(0, 255)
-        return (first..last).toSet().takeIf { it.size <= 2 && it.maxOrNull()!! - it.minOrNull()!! <= 1 }
+        return (first..last).toSet()
     }
 
     private fun f32Envelope(exact: Interval): Interval = hull(preserveF32(exact), flushSubnormal(exact))
@@ -511,7 +596,6 @@ internal object WgslFloatEnvelopeV1Oracle {
     private val MC_UP = MathContext(160, RoundingMode.CEILING)
     // These are the actual f32 WGSL literals, not decimal source spellings.
     private val SRGB_BREAK = decimal(0.04045f)
-    private val LINEAR_BREAK = decimal(0.0031308f)
     private val SRGB_LINEAR_SCALE = decimal(12.92f)
     private val SRGB_OFFSET = decimal(0.055f)
     private val SRGB_ENCODE_SCALE = decimal(1.055f)
@@ -519,6 +603,7 @@ internal object WgslFloatEnvelopeV1Oracle {
     private val F32_MIN_NORMAL = decimal(java.lang.Float.MIN_NORMAL)
     private val F32_MAX_NORMAL = decimal(Float.MAX_VALUE)
     private val UNORM_MAX = BigDecimal("255")
+    private val UNORM_CODE_ERROR = BigDecimal("0.6")
     private val HALF = BigDecimal("0.5")
     // WGSL 15.7.4.1 operation-level f32 bounds.
     private val DIVISION_ULPS = BigDecimal("2.5")

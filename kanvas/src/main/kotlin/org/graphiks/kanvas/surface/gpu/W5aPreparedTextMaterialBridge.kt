@@ -22,13 +22,9 @@ internal class W5aPreparedTextMaterialBridge private constructor(
     private val candidatesByOperationIndex: Map<Int, DisplayOp.DrawText>,
     private val width: Int,
     private val height: Int,
-    private val frameMaterials: W5aPreparedCorePointMaterialBridge?,
 ) {
     fun materialFor(operationIndex: Int): GPUPreparedTextMaterialPlan? {
         val operation = candidatesByOperationIndex[operationIndex] ?: return null
-        frameMaterials?.refsByOperationIndex?.get(operationIndex)?.let { ref ->
-            return GPUPreparedTextMaterialPlan(frameMaterials.table, ref)
-        }
         // Scene capture is an optional W5a admission step. Invalid/non-finite inputs must
         // continue to prepared-text validation so its typed diagnostic is preserved rather
         // than being replaced by a generic frame error.
@@ -51,7 +47,6 @@ internal class W5aPreparedTextMaterialBridge private constructor(
             operations: List<DisplayOp>,
             width: Int,
             height: Int,
-            frameMaterials: W5aPreparedCorePointMaterialBridge? = null,
         ): W5aPreparedTextMaterialBridge? {
             val candidates = linkedMapOf<Int, DisplayOp.DrawText>()
             operations.forEachIndexed { operationIndex, operation ->
@@ -65,7 +60,6 @@ internal class W5aPreparedTextMaterialBridge private constructor(
                 candidatesByOperationIndex = candidates,
                 width = width,
                 height = height,
-                frameMaterials = frameMaterials,
             )
         }
 
