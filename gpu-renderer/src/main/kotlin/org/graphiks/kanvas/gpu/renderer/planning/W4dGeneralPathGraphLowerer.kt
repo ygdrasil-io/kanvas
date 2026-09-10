@@ -21,6 +21,7 @@ import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.SamplePlan
 import org.graphiks.kanvas.gpu.plan.W4dGeneralPathPlanCompiler
 import org.graphiks.kanvas.gpu.plan.hasLegacyPathColorContract
+import org.graphiks.kanvas.gpu.plan.hasW5aMaterialPathCapabilityV2
 import org.graphiks.kanvas.gpu.plan.hasW5aMaterialPathContract
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
@@ -421,13 +422,18 @@ internal class W4dGeneralPathGraphLowerer {
                 }
             }
         }
-        val color = if (pass.phase.isColorProducing()) {
-            resolveMaterialColor(graph.materialPlanTableOrNull(), draw.materialAuthority)
-                ?: error("W5 material authority is invalid for a color-writing path phase")
+        val color = if (graph.hasW5aMaterialPathCapabilityV2()) {
+            if (pass.phase.isColorProducing()) {
+                resolveMaterialColor(graph.materialPlanTableOrNull(), draw.materialAuthority)
+                    ?: error("W5 material authority is invalid for a color-writing path phase")
+            } else {
+                ColorF32.Transparent
+            }
+        } else if (pass.phase.isHistoricalHardMaskProducer()) {
+            ColorF32.of(1f, 1f, 1f, 1f)
         } else {
-            // Stencil and mask producers preserve only geometry/coverage state; their native
-            // Uniform32 payload is deliberately independent of MaterialPlanRef.
-            ColorF32.Transparent
+            resolveMaterialColor(graph.materialPlanTableOrNull(), draw.materialAuthority)
+                ?: error("Historical path color authority is invalid")
         }
         val semantic = GPUCorePrimitivePayloadGatherer().gatherPlannedW4dSemantic(
             GPUCorePrimitivePayloadInput(
@@ -755,6 +761,12 @@ internal class W4dGeneralPathGraphLowerer {
         PathRenderPhase.MultisampleDirectColor,
         PathRenderPhase.MultisampleStencilColorCover,
         PathRenderPhase.HardEdgeBinaryColorCover,
+    )
+
+    private fun PathRenderPhase.isHistoricalHardMaskProducer(): Boolean = this in setOf(
+        PathRenderPhase.HardEdgeMaskProducer,
+        PathRenderPhase.HardEdgeMaskStencilProducer,
+        PathRenderPhase.HardEdgeMaskStencilCover,
     )
 
     private fun PathRenderPhase.isStencilProducer(): Boolean = this in setOf(

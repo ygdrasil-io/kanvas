@@ -14,6 +14,7 @@ import org.graphiks.kanvas.gpu.plan.PlanPass
 import org.graphiks.kanvas.gpu.plan.PlanResource
 import org.graphiks.kanvas.gpu.plan.PlanResourceKind
 import org.graphiks.kanvas.gpu.plan.PlanResourceLifetime
+import org.graphiks.kanvas.gpu.plan.hasW5aMaterialPathCapabilityV2
 import org.graphiks.kanvas.gpu.plan.PlanResourceRole
 import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
 import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
@@ -524,22 +525,30 @@ internal class W4dGeneralNativeMaterializationSnapshot private constructor(
             val known = resources.associateBy(W4dGeneralNativeResourceFact::resourceId)
             val pathFacts = pathPasses.map { pass ->
                 val maskResourceId = (pass.draw as? BinaryMaskedPathDraw)?.mask?.value
-                val materialColor = if (pass.phase in setOf(
+                val materialColor = if (graph.hasW5aMaterialPathCapabilityV2()) {
+                    if (pass.phase in setOf(
                         PathRenderPhase.SingleSampleDirectColor,
                         PathRenderPhase.SingleSampleStencilColorCover,
                         PathRenderPhase.MultisampleDirectColor,
                         PathRenderPhase.MultisampleStencilColorCover,
                         PathRenderPhase.HardEdgeBinaryColorCover,
-                    )
-                ) {
-                    when (val authority = pass.draw.materialAuthority) {
-                        is PlanDrawMaterialAuthority.MaterialV1 ->
-                            W5aMaterialPlanLowerer().lower(graph.materialPlanTableOrNull() ?: return null, authority.ref)
-                                ?: return null
-                        is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
+                    )) {
+                        when (val authority = pass.draw.materialAuthority) {
+                            is PlanDrawMaterialAuthority.MaterialV1 ->
+                                W5aMaterialPlanLowerer().lower(graph.materialPlanTableOrNull() ?: return null, authority.ref)
+                                    ?: return null
+                            is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
+                        }
+                    } else {
+                        org.graphiks.math.color.ColorF32.Transparent
                     }
+                } else if (pass.phase.isHistoricalHardMaskProducer()) {
+                    org.graphiks.math.color.ColorF32.of(1f, 1f, 1f, 1f)
                 } else {
-                    org.graphiks.math.color.ColorF32.Transparent
+                    when (val authority = pass.draw.materialAuthority) {
+                        is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
+                        is PlanDrawMaterialAuthority.MaterialV1 -> return null
+                    }
                 }
                 val consumerUniform64 = (pass.draw as? BinaryMaskedPathDraw)?.let { binary ->
                     val mask = requireNotNull(known[maskResourceId]) {
@@ -644,6 +653,12 @@ internal class W4dGeneralNativeMaterializationSnapshot private constructor(
         }
     }
 }
+
+private fun PathRenderPhase.isHistoricalHardMaskProducer(): Boolean = this in setOf(
+    PathRenderPhase.HardEdgeMaskProducer,
+    PathRenderPhase.HardEdgeMaskStencilProducer,
+    PathRenderPhase.HardEdgeMaskStencilCover,
+)
 
 /** One sealed renderer-frame binding over the Task 7 snapshot; no public constructor exists. */
 internal class GPUW4dGeneralPreparedFrameMaterializationAuthority internal constructor(

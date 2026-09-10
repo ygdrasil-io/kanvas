@@ -355,7 +355,7 @@ class GPUWgpu4kCorePrimitiveW4dGeneralFrameTest {
     }
 
     @Test
-    fun `hard mask passes write opaque white while binary cover retains each premultiplied color`() {
+    fun `W5a hard mask passes carry no material while binary cover retains each premultiplied color`() {
         listOf(
             Triple("green", ColorARGB.fromPackedUInt(0xff00ff00u), listOf(0f, 1f, 0f, 1f)),
             Triple("black", ColorARGB.fromPackedUInt(0xff000000u), listOf(0f, 0f, 0f, 1f)),
@@ -385,9 +385,9 @@ class GPUWgpu4kCorePrimitiveW4dGeneralFrameTest {
                         .filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
                         .single().dynamicOffsets.single().toInt()
                     assertEquals(
-                        opaqueWhiteUniform32(),
+                        transparentUniform32(),
                         uniformUpload.copyOfRange(offset, offset + 32).toList(),
-                        "$label hard-mask pass must paint binary coverage with opaque white",
+                        "$label W5a hard-mask pass must exclude material from its producer payload",
                     )
                 }
                 val consumer = nativeRenders.flatMap { render -> render.commands }
@@ -559,17 +559,17 @@ class GPUWgpu4kCorePrimitiveW4dGeneralFrameTest {
         }
     }
 
-    private fun opaqueWhiteUniform32(): List<Byte> = ByteBuffer.allocate(32)
+    private fun transparentUniform32(): List<Byte> = ByteBuffer.allocate(32)
         .order(ByteOrder.LITTLE_ENDIAN)
         .apply {
             putFloat(16f)
             putFloat(16f)
             putFloat(0f)
             putFloat(0f)
-            putFloat(1f)
-            putFloat(1f)
-            putFloat(1f)
-            putFloat(1f)
+            putFloat(0f)
+            putFloat(0f)
+            putFloat(0f)
+            putFloat(0f)
         }
         .array()
         .toList()

@@ -48,3 +48,9 @@ public fun RenderGraph.hasLegacyPathDrawColorContract(): Boolean =
             is PlanPass.StencilCover -> listOf(pass.draw)
             else -> emptyList()
         } }.all { draw -> draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1 }
+
+/** Exact W5a material capability discriminator for W4dGeneral and W4e path payloads. */
+@JvmSynthetic
+public fun RenderGraph.hasW5aMaterialPathCapabilityV2(): Boolean =
+    W4dGeneralPathPlanCompiler.isW5aMaterialCapabilityId(capabilityId) ||
+        W4eClipPlanCompiler.isW5aMaterialCapabilityId(capabilityId)
