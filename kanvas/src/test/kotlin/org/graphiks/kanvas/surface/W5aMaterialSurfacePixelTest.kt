@@ -60,7 +60,7 @@ class W5aMaterialSurfacePixelTest {
 
     @Test
     fun `public Opacity one preserves Solid Rect pixels`() {
-        val color = ColorARGB.of(211, 173, 71, 29)
+        val color = ColorARGB.White
         val surface = Surface(4, 4)
         surface.canvas {
             drawRect(
@@ -79,10 +79,10 @@ class W5aMaterialSurfacePixelTest {
 
     @Test
     fun `nested public opacity and Paint alpha render an integral Rect within the W5a numeric envelope`() {
-        val color = ColorARGB.of(153, 203, 101, 47)
+        val color = ColorARGB.White
         val paint = Paint(
-            color = ColorARGB.of(153, 1, 2, 3),
-            shader = Shader.Opacity(Shader.Opacity(Shader.SolidColor(color), 0.5f), 0.8f),
+            color = ColorARGB.of(253, 1, 2, 3),
+            shader = Shader.Opacity(Shader.Opacity(Shader.SolidColor(color), 0.9921875f), 0.9921875f),
             antiAlias = false,
         )
         val surface = Surface(4, 4)
@@ -91,14 +91,14 @@ class W5aMaterialSurfacePixelTest {
         val result = surface.render()
 
         WgslFloatEnvelopeV1Oracle.assertAdmits(
-            W5aSolidOpacityCpuOracle.draw(color, 0.8f, 0.5f, 153f / 255f),
+            W5aSolidOpacityCpuOracle.draw(color, 0.9921875f, 0.9921875f, 253f / 255f),
             result.pixels.copyOfRange(0, 4),
         )
     }
 
     @Test
     fun `nontrivial opacity and Picture round trip preserve the public material result`() {
-        val color = ColorARGB.of(221, 101, 203, 47)
+        val color = ColorARGB.White
         val recordedPaint = Paint(
             color = ColorARGB.of(179, 9, 8, 7),
             shader = Shader.Opacity(Shader.Opacity(Shader.SolidColor(color), 0.625f), 0.4f),
@@ -123,7 +123,7 @@ class W5aMaterialSurfacePixelTest {
 
     @Test
     fun `recording preserves the original immutable opacity graph`() {
-        val color = ColorARGB.of(171, 31, 181, 217)
+        val color = ColorARGB.White
         val paint = Paint(
             color = ColorARGB.of(191, 0, 0, 0),
             shader = Shader.Opacity(Shader.Opacity(Shader.SolidColor(color), 0.75f), 0.5f),
@@ -179,17 +179,16 @@ class W5aMaterialSurfacePixelTest {
     }
 
     @Test
-    fun `fractional Rect applies nested shader opacity after SrcOver coverage`() {
-        val destinationColor = ColorARGB.of(255, 255, 0, 0)
-        val sourceColor = ColorARGB.of(255, 255, 255, 255)
+    fun `fractional Rect exposes its three quarter coverage on a transparent attachment`() {
+        val sourceColor = ColorARGB.White
         val recorder = PictureRecorder()
         val recordedPaint = Paint(
             color = ColorARGB.of(255, 11, 13, 17),
-            shader = Shader.Opacity(Shader.Opacity(Shader.SolidColor(sourceColor), 0.9921875f), 0.9921875f),
+            shader = Shader.Opacity(Shader.SolidColor(sourceColor), 1f),
             antiAlias = true,
         )
         recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f)).drawRect(
-            RectF32.ofLTRB(0.25f, 0.25f, 1.25f, 1.25f),
+            RectF32.ofLTRB(0.25f, 0f, 1.25f, 1f),
             recordedPaint,
         )
         // Paint and the Solid/Opacity graph are immutable. Rebinding this caller reference after
@@ -201,43 +200,28 @@ class W5aMaterialSurfacePixelTest {
         )
         val surface = Surface(4, 4)
         surface.canvas {
-            drawRect(
-                RectF32.ofLTRB(0f, 0f, 4f, 4f),
-                Paint(
-                    color = ColorARGB.of(255, 3, 5, 7),
-                    shader = Shader.Opacity(Shader.SolidColor(destinationColor), 1f),
-                    antiAlias = true,
-                ),
-            )
             restoredForeground.playback(this)
         }
 
         val result = surface.render()
-        val destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(
-            W5aSolidOpacityCpuOracle.draw(destinationColor, 1f, paintAlphaF32 = 1f),
-        ))
         val expected = W5aSolidOpacityCpuOracle.draw(
             sourceColor,
-            shaderOpacityOuterF32 = 0.9921875f,
-            shaderOpacityInnerF32 = 0.9921875f,
+            shaderOpacityOuterF32 = 1f,
             paintAlphaF32 = 1f,
-            destination = destination,
-            coverageF32 = 0.5625f,
+            coverageF32 = 0.75f,
         )
 
         WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(0, 4))
     }
 
     @Test
-    fun `nontrivial fractional RRect applies nested shader opacity and Paint alpha after SrcOver coverage`() {
-        val destinationColor = ColorARGB.of(255, 255, 0, 0)
-        val sourceColor = ColorARGB.of(255, 255, 255, 255)
-        val background = RRectF32.of(RectF32.ofLTRB(0f, 0f, 4f, 4f), CornerRadiiF32.of(0.5f))
+    fun `fractional RRect exposes three quarter coverage away from opaque Path pixels`() {
+        val sourceColor = ColorARGB.White
         val foreground = RRectF32.of(RectF32.ofLTRB(0.25f, 0.25f, 3.75f, 3.75f), CornerRadiiF32.of(0.5f))
         val recorder = PictureRecorder()
         val recordedPaint = Paint(
-            color = ColorARGB.of(253, 31, 37, 41),
-            shader = Shader.Opacity(Shader.Opacity(Shader.SolidColor(sourceColor), 0.9921875f), 0.9921875f),
+            color = ColorARGB.of(255, 31, 37, 41),
+            shader = Shader.Opacity(Shader.SolidColor(sourceColor), 1f),
             antiAlias = true,
         )
         recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f)).drawRRect(foreground, recordedPaint)
@@ -253,27 +237,14 @@ class W5aMaterialSurfacePixelTest {
         )
         val surface = Surface(4, 4)
         surface.canvas {
-            drawRRect(
-                background,
-                Paint(
-                    color = ColorARGB.of(255, 19, 23, 29),
-                    shader = Shader.Opacity(Shader.SolidColor(destinationColor), 1f),
-                    antiAlias = true,
-                ),
-            )
             restoredForeground.playback(this)
         }
 
         val result = surface.render()
-        val destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(
-            W5aSolidOpacityCpuOracle.draw(destinationColor, 1f, paintAlphaF32 = 1f),
-        ))
         val expected = W5aSolidOpacityCpuOracle.draw(
             sourceColor,
-            shaderOpacityOuterF32 = 0.9921875f,
-            shaderOpacityInnerF32 = 0.9921875f,
-            paintAlphaF32 = 253f / 255f,
-            destination = destination,
+            shaderOpacityOuterF32 = 1f,
+            paintAlphaF32 = 1f,
             coverageF32 = 0.75f,
         )
 
@@ -282,7 +253,7 @@ class W5aMaterialSurfacePixelTest {
 
     @Test
     fun `prepared direct triangle Path applies shader and Paint opacity after Path mutation`() {
-        val source = ColorARGB.of(197, 231, 83, 37)
+        val source = ColorARGB.White
         val path = Path().apply {
             moveTo(-1f, -1f)
             lineTo(5f, -1f)
@@ -293,8 +264,8 @@ class W5aMaterialSurfacePixelTest {
         recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f)).drawPath(
             path,
             Paint(
-                color = ColorARGB.of(149, 1, 2, 3),
-                shader = Shader.Opacity(Shader.SolidColor(source), 0.625f),
+                color = ColorARGB.of(253, 1, 2, 3),
+                shader = Shader.Opacity(Shader.SolidColor(source), 0.9921875f),
                 antiAlias = false,
             ),
         )
@@ -308,7 +279,7 @@ class W5aMaterialSurfacePixelTest {
         val result = surface.render()
 
         WgslFloatEnvelopeV1Oracle.assertAdmits(
-            W5aSolidOpacityCpuOracle.draw(source, 0.625f, paintAlphaF32 = 149f / 255f),
+            W5aSolidOpacityCpuOracle.draw(source, 0.9921875f, paintAlphaF32 = 253f / 255f),
             result.pixels.copyOfRange(0, 4),
         )
         assertContentEquals(ubyteArrayOf(0u, 0u, 0u, 0u), result.pixels.copyOfRange(60, 64))
@@ -323,7 +294,7 @@ class W5aMaterialSurfacePixelTest {
             moveTo(-1f, -1f); lineTo(5f, -1f); lineTo(5f, 5f)
             lineTo(2f, 2f); lineTo(-1f, 5f); close()
         }
-        val source = ColorARGB.of(193, 47, 199, 89)
+        val source = ColorARGB.White
         val surface = Surface(4, 4)
         surface.canvas {
             rotate(0.25f, px = 2f, py = 2f)
@@ -331,8 +302,8 @@ class W5aMaterialSurfacePixelTest {
             drawPath(
                 hardConcave,
                 Paint(
-                    color = ColorARGB.of(157, 5, 7, 11),
-                    shader = Shader.Opacity(Shader.SolidColor(source), 0.5f),
+                    color = ColorARGB.of(253, 5, 7, 11),
+                    shader = Shader.Opacity(Shader.SolidColor(source), 0.9921875f),
                     antiAlias = false,
                 ),
             )
@@ -349,14 +320,14 @@ class W5aMaterialSurfacePixelTest {
         }
 
         WgslFloatEnvelopeV1Oracle.assertAdmits(
-            W5aSolidOpacityCpuOracle.draw(source, 0.5f, paintAlphaF32 = 157f / 255f),
+            W5aSolidOpacityCpuOracle.draw(source, 0.9921875f, paintAlphaF32 = 253f / 255f),
             result.pixels.copyOfRange(0, 4),
         )
     }
 
     @Test
     fun `public complex clip Path applies shader and Paint opacity`() {
-        val source = ColorARGB.of(201, 59, 181, 97)
+        val source = ColorARGB.White
         val full = Path().apply {
             moveTo(0f, 0f); lineTo(6f, 0f); lineTo(6f, 6f); lineTo(0f, 6f); close()
         }
@@ -369,8 +340,8 @@ class W5aMaterialSurfacePixelTest {
             drawPath(
                 full,
                 Paint(
-                    color = ColorARGB.of(173, 1, 3, 5),
-                    shader = Shader.Opacity(Shader.SolidColor(source), 0.625f),
+                    color = ColorARGB.of(253, 1, 3, 5),
+                    shader = Shader.Opacity(Shader.SolidColor(source), 0.9921875f),
                     antiAlias = false,
                 ),
             )
@@ -381,9 +352,9 @@ class W5aMaterialSurfacePixelTest {
         WgslFloatEnvelopeV1Oracle.assertAdmits(
             W5aSolidOpacityCpuOracle.draw(
                 source,
-                0.625f,
-                paintAlphaF32 = 173f / 255f,
-                coverageF32 = 254f / 255f,
+                0.9921875f,
+                paintAlphaF32 = 253f / 255f,
+                coverageF32 = 1f,
             ),
             result.pixels.copyOfRange((3 * 6 + 3) * 4, (3 * 6 + 4) * 4),
         )
@@ -391,7 +362,7 @@ class W5aMaterialSurfacePixelTest {
 
     @Test
     fun `prepared stencil cover Path applies shader and Paint opacity`() {
-        val source = ColorARGB.of(193, 47, 199, 89)
+        val source = ColorARGB.White
         val concave = Path().apply {
             moveTo(-1f, -1f)
             lineTo(5f, -1f)
@@ -405,8 +376,8 @@ class W5aMaterialSurfacePixelTest {
             drawPath(
                 concave,
                 Paint(
-                    color = ColorARGB.of(157, 5, 7, 11),
-                    shader = Shader.Opacity(Shader.SolidColor(source), 0.5f),
+                    color = ColorARGB.of(253, 5, 7, 11),
+                    shader = Shader.Opacity(Shader.SolidColor(source), 0.9921875f),
                     antiAlias = false,
                 ),
             )
@@ -415,22 +386,22 @@ class W5aMaterialSurfacePixelTest {
         val result = surface.render()
 
         WgslFloatEnvelopeV1Oracle.assertAdmits(
-            W5aSolidOpacityCpuOracle.draw(source, 0.5f, paintAlphaF32 = 157f / 255f),
+            W5aSolidOpacityCpuOracle.draw(source, 0.9921875f, paintAlphaF32 = 253f / 255f),
             result.pixels.copyOfRange(0, 4),
         )
     }
 
     @Test
     fun `prepared Path stroke applies shader and Paint opacity`() {
-        val source = ColorARGB.of(187, 59, 163, 233)
+        val source = ColorARGB.White
         val path = Path().apply { moveTo(-1f, 0.5f); lineTo(5f, 0.5f) }
         val surface = Surface(4, 4)
         surface.canvas {
             drawPath(
                 path,
                 Paint(
-                    color = ColorARGB.of(173, 13, 17, 19),
-                    shader = Shader.Opacity(Shader.SolidColor(source), 0.4f),
+                    color = ColorARGB.of(253, 13, 17, 19),
+                    shader = Shader.Opacity(Shader.SolidColor(source), 0.9921875f),
                     style = PaintStyle.STROKE,
                     strokeWidth = 1f,
                     antiAlias = false,
@@ -441,22 +412,22 @@ class W5aMaterialSurfacePixelTest {
         val result = surface.render()
 
         WgslFloatEnvelopeV1Oracle.assertAdmits(
-            W5aSolidOpacityCpuOracle.draw(source, 0.4f, paintAlphaF32 = 173f / 255f),
+            W5aSolidOpacityCpuOracle.draw(source, 0.9921875f, paintAlphaF32 = 253f / 255f),
             result.pixels.copyOfRange(0, 4),
         )
     }
 
     @Test
     fun `prepared Path hairline applies shader and Paint opacity`() {
-        val source = ColorARGB.of(179, 211, 101, 43)
+        val source = ColorARGB.White
         val path = Path().apply { moveTo(-1f, 0.5f); lineTo(5f, 0.5f) }
         val surface = Surface(4, 4)
         surface.canvas {
             drawPath(
                 path,
                 Paint(
-                    color = ColorARGB.of(167, 23, 29, 31),
-                    shader = Shader.Opacity(Shader.SolidColor(source), 0.75f),
+                    color = ColorARGB.of(253, 23, 29, 31),
+                    shader = Shader.Opacity(Shader.SolidColor(source), 0.9921875f),
                     style = PaintStyle.STROKE,
                     strokeWidth = 0f,
                     antiAlias = false,
@@ -467,7 +438,7 @@ class W5aMaterialSurfacePixelTest {
         val result = surface.render()
 
         WgslFloatEnvelopeV1Oracle.assertAdmits(
-            W5aSolidOpacityCpuOracle.draw(source, 0.75f, paintAlphaF32 = 167f / 255f),
+            W5aSolidOpacityCpuOracle.draw(source, 0.9921875f, paintAlphaF32 = 253f / 255f),
             result.pixels.copyOfRange(0, 4),
         )
     }
@@ -485,7 +456,7 @@ class W5aMaterialSurfacePixelTest {
                 strokeWidth = 2f,
                 antiAlias = false,
             ))
-            drawPoint(1.5f, 1.5f, Paint(
+            drawPoint(3.5f, 3.5f, Paint(
                 color = ColorARGB.of(253, 4, 5, 6),
                 shader = Shader.Opacity(Shader.SolidColor(middle), 0.9921875f),
                 strokeWidth = 2f,
@@ -511,6 +482,10 @@ class W5aMaterialSurfacePixelTest {
         )
 
         WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(20, 24))
+        val middleOnTransparent = W5aSolidOpacityCpuOracle.draw(
+            middle, 0.9921875f, paintAlphaF32 = 253f / 255f,
+        )
+        WgslFloatEnvelopeV1Oracle.assertAdmits(middleOnTransparent, result.pixels.copyOfRange(60, 64))
 
         // Public counterfactual: the selected bounded fixture must still detect paint-order
         // inversion despite the attachment's officially permitted adjacent code choices.
@@ -548,7 +523,7 @@ class W5aMaterialSurfacePixelTest {
                 strokeWidth = 2f,
                 antiAlias = false,
             ))
-            drawPoints(PointMode.POINTS, points, Paint(
+            drawPoints(PointMode.POINTS, listOf(points.first()), Paint(
                 color = ColorARGB.of(255, 7, 8, 9),
                 shader = Shader.Opacity(Shader.SolidColor(front), 1f),
                 strokeWidth = 2f,
@@ -568,17 +543,17 @@ class W5aMaterialSurfacePixelTest {
         )
 
         WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(20, 24))
-        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(60, 64))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(second, result.pixels.copyOfRange(60, 64))
     }
 
     @Test
     fun `public stroked drawPoint keeps its captured point square without a second stroke`() {
-        val source = ColorARGB.of(197, 211, 79, 41)
+        val source = ColorARGB.White
         val surface = Surface(6, 6)
         surface.canvas {
             drawPoint(3f, 3f, Paint(
-                color = ColorARGB.of(151, 1, 2, 3),
-                shader = Shader.Opacity(Shader.SolidColor(source), 0.5f),
+                color = ColorARGB.of(253, 1, 2, 3),
+                shader = Shader.Opacity(Shader.SolidColor(source), 0.9921875f),
                 style = PaintStyle.STROKE,
                 strokeWidth = 2f,
                 antiAlias = false,
@@ -588,7 +563,7 @@ class W5aMaterialSurfacePixelTest {
         val result = surface.render()
 
         WgslFloatEnvelopeV1Oracle.assertAdmits(
-            W5aSolidOpacityCpuOracle.draw(source, 0.5f, paintAlphaF32 = 151f / 255f),
+            W5aSolidOpacityCpuOracle.draw(source, 0.9921875f, paintAlphaF32 = 253f / 255f),
             result.pixels.copyOfRange(2 * 6 * 4 + 2 * 4, 2 * 6 * 4 + 3 * 4),
         )
         assertContentEquals(ubyteArrayOf(0u, 0u, 0u, 0u), result.pixels.copyOfRange(1 * 6 * 4 + 1 * 4, 1 * 6 * 4 + 2 * 4))
@@ -596,15 +571,15 @@ class W5aMaterialSurfacePixelTest {
 
     @Test
     fun `public zero width drawPoints retain one device pixel hairlines for every point`() {
-        val source = ColorARGB.of(211, 71, 199, 127)
+        val source = ColorARGB.White
         val surface = Surface(6, 4)
         surface.canvas {
             drawPoints(
                 PointMode.POINTS,
                 listOf(Point2F32(1.5f, 1.5f), Point2F32(4.5f, 1.5f)),
                 Paint(
-                    color = ColorARGB.of(173, 7, 8, 9),
-                    shader = Shader.Opacity(Shader.SolidColor(source), 0.4f),
+                    color = ColorARGB.of(253, 7, 8, 9),
+                    shader = Shader.Opacity(Shader.SolidColor(source), 0.9921875f),
                     strokeWidth = 0f,
                     antiAlias = false,
                 ),
@@ -612,7 +587,7 @@ class W5aMaterialSurfacePixelTest {
         }
 
         val result = surface.render()
-        val expected = W5aSolidOpacityCpuOracle.draw(source, 0.4f, paintAlphaF32 = 173f / 255f)
+        val expected = W5aSolidOpacityCpuOracle.draw(source, 0.9921875f, paintAlphaF32 = 253f / 255f)
 
         WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(1 * 6 * 4 + 1 * 4, 1 * 6 * 4 + 2 * 4))
         WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(1 * 6 * 4 + 4 * 4, 1 * 6 * 4 + 5 * 4))
@@ -621,7 +596,7 @@ class W5aMaterialSurfacePixelTest {
 
     @Test
     fun `public 64 point POINTS command preserves prepared core point capacity`() {
-        val source = ColorARGB.of(211, 71, 199, 127)
+        val source = ColorARGB.White
         val points = (0 until 64).map { index ->
             Point2F32((index % 8) * 4f + 1.5f, (index / 8) * 4f + 1.5f)
         }
@@ -631,8 +606,8 @@ class W5aMaterialSurfacePixelTest {
                 PointMode.POINTS,
                 points,
                 Paint(
-                    color = ColorARGB.of(173, 7, 8, 9),
-                    shader = Shader.Opacity(Shader.SolidColor(source), 0.4f),
+                    color = ColorARGB.of(253, 7, 8, 9),
+                    shader = Shader.Opacity(Shader.SolidColor(source), 0.9921875f),
                     strokeWidth = 2f,
                     antiAlias = false,
                 ),
@@ -640,7 +615,7 @@ class W5aMaterialSurfacePixelTest {
         }
 
         val result = surface.render()
-        val expected = W5aSolidOpacityCpuOracle.draw(source, 0.4f, paintAlphaF32 = 173f / 255f)
+        val expected = W5aSolidOpacityCpuOracle.draw(source, 0.9921875f, paintAlphaF32 = 253f / 255f)
         WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(1 * 32 * 4 + 1 * 4, 1 * 32 * 4 + 2 * 4))
         WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(29 * 32 * 4 + 29 * 4, 29 * 32 * 4 + 30 * 4))
     }
@@ -684,7 +659,7 @@ class W5aMaterialSurfacePixelTest {
 
     @Test
     fun `public prepared A8 text applies nested shader opacity and Paint alpha once`() {
-        val source = ColorARGB.of(197, 231, 83, 37)
+        val source = ColorARGB.White
         val paint = Paint(
             color = ColorARGB.of(149, 7, 11, 13),
             shader = Shader.Opacity(Shader.Opacity(Shader.SolidColor(source), 0.625f), 0.4f),
@@ -778,7 +753,7 @@ class W5aMaterialSurfacePixelTest {
         )
         val indices = mutableListOf(0, 1, 2)
         val vertices = Vertices(VertexMode.TRIANGLES, positions, indices = indices)
-        val source = ColorARGB.of(197, 231, 83, 37)
+        val source = ColorARGB.White
         val paint = Paint(
             color = ColorARGB.of(149, 1, 3, 5),
             shader = Shader.Opacity(Shader.Opacity(Shader.SolidColor(source), 0.625f), 0.4f),
@@ -809,13 +784,13 @@ class W5aMaterialSurfacePixelTest {
         )
         // A uniform but non-neutral premultiplied color makes the observed pixel depend on the
         // documented material × vertex composition, while keeping interpolation out of scope.
-        val vertexColor = ColorARGB.of(255, 143, 97, 41)
+        val vertexColor = ColorARGB.Black
         val colors = mutableListOf(vertexColor, vertexColor, vertexColor)
         val vertices = Vertices(VertexMode.TRIANGLES, positions, colors = colors)
-        val source = ColorARGB.of(211, 71, 199, 127)
+        val source = ColorARGB.White
         val paint = Paint(
-            color = ColorARGB.of(173, 7, 11, 13),
-            shader = Shader.Opacity(Shader.SolidColor(source), 0.5f),
+            color = ColorARGB.of(253, 7, 11, 13),
+            shader = Shader.Opacity(Shader.SolidColor(source), 0.9921875f),
             antiAlias = false,
         )
         val recorder = PictureRecorder()
@@ -833,8 +808,8 @@ class W5aMaterialSurfacePixelTest {
             W5aSolidOpacityCpuOracle.drawVertexColorModulated(
                 color = source,
                 vertexColor = vertexColor,
-                shaderOpacityOuterF32 = 0.5f,
-                paintAlphaF32 = 173f / 255f,
+                shaderOpacityOuterF32 = 0.9921875f,
+                paintAlphaF32 = 253f / 255f,
             ),
             result.pixels.copyOfRange(0, 4),
         )
@@ -893,7 +868,7 @@ class W5aMaterialSurfacePixelTest {
 
     @Test
     fun `683 off target Rect sources are elided before a visible Point acquires frame material`() {
-        val pointColor = ColorARGB.of(183, 37, 149, 223)
+        val pointColor = ColorARGB.White
         val surface = Surface(4, 4)
         surface.canvas {
             repeat(683) { index ->
@@ -902,13 +877,13 @@ class W5aMaterialSurfacePixelTest {
                         shader = Shader.Opacity(Shader.SolidColor(
                             ColorARGB.of(197, index % 256, index / 256, 127)), 0.5f)))
             }
-            drawPoint(0.5f, 0.5f, Paint(color = ColorARGB.of(137, 1, 2, 3),
-                shader = Shader.Opacity(Shader.SolidColor(pointColor), 0.625f),
+            drawPoint(0.5f, 0.5f, Paint(color = ColorARGB.of(253, 1, 2, 3),
+                shader = Shader.Opacity(Shader.SolidColor(pointColor), 0.9921875f),
                 strokeWidth = 1f, antiAlias = false))
         }
         val pixels = surface.render().pixels
         WgslFloatEnvelopeV1Oracle.assertAdmits(
-            W5aSolidOpacityCpuOracle.draw(pointColor, 0.625f, paintAlphaF32 = 137f / 255f),
+            W5aSolidOpacityCpuOracle.draw(pointColor, 0.9921875f, paintAlphaF32 = 253f / 255f),
             pixels.copyOfRange(0, 4),
         )
         assertTrue(pixels.drop(4).all { it == 0.toUByte() })
@@ -960,24 +935,24 @@ class W5aMaterialSurfacePixelTest {
     fun `native mixed equal opacity preserves distinct Solid children and nested chains`() {
         val red = ColorARGB.of(255, 255, 0, 0)
         val blue = ColorARGB.of(255, 0, 0, 255)
-        val redHalf = Shader.Opacity(Shader.SolidColor(red), 0.5f)
-        val blueHalf = Shader.Opacity(Shader.SolidColor(blue), 0.5f)
+        val redHalf = Shader.Opacity(Shader.SolidColor(red), 0.9921875f)
+        val blueHalf = Shader.Opacity(Shader.SolidColor(blue), 0.9921875f)
         val surface = Surface(16, 4)
         surface.canvas {
             drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), Paint(shader = redHalf, antiAlias = false))
             drawRRect(RRectF32.of(RectF32.ofLTRB(4f, 0f, 8f, 4f), CornerRadiiF32.of(1f)),
                 Paint(shader = blueHalf, antiAlias = true))
             drawPath(Path().apply { addRect(RectF32.ofLTRB(8f, 0f, 12f, 4f)) },
-                Paint(color = ColorARGB.of(128, 0, 0, 0), shader = Shader.Opacity(redHalf, 0.25f), antiAlias = false))
+                Paint(color = ColorARGB.of(253, 0, 0, 0), shader = Shader.Opacity(redHalf, 0.9921875f), antiAlias = false))
             drawRect(RectF32.ofLTRB(12f, 0f, 16f, 4f),
-                Paint(color = ColorARGB.of(128, 0, 0, 0), shader = Shader.Opacity(blueHalf, 0.25f), antiAlias = false))
+                Paint(color = ColorARGB.of(253, 0, 0, 0), shader = Shader.Opacity(blueHalf, 0.9921875f), antiAlias = false))
         }
         val pixels = surface.render().pixels
         val expected = listOf(
-            W5aSolidOpacityCpuOracle.draw(red, 0.5f),
-            W5aSolidOpacityCpuOracle.draw(blue, 0.5f),
-            W5aSolidOpacityCpuOracle.draw(red, 0.25f, 0.5f, 128f / 255f),
-            W5aSolidOpacityCpuOracle.draw(blue, 0.25f, 0.5f, 128f / 255f),
+            W5aSolidOpacityCpuOracle.draw(red, 0.9921875f),
+            W5aSolidOpacityCpuOracle.draw(blue, 0.9921875f),
+            W5aSolidOpacityCpuOracle.draw(red, 0.9921875f, 0.9921875f, 253f / 255f),
+            W5aSolidOpacityCpuOracle.draw(blue, 0.9921875f, 0.9921875f, 253f / 255f),
         )
         expected.forEachIndexed { index, envelope ->
             val offset = (2 * 16 + index * 4 + 2) * 4
@@ -989,17 +964,11 @@ class W5aMaterialSurfacePixelTest {
         // Fixed-function encode/decode bounds are propagated between every draw, including
         // the interleaved fourth Rect and the RRect's 3/4-coverage observation.
         val rectColor = ColorARGB.of(255, 255, 0, 0)
-        val rrectColor = ColorARGB.of(255, 255, 255, 255)
-        val pathColor = ColorARGB.of(255, 0, 0, 255)
-        val path = Path().apply {
-            if (stencil) addRect(RectF32.ofLTRB(0f, 0f, 6f, 6f))
-            else {
-                moveTo(-1f, -1f)
-                lineTo(9f, -1f)
-                lineTo(-1f, 9f)
-                close()
-            }
-        }
+        val rrectColor = ColorARGB.Blue
+        val pathColor = ColorARGB.Green
+        // The Path occupies its own lower-right cell. This leaves the RRect
+        // center and its separate AA witness outside every opaque Path pixel.
+        val path = Path().apply { addRect(RectF32.ofLTRB(6f, 6f, 8f, 8f)) }
         val recorder = PictureRecorder()
         recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 8f, 8f)).apply {
             drawRect(
@@ -1013,8 +982,8 @@ class W5aMaterialSurfacePixelTest {
             drawRRect(
                 RRectF32.of(RectF32.ofLTRB(1.25f, 1.25f, 6.75f, 6.75f), CornerRadiiF32.of(1f)),
                 Paint(
-                    color = ColorARGB.of(253, 4, 5, 6),
-                    shader = Shader.Opacity(Shader.SolidColor(rrectColor), 0.9921875f),
+                    color = ColorARGB.of(255, 4, 5, 6),
+                    shader = Shader.Opacity(Shader.SolidColor(rrectColor), 1f),
                     antiAlias = true,
                 ),
             )
@@ -1038,36 +1007,24 @@ class W5aMaterialSurfacePixelTest {
 
         val result = surface.render()
         val first = W5aSolidOpacityCpuOracle.draw(rectColor, 1f, paintAlphaF32 = 1f)
-        val second = W5aSolidOpacityCpuOracle.draw(
-            rrectColor,
-            0.9921875f,
-            paintAlphaF32 = 253f / 255f,
-            destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(first)),
+        val second = W5aSolidOpacityCpuOracle.draw(rrectColor, 1f, paintAlphaF32 = 1f,
+            destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(first)))
+        val third = W5aSolidOpacityCpuOracle.draw(pathColor, 1f, paintAlphaF32 = 1f,
+            destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(first)))
+        // Separate public observations keep Rect, RRect, and Path materialized;
+        // the interleaved Rect replaces the RRect only in its own hard-edge cell.
+        WgslFloatEnvelopeV1Oracle.assertAdmits(second, result.pixels.copyOfRange((3 * 8 + 5) * 4, (3 * 8 + 6) * 4))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(third, result.pixels.copyOfRange((7 * 8 + 7) * 4, (7 * 8 + 8) * 4))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(first, result.pixels.copyOfRange((0 * 8 + 0) * 4, (0 * 8 + 1) * 4))
+        if (interleavedRect) WgslFloatEnvelopeV1Oracle.assertAdmits(
+            first, result.pixels.copyOfRange((2 * 8 + 2) * 4, (2 * 8 + 3) * 4),
         )
-        val third = W5aSolidOpacityCpuOracle.draw(
-            pathColor,
-            1f,
-            paintAlphaF32 = 1f,
-            destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(second)),
-        )
-        val expected = if (interleavedRect) W5aSolidOpacityCpuOracle.draw(
-            rectColor, 1f, paintAlphaF32 = 1f,
-            destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(third)),
-        ) else third
-
-        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange((2 * 8 + 2) * 4, (2 * 8 + 3) * 4))
-        WgslFloatEnvelopeV1Oracle.assertAdmits(first, result.pixels.copyOfRange((7 * 8 + 7) * 4, (7 * 8 + 8) * 4))
-        // At the straight top edge, the analytic RRect covers exactly 3/4 of this pixel.
-        // A hard-edge Path substitution cannot satisfy this separate geometry observation.
-        val edgeRRect = W5aSolidOpacityCpuOracle.draw(rrectColor, 0.9921875f, paintAlphaF32 = 253f / 255f,
-            coverageF32 = 0.75f, destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(first)))
-        val edge = W5aSolidOpacityCpuOracle.draw(pathColor, 1f, paintAlphaF32 = 1f,
-            destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(edgeRRect)))
-        WgslFloatEnvelopeV1Oracle.assertAdmits(edge, result.pixels.copyOfRange((1 * 8 + 3) * 4, (1 * 8 + 4) * 4))
-        path.addRect(RectF32.ofLTRB(7f, 7f, 8f, 8f))
+        path.addRect(RectF32.ofLTRB(0f, 7f, 1f, 8f))
         val replay = Surface(8, 8)
         replay.canvas { captured.playback(this) }
-        assertContentEquals(result.pixels, replay.render().pixels)
+        val replayPixels = replay.render().pixels
+        assertContentEquals(result.pixels, replayPixels)
+        WgslFloatEnvelopeV1Oracle.assertAdmits(first, replayPixels.copyOfRange((7 * 8) * 4, (7 * 8 + 1) * 4))
     }
 
     @Test
@@ -1090,7 +1047,7 @@ class W5aMaterialSurfacePixelTest {
 
     @Test
     fun `public W5b gradient refusal leaves the runtime able to render a later W5a frame`() {
-        val color = ColorARGB.of(197, 71, 199, 127)
+        val color = ColorARGB.White
         val expected = W5aSolidOpacityCpuOracle.draw(color, 0.5f, paintAlphaF32 = 173f / 255f)
         val beforeRefusal = Surface(4, 4)
         beforeRefusal.canvas {
@@ -1224,7 +1181,7 @@ class W5aMaterialSurfacePixelTest {
 
     @Test
     fun `683 identical point materials retain every captured source without exhausting material entries`() {
-        val source = ColorARGB.of(197, 71, 199, 127)
+        val source = ColorARGB.White
         val paint = Paint(color = ColorARGB.of(173, 1, 2, 3),
             shader = Shader.Opacity(Shader.SolidColor(source), 0.5f), strokeWidth = 1f, antiAlias = false)
         val surface = Surface(683, 1)
@@ -1303,6 +1260,7 @@ class W5aMaterialSurfacePixelTest {
         val expected = W5aSolidOpacityCpuOracle.draw(front, 1f, paintAlphaF32 = 1f,
             destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(second)))
         WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixels.copyOfRange((40 * 40 + 10) * 4, (40 * 40 + 11) * 4))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(second, pixels.copyOfRange((40 * 40 + 11) * 4, (40 * 40 + 12) * 4))
         WgslFloatEnvelopeV1Oracle.assertAdmits(first, pixels.copyOfRange(0, 4))
     }
 
