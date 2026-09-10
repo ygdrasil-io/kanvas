@@ -62,18 +62,25 @@
 ### Task 2: Complete destination-read lowering without a second semantic planner
 
 **Files:**
+- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/FinalBlendPlan.kt`
+- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/EffectiveMaterialPlanner.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/W5bBlendPlanLowerer.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowerer.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUBlendPlanning.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/GPUBlendFormulaLibrary.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/pipelines/GPUBlendFormulaProgramLibrary.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUW5aSourceStageNativeV2.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFramePreflighter.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUCorePrimitivePreparedFrameTaskListBuilder.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/destination/GPUDestinationSnapshotGrouping.kt`
 - Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5bBlendSurfacePixelTest.kt`
 
 **Interfaces:**
 - Consumes: sealed `org.graphiks.kanvas.gpu.plan.BlendPlan` plus the existing W5a source-stage program/bindings.
 - Produces: one renderer execution descriptor containing either exact native blend state, no color write, or one registered destination formula/layout. `GPUBlendPlanner` becomes a compatibility adapter for legacy routes and may not re-plan W5b draws.
 
-- [ ] Add RED public Rect and RRect tests proving that the same captured source executes under destination-read modes, including scalar coverage on a fractional edge. Retain the fixed-function and `DST/NoOp` cells from Task 1 as regressions.
+- [ ] Add RED public Rect and fractional Rect tests proving that the same captured source executes under destination-read modes, including scalar coverage on a fractional edge. Retain the fixed-function and `DST/NoOp` cells from Task 1 as regressions. RRect remains in Task 4, where its compiler acquires W5b ownership.
 - [ ] Verify RED through `Surface.render()` and exact public pixels; do not assert shader text, pipeline keys, bindings, counters or route scopes.
 - [ ] Implement `W5bBlendPlanLowerer` as an exhaustive mapping from the sealed plan to existing native state/formula registries. Validate plan/formula version and source/coverage ABI before allocation; never call `GPUBlendPlanner.plan()` for a W5b draw.
 - [ ] Generalize W5a fragment composition so the source DAG remains unchanged while the authenticated target tail comes from the W5b blend plan. Destination-read adds its texture/sampler group without renumbering geometry group 0 or raw material group 1; the new ABI version must be explicit.
