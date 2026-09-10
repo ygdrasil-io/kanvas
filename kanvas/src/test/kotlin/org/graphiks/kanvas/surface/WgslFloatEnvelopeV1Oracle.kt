@@ -16,8 +16,8 @@ import org.graphiks.kanvas.gpu.plan.NumericOperationGraphV1
  * rounded outward to the predecessor/successor F32 values. It enumerates both
  * preserved-subnormal and FTZ results, plus fused, unfused, and reassociated
  * blend/coverage expressions. The transfer functions are independently bounded
- * from their WGSL definitions (`pow(x, 2.4)` and `pow(x, 1/2.4)`), using
- * arbitrary-precision bisection for the rational powers.
+ * from their WGSL definitions (`pow(x, 2.4)` and `pow(x, 1/2.4)`) as
+ * `exp2(y * log2(x))`, using arbitrary-precision directed series bounds.
  */
 internal object WgslFloatEnvelopeV1Oracle {
     sealed interface DrawResult {
@@ -43,6 +43,8 @@ internal object WgslFloatEnvelopeV1Oracle {
         val encoded = try {
             evaluateProgram(table, root, destination.linearPremul, Interval.input(coverageF32))
         } catch (_: IllegalArgumentException) {
+            return DrawResult.Unbounded
+        } catch (_: ArithmeticException) {
             return DrawResult.Unbounded
         }
         val codes = encoded.map(::codesFor)
@@ -161,43 +163,70 @@ internal object WgslFloatEnvelopeV1Oracle {
         NumericOperationGraphV1.Operation.QUANTIZE_UNORM8 -> evaluate(node.inputs.single(), inputs)
     }
 
-    private fun sourceOver(source: Interval, destination: Interval, inverseAlpha: Interval): Interval = hull(
-        source + destination * inverseAlpha,
-        fma(destination, inverseAlpha, source),
-    )
+    /**
+     * This is the complete two-term closure of the normative SrcOver
+     * expression `source + destination * (1 - source.a)`: ordinary evaluation
+     * and the only legal multiply/add fusion. There is no third summand to
+     * reassociate.
+     */
+    private fun sourceOver(source: Interval, destination: Interval, inverseAlpha: Interval): Interval =
+        sumOfProducts(source, Interval.ONE, destination, inverseAlpha)
 
-    private fun applyCoverage(destination: Interval, blended: Interval, coverage: Interval): Interval = hull(
-        destination + coverage * (blended - destination),
-        (Interval.ONE - coverage) * destination + coverage * blended,
-        fma(coverage, blended - destination, destination),
-        fma(Interval.ONE - coverage, destination, coverage * blended),
-        fma(coverage, blended, (Interval.ONE - coverage) * destination),
+    /**
+     * The normative coverage expression is
+     * `destination + coverage * (blended - destination)`. The direct form is
+     * closed over its ordinary and FMA evaluations. The second branch is the
+     * fixed-function SrcOver equivalent `destination*(1-coverage) +
+     * blended*coverage`, closed over both ordinary and permitted FMA forms.
+     */
+    private fun applyCoverage(destination: Interval, blended: Interval, coverage: Interval): Interval {
+        val inverseCoverage = Interval.ONE - coverage
+        return hull(
+            sumOfProducts(destination, inverseCoverage, blended, coverage),
+            addProduct(destination, coverage, blended - destination),
+        )
+    }
+
+    /** All legal f32 evaluation forms of `a*b + c*d`. */
+    private fun sumOfProducts(a: Interval, b: Interval, c: Interval, d: Interval): Interval {
+        val left = a * b
+        val right = c * d
+        return hull(
+            left + right,
+            fma(a, b, right),
+            fma(c, d, left),
+        )
+    }
+
+    /** All legal f32 evaluation forms of `addend + multiplier*multiplicand`. */
+    private fun addProduct(addend: Interval, multiplier: Interval, multiplicand: Interval): Interval = hull(
+        addend + multiplier * multiplicand,
+        fma(multiplier, multiplicand, addend),
     )
 
     private fun fma(a: Interval, b: Interval, c: Interval): Interval = f32Envelope(
         directedTernary(a, b, c),
     )
 
-    private fun toLinear(value: Interval): Interval = f32Envelope(wgslTransferError(piecewiseTransfer(
+    private fun toLinear(value: Interval): Interval = piecewiseTransfer(
         value,
         SRGB_BREAK,
-        { x -> directedDivide(x, SRGB_LINEAR_SCALE) },
-        { x -> directedAdd(x, SRGB_OFFSET).let { shifted ->
-            rationalPower(Interval(downDivide(shifted.lower, SRGB_ENCODE_SCALE), upDivide(shifted.upper, SRGB_ENCODE_SCALE)), 12, 5)
-        } },
-    )))
+        { x -> wgslDivide(Interval.point(x), Interval.point(SRGB_LINEAR_SCALE)) },
+        { x -> wgslPow(
+            wgslDivide(Interval.point(x) + Interval.point(SRGB_OFFSET), Interval.point(SRGB_ENCODE_SCALE)),
+            Interval.point(SRGB_TO_LINEAR_EXPONENT),
+        ) },
+    )
 
-    private fun toEncoded(value: Interval): Interval = f32Envelope(wgslTransferError(piecewiseTransfer(
+    private fun toEncoded(value: Interval): Interval = piecewiseTransfer(
         value,
         LINEAR_BREAK,
-        { x -> directedMultiply(x, SRGB_LINEAR_SCALE) },
-        { x -> rationalPower(Interval(x, x), 5, 12).let { power ->
-            Interval(
-                downSubtract(downMultiply(power.lower, SRGB_ENCODE_SCALE), SRGB_OFFSET),
-                upSubtract(upMultiply(power.upper, SRGB_ENCODE_SCALE), SRGB_OFFSET),
-            )
-        } },
-    )))
+        { x -> Interval.point(x) * Interval.point(SRGB_LINEAR_SCALE) },
+        { x -> wgslPow(
+            Interval.point(x),
+            wgslDivide(Interval.ONE, Interval.point(SRGB_TO_LINEAR_EXPONENT)),
+        ) * Interval.point(SRGB_ENCODE_SCALE) - Interval.point(SRGB_OFFSET) },
+    )
 
     private fun piecewiseTransfer(value: Interval, split: BigDecimal, lower: (BigDecimal) -> Interval, upper: (BigDecimal) -> Interval): Interval = when {
         value.upper <= split -> Interval(lower(value.lower).lower, lower(value.upper).upper)
@@ -206,26 +235,22 @@ internal object WgslFloatEnvelopeV1Oracle {
     }
 
     /**
-     * Positive rational powers use 512 directed-rounding bisection steps at
-     * 160 decimal digits.  The remaining root width is below 2^-512; the
-     * explicit WGSL implementation budget below dominates it.
+     * Directed rational-root bisection is retained as an exact-arithmetic
+     * primitive. Ambiguous middle points are never guessed: if the directed
+     * powers overlap the target, no narrower proven bracket exists and the
+     * caller must report Unbounded.
      */
-    private fun rationalPower(value: Interval, numerator: Int, denominator: Int): Interval {
-        require(value.lower >= BigDecimal.ZERO)
-        val lowerRoot = nthRoot(value.lower, denominator).lower
-        val upperRoot = nthRoot(value.upper, denominator).upper
-        return wgslPowError(Interval(powDown(lowerRoot, numerator), powUp(upperRoot, numerator)))
-    }
-
-    private fun nthRoot(value: BigDecimal, degree: Int): Interval {
+    private fun nthRoot(value: BigDecimal, degree: Int): Interval? {
         if (value == BigDecimal.ZERO) return Interval.ZERO
         var low = BigDecimal.ZERO
         var high = value.max(BigDecimal.ONE)
         repeat(ROOT_BISECTION_STEPS) {
             val middle = downDivide(downAdd(low, high), BigDecimal.TWO)
-            // If directed upper power cannot prove middle is below the root,
-            // retain it as an upper bound. This is conservative by construction.
-            if (powUp(middle, degree) <= value) low = middle else high = middle
+            when {
+                powUp(middle, degree) <= value -> low = middle
+                powDown(middle, degree) >= value -> high = middle
+                else -> return null
+            }
         }
         return Interval(low, high)
     }
@@ -282,20 +307,171 @@ internal object WgslFloatEnvelopeV1Oracle {
     private fun Interval.hull(other: Interval): Interval = hull(this, other)
     private fun hull(vararg intervals: Interval): Interval = Interval(intervals.minOf { it.lower }, intervals.maxOf { it.upper })
 
-    private fun directedAdd(value: BigDecimal, addend: BigDecimal): Interval = Interval(downAdd(value, addend), upAdd(value, addend))
-    private fun directedMultiply(value: BigDecimal, factor: BigDecimal): Interval = Interval(downMultiply(value, factor), upMultiply(value, factor))
-    private fun directedDivide(value: BigDecimal, divisor: BigDecimal): Interval = Interval(downDivide(value, divisor), upDivide(value, divisor))
+    /** WGSL f32 division has a 2.5-ULP accuracy bound for normal divisors. */
+    private fun wgslDivide(left: Interval, right: Interval): Interval {
+        require(right.lower > BigDecimal.ZERO || right.upper < BigDecimal.ZERO) {
+            "Division crossing zero cannot prove a finite W5a envelope"
+        }
+        val smallestDivisor = minOf(right.lower.abs(), right.upper.abs())
+        require(smallestDivisor >= F32_MIN_NORMAL && right.lower.abs() <= F32_MAX_NORMAL && right.upper.abs() <= F32_MAX_NORMAL) {
+            "WGSL division accuracy is unbounded outside its normal-divisor domain"
+        }
+        return f32Envelope(expandUlps(directedBinary(left, right, ::downDivide, ::upDivide), DIVISION_ULPS))
+    }
 
-    /** WGSL pow is budgeted at 2^-12 relative + 2^-18 absolute; transfer algebra gets 2^-18 absolute. */
-    private fun wgslPowError(value: Interval): Interval = Interval(
-        downSubtract(downMultiply(value.lower, ONE_MINUS_POW_RELATIVE_ERROR), POW_ABSOLUTE_ERROR),
-        upAdd(upMultiply(value.upper, ONE_PLUS_POW_RELATIVE_ERROR), POW_ABSOLUTE_ERROR),
+    /**
+     * WGSL specifies `pow(x,y)` as inherited from `exp2(y * log2(x))`.
+     * Each built-in below applies the specification's operation-level bound;
+     * no implementation-specific transfer-function allowance is assumed.
+     */
+    private fun wgslPow(base: Interval, exponent: Interval): Interval {
+        require(base.lower > BigDecimal.ZERO) { "pow outside its positive finite proof domain" }
+        return wgslExp2(exponent * wgslLog2(base))
+    }
+
+    private fun wgslLog2(value: Interval): Interval {
+        require(value.lower > BigDecimal.ZERO) { "log2 outside its finite proof domain" }
+        val exact = exactLog2(value)
+        val absolute = f32Envelope(expandAbsolute(exact, LOG2_UNIT_INTERVAL_ABSOLUTE_ERROR))
+        val ulps = f32Envelope(expandUlps(exact, LOG2_OUTSIDE_UNIT_INTERVAL_ULPS))
+        return when {
+            value.lower >= HALF && value.upper <= BigDecimal.TWO -> absolute
+            value.upper < HALF || value.lower > BigDecimal.TWO -> ulps
+            else -> hull(absolute, ulps)
+        }
+    }
+
+    private fun wgslExp2(value: Interval): Interval {
+        val exact = exactExp2(value)
+        // WGSL's exp2 bound is (3 + 2*|x|) ULP at each mathematical result.
+        val factor = upAdd(BigDecimal("3"), upMultiply(BigDecimal.TWO, maxOf(value.lower.abs(), value.upper.abs())))
+        return f32Envelope(expandUlps(exact, factor))
+    }
+
+    private fun expandAbsolute(value: Interval, error: BigDecimal): Interval = Interval(
+        downSubtract(value.lower, error),
+        upAdd(value.upper, error),
     )
 
-    private fun wgslTransferError(value: Interval): Interval = Interval(
-        downSubtract(value.lower, TRANSFER_ABSOLUTE_ERROR),
-        upAdd(value.upper, TRANSFER_ABSOLUTE_ERROR),
-    )
+    private fun expandUlps(value: Interval, count: BigDecimal): Interval {
+        val ulp = maxOf(f32UlpAt(value.lower), f32UlpAt(value.upper))
+        val error = upMultiply(count, ulp)
+        return expandAbsolute(value, error)
+    }
+
+    /** Exact f32 ULP bracket around an arbitrary-precision real endpoint. */
+    private fun f32UlpAt(value: BigDecimal): BigDecimal {
+        val rounded = value.toFloat()
+        require(rounded.isFinite()) { "An infinite builtin result cannot prove an RGBA8 envelope" }
+        val center = decimal(rounded)
+        val lower = decimal(java.lang.Math.nextDown(rounded))
+        val upper = decimal(java.lang.Math.nextUp(rounded))
+        return when {
+            value < center -> center.subtract(lower)
+            value > center -> upper.subtract(center)
+            else -> minOf(center.subtract(lower), upper.subtract(center))
+        }
+    }
+
+    /** Arbitrary-precision real `log2`, bounded outward at every primitive. */
+    private fun exactLog2(value: Interval): Interval {
+        val lower = naturalLog(value.lower)
+        val upper = naturalLog(value.upper)
+        return Interval(
+            downDivide(lower.lower, LN_TWO.upper),
+            upDivide(upper.upper, LN_TWO.lower),
+        )
+    }
+
+    private fun naturalLog(value: BigDecimal): Interval {
+        require(value > BigDecimal.ZERO)
+        var normalized = value
+        var exponent = 0
+        while (normalized < BigDecimal.ONE) {
+            // Scaling by a power of two is exact in BigDecimal; preserving the
+            // exact normalization avoids a branch proof depending on rounding.
+            normalized = normalized.multiply(BigDecimal.TWO)
+            exponent--
+        }
+        while (normalized >= BigDecimal.TWO) {
+            normalized = normalized.divide(BigDecimal.TWO)
+            exponent++
+        }
+        val mantissa = atanhLog(normalized)
+        return if (exponent >= 0) Interval(
+            downAdd(mantissa.lower, downMultiply(LN_TWO.lower, BigDecimal(exponent))),
+            upAdd(mantissa.upper, upMultiply(LN_TWO.upper, BigDecimal(exponent))),
+        ) else Interval(
+            downSubtract(mantissa.lower, upMultiply(LN_TWO.upper, BigDecimal(-exponent))),
+            upSubtract(mantissa.upper, downMultiply(LN_TWO.lower, BigDecimal(-exponent))),
+        )
+    }
+
+    /** ln(x) for x in [1,2), using ln(x)=2*atanh((x-1)/(x+1)). */
+    private fun atanhLog(value: BigDecimal): Interval {
+        val z = Interval(
+            downDivide(downSubtract(value, BigDecimal.ONE), upAdd(value, BigDecimal.ONE)),
+            upDivide(upSubtract(value, BigDecimal.ONE), downAdd(value, BigDecimal.ONE)),
+        )
+        return atanhSeries(z)
+    }
+
+    private fun atanhSeries(z: Interval): Interval {
+        require(z.lower >= BigDecimal.ZERO && z.upper < BigDecimal.ONE)
+        val zSquared = Interval(downMultiply(z.lower, z.lower), upMultiply(z.upper, z.upper))
+        var lowerTerm = z.lower
+        var upperTerm = z.upper
+        var lowerSum = lowerTerm
+        var upperSum = upperTerm
+        for (index in 1 until LOG_SERIES_TERMS) {
+            lowerTerm = downMultiply(lowerTerm, zSquared.lower)
+            upperTerm = upMultiply(upperTerm, zSquared.upper)
+            val denominator = BigDecimal(index * 2 + 1)
+            lowerSum = downAdd(lowerSum, downDivide(lowerTerm, denominator))
+            upperSum = upAdd(upperSum, upDivide(upperTerm, denominator))
+        }
+        val nextDenominator = BigDecimal(LOG_SERIES_TERMS * 2 + 1)
+        val nextTerm = upDivide(upMultiply(upperTerm, zSquared.upper), nextDenominator)
+        val remainder = upDivide(nextTerm, downSubtract(BigDecimal.ONE, zSquared.upper))
+        return Interval(downMultiply(BigDecimal.TWO, lowerSum), upMultiply(BigDecimal.TWO, upAdd(upperSum, remainder)))
+    }
+
+    /** Arbitrary-precision real exp2, via exp(x*ln(2)) with a Taylor remainder. */
+    private fun exactExp2(value: Interval): Interval {
+        val exponent = directedBinary(value, LN_TWO, ::downMultiply, ::upMultiply)
+        return Interval(expLower(exponent.lower), expUpper(exponent.upper))
+    }
+
+    private fun expLower(value: BigDecimal): BigDecimal = if (value >= BigDecimal.ZERO) {
+        expPositive(value).lower
+    } else {
+        downDivide(BigDecimal.ONE, expPositive(value.negate()).upper)
+    }
+
+    private fun expUpper(value: BigDecimal): BigDecimal = if (value >= BigDecimal.ZERO) {
+        expPositive(value).upper
+    } else {
+        upDivide(BigDecimal.ONE, expPositive(value.negate()).lower)
+    }
+
+    private fun expPositive(value: BigDecimal): Interval {
+        require(value < BigDecimal(EXP_SERIES_TERMS)) { "exp2 argument exceeds the finite proof budget" }
+        var lowerTerm = BigDecimal.ONE
+        var upperTerm = BigDecimal.ONE
+        var lowerSum = BigDecimal.ONE
+        var upperSum = BigDecimal.ONE
+        for (index in 1..EXP_SERIES_TERMS) {
+            val denominator = BigDecimal(index)
+            lowerTerm = downDivide(downMultiply(lowerTerm, value), denominator)
+            upperTerm = upDivide(upMultiply(upperTerm, value), denominator)
+            lowerSum = downAdd(lowerSum, lowerTerm)
+            upperSum = upAdd(upperSum, upperTerm)
+        }
+        val nextTerm = upDivide(upMultiply(upperTerm, value), BigDecimal(EXP_SERIES_TERMS + 1))
+        val ratio = upDivide(value, BigDecimal(EXP_SERIES_TERMS + 2))
+        val remainder = upDivide(nextTerm, downSubtract(BigDecimal.ONE, ratio))
+        return Interval(lowerSum, upAdd(upperSum, remainder))
+    }
 
     private fun downAdd(a: BigDecimal, b: BigDecimal): BigDecimal = a.add(b, MC_DOWN)
     private fun upAdd(a: BigDecimal, b: BigDecimal): BigDecimal = a.add(b, MC_UP)
@@ -317,6 +493,7 @@ internal object WgslFloatEnvelopeV1Oracle {
                 require(value.isFinite())
                 return Interval(decimal(value), decimal(value))
             }
+            fun point(value: BigDecimal): Interval = Interval(value, value)
         }
     }
 
@@ -327,22 +504,23 @@ internal object WgslFloatEnvelopeV1Oracle {
 
     private val MC_DOWN = MathContext(160, RoundingMode.FLOOR)
     private val MC_UP = MathContext(160, RoundingMode.CEILING)
-    private val SRGB_BREAK = BigDecimal("0.04045")
-    private val LINEAR_BREAK = BigDecimal("0.0031308")
-    private val SRGB_LINEAR_SCALE = BigDecimal("12.92")
-    private val SRGB_OFFSET = BigDecimal("0.055")
-    private val SRGB_ENCODE_SCALE = BigDecimal("1.055")
-    private val F32_MIN_NORMAL = BigDecimal("1.17549435e-38")
+    // These are the actual f32 WGSL literals, not decimal source spellings.
+    private val SRGB_BREAK = decimal(0.04045f)
+    private val LINEAR_BREAK = decimal(0.0031308f)
+    private val SRGB_LINEAR_SCALE = decimal(12.92f)
+    private val SRGB_OFFSET = decimal(0.055f)
+    private val SRGB_ENCODE_SCALE = decimal(1.055f)
+    private val SRGB_TO_LINEAR_EXPONENT = decimal(2.4f)
+    private val F32_MIN_NORMAL = decimal(java.lang.Float.MIN_NORMAL)
+    private val F32_MAX_NORMAL = decimal(Float.MAX_VALUE)
     private val UNORM_MAX = BigDecimal("255")
     private val HALF = BigDecimal("0.5")
-    // These binary budgets deliberately exceed the implementation accuracy the
-    // oracle needs to admit. They are expressed as powers of two so the proof
-    // has an unambiguous real-number interpretation before the adjacent-F32
-    // expansion in f32Envelope.
-    private val POW_RELATIVE_ERROR = BigDecimal.ONE.divide(BigDecimal.TWO.pow(12), MC_UP)
-    private val POW_ABSOLUTE_ERROR = BigDecimal.ONE.divide(BigDecimal.TWO.pow(18), MC_UP)
-    private val TRANSFER_ABSOLUTE_ERROR = BigDecimal.ONE.divide(BigDecimal.TWO.pow(18), MC_UP)
-    private val ONE_MINUS_POW_RELATIVE_ERROR = BigDecimal.ONE.subtract(POW_RELATIVE_ERROR)
-    private val ONE_PLUS_POW_RELATIVE_ERROR = BigDecimal.ONE.add(POW_RELATIVE_ERROR)
+    // WGSL 15.7.4.1 operation-level f32 bounds.
+    private val DIVISION_ULPS = BigDecimal("2.5")
+    private val LOG2_OUTSIDE_UNIT_INTERVAL_ULPS = BigDecimal("3")
+    private val LOG2_UNIT_INTERVAL_ABSOLUTE_ERROR = BigDecimal.ONE.divide(BigDecimal.TWO.pow(21), MC_UP)
+    private val LN_TWO: Interval by lazy { atanhLog(BigDecimal.TWO) }
     private const val ROOT_BISECTION_STEPS = 512
+    private const val LOG_SERIES_TERMS = 512
+    private const val EXP_SERIES_TERMS = 512
 }
