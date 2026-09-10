@@ -133,19 +133,19 @@ Le nom final peut être ajusté lors de l'implémentation, mais les invariants s
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/GPUPreparedMaterialProgram.kt`
 - Modify: Rect planner/lowerer files reached by the failing public fixture
 
-- [ ] Add public RED tests rendering an integral Rect with `Shader.Opacity(Shader.SolidColor(...), alpha)` nested at least twice, non-trivial shader alpha and non-trivial `Paint.color.alpha`; cover opacity zero, one and a non-trivial product.
-- [ ] Add a `Picture` round-trip fixture proving that the public Opacity wrapper and its F32 alpha survive serialization before rendering.
-- [ ] Compare every channel to the independent `WgslFloatEnvelopeV1` oracle: only a singleton or two adjacent RGBA8 codes may pass. Reject a fixture whose envelope is wider or non-adjacent; do not assert a host-language exact float as the portable contract.
-- [ ] Add a RED capture-mutation case: mutate/rebind the caller-owned paint/shader inputs after recording and require the captured result to remain unchanged.
-- [ ] Run only the new public test and record the semantic failure, not an implementation detail.
-- [ ] Add the public `Shader.Opacity`, bounded snapshot traversal, IR mapping and versioned Picture encoding before implementing its planner path.
-- [ ] Implement iterative bounded normalization of `DrawNode` into `EffectiveMaterialPlan` for Solid/Opacity/Transparent; reject all other nodes with stable W5a diagnostics. Preserve public wrapper order until plan canonicalization, then neutralize one, combine adjacent finite opacities, and reduce zero only under the exact W5a `SRC_OVER`/no-effect condition.
-- [ ] Seal `NumericOperationGraphV1` in every W5a program and use that same graph to generate the backend expression and to drive the independent arbitrary-precision/outward-rounded test oracle. Model F32 rounding, FTZ, allowed reassociation/fusion, clamp and UNORM8 quantization.
-- [ ] Implement immutable program/binding entries and a sealed table. Deduplicate structure independently from values; do not deduplicate distinct binding payloads by structure alone.
-- [ ] Replace the first promoted Rect draw's color authority by `MaterialPlanRef`; retain the historical W3/W4 path only through `LegacyColorV1`.
-- [ ] Add the renderer adapter which consumes the plan and reuses the existing proven solid WGSL materializer without accepting a reconstructed semantic descriptor.
-- [ ] Run the new public test, then relevant existing W3/W4 Rect public pixel tests.
-- [ ] Refactor only after GREEN; run `rtk git diff --check` and commit `feat(gpu-plan): establish W5a solid material authority`.
+- [x] Add public RED tests rendering an integral Rect with `Shader.Opacity(Shader.SolidColor(...), alpha)` nested at least twice, non-trivial shader alpha and non-trivial `Paint.color.alpha`; cover opacity zero, one and a non-trivial product.
+- [x] Add a `Picture` round-trip fixture proving that the public Opacity wrapper and its F32 alpha survive serialization before rendering.
+- [x] Compare every channel to the independent `WgslFloatEnvelopeV1` oracle: only a singleton or two adjacent RGBA8 codes may pass. Reject a fixture whose envelope is wider or non-adjacent; do not assert a host-language exact float as the portable contract.
+- [x] Retain the strongest available immutable-input proof described above: rebinding caller variables after recording and public Picture round-trip cannot change the captured source. Mutable Path, vertices and glyph collections provide the subsequent mutation-sensitive proofs; no mutable Solid/Opacity API was fabricated.
+- [x] Run only the new public test and record the semantic failure, not an implementation detail.
+- [x] Add the public `Shader.Opacity`, bounded snapshot traversal, IR mapping and versioned Picture encoding before implementing its planner path.
+- [x] Implement iterative bounded normalization of `DrawNode` into `EffectiveMaterialPlan` for Solid/Opacity/Transparent; reject all other nodes with stable W5a diagnostics. Preserve public wrapper order until plan canonicalization, then neutralize one, combine adjacent finite opacities, and reduce zero only under the exact W5a `SRC_OVER`/no-effect condition.
+- [x] Seal `NumericOperationGraphV1` in every W5a program and use that same graph to generate the backend expression and to drive the independent arbitrary-precision/outward-rounded test oracle. Model F32 rounding, FTZ, allowed reassociation/fusion, clamp and UNORM8 quantization.
+- [x] Implement immutable program/binding entries and a sealed table. Deduplicate structure independently from values; do not deduplicate distinct binding payloads by structure alone.
+- [x] Replace the first promoted Rect draw's color authority by `MaterialPlanRef`; retain the historical W3/W4 path only through `LegacyColorV1`.
+- [x] Add the renderer adapter which consumes the sealed DAG and raw bindings in the color-writing fragment source stage, retaining the proven geometry/coverage/fixed-function stages without a reconstructed material descriptor.
+- [x] Run the new public test, then relevant existing W3/W4 Rect public pixel tests.
+- [x] Refactor only after GREEN; run `rtk git diff --check` and commit `feat(gpu-plan): establish W5a solid material authority`.
 
 ### Task 2: Rect fractionnaire et RRect sur la même autorité
 
@@ -156,12 +156,12 @@ Le nom final peut être ajusté lors de l'implémentation, mais les invariants s
 - Modify: `gpu-renderer/.../planning/W4bAnalyticRRectGraphLowerer.kt`
 - Modify: `kanvas/.../surface/W5aMaterialSurfacePixelTest.kt`
 
-- [ ] Add RED public pixel fixtures for a fractional Rect and non-trivial RRect, each with shader alpha × paint alpha and partial coverage.
-- [ ] Make the independent oracle apply coverage after SRC_OVER: `dst + coverage * (blend(src,dst)-dst)`.
-- [ ] Migrate both draw families to `MaterialPlanRef` while preserving geometry, scissor, sample and coverage facts byte-for-byte.
-- [ ] Version the promoted witness/capability; never authenticate a W5 draw with a historical W4 witness.
-- [ ] Verify mutation after Picture/recording cannot change bindings.
-- [ ] Run new tests plus public W4a/W4b pixel suites; commit `feat(gpu-plan): share W5a material across rect families`.
+- [x] Add RED public pixel fixtures for a fractional Rect and non-trivial RRect, each with shader alpha × paint alpha and partial coverage.
+- [x] Make the independent oracle apply coverage after SRC_OVER: `dst + coverage * (blend(src,dst)-dst)`.
+- [x] Migrate both draw families to `MaterialPlanRef` while preserving geometry, scissor, sample and coverage facts byte-for-byte.
+- [x] Version the promoted witness/capability; never authenticate a W5 draw with a historical W4 witness.
+- [x] Verify mutation after Picture/recording cannot change bindings.
+- [x] Run new tests plus public W4a/W4b pixel suites; commit `feat(gpu-plan): share W5a material across rect families`.
 
 ### Task 3: Path fill, stroke et hairline
 
@@ -170,11 +170,11 @@ Le nom final peut être ajusté lors de l'implémentation, mais les invariants s
 - Modify: W4c/W4d/W4e lowerers and authorities under `gpu-renderer/.../planning/` and `.../passes/`
 - Modify: `kanvas/.../surface/W5aMaterialSurfacePixelTest.kt`
 
-- [ ] Add RED public fixtures for direct-triangle fill, stencil-cover fill, stroke and hairline using Solid shader + paint opacity.
-- [ ] Cover both hard-edge and already-authentic AA4 cells; do not add or inject a new AA4 capability.
-- [ ] Preserve the `MaterialPlanRef` on the logical draw identity through path wrappers without copying `ColorF32` back into the draw.
-- [ ] Bind and evaluate the material only in color-writing phases (direct color, color cover and binary color cover). Stencil and mask producers consume geometry/coverage only and must neither bind nor evaluate material resources.
-- [ ] Run new tests plus public W4c/W4d/W4e path suites; commit `feat(gpu-plan): apply W5a material to prepared paths`.
+- [x] Add RED public fixtures for direct-triangle fill, stencil-cover fill, stroke and hairline using Solid shader + paint opacity.
+- [x] Cover hard-edge cells and retain the explicit public capability skips for unavailable AA4 cells; no AA4 capability is injected and skipped cells are not claimed as executed.
+- [x] Preserve the `MaterialPlanRef` on the logical draw identity through path wrappers without copying `ColorF32` back into the draw.
+- [x] Bind and evaluate the material only in color-writing phases (direct color, color cover and binary color cover). Stencil and mask producers consume geometry/coverage only and must neither bind nor evaluate material resources.
+- [x] Run new tests plus public W4c/W4d/W4e path suites; commit `feat(gpu-plan): apply W5a material to prepared paths`.
 
 ### Task 4: Point et Points préparés
 
@@ -184,11 +184,11 @@ Le nom final peut être ajusté lors de l'implémentation, mais les invariants s
 - Modify: point materialization/payload files selected by the prepared route
 - Modify: `kanvas/.../surface/W5aMaterialSurfacePixelTest.kt`
 
-- [ ] Add RED public `drawPoint` and multi-`drawPoints` fixtures with non-trivial alpha, including three successive commands so ordering cannot be hidden.
-- [ ] Feed the common `EffectiveMaterialPlanner` from the immutable draw snapshot; remove any point-local solid descriptor creation for the promoted cases.
-- [ ] Keep point topology and coverage unchanged. Any unsupported blend still belongs to W5b and must refuse/fall through before W5 ownership according to the existing route contract.
-- [ ] Compare public pixels only; do not assert prepared-route counters or scopes.
-- [ ] Run the point subset of `GPUAllApiBlendSurfaceTest` only where it remains SRC_OVER plus the new W5a fixtures; commit `feat(gpu-renderer): use W5a material for prepared points`.
+- [x] Add RED public `drawPoint` and multi-`drawPoints` fixtures with non-trivial alpha, including three successive commands so ordering cannot be hidden.
+- [x] Feed the common `EffectiveMaterialPlanner` from the immutable draw snapshot; remove any point-local solid descriptor creation for the promoted cases.
+- [x] Keep point topology and coverage unchanged. Any unsupported blend still belongs to W5b and must refuse/fall through before W5 ownership according to the existing route contract.
+- [x] Compare public pixels only; do not assert prepared-route counters or scopes.
+- [x] Run the bounded SRC_OVER point fixtures in `W5aMaterialSurfacePixelTest`; commit the prepared-point migration. No broader blend suite is claimed as verification.
 
 ### Task 5: Text pré-résolu, sans travail font
 
@@ -199,11 +199,11 @@ Le nom final peut être ajusté lors de l'implémentation, mais les invariants s
 - Modify: text payload/material files reached by compiler errors
 - Modify: `kanvas/.../surface/W5aMaterialSurfacePixelTest.kt`
 
-- [ ] Add a RED public fixture built only from an already-resolved glyph/run fixture already present in the test suite; do not create, load or validate a font.
-- [ ] Require shader alpha × paint alpha exactly once and mutation stability after recording.
-- [ ] Change the text lowerer to receive the common plan pair/ref and make the renderer compose the existing A8 coverage with the planned Solid/Opacity result.
-- [ ] Remove the promoted Solid path's direct call that lets text reconstruct its own `GPUMaterialDescriptor`.
-- [ ] Run the bounded prepared-text public pixel subset; commit `feat(gpu-renderer): consume W5a material in prepared text`.
+- [x] Add a RED public fixture using the existing already-resolved A8 glyph/run fixture; no font implementation, new font generation or font test suite is introduced.
+- [x] Require shader alpha × paint alpha exactly once and mutation stability after recording.
+- [x] Change the text lowerer to receive the common plan pair/ref and make the renderer compose the existing A8 coverage with the planned Solid/Opacity result.
+- [x] Remove the promoted Solid path's direct call that lets text reconstruct its own `GPUMaterialDescriptor`.
+- [x] Run the bounded prepared-text public pixel subset; commit `feat(gpu-renderer): consume W5a material in prepared text`.
 
 ### Task 6: Vertices/Mesh préparés
 
@@ -214,11 +214,11 @@ Le nom final peut être ajusté lors de l'implémentation, mais les invariants s
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/wgsl/PreparedVerticesShader.kt`
 - Modify: `kanvas/.../surface/W5aMaterialSurfacePixelTest.kt`
 
-- [ ] Add RED public fixtures for a triangle without vertex colors and a triangle with vertex colors; shader/paint alpha must be applied at the source stage exactly once.
-- [ ] Compile the draw material through the common planner and pass only the scellé plan to vertices payload/composition.
-- [ ] Preserve the operation/mesh color-composition order already specified by the IR; do not treat vertex color as a replacement material authority.
-- [ ] Remove the promoted Solid path's route-local semantic reconstruction and preserve typed refusals for W5b+ material kinds.
-- [ ] Run bounded public vertices pixel tests; commit `feat(gpu-renderer): consume W5a material in prepared vertices`.
+- [x] Add RED public fixtures for a triangle without vertex colors and a triangle with vertex colors; shader/paint alpha must be applied at the source stage exactly once.
+- [x] Compile the draw material through the common planner and pass only the scellé plan to vertices payload/composition.
+- [x] Preserve the operation/mesh color-composition order already specified by the IR; do not treat vertex color as a replacement material authority.
+- [x] Remove the promoted Solid path's route-local semantic reconstruction and preserve typed refusals for W5b+ material kinds.
+- [x] Run bounded public vertices pixel tests; commit `feat(gpu-renderer): consume W5a material in prepared vertices`.
 
 ### Task 7: Frame mixte, refus/récupération et suppression des fallbacks concernés
 
@@ -233,10 +233,14 @@ Le nom final peut être ajusté lors de l'implémentation, mais les invariants s
 - [x] Remove only fallbacks now owned by W5a: Solid/Opacity must never become a child, arbitrary transparent, or legacy route after W5 selection. Leave later W5 kinds as explicit typed gaps, not semantic substitutions.
 - [x] Search all production call sites for alternate Solid/Opacity compilation. Migrate or document every remaining call site; review is the architectural proof, not a source-shape test.
 - [x] Update W05 status with gate evidence, exact deferred gaps and no intermediate status files elsewhere.
-- [x] Update `refactor/README.md` to mark W5a complete and W5b next only if every W5a cell is proven.
+- [x] Update `refactor/README.md` with the verified W5a implementation gates, explicit AA4 skips and W5b next; reserve global closure for the two Task 8 READY re-reviews.
 - [x] Run bounded public regression suites and commit `refactor(material): remove W5a silent fallbacks`.
 
 Correction native Task 7 : `feat(gpu-renderer): compose native W5a material lanes` remplace la conversion Rect/RRect en Path par une capability composite distincte. Les gates publiques sont vertes; la clôture après reviews reste à Task 8.
+
+Correction globale Task 8 : le DAG scellé génère réellement les opérations material du fragment, avec raw bindings et partition ABI V2 (group 1 non dynamique), sans évaluateur CPU ni compute prépass. Les producteurs stencil/mask n'émettent aucune source material. Le registre prepared de frame interne uniquement les admissions réelles A8/Vertices et les sources core, puis rebase les émissions sans refaire leur géométrie. Le composite ajoute les lanes stroke/hairline W4d authentiques et refuse plus de 512 runs avant toute copie de scène par lane. Le public `DrawMesh` sans programme normalise vers les prepared vertices; `MeshProgram` conserve son contrat distinct hors promotion W5a. Les deux reviews globales ont demandé cette correction et restent à reprendre, non validées implicitement par les tests.
+
+Limite de preuve architecturale : si une évaluation CPU et le fragment GPU appartiennent tous deux à l'enveloppe numérique publique, aucun RED black-box discriminant autorisé n'existe. La production review prouve alors la provenance DAG→fragment; les pixels prouvent l'enveloppe, l'ordre, l'alpha et la capture. Aucun test WGSL/IR/structure n'est ajouté pour fabriquer un RED.
 
 ### Task 8: Vérification finale, review indépendante et préparation de la stack
 
@@ -257,11 +261,9 @@ Correction native Task 7 : `feat(gpu-renderer): compose native W5a material lane
 Commands are refined from the actual test class names created by each task; keep them bounded:
 
 ```bash
-rtk ./gradlew :gpu-plan:compileKotlin :gpu-renderer:compileKotlin :kanvas:compileKotlin
-rtk ./gradlew :kanvas:test --tests '*W5aMaterialSurfacePixelTest*'
-rtk ./gradlew :kanvas:test --tests '*GPUPlanSurfacePixelTest*'
-rtk ./gradlew :kanvas:jsNodeTest --tests '*W5aMaterialSurfacePixelTest*'
+rtk proxy ./gradlew :gpu-plan:compileKotlin :gpu-renderer:compileKotlin :kanvas:compileKotlin --no-parallel --max-workers=1
+rtk proxy ./gradlew :kanvas:test --tests '*W5aMaterialSurfacePixelTest' --tests '*GPUPlanSurfacePixelTest' --no-parallel --max-workers=1
 rtk git diff --check
 ```
 
-If a Gradle target is not configured for a module, record that fact in W05 status and use the nearest existing JVM/JS target. Do not replace a missing target with an infrastructure test.
+`:kanvas` is JVM-only (`buildsrc.convention.kotlin-jvm`); there is no `:kanvas:jsNodeTest` and no JS/infrastructure substitute is run. Historical infrastructure tests receive only mechanical compatibility adaptations, never new W5a evidence.
