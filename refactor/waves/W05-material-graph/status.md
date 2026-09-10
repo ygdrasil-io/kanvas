@@ -78,7 +78,7 @@ La première propagation des bornes officielles a rendu 13 anciennes fixtures mu
 
 ## Vérification
 
-Vérification JVM du correctif global Task 8 et de sa continuation, fraîche et sérielle, sur la série `7dbaf8c` → `9891e11` :
+Vérification JVM du correctif global Task 8 et de sa continuation, fraîche et sérielle, sur la série `7dbaf8c` → `9aa924e5c` :
 
 ```bash
 rtk proxy ./gradlew :gpu-plan:compileKotlin :gpu-renderer:compileKotlin :kanvas:compileKotlin --no-parallel --max-workers=1
