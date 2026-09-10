@@ -103,6 +103,13 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         }
 
         return try {
+            if (selected.draws.any { it.blend is BlendPlan.DestinationReadV1 }) {
+                return RenderPlanResult.Ready(W5bDestinationGraphSealer.seal(
+                    PlanId(planIdentity(selected.sceneCanonicalId, target, capabilities, budget, selected.capabilityId)),
+                    selected.capabilityId, targetExtent, capabilities, budget, selected.draws,
+                    requireNotNull(selected.materialPlanTable), targetBytes, stagingBytes, withinBudget.readbackBytesPerRow,
+                ))
+            }
             val logicalTarget = PlanResource.of(
                 PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D, PlanTextureFormat.Color(FORMAT), targetExtent, targetBytes,
                 setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource), PlanResourceLifetime.FrameLocal, 0, 2,
@@ -131,8 +138,13 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
                     materialPlanTable = selected.materialPlanTable,
                 ),
             )
-        } catch (_: IllegalArgumentException) {
-            promoted(diag(W3PlanDiagnostics.PlanIdentityInvalid, RenderDiagnosticDomain.TARGET, "W3 graph invariants were not satisfied"))
+        } catch (failure: IllegalArgumentException) {
+            val reason = failure.message.orEmpty()
+            if (reason.startsWith("unsupported.w5b.")) promoted(diag(RenderDiagnosticCode(reason), RenderDiagnosticDomain.CAPABILITY, reason))
+            else if (reason.startsWith("resource-limit.w5b.")) resourceLimit(diag(RenderDiagnosticCode(reason), RenderDiagnosticDomain.RESOURCE, reason))
+            else promoted(diag(W3PlanDiagnostics.PlanIdentityInvalid, RenderDiagnosticDomain.TARGET, "W3 graph invariants were not satisfied: $reason"))
+        } catch (_: ArithmeticException) {
+            resourceLimit(diag(W3PlanDiagnostics.SizeOverflow, RenderDiagnosticDomain.RESOURCE, "W5b destination size/version overflow"))
         }
     }
 
@@ -226,9 +238,9 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         val visible = intersect(target, geometry) ?: return semanticGap("Draw is outside the target")
         val clipped = if (clip == null) visible else intersect(visible, clip)
             ?: return semanticGap("Draw is fully clipped out")
-        return when (val planned = EffectiveMaterialPlanner.plan(node, targetClamp)) {
-                is EffectiveMaterialPlanner.Result.Refused -> DrawRecognition.MaterialRefused(planned)
-                is EffectiveMaterialPlanner.Result.Ready -> {
+        return when (val planned = EffectiveMaterialPlanner.normalize(node, targetClamp, allowDestinationCandidate = true)) {
+                is EffectiveMaterialPlanner.Normalization.Refused -> DrawRecognition.MaterialRefused(EffectiveMaterialPlanner.Result.Refused(planned.diagnosticCode))
+                is EffectiveMaterialPlanner.Normalization.Source -> {
                     val root = appendMaterialPlan(materialEntries, planned.table, planned.root)
                     DrawRecognition.Accepted(
                         SolidRectDraw.ofMaterial(

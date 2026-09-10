@@ -261,6 +261,8 @@ internal fun mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
             blendProgram = blendProgram,
         ),
         componentIdentity = when {
+            (structuralKey.blend as? GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination)
+                ?.w5bCompositionAbiI32 == 3 -> PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY
             structuralKey.blend is
                 GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination &&
                 program.isAnalyticShapeDstRead() ->
@@ -384,6 +386,13 @@ internal fun GPUCorePrimitiveRenderPipelineStructuralKey.corePrimitiveNativeComp
         blend is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination
     ) {
         val shader = blend as GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination
+        if (shader.w5bCompositionAbiI32 == 3) {
+            return PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY.takeIf {
+                this.shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry &&
+                    shader.sourceCoverage == GPUSourceCoverageEncoding.None &&
+                    GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(shader.mode.gpuLabel, shader.formulaId) != null
+            }
+        }
         if (this.shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape) {
             if (shader.sourceCoverage == GPUSourceCoverageEncoding.LCDCoverageInShader ||
                 GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(

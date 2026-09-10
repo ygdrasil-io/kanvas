@@ -223,6 +223,7 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
             val mode: GPUBlendMode,
             val formulaId: String,
             val sourceCoverage: GPUSourceCoverageEncoding,
+            val w5bCompositionAbiI32: Int? = null,
         ) : Blend
 
         data class NoOp(val mode: GPUBlendMode) : Blend
@@ -1036,6 +1037,7 @@ private fun GPUBlendPlan.corePrimitiveStructuralBlend():
             mode,
             formulaId,
             sourceCoverageEncoding,
+            sealedW5b?.compositionAbiI32,
         )
     is GPUBlendPlan.LayerCompositeBlend -> child.corePrimitiveStructuralBlend()
     is GPUBlendPlan.NoOp -> GPUCorePrimitiveRenderPipelineStructuralKey.Blend.NoOp(mode)
@@ -1811,6 +1813,7 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
     val w4dGeneralPreparedAuthority: GPUPlanW4dGeneralPreparedAuthority? = null,
     val w4dGeneralFrameMaterializationAuthority:
         GPUW4dGeneralPreparedFrameMaterializationAuthority? = null,
+    val w5bFrameWitnessV3: W5bPreparedFrameWitnessV3? = null,
 ) {
     internal constructor(
         structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
@@ -1935,10 +1938,19 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
             w4cSessionScratch,
             w4dSessionScratch,
             scratchLane,
+            w5bFrameWitnessV3 = w5bFrameWitnessV3,
         )
     }
 
     internal companion object {
+        fun plannedW5b(
+            key: GPUCorePrimitiveRenderPipelineStructuralKey,
+            pipeline: GPURenderPipelineKey,
+            witness: W5bPreparedFrameWitnessV3,
+        ): GPUCorePrimitivePreparedPacketAuthority = GPUCorePrimitivePreparedPacketAuthority(
+            key, pipeline, null, scratchLane = ScratchLane.Legacy, w5bFrameWitnessV3 = witness,
+        )
+
         fun plannedW3(
             structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
             renderPipelineKey: GPURenderPipelineKey,

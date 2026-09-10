@@ -735,6 +735,7 @@ public sealed interface PlanPass {
         public val load: AttachmentLoadPlan,
         public val store: AttachmentStorePlan,
         public val drawDataResources: PlanDrawDataResources? = null,
+        public val destinationVersionAfter: DestinationVersionI64? = null,
     ) : PlanPass {
         override val role: PlanPassRole = PlanPassRole.MainRender
         override val id: PlanPassId = checkedPassId(role, ordinal)
@@ -859,6 +860,7 @@ public sealed interface PlanPass {
         override val ordinal: Int,
         public val source: PlanResourceId,
         public val destination: PlanResourceId,
+        public val destinationVersion: DestinationVersionI64? = null,
     ) : PlanPass {
         override val role: PlanPassRole = PlanPassRole.TextureCopy
         override val id: PlanPassId = checkedPassId(role, ordinal)

@@ -276,6 +276,7 @@ sealed interface GPUFrameStep {
         val w4eMaskContinuation: GPUW4eMaskContinuationRequest? = null,
         /** Dedicated W4e scene continuation, intentionally separate from generic and W4d.2 MSAA. */
         val w4eSceneContinuation: GPUW4eSceneContinuationRequest? = null,
+        val w5bInitialClearV3: org.graphiks.kanvas.gpu.renderer.passes.W5bInitialClearV3? = null,
     ) : GPUFrameStep {
         val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
         val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
@@ -293,19 +294,20 @@ sealed interface GPUFrameStep {
         override val executionKind = GPUFrameStepExecutionKind.Encoder
 
         init {
-            require(drawPackets.isNotEmpty()) {
+            require(if (w5bInitialClearV3 == null) drawPackets.isNotEmpty() else
+                drawPackets.isEmpty() && w5bInitialClearV3.matches(target, loadStore, samplePlan)) {
                 "GPUFrameStep.RenderPassStep.drawPackets must not be empty"
             }
             require(drawPackets.map(GPUDrawPacket::packetId).distinct().size == drawPackets.size) {
                 "GPUFrameStep.RenderPassStep.drawPackets must have unique packet IDs"
             }
-            require(drawPackets.map(GPUDrawPacket::targetStateHash).distinct().size == 1) {
+            require(drawPackets.map(GPUDrawPacket::targetStateHash).distinct().size == if (w5bInitialClearV3 == null) 1 else 0) {
                 "GPUFrameStep.RenderPassStep.drawPackets must share one target state"
             }
             require(sourceTaskIds.isNotEmpty() && sourceTaskIds.distinct().size == sourceTaskIds.size) {
                 "GPUFrameStep.RenderPassStep.sourceTaskIds must be non-empty and unique"
             }
-            require(batches.isNotEmpty()) {
+            require(if (w5bInitialClearV3 == null) batches.isNotEmpty() else batches.isEmpty()) {
                 "GPUFrameStep.RenderPassStep.batches must not be empty"
             }
             require(
@@ -315,7 +317,8 @@ sealed interface GPUFrameStep {
                 "GPUFrameStep.RenderPassStep.batches must exactly partition drawPackets in order"
             }
             require(
-                batches.flatMap(GPUFrameRenderBatch::sourceTaskIds).distinct() == sourceTaskIds,
+                if (w5bInitialClearV3 == null) batches.flatMap(GPUFrameRenderBatch::sourceTaskIds).distinct() == sourceTaskIds
+                else sourceTaskIds.size == 1,
             ) {
                 "GPUFrameStep.RenderPassStep batch sourceTaskIds must exactly cover the step sourceTaskIds"
             }

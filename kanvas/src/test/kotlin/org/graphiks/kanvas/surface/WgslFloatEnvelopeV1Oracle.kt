@@ -100,6 +100,58 @@ internal object WgslFloatEnvelopeV1Oracle {
         }
     }
 
+    /** Independent shader blend closure. The target writes directly, without fixed blend math. */
+    fun drawDestination(
+        table: MaterialPlanTable,
+        root: MaterialPlanRef,
+        destination: AttachmentState,
+        mode: org.graphiks.kanvas.paint.BlendMode,
+        coverageF32: Float = 1f,
+    ): DrawResult {
+        val values = try {
+            val dst = destination.linearPremul
+            val src = evaluateMaterialSource(table, root, dst, Interval.ONE)
+            val coverage = Interval.input(coverageF32)
+            fun unpremul(value: Interval, alpha: Interval) = if (alpha == Interval.ZERO) Interval.ZERO else wgslDivide(value, alpha)
+            val blended = Array(4) { channel ->
+                if (channel == 3) sourceOver(src[3], dst[3], Interval.ONE - src[3]) else {
+                    val s = unpremul(src[channel], src[3])
+                    val d = unpremul(dst[channel], dst[3])
+                    val color = when (mode) {
+                        org.graphiks.kanvas.paint.BlendMode.MULTIPLY -> s * d
+                        org.graphiks.kanvas.paint.BlendMode.DIFFERENCE -> (d - s).let {
+                            Interval(if (it.lower.signum() <= 0 && it.upper.signum() >= 0) BigDecimal.ZERO else minOf(it.lower.abs(), it.upper.abs()),
+                                maxOf(it.lower.abs(), it.upper.abs()))
+                        }
+                        else -> error("No independent destination proof for $mode")
+                    }
+                    val left = src[channel] * (Interval.ONE - dst[3])
+                    val right = dst[channel] * (Interval.ONE - src[3])
+                    val product = hull((src[3] * dst[3]) * color, src[3] * (dst[3] * color))
+                    hull((left + right) + product, left + (right + product), (left + product) + right,
+                        fma(src[channel], Interval.ONE - dst[3], right + product),
+                        fma(dst[channel], Interval.ONE - src[3], left + product),
+                        fma(src[3] * dst[3], color, left + right),
+                        fma(src[3], dst[3] * color, left + right))
+                }
+            }
+            Array(4) { channel ->
+                val delta = blended[channel] - dst[channel]
+                (if (coverageF32 == 1f) blended[channel] else hull(dst[channel] + coverage * delta,
+                    fma(coverage, delta, dst[channel]))).clamp01()
+            }
+        } catch (failure: IllegalArgumentException) {
+            return DrawResult.Unbounded(failure.message.orEmpty())
+        } catch (failure: ArithmeticException) {
+            return DrawResult.Unbounded(failure.message.orEmpty())
+        }
+        val codes = values.mapIndexed { channel, value -> if (channel < 3) codesForSrgbAttachment(attachmentEncode(value)) else codesFor(value) }
+        if (codes.any { it.isEmpty() || it.size > 2 || it.maxOrNull()!! - it.minOrNull()!! > 1 }) {
+            return DrawResult.Unbounded("Attachment code sets exceed two adjacent codes: $codes")
+        }
+        return DrawResult.Bounded(codes, AttachmentState(decodeStoredAttachment(codes)))
+    }
+
     private fun evaluateProgram(
         table: MaterialPlanTable,
         root: MaterialPlanRef,

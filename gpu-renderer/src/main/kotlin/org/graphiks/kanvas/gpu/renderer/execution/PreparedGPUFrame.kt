@@ -1414,7 +1414,7 @@ internal class PreparedGPUFrame(
                 "PreparedGPUFrame encoder resource generations must exactly match the semantic step"
             }
             if (step is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep) {
-                val sealedW4e = step.drawPackets.all { packet ->
+                val sealedW4e = step.drawPackets.isNotEmpty() && step.drawPackets.all { packet ->
                     packet.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared
                 }
                 require(scope.corePrimitiveDirectNativeRouteSeal !== GPUCorePrimitiveDirectNativeRouteSeal.Missing) {
@@ -1613,7 +1613,9 @@ internal class PreparedGPUFrame(
                 require(sealedW4e || stream.sourcePacketIds == step.expectedRenderCommandPacketIds(scope)) {
                     "PreparedGPUFrame render command stream must have exact per-packet command structure"
                 }
-                require(stream.sourcePassIds == step.drawPackets.map { it.passId }.distinct()) {
+                val expectedPassIds = step.w5bInitialClearV3?.let { listOf("w5b.${it.witness.graph.id.value}.initial-clear") }
+                    ?: step.drawPackets.map { it.passId }.distinct()
+                require(stream.sourcePassIds == expectedPassIds) {
                     "PreparedGPUFrame render command stream must retain original pass identities"
                 }
                 require(stream.commandLabels == scope.facadeOperationClasses) {
@@ -2041,7 +2043,11 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFac
     when (this) {
         is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep -> buildList {
             add("beginRenderPass")
-            if (drawPackets.all { packet ->
+            if (w5bInitialClearV3 != null) {
+                add("endRenderPass")
+                return@buildList
+            }
+            if (drawPackets.isNotEmpty() && drawPackets.all { packet ->
                     packet.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared
                 }
             ) {

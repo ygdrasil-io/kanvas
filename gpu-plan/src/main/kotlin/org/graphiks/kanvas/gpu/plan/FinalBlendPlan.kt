@@ -43,6 +43,8 @@ public sealed interface BlendPlan {
         public val formulaIdentity: String,
         public val coverage: BlendCoverageEncodingV1,
         public val requiredDestinationVersion: DestinationVersionI64,
+        public val snapshotResource: PlanResourceId? = null,
+        public val compositionAbiI32: Int = 3,
     ) : BlendPlan { override val canonicalLabel: String = "destination-read-$formulaIdentity" }
 
     public data object NoOpV1 : BlendPlan { override val canonicalLabel: String = "no-op-dst-v1" }
@@ -76,7 +78,7 @@ public object FinalBlendPlanner {
         fixed(mode, coverageEncoding, targetClamp)?.let { return it }
         return BlendPlan.DestinationReadV1(
             mode = mode,
-            formulaIdentity = "${mode.name.lowercase()}@v1",
+            formulaIdentity = if (mode == BlendMode.PLUS) "plus_exact@v1" else "${mode.name.lowercase()}@v1",
             coverage = coverageEncoding,
             requiredDestinationVersion = DestinationVersionI64(0L),
         )

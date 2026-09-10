@@ -20,27 +20,41 @@ public object EffectiveMaterialPlanner {
     /** Callers without a sealed target fact intentionally retain no clamp capability. */
     public fun plan(draw: DrawNode): Result = plan(draw, BlendTargetClampV1.Unavailable)
 
-    public fun plan(draw: DrawNode, targetClamp: BlendTargetClampV1): Result {
+    internal sealed interface Normalization {
+        data class Source(val table: MaterialPlanTable, val root: MaterialPlanRef, val blend: BlendPlan) : Normalization
+        data class Refused(val diagnosticCode: String) : Normalization
+    }
+
+    /** Compatibility boundary: existing owners cannot promote destination-read draws. */
+    public fun plan(draw: DrawNode, targetClamp: BlendTargetClampV1): Result =
+        when (val source = normalize(draw, targetClamp)) {
+            is Normalization.Refused -> Result.Refused(source.diagnosticCode)
+            is Normalization.Source -> if (source.blend is BlendPlan.DestinationReadV1) {
+                Result.Refused("unsupported.w5b.destination-read.task-2")
+            } else Result.Ready(source.table, source.root, source.blend)
+        }
+
+    internal fun normalize(draw: DrawNode, targetClamp: BlendTargetClampV1, allowDestinationCandidate: Boolean = false): Normalization {
         val blend = FinalBlendPlanner.plan(draw.blend, CoveragePlan.FullOrScissor, SamplePlan.SingleSample, targetClamp)
-            ?: return Result.Refused(W5aPlanDiagnostics.UnsupportedDrawState)
-        if (blend is BlendPlan.DestinationReadV1) {
-            return Result.Refused("unsupported.w5b.destination-read.task-2")
+            ?: return Normalization.Refused(W5aPlanDiagnostics.UnsupportedDrawState)
+        if (blend is BlendPlan.DestinationReadV1 && !allowDestinationCandidate) {
+            return Normalization.Refused("unsupported.w5b.destination-read.task-2")
         }
         if (draw.effects !is EffectStack.Empty || draw.resource != null || draw.operationBlendMode != null) {
-            return Result.Refused(W5aPlanDiagnostics.UnsupportedDrawState)
+            return Normalization.Refused(W5aPlanDiagnostics.UnsupportedDrawState)
         }
         var material = draw.material
         val opacityInnerToOuter = mutableListOf<Float>()
         var visited = 0
         while (material is MaterialNode.Opacity) {
             if (++visited > 64 || !material.alpha.isFinite() || material.alpha !in 0f..1f) {
-                return Result.Refused(W5aPlanDiagnostics.InvalidOpacity)
+                return Normalization.Refused(W5aPlanDiagnostics.InvalidOpacity)
             }
             opacityInnerToOuter += material.alpha
             material = material.material
         }
         val base = when (material) {
-            MaterialNode.Transparent -> return Result.Ready(
+            MaterialNode.Transparent -> return Normalization.Source(
                 MaterialPlanTable.of(listOf(MaterialPlanEntry(MaterialProgramPlan.TransparentV1, MaterialBindingPlan.EmptyV1))),
                 MaterialPlanRef(0), blend,
             )
@@ -53,15 +67,15 @@ public object EffectiveMaterialPlanner {
                     material.color.alphaNormalized,
                 )),
             )
-            else -> return Result.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
+            else -> return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
         }
         val shaderAlpha = opacityInnerToOuter.asReversed().fold(1f) { accumulated, alpha -> accumulated * alpha }
         val paintAlpha = draw.paint?.takeIf { it.shader != null }?.color?.alphaNormalized ?: 1f
         if (!shaderAlpha.isFinite() || shaderAlpha !in 0f..1f || !paintAlpha.isFinite() || paintAlpha !in 0f..1f) {
-            return Result.Refused(W5aPlanDiagnostics.InvalidOpacity)
+            return Normalization.Refused(W5aPlanDiagnostics.InvalidOpacity)
         }
         if (shaderAlpha == 0f || paintAlpha == 0f) {
-            return Result.Ready(
+            return Normalization.Source(
                 MaterialPlanTable.of(listOf(MaterialPlanEntry(MaterialProgramPlan.TransparentV1, MaterialBindingPlan.EmptyV1))),
                 MaterialPlanRef(0), blend,
             )
@@ -81,6 +95,6 @@ public object EffectiveMaterialPlanner {
                 MaterialBindingPlan.OpacityF32V1.of(paintAlpha),
             )
         }
-        return Result.Ready(MaterialPlanTable.of(entries), MaterialPlanRef(entries.lastIndex), blend)
+        return Normalization.Source(MaterialPlanTable.of(entries), MaterialPlanRef(entries.lastIndex), blend)
     }
 }

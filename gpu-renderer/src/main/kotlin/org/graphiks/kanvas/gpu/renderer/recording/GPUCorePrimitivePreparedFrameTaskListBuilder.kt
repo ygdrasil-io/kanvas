@@ -1614,6 +1614,7 @@ internal data class GPUCorePrimitivePreplannedFrameRequest(
     val renderPassId: PlanPassId,
     val readbackPassId: PlanPassId,
     val compositeWitness: GPUW5aCompositeLaneWitnessV1? = null,
+    val w5bDestinationGraph: org.graphiks.kanvas.gpu.plan.RenderGraph? = null,
 )
 
 /** Versioned authority for one native lane embedded in a W5a composite frame. */
@@ -1666,6 +1667,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
     fun buildPreplanned(
         request: GPUCorePrimitivePreplannedFrameRequest,
     ): GPUCorePrimitivePreparedFrameResult {
+        if (request.w5bDestinationGraph != null) return buildW5bPreplanned(request)
         val render = request.baseTaskList.tasks.singleOrNull() as? GPUTask.Render
             ?: return refused(
                 "w3.lowering.incompatible_plan",
@@ -1771,6 +1773,76 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             ),
         )
     }
+
+    /** Emits the producer's ordered graph verbatim; no destination grouping or classification runs here. */
+    private fun buildW5bPreplanned(request: GPUCorePrimitivePreplannedFrameRequest): GPUCorePrimitivePreparedFrameResult {
+        val graph = requireNotNull(request.w5bDestinationGraph)
+        val base = request.baseTaskList.tasks.singleOrNull() as? GPUTask.Render
+            ?: return refused("invalid.w5b.preplanned", "W5b packing envelope is missing.")
+        val packets = base.drawPackets.associateBy { it.commandIdValue }
+        val witness = base.drawPackets.firstOrNull()?.corePrimitivePreparedAuthority?.w5bFrameWitnessV3
+            ?: return refused("invalid.w5b.preplanned", "W5b graph witness is missing.")
+        if (witness.graph !== graph || graph.id != request.planId || graph.capabilities.deviceGeneration !=
+            request.baseTaskList.capabilitySeal.deviceGeneration.value ||
+            graph.peakFrameLocalBytes != request.memoryBudget.targetResidentBytes + request.memoryBudget.peakFrameTransientBytes ||
+            base.drawPackets.any { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 !== witness }) {
+            return refused("invalid.w5b.preplanned", "W5b prepared authority contradicts its graph.")
+        }
+        val snapshot = GPUFrameTextureRef(request.target.value.removeSuffix(".target") + ".snapshot")
+        val snapshotPlan = graph.resources().single { it.role == org.graphiks.kanvas.gpu.plan.PlanResourceRole.DestinationSnapshot }
+        val prepare = GPUTask.PrepareResources(GPUTaskID("task.w5b.${graph.id.value}.prepare"), base.recordingId,
+            GPUTaskPhase.Prepare, listOf(request.targetPreparation, request.stagingPreparation,
+                GPUResourcePreparationRequest(snapshot, GPUFrameTextureDescriptor(request.targetBounds, GPUColorFormat.RGBA8UnormSrgb, 1),
+                    GPUFrameResourceRole.DestinationSnapshot,
+                    setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.TextureBinding),
+                    GPUFrameResourceLifetime.FrameLocal, snapshotPlan.byteSize, snapshot.value)))
+        fun taskId(pass: org.graphiks.kanvas.gpu.plan.PlanPass) = GPUTaskID("task.w5b.${graph.id.value}.${pass.id.value}")
+        val renders = graph.passes().filterIsInstance<org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass>().associateWith { pass ->
+            val selected = pass.draws().map { packets.getValue(it.commandIndex) }
+            GPUTask.Render(taskId(pass), base.recordingId, GPUTaskPhase.Render, request.target,
+                GPULoadStorePlan(if (pass.load == org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan.ClearTransparent) "clear" else "load", GPUStorePlan.Store),
+                GPUSamplePlan.SingleSampleFrame,
+                provisionalSegmentKey = GPUProvisionalRenderSegmentKey("w5b.${graph.id.value}.${pass.id.value}"),
+                w5bInitialClearV3 = if (selected.isEmpty()) org.graphiks.kanvas.gpu.renderer.passes.W5bInitialClearV3(witness) else null,
+                resourceUses = if (selected.any { it.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead }) listOf(
+                    GPUFrameResourceUse(snapshot, GPUFrameResourceRole.DestinationSnapshot, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false)) else emptyList(),
+                drawPackets = selected, batchEligibilityByPacketId = selected.associate { it.packetId to base.batchEligibilityByPacketId.getValue(it.packetId) })
+        }
+        val passes = graph.passes()
+        val tasks = listOf(prepare) + passes.mapIndexed { index, pass ->
+            when (pass) {
+                is org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass -> renders.getValue(pass)
+                is org.graphiks.kanvas.gpu.plan.PlanPass.TextureCopy -> {
+                    val consumer = renders.getValue(passes[index + 1] as org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass)
+                    val packet = consumer.drawPackets.single()
+                    val key = GPUDestinationSnapshotGroupKey(GPUTargetIdentity(request.target.value),
+                        packet.resourceGeneration, baseTaskGeneration(request), GPUColorFormat.RGBA8UnormSrgb,
+                        corePrimitiveDestinationSnapshotColorInterpretation(GPUColorFormat.RGBA8UnormSrgb), null, null)
+                    val member = GPUDestinationReadMember(packet.commandIdValue.toString(), 0, request.targetBounds)
+                    val row = (passes.last() as org.graphiks.kanvas.gpu.plan.PlanPass.ReadbackPass).bytesPerRow
+                    val copied = Math.multiplyExact(row, request.targetBounds.height.toLong())
+                    val group = GPUDestinationSnapshotGroup(key, request.targetBounds, listOf(member), copied, emptyList())
+                    val operation = GPUDestinationSnapshotOperation.TextureCopy(0, request.target, snapshot, request.targetBounds,
+                        GPUTextureCopyLayout(row, request.targetBounds.height), listOf(GPUDestinationSnapshotConsumerRef(
+                            packet.commandIdValue.toString(), consumer.taskId, packet.packetId, GPUDrawCommandID(packet.commandIdValue))))
+                    GPUTask.DestinationSnapshots(taskId(pass), base.recordingId, GPUTaskPhase.Copy,
+                        GPUDestinationSnapshotTaskPayload(GPUDestinationSnapshotGroupingResult(listOf(group),
+                            listOf(GPUDestinationSnapshotMaterialization.TextureCopy(0, request.targetBounds)),
+                            copied, emptyList(), emptyList()), listOf(operation)))
+                }
+                is org.graphiks.kanvas.gpu.plan.PlanPass.ReadbackPass -> GPUTask.Readback(taskId(pass),
+                    base.recordingId, GPUTaskPhase.Readback, request.target, request.staging, request.readbackRequest)
+                else -> return refused("invalid.w5b.preplanned", "W5b graph contains an unsupported pass.")
+            }
+        }
+        return GPUCorePrimitivePreparedFrameResult.Recorded(GPUTaskList(request.baseTaskList.frameId,
+            request.baseTaskList.capabilitySeal, request.baseTaskList.recordingSeals, request.baseTaskList.expectedReplayKeyHash,
+            tasks, tasks.zipWithNext { before, after -> GPUTaskDependency(before.taskId, after.taskId, "w5b-version-order",
+                GPUTaskUseToken("${before.taskId.value}->${after.taskId.value}"), "w5b-version-order") },
+            request.baseTaskList.phaseOrder, request.memoryBudget))
+    }
+
+    private fun baseTaskGeneration(request: GPUCorePrimitivePreplannedFrameRequest) = request.baseTaskList.capabilitySeal.deviceGeneration
 
     private fun hasExactW3Envelope(
         request: GPUCorePrimitivePreplannedFrameRequest,
@@ -1960,7 +2032,11 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             "maxBufferSize",
             "maxDynamicUniformBuffersPerPipelineLayout",
         )
-        if (facts.map { fact -> fact.name } != expectedNames) return null
+        val w5bNames = setOf("maxBindGroups", "maxBindingsPerBindGroup", "maxSamplersPerShaderStage",
+            "maxSampledTexturesPerShaderStage", "maxUniformBuffersPerShaderStage", "maxUniformBufferBindingSize")
+        if (facts.filter { it.name !in w5bNames }.map { it.name } != expectedNames ||
+            facts.map { it.name }.distinct().size != facts.size ||
+            facts.filter { it.name in w5bNames }.any { it.value.toLongOrNull()?.let { value -> value < 0L || value.toString() != it.value } != false }) return null
         val source = facts.firstOrNull()?.source ?: return null
         if (facts.any { fact ->
                 fact.source != source || !fact.affectsValidity ||

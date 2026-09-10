@@ -1052,6 +1052,7 @@ internal sealed interface GPUPreparedNativeScopeOperand {
         operationKindOverride: GPUEncoderOperationKind? = null,
         val passSegment: RenderPassSegment? = null,
         w5aSourceBindingsV2: List<GPUW5aNativeSourceBindingV2> = emptyList(),
+        val w5bInitialClearV3: org.graphiks.kanvas.gpu.renderer.passes.W5bInitialClearV3? = null,
     ) : GPUPreparedNativeScopeOperand {
         val commands = immutableList(commands)
         val semanticPayloads = immutableList(semanticPayloads)
@@ -1068,6 +1069,7 @@ internal sealed interface GPUPreparedNativeScopeOperand {
                     val source = byDraw[ordinalI32++]
                     add(GPUPreparedNativeRenderCommand.SetPipeline(source?.pipeline ?: requireNotNull(base)))
                     source?.let { add(GPUPreparedNativeRenderCommand.SetBindGroup(1, it.bindGroup)) }
+                    source?.destinationGroupV3?.let { add(GPUPreparedNativeRenderCommand.SetBindGroup(2, it)) }
                 }
                 add(command)
             }
@@ -1392,7 +1394,9 @@ internal sealed interface GPUPreparedNativeScopeOperand {
         }
 
         init {
-            require(this.commands.any {
+            require(if (w5bInitialClearV3 != null) this.commands.isEmpty() && this.semanticPayloads.isEmpty() &&
+                this.w5aSourceBindingsV2.isEmpty() && pass.loadOperation == GPUPreparedNativeLoadOperation.Clear &&
+                pass.clearColor == GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0) else this.commands.any {
                 it is GPUPreparedNativeRenderCommand.Draw || it is GPUPreparedNativeRenderCommand.DrawIndexed
             }) {
                 "Render payload requires at least one closed typed draw"

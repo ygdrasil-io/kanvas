@@ -82,6 +82,7 @@ sealed interface GPUBlendPlan {
         override val mode: GPUBlendMode,
         val formulaId: String,
         override val sourceCoverageEncoding: GPUSourceCoverageEncoding,
+        val sealedW5b: org.graphiks.kanvas.gpu.plan.BlendPlan.DestinationReadV1? = null,
     ) : GPUBlendPlan {
         override val destinationReadRequirement =
             GPUBlendDestinationReadRequirement.DestinationTextureRequired

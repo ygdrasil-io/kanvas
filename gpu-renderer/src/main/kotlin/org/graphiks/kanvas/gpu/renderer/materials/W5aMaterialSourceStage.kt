@@ -5,6 +5,7 @@ import java.nio.ByteOrder
 import org.graphiks.kanvas.gpu.plan.MaterialBindingPlan
 import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
 import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
+import org.graphiks.kanvas.gpu.plan.RawMaterialRequirementsV2
 import org.graphiks.kanvas.gpu.plan.NumericOperationGraphV1
 import org.graphiks.kanvas.gpu.plan.NumericOperationGraphV1.Operation
 
@@ -37,7 +38,9 @@ internal class W5aMaterialSourceStage private constructor(
                 if (ref.indexI32 == 0) return null
                 ref = MaterialPlanRef(ref.indexI32 - 1)
             }
-            val uniforms = ByteBuffer.allocate(chain.size * 16).order(ByteOrder.LITTLE_ENDIAN)
+            val requirements = RawMaterialRequirementsV2.of(table, root)
+            if (chain.size != requirements.bindingCountI32 || requirements.uniformByteCountI64 > Int.MAX_VALUE) return null
+            val uniforms = ByteBuffer.allocate(requirements.uniformByteCountI64.toInt()).order(ByteOrder.LITTLE_ENDIAN)
             val statements = StringBuilder()
             var child: String? = null
             var opaque = true

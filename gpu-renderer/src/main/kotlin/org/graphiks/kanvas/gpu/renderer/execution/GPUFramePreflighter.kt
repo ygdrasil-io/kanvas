@@ -249,6 +249,30 @@ internal class GPUFramePreflighter(
         value == resourceId || value.endsWith(".$resourceId")
 
     fun preflight(framePlan: GPUFramePlan): GPUFramePreflightResult {
+        val w5b = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+            .mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }.firstOrNull()
+        if (w5b != null) {
+            val limits = capabilities.limits
+            val materialBytes = framePlan.w5aMaterialAllocationsV2()
+            if (limits == null || limits.maxBindGroupsI32?.let { it >= 3 } != true ||
+                limits.maxBindingsPerBindGroupI32?.let { it >= 2 } != true ||
+                limits.maxSamplersPerShaderStageI32?.let { it >= 1 } != true ||
+                limits.maxSampledTexturesPerShaderStageI32?.let { it >= 1 } != true ||
+                limits.maxUniformBuffersPerShaderStageI32?.let { it >= 2 } != true ||
+                limits.maxUniformBufferBindingSizeBytesI64 == null ||
+                materialBytes.any { it.bytes > limits.maxUniformBufferBindingSizeBytesI64 } || !w5b.validates(framePlan)) {
+                return GPUFramePreflightResult.Refused(diagnostic("unsupported.preflight.w5b-abi", "W5b source/destination ABI facts are unavailable or stale."))
+            }
+            val physicalBytes = try {
+                val capacities = w5b.scratch.poolCapacities
+                (listOf(w5b.graph.peakFrameLocalBytes, capacities.vertexBytes, capacities.indexBytes, capacities.uniformBytes) +
+                    materialBytes.map { it.bytes }).fold(0L, Math::addExact)
+            } catch (_: ArithmeticException) {
+                return GPUFramePreflightResult.Refused(diagnostic("resource.preflight.w5b-overflow", "W5b native inventory arithmetic overflow."))
+            }
+            if (physicalBytes > w5b.graph.budget.maxFrameLocalBytes) return GPUFramePreflightResult.Refused(
+                diagnostic("resource.preflight.w5b-budget", "W5b native snapshot/source/scratch inventory exceeds the frame budget."))
+        }
         framePlan.w5aMaterialAllocationsV2().takeIf { it.isNotEmpty() }?.let { allocations ->
             val limits = capabilities.limits ?: return GPUFramePreflightResult.Refused(
                 diagnostic("unsupported.preflight.w5a-source-limits", "W5a source bindings require observed device limits."))
@@ -5820,6 +5844,11 @@ internal class GPUFramePreflighter(
                 "Core primitive packet authority contradicts its immutable semantic input.",
             )
         }
+        val w5bWitness = coreRenders.flatMap { it.drawPackets }
+            .mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }.firstOrNull()
+        if (w5bWitness != null) {
+            return if (w5bWitness.validates(framePlan)) null else diagnostic("invalid.preflight.w5b-witness", "W5b prepared graph changed before native allocation.")
+        }
         val w3Scratch = coreRenders.flatMap { it.drawPackets }
             .mapNotNull { it.corePrimitivePreparedAuthority?.w3SessionScratch }
             .firstOrNull()
@@ -8020,6 +8049,7 @@ internal class GPUFramePreflighter(
                 GPUCommandOperandMaterializationRequest(
                     targetId = context.targetId,
                     taskIds = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+                        .filter { it.w5bInitialClearV3 == null }
                         .flatMap { it.sourceTaskIds }.map { it.value }.distinct(),
                     resourcePlanLabels = operands.map { it.label },
                     operands = operands,
@@ -8532,7 +8562,19 @@ internal class GPUFramePreflighter(
                     operandBridge = stepBridge,
                     resourceLeases = materialized.resourceLeases,
                 )
-                val stream = if (step.drawPackets.all { packet ->
+                val stream = if (step.w5bInitialClearV3 != null) {
+                    GPUPassCommandStream(
+                        streamId = "frame.${framePlan.frameId.value}.commands.$index",
+                        packetStreamId = "w5b.initial-clear.$index",
+                        passId = passPlan.passId,
+                        commands = listOf(
+                            org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand.BeginRenderPass(
+                                framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+                                    .flatMap { it.drawPackets }.first().targetStateHash,
+                                step.loadStore.dumpLabel()),
+                            org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand.EndRenderPass(passPlan.passId)),
+                        sourcePassIds = listOf("w5b.${step.w5bInitialClearV3.witness.graph.id.value}.initial-clear"))
+                } else if (step.drawPackets.all { packet ->
                         packet.role == GPUDrawPacketRole.W4ePrepared
                     }
                 ) {
@@ -9137,6 +9179,22 @@ internal class GPUFramePreflighter(
                             GPUPreparedNativeOperandKind.BindGroup,
                             "w4a.${w4aScratch.planId}.scratch.uniform.${packet.commandIdValue}",
                         )
+                    }
+                }
+                step.w5bInitialClearV3?.let {
+                    return listOf(key(GPUPreparedNativeOperandRole.RenderColorTarget, GPUPreparedNativeOperandKind.TextureView, targetResourceLabel))
+                }
+                val w5bWitness = step.drawPackets.firstOrNull()?.corePrimitivePreparedAuthority?.w5bFrameWitnessV3
+                if (w5bWitness != null) {
+                    val scratch = w5bWitness.scratch
+                    return buildList {
+                        add(key(GPUPreparedNativeOperandRole.RenderColorTarget, GPUPreparedNativeOperandKind.TextureView, targetResourceLabel))
+                        add(key(GPUPreparedNativeOperandRole.RenderPipeline, GPUPreparedNativeOperandKind.RenderPipeline, "w5b.${scratch.planId}.pipeline.${step.drawPackets.first().commandIdValue}"))
+                        add(key(GPUPreparedNativeOperandRole.RenderVertexBuffer, GPUPreparedNativeOperandKind.Buffer, "w5b.${scratch.planId}.vertex"))
+                        add(key(GPUPreparedNativeOperandRole.RenderIndexBuffer, GPUPreparedNativeOperandKind.Buffer, "w5b.${scratch.planId}.index"))
+                        step.drawPackets.forEach { packet ->
+                            add(key(GPUPreparedNativeOperandRole.RenderBindGroup, GPUPreparedNativeOperandKind.BindGroup, "w5b.${scratch.planId}.uniform.${packet.commandIdValue}"))
+                        }
                     }
                 }
                 val w3Scratch = step.drawPackets.firstOrNull()

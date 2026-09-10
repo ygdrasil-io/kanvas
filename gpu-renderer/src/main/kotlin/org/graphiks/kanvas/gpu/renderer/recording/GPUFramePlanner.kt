@@ -196,13 +196,14 @@ object GPUFramePlanner {
         }
         validateW4dGeneralContinuationBridges(w4dGeneralBridges)?.let { return it }
         renderTasks.forEach { task ->
-            if (task.drawPackets.map(GPUDrawPacket::passId).distinct().size != 1) {
+            val expectedPacketDomainCount = if (task.w5bInitialClearV3 != null) 0 else 1
+            if (task.drawPackets.map(GPUDrawPacket::passId).distinct().size != expectedPacketDomainCount) {
                 return diagnostic(
                     "invalid.frame_plan.render_packet_pass",
                     "Render task ${task.taskId.value} mixes pass identities",
                 )
             }
-            if (task.drawPackets.map(GPUDrawPacket::targetStateHash).distinct().size != 1) {
+            if (task.drawPackets.map(GPUDrawPacket::targetStateHash).distinct().size != expectedPacketDomainCount) {
                 return diagnostic(
                     "invalid.frame_plan.render_packet_target",
                     "Render task ${task.taskId.value} mixes target states",
@@ -867,6 +868,13 @@ object GPUFramePlanner {
             }
 
             if (task is GPUTask.Render) {
+                if (task.w5bInitialClearV3 != null) {
+                    flushPendingRenderSlices()?.let { return Linearization.Refused(it) }
+                    steps += GPUFrameStep.RenderPassStep(task.target, task.loadStore, task.samplePlan,
+                        drawPackets = emptyList(), sourceTaskIds = listOf(task.taskId), batches = emptyList(),
+                        w5bInitialClearV3 = task.w5bInitialClearV3)
+                    return@forEach
+                }
                 val unsupported = task.drawPackets.singleOrNull()?.blendPlan as? GPUBlendPlan.UnsupportedBlend
                 if (unsupported != null) {
                     flushPendingRenderSlices()?.let { return Linearization.Refused(it) }

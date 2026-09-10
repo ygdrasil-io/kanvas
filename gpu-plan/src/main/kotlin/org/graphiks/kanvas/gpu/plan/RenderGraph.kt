@@ -145,6 +145,7 @@ public class RenderGraph private constructor(
             }
             require(dependencies.distinct().size == dependencies.size) { "Dependencies must be unique" }
             validatePassCapabilities(passes, capabilities)
+            validateW5bDestinationVersions(passes)
             validateColorPasses(passes, resourcesById, targetExtent, colorFormat)
             val usesExplicitAa4PathPasses = passes.any {
                 it is PlanPass.PathMaskClearPass || it is PlanPass.PathRenderPass
@@ -331,6 +332,7 @@ public class RenderGraph private constructor(
         private fun referencedResources(pass: PlanPass): List<PlanResourceId> = when (pass) {
             is PlanPass.RenderPass -> buildList {
                 add(pass.target)
+                pass.draws().mapNotNull { (it.blend as? BlendPlan.DestinationReadV1)?.snapshotResource }.forEach(::add)
                 pass.drawDataResources?.let { addAll(listOf(it.vertex, it.index, it.uniform)) }
                 pass.draws().flatMap { it.clipStrategies() }.forEach { strategy ->
                     strategy.resourceReferences().forEach(::add)

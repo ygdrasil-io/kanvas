@@ -3,10 +3,8 @@ package org.graphiks.kanvas.gpu.renderer.planning
 import org.graphiks.kanvas.gpu.plan.BlendFactorV1
 import org.graphiks.kanvas.gpu.plan.BlendPlan
 import org.graphiks.kanvas.gpu.plan.BlendCoverageEncodingV1
-import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDiagnostic
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
-import org.graphiks.kanvas.gpu.renderer.passes.GPURefusalScope
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
@@ -35,15 +33,17 @@ internal object W5bBlendPlanLowerer {
             ),
             sourceCoverageEncoding = coverage(plan.coverage),
         )
-        is BlendPlan.DestinationReadV1 -> GPUBlendPlan.UnsupportedBlend(
-            mode = GPUBlendMode.valueOf(plan.mode.name),
-            diagnostic = GPUBlendDiagnostic(
-                code = "unsupported.w5b.destination-read.task-2",
-                mode = GPUBlendMode.valueOf(plan.mode.name),
-                message = "W5b destination-read ${plan.formulaIdentity} is deferred to Task 2.",
-            ),
-            refusalScope = GPURefusalScope.AtomicFrameFailure,
-        )
+        is BlendPlan.DestinationReadV1 -> {
+            require(plan.compositionAbiI32 == 3 && plan.snapshotResource != null &&
+                plan.requiredDestinationVersion.valueI64 >= 0L &&
+                org.graphiks.kanvas.gpu.renderer.pipelines.GPUBlendFormulaProgramLibrary
+                    .selectedFullCoverageFunctionWgsl(plan.mode.name.lowercase(), plan.formulaIdentity) != null) {
+                "Invalid sealed W5b destination formula/version/ABI"
+            }
+            GPUBlendPlan.ShaderBlendWithDstRead(
+                GPUBlendMode.valueOf(plan.mode.name), plan.formulaIdentity, coverage(plan.coverage), plan,
+            )
+        }
     }
 
     private fun legacySrcOver() = GPUBlendPlan.FixedFunctionBlend(

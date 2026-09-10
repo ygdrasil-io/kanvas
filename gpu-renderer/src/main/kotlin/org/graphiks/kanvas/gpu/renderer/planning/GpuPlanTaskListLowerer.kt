@@ -174,7 +174,7 @@ public class GpuPlanTaskListLowerer {
         }
         when (val assembled = GPUCorePrimitivePreparedFrameTaskListAssembler().buildPreplanned(
             GPUCorePrimitivePreplannedFrameRequest(request.graph.id, base, target, targetBounds, targetPreparation, staging, stagingPreparation, readback, memory, graph.render.id, graph.readback.id,
-                request.w5aCompositeSessionIdentity?.let { GPUW5aCompositeLaneWitnessV1(it, requireNotNull(request.w5aCompositeLaneOrdinal), request.graph.id.value, base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets).map(GPUDrawPacket::packetId)) }),
+                request.w5aCompositeSessionIdentity?.let { GPUW5aCompositeLaneWitnessV1(it, requireNotNull(request.w5aCompositeLaneOrdinal), request.graph.id.value, base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets).map(GPUDrawPacket::packetId)) }, graph.destinationGraph),
         )) {
             is GPUCorePrimitivePreparedFrameResult.Recorded -> GpuPlanLoweringResult.Lowered(assembled.taskList, readback.requestId.value)
             is GPUCorePrimitivePreparedFrameResult.Refused -> invalid(assembled.diagnostic.message)
@@ -204,6 +204,9 @@ public class GpuPlanTaskListLowerer {
             is W3SessionScratchSealResult.Unsupported -> return W3BaseTaskListResult.Unsupported(sealed.diagnostic)
             is W3SessionScratchSealResult.Invalid -> return W3BaseTaskListResult.Invalid(sealed.diagnostic)
         }
+        val w5bWitness = graph.destinationGraph?.let {
+            org.graphiks.kanvas.gpu.renderer.passes.W5bPreparedFrameWitnessV3(it, scratch)
+        }
         packets.forEach { packet ->
             val semantic = packet.semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive
                 ?: return W3BaseTaskListResult.Invalid(invalidDiagnostic("W3 packet is missing CorePrimitive semantic authority."))
@@ -214,7 +217,10 @@ public class GpuPlanTaskListLowerer {
             val pipeline = packet.renderPipelineKey
                 ?: return W3BaseTaskListResult.Invalid(invalidDiagnostic("W3 packet is missing render pipeline authority."))
             packet.attachCorePrimitivePreparedAuthority(
-                GPUCorePrimitivePreparedPacketAuthority.plannedW3(
+                if (w5bWitness != null) GPUCorePrimitivePreparedPacketAuthority.plannedW5b(
+                    corePrimitiveRenderPipelineStructuralKey(semantic, clip, blend, 1,
+                        GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat()), pipeline, w5bWitness,
+                ) else GPUCorePrimitivePreparedPacketAuthority.plannedW3(
                     structuralPipelineKey = corePrimitiveRenderPipelineStructuralKey(
                         semantic,
                         clip,
@@ -365,16 +371,34 @@ public class GpuPlanTaskListLowerer {
 
     private fun memoryBudget(capabilities: GPUCapabilities, graph: RenderGraph, shape: W3Graph, bounds: GPUPixelBounds, generation: org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID, compositeSessionIdentity: String?): GPUFrameMemoryBudgetPlan? {
         val limits = capabilities.limits ?: return null
-        if (shape.target.byteSize + shape.staging.byteSize != graph.peakFrameLocalBytes || graph.peakFrameLocalBytes > graph.budget.maxFrameLocalBytes) return null
+        val snapshotBytes = if (shape.destinationGraph != null) shape.target.byteSize else 0L
+        val transientBytesI64 = try { Math.addExact(shape.staging.byteSize, snapshotBytes) } catch (_: ArithmeticException) { return null }
+        val totalBytesI64 = try { Math.addExact(shape.target.byteSize, transientBytesI64) } catch (_: ArithmeticException) { return null }
+        if (totalBytesI64 != graph.peakFrameLocalBytes || graph.peakFrameLocalBytes > graph.budget.maxFrameLocalBytes) return null
         val identity = compositeSessionIdentity ?: "w3.session.${generation.value}.${bounds.width}x${bounds.height}.rgba8unorm-srgb"
         val target = GPUFrameMemoryAllocation("$identity.target", GPUFrameMemoryCategory.CanonicalTarget, shape.target.byteSize, GPUFrameMemoryResourceKind.Texture2D, bounds)
         val staging = GPUFrameMemoryAllocation("$identity.staging", GPUFrameMemoryCategory.ReadbackStaging, shape.staging.byteSize, GPUFrameMemoryResourceKind.Buffer, null)
-        return GPUFrameMemoryBudgetPlan(shape.staging.byteSize, shape.target.byteSize, GPUFrameMemoryCategory.entries.associateWith { category -> when (category) { GPUFrameMemoryCategory.CanonicalTarget -> shape.target.byteSize; GPUFrameMemoryCategory.ReadbackStaging -> shape.staging.byteSize; else -> 0L } }, limits.capabilityFacts("frame-memory-budget"), graph.budget.maxFrameLocalBytes, null, listOf(target, staging))
+        val snapshots = if (snapshotBytes == 0L) emptyList() else listOf(GPUFrameMemoryAllocation("$identity.snapshot", GPUFrameMemoryCategory.DestinationSnapshot, snapshotBytes, GPUFrameMemoryResourceKind.Texture2D, bounds))
+        return GPUFrameMemoryBudgetPlan(transientBytesI64, shape.target.byteSize, GPUFrameMemoryCategory.entries.associateWith { category -> when (category) { GPUFrameMemoryCategory.CanonicalTarget -> shape.target.byteSize; GPUFrameMemoryCategory.ReadbackStaging -> shape.staging.byteSize; GPUFrameMemoryCategory.DestinationSnapshot -> snapshotBytes; else -> 0L } }, limits.capabilityFacts("frame-memory-budget"), graph.budget.maxFrameLocalBytes, null, listOf(target, staging) + snapshots)
     }
 
     private fun validateW3Graph(graph: RenderGraph): W3Graph? {
         if (graph.capabilityId !in setOf(W3SolidRectPlanCompiler.CAPABILITY_ID, W3SolidRectPlanCompiler.W5A_CAPABILITY_ID) || graph.colorFormat != PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) return null
         val resources = graph.resources()
+        if (resources.any { it.role == PlanResourceRole.DestinationSnapshot }) {
+            val target = resources.singleOrNull { it.role == PlanResourceRole.LogicalTarget } ?: return null
+            val staging = resources.singleOrNull { it.role == PlanResourceRole.ReadbackStaging } ?: return null
+            val snapshot = resources.singleOrNull { it.role == PlanResourceRole.DestinationSnapshot } ?: return null
+            val passes = graph.passes()
+            val renders = passes.filterIsInstance<PlanPass.RenderPass>()
+            val readback = passes.lastOrNull() as? PlanPass.ReadbackPass ?: return null
+            val draws = renders.flatMap { it.draws() }
+            if (resources.size != 3 || snapshot.byteSize != target.byteSize || snapshot.copyExtent() != graph.targetExtent ||
+                graph.materialPlanTableOrNull() == null || draws.any { it !is SolidRectDraw || it.coverage != CoveragePlan.FullOrScissor || it.sample != SamplePlan.SingleSample } ||
+                renders.any { it.target != target.id || it.destinationVersionAfter == null } ||
+                graph.dependencies() != passes.zipWithNext { before, after -> org.graphiks.kanvas.gpu.plan.PlanPassDependency(before.id, after.id) }) return null
+            return W3Graph(target, staging, renders.first(), readback, draws.filterIsInstance<SolidRectDraw>(), graph.materialPlanTableOrNull(), graph)
+        }
         if (resources.size != 2) return null
         val target = resources.singleOrNull { it.role == PlanResourceRole.LogicalTarget } ?: return null
         val staging = resources.singleOrNull { it.role == PlanResourceRole.ReadbackStaging } ?: return null
@@ -428,6 +452,7 @@ public class GpuPlanTaskListLowerer {
         val readback: PlanPass.ReadbackPass,
         val draws: List<SolidRectDraw>,
         val materialPlanTable: MaterialPlanTable?,
+        val destinationGraph: RenderGraph? = null,
     )
 
     private fun resolveMaterialColor(

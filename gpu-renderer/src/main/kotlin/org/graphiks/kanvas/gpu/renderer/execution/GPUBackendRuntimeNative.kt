@@ -1260,6 +1260,12 @@ private class WgpuBackendSession(
             maxBufferSize = observedMaxBufferSize(deviceLimits.maxBufferSize),
             maxDynamicUniformBuffersPerPipelineLayout =
                 deviceLimits.maxDynamicUniformBuffersPerPipelineLayout.toLong(),
+            maxBindGroupsI32 = deviceLimits.maxBindGroups.toLong().takeIf { it <= Int.MAX_VALUE }?.toInt(),
+            maxBindingsPerBindGroupI32 = deviceLimits.maxBindingsPerBindGroup.toLong().takeIf { it <= Int.MAX_VALUE }?.toInt(),
+            maxSamplersPerShaderStageI32 = deviceLimits.maxSamplersPerShaderStage.toLong().takeIf { it <= Int.MAX_VALUE }?.toInt(),
+            maxSampledTexturesPerShaderStageI32 = deviceLimits.maxSampledTexturesPerShaderStage.toLong().takeIf { it <= Int.MAX_VALUE }?.toInt(),
+            maxUniformBuffersPerShaderStageI32 = deviceLimits.maxUniformBuffersPerShaderStage.toLong().takeIf { it <= Int.MAX_VALUE }?.toInt(),
+            maxUniformBufferBindingSizeBytesI64 = observedMaxBufferSize(deviceLimits.maxUniformBufferBindingSize),
             source = "device.limits",
         )
     }
