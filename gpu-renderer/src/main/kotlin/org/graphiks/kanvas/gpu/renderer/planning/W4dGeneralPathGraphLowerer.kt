@@ -5,10 +5,12 @@ import org.graphiks.kanvas.gpu.plan.BinaryMaskFetchPlan
 import org.graphiks.kanvas.gpu.plan.BinaryMaskedPathDraw
 import org.graphiks.kanvas.gpu.plan.CoveragePlan
 import org.graphiks.kanvas.gpu.plan.GeneralPathDraw
+import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.gpu.plan.PathDrawGeometry
 import org.graphiks.kanvas.gpu.plan.PathFillStrategy
 import org.graphiks.kanvas.gpu.plan.PathRenderPhase
 import org.graphiks.kanvas.gpu.plan.PlanPass
+import org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority
 import org.graphiks.kanvas.gpu.plan.PlanPassDependency
 import org.graphiks.kanvas.gpu.plan.PlanResource
 import org.graphiks.kanvas.gpu.plan.PlanResourceKind
@@ -18,6 +20,9 @@ import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.SamplePlan
 import org.graphiks.kanvas.gpu.plan.W4dGeneralPathPlanCompiler
+import org.graphiks.kanvas.gpu.plan.hasLegacyPathColorContract
+import org.graphiks.kanvas.gpu.plan.hasW5aMaterialPathCapabilityV2
+import org.graphiks.kanvas.gpu.plan.hasW5aMaterialPathContract
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
@@ -91,6 +96,7 @@ import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
 import org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity
 import org.graphiks.math.geometry.FillRule
 import org.graphiks.math.geometry.PathFillGeometryF32
+import org.graphiks.math.color.ColorF32
 
 /** Lowers one fully validated W4d.2 path graph into handle-free prepared task facts. */
 internal class W4dGeneralPathGraphLowerer {
@@ -106,6 +112,7 @@ internal class W4dGeneralPathGraphLowerer {
         paintOrder,
         bounds,
         targetColorFormat(pass, graph),
+        graph,
         consumer,
     ).packet
 
@@ -124,7 +131,7 @@ internal class W4dGeneralPathGraphLowerer {
             return invalid("The W4d.2 prepared authority did not revalidate the graph.")
         }
         val packets = graph.pathPasses.mapIndexed { index, pass ->
-            packet(pass, index, bounds, targetColorFormat(pass, request.graph))
+            packet(pass, index, bounds, targetColorFormat(pass, request.graph), request.graph)
         }
         val limits = request.capabilities.limits
             ?: return invalid("The W4d.2 native uniform slab requires observed device limits.")
@@ -277,10 +284,13 @@ internal class W4dGeneralPathGraphLowerer {
     /** Revalidates the entire immutable graph before any W4d.2 packet is converted or published. */
     private fun preflight(graph: RenderGraph): ValidatedGraph? {
         if (!graph.verifyW4dGeneralCompilerWitness()) return null
-        if (graph.capabilityId !in setOf(
-                W4dGeneralPathPlanCompiler.HARD_CAPABILITY_ID,
-                W4dGeneralPathPlanCompiler.AA_CAPABILITY_ID,
-            )
+        if (!(W4dGeneralPathPlanCompiler.isLegacyCapabilityId(graph.capabilityId) ||
+                W4dGeneralPathPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId))) return null
+        if (if (W4dGeneralPathPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) {
+                !graph.hasW5aMaterialPathContract()
+            } else {
+                !graph.hasLegacyPathColorContract()
+            }
         ) return null
         val passes = graph.passes()
         val readback = passes.lastOrNull() as? PlanPass.ReadbackPass ?: return null
@@ -320,15 +330,13 @@ internal class W4dGeneralPathGraphLowerer {
         ) return null
         if (colorPasses.any { pass -> pass.store.name != "Store" }) return null
         val usesAa = pathPasses.any { pass -> pass.draw.sample == SamplePlan.Multisample4 }
-        return when (graph.capabilityId) {
-            W4dGeneralPathPlanCompiler.HARD_CAPABILITY_ID -> {
+        return if (W4dGeneralPathPlanCompiler.isHardCapabilityId(graph.capabilityId)) {
                 if (usesAa || graph.resources().any { resource ->
                         resource.role in setOf(PlanResourceRole.MultisampleColorTarget, PlanResourceRole.PathHardEdgeMask,
                             PlanResourceRole.PathHardEdgeDepthStencil)
                     } || pathPasses.any { it.resolveTarget != null }
                 ) null else ValidatedGraph(pathPasses, logical.id, logical.byteSize, staging.byteSize)
-            }
-            W4dGeneralPathPlanCompiler.AA_CAPABILITY_ID -> {
+        } else if (W4dGeneralPathPlanCompiler.isAaCapabilityId(graph.capabilityId)) {
                 val multisample = graph.resources().singleOrNull { it.role == PlanResourceRole.MultisampleColorTarget }
                     ?.takeIf { resource -> resource.kind == PlanResourceKind.Texture2D && resource.sampleCountI32 == 4 &&
                         resource.format == PlanTextureFormat.Color(graph.colorFormat) &&
@@ -338,9 +346,7 @@ internal class W4dGeneralPathGraphLowerer {
                     colorPasses.dropLast(1).any { it.resolveTarget != null } ||
                     colorPasses.last().resolveTarget != logical.id
                 ) null else ValidatedGraph(pathPasses, logical.id, logical.byteSize, staging.byteSize)
-            }
-            else -> null
-        }
+        } else null
     }
 
     private fun packet(
@@ -348,6 +354,7 @@ internal class W4dGeneralPathGraphLowerer {
         paintOrder: Int,
         bounds: GPUPixelBounds,
         targetColorFormat: GPUColorFormat,
+        graph: RenderGraph,
         w4ePreparedClipConsumer: GPUW4ePreparedClipConsumerAuthority? = null,
     ): BuiltPacket {
         val draw = pass.draw
@@ -415,12 +422,27 @@ internal class W4dGeneralPathGraphLowerer {
                 }
             }
         }
+        val color = if (graph.hasW5aMaterialPathCapabilityV2()) {
+            if (pass.phase.isColorProducing()) {
+                resolveMaterialColor(graph.materialPlanTableOrNull(), draw.materialAuthority)
+                    ?: error("W5 material authority is invalid for a color-writing path phase")
+            } else {
+                ColorF32.Transparent
+            }
+        } else if (pass.phase.isHistoricalHardMaskProducer()) {
+            ColorF32.of(1f, 1f, 1f, 1f)
+        } else {
+            resolveMaterialColor(graph.materialPlanTableOrNull(), draw.materialAuthority)
+                ?: error("Historical path color authority is invalid")
+        }
         val semantic = GPUCorePrimitivePayloadGatherer().gatherPlannedW4dSemantic(
             GPUCorePrimitivePayloadInput(
                 commandIdValue = draw.commandIndex,
                 sourceFamily = GPUCorePrimitiveSourceFamily.Path,
                 geometry = geometryInput,
-                premultipliedRgba = listOf(draw.color.red, draw.color.green, draw.color.blue, draw.color.alpha),
+                premultipliedRgba = listOf(color.red, color.green, color.blue, color.alpha),
+                material = if (!pass.phase.isColorProducing()) null else
+                    W5aMaterialPlanLowerer().material(graph.materialPlanTableOrNull(), draw.materialAuthority, draw.commandIndex),
                 targetBounds = bounds,
                 scissorBounds = scissorBounds,
                 clipCoveragePlan = clip.first,
@@ -743,6 +765,12 @@ internal class W4dGeneralPathGraphLowerer {
         PathRenderPhase.HardEdgeBinaryColorCover,
     )
 
+    private fun PathRenderPhase.isHistoricalHardMaskProducer(): Boolean = this in setOf(
+        PathRenderPhase.HardEdgeMaskProducer,
+        PathRenderPhase.HardEdgeMaskStencilProducer,
+        PathRenderPhase.HardEdgeMaskStencilCover,
+    )
+
     private fun PathRenderPhase.isStencilProducer(): Boolean = this in setOf(
         PathRenderPhase.SingleSampleStencilProducer,
         PathRenderPhase.MultisampleStencilProducer,
@@ -795,6 +823,14 @@ internal class W4dGeneralPathGraphLowerer {
         val packet: GPUDrawPacket,
         val structuralPipelineKey: org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey,
     )
+
+    private fun resolveMaterialColor(
+        table: MaterialPlanTable?,
+        authority: PlanDrawMaterialAuthority,
+    ): ColorF32? = when (authority) {
+        is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
+        is PlanDrawMaterialAuthority.MaterialV1 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }
+    }
 
     private fun invalid(message: String): GpuPlanLoweringResult.InvalidPlan =
         GpuPlanLoweringResult.InvalidPlan(

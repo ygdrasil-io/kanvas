@@ -96,6 +96,7 @@ internal class GeometrySnapshotContext {
                         value.children.forEach { (name, child) -> put(name, shaders.getValue(child)) }
                     }
                     is Shader.Blend -> shaders[value] = value.copy(dst = shaders.getValue(value.dst), src = shaders.getValue(value.src))
+                    is Shader.Opacity -> shaders[value] = value.copy(shader = shaders.getValue(value.shader))
                     is Shader.WithLocalMatrix -> shaders[value] = value.copy(shader = shaders.getValue(value.shader))
                     is Shader.WithColorFilter -> shaders[value] = value.copy(shader = shaders.getValue(value.shader), filter = snapshot(value.filter))
                     is Shader.CoordClamp -> shaders[value] = value.copy(shader = shaders.getValue(value.shader), subset = value.subset.snapshotGeometry())
@@ -246,6 +247,7 @@ internal class GeometrySnapshotContext {
 
 private fun shaderChildren(value: Shader): List<Shader> = when (value) {
     is Shader.Blend -> listOf(value.dst, value.src)
+    is Shader.Opacity -> listOf(value.shader)
     is Shader.WithLocalMatrix -> listOf(value.shader)
     is Shader.WithColorFilter -> listOf(value.shader)
     is Shader.CoordClamp -> listOf(value.shader)

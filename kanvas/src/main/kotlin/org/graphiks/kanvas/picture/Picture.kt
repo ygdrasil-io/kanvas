@@ -309,8 +309,9 @@ class Picture internal constructor(
 // ---- Binary serialization helpers ------------------------------------------
 
 private val MAGIC = byteArrayOf(0x4B, 0x50, 0x49, 0x43)
-private const val FORMAT_VERSION = 8
-private const val STABLE_WIRE_VERSION = 8
+private const val FORMAT_VERSION = 9
+private const val STABLE_WIRE_VERSION = 9
+private const val HISTORICAL_WIRE_VERSION_V8 = 8
 
 // type discriminators
 private const val OP_DRAW_RECT: Byte = 0
@@ -365,13 +366,17 @@ private class Reader(
         default: T,
     ): T {
         val id = byte()
-        val value = if (formatVersion == STABLE_WIRE_VERSION) stable(id) else legacy.getOrNull(id.toInt())
+        val value = if (usesStableDiscriminators) stable(id) else legacy.getOrNull(id.toInt())
         if (value == null) {
             valid = false
             return default
         }
         return value
     }
+
+    /** Version 8 introduced the stable wire ids that version 9 continues to use. */
+    private val usesStableDiscriminators: Boolean
+        get() = formatVersion == HISTORICAL_WIRE_VERSION_V8 || formatVersion == STABLE_WIRE_VERSION
 
     private fun fillType(): FillType = discriminator(FillType.entries, ::stableFillTypeFromId, FillType.WINDING)
     private fun pathVerb(): PathVerb = discriminator(PathVerb.entries, ::stablePathVerbFromId, PathVerb.MOVE)
@@ -574,12 +579,12 @@ private class Reader(
         val attrCount = int()
         val attrs = List(attrCount) { VertexAttribute(vertexFormat(), int(), int()) }
         val stride = int()
-        val stepMode = if (formatVersion == STABLE_WIRE_VERSION) {
+        val stepMode = if (usesStableDiscriminators) {
             vertexStepMode()
         } else {
             VertexStepMode.entries[byte().toInt()]
         }
-        if (formatVersion != STABLE_WIRE_VERSION) {
+        if (!usesStableDiscriminators) {
             // Versions 1–7 could not reconstruct private ShaderModule state.
             if (uniforms.isNotEmpty() || textures.isNotEmpty() || attrs.isNotEmpty()) valid = false
             return ShaderModule.fromSource(source, entry)
@@ -946,6 +951,13 @@ private fun decodePicture(data: ByteArray, decodedRuntimeEffects: MutableList<Ru
     if (!r.valid) return null
     return when (version) {
         in 1..7 -> decodeLegacyPicture(data, version, decodedRuntimeEffects)
+        8 -> when (val decoded = SceneArchiveCodec.decodePicture(data)) {
+            is SceneArchiveDecodeResult.Decoded -> try {
+                Picture(decoded.copyCullRect(), SceneDisplayOpAdapter.toDisplayOps(decoded.scene))
+            } catch (_: IllegalArgumentException) { null }
+            SceneArchiveDecodeResult.LegacyV8 -> decodeHistoricalPictureV8(data, decodedRuntimeEffects)
+            is SceneArchiveDecodeResult.Invalid -> null
+        }
         STABLE_WIRE_VERSION -> when (val decoded = SceneArchiveCodec.decodePicture(data)) {
             is SceneArchiveDecodeResult.Decoded -> try {
                 Picture(decoded.copyCullRect(), SceneDisplayOpAdapter.toDisplayOps(decoded.scene))
@@ -956,7 +968,8 @@ private fun decodePicture(data: ByteArray, decodedRuntimeEffects: MutableList<Ru
             } catch (_: ClassCastException) {
                 null
             }
-            SceneArchiveDecodeResult.LegacyV8 -> decodeHistoricalPictureV8(data, decodedRuntimeEffects)
+            // A v9 header cannot select the v8 legacy discriminator.
+            SceneArchiveDecodeResult.LegacyV8 -> null
             is SceneArchiveDecodeResult.Invalid -> null
         }
         else -> null
@@ -971,12 +984,12 @@ private fun decodeLegacyPicture(
 
 /**
  * Compatibility reader for v8 data written before SceneArchiveCodec owned the
- * writer.  It is intentionally read-only; all new v8 output is IR-tagged.
+ * writer. It is intentionally read-only; all new output is v9 IR-tagged.
  */
 private fun decodeHistoricalPictureV8(
     data: ByteArray,
     decodedRuntimeEffects: MutableList<RuntimeEffect>,
-): Picture? = decodePictureWithVersion(data, STABLE_WIRE_VERSION, requireEnd = true, decodedRuntimeEffects)
+): Picture? = decodePictureWithVersion(data, HISTORICAL_WIRE_VERSION_V8, requireEnd = true, decodedRuntimeEffects)
 
 private fun decodePictureWithVersion(
     data: ByteArray,

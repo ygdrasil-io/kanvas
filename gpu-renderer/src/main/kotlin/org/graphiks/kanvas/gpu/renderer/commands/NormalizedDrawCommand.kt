@@ -23,6 +23,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
 import org.graphiks.kanvas.gpu.renderer.state.GPUPathSourceAuthority
+import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
 
 private val IDENTITY_GRADIENT_LOCAL_MATRIX = listOf(
     1f, 0f, 0f,
@@ -165,6 +166,10 @@ enum class GPUPreparedMaterialUnsupportedReason(
     val diagnosticCode: String,
     val diagnosticMessage: String,
 ) {
+    OPACITY_CHILD(
+        "unsupported.material.mapping.opacity_child",
+        "Prepared opacity mapping currently requires a solid child material",
+    ),
     IMAGE_CUBIC_SAMPLING(
         "unsupported.material.mapping.image_cubic_sampling",
         "Prepared image mapping does not implement cubic sampling",
@@ -3661,6 +3666,8 @@ sealed interface NormalizedDrawCommand {
      * this value is null only for that explicit command variant.
      */
     val material: GPUMaterialDescriptor?
+    /** Sealed W5a source reference; a promoted command has no legacy descriptor. */
+    val w5aMaterialPlanRef: MaterialPlanRef? get() = null
     /** Captured blend facts. */
     val blend: GPUBlendFacts
     /** Conservative command bounds. */
@@ -3681,7 +3688,7 @@ sealed interface NormalizedDrawCommand {
         override val transform: GPUTransformFacts,
         override val clip: GPUClipFacts,
         override val layer: GPULayerFacts,
-        override val material: GPUMaterialDescriptor,
+        override val material: GPUMaterialDescriptor?,
         override val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
         override val bounds: GPUBounds,
         override val ordering: GPUOrderingFacts,
@@ -3696,7 +3703,9 @@ sealed interface NormalizedDrawCommand {
         val antiAlias: Boolean = true,
         /** Mask filter descriptor for post-processing the fill output. Null when no mask filter is active. */
         val maskFilter: NormalizedMaskFilter? = null,
+        override val w5aMaterialPlanRef: MaterialPlanRef? = null,
     ) : NormalizedDrawCommand {
+        init { require((material != null) xor (w5aMaterialPlanRef != null)) }
         override val drawKind: GPUDrawKind = GPUDrawKind.FillRect
     }
 
@@ -3707,7 +3716,7 @@ sealed interface NormalizedDrawCommand {
         override val transform: GPUTransformFacts,
         override val clip: GPUClipFacts,
         override val layer: GPULayerFacts,
-        override val material: GPUMaterialDescriptor,
+        override val material: GPUMaterialDescriptor?,
         override val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
         override val bounds: GPUBounds,
         override val ordering: GPUOrderingFacts,
@@ -3717,7 +3726,9 @@ sealed interface NormalizedDrawCommand {
         val antiAlias: Boolean = true,
         /** Mask filter descriptor for post-processing the fill output. Null when no mask filter is active. */
         val maskFilter: NormalizedMaskFilter? = null,
+        override val w5aMaterialPlanRef: MaterialPlanRef? = null,
     ) : NormalizedDrawCommand {
+        init { require((material != null) xor (w5aMaterialPlanRef != null)) }
         override val drawKind: GPUDrawKind = GPUDrawKind.FillRRect
     }
 
@@ -3753,7 +3764,15 @@ sealed interface NormalizedDrawCommand {
         override val transform: GPUTransformFacts,
         override val clip: GPUClipFacts,
         override val layer: GPULayerFacts,
-        override val material: GPUMaterialDescriptor,
+        /**
+         * Legacy material authority.  W5a point commands deliberately leave this absent: their
+         * source authority is [w5aMaterialPlanRef], never a reconstructed descriptor.
+         */
+        override val material: GPUMaterialDescriptor? = null,
+        /** Versioned sealed material reference used only by the W5a prepared point bridge. */
+        override val w5aMaterialPlanRef: MaterialPlanRef? = null,
+        /** Non-renderable geometry keeps its command and has no material to evaluate. */
+        val preMaterialGeometryRefusalCode: String? = null,
         override val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
         override val bounds: GPUBounds,
         override val ordering: GPUOrderingFacts,
@@ -3778,6 +3797,12 @@ sealed interface NormalizedDrawCommand {
         /** Mask filter descriptor for post-processing the fill output. Null when no mask filter is active. */
         val maskFilter: NormalizedMaskFilter? = null,
     ) : NormalizedDrawCommand {
+        init {
+            require(listOf(material, w5aMaterialPlanRef, preMaterialGeometryRefusalCode).count { it != null } == 1) {
+                "FillPath requires one legacy descriptor, W5a material reference, or geometry refusal"
+            }
+        }
+
         override val drawKind: GPUDrawKind = GPUDrawKind.FillPath
     }
 
@@ -3805,6 +3830,9 @@ sealed interface NormalizedDrawCommand {
         override val layer: GPULayerFacts,
         override val material: GPUMaterialDescriptor? = null,
         val preparedMaterial: GPUPreparedMaterialProgram? = null,
+        /** Sealed W5a table/ref witness for prepared A8 text; absent on historical material paths. */
+        val preparedW5aMaterialProvenance:
+            org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextMaterialPlanProvenance? = null,
         override val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
         /** Exact prepared blend authority when this command came from a prepared text sub-run. */
         val preparedBlendPlan: GPUBlendPlan? = null,
@@ -3815,6 +3843,16 @@ sealed interface NormalizedDrawCommand {
         init {
             require((material == null) != (preparedMaterial == null)) {
                 "DrawTextRun requires exactly one legacy descriptor or prepared material program"
+            }
+            require(
+                (preparedW5aMaterialProvenance == null) ==
+                    (preparedMaterial?.preparedTextW5aAdmissionToken == null),
+            ) {
+                "DrawTextRun W5a provenance and compiler admission token must be paired"
+            }
+            require(preparedW5aMaterialProvenance == null ||
+                (preparedMaterial != null && preparedW5aMaterialProvenance.validates(commandId.value, preparedMaterial))) {
+                "DrawTextRun W5a provenance must match its prepared material and command"
             }
         }
 

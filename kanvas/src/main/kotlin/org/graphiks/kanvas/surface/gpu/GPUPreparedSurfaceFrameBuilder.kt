@@ -218,11 +218,22 @@ internal object GPUPreparedSurfaceFrameBuilder {
             } else {
                 0
             }
+            val coreMaterialCandidates = if (request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul) {
+                W5aPreparedFrameMaterialRegistry.captureCoreCandidates(
+                    operations, request.targetBounds.width, request.targetBounds.height,
+                )
+            } else emptyMap()
+            val textMaterials = if (request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul) {
+                W5aPreparedTextMaterialBridge.capture(
+                    operations, request.targetBounds.width, request.targetBounds.height,
+                )
+            } else null
             val textPreparation = GPUPreparedTextFramePreparer.prepareInventory(
                 operations = operations,
                 target = request.targetFacts,
                 capabilities = request.capabilities,
                 generation = GPUTextArtifactGeneration(frameGeneration),
+                materialBridge = textMaterials,
             )
             if (textPreparation is GPUPreparedTextFrameInventoryPreparation.Refused) {
                 val refusal = textPreparation.refusal
@@ -256,6 +267,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                             preparedTextInventory = textInventory,
                             preparedVerticesInventory = verticesInventory,
                             elidedOperationIndices = elided,
+                            w5aPointMaterialRefs = coreMaterialCandidates.mapValues { it.value.root },
                         )
                     }
                 },
@@ -394,7 +406,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                         diagnostic(gathered.code, gathered.message, gathered.facts),
                     )
             }
-            val semantics = when (val gathered = GPUPreparedSurfaceSemanticBuilder.gather(
+            val admittedSemantics = when (val gathered = GPUPreparedSurfaceSemanticBuilder.gather(
                 visualCommands = preparedMapping.visualCommands,
                 normalizedCommands = normalizedCommands,
                 recording = recording,
@@ -407,8 +419,22 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 is GPUPreparedSurfaceSemanticGatherResult.Refused ->
                     return GPUPreparedSurfaceFrameBuildResult.Refused(gathered.diagnostic)
             }
-            preflightUnmaterializedPreparedVertices(recording, semantics)?.let { diagnostic ->
+            preflightUnmaterializedPreparedVertices(recording, admittedSemantics)?.let { diagnostic ->
                 return GPUPreparedSurfaceFrameBuildResult.Refused(diagnostic)
+            }
+            // The real mapper/recorder/semantic lowerers have now validated geometry, clip,
+            // budgets and elision. Only their admitted payloads acquire frame material ownership.
+            val corePlansByCommandId = mapping.commandIdsByOperationIndex.flatMap { (operationIndex, commandIds) ->
+                coreMaterialCandidates[operationIndex]?.let { candidate -> commandIds.map { it to candidate } }.orEmpty()
+            }.toMap()
+            val frameMaterials = W5aPreparedFrameMaterialRegistry.seal(admittedSemantics, corePlansByCommandId)
+            val semantics = admittedSemantics.mapValues { (commandId, semantic) ->
+                val ref = frameMaterials?.refsByCommandId?.get(commandId)
+                if (ref == null) semantic else when (semantic) {
+                    is GPUDrawSemanticPayload.TextA8 -> semantic.withW5aFrameMaterial(frameMaterials.table, ref)
+                    is GPUDrawSemanticPayload.Vertices -> semantic.withW5aFrameMaterial(frameMaterials.table, ref)
+                    else -> semantic
+                }
             }
             when (val prepared = taskListBuilder.build(
                 GPUPreparedSurfaceFrameRequest(
@@ -417,6 +443,19 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     target = request.target,
                     targetBounds = request.targetBounds,
                     semanticsByCommandId = semantics,
+                    w5aCoreMaterialAuthority = frameMaterials?.let { materials ->
+                        val refs = materials.refsByCommandId.filterKeys { commandId ->
+                            (semantics[commandId] as? GPUDrawSemanticPayload.CorePrimitive)?.material is
+                                org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1
+                        }
+                        if (refs.isEmpty()) null else requireNotNull(
+                            org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2.issue(
+                                materials.table, refs, refs.keys.associateWith { commandId ->
+                                    corePlansByCommandId.getValue(commandId).let { it.table to it.root }
+                                },
+                            ),
+                        ) { "invalid.material.w5a_core_authority" }
+                    },
                     readbackRequestId = request.readbackRequestId.takeIf { request.includeReadback },
                     targetFormat = GPUColorFormat(request.targetFacts.colorFormat),
                     maskBlurIntermediateBudgetBytes = request.candidate.config.maxMaskBlurIntermediateBytes.toLong(),

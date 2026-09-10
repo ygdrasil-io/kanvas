@@ -11,6 +11,8 @@ import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
 import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
 import org.graphiks.kanvas.gpu.plan.SamplePlan
 import org.graphiks.kanvas.gpu.plan.W4eClipPlanCompiler
+import org.graphiks.kanvas.gpu.plan.hasLegacyPathColorContract
+import org.graphiks.kanvas.gpu.plan.hasW5aMaterialPathContract
 import org.graphiks.math.geometry.ClipGeometryF32
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
@@ -65,7 +67,15 @@ import org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity
 internal class W4eClipGraphLowerer {
     fun lower(request: GpuPlanLoweringRequest): GpuPlanLoweringResult = try {
         val graph = request.graph
-        if (!graph.verifyW4eCompilerWitness() || graph.capabilityId !in setOf(W4eClipPlanCompiler.HARD_CAPABILITY_ID, W4eClipPlanCompiler.AA_CAPABILITY_ID)) return invalid()
+        if (!graph.verifyW4eCompilerWitness() ||
+            !(W4eClipPlanCompiler.isLegacyCapabilityId(graph.capabilityId) ||
+                W4eClipPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) ||
+            if (W4eClipPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) {
+                !graph.hasW5aMaterialPathContract()
+            } else {
+                !graph.hasLegacyPathColorContract()
+            }
+        ) return invalid()
         val passes = graph.passes()
         if (passes.lastOrNull() !is PlanPass.ReadbackPass || graph.dependencies() != passes.zipWithNext().map { (a, b) -> PlanPassDependency(a.id, b.id) }) return invalid()
         val authority = GPUPlanW4ePreparedAuthority.issueAfterFullGraphValidation(graph)
@@ -87,6 +97,18 @@ internal class W4eClipGraphLowerer {
             val preparedPath = path?.let { authority.pathFor(it.id.value) ?: return invalid() }
             val packet = preparedPath?.let { pathPacket(it, consumer, index) }
                 ?: preparedClipPacket(pass, index, authority.clipPassFor(pass.id.value) ?: return invalid())
+            if (path != null && path.phase in setOf(
+                    org.graphiks.kanvas.gpu.plan.PathRenderPhase.SingleSampleDirectColor,
+                    org.graphiks.kanvas.gpu.plan.PathRenderPhase.SingleSampleStencilColorCover,
+                    org.graphiks.kanvas.gpu.plan.PathRenderPhase.MultisampleDirectColor,
+                    org.graphiks.kanvas.gpu.plan.PathRenderPhase.MultisampleStencilColorCover,
+                    org.graphiks.kanvas.gpu.plan.PathRenderPhase.HardEdgeBinaryColorCover,
+                )) {
+                (path.draw.materialAuthority as? org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV1)?.let { material ->
+                    packet.attachW5aSourceStageV2(org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2.issue(
+                        requireNotNull(graph.materialPlanTableOrNull()), material.ref, packet.commandIdValue))
+                }
+            }
             val targetId = when (pass) {
                 is PlanPass.PathMaskClearPass -> pass.target
                 is PlanPass.ClipMaskInitialize -> pass.output

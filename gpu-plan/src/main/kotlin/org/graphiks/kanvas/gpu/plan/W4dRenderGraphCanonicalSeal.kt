@@ -10,8 +10,9 @@ import org.graphiks.math.geometry.RectI32
 /** Canonical, length-delimited, raw-bit-stable snapshot used only by the opaque W4d witness. */
 @JvmSynthetic
 internal fun canonicalW4dGraphDigest(graph: RenderGraph): ByteArray {
+    val materialV2 = W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)
     val writer = W4dGraphDigestWriter()
-    writer.text("schema", "w4d-render-graph-witness-v1")
+    writer.text("schema", if (materialV2) "w4d-render-graph-witness-w5a-material-v2" else "w4d-render-graph-witness-v1")
     writer.text("plan.id", graph.id.value)
     writer.text("plan.capability-id", graph.capabilityId)
     writer.i32("target.width", graph.targetExtent.width)
@@ -21,6 +22,7 @@ internal fun canonicalW4dGraphDigest(graph: RenderGraph): ByteArray {
     writer.i64("budget.frame-local-bytes", graph.budget.maxFrameLocalBytes)
     writer.i32("draw-count", graph.visualCommandCount)
     writer.i64("peak-frame-local-bytes", graph.peakFrameLocalBytes)
+    if (materialV2) writer.materialTable(requireNotNull(graph.materialPlanTableOrNull()))
 
     val resources = graph.resources()
     writer.i32("resources.count", resources.size)
@@ -28,7 +30,7 @@ internal fun canonicalW4dGraphDigest(graph: RenderGraph): ByteArray {
 
     val passes = graph.passes()
     writer.i32("passes.count", passes.size)
-    passes.forEachIndexed { index, pass -> writer.pass("passes[$index]", pass) }
+    passes.forEachIndexed { index, pass -> writer.pass("passes[$index]", pass, materialV2) }
 
     val dependencies = graph.dependencies()
     writer.i32("dependencies.count", dependencies.size)
@@ -105,6 +107,28 @@ private class W4dGraphDigestWriter {
         }
     }
 
+    fun materialTable(table: MaterialPlanTable) {
+        i32("material-table.entry-count", table.sizeI32)
+        table.entries().forEachIndexed { index, entry ->
+            val prefix = "material-table.entries[$index]"
+            i32("$prefix.program.version", entry.program.versionI32)
+            text("$prefix.program.id", entry.program.structuralId.value)
+            when (val binding = entry.bindings) {
+                MaterialBindingPlan.EmptyV1 -> text("$prefix.binding", "empty-v1")
+                is MaterialBindingPlan.SolidRgbaF32V1 -> {
+                    text("$prefix.binding", "solid-rgba-f32-v1")
+                    val color = binding.copyRgbaF32()
+                    f32("$prefix.red", color.red); f32("$prefix.green", color.green)
+                    f32("$prefix.blue", color.blue); f32("$prefix.alpha", color.alpha)
+                }
+                is MaterialBindingPlan.OpacityF32V1 -> {
+                    text("$prefix.binding", "opacity-f32-v1")
+                    f32("$prefix.alpha", binding.alphaF32)
+                }
+            }
+        }
+    }
+
     fun resource(prefix: String, resource: PlanResource) {
         text("$prefix.id", resource.id.value)
         text("$prefix.role", resource.role.name)
@@ -136,7 +160,7 @@ private class W4dGraphDigestWriter {
         i32("$prefix.last-pass-exclusive", resource.lastPassIndexExclusive)
     }
 
-    fun pass(prefix: String, pass: PlanPass) {
+    fun pass(prefix: String, pass: PlanPass, materialV2: Boolean) {
         text("$prefix.id", pass.id.value)
         text("$prefix.role", pass.role.name)
         i32("$prefix.ordinal", pass.ordinal)
@@ -149,19 +173,19 @@ private class W4dGraphDigestWriter {
                 drawData("$prefix.draw-data", pass.drawDataResources)
                 val draws = pass.draws()
                 i32("$prefix.draws.count", draws.size)
-                draws.forEachIndexed { index, draw -> pathDraw("$prefix.draws[$index]", draw) }
+                draws.forEachIndexed { index, draw -> pathDraw("$prefix.draws[$index]", draw, materialV2) }
             }
             is PlanPass.StencilProducer -> {
                 text("$prefix.kind", "stencil-producer")
                 stencilPass(prefix, pass.target, pass.depthStencil, pass.draw, pass.drawDataResources,
                     pass.atomicGroup, pass.load, pass.store, pass.depthStencilAccess,
-                    pass.depthStencilLoadStore)
+                    pass.depthStencilLoadStore, materialV2)
             }
             is PlanPass.StencilCover -> {
                 text("$prefix.kind", "stencil-cover")
                 stencilPass(prefix, pass.target, pass.depthStencil, pass.draw, pass.drawDataResources,
                     pass.atomicGroup, pass.load, pass.store, pass.depthStencilAccess,
-                    pass.depthStencilLoadStore)
+                    pass.depthStencilLoadStore, materialV2)
             }
             is PlanPass.ReadbackPass -> {
                 text("$prefix.kind", "readback")
@@ -184,10 +208,11 @@ private class W4dGraphDigestWriter {
         store: AttachmentStorePlan,
         depthStencilAccess: PlanDepthStencilAccess,
         depthStencilLoadStore: PlanDepthStencilLoadStore,
+        materialV2: Boolean,
     ) {
         text("$prefix.target", target.value)
         text("$prefix.depth-stencil", depthStencil.value)
-        pathDraw("$prefix.draw", draw)
+        pathDraw("$prefix.draw", draw, materialV2)
         drawData("$prefix.draw-data", drawDataResources)
         text("$prefix.atomic-group", atomicGroup.value)
         text("$prefix.load", load.name)
@@ -205,7 +230,7 @@ private class W4dGraphDigestWriter {
         }
     }
 
-    private fun pathDraw(prefix: String, draw: PlanDraw) {
+    private fun pathDraw(prefix: String, draw: PlanDraw, materialV2: Boolean) {
         val pathDraw = draw as? PathDraw
             ?: throw IllegalArgumentException("W4d witness accepts only path draws")
         text("$prefix.type", when (pathDraw) {
@@ -213,10 +238,24 @@ private class W4dGraphDigestWriter {
             is PathStrokeDraw -> "stroke"
         })
         i32("$prefix.command-index", pathDraw.commandIndex)
-        f32("$prefix.color.red", pathDraw.color.red)
-        f32("$prefix.color.green", pathDraw.color.green)
-        f32("$prefix.color.blue", pathDraw.color.blue)
-        f32("$prefix.color.alpha", pathDraw.color.alpha)
+        if (materialV2) {
+            when (val authority = pathDraw.materialAuthority) {
+                is PlanDrawMaterialAuthority.MaterialV1 -> {
+                    text("$prefix.material-authority", "material-v1")
+                    i32("$prefix.material-ref", authority.ref.indexI32)
+                }
+                is PlanDrawMaterialAuthority.LegacyColorV1 ->
+                    throw IllegalArgumentException("W5a v2 seal requires a material authority")
+            }
+        } else {
+            val color = (pathDraw.materialAuthority as? PlanDrawMaterialAuthority.LegacyColorV1)
+                ?.copyColorF32()
+                ?: throw IllegalArgumentException("Historical v1 seal requires a legacy color authority")
+                f32("$prefix.color.red", color.red)
+                f32("$prefix.color.green", color.green)
+                f32("$prefix.color.blue", color.blue)
+                f32("$prefix.color.alpha", color.alpha)
+        }
         text("$prefix.coverage", pathDraw.coverage.name)
         text("$prefix.sample", pathDraw.sample.name)
         text("$prefix.blend", pathDraw.blend.name)

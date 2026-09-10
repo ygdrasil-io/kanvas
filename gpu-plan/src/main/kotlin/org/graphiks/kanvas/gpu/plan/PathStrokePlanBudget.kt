@@ -10,8 +10,11 @@ public object PathStrokePlanBudget {
         geometriesF32: Collection<PathFillGeometryF32>,
         capabilities: PlanCapabilitySnapshot,
         budget: PlanBudget,
+        usesW5aMaterialContract: Boolean = true,
     ): PathStrokePlanBudgetResult = when (
-        val result = PathFillPlanBudget.calculate(targetExtent, geometriesF32, capabilities, budget)
+        val result = PathFillPlanBudget.calculate(
+            targetExtent, geometriesF32, capabilities, budget, usesW5aMaterialContract,
+        )
     ) {
         is PathFillPlanBudgetResult.WithinBudget -> PathStrokePlanBudgetResult.WithinBudget(result.footprint)
         is PathFillPlanBudgetResult.Exceeded -> PathStrokePlanBudgetResult.Exceeded(

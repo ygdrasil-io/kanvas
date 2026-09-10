@@ -94,6 +94,14 @@ retirés qu'après preuve du remplacement. C'est l'approche retenue.
   et du nœud IR `GeometryNode.ImagePatch` ou `GeometryNode.ImageNine`, au lieu
   d'être transporté indirectement par `Paint.shader` puis perdu par la capture.
 
+W5a expose également `Shader.Opacity(shader, alphaF32)` comme wrapper public
+homonyme de `MaterialNode.Opacity`. Sa capture, son snapshot et son round-trip
+`Picture` sont versionnés ensemble. L'alpha doit être fini dans `[0,1]` avant
+la copie du child. Cela fournit une preuve publique directe des opacités
+imbriquées, de leurs neutralisations exactes et des cas zéro/un ; l'opacity
+effective dérivée de `Paint.color.alpha` reste une étape distincte et
+extérieure autour du shader capturé.
+
 Il ne contient ni WGSL, ni layout WebGPU, ni pipeline key native.
 
 ### 4.2 `:math`
@@ -253,6 +261,13 @@ inférée dans le WGSL. Les invariants de capture sont fermés :
 Toute autre combinaison est un refus de schéma. La présence de
 `PaintNode.shader` reste donc le discriminateur autoritaire entre couleur du
 paint et shader du paint, sans concurrencer l'`ImageSample` de l'opération.
+
+Un `Shader.Opacity` public est capturé sans aplatissement dans
+`MaterialNode.Opacity`. Le planner peut ensuite canoniser les wrappers
+adjacents selon 5.2. Pour un shader de paint, l'alpha du paint crée l'opacity
+effective extérieure : `Opacity(capturedShader, paint.color.alpha)`. Il ne se
+substitue donc jamais à un wrapper public intérieur et ne masque pas les tests
+d'ordre ou de double application.
 
 `coverage = geometryCoverage * clipCoverage` est un scalaire fini borné dans
 `[0,1]` et s'applique au résultat du blend, pas seulement à la source. Cette

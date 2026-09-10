@@ -498,7 +498,7 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
     deviceGeneration: GPUDeviceGenerationID,
     private val nativeFactory: GPUWgpu4kCorePrimitiveSessionNativeFactory =
         GPUWgpu4kCorePrimitiveDeviceSessionNativeFactory(device),
-) : AutoCloseable {
+) : AutoCloseable, GPUW5aGeometryPipelineTemplateProvider {
     private enum class State { Open, Closing, Closed }
 
     private var state = State.Open
@@ -517,9 +517,25 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
     private var creations = 0L
     private var reuses = 0L
 
-    private val framePool = GPUWgpu4kCorePrimitiveFramePool(
-        deviceGeneration,
-        object : GPUWgpu4kCorePrimitiveFramePoolFactory {
+    @Synchronized
+    override fun sourceTemplate(pipeline: GPURenderPipeline): GPUW5aGeometryPipelineTemplate? {
+        val (key, acquired) = live.entries.singleOrNull { it.value.pipeline === pipeline } ?: return null
+        val result = when (key.componentIdentity) {
+            PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY -> buildCorePrimitiveNativeShader()
+            PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY -> buildCorePrimitiveAnalyticShapeNativeShader()
+            PRODUCTION_CORE_PRIMITIVE_ANALYTIC_DRRECT_COMPONENT_IDENTITY -> buildCorePrimitiveAnalyticDRRectNativeShader()
+            PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY -> buildCorePrimitiveAnalyticClipNativeShader()
+            PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY -> buildCorePrimitiveAnalyticIntersection4NativeShader()
+            PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY -> buildCorePrimitiveCoverageMaskConsumerNativeShader()
+            else -> return null
+        }
+        val source = (result as? GPUCorePrimitiveNativeShaderResult.Ready)?.plan?.wgslSource ?: return null
+        return GPUW5aGeometryPipelineTemplate(source,
+            corePrimitiveWgpu4kRenderPipelineDescriptor(key.pipelineIdentity, acquired.shader, acquired.pipelineLayout),
+            acquired.bindGroupLayout)
+    }
+
+    private val framePoolFactory = object : GPUWgpu4kCorePrimitiveFramePoolFactory {
             override fun createVertexBuffer(capacityBytes: Long): GPUBuffer = device.createBuffer(
                 BufferDescriptor(
                     size = capacityBytes.toULong(),
@@ -668,8 +684,11 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
 
             override fun createMsaaColorView(texture: GPUTexture): GPUTextureView =
                 texture.createView()
-        },
-    )
+        }
+    private val framePool = GPUWgpu4kCorePrimitiveFramePool(deviceGeneration, framePoolFactory)
+    /** Composite lanes borrow independent exact ranges; the historical three-slot pool stays closed. */
+    private val w5aCompositePool = GPUWgpu4kCorePrimitiveFramePool(deviceGeneration, framePoolFactory,
+        org.graphiks.kanvas.gpu.plan.W5aCompositePlanCompiler.MAX_LANES_I32)
     private val w4eAttachmentPool = GPUWgpu4kW4eAttachmentPool(device, deviceGeneration)
 
     @Synchronized
@@ -737,6 +756,11 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
     ): GPUWgpu4kCorePrimitiveFramePoolCheckout = framePool.acquire(requirements)
 
     @Synchronized
+    fun acquireW5aCompositeFrame(
+        requirements: GPUWgpu4kCorePrimitiveFramePoolRequirements,
+    ): GPUWgpu4kCorePrimitiveFramePoolCheckout = w5aCompositePool.acquire(requirements)
+
+    @Synchronized
     fun acquireW4eAttachments(
         generation: GPUDeviceGenerationID,
         requirements: GPUW4eAttachmentPoolRequirements,
@@ -752,19 +776,19 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
 
     @Synchronized
     fun counters(): GPUCorePrimitiveNativeCacheCounters {
-        val pool = framePool.counters()
+        val pools = listOf(framePool.counters(), w5aCompositePool.counters())
         return GPUCorePrimitiveNativeCacheCounters(
             invariantCreations = creations,
             invariantReuses = reuses,
             invariantInvalidations = 0,
-            coverageMaskTextureCreations = pool.coverageMaskTextureCreations,
-            coverageMaskSlotReuses = pool.coverageMaskSlotReuses,
-            msaaColorTextureCreations = pool.msaaColorTextureCreations,
-            msaaColorSlotReuses = pool.msaaColorSlotReuses,
-            pathDepthStencilTextureCreations = pool.pathDepthStencilTextureCreations,
-            pathDepthStencilSlotReuses = pool.pathDepthStencilSlotReuses,
-            clipDepthStencilTextureCreations = pool.clipDepthStencilTextureCreations,
-            clipDepthStencilSlotReuses = pool.clipDepthStencilSlotReuses,
+            coverageMaskTextureCreations = pools.sumOf { it.coverageMaskTextureCreations },
+            coverageMaskSlotReuses = pools.sumOf { it.coverageMaskSlotReuses },
+            msaaColorTextureCreations = pools.sumOf { it.msaaColorTextureCreations },
+            msaaColorSlotReuses = pools.sumOf { it.msaaColorSlotReuses },
+            pathDepthStencilTextureCreations = pools.sumOf { it.pathDepthStencilTextureCreations },
+            pathDepthStencilSlotReuses = pools.sumOf { it.pathDepthStencilSlotReuses },
+            clipDepthStencilTextureCreations = pools.sumOf { it.clipDepthStencilTextureCreations },
+            clipDepthStencilSlotReuses = pools.sumOf { it.clipDepthStencilSlotReuses },
         )
     }
 
@@ -773,6 +797,7 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
         if (state == State.Closed) return
         state = State.Closing
         w4eAttachmentPool.close()
+        w5aCompositePool.close()
         framePool.close()
 
         live.keys.toList().asReversed().forEach { key ->

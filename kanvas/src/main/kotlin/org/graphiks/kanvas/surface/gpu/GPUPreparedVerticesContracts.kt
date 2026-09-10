@@ -6,15 +6,26 @@ import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesUploadArtif
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedVerticesMaterialPlanEmission
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesFloatBounds
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPrimitiveBlendPlan
+import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
+import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.RectF32
 
 /** The public operation semantic retained by one handle-free prepared vertices draw. */
 internal enum class GPUPreparedVerticesOperationKind { DrawVertices, DrawMesh }
+
+/** Sealed W5a material authority retained from capture through native preflight. */
+internal data class GPUPreparedVerticesMaterialPlan(
+    val table: MaterialPlanTable,
+    val ref: MaterialPlanRef,
+) {
+    init { table.entry(ref) }
+}
 
 /** Exact immutable clip decision retained by the prepared draw. */
 internal data class GPUPreparedVerticesClipSnapshot(
@@ -74,6 +85,8 @@ internal class GPUPreparedVerticesDraw private constructor(
     val artifact: GPUPreparedVerticesUploadArtifact,
     val operationKind: GPUPreparedVerticesOperationKind,
     val material: GPUPreparedMaterialProgram,
+    val materialPlan: GPUPreparedVerticesMaterialPlan?,
+    val materialPlanEmission: GPUPreparedVerticesMaterialPlanEmission?,
     val transform: Matrix3x3F32,
     clip: ClipStack,
     val clipSnapshot: GPUPreparedVerticesClipSnapshot,
@@ -100,6 +113,9 @@ internal class GPUPreparedVerticesDraw private constructor(
         require(paintAlphaApplicationCount == 1) {
             "Prepared vertices paint alpha must be applied exactly once"
         }
+        require((materialPlan == null) == (materialPlanEmission == null)) {
+            "Prepared vertices W5a plan and compiler emission must be paired"
+        }
     }
 
     /** Returns a fresh deep clip copy, so no mutable clip shape escapes. */
@@ -116,6 +132,8 @@ internal class GPUPreparedVerticesDraw private constructor(
             artifact: GPUPreparedVerticesUploadArtifact,
             operationKind: GPUPreparedVerticesOperationKind,
             material: GPUPreparedMaterialProgram,
+            materialPlan: GPUPreparedVerticesMaterialPlan? = null,
+            materialPlanEmission: GPUPreparedVerticesMaterialPlanEmission? = null,
             transform: Matrix3x3F32,
             clip: ClipStack,
             clipSnapshot: GPUPreparedVerticesClipSnapshot,
@@ -135,6 +153,8 @@ internal class GPUPreparedVerticesDraw private constructor(
             artifact = artifact,
             operationKind = operationKind,
             material = material,
+            materialPlan = materialPlan,
+            materialPlanEmission = materialPlanEmission,
             transform = Matrix3x3F32.of(
                 transform.sx, transform.kx, transform.tx,
                 transform.ky, transform.sy, transform.ty,

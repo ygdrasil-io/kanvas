@@ -33,12 +33,17 @@ public object PathFillPlanBudget {
         geometriesF32: Collection<PathFillGeometryF32>,
         capabilities: PlanCapabilitySnapshot,
         budget: PlanBudget,
+        usesW5aMaterialContract: Boolean = true,
     ): PathFillPlanBudgetResult {
         if (targetExtent.isEmpty() || geometriesF32.isEmpty()) {
             return PathFillPlanBudgetResult.Invalid(INVALID_INPUT)
         }
         return try {
-            val drawCount = geometriesF32.size.toLong()
+            // W5a splits a stencil fill into geometry-only producer and material color-cover
+            // uniforms. Historical v1 retains its one shared legacy-color slot.
+            val uniformPayloadCount = geometriesF32.sumOf { geometry ->
+                if (usesW5aMaterialContract && geometry.copyStencilEdgeFanF32OrNull() != null) 2L else 1L
+            }
             val targetPixelCount = Math.multiplyExact(targetExtent.width.toLong(), targetExtent.height.toLong())
             val targetBytes = Math.multiplyExact(targetPixelCount, PIXEL_BYTES)
             val widthBytes = Math.multiplyExact(targetExtent.width.toLong(), PIXEL_BYTES)
@@ -57,9 +62,9 @@ public object PathFillPlanBudget {
             val vertexUsefulBytes = Math.multiplyExact(vertexCount, VERTEX_BYTES)
             val indexUsefulBytes = Math.multiplyExact(indexCount, INDEX_BYTES)
             val uniformStrideBytes = alignUp(UNIFORM_BYTES, capabilities.minUniformBufferOffsetAlignment.toLong())
-            val uniformUsefulBytes = Math.multiplyExact(drawCount, UNIFORM_BYTES)
-            val uniformReservedBytes = Math.multiplyExact(drawCount, uniformStrideBytes)
-            val lastDynamicUniformOffsetBytes = Math.multiplyExact(drawCount - 1L, uniformStrideBytes)
+            val uniformUsefulBytes = Math.multiplyExact(uniformPayloadCount, UNIFORM_BYTES)
+            val uniformReservedBytes = Math.multiplyExact(uniformPayloadCount, uniformStrideBytes)
+            val lastDynamicUniformOffsetBytes = Math.multiplyExact(uniformPayloadCount - 1L, uniformStrideBytes)
             if (lastDynamicUniformOffsetBytes > UInt.MAX_VALUE.toLong()) {
                 return PathFillPlanBudgetResult.Invalid(UNIFORM_DYNAMIC_OFFSET_OVERFLOW)
             }

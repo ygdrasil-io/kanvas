@@ -107,7 +107,7 @@ class GPUWgpu4kCorePrimitiveW4cFramePayloadMaterializerTest {
         })
         assertEquals(listOf(0L, 1L, 1L, 2L), renders.map { it.drawPackets.single().sortKey })
         assertEquals(listOf(0L, 24L, 176L), scratch.draws.map { it.vertexOffsetBytes })
-        assertEquals(3, scratch.uniformPlan.slots.size)
+        assertEquals(4, scratch.uniformPlan.slots.size)
 
         val result = W4cExecutionFixture.preflight(frame)
         val prepared = assertIs<GPUFramePreflightResult.Prepared>(
@@ -165,8 +165,8 @@ class GPUWgpu4kCorePrimitiveW4cFramePayloadMaterializerTest {
                 },
             )
             assertEquals(
-                listOf(0L, scratch.uniformStrideBytes, scratch.uniformStrideBytes,
-                    scratch.uniformStrideBytes * 2L),
+                listOf(0L, scratch.uniformStrideBytes, scratch.uniformStrideBytes * 2L,
+                    scratch.uniformStrideBytes * 3L),
                 renders.flatMap { render ->
                     render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
                 }.map { command -> command.dynamicOffsets.single() },
@@ -923,16 +923,23 @@ class GPUWgpu4kCorePrimitiveW4cFramePayloadMaterializerTest {
         val packets = frame.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
         scratch.draws.forEach { draw ->
-            val semantic = assertIs<org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive>(
-                packets.first { packet -> packet.commandIdValue == draw.commandId }.semanticPayload,
-            )
-            val bytes = requireNotNull(semantic.payloadRef.uniformBlock).bytes
-                .map(Int::toByte)
-                .toByteArray()
-            bytes.copyInto(
-                packed,
-                destinationOffset = scratch.uniformPlan.slots[draw.uniformSlotIndex].alignedOffset.toInt(),
-            )
+            val expectedPackets = if (draw.producerUniformSlotIndex == null) {
+                listOf(GPUDrawPacketRole.Shading to draw.uniformSlotIndex)
+            } else {
+                listOf(
+                    GPUDrawPacketRole.PathStencilProducer to draw.producerUniformSlotIndex,
+                    GPUDrawPacketRole.PathStencilCover to draw.uniformSlotIndex,
+                )
+            }
+            expectedPackets.forEach { (role, slotIndex) ->
+                val semantic = assertIs<org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive>(
+                    packets.first { packet -> packet.commandIdValue == draw.commandId && packet.role == role }.semanticPayload,
+                )
+                requireNotNull(semantic.payloadRef.uniformBlock).bytes.map(Int::toByte).toByteArray().copyInto(
+                    packed,
+                    destinationOffset = scratch.uniformPlan.slots[slotIndex].alignedOffset.toInt(),
+                )
+            }
         }
     }
 
@@ -1201,6 +1208,7 @@ class GPUWgpu4kCorePrimitiveW4cFramePayloadMaterializerTest {
         indexOffsetBytes = indexOffsetBytes,
         indexRangeBytes = indexRangeBytes,
         uniformSlotIndex = uniformSlotIndex,
+        producerUniformSlotIndex = producerUniformSlotIndex,
         atomicGroupId = atomicGroupId,
     )
 
@@ -1511,6 +1519,10 @@ internal object W4cExecutionFixture {
             GPUTextureFormat.RGBA8UnormSrgb,
             GPUTextureFormat.Depth24PlusStencil8,
         ),
+        supportedTextureUsage = GPUTextureUsage.RenderAttachment or
+            GPUTextureUsage.CopySrc or
+            GPUTextureUsage.CopyDst or
+            GPUTextureUsage.TextureBinding,
         textureFormatSampleSupport = GPUTextureFormatSampleSupport(
             mapOf(
                 GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(setOf(1)),

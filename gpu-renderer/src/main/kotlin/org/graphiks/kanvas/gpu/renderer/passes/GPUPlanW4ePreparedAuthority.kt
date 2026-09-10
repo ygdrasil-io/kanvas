@@ -19,6 +19,8 @@ import org.graphiks.kanvas.gpu.plan.PathRenderPhase
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.SamplePlan
 import org.graphiks.kanvas.gpu.plan.W4eClipPlanCompiler
+import org.graphiks.kanvas.gpu.plan.hasLegacyPathColorContract
+import org.graphiks.kanvas.gpu.plan.hasW5aMaterialPathContract
 import org.graphiks.kanvas.gpu.plan.W4eNativePayloadPlan
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
@@ -142,7 +144,7 @@ public sealed interface GPUW4ePreparedClipPassAuthority {
         public val passId: String,
         public val commandIdValue: Int,
         public val phase: PathRenderPhase,
-        public val color: org.graphiks.math.color.ColorF32,
+        public val materialAuthority: org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority,
         public val fillStrategy: PathFillStrategy,
         public val coverage: CoveragePlan,
         public val blend: BlendPlan,
@@ -188,6 +190,7 @@ public sealed interface GPUW4ePreparedClipGeometry {
 
 /** Immutable W4e trust boundary: lowering consumes only a compiler-sealed graph snapshot. */
 internal class GPUPlanW4ePreparedAuthority private constructor(
+    private val version: String,
     private val planId: String,
     private val capabilityId: String,
     private val resourceFacts: List<String>,
@@ -224,7 +227,8 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
     )
 
     fun revalidates(graph: RenderGraph): Boolean =
-        graph.verifyW4eCompilerWitness() &&
+        version == versionForCapability(capabilityId) &&
+            graph.verifyW4eCompilerWitness() &&
             graph.w4eNativePayloadOrNull() === nativePayload &&
             nativePayload.matchesDeclaredResources(graph.resources()) &&
             graph.id.value == planId &&
@@ -233,11 +237,20 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
             graph.passes().map(PlanPass::id).map { it.value } == passFacts
 
     companion object {
+        private const val VERSION: String = "w4e-prepared-authority-v1"
+        private const val W5A_VERSION: String = "w4e-prepared-authority-w5a-material-v2"
+
         fun issueAfterFullGraphValidation(graph: RenderGraph): GPUPlanW4ePreparedAuthority {
-            require(graph.capabilityId in setOf(
-                W4eClipPlanCompiler.HARD_CAPABILITY_ID,
-                W4eClipPlanCompiler.AA_CAPABILITY_ID,
-            ) && graph.verifyW4eCompilerWitness()) {
+            require(
+                (W4eClipPlanCompiler.isLegacyCapabilityId(graph.capabilityId) ||
+                    W4eClipPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) &&
+                    graph.verifyW4eCompilerWitness() &&
+                    if (W4eClipPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) {
+                        graph.hasW5aMaterialPathContract()
+                    } else {
+                        graph.hasLegacyPathColorContract()
+                    },
+            ) {
                 "W4e prepared authority requires the compiler-authenticated graph"
             }
             val nativePayload = requireNotNull(graph.w4eNativePayloadOrNull()) {
@@ -247,6 +260,7 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
                 "W4e graph V/I/U resources differ from their compiler-sealed native payload"
             }
             return GPUPlanW4ePreparedAuthority(
+                versionForCapability(graph.capabilityId),
                 graph.id.value,
                 graph.capabilityId,
                 graph.resources().map(::resourceFact),
@@ -260,7 +274,7 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
                         pass.id.value,
                         pass.draw.commandIndex,
                         pass.phase,
-                        pass.draw.color,
+                        pass.draw.materialAuthority,
                         pass.draw.strategy,
                         pass.draw.coverage,
                         pass.draw.blend,
@@ -286,6 +300,9 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
                 nativePayload,
             )
         }
+
+        private fun versionForCapability(capabilityId: String): String =
+            if (W4eClipPlanCompiler.isW5aMaterialCapabilityId(capabilityId)) W5A_VERSION else VERSION
 
         private fun consumerFact(
             pass: PlanPass.PathRenderPass,

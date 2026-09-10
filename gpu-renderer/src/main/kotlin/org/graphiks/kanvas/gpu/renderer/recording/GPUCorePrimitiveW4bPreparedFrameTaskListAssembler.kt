@@ -20,6 +20,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchAdjacency
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
 import org.graphiks.kanvas.gpu.renderer.passes.W4bSessionScratchV1
+import org.graphiks.kanvas.gpu.renderer.passes.W5aAnalyticRRectSessionScratchV2
+import org.graphiks.kanvas.gpu.renderer.passes.W5aMaterialPlanVersionWitnessV2
 import org.graphiks.kanvas.gpu.renderer.passes.buildCorePrimitiveAnalyticShapeUniform
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_RENDER_STEP_IDENTITY
@@ -60,6 +62,8 @@ internal data class GPUCorePrimitiveW4bPreparedFrameRequest(
     val copyBytesPerRowAlignment: Long,
     val readbackBytesPerRow: Long,
     val scratch: W4bSessionScratchV1,
+    val w5aMaterialWitness: W5aMaterialPlanVersionWitnessV2? = null,
+    val compositeWitness: GPUW5aCompositeLaneWitnessV1? = null,
 )
 
 /**
@@ -149,6 +153,9 @@ internal class GPUCorePrimitiveW4bPreparedFrameTaskListAssembler {
         packets: List<GPUDrawPacket>,
     ): List<GPUDrawPacket>? {
         val scratch = request.scratch
+        val w5aScratch = request.w5aMaterialWitness?.let { witness ->
+            W5aAnalyticRRectSessionScratchV2.issue(scratch, witness) ?: return null
+        }
         val payloads = packets.mapIndexed { index, packet ->
             val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive ?: return null
             val authority = GPUCorePrimitivePreparedSemanticAuthority.capture(semantic)
@@ -197,11 +204,15 @@ internal class GPUCorePrimitiveW4bPreparedFrameTaskListAssembler {
             }
             try {
                 packet.attachCorePrimitivePreparedAuthority(
-                    GPUCorePrimitivePreparedPacketAuthority.plannedW4b(
-                        structuralPipelineKey = scratch.structuralPipelineKey,
-                        renderPipelineKey = publicPipelineKey,
-                        scratch = scratch,
-                    ).copy(analyticShapeUniformSeal = seal),
+                    if (w5aScratch == null) {
+                        GPUCorePrimitivePreparedPacketAuthority.plannedW4b(
+                            scratch.structuralPipelineKey, publicPipelineKey, scratch,
+                        ).copy(analyticShapeUniformSeal = seal)
+                    } else {
+                        GPUCorePrimitivePreparedPacketAuthority.plannedW5aRRect(
+                            scratch.structuralPipelineKey, publicPipelineKey, w5aScratch,
+                        ).copy(analyticShapeUniformSeal = seal)
+                    },
                 )
             } catch (_: IllegalArgumentException) {
                 return null
@@ -214,6 +225,10 @@ internal class GPUCorePrimitiveW4bPreparedFrameTaskListAssembler {
         request: GPUCorePrimitiveW4bPreparedFrameRequest,
         render: GPUTask.Render,
     ): Boolean {
+        if (request.compositeWitness?.let { witness ->
+                witness.planId != request.planId.value || witness.packetIds != render.drawPackets.map(GPUDrawPacket::packetId) ||
+                    request.target.value != "${witness.sessionIdentity}.target" || request.staging.value != "${witness.sessionIdentity}.staging"
+            } == true) return false
         val targetDescriptor = request.targetPreparation.descriptor as? GPUFrameTextureDescriptor ?: return false
         val stagingDescriptor = request.stagingPreparation.descriptor as? GPUFrameBufferDescriptor ?: return false
         val scratch = request.scratch

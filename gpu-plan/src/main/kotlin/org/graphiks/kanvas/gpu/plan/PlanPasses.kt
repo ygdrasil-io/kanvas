@@ -109,6 +109,12 @@ public sealed interface PathDrawGeometry {
 public sealed interface PlanDraw {
     public val commandIndex: Int
     public val color: ColorF32
+    /**
+     * The closed material authority consumed by a renderer.  Pre-W5 draw kinds retain their
+     * colour through the legacy arm; W5 draws use only the material-table reference.
+     */
+    public val materialAuthority: PlanDrawMaterialAuthority
+        get() = PlanDrawMaterialAuthority.LegacyColorV1.of(color)
     public val coverage: CoveragePlan
     public val sample: SamplePlan
     public val blend: BlendPlan
@@ -121,6 +127,7 @@ public class ClippedPlanDraw private constructor(
 ) : PlanDraw {
     override public val commandIndex: Int get() = source.commandIndex
     override public val color: ColorF32 get() = source.color
+    override public val materialAuthority: PlanDrawMaterialAuthority get() = source.materialAuthority
     override public val coverage: CoveragePlan get() = source.coverage
     override public val sample: SamplePlan get() = source.sample
     override public val blend: BlendPlan get() = source.blend
@@ -141,7 +148,7 @@ public sealed interface PathDraw : PlanDraw {
 /** Typed W4d.2 path draw snapshot for a single-sample hard producer or a four-sample AA color draw. */
 public class GeneralPathDraw private constructor(
     override public val commandIndex: Int,
-    override public val color: ColorF32,
+    override public val materialAuthority: PlanDrawMaterialAuthority,
     geometry: PathDrawGeometry,
     override public val strategy: PathFillStrategy,
     scissorI32: RectI32,
@@ -156,6 +163,11 @@ public class GeneralPathDraw private constructor(
     override fun copyPathGeometry(): PathDrawGeometry = geometrySnapshot
 
     override fun copyScissorI32(): RectI32 = scissorSnapshotI32.copy()
+
+    /** Legacy-only compatibility view. W5 path draws carry no reconstructed colour. */
+    override public val color: ColorF32
+        get() = (materialAuthority as? PlanDrawMaterialAuthority.LegacyColorV1)?.copyColorF32()
+            ?: throw IllegalStateException("W5 material draws have no legacy colour authority")
 
     public companion object {
         public fun of(
@@ -174,14 +186,37 @@ public class GeneralPathDraw private constructor(
                     (coverage == CoveragePlan.StencilAA4 && sample == SamplePlan.Multisample4),
             ) { "General path draws require an explicit hard or four-sample AA contract" }
             requirePathRenderGeometryForStrategy(geometry, strategy)
-            return GeneralPathDraw(commandIndex, color, geometry, strategy, scissorI32, coverage, sample)
+            return GeneralPathDraw(
+                commandIndex, PlanDrawMaterialAuthority.LegacyColorV1.of(color), geometry, strategy, scissorI32, coverage, sample,
+            )
+        }
+
+        public fun ofMaterial(
+            commandIndexI32: Int,
+            material: MaterialPlanRef,
+            geometry: PathDrawGeometry,
+            strategy: PathFillStrategy,
+            scissorI32: RectI32,
+            coverage: CoveragePlan,
+            sample: SamplePlan,
+        ): GeneralPathDraw {
+            require(commandIndexI32 >= 0) { "Command index must not be negative" }
+            require(!scissorI32.isEmpty) { "General path scissor must be non-empty" }
+            require(
+                (coverage == CoveragePlan.FullOrScissor && sample == SamplePlan.SingleSample) ||
+                    (coverage == CoveragePlan.StencilAA4 && sample == SamplePlan.Multisample4),
+            ) { "General path draws require an explicit hard or four-sample AA contract" }
+            requirePathRenderGeometryForStrategy(geometry, strategy)
+            return GeneralPathDraw(
+                commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material), geometry, strategy, scissorI32, coverage, sample,
+            )
         }
 
         /** W4e uses this form only for a source path that contained no segments at all. */
         internal fun w4eActuallyEmptyInverseDomainOf(source: GeneralPathDraw): GeneralPathDraw =
             GeneralPathDraw(
                 source.commandIndex,
-                source.color,
+                source.materialAuthority,
                 PathDrawGeometry.Empty,
                 source.strategy,
                 source.copyScissorI32(),
@@ -195,7 +230,7 @@ public class GeneralPathDraw private constructor(
             geometry: PathDrawGeometry.InverseDomainSource,
         ): GeneralPathDraw = GeneralPathDraw(
             source.commandIndex,
-            source.color,
+            source.materialAuthority,
             geometry,
             source.strategy,
             source.copyScissorI32(),
@@ -212,6 +247,7 @@ public class ClippedGeneralPathDraw private constructor(
 ) : PathRenderDraw {
     override public val commandIndex: Int get() = source.commandIndex
     override public val color: ColorF32 get() = source.color
+    override public val materialAuthority: PlanDrawMaterialAuthority get() = source.materialAuthority
     override public val strategy: PathFillStrategy get() = source.strategy
     override public val coverage: CoveragePlan get() = source.coverage
     override public val sample: SamplePlan get() = source.sample
@@ -232,7 +268,8 @@ public class BinaryMaskedPathDraw private constructor(
     public val mask: PlanResourceId,
 ) : PathRenderDraw {
     override public val commandIndex: Int = producer.commandIndex
-    override public val color: ColorF32 = producer.color
+    override public val color: ColorF32 get() = producer.color
+    override public val materialAuthority: PlanDrawMaterialAuthority = producer.materialAuthority
     override public val strategy: PathFillStrategy = producer.strategy
     override public val coverage: CoveragePlan = CoveragePlan.BinaryMaskCover4
     override public val sample: SamplePlan = SamplePlan.Multisample4
@@ -261,6 +298,7 @@ public class ClippedBinaryMaskedPathDraw private constructor(
 ) : PathRenderDraw {
     override public val commandIndex: Int get() = source.commandIndex
     override public val color: ColorF32 get() = source.color
+    override public val materialAuthority: PlanDrawMaterialAuthority get() = source.materialAuthority
     override public val strategy: PathFillStrategy get() = source.strategy
     override public val coverage: CoveragePlan get() = source.coverage
     override public val sample: SamplePlan get() = source.sample
@@ -286,7 +324,7 @@ public sealed interface PathRenderDraw : PlanDraw {
 
 public class SolidRectDraw private constructor(
     override public val commandIndex: Int,
-    override public val color: ColorF32,
+    override public val materialAuthority: PlanDrawMaterialAuthority,
     visibleBounds: RectI32,
     scissor: RectI32,
     override public val coverage: CoveragePlan,
@@ -298,6 +336,11 @@ public class SolidRectDraw private constructor(
 
     public fun copyVisibleBounds(): RectI32 = storedVisibleBounds.copy()
     public fun copyScissor(): RectI32 = storedScissor.copy()
+
+    /** Legacy-only compatibility view. W5 draws never carry a duplicated colour value. */
+    override public val color: ColorF32
+        get() = (materialAuthority as? PlanDrawMaterialAuthority.LegacyColorV1)?.copyColorF32()
+            ?: throw IllegalStateException("W5 material draws have no legacy colour authority")
 
     public companion object {
         public fun of(
@@ -311,14 +354,41 @@ public class SolidRectDraw private constructor(
         ): SolidRectDraw {
             require(commandIndex >= 0) { "Command index must be non-negative" }
             require(!visibleBounds.isEmpty && !scissor.isEmpty) { "Draw rectangles must be non-empty" }
-            return SolidRectDraw(commandIndex, color, visibleBounds, scissor, coverage, sample, blend)
+            return SolidRectDraw(
+                commandIndex,
+                PlanDrawMaterialAuthority.LegacyColorV1.of(color),
+                visibleBounds,
+                scissor,
+                coverage,
+                sample,
+                blend,
+            )
+        }
+
+        public fun ofMaterial(
+            commandIndexI32: Int,
+            material: MaterialPlanRef,
+            visibleBounds: RectI32,
+            scissor: RectI32,
+            coverage: CoveragePlan = CoveragePlan.FullOrScissor,
+            sample: SamplePlan = SamplePlan.SingleSample,
+            blend: BlendPlan = BlendPlan.SrcOver,
+        ): SolidRectDraw {
+            require(commandIndexI32 >= 0) { "Command index must be non-negative" }
+            require(!visibleBounds.isEmpty && !scissor.isEmpty) { "Draw rectangles must be non-empty" }
+            return SolidRectDraw(commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material), visibleBounds, scissor, coverage, sample, blend)
         }
     }
 }
 
+/** Reissues only the sealed W5 material reference; geometry and raster facts are copied verbatim. */
+public fun SolidRectDraw.withMaterialRef(material: MaterialPlanRef): SolidRectDraw = SolidRectDraw.ofMaterial(
+    commandIndex, material, copyVisibleBounds(), copyScissor(), coverage, sample, blend,
+)
+
 public class AnalyticRectDraw private constructor(
     override public val commandIndex: Int,
-    override public val color: ColorF32,
+    override public val materialAuthority: PlanDrawMaterialAuthority,
     deviceBounds: RectF32,
     rasterBounds: RectI32,
     scissor: RectI32,
@@ -334,6 +404,11 @@ public class AnalyticRectDraw private constructor(
     public fun copyRasterBounds(): RectI32 = storedRasterBounds.copy()
     public fun copyScissor(): RectI32 = storedScissor.copy()
 
+    /** Legacy-only compatibility view. W5 draws never carry a duplicated colour value. */
+    override public val color: ColorF32
+        get() = (materialAuthority as? PlanDrawMaterialAuthority.LegacyColorV1)?.copyColorF32()
+            ?: throw IllegalStateException("W5 material draws have no legacy colour authority")
+
     public companion object {
         public fun of(
             commandIndex: Int,
@@ -346,14 +421,40 @@ public class AnalyticRectDraw private constructor(
             require(!deviceBounds.isEmpty && !rasterBounds.isEmpty && !scissor.isEmpty) {
                 "Draw rectangles must be non-empty"
             }
-            return AnalyticRectDraw(commandIndex, color, deviceBounds, rasterBounds, scissor)
+            return AnalyticRectDraw(
+                commandIndex,
+                PlanDrawMaterialAuthority.LegacyColorV1.of(color),
+                deviceBounds,
+                rasterBounds,
+                scissor,
+            )
+        }
+
+        public fun ofMaterial(
+            commandIndexI32: Int,
+            material: MaterialPlanRef,
+            deviceBounds: RectF32,
+            rasterBounds: RectI32,
+            scissor: RectI32,
+        ): AnalyticRectDraw {
+            require(commandIndexI32 >= 0) { "Command index must not be negative" }
+            require(!deviceBounds.isEmpty && !rasterBounds.isEmpty && !scissor.isEmpty) {
+                "Draw rectangles must be non-empty"
+            }
+            return AnalyticRectDraw(
+                commandIndexI32,
+                PlanDrawMaterialAuthority.MaterialV1(material),
+                deviceBounds,
+                rasterBounds,
+                scissor,
+            )
         }
     }
 }
 
 public class AnalyticRRectDraw private constructor(
     override public val commandIndex: Int,
-    override public val color: ColorF32,
+    override public val materialAuthority: PlanDrawMaterialAuthority,
     public val origin: DrawOrigin,
     deviceShape: RRectF32,
     rasterBounds: RectI32,
@@ -382,6 +483,11 @@ public class AnalyticRRectDraw private constructor(
     public fun copyRasterBounds(): RectI32 = storedRasterBounds.copy()
     public fun copyScissor(): RectI32 = storedScissor.copy()
 
+    /** Legacy-only compatibility view. W5 draws never carry a duplicated colour value. */
+    override public val color: ColorF32
+        get() = (materialAuthority as? PlanDrawMaterialAuthority.LegacyColorV1)?.copyColorF32()
+            ?: throw IllegalStateException("W5 material draws have no legacy colour authority")
+
     public companion object {
         public fun of(
             commandIndex: Int,
@@ -398,15 +504,52 @@ public class AnalyticRRectDraw private constructor(
             require(!deviceShape.rect.isEmpty && !rasterBounds.isEmpty && !scissor.isEmpty) {
                 "Draw rectangles must be non-empty"
             }
-            return AnalyticRRectDraw(commandIndex, color, origin, deviceShape, rasterBounds, scissor)
+            return AnalyticRRectDraw(
+                commandIndex,
+                PlanDrawMaterialAuthority.LegacyColorV1.of(color),
+                origin,
+                deviceShape,
+                rasterBounds,
+                scissor,
+            )
+        }
+
+        public fun ofMaterial(
+            commandIndexI32: Int,
+            material: MaterialPlanRef,
+            origin: DrawOrigin,
+            deviceShape: RRectF32,
+            rasterBounds: RectI32,
+            scissor: RectI32,
+        ): AnalyticRRectDraw {
+            require(commandIndexI32 >= 0) { "Command index must not be negative" }
+            require(origin == DrawOrigin.RECT || origin == DrawOrigin.RRECT) {
+                "Analytic rrect draws require RECT or RRECT origin"
+            }
+            require(!deviceShape.rect.isEmpty && !rasterBounds.isEmpty && !scissor.isEmpty) {
+                "Draw rectangles must be non-empty"
+            }
+            return AnalyticRRectDraw(
+                commandIndexI32,
+                PlanDrawMaterialAuthority.MaterialV1(material),
+                origin,
+                deviceShape,
+                rasterBounds,
+                scissor,
+            )
         }
     }
 }
 
+/** Reissues only the sealed W5 material reference; analytic RRect geometry remains native. */
+public fun AnalyticRRectDraw.withMaterialRef(material: MaterialPlanRef): AnalyticRRectDraw = AnalyticRRectDraw.ofMaterial(
+    commandIndex, material, origin, copyDeviceShape(), copyRasterBounds(), copyScissor(),
+)
+
 /** A sealed W4c path-fill draw whose geometry authority remains owned by `:math`. */
 public class PathFillDraw private constructor(
     override public val commandIndex: Int,
-    override public val color: ColorF32,
+    override public val materialAuthority: PlanDrawMaterialAuthority,
     geometryF32: PathFillGeometryF32,
     override public val strategy: PathFillStrategy,
     scissorI32: RectI32,
@@ -418,6 +561,11 @@ public class PathFillDraw private constructor(
     private val scissorSnapshotI32 = scissorI32.copy()
 
     public fun copyGeometryF32(): PathFillGeometryF32 = geometrySnapshotF32
+
+    /** Legacy-only compatibility view. W5 path draws carry no reconstructed colour. */
+    override public val color: ColorF32
+        get() = (materialAuthority as? PlanDrawMaterialAuthority.LegacyColorV1)?.copyColorF32()
+            ?: throw IllegalStateException("W5 material draws have no legacy colour authority")
 
     override fun copyPathGeometry(): PathDrawGeometry = PathDrawGeometry.Fill(geometrySnapshotF32)
 
@@ -443,15 +591,46 @@ public class PathFillDraw private constructor(
                         geometryF32.copyStencilEdgeFanF32OrNull() != null,
                 ) { "Stencil path fills require edge-fan geometry" }
             }
-            return PathFillDraw(commandIndex, color, geometryF32, strategy, scissorI32)
+            return PathFillDraw(commandIndex, PlanDrawMaterialAuthority.LegacyColorV1.of(color), geometryF32, strategy, scissorI32)
+        }
+
+        public fun ofMaterial(
+            commandIndexI32: Int,
+            material: MaterialPlanRef,
+            geometryF32: PathFillGeometryF32,
+            strategy: PathFillStrategy,
+            scissorI32: RectI32,
+        ): PathFillDraw = ofAuthority(
+            commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material), geometryF32, strategy, scissorI32,
+        )
+
+        private fun ofAuthority(
+            commandIndex: Int,
+            authority: PlanDrawMaterialAuthority,
+            geometryF32: PathFillGeometryF32,
+            strategy: PathFillStrategy,
+            scissorI32: RectI32,
+        ): PathFillDraw {
+            require(commandIndex >= 0) { "Command index must not be negative" }
+            require(!scissorI32.isEmpty) { "Path fill scissor must be non-empty" }
+            when (strategy) {
+                PathFillStrategy.DirectTriangle -> require(geometryF32.copyDirectTriangleF32OrNull() != null && geometryF32.copyStencilEdgeFanF32OrNull() == null)
+                PathFillStrategy.StencilCover -> require(geometryF32.copyDirectTriangleF32OrNull() == null && geometryF32.copyStencilEdgeFanF32OrNull() != null)
+            }
+            return PathFillDraw(commandIndex, authority, geometryF32, strategy, scissorI32)
         }
     }
 }
 
+/** Reissues only the sealed W5 material reference; no Path is reconstructed from another shape. */
+public fun PathFillDraw.withMaterialRef(material: MaterialPlanRef): PathFillDraw = PathFillDraw.ofMaterial(
+    commandIndex, material, copyGeometryF32(), strategy, copyScissorI32(),
+)
+
 /** A sealed W4d stroke draw whose immutable geometry authority remains owned by `:math`. */
 public class PathStrokeDraw private constructor(
     override public val commandIndex: Int,
-    override public val color: ColorF32,
+    override public val materialAuthority: PlanDrawMaterialAuthority,
     geometryF32: PathStrokeGeometryF32,
     public val mode: PathStrokeDrawMode,
     public val styleF64: PathStrokeStyleF64,
@@ -465,6 +644,11 @@ public class PathStrokeDraw private constructor(
     override val strategy: PathFillStrategy = pathFillStrategy(geometryF32.copyFillGeometryF32())
 
     public fun copyGeometryF32(): PathStrokeGeometryF32 = geometrySnapshotF32
+
+    /** Legacy-only compatibility view. W5 path draws carry no reconstructed colour. */
+    override public val color: ColorF32
+        get() = (materialAuthority as? PlanDrawMaterialAuthority.LegacyColorV1)?.copyColorF32()
+            ?: throw IllegalStateException("W5 material draws have no legacy colour authority")
 
     override fun copyPathGeometry(): PathDrawGeometry = PathDrawGeometry.Stroke(geometrySnapshotF32)
 
@@ -484,7 +668,25 @@ public class PathStrokeDraw private constructor(
             require(commandIndex >= 0) { "Command index must not be negative" }
             require(!scissorI32.isEmpty) { "Path stroke scissor must be non-empty" }
             pathFillStrategy(geometryF32.copyFillGeometryF32())
-            return PathStrokeDraw(commandIndex, color, geometryF32, mode, styleF64, scissorI32)
+            return PathStrokeDraw(commandIndex, PlanDrawMaterialAuthority.LegacyColorV1.of(color), geometryF32, mode, styleF64, scissorI32)
+        }
+
+        public fun ofMaterial(
+            commandIndexI32: Int,
+            material: MaterialPlanRef,
+            geometryF32: PathStrokeGeometryF32,
+            scissorI32: RectI32,
+            mode: PathStrokeDrawMode = PathStrokeDrawMode.Stroke,
+            styleF64: PathStrokeStyleF64 = PathStrokeStyleF64(
+                PathStrokeWidthF64.Hairline, PathStrokeCap.Butt, PathStrokeJoin.Miter, 4.0,
+            ),
+        ): PathStrokeDraw {
+            require(commandIndexI32 >= 0) { "Command index must not be negative" }
+            require(!scissorI32.isEmpty) { "Path stroke scissor must be non-empty" }
+            pathFillStrategy(geometryF32.copyFillGeometryF32())
+            return PathStrokeDraw(
+                commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material), geometryF32, mode, styleF64, scissorI32,
+            )
         }
     }
 }

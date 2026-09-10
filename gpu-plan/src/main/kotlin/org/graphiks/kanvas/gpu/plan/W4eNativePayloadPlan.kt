@@ -85,6 +85,7 @@ public class W4eNativePayloadPlan private constructor(
             resources: List<PlanResource>,
             targetExtent: SizeI32,
             capabilities: PlanCapabilitySnapshot,
+            materialPlanTable: MaterialPlanTable?,
         ): W4eNativePayloadPlan? = try {
             if (targetExtent.isEmpty()) return null
             val pathPasses = passes.filterIsInstance<PlanPass.PathRenderPass>()
@@ -170,7 +171,14 @@ public class W4eNativePayloadPlan private constructor(
                             return null
                         }
                     }
-                    is PlanPass.PathRenderPass -> if (!collectPathPayload(pass, resourcesById, ::addGeometry, ::addDirectGeometry, ::addUniform)) {
+                    is PlanPass.PathRenderPass -> if (!collectPathPayload(
+                            pass,
+                            resourcesById,
+                            materialPlanTable,
+                            ::addGeometry,
+                            ::addDirectGeometry,
+                            ::addUniform,
+                        )) {
                         return null
                     }
                     else -> Unit
@@ -239,10 +247,20 @@ public class W4eNativePayloadPlan private constructor(
         private fun collectPathPayload(
             pass: PlanPass.PathRenderPass,
             resourcesById: Map<PlanResourceId, PlanResource>,
+            materialPlanTable: MaterialPlanTable?,
             addGeometry: (String, String, FloatArray, IntArray) -> Boolean,
             addDirectGeometry: (String, String, PathFillGeometryF32) -> Boolean,
             addUniform: (String, String, FloatArray) -> Boolean,
         ): Boolean {
+            fun materialColor(): org.graphiks.math.color.ColorF32? = when (val authority = pass.draw.materialAuthority) {
+                is PlanDrawMaterialAuthority.MaterialV1 -> materialPlanTable?.let { table ->
+                    // W5a material source is evaluated by the renderer fragment DAG. This
+                    // historical geometry block does not own a flattened material value.
+                    table.entry(authority.ref)
+                    org.graphiks.math.color.ColorF32.Transparent
+                }
+                is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
+            }
             fun drawableGeometry(): PathFillGeometryF32? = when (val geometry = pass.draw.copyPathGeometry()) {
                 is PathDrawGeometry.Fill -> geometry.valueF32
                 is PathDrawGeometry.Stroke -> geometry.valueF32.copyFillGeometryF32()
@@ -291,11 +309,11 @@ public class W4eNativePayloadPlan private constructor(
                 return addUniform(pass.id.value, STENCIL_COVER_UNIFORM, when (consumer) {
                     is ClipPlanStrategy.Mask,
                     is ClipPlanStrategy.InverseMask,
-                    -> color8(pass.draw.color)
+                    -> color8(materialColor() ?: return false)
                     is ClipPlanStrategy.InverseDomain,
                     null,
-                    -> color4(pass.draw.color)
-                    else -> color4(pass.draw.color)
+                    -> color4(materialColor() ?: return false)
+                    else -> color4(materialColor() ?: return false)
                 })
             }
             if (consumer is ClipPlanStrategy.InverseDomain &&
@@ -304,7 +322,7 @@ public class W4eNativePayloadPlan private constructor(
                 val inverse = consumer.geometryF32
                 return when (val interior = inverse.interiorCoverageF32) {
                     InverseInteriorCoverageF32.Zero -> {
-                        if (!addUniform(pass.id.value, INVERSE_DOMAIN_ZERO_UNIFORM, color4(pass.draw.color))) return false
+                        if (!addUniform(pass.id.value, INVERSE_DOMAIN_ZERO_UNIFORM, color4(materialColor() ?: return false))) return false
                         geometry?.copyDirectTriangleF32OrNull()?.let { direct ->
                             addGeometry(
                                 pass.id.value,
@@ -315,7 +333,11 @@ public class W4eNativePayloadPlan private constructor(
                         } ?: true
                     }
                     is InverseInteriorCoverageF32.Geometry -> {
-                        if (geometry == null || !addUniform(pass.id.value, INVERSE_DOMAIN_UNIFORM, color4(pass.draw.color))) return false
+                        if (geometry == null || !addUniform(
+                                pass.id.value,
+                                INVERSE_DOMAIN_UNIFORM,
+                                color4(materialColor() ?: return false),
+                            )) return false
                         val domain = inverse.copyDomainI32()
                         if (!addGeometry(
                                 pass.id.value,
@@ -339,7 +361,11 @@ public class W4eNativePayloadPlan private constructor(
             if (!addUniform(
                     pass.id.value,
                     CONSUMER_UNIFORM,
-                    if (consumer == null) color4(pass.draw.color) else color8(pass.draw.color, inverseMask),
+                    if (consumer == null) {
+                        color4(materialColor() ?: return false)
+                    } else {
+                        color8(materialColor() ?: return false, inverseMask)
+                    },
                 )
             ) return false
             return direct?.let {

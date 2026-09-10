@@ -283,6 +283,16 @@ internal class GPUCorePrimitiveNativeScopeFrameRouteSeal(
 ) {
     private val routesByFrameKey = immutableMap(routesByFrameKey)
 
+
+    /** Exact relocation of sealed lane ranges into the composite frame's step coordinates. */
+    fun reindexed(indices: Map<Int, Int>): GPUCorePrimitiveNativeScopeFrameRouteSeal = GPUCorePrimitiveNativeScopeFrameRouteSeal(
+        routesByFrameKey.mapKeys { (key, _) -> key.copy(sourceStepIndex = indices.getValue(key.sourceStepIndex)) },
+    )
+
+    fun appended(other: GPUCorePrimitiveNativeScopeFrameRouteSeal): GPUCorePrimitiveNativeScopeFrameRouteSeal {
+        require(routesByFrameKey.keys.intersect(other.routesByFrameKey.keys).isEmpty())
+        return GPUCorePrimitiveNativeScopeFrameRouteSeal(routesByFrameKey + other.routesByFrameKey)
+    }
     init {
         routesByFrameKey.forEach { (key, route) ->
             require(key.firstPacketId == route.flattenedPacketIds.first()) {

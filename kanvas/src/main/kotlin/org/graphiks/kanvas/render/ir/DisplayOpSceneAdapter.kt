@@ -430,6 +430,7 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
         is Shader.WithColorFilter -> listOf(value.shader, value.filter)
         is Shader.WithWorkingColorSpace -> listOf(value.shader)
         is Shader.CoordClamp -> listOf(value.shader)
+        is Shader.Opacity -> listOf(value.shader)
         is ColorFilter.Compose -> listOf(value.outer, value.inner)
         is ColorFilter.Lerp -> listOf(value.dst, value.src)
         is ColorFilter.RuntimeEffect -> value.children.values.toList()

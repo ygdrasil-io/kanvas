@@ -18,6 +18,8 @@ public data class GpuPlanLoweringRequest(
     public val recordingId: GPURecordingID,
     /** Current physical aggregate limit, independently enforced during transactional lowering. */
     public val rendererAggregateMemoryBudgetBytes: Long? = null,
+    internal val w5aCompositeSessionIdentity: String? = null,
+    internal val w5aCompositeLaneOrdinal: Int? = null,
 ) {
     init {
         require(rendererAggregateMemoryBudgetBytes == null || rendererAggregateMemoryBudgetBytes > 0L) {

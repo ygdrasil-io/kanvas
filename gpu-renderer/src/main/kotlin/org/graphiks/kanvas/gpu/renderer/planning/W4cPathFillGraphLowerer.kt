@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.planning
 
 import org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan
 import org.graphiks.kanvas.gpu.plan.AttachmentStorePlan
+import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.gpu.plan.PathFillDraw
 import org.graphiks.kanvas.gpu.plan.PathFillMemoryFootprint
 import org.graphiks.kanvas.gpu.plan.PathFillPlanBudget
@@ -12,6 +13,7 @@ import org.graphiks.kanvas.gpu.plan.PlanDepthStencilAccess
 import org.graphiks.kanvas.gpu.plan.PlanDepthStencilFormat
 import org.graphiks.kanvas.gpu.plan.PlanDepthStencilLoadStore
 import org.graphiks.kanvas.gpu.plan.PlanDrawDataResources
+import org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
 import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
 import org.graphiks.kanvas.gpu.plan.PlanPass
@@ -107,12 +109,14 @@ import org.graphiks.kanvas.render.ir.RenderDiagnosticCode
 import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
 import org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity
 import org.graphiks.math.geometry.FillRule
+import org.graphiks.math.color.ColorF32
 import org.graphiks.math.geometry.PathFillGeometryF32
 
 /** Lowers only the authenticated W4c path-fill graph; it never re-enters Scene IR or legacy tessellation. */
 internal class W4cPathFillGraphLowerer {
     fun lower(request: GpuPlanLoweringRequest): GpuPlanLoweringResult = try {
-        if (request.graph.capabilityId != W4cPathFillPlanCompiler.CAPABILITY_ID) {
+        if (!(W4cPathFillPlanCompiler.isHistoricalCapabilityId(request.graph.capabilityId) ||
+                W4cPathFillPlanCompiler.isW5aMaterialCapabilityId(request.graph.capabilityId))) {
             return invalid("The graph is not a W4c path-fill graph.")
         }
         val current = when (val adapted = request.capabilities.toPlanCapabilitySnapshot(request.deviceGeneration)) {
@@ -140,7 +144,7 @@ internal class W4cPathFillGraphLowerer {
                 "W4c lowering requires one dynamic uniform buffer binding.",
             )
         val targetBounds = GPUPixelBounds(0, 0, request.graph.targetExtent.width, request.graph.targetExtent.height)
-        val sessionIdentity = w4cSessionIdentity(request.deviceGeneration, targetBounds)
+        val sessionIdentity = request.w5aCompositeSessionIdentity ?: w4cSessionIdentity(request.deviceGeneration, targetBounds)
         val target = GPUFrameTargetRef("$sessionIdentity.target")
         val staging = GPUFrameBufferRef("$sessionIdentity.staging")
         val depthStencil = graph.depthStencil?.let { GPUFrameTextureRef("$sessionIdentity.depth-stencil") }
@@ -168,10 +172,11 @@ internal class W4cPathFillGraphLowerer {
             targetBounds,
             request.deviceGeneration,
             limits.capabilityFacts("frame-memory-budget"),
+            request.w5aCompositeSessionIdentity,
         ) ?: return invalid("The W4c graph memory facts cannot be represented by the renderer.")
 
         val builtPasses = graph.renderPasses.map { pass ->
-            builtPass(pass, graph.visualDraws, targetBounds)
+            builtPass(pass, graph.visualDraws, graph.materialPlanTable, targetBounds)
         }
         val capabilitySeal = GPUFrameCapabilitySeal.capture(request.frameId, request.deviceGeneration, request.capabilities)
         val scratch = sealScratch(
@@ -240,6 +245,12 @@ internal class W4cPathFillGraphLowerer {
                 renderPassIds = graph.renderPasses.map(PlanPass::id),
                 readbackPassId = graph.readback.id,
                 scratch = scratch,
+                compositeWitness = request.w5aCompositeSessionIdentity?.let {
+                    org.graphiks.kanvas.gpu.renderer.recording.GPUW5aCompositeLaneWitnessV1(
+                        it, requireNotNull(request.w5aCompositeLaneOrdinal), request.graph.id.value,
+                        renders.flatMap { render -> render.drawPackets }.map { packet -> packet.packetId },
+                    )
+                },
             ),
         )) {
             is GPUCorePrimitivePreparedFrameResult.Recorded ->
@@ -251,7 +262,8 @@ internal class W4cPathFillGraphLowerer {
     }
 
     private fun validateW4cGraph(graph: RenderGraph): W4cGraph? {
-        if (graph.capabilityId != W4cPathFillPlanCompiler.CAPABILITY_ID ||
+        if (!(W4cPathFillPlanCompiler.isHistoricalCapabilityId(graph.capabilityId) ||
+                W4cPathFillPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) ||
             graph.colorFormat != PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL ||
             !hasExactW4cCapabilityFacts(graph)
         ) return null
@@ -266,11 +278,24 @@ internal class W4cPathFillGraphLowerer {
         if (visual.size !in 1..512 || graph.visualCommandCount != visual.size ||
             visual.zipWithNext().any { (first, second) -> first.draw.commandIndex >= second.draw.commandIndex }
         ) return null
+        val materialPlanTable = graph.materialPlanTableOrNull()
+        if (W4cPathFillPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) {
+            val table = materialPlanTable ?: return null
+            if (visual.any { visualDraw ->
+                    val authority = visualDraw.draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV1
+                        ?: return@any true
+                    runCatching { W5aMaterialPlanLowerer().lower(table, authority.ref) }.getOrNull() == null
+                }
+            ) return null
+        } else if (materialPlanTable != null ||
+            visual.any { it.draw.materialAuthority !is PlanDrawMaterialAuthority.LegacyColorV1 }
+        ) return null
         val footprint = when (val result = PathFillPlanBudget.calculate(
             graph.targetExtent,
             visual.map { visualDraw -> visualDraw.draw.copyGeometryF32() },
             graph.capabilities,
             graph.budget,
+            W4cPathFillPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId),
         )) {
             is PathFillPlanBudgetResult.WithinBudget -> result.footprint
             is PathFillPlanBudgetResult.Exceeded,
@@ -302,6 +327,7 @@ internal class W4cPathFillGraphLowerer {
             !hasExactPasses(renderPasses, target.id, depthStencil?.id, bindings, visual)
         ) return null
         return W4cGraph(
+            capabilityId = graph.capabilityId,
             target = target,
             staging = staging,
             vertex = vertex,
@@ -312,6 +338,7 @@ internal class W4cPathFillGraphLowerer {
             readback = readback,
             visualDraws = visual,
             footprint = footprint,
+            materialPlanTable = materialPlanTable,
         )
     }
 
@@ -409,13 +436,10 @@ internal class W4cPathFillGraphLowerer {
         val scissor = draw.copyScissorI32()
         val direct = geometry.copyDirectTriangleF32OrNull()
         val stencil = geometry.copyStencilEdgeFanF32OrNull()
-        val color = draw.color
         return draw.commandIndex >= 0 && !scissor.isEmpty64() &&
             draw.coverage == org.graphiks.kanvas.gpu.plan.CoveragePlan.FullOrScissor &&
             draw.sample == org.graphiks.kanvas.gpu.plan.SamplePlan.SingleSample &&
             draw.blend == org.graphiks.kanvas.gpu.plan.BlendPlan.SrcOver &&
-            listOf(color.red, color.green, color.blue, color.alpha).all(Float::isFinite) &&
-            color.red in 0f..color.alpha && color.green in 0f..color.alpha && color.blue in 0f..color.alpha &&
             when (draw.strategy) {
                 PathFillStrategy.DirectTriangle ->
                     direct != null && stencil == null && geometry.fillRule == FillRule.WINDING
@@ -533,6 +557,7 @@ internal class W4cPathFillGraphLowerer {
     private fun builtPass(
         pass: PlanPass,
         visualDraws: List<W4cVisualDraw>,
+        materialPlanTable: MaterialPlanTable?,
         targetBounds: GPUPixelBounds,
     ): W4cBuiltPass = when (pass) {
         is PlanPass.RenderPass -> {
@@ -547,6 +572,7 @@ internal class W4cPathFillGraphLowerer {
                 coverageMode = GPUCorePrimitiveCoverageMode.FullOrScissor,
                 clipCoverage = clip.coverage,
                 clipExecution = clip.execution,
+                materialPlanTable = materialPlanTable,
                 targetBounds = targetBounds,
             )
         }
@@ -561,6 +587,7 @@ internal class W4cPathFillGraphLowerer {
                 coverageMode = GPUCorePrimitiveCoverageMode.Stencil1x,
                 clipCoverage = GPUClipCoveragePlan.NoClip,
                 clipExecution = GPUClipExecutionPlan.NoClip,
+                materialPlanTable = materialPlanTable,
                 targetBounds = targetBounds,
             )
         }
@@ -576,6 +603,7 @@ internal class W4cPathFillGraphLowerer {
                 coverageMode = GPUCorePrimitiveCoverageMode.Stencil1x,
                 clipCoverage = clip.coverage,
                 clipExecution = clip.execution,
+                materialPlanTable = materialPlanTable,
                 targetBounds = targetBounds,
             )
         }
@@ -595,17 +623,35 @@ internal class W4cPathFillGraphLowerer {
         coverageMode: GPUCorePrimitiveCoverageMode,
         clipCoverage: GPUClipCoveragePlan,
         clipExecution: GPUClipExecutionPlan,
+        materialPlanTable: MaterialPlanTable?,
         targetBounds: GPUPixelBounds,
     ): W4cBuiltPass {
         val geometry = draw.copyGeometryF32()
         val scissor = draw.copyScissorI32()
         val plannedScissor = GPUPixelBounds(scissor.left, scissor.top, scissor.right, scissor.bottom)
+        val color = when (role) {
+            // The stencil producer does not write color.  Keep its ABI payload strictly
+            // geometry/coverage-derived: it must never force or observe the W5 material.
+            GPUDrawPacketRole.PathStencilProducer -> if (
+                materialPlanTable == null
+            ) {
+                resolveMaterialColor(materialPlanTable, draw.materialAuthority)
+                    ?: error("Historical W4c color authority is invalid")
+            } else {
+                ColorF32.Transparent
+            }
+            GPUDrawPacketRole.Shading, GPUDrawPacketRole.PathStencilCover -> resolveMaterialColor(materialPlanTable, draw.materialAuthority)
+                ?: error("W5 material authority is invalid for a color-writing path phase")
+            else -> error("W4c emits only direct and path-stencil roles")
+        }
         val semantic = GPUCorePrimitivePayloadGatherer().gatherPlannedW4cSemantic(
             GPUCorePrimitivePayloadInput(
                 commandIdValue = draw.commandIndex,
                 sourceFamily = GPUCorePrimitiveSourceFamily.Path,
                 geometry = geometryInput(geometry, plannedScissor, draw.strategy),
-                premultipliedRgba = listOf(draw.color.red, draw.color.green, draw.color.blue, draw.color.alpha),
+                premultipliedRgba = listOf(color.red, color.green, color.blue, color.alpha),
+                material = if (role == GPUDrawPacketRole.PathStencilProducer) null else
+                    W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex),
                 targetBounds = targetBounds,
                 scissorBounds = plannedScissor,
                 clipCoveragePlan = clipCoverage,
@@ -752,14 +798,23 @@ internal class W4cPathFillGraphLowerer {
         maxBufferSize: Long,
         maxDynamicUniformBuffers: Long,
     ): W4cSessionScratchV1? {
-        val visualSemantics = graph.visualDraws.map { visual ->
-            builtPasses.getOrNull(visual.firstPassIndex)?.packet?.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
-                ?: return null
-        }
-        val payloads = visualSemantics.zip(graph.visualDraws).map { (semantic, visual) ->
-            val bytes = semantic.payloadRef.uniformBlock?.bytes ?: return null
-            if (bytes.size.toLong() != W4cSessionScratchV1.UNIFORM_PAYLOAD_BYTES) return null
-            GPUUniformSlabPayload("path-fill-draw-${visual.draw.commandIndex}", bytes.map(Int::toByte).toByteArray())
+        val materialV2 = W4cPathFillPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)
+        val payloads = graph.visualDraws.flatMap { visual ->
+            val passCount = if (materialV2 && visual.draw.strategy == PathFillStrategy.StencilCover) 2 else 1
+            (0 until passCount).map { passOffset ->
+                val semantic = builtPasses.getOrNull(visual.firstPassIndex + passOffset)
+                    ?.packet?.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive ?: return null
+                val label = if (!materialV2) {
+                    "path-fill-draw-${visual.draw.commandIndex}"
+                } else if (passOffset == 0 && passCount == 2) {
+                    "path-fill-producer-${visual.draw.commandIndex}"
+                } else {
+                    "path-fill-color-${visual.draw.commandIndex}"
+                }
+                val bytes = semantic.payloadRef.uniformBlock?.bytes ?: return null
+                if (bytes.size.toLong() != W4cSessionScratchV1.UNIFORM_PAYLOAD_BYTES) return null
+                GPUUniformSlabPayload(label, bytes.map(Int::toByte).toByteArray())
+            }
         }
         val uniformPlan = when (val planned = GPUUniformSlabPlanner.plan(
             sourceLabel = W4cSessionScratchV1.SOURCE_LABEL,
@@ -781,7 +836,8 @@ internal class W4cPathFillGraphLowerer {
         val draws = mutableListOf<W4cSessionScratchDrawV1>()
         var vertexOffset = 0L
         var indexOffset = 0L
-        graph.visualDraws.forEachIndexed { index, visual ->
+        var uniformSlot = 0
+        graph.visualDraws.forEachIndexed { visualIndex, visual ->
             val geometry = visual.draw.copyGeometryF32()
             val vertexRange = try { Math.multiplyExact(geometry.vertexCostI64, VERTEX_BYTES) } catch (_: ArithmeticException) { return null }
             val indexRange = try { Math.multiplyExact(geometry.indexCostI64, INDEX_BYTES) } catch (_: ArithmeticException) { return null }
@@ -795,15 +851,22 @@ internal class W4cPathFillGraphLowerer {
                 vertexRangeBytes = vertexRange,
                 indexOffsetBytes = indexOffset,
                 indexRangeBytes = indexRange,
-                uniformSlotIndex = index,
+                uniformSlotIndex = if (materialV2) {
+                    uniformSlot + if (visual.draw.strategy == PathFillStrategy.StencilCover) 1 else 0
+                } else {
+                    visualIndex
+                },
+                producerUniformSlotIndex = if (materialV2 && visual.draw.strategy == PathFillStrategy.StencilCover) uniformSlot else null,
                 atomicGroupId = visual.atomicGroupId,
             )
             vertexOffset = try { Math.addExact(vertexOffset, vertexRange) } catch (_: ArithmeticException) { return null }
             indexOffset = try { Math.addExact(indexOffset, indexRange) } catch (_: ArithmeticException) { return null }
+            uniformSlot += if (materialV2 && visual.draw.strategy == PathFillStrategy.StencilCover) 2 else 1
         }
         return try {
             W4cSessionScratchV1(
                 planId = planId,
+                capabilityId = graph.capabilityId,
                 capabilitySealHash = capabilitySealHash,
                 deviceGeneration = deviceGeneration,
                 target = target,
@@ -903,6 +966,7 @@ internal class W4cPathFillGraphLowerer {
         bounds: GPUPixelBounds,
         generation: GPUDeviceGenerationID,
         deviceLimitFacts: List<GPUCapabilityFact>,
+        compositeSessionIdentity: String?,
     ): GPUFrameMemoryBudgetPlan? {
         val transient = try {
             listOf(
@@ -917,7 +981,7 @@ internal class W4cPathFillGraphLowerer {
         }
         val peak = try { Math.addExact(shape.target.byteSize, transient) } catch (_: ArithmeticException) { return null }
         if (peak != graph.peakFrameLocalBytes || peak > graph.budget.maxFrameLocalBytes) return null
-        val identity = w4cSessionIdentity(generation, bounds)
+        val identity = compositeSessionIdentity ?: w4cSessionIdentity(generation, bounds)
         val allocations = buildList {
             add(GPUFrameMemoryAllocation("$identity.target", GPUFrameMemoryCategory.CanonicalTarget, shape.target.byteSize, GPUFrameMemoryResourceKind.Texture2D, bounds))
             add(GPUFrameMemoryAllocation("$identity.staging", GPUFrameMemoryCategory.ReadbackStaging, shape.staging.byteSize, GPUFrameMemoryResourceKind.Buffer, null))
@@ -949,6 +1013,7 @@ internal class W4cPathFillGraphLowerer {
     private fun Long.isPositivePowerOfTwo(): Boolean = this > 0L && this and (this - 1L) == 0L
 
     private data class W4cGraph(
+        val capabilityId: String,
         val target: PlanResource,
         val staging: PlanResource,
         val vertex: PlanResource,
@@ -959,7 +1024,16 @@ internal class W4cPathFillGraphLowerer {
         val readback: PlanPass.ReadbackPass,
         val visualDraws: List<W4cVisualDraw>,
         val footprint: PathFillMemoryFootprint,
+        val materialPlanTable: MaterialPlanTable?,
     )
+
+    private fun resolveMaterialColor(
+        table: MaterialPlanTable?,
+        authority: PlanDrawMaterialAuthority,
+    ): ColorF32? = when (authority) {
+        is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
+        is PlanDrawMaterialAuthority.MaterialV1 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }
+    }
 
     private data class W4cVisualDraw(
         val draw: PathFillDraw,

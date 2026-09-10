@@ -52,12 +52,14 @@ internal object GPUPreparedTextLowerer {
         operationIndex: Int,
         target: GPUTargetFacts,
         capabilities: GPUCapabilities,
+        materialBridge: W5aPreparedTextMaterialBridge? = null,
     ): GPUPreparedTextLowering = lower(
         operation = operation,
         operationIndex = operationIndex,
         target = target,
         capabilities = capabilities,
         fontResolver = GPUPreparedFontTypefaceResolver,
+        materialBridge = materialBridge,
     )
 
     /**
@@ -72,6 +74,7 @@ internal object GPUPreparedTextLowerer {
         target: GPUTargetFacts,
         capabilities: GPUCapabilities,
         fontResolver: GPUPreparedTextFontResolver,
+        materialBridge: W5aPreparedTextMaterialBridge? = null,
     ): GPUPreparedTextLowering {
         val fontResolution = try {
             fontResolver.resolve(operation.blob.typeface)
@@ -357,6 +360,15 @@ internal object GPUPreparedTextLowerer {
             )
             representations += preparedRepresentation
         }
+        // W5a owns only homogeneous A8 sub-runs.  Color glyphs retain their historical material
+        // route because their resolved layers are not an A8 coverage multiplier.
+        val materialPlan = if (
+            representations.all { it == GPUPreparedTextRepresentation.A8_MASK }
+        ) {
+            materialBridge?.materialFor(operationIndex)
+        } else {
+            null
+        }
 
         val clipProof = when (
             val clipResult = validateAndSnapshotPreparedTextClip(operation.clip, target, capabilities)
@@ -462,7 +474,28 @@ internal object GPUPreparedTextLowerer {
             )
         }
 
-        val mapped = runCatching { paint.toPreparedMaterialMapping() }.getOrElse {
+        val w5aResult = materialPlan?.let { planned ->
+            GPUPreparedMaterialProgramCompiler.compileW5aForPreparedText(
+                table = planned.table,
+                root = planned.ref,
+                context = preparedTextMaterialContext(target, capabilities),
+            )
+        }
+        val materialResult = w5aResult?.let { result ->
+            when (result) {
+                is org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextW5aProgramResult.Ready ->
+                    GPUPreparedMaterialProgramResult.Ready(result.program)
+                is org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextW5aProgramResult.Refused ->
+                    result.refusal
+            }
+        } ?: runCatching {
+            val mapped = paint.toPreparedMaterialMapping()
+            GPUPreparedMaterialProgramCompiler.compile(
+                descriptor = mapped.descriptor,
+                paintAlpha = mapped.paintAlpha,
+                context = preparedTextMaterialContext(target, capabilities),
+            )
+        }.getOrElse {
             return refused(
                 GPUTextRefusalCodes.MATERIAL_UNSUPPORTED,
                 operationIndex,
@@ -476,13 +509,7 @@ internal object GPUPreparedTextLowerer {
                 ),
             )
         }
-        val material = when (
-            val result = GPUPreparedMaterialProgramCompiler.compile(
-                descriptor = mapped.descriptor,
-                paintAlpha = mapped.paintAlpha,
-                context = preparedTextMaterialContext(target, capabilities),
-            )
-        ) {
+        val material = when (val result = materialResult) {
             is GPUPreparedMaterialProgramResult.Ready -> result.program
             is GPUPreparedMaterialProgramResult.Refused ->
                 return refused(
@@ -530,6 +557,11 @@ internal object GPUPreparedTextLowerer {
                 clip = clipProof.clip,
                 paint = paint.snapshotForPreparedText(),
                 material = material,
+                materialPlan = materialPlan,
+                materialPlanEmission = (
+                    w5aResult as?
+                        org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextW5aProgramResult.Ready
+                    )?.emission,
                 blendPlan = blendPlan,
                 targetColorFormat = target.colorFormat,
                 capabilitySnapshotHash = capabilitySnapshotHash,
@@ -820,6 +852,7 @@ private class PreparedTextPaintSnapshotter {
         shaderSnapshots[shader]?.let { return it }
         val snapshot = when (shader) {
             is Shader.SolidColor -> shader.copy()
+            is Shader.Opacity -> shader.copy(shader = snapshotShader(shader.shader, depth + 1))
             is Shader.LinearGradient -> shader.copy(
                 stops = immutablePreparedTextList(shader.stops.map(GradientStop::copy)),
             )

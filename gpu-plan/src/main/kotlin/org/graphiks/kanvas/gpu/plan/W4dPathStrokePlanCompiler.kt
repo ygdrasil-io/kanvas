@@ -71,7 +71,8 @@ public class W4dPathStrokePlanCompiler internal constructor(
             is FramePreflight.Limit -> return limitSelection(preflight.message)
         }
         return when (val recognized = recognize(scene)) {
-            is Recognition.Ready -> GpuPlanSelection.Candidate(Candidate(this, scene.canonicalId, target, recognized.draws))
+            is Recognition.MaterialRefused -> GpuPlanSelection.MaterialOnlyRefusal(CAPABILITY_ID, scene.canonicalId, target, recognized.refusals)
+            is Recognition.Ready -> GpuPlanSelection.Candidate(Candidate(this, scene.canonicalId, target, recognized.draws, recognized.materialPlanTable))
             is Recognition.Gap -> gap(recognized.message)
             is Recognition.Invalid -> invalid(recognized.message)
             is Recognition.Limit -> limitSelection(recognized.message)
@@ -139,6 +140,8 @@ public class W4dPathStrokePlanCompiler internal constructor(
     private fun recognize(scene: SceneSnapshot): Recognition {
         val targetBounds = RectI32(0, 0, scene.extent.width, scene.extent.height)
         val draws = mutableListOf<SealedDraw>()
+        val materialEntries = mutableListOf<MaterialPlanEntry>()
+        val materialRefusals = mutableListOf<EffectiveMaterialPlanner.Result.Refused>()
         var visualDrawCount = 0
         var frameWork = PathStrokeWorkUsageI64()
         var sawStroke = false
@@ -147,7 +150,8 @@ public class W4dPathStrokePlanCompiler internal constructor(
                 is SceneCommand.Draw -> {
                     if (visualDrawCount >= MAX_DRAWS) return Recognition.Gap("W4d accepts at most 512 visual path draws")
                     visualDrawCount = Math.addExact(visualDrawCount, 1)
-                    when (val draw = recognizeDraw(command.node, index, targetBounds, frameWork)) {
+                    when (val draw = recognizeDraw(command.node, index, targetBounds, frameWork, materialEntries)) {
+                        is DrawResult.MaterialRefused -> { materialRefusals += draw.refusal; frameWork = draw.frameWork; sawStroke = sawStroke || draw.stroke }
                         is DrawResult.Ready -> { draws += draw.draw; frameWork = draw.frameWork; sawStroke = sawStroke || draw.stroke }
                         is DrawResult.Empty -> { frameWork = draw.frameWork; sawStroke = sawStroke || draw.stroke }
                         is DrawResult.Gap -> return Recognition.Gap(draw.message)
@@ -162,11 +166,12 @@ public class W4dPathStrokePlanCompiler internal constructor(
             }
         }
         if (!sawStroke) return Recognition.Gap("W4d requires at least one stroke draw")
+        if (materialRefusals.isNotEmpty()) return Recognition.MaterialRefused(materialRefusals)
         if (draws.isEmpty()) return Recognition.Limit("W4d retained no visible prepared geometry")
-        return Recognition.Ready(draws)
+        return Recognition.Ready(draws, MaterialPlanTable.of(materialEntries))
     }
 
-    private fun recognizeDraw(node: DrawNode, commandIndex: Int, targetBounds: RectI32, frameWork: PathStrokeWorkUsageI64): DrawResult {
+    private fun recognizeDraw(node: DrawNode, commandIndex: Int, targetBounds: RectI32, frameWork: PathStrokeWorkUsageI64, materialEntries: MutableList<MaterialPlanEntry>): DrawResult {
         val scope = when (val classified = classifyDrawScope(node)) {
             is DrawScope.Ready -> classified
             is DrawScope.Gap -> return DrawResult.Gap(classified.message)
@@ -193,11 +198,18 @@ public class W4dPathStrokePlanCompiler internal constructor(
                     result.geometry.fillRule == FillRule.WINDING &&
                     result.geometry.copyStencilEdgeFanF32OrNull() != null &&
                     result.geometry.emittedNonZeroClosedEdgeCountI32 > UByte.MAX_VALUE.toInt()
-                ) DrawResult.Limit("Winding path exceeds the W4d stencil edge limit") else DrawResult.Ready(
-                    SealedDraw(commandIndex, linear(node.material.let { (it as MaterialNode.Solid).color }), result.geometry, result.strokeGeometry, result.mode, result.styleF64, scissor),
+                ) DrawResult.Limit("Winding path exceeds the W4d stencil edge limit") else {
+                    // Path effects are geometry-only facts for this lane; the material plan
+                    // remains the captured paint/material authority.
+                    val material = when (val planned = EffectiveMaterialPlanner.plan(node.copy(effects = EffectStack.Empty))) {
+                        is EffectiveMaterialPlanner.Result.Refused -> return DrawResult.MaterialRefused(planned, result.work, scope.stroke)
+                        is EffectiveMaterialPlanner.Result.Ready -> appendMaterialPlan(materialEntries, planned.table, planned.root)
+                    }
+                    DrawResult.Ready(
+                    SealedDraw(commandIndex, material, result.geometry, result.strokeGeometry, result.mode, result.styleF64, scissor),
                     result.work,
                     scope.stroke,
-                )
+                ) }
             }
             is Prepared.Empty -> DrawResult.Empty(result.work, scope.stroke)
             is Prepared.Invalid -> DrawResult.Invalid(result.message)
@@ -303,18 +315,18 @@ public class W4dPathStrokePlanCompiler internal constructor(
         val data = PlanDrawDataResources(vertex.id, index.id, uniform.id)
         val passes = mutableListOf<PlanPass>(); var render = 0; var producer = 0; var cover = 0; var clear = true
         selected.draws.forEach { sealed ->
-            val draw: PathDraw = sealed.stroke?.let { PathStrokeDraw.of(sealed.commandIndex, sealed.color, it, sealed.scissor, requireNotNull(sealed.mode), requireNotNull(sealed.styleF64)) } ?: PathFillDraw.of(sealed.commandIndex, sealed.color, sealed.geometry, sealed.strategy, sealed.scissor)
+            val draw: PathDraw = sealed.stroke?.let { PathStrokeDraw.ofMaterial(sealed.commandIndex, sealed.material, it, sealed.scissor, requireNotNull(sealed.mode), requireNotNull(sealed.styleF64)) } ?: PathFillDraw.ofMaterial(sealed.commandIndex, sealed.material, sealed.geometry, sealed.strategy, sealed.scissor)
             val load = if (clear) AttachmentLoadPlan.ClearTransparent else AttachmentLoadPlan.Load
             if (draw.strategy == PathFillStrategy.DirectTriangle) passes += PlanPass.RenderPass(render++, target.id, listOf(draw), load, AttachmentStorePlan.Store, data)
             else { val group = canonicalPathAtomicGroup(draw); val stencil = requireNotNull(depth); passes += PlanPass.StencilProducer(producer++, target.id, stencil.id, draw, data, group, load, AttachmentStorePlan.Store, PlanDepthStencilAccess.Write, PlanDepthStencilLoadStore.ClearZeroStore); passes += PlanPass.StencilCover(cover++, target.id, stencil.id, draw, data, group, AttachmentLoadPlan.Load, AttachmentStorePlan.Store, PlanDepthStencilAccess.ReadWrite, PlanDepthStencilLoadStore.LoadStoreTestReset) }
             clear = false
         }
         passes += PlanPass.ReadbackPass(0, target.id, staging.id, memory.readbackBytesPerRow)
-        val graph = RenderGraph.of(PlanId(identity(selected, caps, budget)), CAPABILITY_ID, extent, FORMAT, caps, budget, selected.draws.size, buildList { add(target); add(staging); add(vertex); add(index); add(uniform); depth?.let(::add) }, passes, passes.zipWithNext().map { PlanPassDependency(it.first.id, it.second.id) }, memory.peakBytes)
+        val graph = RenderGraph.of(PlanId(identity(selected, caps, budget)), CAPABILITY_ID, extent, FORMAT, caps, budget, selected.draws.size, buildList { add(target); add(staging); add(vertex); add(index); add(uniform); depth?.let(::add) }, passes, passes.zipWithNext().map { PlanPassDependency(it.first.id, it.second.id) }, memory.peakBytes, selected.materialPlanTable)
         return RenderPlanResult.Ready(RenderGraph.issueW4dCompilerWitness(graph))
     }
 
-    private fun solid(node: DrawNode, paint: PaintNode): Boolean = node.material is MaterialNode.Solid && effectsMatchPaintPathEffect(node.effects, paint.pathEffect) && node.resource == null && node.operationBlendMode == null && w4Blend(node.blend) && paint.shader == null && paint.blender == null && paint.colorFilter == null && paint.maskFilter == null && paint.imageFilter == null && paint.blendMode == BlendMode.SRC_OVER && (paint.pathEffect == null || paint.pathEffect is PathEffectNode.Dash)
+    private fun solid(node: DrawNode, paint: PaintNode): Boolean = effectsMatchPaintPathEffect(node.effects, paint.pathEffect) && node.resource == null && node.operationBlendMode == null && w4Blend(node.blend) && paint.blender == null && paint.colorFilter == null && paint.maskFilter == null && paint.imageFilter == null && paint.blendMode == BlendMode.SRC_OVER && (paint.pathEffect == null || paint.pathEffect is PathEffectNode.Dash) && materialMatchesPaintAuthority(node)
     private fun effectsMatchPaintPathEffect(effects: EffectStack, pathEffect: PathEffectNode?): Boolean = when (effects) {
         EffectStack.Empty -> true
         is EffectStack.Entries -> {
@@ -359,7 +371,8 @@ public class W4dPathStrokePlanCompiler internal constructor(
     }
     private fun finite(shape: org.graphiks.math.geometry.RRectF32): Boolean = finite(shape.rect) && listOf(shape.topLeft.x, shape.topLeft.y, shape.topRight.x, shape.topRight.y, shape.bottomRight.x, shape.bottomRight.y, shape.bottomLeft.x, shape.bottomLeft.y).all(Float::isFinite)
     private fun w4Blend(blend: BlendNode): Boolean = when (blend) { BlendNode.SrcOver -> true; is BlendNode.Mode -> blend.mode == BlendMode.SRC_OVER; is BlendNode.Paint -> blend.mode == BlendMode.SRC_OVER && blend.blender == null; is BlendNode.Custom -> false }
-    private fun linear(color: ColorARGB): ColorF32 { val a = color.alphaNormalized; return ColorF32.of(ColorTransferFunction.sRgb.toLinear(color.redNormalized) * a, ColorTransferFunction.sRgb.toLinear(color.greenNormalized) * a, ColorTransferFunction.sRgb.toLinear(color.blueNormalized) * a, a) }
+    private fun materialMatchesPaintAuthority(node: DrawNode): Boolean { val paint = node.paint ?: return false; val paintMaterial = paint.shader ?: MaterialNode.Solid(paint.color); return node.material.canonicalId == paintMaterial.canonicalId }
+    private fun appendMaterialPlan(entries: MutableList<MaterialPlanEntry>, incoming: MaterialPlanTable, root: MaterialPlanRef): MaterialPlanRef { val offset = entries.size; incoming.entries().forEach { entry -> entries += MaterialPlanEntry(entry.program, entry.bindings) }; return MaterialPlanRef(offset + root.indexI32) }
     private fun validAllocationFacts(capabilities: PlanCapabilitySnapshot): Boolean = listOf(
         capabilities.copyBytesPerRowAlignment.toLong(), capabilities.minUniformBufferOffsetAlignment.toLong(),
         capabilities.bufferAllocationPolicy.vertexFloorBytes, capabilities.bufferAllocationPolicy.indexFloorBytes,
@@ -367,7 +380,7 @@ public class W4dPathStrokePlanCompiler internal constructor(
     ).all { value -> value > 0L && value and (value - 1L) == 0L }
     private fun identity(selected: Candidate, caps: PlanCapabilitySnapshot, budget: PlanBudget): String {
         val fields = listOf(
-            "w4d-plan-v1", selected.sceneCanonicalId.value, selected.target.canonicalId.value,
+            "w4d-plan-w5a-material-v2", selected.sceneCanonicalId.value, selected.target.canonicalId.value,
             caps.deviceGeneration.toString(), caps.maxTextureDimension2D.toString(), caps.maxBufferSizeBytes.toString(),
             caps.copyBytesPerRowAlignment.toString(), caps.supportedFormats().map { it.name }.sorted().joinToString(","),
             caps.minUniformBufferOffsetAlignment.toString(), caps.maxDynamicUniformBuffersPerPipelineLayout.toString(),
@@ -406,7 +419,7 @@ public class W4dPathStrokePlanCompiler internal constructor(
     private fun invalidCandidate(): RenderPlanResult<Nothing> = RenderPlanResult.InvalidScene(listOf(RenderDiagnostic(RenderDiagnosticCode("gpu-plan.selection.invalid-candidate"), RenderDiagnosticDomain.SCENE, RenderDiagnosticSeverity.ERROR, "W4d candidate does not belong to this compiler.")))
     private fun diag(code: RenderDiagnosticCode, domain: RenderDiagnosticDomain, message: String): RenderDiagnostic = W4dPlanDiagnostics.diagnostic(code, domain, message)
 
-    private sealed interface Recognition { data class Ready(val draws: List<SealedDraw>) : Recognition; data class Gap(val message: String) : Recognition; data class Invalid(val message: String) : Recognition; data class Limit(val message: String) : Recognition }
+    private sealed interface Recognition { data class MaterialRefused(val refusals: List<EffectiveMaterialPlanner.Result.Refused>) : Recognition; data class Ready(val draws: List<SealedDraw>, val materialPlanTable: MaterialPlanTable) : Recognition; data class Gap(val message: String) : Recognition; data class Invalid(val message: String) : Recognition; data class Limit(val message: String) : Recognition }
     private sealed interface FramePreflight { data object Member : FramePreflight; data object Outside : FramePreflight; data class Invalid(val message: String) : FramePreflight; data class Limit(val message: String) : FramePreflight }
     private sealed interface DrawScope {
         data class Ready(
@@ -420,10 +433,19 @@ public class W4dPathStrokePlanCompiler internal constructor(
         data class Gap(val message: String) : DrawScope
         data class Invalid(val message: String) : DrawScope
     }
-    private sealed interface DrawResult { data class Ready(val draw: SealedDraw, val frameWork: PathStrokeWorkUsageI64, val stroke: Boolean) : DrawResult; data class Empty(val frameWork: PathStrokeWorkUsageI64, val stroke: Boolean) : DrawResult; data class Gap(val message: String) : DrawResult; data class Invalid(val message: String) : DrawResult; data class Limit(val message: String) : DrawResult }
+    private sealed interface DrawResult { data class MaterialRefused(val refusal: EffectiveMaterialPlanner.Result.Refused, val frameWork: PathStrokeWorkUsageI64, val stroke: Boolean) : DrawResult; data class Ready(val draw: SealedDraw, val frameWork: PathStrokeWorkUsageI64, val stroke: Boolean) : DrawResult; data class Empty(val frameWork: PathStrokeWorkUsageI64, val stroke: Boolean) : DrawResult; data class Gap(val message: String) : DrawResult; data class Invalid(val message: String) : DrawResult; data class Limit(val message: String) : DrawResult }
     private sealed interface Prepared { data class Ready(val geometry: org.graphiks.math.geometry.PathFillGeometryF32, val strokeGeometry: org.graphiks.math.geometry.PathStrokeGeometryF32?, val mode: PathStrokeDrawMode?, val styleF64: PathStrokeStyleF64?, val work: PathStrokeWorkUsageI64) : Prepared; data class Empty(val work: PathStrokeWorkUsageI64) : Prepared; data class Invalid(val message: String) : Prepared; data class Limit(val message: String) : Prepared }
-    private data class SealedDraw(val commandIndex: Int, val color: ColorF32, val geometry: org.graphiks.math.geometry.PathFillGeometryF32, val stroke: org.graphiks.math.geometry.PathStrokeGeometryF32?, val mode: PathStrokeDrawMode?, val styleF64: PathStrokeStyleF64?, val scissor: RectI32) { val strategy: PathFillStrategy = if (geometry.copyDirectTriangleF32OrNull() != null) PathFillStrategy.DirectTriangle else PathFillStrategy.StencilCover }
-    private class Candidate(val owner: W4dPathStrokePlanCompiler, override val sceneCanonicalId: org.graphiks.kanvas.render.ir.CanonicalId, override val target: RenderTargetDescriptor, draws: List<SealedDraw>) : GpuPlanCandidate { override val capabilityId: String = CAPABILITY_ID; val draws = Collections.unmodifiableList(draws.toList()) }
+    private data class SealedDraw(val commandIndex: Int, val material: MaterialPlanRef, val geometry: org.graphiks.math.geometry.PathFillGeometryF32, val stroke: org.graphiks.math.geometry.PathStrokeGeometryF32?, val mode: PathStrokeDrawMode?, val styleF64: PathStrokeStyleF64?, val scissor: RectI32) { val strategy: PathFillStrategy = if (geometry.copyDirectTriangleF32OrNull() != null) PathFillStrategy.DirectTriangle else PathFillStrategy.StencilCover }
+    private class Candidate(val owner: W4dPathStrokePlanCompiler, override val sceneCanonicalId: org.graphiks.kanvas.render.ir.CanonicalId, override val target: RenderTargetDescriptor, draws: List<SealedDraw>, val materialPlanTable: MaterialPlanTable) : GpuPlanCandidate { override val capabilityId: String = CAPABILITY_ID; val draws = Collections.unmodifiableList(draws.toList()) }
 
-    public companion object { public const val CAPABILITY_ID: String = "solid-path-stroke-tessellation-stencil-hard-1x-simple-scissor-src-over-srgb-v1"; private val FORMAT = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL; private val REQUIRED = setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.CopyUpload, PlanOperationCapability.UniformBuffer, PlanOperationCapability.Readback); private const val MAX_DRAWS = 512 }
+    public companion object {
+        /** Historical public graph contract; it carries only legacy per-draw colors. */
+        public const val HISTORICAL_CAPABILITY_ID: String = "solid-path-stroke-tessellation-stencil-hard-1x-simple-scissor-src-over-srgb-v1"
+        public const val CAPABILITY_ID: String = "w5a-solid-path-stroke-tessellation-stencil-hard-1x-simple-scissor-src-over-srgb-v2"
+        public fun isHistoricalCapabilityId(capabilityId: String): Boolean = capabilityId == HISTORICAL_CAPABILITY_ID
+        public fun isW5aMaterialCapabilityId(capabilityId: String): Boolean = capabilityId == CAPABILITY_ID
+        private val FORMAT = PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL
+        private val REQUIRED = setOf(PlanOperationCapability.RenderPass, PlanOperationCapability.CopyUpload, PlanOperationCapability.UniformBuffer, PlanOperationCapability.Readback)
+        private const val MAX_DRAWS = 512
+    }
 }

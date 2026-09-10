@@ -1612,7 +1612,24 @@ internal data class GPUCorePrimitivePreplannedFrameRequest(
     val memoryBudget: GPUFrameMemoryBudgetPlan,
     val renderPassId: PlanPassId,
     val readbackPassId: PlanPassId,
+    val compositeWitness: GPUW5aCompositeLaneWitnessV1? = null,
 )
+
+/** Versioned authority for one native lane embedded in a W5a composite frame. */
+internal data class GPUW5aCompositeLaneWitnessV1(
+    val sessionIdentity: String,
+    val laneOrdinal: Int,
+    val planId: String,
+    val packetIds: List<GPUDrawPacketID>,
+) {
+    init {
+        require(sessionIdentity.startsWith("w5a.mixed.") && laneOrdinal >= 0 && planId.isNotBlank())
+        require(packetIds.isNotEmpty() && packetIds.distinct().size == packetIds.size)
+    }
+    fun matches(request: GPUCorePrimitivePreplannedFrameRequest, packets: List<GPUDrawPacket>): Boolean =
+        planId == request.planId.value && packetIds == packets.map(GPUDrawPacket::packetId) &&
+            request.target.value == "$sessionIdentity.target" && request.staging.value == "$sessionIdentity.staging"
+}
 
 /** Source-compatible core-only facade over the shared prepared-surface task assembly. */
 class GPUCorePrimitivePreparedFrameTaskListBuilder(
@@ -1759,6 +1776,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         render: GPUTask.Render,
     ): Boolean {
         val deviceLimits = w3DeviceLimitFacts(request.memoryBudget.deviceLimitFacts) ?: return false
+        if (request.compositeWitness?.matches(request, render.drawPackets) == false) return false
         val scratch = render.drawPackets.firstOrNull()
             ?.corePrimitivePreparedAuthority
             ?.w3SessionScratch
@@ -1981,7 +1999,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
     }
 
     private fun w3SessionIdentity(request: GPUCorePrimitivePreplannedFrameRequest): String =
-        "w3.session.${request.baseTaskList.capabilitySeal.deviceGeneration.value}.${request.targetBounds.width}x${request.targetBounds.height}.rgba8unorm-srgb"
+        request.compositeWitness?.sessionIdentity
+            ?: "w3.session.${request.baseTaskList.capabilitySeal.deviceGeneration.value}.${request.targetBounds.width}x${request.targetBounds.height}.rgba8unorm-srgb"
 
     private fun isExactW3Packet(packet: GPUDrawPacket, targetBounds: GPUPixelBounds): Boolean {
         val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive ?: return false

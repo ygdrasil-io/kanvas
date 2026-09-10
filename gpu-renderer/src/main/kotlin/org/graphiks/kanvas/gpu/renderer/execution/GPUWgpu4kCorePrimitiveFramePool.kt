@@ -1155,7 +1155,9 @@ internal class GPUWgpu4kCorePrimitiveFramePoolLease internal constructor(
 internal class GPUWgpu4kCorePrimitiveFramePool(
     private val deviceGeneration: GPUDeviceGenerationID,
     private val factory: GPUWgpu4kCorePrimitiveFramePoolFactory,
+    private val maxSlots: Int = MAX_SLOTS,
 ) : AutoCloseable {
+    init { require(maxSlots in 1..512) }
     private enum class SlotState {
         Available,
         CheckedOut,
@@ -1304,9 +1306,9 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
             }
         }
         if (slot == null) {
-            if (slots.size == MAX_SLOTS) {
+            if (slots.size >= maxSlots) {
                 return GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused(
-                    GPUWgpu4kCorePrimitiveFramePoolRefusal.Saturated(MAX_SLOTS),
+                    GPUWgpu4kCorePrimitiveFramePoolRefusal.Saturated(maxSlots),
                 )
             }
             when (

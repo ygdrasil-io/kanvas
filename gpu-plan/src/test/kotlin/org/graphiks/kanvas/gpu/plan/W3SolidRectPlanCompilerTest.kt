@@ -85,7 +85,7 @@ class W3SolidRectPlanCompilerTest {
 
         val graph = assertIs<RenderPlanResult.Ready<RenderGraph>>(result).plan
         assertEquals(2, graph.visualCommandCount)
-        assertEquals(W3SolidRectPlanCompiler.CAPABILITY_ID, graph.capabilityId)
+        assertEquals(W3SolidRectPlanCompiler.W5A_CAPABILITY_ID, graph.capabilityId)
     }
 
     @Test

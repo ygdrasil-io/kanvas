@@ -40,9 +40,10 @@ internal object GPUPreparedTextFramePreparer {
         capabilities: GPUCapabilities,
         generation: GPUTextArtifactGeneration,
         limits: PreparedTextFrameInventoryLimits = defaultLimits(target, capabilities),
+        materialBridge: W5aPreparedTextMaterialBridge? = null,
     ): GPUPreparedTextFramePreparation {
         val inventoryPreparation = prepareInventory(
-            operations, target, capabilities, generation, limits,
+            operations, target, capabilities, generation, limits, materialBridge,
         )
         val ready = when (inventoryPreparation) {
             is GPUPreparedTextFrameInventoryPreparation.Ready -> inventoryPreparation
@@ -68,6 +69,7 @@ internal object GPUPreparedTextFramePreparer {
         capabilities: GPUCapabilities,
         generation: GPUTextArtifactGeneration,
         limits: PreparedTextFrameInventoryLimits = defaultLimits(target, capabilities),
+        materialBridge: W5aPreparedTextMaterialBridge? = null,
     ): GPUPreparedTextFrameInventoryPreparation {
         val preparedDraws = ArrayList<GPUPreparedTextDraw>()
         val elidedTextOperationIndices = linkedSetOf<Int>()
@@ -84,6 +86,7 @@ internal object GPUPreparedTextFramePreparer {
                     operationIndex = operationIndex,
                     target = target,
                     capabilities = capabilities,
+                    materialBridge = materialBridge,
                 )
             ) {
                 is GPUPreparedTextLowering.Ready -> {

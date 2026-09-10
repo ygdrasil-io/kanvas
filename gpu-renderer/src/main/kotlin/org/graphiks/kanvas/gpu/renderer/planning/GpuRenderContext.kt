@@ -414,6 +414,7 @@ public class GpuPlanSurfaceExecutor internal constructor(
                     W4cPathFillPlanCompiler(),
                     W4dPathStrokePlanCompiler(),
                     W4dGeneralPathPlanCompiler(),
+                    org.graphiks.kanvas.gpu.plan.W5aCompositePlanCompiler(),
                 ),
             ),
             context = context,

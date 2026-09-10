@@ -174,6 +174,7 @@ internal class GPUPlannedPathSessionScratch private constructor(
         val indexOffsetBytes: Long,
         val indexRangeBytes: Long,
         val uniformSlotIndex: Int,
+        val producerUniformSlotIndex: Int?,
         val atomicGroupId: String?,
     ) {
         fun copyGeometryF32(): PathFillGeometryF32 = geometryF32
@@ -220,7 +221,7 @@ internal class GPUPlannedPathSessionScratch private constructor(
                 depthStencilResourceId = scratch.depthStencilResourceId,
                 targetBytes = null,
                 stagingBytes = null,
-                capabilityId = null,
+                capabilityId = scratch.capabilityId,
                 draws = scratch.draws.map { draw ->
                     Draw(
                         draw.commandId,
@@ -232,6 +233,7 @@ internal class GPUPlannedPathSessionScratch private constructor(
                         draw.indexOffsetBytes,
                         draw.indexRangeBytes,
                         draw.uniformSlotIndex,
+                        draw.producerUniformSlotIndex,
                         draw.atomicGroupId,
                     )
                 },
@@ -296,6 +298,7 @@ internal class GPUPlannedPathSessionScratch private constructor(
                         draw.indexOffsetBytes,
                         draw.indexRangeBytes,
                         draw.uniformSlotIndex,
+                        draw.producerUniformSlotIndex,
                         draw.atomicGroupId,
                     )
                 },

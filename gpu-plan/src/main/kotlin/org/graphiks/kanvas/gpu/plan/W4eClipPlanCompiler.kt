@@ -152,6 +152,10 @@ public class W4eClipPlanCompiler(
         val forceAaFrame = preparedByKey.values.any { it.requiresAaFrame }
         val constructionSeam = if (forceAaFrame) w4dAaSeam else w4dHardSeam
         val base = when (val selected = constructionSeam.select(normalizedScene, target)) {
+            is GpuPlanSelection.MaterialOnlyRefusal -> return GpuPlanSelection.MaterialOnlyRefusal(
+                if (selected.capabilityId == W4dGeneralPathPlanCompiler.W5A_AA_CAPABILITY_ID) W5A_AA_CAPABILITY_ID else W5A_HARD_CAPABILITY_ID,
+                scene.canonicalId, target, selected.materialRefusals,
+            )
             is GpuPlanSelection.Candidate -> selected.candidate
             is GpuPlanSelection.NotCandidate -> return gap("W4e draw scope is outside the W4d.2 construction seam")
             is GpuPlanSelection.InvalidScene -> return invalid("W4d.2 rejected normalized W4e draw facts")
@@ -166,7 +170,7 @@ public class W4eClipPlanCompiler(
     override fun plan(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): RenderPlanResult<RenderGraph> {
         val selected = candidate as? Candidate ?: return invalidCandidate()
         if (selected.owner !== this || !selected.matches()) return invalidCandidate()
-        val requiresAa = selected.capabilityId == AA_CAPABILITY_ID
+        val requiresAa = selected.capabilityId == W5A_AA_CAPABILITY_ID
         val maskStacks = selected.stacks.filter { it.realization == Realization.Mask }
         capabilityRefusal(capabilities, maskStacks)?.let { return it }
         val basePreview = when (val result = selected.constructionSeam.preflightFrame(selected.base, capabilities, budget)) {
@@ -361,6 +365,7 @@ public class W4eClipPlanCompiler(
             resources = unsealedResources,
             targetExtent = extent,
             capabilities = capabilities,
+            materialPlanTable = base.materialPlanTableOrNull(),
         ) ?: throw W4eNativePayloadLimit()
         val nativePrefixFirstUseById = linkedMapOf<PlanResourceId, Int>()
         fun retainNativePrefixFirstUse(resourceId: PlanResourceId, passIndex: Int) {
@@ -393,7 +398,7 @@ public class W4eClipPlanCompiler(
         }
         val graph = RenderGraph.of(
             id = PlanId(identity(selected, capabilities, budget, frameAa)),
-            capabilityId = if (frameAa) AA_CAPABILITY_ID else HARD_CAPABILITY_ID,
+            capabilityId = if (frameAa) W5A_AA_CAPABILITY_ID else W5A_HARD_CAPABILITY_ID,
             targetExtent = extent,
             colorFormat = base.colorFormat,
             capabilities = capabilities,
@@ -403,6 +408,7 @@ public class W4eClipPlanCompiler(
             passes = allPasses,
             dependencies = dependencies,
             peakFrameLocalBytes = actualPeakFrameLocalBytes,
+            materialPlanTable = base.materialPlanTableOrNull(),
         )
         return RenderGraph.issueW4eCompilerWitness(graph, nativePayload)
     }
@@ -975,8 +981,8 @@ public class W4eClipPlanCompiler(
     private fun identity(selected: Candidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget, aa: Boolean): String {
         val digest = MessageDigest.getInstance("SHA-256")
         val fields = listOf(
-            "w4e-clip-plan-v1", selected.sceneCanonicalId.value, selected.target.canonicalId.value,
-            if (aa) AA_CAPABILITY_ID else HARD_CAPABILITY_ID, budget.maxFrameLocalBytes.toString(),
+            "w4e-clip-plan-v2-material-v1", selected.sceneCanonicalId.value, selected.target.canonicalId.value,
+            if (aa) W5A_AA_CAPABILITY_ID else W5A_HARD_CAPABILITY_ID, budget.maxFrameLocalBytes.toString(),
         ) + selected.stacks.map { it.identity } + planCapabilityIdentityFacts(capabilities)
         fields.forEach { field ->
             val bytes = field.encodeToByteArray()
@@ -1089,7 +1095,7 @@ public class W4eClipPlanCompiler(
         inverseDomainSourcesByCommand: Map<Int, PathDrawGeometry.InverseDomainSource>,
         actuallyEmptyInverseCommands: Set<Int>,
     ) : GpuPlanCandidate {
-        override val capabilityId: String = if (base.capabilityId == W4dGeneralPathPlanCompiler.AA_CAPABILITY_ID) AA_CAPABILITY_ID else HARD_CAPABILITY_ID
+        override val capabilityId: String = if (base.capabilityId == W4dGeneralPathPlanCompiler.W5A_AA_CAPABILITY_ID) W5A_AA_CAPABILITY_ID else W5A_HARD_CAPABILITY_ID
         val stacks: List<PreparedStack> = Collections.unmodifiableList(stacks)
         val inverseByCommand: Map<Int, InversePathGeometryF32> = Collections.unmodifiableMap(inverseByCommand.toMap())
         val inverseDomainSourcesByCommand: Map<Int, PathDrawGeometry.InverseDomainSource> =
@@ -1097,7 +1103,7 @@ public class W4eClipPlanCompiler(
         val actuallyEmptyInverseCommands: Set<Int> = Collections.unmodifiableSet(actuallyEmptyInverseCommands.toSet())
         private val sceneFingerprint = sceneCanonicalId
         private val targetFingerprint = target.canonicalId
-        fun matches(): Boolean = sceneCanonicalId == sceneFingerprint && target.canonicalId == targetFingerprint && (capabilityId == HARD_CAPABILITY_ID || capabilityId == AA_CAPABILITY_ID)
+        fun matches(): Boolean = sceneCanonicalId == sceneFingerprint && target.canonicalId == targetFingerprint && isW5aMaterialCapabilityId(capabilityId)
     }
 
     private fun Boolean.thenId(role: PlanResourceRole, ordinal: Int): PlanResourceId? =
@@ -1106,6 +1112,16 @@ public class W4eClipPlanCompiler(
     public companion object {
         public const val HARD_CAPABILITY_ID: String = "solid-path-complex-clip-hard-1x-src-over-srgb-v1"
         public const val AA_CAPABILITY_ID: String = "solid-path-complex-clip-mixed-aa4-src-over-srgb-v1"
+        /** W5a material-bearing successor to the historical [HARD_CAPABILITY_ID] contract. */
+        public const val W5A_HARD_CAPABILITY_ID: String = "solid-path-complex-clip-hard-1x-src-over-srgb-w5a-material-v2"
+        /** W5a material-bearing successor to the historical [AA_CAPABILITY_ID] contract. */
+        public const val W5A_AA_CAPABILITY_ID: String = "solid-path-complex-clip-mixed-aa4-src-over-srgb-w5a-material-v2"
+
+        public fun isLegacyCapabilityId(capabilityId: String): Boolean =
+            capabilityId == HARD_CAPABILITY_ID || capabilityId == AA_CAPABILITY_ID
+
+        public fun isW5aMaterialCapabilityId(capabilityId: String): Boolean =
+            capabilityId == W5A_HARD_CAPABILITY_ID || capabilityId == W5A_AA_CAPABILITY_ID
         private const val MAX_DRAWS: Int = 512
         private const val MAX_CLIP_ENTRIES: Int = 512
     }

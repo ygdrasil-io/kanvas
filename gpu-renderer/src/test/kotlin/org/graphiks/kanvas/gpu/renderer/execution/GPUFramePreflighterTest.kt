@@ -11228,6 +11228,8 @@ class GPUFramePreflighterTest {
                         "first_slice.sweep_gradient.native"
                     is GPUCorePrimitiveMaterialPayload.SolidColor ->
                         error("Gradient preflight fixture requires a gradient material")
+                    is GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1 ->
+                        error("Gradient preflight fixture cannot use a W5a material reference")
                 },
                 "unit-test",
                 "supported",

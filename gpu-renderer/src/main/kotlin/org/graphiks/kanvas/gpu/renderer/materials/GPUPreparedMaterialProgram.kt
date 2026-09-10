@@ -3,6 +3,9 @@ package org.graphiks.kanvas.gpu.renderer.materials
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
+import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
+import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
+import org.graphiks.kanvas.gpu.plan.W5aPlanDiagnostics
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedBlenderChildDescriptor
@@ -28,6 +31,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.hasMaterialColorFunctionSignature
 import org.graphiks.kanvas.gpu.renderer.wgsl.reflectWgslModule
+import org.graphiks.math.color.ColorF32
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
 
@@ -39,6 +43,44 @@ sealed interface GPUPreparedMaterialProgramResult {
         val sourceKind: GPUMaterialSourceKind,
         val message: String,
     ) : GPUPreparedMaterialProgramResult
+}
+
+/** Compiler-only W5a emission used to bind prepared A8 text provenance without reconstruction. */
+sealed interface GPUPreparedTextW5aProgramResult {
+    data class Ready(
+        val program: GPUPreparedMaterialProgram,
+        val emission: GPUPreparedTextMaterialPlanEmission,
+    ) : GPUPreparedTextW5aProgramResult
+
+    data class Refused(val refusal: GPUPreparedMaterialProgramResult.Refused) : GPUPreparedTextW5aProgramResult
+}
+
+/** Compiler-only W5a emission used to bind prepared vertices provenance without reconstruction. */
+sealed interface GPUPreparedVerticesW5aProgramResult {
+    data class Ready(
+        val program: GPUPreparedMaterialProgram,
+        val emission: GPUPreparedVerticesMaterialPlanEmission,
+    ) : GPUPreparedVerticesW5aProgramResult
+
+    data class Refused(val refusal: GPUPreparedMaterialProgramResult.Refused) :
+        GPUPreparedVerticesW5aProgramResult
+}
+
+/**
+ * Unforgeable-by-content runtime witness. Its private constructor confines issuance to the
+ * prepared-text compiler entry point below; snapshots preserve identity without serializing it.
+ */
+public class GPUPreparedTextW5aAdmissionToken private constructor() {
+    internal companion object {
+        fun issue(): GPUPreparedTextW5aAdmissionToken = GPUPreparedTextW5aAdmissionToken()
+    }
+}
+
+/** Unforgeable-by-content witness issued only by the prepared-vertices compiler entry point. */
+public class GPUPreparedVerticesW5aAdmissionToken private constructor() {
+    internal companion object {
+        fun issue(): GPUPreparedVerticesW5aAdmissionToken = GPUPreparedVerticesW5aAdmissionToken()
+    }
 }
 
 object GPUPreparedMaterialProgramCompiler {
@@ -71,6 +113,91 @@ object GPUPreparedMaterialProgramCompiler {
         } else {
             GPUSourceAlphaClassification.Translucent
         }
+        return compilePrepared(
+            prepared = prepared,
+            paintAlpha = paintAlpha,
+            preCoverageSourceAlpha = preCoverageSourceAlpha,
+            context = context,
+        )
+    }
+
+    /** Compiles the sealed W5a source result without reassembling a legacy descriptor. */
+    fun compileW5a(
+        table: MaterialPlanTable,
+        root: MaterialPlanRef,
+        context: GPUMaterialLoweringContext,
+    ): GPUPreparedMaterialProgramResult {
+        if (table.hasNonFiniteW5aBindings(root)) return refused(
+            code = W5aPlanDiagnostics.NonFiniteBinding,
+            sourceKind = GPUMaterialSourceKind.SolidColor,
+            message = "The sealed W5a material table contains non-finite Solid or Opacity bindings",
+        )
+        val source = W5aMaterialSourceStage.lower(table, root) ?: return refused(
+            code = "unsupported.material.w5a_plan",
+            sourceKind = GPUMaterialSourceKind.SolidColor,
+            message = "The sealed W5a material table has no evaluable Solid/Opacity result",
+        )
+        val prepared = prepareW5aSource(source)
+        return compilePrepared(
+            prepared = prepared,
+            paintAlpha = 1f,
+            preCoverageSourceAlpha = if (source.provenOpaque) {
+                GPUSourceAlphaClassification.ProvenOpaque
+            } else {
+                GPUSourceAlphaClassification.Translucent
+            },
+            context = context,
+        )
+    }
+
+    /** Emits the exact compiled W5a program together with its table/ref provenance seed. */
+    fun compileW5aForPreparedText(
+        table: MaterialPlanTable,
+        root: MaterialPlanRef,
+        context: GPUMaterialLoweringContext,
+    ): GPUPreparedTextW5aProgramResult = when (val result = compileW5a(table, root, context)) {
+        is GPUPreparedMaterialProgramResult.Ready -> {
+            val token = GPUPreparedTextW5aAdmissionToken.issue()
+            val program = result.program.authenticatedPreparedTextW5aSnapshot(token)
+            GPUPreparedTextW5aProgramResult.Ready(
+                program = program,
+                emission = GPUPreparedTextMaterialPlanEmission(
+                table = table,
+                ref = root,
+                program = program.authenticatedSnapshot(),
+                ),
+            )
+        }
+        is GPUPreparedMaterialProgramResult.Refused -> GPUPreparedTextW5aProgramResult.Refused(result)
+    }
+
+    /** Emits the exact W5a vertices program with its immutable table/ref provenance seed. */
+    fun compileW5aForPreparedVertices(
+        table: MaterialPlanTable,
+        root: MaterialPlanRef,
+        context: GPUMaterialLoweringContext,
+    ): GPUPreparedVerticesW5aProgramResult = when (val result = compileW5a(table, root, context)) {
+        is GPUPreparedMaterialProgramResult.Ready -> {
+            val token = GPUPreparedVerticesW5aAdmissionToken.issue()
+            val program = result.program.authenticatedPreparedVerticesW5aSnapshot(token)
+            GPUPreparedVerticesW5aProgramResult.Ready(
+                program = program,
+                emission = GPUPreparedVerticesMaterialPlanEmission(
+                    table = table,
+                    ref = root,
+                    program = program.authenticatedSnapshot(),
+                ),
+            )
+        }
+        is GPUPreparedMaterialProgramResult.Refused -> GPUPreparedVerticesW5aProgramResult.Refused(result)
+    }
+
+    private fun compilePrepared(
+        prepared: PreparedSource,
+        paintAlpha: Float,
+        preCoverageSourceAlpha: GPUSourceAlphaClassification,
+        context: GPUMaterialLoweringContext,
+    ): GPUPreparedMaterialProgramResult {
         val finalReflection = when (
             val validation = validateFinalModule(prepared)
         ) {
@@ -209,6 +336,28 @@ object GPUPreparedMaterialProgramCompiler {
                     "lowererKey=${lowererKey.value}",
                     "solidSemantics=linear-premultiplied-rgba-f32",
                 ),
+            ),
+        )
+    }
+
+    /** Raw bindings and graph-derived source code share one authenticated ABI. */
+    private fun prepareW5aSource(source: W5aMaterialSourceStage): PreparedSource {
+        return PreparedSource(
+            wgslSource = wrapMaterialSource(source.declarationsWgsl, MATERIAL_SOURCE_FUNCTION),
+            entryPoint = FINAL_FRAGMENT_ENTRY_POINT,
+            composableDeclarationsWgsl = source.declarationsWgsl,
+            sourceFunction = MATERIAL_SOURCE_FUNCTION,
+            sourceColorContract = PreparedSourceColorContract.LinearPremultipliedRgba,
+            uniformBytes = source.uniformBytes,
+            sampledResources = emptyList(),
+            sourceKind = GPUMaterialSourceKind.SolidColor,
+            uniformLayoutHash = "w5a-raw-bindings-v1:${source.bindingCountI32}",
+            abiExpectation = uniformAbiExpectation(group = 1, binding = 0,
+                size = source.uniformBytes.size,
+                members = (0 until source.bindingCountI32).map { vec4Member("binding$it", it * 16) }),
+            keyFacts = listOf(
+                "w5aMaterialPlan=${source.structuralId}",
+                "solidSemantics=linear-premultiplied-rgba-f32",
             ),
         )
     }
@@ -974,6 +1123,25 @@ object GPUPreparedMaterialProgramCompiler {
             GPUMaterialSourceKind.ShaderBlend,
             message,
         )
+}
+
+private fun MaterialPlanTable.hasNonFiniteW5aBindings(root: MaterialPlanRef): Boolean {
+    var index = root.indexI32
+    while (index >= 0) {
+        val entry = runCatching { entry(MaterialPlanRef(index)) }.getOrNull() ?: return false
+        when (val bindings = entry.bindings) {
+            is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.SolidRgbaF32V1 -> {
+                val color = bindings.copyRgbaF32()
+                return listOf(color.red, color.green, color.blue, color.alpha).any { !it.isFinite() }
+            }
+            is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.OpacityF32V1 -> {
+                if (!bindings.alphaF32.isFinite()) return true
+            }
+            org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.EmptyV1 -> return false
+        }
+        index--
+    }
+    return false
 }
 
 private data class PreparedSource(

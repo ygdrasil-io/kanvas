@@ -6,6 +6,7 @@ plugins {
 dependencies {
     api(project(":render-ir"))
     implementation(project(":gpu-renderer"))
+    implementation(project(":gpu-plan"))
     api(project(":font:gpu-api"))
     api(project(":color-management"))
     implementation(kotlin("stdlib"))

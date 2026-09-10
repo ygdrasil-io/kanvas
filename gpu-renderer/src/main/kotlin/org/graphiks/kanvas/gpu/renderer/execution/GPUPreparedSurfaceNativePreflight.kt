@@ -1840,19 +1840,17 @@ internal class GPUPreparedSurfaceNativePreflight(
                 )
             }
         }
-        capabilities?.let { observed ->
-            textPackets.zip(bindings).forEach { (evidence, binding) ->
-                val semantic = evidence.semantic as? GPUDrawSemanticPayload.TextA8
-                    ?: return@forEach
-                GPUPreparedTextCompositePreflight.validate(
-                    binding = binding,
-                    semantic = semantic,
-                    capabilities = observed,
-                    framePlan = framePlan,
-                    renderSourceStepIndex = evidence.renderIndex,
-                )?.let { refusal ->
-                    return refused(refusal.code, refusal.message)
-                }
+        textPackets.zip(bindings).forEach { (evidence, binding) ->
+            val semantic = evidence.semantic as? GPUDrawSemanticPayload.TextA8
+                ?: return@forEach
+            GPUPreparedTextCompositePreflight.validate(
+                binding = binding,
+                semantic = semantic,
+                capabilities = capabilities,
+                framePlan = framePlan,
+                renderSourceStepIndex = evidence.renderIndex,
+            )?.let { refusal ->
+                return refused(refusal.code, refusal.message)
             }
         }
 
@@ -2367,7 +2365,8 @@ internal class GPUPreparedSurfaceNativePreflight(
             material.abiHash.isBlank() ||
                 !material.abiHash.matches(PREPARED_VERTICES_ABI_HASH_PATTERN) ||
                 material.materialKey.isBlank() ||
-                evidence.semantic.materialIdentity.isBlank()
+                evidence.semantic.materialIdentity.isBlank() ||
+                !evidence.semantic.hasValidW5aMaterialPlanProvenance()
         }?.let {
             return refused(
                 GPUPreparedVerticesPreflightRefusalCodes.MATERIAL_ABI,
@@ -2382,6 +2381,8 @@ internal class GPUPreparedSurfaceNativePreflight(
                     topology = semantic.artifact.topology,
                     material = semantic.material,
                     hasPrimitiveColor = semantic.primitiveColorPresent,
+                    materialPlanProvenance = semantic.materialPlanProvenance,
+                    commandIdValueI32 = semantic.payloadRef.commandIdValue,
                 )
             ) {
                 is GPUPreparedVerticesShaderResult.Ready -> null
@@ -3483,6 +3484,8 @@ internal class GPUPreparedSurfaceNativePreflight(
                                 topology = semantic.artifact.topology,
                                 material = semantic.material,
                                 hasPrimitiveColor = semantic.primitiveColorPresent,
+                                materialPlanProvenance = semantic.materialPlanProvenance,
+                                commandIdValueI32 = semantic.payloadRef.commandIdValue,
                             )
                         ) {
                             is GPUPreparedVerticesShaderResult.Ready ->
@@ -5802,6 +5805,13 @@ private fun preparedVerticesArtifactKeyOfUpload(upload: GPUFrameStep.UploadResou
 }
 
 private val PREPARED_VERTICES_ABI_HASH_PATTERN = Regex("sha256:[0-9a-f]{64}")
+
+/** The native seam accepts W5a vertices only with its sealed table/program/command witness. */
+private fun GPUDrawSemanticPayload.Vertices.hasValidW5aMaterialPlanProvenance(): Boolean {
+    val provenance = materialPlanProvenance
+    return (provenance == null) == (material.preparedVerticesW5aAdmissionToken == null) &&
+        (provenance == null || provenance.validates(payloadRef.commandIdValue, material))
+}
 
 private inline fun <T> List<T>.anyIndexed(predicate: (Int, T) -> Boolean): Boolean {
     forEachIndexed { index, value ->

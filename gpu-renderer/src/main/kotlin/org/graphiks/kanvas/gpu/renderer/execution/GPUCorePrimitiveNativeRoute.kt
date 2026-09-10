@@ -477,6 +477,17 @@ internal class GPUCorePrimitiveDirectNativeFrameRouteSeal(
     private val routesByFrameKey = immutableMap(routesByFrameKey)
     private val preparedPassByStep = immutableMap(preparedPassByStep)
 
+
+    /** Exact relocation of sealed lane ranges into the composite frame's step coordinates. */
+    fun reindexed(indices: Map<Int, Int>): GPUCorePrimitiveDirectNativeFrameRouteSeal = GPUCorePrimitiveDirectNativeFrameRouteSeal(
+        routesByFrameKey.mapKeys { (key, _) -> key.copy(sourceStepIndex = indices.getValue(key.sourceStepIndex)) },
+        preparedPassByStep.mapKeys { (index, _) -> indices.getValue(index) },
+    )
+
+    fun appended(other: GPUCorePrimitiveDirectNativeFrameRouteSeal): GPUCorePrimitiveDirectNativeFrameRouteSeal {
+        require(routesByFrameKey.keys.intersect(other.routesByFrameKey.keys).isEmpty())
+        return GPUCorePrimitiveDirectNativeFrameRouteSeal(routesByFrameKey + other.routesByFrameKey, preparedPassByStep + other.preparedPassByStep)
+    }
     fun routeOrNull(
         sourceStepIndex: Int,
         packetId: GPUDrawPacketID,

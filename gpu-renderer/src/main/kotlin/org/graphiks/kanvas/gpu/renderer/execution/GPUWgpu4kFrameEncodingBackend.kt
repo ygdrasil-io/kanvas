@@ -171,7 +171,7 @@ internal fun encodeWgpu4kRenderPass(
     encoder.beginRenderPass(buildWgpu4kRenderPassDescriptor(render.pass)) {
         onRenderPassBegan()
         encodedDraws = encodeWgpu4kRenderCommands(
-            render.commands,
+            render.encodingCommands,
             GPUWgpu4kRenderCommandActions(
                 setPipeline = { pipeline ->
                     setPipeline(pipeline)
@@ -489,7 +489,7 @@ internal class GPUWgpu4kFrameEncodingBackend(
                 requireNotNull(activeRenderPass)
             }
             encodeWgpu4kRenderCommands(
-                render.commands,
+                render.encodingCommands,
                 GPUWgpu4kRenderCommandActions(
                     setPipeline = { pipeline ->
                         passEncoder.setPipeline(pipeline)

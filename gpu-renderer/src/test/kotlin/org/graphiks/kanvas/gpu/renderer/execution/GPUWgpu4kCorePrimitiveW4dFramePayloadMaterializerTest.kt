@@ -502,7 +502,7 @@ class GPUWgpu4kCorePrimitiveW4dFramePayloadMaterializerTest {
                 requireNotNull(renders[4].pass.depthStencilTarget).view,
             )
             assertEquals(
-                listOf(0L, 1L, 1L, 2L, 2L).map { slot ->
+                listOf(0L, 1L, 2L, 3L, 4L).map { slot ->
                     slot * fixture.scratch.uniformStrideBytes
                 },
                 renders.flatMap { render ->
@@ -1899,12 +1899,24 @@ class GPUWgpu4kCorePrimitiveW4dFramePayloadMaterializerTest {
             .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
         return ByteArray(scratch.uniformPlan.totalBytes.toInt()).also { packed ->
             scratch.draws.forEach { draw ->
-                val semantic = assertIs<
-                    org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive
-                >(packets.first { packet -> packet.commandIdValue == draw.commandId }.semanticPayload)
-                semantic.payloadRef.uniformBlock!!.bytes.forEachIndexed { index, value ->
-                    val offset = scratch.uniformPlan.slots[draw.uniformSlotIndex].alignedOffset.toInt()
-                    packed[offset + index] = value.toByte()
+                val expectedPackets = if (draw.producerUniformSlotIndex == null) {
+                    listOf(GPUDrawPacketRole.Shading to draw.uniformSlotIndex)
+                } else {
+                    listOf(
+                        GPUDrawPacketRole.PathStencilProducer to draw.producerUniformSlotIndex,
+                        GPUDrawPacketRole.PathStencilCover to draw.uniformSlotIndex,
+                    )
+                }
+                expectedPackets.forEach { (role, slotIndex) ->
+                    val semantic = assertIs<
+                        org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive
+                    >(packets.first { packet ->
+                        packet.commandIdValue == draw.commandId && packet.role == role
+                    }.semanticPayload)
+                    semantic.payloadRef.uniformBlock!!.bytes.forEachIndexed { index, value ->
+                        val offset = scratch.uniformPlan.slots[slotIndex].alignedOffset.toInt()
+                        packed[offset + index] = value.toByte()
+                    }
                 }
             }
         }

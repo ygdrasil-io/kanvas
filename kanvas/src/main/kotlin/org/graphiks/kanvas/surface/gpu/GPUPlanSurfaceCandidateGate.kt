@@ -19,4 +19,5 @@ internal object GPUPlanSurfaceCandidateGate {
                     operation is DisplayOp.SetClip ||
                     operation is DisplayOp.Annotation
             }
+
 }

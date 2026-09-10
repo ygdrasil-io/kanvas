@@ -10,8 +10,10 @@ import org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan
 import org.graphiks.kanvas.gpu.plan.AttachmentStorePlan
 import org.graphiks.kanvas.gpu.plan.BlendPlan
 import org.graphiks.kanvas.gpu.plan.CoveragePlan
+import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.gpu.plan.PlanBufferGrowth
 import org.graphiks.kanvas.gpu.plan.PlanDrawDataResources
+import org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
 import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
 import org.graphiks.kanvas.gpu.plan.PlanPass
@@ -48,6 +50,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.W4bSessionScratchDrawV1
 import org.graphiks.kanvas.gpu.renderer.passes.W4bSessionScratchV1
+import org.graphiks.kanvas.gpu.renderer.passes.W5aMaterialPlanVersionWitnessV2
 import org.graphiks.kanvas.gpu.renderer.passes.buildCorePrimitiveAnalyticShapeUniform
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStructuralKey
@@ -102,6 +105,7 @@ import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
 import org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectI32
+import org.graphiks.math.color.ColorF32
 
 /** Lowers only the closed W4b analytic-RRect graph; it never re-enters Scene IR or legacy routes. */
 internal class W4bAnalyticRRectGraphLowerer {
@@ -126,7 +130,7 @@ internal class W4bAnalyticRRectGraphLowerer {
                 "W4b lowering requires at least one dynamic uniform buffer binding.",
             )
         val targetBounds = GPUPixelBounds(0, 0, request.graph.targetExtent.width, request.graph.targetExtent.height)
-        val sessionIdentity = w4bSessionIdentity(request.deviceGeneration, targetBounds)
+        val sessionIdentity = request.w5aCompositeSessionIdentity ?: w4bSessionIdentity(request.deviceGeneration, targetBounds)
         val target = GPUFrameTargetRef("$sessionIdentity.target")
         val staging = GPUFrameBufferRef("$sessionIdentity.staging")
         val targetPreparation = GPUResourcePreparationRequest(
@@ -153,8 +157,13 @@ internal class W4bAnalyticRRectGraphLowerer {
             targetBounds,
             request.deviceGeneration,
             limits.capabilityFacts("frame-memory-budget"),
+            request.w5aCompositeSessionIdentity,
         ) ?: return invalid("The W4b graph memory facts cannot be represented by the renderer.")
-        val builtPackets = graph.draws.mapIndexed { paintOrder, draw -> packet(draw, paintOrder, targetBounds) }
+        val builtPackets = graph.draws.mapIndexed { paintOrder, draw ->
+            val color = resolveMaterialColor(graph.materialPlanTable, draw.materialAuthority)
+                ?: return invalid("W5 material authority is invalid.")
+            packet(draw, color, paintOrder, targetBounds, graph.materialPlanTable)
+        }
         val capabilitySeal = GPUFrameCapabilitySeal.capture(request.frameId, request.deviceGeneration, request.capabilities)
         val scratch = sealScratch(
             graph = graph,
@@ -220,6 +229,19 @@ internal class W4bAnalyticRRectGraphLowerer {
                 copyBytesPerRowAlignment = request.graph.capabilities.copyBytesPerRowAlignment.toLong(),
                 readbackBytesPerRow = graph.readback.bytesPerRow,
                 scratch = scratch,
+                compositeWitness = request.w5aCompositeSessionIdentity?.let {
+                    org.graphiks.kanvas.gpu.renderer.recording.GPUW5aCompositeLaneWitnessV1(
+                        it, requireNotNull(request.w5aCompositeLaneOrdinal), request.graph.id.value, packets.map { packet -> packet.packetId },
+                    )
+                },
+                w5aMaterialWitness = if (request.graph.capabilityId == W4bAnalyticRRectPlanCompiler.CAPABILITY_ID) {
+                    W5aMaterialPlanVersionWitnessV2.issue(
+                        graph.materialPlanTable,
+                        graph.draws.map(AnalyticRRectDraw::materialAuthority),
+                    ) ?: return invalid("W5a RRect material-plan version witness is invalid.")
+                } else {
+                    null
+                },
             ),
         )) {
             is GPUCorePrimitivePreparedFrameResult.Recorded ->
@@ -231,7 +253,10 @@ internal class W4bAnalyticRRectGraphLowerer {
     }
 
     private fun validateW4bGraph(graph: RenderGraph): W4bGraph? {
-        if (graph.capabilityId != W4bAnalyticRRectPlanCompiler.CAPABILITY_ID ||
+        if (graph.capabilityId !in setOf(
+                W4bAnalyticRRectPlanCompiler.HISTORICAL_CAPABILITY_ID,
+                W4bAnalyticRRectPlanCompiler.CAPABILITY_ID,
+            ) ||
             graph.colorFormat != PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL ||
             !hasExactW4bCapabilityFacts(graph)
         ) return null
@@ -247,6 +272,20 @@ internal class W4bAnalyticRRectGraphLowerer {
         if (draws.size !in 1..512 || graph.visualCommandCount != draws.size ||
             draws.zipWithNext().any { (first, second) -> first.commandIndex >= second.commandIndex } ||
             draws.none { draw -> draw.origin == DrawOrigin.RRECT }
+        ) return null
+        val table = graph.materialPlanTableOrNull()
+        if (draws.any { draw ->
+                when (val authority = draw.materialAuthority) {
+                    is PlanDrawMaterialAuthority.LegacyColorV1 -> false
+                    is PlanDrawMaterialAuthority.MaterialV1 -> table == null || authority.ref.indexI32 >= table.sizeI32
+                }
+            } || when (graph.capabilityId) {
+                W4bAnalyticRRectPlanCompiler.HISTORICAL_CAPABILITY_ID ->
+                    table != null || draws.any { it.materialAuthority !is PlanDrawMaterialAuthority.LegacyColorV1 }
+                W4bAnalyticRRectPlanCompiler.CAPABILITY_ID ->
+                    table == null || draws.any { it.materialAuthority !is PlanDrawMaterialAuthority.MaterialV1 }
+                else -> true
+            }
         ) return null
         val footprint = when (val result = AnalyticRRectPlanBudget.calculate(
             graph.targetExtent,
@@ -290,7 +329,7 @@ internal class W4bAnalyticRRectGraphLowerer {
                 .any { bytes -> bytes > graph.capabilities.maxBufferSizeBytes } ||
             draws.any { draw -> !isExactAnalyticDraw(draw, graph.targetExtent) }
         ) return null
-        return W4bGraph(target, staging, vertex, index, uniform, render, readback, draws, footprint)
+        return W4bGraph(target, staging, vertex, index, uniform, render, readback, draws, footprint, table)
     }
 
     private fun hasExactW4bCapabilityFacts(graph: RenderGraph): Boolean {
@@ -397,15 +436,12 @@ internal class W4bAnalyticRRectGraphLowerer {
         val target = RectI32(0, 0, extent.width, extent.height)
         val targetRaster = intersect(expectedRaster, target) ?: return false
         val radii = radii(shape)
-        val color = draw.color
         return hasValidCanonicalDeviceShape(shape) &&
             (draw.origin != DrawOrigin.RECT || radii.all { radius -> radius.toRawBits() == 0f.toRawBits() }) &&
             draw.coverage == CoveragePlan.AnalyticScalarAA &&
             draw.sample == SamplePlan.SingleSample &&
             draw.blend == BlendPlan.SrcOver &&
             draw.commandIndex >= 0 &&
-            listOf(color.red, color.green, color.blue, color.alpha).all(Float::isFinite) &&
-            color.red in 0f..color.alpha && color.green in 0f..color.alpha && color.blue in 0f..color.alpha &&
             raster == expectedRaster &&
             !scissor.isEmpty64() &&
             scissor.left >= targetRaster.left && scissor.top >= targetRaster.top &&
@@ -459,8 +495,10 @@ internal class W4bAnalyticRRectGraphLowerer {
 
     private fun packet(
         draw: AnalyticRRectDraw,
+        color: ColorF32,
         paintOrder: Int,
         target: GPUPixelBounds,
+        materialPlanTable: MaterialPlanTable?,
     ): W4bBuiltPacket {
         val shape = draw.copyDeviceShape()
         val raster = draw.copyRasterBounds()
@@ -500,7 +538,8 @@ internal class W4bAnalyticRRectGraphLowerer {
                 commandIdValue = draw.commandIndex,
                 sourceFamily = GPUCorePrimitiveSourceFamily.RRect,
                 geometry = plannedAuthority.geometryInput,
-                premultipliedRgba = listOf(draw.color.red, draw.color.green, draw.color.blue, draw.color.alpha),
+                premultipliedRgba = listOf(color.red, color.green, color.blue, color.alpha),
+                material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex),
                 targetBounds = target,
                 scissorBounds = plannedScissor,
                 clipCoveragePlan = plannedClip,
@@ -632,6 +671,7 @@ internal class W4bAnalyticRRectGraphLowerer {
         bounds: GPUPixelBounds,
         generation: GPUDeviceGenerationID,
         deviceLimitFacts: List<org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact>,
+        compositeSessionIdentity: String?,
     ): GPUFrameMemoryBudgetPlan? {
         val transient = try {
             Math.addExact(
@@ -643,7 +683,7 @@ internal class W4bAnalyticRRectGraphLowerer {
         }
         val peak = try { Math.addExact(shape.target.byteSize, transient) } catch (_: ArithmeticException) { return null }
         if (peak != graph.peakFrameLocalBytes || peak > graph.budget.maxFrameLocalBytes) return null
-        val identity = w4bSessionIdentity(generation, bounds)
+        val identity = compositeSessionIdentity ?: w4bSessionIdentity(generation, bounds)
         val allocations = listOf(
             GPUFrameMemoryAllocation(
                 "$identity.target",
@@ -710,7 +750,16 @@ internal class W4bAnalyticRRectGraphLowerer {
         val readback: PlanPass.ReadbackPass,
         val draws: List<AnalyticRRectDraw>,
         val footprint: AnalyticRRectMemoryFootprint,
+        val materialPlanTable: MaterialPlanTable?,
     )
+
+    private fun resolveMaterialColor(
+        table: MaterialPlanTable?,
+        authority: PlanDrawMaterialAuthority,
+    ): ColorF32? = when (authority) {
+        is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
+        is PlanDrawMaterialAuthority.MaterialV1 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }
+    }
 
     private data class W4bBuiltPacket(
         val packet: GPUDrawPacket,

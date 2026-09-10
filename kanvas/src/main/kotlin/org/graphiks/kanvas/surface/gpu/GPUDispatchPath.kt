@@ -449,7 +449,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
             )
         }
         else -> {
-            refuse("unsupported_material:${material.kind.name}")
+            refuse("unsupported_material:${material?.kind?.name ?: "w5a_material_plan_ref"}")
             return
         }
     }

@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.materials.contracts
 
 import java.security.MessageDigest
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextW5aAdmissionToken
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedVerticesW5aAdmissionToken
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.state.GPUSourceAlphaClassification
 
@@ -142,6 +144,10 @@ class GPUPreparedMaterialProgram private constructor(
     val preCoverageSourceAlpha: GPUSourceAlphaClassification,
     val abiHash: String,
     private val admission: GPUPreparedMaterialProgramAdmission,
+    /** Runtime-only witness for compiler-issued prepared-text W5a admission. */
+    internal val preparedTextW5aAdmissionToken: GPUPreparedTextW5aAdmissionToken? = null,
+    /** Runtime-only witness for compiler-issued prepared-vertices W5a admission. */
+    internal val preparedVerticesW5aAdmissionToken: GPUPreparedVerticesW5aAdmissionToken? = null,
 ) {
     val uniformBytes: List<Int> = immutableList(uniformBytes)
     val sampledResources: List<GPUPreparedMaterialSampledResource> =
@@ -207,7 +213,82 @@ class GPUPreparedMaterialProgram private constructor(
             admission = admission,
             retainedFragment = composableFragment,
             retainedAbiHash = abiHash,
+            preparedTextW5aAdmissionToken = preparedTextW5aAdmissionToken,
+            preparedVerticesW5aAdmissionToken = preparedVerticesW5aAdmissionToken,
         )
+
+    /**
+     * Adds the compiler-owned W5a text witness to this already authenticated program.
+     * The opaque value is intentionally not part of structural equality or serialization.
+     */
+    @JvmSynthetic
+    internal fun authenticatedPreparedTextW5aSnapshot(
+        token: GPUPreparedTextW5aAdmissionToken,
+    ): GPUPreparedMaterialProgram {
+        require(preparedTextW5aAdmissionToken == null) {
+            "Prepared material already carries a prepared-text W5a admission token"
+        }
+        return createAuthenticatedCore(
+            materialKey = materialKey,
+            wgslSource = wgslSource,
+            entryPoint = entryPoint,
+            uniformBytes = uniformBytes,
+            sampledResources = sampledResources.map { resource ->
+                GPUPreparedMaterialSampledResource(
+                    width = resource.width,
+                    height = resource.height,
+                    samplingFilterMode = resource.samplingFilterMode,
+                    alphaOnly = resource.alphaOnly,
+                    rgba8Bytes = resource.rgba8Bytes(),
+                    resourceKey = resource.resourceKey,
+                )
+            },
+            childPrograms = childPrograms.map(GPUPreparedRuntimeEffectChildProgram::deepSnapshot),
+            paintAlpha = paintAlpha,
+            sourceKind = sourceKind,
+            preCoverageSourceAlpha = preCoverageSourceAlpha,
+            admission = admission,
+            retainedFragment = composableFragment,
+            retainedAbiHash = abiHash,
+            preparedTextW5aAdmissionToken = token,
+            preparedVerticesW5aAdmissionToken = preparedVerticesW5aAdmissionToken,
+        )
+    }
+
+    /** Adds the compiler-owned W5a vertices witness to this authenticated program. */
+    @JvmSynthetic
+    internal fun authenticatedPreparedVerticesW5aSnapshot(
+        token: GPUPreparedVerticesW5aAdmissionToken,
+    ): GPUPreparedMaterialProgram {
+        require(preparedVerticesW5aAdmissionToken == null) {
+            "Prepared material already carries a prepared-vertices W5a admission token"
+        }
+        return createAuthenticatedCore(
+            materialKey = materialKey,
+            wgslSource = wgslSource,
+            entryPoint = entryPoint,
+            uniformBytes = uniformBytes,
+            sampledResources = sampledResources.map { resource ->
+                GPUPreparedMaterialSampledResource(
+                    width = resource.width,
+                    height = resource.height,
+                    samplingFilterMode = resource.samplingFilterMode,
+                    alphaOnly = resource.alphaOnly,
+                    rgba8Bytes = resource.rgba8Bytes(),
+                    resourceKey = resource.resourceKey,
+                )
+            },
+            childPrograms = childPrograms.map(GPUPreparedRuntimeEffectChildProgram::deepSnapshot),
+            paintAlpha = paintAlpha,
+            sourceKind = sourceKind,
+            preCoverageSourceAlpha = preCoverageSourceAlpha,
+            admission = admission,
+            retainedFragment = composableFragment,
+            retainedAbiHash = abiHash,
+            preparedTextW5aAdmissionToken = preparedTextW5aAdmissionToken,
+            preparedVerticesW5aAdmissionToken = token,
+        )
+    }
 
     operator fun component1(): String = materialKey
 
@@ -303,6 +384,8 @@ class GPUPreparedMaterialProgram private constructor(
                 admission = admission,
                 retainedFragment = null,
                 retainedAbiHash = null,
+                preparedTextW5aAdmissionToken = null,
+                preparedVerticesW5aAdmissionToken = null,
             )
 
         private fun createAuthenticatedCore(
@@ -318,6 +401,8 @@ class GPUPreparedMaterialProgram private constructor(
             admission: GPUPreparedMaterialProgramAdmission,
             retainedFragment: GPUPreparedMaterialFragment?,
             retainedAbiHash: String?,
+            preparedTextW5aAdmissionToken: GPUPreparedTextW5aAdmissionToken?,
+            preparedVerticesW5aAdmissionToken: GPUPreparedVerticesW5aAdmissionToken?,
         ): GPUPreparedMaterialProgram {
             admission.requireMatches(
                 materialKey = materialKey,
@@ -370,6 +455,8 @@ class GPUPreparedMaterialProgram private constructor(
                 preCoverageSourceAlpha = preCoverageSourceAlpha,
                 abiHash = abiHash,
                 admission = admission,
+                preparedTextW5aAdmissionToken = preparedTextW5aAdmissionToken,
+                preparedVerticesW5aAdmissionToken = preparedVerticesW5aAdmissionToken,
             )
         }
     }

@@ -2832,7 +2832,9 @@ class GPUPlanSurfacePixelTest {
     private companion object {
         const val W4E_AA4_UNAVAILABLE_DIAGNOSTIC =
             "w4e.clip.sample-count-unavailable: W4e AA clip producer support is unavailable"
-        const val W4A_512_FRAME_BUDGET_BYTES = 164_100L
-        const val W4B_512_FRAME_BUDGET_BYTES = 164_100L
+        // Exact W4 V/I/U budget plus the deduplicated W5 raw source block(s): one
+        // red Solid for W4a; blue and translucent-red Solids for W4b. No slack.
+        const val W4A_512_FRAME_BUDGET_BYTES = 164_100L + 16L
+        const val W4B_512_FRAME_BUDGET_BYTES = 164_100L + 2L * 16L
     }
 }

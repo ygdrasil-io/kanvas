@@ -520,6 +520,12 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
         b = this.color.b,
         a = this.color.a,
     )
+    // Opacity is a W5 material operation.  Legacy descriptors must not fold it into a solid
+    // colour: doing so would select a second, incompatible semantic authority.
+    is Shader.Opacity -> GPUMaterialDescriptor.Unsupported(
+        reason = GPUPreparedMaterialUnsupportedReason.OPACITY_CHILD,
+        originalKind = materialKind(),
+    )
     is Shader.LinearGradient -> {
         val first = this.stops.first()
         val last = this.stops.last()
@@ -869,6 +875,10 @@ private fun Shader.toPreparedMaterial(
 
     return when (this) {
         is Shader.SolidColor -> toMaterial()
+        is Shader.Opacity -> mapper.descriptorAssembly.preparedUnsupported(
+            GPUPreparedMaterialUnsupportedReason.OPACITY_CHILD,
+            materialKind(),
+        )
         is Shader.LinearGradient ->
             if (interpolation != ColorSpaceInterpolation.SRGB) {
                 mapper.descriptorAssembly.preparedUnsupported(
@@ -1350,6 +1360,7 @@ private fun Shader.preparedGraphChildren(): List<Shader> =
         is Shader.WithColorFilter -> listOf(shader)
         is Shader.WithWorkingColorSpace -> listOf(shader)
         is Shader.CoordClamp -> listOf(shader)
+        is Shader.Opacity -> listOf(shader)
         is Shader.SolidColor,
         is Shader.LinearGradient,
         is Shader.RadialGradient,
@@ -1395,6 +1406,7 @@ private fun Shader.materialKind(): GPUMaterialKind {
             is Shader.WithColorFilter -> current = shader.shader
             is Shader.WithWorkingColorSpace -> current = shader.shader
             is Shader.CoordClamp -> current = shader.shader
+            is Shader.Opacity -> current = shader.shader
             is Shader.PerlinNoise,
             is Shader.FractalNoise,
             -> return GPUMaterialKind.SolidColor

@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.render.ir
 
+import java.util.ArrayDeque
+import java.util.IdentityHashMap
 import org.graphiks.kanvas.geometry.toCompatibilityPath
 import org.graphiks.kanvas.geometry.toPathF32
 import org.graphiks.kanvas.image.Image
@@ -28,6 +30,8 @@ public object PaintSceneAdapter {
             throw CaptureFailure("picture-filter-requires-context", "Picture image filters require scene capture context")
         },
     ): PaintNode {
+        paint.shader?.let { preflightShader(it, limits) }
+        (paint.maskFilter as? MaskFilter.Shader)?.shader?.let { preflightShader(it, limits) }
         return PaintNode(
             color = paint.color,
             shader = paint.shader?.toMaterial(captureImage),
@@ -50,6 +54,51 @@ public object PaintSceneAdapter {
             captured.pathEffect?.let { validateEffect(it, limits) }
             captured.imageFilter?.let { validateEffect(it, limits) }
         }
+    }
+
+    /**
+     * Bounds public shader graphs before [Shader.toMaterial] recursively copies
+     * them.  Direct [capture] callers do not have DisplayOp capture's preflight.
+     */
+    private fun preflightShader(root: Shader, limits: SceneCaptureLimits) {
+        data class Visit(val shader: Shader, val depth: Int, val leaving: Boolean)
+
+        val active = IdentityHashMap<Shader, Unit>()
+        val pending = ArrayDeque<Visit>()
+        var nodes = 0
+        pending.addLast(Visit(root, depth = 1, leaving = false))
+        while (pending.isNotEmpty()) {
+            val visit = pending.removeLast()
+            if (visit.leaving) {
+                active.remove(visit.shader)
+                continue
+            }
+            if (active.put(visit.shader, Unit) != null) {
+                throw CaptureFailure("cyclic-effect-graph", "Paint, effect, or material graph contains an identity cycle")
+            }
+            if (visit.depth > minOf(limits.maxDepth, limits.graphLimits.maxDepth)) {
+                throw CaptureFailure("graph-depth-limit", "Paint, effect, or material graph exceeds configured depth")
+            }
+            nodes += 1
+            if (nodes > limits.graphLimits.maxNodes) {
+                throw CaptureFailure("graph-node-limit", "Paint, effect, or material graph exceeds configured nodes")
+            }
+            pending.addLast(Visit(visit.shader, visit.depth, leaving = true))
+            shaderChildren(visit.shader).asReversed().forEach { child ->
+                pending.addLast(Visit(child, visit.depth + 1, leaving = false))
+            }
+        }
+    }
+
+    private fun shaderChildren(shader: Shader): List<Shader> = when (shader) {
+        is Shader.Blend -> listOf(shader.dst, shader.src)
+        is Shader.RuntimeEffect -> shader.children.values.toList()
+        is Shader.WithLocalMatrix -> listOf(shader.shader)
+        is Shader.WithColorFilter -> listOf(shader.shader)
+        is Shader.WithWorkingColorSpace -> listOf(shader.shader)
+        is Shader.CoordClamp -> listOf(shader.shader)
+        is Shader.Opacity -> listOf(shader.shader)
+        else -> emptyList()
     }
 
     /** Reconstructs every public paint component retained in [PaintNode]. */
@@ -106,6 +155,7 @@ public object PaintSceneAdapter {
 
     private fun Shader.toMaterial(captureImage: (Image) -> ImageResourceSnapshot): MaterialNode = when (this) {
         is Shader.SolidColor -> MaterialNode.Solid(color)
+        is Shader.Opacity -> MaterialNode.Opacity(shader.toMaterial(captureImage), alphaF32)
         is Shader.LinearGradient -> MaterialNode.LinearGradient.of(start.checked("shader.start"), end.checked("shader.end"), stops.map { GradientStop(it.position.checked("shader.stop"), it.color) }, TileMode.valueOf(tileMode.name), ColorInterpolation.valueOf(interpolation.name))
         is Shader.RadialGradient -> MaterialNode.RadialGradient.of(center.checked("shader.center"), radius.checked("shader.radius"), stops.map { GradientStop(it.position.checked("shader.stop"), it.color) }, TileMode.valueOf(tileMode.name), ColorInterpolation.valueOf(interpolation.name))
         is Shader.SweepGradient -> MaterialNode.SweepGradient.of(center.checked("shader.center"), startAngle.checked("shader.start-angle"), endAngle.checked("shader.end-angle"), stops.map { GradientStop(it.position.checked("shader.stop"), it.color) }, TileMode.valueOf(tileMode.name), ColorInterpolation.valueOf(interpolation.name))
@@ -217,7 +267,7 @@ public object PaintSceneAdapter {
         is MaterialNode.FractalNoise -> Shader.FractalNoise(baseX, baseY, numOctaves, seed, tileSize)
         is MaterialNode.WithWorkingColorSpace -> Shader.WithWorkingColorSpace(material.toShader(), org.graphiks.kanvas.paint.ColorSpaceInterpolation.valueOf(interpolation.name))
         is MaterialNode.CoordClamp -> Shader.CoordClamp(material.toShader(), copySubset())
-        is MaterialNode.Opacity -> throw IllegalArgumentException("Opacity material has no public Shader equivalent")
+        is MaterialNode.Opacity -> Shader.Opacity(material.toShader(), alpha)
         is MaterialNode.RuntimeEffect -> Shader.RuntimeEffect(
             descriptor.registeredEffect(),
             uniforms().toUniformBlock(),

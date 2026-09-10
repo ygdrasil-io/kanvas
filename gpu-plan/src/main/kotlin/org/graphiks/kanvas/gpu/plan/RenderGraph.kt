@@ -20,6 +20,8 @@ public class RenderGraph private constructor(
     private val w4dGeneralCompilerWitness: W4dGeneralCompilerWitness?,
     private val w4eNativePayloadPlan: W4eNativePayloadPlan?,
     private val w4eCompilerWitness: W4eCompilerWitness?,
+    private val materialPlanTable: MaterialPlanTable?,
+    private val w5aCompositePlan: W5aCompositePlanV1? = null,
 ) {
     private val storedTargetExtent: SizeI32 = targetExtent.copy()
     public val targetExtent: SizeI32
@@ -31,6 +33,11 @@ public class RenderGraph private constructor(
     public fun resources(): List<PlanResource> = storedResources
     public fun passes(): List<PlanPass> = storedPasses
     public fun dependencies(): List<PlanPassDependency> = storedDependencies
+
+    /** Immutable W5 material authority, present only on material-plan graphs. */
+    public fun materialPlanTableOrNull(): MaterialPlanTable? = materialPlanTable
+
+    public fun w5aCompositePlanOrNull(): W5aCompositePlanV1? = w5aCompositePlan
 
     /** Verifies that this exact immutable graph snapshot was issued by the W4d compiler. */
     public fun verifyW4dCompilerWitness(): Boolean =
@@ -51,6 +58,20 @@ public class RenderGraph private constructor(
     public fun w4eNativePayloadOrNull(): W4eNativePayloadPlan? = w4eNativePayloadPlan
 
     public companion object {
+        /** Only the composite compiler can issue this distinct, lane-owned graph representation. */
+        internal fun issueW5aComposite(composite: W5aCompositePlanV1): RenderGraph {
+            val lanes = composite.lanes()
+            val first = lanes.first()
+            val identity = MessageDigest.getInstance("SHA-256").digest(
+                lanes.joinToString("|") { it.id.value }.encodeToByteArray(),
+            ).joinToString("") { "%02x".format(it) }
+            // Composite resources/passes live in typed lanes; no standalone topology is forged.
+            return RenderGraph(PlanId("w5a.composite.$identity"), W5aCompositePlanCompiler.CAPABILITY_ID,
+                first.targetExtent, first.colorFormat, first.capabilities, first.budget,
+                lanes.sumOf { it.visualCommandCount }, emptyList(), emptyList(), emptyList(),
+                composite.peakFrameLocalBytesI64, null, null, null, null, composite.materialTable, composite)
+        }
+
         public fun of(
             id: PlanId,
             capabilityId: String,
@@ -63,6 +84,7 @@ public class RenderGraph private constructor(
             passes: List<PlanPass>,
             dependencies: List<PlanPassDependency>,
             peakFrameLocalBytes: Long,
+            materialPlanTable: MaterialPlanTable? = null,
         ): RenderGraph {
             require(capabilityId.isNotBlank()) { "Capability ID must not be blank" }
             require(!targetExtent.isEmpty()) { "Target extent must be non-empty" }
@@ -167,15 +189,25 @@ public class RenderGraph private constructor(
             require(calculatedPeak == peakFrameLocalBytes) { "Peak memory does not match resource lifetimes" }
             require(calculatedPeak <= budget.maxFrameLocalBytes) { "Peak memory exceeds budget" }
             return RenderGraph(id, capabilityId, targetExtent, colorFormat, capabilities, budget, visualCommandCount,
-                resources, passes, dependencies, peakFrameLocalBytes, null, null, null, null)
+                resources, passes, dependencies, peakFrameLocalBytes, null, null, null, null, materialPlanTable)
         }
 
         /** Trust-boundary factory available only to the W4d compiler after public validation. */
         @JvmSynthetic
         internal fun issueW4dCompilerWitness(graph: RenderGraph): RenderGraph {
-            require(graph.capabilityId == W4dPathStrokePlanCompiler.CAPABILITY_ID) {
+            require(
+                W4dPathStrokePlanCompiler.isHistoricalCapabilityId(graph.capabilityId) ||
+                    W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId),
+            ) {
                 "Only a W4d graph may receive a W4d compiler witness"
             }
+            require(
+                if (W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) {
+                    graph.hasW5aPathDrawMaterialContract()
+                } else {
+                    graph.hasLegacyPathDrawColorContract()
+                },
+            ) { "W4d graph material authority does not match its capability version" }
             require(graph.w4dCompilerWitness == null) { "A W4d compiler witness may be issued only once" }
             return RenderGraph(
                 graph.id,
@@ -193,16 +225,24 @@ public class RenderGraph private constructor(
                 null,
                 null,
                 null,
+                graph.materialPlanTable,
             )
         }
 
         /** Trust-boundary factory available only to the W4d.2 compiler after public validation. */
         @JvmSynthetic
         internal fun issueW4dGeneralCompilerWitness(graph: RenderGraph): RenderGraph {
-            require(graph.capabilityId in setOf(
-                W4dGeneralPathPlanCompiler.HARD_CAPABILITY_ID,
-                W4dGeneralPathPlanCompiler.AA_CAPABILITY_ID,
-            )) { "Only a W4d.2 graph may receive a W4d.2 compiler witness" }
+            require(
+                W4dGeneralPathPlanCompiler.isLegacyCapabilityId(graph.capabilityId) ||
+                    W4dGeneralPathPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId),
+            ) { "Only a W4d.2 graph may receive a W4d.2 compiler witness" }
+            require(
+                if (W4dGeneralPathPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) {
+                    graph.hasW5aMaterialPathContract()
+                } else {
+                    graph.hasLegacyPathColorContract()
+                },
+            ) { "W4d.2 graph material authority does not match its capability version" }
             require(graph.w4dGeneralCompilerWitness == null) {
                 "A W4d.2 compiler witness may be issued only once"
             }
@@ -222,6 +262,7 @@ public class RenderGraph private constructor(
                 W4dGeneralCompilerWitness.issue(graph),
                 null,
                 null,
+                graph.materialPlanTable,
             )
         }
 
@@ -231,10 +272,17 @@ public class RenderGraph private constructor(
             graph: RenderGraph,
             nativePayload: W4eNativePayloadPlan,
         ): RenderGraph {
-            require(graph.capabilityId in setOf(
-                W4eClipPlanCompiler.HARD_CAPABILITY_ID,
-                W4eClipPlanCompiler.AA_CAPABILITY_ID,
-            )) { "Only a W4e graph may receive a W4e compiler witness" }
+            require(
+                W4eClipPlanCompiler.isLegacyCapabilityId(graph.capabilityId) ||
+                    W4eClipPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId),
+            ) { "Only a W4e graph may receive a W4e compiler witness" }
+            require(
+                if (W4eClipPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) {
+                    graph.hasW5aMaterialPathContract()
+                } else {
+                    graph.hasLegacyPathColorContract()
+                },
+            ) { "W4e graph material authority does not match its capability version" }
             require(graph.w4dCompilerWitness == null && graph.w4dGeneralCompilerWitness == null &&
                 graph.w4eNativePayloadPlan == null && graph.w4eCompilerWitness == null) {
                 "A W4e graph must be sealed exactly once"
@@ -258,6 +306,7 @@ public class RenderGraph private constructor(
                 null,
                 nativePayload,
                 null,
+                graph.materialPlanTable,
             )
             return RenderGraph(
                 payloadGraph.id,
@@ -275,6 +324,7 @@ public class RenderGraph private constructor(
                 null,
                 nativePayload,
                 W4eCompilerWitness.issue(payloadGraph),
+                payloadGraph.materialPlanTable,
             )
         }
 

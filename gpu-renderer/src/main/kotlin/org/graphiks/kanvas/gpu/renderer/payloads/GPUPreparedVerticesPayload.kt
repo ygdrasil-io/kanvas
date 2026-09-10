@@ -8,6 +8,8 @@ import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFrameIdentityAuthority
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFrameSnapshot
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgram
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedVerticesMaterialPlanEmission
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedVerticesMaterialPlanProvenance
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 const val PREPARED_VERTICES_RENDER_STEP_IDENTITY: String = "vertices.draw.prepared"
@@ -35,6 +37,7 @@ data class GPUPreparedVerticesPayloadInput(
     val artifact: GPUPreparedVerticesUploadArtifact,
     val material: GPUPreparedMaterialProgram,
     val materialFrameSnapshot: GPUPreparedMaterialFrameSnapshot? = null,
+    val materialPlanEmission: GPUPreparedVerticesMaterialPlanEmission? = null,
     val topologyIdentity: GPUPreparedVerticesTopologyIdentity,
     val transformBytes: List<Int>,
     val targetBounds: GPUPixelBounds,
@@ -82,6 +85,16 @@ internal class GPUPreparedVerticesPayloadSnapshot(
     } ?: GPUPreparedMaterialFrameIdentityAuthority.authenticate(input.material)
     val material = authenticatedMaterial.program
     val materialIdentity = authenticatedMaterial.identity.bucketKey
+    val materialPlanProvenance = input.materialPlanEmission?.bind(payloadRef.commandIdValue, material)
+        ?: input.materialPlanEmission?.let {
+            throw IllegalArgumentException("Prepared vertices W5a emission does not match its command or program")
+        }
+    init {
+        require((materialPlanProvenance == null) ==
+            (material.preparedVerticesW5aAdmissionToken == null)) {
+            "Prepared vertices W5a provenance must match its compiler-issued program"
+        }
+    }
     val topologyIdentity = input.topologyIdentity
     val transformBytes = immutableList(input.transformBytes)
     val targetBounds = input.targetBounds.copy()
@@ -96,6 +109,21 @@ internal class GPUPreparedVerticesPayloadSnapshot(
     val drawProvenance = input.drawProvenance
     val frameProvenance = input.frameProvenance
     val canonicalHash = canonicalHash()
+
+    fun withW5aFrameMaterial(
+        table: org.graphiks.kanvas.gpu.plan.MaterialPlanTable,
+        ref: org.graphiks.kanvas.gpu.plan.MaterialPlanRef,
+    ): GPUPreparedVerticesPayloadSnapshot = GPUPreparedVerticesPayloadSnapshot(GPUPreparedVerticesPayloadInput(
+        payloadRef = payloadRef, artifact = artifact, material = material,
+        materialFrameSnapshot = authenticatedMaterial,
+        materialPlanEmission = requireNotNull(materialPlanProvenance).remappedEmission(table, ref),
+        topologyIdentity = topologyIdentity, transformBytes = transformBytes,
+        targetBounds = targetBounds, scissorBounds = scissorBounds, targetFormat = targetFormat,
+        clipIdentity = clipIdentity, clipCoverageIdentity = clipCoverageIdentity,
+        primitiveColorPresent = primitiveColorPresent, primitiveBlendIdentity = primitiveBlendIdentity,
+        finalBlendIdentity = finalBlendIdentity, capabilitySnapshotHash = capabilitySnapshotHash,
+        drawProvenance = drawProvenance, frameProvenance = frameProvenance,
+    ))
 
     fun canonicalHash(): String {
         val layout = artifact.layout
@@ -125,6 +153,8 @@ internal class GPUPreparedVerticesPayloadSnapshot(
             .bytes("artifact.vertexBytes", artifact.vertexBytesForUpload())
             .bytes("artifact.indexBytes", artifact.indexBytesForUpload() ?: byteArrayOf())
             .text("material.authenticatedIdentity", materialIdentity)
+            .boolean("material.w5aPlan.present", materialPlanProvenance != null)
+            .text("material.w5aPlan.identity", materialPlanProvenance?.canonicalIdentity() ?: "none")
             .text("topology", topologyIdentity.sourceLabel)
             .int("transform.count", transformBytes.size)
         transformBytes.forEachIndexed { index, bits ->

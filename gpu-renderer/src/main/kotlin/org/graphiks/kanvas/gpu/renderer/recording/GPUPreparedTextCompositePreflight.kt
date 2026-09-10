@@ -70,7 +70,7 @@ internal object GPUPreparedTextCompositePreflight {
     fun validate(
         binding: GPUPreparedTextRenderBinding,
         semantic: GPUDrawSemanticPayload.TextA8,
-        capabilities: GPUCapabilities,
+        capabilities: GPUCapabilities?,
         framePlan: GPUFramePlan,
         renderSourceStepIndex: Int,
     ): GPUPreparedTextCompositePreflightRefusal? {
@@ -97,6 +97,20 @@ internal object GPUPreparedTextCompositePreflight {
         ) {
             return bindingLayoutRefusal(
                 "Prepared TextA8 semantic, capability, binding, and frame identities diverged.",
+            )
+        }
+        val materialPlan = semantic.materialPlanProvenance
+        val semanticAdmissionToken = semantic.material.preparedTextW5aAdmissionToken
+        if (materialPlan?.validates(semantic.payloadRef.commandIdValue, semantic.material) == false ||
+            binding.preflightSeal.materialPlanProvenanceIdentity != materialPlan?.canonicalIdentity() ||
+            binding.preflightSeal.materialPlanAdmissionToken !== semanticAdmissionToken ||
+            (materialPlan == null) != (semanticAdmissionToken == null) ||
+            materialPlan?.matchesAdmissionToken(
+                binding.preflightSeal.materialPlanAdmissionToken,
+            ) == false
+        ) {
+            return bindingLayoutRefusal(
+                "Prepared TextA8 sealed W5a material table, reference, version, or command changed.",
             )
         }
         val compositeSeal = binding.preflightSeal.textA8Composite
@@ -151,10 +165,11 @@ internal object GPUPreparedTextCompositePreflight {
             render,
             preparations,
         )?.let { return it }
+        val observedCapabilities = capabilities ?: return null
         validateDrawUniform(
             binding,
             semantic,
-            capabilities,
+            observedCapabilities,
         )?.let { return it }
         validateProgramSourceAndAbi(
             binding.compositeProgram,

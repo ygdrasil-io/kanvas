@@ -321,6 +321,7 @@ internal class GPUPreparedNativeCompositeFrameLeaseLifecycle(
     }
 
     private val children = lifecycles.toList()
+    internal fun contains(lifecycle: GPUPreparedNativeFrameLeaseLifecycle?): Boolean = children.any { it === lifecycle }
     private val childStates = MutableList(children.size) { State.CheckedOut }
     private var state = State.CheckedOut
 
@@ -1050,9 +1051,28 @@ internal sealed interface GPUPreparedNativeScopeOperand {
             GPUPreparedNativeRenderOperandLayout.CommandOrder,
         operationKindOverride: GPUEncoderOperationKind? = null,
         val passSegment: RenderPassSegment? = null,
+        w5aSourceBindingsV2: List<GPUW5aNativeSourceBindingV2> = emptyList(),
     ) : GPUPreparedNativeScopeOperand {
         val commands = immutableList(commands)
         val semanticPayloads = immutableList(semanticPayloads)
+        val w5aSourceBindingsV2 = immutableList(w5aSourceBindingsV2)
+        /** V2 fragment-only bindings are a separate, explicitly sealed command partition. */
+        val encodingCommands: List<GPUPreparedNativeRenderCommand> = if (w5aSourceBindingsV2.isEmpty()) this.commands else buildList {
+            val byDraw = w5aSourceBindingsV2.associateBy { it.drawOrdinalI32 }
+            require(byDraw.size == w5aSourceBindingsV2.size)
+            var base: GPUPreparedNativeRenderPipelineOperand? = null
+            var ordinalI32 = 0
+            this@Render.commands.forEach { command ->
+                if (command is GPUPreparedNativeRenderCommand.SetPipeline) base = command.pipeline
+                if (command is GPUPreparedNativeRenderCommand.Draw || command is GPUPreparedNativeRenderCommand.DrawIndexed) {
+                    val source = byDraw[ordinalI32++]
+                    add(GPUPreparedNativeRenderCommand.SetPipeline(source?.pipeline ?: requireNotNull(base)))
+                    source?.let { add(GPUPreparedNativeRenderCommand.SetBindGroup(1, it.bindGroup)) }
+                }
+                add(command)
+            }
+            require(byDraw.keys.all { it in 0 until ordinalI32 })
+        }
         override val operationKind: GPUEncoderOperationKind =
             operationKindOverride ?: GPUEncoderOperationKind.Render
         override val operands: List<GPUPreparedNativeOperand> =
@@ -2097,6 +2117,21 @@ internal class GPUPreparedNativeFrameDraft internal constructor(
                 true
             }
         }
+
+    /** Transfers a constituent journal into the one composite draft that owns its lease and handles. */
+    internal fun transferOwnershipToComposite(replacement: GPUPreparedNativeFrameDraft): Boolean = synchronized(this) {
+        synchronized(replacement) {
+            val lifecycle = replacement.payload.leaseLifecycle as? GPUPreparedNativeCompositeFrameLeaseLifecycle
+                ?: return@synchronized false
+            if (ownershipState != OwnershipState.Draft || replacement.ownershipState != OwnershipState.Draft ||
+                !lifecycle.contains(payload.leaseLifecycle) || pendingOwnedHandles.any { source ->
+                    replacement.pendingOwnedHandles.none { it === source }
+                }) return@synchronized false
+            pendingOwnedHandles.clear()
+            ownershipState = OwnershipState.Released
+            true
+        }
+    }
 
     @Synchronized
     internal fun pendingOwnedHandlesSnapshot(): List<AutoCloseable> = pendingOwnedHandles.toList()

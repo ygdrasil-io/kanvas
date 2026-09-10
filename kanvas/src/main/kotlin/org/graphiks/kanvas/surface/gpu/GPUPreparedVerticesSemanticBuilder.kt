@@ -247,6 +247,7 @@ internal object GPUPreparedVerticesSemanticBuilder {
                     artifact = inventoryCommand.artifact,
                     material = inventoryCommand.material,
                     materialFrameSnapshot = inventoryCommand.materialFrameSnapshot,
+                    materialPlanEmission = inventoryCommand.materialPlanEmission,
                     topologyIdentity = when (inventoryCommand.artifact.topology.sourceLabel) {
                         "Triangles" -> GPUPreparedVerticesTopologyIdentity.Triangles
                         "TriangleStrip" -> GPUPreparedVerticesTopologyIdentity.TriangleStrip

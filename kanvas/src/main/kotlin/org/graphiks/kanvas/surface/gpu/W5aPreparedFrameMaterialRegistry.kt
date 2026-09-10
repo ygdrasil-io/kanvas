@@ -1,0 +1,135 @@
+package org.graphiks.kanvas.surface.gpu
+
+import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.kanvas.gpu.plan.EffectiveMaterialPlanner
+import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
+import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
+import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.StrokeCap
+import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.render.ir.DisplayOpSceneAdapter
+import org.graphiks.kanvas.render.ir.SceneCaptureResult
+import org.graphiks.kanvas.render.ir.SceneCommand
+import org.graphiks.kanvas.render.ir.SceneExtent
+import org.graphiks.kanvas.types.PointMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
+import org.graphiks.kanvas.canvas.ClipStack
+import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.matrix.Matrix3x3F32
+
+/**
+ * Interns immutable W5a sources for authentic prepared core, A8 text and vertices lanes.
+ *
+ * Only completed mapper/lowerer admissions may enter the frame table. Local paint candidates
+ * are not frame ownership and never consume the aggregate table capacity.
+ */
+internal data class W5aPreparedFrameMaterialRegistry(
+    val table: MaterialPlanTable,
+    val refsByCommandId: Map<Int, MaterialPlanRef>,
+) {
+    internal companion object {
+        fun captureCoreCandidates(
+            operations: List<DisplayOp>,
+            width: Int,
+            height: Int,
+        ): Map<Int, EffectiveMaterialPlanner.Result.Ready> {
+            val plannedByOperationIndex = linkedMapOf<Int, EffectiveMaterialPlanner.Result.Ready>()
+            operations.forEachIndexed { operationIndex, operation ->
+                if (!operation.isW5aCoreMaterialCandidate()) return@forEachIndexed
+                val paint = when (operation) {
+                    is DisplayOp.DrawRect -> operation.paint
+                    is DisplayOp.DrawRRect -> operation.paint
+                    is DisplayOp.DrawPath -> operation.paint
+                    is DisplayOp.DrawPoint -> operation.paint
+                    is DisplayOp.DrawPoints -> operation.paint
+                    else -> return@forEachIndexed
+                }
+                // Material-only candidate capture, exactly as in prepared Vertices. The real
+                // mapper owns all geometry/state validation and can discard this local source.
+                val captured = runCatching { DisplayOpSceneAdapter.capture(
+                    operations = listOf(DisplayOp.DrawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f),
+                        paint, Matrix3x3F32.Identity, ClipStack.WideOpen)),
+                    extent = SceneExtent(width, height),
+                    colorSpace = ColorSpace.SRGB,
+                ) }.getOrNull() as? SceneCaptureResult.Captured ?: return@forEachIndexed
+                val draw = captured.scene.singleOrNull() as? SceneCommand.Draw
+                    ?: return@forEachIndexed
+                val planned = EffectiveMaterialPlanner.plan(draw.node)
+                    as? EffectiveMaterialPlanner.Result.Ready ?: return@forEachIndexed
+                plannedByOperationIndex[operationIndex] = planned
+            }
+            return java.util.Collections.unmodifiableMap(plannedByOperationIndex)
+        }
+
+        fun seal(
+            semantics: Map<Int, GPUDrawSemanticPayload>,
+            corePlansByCommandId: Map<Int, EffectiveMaterialPlanner.Result.Ready>,
+        ): W5aPreparedFrameMaterialRegistry? {
+            val orderedPlans = sortedMapOf<Int, EffectiveMaterialPlanner.Result.Ready>()
+            semantics.forEach { (commandId, semantic) ->
+                val planned = when (semantic) {
+                    is GPUDrawSemanticPayload.CorePrimitive -> {
+                        val material = semantic.material as? GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1
+                            ?: return@forEach
+                        requireNotNull(corePlansByCommandId[commandId]).also { require(it.root == material.ref) }
+                    }
+                    is GPUDrawSemanticPayload.TextA8 -> semantic.materialPlanProvenance?.let {
+                        EffectiveMaterialPlanner.Result.Ready(it.sourcePlanTable, it.ref)
+                    }
+                    is GPUDrawSemanticPayload.Vertices -> semantic.materialPlanProvenance?.let {
+                        EffectiveMaterialPlanner.Result.Ready(it.sourcePlanTable, it.ref)
+                    }
+                    else -> null
+                }
+                if (planned != null) orderedPlans[commandId] = planned
+            }
+            if (orderedPlans.isEmpty()) return null
+            // Once at least one source selects W5a, an invalid aggregate table is terminal.
+            val interned = try {
+                MaterialPlanTable.intern(orderedPlans.values.map { it.table })
+            } catch (_: IllegalArgumentException) {
+                throw GPUPreparedSurfaceTerminalException(org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic(
+                    org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode("resource.material.w5a.table-limit"),
+                    org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain.Resources,
+                    org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity.Error,
+                    "The W5a frame material table exceeds its bounded entry capacity.",
+                ))
+            }
+            val refs = orderedPlans.entries.mapIndexed { laneOrdinalI32, (operationIndex, planned) ->
+                operationIndex to interned.remap(laneOrdinalI32, planned.root)
+            }.toMap()
+            return W5aPreparedFrameMaterialRegistry(
+                table = interned.table,
+                refsByCommandId = java.util.Collections.unmodifiableMap(LinkedHashMap(refs)),
+            )
+        }
+
+        private fun DisplayOp.isW5aCoreMaterialCandidate(): Boolean = when (this) {
+            is DisplayOp.DrawRect -> !paint.isStroke() && paint.blendMode == BlendMode.SRC_OVER &&
+                paint.shader.isW5aSolidOpacity()
+            is DisplayOp.DrawRRect -> !paint.isStroke() && paint.blendMode == BlendMode.SRC_OVER &&
+                paint.shader.isW5aSolidOpacity()
+            is DisplayOp.DrawPath -> paint.blendMode == BlendMode.SRC_OVER && paint.shader.isW5aSolidOpacity()
+            is DisplayOp.DrawPoint ->
+                paint.blendMode == BlendMode.SRC_OVER && paint.strokeCap != StrokeCap.ROUND &&
+                    paint.shader.isW5aSolidOpacity()
+            is DisplayOp.DrawPoints ->
+                mode == PointMode.POINTS &&
+                    paint.blendMode == BlendMode.SRC_OVER && paint.strokeCap != StrokeCap.ROUND &&
+                    paint.shader.isW5aSolidOpacity()
+            else -> false
+        }
+
+        private fun Shader?.isW5aSolidOpacity(): Boolean {
+            var source = this
+            var depth = 0
+            while (source is Shader.Opacity) {
+                if (++depth > 64) return false
+                source = source.shader
+            }
+            return source == null || source is Shader.SolidColor
+        }
+    }
+}

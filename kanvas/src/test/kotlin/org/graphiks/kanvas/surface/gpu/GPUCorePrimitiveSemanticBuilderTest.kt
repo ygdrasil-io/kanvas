@@ -235,6 +235,8 @@ class GPUCorePrimitiveSemanticBuilderTest {
                 is GPUCorePrimitiveMaterialPayload.SweepGradient -> material.localMatrix
                 is GPUCorePrimitiveMaterialPayload.SolidColor ->
                     error("Unexpected solid fixture")
+                is GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1 ->
+                    error("Unexpected W5a material reference in legacy gradient fixture")
             }
             assertEquals(descriptorMatrix, semanticMatrix)
             assertNotNull(semantic.material.materialHash)

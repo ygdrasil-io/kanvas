@@ -89,6 +89,9 @@ public class GpuRenderBackend(
         }
         return when (val selected = compiler.select(scene, target)) {
             is GpuPlanSelection.NotCandidate -> RenderPlanResult.GapNotMigrated(selected.diagnostics())
+            is GpuPlanSelection.MaterialOnlyRefusal -> if (selected.sceneCanonicalId == scene.canonicalId && selected.target == target) {
+                RenderPlanResult.GapOnPromotedScope(selected.diagnostics())
+            } else RenderPlanResult.InvalidScene(selected.diagnostics())
             is GpuPlanSelection.InvalidScene -> RenderPlanResult.InvalidScene(selected.diagnostics())
             is GpuPlanSelection.ResourceLimitExceeded -> RenderPlanResult.ResourceLimitExceeded(selected.diagnostics())
             is GpuPlanSelection.Candidate -> when (val acquisition = acquirePlanningCapabilitiesOrPromotedGap()) {
@@ -326,7 +329,7 @@ public class GpuRenderBackend(
     ): RenderExecutionResult.DeviceFailure = if (isDeviceLoss(diagnostic)) {
         device("w3.execution.device_failure", "GPU device failed during submission.")
     } else {
-        device("w3.execution.submit_failure", submitMessage)
+        device("w3.execution.submit_failure", "$submitMessage ${diagnostic.code.value}: ${diagnostic.message} ${diagnostic.facts["failureMessage"].orEmpty()}".trim())
     }
 
     private fun isAuthenticatedForTarget(

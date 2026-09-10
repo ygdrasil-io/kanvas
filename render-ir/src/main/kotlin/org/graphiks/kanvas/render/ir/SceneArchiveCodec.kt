@@ -27,9 +27,9 @@ import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.vector.Vector2F32
 
 /**
- * The owner of the version-8 Picture payload.
+ * The owner of the version-9 Picture payload.
  *
- * A v8 archive starts with the public `KPIC` magic, its v8 integer and the
+ * A v8/v9 archive starts with the public `KPIC` magic, its version integer and the
  * cull rectangle.  The following negative marker occupies the old v8
  * `opCount` slot: it can therefore never be mistaken for a valid historical
  * v8 op count.  Historical Task 8 v8 streams deliberately return [LegacyV8]
@@ -37,11 +37,11 @@ import org.graphiks.math.vector.Vector2F32
  */
 public object SceneArchiveCodec {
     private val magic: ByteArray = byteArrayOf(0x4b, 0x50, 0x49, 0x43)
-    private const val pictureVersion: Int = 8
+    private const val pictureVersion: Int = 9
     private const val irMarker: Int = -1_391_019_346
-    private const val schemaVersion: Int = 2
+    private const val schemaVersion: Int = 3
 
-    /** Encodes a deeply immutable Scene IR as the sole v8 Picture writer. */
+    /** Encodes a deeply immutable Scene IR as the sole v9 Picture writer. */
     public fun encodePicture(scene: SceneSnapshot, cullRect: RectF32): ByteArray {
         requireSemanticValidity(scene)
         val writer = ArchiveWriter()
@@ -59,18 +59,22 @@ public object SceneArchiveCodec {
         val reader = ArchiveReader(data)
         return try {
             if (!reader.bytesEqual(magic)) return SceneArchiveDecodeResult.Invalid("invalid-magic", "Picture magic is not KPIC")
-            if (reader.i32() != pictureVersion) return SceneArchiveDecodeResult.Invalid("unknown-version", "Picture version is not 8")
+            val encodedPictureVersion = reader.i32()
+            if (encodedPictureVersion !in setOf(8, pictureVersion)) {
+                return SceneArchiveDecodeResult.Invalid("unknown-version", "Picture version is not supported")
+            }
             val cull = reader.rect()
             val markerOrLegacyOpCount = reader.i32()
             if (markerOrLegacyOpCount != irMarker) {
-                return if (markerOrLegacyOpCount >= 0) {
+                return if (encodedPictureVersion == 8 && markerOrLegacyOpCount >= 0) {
                     SceneArchiveDecodeResult.LegacyV8
                 } else {
                     SceneArchiveDecodeResult.Invalid("invalid-marker", "Picture archive marker is not recognized")
                 }
             }
             val decodedSchemaVersion = reader.i32()
-            if (decodedSchemaVersion !in 1..schemaVersion) {
+            val maxSchema = if (encodedPictureVersion == 8) 2 else schemaVersion
+            if (decodedSchemaVersion !in 1..maxSchema) {
                 return SceneArchiveDecodeResult.Invalid("unknown-schema", "Scene archive schema is not supported")
             }
             reader.sceneArchiveSchemaVersion = decodedSchemaVersion
@@ -550,7 +554,7 @@ private class ArchiveReader(private val data: ByteArray) {
                         perspectiveCaptureRefusal = bool(),
                         transformClass = text(),
                     )
-                    2 -> clipTransformV2()
+                    2, 3 -> clipTransformV2()
                     else -> throw ArchiveFailure("unknown-schema", "Scene archive schema is not supported")
                 }
                 ClipEntry(geometry, operation, antiAlias, transform)

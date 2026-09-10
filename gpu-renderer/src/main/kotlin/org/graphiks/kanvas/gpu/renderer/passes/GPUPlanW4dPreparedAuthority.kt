@@ -44,6 +44,7 @@ internal class W4dSessionScratchDrawV1(
     val indexOffsetBytes: Long,
     val indexRangeBytes: Long,
     val uniformSlotIndex: Int,
+    val producerUniformSlotIndex: Int? = null,
     val atomicGroupId: String?,
 ) {
     private val pathGeometrySnapshot: PathDrawGeometry = pathGeometry
@@ -75,7 +76,8 @@ internal class W4dSessionScratchDrawV1(
         require(commandId >= 0 && !scissorBoundsSnapshot.isEmpty) {
             "W4d scratch draw requires a non-negative command and non-empty scissor"
         }
-        require(vertexOffsetBytes >= 0L && indexOffsetBytes >= 0L && uniformSlotIndex >= 0) {
+        require(vertexOffsetBytes >= 0L && indexOffsetBytes >= 0L && uniformSlotIndex >= 0 &&
+            (producerUniformSlotIndex == null || producerUniformSlotIndex >= 0)) {
             "W4d scratch draw offsets and uniform slot must be non-negative"
         }
         require(vertexRangeBytes == expectedVertexBytes && indexRangeBytes == expectedIndexBytes) {
@@ -93,6 +95,9 @@ internal class W4dSessionScratchDrawV1(
                         !atomicGroupId.isNullOrBlank()
             },
         ) { "W4d scratch draw strategy must retain its exact immutable geometry authority" }
+        require(
+            strategy != PathFillStrategy.DirectTriangle || producerUniformSlotIndex == null,
+        ) { "W4d direct scratch draws must not have a producer uniform slot" }
         require(
             strategy != PathFillStrategy.StencilCover ||
                 fillRule != FillRule.WINDING ||
@@ -153,16 +158,23 @@ internal class W4dSessionScratchV1(
     val renderPassIds: List<PlanPassId> = immutableList(renderPassIds)
 
     init {
+        val materialV2 = W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(capabilityId)
         val usesStencil = this.draws.any { draw -> draw.strategy == PathFillStrategy.StencilCover }
         val expectedVertexUseful = this.draws.checkedSumOf(W4dSessionScratchDrawV1::vertexRangeBytes)
         val expectedIndexUseful = this.draws.checkedSumOf(W4dSessionScratchDrawV1::indexRangeBytes)
-        val expectedUniformPayload = Math.multiplyExact(this.draws.size.toLong(), UNIFORM_PAYLOAD_BYTES)
-        val expectedUniformReserved = Math.multiplyExact(this.draws.size.toLong(), uniformStrideBytes)
+        val expectedUniformCount = this.draws.sumOf { draw ->
+            if (materialV2 && draw.strategy == PathFillStrategy.StencilCover) 2L else 1L
+        }
+        val expectedUniformPayload = Math.multiplyExact(expectedUniformCount, UNIFORM_PAYLOAD_BYTES)
+        val expectedUniformReserved = Math.multiplyExact(expectedUniformCount, uniformStrideBytes)
         require(planId.isCanonicalSha256() && capabilitySealHash.isNotBlank() && deviceGeneration >= 0L) {
             "W4d scratch requires exact graph and capability hashes"
         }
-        require(capabilityId == W4dPathStrokePlanCompiler.CAPABILITY_ID) {
-            "W4d scratch requires the exact W4d capability id"
+        require(
+            W4dPathStrokePlanCompiler.isHistoricalCapabilityId(capabilityId) ||
+                W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(capabilityId),
+        ) {
+            "W4d scratch requires a recognized W4d capability id"
         }
         require(
             this.renderPassIds.isNotEmpty() && this.renderPassIds.distinct().size == this.renderPassIds.size &&
@@ -178,7 +190,16 @@ internal class W4dSessionScratchV1(
             this.draws.size in 1..512 &&
                 this.draws.map(W4dSessionScratchDrawV1::commandId).distinct().size == this.draws.size &&
                 this.draws.zipWithNext().all { (first, second) -> first.commandId < second.commandId } &&
-                this.draws.withIndex().all { (index, draw) -> draw.uniformSlotIndex == index } &&
+                this.draws.flatMap { draw -> listOfNotNull(draw.producerUniformSlotIndex, draw.uniformSlotIndex) }
+                    .sorted() == (0 until expectedUniformCount.toInt()).toList() &&
+                this.draws.all { draw ->
+                    draw.strategy != PathFillStrategy.StencilCover || if (materialV2) {
+                        draw.producerUniformSlotIndex != null &&
+                            draw.producerUniformSlotIndex != draw.uniformSlotIndex
+                    } else {
+                        draw.producerUniformSlotIndex == null
+                    }
+                } &&
                 this.draws.zipWithNext().all { (first, second) ->
                     Math.addExact(first.vertexOffsetBytes, first.vertexRangeBytes) == second.vertexOffsetBytes &&
                         Math.addExact(first.indexOffsetBytes, first.indexRangeBytes) == second.indexOffsetBytes
@@ -194,9 +215,13 @@ internal class W4dSessionScratchV1(
                 uniformPlan.deviceGeneration == deviceGeneration &&
                 uniformPlan.uploadBudgetBytes == uniformCapacityBytes &&
                 uniformPlan.totalBytes == expectedUniformReserved &&
-                uniformPlan.slots.size == this.draws.size &&
+                uniformPlan.slots.size == expectedUniformCount.toInt() &&
                 uniformPlan.slots.withIndex().all { (index, slot) ->
-                    slot.slotLabel == "path-draw-${this.draws[index].commandId}" &&
+                    slot.slotLabel in this.draws.flatMap { draw -> if (materialV2) {
+                        listOf("path-draw-producer-${draw.commandId}").takeIf {
+                            draw.strategy == PathFillStrategy.StencilCover
+                        }.orEmpty() + "path-draw-color-${draw.commandId}"
+                    } else listOf("path-draw-${draw.commandId}") } &&
                         slot.payloadBytes == UNIFORM_PAYLOAD_BYTES &&
                         slot.allocatedBytes == uniformStrideBytes &&
                         slot.alignedOffset == index.toLong() * uniformStrideBytes
@@ -266,7 +291,13 @@ internal class W4dSessionScratchV1(
         val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive ?: return false
         val geometry = semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath ?: return false
         val draw = draws.singleOrNull { scratchDraw -> scratchDraw.commandId == packet.commandIdValue } ?: return false
-        val uniformSlot = uniformPlan.slots.getOrNull(draw.uniformSlotIndex) ?: return false
+        val materialV2 = W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(capabilityId)
+        val expectedSlotIndex = when (packet.role) {
+            GPUDrawPacketRole.PathStencilProducer -> if (materialV2) draw.producerUniformSlotIndex else draw.uniformSlotIndex
+            GPUDrawPacketRole.Shading, GPUDrawPacketRole.PathStencilCover -> draw.uniformSlotIndex
+            else -> null
+        } ?: return false
+        val uniformSlot = uniformPlan.slots.getOrNull(expectedSlotIndex) ?: return false
         val semanticUniform = semantic.payloadRef.uniformSlot ?: return false
         val uniformBytes = semantic.payloadRef.uniformBlock?.bytes ?: return false
         if (
@@ -275,12 +306,20 @@ internal class W4dSessionScratchV1(
                 semanticUniform.slotId.value != "core-primitive:${packet.commandIdValue}" ||
                 semanticUniform.byteOffset != 0L ||
                 uniformBytes.size.toLong() != UNIFORM_PAYLOAD_BYTES ||
-                uniformSlot.slotLabel != "path-draw-${draw.commandId}" ||
+                uniformSlot.slotLabel != when (packet.role) {
+                    GPUDrawPacketRole.PathStencilProducer -> if (materialV2) {
+                        "path-draw-producer-${draw.commandId}"
+                    } else "path-draw-${draw.commandId}"
+                    GPUDrawPacketRole.Shading, GPUDrawPacketRole.PathStencilCover -> if (materialV2) {
+                        "path-draw-color-${draw.commandId}"
+                    } else "path-draw-${draw.commandId}"
+                    else -> return false
+                } ||
                 uniformSlot.payloadBytes != UNIFORM_PAYLOAD_BYTES ||
                 uniformSlot.allocatedBytes != uniformStrideBytes ||
-                uniformSlot.alignedOffset != draw.uniformSlotIndex.toLong() * uniformStrideBytes ||
+                uniformSlot.alignedOffset != expectedSlotIndex.toLong() * uniformStrideBytes ||
                 uniformSlot.payloadHash != sha256Hex(uniformBytes) ||
-                packet.originalPaintOrder != draw.uniformSlotIndex ||
+                packet.originalPaintOrder < 0 ||
                 packet.analysisRecordId != "analysis.w4d_path_draw.${draw.commandId}" ||
                 semantic.sourceFamily != GPUCorePrimitiveSourceFamily.Path ||
                 semantic.targetBounds != targetBounds ||
