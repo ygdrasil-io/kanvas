@@ -2464,6 +2464,7 @@ internal class GPUFramePreflighter(
                 scratch.resourceLastPassIndexExclusive != renders.size + 1)
         ) return null
 
+
         val usesStencil = scratch.draws.any { draw -> draw.strategy == PathFillStrategy.StencilCover }
         val expectedDepthStencilBytes = if (usesStencil) {
             Math.multiplyExact(
@@ -2672,7 +2673,8 @@ internal class GPUFramePreflighter(
         ) return null
 
         val uniformBytes = ByteArray(scratch.uniformPlan.totalBytes.toInt())
-        val uniformBytesByDraw = ArrayList<List<Int>>(scratch.draws.size)
+        val uniformBytesBySlot = ArrayList<List<Int>>(scratch.uniformPlan.slots.size)
+        val uniformCommandIds = ArrayList<Int>(scratch.uniformPlan.slots.size)
         val directRoutes = linkedMapOf<
             GPUCorePrimitiveDirectNativeFrameRouteKey,
             GPUCorePrimitiveDirectNativeRoute.Accepted,
@@ -2696,17 +2698,24 @@ internal class GPUFramePreflighter(
             locationCursor += expectedPacketCount
             val packets = scopedLocations.map(Triple<Int, GPUFrameStep.RenderPassStep, GPUDrawPacket>::third)
             val semantics = packets.map { it.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive }
-            val uniform = semantics.firstOrNull()?.payloadRef?.uniformBlock?.bytes ?: return null
-            val slot = scratch.uniformPlan.slots.getOrNull(draw.uniformSlotIndex) ?: return null
-            if (semantics.any { semantic -> semantic == null || semantic.payloadRef.uniformBlock?.bytes != uniform } ||
-                uniform.size.toLong() != scratch.lane.uniformPayloadBytes ||
-                slot.payloadBytes != scratch.lane.uniformPayloadBytes ||
-                slot.alignedOffset != draw.uniformSlotIndex.toLong() * scratch.uniformStrideBytes ||
-                slot.alignedOffset > Int.MAX_VALUE.toLong() ||
-                slot.alignedOffset + uniform.size > uniformBytes.size
-            ) return null
-            uniform.forEachIndexed { index, value -> uniformBytes[slot.alignedOffset.toInt() + index] = value.toByte() }
-            uniformBytesByDraw += uniform
+            val uniformSlots = when (draw.strategy) {
+                PathFillStrategy.DirectTriangle -> listOf(draw.uniformSlotIndex)
+                PathFillStrategy.StencilCover -> listOf(draw.producerUniformSlotIndex ?: return null, draw.uniformSlotIndex)
+            }
+            if (semantics.size != uniformSlots.size) return null
+            semantics.zip(uniformSlots).forEachIndexed { uniformIndex, (semantic, slotIndex) ->
+                val uniform = semantic?.payloadRef?.uniformBlock?.bytes ?: return null
+                val slot = scratch.uniformPlan.slots.getOrNull(slotIndex) ?: return null
+                if (uniform.size.toLong() != scratch.lane.uniformPayloadBytes ||
+                    slot.payloadBytes != scratch.lane.uniformPayloadBytes ||
+                    slot.alignedOffset != slotIndex.toLong() * scratch.uniformStrideBytes ||
+                    slot.alignedOffset > Int.MAX_VALUE.toLong() ||
+                    slot.alignedOffset + uniform.size > uniformBytes.size
+                ) return null
+                uniform.forEachIndexed { index, value -> uniformBytes[slot.alignedOffset.toInt() + index] = value.toByte() }
+                uniformBytesBySlot += uniform
+                uniformCommandIds += draw.commandId
+            }
             if (packets.any { packet ->
                     val authority = packet.corePrimitivePreparedAuthority ?: return@any true
                     !scratch.owns(authority) ||
@@ -2841,7 +2850,9 @@ internal class GPUFramePreflighter(
                             ),
                         ),
                         uniformSeal,
-                        GPUCorePrimitiveNativeScopeUniformCoverage.ExactCommandRange(draw.uniformSlotIndex, 1),
+                        GPUCorePrimitiveNativeScopeUniformCoverage.ExactCommandRange(
+                            requireNotNull(draw.producerUniformSlotIndex), 1,
+                        ),
                     )
                     unifiedRoutes[
                         GPUCorePrimitiveNativeScopeFrameRouteKey(coverLocation.first, cover.packetId)
@@ -2863,9 +2874,9 @@ internal class GPUFramePreflighter(
         if (locationCursor != locations.size ||
             !GPUCorePrimitiveUniformSlabSeal(
                 scratch.uniformPlan,
-                scratch.draws.map { it.commandId },
+                uniformCommandIds,
                 uniformBytes,
-            ).hasExactPayloads(scratch.draws.map { it.commandId }, uniformBytesByDraw) ||
+            ).hasExactPayloads(uniformCommandIds, uniformBytesBySlot) ||
             scratch.depthStencilResourceId == null && pathRoutes.isNotEmpty() ||
             scratch.depthStencilResourceId != null && pathRoutes.isEmpty()
         ) return null
@@ -2891,11 +2902,16 @@ internal class GPUFramePreflighter(
     private fun scratchUniformSeal(
         scratch: GPUPlannedPathSessionScratch,
         packedBytes: ByteArray,
-    ): GPUCorePrimitiveUniformSlabSeal = GPUCorePrimitiveUniformSlabSeal(
-        scratch.uniformPlan,
-        scratch.draws.map { it.commandId },
-        packedBytes,
-    )
+    ): GPUCorePrimitiveUniformSlabSeal =
+        GPUCorePrimitiveUniformSlabSeal(
+            scratch.uniformPlan,
+            scratch.draws.flatMap { draw ->
+                if (draw.strategy == PathFillStrategy.StencilCover) {
+                    listOf(draw.commandId, draw.commandId)
+                } else listOf(draw.commandId)
+            },
+            packedBytes,
+        )
 
     private data class PureValidationResult(
         val diagnostic: GPUDiagnostic?,

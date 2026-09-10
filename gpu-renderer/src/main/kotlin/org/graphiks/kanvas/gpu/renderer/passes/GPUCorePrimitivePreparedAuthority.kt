@@ -1126,8 +1126,8 @@ internal class GPUCorePrimitiveUniformSlabSeal(
         get() = commandIdsSnapshot.size
 
     init {
-        require(commandIdsSnapshot.isNotEmpty() && commandIdsSnapshot.distinct().size == commandIdsSnapshot.size) {
-            "CorePrimitive uniform slab seal requires unique draw commands"
+        require(commandIdsSnapshot.isNotEmpty()) {
+            "CorePrimitive uniform slab seal requires at least one sealed pass command"
         }
         require(plan.slots.size == commandIdsSnapshot.size) {
             "CorePrimitive uniform slab slots must match draw commands"

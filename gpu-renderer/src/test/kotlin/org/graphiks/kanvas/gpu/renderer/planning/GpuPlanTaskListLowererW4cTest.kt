@@ -18,6 +18,7 @@ import org.graphiks.kanvas.gpu.plan.PlanDepthStencilFormat
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
 import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
 import org.graphiks.kanvas.gpu.plan.PlanPass
+import org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority
 import org.graphiks.kanvas.gpu.plan.PathFillDraw
 import org.graphiks.kanvas.gpu.plan.PathStrokeDraw
 import org.graphiks.kanvas.gpu.plan.RenderGraph
@@ -204,7 +205,7 @@ class GpuPlanTaskListLowererW4cTest {
             listOf(FillRule.WINDING, FillRule.EVEN_ODD, FillRule.WINDING),
             scratch.draws.map(W4cSessionScratchDrawV1::fillRule),
         )
-        assertEquals(listOf(0L, 256L, 512L), scratch.uniformPlan.slots.map { it.alignedOffset })
+        assertEquals(listOf(0L, 256L, 512L, 768L), scratch.uniformPlan.slots.map { it.alignedOffset })
         assertEquals(16_384L, scratch.vertexCapacityBytes)
         assertEquals(4_096L, scratch.indexCapacityBytes)
         assertEquals(4_096L, scratch.uniformCapacityBytes)
@@ -254,9 +255,9 @@ class GpuPlanTaskListLowererW4cTest {
             ordinal = fillPass.ordinal,
             target = fillPass.target,
             draws = listOf(
-                PathStrokeDraw.of(
+                PathStrokeDraw.ofMaterial(
                     commandIndex = fillDraw.commandIndex,
-                    color = fillDraw.color,
+                    material = assertIs<PlanDrawMaterialAuthority.MaterialV1>(fillDraw.materialAuthority).ref,
                     geometryF32 = directStrokeAndFillGeometry(),
                     scissorI32 = fillDraw.copyScissorI32(),
                 ),
@@ -277,6 +278,7 @@ class GpuPlanTaskListLowererW4cTest {
             passes = listOf(strokePass) + fillGraph.passes().drop(1),
             dependencies = fillGraph.dependencies(),
             peakFrameLocalBytes = fillGraph.peakFrameLocalBytes,
+            materialPlanTable = fillGraph.materialPlanTableOrNull(),
         )
 
         assertIs<GpuPlanLoweringResult.InvalidPlan>(W4cPathFillGraphLowerer().lower(request(forged)))

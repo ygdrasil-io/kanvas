@@ -379,7 +379,7 @@ class GpuPlanTaskListLowererW4eTest {
             val source = sealedByPass.getValue(path.passId)
             assertEquals(source.draw.commandIndex, path.commandIdValue)
             assertEquals(source.phase, path.phase)
-            assertEquals(source.draw.color, path.color)
+            assertEquals(source.draw.materialAuthority, path.materialAuthority)
             assertEquals(source.draw.strategy, path.fillStrategy)
             assertEquals(source.draw.coverage, path.coverage)
             assertEquals(source.draw.blend, path.blend)

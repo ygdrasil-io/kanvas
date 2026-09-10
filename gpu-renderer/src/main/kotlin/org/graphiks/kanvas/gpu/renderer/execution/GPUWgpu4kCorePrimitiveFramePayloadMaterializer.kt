@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.plan.PathFillStrategy
+
 import io.ygdrasil.webgpu.ArrayBuffer
 import io.ygdrasil.webgpu.BlendComponent
 import io.ygdrasil.webgpu.BlendState
@@ -3524,7 +3526,6 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                                 val cover = createW4ePathCoverPipeline(device, format, sampleCount, 1f, owned)
                                 GPUPreparedNativeRenderPipelineOperand.noBindings(cover, generationSeal.deviceGeneration) to null
                             } else {
-                                val color = sealedPath.color
                                 when (consumer) {
                                     is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.Mask,
                                     is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseMask,
@@ -3585,7 +3586,6 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                             val inversePath = requireNotNull(path) {
                                 "W4e inverse-domain consumer requires its sealed path authority."
                             }
-                            val color = inversePath.color
                             val hasSourceGeometry = inversePath.copyGeometry().let { geometry ->
                                 geometry is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Fill ||
                                     geometry is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Stroke
@@ -3788,7 +3788,9 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                             null -> null
                         }
                         val inverse = maskConsumer is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseMask
-                        val color = path?.color ?: throw Refusal("invalid.native-core-primitive.w4e-path", "W4e consumer path authority is absent.")
+                        requireNotNull(path) {
+                            "W4e consumer path authority is absent."
+                        }
                         val directGeometry = when (val geometry = path.copyGeometry()) {
                             is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Fill -> geometry.valueF32
                             is org.graphiks.kanvas.gpu.plan.PathDrawGeometry.Stroke -> geometry.valueF32.copyFillGeometryF32()
@@ -4587,11 +4589,22 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             } else {
                 listOf(GPUDrawPacketRole.PathStencilProducer, GPUDrawPacketRole.PathStencilCover)
             }
+            val expectedUniformSlots = if (direct != null) {
+                listOf(draw.uniformSlotIndex)
+            } else {
+                listOf(
+                    draw.producerUniformSlotIndex ?: return refused(
+                        "invalid.native-core-primitive.$lane-route",
+                        "$laneName stencil producer slot is absent.",
+                    ),
+                    draw.uniformSlotIndex,
+                )
+            }
             val drawEntries = entries.subList(entryCursor, entryCursor + expectedRoles.size)
             entryCursor += expectedRoles.size
             if (drawEntries.map(Entry::drawIndex).any { it != drawIndex } ||
                 drawEntries.map { it.packet.role } != expectedRoles ||
-                drawEntries.any { entry ->
+                drawEntries.withIndex().any { (entryIndex, entry) ->
                     entry.packet.commandIdValue != draw.commandId ||
                         entry.semantic.scissorBounds != draw.copyScissorBounds() ||
                         entry.scope.corePrimitiveNativeScopeRouteSeal.let { routeSeal ->
@@ -4603,7 +4616,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                             route.uniformPlan !== scratch.uniformPlan ||
                                 route.commandIds != listOf(draw.commandId) ||
                                 route.flattenedPacketIds != listOf(entry.packet.packetId) ||
-                                coverage.startIndex != draw.uniformSlotIndex || coverage.commandCount != 1
+                                coverage.startIndex != expectedUniformSlots[entryIndex] ||
+                                coverage.commandCount != 1
                         }
                 }
             ) {
@@ -4826,21 +4840,28 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     maxLocalIndex = requireNotNull(coverIndices.maxOrNull()),
                 )
             }
-            val uniform = matchingEntries.firstOrNull()?.semantic?.payloadRef?.uniformBlock?.bytes
-                ?: return refused("invalid.native-core-primitive.$lane-uniform", "$laneName packet is missing its Uniform32 bytes.")
-            if (matchingEntries.any { entry -> entry.semantic.payloadRef.uniformBlock?.bytes != uniform } ||
-                uniform.size.toLong() != scratch.lane.uniformPayloadBytes
-            ) {
-                return refused("invalid.native-core-primitive.$lane-uniform", "$laneName producer and cover must retain identical Uniform32 bytes.")
+            val uniformSlots = if (draw.strategy == PathFillStrategy.StencilCover) {
+                listOf(draw.producerUniformSlotIndex ?: return refused(
+                    "invalid.native-core-primitive.$lane-uniform", "$laneName stencil producer slot is absent.",
+                ), draw.uniformSlotIndex)
+            } else listOf(draw.uniformSlotIndex)
+            if (matchingEntries.size != uniformSlots.size) return refused(
+                "invalid.native-core-primitive.$lane-uniform", "$laneName packets do not match sealed uniform slots.",
+            )
+            matchingEntries.zip(uniformSlots).forEach { (entry, slotIndex) ->
+                val uniform = entry.semantic.payloadRef.uniformBlock?.bytes ?: return refused(
+                    "invalid.native-core-primitive.$lane-uniform", "$laneName packet is missing its Uniform32 bytes.",
+                )
+                val slot = scratch.uniformPlan.slots.getOrNull(slotIndex) ?: return refused(
+                    "invalid.native-core-primitive.$lane-uniform", "$laneName Uniform32 slot is absent.",
+                )
+                if (uniform.size.toLong() != scratch.lane.uniformPayloadBytes ||
+                    slot.alignedOffset > Int.MAX_VALUE.toLong() ||
+                    slot.alignedOffset + uniform.size > uniformData.size ||
+                    slot.payloadBytes != scratch.lane.uniformPayloadBytes
+                ) return refused("invalid.native-core-primitive.$lane-uniform", "$laneName Uniform32 slot range is not exact.")
+                uniform.forEachIndexed { index, value -> uniformData[slot.alignedOffset.toInt() + index] = value.toByte() }
             }
-            val slot = scratch.uniformPlan.slots[draw.uniformSlotIndex]
-            if (slot.alignedOffset > Int.MAX_VALUE.toLong() ||
-                slot.alignedOffset + uniform.size > uniformData.size ||
-                slot.payloadBytes != scratch.lane.uniformPayloadBytes
-            ) {
-                return refused("invalid.native-core-primitive.$lane-uniform", "$laneName Uniform32 slot range is not exact.")
-            }
-            uniform.forEachIndexed { index, value -> uniformData[slot.alignedOffset.toInt() + index] = value.toByte() }
         }
         if (vertexData.size.toLong() * Float.SIZE_BYTES != scratch.vertexUsefulBytes ||
             indexData.size.toLong() * Int.SIZE_BYTES != scratch.indexUsefulBytes ||
@@ -5001,7 +5022,13 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     role = entry.packet.role,
                     renderStep = entry.renderStep,
                     semantic = entry.semantic,
-                    uniformOffset = scratch.uniformPlan.slots[draw.uniformSlotIndex].alignedOffset,
+                    uniformOffset = scratch.uniformPlan.slots[
+                        if (entry.packet.role == GPUDrawPacketRole.PathStencilProducer) {
+                            draw.producerUniformSlotIndex ?: error("Stencil producer has no sealed Uniform32 slot")
+                        } else {
+                            draw.uniformSlotIndex
+                        }
+                    ].alignedOffset,
                     geometry = slice,
                     pipeline = pipeline,
                     bindGroup = bindGroup,

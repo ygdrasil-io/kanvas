@@ -18,6 +18,8 @@ import org.graphiks.kanvas.gpu.plan.PlanDepthStencilFormat
 import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
 import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
 import org.graphiks.kanvas.gpu.plan.PlanAtomicGroupId
+import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
+import org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority
 import org.graphiks.kanvas.gpu.plan.PlanPass
 import org.graphiks.kanvas.gpu.plan.PlanPassDependency
 import org.graphiks.kanvas.gpu.plan.PlanResource
@@ -66,7 +68,6 @@ import org.graphiks.kanvas.render.ir.SceneSnapshot
 import org.graphiks.kanvas.render.ir.StrokeCapNode
 import org.graphiks.kanvas.render.ir.StrokeJoinNode
 import org.graphiks.math.color.ColorARGB
-import org.graphiks.math.color.ColorF32
 import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.FillRule
 import org.graphiks.math.geometry.PathF32
@@ -173,8 +174,8 @@ class GpuPlanTaskListLowererW4dTest {
         assertEquals(0.0, assertIs<PathStrokeWidthF64.Finite>(scratch.draws[3].styleF64!!.widthF64).valueF64)
         assertEquals(scratch.draws.sumOf { it.vertexRangeBytes }, scratch.vertexUsefulBytes)
         assertEquals(scratch.draws.sumOf { it.indexRangeBytes }, scratch.indexUsefulBytes)
-        assertEquals(scratch.draws.size * 32L, scratch.uniformUsefulBytes)
-        assertEquals(listOf(0L, 256L, 512L, 768L), scratch.uniformPlan.slots.map { it.alignedOffset })
+        assertEquals(6L * 32L, scratch.uniformUsefulBytes)
+        assertEquals(listOf(0L, 256L, 512L, 768L, 1024L, 1280L), scratch.uniformPlan.slots.map { it.alignedOffset })
         assertEquals(graph.resources().single { it.role == PlanResourceRole.VertexData }.byteSize, scratch.vertexCapacityBytes)
         assertEquals(graph.resources().single { it.role == PlanResourceRole.IndexData }.byteSize, scratch.indexCapacityBytes)
         assertEquals(graph.resources().single { it.role == PlanResourceRole.UniformData }.byteSize, scratch.uniformCapacityBytes)
@@ -324,9 +325,9 @@ class GpuPlanTaskListLowererW4dTest {
         val fillPass = assertIs<PlanPass.RenderPass>(fillOnly.passes().first())
         val graphFill = assertIs<org.graphiks.kanvas.gpu.plan.PathStrokeDraw>(fillPass.draws().single())
             .copyGeometryF32().copyFillGeometryF32()
-        val forgedDraw = org.graphiks.kanvas.gpu.plan.PathFillDraw.of(
+        val forgedDraw = org.graphiks.kanvas.gpu.plan.PathFillDraw.ofMaterial(
             commandIndex = 0,
-            color = fillPass.draws().single().color,
+            material = assertIs<PlanDrawMaterialAuthority.MaterialV1>(fillPass.draws().single().materialAuthority).ref,
             geometryF32 = graphFill,
             strategy = org.graphiks.kanvas.gpu.plan.PathFillStrategy.DirectTriangle,
             scissorI32 = fillPass.draws().single().let { (it as org.graphiks.kanvas.gpu.plan.PathDraw).copyScissorI32() },
@@ -347,9 +348,10 @@ class GpuPlanTaskListLowererW4dTest {
     fun `W4d witness rejects coherent style mode color and geometry substitutions retaining the old identity`() {
         val graph = readyGraph(listOf(pathDraw(PaintStyleNode.STROKE)))
         val original = graph.firstStrokeDraw()
-        val changedStyle = PathStrokeDraw.of(
+        val originalMaterial = assertIs<PlanDrawMaterialAuthority.MaterialV1>(original.materialAuthority).ref
+        val changedStyle = PathStrokeDraw.ofMaterial(
             original.commandIndex,
-            original.color,
+            originalMaterial,
             original.copyGeometryF32(),
             original.copyScissorI32(),
             original.mode,
@@ -360,17 +362,17 @@ class GpuPlanTaskListLowererW4dTest {
                 1.25,
             ),
         )
-        val changedMode = PathStrokeDraw.of(
+        val changedMode = PathStrokeDraw.ofMaterial(
             original.commandIndex,
-            original.color,
+            originalMaterial,
             original.copyGeometryF32(),
             original.copyScissorI32(),
             PathStrokeDrawMode.StrokeAndFill,
             original.styleF64,
         )
-        val changedColor = PathStrokeDraw.of(
+        val changedColor = PathStrokeDraw.ofMaterial(
             original.commandIndex,
-            ColorF32.Blue,
+            MaterialPlanRef(Int.MAX_VALUE),
             original.copyGeometryF32(),
             original.copyScissorI32(),
             original.mode,
@@ -379,9 +381,9 @@ class GpuPlanTaskListLowererW4dTest {
         val donor = readyGraph(
             listOf(pathDraw(PaintStyleNode.STROKE, path = concavePath(FillRule.WINDING))),
         ).firstStrokeDraw()
-        val changedGeometry = PathStrokeDraw.of(
+        val changedGeometry = PathStrokeDraw.ofMaterial(
             original.commandIndex,
-            original.color,
+            originalMaterial,
             donor.copyGeometryF32(),
             original.copyScissorI32(),
             original.mode,
@@ -694,6 +696,7 @@ class GpuPlanTaskListLowererW4dTest {
         passes = passes,
         dependencies = dependencies,
         peakFrameLocalBytes = peakFrameLocalBytes,
+        materialPlanTable = base.materialPlanTableOrNull(),
     )
 
     private fun RenderGraph.firstStrokeDraw(): org.graphiks.kanvas.gpu.plan.PathStrokeDraw =

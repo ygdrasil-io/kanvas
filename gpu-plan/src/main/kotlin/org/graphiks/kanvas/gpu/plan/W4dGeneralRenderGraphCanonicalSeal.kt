@@ -264,10 +264,20 @@ private class W4dGeneralGraphDigestWriter {
 
     private fun generalPathDraw(prefix: String, draw: GeneralPathDraw) {
         i32("$prefix.command-index", draw.commandIndex)
-        f32("$prefix.color.red", draw.color.red)
-        f32("$prefix.color.green", draw.color.green)
-        f32("$prefix.color.blue", draw.color.blue)
-        f32("$prefix.color.alpha", draw.color.alpha)
+        when (val authority = draw.materialAuthority) {
+            is PlanDrawMaterialAuthority.LegacyColorV1 -> {
+                val color = authority.copyColorF32()
+                text("$prefix.material-authority", "legacy-color-v1")
+                f32("$prefix.color.red", color.red)
+                f32("$prefix.color.green", color.green)
+                f32("$prefix.color.blue", color.blue)
+                f32("$prefix.color.alpha", color.alpha)
+            }
+            is PlanDrawMaterialAuthority.MaterialV1 -> {
+                text("$prefix.material-authority", "material-v1")
+                i32("$prefix.material-ref", authority.ref.indexI32)
+            }
+        }
         text("$prefix.strategy", draw.strategy.name)
         text("$prefix.coverage", draw.coverage.name)
         text("$prefix.sample", draw.sample.name)

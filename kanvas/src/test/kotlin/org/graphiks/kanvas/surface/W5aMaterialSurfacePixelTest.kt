@@ -3,9 +3,11 @@
 package org.graphiks.kanvas.surface
 
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
+import org.graphiks.kanvas.geometry.Path
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.RRectF32
@@ -260,4 +262,120 @@ class W5aMaterialSurfacePixelTest {
 
         WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(4, 8))
     }
+
+    @Test
+    fun `prepared direct triangle Path applies shader and Paint opacity after Path mutation`() {
+        val source = ColorARGB.of(197, 231, 83, 37)
+        val path = Path().apply {
+            moveTo(-1f, -1f)
+            lineTo(5f, -1f)
+            lineTo(-1f, 5f)
+            close()
+        }
+        val recorder = PictureRecorder()
+        recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f)).drawPath(
+            path,
+            Paint(
+                color = ColorARGB.of(149, 1, 2, 3),
+                shader = Shader.Opacity(Shader.SolidColor(source), 0.625f),
+                antiAlias = false,
+            ),
+        )
+        // Path is a public mutable facade. The captured draw must retain its pre-mutation shape.
+        path.lineTo(100f, 100f)
+        val captured = recorder.finishRecordingAsPicture()
+        val surface = Surface(4, 4)
+        surface.canvas { captured.playback(this) }
+
+        val result = surface.render()
+
+        WgslFloatEnvelopeV1Oracle.assertAdmits(
+            W5aSolidOpacityCpuOracle.draw(source, 0.625f, paintAlphaF32 = 149f / 255f),
+            result.pixels.copyOfRange(0, 4),
+        )
+    }
+
+    @Test
+    fun `prepared stencil cover Path applies shader and Paint opacity`() {
+        val source = ColorARGB.of(193, 47, 199, 89)
+        val concave = Path().apply {
+            moveTo(-1f, -1f)
+            lineTo(5f, -1f)
+            lineTo(5f, 5f)
+            lineTo(2f, 2f)
+            lineTo(-1f, 5f)
+            close()
+        }
+        val surface = Surface(4, 4)
+        surface.canvas {
+            drawPath(
+                concave,
+                Paint(
+                    color = ColorARGB.of(157, 5, 7, 11),
+                    shader = Shader.Opacity(Shader.SolidColor(source), 0.5f),
+                    antiAlias = false,
+                ),
+            )
+        }
+
+        val result = surface.render()
+
+        WgslFloatEnvelopeV1Oracle.assertAdmits(
+            W5aSolidOpacityCpuOracle.draw(source, 0.5f, paintAlphaF32 = 157f / 255f),
+            result.pixels.copyOfRange(0, 4),
+        )
+    }
+
+    @Test
+    fun `prepared Path stroke applies shader and Paint opacity`() {
+        val source = ColorARGB.of(187, 59, 163, 233)
+        val path = Path().apply { moveTo(-1f, 0.5f); lineTo(5f, 0.5f) }
+        val surface = Surface(4, 4)
+        surface.canvas {
+            drawPath(
+                path,
+                Paint(
+                    color = ColorARGB.of(173, 13, 17, 19),
+                    shader = Shader.Opacity(Shader.SolidColor(source), 0.4f),
+                    style = PaintStyle.STROKE,
+                    strokeWidth = 1f,
+                    antiAlias = false,
+                ),
+            )
+        }
+
+        val result = surface.render()
+
+        WgslFloatEnvelopeV1Oracle.assertAdmits(
+            W5aSolidOpacityCpuOracle.draw(source, 0.4f, paintAlphaF32 = 173f / 255f),
+            result.pixels.copyOfRange(0, 4),
+        )
+    }
+
+    @Test
+    fun `prepared Path hairline applies shader and Paint opacity`() {
+        val source = ColorARGB.of(179, 211, 101, 43)
+        val path = Path().apply { moveTo(-1f, 0.5f); lineTo(5f, 0.5f) }
+        val surface = Surface(4, 4)
+        surface.canvas {
+            drawPath(
+                path,
+                Paint(
+                    color = ColorARGB.of(167, 23, 29, 31),
+                    shader = Shader.Opacity(Shader.SolidColor(source), 0.75f),
+                    style = PaintStyle.STROKE,
+                    strokeWidth = 0f,
+                    antiAlias = false,
+                ),
+            )
+        }
+
+        val result = surface.render()
+
+        WgslFloatEnvelopeV1Oracle.assertAdmits(
+            W5aSolidOpacityCpuOracle.draw(source, 0.75f, paintAlphaF32 = 167f / 255f),
+            result.pixels.copyOfRange(0, 4),
+        )
+    }
+
 }

@@ -361,6 +361,8 @@ public class W4eClipPlanCompiler(
             resources = unsealedResources,
             targetExtent = extent,
             capabilities = capabilities,
+            materialPlanTable = base.materialPlanTableOrNull()
+                ?: throw W4eNativePayloadLimit(),
         ) ?: throw W4eNativePayloadLimit()
         val nativePrefixFirstUseById = linkedMapOf<PlanResourceId, Int>()
         fun retainNativePrefixFirstUse(resourceId: PlanResourceId, passIndex: Int) {
@@ -403,6 +405,7 @@ public class W4eClipPlanCompiler(
             passes = allPasses,
             dependencies = dependencies,
             peakFrameLocalBytes = actualPeakFrameLocalBytes,
+            materialPlanTable = base.materialPlanTableOrNull(),
         )
         return RenderGraph.issueW4eCompilerWitness(graph, nativePayload)
     }

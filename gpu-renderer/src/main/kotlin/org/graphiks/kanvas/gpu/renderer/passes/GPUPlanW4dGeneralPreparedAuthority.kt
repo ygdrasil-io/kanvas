@@ -17,6 +17,7 @@ import org.graphiks.kanvas.gpu.plan.PlanResourceLifetime
 import org.graphiks.kanvas.gpu.plan.PlanResourceRole
 import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
 import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
+import org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority
 import org.graphiks.kanvas.gpu.plan.PathDrawGeometry
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.SamplePlan
@@ -28,6 +29,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.corePrimitiveUniformBytes
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
+import org.graphiks.kanvas.gpu.renderer.planning.W5aMaterialPlanLowerer
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
@@ -510,6 +512,21 @@ internal class W4dGeneralNativeMaterializationSnapshot private constructor(
             val known = resources.associateBy(W4dGeneralNativeResourceFact::resourceId)
             val pathFacts = pathPasses.map { pass ->
                 val maskResourceId = (pass.draw as? BinaryMaskedPathDraw)?.mask?.value
+                val materialColor = if (pass.phase in setOf(
+                        PathRenderPhase.SingleSampleDirectColor,
+                        PathRenderPhase.SingleSampleStencilColorCover,
+                        PathRenderPhase.MultisampleDirectColor,
+                        PathRenderPhase.MultisampleStencilColorCover,
+                        PathRenderPhase.HardEdgeBinaryColorCover,
+                    )
+                ) {
+                    val authority = pass.draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV1
+                        ?: return null
+                    W5aMaterialPlanLowerer().lower(graph.materialPlanTableOrNull() ?: return null, authority.ref)
+                        ?: return null
+                } else {
+                    org.graphiks.math.color.ColorF32.Transparent
+                }
                 val consumerUniform64 = (pass.draw as? BinaryMaskedPathDraw)?.let { binary ->
                     val mask = requireNotNull(known[maskResourceId]) {
                         "W4d.2 binary mask has no sealed resource fact"
@@ -524,30 +541,21 @@ internal class W4dGeneralNativeMaterializationSnapshot private constructor(
                         maskWidth = requireNotNull(mask.width),
                         maskHeight = requireNotNull(mask.height),
                         premultipliedRgba = listOf(
-                            binary.color.red,
-                            binary.color.green,
-                            binary.color.blue,
-                            binary.color.alpha,
+                            materialColor.red,
+                            materialColor.green,
+                            materialColor.blue,
+                            materialColor.alpha,
                         ),
                     )
                 }
                 val uniformPayload = consumerUniform64 ?: corePrimitiveUniformBytes(
                     GPUPixelBounds(0, 0, graph.targetExtent.width, graph.targetExtent.height),
-                    if (pass.phase in setOf(
-                            PathRenderPhase.HardEdgeMaskProducer,
-                            PathRenderPhase.HardEdgeMaskStencilProducer,
-                            PathRenderPhase.HardEdgeMaskStencilCover,
-                        )
-                    ) {
-                        listOf(1f, 1f, 1f, 1f)
-                    } else {
-                        listOf(
-                            pass.draw.color.red,
-                            pass.draw.color.green,
-                            pass.draw.color.blue,
-                            pass.draw.color.alpha,
-                        )
-                    },
+                    listOf(
+                        materialColor.red,
+                        materialColor.green,
+                        materialColor.blue,
+                        materialColor.alpha,
+                    ),
                 ).map(Int::toByte)
                 W4dGeneralNativePathPassFact(
                     pathPassId = pass.id.value,

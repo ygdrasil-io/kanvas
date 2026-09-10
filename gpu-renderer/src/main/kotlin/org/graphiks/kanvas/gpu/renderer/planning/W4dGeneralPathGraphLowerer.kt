@@ -5,10 +5,12 @@ import org.graphiks.kanvas.gpu.plan.BinaryMaskFetchPlan
 import org.graphiks.kanvas.gpu.plan.BinaryMaskedPathDraw
 import org.graphiks.kanvas.gpu.plan.CoveragePlan
 import org.graphiks.kanvas.gpu.plan.GeneralPathDraw
+import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.gpu.plan.PathDrawGeometry
 import org.graphiks.kanvas.gpu.plan.PathFillStrategy
 import org.graphiks.kanvas.gpu.plan.PathRenderPhase
 import org.graphiks.kanvas.gpu.plan.PlanPass
+import org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority
 import org.graphiks.kanvas.gpu.plan.PlanPassDependency
 import org.graphiks.kanvas.gpu.plan.PlanResource
 import org.graphiks.kanvas.gpu.plan.PlanResourceKind
@@ -91,6 +93,7 @@ import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
 import org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity
 import org.graphiks.math.geometry.FillRule
 import org.graphiks.math.geometry.PathFillGeometryF32
+import org.graphiks.math.color.ColorF32
 
 /** Lowers one fully validated W4d.2 path graph into handle-free prepared task facts. */
 internal class W4dGeneralPathGraphLowerer {
@@ -106,6 +109,7 @@ internal class W4dGeneralPathGraphLowerer {
         paintOrder,
         bounds,
         targetColorFormat(pass, graph),
+        graph,
         consumer,
     ).packet
 
@@ -124,7 +128,7 @@ internal class W4dGeneralPathGraphLowerer {
             return invalid("The W4d.2 prepared authority did not revalidate the graph.")
         }
         val packets = graph.pathPasses.mapIndexed { index, pass ->
-            packet(pass, index, bounds, targetColorFormat(pass, request.graph))
+            packet(pass, index, bounds, targetColorFormat(pass, request.graph), request.graph)
         }
         val limits = request.capabilities.limits
             ?: return invalid("The W4d.2 native uniform slab requires observed device limits.")
@@ -348,6 +352,7 @@ internal class W4dGeneralPathGraphLowerer {
         paintOrder: Int,
         bounds: GPUPixelBounds,
         targetColorFormat: GPUColorFormat,
+        graph: RenderGraph,
         w4ePreparedClipConsumer: GPUW4ePreparedClipConsumerAuthority? = null,
     ): BuiltPacket {
         val draw = pass.draw
@@ -415,12 +420,20 @@ internal class W4dGeneralPathGraphLowerer {
                 }
             }
         }
+        val color = if (pass.phase.isColorProducing()) {
+            resolveMaterialColor(graph.materialPlanTableOrNull(), draw.materialAuthority)
+                ?: error("W5 material authority is invalid for a color-writing path phase")
+        } else {
+            // Stencil and mask producers preserve only geometry/coverage state; their native
+            // Uniform32 payload is deliberately independent of MaterialPlanRef.
+            ColorF32.Transparent
+        }
         val semantic = GPUCorePrimitivePayloadGatherer().gatherPlannedW4dSemantic(
             GPUCorePrimitivePayloadInput(
                 commandIdValue = draw.commandIndex,
                 sourceFamily = GPUCorePrimitiveSourceFamily.Path,
                 geometry = geometryInput,
-                premultipliedRgba = listOf(draw.color.red, draw.color.green, draw.color.blue, draw.color.alpha),
+                premultipliedRgba = listOf(color.red, color.green, color.blue, color.alpha),
                 targetBounds = bounds,
                 scissorBounds = scissorBounds,
                 clipCoveragePlan = clip.first,
@@ -795,6 +808,14 @@ internal class W4dGeneralPathGraphLowerer {
         val packet: GPUDrawPacket,
         val structuralPipelineKey: org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey,
     )
+
+    private fun resolveMaterialColor(
+        table: MaterialPlanTable?,
+        authority: PlanDrawMaterialAuthority,
+    ): ColorF32? = when (authority) {
+        is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
+        is PlanDrawMaterialAuthority.MaterialV1 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }
+    }
 
     private fun invalid(message: String): GpuPlanLoweringResult.InvalidPlan =
         GpuPlanLoweringResult.InvalidPlan(

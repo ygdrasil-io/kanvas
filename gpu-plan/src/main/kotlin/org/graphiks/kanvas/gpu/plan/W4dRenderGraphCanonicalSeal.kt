@@ -213,10 +213,20 @@ private class W4dGraphDigestWriter {
             is PathStrokeDraw -> "stroke"
         })
         i32("$prefix.command-index", pathDraw.commandIndex)
-        f32("$prefix.color.red", pathDraw.color.red)
-        f32("$prefix.color.green", pathDraw.color.green)
-        f32("$prefix.color.blue", pathDraw.color.blue)
-        f32("$prefix.color.alpha", pathDraw.color.alpha)
+        when (val authority = pathDraw.materialAuthority) {
+            is PlanDrawMaterialAuthority.LegacyColorV1 -> {
+                val color = authority.copyColorF32()
+                text("$prefix.material-authority", "legacy-color-v1")
+                f32("$prefix.color.red", color.red)
+                f32("$prefix.color.green", color.green)
+                f32("$prefix.color.blue", color.blue)
+                f32("$prefix.color.alpha", color.alpha)
+            }
+            is PlanDrawMaterialAuthority.MaterialV1 -> {
+                text("$prefix.material-authority", "material-v1")
+                i32("$prefix.material-ref", authority.ref.indexI32)
+            }
+        }
         text("$prefix.coverage", pathDraw.coverage.name)
         text("$prefix.sample", pathDraw.sample.name)
         text("$prefix.blend", pathDraw.blend.name)
