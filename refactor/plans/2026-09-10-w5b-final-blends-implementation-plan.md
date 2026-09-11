@@ -223,11 +223,13 @@ Task 6 closed after three independent-review fix rounds. The mixed sibling now o
 - Consumes: compiler-authenticated W5b ownership and complete public gate evidence.
 - Produces: terminal typed W5b refusal after ownership, legacy continuation only before ownership, and the authoritative W5b status/next-W5c scope.
 
-- [ ] Audit every production final-blend classification call site. W5b-promoted paths must consume the sealed plan; legacy-only paths are documented in the status and may keep the compatibility adapter until their `H` deadline.
-- [ ] Remove only fallbacks now owned by W5b. A `GapNotMigrated` before ownership stays legacy; an error after authenticated W5b ownership is terminal and cannot rescan public paint or substitute `SRC_OVER`/transparent/source-only behavior.
-- [ ] Update the 45-cell ledger entry from historical failure to closed only after the filterable public gate passes all 15 modes × 3 contexts. Record the exact command and results.
-- [ ] Update W05 status and README with every promoted family, exact AA4 skips, numerical `Unbounded` non-gates, capability/budget gaps, the pre-existing CoreAnalytics warning if still emitted, and W5c as the next stacked slice.
-- [ ] Run `rtk git diff --check`, targeted compiles and the complete W5b/W5a/W3/W4 public gates; commit `refactor(blend): remove W5b final-blend fallbacks`.
+- [x] Audit every production final-blend classification call site. W5b-promoted paths must consume the sealed plan; legacy-only paths are documented in the status and may keep the compatibility adapter until their `H` deadline.
+- [x] Remove only fallbacks now owned by W5b. A `GapNotMigrated` before ownership stays legacy; an error after authenticated W5b ownership is terminal and cannot rescan public paint or substitute `SRC_OVER`/transparent/source-only behavior.
+- [x] Update the 45-cell ledger entry from historical failure to closed only after the filterable public gate passes all 15 modes × 3 contexts. Record the exact command and results.
+- [x] Update W05 status and README with every promoted family, exact AA4 skips, numerical `Unbounded` non-gates, capability/budget gaps, the pre-existing CoreAnalytics warning if still emitted, and W5c as the next stacked slice.
+- [x] Run `rtk git diff --check`, targeted compiles and the complete W5b/W5a/W3/W4 public gates; commit `refactor(blend): remove W5b final-blend fallbacks`.
+
+Task 7 closed by `b0ef1cbcf`: the exhaustive production audit is recorded in the ignored Task 7 report and summarized in the durable W05 status. Post-ownership W5b gaps are terminal; pre-admission/deferred legacy adapters remain explicitly scoped through W5c–W5h, W6 or W8. The forced before/after public regression stayed at 146 selected methods, 144 passed and 2 authentic AA4 skips; the standalone GREEN45 gate passed all 15 modes × 3 contexts. Independent Sol review verdict: READY with no finding.
 
 ### Task 8: Independent reviews, final verification and stacked PR
 
