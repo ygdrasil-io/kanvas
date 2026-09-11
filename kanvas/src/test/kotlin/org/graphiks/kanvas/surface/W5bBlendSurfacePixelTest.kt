@@ -114,6 +114,9 @@ class W5bBlendSurfacePixelTest {
         listOf(green, white).forEach { alternative -> assertDisjoint(expected,
             WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
                 (alternative as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels)) }
+        val transparent = W5aSolidOpacityCpuOracle.draw(ColorARGB.Transparent, 1f)
+        assertDisjoint(white, WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+            (transparent as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels))
         val vertices = Vertices(VertexMode.TRIANGLES,
             listOf(Point2F32(0f, 0f), Point2F32(12f, 0f), Point2F32(0f, 12f)), indices = listOf(0, 1, 2))
         val surface = Surface(8, 8).also { it.canvas {
@@ -121,8 +124,30 @@ class W5bBlendSurfacePixelTest {
             drawVertices(vertices, Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), .5f),
                 blendMode = BlendMode.DIFFERENCE, antiAlias = false))
         } }
+        // Both destination draws share source and geometry. The middle opaque write
+        // makes their order observable; disjoint outer pixels detect either omission.
+        val sameSource = Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), .5f),
+            blendMode = BlendMode.DIFFERENCE, antiAlias = false)
+        val sameSourceSurface = Surface(8, 8).also { it.canvas {
+            save()
+            clipRect(RectF32.ofLTRB(0f, 0f, 5f, 6f), antiAlias = false)
+            drawVertices(vertices, sameSource)
+            restore()
+            drawRect(RectF32.ofLTRB(3f, 0f, 5f, 6f),
+                Paint(shader = Shader.SolidColor(ColorARGB.Green), antiAlias = false))
+            save()
+            clipRect(RectF32.ofLTRB(3f, 0f, 8f, 6f), antiAlias = false)
+            drawVertices(vertices, sameSource)
+            restore()
+        } }
         repeat(3) {
             WgslFloatEnvelopeV1Oracle.assertAdmits(expected, surface.render().pixels.copyOfRange(0, 4))
+            val pixels = sameSourceSurface.render().pixels
+            listOf(Triple(1, 1, white), Triple(4, 1, expected), Triple(6, 1, white), Triple(7, 7, transparent))
+                .forEach { (xI32, yI32, color) ->
+                    val offsetI32 = (yI32 * 8 + xI32) * 4
+                    WgslFloatEnvelopeV1Oracle.assertAdmits(color, pixels.copyOfRange(offsetI32, offsetI32 + 4))
+                }
         }
     }
 

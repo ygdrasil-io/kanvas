@@ -3790,6 +3790,15 @@ internal class GPUPreparedSurfaceNativePreflight(
             )
         }
         val orderedRuns = mutableListOf<GPUPreparedSurfaceNativeRunPlan>()
+        val exactScopeKeyByStep = exactScopeKeys.associateBy(GPUPreparedNativeScopeKey::sourceStepIndex)
+        val verticesUploadScopeByResource = buildMap {
+            val verticesStaging = preparedVerticesStagingRef(framePlan.frameId)
+            framePlan.steps.forEachIndexed { index, step ->
+                if (step is GPUFrameStep.UploadResourceStep && step.staging == verticesStaging) {
+                    put(step.destination, exactScopeKeyByStep.getValue(index))
+                }
+            }
+        }
         val uploadedVerticesArtifactKeys = mutableSetOf<String>()
         framePlan.steps.forEachIndexed { sourceStepIndex, step ->
             val render = step as? GPUFrameStep.RenderPassStep ?: return@forEachIndexed
@@ -3798,9 +3807,7 @@ internal class GPUPreparedSurfaceNativePreflight(
                     "invalid.prepared-surface.encoder-plan",
                     "A mixed render run is absent from the full encoder plan.",
                 )
-            val renderScopeKey = exactScopeKeys.single { scope ->
-                scope.sourceStepIndex == sourceStepIndex
-            }
+            val renderScopeKey = exactScopeKeyByStep.getValue(sourceStepIndex)
             val corePackets = render.drawPackets.filter {
                 it.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
             }
@@ -4002,11 +4009,10 @@ internal class GPUPreparedSurfaceNativePreflight(
                     val runPlans = runArtifacts.map { artifact ->
                         buildVerticesFrameResourcePlan(artifact, deviceGeneration)
                     }
+                    val runPlanByArtifactKey = runPlans.associateBy { it.artifactKey }
                     val drawFacts = render.drawPackets.map { packet ->
                         val semantic = packet.semanticPayload as GPUDrawSemanticPayload.Vertices
-                        val plan = runPlans.singleOrNull { plan ->
-                            plan.artifactKey == semantic.artifact.key
-                        } ?: throw IllegalArgumentException(
+                        val plan = runPlanByArtifactKey[semantic.artifact.key] ?: throw IllegalArgumentException(
                             "Prepared-vertices run artifact plan is missing",
                         )
                         GPUPreparedVerticesDrawFacts(
@@ -4042,23 +4048,23 @@ internal class GPUPreparedSurfaceNativePreflight(
                                 )
                         }
                     }
-                    val exactScopeKey = exactScopeKeys.singleOrNull { scope ->
-                        scope.sourceStepIndex == sourceStepIndex
-                    } ?: throw IllegalArgumentException(
-                        "Prepared-vertices run scope is missing",
-                    )
                     // A shared artifact has one frame upload, owned by its first run.
                     val newlyUploadedArtifactKeys = runArtifacts.map { it.key }
-                        .filterTo(mutableSetOf()) { uploadedVerticesArtifactKeys.add(it) }
-                    val verticesUploadScopeKeys = framePlan.steps
-                        .mapIndexedNotNull { index, step ->
-                            (step as? GPUFrameStep.UploadResourceStep)?.takeIf { upload ->
-                                upload.staging == preparedVerticesStagingRef(framePlan.frameId) &&
-                                    preparedVerticesArtifactKeyOfUpload(upload) in newlyUploadedArtifactKeys
-                            }?.let { exactScopeKeys.single { scope ->
-                                scope.sourceStepIndex == index
-                            } }
+                        .filter { uploadedVerticesArtifactKeys.add(it) }
+                    // Recording orders all vertex uploads before all index uploads, each
+                    // by artifact key. Recover only this run's new resources in that order.
+                    val verticesUploadScopeKeys = buildList {
+                        newlyUploadedArtifactKeys.forEach { artifactKey ->
+                            add(verticesUploadScopeByResource.getValue(
+                                preparedVerticesVertexBufferRef(framePlan.frameId, artifactKey),
+                            ))
                         }
+                        newlyUploadedArtifactKeys.forEach { artifactKey ->
+                            verticesUploadScopeByResource[
+                                preparedVerticesIndexBufferRef(framePlan.frameId, artifactKey)
+                            ]?.let(::add)
+                        }
+                    }
                     GPUPreparedSurfaceNativeRunPlan.Vertices(
                         GPUPreparedVerticesRenderRunPlan(
                             sourceScopeIndex = sourceStepIndex,
@@ -4067,7 +4073,7 @@ internal class GPUPreparedSurfaceNativePreflight(
                             resourcePlans = runPlans,
                             drawFacts = drawFacts,
                             shaderProgramByPacketId = shaderProgramByPacketId,
-                            exactScopeKey = exactScopeKey,
+                            exactScopeKey = renderScopeKey,
                             uploadScopeKeys = verticesUploadScopeKeys,
                         ),
                     )

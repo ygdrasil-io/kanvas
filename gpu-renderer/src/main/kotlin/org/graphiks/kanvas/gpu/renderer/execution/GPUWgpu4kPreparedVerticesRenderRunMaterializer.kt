@@ -34,6 +34,7 @@ import io.ygdrasil.webgpu.GPUTextureView
 import io.ygdrasil.webgpu.GPUVertexFormat
 import io.ygdrasil.webgpu.GPUVertexStepMode
 import io.ygdrasil.webgpu.PipelineLayoutDescriptor
+import io.ygdrasil.webgpu.MultisampleState
 import io.ygdrasil.webgpu.PrimitiveState
 import io.ygdrasil.webgpu.RenderPipelineDescriptor
 import io.ygdrasil.webgpu.SamplerBindingLayout
@@ -50,13 +51,16 @@ import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesShaderProgr
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesUploadArtifact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialUniformBinding
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
+import org.graphiks.kanvas.gpu.renderer.state.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUPreparedVerticesBatchingCounter
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUPreparedVerticesBatchingCounters
+import org.graphiks.kanvas.gpu.renderer.vertices.GPUVertexLayoutPlan
 
 /** Size in bytes of the prepared-vertices draw uniform (transform + target size). */
 private const val PREPARED_VERTICES_DRAW_UNIFORM_SIZE_BYTES = 64
@@ -75,13 +79,14 @@ internal data class GPUWgpu4kPreparedVerticesDestinationReadInput(
 )
 
 /**
- * Materializes one accepted prepared-vertices run into frame-owned buffers, one target-bound
- * render scope, and transferable completion owners.
+ * Materializes the accepted prepared-vertices runs of one frame into frame-owned buffers,
+ * target-bound render scopes, and transferable completion owners.
  *
  * Vertex/index buffers and bind groups are frame-owned completion operands. The pipeline and
- * its layout entries are session-owned: they are never completion operands and remain in the
- * run owner ledger. All completion owners transfer only after successful submission; on
- * failure every acquired owner closes once in reverse creation order.
+ * its layout entries remain in the first introducing run's owner ledger. The frame-local
+ * cache holds only non-owning references: later runs borrow the same pipeline, while the
+ * caller retains every earlier run owner until frame completion or aggregate rollback.
+ * This materializer must not outlive that frame or be reused after a refused run.
  *
  * When batching is enabled, compatible adjacent draws share one packed vertex/index buffer
  * allocation and one pipeline emission; every draw keeps its exact first vertex, base index,
@@ -95,6 +100,8 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
     private val batchingEnabled: Boolean = true,
     private val countersObserver: ((GPUPreparedVerticesBatchingCounters) -> Unit)? = null,
 ) {
+    private val pipelineByKey = linkedMapOf<PreparedVerticesPipelineKey, PreparedVerticesPipelineSet>()
+
     fun materializeAcceptedRun(
         plan: GPUPreparedVerticesRenderRunPlan,
         actualDeviceGeneration: GPUDeviceGenerationID,
@@ -145,7 +152,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                 )
             }
             val uniformUploads = mutableListOf<GPUPreparedNativeBufferUpload>()
-            val pipelineByKey = linkedMapOf<String, PreparedVerticesPipelineSet>()
+            val pipelineCountBeforeI32 = pipelineByKey.size
             var bufferCreationCount = 0L
             var setPipelineEmissions = 0L
             var batches: List<GPUPreparedVerticesBatch> = emptyList()
@@ -162,7 +169,6 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                             plan = plan,
                             actualDeviceGeneration = actualDeviceGeneration,
                             artifactByKey = artifactByKey,
-                            pipelineByKey = pipelineByKey,
                             uniformUploads = uniformUploads,
                             created = created,
                             bufferCreationCount = { bufferCreationCount += 1L },
@@ -175,7 +181,6 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                         plan = plan,
                         actualDeviceGeneration = actualDeviceGeneration,
                         artifactByKey = artifactByKey,
-                        pipelineByKey = pipelineByKey,
                         uniformUploads = uniformUploads,
                         created = created,
                         bufferCreationCount = { bufferCreationCount += 1L },
@@ -212,8 +217,9 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                         uniformUploads = uniformUploads,
                         commands = commands,
                         bufferCreations = bufferCreationCount,
-                        pipelineCreations = pipelineByKey.size.toLong(),
-                        pipelineReuses = (setPipelineEmissions - pipelineByKey.size).coerceAtLeast(0L),
+                        pipelineCreations = (pipelineByKey.size - pipelineCountBeforeI32).toLong(),
+                        pipelineReuses = (setPipelineEmissions -
+                            (pipelineByKey.size - pipelineCountBeforeI32)).coerceAtLeast(0L),
                         encoderScopes = scopeOperands.size.toLong(),
                     ),
                 )
@@ -235,7 +241,6 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
         plan: GPUPreparedVerticesRenderRunPlan,
         actualDeviceGeneration: GPUDeviceGenerationID,
         artifactByKey: Map<String, GPUPreparedVerticesUploadArtifact>,
-        pipelineByKey: MutableMap<String, PreparedVerticesPipelineSet>,
         uniformUploads: MutableList<GPUPreparedNativeBufferUpload>,
         created: MutableList<AutoCloseable>,
         bufferCreationCount: () -> Unit,
@@ -284,7 +289,10 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                 },
             )
         }
-        bufferByArtifactKey.filterKeys { it in newlyCreatedArtifactKeys }.values.forEach { buffers ->
+        // Traverse only newly introduced buffers, never the accumulated frame map.
+        // Match the recording upload order: vertices first, then indices.
+        newlyCreatedArtifactKeys.forEach { artifactKey ->
+            val buffers = bufferByArtifactKey.getValue(artifactKey)
             uniformUploads += preparedVerticesBufferUpload(
                 role = "vertex",
                 bytes = buffers.artifact.vertexBytesForUpload(),
@@ -292,6 +300,9 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                 destinationLabel = "vertex.${buffers.artifact.key}",
                 renderScopeIndices = listOf(plan.sourceScopeIndex),
             )
+        }
+        newlyCreatedArtifactKeys.forEach { artifactKey ->
+            val buffers = bufferByArtifactKey.getValue(artifactKey)
             buffers.indexBuffer?.let { indexBuffer ->
                 val indexBytes = requireNotNull(buffers.artifact.indexBytesForUpload())
                 uniformUploads += preparedVerticesBufferUpload(
@@ -304,15 +315,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
             }
         }
         entries.forEach { entry ->
-            val pipelineSet = pipelineByKey.getOrPut(entry.program.pipelineKeyHash) {
-                createPipelineSet(
-                    program = entry.program,
-                    packet = entry.packet,
-                    blendState = requirePreparedVerticesBlend(plan, entry.packet),
-                    hasDestinationRead = entry.destinationRead != null,
-                    created = created,
-                )
-            }
+            val pipelineSet = pipelineFor(entry, actualDeviceGeneration, created)
             add(
                 GPUPreparedNativeRenderCommand.SetPipeline(
                     GPUPreparedNativeRenderPipelineOperand(
@@ -350,7 +353,6 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
         plan: GPUPreparedVerticesRenderRunPlan,
         actualDeviceGeneration: GPUDeviceGenerationID,
         artifactByKey: Map<String, GPUPreparedVerticesUploadArtifact>,
-        pipelineByKey: MutableMap<String, PreparedVerticesPipelineSet>,
         uniformUploads: MutableList<GPUPreparedNativeBufferUpload>,
         created: MutableList<AutoCloseable>,
         bufferCreationCount: () -> Unit,
@@ -410,22 +412,11 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                 destinationOffset = subrange.offsetBytes,
             )
         }
-        val firstEntry = requireNotNull(entriesByPacketId[batch.packetIds.first()]) {
-            "A prepared-vertices batch must retain its exact first packet"
-        }
-        val pipelineSet = pipelineByKey.getOrPut(batch.pipelineKeyHash) {
-            createPipelineSet(
-                program = firstEntry.program,
-                packet = firstEntry.packet,
-                blendState = requirePreparedVerticesBlend(plan, firstEntry.packet),
-                hasDestinationRead = firstEntry.destinationRead != null,
-                created = created,
-            )
-        }
         batch.packetIds.forEach { packetId ->
             val entry = requireNotNull(entriesByPacketId[packetId]) {
                 "A prepared-vertices batch must retain its exact packet"
             }
+            val pipelineSet = pipelineFor(entry, actualDeviceGeneration, created)
             // One SetPipeline per packet: the facade contract
             // (expectedFacadeOperations) and the pass command stream both emit
             // one SetRenderPipeline per packet, so a batched packet emits its
@@ -676,14 +667,47 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
         }
     }
 
-    private fun createPipelineSet(
-        program: GPUPreparedVerticesShaderProgram,
-        packet: GPUDrawSemanticPayload.Vertices,
-        blendState: GPUFixedFunctionBlendState,
-        hasDestinationRead: Boolean,
+    private fun pipelineFor(
+        entry: PreparedVerticesPacketEntry,
+        actualDeviceGeneration: GPUDeviceGenerationID,
         created: MutableList<AutoCloseable>,
     ): PreparedVerticesPipelineSet {
-        val layout = packet.artifact.layout
+        val destination = entry.destinationRead?.plan?.blendPlan
+        val key = PreparedVerticesPipelineKey(
+            deviceGeneration = actualDeviceGeneration,
+            program = entry.program,
+            blendState = requirePreparedVerticesBlend(entry.drawPacket.blendPlan, entry.packet),
+            targetFormat = entry.packet.targetFormat.toPreparedVerticesTargetFormat(),
+            vertexLayout = entry.packet.artifact.layout,
+            topology = when (entry.packet.topologyIdentity.sourceLabel) {
+                "Triangles" -> GPUPrimitiveTopology.TriangleList
+                "TriangleStrip" -> GPUPrimitiveTopology.TriangleStrip
+                else -> error("Unsupported prepared-vertices topology")
+            },
+            vertexStepMode = GPUVertexStepMode.Vertex,
+            sampleCountI32 = 1,
+            drawUniformSizeBytesI32 = PREPARED_VERTICES_DRAW_UNIFORM_SIZE_BYTES,
+            materialUniformBinding = entry.packet.material.composableFragment.uniformBinding,
+            destination = destination?.let { blend ->
+                PreparedVerticesDestinationPipelineKey(
+                    formulaIdentity = blend.formulaId,
+                    compositionAbiI32 = requireNotNull(blend.sealedW5b).compositionAbiI32,
+                    sourceCoverageEncoding = blend.sourceCoverageEncoding,
+                    bindingLayoutHash = entry.program.bindingLayoutHash,
+                )
+            },
+        )
+        // Only cache misses acquire owners. A later run's ledger never acquires these
+        // handles again, including when a later allocation fails and the frame rolls back.
+        return pipelineByKey.getOrPut(key) { createPipelineSet(key, created) }
+    }
+
+    private fun createPipelineSet(
+        key: PreparedVerticesPipelineKey,
+        created: MutableList<AutoCloseable>,
+    ): PreparedVerticesPipelineSet {
+        val program = key.program
+        val layout = key.vertexLayout
         val drawLayout = device.createBindGroupLayout(
             BindGroupLayoutDescriptor(
                 label = "Kanvas.frame.preparedVertices.drawLayout",
@@ -694,14 +718,14 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                         buffer = BufferBindingLayout(
                             type = GPUBufferBindingType.Uniform,
                             hasDynamicOffset = false,
-                            minBindingSize = PREPARED_VERTICES_DRAW_UNIFORM_SIZE_BYTES.toULong(),
+                            minBindingSize = key.drawUniformSizeBytesI32.toULong(),
                         ),
                     ),
                 ),
             ),
         ).track(created)
         val materialEntries = buildList {
-            packet.material.composableFragment.uniformBinding?.let { uniform ->
+            key.materialUniformBinding?.let { uniform ->
                 add(
                     BindGroupLayoutEntry(
                         binding = uniform.binding.toUInt(),
@@ -721,7 +745,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                 entries = materialEntries,
             ),
         ).track(created)
-        val destinationLayout = if (hasDestinationRead) {
+        val destinationLayout = if (key.destination != null) {
             device.createBindGroupLayout(
                 BindGroupLayoutDescriptor(
                     label = "Kanvas.frame.preparedVertices.destinationLayout",
@@ -768,7 +792,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                     buffers = listOf(
                         VertexBufferLayout(
                             arrayStride = layout.strideBytes.toULong(),
-                            stepMode = GPUVertexStepMode.Vertex,
+                            stepMode = key.vertexStepMode,
                             attributes = layout.attributes.map { attribute ->
                                 VertexAttribute(
                                     format = attribute.toPreparedVerticesVertexFormat(),
@@ -780,21 +804,16 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                         ),
                     ),
                 ),
-                primitive = PrimitiveState(
-                    topology = when (packet.topologyIdentity.sourceLabel) {
-                        "Triangles" -> GPUPrimitiveTopology.TriangleList
-                        "TriangleStrip" -> GPUPrimitiveTopology.TriangleStrip
-                        else -> error("Unsupported prepared-vertices topology")
-                    },
-                ),
+                primitive = PrimitiveState(topology = key.topology),
+                multisample = MultisampleState(count = key.sampleCountI32.toUInt()),
                 fragment = FragmentState(
                     module = shader,
                     entryPoint = program.fragmentEntryPoint,
                     targets = listOf(
                         ColorTargetState(
-                            format = packet.targetFormat.toPreparedVerticesTargetFormat(),
-                            blend = blendState.toPreparedVerticesBlendState(),
-                            writeMask = blendState.toPreparedVerticesWriteMask(),
+                            format = key.targetFormat,
+                            blend = key.blendState.toPreparedVerticesBlendState(),
+                            writeMask = key.blendState.toPreparedVerticesWriteMask(),
                         ),
                     ),
                 ),
@@ -827,6 +846,34 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
         val artifact: GPUPreparedVerticesUploadArtifact,
         val vertexBuffer: GPUPreparedNativeBufferOperand,
         val indexBuffer: GPUPreparedNativeBufferOperand?,
+    )
+
+    /** Exact varying descriptor facts, not a mode label or a shader hash alone.
+     * Remaining descriptor defaults are fixed for this frame-local implementation:
+     * no depth/stencil/culling, full sample mask, no alpha-to-coverage, and destination
+     * group 2 is fragment float-2D texture binding 0 plus filtering sampler binding 1.
+     * Destination versions/origins and material values belong to per-draw bindings,
+     * not pipeline compatibility; the program retains exact WGSL and reflected ABI.
+     */
+    private data class PreparedVerticesPipelineKey(
+        val deviceGeneration: GPUDeviceGenerationID,
+        val program: GPUPreparedVerticesShaderProgram,
+        val blendState: GPUFixedFunctionBlendState,
+        val targetFormat: GPUTextureFormat,
+        val vertexLayout: GPUVertexLayoutPlan,
+        val topology: GPUPrimitiveTopology,
+        val vertexStepMode: GPUVertexStepMode,
+        val sampleCountI32: Int,
+        val drawUniformSizeBytesI32: Int,
+        val materialUniformBinding: GPUPreparedMaterialUniformBinding?,
+        val destination: PreparedVerticesDestinationPipelineKey?,
+    )
+
+    private data class PreparedVerticesDestinationPipelineKey(
+        val formulaIdentity: String,
+        val compositionAbiI32: Int,
+        val sourceCoverageEncoding: GPUSourceCoverageEncoding,
+        val bindingLayoutHash: String,
     )
 
     private data class PreparedVerticesPipelineSet(
@@ -1249,12 +1296,9 @@ private fun preparedVerticesBatchingCounters(
 }
 
 private fun requirePreparedVerticesBlend(
-    plan: GPUPreparedVerticesRenderRunPlan,
+    blendPlan: GPUBlendPlan?,
     packet: GPUDrawSemanticPayload.Vertices,
 ): GPUFixedFunctionBlendState {
-    val blendPlan = plan.renderStep.drawPackets
-        .single { candidate -> candidate.commandIdValue == packet.payloadRef.commandIdValue }
-        .blendPlan
     return when (blendPlan) {
         is GPUBlendPlan.FixedFunctionBlend -> blendPlan.state
         is GPUBlendPlan.ShaderBlendWithDstRead -> GPUFixedFunctionBlendState(

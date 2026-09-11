@@ -840,24 +840,29 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                 GPUWgpu4kPreparedVerticesRenderRunMaterializer.PreparedVerticesBufferSet>()
             val finalVerticesOperands = mutableListOf<GPUPreparedNativeScopeOperand.Render>()
             val verticesBufferUploadOperands = mutableListOf<GPUPreparedNativeScopeOperand.BufferUpload>()
+            val verticesDestinationInputsByPacketId = verticesDestinationNativeResources.mapValues { (_, resource) ->
+                GPUWgpu4kPreparedVerticesDestinationReadInput(resource.plan, resource.view)
+            }
+            val verticesMaterializer = GPUWgpu4kPreparedVerticesRenderRunMaterializer(
+                device,
+                batchingEnabled = verticesRuns.size == 1,
+            )
             verticesRuns.forEach { run ->
-                val runPacketIds = run.renderStep.drawPackets.map { it.packetId }.toSet()
+                val runDestinationInputs = buildMap {
+                    run.renderStep.drawPackets.forEach { packet ->
+                        verticesDestinationInputsByPacketId[packet.packetId]?.let { input ->
+                            put(packet.packetId, input)
+                        }
+                    }
+                }
                 val verticesReady = when (
-                    val result = GPUWgpu4kPreparedVerticesRenderRunMaterializer(device,
-                        batchingEnabled = verticesRuns.size == 1)
-                        .materializeAcceptedRun(
-                            run,
-                            generationSeal.deviceGeneration,
-                            targetViewOperand,
-                            destinationReadsByPacketId =
-                                verticesDestinationNativeResources.filterKeys { it in runPacketIds }.mapValues { (_, resource) ->
-                                    GPUWgpu4kPreparedVerticesDestinationReadInput(
-                                        resource.plan,
-                                        resource.view,
-                                    )
-                                },
-                            sharedBuffersByArtifactKey = sharedVerticesBuffers,
-                        )
+                    val result = verticesMaterializer.materializeAcceptedRun(
+                        run,
+                        generationSeal.deviceGeneration,
+                        targetViewOperand,
+                        destinationReadsByPacketId = runDestinationInputs,
+                        sharedBuffersByArtifactKey = sharedVerticesBuffers,
+                    )
                 ) {
                     is GPUPreparedRenderRunMaterialization.Ready -> result
                     is GPUPreparedRenderRunMaterialization.Refused -> {
@@ -895,9 +900,8 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                     }
                 }
                 verticesBufferUploadOperands += run.let {
-                    val uploadScopeKeys = run.uploadScopeKeys.sortedBy(
-                        GPUPreparedNativeScopeKey::sourceStepIndex,
-                    )
+                    val uploadScopeKeys = run.uploadScopeKeys
+                    val artifactByKey = run.packets.associate { it.artifact.key to it.artifact }
                     val bufferUploads = verticesReady.uniformUploads
                         .filter { upload ->
                             upload.uploadRole == "vertex" || upload.uploadRole == "index"
@@ -907,12 +911,12 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                     }
                     uploadScopeKeys.zip(bufferUploads).map { (scopeKey, upload) ->
                         val original = framePlan.steps[scopeKey.sourceStepIndex] as GPUFrameStep.UploadResourceStep
-                        val artifact = run.packets.map { it.artifact }.distinctBy { it.key }
-                            .single { original.destination.value.endsWith(".${it.key}") }
+                        val artifact = artifactByKey.getValue(original.destination.value.substringAfterLast('.'))
                         val expectedBytes = if (upload.uploadRole == "vertex") artifact.vertexBytesForUpload()
                             else requireNotNull(artifact.indexBytesForUpload()).let { bytes ->
                                 bytes.copyOf(Math.addExact(bytes.size, (4 - bytes.size % 4) % 4)) }
-                        check(original.destination.value.contains("prepared-vertices.${upload.uploadRole}.") &&
+                        check(original.destination.value ==
+                            "buffer.prepared-vertices.${upload.uploadRole}.${framePlan.frameId.value}.${artifact.key}" &&
                             upload.consumerSourceStepIndices == listOf(run.sourceScopeIndex) &&
                             upload.data.bytes().contentEquals(expectedBytes)) {
                             "Prepared-vertices upload must match this run's exact artifact and consumer"
@@ -934,9 +938,10 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                     }
                 }
                 // Buffers shared by later runs already belong to the first run's anchor.
-                val ownedByThisRun = verticesOwner.ownedHandlesSnapshot()
+                val ownedByThisRun = java.util.Collections.newSetFromMap(IdentityHashMap<AutoCloseable, Boolean>())
+                    .also { it.addAll(verticesOwner.ownedHandlesSnapshot()) }
                 val distinctVisibleVerticesHandles = visibleVerticesHandles.distinctByNativeIdentity()
-                    .filter { visible -> ownedByThisRun.any { it === visible } }
+                    .filter { visible -> visible in ownedByThisRun }
                 verticesOwner.detachOwnedHandles(distinctVisibleVerticesHandles)
                 if (distinctVisibleVerticesHandles.isNotEmpty()) {
                     verticesAnchors += GPUPreparedNativeCompletionAnchor(distinctVisibleVerticesHandles)
