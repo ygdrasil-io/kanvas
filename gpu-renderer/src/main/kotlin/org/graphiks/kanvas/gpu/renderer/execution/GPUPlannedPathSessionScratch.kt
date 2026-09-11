@@ -206,7 +206,8 @@ internal class GPUPlannedPathSessionScratch private constructor(
     ): Boolean = packetAuthority(packet, structuralPipelineKey, renderPipelineKey)
 
     companion object {
-        fun from(scratch: W4cSessionScratchV1): GPUPlannedPathSessionScratch =
+        fun from(scratch: W4cSessionScratchV1,
+            w5b: org.graphiks.kanvas.gpu.renderer.passes.W5bPreparedFrameWitnessV3? = null): GPUPlannedPathSessionScratch =
             GPUPlannedPathSessionScratch(
                 lane = Lane.W4c,
                 planId = scratch.planId,
@@ -265,7 +266,10 @@ internal class GPUPlannedPathSessionScratch private constructor(
                     )
                 },
                 authorityOwner = { authority ->
-                    authority.w4cSessionScratch === scratch &&
+                    (if (w5b == null) authority.w4cSessionScratch === scratch else
+                        authority.w5bFrameWitnessV3 === w5b && w5b.geometryLanes.any {
+                            it is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.PathFill && it.authority === scratch
+                        }) &&
                         authority.w3SessionScratch == null && authority.w4aSessionScratch == null &&
                         authority.w4bSessionScratch == null && authority.w4dSessionScratch == null
                 },

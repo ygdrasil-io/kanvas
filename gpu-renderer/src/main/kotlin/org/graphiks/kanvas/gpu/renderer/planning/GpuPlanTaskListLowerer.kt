@@ -114,6 +114,8 @@ public class GpuPlanTaskListLowerer {
         if (request.graph.budget != request.currentBudget) return invalid("The graph budget is stale.")
         return when (request.graph.capabilityId) {
             W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID -> W5bAnalyticRRectGraphLowerer().lower(request)
+            org.graphiks.kanvas.gpu.plan.W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID,
+            W4cPathFillPlanCompiler.W5B_CAPABILITY_ID -> W5bNativeGeometryGraphLowerer().lower(request)
             W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID -> W5bAnalyticRectGraphLowerer().lower(request)
             org.graphiks.kanvas.gpu.plan.W5aCompositePlanCompiler.CAPABILITY_ID ->
                 W5aCompositeGraphLowerer().lower(request)
@@ -269,7 +271,7 @@ public class GpuPlanTaskListLowerer {
         )
     }
 
-    private fun sealW3Scratch(
+    internal fun sealW3Scratch(
         request: GpuPlanLoweringRequest,
         target: GPUFrameTargetRef,
         staging: GPUFrameBufferRef,
@@ -384,7 +386,7 @@ public class GpuPlanTaskListLowerer {
         }
     }
 
-    private fun packet(draw: PlanDraw, color: ColorF32, paintOrder: Int, target: GPUPixelBounds, materialPlanTable: MaterialPlanTable?,
+    internal fun packet(draw: PlanDraw, color: ColorF32, paintOrder: Int, target: GPUPixelBounds, materialPlanTable: MaterialPlanTable?,
         prepared: org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive?): GPUDrawPacket {
         val bounds = when (draw) { is SolidRectDraw -> draw.copyVisibleBounds(); is W5bPointDraw -> draw.copyBoundsI32(); else -> error("Unknown direct geometry") }
         val scissor = when (draw) { is SolidRectDraw -> draw.copyScissor(); is W5bPointDraw -> draw.copyScissorI32(); else -> error("Unknown direct geometry") }
@@ -562,7 +564,7 @@ public class GpuPlanTaskListLowerer {
         data class Invalid(val diagnostic: RenderDiagnostic) : W3BaseTaskListResult
     }
 
-    private sealed interface W3SessionScratchSealResult {
+    internal sealed interface W3SessionScratchSealResult {
         data class Sealed(val scratch: W3SessionScratchV1) : W3SessionScratchSealResult
         data class Unsupported(val diagnostic: RenderDiagnostic) : W3SessionScratchSealResult
         data class Invalid(val diagnostic: RenderDiagnostic) : W3SessionScratchSealResult

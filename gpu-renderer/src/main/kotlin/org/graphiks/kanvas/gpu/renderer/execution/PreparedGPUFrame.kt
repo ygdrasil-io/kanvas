@@ -1481,7 +1481,15 @@ internal class PreparedGPUFrame(
                     semanticPlan.steps.filterIsInstance<org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep>())) {
                     "Prepared composite frames require their exact ordered lane authority"
                 }
-                val plannedPathFrame = if (compositeAuthority != null) {
+                val w5bPathWitness = step.drawPackets.singleOrNull()?.let { packet ->
+                    packet.corePrimitivePreparedAuthority?.w5bFrameWitnessV3?.takeIf {
+                        it.scratchFor(packet) is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.PathFill
+                    }
+                }
+                if (w5bPathWitness != null) require(w5bPathWitness.validates(semanticPlan)) {
+                    "Prepared W5b path scopes require the exact compiler-owned frame"
+                }
+                val plannedPathFrame = if (w5bPathWitness != null) true else if (compositeAuthority != null) {
                     step.drawPackets.all { it.corePrimitivePreparedAuthority?.let { authority ->
                         authority.w4cSessionScratch != null || authority.w4dSessionScratch != null
                     } == true }
@@ -1494,7 +1502,7 @@ internal class PreparedGPUFrame(
                 val w4dGeneralScope = sealedW4e || plannedPathAuthority
                     ?.w4dGeneralFrameMaterializationAuthority != null
                 val hasPlannedPathAuthority = plannedPathAuthority?.w4cSessionScratch != null ||
-                    plannedPathAuthority?.w4dSessionScratch != null
+                    plannedPathAuthority?.w4dSessionScratch != null || w5bPathWitness != null
                 val expectedPlannedPathLoadStore = when (plannedPathPacket?.role) {
                     org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilProducer ->
                         org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan

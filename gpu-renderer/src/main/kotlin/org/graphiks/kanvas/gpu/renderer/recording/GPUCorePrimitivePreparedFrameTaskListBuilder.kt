@@ -1779,7 +1779,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         val graph = requireNotNull(request.w5bDestinationGraph)
         val base = request.baseTaskList.tasks.singleOrNull() as? GPUTask.Render
             ?: return refused("invalid.w5b.preplanned", "W5b packing envelope is missing.")
-        val packets = base.drawPackets.associateBy { it.commandIdValue }
+        val packets = base.drawPackets.filter { it.role != GPUDrawPacketRole.PathStencilProducer }.associateBy { it.commandIdValue }
+        val producers = base.drawPackets.filter { it.role == GPUDrawPacketRole.PathStencilProducer }.associateBy { it.commandIdValue }
         base.w5bInitialClearV3?.clearOnly?.let { witness ->
             if (witness.graph !== graph || graph.id != request.planId || witness.target != request.target ||
                 witness.staging != request.staging || witness.capabilitySealHash != request.baseTaskList.capabilitySeal.sealHash ||
@@ -1826,6 +1827,21 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         val tasks = listOf(prepare) + passes.map { pass ->
             when (pass) {
                 is org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass -> renders.getValue(pass)
+                is org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3,
+                is org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover -> {
+                    val producer = pass is org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3
+                    val command = if (producer) (pass as org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3).commandIndexI32
+                        else (pass as org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover).draw.commandIndex
+                    val selected = if (producer) producers.getValue(command) else packets.getValue(command)
+                    val load = if (producer) (pass as org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3).load
+                        else (pass as org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover).load
+                    GPUTask.Render(taskId(pass), base.recordingId, GPUTaskPhase.Render, request.target,
+                        GPULoadStorePlan(if (load == org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan.ClearTransparent) "clear" else "load", GPUStorePlan.Store),
+                        GPUSamplePlan.SingleSampleFrame, witness.stencilResourceUses(pass),
+                        provisionalSegmentKey = GPUProvisionalRenderSegmentKey("w5b.${graph.id.value}.${pass.id.value}"),
+                        drawPackets = listOf(selected), batchEligibilityByPacketId = mapOf(selected.packetId to base.batchEligibilityByPacketId.getValue(selected.packetId)),
+                        depthStencilLoadStore = witness.stencilLoadStore(pass))
+                }
                 is org.graphiks.kanvas.gpu.plan.PlanPass.TextureCopy -> {
                     val authority = witness.copyAuthority(pass)
                     val member = GPUDestinationReadMember(authority.consumers.single().groupingCommandId, 0, authority.logicalBounds)

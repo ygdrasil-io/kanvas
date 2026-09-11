@@ -677,7 +677,9 @@ object GPUFramePlanner {
                         packet.commandIdValue != consumer.commandId.value ||
                         packet.blendPlan?.destinationReadRequirement !=
                         GPUBlendDestinationReadRequirement.DestinationTextureRequired ||
-                        (destination.taskId to render.taskId) !in directDependencies ||
+                        ((destination.taskId to render.taskId) !in directDependencies &&
+                            packet.corePrimitivePreparedAuthority?.w5bFrameWitnessV3?.hasAtomicCopyBinding(
+                                destination.taskId, render.taskId, packet, taskList.dependencies) != true) ||
                         !consumerPacketIds.add(packet.packetId)
                     ) {
                         return invalidDestination(
@@ -724,15 +726,18 @@ object GPUFramePlanner {
                 val firstExecutionPoint = orderedExecutionPoints.first()
                 val lastExecutionPoint = orderedExecutionPoints.last()
                 val firstConsumer = consumerPoints.first()
+                val firstPacket = firstConsumer.first.drawPackets[firstConsumer.second]
+                val atomicProducer = firstPacket.corePrimitivePreparedAuthority?.w5bFrameWitnessV3?.atomicCopyProducer(
+                    destination.taskId, firstConsumer.first.taskId, firstPacket, taskList.dependencies)
                 scheduledOperations += ScheduledDestinationOperation(
                     sourceTaskId = destination.taskId,
                     sourceKey = group.key,
                     operation = operation,
                     schedulePoint = RenderExecutionPoint(
-                        taskId = firstConsumer.first.taskId,
-                        packetIndex = firstConsumer.second,
+                        taskId = atomicProducer ?: firstConsumer.first.taskId,
+                        packetIndex = if (atomicProducer != null) 0 else firstConsumer.second,
                     ),
-                    lifetimeStart = firstExecutionPoint,
+                    lifetimeStart = atomicProducer?.let { OrderedRenderExecutionPoint(orderedIndex.getValue(it), 0) } ?: firstExecutionPoint,
                     lifetimeEnd = lastExecutionPoint,
                     consumerPacketIds = operation.consumers.map { it.packetId }.toSet(),
                 )
@@ -1230,12 +1235,12 @@ object GPUFramePlanner {
     private fun GPUTask.Render.packetWrites(
         packet: GPUDrawPacket,
         resource: GPUFrameResourceRef,
-    ): Boolean = target == resource && packet.blendPlan.writesColorAttachment() ||
+    ): Boolean = target == resource && packet.writesColorAttachment() ||
         resourceUses.any { it.write && it.resource == resource }
 
     private fun GPUTask.writes(resource: GPUFrameResourceRef): Boolean = when (this) {
         is GPUTask.Render ->
-            target == resource && drawPackets.any { it.blendPlan.writesColorAttachment() } ||
+            target == resource && drawPackets.any { it.writesColorAttachment() } ||
                 resourceUses.any { it.write && it.resource == resource }
         is GPUTask.Compute -> target == resource || resourceUses.any { it.write && it.resource == resource }
         is GPUTask.Copy -> destination == resource
@@ -1254,6 +1259,8 @@ object GPUFramePlanner {
         null,
         -> false
     }
+    private fun GPUDrawPacket.writesColorAttachment(): Boolean =
+        corePrimitivePreparedAuthority?.w5bFrameWitnessV3?.ownsGeometryProducer(this) != true && blendPlan.writesColorAttachment()
 
     /**
      * A path cover still owns the stencil test/reset even when its color blend is destination-only.

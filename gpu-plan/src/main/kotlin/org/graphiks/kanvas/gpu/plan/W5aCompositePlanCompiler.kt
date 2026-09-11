@@ -75,7 +75,12 @@ public class W5aCompositePlanCompiler : GpuPlanCompiler {
             else -> return result
         }
         return try {
-            RenderPlanResult.Ready(RenderGraph.issueW5aComposite(W5aCompositePlanV1.issue(graphs)))
+            if (graphs.any { graph -> graph.verifyW5bGeometryCompilerWitness() || graph.passes().any {
+                it is PlanPass.TextureCopy || it is PlanPass.RenderPass && it.draws().any { draw ->
+                    draw.blend != BlendPlan.LegacySrcOverV1 && (draw.blend as? BlendPlan.FixedFunctionV1)?.mode != BlendMode.SRC_OVER
+                }
+            } }) RenderPlanResult.Ready(issueW5bNativeComposite(graphs))
+            else RenderPlanResult.Ready(RenderGraph.issueW5aComposite(W5aCompositePlanV1.issue(graphs)))
         } catch (_: W5aCompositeBudgetExceeded) {
             RenderPlanResult.ResourceLimitExceeded(listOf(diagnostic("Composite frame exceeds its aggregate memory budget")))
         } catch (failure: IllegalArgumentException) {

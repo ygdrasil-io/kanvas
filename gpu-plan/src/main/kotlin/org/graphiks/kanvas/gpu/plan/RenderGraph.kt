@@ -23,6 +23,7 @@ public class RenderGraph private constructor(
     private val materialPlanTable: MaterialPlanTable?,
     private val w5aCompositePlan: W5aCompositePlanV1? = null,
     private val w5bGeometryIssued: Boolean = false,
+    w5bGeometryLanes: List<W5bGeometryLanePlanV3> = emptyList(),
 ) {
     private val storedTargetExtent: SizeI32 = targetExtent.copy()
     public val targetExtent: SizeI32
@@ -30,6 +31,7 @@ public class RenderGraph private constructor(
     private val storedResources = immutableList(resources)
     private val storedPasses = immutableList(passes)
     private val storedDependencies = immutableList(dependencies)
+    private val storedW5bGeometryLanes = immutableList(w5bGeometryLanes)
 
     public fun resources(): List<PlanResource> = storedResources
     public fun passes(): List<PlanPass> = storedPasses
@@ -41,6 +43,7 @@ public class RenderGraph private constructor(
     public fun w5aCompositePlanOrNull(): W5aCompositePlanV1? = w5aCompositePlan
 
     public fun verifyW5bGeometryCompilerWitness(): Boolean = w5bGeometryIssued
+    public fun w5bGeometryLanes(): List<W5bGeometryLanePlanV3> = storedW5bGeometryLanes
 
     /** Verifies that this exact immutable graph snapshot was issued by the W4d compiler. */
     public fun verifyW4dCompilerWitness(): Boolean =
@@ -61,15 +64,25 @@ public class RenderGraph private constructor(
     public fun w4eNativePayloadOrNull(): W4eNativePayloadPlan? = w4eNativePayloadPlan
 
     public companion object {
-        internal fun issueW5bGeometry(graph: RenderGraph): RenderGraph {
+        internal fun issueW5bGeometry(graph: RenderGraph, lanes: List<W5bGeometryLanePlanV3> = emptyList()): RenderGraph {
             require(graph.capabilityId in setOf(W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID,
-                W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID))
+                W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID, W4cPathFillPlanCompiler.W5B_CAPABILITY_ID,
+                W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID))
             require(graph.passes().filterIsInstance<PlanPass.RenderPass>().flatMap { it.draws() }.all {
-                (it is AnalyticRectDraw || it is AnalyticRRectDraw) && it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1
+                (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw) &&
+                    it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1
             })
             return RenderGraph(graph.id, graph.capabilityId, graph.targetExtent, graph.colorFormat, graph.capabilities,
                 graph.budget, graph.visualCommandCount, graph.resources(), graph.passes(), graph.dependencies(),
-                graph.peakFrameLocalBytes, null, null, null, null, graph.materialPlanTable, w5bGeometryIssued = true)
+                graph.peakFrameLocalBytes, null, null, null, null, graph.materialPlanTable, w5bGeometryIssued = true,
+                w5bGeometryLanes = if (lanes.isEmpty() && graph.capabilityId == W4cPathFillPlanCompiler.W5B_CAPABILITY_ID && graph.visualCommandCount > 0) {
+                    val colors = visualDraws(graph.passes())
+                    listOf(W5bGeometryLanePlanV3(graph, colors.map { it.commandIndex },
+                        PlanDrawDataResources(graph.resources().single { it.role == PlanResourceRole.VertexData }.id,
+                            graph.resources().single { it.role == PlanResourceRole.IndexData }.id,
+                            graph.resources().single { it.role == PlanResourceRole.UniformData }.id),
+                        graph.resources().singleOrNull { it.role == PlanResourceRole.DepthStencil }?.id))
+                } else lanes)
         }
         /** Only the composite compiler can issue this distinct, lane-owned graph representation. */
         internal fun issueW5aComposite(composite: W5aCompositePlanV1): RenderGraph {
@@ -181,11 +194,13 @@ public class RenderGraph private constructor(
                     colorFormat,
                     visualCommandCount,
                 )
+            } else if (capabilityId in setOf(W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID)) {
+                validateW5bGeometryPasses(passes, resourcesById, visualCommandCount)
             } else {
                 validateStencilAtomicContracts(passes, dependencies, resources, resourcesById, capabilities, targetExtent)
             }
             validateVisualCommandOrder(passes)
-            validatePathDrawContracts(
+            if (capabilityId !in setOf(W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID)) validatePathDrawContracts(
                 passes,
                 dependencies,
                 resources,
@@ -343,6 +358,8 @@ public class RenderGraph private constructor(
         }
 
         private fun referencedResources(pass: PlanPass): List<PlanResourceId> = when (pass) {
+            is PlanPass.StencilGeometryProducerV3 -> listOf(pass.target, pass.depthStencil,
+                pass.drawDataResources.vertex, pass.drawDataResources.index, pass.drawDataResources.uniform)
             is PlanPass.RenderPass -> buildList {
                 add(pass.target)
                 pass.draws().mapNotNull { (it.blend as? BlendPlan.DestinationReadV1)?.snapshotResource }.forEach(::add)
@@ -369,12 +386,13 @@ public class RenderGraph private constructor(
                 pass.drawDataResources.index,
                 pass.drawDataResources.uniform,
             )
-            is PlanPass.StencilCover -> listOf(
+            is PlanPass.StencilCover -> listOfNotNull(
                 pass.target,
                 pass.depthStencil,
                 pass.drawDataResources.vertex,
                 pass.drawDataResources.index,
                 pass.drawDataResources.uniform,
+                (pass.draw.blend as? BlendPlan.DestinationReadV1)?.snapshotResource,
             )
             is PlanPass.TextureCopy -> listOf(pass.source, pass.destination)
             is PlanPass.FilterPass -> pass.inputs() + pass.output
@@ -397,6 +415,7 @@ public class RenderGraph private constructor(
         ) {
             val colorPasses = passes.mapNotNull { pass ->
                 when (pass) {
+                    is PlanPass.StencilGeometryProducerV3 -> ColorAttachment(pass.target, pass.load, pass.store, SamplePlan.SingleSample)
                     is PlanPass.RenderPass -> {
                         require(pass.draws().all { it.sample == SamplePlan.SingleSample }) {
                             "Legacy render passes require single-sample draws"
@@ -1841,10 +1860,11 @@ public class RenderGraph private constructor(
         }
 
         private fun visualDraws(passes: List<PlanPass>): List<PlanDraw> = buildList {
-            passes.forEach { pass ->
+            passes.forEachIndexed { index, pass ->
                 when (pass) {
                     is PlanPass.RenderPass -> addAll(pass.draws())
                     is PlanPass.StencilProducer -> add(pass.draw)
+                    is PlanPass.StencilCover -> if (passes.getOrNull(index - 1) is PlanPass.StencilGeometryProducerV3) add(pass.draw)
                     is PlanPass.PathRenderPass -> when (pass.phase) {
                         PathRenderPhase.SingleSampleDirectColor,
                         PathRenderPhase.SingleSampleStencilColorCover,
