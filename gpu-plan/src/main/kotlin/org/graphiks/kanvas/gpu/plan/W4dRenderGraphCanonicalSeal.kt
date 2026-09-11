@@ -114,7 +114,7 @@ private class W4dGraphDigestWriter {
             i32("$prefix.program.version", entry.program.versionI32)
             text("$prefix.program.id", entry.program.structuralId.value)
             when (val binding = entry.bindings) {
-                is MaterialBindingPlan.LinearGradientV1 -> {
+                is MaterialBindingPlan.GradientV1 -> {
                     text("$prefix.binding", binding.toString())
                     text("$prefix.stop-slab", requireNotNull(table.gradientStopSlab).canonicalIdentity)
                 }

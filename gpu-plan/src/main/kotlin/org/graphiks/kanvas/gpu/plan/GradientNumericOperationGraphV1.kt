@@ -20,7 +20,7 @@ public sealed interface GradientNumericOperationGraphV1 {
         SQRT_F32, ATAN2_F32, FLOOR_F32, ABS_F32, MAX_F32, COMPARE_F32, SELECT,
         UPPER_BOUND_STOPS_V1, INTERPOLATE_SRGBA_STRAIGHT_F32,
     }
-    public enum class Input { X, Y, START_X, START_Y, END_X, END_Y, ZERO, ONE, DEGENERATE, STOPS, PROBE }
+    public enum class Input { X, Y, START_X, START_Y, END_X, END_Y, CENTER_X, CENTER_Y, RADIUS, ZERO, ONE, DEGENERATE, STOPS, PROBE }
     public enum class Schedule { RoundedF32, FusedMultiplyAdd, ReassociatedSumOfProducts }
     public class Node internal constructor(
         public val operation: Operation,
@@ -86,13 +86,15 @@ public sealed interface GradientNumericOperationGraphV1 {
     }
     public class Linear internal constructor(override val root: Node,
         override val domainProof: GradientNumericDomainProofV1) : GradientNumericOperationGraphV1
+    public class Radial internal constructor(override val root: Node,
+        override val domainProof: GradientNumericDomainProofV1) : GradientNumericOperationGraphV1
 
     public companion object {
-        public fun linear(): GradientNumericOperationGraphV1 {
-            fun input(slot: Input) = Node(if (slot in listOf(Input.X, Input.Y)) Operation.INPUT_LOCAL_POINT_F32
+        private fun input(slot: Input): Node = Node(if (slot in listOf(Input.X, Input.Y)) Operation.INPUT_LOCAL_POINT_F32
                 else Operation.INPUT_UNIFORM_F32, ValueType.ScalarF32, input = slot)
-            fun scalar(op: Operation, vararg args: Node) = Node(op, ValueType.ScalarF32, args.toList())
-            val zero = input(Input.ZERO)
+        private fun scalar(op: Operation, vararg args: Node): Node = Node(op, ValueType.ScalarF32, args.toList())
+
+        public fun linear(): GradientNumericOperationGraphV1 {
             val one = input(Input.ONE)
             val dx = scalar(Operation.SUB_F32, input(Input.END_X), input(Input.START_X))
             val dy = scalar(Operation.SUB_F32, input(Input.END_Y), input(Input.START_Y))
@@ -103,6 +105,35 @@ public sealed interface GradientNumericOperationGraphV1 {
             val degenerate = Node(Operation.INPUT_UNIFORM_FLAG, ValueType.ValidityFlag, input = Input.DEGENERATE)
             val safeLength = scalar(Operation.SELECT, length, one, degenerate)
             val numerator = scalar(Operation.SELECT, dot, one, degenerate)
+            return Linear(clampStops(numerator, safeLength),
+                GradientNumericDomainProofV1.Unbounded(W5cPlanDiagnostics.NumericDomainUnbounded))
+        }
+
+        public fun radial(): GradientNumericOperationGraphV1 {
+            val zero = input(Input.ZERO)
+            val one = input(Input.ONE)
+            val dx = scalar(Operation.SUB_F32, input(Input.X), input(Input.CENTER_X))
+            val dy = scalar(Operation.SUB_F32, input(Input.Y), input(Input.CENTER_Y))
+            val absX = scalar(Operation.ABS_F32, dx)
+            val absY = scalar(Operation.ABS_F32, dy)
+            fun isZero(value: Node): Node = Node(Operation.COMPARE_F32, ValueType.ValidityFlag,
+                listOf(value, zero), lessOrEqual = true)
+            // Exact axis identities preserve equality without assuming sqrt or division exact.
+            // Clamp also covers cancellation in the declared reassociated square expansion.
+            val sum = scalar(Operation.ADD_F32, scalar(Operation.MUL_F32, dx, dx), scalar(Operation.MUL_F32, dy, dy))
+            val length = scalar(Operation.SQRT_F32, scalar(Operation.MAX_F32, sum, zero))
+            val distance = scalar(Operation.SELECT,
+                scalar(Operation.SELECT, length, absY, isZero(absX)), absX, isZero(absY))
+            val degenerate = Node(Operation.INPUT_UNIFORM_FLAG, ValueType.ValidityFlag, input = Input.DEGENERATE)
+            val radius = scalar(Operation.SELECT, input(Input.RADIUS), one, degenerate)
+            val numerator = scalar(Operation.SELECT, distance, one, degenerate)
+            return Radial(clampStops(numerator, radius),
+                GradientNumericDomainProofV1.Unbounded(W5cPlanDiagnostics.NumericDomainUnbounded))
+        }
+
+        private fun clampStops(numerator: Node, safeLength: Node): Node {
+            val zero = input(Input.ZERO)
+            val one = input(Input.ONE)
             val projection = scalar(Operation.DIV_F32, numerator, safeLength)
             val selected = projection
             val positive = scalar(Operation.MAX_F32, selected, zero)
@@ -125,8 +156,7 @@ public sealed interface GradientNumericOperationGraphV1 {
             val first = Node(Operation.LOAD_STOP_COLOR_SRGBA_F32, ValueType.SrgbaStraightF32, listOf(range,
                 Node(Operation.INPUT_STOP_RANGE_U32, ValueType.IndexU32, input = Input.ZERO)))
             val below = Node(Operation.COMPARE_F32, ValueType.ValidityFlag, listOf(numerator, zero))
-            return Linear(Node(Operation.SELECT, ValueType.SrgbaStraightF32, listOf(interpolated, first, below)),
-                GradientNumericDomainProofV1.Unbounded(W5cPlanDiagnostics.NumericDomainUnbounded))
+            return Node(Operation.SELECT, ValueType.SrgbaStraightF32, listOf(interpolated, first, below))
         }
     }
 }
@@ -140,10 +170,6 @@ internal fun GradientNumericOperationGraphV1.proveLinearDomainV1(
     startF32: org.graphiks.math.geometry.Point2F32,
     endF32: org.graphiks.math.geometry.Point2F32,
 ): GradientNumericDomainProofV1 {
-    val bounds = mutableMapOf<GradientNumericOperationGraphV1.Node, Double>()
-    val minimumGapF64 = stops.zipWithNext().mapNotNull { (a, b) ->
-        (b.positionF32 - a.positionF32).takeIf { it > 0f }?.toDouble()
-    }.minOrNull() ?: 1.0
     // The expanded form may cancel large products even when (end-start)^2 looks harmless.
     val xSumF64 = kotlin.math.abs(startF32.x.toDouble()) + kotlin.math.abs(endF32.x.toDouble())
     val ySumF64 = kotlin.math.abs(startF32.y.toDouble()) + kotlin.math.abs(endF32.y.toDouble())
@@ -152,10 +178,27 @@ internal fun GradientNumericOperationGraphV1.proveLinearDomainV1(
     val lengthErrorF64 = (xSumF64 * xSumF64 + ySumF64 * ySumF64) * reassociationRoundoffFactorF64 +
         64.0 * java.lang.Float.MIN_NORMAL
     val minimumLengthF64 = if (degeneracy.degenerate) 1.0 else dxF64 * dxF64 + dyF64 * dyF64 - lengthErrorF64
+    return proveGradientDomainV1(localMagnitudeF64, uniformMagnitudeF64, minimumLengthF64, stops)
+}
+
+internal fun GradientNumericOperationGraphV1.proveRadialDomainV1(
+    localMagnitudeF64: Double, uniformMagnitudeF64: Double,
+    degeneracy: RadialGradientDegeneracyV1, stops: List<GradientStopPlanV1>,
+): GradientNumericDomainProofV1 = proveGradientDomainV1(localMagnitudeF64, uniformMagnitudeF64,
+    if (degeneracy.radialDegenerate) 1.0 else degeneracy.radialRadiusF32.toDouble(), stops)
+
+private fun GradientNumericOperationGraphV1.proveGradientDomainV1(
+    localMagnitudeF64: Double, uniformMagnitudeF64: Double, minimumLengthF64: Double,
+    stops: List<GradientStopPlanV1>,
+): GradientNumericDomainProofV1 {
+    val bounds = mutableMapOf<GradientNumericOperationGraphV1.Node, Double>()
+    val minimumGapF64 = stops.zipWithNext().mapNotNull { (a, b) ->
+        (b.positionF32 - a.positionF32).takeIf { it > 0f }?.toDouble()
+    }.minOrNull() ?: 1.0
     var finite = true
     fun bound(node: GradientNumericOperationGraphV1.Node): Double = bounds.getOrPut(node) {
         val inputs = node.inputs.map(::bound)
-        fun rounded(valueF64: Double): Double = valueF64 * 1.000001 + java.lang.Float.MIN_NORMAL
+        fun rounded(valueF64: Double): Double = valueF64 * (1.0 + reassociationRoundoffFactorF64) + java.lang.Float.MIN_NORMAL
         val valueF64 = when (node.operation) {
             GradientNumericOperationGraphV1.Operation.INPUT_LOCAL_POINT_F32 -> localMagnitudeF64
             GradientNumericOperationGraphV1.Operation.INPUT_UNIFORM_F32 -> when (node.input) {
@@ -166,6 +209,13 @@ internal fun GradientNumericOperationGraphV1.proveLinearDomainV1(
             GradientNumericOperationGraphV1.Operation.ADD_F32,
             GradientNumericOperationGraphV1.Operation.SUB_F32 -> rounded(inputs.sum())
             GradientNumericOperationGraphV1.Operation.MUL_F32 -> rounded(inputs[0] * inputs[1])
+            GradientNumericOperationGraphV1.Operation.ABS_F32 -> inputs[0]
+            GradientNumericOperationGraphV1.Operation.SQRT_F32 -> {
+                // Radial square root always receives max(sum,0); all axis and generic
+                // paths are visited even though select may discard one at runtime.
+                finite = finite && node.inputs.single().operation == GradientNumericOperationGraphV1.Operation.MAX_F32
+                rounded(kotlin.math.sqrt(inputs[0]))
+            }
             GradientNumericOperationGraphV1.Operation.DIV_F32 -> {
                 finite = finite && minimumLengthF64 >= node.minimumPositiveDenominatorF64
                 rounded(inputs[0] / minimumLengthF64)

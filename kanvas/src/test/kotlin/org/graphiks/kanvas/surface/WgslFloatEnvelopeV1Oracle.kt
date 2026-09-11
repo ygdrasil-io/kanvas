@@ -606,6 +606,19 @@ internal object WgslFloatEnvelopeV1Oracle {
     fun gradientSubtract(a: Interval, b: Interval): Interval = a - b
     fun gradientMultiply(a: Interval, b: Interval): Interval = a * b
     fun gradientDivide(a: Interval, b: Interval): Interval = wgslDivide(a, b)
+    fun gradientSqrt(value: Interval): Interval {
+        require(value.lower.signum() >= 0)
+        if (value.upper.signum() == 0) return Interval.ZERO
+        // WGSL sqrt inherits 1/inverseSqrt: retain inverseSqrt's 2 ULP
+        // and division's 2.5 ULP, plus permitted F32 rounding and flushing.
+        fun positive(input: Interval): Interval {
+            val inverse = Interval(downDivide(BigDecimal.ONE, input.upper.sqrt(MC_UP)),
+                upDivide(BigDecimal.ONE, input.lower.sqrt(MC_DOWN)))
+            return wgslDivide(Interval.ONE, f32Envelope(expandUlps(inverse, BigDecimal("2"))))
+        }
+        return if (value.lower.signum() > 0) positive(value) else
+            Interval(BigDecimal.ZERO, positive(Interval(value.upper, value.upper)).upper)
+    }
     fun gradientFma(a: Interval, b: Interval, c: Interval): Interval = fma(a, b, c)
     fun gradientHull(vararg values: Interval): Interval = hull(*values)
 

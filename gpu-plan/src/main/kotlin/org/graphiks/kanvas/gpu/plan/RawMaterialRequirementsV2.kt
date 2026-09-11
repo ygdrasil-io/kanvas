@@ -17,7 +17,7 @@ public class RawMaterialRequirementsV2 private constructor(
                 indexI32--
                 countI32 = Math.addExact(countI32, 1)
             }
-            val gradient = table.entry(MaterialPlanRef(indexI32)).bindings is MaterialBindingPlan.LinearGradientV1
+            val gradient = table.entry(MaterialPlanRef(indexI32)).bindings is MaterialBindingPlan.GradientV1
             return RawMaterialRequirementsV2(countI32, Math.addExact(
                 Math.multiplyExact(countI32.toLong(), BINDING_STRIDE_BYTES_I64), if (gradient) 80L else 0L))
         }

@@ -79,7 +79,7 @@ public class GPUPreparedVerticesMaterialPlanProvenance internal constructor(
             is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.OpacityF32V1 ->
                 value.alphaF32.toRawBits().toString()
             org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.EmptyV1 -> "empty"
-            is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.LinearGradientV1 -> error("W5c gradients do not admit Vertices")
+            is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.GradientV1 -> error("W5c gradients do not admit Vertices")
         }
         "${entry.program.structuralId.value}@${entry.program.versionI32}:${entry.bindings.versionI32}:$binding"
     }

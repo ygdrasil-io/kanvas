@@ -30,6 +30,108 @@ import kotlin.test.assertContentEquals
 
 class W5cGradientSurfacePixelTest {
     @Test
+    fun radialGradientCoversFourGeometryLanes() {
+        val stops = List(17) { indexI32 -> GradientStop(
+            if (indexI32 in 8..9) .5f else indexI32 / 16f,
+            if (indexI32 <= 8) ColorARGB.Red else ColorARGB.Blue) }
+        val surface = Surface(22, 40)
+        surface.canvas {
+            // A different Linear sequence precedes the Radial ranges in the same slab.
+            drawRect(RectF32.ofLTRB(0f, 0f, 22f, 40f), Paint(shader = Shader.LinearGradient(Point2F32(0f, 0f),
+                Point2F32(22f, 0f), listOf(GradientStop(0f, ColorARGB.Green), GradientStop(1f, ColorARGB.Green))), antiAlias = false))
+            repeat(4) { laneI32 ->
+                save()
+                concat(Matrix3x3F32.translation(.5f, laneI32 * 10f + .5f) * Matrix3x3F32.scaling(2f, 2f))
+                val paint = Paint(shader = Shader.RadialGradient(Point2F32(1f, 1f), 8f, stops), antiAlias = false)
+                when (laneI32) {
+                    0 -> drawRect(RectF32.ofLTRB(-.25f, -.25f, 10.25f, 3.25f), paint)
+                    1 -> drawRRect(RRectF32.of(RectF32.ofLTRB(0f, 0f, 10f, 3f), CornerRadiiF32.of(.5f)), paint.copy(antiAlias = true))
+                    2 -> drawPath(Path().apply { moveTo(-1f, -1f); lineTo(12f, -1f); lineTo(-1f, 5f); close() }, paint)
+                    3 -> drawPath(Path().apply { moveTo(-1f, 1f); lineTo(11f, 1f) }, paint.copy(style = PaintStyle.STROKE, strokeWidth = 1f))
+                }
+                restore()
+            }
+        }
+        val pixels = surface.render().pixels
+        assertContentEquals(ubyteArrayOf(0u, 255u, 0u, 255u), pixels.copyOfRange((39 * 22 + 21) * 4, (39 * 22 + 22) * 4))
+        repeat(4) { laneI32 ->
+            for ((localXF32, color) in listOf(4.5f to ubyteArrayOf(255u, 0u, 0u, 255u),
+                5f to ubyteArrayOf(0u, 0u, 255u, 255u), 5.5f to ubyteArrayOf(0u, 0u, 255u, 255u))) {
+                val offsetI32 = ((laneI32 * 10 + 2) * 22 + (localXF32 * 2).toInt()) * 4
+                assertContentEquals(color, pixels.copyOfRange(offsetI32, offsetI32 + 4), "lane=$laneI32 x=$localXF32")
+                val expected = W5cGradientCpuOracle.radialClampSrgb(Point2F32(localXF32, 1f), Point2F32(1f, 1f), 8f, stops)
+                    .thenBlend(W5bBlendCpuOracle.Draw(ColorARGB.Transparent, 1f, BlendMode.SRC_OVER), BlendMode.SRC_OVER, 1f)
+                require(expected is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { expected.toString() }
+                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixels.copyOfRange(offsetI32, offsetI32 + 4))
+            }
+        }
+        // General distance and vertical-axis distance, through the shared opacity/blend tail.
+        val interpolatedStops = listOf(GradientStop(0f, ColorARGB.Black), GradientStop(1f, ColorARGB.White))
+        // 32/255 keeps the complete distance/transfer/attachment envelope within
+        // two adjacent codes at these samples; 16/255 and 64/255 straddle a code.
+        val opacityF32 = 32f / 255f
+        val interpolation = Surface(29, 40)
+        interpolation.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 29f, 40f), Paint(shader = Shader.SolidColor(ColorARGB.White), antiAlias = false))
+            repeat(4) { laneI32 ->
+                save()
+                concat(Matrix3x3F32.translation(.5f, laneI32 * 10f + .5f) * Matrix3x3F32.scaling(2f, 2f))
+                val paint = Paint(shader = Shader.Opacity(Shader.RadialGradient(Point2F32(1f, 1f), 8f, interpolatedStops), opacityF32),
+                    blendMode = BlendMode.DIFFERENCE, antiAlias = false)
+                when (laneI32) {
+                    0 -> drawRect(RectF32.ofLTRB(-.25f, -.25f, 10.25f, 4.25f), paint)
+                    1 -> drawRRect(RRectF32.of(RectF32.ofLTRB(0f, 0f, 10f, 4f), CornerRadiiF32.of(.5f)), paint.copy(antiAlias = true))
+                    2 -> drawPath(Path().apply { moveTo(-1f, -1f); lineTo(12f, -1f); lineTo(-1f, 5f); close() }, paint)
+                    3 -> drawPath(Path().apply { moveTo(-1f, 2f); lineTo(11f, 2f) }, paint.copy(style = PaintStyle.STROKE, strokeWidth = 1f))
+                }
+                restore()
+            }
+        }
+        val interpolatedPixels = interpolation.render().pixels
+        repeat(4) { laneI32 ->
+            for (localXF32 in listOf(1f, 5f)) {
+                val expected = W5cGradientCpuOracle.radialClampSrgb(Point2F32(localXF32, 2f), Point2F32(1f, 1f), 8f, interpolatedStops)
+                    .thenBlend(W5bBlendCpuOracle.Draw(ColorARGB.White, 1f, BlendMode.SRC_OVER), BlendMode.DIFFERENCE, opacityF32)
+                require(expected is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { "lane=$laneI32 x=$localXF32: $expected" }
+                val offsetI32 = ((laneI32 * 10 + 4) * 29 + (localXF32 * 2).toInt()) * 4
+                try { WgslFloatEnvelopeV1Oracle.assertAdmits(expected, interpolatedPixels.copyOfRange(offsetI32, offsetI32 + 4)) }
+                catch (failure: IllegalArgumentException) { throw AssertionError("lane=$laneI32 x=$localXF32", failure) }
+            }
+        }
+    }
+
+    @Test
+    fun radialGradientHandlesDegenerateAndSingletonStops() {
+        val epsilonF32 = 0.000030517578125f
+        val stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue))
+        for ((indexI32, radiusF32) in listOf(0f, Math.nextDown(epsilonF32), epsilonF32, Math.nextUp(epsilonF32)).withIndex()) {
+            val surface = Surface(23 + indexI32, 1)
+            surface.canvas { drawRect(RectF32.ofLTRB(0f, 0f, (23 + indexI32).toFloat(), 1f),
+                Paint(shader = Shader.RadialGradient(Point2F32(.5f, .5f), radiusF32, stops), antiAlias = false)) }
+            val expected = if (radiusF32 <= epsilonF32) ubyteArrayOf(0u, 0u, 255u, 255u) else ubyteArrayOf(255u, 0u, 0u, 255u)
+            assertContentEquals(expected, surface.render().pixels.copyOfRange(0, 4))
+        }
+        val singleton = Surface(27, 1)
+        singleton.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 27f, 1f), Paint(shader = Shader.RadialGradient(
+            Point2F32(0f, 0f), 8f, listOf(GradientStop(.7f, ColorARGB.Green))), antiAlias = false)) }
+        assertContentEquals(ubyteArrayOf(0u, 255u, 0u, 255u), singleton.render().pixels.copyOfRange(0, 4))
+        for (radiusF32 in listOf(-1f, Float.NaN, Float.POSITIVE_INFINITY)) {
+            val invalid = Surface(28, 1)
+            invalid.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 28f, 1f), Paint(shader = Shader.RadialGradient(
+                Point2F32(0f, 0f), radiusF32, stops), antiAlias = false)) }
+            val failure = assertThrows<IllegalStateException> { invalid.render() }
+            assertEquals(if (radiusF32 < 0f) "unsupported.material.gradient.negative_radius" else "non-finite-value",
+                failure.message.orEmpty().substringBefore(':'))
+        }
+        val outsideDomain = Surface(30, 1)
+        outsideDomain.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 30f, 1f), Paint(shader = Shader.RadialGradient(
+            Point2F32(0f, 0f), 1e20f, stops), antiAlias = false)) }
+        assertInstanceOf(SceneCaptureResult.Captured::class.java, outsideDomain.snapshotScene())
+        val domainFailure = assertThrows<IllegalStateException> { outsideDomain.render() }
+        assertEquals("unsupported.material.gradient.numeric-domain-unbounded", domainFailure.message.orEmpty().substringBefore(':'))
+    }
+
+    @Test
     fun linearGradientCoversRRectPathFillAndStroke() {
         for (countI32 in listOf(1, 2, 16, 17)) {
             val stops = when (countI32) {

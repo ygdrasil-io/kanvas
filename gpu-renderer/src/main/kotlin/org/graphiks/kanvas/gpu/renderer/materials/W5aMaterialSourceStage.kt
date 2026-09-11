@@ -9,7 +9,6 @@ import org.graphiks.kanvas.gpu.plan.RawMaterialRequirementsV2
 import org.graphiks.kanvas.gpu.plan.NumericOperationGraphV1
 import org.graphiks.kanvas.gpu.plan.NumericOperationGraphV1.Operation
 import org.graphiks.kanvas.gpu.plan.MaterialCoordinatePlanV1
-import org.graphiks.kanvas.gpu.plan.MaterialProgramPlan
 import org.graphiks.kanvas.gpu.plan.GradientStopSlabPlanV1
 import org.graphiks.kanvas.gpu.plan.GradientNumericOperationGraphV1
 import org.graphiks.kanvas.gpu.plan.GradientNumericDomainProofV1
@@ -52,10 +51,9 @@ internal class W5aMaterialSourceStage private constructor(
             if (chain.size != requirements.bindingCountI32 || requirements.uniformByteCountI64 > Int.MAX_VALUE) return null
             val uniforms = ByteBuffer.allocate(requirements.uniformByteCountI64.toInt()).order(ByteOrder.LITTLE_ENDIAN)
             val statements = StringBuilder()
-            val gradientBinding = chain.map { it.second }.filterIsInstance<MaterialBindingPlan.LinearGradientV1>().singleOrNull()
+            val gradientBinding = chain.map { it.second }.filterIsInstance<MaterialBindingPlan.GradientV1>().singleOrNull()
             if (gradientBinding != null && coordinates == null) return null
             val gradientGraph = if (gradientBinding == null) null else {
-                if (table.entry(ref).program != MaterialProgramPlan.LinearGradientClampSrgbV1) return null
                 val numeric = gradientBinding.numericAuthority
                 if (!numeric.authenticates(table.entry(ref).program, gradientBinding,
                     requireNotNull(table.gradientStopSlab), requireNotNull(coordinates))) return null
@@ -68,8 +66,8 @@ internal class W5aMaterialSourceStage private constructor(
                 val (source, binding) = pair
                 val input = "w5aMaterial.binding$bindingIndexI32"
                 when (binding) {
-                    is MaterialBindingPlan.LinearGradientV1 -> {
-                        listOf(binding.startF32.x, binding.startF32.y, binding.endF32.x, binding.endF32.y).forEach(uniforms::putFloat)
+                    is MaterialBindingPlan.GradientV1 -> {
+                        binding.copyUniformValuesF32().forEach(uniforms::putFloat)
                         opaque = opaque && requireNotNull(table.gradientStopSlab).copyStops().all { it.straightSrgbF32.alpha == 1f }
                     }
                     MaterialBindingPlan.EmptyV1 -> { repeat(4) { uniforms.putFloat(0f) }; opaque = false }
@@ -91,7 +89,7 @@ internal class W5aMaterialSourceStage private constructor(
                     val expression = when (node.operation) {
                         Operation.CONSTANT_TRANSPARENT -> "vec4<f32>(0.0)"
                         Operation.INPUT_SOLID_SRGBA_STRAIGHT -> if (binding is MaterialBindingPlan.SolidRgbaF32V1) input else return null
-                        Operation.INPUT_GRADIENT_SRGBA_STRAIGHT -> if (binding is MaterialBindingPlan.LinearGradientV1 && gradientGraph != null)
+                        Operation.INPUT_GRADIENT_SRGBA_STRAIGHT -> if (binding is MaterialBindingPlan.GradientV1 && gradientGraph != null)
                             "w5c_gradient(localPosition)" else return null
                         Operation.INPUT_MATERIAL_LINEAR_PREMUL -> if (binding is MaterialBindingPlan.OpacityF32V1) child ?: return null else return null
                         Operation.SRGB_TO_LINEAR -> "w5a_srgb_to_linear(${inputs.single()})"
@@ -108,7 +106,7 @@ internal class W5aMaterialSourceStage private constructor(
             if (gradientBinding != null) {
                 uniforms.putInt(gradientBinding.stopRange.baseIndexU32.toInt()).putInt(gradientBinding.stopRange.countU32.toInt())
                     .putInt(0).putInt(0)
-                uniforms.putInt(if (gradientBinding.degeneracy.degenerate) 1 else 0).putInt(0).putInt(0).putInt(0)
+                uniforms.putInt(if (gradientBinding.gradientDegenerate) 1 else 0).putInt(0).putInt(0).putInt(0)
                 val inverseF32 = requireNotNull(coordinates).copyInverseCtmF32()
                 listOf(inverseF32.sx, inverseF32.kx, inverseF32.tx, 0f, inverseF32.ky, inverseF32.sy, inverseF32.ty, 0f,
                     inverseF32.persp0, inverseF32.persp1, inverseF32.persp2, 0f).forEach(uniforms::putFloat)
@@ -178,6 +176,9 @@ internal class W5aMaterialSourceStage private constructor(
                         GradientNumericOperationGraphV1.Input.START_Y -> "w5aMaterial.binding0.y"
                         GradientNumericOperationGraphV1.Input.END_X -> "w5aMaterial.binding0.z"
                         GradientNumericOperationGraphV1.Input.END_Y -> "w5aMaterial.binding0.w"
+                        GradientNumericOperationGraphV1.Input.CENTER_X -> "w5aMaterial.binding0.x"
+                        GradientNumericOperationGraphV1.Input.CENTER_Y -> "w5aMaterial.binding0.y"
+                        GradientNumericOperationGraphV1.Input.RADIUS -> "w5aMaterial.binding0.z"
                         GradientNumericOperationGraphV1.Input.ZERO -> "0.0"
                         GradientNumericOperationGraphV1.Input.ONE -> "1.0"
                         else -> error("Unsupported sealed scalar input")

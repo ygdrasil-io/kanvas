@@ -166,7 +166,7 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
         if (materialRefusals.isNotEmpty()) return Recognition.MaterialRefused(materialRefusals)
         return Recognition.Accepted(draws, materialEntries.takeIf { it.isNotEmpty() }?.let(MaterialPlanTable::of),
             if (elidedNoOpsI32 > 0 || draws.any { it.blend != BlendPlan.LegacySrcOverV1 } ||
-                materialEntries.any { it.bindings is MaterialBindingPlan.LinearGradientV1 }) W5B_CAPABILITY_ID else W5A_CAPABILITY_ID)
+                materialEntries.any { it.bindings is MaterialBindingPlan.GradientV1 }) W5B_CAPABILITY_ID else W5A_CAPABILITY_ID)
     }
 
     private fun recognizeDraw(

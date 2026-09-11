@@ -125,10 +125,10 @@ internal data class W5aPreparedFrameMaterialRegistry(
 
         private fun DisplayOp.isW5aCoreMaterialCandidate(): Boolean = when (this) {
             is DisplayOp.DrawRect -> !paint.isStroke() &&
-                paint.shader.isW5aSolidOpacity(allowLinear = true)
+                paint.shader.isW5aSolidOpacity(allowGradient = true)
             is DisplayOp.DrawRRect -> !paint.isStroke() &&
-                paint.shader.isW5aSolidOpacity(allowLinear = paint.antiAlias)
-            is DisplayOp.DrawPath -> paint.shader.isW5aSolidOpacity(allowLinear = true)
+                paint.shader.isW5aSolidOpacity(allowGradient = paint.antiAlias)
+            is DisplayOp.DrawPath -> paint.shader.isW5aSolidOpacity(allowGradient = true)
             is DisplayOp.DrawPoint ->
                 paint.blendMode in POINT_MATERIAL_BLENDS && paint.strokeCap != StrokeCap.ROUND &&
                     paint.shader.isW5aSolidOpacity()
@@ -139,15 +139,18 @@ internal data class W5aPreparedFrameMaterialRegistry(
             else -> false
         }
 
-        private fun Shader?.isW5aSolidOpacity(allowLinear: Boolean = false): Boolean {
+        private fun Shader?.isW5aSolidOpacity(allowGradient: Boolean = false): Boolean {
             var source = this
             var depth = 0
             while (source is Shader.Opacity) {
                 if (++depth > 64) return false
                 source = source.shader
             }
-            return source == null || source is Shader.SolidColor || allowLinear && source is Shader.LinearGradient &&
-                source.tileMode == TileMode.CLAMP && source.interpolation == ColorSpaceInterpolation.SRGB
+            return source == null || source is Shader.SolidColor || allowGradient && when (source) {
+                is Shader.LinearGradient -> source.tileMode == TileMode.CLAMP && source.interpolation == ColorSpaceInterpolation.SRGB
+                is Shader.RadialGradient -> source.tileMode == TileMode.CLAMP && source.interpolation == ColorSpaceInterpolation.SRGB
+                else -> false
+            }
         }
 
         private val POINT_MATERIAL_BLENDS = setOf(BlendMode.SRC_OVER, BlendMode.PLUS, BlendMode.MULTIPLY,

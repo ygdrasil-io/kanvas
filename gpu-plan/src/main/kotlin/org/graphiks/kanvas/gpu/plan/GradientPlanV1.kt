@@ -29,57 +29,79 @@ public class GradientStopSlabPlanV1 private constructor(stops: List<GradientStop
     }
 }
 
+public sealed interface GradientDegeneracyV1
 public data class LinearGradientDegeneracyV1(public val axisXF32: Float, public val axisYF32: Float,
-    public val lengthSquaredF32: Float, public val degenerate: Boolean)
+    public val lengthSquaredF32: Float, public val degenerate: Boolean) : GradientDegeneracyV1
 
-/** Value-dependent proof, issued only by the planner and transported through range rebasing. */
-public class LinearGradientNumericAuthorityV1 private constructor(
+public data class RadialGradientDegeneracyV1(public val radialRadiusF32: Float, public val radialDegenerate: Boolean) : GradientDegeneracyV1
+
+/** Value-dependent proof shared by admitted families, transported only after exact stop-range validation. */
+public class GradientNumericAuthorityV1 private constructor(
     public val graph: GradientNumericOperationGraphV1,
+    private val program: MaterialProgramPlan,
     private val coordinates: MaterialCoordinatePlanV1,
-    private val startF32: Point2F32,
-    private val endF32: Point2F32,
-    private val degeneracy: LinearGradientDegeneracyV1,
+    uniformValuesF32: List<Float>,
+    private val degeneracy: GradientDegeneracyV1,
     private val range: GradientStopRangeV1,
     private val slabIdentity: String,
     private val localMagnitudeF64: Double,
     private val uniformMagnitudeF64: Double,
 ) {
-    private val programId = MaterialProgramPlan.LinearGradientClampSrgbV1.structuralId
-    internal val domainIdentity: String = "linear-domain-v1:${programId.value}:${graph.contractId}:" +
-        "$startF32:$endF32:$degeneracy:${coordinates.canonicalIdentity}:" +
+    private val uniformValuesF32 = immutableList(uniformValuesF32)
+    internal val domainIdentity: String = "gradient-domain-v1:${program.structuralId.value}:${graph.contractId}:" +
+        "${this.uniformValuesF32}:$degeneracy:${coordinates.canonicalIdentity}:" +
         "${localMagnitudeF64.toBits()}:${uniformMagnitudeF64.toBits()}"
     public val canonicalIdentity: String = "$domainIdentity:$range:$slabIdentity"
     override fun toString(): String = canonicalIdentity
 
-    public fun authenticates(program: MaterialProgramPlan, binding: MaterialBindingPlan.LinearGradientV1,
+    public fun authenticates(program: MaterialProgramPlan, binding: MaterialBindingPlan.GradientV1,
         slab: GradientStopSlabPlanV1, coordinates: MaterialCoordinatePlanV1): Boolean =
-        program.structuralId == programId && graph.contractId == "WgslFloatEnvelopeV1" &&
+        program.structuralId == this.program.structuralId && graph.contractId == "WgslFloatEnvelopeV1" &&
             graph.domainProof == GradientNumericDomainProofV1.ProvenFinite && this.coordinates == coordinates &&
-            binding.startF32 == startF32 && binding.endF32 == endF32 && binding.degeneracy == degeneracy &&
-            binding.stopRange == range && slab.canonicalIdentity == slabIdentity
+            binding.copyUniformValuesF32() == uniformValuesF32 &&
+            when (binding) {
+                is MaterialBindingPlan.LinearGradientV1 -> program == MaterialProgramPlan.LinearGradientClampSrgbV1 &&
+                    binding.degeneracy == degeneracy
+                is MaterialBindingPlan.RadialGradientV1 -> program == MaterialProgramPlan.RadialGradientClampSrgbV1 &&
+                    binding.degeneracy == degeneracy
+            } && binding.stopRange == range && slab.canonicalIdentity == slabIdentity
 
-    internal fun rebase(binding: MaterialBindingPlan.LinearGradientV1, sourceSlab: GradientStopSlabPlanV1,
-        newRange: GradientStopRangeV1, newSlab: GradientStopSlabPlanV1): LinearGradientNumericAuthorityV1 {
-        require(authenticates(MaterialProgramPlan.LinearGradientClampSrgbV1, binding, sourceSlab, coordinates)) {
-            W5cPlanDiagnostics.NumericDomainUnbounded
-        }
+    internal fun rebase(binding: MaterialBindingPlan.GradientV1, sourceSlab: GradientStopSlabPlanV1,
+        newRange: GradientStopRangeV1, newSlab: GradientStopSlabPlanV1): GradientNumericAuthorityV1 {
+        require(authenticates(program, binding, sourceSlab, coordinates)) { W5cPlanDiagnostics.NumericDomainUnbounded }
         fun sequence(slab: GradientStopSlabPlanV1, selected: GradientStopRangeV1): List<GradientStopPlanV1> =
             slab.copyStops().subList(selected.baseIndexU32.toInt(), (selected.baseIndexU32 + selected.countU32).toInt())
         require(sequence(sourceSlab, range) == sequence(newSlab, newRange)) { W5cPlanDiagnostics.NumericDomainUnbounded }
-        return LinearGradientNumericAuthorityV1(graph, coordinates, startF32, endF32, degeneracy,
+        return GradientNumericAuthorityV1(graph, program, coordinates, uniformValuesF32, degeneracy,
             newRange, newSlab.canonicalIdentity, localMagnitudeF64, uniformMagnitudeF64)
     }
 
     internal companion object {
-        fun seal(coordinates: MaterialCoordinatePlanV1, startF32: Point2F32, endF32: Point2F32,
+        fun sealLinear(coordinates: MaterialCoordinatePlanV1, startF32: Point2F32, endF32: Point2F32,
             degeneracy: LinearGradientDegeneracyV1, slab: GradientStopSlabPlanV1,
-            localMagnitudeF64: Double, uniformMagnitudeF64: Double): LinearGradientNumericAuthorityV1? {
+            localMagnitudeF64: Double, uniformMagnitudeF64: Double): GradientNumericAuthorityV1? {
             val schema = MaterialProgramPlan.LinearGradientClampSrgbV1.copyGradientNumericOperationGraphV1()
             val stops = slab.copyStops()
             val proof = schema.proveLinearDomainV1(localMagnitudeF64, uniformMagnitudeF64, degeneracy, stops, startF32, endF32)
             if (proof != GradientNumericDomainProofV1.ProvenFinite) return null
-            val provenGraph = GradientNumericOperationGraphV1.Linear(schema.root, proof)
-            return LinearGradientNumericAuthorityV1(provenGraph, coordinates, startF32, endF32, degeneracy,
+            return GradientNumericAuthorityV1(GradientNumericOperationGraphV1.Linear(schema.root, proof),
+                MaterialProgramPlan.LinearGradientClampSrgbV1, coordinates,
+                listOf(startF32.x, startF32.y, endF32.x, endF32.y), degeneracy,
+                GradientStopRangeV1(0u, stops.size.toUInt()), slab.canonicalIdentity, localMagnitudeF64, uniformMagnitudeF64)
+        }
+
+        fun sealRadial(coordinates: MaterialCoordinatePlanV1, centerF32: Point2F32, radiusF32: Float,
+            degeneracy: RadialGradientDegeneracyV1, slab: GradientStopSlabPlanV1,
+            localMagnitudeF64: Double, uniformMagnitudeF64: Double): GradientNumericAuthorityV1? {
+            if (!radiusF32.isFinite() || radiusF32 < 0f || degeneracy !=
+                RadialGradientDegeneracyV1(radiusF32, radiusF32 <= 0.000030517578125f)) return null
+            val schema = MaterialProgramPlan.RadialGradientClampSrgbV1.copyGradientNumericOperationGraphV1()
+            val stops = slab.copyStops()
+            val proof = schema.proveRadialDomainV1(localMagnitudeF64, uniformMagnitudeF64, degeneracy, stops)
+            if (proof != GradientNumericDomainProofV1.ProvenFinite) return null
+            return GradientNumericAuthorityV1(GradientNumericOperationGraphV1.Radial(schema.root, proof),
+                MaterialProgramPlan.RadialGradientClampSrgbV1, coordinates,
+                listOf(centerF32.x, centerF32.y, radiusF32, 0f), degeneracy,
                 GradientStopRangeV1(0u, stops.size.toUInt()), slab.canonicalIdentity, localMagnitudeF64, uniformMagnitudeF64)
         }
     }

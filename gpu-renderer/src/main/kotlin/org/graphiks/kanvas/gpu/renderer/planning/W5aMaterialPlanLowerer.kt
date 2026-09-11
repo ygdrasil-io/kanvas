@@ -26,7 +26,7 @@ internal class W5aMaterialPlanLowerer {
             var indexI32 = root.indexI32
             while (table.entry(MaterialPlanRef(indexI32)).bindings is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.OpacityF32V1) indexI32--
             val entry = table.entry(MaterialPlanRef(indexI32))
-            if (entry.program == org.graphiks.kanvas.gpu.plan.MaterialProgramPlan.LinearGradientClampSrgbV1)
+            if (entry.bindings is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.GradientV1)
                 return ColorF32.Transparent
         }
         return W5aMaterialSourceStage.lower(table, root)?.let { ColorF32.Transparent }

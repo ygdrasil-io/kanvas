@@ -121,7 +121,7 @@ public class RenderGraph private constructor(
                     var indexI32 = authority.ref.indexI32
                     while (materialPlanTable.entry(MaterialPlanRef(indexI32)).bindings is MaterialBindingPlan.OpacityF32V1) indexI32--
                     val entry = materialPlanTable.entry(MaterialPlanRef(indexI32))
-                    if (entry.bindings is MaterialBindingPlan.LinearGradientV1) {
+                    if (entry.bindings is MaterialBindingPlan.GradientV1) {
                         require((draw is SolidRectDraw || draw is AnalyticRectDraw || draw is AnalyticRRectDraw ||
                             draw is PathFillDraw || draw is PathStrokeDraw || draw is GeneralPathDraw ||
                             draw is ClippedGeneralPathDraw || draw is BinaryMaskedPathDraw || draw is W5bW4ePathDraw) && authority.coordinates != null) {
