@@ -45,6 +45,13 @@ public sealed interface MaterialProgramPlan {
         public fun copyGradientNumericOperationGraphV1(): GradientNumericOperationGraphV1 = GradientNumericOperationGraphV1.radial()
     }
 
+    public data object SweepGradientClampSrgbV1 : MaterialProgramPlan {
+        override val versionI32: Int = 1
+        override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5c-sweep-clamp-srgb-stop-abi-v1-numeric-v1")
+        override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.gradient()
+        public fun copyGradientNumericOperationGraphV1(): GradientNumericOperationGraphV1 = GradientNumericOperationGraphV1.sweep()
+    }
+
     /** Child topology is code shape, while alpha remains a dynamic binding value. */
     public class OpacityV1(public val child: MaterialProgramPlan) : MaterialProgramPlan {
         override val versionI32: Int = 1
@@ -83,6 +90,17 @@ public sealed interface MaterialBindingPlan {
         override val versionI32: Int = 1
         override val gradientDegenerate: Boolean get() = degeneracy.radialDegenerate
         override fun copyUniformValuesF32(): List<Float> = listOf(centerF32.x, centerF32.y, radiusF32, 0f)
+        override fun rebind(range: GradientStopRangeV1, authority: GradientNumericAuthorityV1): GradientV1 =
+            copy(stopRange = range, numericAuthority = authority)
+    }
+
+    public data class SweepGradientV1(public val centerF32: Point2F32,
+        override val stopRange: GradientStopRangeV1, public val degeneracy: SweepGradientDegeneracyV1,
+        override val numericAuthority: GradientNumericAuthorityV1) : GradientV1 {
+        override val versionI32: Int = 1
+        override val gradientDegenerate: Boolean get() = degeneracy.sweepDegenerate
+        override fun copyUniformValuesF32(): List<Float> = listOf(centerF32.x, centerF32.y,
+            degeneracy.startAngleDegreesF32, degeneracy.endAngleDegreesF32)
         override fun rebind(range: GradientStopRangeV1, authority: GradientNumericAuthorityV1): GradientV1 =
             copy(stopRange = range, numericAuthority = authority)
     }
@@ -155,6 +173,7 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
                     }
                     MaterialProgramPlan.LinearGradientClampSrgbV1 -> require(entry.bindings is MaterialBindingPlan.LinearGradientV1 && entry.stopSlab != null)
                     MaterialProgramPlan.RadialGradientClampSrgbV1 -> require(entry.bindings is MaterialBindingPlan.RadialGradientV1 && entry.stopSlab != null)
+                    MaterialProgramPlan.SweepGradientClampSrgbV1 -> require(entry.bindings is MaterialBindingPlan.SweepGradientV1 && entry.stopSlab != null)
                     is MaterialProgramPlan.OpacityV1 -> {
                         require(entry.bindings is MaterialBindingPlan.OpacityF32V1) {
                             "Opacity programs require opacity bindings"

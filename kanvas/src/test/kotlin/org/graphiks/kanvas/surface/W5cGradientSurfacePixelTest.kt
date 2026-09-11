@@ -30,6 +30,100 @@ import kotlin.test.assertContentEquals
 
 class W5cGradientSurfacePixelTest {
     @Test
+    fun sweepGradientUsesClockwiseScreenAnglesOnFourLanes() {
+        val stops = listOf(GradientStop(0f, ColorARGB.Red),
+            GradientStop(.25f, ColorARGB.Red), GradientStop(.25f, ColorARGB.Green),
+            GradientStop(.5f, ColorARGB.Green), GradientStop(.5f, ColorARGB.Blue),
+            GradientStop(.75f, ColorARGB.Blue), GradientStop(.75f, ColorARGB.White), GradientStop(1f, ColorARGB.White))
+        assertSweepLanes(0f, 360f, stops, listOf(ColorARGB.Red, ColorARGB.Green, ColorARGB.Blue, ColorARGB.White), generic = true)
+        val hardStops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(.5f, ColorARGB.Red),
+            GradientStop(.5f, ColorARGB.Blue), GradientStop(1f, ColorARGB.Blue))
+        assertSweepLanes(90f, 270f, hardStops, listOf(ColorARGB.Red, ColorARGB.Red, ColorARGB.Blue, ColorARGB.Blue), generic = true)
+        // Coverage extending beyond a revolution still maps through its declared span.
+        assertSweepLanes(-90f, 450f, hardStops, listOf(ColorARGB.Red, ColorARGB.Red, ColorARGB.Blue, ColorARGB.Blue), generic = true)
+        assertSweepLanes(0f, 360f, listOf(GradientStop(0f, ColorARGB.Black), GradientStop(1f, ColorARGB.White)),
+            null, opacityF32 = 32f / 255f, blend = BlendMode.DIFFERENCE,
+            samplePointsI32 = listOf(1 to 4, 7 to 6))
+    }
+
+    @Test
+    fun sweepGradientHandlesSpanBoundariesAndDegeneracy() {
+        val stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue))
+        assertSweepLanes(180f, 180f, stops, listOf(ColorARGB.Red, ColorARGB.Red, ColorARGB.Blue, ColorARGB.Blue))
+        val epsilonF32 = 0.000030517578125f
+        assertSweepLanes(90f - epsilonF32, 90f, stops,
+            listOf(ColorARGB.Red, ColorARGB.Blue, ColorARGB.Blue, ColorARGB.Blue))
+        for (spanF32 in listOf(0f, Math.nextDown(epsilonF32), epsilonF32))
+            assertSweepLanes(0f, spanF32, stops, List(4) { ColorARGB.Blue })
+        // A constant first segment proves the epsilon branch without making the
+        // near-zero interpolation/transfer envelope cross several output codes.
+        val epsilonStops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(.5f, ColorARGB.Red),
+            GradientStop(.5f, ColorARGB.Blue), GradientStop(1f, ColorARGB.Blue))
+        assertSweepLanes(0f, Math.nextUp(epsilonF32), epsilonStops,
+            listOf(ColorARGB.Red, ColorARGB.Blue, ColorARGB.Blue, ColorARGB.Blue))
+        for ((startF32, endF32) in listOf(180f to 90f, Float.NaN to 360f, 0f to Float.POSITIVE_INFINITY)) {
+            repeat(4) { laneI32 ->
+                val invalid = Surface(35, 77)
+                invalid.canvas {
+                    concat(Matrix3x3F32.translation(.5f, .5f) * Matrix3x3F32.scaling(2f, 2f))
+                    drawSweepLane(laneI32, Paint(shader = Shader.SweepGradient(
+                        Point2F32(4f, 4f), startF32, endF32, stops), antiAlias = false))
+                }
+                val failure = assertThrows<IllegalStateException> { invalid.render() }
+                assertEquals(if (startF32.isFinite() && endF32.isFinite()) "unsupported.material.gradient.sweep_ordering"
+                    else "non-finite-value", failure.message.orEmpty().substringBefore(':'))
+            }
+        }
+    }
+
+    private fun assertSweepLanes(startF32: Float, endF32: Float, stops: List<GradientStop>, colors: List<ColorARGB>?,
+        generic: Boolean = false, opacityF32: Float = 1f, blend: BlendMode = BlendMode.SRC_OVER,
+        samplePointsI32: List<Pair<Int, Int>>? = null) {
+        val surface = Surface(34, 76)
+        surface.canvas {
+            // A distinct Linear range makes Sweep rebase/reseal into the common frame slab.
+            drawRect(RectF32.ofLTRB(0f, 0f, 34f, 76f), Paint(shader = Shader.LinearGradient(
+                Point2F32(0f, 0f), Point2F32(34f, 0f), listOf(GradientStop(0f, ColorARGB.White),
+                    GradientStop(1f, ColorARGB.White))), antiAlias = false))
+            repeat(4) { laneI32 ->
+                save()
+                concat(Matrix3x3F32.translation(.5f, laneI32 * 19f + .5f) * Matrix3x3F32.scaling(2f, 2f))
+                val paint = Paint(shader = Shader.Opacity(Shader.SweepGradient(Point2F32(4f, 4f), startF32, endF32, stops),
+                    opacityF32), blendMode = blend, antiAlias = false)
+                drawSweepLane(laneI32, paint)
+                restore()
+            }
+        }
+        val pixels = surface.render().pixels
+        repeat(4) { laneI32 ->
+            val samples = samplePointsI32 ?: (listOf(7 to 4, 4 to 7, 1 to 4, 4 to 1) +
+                if (generic) listOf(7 to 5, 3 to 7, 1 to 3, 5 to 1) else emptyList())
+            samples.forEachIndexed { angleI32, (xI32, yI32) ->
+                val color = colors?.get(angleI32 % 4)
+                val offsetI32 = ((laneI32 * 19 + yI32 * 2) * 34 + xI32 * 2) * 4
+                if (color != null) assertContentEquals(ubyteArrayOf(color.red.toUByte(), color.green.toUByte(), color.blue.toUByte(), 255u),
+                    pixels.copyOfRange(offsetI32, offsetI32 + 4), "lane=$laneI32 angle=${angleI32 * 90} span=$startF32..$endF32")
+                val expected = W5cGradientCpuOracle.sweepClampSrgb(Point2F32(xI32.toFloat(), yI32.toFloat()),
+                    Point2F32(4f, 4f), startF32, endF32, stops).thenBlend(
+                    W5bBlendCpuOracle.Draw(ColorARGB.White, 1f, BlendMode.SRC_OVER), blend, opacityF32)
+                require(expected is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) {
+                    "lane=$laneI32 sample=$xI32,$yI32 span=$startF32..$endF32 opacity=$opacityF32: $expected" }
+                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixels.copyOfRange(offsetI32, offsetI32 + 4))
+            }
+        }
+    }
+
+    private fun Canvas.drawSweepLane(laneI32: Int, paint: Paint) {
+        when (laneI32) {
+            0 -> drawRect(RectF32.ofLTRB(-.25f, -.25f, 8.25f, 8.25f), paint)
+            1 -> drawRRect(RRectF32.of(RectF32.ofLTRB(0f, 0f, 8f, 8f), CornerRadiiF32.of(.5f)), paint.copy(antiAlias = true))
+            2 -> drawPath(Path().apply { moveTo(-1f, -1f); lineTo(18f, -1f); lineTo(-1f, 18f); close() }, paint)
+            3 -> drawPath(Path().apply { addRect(RectF32.ofLTRB(1f, 1f, 7f, 7f)) },
+                paint.copy(style = PaintStyle.STROKE, strokeWidth = 1f))
+        }
+    }
+
+    @Test
     fun radialGradientCoversFourGeometryLanes() {
         val stops = List(17) { indexI32 -> GradientStop(
             if (indexI32 in 8..9) .5f else indexI32 / 16f,

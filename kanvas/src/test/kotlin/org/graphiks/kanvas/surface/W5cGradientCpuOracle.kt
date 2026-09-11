@@ -12,16 +12,21 @@ import org.graphiks.kanvas.surface.WgslFloatEnvelopeV1Oracle.Interval
 /** Independent public-input interpreter: no production normalizer, bindings, shaders or formula helpers. */
 internal object W5cGradientCpuOracle {
     class Sample internal constructor(private val pointF32: Point2F32, private val startF32: Point2F32,
-        private val endF32: Point2F32, private val stops: List<GradientStop>, private val radiusF32: Float? = null) {
+        private val endF32: Point2F32, private val stops: List<GradientStop>, private val radiusF32: Float? = null,
+        private val sweepAnglesF32: Pair<Float, Float>? = null) {
         fun thenBlend(destination: W5bBlendCpuOracle.Draw, blend: BlendMode, opacityF32: Float): WgslFloatEnvelopeV1Oracle.DrawResult {
-            val graph = if (radiusF32 == null) GradientNumericOperationGraphV1.linear() else GradientNumericOperationGraphV1.radial()
+            val graph = if (sweepAnglesF32 != null) GradientNumericOperationGraphV1.sweep()
+                else if (radiusF32 == null) GradientNumericOperationGraphV1.linear() else GradientNumericOperationGraphV1.radial()
             // A value-free schema carries no production proof; derive this sample's domain independently.
             if (stops.isEmpty() || stops.size > 65_536 || stops.any { !it.position.isFinite() } ||
                 listOf(pointF32.x, pointF32.y, startF32.x, startF32.y, endF32.x, endF32.y).any {
                     !it.isFinite() || kotlin.math.abs(it.toDouble()) > 1e8 } ||
-                radiusF32 != null && (!radiusF32.isFinite() || radiusF32 < 0f || radiusF32 > 1e8f))
+                radiusF32 != null && (!radiusF32.isFinite() || radiusF32 < 0f || radiusF32 > 1e8f) ||
+                sweepAnglesF32 != null && (sweepAnglesF32.first > sweepAnglesF32.second ||
+                    listOf(sweepAnglesF32.first, sweepAnglesF32.second, sweepAnglesF32.second - sweepAnglesF32.first)
+                        .any { !it.isFinite() || kotlin.math.abs(it) > 1e8f }))
                 return WgslFloatEnvelopeV1Oracle.DrawResult.DomainUnbounded("No finite gradient input-domain proof")
-            val interpreter = Interpreter(pointF32, startF32, endF32, stops, radiusF32)
+            val interpreter = Interpreter(pointF32, startF32, endF32, stops, radiusF32, sweepAnglesF32)
             if (!interpreter.hasFiniteStopDomain())
                 return WgslFloatEnvelopeV1Oracle.DrawResult.DomainUnbounded("Stop interval has no normal finite denominator")
             val background = W5aSolidOpacityCpuOracle.draw(destination.color, destination.opacityF32)
@@ -39,6 +44,9 @@ internal object W5cGradientCpuOracle {
         stops: List<GradientStop>): Sample = Sample(localPointF32, startF32, endF32, stops.toList())
     fun radialClampSrgb(localPointF32: Point2F32, centerF32: Point2F32, radiusF32: Float,
         stops: List<GradientStop>): Sample = Sample(localPointF32, centerF32, centerF32, stops.toList(), radiusF32)
+    fun sweepClampSrgb(localPointF32: Point2F32, centerF32: Point2F32, startAngleDegreesF32: Float,
+        endAngleDegreesF32: Float, stops: List<GradientStop>): Sample = Sample(localPointF32, centerF32, centerF32,
+        stops.toList(), sweepAnglesF32 = startAngleDegreesF32 to endAngleDegreesF32)
 
     private sealed interface Value {
         fun scalar(): Interval = (this as Scalar).value
@@ -51,7 +59,7 @@ internal object W5cGradientCpuOracle {
     private data object Range : Value
 
     private class Interpreter(val pointF32: Point2F32, val startF32: Point2F32, val endF32: Point2F32,
-        inputStops: List<GradientStop>, val radiusF32: Float?) {
+        inputStops: List<GradientStop>, val radiusF32: Float?, val sweepAnglesF32: Pair<Float, Float>?) {
         private val stops: List<GradientStop>
         private val values = mutableMapOf<GradientNumericOperationGraphV1.Node, Value>()
         init {
@@ -78,11 +86,25 @@ internal object W5cGradientCpuOracle {
                     Input.END_X -> endF32.x; Input.END_Y -> endF32.y
                     Input.CENTER_X -> startF32.x; Input.CENTER_Y -> startF32.y
                     Input.RADIUS -> requireNotNull(radiusF32)
+                    Input.START_DEGREES -> requireNotNull(sweepAnglesF32).first
+                    Input.END_DEGREES -> requireNotNull(sweepAnglesF32).second
+                    Input.SPAN_DEGREES -> requireNotNull(sweepAnglesF32).let { it.second - it.first }
+                    Input.MIN_NORMAL -> java.lang.Float.MIN_NORMAL
+                    Input.TWO_PI -> (2.0 * kotlin.math.PI).toFloat()
+                    Input.QUARTER -> .25f; Input.HALF -> .5f; Input.THREE_QUARTERS -> .75f
+                    Input.FULL_TURN_DEGREES -> 360f
                     Input.ZERO -> 0f; Input.ONE -> 1f; else -> error("Unexpected scalar")
                 })
                 Operation.INPUT_UNIFORM_FLAG -> {
                     val dxF32 = endF32.x - startF32.x; val dyF32 = endF32.y - startF32.y
-                    Flag(setOf(if (radiusF32 == null) kotlin.math.sqrt(dxF32 * dxF32 + dyF32 * dyF32) <= 0.000030517578125f
+                    Flag(setOf(if (sweepAnglesF32 != null) {
+                        val degenerate = sweepAnglesF32.second - sweepAnglesF32.first <= 0.000030517578125f
+                        when (node.input) {
+                            Input.DEGENERATE -> degenerate
+                            Input.LEADING_SEGMENT -> degenerate && sweepAnglesF32.second > 0.000030517578125f
+                            else -> error("Unexpected Sweep flag")
+                        }
+                    } else if (radiusF32 == null) kotlin.math.sqrt(dxF32 * dxF32 + dyF32 * dyF32) <= 0.000030517578125f
                         else radiusF32 <= 0.000030517578125f))
                 }
                 Operation.INPUT_STOP_RANGE_U32 -> if (node.input == Input.STOPS) Range else Index(setOf(0))
@@ -99,7 +121,19 @@ internal object W5cGradientCpuOracle {
                         Schedule.ReassociatedSumOfProducts -> reassociatedSum(expandProducts(node))
                     } }.toTypedArray()))
                 }
-                Operation.SUB_F32 -> Scalar(oracle.gradientSubtract(args[0].scalar(), args[1].scalar()))
+                Operation.SUB_F32 -> Scalar(oracle.gradientHull(*node.schedules.map { schedule -> when (schedule) {
+                    Schedule.RoundedF32 -> oracle.gradientSubtract(args[0].scalar(), args[1].scalar())
+                    Schedule.FusedMultiplyAdd -> oracle.gradientHull(
+                        oracle.gradientSubtract(args[0].scalar(), args[1].scalar()),
+                        *node.inputs.mapIndexedNotNull { indexI32, child ->
+                            child.takeIf { it.operation == Operation.MUL_F32 }?.let {
+                                val a = evaluate(it.inputs[0]).scalar(); val b = evaluate(it.inputs[1]).scalar()
+                                if (indexI32 == 0) oracle.gradientFma(a, b, negate(args[1].scalar()))
+                                else oracle.gradientFma(negate(a), b, args[0].scalar())
+                            }
+                        }.toTypedArray())
+                    Schedule.ReassociatedSumOfProducts -> reassociatedSum(expandProducts(node))
+                } }.toTypedArray()))
                 Operation.MUL_F32 -> Scalar(oracle.gradientMultiply(args[0].scalar(), args[1].scalar()))
                 Operation.DIV_F32 -> Scalar(oracle.gradientDivide(args[0].scalar(), args[1].scalar()))
                 Operation.SQRT_F32 -> Scalar(oracle.gradientSqrt(args[0].scalar()))
@@ -192,8 +226,8 @@ internal object W5cGradientCpuOracle {
                         })
                     }
                 }
-                Operation.ATAN2_F32, Operation.FLOOR_F32 ->
-                    error("Operation belongs to a deferred gradient family")
+                Operation.ATAN2_F32 -> Scalar(oracle.gradientAtan2(args[0].scalar(), args[1].scalar(), node.accuracyUlpsF64))
+                Operation.FLOOR_F32 -> Scalar(oracle.gradientFloor(args.single().scalar()))
             }
         }
 

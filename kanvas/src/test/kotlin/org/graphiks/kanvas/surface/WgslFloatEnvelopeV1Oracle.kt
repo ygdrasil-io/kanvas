@@ -606,6 +606,25 @@ internal object WgslFloatEnvelopeV1Oracle {
     fun gradientSubtract(a: Interval, b: Interval): Interval = a - b
     fun gradientMultiply(a: Interval, b: Interval): Interval = a * b
     fun gradientDivide(a: Interval, b: Interval): Interval = wgslDivide(a, b)
+    fun gradientAtan2(y: Interval, x: Interval, accuracyUlpsF64: Double): Interval {
+        // Independent corner enclosure. The eager graph guards keep both arguments
+        // normal and nonzero; atan2 is monotone on each fixed-sign rectangle.
+        val minimumNormal = BigDecimal(java.lang.Float.MIN_NORMAL.toDouble())
+        fun normal(value: Interval): Boolean = value.lower >= minimumNormal || value.upper <= minimumNormal.negate()
+        require(normal(x) && normal(y)) { "atan2 operands are outside its normal finite accuracy domain" }
+        require(accuracyUlpsF64 == 4096.0)
+        val cornersF64 = listOf(Math.nextDown(y.lower.toDouble()), Math.nextUp(y.upper.toDouble())).flatMap { yy ->
+            listOf(Math.nextDown(x.lower.toDouble()), Math.nextUp(x.upper.toDouble())).map { xx ->
+            StrictMath.atan2(yy, xx)
+        } }
+        // StrictMath atan2 is within two binary64 ULP; directed endpoint conversion
+        // and the WGSL F32 4096-ULP envelope are both retained.
+        val exact = Interval(BigDecimal(Math.nextDown(Math.nextDown(cornersF64.min()))),
+            BigDecimal(Math.nextUp(Math.nextUp(cornersF64.max()))))
+        return f32Envelope(expandUlps(exact, BigDecimal("4096")))
+    }
+    fun gradientFloor(value: Interval): Interval = f32Envelope(Interval(
+        value.lower.setScale(0, java.math.RoundingMode.FLOOR), value.upper.setScale(0, java.math.RoundingMode.FLOOR)))
     fun gradientSqrt(value: Interval): Interval {
         require(value.lower.signum() >= 0)
         if (value.upper.signum() == 0) return Interval.ZERO

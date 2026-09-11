@@ -35,6 +35,25 @@ public data class LinearGradientDegeneracyV1(public val axisXF32: Float, public 
 
 public data class RadialGradientDegeneracyV1(public val radialRadiusF32: Float, public val radialDegenerate: Boolean) : GradientDegeneracyV1
 
+public data class SweepGradientDegeneracyV1(
+    public val startAngleDegreesF32: Float, public val endAngleDegreesF32: Float,
+    public val sweepSpanDegreesF32: Float, public val sweepOrderingInvalid: Boolean,
+    public val sweepDegenerate: Boolean, public val sweepClampLeadingSegment: Boolean,
+    public val sweepFullCoverage: Boolean,
+) : GradientDegeneracyV1 {
+    internal companion object {
+        fun of(startAngleDegreesF32: Float, endAngleDegreesF32: Float): SweepGradientDegeneracyV1 {
+            val sweepSpanDegreesF32 = endAngleDegreesF32 - startAngleDegreesF32
+            val sweepOrderingInvalid = startAngleDegreesF32 > endAngleDegreesF32
+            val sweepDegenerate = sweepSpanDegreesF32 <= 0.000030517578125f
+            val sweepClampLeadingSegment = sweepDegenerate && endAngleDegreesF32 > 0.000030517578125f
+            val sweepFullCoverage = startAngleDegreesF32 <= 0f && endAngleDegreesF32 >= 360f
+            return SweepGradientDegeneracyV1(startAngleDegreesF32, endAngleDegreesF32, sweepSpanDegreesF32,
+                sweepOrderingInvalid, sweepDegenerate, sweepClampLeadingSegment, sweepFullCoverage)
+        }
+    }
+}
+
 /** Value-dependent proof shared by admitted families, transported only after exact stop-range validation. */
 public class GradientNumericAuthorityV1 private constructor(
     public val graph: GradientNumericOperationGraphV1,
@@ -64,6 +83,8 @@ public class GradientNumericAuthorityV1 private constructor(
                     binding.degeneracy == degeneracy
                 is MaterialBindingPlan.RadialGradientV1 -> program == MaterialProgramPlan.RadialGradientClampSrgbV1 &&
                     binding.degeneracy == degeneracy
+                is MaterialBindingPlan.SweepGradientV1 -> program == MaterialProgramPlan.SweepGradientClampSrgbV1 &&
+                    binding.degeneracy == degeneracy
             } && binding.stopRange == range && slab.canonicalIdentity == slabIdentity
 
     internal fun rebase(binding: MaterialBindingPlan.GradientV1, sourceSlab: GradientStopSlabPlanV1,
@@ -77,6 +98,22 @@ public class GradientNumericAuthorityV1 private constructor(
     }
 
     internal companion object {
+        fun sealSweep(coordinates: MaterialCoordinatePlanV1, centerF32: Point2F32,
+            degeneracy: SweepGradientDegeneracyV1, slab: GradientStopSlabPlanV1,
+            localMagnitudeF64: Double, uniformMagnitudeF64: Double): GradientNumericAuthorityV1? {
+            if (degeneracy != SweepGradientDegeneracyV1.of(degeneracy.startAngleDegreesF32, degeneracy.endAngleDegreesF32) ||
+                degeneracy.sweepOrderingInvalid || listOf(degeneracy.startAngleDegreesF32,
+                    degeneracy.endAngleDegreesF32, degeneracy.sweepSpanDegreesF32).any { !it.isFinite() }) return null
+            val schema = GradientNumericOperationGraphV1.sweep()
+            val stops = slab.copyStops()
+            val proof = schema.proveSweepDomainV1(localMagnitudeF64, uniformMagnitudeF64, degeneracy, stops)
+            if (proof != GradientNumericDomainProofV1.ProvenFinite) return null
+            return GradientNumericAuthorityV1(GradientNumericOperationGraphV1.Sweep(schema.root, proof),
+                MaterialProgramPlan.SweepGradientClampSrgbV1, coordinates,
+                listOf(centerF32.x, centerF32.y, degeneracy.startAngleDegreesF32, degeneracy.endAngleDegreesF32), degeneracy,
+                GradientStopRangeV1(0u, stops.size.toUInt()), slab.canonicalIdentity, localMagnitudeF64, uniformMagnitudeF64)
+        }
+
         fun sealLinear(coordinates: MaterialCoordinatePlanV1, startF32: Point2F32, endF32: Point2F32,
             degeneracy: LinearGradientDegeneracyV1, slab: GradientStopSlabPlanV1,
             localMagnitudeF64: Double, uniformMagnitudeF64: Double): GradientNumericAuthorityV1? {

@@ -106,7 +106,15 @@ internal class W5aMaterialSourceStage private constructor(
             if (gradientBinding != null) {
                 uniforms.putInt(gradientBinding.stopRange.baseIndexU32.toInt()).putInt(gradientBinding.stopRange.countU32.toInt())
                     .putInt(0).putInt(0)
-                uniforms.putInt(if (gradientBinding.gradientDegenerate) 1 else 0).putInt(0).putInt(0).putInt(0)
+                val sweep = (gradientBinding as? MaterialBindingPlan.SweepGradientV1)?.degeneracy
+                uniforms.putInt(if (gradientBinding.gradientDegenerate) 1 else 0)
+                    .putInt(if (sweep?.sweepOrderingInvalid == true) 1 else 0)
+                    .putInt(if (sweep?.sweepClampLeadingSegment == true) 1 else 0)
+                    .putInt(if (sweep?.sweepFullCoverage == true) 1 else 0)
+                if (sweep != null) {
+                    uniforms.putFloat(sweep.sweepSpanDegreesF32)
+                    repeat(3) { uniforms.putFloat(0f) }
+                }
                 val inverseF32 = requireNotNull(coordinates).copyInverseCtmF32()
                 listOf(inverseF32.sx, inverseF32.kx, inverseF32.tx, 0f, inverseF32.ky, inverseF32.sy, inverseF32.ty, 0f,
                     inverseF32.persp0, inverseF32.persp1, inverseF32.persp2, 0f).forEach(uniforms::putFloat)
@@ -114,7 +122,9 @@ internal class W5aMaterialSourceStage private constructor(
             val declarations = """
                 struct W5aMaterialBlock {
                 ${chain.indices.joinToString("\n") { "    binding$it: vec4<f32>," }}
-                ${if (gradientBinding == null) "" else "    gradientHeader: vec4<u32>,\n    gradientFlags: vec4<u32>,\n    inverseRow0: vec4<f32>,\n    inverseRow1: vec4<f32>,\n    inverseRow2: vec4<f32>,"}
+                ${if (gradientBinding == null) "" else "    gradientHeader: vec4<u32>,\n    gradientFlags: vec4<u32>,\n" +
+                    (if (gradientBinding is MaterialBindingPlan.SweepGradientV1) "    sweepParameters: vec4<f32>,\n" else "") +
+                    "    inverseRow0: vec4<f32>,\n    inverseRow1: vec4<f32>,\n    inverseRow2: vec4<f32>,"}
                 }
                 @group(1) @binding(0) var<uniform> w5aMaterial: W5aMaterialBlock;
 
@@ -179,11 +189,24 @@ internal class W5aMaterialSourceStage private constructor(
                         GradientNumericOperationGraphV1.Input.CENTER_X -> "w5aMaterial.binding0.x"
                         GradientNumericOperationGraphV1.Input.CENTER_Y -> "w5aMaterial.binding0.y"
                         GradientNumericOperationGraphV1.Input.RADIUS -> "w5aMaterial.binding0.z"
+                        GradientNumericOperationGraphV1.Input.START_DEGREES -> "w5aMaterial.binding0.z"
+                        GradientNumericOperationGraphV1.Input.END_DEGREES -> "w5aMaterial.binding0.w"
+                        GradientNumericOperationGraphV1.Input.SPAN_DEGREES -> "w5aMaterial.sweepParameters.x"
+                        GradientNumericOperationGraphV1.Input.MIN_NORMAL -> "1.17549435e-38f"
+                        GradientNumericOperationGraphV1.Input.TWO_PI -> "6.2831855f"
+                        GradientNumericOperationGraphV1.Input.QUARTER -> "0.25"
+                        GradientNumericOperationGraphV1.Input.HALF -> "0.5"
+                        GradientNumericOperationGraphV1.Input.THREE_QUARTERS -> "0.75"
+                        GradientNumericOperationGraphV1.Input.FULL_TURN_DEGREES -> "360.0"
                         GradientNumericOperationGraphV1.Input.ZERO -> "0.0"
                         GradientNumericOperationGraphV1.Input.ONE -> "1.0"
                         else -> error("Unsupported sealed scalar input")
                     }
-                    GradientNumericOperationGraphV1.Operation.INPUT_UNIFORM_FLAG -> "(w5aMaterial.gradientFlags.x != 0u)"
+                    GradientNumericOperationGraphV1.Operation.INPUT_UNIFORM_FLAG -> when (node.input) {
+                        GradientNumericOperationGraphV1.Input.DEGENERATE -> "(w5aMaterial.gradientFlags.x != 0u)"
+                        GradientNumericOperationGraphV1.Input.LEADING_SEGMENT -> "(w5aMaterial.gradientFlags.z != 0u)"
+                        else -> error("Unsupported sealed flag input")
+                    }
                     GradientNumericOperationGraphV1.Operation.INPUT_STOP_RANGE_U32 -> when (node.input) {
                         GradientNumericOperationGraphV1.Input.STOPS -> "w5aMaterial.gradientHeader.xy"
                         GradientNumericOperationGraphV1.Input.PROBE -> "gradientProbe"

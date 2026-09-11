@@ -19,7 +19,8 @@ public class RawMaterialRequirementsV2 private constructor(
             }
             val gradient = table.entry(MaterialPlanRef(indexI32)).bindings is MaterialBindingPlan.GradientV1
             return RawMaterialRequirementsV2(countI32, Math.addExact(
-                Math.multiplyExact(countI32.toLong(), BINDING_STRIDE_BYTES_I64), if (gradient) 80L else 0L))
+                Math.multiplyExact(countI32.toLong(), BINDING_STRIDE_BYTES_I64),
+                if (table.entry(MaterialPlanRef(indexI32)).bindings is MaterialBindingPlan.SweepGradientV1) 96L else if (gradient) 80L else 0L))
         }
     }
 }

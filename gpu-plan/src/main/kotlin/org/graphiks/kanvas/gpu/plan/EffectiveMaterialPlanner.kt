@@ -101,11 +101,18 @@ public object EffectiveMaterialPlanner {
                     material.color.alphaNormalized,
                 )),
             )
-            is MaterialNode.LinearGradient, is MaterialNode.RadialGradient -> {
+            is MaterialNode.LinearGradient, is MaterialNode.RadialGradient, is MaterialNode.SweepGradient -> {
                 val linear = material as? MaterialNode.LinearGradient
                 val radial = material as? MaterialNode.RadialGradient
-                val tileMode = linear?.tileMode ?: requireNotNull(radial).tileMode
-                val interpolation = linear?.interpolation ?: requireNotNull(radial).interpolation
+                val sweep = material as? MaterialNode.SweepGradient
+                val tileMode = linear?.tileMode ?: radial?.tileMode ?: requireNotNull(sweep).tileMode
+                val interpolation = linear?.interpolation ?: radial?.interpolation ?: requireNotNull(sweep).interpolation
+                if (sweep != null && listOf(sweep.center.x, sweep.center.y, sweep.startAngle, sweep.endAngle).any { !it.isFinite() })
+                    return Normalization.Refused(W5cPlanDiagnostics.NonFinite)
+                val sweepDegeneracy = sweep?.let { SweepGradientDegeneracyV1.of(it.startAngle, it.endAngle) }
+                if (sweepDegeneracy?.sweepOrderingInvalid == true) return Normalization.Refused(W5cPlanDiagnostics.SweepOrdering)
+                if (sweepDegeneracy != null && !sweepDegeneracy.sweepSpanDegreesF32.isFinite())
+                    return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
                 if (radial != null && (!radial.radius.isFinite() || !radial.center.x.isFinite() || !radial.center.y.isFinite()))
                     return Normalization.Refused(W5cPlanDiagnostics.NonFinite)
                 if (radial != null && radial.radius < 0f)
@@ -115,7 +122,7 @@ public object EffectiveMaterialPlanner {
                     draw.origin !in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.RECT,
                         org.graphiks.kanvas.render.ir.DrawOrigin.RRECT, org.graphiks.kanvas.render.ir.DrawOrigin.PATH))
                     return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
-                when (val stops = normalizeGradientStopsV1(linear?.stops() ?: requireNotNull(radial).stops())) {
+                when (val stops = normalizeGradientStopsV1(linear?.stops() ?: radial?.stops() ?: requireNotNull(sweep).stops())) {
                     is NormalizedGradientStopsV1.Refused -> return Normalization.Refused(stops.code)
                     is NormalizedGradientStopsV1.Solid -> MaterialPlanEntry(MaterialProgramPlan.SolidLinearPremulV1,
                         MaterialBindingPlan.SolidRgbaF32V1.of(stops.colorF32))
@@ -132,7 +139,9 @@ public object EffectiveMaterialPlanner {
                         if (bounds == null && (gradientDeviceBoundsI32 == null || gradientDeviceBoundsI32.isEmpty))
                             return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
                         val uniformValuesF32 = if (linear != null) listOf(linear.start.x, linear.start.y, linear.end.x, linear.end.y)
-                            else requireNotNull(radial).let { listOf(it.center.x, it.center.y, it.radius, 0f) }
+                            else if (radial != null) listOf(radial.center.x, radial.center.y, radial.radius, 0f)
+                            else requireNotNull(sweep).let { listOf(it.center.x, it.center.y, it.startAngle, it.endAngle,
+                                requireNotNull(sweepDegeneracy).sweepSpanDegreesF32) }
                         val valuesF32 = uniformValuesF32 + listOf(
                             bounds?.left ?: 0f, bounds?.top ?: 0f, bounds?.right ?: 0f, bounds?.bottom ?: 0f)
                         // Include the inverse-mapped raster footprint in the finite local domain.
@@ -158,7 +167,14 @@ public object EffectiveMaterialPlanner {
                             return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
                         val stopRange = GradientStopRangeV1(0u, stops.slab.copyStops().size.toUInt())
                         val uniformMagnitudeF64 = uniformValuesF32.maxOf { kotlin.math.abs(it.toDouble()) }
-                        if (radial != null) {
+                        if (sweep != null) {
+                            val degeneracy = requireNotNull(sweepDegeneracy)
+                            val numericAuthority = GradientNumericAuthorityV1.sealSweep(coordinates, sweep.center, degeneracy,
+                                stops.slab, mappingBoundF64, uniformMagnitudeF64)
+                                ?: return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
+                            MaterialPlanEntry(MaterialProgramPlan.SweepGradientClampSrgbV1,
+                                MaterialBindingPlan.SweepGradientV1(sweep.center, stopRange, degeneracy, numericAuthority), stops.slab)
+                        } else if (radial != null) {
                             val degeneracy = RadialGradientDegeneracyV1(radial.radius, radial.radius <= 0.000030517578125f)
                             val numericAuthority = GradientNumericAuthorityV1.sealRadial(coordinates, radial.center, radial.radius,
                                 degeneracy, stops.slab, mappingBoundF64, uniformMagnitudeF64)

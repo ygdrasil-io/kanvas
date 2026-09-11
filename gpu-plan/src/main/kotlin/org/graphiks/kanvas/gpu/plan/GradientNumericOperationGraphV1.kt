@@ -1,5 +1,8 @@
 package org.graphiks.kanvas.gpu.plan
 
+import org.graphiks.kanvas.gpu.plan.GradientNumericOperationGraphV1.Operation
+import org.graphiks.kanvas.gpu.plan.GradientNumericOperationGraphV1.Input
+
 public sealed interface GradientNumericDomainProofV1 {
     public data object ProvenFinite : GradientNumericDomainProofV1
     public data class Unbounded(public val diagnosticCode: String) : GradientNumericDomainProofV1
@@ -20,7 +23,9 @@ public sealed interface GradientNumericOperationGraphV1 {
         SQRT_F32, ATAN2_F32, FLOOR_F32, ABS_F32, MAX_F32, COMPARE_F32, SELECT,
         UPPER_BOUND_STOPS_V1, INTERPOLATE_SRGBA_STRAIGHT_F32,
     }
-    public enum class Input { X, Y, START_X, START_Y, END_X, END_Y, CENTER_X, CENTER_Y, RADIUS, ZERO, ONE, DEGENERATE, STOPS, PROBE }
+    public enum class Input { X, Y, START_X, START_Y, END_X, END_Y, CENTER_X, CENTER_Y, RADIUS,
+        START_DEGREES, END_DEGREES, SPAN_DEGREES, LEADING_SEGMENT, MIN_NORMAL, TWO_PI,
+        QUARTER, HALF, THREE_QUARTERS, FULL_TURN_DEGREES, ZERO, ONE, DEGENERATE, STOPS, PROBE }
     public enum class Schedule { RoundedF32, FusedMultiplyAdd, ReassociatedSumOfProducts }
     public class Node internal constructor(
         public val operation: Operation,
@@ -57,8 +62,14 @@ public sealed interface GradientNumericOperationGraphV1 {
         }
         public val minimumPositiveDenominatorF64: Double = if (operation == Operation.INTERPOLATE_SRGBA_STRAIGHT_F32)
             java.lang.Float.MIN_NORMAL.toDouble() else 9e-10
+        /** WGSL §15.7.4.1: requires normal finite operands; eager inputs are explicitly guarded. */
+        public val accuracyUlpsF64: Double = when (operation) {
+            Operation.ATAN2_F32 -> 4096.0
+            Operation.DIV_F32 -> 2.5
+            else -> 0.0
+        }
         public val schedules: Set<Schedule> = immutableSet(when (operation) {
-            Operation.ADD_F32, Operation.INTERPOLATE_SRGBA_STRAIGHT_F32 -> Schedule.entries.toSet()
+            Operation.ADD_F32, Operation.SUB_F32, Operation.INTERPOLATE_SRGBA_STRAIGHT_F32 -> Schedule.entries.toSet()
             else -> setOf(Schedule.RoundedF32)
         })
         init {
@@ -87,6 +98,8 @@ public sealed interface GradientNumericOperationGraphV1 {
     public class Linear internal constructor(override val root: Node,
         override val domainProof: GradientNumericDomainProofV1) : GradientNumericOperationGraphV1
     public class Radial internal constructor(override val root: Node,
+        override val domainProof: GradientNumericDomainProofV1) : GradientNumericOperationGraphV1
+    public class Sweep internal constructor(override val root: Node,
         override val domainProof: GradientNumericDomainProofV1) : GradientNumericOperationGraphV1
 
     public companion object {
@@ -128,6 +141,45 @@ public sealed interface GradientNumericOperationGraphV1 {
             val radius = scalar(Operation.SELECT, input(Input.RADIUS), one, degenerate)
             val numerator = scalar(Operation.SELECT, distance, one, degenerate)
             return Radial(clampStops(numerator, radius),
+                GradientNumericDomainProofV1.Unbounded(W5cPlanDiagnostics.NumericDomainUnbounded))
+        }
+
+        public fun sweep(): GradientNumericOperationGraphV1 {
+            val zero = input(Input.ZERO)
+            val one = input(Input.ONE)
+            fun less(a: Node, b: Node): Node = Node(Operation.COMPARE_F32, ValueType.ValidityFlag, listOf(a, b))
+            fun isZero(a: Node): Node = Node(Operation.COMPARE_F32, ValueType.ValidityFlag,
+                listOf(scalar(Operation.ABS_F32, a), zero), lessOrEqual = true)
+            // Deterministic permitted FTZ: both retained and hardware-flushed subnormals
+            // choose +0 before any cardinal decision or eager atan2 evaluation.
+            fun delta(component: Input, center: Input): Node {
+                val raw = scalar(Operation.SUB_F32, input(component), input(center))
+                return scalar(Operation.SELECT, raw, zero,
+                    less(scalar(Operation.ABS_F32, raw), input(Input.MIN_NORMAL)))
+            }
+            val dx = delta(Input.X, Input.CENTER_X)
+            val dy = delta(Input.Y, Input.CENTER_Y)
+            val safeX = scalar(Operation.SELECT, dx, one, isZero(dx))
+            val safeY = scalar(Operation.SELECT, dy, one, isZero(dy))
+            val angle = scalar(Operation.ATAN2_F32, safeY, safeX)
+            val turns = scalar(Operation.DIV_F32, angle, input(Input.TWO_PI))
+            val wrapped = scalar(Operation.SUB_F32, turns, scalar(Operation.FLOOR_F32, turns))
+            val vertical = scalar(Operation.SELECT, input(Input.QUARTER), input(Input.THREE_QUARTERS), less(dy, zero))
+            val horizontal = scalar(Operation.SELECT, zero, input(Input.HALF), less(dx, zero))
+            val canonicalTurns = scalar(Operation.SELECT,
+                scalar(Operation.SELECT, wrapped, vertical, isZero(dx)), horizontal, isZero(dy))
+            val degrees = scalar(Operation.MUL_F32, input(Input.FULL_TURN_DEGREES), canonicalTurns)
+            val mapped = scalar(Operation.SUB_F32, degrees, input(Input.START_DEGREES))
+            val degenerate = Node(Operation.INPUT_UNIFORM_FLAG, ValueType.ValidityFlag, input = Input.DEGENERATE)
+            val leading = Node(Operation.INPUT_UNIFORM_FLAG, ValueType.ValidityFlag, input = Input.LEADING_SEGMENT)
+            // Negative numerator selects the actual first stop (even a hard stop at 0).
+            val leadingValue = scalar(Operation.SELECT, one, scalar(Operation.SUB_F32, zero, one),
+                less(degrees, input(Input.END_DEGREES)))
+            val degenerateValue = scalar(Operation.SELECT, one, leadingValue, leading)
+            val numerator = scalar(Operation.SELECT, mapped, degenerateValue, degenerate)
+            val denominator = scalar(Operation.SELECT, input(Input.SPAN_DEGREES), one, degenerate)
+            // Full coverage is already CLAMP, as is every admitted Sweep tile mode.
+            return Sweep(clampStops(numerator, denominator),
                 GradientNumericDomainProofV1.Unbounded(W5cPlanDiagnostics.NumericDomainUnbounded))
         }
 
@@ -187,6 +239,12 @@ internal fun GradientNumericOperationGraphV1.proveRadialDomainV1(
 ): GradientNumericDomainProofV1 = proveGradientDomainV1(localMagnitudeF64, uniformMagnitudeF64,
     if (degeneracy.radialDegenerate) 1.0 else degeneracy.radialRadiusF32.toDouble(), stops)
 
+internal fun GradientNumericOperationGraphV1.proveSweepDomainV1(
+    localMagnitudeF64: Double, uniformMagnitudeF64: Double,
+    degeneracy: SweepGradientDegeneracyV1, stops: List<GradientStopPlanV1>,
+): GradientNumericDomainProofV1 = proveGradientDomainV1(localMagnitudeF64, uniformMagnitudeF64,
+    if (degeneracy.sweepDegenerate) 1.0 else degeneracy.sweepSpanDegreesF32.toDouble(), stops)
+
 private fun GradientNumericOperationGraphV1.proveGradientDomainV1(
     localMagnitudeF64: Double, uniformMagnitudeF64: Double, minimumLengthF64: Double,
     stops: List<GradientStopPlanV1>,
@@ -204,6 +262,12 @@ private fun GradientNumericOperationGraphV1.proveGradientDomainV1(
             GradientNumericOperationGraphV1.Operation.INPUT_UNIFORM_F32 -> when (node.input) {
                 GradientNumericOperationGraphV1.Input.ZERO -> 0.0
                 GradientNumericOperationGraphV1.Input.ONE -> 1.0
+                GradientNumericOperationGraphV1.Input.MIN_NORMAL -> java.lang.Float.MIN_NORMAL.toDouble()
+                GradientNumericOperationGraphV1.Input.TWO_PI -> 6.2831855f.toDouble()
+                GradientNumericOperationGraphV1.Input.QUARTER -> .25
+                GradientNumericOperationGraphV1.Input.HALF -> .5
+                GradientNumericOperationGraphV1.Input.THREE_QUARTERS -> .75
+                GradientNumericOperationGraphV1.Input.FULL_TURN_DEGREES -> 360.0
                 else -> uniformMagnitudeF64
             }
             GradientNumericOperationGraphV1.Operation.ADD_F32,
@@ -217,9 +281,32 @@ private fun GradientNumericOperationGraphV1.proveGradientDomainV1(
                 rounded(kotlin.math.sqrt(inputs[0]))
             }
             GradientNumericOperationGraphV1.Operation.DIV_F32 -> {
-                finite = finite && minimumLengthF64 >= node.minimumPositiveDenominatorF64
-                rounded(inputs[0] / minimumLengthF64)
+                val divisorF64 = if (node.inputs[1].input == GradientNumericOperationGraphV1.Input.TWO_PI) 6.2831855f.toDouble()
+                    else minimumLengthF64
+                finite = finite && divisorF64 >= node.minimumPositiveDenominatorF64
+                rounded(inputs[0] / divisorF64)
             }
+            GradientNumericOperationGraphV1.Operation.ATAN2_F32 -> {
+                // Each operand is select(canonicalDelta,1,abs(canonicalDelta)<=0).
+                // canonicalDelta itself selects +0 for abs(raw)<MIN_NORMAL. Thus
+                // all eager atan2 inputs are normal, nonzero, finite and <=2e8.
+                fun guarded(operand: GradientNumericOperationGraphV1.Node): Boolean {
+                    if (operand.operation != Operation.SELECT || operand.inputs[1].input != Input.ONE) return false
+                    val delta = operand.inputs[0]
+                    val condition = operand.inputs[2]
+                    if (condition.operation != Operation.COMPARE_F32 || !condition.lessOrEqual ||
+                        condition.inputs[1].input != Input.ZERO || condition.inputs[0].operation != Operation.ABS_F32 ||
+                        condition.inputs[0].inputs.single() !== delta || delta.operation != Operation.SELECT || delta.inputs[1].input != Input.ZERO) return false
+                    val flush = delta.inputs[2]
+                    return flush.operation == Operation.COMPARE_F32 && !flush.lessOrEqual &&
+                        flush.inputs[1].input == Input.MIN_NORMAL && flush.inputs[0].operation == Operation.ABS_F32 &&
+                        flush.inputs[0].inputs.single() === delta.inputs[0]
+                }
+                finite = finite && node.inputs.all(::guarded) && inputs.all { it <= Math.scalb(1.0, 126) }
+                // pi + 4096 ULP, with final rounding/FTZ enclosed by rounded().
+                rounded(kotlin.math.PI + node.accuracyUlpsF64 * Math.ulp(kotlin.math.PI.toFloat()).toDouble())
+            }
+            GradientNumericOperationGraphV1.Operation.FLOOR_F32 -> kotlin.math.ceil(inputs.single())
             GradientNumericOperationGraphV1.Operation.SELECT -> {
                 val condition = node.inputs[2]
                 // select(x,1,1<x) is an explicit graph clamp, not an emitter-only optimization.

@@ -149,6 +149,7 @@ internal data class W5aPreparedFrameMaterialRegistry(
             return source == null || source is Shader.SolidColor || allowGradient && when (source) {
                 is Shader.LinearGradient -> source.tileMode == TileMode.CLAMP && source.interpolation == ColorSpaceInterpolation.SRGB
                 is Shader.RadialGradient -> source.tileMode == TileMode.CLAMP && source.interpolation == ColorSpaceInterpolation.SRGB
+                is Shader.SweepGradient -> source.tileMode == TileMode.CLAMP && source.interpolation == ColorSpaceInterpolation.SRGB
                 else -> false
             }
         }
