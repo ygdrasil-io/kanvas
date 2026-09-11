@@ -324,6 +324,64 @@ class W5bBlendSurfacePixelTest {
         })
     }
 
+    @Test fun `geometry W4e NoOp discards an independent AA clip stack before admission`() {
+        val counterfactual = assertFailsWith<org.graphiks.kanvas.surface.gpu.GPUPlanSurfaceTerminalException> {
+            w4eNoOpFrame(65, includeVisible = true, mode = BlendMode.SRC_OVER).render()
+        }
+        kotlin.test.assertEquals("w4e.clip.geometry-limit", counterfactual.code)
+        val expected = W5aSolidOpacityCpuOracle.draw(ColorARGB.White, .5f)
+        val blue = W5aSolidOpacityCpuOracle.draw(ColorARGB.Blue, .5f)
+        assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.sourceOverExclusion(halfWhiteSource(), MaterialPlanRef(1),
+            requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(blue))))
+        val clear = W5aSolidOpacityCpuOracle.draw(ColorARGB.Transparent, 0f)
+        assertAll(listOf(1, 65).map { entriesI32 -> {
+            val pixels = w4eNoOpFrame(entriesI32, includeVisible = true).render().pixels
+            WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixels.copyOfRange(0, 4))
+            WgslFloatEnvelopeV1Oracle.assertAdmits(clear, pixels.copyOfRange(60, 64))
+        } })
+    }
+
+    @Test fun `geometry W4e all NoOp inverse Paths need no AA clip preparation`() {
+        val clear = W5aSolidOpacityCpuOracle.draw(ColorARGB.Transparent, 0f)
+        assertDisjoint(clear, WgslFloatEnvelopeV1Oracle.sourceOverExclusion(
+            solidSource(ColorF32.of(0f, 0f, 1f, 1f), .5f), MaterialPlanRef(1),
+            WgslFloatEnvelopeV1Oracle.clearAttachment()))
+        assertAll(listOf(1, 65).map { entriesI32 -> {
+            val pixels = w4eNoOpFrame(entriesI32, includeVisible = false).render().pixels
+            WgslFloatEnvelopeV1Oracle.assertAdmits(clear, pixels.copyOfRange(0, 4))
+            WgslFloatEnvelopeV1Oracle.assertAdmits(clear, pixels.copyOfRange(40, 44))
+        } })
+    }
+
+    private fun w4eNoOpFrame(entriesI32: Int, includeVisible: Boolean, mode: BlendMode = BlendMode.DST): Surface {
+        val source = Path().apply { addRect(RectF32.ofLTRB(-1f, -1f, 5f, 5f)) }
+        val recorder = PictureRecorder()
+        recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f)).drawPath(source,
+            Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), .5f), antiAlias = false))
+        source.fillType = org.graphiks.kanvas.geometry.FillType.INVERSE_WINDING
+        val picture = requireNotNull(Picture.fromByteArray(recorder.finishRecordingAsPicture().toByteArray()))
+        val aaClip = Path().apply { addRect(RectF32.ofLTRB(0f, 0f, 4f, 4f)) }
+        val inverse = Path().apply {
+            addRect(RectF32.ofLTRB(1f, 1f, 3f, 3f))
+            fillType = org.graphiks.kanvas.geometry.FillType.INVERSE_WINDING
+        }
+        return Surface(4, 4).also { surface ->
+            surface.canvas {
+                save()
+                repeat(entriesI32) { clipPath(aaClip, antiAlias = true) }
+                drawPath(inverse, Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.Blue), .5f),
+                    blendMode = mode, antiAlias = true))
+                restore()
+                if (includeVisible) {
+                    save()
+                    clipPath(Path().apply { moveTo(0f, 0f); lineTo(4f, 0f); lineTo(0f, 4f); close() }, antiAlias = false)
+                    picture.playback(this)
+                    restore()
+                }
+            }
+        }
+    }
+
     private enum class GeometryFamily { Rect, FractionalRect, RRect, DirectPath, StencilPath, Stroke, Hairline }
 
     /** Catches lost blend/coverage, stale destination, reordered draws and mutable geometry reuse. */

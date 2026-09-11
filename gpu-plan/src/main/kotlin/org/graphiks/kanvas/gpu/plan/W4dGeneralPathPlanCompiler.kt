@@ -139,8 +139,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         }
     }
 
-    /** Establishes ownership before spending any shared :math work ledger. */
-    private fun preflight(scene: SceneSnapshot): Preflight {
+    /** Numeric validation shared with W4e before a semantically valid NoOp is elided. */
+    internal fun finiteSceneError(scene: SceneSnapshot): String? {
         scene.forEach { command ->
             when (command) {
                 is SceneCommand.Draw -> {
@@ -148,15 +148,21 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                     val paint = command.node.paint
                     if (!finite(command.node.transform) || !finite(command.node.effects) || !finiteClip(command.node.clip) ||
                         (path != null && !finite(path)) || (paint != null && !finite(paint))
-                    ) return Preflight.Invalid("Draw facts are non-finite")
+                    ) return "Draw facts are non-finite"
                 }
-                is SceneCommand.SetTransform -> if (!finite(command.matrix)) return Preflight.Invalid("Transform metadata is non-finite")
-                is SceneCommand.SetClip -> if (!finiteClip(command.clip)) return Preflight.Invalid("Clip metadata is non-finite")
-                is SceneCommand.Annotation -> if (!finite(command.copyBounds())) return Preflight.Invalid("Annotation bounds are non-finite")
+                is SceneCommand.SetTransform -> if (!finite(command.matrix)) return "Transform metadata is non-finite"
+                is SceneCommand.SetClip -> if (!finiteClip(command.clip)) return "Clip metadata is non-finite"
+                is SceneCommand.Annotation -> if (!finite(command.copyBounds())) return "Annotation bounds are non-finite"
                 else -> Unit
             }
         }
 
+        return null
+    }
+
+    /** Establishes ownership before spending any shared :math work ledger. */
+    private fun preflight(scene: SceneSnapshot): Preflight {
+        finiteSceneError(scene)?.let { return Preflight.Invalid(it) }
         var visualDrawCountI32 = 0
         var requiresGeneral = false
         var outside = false

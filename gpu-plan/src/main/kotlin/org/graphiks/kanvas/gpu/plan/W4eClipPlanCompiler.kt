@@ -153,6 +153,10 @@ public class W4eClipPlanCompiler(
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) return invalid("Scene and target differ")
         if (SceneSemanticValidator.validate(scene) is SceneSemanticValidationResult.Invalid) return invalid("Scene validation failed")
         if (scene.colorSpace != ColorSpace.SRGB) return gap("W4e supports only sRGB")
+        w4dHardSeam.finiteSceneError(scene)?.let { return invalid(it) }
+        if (scene.any { it !is SceneCommand.Draw && it !is SceneCommand.SetTransform &&
+            it !is SceneCommand.SetClip && it !is SceneCommand.Annotation })
+            return gap("W4e scene commands are outside the construction seam")
         val drawCommands = scene.filterIsInstance<SceneCommand.Draw>()
         val operationDraws = drawCommands
             .filter { it.node.clip is ClipStackNode.Operations }
@@ -160,13 +164,31 @@ public class W4eClipPlanCompiler(
         if (operationDraws.isEmpty() && inverseDraws.isEmpty()) {
             return gap("W4e requires an explicitly captured complex clip or inverse path draw")
         }
-        operationDraws.forEach { command ->
+        val finalBlendsByCommandI32 = scene.withIndex().mapNotNull { (indexI32, command) ->
+            val node = (command as? SceneCommand.Draw)?.node ?: return@mapNotNull null
+            val blend = FinalBlendPlanner.plan(node.blend, CoveragePlan.FullOrScissor, SamplePlan.SingleSample,
+                PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1(),
+                BlendCoverageApplicationV1.SourceMultiplication,
+                if (node.clip is ClipStackNode.Operations || node.hasInversePathFillRule())
+                    BlendCoverageEncodingV1.ScalarCoverageInShader else BlendCoverageEncodingV1.FullOrScissor)
+                ?: return@mapNotNull null
+            indexI32 to if (blend is BlendPlan.FixedFunctionV1 && blend.mode == org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER)
+                BlendPlan.SrcOver else blend
+        }.toMap()
+        val noOpCommandsI32 = finalBlendsByCommandI32.filterValues { it == BlendPlan.NoOpV1 }.keys
+        val activeDrawCommands = scene.withIndex().filter { it.value is SceneCommand.Draw && it.index !in noOpCommandsI32 }
+            .map { it.value as SceneCommand.Draw }
+        if (finalBlendsByCommandI32.values.any { it != BlendPlan.SrcOver } &&
+            drawCommands.any { it.node.geometry !is GeometryNode.Path })
+            return gap("W5b W4e color ownership retains actual Path geometry")
+        if (activeDrawCommands.isEmpty()) return GpuPlanSelection.Candidate(NoOpCandidate(this, scene.canonicalId, target))
+        activeDrawCommands.filter { it.node.clip is ClipStackNode.Operations }.forEach { command ->
             val operations = command.node.clip as ClipStackNode.Operations
             if (operations.entryCount > maxClipEntriesPerStackI32()) {
                 return limit("W4e accepts at most ${maxClipEntriesPerStackI32()} clip entries per stack")
             }
         }
-        val totalVisualDrawCount = scene.count { it is SceneCommand.Draw }
+        val totalVisualDrawCount = activeDrawCommands.size
         if (totalVisualDrawCount > MAX_DRAWS) return limit("W4e accepts at most 512 visual path draws")
 
         val domain = RectI32(0, 0, scene.extent.width, scene.extent.height)
@@ -176,12 +198,16 @@ public class W4eClipPlanCompiler(
         val inverseDomainSourcesByCommand = mutableMapOf<Int, PathDrawGeometry.InverseDomainSource>()
         val actuallyEmptyInverseCommands = mutableSetOf<Int>()
         var frameUsage = ClipWorkUsageI64()
-        var ownsW4eFeature = false
-        val finalBlendsByCommandI32 = linkedMapOf<Int, BlendPlan>()
+        var ownsW4eFeature = noOpCommandsI32.isNotEmpty()
 
         scene.withIndex().forEach { (index, command) ->
             when (command) {
                 is SceneCommand.Draw -> {
+                    if (index in noOpCommandsI32) {
+                        normalized += SceneCommand.Annotation.of(org.graphiks.math.geometry.RectF32(0f, 0f, 0f, 0f),
+                            "w5b.w4e.no-op", index.toString())
+                        return@forEach
+                    }
                     val operations = command.node.clip as? ClipStackNode.Operations
                     // A W4d DeviceRect remains the construction seam's scissor authority.  An
                     // inverse domain is bounded by that same device-space rectangle before the
@@ -224,17 +250,7 @@ public class W4eClipPlanCompiler(
                             }
                         }
                     }
-                    val finalBlend = FinalBlendPlanner.plan(command.node.blend, CoveragePlan.FullOrScissor,
-                        SamplePlan.SingleSample, PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1(),
-                        BlendCoverageApplicationV1.SourceMultiplication,
-                        if (operations != null || inverse != null) BlendCoverageEncodingV1.ScalarCoverageInShader else BlendCoverageEncodingV1.FullOrScissor)
-                    val sealed = when (finalBlend) {
-                        is BlendPlan.FixedFunctionV1 -> if (finalBlend.mode == org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER)
-                            BlendPlan.SrcOver else finalBlend
-                        is BlendPlan.DestinationReadV1 -> finalBlend
-                        else -> finalBlend
-                    }
-                    if (sealed != null) finalBlendsByCommandI32[index] = sealed
+                    val sealed = finalBlendsByCommandI32[index]
                     val construction = command.node.normalizedForW4dConstructionSeam(domain, inverse)
                     normalized += SceneCommand.Draw(if (sealed == null) construction else construction.copy(blend = org.graphiks.kanvas.render.ir.BlendNode.SrcOver))
                     // The candidate keeps the prepared stack map keyed by this exact canonical stack identity.
@@ -245,9 +261,6 @@ public class W4eClipPlanCompiler(
         }
         if (!ownsW4eFeature) return gap("W4e requires an explicitly captured complex clip or inverse path draw")
 
-        if (finalBlendsByCommandI32.values.any { it != BlendPlan.SrcOver } &&
-            drawCommands.any { it.node.geometry !is GeometryNode.Path })
-            return gap("W5b W4e color ownership retains actual Path geometry")
         val normalizedScene = SceneSnapshot.of(scene.extent, scene.colorSpace, normalized)
         val forceAaFrame = preparedByKey.values.any { it.requiresAaFrame }
         val constructionSeam = if (forceAaFrame) w4dAaSeam else w4dHardSeam
@@ -268,9 +281,37 @@ public class W4eClipPlanCompiler(
     }
 
     override fun plan(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): RenderPlanResult<RenderGraph> {
+        if (candidate is NoOpCandidate) {
+            if (candidate.owner !== this) return invalidCandidate()
+            return try {
+                RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bGeometryLanePlanV3.clearOnly(
+                    PlanId("w5b.w4e.no-op.${candidate.sceneCanonicalId.value}"), W5B_HARD_CAPABILITY_ID,
+                    SizeI32(candidate.target.extent.width, candidate.target.extent.height), capabilities, budget, null)))
+            } catch (_: ArithmeticException) {
+                resource(W4ePlanDiagnostics.SizeOverflow, "W4e clear-only resources overflowed")
+            } catch (_: IllegalArgumentException) {
+                resource(W4ePlanDiagnostics.BudgetFrameLocalExceeded, "W4e clear-only frame exceeds its resource contract")
+            }
+        }
         val selected = candidate as? Candidate ?: return invalidCandidate()
         if (selected.owner !== this || !selected.matches()) return invalidCandidate()
         val requiresAa = selected.capabilityId == W5A_AA_CAPABILITY_ID
+        // The original W4e feature may belong only to an elided NoOp. Its surviving plain
+        // Paths retain the construction seam's General authority, not an empty W4e inventory.
+        if (selected.stacks.isEmpty() && selected.inverseByCommand.isEmpty() &&
+            selected.finalBlendsByCommandI32.values.any { it == BlendPlan.NoOpV1 }) {
+            return when (val result = selected.constructionSeam.plan(selected.base, capabilities, budget)) {
+                is RenderPlanResult.Ready -> if (requiresAa)
+                    promoted("W5b final blending requires the admitted single-sample path topology")
+                    else try {
+                        RenderPlanResult.Ready(issueW5bGeneralPathGraph(result.plan,
+                            selected.finalBlendsByCommandI32.filterValues { it != BlendPlan.NoOpV1 }))
+                    } catch (_: IllegalArgumentException) {
+                        resource(W4ePlanDiagnostics.PlanIdentityInvalid, "W4e plain survivor graph is invalid")
+                    }
+                else -> result
+            }
+        }
         val maskStacks = selected.stacks.filter { it.realization == Realization.Mask }
         capabilityRefusal(capabilities, maskStacks)?.let { return it }
         val basePreview = when (val result = selected.constructionSeam.preflightFrame(selected.base, capabilities, budget)) {
@@ -1186,6 +1227,12 @@ public class W4eClipPlanCompiler(
         val maskLayouts: Map<Int, MaskResourceLayout>,
     )
     private data class MaskResourceIds(val firstAccumulator: PlanResourceId, val secondAccumulator: PlanResourceId, val scratch: PlanResourceId, val multisampleScratch: PlanResourceId?, val aaDepth: PlanResourceId?, val hardDepth: PlanResourceId?)
+    private class NoOpCandidate(
+        val owner: W4eClipPlanCompiler,
+        override val sceneCanonicalId: org.graphiks.kanvas.render.ir.CanonicalId,
+        override val target: RenderTargetDescriptor,
+    ) : GpuPlanCandidate { override val capabilityId: String = W5B_HARD_CAPABILITY_ID }
+
     private class Candidate(
         val owner: W4eClipPlanCompiler,
         override val sceneCanonicalId: org.graphiks.kanvas.render.ir.CanonicalId,
