@@ -159,11 +159,13 @@ Task 3 est close par `66dcceffc`, `f7a37d704`, puis les corrections de review `3
 - Consumes: existing W3/W4 geometry/coverage plans and sealed W5b final blend.
 - Produces: W5b successor capabilities carrying both `MaterialV1` and non-legacy `BlendPlan`, including ordered composite lanes and atomic stencil producer/cover pairs.
 
-- [ ] Add RED public cells for Rect, fractional Rect, RRect, direct Path fill, stencil Path fill, stroke and hairline. Each family covers one fixed-function mode, `DST`, and one destination-read mode with nontrivial alpha; at least one Picture mutation witness must remain visible for each mutable geometry family.
-- [ ] Verify RED as missing W5b ownership/refusal, not by accepting legacy pixels.
-- [ ] Thread the sealed blend through each compiler and draw snapshot. Producer-only stencil/mask passes write no material and have no final blend; only the color consumer carries the W5b authority.
-- [ ] Extend the composite plan interning/remapping to preserve blend refs/order without merging distinct destination versions. Geometry, clip and W4 budgets remain byte-for-byte authoritative except for explicit destination snapshot resources.
-- [ ] Run all W5b geometry cells plus W3/W4/W5a public pixel regressions; commit `feat(gpu-plan): promote W5b geometry blend lanes`.
+- [x] Add RED public cells for Rect, fractional Rect, RRect, direct Path fill, stencil Path fill, stroke and hairline. Each family covers one fixed-function mode, `DST`, and one destination-read mode with nontrivial alpha; at least one Picture mutation witness must remain visible for each mutable geometry family.
+- [x] Verify RED as missing W5b ownership/refusal, not by accepting legacy pixels.
+- [x] Thread the sealed blend through each compiler and draw snapshot. Producer-only stencil/mask passes write no material and have no final blend; only the color consumer carries the W5b authority.
+- [x] Extend the composite plan interning/remapping to preserve blend refs/order without merging distinct destination versions. Geometry, clip and W4 budgets remain byte-for-byte authoritative except for explicit destination snapshot resources.
+- [x] Run all W5b geometry cells plus W3/W4/W5a public pixel regressions; commit `feat(gpu-plan): promote W5b geometry blend lanes`.
+
+Implementation verification (2026-09-11): 101 exact public JUnit methods selected, 99 passed, two authentic AA4 capability skips, zero failures/errors; `W5bBlendSurfacePixelTest`25/25 and the historical DrawPoint GREEN45 gate pass. Targeted `:render-ir`, `:gpu-plan`, `:gpu-renderer`, `:kanvas` and test compiles pass. Rect/RRect, narrow and General Paths, ordered native composites, and retained W4e hard mask/inverse consumers carry the sealed final blend; producer-only passes remain source-free. The W4e scalar witness preserves its original 2×2 producer and R8 mask quantization. Existing AA4 refusal and Picture clip-playback limitation remain unchanged. Independent Task4 review is pending with the orchestrator; this is implementation closure only.
 
 ### Task 5: Promote already-resolved A8 text and Vertices/Mesh
 
