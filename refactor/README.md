@@ -83,15 +83,17 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
   — W5b promeut Rect/fractional Rect, RRect, Path fill direct/stencil,
   stroke/hairline hard, Point(s), W4e clips/inverse, A8 déjà résolu et
   Vertices/Mesh sans programme. Les 45 cellules DrawPoint sont fermées sur
-  trois contextes. La sélection publique de 146 méthodes conserve deux skips
+  trois contextes. La sélection publique finale de 151 méthodes en réussit 149 et conserve deux skips
   AA4 authentiques (`w4d.general.texture-sample-support-unavailable` et
   `w4e.clip.sample-count-unavailable`); les cas numériques `Unbounded` ne
   ferment aucune gate. Les refus capability/budget restent terminaux après
   ownership; la récupération publique utilise des Surfaces distinctes du même
   runtime/backend, sans injection de capability, panne native ou budget
   prepared agrégé. Le warning CoreAnalytics préexistant est toujours tracé.
-  W5c (quatre gradients et stop buffer sans plafond 16) est la prochaine
-  tranche empilée; les revues globales/PR W5b restent à Task 8.
+  Les deux reviews Sol Task 8 sont `READY`, après fermeture des copies destination
+  régionales/versionnées, du clear post-culling, des runs Vertices multiples et du
+  cache de pipeline frame-local. W5c (quatre gradients et stop buffer sans plafond
+  16) est la prochaine tranche empilée; seule la publication de la PR W5b reste à Task 8.
 - [Rapport d'implémentation de l'admission conservative](progress/2026-09-01-conservative-hybrid-topology-admission/implementation-report.md)
 - [Revue de spécification de l'admission conservative](progress/2026-09-01-conservative-hybrid-topology-admission/spec-review.md)
 - [Revue qualité de l'admission conservative](progress/2026-09-01-conservative-hybrid-topology-admission/quality-review.md)
@@ -105,7 +107,7 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 | W2 | `Scene IR` et frontières de modules | Capture backend-neutral et frontières de modules implémentées ; gate stricte **NON ATTEINTE** (431/443 captures, 12 dettes), rendu public encore legacy |
 | W3 | `gpu-plan` et premier `RenderGraph` | Capability rectangles solides/clip simple/`SrcOver` branchée et prouvée par pixels exacts ; baseline globale conservée (51 échecs connus, 0 erreur) |
 | W4 | Geometry/coverage | W4a ScalarAA Rect, W4b RRect analytique, W4c fills hard-edge et W4d.1 strokes/hairlines hard-edge sont atteints. W4d.2 ajoute les transforms F64 `Identity`/`AxisAlignedAffine`/`GeneralAffine`/`Perspective`, le graph AA4/resolve scellé et la lane hard générale prouvée byte-exact à travers `Surface`. W4e fournit hard mask 1×, inverse/D24S8 et oracle/matrice `Surface`; Task 9-fix1 clôt les 18 deltas frais, Task 9-fix2 élimine le fallback d'usages couleur implicite, et le correctif final post-revue couvre les consumers Rect/RRect/Path, les entrées/copies bornées et les buffers V/I/U scellés. `final-fix3` conserve ses preuves publiques de mutation/ordre; la pré-publication `.from` reste un constat statique, sans conclusion pixel sur l'identité du pool. La baseline globale historique reste 51 failures, 0 error et 2 skips, sans nouveau run global W5b. Les 45 DrawPoint sont désormais fermés par le gate public W5b; restent AA4 et `TopologyLimit` conservative F64→F32. Font/codec, GM/dashboard/baseline et `jpg-color-cube` exclus ([status](waves/W04-geometry-coverage/status.md)) |
-| W5 | Material graph et final blends | W5a close; W5b implémentée sur toutes les familles promues listées ci-dessus, avec source Solid/Opacity, blend scellé, copies GPU ordonnées et refus terminaux après ownership. GREEN45 = 15 modes × UNCLIPPED/SCISSOR/ALPHA_MASK, trois DrawPoint successifs. Vérification ciblée : 146 méthodes publiques, 144 passées, 2 skips AA4 authentiques, 0 failure/error; budgets 64/512/513 et récupération sur des Surfaces distinctes du même runtime/backend conservés. Singleton/deux codes adjacents seulement; `Unbounded` reste non-gate. Capability/budget prepared non injectables et device loss sont des limites d'intégration; CoreAnalytics reste un warning préexistant. MeshProgram, images/glyphs couleur et le gap legacy `uniform slab` restent hors promotion. W5c gradients/stop buffer ensuite; revues globales et PR W5b à Task 8 ([status](waves/W05-material-graph/status.md)) |
+| W5 | Material graph et final blends | W5a close; W5b implémentée sur toutes les familles promues listées ci-dessus, avec source Solid/Opacity, blend scellé, copies GPU régionales/versionnées, runs préparés ordonnés et refus terminaux après ownership. GREEN45 = 15 modes × UNCLIPPED/SCISSOR/ALPHA_MASK, trois DrawPoint successifs. Vérification finale : 151 méthodes publiques, 149 passées, 2 skips AA4 authentiques, 0 failure/error; budgets 64/512/513 et récupération sur des Surfaces distinctes du même runtime/backend conservés. Les deux reviews Sol Task 8 sont `READY`. Singleton/deux codes adjacents seulement; `Unbounded` reste non-gate. Capability/budget prepared non injectables et device loss sont des limites d'intégration; CoreAnalytics reste un warning préexistant. MeshProgram, images/glyphs couleur et le gap legacy `uniform slab` restent hors promotion. W5c gradients/stop buffer ensuite; seule la publication de la PR W5b reste à Task 8 ([status](waves/W05-material-graph/status.md)) |
 | W6 | Layers et effets | Non démarrée |
 | W7 | Convergence GM | Non démarrée |
 | W8 | Retrait legacy et runtime | Non démarrée |

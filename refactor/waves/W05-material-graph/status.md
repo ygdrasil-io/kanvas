@@ -1,6 +1,6 @@
 # État W05 — material graph et final blends W5b
 
-W5a Solid/Opacity est close sur son périmètre. W5b et le nettoyage Task 7 sont implémentés et vérifiés sur `codex/w5b-blends`, empilée sur `codex/w5a-solid-opacity`. Les revues globales et la PR W5b appartiennent encore à Task 8 : les verdicts W5a historiques ci-dessous ne valent pas approbation de W5b. La prochaine tranche empilée est W5c : quatre gradients et stop buffer sans plafond de 16 stops.
+W5a Solid/Opacity est close sur son périmètre. W5b, son nettoyage Task 7 et sa boucle de reviews Task 8 sont implémentés et vérifiés sur `codex/w5b-blends`, empilée sur `codex/w5a-solid-opacity`. Les deux reviews Sol indépendantes W5b sont `READY`; la publication de la PR empilée est la dernière action de Task 8. La prochaine tranche empilée est W5c : quatre gradients et stop buffer sans plafond de 16 stops.
 
 ## Périmètre public promu W5b
 
@@ -49,6 +49,10 @@ Cet audit est une inspection de production, pas une assertion de source shape. L
 
 Les compilations ciblées sont `:render-ir:compileKotlin`, `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin` et `:kanvas:compileKotlin`, forcées avec `--rerun-tasks --no-parallel --max-workers=1`. La régression publique reprend exactement la sélection Task 6 : toute W5b, les 47 méthodes Surface W5a (sans le test immutable-graph) et les 53 gates W3/W4 publics autorisés, plus GREEN45. Aucun test sur scopes, counters, packets, bindings ou détails internes ne sert de preuve. `:gpu-renderer:compileTestKotlin` a des erreurs historiques de sources de tests périmées et reste exclu des preuves.
 
+Clôture fraîche Task 8 au commit `e470bcee8`, le 11 septembre 2026 : les quatre compilations principales forcées sont vertes de 17:52:43 à 17:53:42 UTC. La régression publique complète forcée est verte de 17:53:51 à 17:56:12 UTC avec 151 méthodes sélectionnées, 149 réussies, 2 skips AA4 authentiques et 0 failure/error. GREEN45 rejoué seul est vert de 17:56:31 à 17:58:19 UTC : une méthode, 45 cellules, aucun failure/error/skip.
+
+Les reviews Task 8 ont fermé sept findings Important : copies destination bornées avec origine non nulle et version `DestinationVersionI64`; branches `COLOR_DODGE`/`COLOR_BURN` sans division singulière évaluée avidement; matérialisation ordonnée de plusieurs runs Vertices/Mesh; décision de clear après culling; indexation linéaire des ressources; cache de pipeline Vertices local à la frame, à ownership unique et clé typée indépendante des valeurs d'uniformes. Les deux re-reviews Sol sont `READY`, sans finding Critical/Important restant.
+
 Deux skips AA4 authentiques dans cette sélection : `public mixed AA4 frame keeps a hard Path binary cover materialized only at color output` avec `w4d.general.texture-sample-support-unavailable`, et `W4e public Path AA4 uses only binary fixtures after its exact native capability boundary` avec `w4e.clip.sample-count-unavailable`. Le troisième skip de la vérification historique W5a ci-dessous n'est pas inclus dans la sélection W5b; aucune réussite ni capability AA4 n'est simulée.
 
 `WgslFloatEnvelopeV1` accepte seulement un singleton ou deux codes RGBA8 adjacents, calculés analytiquement avec destination corrélée. Les fixtures W5a arbitraires 17/18 et 9/16 avec alpha Paint `253/255`, ainsi que les contre-exemples W5b dont les intervalles se chevauchent ou dépassent cette borne, restent `Unbounded` et ne sont pas des gates. Aucun seuil empirique ni garantie universelle sur tous les backends n'en découle.
@@ -56,6 +60,8 @@ Deux skips AA4 authentiques dans cette sélection : `public mixed AA4 frame keep
 La preuve de budget utilise un input W5b valide de deux Rects puis `resource-limit.w5b.destination-budget` à 1150 bytes et des pixels de récupération. Le display list public est append-only et `Surface.config` immuable : la récupération utilise des Surfaces distinctes sur le même runtime/backend ininterrompu, puis rejoue la Surface valide. La configuration prepared n'expose ni remplacement de capabilities ni budget agrégé injectables. Ces branches typées, les limites I64, la comptabilité physique pré-allocation et la libération/quarantaine native sont inspectées statiquement; ni device loss ni allocation failure ne sont prouvés par injection. Les ABIs admis utilisent uniforms, textures échantillonnées et samplers; aucun storage buffer inutilisé n'est exigé.
 
 Le warning natif préexistant `Context leak detected, CoreAnalytics returned false` est toujours émis sans failure/error, avec les warnings JVM native-access/Unsafe. Les modules font peuvent se compiler transitivement; aucune suite font/codec/GM/dashboard/render/baseline/Skia/`jpg-color-cube` n'est exécutée. Le target `:kanvas` reste JVM, sans tâche JS/Node authentique. Le gap legacy Rect-gradient + RRect hard-edge `uniform slab` reste reporté. W5c vient ensuite; W5d matrices/tile, W5e images, W5f filters, W5g blend-children/noise et W5h runtime effects/H restent ouverts.
+
+Minors explicitement différés : le seuil `1e-10` de `SetSat` reste partagé par l'implémentation et l'oracle et devra être réévalué avant l'expansion des sources; `GeneralPathDraw.withBlend` conserve un cast de l'autorité material legacy; le test public budget/recovery Task 6 vérifie aussi les pixels du primer avant le checkpoint refusal/recovery prévu par le brief. Aucun de ces points ne bloque les gates publics W5b actuels.
 
 ## Historique W5a — référence antérieure à W5b
 

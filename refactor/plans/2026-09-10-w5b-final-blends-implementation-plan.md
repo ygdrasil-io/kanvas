@@ -240,13 +240,15 @@ Task 7 closed by `b0ef1cbcf`: the exhaustive production audit is recorded in the
 - Consumes: the full `codex/w5a-solid-opacity..codex/w5b-blends` range, plan, spec, task ledger and public verification evidence.
 - Produces: two independent `READY` reviews, a clean verified branch, and a W5b PR targeting `codex/w5a-solid-opacity`.
 
-- [ ] Ask a fresh Sol agent for a global specification review against this plan and the W5 spec. Route every Critical/Important finding through one responsible non-Sol implementer and a scoped Sol re-review.
-- [ ] Ask a different fresh Sol agent for final code quality review. Iterate the single permitted final fix wave until no Critical/Important finding remains; record minors explicitly.
-- [ ] Run fresh, non-parallel JVM compiles and the complete public W5b/W5a plus bounded W3/W4 gates. Force test execution when Gradle reports `UP-TO-DATE`.
-- [ ] Confirm `:kanvas` target inventory; run JS only if an authentic JS target exists. Do not invent an infrastructure substitute.
-- [ ] Do not run font, codec, GM/dashboard/render/baseline, Skia integration or `jpg-color-cube` suites.
-- [ ] Run `rtk git diff --check`, verify a clean worktree and inspect the full commit range from `codex/w5a-solid-opacity`.
+- [x] Ask a fresh Sol agent for a global specification review against this plan and the W5 spec. Route every Critical/Important finding through one responsible non-Sol implementer and a scoped Sol re-review.
+- [x] Ask a different fresh Sol agent for final code quality review. Iterate the single permitted final fix wave until no Critical/Important finding remains; record minors explicitly.
+- [x] Run fresh, non-parallel JVM compiles and the complete public W5b/W5a plus bounded W3/W4 gates. Force test execution when Gradle reports `UP-TO-DATE`.
+- [x] Confirm `:kanvas` target inventory; run JS only if an authentic JS target exists. Do not invent an infrastructure substitute.
+- [x] Do not run font, codec, GM/dashboard/render/baseline, Skia integration or `jpg-color-cube` suites.
+- [x] Run `rtk git diff --check`, verify a clean worktree and inspect the full commit range from `codex/w5a-solid-opacity`.
 - [ ] Push `codex/w5b-blends` and create/update its PR with base `codex/w5a-solid-opacity`, exact public test counts, authentic skips, review verdicts, and deferred W5c–W5h scope.
+
+Task 8 ferme les findings de spécification F1–F3 et les findings qualité F4–F7 aux commits `7382123bf`, `900f1dea7` et `e470bcee8`. Les deux re-reviews Sol sont `READY`. La vérification contrôleur finale du 11 septembre 2026 sélectionne 151 méthodes publiques : 149 réussites, 2 skips AA4 authentiques, 0 failure/error; GREEN45 passe aussi seul sur ses 45 cellules. Les Minors `SetSat`/oracle, cast legacy `GeneralPathDraw.withBlend` et assertion de primer du test budget Task 6 restent explicitement différés dans le status W05.
 
 ## Verification Commands
 
