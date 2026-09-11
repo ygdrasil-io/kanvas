@@ -1371,7 +1371,7 @@ private fun GPUWgpu4kCorePrimitiveBlendProgram.toWgpuBlendStateOrNull(): BlendSt
     )
 }
 
-private fun String.toWgpuBlendFactor(): GPUBlendFactor = when (this) {
+internal fun String.toWgpuBlendFactor(): GPUBlendFactor = when (this) {
     "zero" -> GPUBlendFactor.Zero
     "one" -> GPUBlendFactor.One
     "src" -> GPUBlendFactor.Src
@@ -1383,7 +1383,7 @@ private fun String.toWgpuBlendFactor(): GPUBlendFactor = when (this) {
     else -> error("Unsupported CorePrimitive fixed-function blend factor: $this")
 }
 
-private fun String.toWgpuBlendOperation(): GPUBlendOperation = when (this) {
+internal fun String.toWgpuBlendOperation(): GPUBlendOperation = when (this) {
     "add" -> GPUBlendOperation.Add
     else -> error("Unsupported CorePrimitive fixed-function blend operation: $this")
 }

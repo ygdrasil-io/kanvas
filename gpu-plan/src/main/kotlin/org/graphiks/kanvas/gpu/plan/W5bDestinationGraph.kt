@@ -19,7 +19,11 @@ internal object W5bDestinationGraphSealer {
         drawDataResources: PlanDrawDataResources? = null,
         drawDataByCommandI32: Map<Int, PlanDrawDataResources> = emptyMap(),
         depthStencilByCommandI32: Map<Int, PlanResourceId> = emptyMap(),
+        w4eSource: RenderGraph? = null,
     ): RenderGraph {
+        require(w4eSource == null || w4eSource.verifyW4eCompilerWitness() &&
+            w4eSource.capabilityId == W4eClipPlanCompiler.W5A_HARD_CAPABILITY_ID && capabilityId == W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID)
+        val nativePrefix = w4eSource?.passes()?.filter { it is PlanPass.ClipMaskInitialize || it is PlanPass.ClipMaskProducer || it is PlanPass.ClipMaskFold }.orEmpty()
         val clips = draws.filterIsInstance<W5bPointDraw>().mapNotNull { it.clipOnly }.distinct()
         require(clips.size <= 1)
         val clip = clips.singleOrNull()
@@ -30,7 +34,7 @@ internal object W5bDestinationGraphSealer {
         val readsDestination = destinationCountI32 > 0
         require(capabilities.maxBindGroupsI32?.let { it >= if (clip != null) 4 else if (readsDestination) 3 else 2 } == true &&
             capabilities.maxBindingsPerBindGroupI32?.let { it >= if (readsDestination) 2 else 1 } == true &&
-            (!readsDestination || capabilities.maxSampledTexturesPerShaderStageI32?.let { it >= if (clip == null) 1 else 2 } == true) &&
+            (!readsDestination || capabilities.maxSampledTexturesPerShaderStageI32?.let { it >= if (clip == null && w4eSource == null) 1 else 2 } == true) &&
             (!readsDestination || capabilities.maxSamplersPerShaderStageI32?.let { it >= 1 } == true) &&
             capabilities.maxUniformBuffersPerShaderStageI32?.let { it >= 2 } == true &&
             capabilities.maxUniformBufferBindingSizeBytesI64?.let { it >= 32L } == true) {
@@ -42,10 +46,10 @@ internal object W5bDestinationGraphSealer {
         }
         require(destinationCountI32 > 0 || capabilityId in setOf(W5bCorePrimitiveGraph.CAPABILITY_ID,
             W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID, W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID,
-            W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID))
+            W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID, W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID))
         val initialClearI32 = if (draws.isEmpty() || draws.first().blend is BlendPlan.DestinationReadV1) 1 else 0
         val stencilCountI32 = draws.count { it is PathDraw && it.strategy == PathFillStrategy.StencilCover }
-        val passCountI32 = Math.addExact(Math.addExact(draws.size, destinationCountI32), initialClearI32 + stencilCountI32 + 1 + (clip?.passes()?.size ?: 0))
+        val passCountI32 = Math.addExact(Math.addExact(draws.size, destinationCountI32), initialClearI32 + stencilCountI32 + 1 + (clip?.passes()?.size ?: 0) + nativePrefix.size)
         // One snapshot is reused only after its preceding consumer; native storage stays live
         // through frame completion, so all three physical resources overlap in the budget.
         val peakI64 = Math.addExact(geometryResources.fold(0L) { total, resource -> Math.addExact(total, resource.byteSize) },
@@ -73,7 +77,7 @@ internal object W5bDestinationGraphSealer {
         var producerOrdinalI32 = 0
         var coverOrdinalI32 = 0
         var hasColorAttachment = false
-        val passes = (clip?.passes().orEmpty()).toMutableList()
+        val passes = (nativePrefix + clip?.passes().orEmpty()).toMutableList()
         fun render(draw: PlanDraw?) {
             if (draw != null) versionI64 = Math.addExact(versionI64, 1L)
             val data = draw?.let { drawDataByCommandI32[it.commandIndex] } ?: drawDataResources
@@ -97,7 +101,9 @@ internal object W5bDestinationGraphSealer {
         draws.forEach { draw ->
             val blend = draw.blend
             if (blend is BlendPlan.DestinationReadV1) {
-                require(if ((draw as? W5bPointDraw)?.clipOnly != null)
+                require(if (draw is W5bW4ePathDraw && blend.coverage == BlendCoverageEncodingV1.ScalarCoverageInShader)
+                    blend.compositionAbiI32 == 3
+                    else if ((draw as? W5bPointDraw)?.clipOnly != null)
                     blend.compositionAbiI32 == 4 && blend.coverage == BlendCoverageEncodingV1.ScalarCoverageInShader
                     else blend.compositionAbiI32 == 3 && (blend.coverage == BlendCoverageEncodingV1.FullOrScissor ||
                         draw is AnalyticRectDraw || draw is AnalyticRRectDraw))
@@ -118,6 +124,7 @@ internal object W5bDestinationGraphSealer {
                     is PathFillDraw -> PathFillDraw.ofMaterial(draw.commandIndex,
                         (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref,
                         draw.copyGeometryF32(), draw.strategy, draw.copyScissorI32(), sealed)
+                    is W5bW4ePathDraw -> draw.withBlend(sealed)
                     is GeneralPathDraw -> draw.withBlend(sealed)
                     is PathStrokeDraw -> PathStrokeDraw.ofMaterial(draw.commandIndex,
                         (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref, draw.copyGeometryF32(),
@@ -140,14 +147,14 @@ internal object W5bDestinationGraphSealer {
         }
         return RenderGraph.of(id, capabilityId, extent, format.value, capabilities, budget, draws.size,
             listOfNotNull(target, snapshot, staging) + clipResources + geometryResources.map { resource ->
-                val firstUseI32 = if (resource.role == PlanResourceRole.DepthStencil)
+                val firstUseI32 = if (resource.role == PlanResourceRole.DepthStencil && w4eSource == null)
                     passes.indexOfFirst { it is PlanPass.StencilGeometryProducerV3 && it.depthStencil == resource.id }
                     else 0
                 PlanResource.of(resource.role, resource.ordinal, resource.kind, resource.format, resource.copyExtent(),
                     resource.byteSize, resource.usages(), resource.lifetime, firstUseI32, passCountI32, resource.sampleCountI32)
             }, passes,
             passes.zipWithNext { before, after -> PlanPassDependency(before.id, after.id) }, peakI64,
-            materialPlanTable = material.takeIf { draws.isNotEmpty() })
+            materialPlanTable = material.takeIf { draws.isNotEmpty() }, w5bW4eSource = w4eSource)
     }
 }
 

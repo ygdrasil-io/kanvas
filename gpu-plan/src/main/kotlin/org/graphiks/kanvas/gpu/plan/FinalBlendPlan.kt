@@ -65,6 +65,7 @@ public object FinalBlendPlanner {
         sample: SamplePlan,
         targetClamp: BlendTargetClampV1,
         coverageApplication: BlendCoverageApplicationV1 = BlendCoverageApplicationV1.DestinationInterpolation,
+        coverageEncoding: BlendCoverageEncodingV1? = null,
     ): BlendPlan? {
         val mode = when (blend) {
             BlendNode.SrcOver -> BlendMode.SRC_OVER
@@ -73,20 +74,20 @@ public object FinalBlendPlanner {
             is BlendNode.Custom -> return null
         }
         if (mode == BlendMode.DST) return BlendPlan.NoOpV1
-        val coverageEncoding = if (coverage == CoveragePlan.FullOrScissor && sample == SamplePlan.SingleSample) {
+        val effectiveCoverage = coverageEncoding ?: if (coverage == CoveragePlan.FullOrScissor && sample == SamplePlan.SingleSample) {
             BlendCoverageEncodingV1.FullOrScissor
         } else {
             BlendCoverageEncodingV1.ScalarCoverageInShader
         }
-        if (coverageEncoding == BlendCoverageEncodingV1.FullOrScissor ||
-            coverage == CoveragePlan.AnalyticScalarAA && sample == SamplePlan.SingleSample &&
+        if (effectiveCoverage == BlendCoverageEncodingV1.FullOrScissor ||
+            sample == SamplePlan.SingleSample &&
                 coverageApplication == BlendCoverageApplicationV1.SourceMultiplication) {
-            fixed(mode, coverageEncoding, targetClamp)?.let { return it }
+            fixed(mode, effectiveCoverage, targetClamp)?.let { return it }
         }
         return BlendPlan.DestinationReadV1(
             mode = mode,
             formulaIdentity = if (mode == BlendMode.PLUS) "plus_exact@v1" else "${mode.name.lowercase()}@v1",
-            coverage = coverageEncoding,
+            coverage = effectiveCoverage,
             requiredDestinationVersion = DestinationVersionI64(0L),
         )
     }

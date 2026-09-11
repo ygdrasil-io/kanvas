@@ -61,6 +61,11 @@ internal class W5bNativeGeometryGraphLowerer {
             } }.filter { it.commandIndex in commands }
             val data = requireNotNull(lane.drawDataResources)
             when (lane.capabilityId) {
+                W4eClipPlanCompiler.W5A_HARD_CAPABILITY_ID -> {
+                    val scratch = lowerW5bW4eLaneV3(request, lane, target, staging, seal)
+                    packets += scratch.allPackets.filter { it.w4ePreparedPath != null }
+                    scratches += scratch
+                }
                 W4dGeneralPathPlanCompiler.W5A_HARD_CAPABILITY_ID -> {
                     val source = lane.sourceGraph
                     val sourcePasses = source.passes().filterIsInstance<PlanPass.PathRenderPass>()
@@ -246,9 +251,11 @@ internal class W5bNativeGeometryGraphLowerer {
         val witness = W5bPreparedFrameWitnessV3(graph, scratches.first(), seal, recording, memory,
             targetPreparation, stagingPreparation, readback, packets, geometryLanes = scratches)
         scratches.forEach { scratch -> witness.packetsFor(scratch).forEachIndexed { index, packet ->
-            packet.attachCorePrimitivePreparedAuthority(GPUCorePrimitivePreparedPacketAuthority.plannedW5b(
-                scratch.packetStructuralPipelineKeys[index], requireNotNull(packet.renderPipelineKey), witness, analyticUniformSeals[packet.packetId], scratch as? W5bGeometryScratchV3.General))
+            if (scratch is W5bGeometryScratchV3.W4e) packet.attachW5bW4eFrameWitnessV3(witness)
+            else packet.attachCorePrimitivePreparedAuthority(GPUCorePrimitivePreparedPacketAuthority.plannedW5b(
+                (scratch as W5bGeometryScratchV3.Pooled).packetStructuralPipelineKeys[index], requireNotNull(packet.renderPipelineKey), witness, analyticUniformSeals[packet.packetId], scratch as? W5bGeometryScratchV3.General))
         } }
+        witness.w4eLane?.prefixRenders?.forEach { it.drawPackets.single().attachW5bW4eFrameWitnessV3(witness) }
         val render = GPUTask.Render(GPUTaskID("task.w5b.geometry.${graph.id.value}.packing"), request.recordingId,
             GPUTaskPhase.Render, target, GPULoadStorePlan("clear", GPUStorePlan.Store), GPUSamplePlan.SingleSampleFrame,
             drawPackets = packets, batchEligibilityByPacketId = packets.associate { it.packetId to GPUPassBatchEligibility(

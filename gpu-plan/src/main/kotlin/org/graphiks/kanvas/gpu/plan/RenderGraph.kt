@@ -68,9 +68,9 @@ public class RenderGraph private constructor(
             require(graph.capabilityId in setOf(W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID,
                 W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID, W4cPathFillPlanCompiler.W5B_CAPABILITY_ID,
                 W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID,
-                W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID))
+                W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID))
             require(graph.passes().filterIsInstance<PlanPass.RenderPass>().flatMap { it.draws() }.all {
-                (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw || it is PathStrokeDraw || it is GeneralPathDraw) &&
+                (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw || it is PathStrokeDraw || it is GeneralPathDraw || it is W5bW4ePathDraw) &&
                     it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1
             })
             return RenderGraph(graph.id, graph.capabilityId, graph.targetExtent, graph.colorFormat, graph.capabilities,
@@ -112,7 +112,11 @@ public class RenderGraph private constructor(
             dependencies: List<PlanPassDependency>,
             peakFrameLocalBytes: Long,
             materialPlanTable: MaterialPlanTable? = null,
+            w5bW4eSource: RenderGraph? = null,
         ): RenderGraph {
+            require(w5bW4eSource == null || capabilityId == W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID &&
+                w5bW4eSource.verifyW4eCompilerWitness() && w5bW4eSource.capabilityId == W4eClipPlanCompiler.W5A_HARD_CAPABILITY_ID)
+            require(capabilityId != W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID || visualCommandCount == 0 || w5bW4eSource != null)
             require(capabilityId.isNotBlank()) { "Capability ID must not be blank" }
             require(!targetExtent.isEmpty()) { "Target extent must be non-empty" }
             require(colorFormat in capabilities.supportedFormats()) { "Target format is unsupported" }
@@ -180,11 +184,14 @@ public class RenderGraph private constructor(
             val usesClipMasks = passes.any {
                 it is PlanPass.ClipMaskInitialize || it is PlanPass.ClipMaskProducer || it is PlanPass.ClipMaskFold
             }
-            if (usesClipMasks) {
+            if (usesClipMasks && w5bW4eSource == null) {
                 validateClipMaskContracts(passes, dependencies, resources, resourcesById, capabilities, targetExtent)
             }
-            validateClipConsumers(passes, dependencies, resourcesById, targetExtent, usesClipMasks)
-            if (usesExplicitAa4PathPasses) {
+            if (w5bW4eSource == null) validateClipConsumers(passes, dependencies, resourcesById, targetExtent, usesClipMasks)
+            if (w5bW4eSource != null) {
+                validateW5bW4eGeometrySource(w5bW4eSource, passes, resources, targetExtent, capabilities, budget)
+                validateW5bGeometryPasses(passes, resourcesById, visualCommandCount, w5bW4eSource)
+            } else if (usesExplicitAa4PathPasses) {
                 validateExplicitAa4PathContracts(
                     passes,
                     dependencies,
@@ -201,7 +208,7 @@ public class RenderGraph private constructor(
                 validateStencilAtomicContracts(passes, dependencies, resources, resourcesById, capabilities, targetExtent)
             }
             validateVisualCommandOrder(passes)
-            if (capabilityId !in setOf(W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID)) validatePathDrawContracts(
+            if (capabilityId !in setOf(W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID, W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID)) validatePathDrawContracts(
                 passes,
                 dependencies,
                 resources,

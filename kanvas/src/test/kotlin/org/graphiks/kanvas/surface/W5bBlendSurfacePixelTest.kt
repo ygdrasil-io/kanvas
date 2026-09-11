@@ -194,6 +194,68 @@ class W5bBlendSurfacePixelTest {
             surface(BlendMode.SRC, false).render().pixels.copyOfRange(0, 4))
     }
 
+    @Test fun `geometry W4e clipped and inverse Paths retain final blends and captured coverage`() {
+        assertAll(listOf(false, true).flatMap { inverse ->
+            listOf(BlendMode.DST_OUT, BlendMode.DST, BlendMode.DIFFERENCE).map { mode -> {
+                val opacity = if (mode == BlendMode.DIFFERENCE) .45f else .5f
+                val background = W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, 1f)
+                val destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(background))
+                val white = solidSource(ColorF32.of(1f, 1f, 1f, 1f), opacity)
+                val expected = when (mode) {
+                    BlendMode.DST -> background
+                    BlendMode.DST_OUT -> W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, .5f)
+                    else -> WgslFloatEnvelopeV1Oracle.drawDestination(white, MaterialPlanRef(1), destination, mode)
+                }
+                assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.sourceOverExclusion(white, MaterialPlanRef(1), destination))
+                if (mode != BlendMode.DST) assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+                    (background as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels))
+                fun pixels(reverse: Boolean = false, mutateBefore: Boolean = false): UByteArray {
+                    val path = Path().apply {
+                        addRect(if (inverse) RectF32.ofLTRB(1f, 1f, 3f, 3f) else RectF32.ofLTRB(-1f, -1f, 5f, 5f))
+                        if (inverse) fillType = org.graphiks.kanvas.geometry.FillType.INVERSE_WINDING
+                    }
+                    val clip = Path().apply { moveTo(0f, 0f); lineTo(4f, 0f); lineTo(0f, 4f); close() }
+                    fun mutate() {
+                        if (inverse) path.addRect(RectF32.ofLTRB(0f, 0f, 1f, 1f))
+                        else path.fillType = org.graphiks.kanvas.geometry.FillType.INVERSE_WINDING
+                    }
+                    if (mutateBefore) mutate()
+                    val recorder = PictureRecorder()
+                    recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f)).drawPath(path,
+                        Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), opacity),
+                            blendMode = mode, antiAlias = false))
+                    if (!mutateBefore) mutate()
+                    val picture = requireNotNull(Picture.fromByteArray(recorder.finishRecordingAsPicture().toByteArray()))
+                    val surface = Surface(4, 4)
+                    surface.canvas {
+                        fun foreground() {
+                            save()
+                            if (!inverse) clipPath(clip, antiAlias = false)
+                            picture.playback(this)
+                            restore()
+                        }
+                        fun background() = drawPath(Path().apply { addRect(RectF32.ofLTRB(-1f, -1f, 5f, 5f)) },
+                            Paint(shader = Shader.SolidColor(ColorARGB.Green), antiAlias = false))
+                        if (reverse) { foreground(); background() } else { background(); foreground() }
+                    }
+                    clip.addRect(RectF32.ofLTRB(3f, 3f, 4f, 4f))
+                    return surface.render().pixels
+                }
+                val actual = pixels()
+                try { WgslFloatEnvelopeV1Oracle.assertAdmits(expected, actual.copyOfRange(0, 4)) }
+                catch (failure: IllegalArgumentException) {
+                    throw AssertionError("inverse=$inverse mode=$mode", failure)
+                }
+                if (mode != BlendMode.DST) {
+                    WgslFloatEnvelopeV1Oracle.assertAdmits(background, pixels(reverse = true).copyOfRange(0, 4))
+                    val holeI32 = if (inverse) 40 else 60
+                    WgslFloatEnvelopeV1Oracle.assertAdmits(background, pixels().copyOfRange(holeI32, holeI32 + 4))
+                    WgslFloatEnvelopeV1Oracle.assertAdmits(background, pixels(mutateBefore = true).copyOfRange(0, 4))
+                }
+            } }
+        })
+    }
+
     private enum class GeometryFamily { Rect, FractionalRect, RRect, DirectPath, StencilPath, Stroke, Hairline }
 
     /** Catches lost blend/coverage, stale destination, reordered draws and mutable geometry reuse. */

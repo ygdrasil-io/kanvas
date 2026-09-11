@@ -1414,6 +1414,9 @@ internal class PreparedGPUFrame(
                 "PreparedGPUFrame encoder resource generations must exactly match the semantic step"
             }
             if (step is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep) {
+                step.drawPackets.firstOrNull()?.w5bFinalFrameWitnessV3?.takeIf { it.w4eLane != null }?.let { witness ->
+                    require(witness.validates(semanticPlan)) { "Prepared W4e final-color scopes require their complete sealed frame" }
+                }
                 val sealedW4e = step.drawPackets.isNotEmpty() && step.drawPackets.all { packet ->
                     packet.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared
                 }

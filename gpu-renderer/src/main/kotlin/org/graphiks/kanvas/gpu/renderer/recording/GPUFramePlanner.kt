@@ -319,7 +319,13 @@ object GPUFramePlanner {
                 renders.drop(prefix.renders.size).flatMap { it.drawPackets }.all { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 === witness } &&
                 taskList.tasks.filterIsInstance<GPUTask.Readback>().size == 1
         } == true
-        if ((!exactPointPrefix && w4eRenders.size != renders.size) || w4eRenders.any { render ->
+        val nativeFinal = w4eRenders.first().drawPackets.singleOrNull()?.w5bFinalFrameWitnessV3
+        val exactNativeFinal = nativeFinal?.let { witness -> witness.w4eLane?.let { lane ->
+            taskList.tasks.map { it.taskId } == listOf(witness.prepareTaskId) + witness.graph.passes().map(witness::taskId) &&
+                taskList.dependencies == witness.dependencies && w4eRenders == lane.renders.values.toList() &&
+                renders.filter { it !in w4eRenders }.all { it.w5bInitialClearV3?.witness === witness }
+        } } == true
+        if ((!exactPointPrefix && !exactNativeFinal && w4eRenders.size != renders.size) || w4eRenders.any { render ->
                 render.drawPackets.singleOrNull()?.role != GPUDrawPacketRole.W4ePrepared
             }
         ) {
@@ -678,7 +684,7 @@ object GPUFramePlanner {
                         packet.blendPlan?.destinationReadRequirement !=
                         GPUBlendDestinationReadRequirement.DestinationTextureRequired ||
                         ((destination.taskId to render.taskId) !in directDependencies &&
-                            packet.corePrimitivePreparedAuthority?.w5bFrameWitnessV3?.hasAtomicCopyBinding(
+                            packet.w5bFinalFrameWitnessV3?.hasAtomicCopyBinding(
                                 destination.taskId, render.taskId, packet, taskList.dependencies) != true) ||
                         !consumerPacketIds.add(packet.packetId)
                     ) {
@@ -727,7 +733,7 @@ object GPUFramePlanner {
                 val lastExecutionPoint = orderedExecutionPoints.last()
                 val firstConsumer = consumerPoints.first()
                 val firstPacket = firstConsumer.first.drawPackets[firstConsumer.second]
-                val atomicProducer = firstPacket.corePrimitivePreparedAuthority?.w5bFrameWitnessV3?.atomicCopyProducer(
+                val atomicProducer = firstPacket.w5bFinalFrameWitnessV3?.atomicCopyProducer(
                     destination.taskId, firstConsumer.first.taskId, firstPacket, taskList.dependencies)
                 scheduledOperations += ScheduledDestinationOperation(
                     sourceTaskId = destination.taskId,
@@ -1260,7 +1266,7 @@ object GPUFramePlanner {
         -> false
     }
     private fun GPUDrawPacket.writesColorAttachment(): Boolean =
-        corePrimitivePreparedAuthority?.w5bFrameWitnessV3?.ownsGeometryProducer(this) != true && blendPlan.writesColorAttachment()
+        w5bFinalFrameWitnessV3?.ownsGeometryProducer(this) != true && blendPlan.writesColorAttachment()
 
     /**
      * A path cover still owns the stencil test/reset even when its color blend is destination-only.

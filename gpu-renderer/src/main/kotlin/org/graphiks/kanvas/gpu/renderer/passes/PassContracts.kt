@@ -451,6 +451,21 @@ class GPUDrawPacket(
         w5aCompositeFrameAuthority = authority
     }
 
+    internal fun isW5bStencilProducerV3(): Boolean = role == GPUDrawPacketRole.PathStencilProducer ||
+        role == GPUDrawPacketRole.W4ePrepared && w4ePreparedPath?.phase == org.graphiks.kanvas.gpu.plan.PathRenderPhase.SingleSampleStencilProducer
+    internal fun isW5bStencilCoverV3(): Boolean = role == GPUDrawPacketRole.PathStencilCover ||
+        role == GPUDrawPacketRole.W4ePrepared && w4ePreparedPath?.phase == org.graphiks.kanvas.gpu.plan.PathRenderPhase.SingleSampleStencilColorCover
+
+    private var w5bW4eFrameWitnessV3: W5bPreparedFrameWitnessV3? = null
+    internal val w5bFinalFrameWitnessV3: W5bPreparedFrameWitnessV3?
+        get() = corePrimitivePreparedAuthority?.w5bFrameWitnessV3 ?: w5bW4eFrameWitnessV3
+    internal fun attachW5bW4eFrameWitnessV3(witness: W5bPreparedFrameWitnessV3) {
+        check(w5bW4eFrameWitnessV3 == null && corePrimitivePreparedAuthority == null)
+        require(role == GPUDrawPacketRole.W4ePrepared && witness.w4eLane?.owns(this) == true &&
+            w4ePreparedFrameAuthority === witness.w4eLane?.frameAuthority)
+        w5bW4eFrameWitnessV3 = witness
+    }
+
     /** One lowering-local frame seal; every W4e packet must carry the same immutable authority. */
     internal var w4ePreparedFrameAuthority: GPUW4ePreparedFrameAuthority? = null
         private set

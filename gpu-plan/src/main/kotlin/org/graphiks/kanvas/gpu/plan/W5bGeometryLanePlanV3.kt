@@ -120,7 +120,7 @@ internal fun issueW5bNativeComposite(graphs: List<RenderGraph>): RenderGraph {
 
 /** Exact color/geometry split for the successor; historical W4 path validation stays closed. */
 internal fun validateW5bGeometryPasses(passes: List<PlanPass>, resources: Map<PlanResourceId, PlanResource>,
-    visualCommandCountI32: Int) {
+    visualCommandCountI32: Int, w4eSource: RenderGraph? = null) {
     val colors = passes.flatMap { pass -> when (pass) {
         is PlanPass.RenderPass -> pass.draws()
         is PlanPass.StencilCover -> listOf(pass.draw)
@@ -162,6 +162,8 @@ internal fun validateW5bGeometryPasses(passes: List<PlanPass>, resources: Map<Pl
             data(pass.drawDataResources)
         }
         is PlanPass.StencilCover -> require(passes.getOrNull(indexI32 - 1) is PlanPass.StencilGeometryProducerV3)
+        is PlanPass.ClipMaskInitialize, is PlanPass.ClipMaskProducer, is PlanPass.ClipMaskFold ->
+            require(w4eSource?.passes()?.any { it === pass } == true)
         is PlanPass.TextureCopy, is PlanPass.ReadbackPass -> Unit
         else -> error("Invalid W5b geometry-lane pass")
     } }

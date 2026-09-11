@@ -313,8 +313,15 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
         if (hasW4e) {
             val pointWitness = w4eRenderSteps.flatMap { it.drawPackets }.mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }
                 .firstOrNull()?.takeIf { it.clipPrefixV4 != null }
-            val prefixSteps = if (pointWitness != null && pointWitness.validates(framePlan))
-                w4eRenderSteps.take(requireNotNull(pointWitness.clipPrefixV4).renders.size) else w4eRenderSteps
+            val nativeFinal = w4eRenderSteps.flatMap { it.drawPackets }.mapNotNull { it.w5bFinalFrameWitnessV3 }
+                .firstOrNull()?.takeIf { it.w4eLane != null }
+            if (nativeFinal != null && !nativeFinal.validates(framePlan)) return GPUPreparedNativeFramePayloadMaterialization.Refused(
+                "invalid.native-frame-payload.w5b-w4e", "W4e final-color materialization requires its complete sealed frame.")
+            val prefixSteps = when {
+                nativeFinal != null -> w4eRenderSteps.filter { step -> step.drawPackets.any(requireNotNull(nativeFinal.w4eLane)::owns) }
+                pointWitness != null && pointWitness.validates(framePlan) -> w4eRenderSteps.take(requireNotNull(pointWitness.clipPrefixV4).renders.size)
+                else -> w4eRenderSteps
+            }
             if (prefixSteps.isEmpty() || prefixSteps.any { step ->
                     step.drawPackets.size != 1 || step.drawPackets.single().role != GPUDrawPacketRole.W4ePrepared
                 }) {

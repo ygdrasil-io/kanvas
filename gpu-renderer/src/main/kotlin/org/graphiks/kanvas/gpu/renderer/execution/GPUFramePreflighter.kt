@@ -250,7 +250,7 @@ internal class GPUFramePreflighter(
 
     fun preflight(framePlan: GPUFramePlan): GPUFramePreflightResult {
         val w5b = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
-            .mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }.firstOrNull()
+            .mapNotNull { it.w5bFinalFrameWitnessV3 }.firstOrNull()
         if (w5b != null) {
             val limits = capabilities.limits
             val materialBytes = framePlan.w5aMaterialAllocationsV2()
@@ -308,8 +308,11 @@ internal class GPUFramePreflighter(
             .mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }.firstOrNull()?.takeIf { it.clipPrefixV4 != null }
         if (pointComposite != null && !pointComposite.validates(framePlan)) return GPUFramePreflightResult.Refused(
             diagnostic("invalid.preflight.w5b_clip_v4", "W5b clip-only composition does not match its complete sealed graph."))
-        val w4eRenders = if (pointComposite == null) allW4eCandidateRenders else
-            allW4eCandidateRenders.take(requireNotNull(pointComposite.clipPrefixV4).renders.size)
+        val w4eRenders = when {
+            w5b?.w4eLane != null -> allW4eCandidateRenders.filter { step -> step.drawPackets.any(w5b.w4eLane::owns) }
+            pointComposite != null -> allW4eCandidateRenders.take(requireNotNull(pointComposite.clipPrefixV4).renders.size)
+            else -> allW4eCandidateRenders
+        }
         val w4ePackets = w4eRenders.flatMap(GPUFrameStep.RenderPassStep::drawPackets)
             .filter { packet -> packet.role == GPUDrawPacketRole.W4ePrepared }
         if (w4ePackets.isNotEmpty()) {
@@ -3723,6 +3726,12 @@ internal class GPUFramePreflighter(
         if (pointWitness != null) return if (pointWitness.validates(framePlan) &&
             framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().all { it.w4eSceneContinuation == null && it.sampleContinuation == null }) null
             else refused("W5b clip-only frame cannot carry a Path scene continuation.")
+        val w4eFinal = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+            .mapNotNull { it.w5bFinalFrameWitnessV3 }.firstOrNull()?.takeIf { it.w4eLane != null }
+        if (w4eFinal != null) return if (w4eFinal.validates(framePlan) &&
+            framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().all {
+                it.w4eSceneContinuation == null && it.sampleContinuation == null && it.samplePlan == GPUSamplePlan.SingleSampleFrame
+            }) null else refused("W5b W4e native frame must retain its complete single-sample authority.")
         val renders = framePlan.w4eRenderSteps()
         if (renders.isEmpty() || framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().size != renders.size) {
             return refused("W4e requires one closed prepared render sequence.")
@@ -9004,12 +9013,14 @@ internal class GPUFramePreflighter(
                             } else if (inverseDomainConsumer?.interiorCoverage is org.graphiks.kanvas.gpu.renderer.passes
                                     .GPUW4ePreparedInverseInteriorCoverage.Geometry && stencilCover
                             ) {
+                                if (w4ePacket.w5bFinalFrameWitnessV3?.w4eLane?.owns(w4ePacket) != true) {
                                 add(key(GPUPreparedNativeOperandRole.RenderPipeline,
                                     GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:inverse-domain-interior"))
                                 add(key(GPUPreparedNativeOperandRole.RenderVertexBuffer,
                                     GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:inverse-domain-interior-vertices"))
                                 add(key(GPUPreparedNativeOperandRole.RenderIndexBuffer,
                                     GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:inverse-domain-interior-indices"))
+                                }
                                 add(key(GPUPreparedNativeOperandRole.RenderPipeline,
                                     GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:inverse-domain-cover"))
                                 add(key(GPUPreparedNativeOperandRole.RenderBindGroup,
@@ -9022,12 +9033,14 @@ internal class GPUFramePreflighter(
                                 add(key(GPUPreparedNativeOperandRole.RenderBindGroup,
                                     GPUPreparedNativeOperandKind.BindGroup, "w4e:${w4ePacket.passId}:inverse-domain-color"))
                             } else if (inverseDomainConsumer != null) {
+                                if (w4ePacket.w5bFinalFrameWitnessV3?.w4eLane?.owns(w4ePacket) != true) {
                                 add(key(GPUPreparedNativeOperandRole.RenderPipeline,
                                     GPUPreparedNativeOperandKind.RenderPipeline, "w4e:${w4ePacket.passId}:inverse-domain-main"))
                                 add(key(GPUPreparedNativeOperandRole.RenderVertexBuffer,
                                     GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:inverse-domain-main-vertices"))
                                 add(key(GPUPreparedNativeOperandRole.RenderIndexBuffer,
                                     GPUPreparedNativeOperandKind.Buffer, "w4e:${w4ePacket.passId}:inverse-domain-main-indices"))
+                                }
                                 if (inverseDomainConsumer.interiorCoverage is org.graphiks.kanvas.gpu.renderer.passes
                                         .GPUW4ePreparedInverseInteriorCoverage.Geometry
                                 ) {

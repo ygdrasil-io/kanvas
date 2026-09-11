@@ -232,13 +232,13 @@ internal class W4eClipGraphLowerer {
         }
     } catch (_: IllegalArgumentException) { invalid() }
 
-    private fun ref(session: String, resource: PlanResource): GPUFrameResourceRef = when (resource.kind) {
+    internal fun ref(session: String, resource: PlanResource): GPUFrameResourceRef = when (resource.kind) {
         PlanResourceKind.Buffer -> GPUFrameBufferRef("$session.${resource.id.value}")
         PlanResourceKind.Texture2D -> GPUFrameTargetRef("$session.${resource.id.value}")
     }
 
     /** Prefix packets carry sealed native W4e clip authority; materialization executes each pass. */
-    private fun preparedClipPacket(
+    internal fun preparedClipPacket(
         pass: PlanPass,
         index: Int,
         preparedPass: GPUW4ePreparedClipPassAuthority,
@@ -265,10 +265,11 @@ internal class W4eClipGraphLowerer {
     )
 
     /** Complete path handoff with no W4d clip mapper, execution plan, or structural-key fallback. */
-    private fun pathPacket(
+    internal fun pathPacket(
         preparedPath: GPUW4ePreparedClipPassAuthority.Path,
         consumer: GPUW4ePreparedClipConsumerAuthority?,
         index: Int,
+        finalBlend: org.graphiks.kanvas.gpu.plan.BlendPlan? = null,
     ): GPUDrawPacket = GPUDrawPacket(
         packetId = GPUDrawPacketID("packet.w4e.${preparedPath.passId}"),
         commandIdValue = preparedPath.commandIdValue,
@@ -282,7 +283,8 @@ internal class W4eClipGraphLowerer {
         renderStepId = org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID("w4e.prepared-path"),
         renderStepVersion = 1,
         role = GPUDrawPacketRole.W4ePrepared,
-        blendPlan = org.graphiks.kanvas.gpu.renderer.recording.canonicalSolidRectSrcOverBlendPlan(),
+        blendPlan = finalBlend?.let(W5bBlendPlanLowerer::lower)
+            ?: org.graphiks.kanvas.gpu.renderer.recording.canonicalSolidRectSrcOverBlendPlan(),
         bindingLayoutHash = "w4e.prepared-path.sealed-bindings",
         vertexSourceLabel = "w4e.prepared-path.sealed-geometry",
         targetStateHash = "w4e.prepared-path.attachments",
@@ -292,7 +294,7 @@ internal class W4eClipGraphLowerer {
         w4ePreparedPath = preparedPath,
     )
 
-    private fun loadLabel(pass: PlanPass): String = when (pass) {
+    internal fun loadLabel(pass: PlanPass): String = when (pass) {
         is PlanPass.ClipMaskInitialize -> "clear"
         is PlanPass.PathMaskClearPass -> "clear"
         is PlanPass.ClipMaskProducer -> "clear"
@@ -301,7 +303,7 @@ internal class W4eClipGraphLowerer {
         else -> "load"
     }
 
-    private fun depthStencilLoadStore(
+    internal fun depthStencilLoadStore(
         pass: PlanPass.PathRenderPass,
     ): org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan? = when (
         pass.depthStencilLoadStore
@@ -321,7 +323,7 @@ internal class W4eClipGraphLowerer {
             )
     }
 
-    private fun resourceUses(
+    internal fun resourceUses(
         pass: PlanPass,
         refs: Map<String, GPUFrameResourceRef>,
         resourcesById: Map<String, PlanResource>,
@@ -412,7 +414,7 @@ internal class W4eClipGraphLowerer {
             else -> GPUFrameResourceRole.ClipMask
         }
 
-    private fun preparation(resource: PlanResource, ref: GPUFrameResourceRef, bounds: GPUPixelBounds, alignment: Long): GPUResourcePreparationRequest {
+    internal fun preparation(resource: PlanResource, ref: GPUFrameResourceRef, bounds: GPUPixelBounds, alignment: Long): GPUResourcePreparationRequest {
         val role = sealedRoleFor(resource)
         val usages = resource.usages().map { usage -> when (usage) {
             PlanResourceUsage.RenderAttachment, PlanResourceUsage.DepthStencilAttachment -> GPUFrameResourceUsage.RenderAttachment

@@ -1406,6 +1406,10 @@ internal class GPUFrameExecutor(
         val composite = allRenders.flatMap { it.drawPackets }.mapNotNull { it.w5aCompositeFrameAuthority }.firstOrNull()
         if (composite != null && !composite.validates(frame.semanticPlan, allRenders)) return executionDiagnostic(
             "invalid.native-frame-payload.w5a-composite", "Composite execution requires its exact lane and packet authority.")
+        val w4eFinal = allRenders.flatMap { it.drawPackets }.mapNotNull { it.w5bFinalFrameWitnessV3 }
+            .firstOrNull()?.takeIf { it.w4eLane != null }
+        if (w4eFinal != null && !w4eFinal.validates(frame.semanticPlan)) return executionDiagnostic(
+            "invalid.native-frame-payload.w5b-w4e", "W4e execution requires its complete final-color frame.")
         val w5bGeometry = allRenders.flatMap { it.drawPackets }.mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }
             .firstOrNull()?.takeIf { it.geometryLanes.any { lane -> lane is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath } }
         if (w5bGeometry != null && !w5bGeometry.validates(frame.semanticPlan)) return executionDiagnostic(
@@ -1416,7 +1420,8 @@ internal class GPUFrameExecutor(
             "invalid.native-frame-payload.w5b-general-authority", "General execution lost the complete sealed W5b frame.")
         val renders = frame.semanticPlan.steps.mapIndexedNotNull { stepIndex, step ->
             (step as? GPUFrameStep.RenderPassStep)?.let { render -> Triple(stepIndex, render, render.drawPackets.singleOrNull()) }
-        }.filter { (_, render, _) -> if (w5bGeneral != null) render.drawPackets.isNotEmpty() && render.drawPackets.all {
+        }.filter { (_, render, _) -> if (w4eFinal != null) render.drawPackets.any(requireNotNull(w4eFinal.w4eLane)::owns)
+        else if (w5bGeneral != null) render.drawPackets.isNotEmpty() && render.drawPackets.all {
             w5bGeneral.scratchFor(it) is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.General
         } else if (w5bGeometry != null) render.drawPackets.isNotEmpty() && render.drawPackets.all {
             w5bGeometry.scratchFor(it) is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath
@@ -1436,14 +1441,18 @@ internal class GPUFrameExecutor(
         val hasW4e = renders.isNotEmpty() && renders.all { (_, _, packet) ->
             packet?.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared
         }
-        if (hasW4e || pointWitness != null) {
+        if (hasW4e || pointWitness != null || w4eFinal != null) {
             val renderSteps = frame.semanticPlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             val w4ePackets = renderSteps.flatMap(GPUFrameStep.RenderPassStep::drawPackets)
                 .filter { packet -> packet.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared }
             val authority = w4ePackets.firstOrNull()?.w4ePreparedFrameAuthority
             if (pointWitness != null && !pointWitness.validates(frame.semanticPlan)) return executionDiagnostic(
                 "invalid.native-frame-payload.w5b-clip-frame-authority", "Point execution requires its exact clip-prefix and color frame authority.")
-            val w4eSteps = if (pointWitness != null) renderSteps.take(requireNotNull(pointWitness.clipPrefixV4).renders.size) else renderSteps
+            val w4eSteps = when {
+                w4eFinal != null -> renderSteps.filter { step -> step.drawPackets.any(requireNotNull(w4eFinal.w4eLane)::owns) }
+                pointWitness != null -> renderSteps.take(requireNotNull(pointWitness.clipPrefixV4).renders.size)
+                else -> renderSteps
+            }
             if (w4ePackets.size != w4eSteps.size || authority == null || !authority.validatesRenderSteps(
                     frame.semanticPlan.frameId.value,
                     frame.semanticPlan.capabilitySeal.sealHash,
@@ -1461,6 +1470,7 @@ internal class GPUFrameExecutor(
             )
             w4eSceneContinuationPayloadDiagnostic(frame, exactPayload)?.let { return it }
             val renderScopes = exactPayload.scopeOperands.filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+                .filter { w4eFinal == null || it.sourceStepIndex in renders.map { row -> row.first } }
             return if (renderScopes.size != renders.size ||
                 renderScopes.map(GPUPreparedNativeScopeOperand.Render::sourceStepIndex) !=
                     renders.map { (stepIndex, _, _) -> stepIndex }

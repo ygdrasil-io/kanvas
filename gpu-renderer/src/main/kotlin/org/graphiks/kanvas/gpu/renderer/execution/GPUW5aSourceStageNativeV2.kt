@@ -23,11 +23,14 @@ internal class GPUW5bCoverageNativeV4(val witness: org.graphiks.kanvas.gpu.rende
     override fun close() = Unit
 }
 
+internal enum class GPUW5bInlineCoverageV3 { NativeMask, NativeFull }
+
 /** Original, authenticated geometry descriptor. W5a changes no geometry or attachment state. */
 internal data class GPUW5aGeometryPipelineTemplate(
     val source: String,
     val descriptor: RenderPipelineDescriptor,
     val groupZero: GPUBindGroupLayout,
+    val w5bInlineCoverageV3: GPUW5bInlineCoverageV3? = null,
 )
 
 internal interface GPUW5aGeometryPipelineTemplateProvider {
@@ -82,9 +85,9 @@ internal fun validatesW5aSourcePartitionV2(framePlan: GPUFramePlan, payload: GPU
         operand.w5aSourceBindingsV2.size == expected.size &&
             operand.w5aSourceBindingsV2.zip(expected).all { (binding, source) ->
                 binding.drawOrdinalI32 == source.first && binding.source === source.second &&
-                    (binding.destinationGroupV3 != null) == ((render.drawPackets.getOrNull(source.first)?.blendPlan
+                    (binding.destinationGroupV3 != null) == ((nativeSourcePacketV3(render.drawPackets, source.first, source.second)?.blendPlan
                         as? GPUBlendPlan.ShaderBlendWithDstRead)?.sealedW5b != null) &&
-                    (binding.coverageGroupV4 != null) == ((render.drawPackets.getOrNull(source.first)?.blendPlan
+                    (binding.coverageGroupV4 != null) == ((nativeSourcePacketV3(render.drawPackets, source.first, source.second)?.blendPlan
                         as? GPUBlendPlan.ShaderBlendWithDstRead)?.sealedW5b?.compositionAbiI32 == 4) &&
                     binding.byteCapacityI64 == source.second.stage.uniformByteCountI64 &&
                     binding.pipeline.deviceGeneration == payload.identity.deviceGeneration &&
@@ -97,6 +100,13 @@ internal fun validatesW5aSourcePartitionV2(framePlan: GPUFramePlan, payload: GPU
             }
     }
 }
+
+private fun nativeSourcePacketV3(packets: List<org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket>,
+    ordinalI32: Int, source: W5aPacketMaterialSourceV2) =
+    packets.singleOrNull()?.takeIf { packet ->
+        packet.w5bFinalFrameWitnessV3?.w4eLane?.owns(packet) == true &&
+            packet.w5aSourceStageV2 === source && packet.w4ePreparedFrameAuthority != null
+    } ?: packets.getOrNull(ordinalI32)
 
 /** W4e inverse-domain packets seal an atomic stencil prefix plus one final color draw. */
 private fun sourceDrawsV2(
@@ -160,10 +170,25 @@ private fun composeSource(template: GPUW5aGeometryPipelineTemplate, source: W5aP
         }
         require(!geometry.contains("@group(2)"))
         if (analyticCoverage) {
-            require(geometry.contains("fn fs_main(@builtin(position) fragment_position: vec4<f32>)") &&
-                geometry.contains("return analytic.premul_rgba * coverage;"))
-            geometry = geometry.replace("return analytic.premul_rgba * coverage;",
-                "return kanvas_w5b_target($sourceExpression, fragment_position.xy, coverage);")
+            when (template.w5bInlineCoverageV3) {
+                GPUW5bInlineCoverageV3.NativeMask -> {
+                    require(geometry.contains("fn fs_main(@builtin(position) position: vec4<f32>)") &&
+                        geometry.contains("return consumer.color * coverage;"))
+                    geometry = geometry.replace("return consumer.color * coverage;",
+                        "return kanvas_w5b_target($sourceExpression, position.xy, coverage);")
+                }
+                GPUW5bInlineCoverageV3.NativeFull -> {
+                    require(geometry.contains("fn fs_main()") && geometry.contains("return consumer.color;"))
+                    geometry = geometry.replace("fn fs_main()", "fn fs_main(@builtin(position) fragment_position: vec4<f32>)")
+                        .replace("return consumer.color;", "return kanvas_w5b_target($sourceExpression, fragment_position.xy, 1.0);")
+                }
+                null -> {
+                    require(geometry.contains("fn fs_main(@builtin(position) fragment_position: vec4<f32>)") &&
+                        geometry.contains("return analytic.premul_rgba * coverage;"))
+                    geometry = geometry.replace("return analytic.premul_rgba * coverage;",
+                        "return kanvas_w5b_target($sourceExpression, fragment_position.xy, coverage);")
+                }
+            }
         } else {
             require(geometry.contains("fn fs_main()"))
             geometry = geometry.replace("fn fs_main()", "fn fs_main(@builtin(position) fragment_position: vec4<f32>)")
@@ -260,7 +285,8 @@ internal fun materializeW5aSourcePartitionV2(
                 if (command !is GPUPreparedNativeRenderCommand.Draw && command !is GPUPreparedNativeRenderCommand.DrawIndexed) return@forEach
                 val ordinalI32 = drawOrdinalI32++
                 val source = sources[ordinalI32] ?: return@forEach
-                val destination = (packets.getOrNull(ordinalI32)?.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead)
+                val sourcePacket = nativeSourcePacketV3(packets, ordinalI32, source)
+                val destination = (sourcePacket?.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead)
                     ?.takeIf { it.sealedW5b != null }
                 require(destination == null || destinationGroup != null)
                 val scalar = destination?.sealedW5b?.compositionAbiI32 == 4

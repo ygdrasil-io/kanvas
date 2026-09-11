@@ -109,6 +109,9 @@ internal class W5bPreparedFrameWitnessV3(
     geometryLanes: List<W5bGeometryScratchV3> = listOf(scratch),
 ) {
     val geometryLanes = immutableList(geometryLanes)
+    val w4eLane = this.geometryLanes.filterIsInstance<W5bGeometryScratchV3.W4e>().singleOrNull()
+    fun prefixRender(pass: PlanPass) = w4eLane?.render(pass)
+        ?: clipPrefixV4?.renders?.singleOrNull { it.drawPackets.single().w4ePreparedClipPass?.passId == pass.id.value }
     fun scratchFor(packet: GPUDrawPacket): W5bGeometryScratchV3 = this.geometryLanes.single { packet.packetId in it.packetIds }
     fun packetsFor(lane: W5bGeometryScratchV3): List<GPUDrawPacket> {
         require(this.geometryLanes.any { it === lane })
@@ -116,12 +119,14 @@ internal class W5bPreparedFrameWitnessV3(
     }
     private val admittedPackets = immutableList(packets)
     fun ownsGeometryProducer(packet: GPUDrawPacket): Boolean = admittedPackets.any { it === packet } &&
-        packet.role == GPUDrawPacketRole.PathStencilProducer &&
-        packet.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 === this &&
-        packet.corePrimitivePreparedAuthority?.structuralPipelineKey?.blend == GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ColorWriteNone &&
+        packet.isW5bStencilProducerV3() &&
+        packet.w5bFinalFrameWitnessV3 === this &&
+        (packet.corePrimitivePreparedAuthority?.structuralPipelineKey?.blend == GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ColorWriteNone ||
+            w4eLane?.owns(packet) == true) &&
         graph.passes().filterIsInstance<PlanPass.StencilGeometryProducerV3>().any {
             it.commandIndexI32 == packet.commandIdValue && (it.id.value == packet.passId ||
-                (scratchFor(packet) as? W5bGeometryScratchV3.General)?.ownsProducer(packet, it) == true)
+                (scratchFor(packet) as? W5bGeometryScratchV3.General)?.ownsProducer(packet, it) == true ||
+                w4eLane?.ownsProducer(packet, it) == true)
         }
     private val memory = memoryBudget.snapshotForFramePlan()
     private val packetResourceGenerations = org.graphiks.kanvas.gpu.renderer.collections.immutableMap(
@@ -137,13 +142,11 @@ internal class W5bPreparedFrameWitnessV3(
                 setOf(org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.CopyDestination,
                     org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding),
                 org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, it.byteSize, resource.value)
-        }) + clipPrefixV4?.preparations.orEmpty())
-    fun taskId(pass: PlanPass): GPUTaskID = clipPrefixV4?.renders?.singleOrNull {
-        it.drawPackets.single().w4ePreparedClipPass?.passId == pass.id.value
-    }?.taskId ?: GPUTaskID("task.w5b.${graph.id.value}.${pass.id.value}")
+        }) + clipPrefixV4?.preparations.orEmpty() + w4eLane?.preparations.orEmpty())
+    fun taskId(pass: PlanPass): GPUTaskID = prefixRender(pass)?.taskId ?: GPUTaskID("task.w5b.${graph.id.value}.${pass.id.value}")
     private val taskIds = immutableList(listOf(prepareTaskId) + graph.passes().map(::taskId))
     val dependencies = immutableList(taskIds.zipWithNext { before, after ->
-        fun atomic(id: GPUTaskID) = clipPrefixV4?.renders?.singleOrNull { it.taskId == id }
+        fun atomic(id: GPUTaskID) = (clipPrefixV4?.renders.orEmpty() + w4eLane?.prefixRenders.orEmpty()).singleOrNull { it.taskId == id }
             ?.drawPackets?.singleOrNull()?.w4ePreparedClipPass?.atomicGroupId ?: graph.passes().singleOrNull { taskId(it) == id }?.let {
                 when (it) {
                     is PlanPass.StencilGeometryProducerV3 -> it.atomicGroup.value
@@ -173,7 +176,7 @@ internal class W5bPreparedFrameWitnessV3(
                 else -> error("Invalid destination consumer")
             }
             val blend = draw.blend as org.graphiks.kanvas.gpu.plan.BlendPlan.DestinationReadV1
-            val packet = packets.single { it.commandIdValue == draw.commandIndex && it.role != GPUDrawPacketRole.PathStencilProducer }
+            val packet = packets.single { it.commandIdValue == draw.commandIndex && !it.isW5bStencilProducerV3() }
             require(pass.source == consumerTarget && pass.destination == blend.snapshotResource &&
                 pass.destinationVersion == blend.requiredDestinationVersion &&
                 packet.blendPlan == org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.lower(blend))
@@ -203,7 +206,7 @@ internal class W5bPreparedFrameWitnessV3(
         val producer = graph.passes().getOrNull(copyIndex + 1) as? PlanPass.StencilGeometryProducerV3 ?: return false
         val cover = graph.passes().getOrNull(copyIndex + 2) as? PlanPass.StencilCover ?: return false
         return actualDependencies == dependencies && taskId(cover) == consumerTask && producer.atomicGroup == cover.atomicGroup &&
-            packet.role == GPUDrawPacketRole.PathStencilCover && packet.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 === this &&
+            packet.isW5bStencilCoverV3() && packet.w5bFinalFrameWitnessV3 === this &&
             copyAuthority(copy).consumers.single().let { it.renderTaskId == consumerTask && it.packetId == packet.packetId && it.commandId.value == packet.commandIdValue }
     }
     fun atomicCopyProducer(copyTask: GPUTaskID, consumerTask: GPUTaskID, packet: GPUDrawPacket,
@@ -220,7 +223,9 @@ internal class W5bPreparedFrameWitnessV3(
             actual.copyLayout == expected.copyLayout && actual.consumers == expected.consumers &&
             actual.sourceTaskIds == expected.sourceTaskIds
     }
-    fun colorResourceUses(pass: PlanPass.RenderPass) = buildList {
+    fun colorResourceUses(pass: PlanPass.RenderPass): List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse> {
+        w4eLane?.render(pass)?.let { return it.resourceUses }
+        return buildList {
         pass.draws().forEach { draw -> geometryLanes.filterIsInstance<W5bGeometryScratchV3.General>()
             .singleOrNull { draw.commandIndex in it.commandIds }?.let { addAll(it.geometryResourceUses(draw.commandIndex, false)) } }
         if (pass.draws().any { it.blend is org.graphiks.kanvas.gpu.plan.BlendPlan.DestinationReadV1 }) add(
@@ -235,9 +240,12 @@ internal class W5bPreparedFrameWitnessV3(
                 org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding,
                 org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false))
     }
+    }
     fun depthStencilRef(id: org.graphiks.kanvas.gpu.plan.PlanResourceId) =
         org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef(scratch.target.value.removeSuffix(".target") + ".${id.value}.depth-stencil")
-    fun stencilResourceUses(pass: PlanPass) = buildList {
+    fun stencilResourceUses(pass: PlanPass): List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse> {
+        w4eLane?.render(pass)?.let { return it.resourceUses }
+        return buildList {
         val depth = when (pass) {
             is PlanPass.StencilGeometryProducerV3 -> pass.depthStencil
             is PlanPass.StencilCover -> pass.depthStencil
@@ -257,6 +265,7 @@ internal class W5bPreparedFrameWitnessV3(
                 org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding,
                 org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false))
     }
+    }
     fun stencilLoadStore(pass: PlanPass) = org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan.WritableStencil(
         if (pass is PlanPass.StencilGeometryProducerV3)
             org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Clear else org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Load,
@@ -271,6 +280,7 @@ internal class W5bPreparedFrameWitnessV3(
                 org.graphiks.kanvas.gpu.plan.W4cPathFillPlanCompiler.W5B_CAPABILITY_ID,
                 org.graphiks.kanvas.gpu.plan.W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID,
                 org.graphiks.kanvas.gpu.plan.W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID,
+                org.graphiks.kanvas.gpu.plan.W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID,
                 org.graphiks.kanvas.gpu.plan.W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID))
         require(this.geometryLanes.isNotEmpty() && this.geometryLanes.first() === scratch &&
             this.geometryLanes.all { it.planId == graph.id.value && it.target == scratch.target && it.staging == scratch.staging &&
@@ -285,7 +295,7 @@ internal class W5bPreparedFrameWitnessV3(
     fun validates(frame: GPUFramePlan): Boolean {
         val allRenders = frame.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
         val prefix = clipPrefixV4
-        val prefixRenders = if (prefix == null) emptyList() else allRenders.take(prefix.renders.size)
+        val prefixRenders = allRenders.take(prefix?.renders?.size ?: w4eLane?.prefixRenders?.size ?: 0)
         val prepare = frame.steps.firstOrNull() as? GPUFrameStep.PrepareResourcesStep ?: return false
         if (frame.capabilitySeal !== capabilitySeal || frame.frameId != capabilitySeal.frameId ||
             frame.recordingSeals != listOf(recordingSeal) || frame.memoryBudget != memory ||
@@ -301,6 +311,8 @@ internal class W5bPreparedFrameWitnessV3(
             prefixRenders.map { it.sourceTaskIds.singleOrNull() } != prefix.renders.map { it.taskId } ||
             frame.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>().flatMap { it.requests }
                 .filter { request -> prefix.preparations.any { it.resource == request.resource } } != prefix.preparations)) return false
+        if (w4eLane?.let { lane -> !lane.frameAuthority.validatesRenderSteps(frame.frameId.value,
+                frame.capabilitySeal.sealHash, allRenders.filter { step -> step.drawPackets.any(lane::owns) }) } == true) return false
         val renders = allRenders.drop(prefixRenders.size)
         val planned = graph.passes().filter { it is PlanPass.RenderPass || it is PlanPass.StencilGeometryProducerV3 || it is PlanPass.StencilCover }
         if (renders.size != planned.size || frame.capabilitySeal.sealHash != scratch.capabilitySealHash) return false
@@ -330,7 +342,7 @@ internal class W5bPreparedFrameWitnessV3(
             is PlanPass.ReadbackPass -> actual !is GPUFrameStep.ReadbackCopyStep || actual.source != scratch.target ||
                 actual.staging != scratch.staging || actual.request != readbackRequest
             is PlanPass.ClipMaskInitialize, is PlanPass.ClipMaskProducer, is PlanPass.ClipMaskFold ->
-                prefix == null || actual !is GPUFrameStep.RenderPassStep || actual !in prefixRenders ||
+                (prefix == null && w4eLane == null) || actual !is GPUFrameStep.RenderPassStep || actual !in prefixRenders ||
                     actual.drawPackets.singleOrNull()?.w4ePreparedClipPass?.passId != expected.id.value
             else -> true
         } }) return false
@@ -342,14 +354,18 @@ internal class W5bPreparedFrameWitnessV3(
             }
             val expectedCommands = if (sealed is PlanPass.StencilGeometryProducerV3) listOf(sealed.commandIndexI32) else sealedDraws.map { it.commandIndex }
             actual.drawPackets.map { it.commandIdValue } != expectedCommands ||
-                actual.drawPackets.any { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 !== this } ||
+                actual.drawPackets.any { it.w5bFinalFrameWitnessV3 !== this } ||
                 (sealed is PlanPass.StencilGeometryProducerV3 && actual.drawPackets.single().let { packet ->
-                    packet.role != GPUDrawPacketRole.PathStencilProducer || packet.w5aSourceStageV2 != null ||
+                    !packet.isW5bStencilProducerV3() || packet.w5aSourceStageV2 != null ||
                         packet.blendPlan != org.graphiks.kanvas.gpu.renderer.recording.canonicalSolidRectSrcOverBlendPlan()
                 }) ||
                 actual.drawPackets.zip(sealedDraws).any { (packet, draw) ->
                     packet.blendPlan != org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.lower(draw.blend) ||
-                        packet.role != if (sealed is PlanPass.StencilCover) GPUDrawPacketRole.PathStencilCover else GPUDrawPacketRole.Shading
+                        !(if (packet.role == GPUDrawPacketRole.W4ePrepared) w4eLane?.owns(packet) == true &&
+                            packet.w4ePreparedPath?.phase == if (sealed is PlanPass.StencilCover)
+                                org.graphiks.kanvas.gpu.plan.PathRenderPhase.SingleSampleStencilColorCover
+                            else org.graphiks.kanvas.gpu.plan.PathRenderPhase.SingleSampleDirectColor
+                        else packet.role == if (sealed is PlanPass.StencilCover) GPUDrawPacketRole.PathStencilCover else GPUDrawPacketRole.Shading)
                 } || actual.drawPackets.any { it.resourceGeneration != packetResourceGenerations[it.packetId] || it.diagnostics.isNotEmpty() }
         }) return false
         val packets = renders.flatMap { it.drawPackets }

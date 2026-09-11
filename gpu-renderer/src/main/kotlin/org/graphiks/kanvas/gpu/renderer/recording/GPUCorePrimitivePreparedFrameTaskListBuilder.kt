@@ -1779,8 +1779,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         val graph = requireNotNull(request.w5bDestinationGraph)
         val base = request.baseTaskList.tasks.singleOrNull() as? GPUTask.Render
             ?: return refused("invalid.w5b.preplanned", "W5b packing envelope is missing.")
-        val packets = base.drawPackets.filter { it.role != GPUDrawPacketRole.PathStencilProducer }.associateBy { it.commandIdValue }
-        val producers = base.drawPackets.filter { it.role == GPUDrawPacketRole.PathStencilProducer }.associateBy { it.commandIdValue }
+        val packets = base.drawPackets.filter { !it.isW5bStencilProducerV3() }.associateBy { it.commandIdValue }
+        val producers = base.drawPackets.filter { it.isW5bStencilProducerV3() }.associateBy { it.commandIdValue }
         base.w5bInitialClearV3?.clearOnly?.let { witness ->
             if (witness.graph !== graph || graph.id != request.planId || witness.target != request.target ||
                 witness.staging != request.staging || witness.capabilitySealHash != request.baseTaskList.capabilitySeal.sealHash ||
@@ -1797,12 +1797,12 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 tasks, witness.dependencies,
                 request.baseTaskList.phaseOrder, request.memoryBudget))
         }
-        val witness = base.drawPackets.firstOrNull()?.corePrimitivePreparedAuthority?.w5bFrameWitnessV3
+        val witness = base.drawPackets.firstOrNull()?.w5bFinalFrameWitnessV3
             ?: return refused("invalid.w5b.preplanned", "W5b graph witness is missing.")
         if (witness.graph !== graph || graph.id != request.planId || graph.capabilities.deviceGeneration !=
             request.baseTaskList.capabilitySeal.deviceGeneration.value ||
             graph.peakFrameLocalBytes != request.memoryBudget.targetResidentBytes + request.memoryBudget.peakFrameTransientBytes ||
-            base.drawPackets.any { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 !== witness }) {
+            base.drawPackets.any { it.w5bFinalFrameWitnessV3 !== witness }) {
             return refused("invalid.w5b.preplanned", "W5b prepared authority contradicts its graph.")
         }
         val snapshot = GPUFrameTextureRef(request.target.value.removeSuffix(".target") + ".snapshot")
@@ -1811,7 +1811,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         fun taskId(pass: org.graphiks.kanvas.gpu.plan.PlanPass) = witness.taskId(pass)
         val renders = graph.passes().filterIsInstance<org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass>().associateWith { pass ->
             val selected = pass.draws().map { packets.getValue(it.commandIndex) }
-            GPUTask.Render(taskId(pass), base.recordingId, GPUTaskPhase.Render, request.target,
+            witness.w4eLane?.render(pass) ?: GPUTask.Render(taskId(pass), base.recordingId, GPUTaskPhase.Render, request.target,
                 GPULoadStorePlan(if (pass.load == org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan.ClearTransparent) "clear" else "load", GPUStorePlan.Store),
                 GPUSamplePlan.SingleSampleFrame,
                 provisionalSegmentKey = GPUProvisionalRenderSegmentKey("w5b.${graph.id.value}.${pass.id.value}"),
@@ -1831,7 +1831,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                     val selected = if (producer) producers.getValue(command) else packets.getValue(command)
                     val load = if (producer) (pass as org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3).load
                         else (pass as org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover).load
-                    GPUTask.Render(taskId(pass), base.recordingId, GPUTaskPhase.Render, request.target,
+                    witness.w4eLane?.render(pass) ?: GPUTask.Render(taskId(pass), base.recordingId, GPUTaskPhase.Render, request.target,
                         GPULoadStorePlan(if (load == org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan.ClearTransparent) "clear" else "load", GPUStorePlan.Store),
                         GPUSamplePlan.SingleSampleFrame, witness.stencilResourceUses(pass),
                         provisionalSegmentKey = GPUProvisionalRenderSegmentKey("w5b.${graph.id.value}.${pass.id.value}"),
@@ -1855,7 +1855,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 is org.graphiks.kanvas.gpu.plan.PlanPass.ClipMaskInitialize,
                 is org.graphiks.kanvas.gpu.plan.PlanPass.ClipMaskProducer,
                 is org.graphiks.kanvas.gpu.plan.PlanPass.ClipMaskFold ->
-                    requireNotNull(witness.clipPrefixV4).renders.single { it.drawPackets.single().w4ePreparedClipPass?.passId == pass.id.value }
+                    requireNotNull(witness.prefixRender(pass))
                 else -> return refused("invalid.w5b.preplanned", "W5b graph contains an unsupported pass.")
             }
         }

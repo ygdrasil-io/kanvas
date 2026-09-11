@@ -177,6 +177,7 @@ public class W4eClipPlanCompiler(
         val actuallyEmptyInverseCommands = mutableSetOf<Int>()
         var frameUsage = ClipWorkUsageI64()
         var ownsW4eFeature = false
+        val finalBlendsByCommandI32 = linkedMapOf<Int, BlendPlan>()
 
         scene.withIndex().forEach { (index, command) ->
             when (command) {
@@ -223,7 +224,19 @@ public class W4eClipPlanCompiler(
                             }
                         }
                     }
-                    normalized += SceneCommand.Draw(command.node.normalizedForW4dConstructionSeam(domain, inverse))
+                    val finalBlend = FinalBlendPlanner.plan(command.node.blend, CoveragePlan.FullOrScissor,
+                        SamplePlan.SingleSample, PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1(),
+                        BlendCoverageApplicationV1.SourceMultiplication,
+                        if (operations != null || inverse != null) BlendCoverageEncodingV1.ScalarCoverageInShader else BlendCoverageEncodingV1.FullOrScissor)
+                    val sealed = when (finalBlend) {
+                        is BlendPlan.FixedFunctionV1 -> if (finalBlend.mode == org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER)
+                            BlendPlan.SrcOver else finalBlend
+                        is BlendPlan.DestinationReadV1 -> finalBlend
+                        else -> finalBlend
+                    }
+                    if (sealed != null) finalBlendsByCommandI32[index] = sealed
+                    val construction = command.node.normalizedForW4dConstructionSeam(domain, inverse)
+                    normalized += SceneCommand.Draw(if (sealed == null) construction else construction.copy(blend = org.graphiks.kanvas.render.ir.BlendNode.SrcOver))
                     // The candidate keeps the prepared stack map keyed by this exact canonical stack identity.
                     prepared?.consumerIndexes?.add(index)
                 }
@@ -232,6 +245,9 @@ public class W4eClipPlanCompiler(
         }
         if (!ownsW4eFeature) return gap("W4e requires an explicitly captured complex clip or inverse path draw")
 
+        if (finalBlendsByCommandI32.values.any { it != BlendPlan.SrcOver } &&
+            drawCommands.any { it.node.geometry !is GeometryNode.Path })
+            return gap("W5b W4e color ownership retains actual Path geometry")
         val normalizedScene = SceneSnapshot.of(scene.extent, scene.colorSpace, normalized)
         val forceAaFrame = preparedByKey.values.any { it.requiresAaFrame }
         val constructionSeam = if (forceAaFrame) w4dAaSeam else w4dHardSeam
@@ -247,7 +263,7 @@ public class W4eClipPlanCompiler(
         }
         return GpuPlanSelection.Candidate(Candidate(
             this, scene.canonicalId, target, constructionSeam, base, preparedByKey.values.toList(), inverseByCommand,
-            inverseDomainSourcesByCommand, actuallyEmptyInverseCommands,
+            inverseDomainSourcesByCommand, actuallyEmptyInverseCommands, finalBlendsByCommandI32,
         ))
     }
 
@@ -289,7 +305,9 @@ public class W4eClipPlanCompiler(
         }
         return try {
             val graph = insertClips(base, selected, capabilities, budget, requiresAa, framePreview)
-            RenderPlanResult.Ready(graph)
+            val successor = selected.finalBlendsByCommandI32.values.any { it != BlendPlan.SrcOver }
+            if (successor && requiresAa) return promoted("W5b final blending requires the admitted single-sample W4e topology")
+            RenderPlanResult.Ready(if (successor) issueW5bW4ePathGraph(graph, selected.finalBlendsByCommandI32) else graph)
         } catch (_: W4eNativePayloadLimit) {
             resource(
                 W4ePlanDiagnostics.BudgetFrameLocalExceeded,
@@ -1178,7 +1196,9 @@ public class W4eClipPlanCompiler(
         inverseByCommand: Map<Int, InversePathGeometryF32>,
         inverseDomainSourcesByCommand: Map<Int, PathDrawGeometry.InverseDomainSource>,
         actuallyEmptyInverseCommands: Set<Int>,
+        finalBlendsByCommandI32: Map<Int, BlendPlan>,
     ) : GpuPlanCandidate {
+        val finalBlendsByCommandI32 = Collections.unmodifiableMap(finalBlendsByCommandI32.toMap())
         override val capabilityId: String = if (base.capabilityId == W4dGeneralPathPlanCompiler.W5A_AA_CAPABILITY_ID) W5A_AA_CAPABILITY_ID else W5A_HARD_CAPABILITY_ID
         val stacks: List<PreparedStack> = Collections.unmodifiableList(stacks)
         val inverseByCommand: Map<Int, InversePathGeometryF32> = Collections.unmodifiableMap(inverseByCommand.toMap())
@@ -1194,6 +1214,7 @@ public class W4eClipPlanCompiler(
         if (this) planResourceId(role, ordinal) else null
 
     public companion object {
+        public const val W5B_HARD_CAPABILITY_ID: String = "w5b-w4e-path-hard-final-blend-v3"
         public const val HARD_CAPABILITY_ID: String = "solid-path-complex-clip-hard-1x-src-over-srgb-v1"
         public const val AA_CAPABILITY_ID: String = "solid-path-complex-clip-mixed-aa4-src-over-srgb-v1"
         /** W5a material-bearing successor to the historical [HARD_CAPABILITY_ID] contract. */
