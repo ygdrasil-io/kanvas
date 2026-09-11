@@ -69,7 +69,7 @@ internal data class W5aPreparedFrameMaterialRegistry(
                     ?: return@forEachIndexed
                 val planned = (if (operation is DisplayOp.DrawPoint || operation is DisplayOp.DrawPoints)
                     org.graphiks.kanvas.gpu.plan.W5bCorePrimitiveGraph.normalizeSource(draw.node, targetClamp)
-                    else EffectiveMaterialPlanner.plan(draw.node, targetClamp))
+                    else EffectiveMaterialPlanner.planW5b(draw.node, targetClamp))
                     as? EffectiveMaterialPlanner.Result.Ready ?: return@forEachIndexed
                 plannedByOperationIndex[operationIndex] = planned
             }
@@ -120,11 +120,11 @@ internal data class W5aPreparedFrameMaterialRegistry(
         }
 
         private fun DisplayOp.isW5aCoreMaterialCandidate(): Boolean = when (this) {
-            is DisplayOp.DrawRect -> !paint.isStroke() && paint.blendMode in setOf(BlendMode.SRC_OVER, BlendMode.SRC, BlendMode.PLUS) &&
+            is DisplayOp.DrawRect -> !paint.isStroke() &&
                 paint.shader.isW5aSolidOpacity()
-            is DisplayOp.DrawRRect -> !paint.isStroke() && paint.blendMode == BlendMode.SRC_OVER &&
+            is DisplayOp.DrawRRect -> !paint.isStroke() &&
                 paint.shader.isW5aSolidOpacity()
-            is DisplayOp.DrawPath -> paint.blendMode == BlendMode.SRC_OVER && paint.shader.isW5aSolidOpacity()
+            is DisplayOp.DrawPath -> paint.shader.isW5aSolidOpacity()
             is DisplayOp.DrawPoint ->
                 paint.blendMode in POINT_MATERIAL_BLENDS && paint.strokeCap != StrokeCap.ROUND &&
                     paint.shader.isW5aSolidOpacity()

@@ -369,6 +369,25 @@ internal class GPUCorePrimitiveNativeScopeGeometryArena private constructor(
     }
 
     companion object {
+        /** Shared sizing walk for preflight and packing; never reads or allocates native handles. */
+        fun countsI64(routes: GPUCorePrimitiveNativeScopeRouteSeal.Routes): Pair<Long, Long> {
+            var verticesI64 = 0L
+            var indicesI64 = 0L
+            fun add(vertices: Int, indices: Int) {
+                verticesI64 = Math.addExact(verticesI64, vertices.toLong())
+                indicesI64 = Math.addExact(indicesI64, indices.toLong())
+            }
+            routes.orderedUnits.forEach { unit -> when (unit) {
+                is GPUCorePrimitiveNativeScopeRouteUnit.Direct -> add(unit.route.vertexCount, unit.route.indexCount)
+                is GPUCorePrimitiveNativeScopeRouteUnit.PathPair -> {
+                    add(unit.pair.producer.vertexCount, unit.pair.producer.indexCount)
+                    add(unit.pair.cover.vertexCount, unit.pair.cover.indexCount)
+                }
+                is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer -> add(unit.geometry.vertexCount, unit.geometry.indexCount)
+                is GPUCorePrimitiveNativeScopeRouteUnit.PathCover -> add(unit.geometry.vertexCount, unit.geometry.indexCount)
+            } }
+            return verticesI64 to indicesI64
+        }
         fun pack(routes: GPUCorePrimitiveNativeScopeRouteSeal.Routes): GPUCorePrimitiveNativeScopeGeometryArena {
             val geometryCount = routes.orderedUnits.sumOf { unit ->
                 when (unit) {
@@ -378,30 +397,9 @@ internal class GPUCorePrimitiveNativeScopeGeometryArena private constructor(
                     is GPUCorePrimitiveNativeScopeRouteUnit.PathCover -> 1
                 }
             }
-            var totalVertexCount = 0
-            var totalIndexCount = 0
-            routes.orderedUnits.forEach { unit ->
-                when (unit) {
-                    is GPUCorePrimitiveNativeScopeRouteUnit.Direct -> {
-                        totalVertexCount = Math.addExact(totalVertexCount, unit.route.vertexCount)
-                        totalIndexCount = Math.addExact(totalIndexCount, unit.route.indexCount)
-                    }
-                    is GPUCorePrimitiveNativeScopeRouteUnit.PathPair -> {
-                        totalVertexCount = Math.addExact(totalVertexCount, unit.pair.producer.vertexCount)
-                        totalVertexCount = Math.addExact(totalVertexCount, unit.pair.cover.vertexCount)
-                        totalIndexCount = Math.addExact(totalIndexCount, unit.pair.producer.indexCount)
-                        totalIndexCount = Math.addExact(totalIndexCount, unit.pair.cover.indexCount)
-                    }
-                    is GPUCorePrimitiveNativeScopeRouteUnit.PathProducer -> {
-                        totalVertexCount = Math.addExact(totalVertexCount, unit.geometry.vertexCount)
-                        totalIndexCount = Math.addExact(totalIndexCount, unit.geometry.indexCount)
-                    }
-                    is GPUCorePrimitiveNativeScopeRouteUnit.PathCover -> {
-                        totalVertexCount = Math.addExact(totalVertexCount, unit.geometry.vertexCount)
-                        totalIndexCount = Math.addExact(totalIndexCount, unit.geometry.indexCount)
-                    }
-                }
-            }
+            val counts = countsI64(routes)
+            val totalVertexCount = Math.toIntExact(counts.first)
+            val totalIndexCount = Math.toIntExact(counts.second)
             val vertices = FloatArray(Math.multiplyExact(totalVertexCount, 2))
             val indices = IntArray(totalIndexCount)
             val slices = ArrayList<GPUCorePrimitiveNativeScopeGeometrySlice>(geometryCount)

@@ -768,6 +768,11 @@ class GPUCorePrimitiveRectGeometryAuthority private constructor(
     private val transformSkewXBits: Int,
     private val transformSkewYBits: Int,
 ) {
+    internal fun isIdentityFullTarget(bounds: GPUPixelBounds): Boolean =
+        transformType == GPUCorePrimitiveRectTransformType.Identity && exactTransformOrNull() != null &&
+            rectLeftBits == bounds.left.toFloat().toRawBits() && rectTopBits == bounds.top.toFloat().toRawBits() &&
+            rectRightBits == bounds.right.toFloat().toRawBits() && rectBottomBits == bounds.bottom.toFloat().toRawBits()
+
     init {
         require(issuerProof === GPUCorePrimitiveRectGeometryAuthorityIssuerProof) {
             "FillRect geometry authority requires the gpu-renderer issuer proof"
@@ -1647,6 +1652,29 @@ sealed interface GPUDrawSemanticPayload {
                 drrectInnerGeometryAuthority = drrectInnerGeometryAuthority,
             )
         }
+
+        /** Rebase only the selected final blend after the enclosing timeline assigns its read. */
+        internal fun withW5bBlendIdentity(identity: String): CorePrimitive = CorePrimitive(
+            payloadRef = payloadRef,
+            sourceFamily = sourceFamily,
+            geometry = geometry,
+            premultipliedRgba = premultipliedRgba,
+            material = material,
+            targetBounds = targetBounds,
+            scissorBounds = scissorBounds,
+            clipCoveragePlan = clipCoveragePlan,
+            clipExecutionPlanIdentity = clipExecutionPlanIdentity,
+            blendPlanIdentity = identity,
+            frameProvenance = frameProvenance,
+            coverageMode = coverageMode,
+            analysisRecordId = analysisRecordId,
+            analysisCommandFamily = analysisCommandFamily,
+            rectRouteAuthority = rectRouteAuthority,
+            rectGeometryAuthority = rectGeometryAuthority,
+            rrectGeometryAuthority = rrectGeometryAuthority,
+            drrectOuterGeometryAuthority = drrectOuterGeometryAuthority,
+            drrectInnerGeometryAuthority = drrectInnerGeometryAuthority,
+        )
     }
 
     /** Exact immutable uniform bytes for one shader from the closed prepared program registry. */

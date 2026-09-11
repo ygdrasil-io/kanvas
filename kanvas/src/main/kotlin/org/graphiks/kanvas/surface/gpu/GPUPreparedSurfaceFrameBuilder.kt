@@ -265,6 +265,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                                 interpretation = request.candidate.color.interpretation,
                                 textInventory = textInventory,
                                 verticesInventory = verticesInventory,
+                                corePlansByOperationIndex = coreMaterialCandidates,
                             ),
                         )
                     }
@@ -446,6 +447,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     targetBounds = request.targetBounds,
                     semanticsByCommandId = semantics,
                     w5bPointBlends = corePlansByCommandId.mapValues { it.value.blend },
+                    synthesizedSceneClearCommandIdI32 = 0.takeIf { mapping.hasSynthesizedSceneClear },
                     w5bPointClips = pointClips,
                     w5bPointCaptures = recording.pointAuthorities.mapNotNull { (commandId, authority) ->
                         val original = admittedSemantics[commandId] as? GPUDrawSemanticPayload.CorePrimitive
@@ -469,6 +471,9 @@ internal object GPUPreparedSurfaceFrameBuilder {
                             org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2.issue(
                                 materials.table, refs, refs.keys.associateWith { commandId ->
                                     corePlansByCommandId.getValue(commandId).let { it.table to it.root }
+                                },
+                                finalBlendsByCommandIdI32 = refs.keys.associateWith { commandId ->
+                                    corePlansByCommandId.getValue(commandId).blend
                                 },
                             ),
                         ) { "invalid.material.w5a_core_authority" }
@@ -582,6 +587,7 @@ private fun List<DisplayOp>.requiresDstReadSceneClear(
     interpretation: GPUColorInterpretation,
     textInventory: PreparedTextFrameInventory?,
     verticesInventory: PreparedVerticesFrameInventory,
+    corePlansByOperationIndex: Map<Int, org.graphiks.kanvas.gpu.plan.EffectiveMaterialPlanner.Result.Ready>,
 ): Boolean {
     // EncodedPremulSrgb targets refuse translucent solids (unsupported.surface.prepared.
     // encoded-premul-srgb.translucent-solid); those frames keep today's fused-clear behavior.
@@ -599,6 +605,7 @@ private fun List<DisplayOp>.requiresDstReadSceneClear(
         visual.isVisualDraw() &&
             index !in textInventory?.elidedTextOperationIndices.orEmpty() &&
             index !in verticesInventory.elidedVerticesOperationIndices
+            && corePlansByOperationIndex[index]?.blend != BlendPlan.NoOpV1
     } ?: return false
     return when (firstVisual.value) {
         is DisplayOp.DrawText -> {
@@ -613,7 +620,7 @@ private fun List<DisplayOp>.requiresDstReadSceneClear(
             draw.materialPlan?.let { it.blend is BlendPlan.DestinationReadV1 }
                 ?: (draw.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead)
         }
-        else -> false
+        else -> corePlansByOperationIndex[firstVisual.index]?.blend is BlendPlan.DestinationReadV1
     }
 }
 

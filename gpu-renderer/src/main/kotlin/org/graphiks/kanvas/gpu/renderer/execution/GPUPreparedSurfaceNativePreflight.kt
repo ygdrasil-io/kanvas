@@ -167,6 +167,9 @@ internal object GPUPreparedVerticesPreflightRefusalCodes {
     const val TARGET = "invalid.prepared-surface.vertices-target"
 }
 
+private fun GPUDrawPacket.preparedDestinationVersionV1(): Long =
+    w5bMixedFrameWitnessV1?.destinationVersion(this) ?: originalPaintOrder.toLong()
+
 private data class GPUPreparedSurfaceArtifactByteEvidence(
     val tightRgba8Bytes: ByteArray,
     val contentHash: String,
@@ -666,7 +669,7 @@ internal class GPUPreparedTextDestinationReadPlan(
                 exactRenderScopeKey.sourceStepIndex == renderSourceStepIndex &&
                 exactRenderScopeKey.operationKind == GPUEncoderOperationKind.Render &&
                 sealed.snapshotResource?.value == copyStep.snapshot.value &&
-                sealed.requiredDestinationVersion.valueI64 == packet.originalPaintOrder.toLong() &&
+                sealed.requiredDestinationVersion.valueI64 == packet.preparedDestinationVersionV1() &&
                 semantic.w5bFinalBlendPlan == sealed &&
                 semantic.payloadRef.commandIdValue == packet.commandIdValue &&
                 binding.packetId == packet.packetId &&
@@ -707,7 +710,7 @@ internal class GPUPreparedVerticesDestinationReadPlan(
                 exactRenderScopeKey.operationKind == GPUEncoderOperationKind.Render &&
                 sealed.snapshotResource?.value == copyStep.snapshot.value &&
                 sealed.requiredDestinationVersion.valueI64 ==
-                packet.originalPaintOrder.toLong() &&
+                packet.preparedDestinationVersionV1() &&
                 semantic.w5bFinalBlendPlan == sealed &&
                 semantic.payloadRef.commandIdValue == packet.commandIdValue,
         ) {
@@ -736,6 +739,7 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
     compositeRuns: List<GPUPreparedSurfaceLayerCompositeRunPlan>,
     exactScopeKeys: List<GPUPreparedNativeScopeKey>,
     val generationSeal: GPUPreparedGenerationSeal,
+    val mixedCoreProjection: org.graphiks.kanvas.gpu.renderer.passes.W5bMixedPreparedFrameWitnessV1.NativeProjection? = null,
 ) {
     val orderedRuns: List<GPUPreparedSurfaceNativeRunPlan> = immutableList(orderedRuns)
     val imageFrames: List<GPUPreparedSurfaceImageFramePlan> = immutableList(imageFrames)
@@ -780,6 +784,7 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
             }
         }
         val expectedScopeKeysWithSharedUploads = buildList {
+            mixedCoreProjection?.let { addAll(it.copyScopeKeys) }
             addAll(this@GPUPreparedSurfaceNativePreflightPlan.imageFrames.map { it.uploadScopeKey })
             this@GPUPreparedSurfaceNativePreflightPlan.orderedRuns.forEach { run ->
                 when (run) {
@@ -861,7 +866,8 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
             .map { run -> run.plan.routeSeal as GPUCorePrimitiveNativeScopeRouteSeal.Routes }
         if (coreRoutes.isNotEmpty()) {
             val commandIds = coreRoutes.flatMap { route -> route.commandIds }
-            require(commandIds.distinct().size == commandIds.size) {
+            require(if (mixedCoreProjection == null) commandIds.distinct().size == commandIds.size else
+                coreRoutes.flatMap { it.flattenedPacketIds } == mixedCoreProjection.packetIds) {
                 "Prepared CorePrimitive runs must retain unique sealed command authorities"
             }
         }
@@ -917,6 +923,10 @@ internal class GPUPreparedSurfaceNativePreflight(
             GPUPreparedColorGlyphCanonicalPlanAuthentication,
     ): GPUPreparedSurfaceNativePreflightResult.Refused? {
         val allRenders = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        allRenders.flatMap { it.drawPackets }.mapNotNull { it.w5bMixedFrameWitnessV1 }.firstOrNull()?.let { witness ->
+            if (!witness.validates(framePlan)) return refused("invalid.prepared-surface.w5b-mixed-frame",
+                "Mixed W5b requires its complete immutable frame before native projection.")
+        }
         val renders = allRenders.filterNot { render ->
             render.drawPackets.isNotEmpty() &&
                 render.drawPackets.all { packet ->
@@ -1555,7 +1565,7 @@ internal class GPUPreparedSurfaceNativePreflight(
                 !formulaKnown ||
                 sealed == null ||
                 sealed.snapshotResource?.value != copy.snapshot.value ||
-                sealed.requiredDestinationVersion.valueI64 != packet.originalPaintOrder.toLong() ||
+                sealed.requiredDestinationVersion.valueI64 != packet.preparedDestinationVersionV1() ||
                 semantic.w5bFinalBlendPlan != sealed ||
                 semantic.finalBlendIdentity != blend.canonicalIdentity() ||
                 render.resourceUses.none { use ->
@@ -1748,7 +1758,7 @@ internal class GPUPreparedSurfaceNativePreflight(
                 !formulaKnown ||
                 sealed == null ||
                 sealed.snapshotResource?.value != copy.snapshot.value ||
-                sealed.requiredDestinationVersion.valueI64 != packet.originalPaintOrder.toLong() ||
+                sealed.requiredDestinationVersion.valueI64 != packet.preparedDestinationVersionV1() ||
                 semantic.w5bFinalBlendPlan != sealed ||
                 semantic.blendPlanIdentity != blend.canonicalIdentity() ||
                 binding.compositeProgram.destinationBlend?.let { programBlend ->
@@ -2396,7 +2406,10 @@ internal class GPUPreparedSurfaceNativePreflight(
                 }
             targetPreparations.values
                 .filter { request ->
-                    request.role == GPUFrameResourceRole.DestinationSnapshot
+                    request.role == GPUFrameResourceRole.DestinationSnapshot &&
+                        framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+                            .mapNotNull { it.w5bMixedFrameWitnessV1 }.firstOrNull()?.takeIf { it.validates(framePlan) }
+                            ?.coreCopies?.none { it.snapshot == request.resource } != false
                 }
                 .forEach { request ->
                     val descriptor = when (val value = request.descriptor) {
@@ -3228,6 +3241,10 @@ internal class GPUPreparedSurfaceNativePreflight(
     private fun validatePreparedSurfaceDependencies(
         framePlan: GPUFramePlan,
     ): GPUPreparedSurfaceNativePreflightResult.Refused? {
+        framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+            .mapNotNull { it.w5bMixedFrameWitnessV1 }.firstOrNull()?.takeIf { it.coreCopies.isNotEmpty() && it.validates(framePlan) }?.let { witness ->
+                return validatePreparedSurfaceDependencies(witness.preparedDependencyProjection(framePlan))
+            }
         val prepareTaskId = framePlan.steps
             .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
             .singleOrNull()
@@ -4541,6 +4558,12 @@ internal class GPUPreparedSurfaceNativePreflight(
                     compositeRuns = compositeRuns,
                     exactScopeKeys = exactScopeKeys,
                     generationSeal = generationSeal,
+                    mixedCoreProjection = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+                        .flatMap { it.drawPackets }.mapNotNull { it.w5bMixedFrameWitnessV1 }.firstOrNull()?.let { witness ->
+                            org.graphiks.kanvas.gpu.renderer.passes.W5bMixedPreparedFrameWitnessV1.NativeProjection.issue(
+                                witness, framePlan, exactScopeKeys,
+                                orderedRuns.filterIsInstance<GPUPreparedSurfaceNativeRunPlan.Core>().map { it.plan })
+                        },
                 ),
             )
         } catch (_: IllegalArgumentException) {

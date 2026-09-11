@@ -16,6 +16,25 @@ import org.graphiks.math.color.ColorF32
 internal object W5bBlendCpuOracle {
     data class Draw(val color: ColorARGB, val opacityF32: Float, val mode: BlendMode,
         val preparation: List<Draw> = emptyList())
+
+    /** Each step consumes the preceding quantized attachment, including its affine correlations. */
+    fun mixedPixel(draws: List<Pair<Draw, Float>>): WgslFloatEnvelopeV1Oracle.DrawResult {
+        var result = W5aSolidOpacityCpuOracle.draw(ColorARGB.Transparent, 1f)
+        for ((draw, coverageF32) in draws) {
+            if (draw.mode == BlendMode.DST || coverageF32 == 0f) continue
+            val attachment = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(result))
+            val source = table(draw.color, draw.opacityF32)
+            result = when (draw.mode) {
+                BlendMode.SRC_OVER -> WgslFloatEnvelopeV1Oracle.draw(source, MaterialPlanRef(1), attachment)
+                BlendMode.SRC_IN -> WgslFloatEnvelopeV1Oracle.drawSrcIn(source, MaterialPlanRef(1), attachment)
+                BlendMode.DIFFERENCE -> WgslFloatEnvelopeV1Oracle.drawDestination(
+                    source, MaterialPlanRef(1), attachment, draw.mode, coverageF32,
+                )
+                else -> error("Unsupported mixed fixture mode: ${draw.mode}")
+            }
+        }
+        return result
+    }
     private data class PointKey(val source: Draw, val destination: Draw, val coverageF32: Float, val scalarMask: Boolean)
     private val pointResults = mutableMapOf<PointKey, WgslFloatEnvelopeV1Oracle.DrawResult>()
     private val backgrounds = mutableMapOf<Draw, WgslFloatEnvelopeV1Oracle.DrawResult>()

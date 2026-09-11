@@ -249,6 +249,23 @@ internal class GPUFramePreflighter(
         value == resourceId || value.endsWith(".$resourceId")
 
     fun preflight(framePlan: GPUFramePlan): GPUFramePreflightResult {
+        val mixedW5b = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+            .mapNotNull { it.w5bMixedFrameWitnessV1 }.firstOrNull()
+        if (mixedW5b != null) {
+            val limits = capabilities.limits
+            val destination = mixedW5b.timeline.draws.any { it.blend is org.graphiks.kanvas.gpu.plan.BlendPlan.DestinationReadV1 }
+            if (!mixedW5b.validates(framePlan) || limits == null ||
+                limits.maxBindGroupsI32?.let { it >= if (destination) 3 else 2 } != true ||
+                limits.maxBindingsPerBindGroupI32?.let { it >= 2 } != true ||
+                limits.maxUniformBuffersPerShaderStageI32?.let { it >= 2 } != true ||
+                (destination && (limits.maxSampledTexturesPerShaderStageI32?.let { it >= 1 } != true ||
+                    limits.maxSamplersPerShaderStageI32?.let { it >= 1 } != true)) ||
+                limits.maxUniformBufferBindingSizeBytesI64 == null ||
+                framePlan.w5aMaterialAllocationsV2().any { it.bytes > limits.maxUniformBufferBindingSizeBytesI64 }) {
+                return GPUFramePreflightResult.Refused(diagnostic("unsupported.preflight.w5b-mixed-abi",
+                    "Mixed W5b frame/source/destination authority is unavailable or stale."))
+            }
+        }
         val w5b = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
             .mapNotNull { it.w5bFinalFrameWitnessV3 }.firstOrNull()
         if (w5b != null) {
@@ -607,6 +624,21 @@ internal class GPUFramePreflighter(
             ?: pureValidation.corePrimitivePathStencilRoutes
         val corePrimitiveNativeScopeRoutes = plannedPathValidation?.unifiedRouteSeal
             ?: pureValidation.corePrimitiveNativeScopeRoutes
+        if (mixedW5b != null) {
+            try {
+                mixedW5b.sealNativeInventory(framePlan, corePrimitiveNativeScopeRoutes, requireNotNull(capabilities.limits))
+            } catch (_: ArithmeticException) {
+                return GPUFramePreflightResult.Refused(diagnostic("resource-limit.w5b.mixed-physical-overflow",
+                    "Mixed W5b physical sizing exceeds checked I64 bounds."))
+            } catch (failure: org.graphiks.kanvas.gpu.renderer.passes.W5bMixedPreparedFrameWitnessV1.Refusal) {
+                return GPUFramePreflightResult.Refused(diagnostic(failure.reason.code,
+                    "Mixed W5b native resource admission refused."))
+            } catch (_: IllegalArgumentException) {
+                return GPUFramePreflightResult.Refused(diagnostic(
+                    "invalid.preflight.w5b-mixed-inventory",
+                    "Mixed W5b native resource inventory does not fit its sealed frame and observed limits."))
+            }
+        }
         val corePrimitiveClipStencilPreparedRoutes =
             pureValidation.corePrimitiveClipStencilPreparedRoutes
         val corePrimitiveCoverageMaskPreparedRoutes =
@@ -3413,6 +3445,62 @@ internal class GPUFramePreflighter(
         val unifiedRouteSeal: GPUCorePrimitiveNativeScopeFrameRouteSeal,
     )
 
+    /** Frame facts only; neither projection can authorize execution or replace geometry. */
+    private class MixedCoreProjection private constructor(
+        val frame: GPUFramePlan,
+        private val packets: List<GPUDrawPacket>,
+    ) {
+        private val contributions = linkedMapOf<GPUFrameResourceRef, MutableList<Long>>()
+        private val nonemptyProjectionCount = packets.map { it.role != GPUDrawPacketRole.Shading }.distinct().size
+        fun selects(render: GPUFrameStep.RenderPassStep, path: Boolean): Boolean {
+            val core = render.drawPackets.filter { it.semanticPayload is GPUDrawSemanticPayload.CorePrimitive }
+            if (core.isEmpty()) return false
+            val roles = core.map { it.role != GPUDrawPacketRole.Shading }.distinct()
+            require(roles.size == 1 && core.size == render.drawPackets.size)
+            return roles.single() == path
+        }
+        fun ownsRender(render: GPUFrameStep.RenderPassStep): Boolean =
+            render.drawPackets.isNotEmpty() && render.drawPackets.all { packet -> packets.any { it === packet } }
+        fun sharedBytes(resource: GPUFrameResourceRef, contributionI64: Long): Long {
+            require(contributionI64 > 0L)
+            contributions.getOrPut(resource) { mutableListOf() } += contributionI64
+            return frame.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>().single().requests
+                .single { it.resource == resource }.byteSize
+        }
+        fun complete(): Boolean = contributions.isNotEmpty() && contributions.all { (resource, values) ->
+            values.size == nonemptyProjectionCount && values.fold(0L, Math::addExact) ==
+                frame.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>().single().requests
+                    .single { it.resource == resource }.byteSize
+        }
+        private fun uniformPackets(seal: GPUCorePrimitiveUniformSlabSeal): List<GPUDrawPacket> = packets
+            .filter { it.corePrimitivePreparedAuthority?.uniformSlabSeal === seal && it.role != GPUDrawPacketRole.PathStencilCover }
+        fun fullUniform(seal: GPUCorePrimitiveUniformSlabSeal): Boolean {
+            val owners = uniformPackets(seal)
+            return seal.commandIds == owners.map { it.commandIdValue } && seal.drawCount == owners.size &&
+                seal.plan.slots.size == owners.size && owners.withIndex().all { (index, packet) ->
+                    val bytes = (packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive).payloadRef.uniformBlock?.bytes
+                    bytes != null && seal.plan.slots[index].slotLabel == "draw-${packet.commandIdValue}" &&
+                        seal.hasExactPayload(index, packet.commandIdValue, bytes)
+                }
+        }
+        fun uniformSlot(packet: GPUDrawPacket): Int = requireNotNull(packet.corePrimitivePreparedAuthority?.uniformSlabSeal)
+            .commandIds.indexOf(packet.commandIdValue).also { require(it >= 0) }
+        companion object {
+            fun from(frame: GPUFramePlan, witness: org.graphiks.kanvas.gpu.renderer.passes.W5bMixedPreparedFrameWitnessV1): MixedCoreProjection {
+                require(witness.validates(frame))
+                val packets = frame.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+                    .filter { it.semanticPayload is GPUDrawSemanticPayload.CorePrimitive }
+                require(packets.all { it.role in setOf(GPUDrawPacketRole.Shading, GPUDrawPacketRole.PathStencilProducer,
+                    GPUDrawPacketRole.PathStencilCover) })
+                return MixedCoreProjection(frame, packets).also { projection ->
+                    val renders = frame.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+                    val projected = listOf(false, true).flatMap { path -> renders.filter { projection.selects(it, path) }.flatMap { it.drawPackets } }
+                    require(projected.size == packets.size && projected.toSet() == packets.toSet())
+                }
+            }
+        }
+    }
+
     private fun classifyCorePrimitiveDirectNativeRoute(
         semantic: GPUDrawSemanticPayload.CorePrimitive,
         clipAuthority: GPUCorePrimitiveDirectClipAuthority,
@@ -3433,17 +3521,34 @@ internal class GPUFramePreflighter(
     private fun validateCorePrimitiveGeometryResources(
         framePlan: GPUFramePlan,
         strictNativeRoute: Boolean,
+        projection: MixedCoreProjection? = null,
     ): CorePrimitiveGeometryValidation {
+        val mixedWitness = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+            .mapNotNull { it.w5bMixedFrameWitnessV1 }.firstOrNull()
+        if (projection == null && mixedWitness != null && framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+                .flatMap { it.drawPackets }.any { it.role == GPUDrawPacketRole.PathStencilProducer }) {
+            val exact = MixedCoreProjection.from(framePlan, mixedWitness)
+            val path = validateCorePrimitivePathGeometryResources(framePlan, exact)
+            if (path.diagnostic != null) return path
+            val direct = validateCorePrimitiveGeometryResources(framePlan, strictNativeRoute, exact)
+            if (direct.diagnostic != null) return direct
+            if (!exact.complete()) return CorePrimitiveGeometryValidation(
+                diagnostic("invalid.preflight.w5b-mixed-shared-slabs", "Native projections do not exhaust the original shared slabs."),
+                GPUCorePrimitiveDirectNativeFrameRouteSeal.Empty, GPUCorePrimitivePathStencilNativeFrameRouteSeal.Empty,
+                GPUCorePrimitiveNativeScopeFrameRouteSeal.Empty)
+            return CorePrimitiveGeometryValidation(null, path.directRouteSeal.appended(direct.directRouteSeal),
+                path.pathRouteSeal.appended(direct.pathRouteSeal), path.unifiedRouteSeal.appended(direct.unifiedRouteSeal))
+        }
         val hasPathPackets = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
             .any { packet ->
                 packet.role == GPUDrawPacketRole.PathStencilProducer ||
                     packet.role == GPUDrawPacketRole.PathStencilCover
             }
-        if (hasPathPackets) {
+        if (hasPathPackets && projection == null) {
             return validateCorePrimitivePathGeometryResources(framePlan)
         }
-        val direct = validateCorePrimitiveDirectGeometryResources(framePlan, strictNativeRoute)
+        val direct = validateCorePrimitiveDirectGeometryResources(framePlan, strictNativeRoute, projection)
         if (direct.diagnostic != null) {
             return CorePrimitiveGeometryValidation(
                 direct.diagnostic,
@@ -3458,6 +3563,7 @@ internal class GPUFramePreflighter(
             >()
         framePlan.steps.forEachIndexed { sourceStepIndex, step ->
             val render = step as? GPUFrameStep.RenderPassStep ?: return@forEachIndexed
+            if (projection != null && !projection.selects(render, false)) return@forEachIndexed
             val corePackets = render.drawPackets.filter { it.semanticPayload is GPUDrawSemanticPayload.CorePrimitive }
             if (corePackets.isEmpty()) return@forEachIndexed
             val units = corePackets.mapNotNull { packet ->
@@ -4057,6 +4163,7 @@ internal class GPUFramePreflighter(
 
     private fun validateCorePrimitivePathGeometryResources(
         framePlan: GPUFramePlan,
+        projection: MixedCoreProjection? = null,
     ): CorePrimitiveGeometryValidation {
         fun refused(message: String): CorePrimitiveGeometryValidation = CorePrimitiveGeometryValidation(
             diagnostic(
@@ -4070,6 +4177,7 @@ internal class GPUFramePreflighter(
 
         val indexedCoreRenders = framePlan.steps.withIndex().mapNotNull { indexed ->
             val render = indexed.value as? GPUFrameStep.RenderPassStep ?: return@mapNotNull null
+            if (projection != null && !projection.selects(render, true)) return@mapNotNull null
             if (render.drawPackets.any { it.semanticPayload is GPUDrawSemanticPayload.CorePrimitive }) {
                 indexed.index to render
             } else {
@@ -4621,7 +4729,7 @@ internal class GPUFramePreflighter(
                             // seals, which are rebased per render scope for split frames.
                             requireNotNull(coverAuthority.first.analyticClipUniformSeal).slotIndex
                         } else {
-                            uniformSlotIndex
+                            projection?.uniformSlot(packet) ?: uniformSlotIndex
                         },
                         packet.packetId,
                         cover.packetId,
@@ -4712,7 +4820,7 @@ internal class GPUFramePreflighter(
                     )
                     uniformSeal.hasExactPayload(index, commandId, bytes)
                 }
-            if (!slabExact) {
+            if (!(projection?.fullUniform(uniformSeal) ?: slabExact)) {
                 return refused("The shared uniform slab does not exactly match original command order and bytes.")
             }
         }
@@ -4811,8 +4919,8 @@ internal class GPUFramePreflighter(
                 "Unified path geometry cannot be sized or packed into exact immutable slabs.",
             )
         }
-        val expectedVertexBytes = geometrySizing.first
-        val expectedIndexBytes = geometrySizing.second
+        val expectedVertexBytes = projection?.sharedBytes(vertex.resource, geometrySizing.first) ?: geometrySizing.first
+        val expectedIndexBytes = projection?.sharedBytes(index.resource, geometrySizing.second) ?: geometrySizing.second
         fun exactBuffer(
             request: GPUResourcePreparationRequest,
             bytes: Long,
@@ -4958,6 +5066,8 @@ internal class GPUFramePreflighter(
         val foreignGeometryUse = framePlan.steps.withIndex()
             .filter { indexed -> indexed.index !in coreStepIndices }
             .any { indexed ->
+                val render = indexed.value as? GPUFrameStep.RenderPassStep
+                if (render != null && projection?.ownsRender(render) == true) return@any false
                 val typedUses = when (val step = indexed.value) {
                     is GPUFrameStep.RenderPassStep -> step.resourceUses
                     is GPUFrameStep.ComputePassStep -> step.resourceUses
@@ -5007,7 +5117,7 @@ internal class GPUFramePreflighter(
         unifiedUnitsByStep.forEach { (sourceStepIndex, unifiedUnits) ->
             val uniformCoverage = if (mixedPreparedSurface) {
                 GPUCorePrimitiveNativeScopeUniformCoverage.ExactCommandRange(
-                    firstUniformIndex,
+                    if (projection == null) firstUniformIndex else requireNotNull(uniformSeal).commandIds.indexOf(unifiedUnits.first().commandIdValue),
                     unifiedUnits.size,
                 )
             } else {
@@ -5066,11 +5176,13 @@ internal class GPUFramePreflighter(
     private fun validateCorePrimitiveDirectGeometryResources(
         framePlan: GPUFramePlan,
         strictNativeRoute: Boolean,
+        projection: MixedCoreProjection? = null,
     ): CorePrimitiveDirectGeometryValidation {
         var routeSeal = GPUCorePrimitiveDirectNativeFrameRouteSeal.Empty
         val diagnostic = validateCorePrimitiveDirectGeometryResourcesDiagnostic(
             framePlan,
             strictNativeRoute,
+            projection,
         ) { routes, preparedPasses ->
             routeSeal = GPUCorePrimitiveDirectNativeFrameRouteSeal(routes, preparedPasses)
         }
@@ -5766,6 +5878,7 @@ internal class GPUFramePreflighter(
     private fun validateCorePrimitiveDirectGeometryResourcesDiagnostic(
         framePlan: GPUFramePlan,
         strictNativeRoute: Boolean,
+        projection: MixedCoreProjection? = null,
         retainAcceptedRoutes: (
             Map<GPUCorePrimitiveDirectNativeFrameRouteKey, GPUCorePrimitiveDirectNativeRoute.Accepted>,
             Map<Int, GPUCorePrimitiveDirectPreparedPassAuthority>,
@@ -5773,7 +5886,8 @@ internal class GPUFramePreflighter(
     ): GPUDiagnostic? {
         val renders = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
         val coreRenders = renders.filter { render ->
-            render.drawPackets.any { it.semanticPayload is GPUDrawSemanticPayload.CorePrimitive }
+            render.drawPackets.any { it.semanticPayload is GPUDrawSemanticPayload.CorePrimitive } &&
+                (projection == null || projection.selects(render, false))
         }
         renders.mapNotNull { it.w5bInitialClearV3?.clearOnly }.firstOrNull()?.let { witness ->
             return if (witness.validates(framePlan)) null else diagnostic(
@@ -6154,8 +6268,8 @@ internal class GPUFramePreflighter(
                 request.usages == setOf(GPUFrameResourceUsage.CopyDestination, usage) &&
                 request.lifetime == GPUFrameResourceLifetime.FrameLocal
         }
-        if (!exactBuffer(vertex, vertexBytes, GPUFrameResourceUsage.Vertex) ||
-            vertexBytes % 8L != 0L || !exactBuffer(index, indexBytes, GPUFrameResourceUsage.Index)
+        if (!exactBuffer(vertex, projection?.sharedBytes(vertex.resource, vertexBytes) ?: vertexBytes, GPUFrameResourceUsage.Vertex) ||
+            vertexBytes % 8L != 0L || !exactBuffer(index, projection?.sharedBytes(index.resource, indexBytes) ?: indexBytes, GPUFrameResourceUsage.Index)
         ) {
             return refuse("Direct CorePrimitive shared slab descriptors, sizes, alignment, usages, or lifetime are not exact.")
         }
@@ -6469,13 +6583,14 @@ internal class GPUFramePreflighter(
                 seal.plan.deviceGeneration != context.deviceGeneration.value ||
                 seal.plan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
                 seal.plan.totalBytes > maxBufferSize || maxDynamicUniformBuffers < 1L ||
-                seal.plan.slots.size != legacyUniformAcceptedIndices.size ||
-                seal.drawCount != legacyUniformAcceptedIndices.size
+                (if (projection == null) seal.plan.slots.size != legacyUniformAcceptedIndices.size ||
+                    seal.drawCount != legacyUniformAcceptedIndices.size else !projection.fullUniform(seal))
             ) {
                 return refuse("Direct CorePrimitive builder uniform slab seal contradicts current packet or limit authority.")
             }
-            legacyUniformAcceptedIndices.forEachIndexed { slotIndex, acceptedIndex ->
+            legacyUniformAcceptedIndices.forEachIndexed { localSlotIndex, acceptedIndex ->
                 val entry = accepted[acceptedIndex]
+                val slotIndex = projection?.uniformSlot(entry.packet) ?: localSlotIndex
                 val uniformBlock = entry.semantic.payloadRef.uniformBlock ?: return diagnostic(
                     "invalid.preflight.core_primitive_semantic_integrity",
                     "Core primitive packet authority contradicts its immutable semantic input.",
@@ -7552,6 +7667,8 @@ internal class GPUFramePreflighter(
         ) {
             return false
         }
+        framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+            .mapNotNull { it.w5bMixedFrameWitnessV1 }.firstOrNull()?.let { return it.validates(framePlan) }
         val destinationCopies =
             framePlan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>()
         if (destinationCopies.isNotEmpty()) {

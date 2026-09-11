@@ -22,6 +22,15 @@ public object W5bBlendPlanLowerer {
     public fun lowerForRecording(plan: BlendPlan): GPUBlendPlan =
         lower(plan, requireDestinationSeal = false)
 
+    /** Ownership compatibility only; consumes selected state without classifying a public mode. */
+    internal fun isLegacySrcOverEquivalent(plan: BlendPlan): Boolean {
+        val lowered = lowerForRecording(plan) as? GPUBlendPlan.FixedFunctionBlend ?: return false
+        val historical = legacySrcOver()
+        return lowered.state.color == historical.state.color && lowered.state.alpha == historical.state.alpha &&
+            lowered.state.writeMask == historical.state.writeMask &&
+            lowered.sourceCoverageEncoding == historical.sourceCoverageEncoding
+    }
+
     private fun lower(plan: BlendPlan, requireDestinationSeal: Boolean): GPUBlendPlan = when (plan) {
         BlendPlan.LegacySrcOverV1 -> legacySrcOver()
         BlendPlan.NoOpV1 -> GPUBlendPlan.NoOp(GPUBlendMode.DST, "sealed-w5b-dst-noop")

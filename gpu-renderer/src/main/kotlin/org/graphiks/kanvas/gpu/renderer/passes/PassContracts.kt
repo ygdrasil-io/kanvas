@@ -457,6 +457,12 @@ class GPUDrawPacket(
         role == GPUDrawPacketRole.W4ePrepared && w4ePreparedPath?.phase == org.graphiks.kanvas.gpu.plan.PathRenderPhase.SingleSampleStencilColorCover
 
     private var w5bW4eFrameWitnessV3: W5bPreparedFrameWitnessV3? = null
+    internal var w5bMixedFrameWitnessV1: W5bMixedPreparedFrameWitnessV1? = null
+        private set
+    internal fun attachW5bMixedFrameWitnessV1(witness: W5bMixedPreparedFrameWitnessV1) {
+        check(w5bMixedFrameWitnessV1 == null && witness.owns(this))
+        w5bMixedFrameWitnessV1 = witness
+    }
     internal val w5bFinalFrameWitnessV3: W5bPreparedFrameWitnessV3?
         get() = corePrimitivePreparedAuthority?.w5bFrameWitnessV3 ?: w5bW4eFrameWitnessV3
     internal fun attachW5bW4eFrameWitnessV3(witness: W5bPreparedFrameWitnessV3) {

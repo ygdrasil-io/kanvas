@@ -40,6 +40,181 @@ import kotlin.test.assertTrue
 class W5bBlendSurfacePixelTest {
     @AfterEach fun disposeGpuRuntime() = GPUBackendRuntimeFactory.dispose()
 
+    @Test fun `mixed frame Rect Point RRect Path A8 Vertices retains every middle write and captured source`() {
+        val draws = listOf(
+            W5bBlendCpuOracle.Draw(ColorARGB.Green, 1f, BlendMode.SRC_OVER),
+            W5bBlendCpuOracle.Draw(ColorARGB.White, .5f, BlendMode.DIFFERENCE),
+            W5bBlendCpuOracle.Draw(ColorARGB.White, 1f, BlendMode.SRC_OVER),
+            W5bBlendCpuOracle.Draw(ColorARGB.White, .45f, BlendMode.DIFFERENCE),
+            W5bBlendCpuOracle.Draw(ColorARGB.White, 1f, BlendMode.DST),
+            W5bBlendCpuOracle.Draw(ColorARGB.White, 1f, BlendMode.DIFFERENCE),
+            W5bBlendCpuOracle.Draw(ColorARGB.Red, .5f, BlendMode.SRC_IN),
+        )
+        val samples = listOf(
+            Triple(39, 0, listOf(0 to 1f)),
+            Triple(39, 60, listOf(0 to 1f, 1 to 1f)),
+            Triple(25, 25, listOf(0 to 1f, 1 to 1f, 2 to 1f)),
+            Triple(1, 35, listOf(0 to 1f, 1 to 1f, 2 to 1f, 3 to 1f)),
+            Triple(5, 40, listOf(0 to 1f, 1 to 1f, 2 to 1f, 3 to 1f, 5 to 128f / 255f)),
+            Triple(35, 45, listOf(0 to 1f, 1 to 1f, 6 to 1f)),
+        )
+        fun expected(steps: List<Pair<Int, Float>>) = W5bBlendCpuOracle.mixedPixel(
+            steps.map { (indexI32, coverageF32) -> draws[indexI32] to coverageF32 },
+        )
+        val expected = samples.map { expected(it.third) }
+        // Each selected pixel distinguishes its middle command from an omitted write.
+        samples.drop(1).forEachIndexed { indexI32, sample ->
+            assertDisjoint(expected[indexI32 + 1], WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+                (expected(sample.third.dropLast(1)) as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels,
+            ))
+        }
+        fun pixels(rectLast: Boolean = false, mutationBefore: String? = null): UByteArray {
+            val rect = RectF32.ofLTRB(0f, 0f, 40f, 80f)
+            val rounded = RRectF32.of(RectF32.ofLTRB(0f, 20f, 30f, 60f), CornerRadiiF32.of(1f))
+            val path = Path().apply { addRect(RectF32.ofLTRB(0f, 30f, 20f, 50f)) }
+            val glyphs = mutableListOf(GPUPreparedTextTestFixtures.A8_GLYPH_ID.toUShort())
+            val glyphPositions = mutableListOf(Point2F32(0f, 0f))
+            val blob = TextBlob(listOf(KanvasGlyphRun(glyphs, glyphPositions, fontSize = 48f)),
+                FontTypeface(GPUPreparedTextTestFixtures.colrFontBytesWithForegroundLayer(), "W5b mixed A8"), 48f)
+            val vertexPositions = mutableListOf(Point2F32(30f, 40f), Point2F32(44f, 40f), Point2F32(30f, 54f))
+            val vertexColors = mutableListOf(ColorARGB.White, ColorARGB.White, ColorARGB.White)
+            val indices = mutableListOf(0, 1, 2)
+            val vertices = Vertices(VertexMode.TRIANGLES, vertexPositions, colors = vertexColors, indices = indices)
+            val mutations = linkedMapOf<String, () -> Unit>(
+                "rect" to { rect.offset(100f, 100f) },
+                "rrect" to { rounded.rect.offset(100f, 100f) },
+                "path" to { path.addRect(RectF32.ofLTRB(20f, 20f, 30f, 30f)) },
+                // Glyph/position cardinality is atomic: this valid empty run omits A8.
+                "glyph run entries" to { glyphs.clear(); glyphPositions.clear() },
+                "glyph positions" to { glyphPositions.indices.forEach { glyphPositions[it] = Point2F32(20f, 0f) } },
+                "vertex positions" to { vertexPositions.indices.forEach {
+                    vertexPositions[it] = Point2F32(vertexPositions[it].x, vertexPositions[it].y + 20f)
+                } },
+                "vertex colors" to { vertexColors.indices.forEach { vertexColors[it] = ColorARGB.Transparent } },
+                "indices" to { indices[2] = 0 },
+            )
+            mutationBefore?.let { mutations.getValue(it)() }
+            fun paint(indexI32: Int) = draws[indexI32].let {
+                Paint(shader = Shader.Opacity(Shader.SolidColor(it.color), it.opacityF32),
+                    blendMode = it.mode, antiAlias = false)
+            }
+            val recorder = PictureRecorder()
+            recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 40f, 80f)).apply {
+                if (!rectLast) drawRect(rect, paint(0))
+                drawPoint(20f, 40f, paint(1).copy(strokeWidth = 64f))
+                drawRRect(rounded, paint(2))
+                drawPath(path, paint(3))
+                drawPath(Path().apply { addRect(RectF32.ofLTRB(0f, 0f, 40f, 80f)) }, paint(4))
+                drawText(blob, 4.25f, 58.5f, paint(5))
+                drawVertices(vertices, paint(6))
+                if (rectLast) drawRect(rect, paint(0))
+            }
+            val picture = recorder.finishRecordingAsPicture()
+            mutations.filterKeys { it != mutationBefore }.values.forEach { it() }
+            return Surface(40, 80).also { surface -> surface.canvas { picture.playback(this) } }.render().pixels
+        }
+        // Each caller-owned mutable source independently changes an observed pixel when
+        // mutated before recording. The same mutation after recording must preserve capture.
+        val mutationCases = listOf(
+            Triple("rect", 0, emptyList()),
+            Triple("rrect", 2, samples[2].third.dropLast(1)),
+            Triple("path", 2, samples[2].third + (3 to 1f)),
+            Triple("glyph run entries", 4, samples[4].third.dropLast(1)),
+            Triple("glyph positions", 4, samples[4].third.dropLast(1)),
+            Triple("vertex positions", 5, samples[5].third.dropLast(1)),
+            Triple("vertex colors", 5, emptyList()),
+            Triple("indices", 5, samples[5].third.dropLast(1)),
+        )
+        val mutationExpected = mutationCases.map { (_, sampleIndexI32, steps) ->
+            val counterfactual = expected(steps)
+            assertDisjoint(expected[sampleIndexI32], WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+                (counterfactual as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels,
+            ))
+            counterfactual
+        }
+        val reverseExpected = expected(listOf(0 to 1f))
+        assertDisjoint(expected[1], WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+            (reverseExpected as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels,
+        ))
+        // The white DST path crosses this green pixel. Treating it as SRC_OVER is disjoint.
+        assertDisjoint(expected[0], WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+            (W5aSolidOpacityCpuOracle.draw(ColorARGB.White, 1f) as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels,
+        ))
+        val actual = pixels()
+        samples.forEachIndexed { indexI32, (xI32, yI32, _) ->
+            val offsetI32 = (40 * yI32 + xI32) * 4
+            WgslFloatEnvelopeV1Oracle.assertAdmits(expected[indexI32], actual.copyOfRange(offsetI32, offsetI32 + 4))
+        }
+        mutationCases.forEachIndexed { indexI32, (mutation, sampleIndexI32, _) ->
+            val (xI32, yI32, _) = samples[sampleIndexI32]
+            val offsetI32 = (40 * yI32 + xI32) * 4
+            try {
+                WgslFloatEnvelopeV1Oracle.assertAdmits(mutationExpected[indexI32],
+                    pixels(mutationBefore = mutation).copyOfRange(offsetI32, offsetI32 + 4))
+            } catch (failure: Throwable) {
+                throw AssertionError("Public mutation control: $mutation", failure)
+            }
+        }
+        val reversed = pixels(rectLast = true)
+        samples.forEach { (xI32, yI32, _) ->
+            val offsetI32 = (40 * yI32 + xI32) * 4
+            WgslFloatEnvelopeV1Oracle.assertAdmits(reverseExpected, reversed.copyOfRange(offsetI32, offsetI32 + 4))
+        }
+    }
+
+    @Test fun `mixed frame first destination Point and Rect read transparent before retained target contents`() {
+        val expected = W5aSolidOpacityCpuOracle.draw(ColorARGB.White, .5f)
+        val stale = W5bBlendCpuOracle.mixedPixel(listOf(
+            W5bBlendCpuOracle.Draw(ColorARGB.Green, 1f, BlendMode.SRC_OVER) to 1f,
+            W5bBlendCpuOracle.Draw(ColorARGB.White, .5f, BlendMode.DIFFERENCE) to 1f,
+        )) as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded
+        assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.ConservativeExclusion(stale.channels))
+        fun frame(firstColor: ColorARGB, opacityF32: Float, mode: BlendMode, rect: Boolean): UByteArray {
+            val blob = TextBlob(listOf(KanvasGlyphRun(
+                listOf(GPUPreparedTextTestFixtures.A8_GLYPH_ID.toUShort()), listOf(Point2F32(0f, 0f)), fontSize = 48f)),
+                FontTypeface(GPUPreparedTextTestFixtures.colrFontBytesWithForegroundLayer(), "W5b mixed initial A8"), 48f)
+            return Surface(40, 80).also { surface -> surface.canvas {
+                val paint = Paint(strokeWidth = 4f,
+                    shader = Shader.Opacity(Shader.SolidColor(firstColor), opacityF32), blendMode = mode, antiAlias = false)
+                if (rect) drawRect(RectF32.ofLTRB(8f, 8f, 12f, 12f), paint) else drawPoint(10f, 10f, paint)
+                drawText(blob, 4.25f, 58.5f, Paint(shader = Shader.SolidColor(ColorARGB.White), antiAlias = false))
+                drawVertices(Vertices(VertexMode.TRIANGLES, listOf(Point2F32(30f, 60f), Point2F32(39f, 60f), Point2F32(30f, 70f))),
+                    Paint(shader = Shader.SolidColor(ColorARGB.Red), antiAlias = false))
+            } }.render().pixels.copyOfRange((40 * 10 + 10) * 4, (40 * 10 + 10) * 4 + 4)
+        }
+        listOf(false, true).forEach { rect ->
+            WgslFloatEnvelopeV1Oracle.assertAdmits(W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, 1f), frame(ColorARGB.Green, 1f, BlendMode.SRC_OVER, rect))
+            try {
+                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, frame(ColorARGB.White, .5f, BlendMode.DIFFERENCE, rect))
+            } catch (failure: org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException) {
+                throw AssertionError("Public first destination control rect=$rect: ${failure.diagnostic}", failure)
+            }
+        }
+    }
+
+    @Test fun `mixed frame destination budget refusal preserves later W5b pixels on the same runtime`() {
+        fun frame(budgetI64: Long) = Surface(4, 4, config = RenderConfig(frameLocalBudgetBytes = budgetI64)).also { surface ->
+            surface.canvas {
+                drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), Paint(shader = Shader.SolidColor(ColorARGB.Green), antiAlias = false))
+                drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), Paint(
+                    shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), .5f),
+                    blendMode = BlendMode.DIFFERENCE, antiAlias = false))
+            }
+        }
+        val expected = W5bBlendCpuOracle.mixedPixel(listOf(
+            W5bBlendCpuOracle.Draw(ColorARGB.Green, 1f, BlendMode.SRC_OVER) to 1f,
+            W5bBlendCpuOracle.Draw(ColorARGB.White, .5f, BlendMode.DIFFERENCE) to 1f,
+        ))
+        val healthy = frame(1L shl 20)
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, healthy.render().pixels.copyOfRange(0, 4))
+        val failure = assertFailsWith<org.graphiks.kanvas.surface.gpu.GPUPlanSurfaceTerminalException> {
+            frame(1150L).render()
+        }
+        assertTrue(failure.message.orEmpty().contains("resource-limit.w5b.destination-budget"), failure.message)
+        // Surface has no public operation to discard the refused list or replace its immutable config.
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, healthy.render().pixels.copyOfRange(0, 4))
+    }
+
     @Test fun `prepared uncolored Vertices and Mesh no program retain fixed and DST blends`() =
         preparedUncoloredVerticesBlends(listOf(BlendMode.DST_OUT, BlendMode.DST))
 

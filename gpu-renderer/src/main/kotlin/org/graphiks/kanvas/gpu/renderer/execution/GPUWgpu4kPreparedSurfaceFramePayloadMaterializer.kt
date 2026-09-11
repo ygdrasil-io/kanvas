@@ -117,6 +117,12 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                 "Prepared-vertices materialization supports one exact render run per frame.",
             )
         }
+        val mixedWitness = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .flatMap { it.drawPackets }.mapNotNull { it.w5bMixedFrameWitnessV1 }.firstOrNull()
+        if (mixedWitness != null && !mixedWitness.validates(framePlan)) return refused(
+            "invalid.prepared-surface.w5b-mixed-frame", "Native mixed snapshot projection lost its complete witness.")
+        val coreDestinationCopies = mixedWitness?.coreCopies.orEmpty()
+        val mixedInventory = mixedWitness?.nativeInventory(framePlan)
 
         var coreLifecycle: GPUPreparedNativeFrameLeaseLifecycle? = null
         val coverageMaskLifecycles = mutableListOf<GPUPreparedNativeFrameLeaseLifecycle>()
@@ -159,6 +165,19 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                 generationSeal.deviceGeneration,
                 GPUPreparedNativeOperandOwnership.Borrowed,
             )
+            val coreDestination = coreDestinationCopies.firstOrNull()?.let { copy ->
+                require(coreDestinationCopies.all { it.snapshot == copy.snapshot && it.logicalBounds == copy.logicalBounds })
+                val texture = setupLedger.track(device.createTexture(TextureDescriptor(
+                    size = Extent3D(copy.logicalBounds.width.toUInt(), copy.logicalBounds.height.toUInt(), 1u),
+                    format = GPUTextureFormat.RGBA8UnormSrgb,
+                    usage = GPUTextureUsage.CopyDst or GPUTextureUsage.TextureBinding,
+                    label = "Kanvas.frame.w5bMixed.destinationSnapshot",
+                )))
+                onDestinationSnapshotCreated()
+                val view = setupLedger.track(texture.createView())
+                onDestinationSnapshotViewCreated()
+                GPUW5bDestinationSnapshotNativeV3(texture, view)
+            }
             val destinationNativeResources = accepted.colorGlyphDestinationReads
                 .associate { destination ->
                     val allocation = requireNotNull(
@@ -264,6 +283,8 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                         resource.plan.copyStep.logicalBounds,
                         resource.texture,
                     )
+                } + coreDestinationCopies.map { copy ->
+                    DestinationNativeCopy(requireNotNull(mixedWitness).copyStepIndex(framePlan, copy), copy.logicalBounds, requireNotNull(coreDestination).texture)
                 }
                 ).map { resource ->
                 val bounds = resource.bounds
@@ -396,6 +417,7 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                         targetTexture,
                         targetView,
                         generationSeal,
+                        mixedInventory = mixedInventory,
                     )
                 ) {
                     is GPUCorePrimitiveRenderRunMaterialization.Ready -> result
@@ -1105,6 +1127,9 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                     GPUPreparedNativeScopeKey::operandKeys,
                 ),
                 auxiliaryOwnedHandles = buildList {
+                    coreDestination?.let { snapshot ->
+                        add(GPUPreparedNativeAuxiliaryHandle(snapshot, GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion))
+                    }
                     listOfNotNull(
                         imageAnchor,
                         imageOwner,
