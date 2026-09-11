@@ -136,7 +136,7 @@ internal class W4eClipGraphLowerer {
             val path = pass as? PlanPass.PathRenderPass
             val consumer = path?.let { authority.consumerFor(it.id.value) }
             val preparedPath = path?.let { authority.pathFor(it.id.value) ?: return invalid() }
-            val packet = preparedPath?.let { pathPacket(it, consumer, index) }
+            val packet = preparedPath?.let { pathPacket(it, consumer, index, requireNotNull(path).draw.blend) }
                 ?: preparedClipPacket(pass, index, authority.clipPassFor(pass.id.value) ?: return invalid())
             if (path != null && path.phase in setOf(
                     org.graphiks.kanvas.gpu.plan.PathRenderPhase.SingleSampleDirectColor,
@@ -269,7 +269,7 @@ internal class W4eClipGraphLowerer {
         preparedPath: GPUW4ePreparedClipPassAuthority.Path,
         consumer: GPUW4ePreparedClipConsumerAuthority?,
         index: Int,
-        finalBlend: org.graphiks.kanvas.gpu.plan.BlendPlan? = null,
+        finalBlend: org.graphiks.kanvas.gpu.plan.BlendPlan,
     ): GPUDrawPacket = GPUDrawPacket(
         packetId = GPUDrawPacketID("packet.w4e.${preparedPath.passId}"),
         commandIdValue = preparedPath.commandIdValue,
@@ -283,8 +283,7 @@ internal class W4eClipGraphLowerer {
         renderStepId = org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID("w4e.prepared-path"),
         renderStepVersion = 1,
         role = GPUDrawPacketRole.W4ePrepared,
-        blendPlan = finalBlend?.let(W5bBlendPlanLowerer::lower)
-            ?: org.graphiks.kanvas.gpu.renderer.recording.canonicalSolidRectSrcOverBlendPlan(),
+        blendPlan = W5bBlendPlanLowerer.lower(finalBlend),
         bindingLayoutHash = "w4e.prepared-path.sealed-bindings",
         vertexSourceLabel = "w4e.prepared-path.sealed-geometry",
         targetStateHash = "w4e.prepared-path.attachments",

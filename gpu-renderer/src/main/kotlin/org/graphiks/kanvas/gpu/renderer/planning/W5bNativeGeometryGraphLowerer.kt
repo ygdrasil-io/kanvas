@@ -74,7 +74,7 @@ internal class W5bNativeGeometryGraphLowerer {
                     val builder = W4dGeneralPathGraphLowerer()
                     val sealedColors = draws.associateBy { it.commandIndex }
                     val built = sourcePasses.mapIndexed { index, pass -> builder.packet(pass, index, bounds,
-                        GPUColorFormat.RGBA8UnormSrgb, source, w5bBlend = sealedColors.getValue(pass.draw.commandIndex).blend,
+                        GPUColorFormat.RGBA8UnormSrgb, source, finalBlend = sealedColors.getValue(pass.draw.commandIndex).blend,
                         w5bMaterial = if (pass.phase == PathRenderPhase.SingleSampleStencilProducer) null else
                             W5aMaterialPlanLowerer().material(table, sealedColors.getValue(pass.draw.commandIndex).materialAuthority,
                                 pass.draw.commandIndex)) }

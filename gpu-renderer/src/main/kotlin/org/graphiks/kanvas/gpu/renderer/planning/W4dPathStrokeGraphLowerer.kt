@@ -136,7 +136,7 @@ internal class W4dPathStrokeGraphLowerer {
                 GPUDrawPacketRole.PathStencilCover else GPUDrawPacketRole.Shading,
             if (draw.strategy == PathFillStrategy.StencilCover) GPUCorePrimitiveCoverageMode.Stencil1x else GPUCorePrimitiveCoverageMode.FullOrScissor,
             if (producer) GPUClipCoveragePlan.NoClip else clip.coverage,
-            if (producer) GPUClipExecutionPlan.NoClip else clip.execution, table, bounds, w5b = true)
+            if (producer) GPUClipExecutionPlan.NoClip else clip.execution, table, bounds)
     }
 
     fun lower(request: GpuPlanLoweringRequest): GpuPlanLoweringResult = try {
@@ -673,7 +673,6 @@ internal class W4dPathStrokeGraphLowerer {
         clipExecution: GPUClipExecutionPlan,
         materialPlanTable: MaterialPlanTable?,
         targetBounds: GPUPixelBounds,
-        w5b: Boolean = false,
     ): W4dBuiltPass {
         val geometry = draw.copyFillGeometryF32()
         val scissor = draw.copyScissorI32()
@@ -692,7 +691,7 @@ internal class W4dPathStrokeGraphLowerer {
                     ?: error("W5 material authority is invalid for a color-writing path phase")
             else -> error("W4d emits only direct and path-stencil roles")
         }
-        val blend = if (w5b && role != GPUDrawPacketRole.PathStencilProducer) W5bBlendPlanLowerer.lower(draw.blend)
+        val blend = if (role != GPUDrawPacketRole.PathStencilProducer) W5bBlendPlanLowerer.lower(draw.blend)
             else canonicalSolidRectSrcOverBlendPlan()
         val semantic = GPUCorePrimitivePayloadGatherer().gatherPlannedW4dSemantic(
             GPUCorePrimitivePayloadInput(

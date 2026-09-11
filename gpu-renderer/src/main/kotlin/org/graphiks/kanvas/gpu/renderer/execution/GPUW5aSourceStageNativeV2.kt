@@ -84,11 +84,12 @@ internal fun validatesW5aSourcePartitionV2(framePlan: GPUFramePlan, payload: GPU
         } }.getOrNull() ?: return@all false
         operand.w5aSourceBindingsV2.size == expected.size &&
             operand.w5aSourceBindingsV2.zip(expected).all { (binding, source) ->
-                binding.drawOrdinalI32 == source.first && binding.source === source.second &&
-                    (binding.destinationGroupV3 != null) == ((nativeSourcePacketV3(render.drawPackets, source.first, source.second)?.blendPlan
-                        as? GPUBlendPlan.ShaderBlendWithDstRead)?.sealedW5b != null) &&
-                    (binding.coverageGroupV4 != null) == ((nativeSourcePacketV3(render.drawPackets, source.first, source.second)?.blendPlan
-                        as? GPUBlendPlan.ShaderBlendWithDstRead)?.sealedW5b?.compositionAbiI32 == 4) &&
+                val destination = nativeSourcePacketV3(render.drawPackets, source.first, source.second)?.blendPlan
+                    as? GPUBlendPlan.ShaderBlendWithDstRead
+                (destination == null || destination.sealedW5b != null) &&
+                    binding.drawOrdinalI32 == source.first && binding.source === source.second &&
+                    (binding.destinationGroupV3 != null) == (destination != null) &&
+                    (binding.coverageGroupV4 != null) == (destination?.sealedW5b?.compositionAbiI32 == 4) &&
                     binding.byteCapacityI64 == source.second.stage.uniformByteCountI64 &&
                     binding.pipeline.deviceGeneration == payload.identity.deviceGeneration &&
                     binding.bindGroup.deviceGeneration == payload.identity.deviceGeneration &&
@@ -287,7 +288,7 @@ internal fun materializeW5aSourcePartitionV2(
                 val source = sources[ordinalI32] ?: return@forEach
                 val sourcePacket = nativeSourcePacketV3(packets, ordinalI32, source)
                 val destination = (sourcePacket?.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead)
-                    ?.takeIf { it.sealedW5b != null }
+                    ?.also { requireNotNull(it.sealedW5b) { "W5 destination-read source lost its sealed final blend" } }
                 require(destination == null || destinationGroup != null)
                 val scalar = destination?.sealedW5b?.compositionAbiI32 == 4
                 require(!scalar || coverageGroup != null && packets[ordinalI32].corePrimitivePreparedAuthority?.w5bFrameWitnessV3 === coverage?.witness)

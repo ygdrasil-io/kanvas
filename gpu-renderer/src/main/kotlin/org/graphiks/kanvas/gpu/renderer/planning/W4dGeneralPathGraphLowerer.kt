@@ -356,7 +356,7 @@ internal class W4dGeneralPathGraphLowerer {
         targetColorFormat: GPUColorFormat,
         graph: RenderGraph,
         w4ePreparedClipConsumer: GPUW4ePreparedClipConsumerAuthority? = null,
-        w5bBlend: org.graphiks.kanvas.gpu.plan.BlendPlan? = null,
+        finalBlend: org.graphiks.kanvas.gpu.plan.BlendPlan = pass.draw.blend,
         w5bMaterial: org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload? = null,
     ): BuiltPacket {
         val draw = pass.draw
@@ -437,8 +437,8 @@ internal class W4dGeneralPathGraphLowerer {
             resolveMaterialColor(graph.materialPlanTableOrNull(), draw.materialAuthority)
                 ?: error("Historical path color authority is invalid")
         }
-        val blend = if (producer || w5bBlend == null) canonicalSolidRectSrcOverBlendPlan()
-            else W5bBlendPlanLowerer.lower(w5bBlend)
+        val blend = if (producer) canonicalSolidRectSrcOverBlendPlan()
+            else W5bBlendPlanLowerer.lower(finalBlend)
         val semantic = GPUCorePrimitivePayloadGatherer().gatherPlannedW4dSemantic(
             GPUCorePrimitivePayloadInput(
                 commandIdValue = draw.commandIndex,

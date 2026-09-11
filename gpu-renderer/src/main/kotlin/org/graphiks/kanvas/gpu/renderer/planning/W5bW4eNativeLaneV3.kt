@@ -49,7 +49,9 @@ internal fun lowerW5bW4eLaneV3(request: GpuPlanLoweringRequest, lane: W5bGeometr
             ?.let { authority.consumerFor(it.id.value) }
         val prepared = sourcePass?.let { requireNotNull(authority.pathFor(it.id.value)) }
         val packet = if (prepared == null) builder.preparedClipPacket(pass, indexI32,
-            requireNotNull(authority.clipPassFor(pass.id.value))) else builder.pathPacket(prepared, consumer, indexI32, draw?.blend)
+            requireNotNull(authority.clipPassFor(pass.id.value))) else builder.pathPacket(prepared, consumer, indexI32,
+                if (sourcePass.phase == PathRenderPhase.SingleSampleStencilProducer) BlendPlan.LegacySrcOverV1
+                else requireNotNull(draw).blend)
         if (draw != null) {
             val material = draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1
             packet.attachW5aSourceStageV2(org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2.issue(

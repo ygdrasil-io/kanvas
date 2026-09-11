@@ -299,6 +299,9 @@ public class W4eClipPlanCompiler(
         val survivingFinalBlendsByCommandI32 = selected.finalBlendsByCommandI32.filterValues { it != BlendPlan.NoOpV1 }
         val successor = survivingFinalBlendsByCommandI32.values.any { it != BlendPlan.SrcOver }
         val elidedNoOps = selected.finalBlendsByCommandI32.values.any { it == BlendPlan.NoOpV1 }
+        fun constructionGap(diagnostics: List<RenderDiagnostic>): RenderPlanResult<Nothing> =
+            if (successor || elidedNoOps) RenderPlanResult.GapOnPromotedScope(diagnostics)
+            else RenderPlanResult.GapNotMigrated(diagnostics)
         // The original W4e feature may belong only to an elided NoOp. Its surviving plain
         // Paths retain the construction seam's General authority, not an empty W4e inventory.
         if (selected.stacks.isEmpty() && selected.inverseByCommand.isEmpty() && elidedNoOps) {
@@ -312,6 +315,7 @@ public class W4eClipPlanCompiler(
                         resource(W4ePlanDiagnostics.PlanIdentityInvalid, "W4e plain survivor graph is invalid")
                     }
                 }
+                is RenderPlanResult.GapNotMigrated -> constructionGap(result.diagnostics)
                 else -> result
             }
         }
@@ -319,7 +323,7 @@ public class W4eClipPlanCompiler(
         capabilityRefusal(capabilities, maskStacks)?.let { return it }
         val basePreview = when (val result = selected.constructionSeam.preflightFrame(selected.base, capabilities, budget)) {
             is RenderPlanResult.Ready -> result.plan
-            is RenderPlanResult.GapNotMigrated -> return RenderPlanResult.GapNotMigrated(listOf(
+            is RenderPlanResult.GapNotMigrated -> return constructionGap(listOf(
                 diag(W4ePlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W4d.2 construction seam declined W4e draw facts"),
             ))
             is RenderPlanResult.InvalidScene -> return invalidCandidate()
@@ -340,7 +344,7 @@ public class W4eClipPlanCompiler(
         // to issue its graph, under the caller's real budget rather than an unbounded surrogate.
         val base = when (val result = selected.constructionSeam.plan(selected.base, capabilities, budget)) {
             is RenderPlanResult.Ready -> result.plan
-            is RenderPlanResult.GapNotMigrated -> return RenderPlanResult.GapNotMigrated(listOf(
+            is RenderPlanResult.GapNotMigrated -> return constructionGap(listOf(
                 diag(W4ePlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W4d.2 construction seam declined W4e draw facts"),
             ))
             is RenderPlanResult.InvalidScene -> return invalidCandidate()
