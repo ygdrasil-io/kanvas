@@ -930,13 +930,17 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     semantic.material is org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1
             }
         ) return refused("invalid.material.w5a_core_authority", "W5a core material references require a sealed frame authority.")
-        org.graphiks.kanvas.gpu.renderer.planning.W5bPreparedPointBridgeV3.lower(request,
-            configuredAggregateBudgetBytes)?.let { return it }
         request.baseTaskList.tasks.filterIsInstance<GPUTask.Refused>().firstOrNull()?.let {
             return GPUPreparedSurfaceFrameResult.Refused(it.diagnostic.atRecordingBoundary())
         }
         request.baseTaskList.diagnostics.firstOrNull(GPUDiagnostic::isTerminal)?.let {
             return GPUPreparedSurfaceFrameResult.Refused(it.atRecordingBoundary())
+        }
+        request.baseTaskList.memoryBudget.diagnostic?.let {
+            return GPUPreparedSurfaceFrameResult.Refused(it.atRecordingBoundary())
+        }
+        if (!GPUFrameMemoryBudgetPlanner.hasExactLimitIndependentFacts(request.baseTaskList.memoryBudget)) {
+            return refused("invalid.recording.prepared_surface_budget", "Prepared-surface base memory accounting is inconsistent.")
         }
         val baseRenders = request.baseTaskList.tasks.filterIsInstance<GPUTask.Render>()
         val semanticOnlyVertices = request.baseTaskList.tasks.filterIsInstance<GPUTask.SemanticOnly>()
@@ -1141,6 +1145,22 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             @Suppress("UNCHECKED_CAST")
             val coreSemantics = request.semanticsByCommandId as
                 Map<Int, GPUDrawSemanticPayload.CorePrimitive>
+            // Only the exact admitted packet sequence may enter the replacement graph.
+            // Keep the common base/identity checks above and the graph-limit policy shared.
+            org.graphiks.kanvas.gpu.renderer.planning.W5bPreparedPointBridgeV3.lower(
+                request, packets, configuredAggregateBudgetBytes,
+            )?.let { result ->
+                if (result is GPUPreparedSurfaceFrameResult.Recorded) {
+                    val frame = result.taskList
+                    val limit = taskGraphLimitRefusal(taskGraphLimits,
+                        frame.memoryBudget.allocations.count { it.resourceKind == GPUFrameMemoryResourceKind.Buffer },
+                        frame.memoryBudget.allocations.count { it.resourceKind == GPUFrameMemoryResourceKind.Texture2D },
+                        frame.memoryBudget.allocations.size, frame.tasks.size.toLong(),
+                        frame.dependencies.size.toLong(), 0)
+                    if (limit != null) return refused(limit.code, limit.message)
+                }
+                return result
+            }
             val coreBase = when (
                 val prepared = prepareCoreAuthorityBaseTaskList(
                     baseTaskList = request.baseTaskList,

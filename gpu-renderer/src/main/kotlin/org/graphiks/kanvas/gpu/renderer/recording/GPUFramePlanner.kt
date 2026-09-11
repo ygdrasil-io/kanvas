@@ -69,7 +69,7 @@ private fun GPUDrawPacket.withPlannedPreparedVerticesRenderAuthority(): GPUDrawP
 /** Pure deterministic linearizer between finalized recordings and resource preflight. */
 object GPUFramePlanner {
     fun plan(taskList: GPUTaskList): GPUFramePlan {
-        validate(taskList)?.let { return taskList.atomicallyRefused(it) }
+        validateRecordingEnvelope(taskList)?.let { return taskList.atomicallyRefused(it) }
 
         val orderedTasks = stableTopologicalOrder(taskList)
             ?: return taskList.atomicallyRefused(
@@ -124,7 +124,8 @@ object GPUFramePlanner {
         )
     }
 
-    private fun validate(taskList: GPUTaskList): GPUDiagnostic? {
+    /** Shared recording identity/shape gate, also used before replacement lowering. */
+    internal fun validateRecordingEnvelope(taskList: GPUTaskList): GPUDiagnostic? {
         if (taskList.capabilitySeal.frameId != taskList.frameId ||
             taskList.recordingSeals.any { it.capabilitySealHash != taskList.capabilitySeal.sealHash }
         ) {

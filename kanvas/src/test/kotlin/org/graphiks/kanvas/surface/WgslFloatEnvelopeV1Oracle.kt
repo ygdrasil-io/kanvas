@@ -369,14 +369,21 @@ internal object WgslFloatEnvelopeV1Oracle {
         fun setSaturation(color: Array<Interval>, saturation: Interval): Array<Interval> {
             val lo = minimum(color)
             val hi = maximum(color)
-            if (hi == lo) return Array(3) { Interval.ZERO }
-            require(hi.lower > lo.upper) { "Ambiguous nonseparable saturation denominator" }
+            val range = hi - lo
+            // Execute the WGSL max/select, including boxes crossing range == 0.
+            // Equal interval endpoints do not prove that the RGB variables coincide.
+            if (range.upper <= BigDecimal.ZERO) return Array(3) { Interval.ZERO }
+            val epsilon = decimal(1.0e-10f)
+            val denominator = Interval(maxOf(range.lower, epsilon), maxOf(range.upper, epsilon))
             return Array(3) {
-                when {
+                val scaled = when {
                     stableMinimum(color, it) -> Interval.ZERO
-                    stableMaximum(color, it) -> expandAbsolute(saturation, sharedQuotientError(hi, lo, saturation))
-                    else -> wgslDivide((color[it] - lo) * saturation, hi - lo)
+                    // Cancellation is valid only when max cannot select epsilon.
+                    stableMaximum(color, it) && range.lower >= epsilon ->
+                        expandAbsolute(saturation, sharedQuotientError(hi, lo, saturation))
+                    else -> wgslDivide((color[it] - lo) * saturation, denominator)
                 }
+                if (range.lower <= BigDecimal.ZERO) hull(Interval.ZERO, scaled) else scaled
             }
         }
         fun setLuminosity(color: Array<Interval>, lum: Interval): Array<Interval> {

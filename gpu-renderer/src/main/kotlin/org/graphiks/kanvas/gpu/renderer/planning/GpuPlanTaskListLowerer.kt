@@ -229,7 +229,9 @@ public class GpuPlanTaskListLowerer {
         }
         val w5bWitness = graph.destinationGraph?.let {
             val clip = graph.draws.filterIsInstance<W5bPointDraw>().mapNotNull { point -> point.clipOnly }.distinct().singleOrNull()
-            org.graphiks.kanvas.gpu.renderer.passes.W5bPreparedFrameWitnessV3(it, scratch,
+            org.graphiks.kanvas.gpu.renderer.passes.W5bPreparedFrameWitnessV3(it, scratch, seal,
+                GPURecordingSeal(request.recordingId, 0L, replay, replay, seal.sealHash), memory,
+                targetPreparation, stagingPreparation, readback,
                 clip?.let { plan -> W4eClipGraphLowerer().lowerClipOnly(request, plan) })
         }
         packets.forEach { packet ->

@@ -1419,18 +1419,19 @@ internal class GPUFrameExecutor(
         }
         val hasW4c = frame.semanticPlan.hasSealedW4cSessionMarker()
         val hasW4d = frame.semanticPlan.hasSealedW4dSessionMarker()
+        val pointWitness = allRenders.flatMap { it.drawPackets }.mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }
+            .firstOrNull()?.takeIf { it.clipPrefixV4 != null }
         val hasW4e = renders.isNotEmpty() && renders.all { (_, _, packet) ->
             packet?.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared
         }
-        if (hasW4e) {
+        if (hasW4e || pointWitness != null) {
             val renderSteps = frame.semanticPlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             val w4ePackets = renderSteps.flatMap(GPUFrameStep.RenderPassStep::drawPackets)
                 .filter { packet -> packet.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared }
             val authority = w4ePackets.firstOrNull()?.w4ePreparedFrameAuthority
-            val pointWitness = renderSteps.flatMap { it.drawPackets }.mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }
-                .firstOrNull()?.takeIf { it.clipPrefixV4 != null }
-            val w4eSteps = if (pointWitness != null && pointWitness.validates(frame.semanticPlan))
-                renderSteps.take(requireNotNull(pointWitness.clipPrefixV4).renders.size) else renderSteps
+            if (pointWitness != null && !pointWitness.validates(frame.semanticPlan)) return executionDiagnostic(
+                "invalid.native-frame-payload.w5b-clip-frame-authority", "Point execution requires its exact clip-prefix and color frame authority.")
+            val w4eSteps = if (pointWitness != null) renderSteps.take(requireNotNull(pointWitness.clipPrefixV4).renders.size) else renderSteps
             if (w4ePackets.size != w4eSteps.size || authority == null || !authority.validatesRenderSteps(
                     frame.semanticPlan.frameId.value,
                     frame.semanticPlan.capabilitySeal.sealHash,

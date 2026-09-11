@@ -10,9 +10,10 @@ import org.graphiks.math.geometry.SizeI32
 
 /** Converts already admitted W5a squares and raw sources to a handle-free W5b graph. */
 internal object W5bPreparedPointBridgeV3 {
-    fun lower(request: GPUPreparedSurfaceFrameRequest, budgetBytesI64: Long): GPUPreparedSurfaceFrameResult? {
-        val semantics = request.semanticsByCommandId.values.filterIsInstance<GPUDrawSemanticPayload.CorePrimitive>()
-            .sortedBy { it.payloadRef.commandIdValue }
+    fun lower(request: GPUPreparedSurfaceFrameRequest,
+        packets: List<org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket>,
+        budgetBytesI64: Long): GPUPreparedSurfaceFrameResult? {
+        val semantics = packets.mapNotNull { request.semanticsByCommandId[it.commandIdValue] as? GPUDrawSemanticPayload.CorePrimitive }
         if (semantics.size != request.semanticsByCommandId.size || semantics.none { semantic ->
                 semantic.sourceFamily == GPUCorePrimitiveSourceFamily.PointLine &&
                     request.w5bPointBlends[semantic.payloadRef.commandIdValue]?.let { blend ->
@@ -25,8 +26,45 @@ internal object W5bPreparedPointBridgeV3 {
                 it.clipCoveragePlan !is org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.Scissor) &&
                 (it.sourceFamily != GPUCorePrimitiveSourceFamily.PointLine || request.w5bPointClips[it.payloadRef.commandIdValue] == null) } ||
             request.targetFormat != GPUColorFormat.RGBA8UnormSrgb || request.readbackRequestId == null) return null
+        GPUFramePlanner.validateRecordingEnvelope(request.baseTaskList)?.let {
+            return GPUPreparedSurfaceFrameResult.Refused(it)
+        }
         return try {
-            require(semantics.all { it.hasStructuralIntegrity() })
+            val base = request.baseTaskList
+            val renders = base.tasks.filterIsInstance<GPUTask.Render>()
+            require(renders.size == base.tasks.size && renders.flatMap { it.drawPackets } == packets) { "W5b base packet sequence changed" }
+            require(base.diagnostics.isEmpty() && base.compositeCommands.isEmpty() && base.memoryBudget.diagnostic == null) { "W5b cannot discard base diagnostics or composite commands" }
+            require(base.memoryBudget.allocations.isEmpty()) { "W5b cannot discard prepared base allocations" }
+            require(base.phaseOrder == GPUTaskPhase.entries && base.recordingSeals.size == 1) { "W5b requires one canonical recording" }
+            val recording = base.recordingSeals.single()
+            require(recording.capabilitySealHash == base.capabilitySeal.sealHash) { "W5b recording capability identity changed" }
+            // GPURecorder emits the logical frame.scene target; lowering maps that
+            // one authenticated scene to the prepared session target, not vice versa.
+            require(renders.all { it.recordingId == recording.recordingId && it.target.value == "frame.scene" &&
+                it.phase == GPUTaskPhase.Render && it.compositeMembership == null &&
+                it.loadStore == org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan("load", org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store) &&
+                it.resourceUses.isEmpty() && it.depthStencilLoadStore == null &&
+                it.preparedImageBindingsByPacketId.isEmpty() && it.preparedTextBindingsByPacketId.isEmpty() &&
+                it.samplePlan == org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan.SingleSampleFrame }) { "W5b base render target, recording or sample authority changed" }
+            val taskOrder = renders.map { it.taskId }
+            require(taskOrder.distinct().size == taskOrder.size && base.dependencies.all {
+                val from = taskOrder.indexOf(it.fromTaskId)
+                val to = taskOrder.indexOf(it.toTaskId)
+                from >= 0 && to > from
+            }) { "W5b base dependency order changed" }
+            packets.zip(semantics).forEach { (packet, semantic) ->
+                require(packet.hasCorePrimitiveSemanticAuthority(semantic, request.capabilities)) { "W5b captured geometry authority changed" }
+                require(semantic.targetBounds == request.targetBounds) { "W5b semantic target bounds changed" }
+                require(semantic.payloadRef.commandIdValue == packet.commandIdValue) { "W5b semantic command identity changed" }
+                // W5a intentionally replaces the analyzed route/material uniform with
+                // CorePrimitive's captured geometry and source-stage uniform. The shared
+                // semantic-authority validator above authenticates that route mapping.
+                require(semantic.clipCoveragePlan == packet.clipCoveragePlan) { "W5b semantic clip coverage changed" }
+                val execution = requireNotNull(packet.clipExecutionPlan) { "W5b packet clip execution is missing" }
+                require(execution !is org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.Refused) { "W5b cannot discard a refused clip execution" }
+                require(semantic.clipExecutionPlanIdentity?.let { it == execution.canonicalIdentity() } != false) { "W5b semantic clip execution changed" }
+                require(packet.diagnostics.isEmpty()) { "W5b cannot discard packet diagnostics" }
+            }
             val sources = semantics.map { semantic ->
                 requireNotNull((semantic.material as? GPUCorePrimitiveMaterialPayload.SolidColor)?.w5aAuthority)
                     .also { require(it.validates(semantic.payloadRef.commandIdValue)) }

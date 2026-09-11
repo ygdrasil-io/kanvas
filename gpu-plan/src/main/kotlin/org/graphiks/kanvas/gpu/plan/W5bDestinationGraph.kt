@@ -22,19 +22,20 @@ internal object W5bDestinationGraphSealer {
         require(clip == null || capabilityId == W5bCorePrimitiveGraph.CAPABILITY_ID &&
             clip.capabilities == capabilities && clip.budget == budget && clip.copyExtentI32() == extent)
         require(draws.none { it.blend == BlendPlan.NoOpV1 }) { "NoOp draws must be elided before graph issuance" }
-        require(capabilities.maxBindGroupsI32?.let { it >= if (clip == null) 3 else 4 } == true &&
-            capabilities.maxBindingsPerBindGroupI32?.let { it >= 2 } == true &&
-            capabilities.maxSampledTexturesPerShaderStageI32?.let { it >= if (clip == null) 1 else 2 } == true &&
-            capabilities.maxSamplersPerShaderStageI32?.let { it >= 1 } == true &&
+        val destinationCountI32 = draws.count { it.blend is BlendPlan.DestinationReadV1 }
+        val readsDestination = destinationCountI32 > 0
+        require(capabilities.maxBindGroupsI32?.let { it >= if (clip != null) 4 else if (readsDestination) 3 else 2 } == true &&
+            capabilities.maxBindingsPerBindGroupI32?.let { it >= if (readsDestination) 2 else 1 } == true &&
+            (!readsDestination || capabilities.maxSampledTexturesPerShaderStageI32?.let { it >= if (clip == null) 1 else 2 } == true) &&
+            (!readsDestination || capabilities.maxSamplersPerShaderStageI32?.let { it >= 1 } == true) &&
             capabilities.maxUniformBuffersPerShaderStageI32?.let { it >= 2 } == true &&
             capabilities.maxUniformBufferBindingSizeBytesI64?.let { it >= 32L } == true) {
             "unsupported.w5b.destination-capability"
         }
         val format = PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)
-        require(capabilities.supportsTexture(format, 1, setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.Sampled))) {
+        require(!readsDestination || capabilities.supportsTexture(format, 1, setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.Sampled))) {
             "unsupported.w5b.destination-texture"
         }
-        val destinationCountI32 = draws.count { it.blend is BlendPlan.DestinationReadV1 }
         require(destinationCountI32 > 0 || capabilityId == W5bCorePrimitiveGraph.CAPABILITY_ID)
         val initialClearI32 = if (draws.first().blend is BlendPlan.DestinationReadV1) 1 else 0
         val passCountI32 = Math.addExact(Math.addExact(draws.size, destinationCountI32), initialClearI32 + 1 + (clip?.passes()?.size ?: 0))

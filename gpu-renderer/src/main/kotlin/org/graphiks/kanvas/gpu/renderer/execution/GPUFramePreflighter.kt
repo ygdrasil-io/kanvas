@@ -254,10 +254,13 @@ internal class GPUFramePreflighter(
         if (w5b != null) {
             val limits = capabilities.limits
             val materialBytes = framePlan.w5aMaterialAllocationsV2()
-            if (limits == null || limits.maxBindGroupsI32?.let { it >= 3 } != true ||
-                limits.maxBindingsPerBindGroupI32?.let { it >= 2 } != true ||
-                limits.maxSamplersPerShaderStageI32?.let { it >= 1 } != true ||
-                limits.maxSampledTexturesPerShaderStageI32?.let { it >= 1 } != true ||
+            val readsDestination = w5b.graph.passes().filterIsInstance<org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass>()
+                .flatMap { it.draws() }.any { it.blend is org.graphiks.kanvas.gpu.plan.BlendPlan.DestinationReadV1 }
+            val hasClip = w5b.clipPrefixV4 != null
+            if (limits == null || limits.maxBindGroupsI32?.let { it >= if (hasClip) 4 else if (readsDestination) 3 else 2 } != true ||
+                limits.maxBindingsPerBindGroupI32?.let { it >= if (readsDestination) 2 else 1 } != true ||
+                (readsDestination && limits.maxSamplersPerShaderStageI32?.let { it >= 1 } != true) ||
+                (readsDestination && limits.maxSampledTexturesPerShaderStageI32?.let { it >= if (hasClip) 2 else 1 } != true) ||
                 limits.maxUniformBuffersPerShaderStageI32?.let { it >= 2 } != true ||
                 limits.maxUniformBufferBindingSizeBytesI64 == null ||
                 materialBytes.any { it.bytes > limits.maxUniformBufferBindingSizeBytesI64 } || !w5b.validates(framePlan)) {

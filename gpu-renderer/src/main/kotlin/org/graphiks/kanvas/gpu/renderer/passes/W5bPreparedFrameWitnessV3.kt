@@ -2,7 +2,6 @@ package org.graphiks.kanvas.gpu.renderer.passes
 
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.PlanPass
-import org.graphiks.kanvas.gpu.plan.BlendPlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameCapabilitySeal
@@ -99,35 +98,77 @@ internal class W5bClearOnlyFrameWitnessV3(
 internal class W5bPreparedFrameWitnessV3(
     val graph: RenderGraph,
     val scratch: W3SessionScratchV1,
+    private val capabilitySeal: GPUFrameCapabilitySeal,
+    private val recordingSeal: GPURecordingSeal,
+    memoryBudget: GPUFrameMemoryBudgetPlan,
+    targetPreparation: GPUResourcePreparationRequest,
+    stagingPreparation: GPUResourcePreparationRequest,
+    private val readbackRequest: GPUFrameReadbackRequest,
     val clipPrefixV4: org.graphiks.kanvas.gpu.renderer.planning.W4eClipGraphLowerer.ClipPrefixV4? = null,
 ) {
+    private val memory = memoryBudget.snapshotForFramePlan()
+    val prepareTaskId = GPUTaskID("task.w5b.${graph.id.value}.prepare")
+    val preparations = immutableList(listOfNotNull(targetPreparation, stagingPreparation,
+        graph.resources().singleOrNull { it.role == org.graphiks.kanvas.gpu.plan.PlanResourceRole.DestinationSnapshot }?.let {
+            val resource = org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef(scratch.target.value.removeSuffix(".target") + ".snapshot")
+            GPUResourcePreparationRequest(resource,
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor(scratch.targetBounds,
+                    org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat.RGBA8UnormSrgb, 1),
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.DestinationSnapshot,
+                setOf(org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.CopyDestination,
+                    org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding),
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, it.byteSize, resource.value)
+        }) + clipPrefixV4?.preparations.orEmpty())
+    fun taskId(pass: PlanPass): GPUTaskID = clipPrefixV4?.renders?.singleOrNull {
+        it.drawPackets.single().w4ePreparedClipPass?.passId == pass.id.value
+    }?.taskId ?: GPUTaskID("task.w5b.${graph.id.value}.${pass.id.value}")
+    private val taskIds = immutableList(listOf(prepareTaskId) + graph.passes().map(::taskId))
+    val dependencies = immutableList(taskIds.zipWithNext { before, after ->
+        fun atomic(id: GPUTaskID) = clipPrefixV4?.renders?.singleOrNull { it.taskId == id }
+            ?.drawPackets?.singleOrNull()?.w4ePreparedClipPass?.atomicGroupId
+        GPUTaskDependency(before, after, "w5b-version-order", GPUTaskUseToken("${before.value}->${after.value}"),
+            "w5b-version-order", atomic(before)?.takeIf { it == atomic(after) }
+                ?.let { org.graphiks.kanvas.gpu.renderer.recording.GPUTaskAtomicGroupID(it) })
+    })
+    private fun colorResourceUses(pass: PlanPass.RenderPass) = buildList {
+        if (pass.draws().any { it.blend is org.graphiks.kanvas.gpu.plan.BlendPlan.DestinationReadV1 }) add(
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef(scratch.target.value.removeSuffix(".target") + ".snapshot"),
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.DestinationSnapshot,
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding,
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false))
+        if (pass.draws().filterIsInstance<org.graphiks.kanvas.gpu.plan.W5bPointDraw>().any { it.clipOnly != null }) add(
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(requireNotNull(clipPrefixV4).maskRef,
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.ClipMask,
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding,
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false))
+    }
     init {
         require(graph.id.value == scratch.planId)
         require(graph.passes().any { it is PlanPass.TextureCopy } ||
             graph.capabilityId == org.graphiks.kanvas.gpu.plan.W5bCorePrimitiveGraph.CAPABILITY_ID)
         require(scratch.fitsDeviceLimits(graph.capabilities.maxBufferSizeBytes,
             graph.capabilities.maxDynamicUniformBuffersPerPipelineLayout.toLong()))
+        require(capabilitySeal.sealHash == scratch.capabilitySealHash && recordingSeal.capabilitySealHash == capabilitySeal.sealHash)
+        require(targetPreparation.resource == scratch.target && stagingPreparation.resource == scratch.staging)
+        require(memory.diagnostic == null && memory.targetResidentBytes + memory.peakFrameTransientBytes == graph.peakFrameLocalBytes)
     }
 
     fun validates(frame: GPUFramePlan): Boolean {
         val allRenders = frame.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
         val prefix = clipPrefixV4
         val prefixRenders = if (prefix == null) emptyList() else allRenders.take(prefix.renders.size)
-        if (prefix != null) {
-            val prepare = frame.steps.firstOrNull() as? GPUFrameStep.PrepareResourcesStep ?: return false
-            if (frame.steps.count { it is GPUFrameStep.PrepareResourcesStep } != 1 ||
+        val prepare = frame.steps.firstOrNull() as? GPUFrameStep.PrepareResourcesStep ?: return false
+        if (frame.capabilitySeal !== capabilitySeal || frame.frameId != capabilitySeal.frameId ||
+            frame.recordingSeals != listOf(recordingSeal) || frame.memoryBudget != memory ||
+            frame.phaseOrder != GPUTaskPhase.entries || frame.diagnostics.isNotEmpty() ||
+            frame.elidedNoOpDraws.isNotEmpty() || frame.atomicallyRefused ||
+            frame.steps.map { it.sourceTaskIds.singleOrNull() ?: return false } != taskIds ||
+            frame.dependencies != dependencies || prepare.requests != preparations ||
+            frame.steps.count { it is GPUFrameStep.PrepareResourcesStep } != 1 ||
                 frame.steps.any { it !is GPUFrameStep.PrepareResourcesStep && it !is GPUFrameStep.RenderPassStep &&
                     it !is GPUFrameStep.CopyDestinationStep && it !is GPUFrameStep.ReadbackCopyStep } ||
-                frame.steps.lastOrNull() !is GPUFrameStep.ReadbackCopyStep ||
-                prepare.sourceTaskIds.singleOrNull()?.value != "task.w5b.${graph.id.value}.prepare" ||
-                prepare.requests.size != prefix.preparations.size + 3 ||
-                prepare.requests.map { it.resource.value }.toSet() !=
-                (prefix.preparations.map { it.resource.value } + scratch.target.value + scratch.staging.value +
-                    (scratch.target.value.removeSuffix(".target") + ".snapshot")).toSet() ||
-                frame.memoryBudget.targetResidentBytes + frame.memoryBudget.peakFrameTransientBytes != graph.peakFrameLocalBytes) return false
-            val taskIds = frame.steps.map { it.sourceTaskIds.singleOrNull() ?: return false }
-            if (frame.dependencies.map { it.fromTaskId to it.toTaskId } != taskIds.zipWithNext()) return false
-        }
+            frame.steps.lastOrNull() !is GPUFrameStep.ReadbackCopyStep) return false
         if (prefix != null && (!prefix.authority.validatesRenderSteps(frame.frameId.value, frame.capabilitySeal.sealHash, prefixRenders) ||
             prefixRenders.map { it.sourceTaskIds.singleOrNull() } != prefix.renders.map { it.taskId } ||
             frame.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>().flatMap { it.requests }
@@ -142,13 +183,17 @@ internal class W5bPreparedFrameWitnessV3(
             is PlanPass.RenderPass -> actual !is GPUFrameStep.RenderPassStep || actual.target != scratch.target ||
                 (if (expected.draws().isEmpty()) actual.w5bInitialClearV3?.witness !== this else actual.w5bInitialClearV3 != null) ||
                 actual.samplePlan != GPUSamplePlan.SingleSampleFrame || actual.loadStore.loadOp !=
-                (if (expected.load == org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan.ClearTransparent) "clear" else "load")
+                (if (expected.load == org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan.ClearTransparent) "clear" else "load") ||
+                actual.loadStore.storePlan != GPUStorePlan.Store || actual.loadStore.clearColorLabel != null ||
+                actual.resourceUses != colorResourceUses(expected) || actual.sampleContinuation != null ||
+                actual.depthStencilLoadStore != null || actual.w4eMaskContinuation != null || actual.w4eSceneContinuation != null ||
+                actual.preparedImageBindingsByPacketId.isNotEmpty() || actual.preparedTextBindingsByPacketId.isNotEmpty()
             is PlanPass.TextureCopy -> actual !is GPUFrameStep.CopyDestinationStep ||
                 actual.source != scratch.target || actual.snapshot.value != scratch.target.value.removeSuffix(".target") + ".snapshot" ||
                 actual.logicalBounds != scratch.targetBounds || actual.consumers.size != 1 ||
                 actual.sourceKey.deviceGeneration != frame.capabilitySeal.deviceGeneration
             is PlanPass.ReadbackPass -> actual !is GPUFrameStep.ReadbackCopyStep || actual.source != scratch.target ||
-                actual.staging != scratch.staging || actual.request.requestId.value != "w3.${graph.id.value}.readback"
+                actual.staging != scratch.staging || actual.request != readbackRequest
             is PlanPass.ClipMaskInitialize, is PlanPass.ClipMaskProducer, is PlanPass.ClipMaskFold ->
                 prefix == null || actual !is GPUFrameStep.RenderPassStep || actual !in prefixRenders ||
                     actual.drawPackets.singleOrNull()?.w4ePreparedClipPass?.passId != expected.id.value
@@ -158,8 +203,8 @@ internal class W5bPreparedFrameWitnessV3(
             actual.drawPackets.map { it.commandIdValue } != sealed.draws().map { it.commandIndex } ||
                 actual.drawPackets.any { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 !== this } ||
                 actual.drawPackets.zip(sealed.draws()).any { (packet, draw) ->
-                    val expected = draw.blend as? BlendPlan.DestinationReadV1
-                    (packet.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead)?.sealedW5b != expected
+                    packet.blendPlan != org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.lower(draw.blend) ||
+                        packet.diagnostics.isNotEmpty()
                 }
         }) return false
         val packets = renders.flatMap { it.drawPackets }

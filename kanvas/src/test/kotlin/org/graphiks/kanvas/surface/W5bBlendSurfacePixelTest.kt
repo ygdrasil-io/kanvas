@@ -12,6 +12,7 @@ import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
+import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.math.color.ColorARGB
@@ -20,9 +21,39 @@ import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class W5bBlendSurfacePixelTest {
     @AfterEach fun disposeGpuRuntime() = GPUBackendRuntimeFactory.dispose()
+
+    @Test
+    fun `Surface W5b point does not hide a later round point refusal`() {
+        val surface = Surface(4, 4)
+        surface.canvas {
+            drawPoint(1f, 1f, Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), .5f),
+                antiAlias = false, blendMode = BlendMode.PLUS))
+            drawPoint(2f, 2f, Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.Red), .5f),
+                strokeCap = StrokeCap.ROUND, strokeWidth = 2f, antiAlias = false))
+        }
+        val failure = assertFailsWith<IllegalStateException> { surface.render() }
+        assertTrue(failure.message.orEmpty().contains("unsupported.core_primitive.point.round_cap_exact_lowering"), failure.message)
+    }
+
+    @Test
+    fun `Surface HUE points retain bounded zero and near black source pixels`() {
+        val destination = W5bBlendCpuOracle.Draw(ColorARGB.Red, 1f, BlendMode.SRC_OVER)
+        for (source in listOf(W5bBlendCpuOracle.Draw(ColorARGB.Black, .000001f, BlendMode.HUE),
+            W5bBlendCpuOracle.Draw(ColorARGB.of(255, 1, 0, 0), .000001f, BlendMode.HUE))) {
+            val surface = Surface(4, 4)
+            surface.canvas {
+                drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), Paint(shader = Shader.SolidColor(destination.color), antiAlias = false))
+                drawPoint(2f, 2f, Paint(shader = Shader.Opacity(Shader.SolidColor(source.color), source.opacityF32),
+                    antiAlias = false, blendMode = source.mode))
+            }
+            W5bBlendCpuOracle.assertPoint(source, destination, 1f, surface.render().pixels.copyOfRange(40, 44))
+        }
+    }
 
     @Test
     fun `Picture replays fixed function SRC IN Solid Opacity in recorded order`() {
