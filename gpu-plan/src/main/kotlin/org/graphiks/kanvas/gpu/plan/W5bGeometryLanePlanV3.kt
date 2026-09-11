@@ -99,8 +99,7 @@ internal fun issueW5bNativeComposite(graphs: List<RenderGraph>): RenderGraph {
             val ref = interned.remap(ordinal, (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref)
             colors += when (draw) {
                 is SolidRectDraw -> draw.withMaterialRef(ref)
-                is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(draw.commandIndex, ref, draw.copyDeviceBounds(),
-                    draw.copyRasterBounds(), draw.copyScissor(), draw.blend)
+                is AnalyticRectDraw -> draw.withMaterialRef(ref)
                 is AnalyticRRectDraw -> draw.withMaterialRef(ref)
                 is PathFillDraw -> draw.withMaterialRef(ref)
                 is PathStrokeDraw -> draw.withMaterialRef(ref)

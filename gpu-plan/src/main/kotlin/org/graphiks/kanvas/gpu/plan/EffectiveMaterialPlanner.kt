@@ -6,7 +6,7 @@ import org.graphiks.kanvas.render.ir.EffectStack
 import org.graphiks.kanvas.render.ir.MaterialNode
 import org.graphiks.math.color.ColorF32
 
-/** Normalizes the W5a Solid/Opacity subset once, before a graph is published Ready. */
+/** Normalizes admitted W5 sources once, before a graph is published Ready. */
 public object EffectiveMaterialPlanner {
     public sealed interface Result {
         public data class Ready(
@@ -98,6 +98,55 @@ public object EffectiveMaterialPlanner {
                     material.color.alphaNormalized,
                 )),
             )
+            is MaterialNode.LinearGradient -> {
+                if (material.tileMode != org.graphiks.kanvas.render.ir.TileMode.CLAMP ||
+                    material.interpolation != org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB ||
+                    draw.origin != org.graphiks.kanvas.render.ir.DrawOrigin.RECT)
+                    return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
+                when (val stops = normalizeGradientStopsV1(material.stops())) {
+                    is NormalizedGradientStopsV1.Refused -> return Normalization.Refused(stops.code)
+                    is NormalizedGradientStopsV1.Solid -> MaterialPlanEntry(MaterialProgramPlan.SolidLinearPremulV1,
+                        MaterialBindingPlan.SolidRgbaF32V1.of(stops.colorF32))
+                    is NormalizedGradientStopsV1.Stops -> {
+                        val coordinates = MaterialCoordinatePlanV1.fromCtm(draw.transform)
+                            ?: return Normalization.Refused(W5cPlanDiagnostics.CoordinatesUnavailable)
+                        val inverseF32 = coordinates.copyInverseCtmF32()
+                        val bounds = (draw.geometry as? org.graphiks.kanvas.render.ir.GeometryNode.Rect)?.copyBounds()
+                            ?: return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
+                        val valuesF32 = listOf(material.start.x, material.start.y, material.end.x, material.end.y,
+                            bounds.left, bounds.top, bounds.right, bounds.bottom)
+                        // Include the inverse-mapped raster footprint in the finite local domain.
+                        val radiusF64 = (kotlin.math.abs(inverseF32.sx.toDouble()) + kotlin.math.abs(inverseF32.kx.toDouble()) +
+                            kotlin.math.abs(inverseF32.ky.toDouble()) + kotlin.math.abs(inverseF32.sy.toDouble())) * 2.0
+                        val deviceCorners = listOf(org.graphiks.math.geometry.Point2F32(bounds.left, bounds.top),
+                            org.graphiks.math.geometry.Point2F32(bounds.right, bounds.top),
+                            org.graphiks.math.geometry.Point2F32(bounds.left, bounds.bottom),
+                            org.graphiks.math.geometry.Point2F32(bounds.right, bounds.bottom)).map(draw.transform::transform)
+                        val deviceXF64 = deviceCorners.maxOf { kotlin.math.abs(it.x.toDouble()) } + 2.0
+                        val deviceYF64 = deviceCorners.maxOf { kotlin.math.abs(it.y.toDouble()) } + 2.0
+                        val mappingBoundF64 = maxOf(
+                            kotlin.math.abs(inverseF32.sx.toDouble()) * deviceXF64 + kotlin.math.abs(inverseF32.kx.toDouble()) * deviceYF64 + kotlin.math.abs(inverseF32.tx.toDouble()),
+                            kotlin.math.abs(inverseF32.ky.toDouble()) * deviceXF64 + kotlin.math.abs(inverseF32.sy.toDouble()) * deviceYF64 + kotlin.math.abs(inverseF32.ty.toDouble()),
+                        ) * 1.00001
+                        if (valuesF32.any { !it.isFinite() || kotlin.math.abs(it.toDouble()) + radiusF64 > 1e8 } ||
+                            !mappingBoundF64.isFinite() || mappingBoundF64 > 1e8 ||
+                            inverseF32.persp0 != 0f || inverseF32.persp1 != 0f || inverseF32.persp2 != 1f)
+                            return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
+                        val dxF32 = material.end.x - material.start.x
+                        val dyF32 = material.end.y - material.start.y
+                        val lengthSquaredF32 = dxF32 * dxF32 + dyF32 * dyF32
+                        val degeneracy = LinearGradientDegeneracyV1(dxF32, dyF32, lengthSquaredF32,
+                            kotlin.math.sqrt(lengthSquaredF32) <= 0.000030517578125f)
+                        val proof = MaterialProgramPlan.LinearGradientClampSrgbV1.copyGradientNumericOperationGraphV1()
+                            .proveLinearDomainV1(mappingBoundF64, valuesF32.take(4).maxOf { kotlin.math.abs(it.toDouble()) },
+                                degeneracy, stops.slab.copyStops())
+                        if (proof is GradientNumericDomainProofV1.Unbounded) return Normalization.Refused(proof.diagnosticCode)
+                        MaterialPlanEntry(MaterialProgramPlan.LinearGradientClampSrgbV1,
+                            MaterialBindingPlan.LinearGradientV1(material.start, material.end,
+                                GradientStopRangeV1(0u, stops.slab.copyStops().size.toUInt()), degeneracy), stops.slab)
+                    }
+                }
+            }
             else -> return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
         }
         val shaderAlpha = opacityInnerToOuter.asReversed().fold(1f) { accumulated, alpha -> accumulated * alpha }

@@ -8,6 +8,11 @@ import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.gpu.plan.RawMaterialRequirementsV2
 import org.graphiks.kanvas.gpu.plan.NumericOperationGraphV1
 import org.graphiks.kanvas.gpu.plan.NumericOperationGraphV1.Operation
+import org.graphiks.kanvas.gpu.plan.MaterialCoordinatePlanV1
+import org.graphiks.kanvas.gpu.plan.MaterialProgramPlan
+import org.graphiks.kanvas.gpu.plan.GradientStopSlabPlanV1
+import org.graphiks.kanvas.gpu.plan.GradientNumericOperationGraphV1
+import org.graphiks.kanvas.gpu.plan.GradientNumericDomainProofV1
 
 /**
  * Renderer-only lowering of the sealed numeric DAG. No source color is evaluated on the host.
@@ -20,13 +25,18 @@ internal class W5aMaterialSourceStage private constructor(
     val bindingCountI32: Int,
     uniformBytes: ByteArray,
     val provenOpaque: Boolean,
+    val gradientStopSlab: GradientStopSlabPlanV1?,
 ) {
+    data class Binding(val bindingI32: Int, val resourceKind: String)
+    val bindingManifest: List<Binding> = listOf(Binding(0, "uniformBuffer")) +
+        if (gradientStopSlab == null) emptyList() else listOf(Binding(1, "storageBuffer"))
     private val ownedUniformBytes = uniformBytes.copyOf()
     val uniformBytes: ByteArray get() = ownedUniformBytes.copyOf()
     val uniformByteCountI64: Long get() = ownedUniformBytes.size.toLong()
-    val canonicalIdentity: String = structuralId + ":raw-v2:" + ownedUniformBytes.joinToString(",")
+    val canonicalIdentity: String = structuralId + ":raw-v2:" + ownedUniformBytes.joinToString(",") +
+        (gradientStopSlab?.canonicalIdentity ?: "")
     companion object {
-        fun lower(table: MaterialPlanTable, root: MaterialPlanRef): W5aMaterialSourceStage? {
+        fun lower(table: MaterialPlanTable, root: MaterialPlanRef, coordinates: MaterialCoordinatePlanV1? = null): W5aMaterialSourceStage? {
             if (root.indexI32 !in 0 until table.sizeI32) return null
             val chain = mutableListOf<Pair<NumericOperationGraphV1.Node, MaterialBindingPlan>>()
             var ref = root
@@ -42,6 +52,14 @@ internal class W5aMaterialSourceStage private constructor(
             if (chain.size != requirements.bindingCountI32 || requirements.uniformByteCountI64 > Int.MAX_VALUE) return null
             val uniforms = ByteBuffer.allocate(requirements.uniformByteCountI64.toInt()).order(ByteOrder.LITTLE_ENDIAN)
             val statements = StringBuilder()
+            val gradientBinding = chain.map { it.second }.filterIsInstance<MaterialBindingPlan.LinearGradientV1>().singleOrNull()
+            if (gradientBinding != null && coordinates == null) return null
+            val gradientGraph = if (gradientBinding == null) null else {
+                if (table.entry(ref).program != MaterialProgramPlan.LinearGradientClampSrgbV1) return null
+                MaterialProgramPlan.LinearGradientClampSrgbV1.copyGradientNumericOperationGraphV1().also {
+                    if (it.domainProof != GradientNumericDomainProofV1.ProvenFinite) return null
+                }
+            }
             var child: String? = null
             var opaque = true
             var nextValueI32 = 0
@@ -49,6 +67,10 @@ internal class W5aMaterialSourceStage private constructor(
                 val (source, binding) = pair
                 val input = "w5aMaterial.binding$bindingIndexI32"
                 when (binding) {
+                    is MaterialBindingPlan.LinearGradientV1 -> {
+                        listOf(binding.startF32.x, binding.startF32.y, binding.endF32.x, binding.endF32.y).forEach(uniforms::putFloat)
+                        opaque = opaque && requireNotNull(table.gradientStopSlab).copyStops().all { it.straightSrgbF32.alpha == 1f }
+                    }
                     MaterialBindingPlan.EmptyV1 -> { repeat(4) { uniforms.putFloat(0f) }; opaque = false }
                     is MaterialBindingPlan.SolidRgbaF32V1 -> {
                         val color = binding.copyRgbaF32()
@@ -68,6 +90,8 @@ internal class W5aMaterialSourceStage private constructor(
                     val expression = when (node.operation) {
                         Operation.CONSTANT_TRANSPARENT -> "vec4<f32>(0.0)"
                         Operation.INPUT_SOLID_SRGBA_STRAIGHT -> if (binding is MaterialBindingPlan.SolidRgbaF32V1) input else return null
+                        Operation.INPUT_GRADIENT_SRGBA_STRAIGHT -> if (binding is MaterialBindingPlan.LinearGradientV1 && gradientGraph != null)
+                            "w5c_gradient(localPosition)" else return null
                         Operation.INPUT_MATERIAL_LINEAR_PREMUL -> if (binding is MaterialBindingPlan.OpacityF32V1) child ?: return null else return null
                         Operation.SRGB_TO_LINEAR -> "w5a_srgb_to_linear(${inputs.single()})"
                         Operation.PREMULTIPLY -> "vec4<f32>(${inputs.single()}.rgb * ${inputs.single()}.a, ${inputs.single()}.a)"
@@ -80,13 +104,23 @@ internal class W5aMaterialSourceStage private constructor(
                 }
                 child = emit(source) ?: return null
             }
+            if (gradientBinding != null) {
+                uniforms.putInt(gradientBinding.stopRange.baseIndexU32.toInt()).putInt(gradientBinding.stopRange.countU32.toInt())
+                    .putInt(0).putInt(0)
+                uniforms.putInt(if (gradientBinding.degeneracy.degenerate) 1 else 0).putInt(0).putInt(0).putInt(0)
+                val inverseF32 = requireNotNull(coordinates).copyInverseCtmF32()
+                listOf(inverseF32.sx, inverseF32.kx, inverseF32.tx, 0f, inverseF32.ky, inverseF32.sy, inverseF32.ty, 0f,
+                    inverseF32.persp0, inverseF32.persp1, inverseF32.persp2, 0f).forEach(uniforms::putFloat)
+            }
             val declarations = """
                 struct W5aMaterialBlock {
                 ${chain.indices.joinToString("\n") { "    binding$it: vec4<f32>," }}
+                ${if (gradientBinding == null) "" else "    gradientHeader: vec4<u32>,\n    gradientFlags: vec4<u32>,\n    inverseRow0: vec4<f32>,\n    inverseRow1: vec4<f32>,\n    inverseRow2: vec4<f32>,"}
                 }
                 @group(1) @binding(0) var<uniform> w5aMaterial: W5aMaterialBlock;
 
                 $SRGB_TO_LINEAR_WGSL
+                ${gradientGraph?.let(::gradientDeclarationsWgsl).orEmpty()}
 
                 fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {
                 $statements
@@ -94,7 +128,7 @@ internal class W5aMaterialSourceStage private constructor(
                 }
             """.trimIndent()
             return W5aMaterialSourceStage(table.entry(root).program.structuralId.value + ":srgb-endpoints-v1",
-                declarations, chain.size, uniforms.array(), opaque)
+                declarations, chain.size, uniforms.array(), opaque, table.gradientStopSlab.takeIf { gradientBinding != null })
         }
 
         /** Exact partition proof; altered blend/coverage/destination/attachment graphs fail closed. */
@@ -125,5 +159,94 @@ internal class W5aMaterialSourceStage private constructor(
                     w5a_srgb_channel_to_linear(value.g), w5a_srgb_channel_to_linear(value.b), value.a);
             }
         """.trimIndent()
+
+        /** Lowers every executed gradient node, including the explicit bounded search body. */
+        private fun gradientDeclarationsWgsl(graph: GradientNumericOperationGraphV1): String {
+            require(graph.contractId == "WgslFloatEnvelopeV1" && graph.domainProof == GradientNumericDomainProofV1.ProvenFinite)
+            val code = StringBuilder()
+            val emitted = mutableMapOf<GradientNumericOperationGraphV1.Node, String>()
+            var ordinalI32 = 0
+            fun emit(node: GradientNumericOperationGraphV1.Node): String = emitted.getOrPut(node) {
+                val args = node.inputs.map(::emit)
+                val name = "gradientValue${ordinalI32++}"
+                val expression = when (node.operation) {
+                    GradientNumericOperationGraphV1.Operation.INPUT_LOCAL_POINT_F32 ->
+                        if (node.input == GradientNumericOperationGraphV1.Input.X) "localPosition.x" else "localPosition.y"
+                    GradientNumericOperationGraphV1.Operation.INPUT_UNIFORM_F32 -> when (node.input) {
+                        GradientNumericOperationGraphV1.Input.START_X -> "w5aMaterial.binding0.x"
+                        GradientNumericOperationGraphV1.Input.START_Y -> "w5aMaterial.binding0.y"
+                        GradientNumericOperationGraphV1.Input.END_X -> "w5aMaterial.binding0.z"
+                        GradientNumericOperationGraphV1.Input.END_Y -> "w5aMaterial.binding0.w"
+                        GradientNumericOperationGraphV1.Input.ZERO -> "0.0"
+                        GradientNumericOperationGraphV1.Input.ONE -> "1.0"
+                        else -> error("Unsupported sealed scalar input")
+                    }
+                    GradientNumericOperationGraphV1.Operation.INPUT_UNIFORM_FLAG -> "(w5aMaterial.gradientFlags.x != 0u)"
+                    GradientNumericOperationGraphV1.Operation.INPUT_STOP_RANGE_U32 -> when (node.input) {
+                        GradientNumericOperationGraphV1.Input.STOPS -> "w5aMaterial.gradientHeader.xy"
+                        GradientNumericOperationGraphV1.Input.PROBE -> "gradientProbe"
+                        GradientNumericOperationGraphV1.Input.ZERO -> "0u"
+                        else -> error("Unsupported sealed index input")
+                    }
+                    GradientNumericOperationGraphV1.Operation.ADD_F32 -> "(${args[0]} + ${args[1]})"
+                    GradientNumericOperationGraphV1.Operation.SUB_F32 -> "(${args[0]} - ${args[1]})"
+                    GradientNumericOperationGraphV1.Operation.MUL_F32 -> "(${args[0]} * ${args[1]})"
+                    GradientNumericOperationGraphV1.Operation.DIV_F32 -> "(${args[0]} / ${args[1]})"
+                    GradientNumericOperationGraphV1.Operation.SQRT_F32 -> "sqrt(${args.single()})"
+                    GradientNumericOperationGraphV1.Operation.ATAN2_F32 -> "atan2(${args[0]}, ${args[1]})"
+                    GradientNumericOperationGraphV1.Operation.FLOOR_F32 -> "floor(${args.single()})"
+                    GradientNumericOperationGraphV1.Operation.ABS_F32 -> "abs(${args.single()})"
+                    GradientNumericOperationGraphV1.Operation.MAX_F32 -> "max(${args[0]}, ${args[1]})"
+                    GradientNumericOperationGraphV1.Operation.COMPARE_F32 -> "(${args[0]} ${if (node.lessOrEqual) "<=" else "<"} ${args[1]})"
+                    GradientNumericOperationGraphV1.Operation.SELECT -> "select(${args[0]}, ${args[1]}, ${args[2]})"
+                    GradientNumericOperationGraphV1.Operation.LOAD_STOP_POSITION_F32,
+                    GradientNumericOperationGraphV1.Operation.LOAD_STOP_COLOR_SRGBA_F32 -> {
+                        val index = if (node.relativeIndexI32 == -1) "max(${args[1]}, 1u) - 1u" else args[1]
+                        "w5cStops[${args[0]}.x + min($index, ${args[0]}.y - 1u)]." +
+                            if (node.operation == GradientNumericOperationGraphV1.Operation.LOAD_STOP_POSITION_F32) "positionAndReserved.x" else "straightColor"
+                    }
+                    GradientNumericOperationGraphV1.Operation.UPPER_BOUND_STOPS_V1 -> {
+                        val body = requireNotNull(node.loopBody)
+                        require(body.countBoundU32 == 65_538u && body.midpointUsesDifference && body.comparisonIsLessOrEqual)
+                        code.append("var gradientLow = 0u; var gradientHigh = ${args[0]}.y;\n")
+                        code.append("for (var iteration = 0u; iteration < ${args[0]}.y; iteration = iteration + 1u) {\n")
+                        code.append("if (gradientLow >= gradientHigh) { break; }\n")
+                        code.append("let gradientProbe = gradientLow + (gradientHigh - gradientLow) / 2u;\n")
+                        val comparison = emit(body.comparison)
+                        code.append("if ($comparison) { gradientLow = gradientProbe + 1u; } else { gradientHigh = gradientProbe; }\n}\n")
+                        "gradientLow"
+                    }
+                    GradientNumericOperationGraphV1.Operation.INTERPOLATE_SRGBA_STRAIGHT_F32 -> {
+                        require(node.clampInterpolationWeightToUnitInterval)
+                        "w5c_interpolate(${args.joinToString(", ")})"
+                    }
+                }
+                code.append("let $name = $expression;\n")
+                name
+            }
+            val result = emit(graph.root)
+            return """
+                struct GradientStopV1 { positionAndReserved: vec4<f32>, straightColor: vec4<f32>, }
+                @group(1) @binding(1) var<storage, read> w5cStops: array<GradientStopV1>;
+                fn w5c_local_point(pixel: vec2<f32>) -> vec2<f32> {
+                    let p = vec3<f32>(pixel, 1.0);
+                    let x = (w5aMaterial.inverseRow0.x * p.x + w5aMaterial.inverseRow0.y * p.y) + w5aMaterial.inverseRow0.z;
+                    let y = (w5aMaterial.inverseRow1.x * p.x + w5aMaterial.inverseRow1.y * p.y) + w5aMaterial.inverseRow1.z;
+                    let w = (w5aMaterial.inverseRow2.x * p.x + w5aMaterial.inverseRow2.y * p.y) + w5aMaterial.inverseRow2.z;
+                    if (w == 1.0) { return vec2<f32>(x, y); }
+                    return vec2<f32>(x, y) / w;
+                }
+                fn w5c_interpolate(left: vec4<f32>, right: vec4<f32>, low: f32, high: f32, t: f32) -> vec4<f32> {
+                    if (high <= low) { return right; }
+                    if (t == low || all(left == right)) { return left; }
+                    let weight = clamp((t - low) / (high - low), 0.0, 1.0);
+                    return left + (right - left) * weight;
+                }
+                fn w5c_gradient(localPosition: vec2<f32>) -> vec4<f32> {
+                    $code
+                    return $result;
+                }
+            """.trimIndent()
+        }
     }
 }

@@ -24,6 +24,7 @@ internal class GPUW5bCoverageNativeV4(val witness: org.graphiks.kanvas.gpu.rende
 }
 
 internal enum class GPUW5bInlineCoverageV3 { NativeMask, NativeFull }
+internal enum class MaterialCoordinateSlotV1 { RectDevicePosition }
 
 /** Original, authenticated geometry descriptor. W5a changes no geometry or attachment state. */
 internal data class GPUW5aGeometryPipelineTemplate(
@@ -31,6 +32,7 @@ internal data class GPUW5aGeometryPipelineTemplate(
     val descriptor: RenderPipelineDescriptor,
     val groupZero: GPUBindGroupLayout,
     val w5bInlineCoverageV3: GPUW5bInlineCoverageV3? = null,
+    val materialCoordinateSlot: MaterialCoordinateSlotV1? = null,
 )
 
 internal interface GPUW5aGeometryPipelineTemplateProvider {
@@ -160,7 +162,10 @@ private fun composeSource(template: GPUW5aGeometryPipelineTemplate, source: W5aP
         "consumer.premul_rgba", "consumer.color")
     require(slots.any(geometry::contains)) { "W5a source requires an authenticated color-writing geometry shader" }
     require(!geometry.contains("@group(1)")) { "W5a source group is already occupied" }
-    val sourceExpression = "kanvas_material_source(vec2<f32>(0.0))"
+    val gradient = source.stage.gradientStopSlab != null
+    require(!gradient || template.materialCoordinateSlot == MaterialCoordinateSlotV1.RectDevicePosition)
+    val sourceExpression = if (gradient) "kanvas_material_source(w5c_local_point(fragment_position.xy))"
+        else "kanvas_material_source(vec2<f32>(0.0))"
     val analyticCoverage = destination?.sealedW5b?.compositionAbiI32 == 3 &&
         destination.sourceCoverageEncoding == org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding.ScalarCoverageInShader
     val tail = if (destination == null) "" else {
@@ -211,16 +216,21 @@ private fun composeSource(template: GPUW5aGeometryPipelineTemplate, source: W5aP
             }
         """.trimIndent().replace(Regex("\\bvec([234])([fiu])\\b")) { "vec${it.groupValues[1]}<${it.groupValues[2]}32>" }
     }
+    if (gradient && geometry.contains("fn fs_main()")) geometry = geometry.replace("fn fs_main()",
+        "fn fs_main(@builtin(position) fragment_position: vec4<f32>)")
     slots.forEach { slot -> geometry = geometry.replace(slot, if (destination == null || analyticCoverage) sourceExpression
         else "kanvas_w5b_target($sourceExpression, fragment_position.xy)") }
     val result = geometry + "\n" + source.stage.declarationsWgsl + "\n" + tail
     val composed = (validateColorWgsl("w5a-source-v2:${source.stage.structuralId}", result) as? GPUColorWgslValidation.Validated)
         ?.reflection?.report ?: error("Composed W5a fragment module failed parser validation")
-    val material = composed.bindings.singleOrNull { it.group == 1 }
+    val material = composed.bindings.singleOrNull { it.group == 1 && it.binding == 0 }
+    val manifest = source.stage.bindingManifest
     require(original.validation.success && composed.validation.success &&
         original.bindings.all { it.group == 0 } &&
         composed.bindings.filter { it.group == 0 } == original.bindings &&
-        composed.bindings.size == original.bindings.size + (if (destination == null) 1 else if (destination.sealedW5b?.compositionAbiI32 == 4) 4 else 3) && material != null &&
+        composed.bindings.filter { it.group == 1 }.size == manifest.size &&
+        manifest.all { expected -> composed.bindings.any { it.group == 1 && it.binding == expected.bindingI32 && it.resourceKind == expected.resourceKind } } &&
+        composed.bindings.size == original.bindings.size + manifest.size + (if (destination == null) 0 else if (destination.sealedW5b?.compositionAbiI32 == 4) 3 else 2) && material != null &&
         material.binding == 0 && material.resourceKind == "uniformBuffer" &&
         material.minBindingSize?.toLong() == source.stage.uniformByteCountI64) {
         "W5a composed ABI must preserve geometry bindings and add exactly its raw group-1 block"
@@ -247,6 +257,10 @@ internal fun materializeW5aSourcePartitionV2(
     var replacement: GPUPreparedNativeFrameDraft? = null
     try {
         require(framePlan.w5aCombinedMemoryBudgetV2(limits).diagnostic == null)
+        val stopSlabs = renders.values.flatMap { it.drawPackets }.mapNotNull { it.w5aSourceStageV2?.stage?.gradientStopSlab }
+            .distinctBy { it.canonicalIdentity }
+        require(stopSlabs.size <= 1) { "W5c requires one sealed frame stop slab" }
+        val stopBuffer = stopSlabs.singleOrNull()?.let { materializeGradientStopsV1(device, queue, it, owned) }
         data class SourcePipelineKey(
             val geometryPipeline: GPURenderPipeline,
             val sourceStructuralId: String,
@@ -315,7 +329,11 @@ internal fun materializeW5aSourcePartitionV2(
                         label = "Kanvas.w5a.source-v2.${source.stage.structuralId}",
                         entries = listOf(BindGroupLayoutEntry(binding = 0u, visibility = GPUShaderStage.Fragment,
                             buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform, hasDynamicOffset = false,
-                                minBindingSize = source.stage.uniformByteCountI64.toULong()))),
+                                minBindingSize = source.stage.uniformByteCountI64.toULong()))) +
+                            if (source.stage.gradientStopSlab == null) emptyList() else listOf(
+                                BindGroupLayoutEntry(binding = 1u, visibility = GPUShaderStage.Fragment,
+                                    buffer = BufferBindingLayout(type = GPUBufferBindingType.ReadOnlyStorage,
+                                        hasDynamicOffset = false, minBindingSize = 32uL))),
                     )))
                     val shader = owned.own(device.createShaderModule(ShaderModuleDescriptor(
                         label = "Kanvas.w5a.source-v2.${source.stage.structuralId}", code = composeSource(template, source, destination, destinationCopy?.logicalBounds))))
@@ -346,9 +364,12 @@ internal fun materializeW5aSourcePartitionV2(
                     }
                 }
                 val group = groups.getOrPut(source.stage.canonicalIdentity to materialLayout) {
-                    GPUPreparedNativeBindGroupOperand(owned.own(device.createBindGroup(BindGroupDescriptor(label = "Kanvas.w5a.source-group1-v2",
-                        layout = materialLayout, entries = listOf(BindGroupEntry(binding = 0u,
-                            resource = BufferBinding(buffer = buffer, offset = 0uL, size = bytes.size.toULong())))))), generation)
+                    val entries = mutableListOf(BindGroupEntry(binding = 0u,
+                        resource = BufferBinding(buffer = buffer, offset = 0uL, size = bytes.size.toULong())))
+                    source.stage.gradientStopSlab?.let { slab -> entries += BindGroupEntry(binding = 1u,
+                        resource = BufferBinding(buffer = requireNotNull(stopBuffer), offset = 0uL, size = slab.byteSizeI64.toULong())) }
+                    GPUPreparedNativeBindGroupOperand(owned.own(device.createBindGroup(BindGroupDescriptor(
+                        label = "Kanvas.w5a.source-group1-v2", layout = materialLayout, entries = entries))), generation)
                 }
                 bindings += GPUW5aNativeSourceBindingV2(ordinalI32, source, pipeline, group, buffer, bytes.size.toLong(),
                     destinationGroup.takeIf { destination != null }, coverageGroup.takeIf { scalar })

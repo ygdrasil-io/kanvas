@@ -33,6 +33,8 @@ internal object WgslFloatEnvelopeV1Oracle {
             internal val state: AttachmentState,
         ) : DrawResult
         data class Unbounded(val reason: String, internal val exclusionOnlyChannels: List<Set<Int>>? = null) : DrawResult
+        data class DomainUnbounded(val reason: String) : DrawResult
+        data class FixtureUnbounded(val reason: String) : DrawResult
     }
 
     internal class AttachmentState internal constructor(internal val linearPremul: Array<Interval>)
@@ -48,6 +50,8 @@ internal object WgslFloatEnvelopeV1Oracle {
         return ConservativeExclusion(when (result) {
             is DrawResult.Bounded -> result.channels
             is DrawResult.Unbounded -> requireNotNull(result.exclusionOnlyChannels) { result.reason }
+            is DrawResult.DomainUnbounded -> error(result.reason)
+            is DrawResult.FixtureUnbounded -> error(result.reason)
         })
     }
 
@@ -111,6 +115,8 @@ internal object WgslFloatEnvelopeV1Oracle {
     fun nextAttachment(result: DrawResult): AttachmentState? = when (result) {
         is DrawResult.Bounded -> result.state
         is DrawResult.Unbounded -> error("WgslFloatEnvelopeV1 is unbounded: ${result.reason}")
+        is DrawResult.DomainUnbounded -> error("W5c program domain is unbounded: ${result.reason}")
+        is DrawResult.FixtureUnbounded -> error("W5c fixture is unbounded: ${result.reason}")
     }
 
     /** Closes SRC_IN against the stored attachment left by the preceding draw. */
@@ -154,10 +160,11 @@ internal object WgslFloatEnvelopeV1Oracle {
         mode: BlendMode,
         coverageF32: Float = 1f,
         scalarMask: Boolean = false,
+        gradientSource: (() -> Array<Interval>)? = null,
     ): DrawResult {
         val values = try {
             val dst = destination.linearPremul
-            val src = evaluateMaterialSource(table, root, dst, Interval.ONE)
+            val src = gradientSource?.invoke() ?: evaluateMaterialSource(table, root, dst, Interval.ONE)
             // Historical W4e Rect AA producer writes an exactly half-covered edge into
             // linear RGBA8. INTERSECT then stores that sampled coverage in the accumulator.
             // Both conversions and the final texture decode belong to the independent bound.
@@ -511,6 +518,7 @@ internal object WgslFloatEnvelopeV1Oracle {
         val destination: Array<Interval>,
         val coverage: Interval,
         val opacity: Interval?,
+        val gradient: (() -> Array<Interval>)? = null,
     )
 
     private sealed interface Value {
@@ -527,6 +535,7 @@ internal object WgslFloatEnvelopeV1Oracle {
 
     private fun evaluate(node: NumericOperationGraphV1.Node, inputs: Inputs): Value = when (node.operation) {
         NumericOperationGraphV1.Operation.INPUT_SOLID_SRGBA_STRAIGHT -> Rgba(requireNotNull(inputs.solid))
+        NumericOperationGraphV1.Operation.INPUT_GRADIENT_SRGBA_STRAIGHT -> Rgba(requireNotNull(inputs.gradient).invoke())
         NumericOperationGraphV1.Operation.INPUT_MATERIAL_LINEAR_PREMUL -> Rgba(requireNotNull(inputs.material).invoke())
         NumericOperationGraphV1.Operation.INPUT_DESTINATION_LINEAR_PREMUL -> Rgba(inputs.destination)
         NumericOperationGraphV1.Operation.INPUT_COVERAGE_F32 -> Scalar(inputs.coverage)
@@ -572,6 +581,33 @@ internal object WgslFloatEnvelopeV1Oracle {
      */
     private fun sourceOver(source: Interval, destination: Interval, inverseAlpha: Interval): Interval =
         sumOfProducts(source, Interval.ONE, destination, inverseAlpha)
+
+    fun gradientThenBlend(gradient: () -> Array<Interval>, opacityF32: Float, destination: AttachmentState,
+        mode: BlendMode): DrawResult {
+        val source = evaluate(sourceNode(NumericOperationGraphV1.gradient()), Inputs(null, null,
+            destination.linearPremul, Interval.ONE, null, gradient)).rgba()
+        val opacity = Interval.input(opacityF32)
+        if (mode == BlendMode.SRC_OVER) {
+            val encoded = evaluate(NumericOperationGraphV1.opacity().root, Inputs(null, { source },
+                destination.linearPremul, Interval.ONE, opacity)).rgba()
+            val codes = encoded.mapIndexed { channelI32, value -> if (channelI32 < 3) codesForSrgbAttachment(value) else codesFor(value) }
+            if (codes.any { it.isEmpty() || it.size > 2 || it.maxOrNull()!! - it.minOrNull()!! > 1 })
+                return DrawResult.FixtureUnbounded("Attachment code sets exceed two adjacent codes: $codes")
+            return DrawResult.Bounded(codes, AttachmentState(decodeStoredAttachment(codes)))
+        }
+        val table = MaterialPlanTable.of(listOf(org.graphiks.kanvas.gpu.plan.MaterialPlanEntry(
+            MaterialProgramPlan.TransparentV1, MaterialBindingPlan.EmptyV1)))
+        val result = drawDestination(table, MaterialPlanRef(0), destination, mode,
+            gradientSource = { Array(4) { source[it] * opacity } })
+        return if (result is DrawResult.Unbounded) DrawResult.FixtureUnbounded(result.reason) else result
+    }
+
+    fun gradientAdd(a: Interval, b: Interval): Interval = a + b
+    fun gradientSubtract(a: Interval, b: Interval): Interval = a - b
+    fun gradientMultiply(a: Interval, b: Interval): Interval = a * b
+    fun gradientDivide(a: Interval, b: Interval): Interval = wgslDivide(a, b)
+    fun gradientFma(a: Interval, b: Interval, c: Interval): Interval = fma(a, b, c)
+    fun gradientHull(vararg values: Interval): Interval = hull(*values)
 
     /** The authenticated native partition emits coverage*source in WGSL, then One/InvSrcAlpha. */
     private fun blendAndCoverage(source: Interval, alpha: Interval, destination: Interval, coverage: Interval): Interval {

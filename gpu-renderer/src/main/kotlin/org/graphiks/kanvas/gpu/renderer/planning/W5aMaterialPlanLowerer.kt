@@ -15,11 +15,20 @@ internal class W5aMaterialPlanLowerer {
         if (authority !is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV1) return null
         val owner = org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2.issue(
             requireNotNull(table), mapOf(commandIdI32 to authority.ref),
+            coordinatesByCommandIdI32 = authority.coordinates?.let { mapOf(commandIdI32 to it) }.orEmpty(),
         ) ?: error("Invalid W5a source authority")
         return org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.SolidColor(
             requireNotNull(owner.materializeSource(commandIdI32, authority.ref)),
         )
     }
-    fun lower(table: MaterialPlanTable, root: MaterialPlanRef): ColorF32? =
-        W5aMaterialSourceStage.lower(table, root)?.let { ColorF32.Transparent }
+    fun lower(table: MaterialPlanTable, root: MaterialPlanRef): ColorF32? {
+        if (table.gradientStopSlab != null) {
+            var indexI32 = root.indexI32
+            while (table.entry(MaterialPlanRef(indexI32)).bindings is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.OpacityF32V1) indexI32--
+            val entry = table.entry(MaterialPlanRef(indexI32))
+            if (entry.program == org.graphiks.kanvas.gpu.plan.MaterialProgramPlan.LinearGradientClampSrgbV1)
+                return ColorF32.Transparent
+        }
+        return W5aMaterialSourceStage.lower(table, root)?.let { ColorF32.Transparent }
+    }
 }

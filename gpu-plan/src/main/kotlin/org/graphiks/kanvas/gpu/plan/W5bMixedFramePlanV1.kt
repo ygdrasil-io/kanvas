@@ -49,8 +49,10 @@ public class W5bMixedFramePlanV1 private constructor(
                 "invalid.w5b.mixed-command-order"
             }
             val readsDestination = inputs.any { it.blend is BlendPlan.DestinationReadV1 }
+            val slabs = inputs.mapNotNull { it.sourceTable.gradientStopSlab }.distinctBy { it.canonicalIdentity }
+            slabs.forEach { it.requireStorageCapabilities(capabilities) }
             // Common source + geometry + destination ABI. Prepared child witnesses retain
-            // their additional atlas/vertex binding checks. This ABI never uses storage.
+            // their additional atlas/vertex checks; gradient storage was admitted above.
             admit(RefusalReason.Capability, capabilities.maxBindGroupsI32?.let { it >= if (readsDestination) 3 else 2 } == true &&
                 capabilities.maxBindingsPerBindGroupI32?.let { it >= if (readsDestination) 2 else 1 } == true &&
                 (!readsDestination || capabilities.maxSampledTexturesPerShaderStageI32?.let { it >= 1 } == true &&
@@ -61,7 +63,7 @@ public class W5bMixedFramePlanV1 private constructor(
                 PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), 1,
                 setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.Sampled)))
             var versionI64 = 0L
-            var sourceBytesI64 = 0L
+            var sourceBytesI64 = slabs.fold(0L) { totalI64, slab -> Math.addExact(totalI64, slab.byteSizeI64) }
             val draws = inputs.map { input ->
                 require(input.commandIndexI32 >= 0)
                 val source = RawMaterialRequirementsV2.of(input.sourceTable, input.sourceRef)

@@ -1074,7 +1074,7 @@ class W5aMaterialSurfacePixelTest {
     }
 
     @Test
-    fun `public W5b gradient refusal leaves the runtime able to render a later W5a frame`() {
+    fun `public empty gradient refusal leaves the runtime able to render a later W5a frame`() {
         val color = ColorARGB.White
         val expected = W5aSolidOpacityCpuOracle.draw(color, 0.5f, paintAlphaF32 = 173f / 255f)
         val beforeRefusal = Surface(4, 4)
@@ -1099,10 +1099,7 @@ class W5aMaterialSurfacePixelTest {
                     shader = Shader.LinearGradient(
                         Point2F32(0f, 0f),
                         Point2F32(4f, 0f),
-                        listOf(
-                            GradientStop(0f, ColorARGB.Red),
-                            GradientStop(1f, ColorARGB.Blue),
-                        ),
+                        emptyList(),
                     ),
                     antiAlias = false,
                 ),
@@ -1110,7 +1107,7 @@ class W5aMaterialSurfacePixelTest {
         }
 
         val failure = assertFailsWith<IllegalStateException> { rejected.render() }
-        assertTrue(failure.message.orEmpty().contains("unsupported.material.w5a.kind"), failure.message)
+        assertTrue(failure.message.orEmpty().contains("unsupported.material.gradient.empty_stops"), failure.message)
 
         val recovered = Surface(4, 4)
         recovered.canvas {

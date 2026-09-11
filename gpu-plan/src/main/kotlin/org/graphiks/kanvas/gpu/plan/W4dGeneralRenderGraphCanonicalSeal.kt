@@ -112,6 +112,10 @@ private class W4dGeneralGraphDigestWriter {
             i32("$prefix.program.version", entry.program.versionI32)
             text("$prefix.program.id", entry.program.structuralId.value)
             when (val binding = entry.bindings) {
+                is MaterialBindingPlan.LinearGradientV1 -> {
+                    text("$prefix.binding", binding.toString())
+                    text("$prefix.stop-slab", requireNotNull(table.gradientStopSlab).canonicalIdentity)
+                }
                 MaterialBindingPlan.EmptyV1 -> text("$prefix.binding", "empty-v1")
                 is MaterialBindingPlan.SolidRgbaF32V1 -> {
                     text("$prefix.binding", "solid-rgba-f32-v1")

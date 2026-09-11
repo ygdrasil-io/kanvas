@@ -11,7 +11,8 @@ internal class W5aPacketMaterialSourceV2 private constructor(
     val canonicalIdentity: String = "w5a-source-v2:$commandIdI32:${stage.canonicalIdentity}"
 
     companion object {
-        fun issue(table: MaterialPlanTable, ref: MaterialPlanRef, commandIdI32: Int): W5aPacketMaterialSourceV2 =
-            W5aPacketMaterialSourceV2(commandIdI32, requireNotNull(W5aMaterialSourceStage.lower(table, ref)))
+        fun issue(table: MaterialPlanTable, ref: MaterialPlanRef, commandIdI32: Int,
+            coordinates: org.graphiks.kanvas.gpu.plan.MaterialCoordinatePlanV1? = null): W5aPacketMaterialSourceV2 =
+            W5aPacketMaterialSourceV2(commandIdI32, requireNotNull(W5aMaterialSourceStage.lower(table, ref, coordinates)))
     }
 }

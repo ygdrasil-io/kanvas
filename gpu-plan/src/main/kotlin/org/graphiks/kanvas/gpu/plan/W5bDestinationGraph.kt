@@ -131,11 +131,11 @@ internal object W5bDestinationGraphSealer {
                 render(when (draw) {
                     is SolidRectDraw -> SolidRectDraw.ofMaterial(draw.commandIndex,
                         (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref,
-                        draw.copyVisibleBounds(), draw.copyScissor(), draw.coverage, draw.sample, sealed)
+                        draw.copyVisibleBounds(), draw.copyScissor(), draw.coverage, draw.sample, sealed, draw.materialCoordinates)
                     is W5bPointDraw -> draw.withBlend(sealed)
                     is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(draw.commandIndex,
                         (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref,
-                        draw.copyDeviceBounds(), draw.copyRasterBounds(), draw.copyScissor(), sealed)
+                        draw.copyDeviceBounds(), draw.copyRasterBounds(), draw.copyScissor(), sealed, draw.materialCoordinates)
                     is AnalyticRRectDraw -> AnalyticRRectDraw.ofMaterial(draw.commandIndex,
                         (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref, draw.origin,
                         draw.copyDeviceShape(), draw.copyRasterBounds(), draw.copyScissor(), sealed)

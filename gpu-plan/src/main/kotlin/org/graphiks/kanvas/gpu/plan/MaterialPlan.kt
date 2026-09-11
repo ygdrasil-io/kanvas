@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.math.color.ColorF32
+import org.graphiks.math.geometry.Point2F32
 
 @JvmInline
 public value class MaterialPlanRef(public val indexI32: Int) {
@@ -30,6 +31,13 @@ public sealed interface MaterialProgramPlan {
         override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.solid()
     }
 
+    public data object LinearGradientClampSrgbV1 : MaterialProgramPlan {
+        override val versionI32: Int = 1
+        override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5c-linear-clamp-srgb-stop-abi-v1-numeric-v1")
+        override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.gradient()
+        public fun copyGradientNumericOperationGraphV1(): GradientNumericOperationGraphV1 = GradientNumericOperationGraphV1.linear()
+    }
+
     /** Child topology is code shape, while alpha remains a dynamic binding value. */
     public class OpacityV1(public val child: MaterialProgramPlan) : MaterialProgramPlan {
         override val versionI32: Int = 1
@@ -43,6 +51,11 @@ public sealed interface MaterialBindingPlan {
     public val versionI32: Int
 
     public data object EmptyV1 : MaterialBindingPlan { override val versionI32: Int = 1 }
+
+    public data class LinearGradientV1(public val startF32: Point2F32, public val endF32: Point2F32,
+        public val stopRange: GradientStopRangeV1, public val degeneracy: LinearGradientDegeneracyV1) : MaterialBindingPlan {
+        override val versionI32: Int = 1
+    }
 
     /** Exact public Solid input, in straight sRGB; the program performs conversion and premultiplication. */
     public class SolidRgbaF32V1 private constructor(private val rgbaF32: ColorF32) : MaterialBindingPlan {
@@ -62,12 +75,14 @@ public sealed interface MaterialBindingPlan {
     }
 }
 
-public data class MaterialPlanEntry(public val program: MaterialProgramPlan, public val bindings: MaterialBindingPlan)
+public data class MaterialPlanEntry(public val program: MaterialProgramPlan, public val bindings: MaterialBindingPlan,
+    public val stopSlab: GradientStopSlabPlanV1? = null)
 
 public class MaterialPlanTable private constructor(entries: List<MaterialPlanEntry>) {
     private data class StoredEntry(val programIndex: Int, val bindings: MaterialBindingPlan)
     private val storedPrograms: List<MaterialProgramPlan>
     private val storedEntries: List<StoredEntry>
+    public val gradientStopSlab: GradientStopSlabPlanV1? = entries.firstNotNullOfOrNull { it.stopSlab }
 
     init {
         val programIndexById = linkedMapOf<MaterialProgramPlanId, Int>()
@@ -88,7 +103,7 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
 
     public fun entry(ref: MaterialPlanRef): MaterialPlanEntry = storedEntries.getOrElse(ref.indexI32) {
         throw IllegalArgumentException("Material plan reference is outside the sealed table")
-    }.let { MaterialPlanEntry(storedPrograms[it.programIndex], it.bindings) }
+    }.let { MaterialPlanEntry(storedPrograms[it.programIndex], it.bindings, gradientStopSlab) }
 
     public fun entries(): List<MaterialPlanEntry> = storedEntries.indices.map { entry(MaterialPlanRef(it)) }
 
@@ -108,6 +123,7 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
                     MaterialProgramPlan.SolidLinearPremulV1 -> require(entry.bindings is MaterialBindingPlan.SolidRgbaF32V1) {
                         "Solid programs require RGBA bindings"
                     }
+                    MaterialProgramPlan.LinearGradientClampSrgbV1 -> require(entry.bindings is MaterialBindingPlan.LinearGradientV1 && entry.stopSlab != null)
                     is MaterialProgramPlan.OpacityV1 -> {
                         require(entry.bindings is MaterialBindingPlan.OpacityF32V1) {
                             "Opacity programs require opacity bindings"
@@ -116,7 +132,23 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
                     }
                 }
             }
-            return MaterialPlanTable(entries)
+            val stops = mutableListOf<GradientStopPlanV1>()
+            val ranges = linkedMapOf<List<GradientStopPlanV1>, GradientStopRangeV1>()
+            val rewritten = entries.map { entry ->
+                val binding = entry.bindings as? MaterialBindingPlan.LinearGradientV1 ?: return@map entry
+                val slabStops = requireNotNull(entry.stopSlab).copyStops()
+                val firstI64 = binding.stopRange.baseIndexU32.toLong()
+                val lastI64 = firstI64 + binding.stopRange.countU32.toLong()
+                require(lastI64 <= slabStops.size.toLong())
+                val sequence = slabStops.subList(firstI64.toInt(), lastI64.toInt()).toList()
+                val range = ranges.getOrPut(sequence) {
+                    require((stops.size.toLong() + sequence.size) * 32L <= Int.MAX_VALUE)
+                    GradientStopRangeV1(stops.size.toUInt(), sequence.size.toUInt()).also { stops += sequence }
+                }
+                entry.copy(bindings = binding.copy(stopRange = range))
+            }
+            val slab = stops.takeIf { it.isNotEmpty() }?.let(GradientStopSlabPlanV1::of)
+            return MaterialPlanTable(rewritten.map { it.copy(stopSlab = slab) })
         }
 
         /**
@@ -175,15 +207,22 @@ private fun MaterialPlanEntry.copyForInterning(): MaterialPlanEntry = MaterialPl
     program,
     when (val binding = bindings) {
         MaterialBindingPlan.EmptyV1 -> MaterialBindingPlan.EmptyV1
+        is MaterialBindingPlan.LinearGradientV1 -> binding.copy()
         is MaterialBindingPlan.SolidRgbaF32V1 -> MaterialBindingPlan.SolidRgbaF32V1.of(binding.copyRgbaF32())
         is MaterialBindingPlan.OpacityF32V1 -> MaterialBindingPlan.OpacityF32V1.of(binding.alphaF32)
-    },
+    }, stopSlab,
 )
 
 private fun MaterialPlanEntry.interningKey(): String = buildString {
     append(program.structuralId.value).append('|')
     when (val binding = bindings) {
         MaterialBindingPlan.EmptyV1 -> append("empty")
+        is MaterialBindingPlan.LinearGradientV1 -> {
+            append(binding.startF32).append(binding.endF32).append(binding.degeneracy)
+            val values = requireNotNull(stopSlab).copyStops()
+            append(GradientStopSlabPlanV1.of(values.subList(binding.stopRange.baseIndexU32.toInt(),
+                (binding.stopRange.baseIndexU32 + binding.stopRange.countU32).toInt())).canonicalIdentity)
+        }
         is MaterialBindingPlan.SolidRgbaF32V1 -> binding.copyRgbaF32().let { color ->
             append("solid:").append(color.red.toBits()).append(':').append(color.green.toBits()).append(':')
                 .append(color.blue.toBits()).append(':').append(color.alpha.toBits())
@@ -194,7 +233,8 @@ private fun MaterialPlanEntry.interningKey(): String = buildString {
 
 /** Closed draw authority: W5 material references cannot coexist with legacy colours. */
 public sealed interface PlanDrawMaterialAuthority {
-    public data class MaterialV1(public val ref: MaterialPlanRef) : PlanDrawMaterialAuthority
+    public data class MaterialV1(public val ref: MaterialPlanRef,
+        public val coordinates: MaterialCoordinatePlanV1? = null) : PlanDrawMaterialAuthority
 
     public class LegacyColorV1 private constructor(private val colorF32: ColorF32) : PlanDrawMaterialAuthority {
         public fun copyColorF32(): ColorF32 = ColorF32.of(colorF32.red, colorF32.green, colorF32.blue, colorF32.alpha)

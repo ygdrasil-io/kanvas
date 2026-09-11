@@ -455,7 +455,8 @@ public class GpuPlanTaskListLowerer {
         }
         val snapshot = graph.resources().singleOrNull { it.role == PlanResourceRole.DestinationSnapshot }
         val snapshotBytes = snapshot?.byteSize ?: 0L
-        val transientBytesI64 = try { Math.addExact(shape.staging.byteSize, snapshotBytes) } catch (_: ArithmeticException) { return null }
+        val stopBytesI64 = graph.materialPlanTableOrNull()?.gradientStopSlab?.byteSizeI64 ?: 0L
+        val transientBytesI64 = try { Math.addExact(Math.addExact(shape.staging.byteSize, snapshotBytes), stopBytesI64) } catch (_: ArithmeticException) { return null }
         val totalBytesI64 = try { Math.addExact(shape.target.byteSize, transientBytesI64) } catch (_: ArithmeticException) { return null }
         if (totalBytesI64 != graph.peakFrameLocalBytes || graph.peakFrameLocalBytes > graph.budget.maxFrameLocalBytes) return null
         val identity = compositeSessionIdentity ?: "w3.session.${generation.value}.${bounds.width}x${bounds.height}.rgba8unorm-srgb"
@@ -463,14 +464,16 @@ public class GpuPlanTaskListLowerer {
         val staging = GPUFrameMemoryAllocation("$identity.staging", GPUFrameMemoryCategory.ReadbackStaging, shape.staging.byteSize, GPUFrameMemoryResourceKind.Buffer, null)
         val snapshots = if (snapshotBytes == 0L) emptyList() else listOf(GPUFrameMemoryAllocation("$identity.snapshot", GPUFrameMemoryCategory.DestinationSnapshot, snapshotBytes, GPUFrameMemoryResourceKind.Texture2D,
             requireNotNull(snapshot?.copyExtent()).let { GPUPixelBounds(0, 0, it.width, it.height) }))
-        return GPUFrameMemoryBudgetPlan(transientBytesI64, shape.target.byteSize, GPUFrameMemoryCategory.entries.associateWith { category -> when (category) { GPUFrameMemoryCategory.CanonicalTarget -> shape.target.byteSize; GPUFrameMemoryCategory.ReadbackStaging -> shape.staging.byteSize; GPUFrameMemoryCategory.DestinationSnapshot -> snapshotBytes; else -> 0L } }, limits.capabilityFacts("frame-memory-budget"), graph.budget.maxFrameLocalBytes, null, listOf(target, staging) + snapshots)
+        val stops = if (stopBytesI64 == 0L) emptyList() else listOf(GPUFrameMemoryAllocation(
+            "$identity.gradient-stops", GPUFrameMemoryCategory.ReusableScratch, stopBytesI64, GPUFrameMemoryResourceKind.Buffer, null))
+        return GPUFrameMemoryBudgetPlan(transientBytesI64, shape.target.byteSize, GPUFrameMemoryCategory.entries.associateWith { category -> when (category) { GPUFrameMemoryCategory.CanonicalTarget -> shape.target.byteSize; GPUFrameMemoryCategory.ReadbackStaging -> shape.staging.byteSize; GPUFrameMemoryCategory.DestinationSnapshot -> snapshotBytes; GPUFrameMemoryCategory.ReusableScratch -> stopBytesI64; else -> 0L } }, limits.capabilityFacts("frame-memory-budget"), graph.budget.maxFrameLocalBytes, null, listOf(target, staging) + snapshots + stops)
     }
 
     private fun validateW3Graph(graph: RenderGraph): W3Graph? {
         val geometryClearOnly = graph.verifyW5bGeometryCompilerWitness() && graph.visualCommandCount == 0 &&
             graph.materialPlanTableOrNull() == null && graph.w5bGeometryLanes().isEmpty() && graph.passes().size == 2
         if ((!geometryClearOnly && graph.capabilityId !in setOf(W3SolidRectPlanCompiler.CAPABILITY_ID, W3SolidRectPlanCompiler.W5A_CAPABILITY_ID, W5bCorePrimitiveGraph.CAPABILITY_ID)) || graph.colorFormat != PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) return null
-        val resources = graph.resources()
+        val resources = graph.resources().filter { it.role != PlanResourceRole.GradientStopData }
         if (graph.capabilityId == W5bCorePrimitiveGraph.CAPABILITY_ID) {
             val target = resources.singleOrNull { it.role == PlanResourceRole.LogicalTarget } ?: return null
             val staging = resources.singleOrNull { it.role == PlanResourceRole.ReadbackStaging } ?: return null
@@ -534,7 +537,7 @@ public class GpuPlanTaskListLowerer {
         val planDraws = render.draws()
         if (planDraws.any { it !is SolidRectDraw }) return null
         val draws = planDraws.filterIsInstance<SolidRectDraw>()
-        if (staging.id != expectedStagingResource.id || staging.ordinal != 0 || staging.kind != PlanResourceKind.Buffer || staging.format != null || staging.copyExtent() != null || staging.byteSize != expectedStaging || staging.usages() != setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead) || staging.lifetime != PlanResourceLifetime.FrameLocal || staging.firstPassIndex != 1 || staging.lastPassIndexExclusive != 2 || render.ordinal != 0 || readback.ordinal != 0 || render.id != expectedRenderId || readback.id != expectedReadbackId || render.target != target.id || readback.source != target.id || readback.staging != staging.id || readback.bytesPerRow != expectedRow || render.load != AttachmentLoadPlan.ClearTransparent || render.store != AttachmentStorePlan.Store || render.drawDataResources != null || graph.dependencies().singleOrNull()?.let { it.before == render.id && it.after == readback.id } != true || graph.visualCommandCount != draws.size || (draws.size !in 1..512 && !(draws.isEmpty() && render.destinationVersionAfter?.valueI64 == 0L && graph.materialPlanTableOrNull() == null)) || graph.peakFrameLocalBytes != expectedTargetBytes + expectedStaging) return null
+        if (staging.id != expectedStagingResource.id || staging.ordinal != 0 || staging.kind != PlanResourceKind.Buffer || staging.format != null || staging.copyExtent() != null || staging.byteSize != expectedStaging || staging.usages() != setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead) || staging.lifetime != PlanResourceLifetime.FrameLocal || staging.firstPassIndex != 1 || staging.lastPassIndexExclusive != 2 || render.ordinal != 0 || readback.ordinal != 0 || render.id != expectedRenderId || readback.id != expectedReadbackId || render.target != target.id || readback.source != target.id || readback.staging != staging.id || readback.bytesPerRow != expectedRow || render.load != AttachmentLoadPlan.ClearTransparent || render.store != AttachmentStorePlan.Store || render.drawDataResources != null || graph.dependencies().singleOrNull()?.let { it.before == render.id && it.after == readback.id } != true || graph.visualCommandCount != draws.size || (draws.size !in 1..512 && !(draws.isEmpty() && render.destinationVersionAfter?.valueI64 == 0L && graph.materialPlanTableOrNull() == null)) || graph.peakFrameLocalBytes != expectedTargetBytes + expectedStaging + (graph.materialPlanTableOrNull()?.gradientStopSlab?.byteSizeI64 ?: 0L)) return null
         val targetRect = org.graphiks.math.geometry.RectI32(0, 0, graph.targetExtent.width, graph.targetExtent.height)
         if (draws.any { draw -> draw.coverage != CoveragePlan.FullOrScissor || draw.sample != SamplePlan.SingleSample || draw.copyVisibleBounds().isEmpty || draw.copyScissor().isEmpty || !targetRect.copy().intersect(draw.copyVisibleBounds()) || !draw.copyVisibleBounds().copy().intersect(draw.copyScissor()) || draw.copyScissor() != draw.copyVisibleBounds() }) return null
         val table = graph.materialPlanTableOrNull()
