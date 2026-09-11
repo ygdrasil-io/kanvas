@@ -296,19 +296,22 @@ public class W4eClipPlanCompiler(
         val selected = candidate as? Candidate ?: return invalidCandidate()
         if (selected.owner !== this || !selected.matches()) return invalidCandidate()
         val requiresAa = selected.capabilityId == W5A_AA_CAPABILITY_ID
+        val survivingFinalBlendsByCommandI32 = selected.finalBlendsByCommandI32.filterValues { it != BlendPlan.NoOpV1 }
+        val successor = survivingFinalBlendsByCommandI32.values.any { it != BlendPlan.SrcOver }
+        val elidedNoOps = selected.finalBlendsByCommandI32.values.any { it == BlendPlan.NoOpV1 }
         // The original W4e feature may belong only to an elided NoOp. Its surviving plain
         // Paths retain the construction seam's General authority, not an empty W4e inventory.
-        if (selected.stacks.isEmpty() && selected.inverseByCommand.isEmpty() &&
-            selected.finalBlendsByCommandI32.values.any { it == BlendPlan.NoOpV1 }) {
+        if (selected.stacks.isEmpty() && selected.inverseByCommand.isEmpty() && elidedNoOps) {
             return when (val result = selected.constructionSeam.plan(selected.base, capabilities, budget)) {
-                is RenderPlanResult.Ready -> if (requiresAa)
-                    promoted("W5b final blending requires the admitted single-sample path topology")
-                    else try {
-                        RenderPlanResult.Ready(issueW5bGeneralPathGraph(result.plan,
-                            selected.finalBlendsByCommandI32.filterValues { it != BlendPlan.NoOpV1 }))
+                is RenderPlanResult.Ready -> when {
+                    !successor && requiresAa -> result
+                    requiresAa -> promoted("W5b final blending requires the admitted single-sample path topology")
+                    else -> try {
+                        RenderPlanResult.Ready(issueW5bGeneralPathGraph(result.plan, survivingFinalBlendsByCommandI32))
                     } catch (_: IllegalArgumentException) {
                         resource(W4ePlanDiagnostics.PlanIdentityInvalid, "W4e plain survivor graph is invalid")
                     }
+                }
                 else -> result
             }
         }
@@ -346,9 +349,11 @@ public class W4eClipPlanCompiler(
         }
         return try {
             val graph = insertClips(base, selected, capabilities, budget, requiresAa, framePreview)
-            val successor = selected.finalBlendsByCommandI32.values.any { it != BlendPlan.SrcOver }
             if (successor && requiresAa) return promoted("W5b final blending requires the admitted single-sample W4e topology")
-            RenderPlanResult.Ready(if (successor) issueW5bW4ePathGraph(graph, selected.finalBlendsByCommandI32) else graph)
+            // Preserve the admitted hard NoOp envelope and its logical target identity.
+            val hardNoOpEnvelope = elidedNoOps && !requiresAa
+            RenderPlanResult.Ready(if (successor || hardNoOpEnvelope)
+                issueW5bW4ePathGraph(graph, survivingFinalBlendsByCommandI32) else graph)
         } catch (_: W4eNativePayloadLimit) {
             resource(
                 W4ePlanDiagnostics.BudgetFrameLocalExceeded,

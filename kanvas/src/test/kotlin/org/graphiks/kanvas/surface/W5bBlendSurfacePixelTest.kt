@@ -353,6 +353,59 @@ class W5bBlendSurfacePixelTest {
         } })
     }
 
+    @Test fun `geometry W4e NoOp leaves the plain AA SrcOver survivor on its authentic route`() =
+        w4eNoOpAaSurvivor(clipped = false)
+
+    @Test fun `geometry W4e NoOp leaves the clipped AA SrcOver survivor on its authentic route`() =
+        w4eNoOpAaSurvivor(clipped = true)
+
+    private fun w4eNoOpAaSurvivor(clipped: Boolean) {
+        val expected = W5aSolidOpacityCpuOracle.draw(ColorARGB.White, .5f)
+        val clear = W5aSolidOpacityCpuOracle.draw(ColorARGB.Transparent, 0f)
+        val blue = W5aSolidOpacityCpuOracle.draw(ColorARGB.Blue, .5f)
+        assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.sourceOverExclusion(halfWhiteSource(), MaterialPlanRef(1),
+            requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(blue))))
+        assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+            (clear as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels))
+        fun render(includeNoOp: Boolean): UByteArray? {
+            val source = Path().apply { addRect(RectF32.ofLTRB(-10f, -10f, 10f, 10f)) }
+            val recorder = PictureRecorder()
+            recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f)).drawPath(source,
+                Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), .5f), antiAlias = true))
+            source.fillType = org.graphiks.kanvas.geometry.FillType.INVERSE_WINDING
+            val picture = requireNotNull(Picture.fromByteArray(recorder.finishRecordingAsPicture().toByteArray()))
+            val surface = Surface(4, 4)
+            surface.canvas {
+                if (includeNoOp) {
+                    save()
+                    clipPath(Path().apply { addRect(RectF32.ofLTRB(0f, 0f, 4f, 4f)) }, antiAlias = true)
+                    drawPath(Path().apply {
+                        addRect(RectF32.ofLTRB(1f, 1f, 3f, 3f))
+                        fillType = org.graphiks.kanvas.geometry.FillType.INVERSE_WINDING
+                    }, Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.Blue), .5f),
+                        blendMode = BlendMode.DST, antiAlias = true))
+                    restore()
+                }
+                if (clipped) clipPath(Path().apply { addRect(RectF32.ofLTRB(0f, 0f, 2f, 4f)) }, antiAlias = true)
+                concat(Matrix3x3F32.skewing(.25f, 0f))
+                picture.playback(this)
+            }
+            return try { surface.render().pixels }
+            catch (failure: org.graphiks.kanvas.surface.gpu.GPUPlanSurfaceTerminalException) {
+                kotlin.test.assertEquals(if (clipped) "w4e.clip.sample-count-unavailable"
+                    else "w4d.general.texture-sample-support-unavailable", failure.code)
+                null
+            }
+        }
+        val control = render(includeNoOp = false)
+        val withNoOp = render(includeNoOp = true)
+        kotlin.test.assertEquals(control == null, withNoOp == null)
+        for (pixels in listOfNotNull(control, withNoOp)) {
+            WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixels.copyOfRange(0, 4))
+            WgslFloatEnvelopeV1Oracle.assertAdmits(if (clipped) clear else expected, pixels.copyOfRange(60, 64))
+        }
+    }
+
     private fun w4eNoOpFrame(entriesI32: Int, includeVisible: Boolean, mode: BlendMode = BlendMode.DST): Surface {
         val source = Path().apply { addRect(RectF32.ofLTRB(-1f, -1f, 5f, 5f)) }
         val recorder = PictureRecorder()
