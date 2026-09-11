@@ -192,6 +192,77 @@ class W5bBlendSurfacePixelTest {
         } })
     }
 
+    @Test fun `leading prepared A8 CLEAR ignores the retained previous frame`() =
+        leadingPreparedA8IgnoresRetainedFrame(BlendMode.CLEAR)
+
+    @Test fun `leading prepared A8 DST_IN ignores the retained previous frame`() =
+        leadingPreparedA8IgnoresRetainedFrame(BlendMode.DST_IN)
+
+    @Test fun `leading prepared A8 MODULATE ignores the retained previous frame`() =
+        leadingPreparedA8IgnoresRetainedFrame(BlendMode.MODULATE)
+
+    private fun leadingPreparedA8IgnoresRetainedFrame(mode: BlendMode) {
+        val expected = W5aSolidOpacityCpuOracle.draw(ColorARGB.Transparent, 1f)
+        val blob = TextBlob(
+            glyphRuns = listOf(KanvasGlyphRun(
+                listOf(GPUPreparedTextTestFixtures.A8_GLYPH_ID.toUShort()),
+                listOf(Point2F32(0f, 0f)),
+                fontSize = 48f,
+            )),
+            typeface = FontTypeface(
+                GPUPreparedTextTestFixtures.colrFontBytesWithForegroundLayer(),
+                "W5b retained A8 fixture",
+            ),
+            fontSize = 48f,
+        )
+        val current = Surface(40, 80).also { surface ->
+            surface.canvas {
+                drawText(
+                    blob, 4.25f, 58.5f,
+                    Paint(
+                        shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), .5f),
+                        blendMode = mode,
+                        antiAlias = false,
+                    ),
+                )
+            }
+        }
+        val fresh = current.render().pixels
+        WgslFloatEnvelopeV1Oracle.assertAdmits(
+            expected,
+            fresh.copyOfRange((40 * 40 + 5) * 4, (40 * 40 + 6) * 4),
+        )
+        assertAll(listOf(ColorARGB.Red, ColorARGB.Green).map { previousColor -> {
+            // The same runtime reuses the prepared target across equal-sized Surfaces.
+            val previous = Surface(40, 80).also { surface ->
+                surface.canvas {
+                    drawRect(
+                        RectF32.ofLTRB(0f, 0f, 40f, 80f),
+                        Paint(shader = Shader.SolidColor(previousColor), antiAlias = false),
+                    )
+                    drawText(blob, 4.25f, 58.5f, Paint(shader = Shader.SolidColor(previousColor)))
+                }
+            }.render().pixels
+            WgslFloatEnvelopeV1Oracle.assertAdmits(
+                W5aSolidOpacityCpuOracle.draw(previousColor, 1f),
+                previous.copyOfRange((40 * 40 + 5) * 4, (40 * 40 + 6) * 4),
+            )
+            // CLEAR leaves (1-c)D; DST_IN and MODULATE with half-white leave (1-c/2)D
+            // for c=128/255 if the snapshot reads the previous frame. Their RGBA8 alpha is
+            // 127 or 191; allow any RGB in this exclusion, so disjointness depends only on alpha.
+            val retainedAlphaI32 = if (mode == BlendMode.CLEAR) 127 else 191
+            assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+                List(3) { (0..255).toSet() } + listOf(setOf(retainedAlphaI32)),
+            ))
+
+            val pixels = current.render().pixels
+            WgslFloatEnvelopeV1Oracle.assertAdmits(
+                expected,
+                pixels.copyOfRange((40 * 40 + 5) * 4, (40 * 40 + 6) * 4),
+            )
+        } })
+    }
+
     @Test fun `leading prepared Vertices and Mesh destination reads observe the cleared frame`() {
         val source = solidSource(ColorF32.of(1f, 1f, 1f, 1f), .45f)
         val expected = WgslFloatEnvelopeV1Oracle.drawDestination(

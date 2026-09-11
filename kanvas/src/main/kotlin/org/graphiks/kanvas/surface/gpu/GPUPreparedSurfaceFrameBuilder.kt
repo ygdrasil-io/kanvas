@@ -20,7 +20,7 @@ import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeEntry
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeState
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedRectSnapshot
-import org.graphiks.math.color.ColorARGB
+import org.graphiks.kanvas.gpu.plan.BlendPlan
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedLayerChildrenSpec
@@ -44,7 +44,6 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
-import org.graphiks.kanvas.paint.BlendMode
 
 internal data class GPUPreparedSurfaceFrameBuildRequest(
     val candidate: GPUPreparedSurfaceEligibility.Candidate,
@@ -117,16 +116,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
         validateTargetFormat(request)?.let { return GPUPreparedSurfaceFrameBuildResult.Refused(it) }
         validateFrameIdentities(request)?.let { return GPUPreparedSurfaceFrameBuildResult.Refused(it) }
         return try {
-            // Destination-reading frames whose first visual op is the reader fuse the
-            // scene-target clear into that reader's render pass, while the destination
-            // snapshot copy is ordered before the pass. On a fresh target the copy
-            // accidentally captures the cleared state; on a retained prepared session
-            // target it captures the previous frame's pixels. Synthesize
-            // the frame's implicit clear as an explicit leading op so the copy always
-            // captures the cleared target.
-            val operations = request.candidate.operations.withSynthesizedDstReadSceneClear(
-                interpretation = request.candidate.color.interpretation,
-            )
+            val operations = request.candidate.operations
             val hasCompositeOps = operations.any { operation ->
                 operation is DisplayOp.BeginLayer ||
                     operation is DisplayOp.EndLayer ||
@@ -271,6 +261,11 @@ internal object GPUPreparedSurfaceFrameBuilder {
                             preparedVerticesInventory = verticesInventory,
                             elidedOperationIndices = elided,
                             w5aPointMaterialRefs = coreMaterialCandidates.mapValues { it.value.root },
+                            synthesizeSceneClear = operations.requiresDstReadSceneClear(
+                                interpretation = request.candidate.color.interpretation,
+                                textInventory = textInventory,
+                                verticesInventory = verticesInventory,
+                            ),
                         )
                     }
                 },
@@ -577,38 +572,20 @@ internal object GPUPreparedSurfaceFrameBuilder {
 }
 
 /**
- * Destination-reading prepared frames whose first visual op IS the reader fuse the scene-target
- * clear into that reader's render pass (`loadOp = "clear"` on the first scene render), while the
- * destination snapshot copy is ordered before that pass. On a fresh target the copy accidentally
- * captures the cleared state; on a retained prepared-session target it captures the
- * previous frame's pixels. Synthesize the frame's implicit clear as an explicit leading
- * [DisplayOp.Clear] so the copy always captures the cleared target, on fresh and retained sessions
- * alike.
- *
- * Evidence contract of the synthesized clear: the [DisplayOp.Clear] is a REAL op in the visual
- * stream. It maps to one full-target solid command, so the built frame reports
- * `visualOperationCount` N+1 (N recorded visuals), the native evidence reports one extra render
- * pass, draw, and pipeline bind, and the executor's `opsDispatched` is N+1 by design — the clear
- * IS a dispatched op. The synthesis never flips a builder-NoOp frame to Ready: it fires only for
- * frames whose first visual op is a non-empty destination-reading prepared draw (empty-glyph text
- * ops are skipped when locating the first visual, and empty-glyph-only frames stay NoOp).
- *
- * Known non-synthesized shapes (documented, not handled): elidable non-empty text first ops whose
- * blend is outside [PREPARED_DST_READ_TEXT_BLEND_MODES] (e.g. an opaque DST_IN text elides to a
- * no-op while a later dst-read text fuses the clear). Such frames keep the retained-target
- * behavior above; no current test shape exercises them. Vertices and no-program Mesh use the
- * full-or-scissor destination-read set, so fixed-function modes never gain a synthetic command.
- * LCD (subpixel) text cannot reach this lane: its blend plan is always
- * `ShaderBlendWithDstRead` (GPUSubpixelLcd.lcdBlendPlan), which the prepared-surface lane refuses
- * for TextA8 at `invalid.preflight.text.blend` (GPUPreparedSurfaceFrameTaskListBuilder), so no LCD
- * frame ever renders through the copy lane.
+ * A leading destination reader needs a separate scene clear before its snapshot, because its
+ * own render-pass loadOp executes after the copy. Decide from the already-prepared draw's sealed
+ * final blend, after text/vertices validation and elision. The mapper inserts the clear before
+ * assigning command IDs while preserving the inventories' original operation indices.
+ * Unpromoted draws retain their prepared legacy blend authority; no public mode is reclassified.
  */
-private fun List<DisplayOp>.withSynthesizedDstReadSceneClear(
+private fun List<DisplayOp>.requiresDstReadSceneClear(
     interpretation: GPUColorInterpretation,
-): List<DisplayOp> {
+    textInventory: PreparedTextFrameInventory?,
+    verticesInventory: PreparedVerticesFrameInventory,
+): Boolean {
     // EncodedPremulSrgb targets refuse translucent solids (unsupported.surface.prepared.
     // encoded-premul-srgb.translucent-solid); those frames keep today's fused-clear behavior.
-    if (interpretation == GPUColorInterpretation.EncodedPremulSrgb) return this
+    if (interpretation == GPUColorInterpretation.EncodedPremulSrgb) return false
     // Composite frames own their background through the saveLayer pipeline.
     if (any { operation ->
             operation is DisplayOp.BeginLayer ||
@@ -616,30 +593,28 @@ private fun List<DisplayOp>.withSynthesizedDstReadSceneClear(
                 operation is DisplayOp.DrawPicture
         }
     ) {
-        return this
+        return false
     }
-    // Locate the first visual op that will actually paint: empty-glyph text ops are elided by
-    // the prepared-text inventory, so they do not own the fused scene clear and must not block
-    // the synthesis for a later destination-reading text op.
-    val firstVisual = firstOrNull { visual ->
+    val firstVisual = withIndex().firstOrNull { (index, visual) ->
         visual.isVisualDraw() &&
-            (visual !is DisplayOp.DrawText || visual.blob.glyphRuns.any { run -> run.glyphs.isNotEmpty() })
-    } ?: return this
-    val destinationRead = when (firstVisual) {
-        is DisplayOp.DrawText ->
-            firstVisual.paint.blendMode in PREPARED_DST_READ_TEXT_BLEND_MODES
-        is DisplayOp.DrawVertices ->
-            firstVisual.paint.blendMode in PREPARED_DST_READ_FULL_COVERAGE_BLEND_MODES
-        is DisplayOp.DrawMesh ->
-            firstVisual.mesh.program == null &&
-                (firstVisual.blendMode ?: firstVisual.paint.blendMode) in
-                PREPARED_DST_READ_FULL_COVERAGE_BLEND_MODES
+            index !in textInventory?.elidedTextOperationIndices.orEmpty() &&
+            index !in verticesInventory.elidedVerticesOperationIndices
+    } ?: return false
+    return when (firstVisual.value) {
+        is DisplayOp.DrawText -> {
+            val draw = textInventory?.subRunsByOperationIndex?.get(firstVisual.index)?.firstOrNull()?.draw
+                ?: textInventory?.strokePathsByOperationIndex?.get(firstVisual.index)?.firstOrNull()?.draw
+                ?: return false
+            draw.materialPlan?.let { it.blend is BlendPlan.DestinationReadV1 }
+                ?: (draw.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead)
+        }
+        is DisplayOp.DrawVertices, is DisplayOp.DrawMesh -> {
+            val draw = verticesInventory.commandsByOperationIndex[firstVisual.index]?.draw ?: return false
+            draw.materialPlan?.let { it.blend is BlendPlan.DestinationReadV1 }
+                ?: (draw.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead)
+        }
         else -> false
     }
-    if (!destinationRead) return this
-    return listOf(
-        DisplayOp.Clear(ColorARGB.Transparent),
-    ) + this
 }
 
 private fun DisplayOp.isVisualDraw(): Boolean = when (this) {
@@ -661,59 +636,6 @@ private fun DisplayOp.isVisualDraw(): Boolean = when (this) {
     -> true
     else -> false
 }
-
-/**
- * Text blend modes whose canonical scalar-coverage blend plan samples the destination texture
- * (`ShaderBlendWithDstRead`), mirroring GPUBlendPlanning's scalar-coverage fallback branch for
- * text semantics. A leading destination-reading draw therefore sees the frame's cleared state.
- *
- * The set is pinned by `GPUPreparedSurfaceFrameBuilderTextTest` against the planner itself
- * (`GPUBlendPlanner.plan` with scalar coverage and a non-proven-opaque source), so drift fails
- * loudly. Over-approximation is intentional: for a PROVEN-OPAQUE source alpha the planner
- * downgrades SRC/SRC_IN/SRC_OUT/DST_ATOP to fixed-function blends (no destination read), so the
- * mirror may synthesize a clear for an opaque non-reading text op — harmless, because the clear
- * rect writes transparent and the fused-clear render would have cleared the target anyway.
- * LCD (subpixel) coverage reads the destination regardless of mode, but LCD text never reaches
- * this lane (see [withSynthesizedDstReadSceneClear]); the mirror therefore does not model it.
- */
-internal val PREPARED_DST_READ_TEXT_BLEND_MODES: Set<BlendMode> = setOf(
-    BlendMode.SRC,
-    BlendMode.SRC_IN,
-    BlendMode.SRC_OUT,
-    BlendMode.DST_ATOP,
-    BlendMode.PLUS,
-    BlendMode.MULTIPLY,
-    BlendMode.OVERLAY,
-    BlendMode.DARKEN,
-    BlendMode.LIGHTEN,
-    BlendMode.COLOR_DODGE,
-    BlendMode.COLOR_BURN,
-    BlendMode.HARD_LIGHT,
-    BlendMode.SOFT_LIGHT,
-    BlendMode.DIFFERENCE,
-    BlendMode.EXCLUSION,
-    BlendMode.HUE,
-    BlendMode.SATURATION,
-    BlendMode.COLOR,
-    BlendMode.LUMINOSITY,
-)
-
-private val PREPARED_DST_READ_FULL_COVERAGE_BLEND_MODES: Set<BlendMode> = setOf(
-    BlendMode.MULTIPLY,
-    BlendMode.OVERLAY,
-    BlendMode.DARKEN,
-    BlendMode.LIGHTEN,
-    BlendMode.COLOR_DODGE,
-    BlendMode.COLOR_BURN,
-    BlendMode.HARD_LIGHT,
-    BlendMode.SOFT_LIGHT,
-    BlendMode.DIFFERENCE,
-    BlendMode.EXCLUSION,
-    BlendMode.HUE,
-    BlendMode.SATURATION,
-    BlendMode.COLOR,
-    BlendMode.LUMINOSITY,
-)
 
 private fun GPUTaskList.authenticatedDestinationReadEvidence(
     semantics: Map<Int, GPUDrawSemanticPayload>,
@@ -1106,6 +1028,10 @@ private sealed interface PreparedImageVisuals {
 private sealed interface PreparedVisualSource {
     val operationIndex: Int
 
+    data object SceneClear : PreparedVisualSource {
+        override val operationIndex: Int = -1 // The implicit frame clear has no caller operation.
+    }
+
     data class Image(
         override val operationIndex: Int,
         val image: org.graphiks.kanvas.image.Image,
@@ -1171,7 +1097,8 @@ private fun collectPreparedImageVisuals(
             )
         }
     }
-    val visualSources = operations.withIndex().flatMap { indexed ->
+    val visualSources = listOfNotNull(PreparedVisualSource.SceneClear.takeIf { mapping.hasSynthesizedSceneClear }) +
+        operations.withIndex().flatMap { indexed ->
         val operationIndex = indexed.index
         if (operationIndex in elidedOperationIndices ||
             operationIndex in mapping.culledCoreOperationIndices
@@ -1269,7 +1196,7 @@ private fun collectPreparedImageVisuals(
             )
         }
         previousVisualCommandId = visualCommandId
-        if (source is PreparedVisualSource.Core) {
+        if (source is PreparedVisualSource.Core || source is PreparedVisualSource.SceneClear) {
             if (visual.normalized is NormalizedDrawCommand.DrawImageRect ||
                 visual.preparedImage != null
             ) {
