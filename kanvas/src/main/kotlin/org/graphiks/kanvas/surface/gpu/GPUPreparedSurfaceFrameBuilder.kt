@@ -243,6 +243,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 )
             }
             textPreparation as GPUPreparedTextFrameInventoryPreparation.Ready
+            var elidedNoOpFrame: org.graphiks.kanvas.gpu.plan.W5bElidedNoOpFrameV1? = null
             val verticesPreparation = GPUPreparedVerticesFramePreparer.prepare(
                 operations = operations,
                 target = request.targetFacts,
@@ -252,6 +253,8 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 mappingBoundary = flatElidedOperationIndices.let { elided ->
                     GPUPreparedFrameMappingBoundary { operations, target, config, capabilities,
                         textInventory, verticesInventory ->
+                        elidedNoOpFrame = operations.sealElidedNoOpFrame(
+                            request.candidate.color.interpretation, textPreparation, verticesInventory)
                         GPUOpMapper.mapOperations(
                             operations = operations,
                             target = target,
@@ -261,7 +264,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                             preparedVerticesInventory = verticesInventory,
                             elidedOperationIndices = elided,
                             w5aPointMaterialRefs = coreMaterialCandidates.mapValues { it.value.root },
-                            synthesizeSceneClear = operations.requiresDstReadSceneClear(
+                            synthesizeSceneClear = elidedNoOpFrame != null || operations.requiresDstReadSceneClear(
                                 interpretation = request.candidate.color.interpretation,
                                 textInventory = textInventory,
                                 verticesInventory = verticesInventory,
@@ -448,6 +451,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     semanticsByCommandId = semantics,
                     w5bPointBlends = corePlansByCommandId.mapValues { it.value.blend },
                     synthesizedSceneClearCommandIdI32 = 0.takeIf { mapping.hasSynthesizedSceneClear },
+                    elidedNoOpFrame = elidedNoOpFrame,
                     w5bPointClips = pointClips,
                     w5bPointCaptures = recording.pointAuthorities.mapNotNull { (commandId, authority) ->
                         val original = admittedSemantics[commandId] as? GPUDrawSemanticPayload.CorePrimitive
@@ -574,6 +578,33 @@ internal object GPUPreparedSurfaceFrameBuilder {
             )
         }
     }
+}
+
+/** Only exhaustive, already-validated prepared NoOps may request zero-survivor initialization. */
+private fun List<DisplayOp>.sealElidedNoOpFrame(
+    interpretation: GPUColorInterpretation,
+    text: GPUPreparedTextFrameInventoryPreparation.Ready,
+    vertices: PreparedVerticesFrameInventory,
+): org.graphiks.kanvas.gpu.plan.W5bElidedNoOpFrameV1? {
+    if (interpretation != GPUColorInterpretation.LinearPremul || any {
+            it is DisplayOp.BeginLayer || it is DisplayOp.EndLayer || it is DisplayOp.DrawPicture
+        }) return null
+    val visuals = withIndex().filter { it.value.isVisualDraw() }
+    if (visuals.isEmpty() || visuals.any { it.value !is DisplayOp.DrawText &&
+            it.value !is DisplayOp.DrawVertices && it.value !is DisplayOp.DrawMesh }) return null
+    val noOps = text.elidedNoOps + vertices.elidedNoOps
+    if (noOps.map { it.operationIndexI32 }.sorted() != visuals.map { it.index }) return null
+    val inventory = text.inventory
+    require(inventory.pages.isEmpty() && inventory.subRunsByOperationIndex.isEmpty() &&
+        inventory.strokePathsByOperationIndex.isEmpty() && inventory.maskIdentityByGlyphUse.isEmpty() &&
+        inventory.elidedTextOperationIndices == visuals.filter { it.value is DisplayOp.DrawText }.map { it.index }.toSet() &&
+        vertices.commands.isEmpty() && vertices.mappedCommands.isEmpty() && vertices.artifactsByKey.isEmpty() &&
+        vertices.materialsByKey.isEmpty() && vertices.artifactKeyByOperationIndex.isEmpty() &&
+        vertices.vertexUploadRanges.isEmpty() && vertices.indexUploadRanges.isEmpty() &&
+        vertices.elidedVerticesOperationIndices == visuals.filter { it.value !is DisplayOp.DrawText }.map { it.index }.toSet()) {
+        "invalid.w5b.elided-source-inventory"
+    }
+    return org.graphiks.kanvas.gpu.plan.W5bElidedNoOpFrameV1.seal(visuals.map { it.index }, noOps)
 }
 
 /**

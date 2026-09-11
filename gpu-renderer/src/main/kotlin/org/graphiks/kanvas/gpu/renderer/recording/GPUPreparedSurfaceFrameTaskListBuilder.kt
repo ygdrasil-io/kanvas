@@ -128,6 +128,7 @@ data class GPUPreparedSurfaceFrameRequest(
     val w5bPointClips: Map<Int, org.graphiks.kanvas.render.ir.ClipStackNode> = emptyMap(),
     val w5bPointCaptures: Map<Int, W5bPreparedPointCaptureV3> = emptyMap(),
     val synthesizedSceneClearCommandIdI32: Int? = null,
+    val elidedNoOpFrame: org.graphiks.kanvas.gpu.plan.W5bElidedNoOpFrameV1? = null,
 )
 
 /** Checked structural ceilings applied before one prepared task graph is published. */
@@ -1161,7 +1162,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         }
         val allCore = request.semanticsByCommandId.values
             .all { it is GPUDrawSemanticPayload.CorePrimitive }
-        if (allCore) {
+        if (allCore && request.elidedNoOpFrame == null) {
             @Suppress("UNCHECKED_CAST")
             val coreSemantics = request.semanticsByCommandId as
                 Map<Int, GPUDrawSemanticPayload.CorePrimitive>
@@ -2896,6 +2897,8 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         destinationTask?.let(tasks::add)
         tasks += coreDestinationTasks
         tasks += renders
+        if (renders.isEmpty()) return refused("invalid.recording.w5b-mixed-initialization",
+            "An elided prepared frame requires an authenticated initialization render.")
         if (readbackRequest != null && readbackStaging != null) {
             val readbackTask = GPUTask.Readback(
                 taskId = GPUTaskID("task.prepared-surface.readback.${request.baseTaskList.frameId.value}"),
@@ -2985,7 +2988,12 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             is GPUDrawSemanticPayload.Vertices -> semantic.w5bFinalBlendPlan
             else -> null
         } }
-        if (finalBlends.all(org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer::isLegacySrcOverEquivalent)) return null
+        if (request.elidedNoOpFrame == null &&
+            finalBlends.all(org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer::isLegacySrcOverEquivalent)) return null
+        if (request.elidedNoOpFrame != null) require(request.synthesizedSceneClearCommandIdI32 == 0 &&
+            packets.size == 1 && packets.single().commandIdValue == 0 && snapshots.isEmpty()) {
+            "invalid.w5b.mixed-zero-survivor-initialization"
+        }
         val capability = request.capabilities.toPlanCapabilitySnapshot(request.baseTaskList.capabilitySeal.deviceGeneration)
             as? org.graphiks.kanvas.gpu.renderer.planning.GpuPlanCapabilityAdapterResult.Supported
             ?: throw MixedUnsupportedCapability()
@@ -3031,7 +3039,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         }
         return org.graphiks.kanvas.gpu.plan.W5bMixedFramePlanV1.seal(
             org.graphiks.kanvas.gpu.plan.PlanResourceId(request.target.value), capability.snapshot,
-            org.graphiks.kanvas.gpu.plan.PlanBudget(budgetI64), inputs)
+            org.graphiks.kanvas.gpu.plan.PlanBudget(budgetI64), inputs, request.elidedNoOpFrame)
     }
 
     private fun prepareCoreAuthorityBaseTaskList(

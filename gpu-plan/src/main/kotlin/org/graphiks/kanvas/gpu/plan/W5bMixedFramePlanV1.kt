@@ -6,6 +6,7 @@ public class W5bMixedFramePlanV1 private constructor(
     public val capabilities: PlanCapabilitySnapshot,
     public val budget: PlanBudget,
     draws: List<Draw>,
+    public val elidedNoOpFrame: W5bElidedNoOpFrameV1?,
 ) {
     public val draws: List<Draw> = java.util.Collections.unmodifiableList(ArrayList(draws))
 
@@ -43,7 +44,9 @@ public class W5bMixedFramePlanV1 private constructor(
             capabilities: PlanCapabilitySnapshot,
             budget: PlanBudget,
             inputs: List<Input>,
+            elidedNoOpFrame: W5bElidedNoOpFrameV1? = null,
         ): W5bMixedFramePlanV1 {
+            require((elidedNoOpFrame == null) == inputs.isNotEmpty()) { "invalid.w5b.mixed-zero-survivors" }
             require(inputs.map { it.commandIndexI32 }.distinct().size == inputs.size &&
                 inputs.zipWithNext().all { (a, b) -> a.commandIndexI32 < b.commandIndexI32 }) {
                 "invalid.w5b.mixed-command-order"
@@ -87,7 +90,7 @@ public class W5bMixedFramePlanV1 private constructor(
                     before, DestinationVersionI64(versionI64))
             }
             admit(RefusalReason.SourceBudget, sourceBytesI64 <= budget.maxFrameLocalBytes)
-            return W5bMixedFramePlanV1(targetId, capabilities, budget, draws)
+            return W5bMixedFramePlanV1(targetId, capabilities, budget, draws, elidedNoOpFrame)
         }
 
         private fun admit(reason: RefusalReason, condition: Boolean) {

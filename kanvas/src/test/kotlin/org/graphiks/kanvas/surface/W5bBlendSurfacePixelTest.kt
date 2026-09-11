@@ -263,6 +263,27 @@ class W5bBlendSurfacePixelTest {
         WgslFloatEnvelopeV1Oracle.assertAdmits(expected, frame(true))
     }
 
+    @Test fun `mixed frame all Vertices DST reads transparent after retained colored target`() {
+        val transparent = W5aSolidOpacityCpuOracle.draw(ColorARGB.Transparent, 1f)
+        val green = W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, 1f)
+        val white = W5aSolidOpacityCpuOracle.draw(ColorARGB.White, 1f)
+        listOf(green, white).forEach { counterfactual ->
+            assertDisjoint(transparent, WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+                (counterfactual as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels))
+        }
+        fun frame(color: ColorARGB, mode: BlendMode): UByteArray = Surface(16, 16).also { surface -> surface.canvas {
+            drawVertices(Vertices(VertexMode.TRIANGLES,
+                listOf(Point2F32(0f, 0f), Point2F32(16f, 0f), Point2F32(0f, 16f))),
+                Paint(shader = Shader.SolidColor(color), blendMode = mode, antiAlias = false))
+        } }.render().pixels
+        val primer = frame(ColorARGB.Green, BlendMode.SRC_OVER)
+        WgslFloatEnvelopeV1Oracle.assertAdmits(green, primer.copyOfRange((16 * 4 + 4) * 4, (16 * 4 + 4) * 4 + 4))
+        val noOp = frame(ColorARGB.White, BlendMode.DST)
+        for (offsetI32 in noOp.indices step 4) {
+            WgslFloatEnvelopeV1Oracle.assertAdmits(transparent, noOp.copyOfRange(offsetI32, offsetI32 + 4))
+        }
+    }
+
     @Test fun `prepared uncolored Vertices and Mesh no program retain fixed and DST blends`() =
         preparedUncoloredVerticesBlends(listOf(BlendMode.DST_OUT, BlendMode.DST))
 

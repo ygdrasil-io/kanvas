@@ -25,6 +25,7 @@ internal sealed interface GPUPreparedTextFrameInventoryPreparation {
     data class Ready(
         val inventory: PreparedTextFrameInventory,
         val metrics: GPUPreparedTextFrameMetrics,
+        val elidedNoOps: List<org.graphiks.kanvas.gpu.plan.W5bElidedNoOpFrameV1.Operation> = emptyList(),
     ) : GPUPreparedTextFrameInventoryPreparation
 
     data class Refused(val refusal: GPUPreparedOperationRefusal) :
@@ -73,6 +74,7 @@ internal object GPUPreparedTextFramePreparer {
     ): GPUPreparedTextFrameInventoryPreparation {
         val preparedDraws = ArrayList<GPUPreparedTextDraw>()
         val elidedTextOperationIndices = linkedSetOf<Int>()
+        val elidedNoOps = ArrayList<org.graphiks.kanvas.gpu.plan.W5bElidedNoOpFrameV1.Operation>()
         val loweringStartedAt = System.nanoTime()
         operations.forEachIndexed { operationIndex, operation ->
             if (operation !is DisplayOp.DrawText) return@forEachIndexed
@@ -91,6 +93,12 @@ internal object GPUPreparedTextFramePreparer {
             ) {
                 is GPUPreparedTextLowering.Ready -> {
                     if (lowered.draw.blendPlan is GPUBlendPlan.NoOp) {
+                        lowered.draw.materialPlan?.let { material ->
+                            if (material.blend == org.graphiks.kanvas.gpu.plan.BlendPlan.NoOpV1) {
+                                elidedNoOps += org.graphiks.kanvas.gpu.plan.W5bElidedNoOpFrameV1.Operation.seal(
+                                    operationIndex, material.table, material.ref, material.blend)
+                            }
+                        }
                         elidedTextOperationIndices += operationIndex
                     } else {
                         preparedDraws += lowered.draw
@@ -149,6 +157,7 @@ internal object GPUPreparedTextFramePreparer {
         }
         return GPUPreparedTextFrameInventoryPreparation.Ready(
             inventory = inventory,
+            elidedNoOps = java.util.Collections.unmodifiableList(ArrayList(elidedNoOps)),
             metrics = inventory.metrics.copy(
                 loweringNanoseconds = loweringNanoseconds,
                 rasterNanoseconds = inventoryResult.rasterNanoseconds,

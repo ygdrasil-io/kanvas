@@ -225,6 +225,10 @@ internal class W5bMixedPreparedFrameWitnessV1 private constructor(
                 }
             }
             val colors = packets.filter { it.role != GPUDrawPacketRole.PathStencilProducer && it !== initialization }
+            if (timeline.elidedNoOpFrame != null) require(timeline.draws.isEmpty() &&
+                initialization != null && packets == listOf(initialization) && renders.size == 1 &&
+                frame.steps.none { it is GPUFrameStep.UploadResourceStep || it is GPUFrameStep.CopyDestinationStep } &&
+                nativeCoreDestinationTasks.isEmpty()) { "invalid.w5b.mixed-zero-survivor-domain" }
             require(colors.map { it.commandIdValue } == survivors.map { it.commandIndexI32 }) {
                 "invalid.w5b.mixed-color-order"
             }

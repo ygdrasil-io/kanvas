@@ -130,7 +130,10 @@ internal class PreparedVerticesFrameInventory internal constructor(
     val capabilitySnapshotHash: String,
     val metrics: PreparedVerticesFrameMetrics,
     val limitEvidence: PreparedVerticesFrameLimitEvidence,
+    elidedNoOps: List<org.graphiks.kanvas.gpu.plan.W5bElidedNoOpFrameV1.Operation> = emptyList(),
 ) {
+    val elidedNoOps: List<org.graphiks.kanvas.gpu.plan.W5bElidedNoOpFrameV1.Operation> =
+        Collections.unmodifiableList(ArrayList(elidedNoOps))
     val commands: List<PreparedVerticesFrameCommand> =
         Collections.unmodifiableList(commands.toList())
     val commandsByOperationIndex: Map<Int, PreparedVerticesFrameCommand> =
@@ -176,6 +179,9 @@ internal class PreparedVerticesFrameInventory internal constructor(
         require(commandsByOperationIndex.keys.none(elidedVerticesOperationIndices::contains)) {
             "Prepared vertices accepted and elided ownership must be disjoint"
         }
+        require(this.elidedNoOps.map { it.operationIndexI32 }.let { indices ->
+            indices.distinct().size == indices.size && indices.all(this.elidedVerticesOperationIndices::contains)
+        }) { "Prepared vertices NoOp authority must uniquely belong to elided operations" }
         require(materialsByKey.keys == commands.mapTo(linkedSetOf()) { it.materialKey }) {
             "Prepared vertices material ownership must exactly match command material keys"
         }
@@ -254,7 +260,7 @@ internal class PreparedVerticesFrameInventory internal constructor(
             PreparedVerticesFrameInventory(
                 commands, artifactsByKey, materialsByKey, artifactKeyByOperationIndex,
                 vertexUploadRanges, indexUploadRanges, elidedVerticesOperationOrder,
-                bindings, capabilitySnapshotHash, metrics, limitEvidence,
+                bindings, capabilitySnapshotHash, metrics, limitEvidence, elidedNoOps,
             ),
         )
     }
@@ -340,6 +346,13 @@ internal object PreparedVerticesFrameInventoryBuilder {
         }
         val elided = draws.filter { draw ->
             draw.culledByClip || draw.blendPlan is GPUBlendPlan.NoOp
+        }
+        val elidedNoOps = elided.mapNotNull { draw ->
+            draw.materialPlan?.takeIf { it.blend == org.graphiks.kanvas.gpu.plan.BlendPlan.NoOpV1 &&
+                draw.blendPlan is GPUBlendPlan.NoOp }?.let { material ->
+                org.graphiks.kanvas.gpu.plan.W5bElidedNoOpFrameV1.Operation.seal(
+                    draw.operationIndex, material.table, material.ref, material.blend)
+            }
         }
         val visibleDraws = draws.filterNot { draw ->
             draw.culledByClip || draw.blendPlan is GPUBlendPlan.NoOp
@@ -533,6 +546,7 @@ internal object PreparedVerticesFrameInventoryBuilder {
                 vertexUploadRanges = vertexRanges,
                 indexUploadRanges = indexRanges,
                 elidedVerticesOperationIndices = elided.map { it.operationIndex },
+                elidedNoOps = elidedNoOps,
                 capabilitySnapshotHash = capabilities.canonicalSnapshotHash(),
                 metrics = PreparedVerticesFrameMetrics(
                     drawCount = commands.size,
