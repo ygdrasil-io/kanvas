@@ -357,6 +357,7 @@ internal class W4dGeneralPathGraphLowerer {
         graph: RenderGraph,
         w4ePreparedClipConsumer: GPUW4ePreparedClipConsumerAuthority? = null,
         w5bBlend: org.graphiks.kanvas.gpu.plan.BlendPlan? = null,
+        w5bMaterial: org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload? = null,
     ): BuiltPacket {
         val draw = pass.draw
         val scissor = draw.copyScissorI32()
@@ -445,7 +446,7 @@ internal class W4dGeneralPathGraphLowerer {
                 geometry = geometryInput,
                 premultipliedRgba = listOf(color.red, color.green, color.blue, color.alpha),
                 material = if (!pass.phase.isColorProducing()) null else
-                    W5aMaterialPlanLowerer().material(graph.materialPlanTableOrNull(), draw.materialAuthority, draw.commandIndex),
+                    w5bMaterial ?: W5aMaterialPlanLowerer().material(graph.materialPlanTableOrNull(), draw.materialAuthority, draw.commandIndex),
                 targetBounds = bounds,
                 scissorBounds = scissorBounds,
                 clipCoveragePlan = clip.first,

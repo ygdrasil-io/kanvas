@@ -430,7 +430,8 @@ public class RenderGraph private constructor(
                             "Legacy render passes require single-sample draws"
                         }
                         require(pass.draws().none { it.unwrapClippedSource().let { source -> source is PathRenderDraw &&
-                            !(source is GeneralPathDraw && capabilityId == W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID) } }) {
+                            !(source is GeneralPathDraw && capabilityId in setOf(W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID,
+                                W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID)) } }) {
                             "General and binary masked path draws require explicit path render passes"
                         }
                         pass.draws().map { it.unwrapClippedSource() }.filterIsInstance<PathDraw>().forEach { draw ->

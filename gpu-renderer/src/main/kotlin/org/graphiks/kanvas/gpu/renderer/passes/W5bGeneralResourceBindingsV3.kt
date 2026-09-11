@@ -18,16 +18,24 @@ internal class W5bGeneralResourceBindingsV3 private constructor(bindings: Map<St
             require(target.value.endsWith(".target") && staging.value == target.value.removeSuffix(".target") + ".staging")
             val identity = target.value.removeSuffix(".target")
             return W5bGeneralResourceBindingsV3(source.resources().associate { item ->
-                val successor = graph.resources().single { it.id == item.id }
+                val successorId = when (item.role) {
+                    PlanResourceRole.LogicalTarget, PlanResourceRole.ReadbackStaging -> graph.resources().single { it.role == item.role }.id
+                    PlanResourceRole.VertexData -> requireNotNull(lane.drawDataResources).vertex
+                    PlanResourceRole.IndexData -> requireNotNull(lane.drawDataResources).index
+                    PlanResourceRole.UniformData -> requireNotNull(lane.drawDataResources).uniform
+                    PlanResourceRole.DepthStencil -> requireNotNull(lane.depthStencil)
+                    else -> error("General hard successor cannot rebind another native resource family")
+                }
+                val successor = graph.resources().single { it.id == successorId }
                 require(successor.role == item.role && successor.kind == item.kind && successor.format == item.format &&
                     successor.copyExtent() == item.copyExtent() && successor.byteSize == item.byteSize &&
                     successor.sampleCountI32 == item.sampleCountI32 && successor.usages() == item.usages())
                 item.id.value to when (item.role) {
                     PlanResourceRole.LogicalTarget -> target
                     PlanResourceRole.ReadbackStaging -> staging
-                    PlanResourceRole.DepthStencil -> GPUFrameTextureRef("$identity.${item.id.value}.depth-stencil")
+                    PlanResourceRole.DepthStencil -> GPUFrameTextureRef("$identity.${successor.id.value}.depth-stencil")
                     PlanResourceRole.VertexData, PlanResourceRole.IndexData, PlanResourceRole.UniformData ->
-                        GPUFrameBufferRef("$identity.${item.id.value}")
+                        GPUFrameBufferRef("$identity.${successor.id.value}")
                     else -> error("General hard successor cannot rebind another native resource family")
                 }
             })

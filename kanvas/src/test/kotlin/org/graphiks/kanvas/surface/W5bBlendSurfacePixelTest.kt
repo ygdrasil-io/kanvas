@@ -112,7 +112,11 @@ class W5bBlendSurfacePixelTest {
         WgslFloatEnvelopeV1Oracle.assertAdmits(green, reverse.copyOfRange(36, 40))
     }
 
-    @Test fun `geometry transformed hard Paths retain final blends and captured math geometry`() {
+    @Test fun `geometry transformed hard Paths retain final blends and captured math geometry`() = transformedGeometryBlends(false)
+
+    @Test fun `geometry mixed transformed Paths retain distinct native lanes and final blends`() = transformedGeometryBlends(true)
+
+    private fun transformedGeometryBlends(mixed: Boolean) {
         assertAll(listOf(GeometryFamily.DirectPath, GeometryFamily.StencilPath, GeometryFamily.Stroke, GeometryFamily.Hairline).flatMap { family ->
             listOf(BlendMode.DST_OUT, BlendMode.DST, BlendMode.DIFFERENCE).map { mode -> {
                 val opacity = if (mode == BlendMode.DIFFERENCE) .45f else .5f
@@ -141,13 +145,21 @@ class W5bBlendSurfacePixelTest {
                     if (mutateBefore) mutate()
                     val recorder = PictureRecorder()
                     val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f))
-                    canvas.concat(Matrix3x3F32.skewing(.25f, 0f))
-                    fun foreground() = canvas.drawPath(source, Paint(
+                    fun foreground() {
+                        canvas.save()
+                        canvas.concat(Matrix3x3F32.skewing(.25f, 0f))
+                        canvas.drawPath(source, Paint(
                         shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), opacity), antiAlias = false,
                         blendMode = mode, style = if (family in setOf(GeometryFamily.Stroke, GeometryFamily.Hairline)) PaintStyle.STROKE else PaintStyle.FILL,
                         strokeWidth = if (family == GeometryFamily.Hairline) 0f else 1f))
-                    fun background() = canvas.drawPath(Path().apply { addRect(RectF32.ofLTRB(-10f, -10f, 10f, 10f)) },
-                        Paint(shader = Shader.SolidColor(ColorARGB.Green), antiAlias = false))
+                        canvas.restore()
+                        canvas.resetMatrix()
+                    }
+                    fun background() {
+                        val paint = Paint(shader = Shader.SolidColor(ColorARGB.Green), antiAlias = false)
+                        if (mixed) canvas.drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), paint)
+                        else canvas.drawPath(Path().apply { addRect(RectF32.ofLTRB(-10f, -10f, 10f, 10f)) }, paint)
+                    }
                     if (reverse) { foreground(); background() } else { background(); foreground() }
                     if (!mutateBefore) mutate()
                     return requireNotNull(Picture.fromByteArray(recorder.finishRecordingAsPicture().toByteArray()))
@@ -194,21 +206,32 @@ class W5bBlendSurfacePixelTest {
             surface(BlendMode.SRC, false).render().pixels.copyOfRange(0, 4))
     }
 
-    @Test fun `geometry W4e clipped and inverse Paths retain final blends and captured coverage`() {
-        assertAll(listOf(false, true).flatMap { inverse ->
+    @Test fun `geometry W4e clipped and inverse Paths retain final blends and captured coverage`() = w4eGeometryBlends(1f)
+
+    @Test fun `geometry W4e scalar mask retains three quarter final blend interpolation`() = w4eGeometryBlends(.75f)
+
+    private fun w4eGeometryBlends(coverage: Float) {
+        // The original 2x2 AA producer leaves three samples, stored as R8 code191.
+        val storedCoverage = if (coverage == 1f) 1f else 191f / 255f
+        assertAll((if (coverage == 1f) listOf(false, true) else listOf(false)).flatMap { inverse ->
             listOf(BlendMode.DST_OUT, BlendMode.DST, BlendMode.DIFFERENCE).map { mode -> {
-                val opacity = if (mode == BlendMode.DIFFERENCE) .45f else .5f
+                val opacity = if (mode == BlendMode.DIFFERENCE) .45f else if (coverage == 1f) .5f else .75f
                 val background = W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, 1f)
                 val destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(background))
                 val white = solidSource(ColorF32.of(1f, 1f, 1f, 1f), opacity)
                 val expected = when (mode) {
                     BlendMode.DST -> background
-                    BlendMode.DST_OUT -> W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, .5f)
-                    else -> WgslFloatEnvelopeV1Oracle.drawDestination(white, MaterialPlanRef(1), destination, mode)
+                    BlendMode.DST_OUT -> W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, 1f - opacity * storedCoverage)
+                    else -> WgslFloatEnvelopeV1Oracle.drawDestination(white, MaterialPlanRef(1), destination, mode, storedCoverage)
                 }
-                assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.sourceOverExclusion(white, MaterialPlanRef(1), destination))
+                assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.sourceOverExclusion(white, MaterialPlanRef(1), destination, storedCoverage))
                 if (mode != BlendMode.DST) assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
                     (background as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels))
+                if (coverage != 1f && mode != BlendMode.DST) assertDisjoint(expected,
+                    if (mode == BlendMode.DST_OUT) WgslFloatEnvelopeV1Oracle.sourceOverExclusion(
+                        solidSource(ColorF32.of(0f, 1f, 0f, 1f), 1f - opacity), MaterialPlanRef(1),
+                        WgslFloatEnvelopeV1Oracle.clearAttachment())
+                    else WgslFloatEnvelopeV1Oracle.destinationExclusion(white, MaterialPlanRef(1), destination, mode))
                 fun pixels(reverse: Boolean = false, mutateBefore: Boolean = false): UByteArray {
                     val path = Path().apply {
                         addRect(if (inverse) RectF32.ofLTRB(1f, 1f, 3f, 3f) else RectF32.ofLTRB(-1f, -1f, 5f, 5f))
@@ -231,6 +254,7 @@ class W5bBlendSurfacePixelTest {
                         fun foreground() {
                             save()
                             if (!inverse) clipPath(clip, antiAlias = false)
+                            if (coverage != 1f) clipRect(RectF32.ofLTRB(.5f, .5f, 4f, 4f), org.graphiks.kanvas.pipeline.ClipOp.DIFFERENCE, antiAlias = true)
                             picture.playback(this)
                             restore()
                         }

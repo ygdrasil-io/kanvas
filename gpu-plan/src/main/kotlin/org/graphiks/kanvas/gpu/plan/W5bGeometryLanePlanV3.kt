@@ -35,7 +35,8 @@ internal fun issueW5bNativeComposite(graphs: List<RenderGraph>): RenderGraph {
         W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID, W4bAnalyticRRectPlanCompiler.CAPABILITY_ID,
         W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID, W4cPathFillPlanCompiler.CAPABILITY_ID,
         W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W4dPathStrokePlanCompiler.CAPABILITY_ID,
-        W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID)
+        W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, W4dGeneralPathPlanCompiler.W5A_HARD_CAPABILITY_ID,
+        W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID)
     require(graphs.all { it.capabilityId in admitted && it.targetExtent == first.targetExtent &&
         it.capabilities == first.capabilities && it.budget == first.budget && it.colorFormat == first.colorFormat })
     require(graphs.filter { it.capabilityId == W3SolidRectPlanCompiler.CAPABILITY_ID }.all {
@@ -58,6 +59,7 @@ internal fun issueW5bNativeComposite(graphs: List<RenderGraph>): RenderGraph {
         val draws = graph.passes().flatMap { pass -> when (pass) {
             is PlanPass.RenderPass -> pass.draws()
             is PlanPass.StencilCover -> listOf(pass.draw)
+            is PlanPass.PathRenderPass -> if (pass.phase == PathRenderPhase.SingleSampleStencilProducer) emptyList() else listOf(pass.draw as GeneralPathDraw)
             else -> emptyList()
         } }
         if (draws.isEmpty()) return@forEachIndexed
@@ -89,7 +91,9 @@ internal fun issueW5bNativeComposite(graphs: List<RenderGraph>): RenderGraph {
             resources.single { it.role == PlanResourceRole.IndexData }.id, resources.single { it.role == PlanResourceRole.UniformData }.id)
         val depth = resources.singleOrNull { it.role == PlanResourceRole.DepthStencil }?.id
         geometryResources += resources
-        lanes += W5bGeometryLanePlanV3(graph, draws.map { it.commandIndex }, data, depth)
+        val geometrySource = if (graph.capabilityId == W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID)
+            graph.w5bGeometryLanes().single().sourceGraph else graph
+        lanes += W5bGeometryLanePlanV3(geometrySource, draws.map { it.commandIndex }, data, depth)
         draws.forEach { draw ->
             val ref = interned.remap(ordinal, (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref)
             colors += when (draw) {
@@ -99,6 +103,8 @@ internal fun issueW5bNativeComposite(graphs: List<RenderGraph>): RenderGraph {
                 is AnalyticRRectDraw -> draw.withMaterialRef(ref)
                 is PathFillDraw -> draw.withMaterialRef(ref)
                 is PathStrokeDraw -> draw.withMaterialRef(ref)
+                is GeneralPathDraw -> GeneralPathDraw.ofMaterial(draw.commandIndex, ref, draw.copyPathGeometry(),
+                    draw.strategy, draw.copyScissorI32(), draw.coverage, draw.sample, draw.blend)
                 else -> error("Unsupported native W5b composite geometry")
             }
             dataByCommand[draw.commandIndex] = data
