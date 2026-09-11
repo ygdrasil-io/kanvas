@@ -6,7 +6,7 @@ import org.graphiks.math.geometry.Point2F32
 import org.graphiks.kanvas.gpu.plan.GradientNumericOperationGraphV1
 import org.graphiks.kanvas.gpu.plan.GradientNumericOperationGraphV1.Operation
 import org.graphiks.kanvas.gpu.plan.GradientNumericOperationGraphV1.Input
-import org.graphiks.kanvas.gpu.plan.GradientNumericDomainProofV1
+import org.graphiks.kanvas.gpu.plan.GradientNumericOperationGraphV1.Schedule
 import org.graphiks.kanvas.surface.WgslFloatEnvelopeV1Oracle.Interval
 
 /** Independent public-input interpreter: no production normalizer, bindings, shaders or formula helpers. */
@@ -15,8 +15,8 @@ internal object W5cGradientCpuOracle {
         private val endF32: Point2F32, private val stops: List<GradientStop>) {
         fun thenBlend(destination: W5bBlendCpuOracle.Draw, blend: BlendMode, opacityF32: Float): WgslFloatEnvelopeV1Oracle.DrawResult {
             val graph = GradientNumericOperationGraphV1.linear()
-            if (graph.domainProof != GradientNumericDomainProofV1.ProvenFinite ||
-                stops.isEmpty() || stops.size > 65_536 || stops.any { !it.position.isFinite() } ||
+            // A value-free schema carries no production proof; derive this sample's domain independently.
+            if (stops.isEmpty() || stops.size > 65_536 || stops.any { !it.position.isFinite() } ||
                 listOf(pointF32.x, pointF32.y, startF32.x, startF32.y, endF32.x, endF32.y).any {
                     !it.isFinite() || kotlin.math.abs(it.toDouble()) > 1e8 })
                 return WgslFloatEnvelopeV1Oracle.DrawResult.DomainUnbounded("No finite Linear input-domain proof")
@@ -24,10 +24,14 @@ internal object W5cGradientCpuOracle {
             if (!interpreter.hasFiniteStopDomain())
                 return WgslFloatEnvelopeV1Oracle.DrawResult.DomainUnbounded("Stop interval has no normal finite denominator")
             val background = W5aSolidOpacityCpuOracle.draw(destination.color, destination.opacityF32)
-            return WgslFloatEnvelopeV1Oracle.gradientThenBlend(
-                { interpreter.evaluate(graph.root).color() }, opacityF32,
-                requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(background)), blend,
-            )
+            return try {
+                WgslFloatEnvelopeV1Oracle.gradientThenBlend(
+                    { interpreter.evaluate(graph.root).color() }, opacityF32,
+                    requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(background)), blend,
+                )
+            } catch (failure: IllegalArgumentException) {
+                WgslFloatEnvelopeV1Oracle.DrawResult.DomainUnbounded(failure.message ?: "No finite operation-domain proof")
+            }
         }
     }
     fun linearClampSrgb(localPointF32: Point2F32, startF32: Point2F32, endF32: Point2F32,
@@ -77,13 +81,17 @@ internal object W5cGradientCpuOracle {
                 }
                 Operation.INPUT_STOP_RANGE_U32 -> if (node.input == Input.STOPS) Range else Index(setOf(0))
                 Operation.ADD_F32 -> {
-                    var sum = oracle.gradientAdd(args[0].scalar(), args[1].scalar())
-                    node.inputs.forEachIndexed { indexI32, child -> if (child.operation == Operation.MUL_F32 &&
-                        GradientNumericOperationGraphV1.Schedule.FusedMultiplyAdd in node.schedules) {
-                        sum = oracle.gradientHull(sum, oracle.gradientFma(evaluate(child.inputs[0]).scalar(),
-                            evaluate(child.inputs[1]).scalar(), args[1 - indexI32].scalar()))
-                    } }
-                    Scalar(sum)
+                    Scalar(oracle.gradientHull(*node.schedules.map { schedule -> when (schedule) {
+                        Schedule.RoundedF32 -> oracle.gradientAdd(args[0].scalar(), args[1].scalar())
+                        Schedule.FusedMultiplyAdd -> oracle.gradientHull(
+                            oracle.gradientAdd(args[0].scalar(), args[1].scalar()),
+                            *node.inputs.mapIndexedNotNull { indexI32, child ->
+                                child.takeIf { it.operation == Operation.MUL_F32 }?.let {
+                                    oracle.gradientFma(evaluate(it.inputs[0]).scalar(), evaluate(it.inputs[1]).scalar(), args[1 - indexI32].scalar())
+                                }
+                            }.toTypedArray())
+                        Schedule.ReassociatedSumOfProducts -> reassociatedSum(expandProducts(node))
+                    } }.toTypedArray()))
                 }
                 Operation.SUB_F32 -> Scalar(oracle.gradientSubtract(args[0].scalar(), args[1].scalar()))
                 Operation.MUL_F32 -> Scalar(oracle.gradientMultiply(args[0].scalar(), args[1].scalar()))
@@ -144,8 +152,6 @@ internal object W5cGradientCpuOracle {
                 }
                 Operation.INTERPOLATE_SRGBA_STRAIGHT_F32 -> {
                     require(node.clampInterpolationWeightToUnitInterval)
-                    require(GradientNumericOperationGraphV1.Schedule.FusedMultiplyAdd in node.schedules &&
-                        GradientNumericOperationGraphV1.Schedule.RoundedF32 in node.schedules)
                     val left = args[0].color(); val right = args[1].color()
                     val low = args[2].scalar(); val high = args[3].scalar(); val t = args[4].scalar()
                     if (high.upper <= low.lower) Color(right)
@@ -157,14 +163,67 @@ internal object W5cGradientCpuOracle {
                             rawWeight.upper.coerceIn(java.math.BigDecimal.ZERO, java.math.BigDecimal.ONE))
                         Color(Array(4) { channelI32 ->
                             val delta = oracle.gradientSubtract(right[channelI32], left[channelI32])
-                            oracle.gradientHull(oracle.gradientAdd(left[channelI32], oracle.gradientMultiply(delta, weight)),
-                                oracle.gradientFma(delta, weight, left[channelI32]))
+                            oracle.gradientHull(*node.schedules.map { schedule -> when (schedule) {
+                                Schedule.RoundedF32 -> oracle.gradientAdd(left[channelI32], oracle.gradientMultiply(delta, weight))
+                                Schedule.FusedMultiplyAdd -> oracle.gradientFma(delta, weight, left[channelI32])
+                                Schedule.ReassociatedSumOfProducts -> {
+                                    val inverse = oracle.gradientSubtract(Interval.ONE, weight)
+                                    oracle.gradientHull(
+                                        reassociatedSum(listOf(listOf(left[channelI32]), listOf(right[channelI32], weight),
+                                            listOf(negate(left[channelI32]), weight))),
+                                        reassociatedSum(listOf(listOf(left[channelI32], inverse), listOf(right[channelI32], weight))),
+                                        oracle.gradientAdd(right[channelI32], oracle.gradientMultiply(negate(delta), inverse)),
+                                        oracle.gradientFma(negate(delta), inverse, right[channelI32]),
+                                    )
+                                }
+                            } }.toTypedArray())
                         })
                     }
                 }
                 Operation.SQRT_F32, Operation.ATAN2_F32, Operation.FLOOR_F32, Operation.ABS_F32 ->
                     error("Operation belongs to a deferred family outside the sealed Linear graph")
             }
+        }
+
+        private fun negate(value: Interval): Interval = WgslFloatEnvelopeV1Oracle.gradientSubtract(Interval.ZERO, value)
+
+        /** Independent polynomial expansion of the declared dot/length sum-of-products schedule. */
+        private fun expandProducts(node: GradientNumericOperationGraphV1.Node): List<List<Interval>> = when (node.operation) {
+            Operation.ADD_F32 -> expandProducts(node.inputs[0]) + expandProducts(node.inputs[1])
+            Operation.SUB_F32 -> expandProducts(node.inputs[0]) + expandProducts(node.inputs[1]).map { factors ->
+                listOf(negate(factors.first())) + factors.drop(1)
+            }
+            Operation.MUL_F32 -> expandProducts(node.inputs[0]).flatMap { left -> expandProducts(node.inputs[1]).map { right -> left + right } }
+            else -> listOf(listOf(evaluate(node).scalar()))
+        }
+
+        /** Enumerates all subset partitions: every ordering/association and every available FMA. */
+        private fun reassociatedSum(inputTerms: List<List<Interval>>): Interval {
+            val oracle = WgslFloatEnvelopeV1Oracle
+            val terms = inputTerms.filterNot { factors -> factors.any { it == Interval.ZERO } }
+            if (terms.isEmpty()) return Interval.ZERO
+            require(terms.size <= 8 && terms.all { it.size in 1..2 })
+            val cache = mutableMapOf<Int, Interval>()
+            fun sum(maskI32: Int): Interval = cache.getOrPut(maskI32) {
+                if (maskI32.countOneBits() == 1) {
+                    val factors = terms[maskI32.countTrailingZeroBits()]
+                    if (factors.size == 1) factors.single() else oracle.gradientMultiply(factors[0], factors[1])
+                } else {
+                    val alternatives = mutableListOf<Interval>()
+                    var leftI32 = (maskI32 - 1) and maskI32
+                    while (leftI32 != 0) {
+                        val rightI32 = maskI32 xor leftI32
+                        alternatives += oracle.gradientAdd(sum(leftI32), sum(rightI32))
+                        if (leftI32.countOneBits() == 1) {
+                            val factors = terms[leftI32.countTrailingZeroBits()]
+                            if (factors.size == 2) alternatives += oracle.gradientFma(factors[0], factors[1], sum(rightI32))
+                        }
+                        leftI32 = (leftI32 - 1) and maskI32
+                    }
+                    oracle.gradientHull(*alternatives.toTypedArray())
+                }
+            }
+            return sum((1 shl terms.size) - 1)
         }
     }
 }

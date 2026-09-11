@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.kanvas.render.ir.GradientStop
 import org.graphiks.math.color.ColorF32
+import org.graphiks.math.geometry.Point2F32
 
 public data class GradientStopPlanV1(public val positionF32: Float, public val straightSrgbF32: ColorF32)
 public data class GradientStopRangeV1(public val baseIndexU32: UInt, public val countU32: UInt) {
@@ -30,6 +31,59 @@ public class GradientStopSlabPlanV1 private constructor(stops: List<GradientStop
 
 public data class LinearGradientDegeneracyV1(public val axisXF32: Float, public val axisYF32: Float,
     public val lengthSquaredF32: Float, public val degenerate: Boolean)
+
+/** Value-dependent proof, issued only by the planner and transported through range rebasing. */
+public class LinearGradientNumericAuthorityV1 private constructor(
+    public val graph: GradientNumericOperationGraphV1,
+    private val coordinates: MaterialCoordinatePlanV1,
+    private val startF32: Point2F32,
+    private val endF32: Point2F32,
+    private val degeneracy: LinearGradientDegeneracyV1,
+    private val range: GradientStopRangeV1,
+    private val slabIdentity: String,
+    private val localMagnitudeF64: Double,
+    private val uniformMagnitudeF64: Double,
+) {
+    private val programId = MaterialProgramPlan.LinearGradientClampSrgbV1.structuralId
+    internal val domainIdentity: String = "linear-domain-v1:${programId.value}:${graph.contractId}:" +
+        "$startF32:$endF32:$degeneracy:${coordinates.canonicalIdentity}:" +
+        "${localMagnitudeF64.toBits()}:${uniformMagnitudeF64.toBits()}"
+    public val canonicalIdentity: String = "$domainIdentity:$range:$slabIdentity"
+    override fun toString(): String = canonicalIdentity
+
+    public fun authenticates(program: MaterialProgramPlan, binding: MaterialBindingPlan.LinearGradientV1,
+        slab: GradientStopSlabPlanV1, coordinates: MaterialCoordinatePlanV1): Boolean =
+        program.structuralId == programId && graph.contractId == "WgslFloatEnvelopeV1" &&
+            graph.domainProof == GradientNumericDomainProofV1.ProvenFinite && this.coordinates == coordinates &&
+            binding.startF32 == startF32 && binding.endF32 == endF32 && binding.degeneracy == degeneracy &&
+            binding.stopRange == range && slab.canonicalIdentity == slabIdentity
+
+    internal fun rebase(binding: MaterialBindingPlan.LinearGradientV1, sourceSlab: GradientStopSlabPlanV1,
+        newRange: GradientStopRangeV1, newSlab: GradientStopSlabPlanV1): LinearGradientNumericAuthorityV1 {
+        require(authenticates(MaterialProgramPlan.LinearGradientClampSrgbV1, binding, sourceSlab, coordinates)) {
+            W5cPlanDiagnostics.NumericDomainUnbounded
+        }
+        fun sequence(slab: GradientStopSlabPlanV1, selected: GradientStopRangeV1): List<GradientStopPlanV1> =
+            slab.copyStops().subList(selected.baseIndexU32.toInt(), (selected.baseIndexU32 + selected.countU32).toInt())
+        require(sequence(sourceSlab, range) == sequence(newSlab, newRange)) { W5cPlanDiagnostics.NumericDomainUnbounded }
+        return LinearGradientNumericAuthorityV1(graph, coordinates, startF32, endF32, degeneracy,
+            newRange, newSlab.canonicalIdentity, localMagnitudeF64, uniformMagnitudeF64)
+    }
+
+    internal companion object {
+        fun seal(coordinates: MaterialCoordinatePlanV1, startF32: Point2F32, endF32: Point2F32,
+            degeneracy: LinearGradientDegeneracyV1, slab: GradientStopSlabPlanV1,
+            localMagnitudeF64: Double, uniformMagnitudeF64: Double): LinearGradientNumericAuthorityV1? {
+            val schema = MaterialProgramPlan.LinearGradientClampSrgbV1.copyGradientNumericOperationGraphV1()
+            val stops = slab.copyStops()
+            val proof = schema.proveLinearDomainV1(localMagnitudeF64, uniformMagnitudeF64, degeneracy, stops, startF32, endF32)
+            if (proof != GradientNumericDomainProofV1.ProvenFinite) return null
+            val provenGraph = GradientNumericOperationGraphV1.Linear(schema.root, proof)
+            return LinearGradientNumericAuthorityV1(provenGraph, coordinates, startF32, endF32, degeneracy,
+                GradientStopRangeV1(0u, stops.size.toUInt()), slab.canonicalIdentity, localMagnitudeF64, uniformMagnitudeF64)
+        }
+    }
+}
 
 internal fun GradientStopSlabPlanV1.requireStorageCapabilities(capabilities: PlanCapabilitySnapshot) {
     require(capabilities.supportedOperations().containsAll(setOf(PlanOperationCapability.StorageBuffer,

@@ -30,11 +30,19 @@ internal object GPUPlanSurfaceCandidateGate {
                     operation is DisplayOp.Annotation
             }
 
-    private fun acceptsGradient(shader: Shader?, rect: Boolean): Boolean = when (shader) {
-        is Shader.Opacity -> acceptsGradient(shader.shader, rect)
-        is Shader.LinearGradient -> rect && shader.tileMode == TileMode.CLAMP && shader.interpolation == ColorSpaceInterpolation.SRGB
-        is Shader.RadialGradient, is Shader.SweepGradient, is Shader.ConicalGradient -> false
-        else -> true
+    private fun acceptsGradient(shader: Shader?, rect: Boolean): Boolean {
+        var source = shader
+        var depthI32 = 0
+        while (source is Shader.Opacity) {
+            // Admission does not own diagnostics; capture reports the public graph-depth refusal.
+            if (++depthI32 > 64) return true
+            source = source.shader
+        }
+        return when (source) {
+            is Shader.LinearGradient -> rect && source.tileMode == TileMode.CLAMP && source.interpolation == ColorSpaceInterpolation.SRGB
+            is Shader.RadialGradient, is Shader.SweepGradient, is Shader.ConicalGradient -> false
+            else -> true
+        }
     }
 
 }

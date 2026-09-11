@@ -137,13 +137,12 @@ public object EffectiveMaterialPlanner {
                         val lengthSquaredF32 = dxF32 * dxF32 + dyF32 * dyF32
                         val degeneracy = LinearGradientDegeneracyV1(dxF32, dyF32, lengthSquaredF32,
                             kotlin.math.sqrt(lengthSquaredF32) <= 0.000030517578125f)
-                        val proof = MaterialProgramPlan.LinearGradientClampSrgbV1.copyGradientNumericOperationGraphV1()
-                            .proveLinearDomainV1(mappingBoundF64, valuesF32.take(4).maxOf { kotlin.math.abs(it.toDouble()) },
-                                degeneracy, stops.slab.copyStops())
-                        if (proof is GradientNumericDomainProofV1.Unbounded) return Normalization.Refused(proof.diagnosticCode)
+                        val numericAuthority = LinearGradientNumericAuthorityV1.seal(coordinates, material.start, material.end,
+                            degeneracy, stops.slab, mappingBoundF64, valuesF32.take(4).maxOf { kotlin.math.abs(it.toDouble()) })
+                            ?: return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
                         MaterialPlanEntry(MaterialProgramPlan.LinearGradientClampSrgbV1,
                             MaterialBindingPlan.LinearGradientV1(material.start, material.end,
-                                GradientStopRangeV1(0u, stops.slab.copyStops().size.toUInt()), degeneracy), stops.slab)
+                                GradientStopRangeV1(0u, stops.slab.copyStops().size.toUInt()), degeneracy, numericAuthority), stops.slab)
                     }
                 }
             }

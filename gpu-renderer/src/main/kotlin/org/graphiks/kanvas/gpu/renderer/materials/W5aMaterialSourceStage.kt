@@ -56,9 +56,10 @@ internal class W5aMaterialSourceStage private constructor(
             if (gradientBinding != null && coordinates == null) return null
             val gradientGraph = if (gradientBinding == null) null else {
                 if (table.entry(ref).program != MaterialProgramPlan.LinearGradientClampSrgbV1) return null
-                MaterialProgramPlan.LinearGradientClampSrgbV1.copyGradientNumericOperationGraphV1().also {
-                    if (it.domainProof != GradientNumericDomainProofV1.ProvenFinite) return null
-                }
+                val numeric = gradientBinding.numericAuthority
+                if (!numeric.authenticates(table.entry(ref).program, gradientBinding,
+                    requireNotNull(table.gradientStopSlab), requireNotNull(coordinates))) return null
+                numeric.graph
             }
             var child: String? = null
             var opaque = true

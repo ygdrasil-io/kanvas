@@ -53,7 +53,8 @@ public sealed interface MaterialBindingPlan {
     public data object EmptyV1 : MaterialBindingPlan { override val versionI32: Int = 1 }
 
     public data class LinearGradientV1(public val startF32: Point2F32, public val endF32: Point2F32,
-        public val stopRange: GradientStopRangeV1, public val degeneracy: LinearGradientDegeneracyV1) : MaterialBindingPlan {
+        public val stopRange: GradientStopRangeV1, public val degeneracy: LinearGradientDegeneracyV1,
+        public val numericAuthority: LinearGradientNumericAuthorityV1) : MaterialBindingPlan {
         override val versionI32: Int = 1
     }
 
@@ -148,7 +149,16 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
                 entry.copy(bindings = binding.copy(stopRange = range))
             }
             val slab = stops.takeIf { it.isNotEmpty() }?.let(GradientStopSlabPlanV1::of)
-            return MaterialPlanTable(rewritten.map { it.copy(stopSlab = slab) })
+            return MaterialPlanTable(rewritten.mapIndexed { indexI32, entry ->
+                val binding = entry.bindings as? MaterialBindingPlan.LinearGradientV1
+                val sealed = if (binding == null) entry else {
+                    val source = entries[indexI32]
+                    val original = source.bindings as MaterialBindingPlan.LinearGradientV1
+                    entry.copy(bindings = binding.copy(numericAuthority = original.numericAuthority.rebase(
+                        original, requireNotNull(source.stopSlab), binding.stopRange, requireNotNull(slab))))
+                }
+                sealed.copy(stopSlab = slab)
+            })
         }
 
         /**
@@ -219,6 +229,7 @@ private fun MaterialPlanEntry.interningKey(): String = buildString {
         MaterialBindingPlan.EmptyV1 -> append("empty")
         is MaterialBindingPlan.LinearGradientV1 -> {
             append(binding.startF32).append(binding.endF32).append(binding.degeneracy)
+            append(binding.numericAuthority.domainIdentity)
             val values = requireNotNull(stopSlab).copyStops()
             append(GradientStopSlabPlanV1.of(values.subList(binding.stopRange.baseIndexU32.toInt(),
                 (binding.stopRange.baseIndexU32 + binding.stopRange.countU32).toInt())).canonicalIdentity)

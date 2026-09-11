@@ -10,6 +10,8 @@ public sealed interface GradientNumericOperationGraphV1 {
     public val root: Node
     public val contractId: String get() = "WgslFloatEnvelopeV1"
     public val domainProof: GradientNumericDomainProofV1
+    /** Gamma(64) with a full-ULP unit bound: covers all eight-term sum/product schedules. */
+    public val reassociationRoundoffFactorF64: Double get() = (64.0 / 8_388_608.0) / (1.0 - 64.0 / 8_388_608.0)
     public enum class ValueType { LocalPointF32, UniformScalarF32, UniformFlag, StopRangeU32,
         ScalarF32, IndexU32, ValidityFlag, SrgbaStraightF32 }
     public enum class Operation {
@@ -124,7 +126,7 @@ public sealed interface GradientNumericOperationGraphV1 {
                 Node(Operation.INPUT_STOP_RANGE_U32, ValueType.IndexU32, input = Input.ZERO)))
             val below = Node(Operation.COMPARE_F32, ValueType.ValidityFlag, listOf(numerator, zero))
             return Linear(Node(Operation.SELECT, ValueType.SrgbaStraightF32, listOf(interpolated, first, below)),
-                GradientNumericDomainProofV1.ProvenFinite)
+                GradientNumericDomainProofV1.Unbounded(W5cPlanDiagnostics.NumericDomainUnbounded))
         }
     }
 }
@@ -135,13 +137,21 @@ internal fun GradientNumericOperationGraphV1.proveLinearDomainV1(
     uniformMagnitudeF64: Double,
     degeneracy: LinearGradientDegeneracyV1,
     stops: List<GradientStopPlanV1>,
+    startF32: org.graphiks.math.geometry.Point2F32,
+    endF32: org.graphiks.math.geometry.Point2F32,
 ): GradientNumericDomainProofV1 {
     val bounds = mutableMapOf<GradientNumericOperationGraphV1.Node, Double>()
     val minimumGapF64 = stops.zipWithNext().mapNotNull { (a, b) ->
         (b.positionF32 - a.positionF32).takeIf { it > 0f }?.toDouble()
     }.minOrNull() ?: 1.0
-    // A margin larger than all permitted rounded/FMA schedules for the two-term positive sum.
-    val minimumLengthF64 = if (degeneracy.degenerate) 1.0 else degeneracy.lengthSquaredF32.toDouble() * 0.99999
+    // The expanded form may cancel large products even when (end-start)^2 looks harmless.
+    val xSumF64 = kotlin.math.abs(startF32.x.toDouble()) + kotlin.math.abs(endF32.x.toDouble())
+    val ySumF64 = kotlin.math.abs(startF32.y.toDouble()) + kotlin.math.abs(endF32.y.toDouble())
+    val dxF64 = endF32.x.toDouble() - startF32.x.toDouble()
+    val dyF64 = endF32.y.toDouble() - startF32.y.toDouble()
+    val lengthErrorF64 = (xSumF64 * xSumF64 + ySumF64 * ySumF64) * reassociationRoundoffFactorF64 +
+        64.0 * java.lang.Float.MIN_NORMAL
+    val minimumLengthF64 = if (degeneracy.degenerate) 1.0 else dxF64 * dxF64 + dyF64 * dyF64 - lengthErrorF64
     var finite = true
     fun bound(node: GradientNumericOperationGraphV1.Node): Double = bounds.getOrPut(node) {
         val inputs = node.inputs.map(::bound)

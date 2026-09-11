@@ -24,6 +24,85 @@ import kotlin.test.assertContentEquals
 
 class W5cGradientSurfacePixelTest {
     @Test
+    fun linearRectNormalizesPositionsAndHardStopRuns() {
+        val red = ubyteArrayOf(255u, 0u, 0u, 255u)
+        val blue = ubyteArrayOf(0u, 0u, 255u, 255u)
+        val fixtures = listOf(
+            // Clamp both ends, then monotonize .25 into the hard stop at .5.
+            listOf(GradientStop(-1f, ColorARGB.Red), GradientStop(.5f, ColorARGB.Red),
+                GradientStop(.25f, ColorARGB.Blue), GradientStop(2f, ColorARGB.Blue)) to listOf(red, red, blue, blue, blue),
+            // Both implicit endpoints must repeat the nearest input color.
+            listOf(GradientStop(.25f, ColorARGB.Red), GradientStop(.25f, ColorARGB.Blue),
+                GradientStop(.75f, ColorARGB.Blue), GradientStop(.75f, ColorARGB.Red)) to listOf(red, blue, blue, red, red),
+            // Interior colors in a run longer than two never replace its first or last.
+            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(.5f, ColorARGB.Red),
+                GradientStop(.5f, ColorARGB.Green), GradientStop(.5f, ColorARGB.Black),
+                GradientStop(.5f, ColorARGB.Blue), GradientStop(1f, ColorARGB.Blue)) to listOf(red, red, blue, blue, blue),
+        )
+        for ((stops, expected) in fixtures) {
+            val bounds = RectF32.ofLTRB(0f, 0f, 5f, 1f)
+            val recorder = PictureRecorder()
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(shader = Shader.LinearGradient(
+                Point2F32(.5f, 0f), Point2F32(4.5f, 0f), stops), antiAlias = false))
+            val picture = recorder.finishRecordingAsPicture()
+            val surface = Surface(5, 1)
+            surface.canvas { picture.playback(this) }
+            val pixels = surface.render().pixels
+            expected.forEachIndexed { indexI32, color ->
+                assertContentEquals(color, pixels.copyOfRange(indexI32 * 4, indexI32 * 4 + 4))
+            }
+        }
+    }
+
+    @Test
+    fun linearRectDegenerateAxisUsesLastStop() {
+        for (endF32 in listOf(Point2F32(0f, 0f), Point2F32(0.0000152587890625f, 0f))) {
+            val surface = Surface(1, 1)
+            surface.canvas { drawRect(rect, Paint(shader = Shader.LinearGradient(Point2F32(0f, 0f), endF32,
+                listOf(GradientStop(0f, ColorARGB.Red), GradientStop(.5f, ColorARGB.Green),
+                    GradientStop(1f, ColorARGB.Blue))), antiAlias = false)) }
+            assertContentEquals(ubyteArrayOf(0u, 0u, 255u, 255u), surface.render().pixels)
+        }
+    }
+
+    @Test
+    fun linearRectInvalidInputsRefusePubliclyAndAllowRecovery() {
+        for (shader in listOf(linearStops(2).copy(start = Point2F32(Float.NaN, 0f)),
+            linearStops(2).copy(stops = listOf(GradientStop(Float.POSITIVE_INFINITY, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue))))) {
+            val surface = Surface(1, 1)
+            surface.canvas { drawRect(rect, Paint(shader = shader, antiAlias = false)) }
+            val captured = assertInstanceOf(SceneCaptureResult.Invalid::class.java, surface.snapshotScene())
+            assertEquals("non-finite-value", captured.diagnostics.single().code.value)
+            val failure = assertThrows<IllegalStateException> { surface.render() }
+            assertEquals("non-finite-value", failure.message.orEmpty().substringBefore(':'))
+        }
+        // Finite public inputs whose per-fragment numeric domain cannot be proven must never execute.
+        for (shader in listOf(linearStops(2).copy(end = Point2F32(1e20f, 0f)),
+            linearStops(2).copy(start = Point2F32(1_000_000f, 0f), end = Point2F32(1_000_001f, 0f)))) {
+            val surface = Surface(1, 1)
+            surface.canvas { drawRect(rect, Paint(shader = shader, antiAlias = false)) }
+            assertInstanceOf(SceneCaptureResult.Captured::class.java, surface.snapshotScene())
+            val failure = assertThrows<IllegalStateException> { surface.render() }
+            assertEquals("unsupported.material.gradient.numeric-domain-unbounded", failure.message.orEmpty().substringBefore(':'))
+        }
+        val recovery = Surface(1, 1)
+        recovery.canvas { drawRect(rect, Paint(shader = linearStops(2), antiAlias = false)) }
+        assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u), recovery.render().pixels)
+    }
+
+    @Test
+    fun linearRectDeepOpacityReportsDepthLimitWithoutOverflow() {
+        var shader: Shader = linearStops(2)
+        repeat(50_000) { shader = Shader.Opacity(shader, 1f) }
+        val surface = Surface(1, 1)
+        surface.canvas { drawRect(rect, Paint(shader = shader, antiAlias = false)) }
+        val captured = assertInstanceOf(SceneCaptureResult.Invalid::class.java, surface.snapshotScene())
+        assertEquals("graph-depth-limit", captured.diagnostics.single().code.value)
+        val failure = assertThrows<IllegalStateException> { surface.render() }
+        assertEquals("graph-depth-limit", failure.message.orEmpty().substringBefore(':'))
+    }
+
+    @Test
     fun linearRectUsesLocalCoordinatesAndMoreThanSixteenStops() {
         val capturedStops = MutableList(17) { indexI32 ->
             GradientStop(

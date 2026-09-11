@@ -3,6 +3,7 @@
 package org.graphiks.kanvas.surface
 
 import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.paint.Paint
@@ -1107,7 +1108,7 @@ class W5aMaterialSurfacePixelTest {
         }
 
         val failure = assertFailsWith<IllegalStateException> { rejected.render() }
-        assertTrue(failure.message.orEmpty().contains("unsupported.material.gradient.empty_stops"), failure.message)
+        assertEquals("unsupported.material.gradient.empty_stops", failure.message.orEmpty().substringBefore(':'))
 
         val recovered = Surface(4, 4)
         recovered.canvas {

@@ -115,17 +115,25 @@ public class RenderGraph private constructor(
             w5bW4eSource: RenderGraph? = null,
         ): RenderGraph {
             val stopSlab = materialPlanTable?.gradientStopSlab
-            if (stopSlab != null && resources.none { it.role == PlanResourceRole.GradientStopData }) {
-                stopSlab.requireStorageCapabilities(capabilities)
-                val draws = visualDraws(passes)
-                val sourceBytesI64 = draws.fold(0L) { totalI64, draw ->
+            if (stopSlab != null) {
+                visualDraws(passes).forEach { draw ->
                     val authority = draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1
                     var indexI32 = authority.ref.indexI32
                     while (materialPlanTable.entry(MaterialPlanRef(indexI32)).bindings is MaterialBindingPlan.OpacityF32V1) indexI32--
-                    if (materialPlanTable.entry(MaterialPlanRef(indexI32)).bindings is MaterialBindingPlan.LinearGradientV1)
+                    val entry = materialPlanTable.entry(MaterialPlanRef(indexI32))
+                    if (entry.bindings is MaterialBindingPlan.LinearGradientV1) {
                         require((draw is SolidRectDraw || draw is AnalyticRectDraw) && authority.coordinates != null) {
                             W5cPlanDiagnostics.CoordinatesUnavailable
                         }
+                        require(entry.bindings.numericAuthority.authenticates(entry.program, entry.bindings,
+                            stopSlab, requireNotNull(authority.coordinates))) { W5cPlanDiagnostics.NumericDomainUnbounded }
+                    }
+                }
+            }
+            if (stopSlab != null && resources.none { it.role == PlanResourceRole.GradientStopData }) {
+                stopSlab.requireStorageCapabilities(capabilities)
+                val sourceBytesI64 = visualDraws(passes).fold(0L) { totalI64, draw ->
+                    val authority = draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1
                     val source = RawMaterialRequirementsV2.of(materialPlanTable, authority.ref)
                     require(capabilities.maxUniformBufferBindingSizeBytesI64?.let { source.uniformByteCountI64 <= it } == true &&
                         source.uniformByteCountI64 <= capabilities.maxBufferSizeBytes) { W5cPlanDiagnostics.StorageUnavailable }
