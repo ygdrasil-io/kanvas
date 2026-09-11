@@ -30,8 +30,9 @@ class Surface(
     val height: Int,
     val format: PixelFormat = PixelFormat.RGBA8,
     val config: RenderConfig = RenderConfig.DEFAULT,
+    private val captureLimits: SceneCaptureLimits = SceneCaptureLimits.DEFAULT,
 ) {
-    private val buffer = SnapshotDisplayListBuffer()
+    private val buffer = SnapshotDisplayListBuffer(captureLimits)
     private var canvasInstance: Canvas? = null
 
     /** Return a snapshot of recorded display operations (for diagnostic replay). */
@@ -43,8 +44,8 @@ class Surface(
      * This is a read-only recording operation: it does not initialize, submit to,
      * or read back from the legacy GPU renderer.
      */
-    fun snapshotScene(limits: SceneCaptureLimits = SceneCaptureLimits.DEFAULT): SceneCaptureResult = DisplayOpSceneAdapter.capture(
-        operations = snapshotOps(),
+    fun snapshotScene(limits: SceneCaptureLimits = captureLimits): SceneCaptureResult = DisplayOpSceneAdapter.capture(
+        operations = buffer.sealedOps(),
         extent = SceneExtent(width, height),
         colorSpace = ColorSpace.SRGB,
         limits = limits,
@@ -76,7 +77,7 @@ class Surface(
         check(!SceneRecordingScope.isRecordingOnly()) {
             "Surface.render is unavailable in a recording-only scene capture scope"
         }
-        return renderViaGpu(buffer, width, height, format, config)
+        return renderViaGpu(buffer, width, height, format, config, captureLimits = captureLimits)
     }
 
     /**

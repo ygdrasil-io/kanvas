@@ -33,11 +33,13 @@ public data class SceneCaptureLimits(
     public val maxDepth: Int = 64,
     public val maxNodes: Int = 4_096,
     public val maxResources: Int = 1_024,
+    public val maxGradientStopsI32: Int = 65_536,
 ) {
     init {
         require(maxDepth > 0) { "SceneCaptureLimits.maxDepth must be positive" }
         require(maxNodes > 0) { "SceneCaptureLimits.maxNodes must be positive" }
         require(maxResources > 0) { "SceneCaptureLimits.maxResources must be positive" }
+        require(maxGradientStopsI32 > 0) { "SceneCaptureLimits.maxGradientStopsI32 must be positive" }
     }
 
     public companion object {
@@ -330,6 +332,7 @@ public object DisplayOpSceneAdapter {
 }
 
 private class CaptureContext(private val limits: SceneCaptureLimits) {
+    private val gradientStops = GradientStopCaptureBudget(limits.maxGradientStopsI32)
     private val activePictures = IdentityHashMap<org.graphiks.kanvas.picture.Picture, Unit>()
     private val images = IdentityHashMap<org.graphiks.kanvas.image.Image, Unit>()
     private var nodes: Int = 0
@@ -416,6 +419,7 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
                 throw CaptureFailure("graph-depth-limit", "Paint, effect, or material graph exceeds configured depth")
             }
             countGraphLeaf()
+            (visit.value as? Shader)?.let(gradientStops::reserve)
             pending.addLast(Visit(visit.value, visit.depth, true))
             graphChildren(visit.value).asReversed().forEach { child ->
                 pending.addLast(Visit(child, visit.depth + 1, false))
