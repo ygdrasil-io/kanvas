@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
+import org.graphiks.kanvas.gpu.renderer.destination.preparedDestinationBounds
+
 import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureUsage
 import java.security.MessageDigest
@@ -4678,13 +4680,16 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                                     ),
                                     sampleContinuation = render.sampleContinuationKey,
                                     sourceIntermediate = null,
+                                    destinationVersion = (render.drawPackets.single {
+                                        it.packetId == destinationConsumerPacketId(plan) }.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead)
+                                        ?.sealedW5b?.requiredDestinationVersion,
                                 ),
-                                logicalBounds = request.targetBounds,
+                                logicalBounds = plan.logicalBounds,
                                 members = listOf(
                                     GPUDestinationReadMember(
                                         commandId = plan.packet.commandIdValue.toString(),
                                         accessIndex = plan.groupIndex,
-                                        logicalBounds = request.targetBounds,
+                                        logicalBounds = plan.logicalBounds,
                                     ),
                                 ),
                                 copiedBytes = plan.copiedBytes,
@@ -4697,7 +4702,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                         materializations = destinationReadPlans.map { plan ->
                             GPUDestinationSnapshotMaterialization.TextureCopy(
                                 groupIndex = plan.groupIndex,
-                                logicalBounds = request.targetBounds,
+                                logicalBounds = plan.logicalBounds,
                             )
                         },
                         totalCopiedBytes = destinationReadPlans.fold(0L) { total, plan ->
@@ -4714,10 +4719,10 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                             groupIndex = plan.groupIndex,
                             source = request.target,
                             snapshot = plan.snapshot,
-                            logicalBounds = request.targetBounds,
+                            logicalBounds = plan.logicalBounds,
                             copyLayout = GPUTextureCopyLayout(
                                 bytesPerRow = plan.paddedBytesPerRow,
-                                rowsPerImage = request.targetBounds.height,
+                                rowsPerImage = plan.logicalBounds.height,
                             ),
                             consumers = listOf(
                                 GPUDestinationSnapshotConsumerRef(
@@ -5498,6 +5503,7 @@ private data class GPUCorePrimitiveDestinationSnapshotPlan(
     val groupIndex: Int,
     val packet: GPUDrawPacket,
     val snapshot: GPUFrameTextureRef,
+    val logicalBounds: GPUPixelBounds,
     val copiedBytes: Long,
     val paddedBytesPerRow: Long,
     val preparation: GPUResourcePreparationRequest,
@@ -5507,7 +5513,8 @@ private data class GPUCorePrimitiveDestinationSnapshotPlan(
 /**
  * Plans one GPU-owned TextureCopy snapshot per destination-reading core packet.
  *
- * The ordered plans share one full-target snapshot resource; the grouping remains planned by
+ * The ordered plans share one maximum-capacity snapshot across disjoint Copy→consumer lifetimes;
+ * each copy retains its own exact origin/extent. The grouping remains planned by
  * command and blend only (family-agnostic), so the same [GPUDestinationSnapshotOperation.TextureCopy]
  * machinery the ColorGlyph lane uses serves the core-primitive lane unchanged.
  */
@@ -5516,40 +5523,47 @@ private fun buildCorePrimitiveDestinationSnapshotPlans(
     packets: List<GPUDrawPacket>,
     limits: GPULimits,
 ): List<GPUCorePrimitiveDestinationSnapshotPlan> {
-    val logicalBytesPerRow = Math.multiplyExact(request.targetBounds.width.toLong(), 4L)
-    val paddedBytesPerRow = corePrimitiveAlignUpPreparedText(
-        logicalBytesPerRow,
-        limits.copyBytesPerRowAlignment,
-    )
-    val copiedBytes = Math.multiplyExact(
-        paddedBytesPerRow,
-        request.targetBounds.height.toLong(),
-    )
-    val textureBytes = Math.multiplyExact(
-        logicalBytesPerRow,
-        request.targetBounds.height.toLong(),
-    )
+    val destinationPackets = packets.filter {
+        it.blendPlan?.destinationReadRequirement == GPUBlendDestinationReadRequirement.DestinationTextureRequired
+    }
+    if (destinationPackets.isEmpty()) return emptyList()
+    val boundsByPacketId = destinationPackets.associate { packet ->
+        packet.packetId to if ((packet.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead)?.sealedW5b != null)
+            request.semanticsByCommandId.getValue(packet.commandIdValue).preparedDestinationBounds(request.targetBounds)
+        else request.targetBounds // Unpromoted destination path retains its existing contract.
+    }
+    val allW5b = destinationPackets.all { (it.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead)?.sealedW5b != null }
+    val maximumRowBytes = Math.multiplyExact(boundsByPacketId.values.maxOf { it.width }.toLong(), 4L)
+    val capacityRowBytes = if (allW5b) corePrimitiveAlignUpPreparedText(maximumRowBytes, limits.copyBytesPerRowAlignment)
+        else maximumRowBytes
+    require(capacityRowBytes % 4L == 0L)
+    val capacity = GPUPixelBounds(0, 0, Math.toIntExact(capacityRowBytes / 4L), boundsByPacketId.values.maxOf { it.height })
+    val textureBytes = Math.multiplyExact(capacityRowBytes, capacity.height.toLong())
     val snapshot = GPUFrameTextureRef(
         "texture.core-primitive.destination-snapshot.${request.baseTaskList.frameId.value}",
     )
-    return packets.mapNotNull { packet ->
-        if (packet.blendPlan?.destinationReadRequirement !=
-            GPUBlendDestinationReadRequirement.DestinationTextureRequired
-        ) {
-            return@mapNotNull null
-        }
-        packet
-    }.mapIndexed { index, packet ->
+    return destinationPackets.mapIndexed { index, packet ->
+        val logicalBounds = boundsByPacketId.getValue(packet.packetId)
+        val logicalBytesPerRow = Math.multiplyExact(logicalBounds.width.toLong(), 4L)
+        val paddedBytesPerRow = corePrimitiveAlignUpPreparedText(
+            logicalBytesPerRow,
+            limits.copyBytesPerRowAlignment,
+        )
+        val copiedBytes = Math.multiplyExact(
+            paddedBytesPerRow,
+            logicalBounds.height.toLong(),
+        )
         GPUCorePrimitiveDestinationSnapshotPlan(
             groupIndex = index,
             packet = packet,
             snapshot = snapshot,
+            logicalBounds = logicalBounds,
             copiedBytes = copiedBytes,
             paddedBytesPerRow = paddedBytesPerRow,
             preparation = GPUResourcePreparationRequest(
                 resource = snapshot,
                 descriptor = GPUFrameTextureDescriptor(
-                    logicalBounds = request.targetBounds,
+                    logicalBounds = capacity,
                     format = request.targetFormat,
                     sampleCount = 1,
                 ),
@@ -5567,7 +5581,7 @@ private fun buildCorePrimitiveDestinationSnapshotPlans(
                 GPUFrameMemoryCategory.DestinationSnapshot,
                 textureBytes,
                 GPUFrameMemoryResourceKind.Texture2D,
-                request.targetBounds,
+                capacity,
             ),
         )
     }

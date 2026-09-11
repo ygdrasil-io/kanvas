@@ -40,6 +40,127 @@ import kotlin.test.assertTrue
 class W5bBlendSurfacePixelTest {
     @AfterEach fun disposeGpuRuntime() = GPUBackendRuntimeFactory.dispose()
 
+    @Test fun `Surface dodge and burn extreme channels preserve finite W3C output`() {
+        val cases = listOf(
+            Triple(BlendMode.COLOR_DODGE, ColorARGB.Red, ColorARGB.White),
+            Triple(BlendMode.COLOR_BURN, ColorARGB.Red, ColorARGB.Black),
+        )
+        // Opaque source endpoints exercise Cs==1 / Cs==0 without an uncertain
+        // unpremultiplication. The oracle never evaluates a singular quotient.
+        val expectations = cases.map { (mode, source, destination) ->
+            val material = solidSource(ColorF32.of(1f, 0f, 0f, 1f), 1f)
+            val background = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(
+                W5aSolidOpacityCpuOracle.draw(destination, 1f)))
+            val expected = WgslFloatEnvelopeV1Oracle.drawDestination(material, MaterialPlanRef(1), background, mode)
+            assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.sourceOverExclusion(material, MaterialPlanRef(1), background))
+            assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+                (W5aSolidOpacityCpuOracle.draw(source, 1f) as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels))
+            expected
+        }
+        cases.zip(expectations).forEach { (fixture, expected) ->
+            val (mode, source, destination) = fixture
+            val surface = Surface(8, 8).also { it.canvas {
+                drawRect(RectF32.ofLTRB(0f, 0f, 8f, 8f), Paint(shader = Shader.SolidColor(destination), antiAlias = false))
+                drawRect(RectF32.ofLTRB(3f, 4f, 7f, 7f), Paint(
+                    shader = Shader.SolidColor(source), blendMode = mode, antiAlias = false))
+            } }
+            repeat(2) {
+                val pixels = surface.render().pixels
+                val offsetI32 = (5 * 8 + 4) * 4
+                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixels.copyOfRange(offsetI32, offsetI32 + 4))
+            }
+        }
+    }
+
+    @Test fun `Surface multiple Vertices and Mesh runs preserve each draw and destination order`() {
+        val green = W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, 1f)
+        val white = W5aSolidOpacityCpuOracle.draw(ColorARGB.White, .5f)
+        val source = solidSource(ColorF32.of(1f, 1f, 1f, 1f), .5f)
+        val overlap = WgslFloatEnvelopeV1Oracle.drawDestination(source, MaterialPlanRef(1),
+            requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(green)), BlendMode.DIFFERENCE)
+        val transparent = W5aSolidOpacityCpuOracle.draw(ColorARGB.Transparent, 1f)
+        fun excludes(expected: WgslFloatEnvelopeV1Oracle.DrawResult, other: WgslFloatEnvelopeV1Oracle.DrawResult) =
+            assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+                (other as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels))
+        excludes(green, transparent) // first run omitted
+        excludes(white, transparent) // second run omitted
+        excludes(overlap, green) // two runs reversed, or second omitted
+        excludes(overlap, white) // first run omitted
+        fun triangle(leftF32: Float) = Vertices(VertexMode.TRIANGLES,
+            listOf(Point2F32(leftF32, 0f), Point2F32(leftF32 + 12f, 0f), Point2F32(leftF32, 12f)),
+            indices = listOf(0, 1, 2))
+        val surface = Surface(12, 8).also { it.canvas {
+            drawVertices(triangle(0f), Paint(shader = Shader.SolidColor(ColorARGB.Green), antiAlias = false))
+            drawMesh(Mesh(triangle(4f), bounds = RectF32.ofLTRB(4f, 0f, 16f, 12f)),
+                Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), .5f), antiAlias = false),
+                BlendMode.DIFFERENCE)
+        } }
+        repeat(2) {
+            val pixels = surface.render().pixels
+            listOf(Triple(1, 1, green), Triple(5, 2, overlap), Triple(10, 2, white), Triple(11, 7, transparent))
+                .forEach { (xI32, yI32, expected) ->
+                    val offsetI32 = (yI32 * 12 + xI32) * 4
+                    WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixels.copyOfRange(offsetI32, offsetI32 + 4))
+                }
+        }
+    }
+
+    @Test fun `Surface repeated Vertices geometry retains both ordered sources across renders`() {
+        val green = W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, 1f)
+        val white = W5aSolidOpacityCpuOracle.draw(ColorARGB.White, .5f)
+        val source = solidSource(ColorF32.of(1f, 1f, 1f, 1f), .5f)
+        val expected = WgslFloatEnvelopeV1Oracle.drawDestination(source, MaterialPlanRef(1),
+            requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(green)), BlendMode.DIFFERENCE)
+        listOf(green, white).forEach { alternative -> assertDisjoint(expected,
+            WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+                (alternative as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels)) }
+        val vertices = Vertices(VertexMode.TRIANGLES,
+            listOf(Point2F32(0f, 0f), Point2F32(12f, 0f), Point2F32(0f, 12f)), indices = listOf(0, 1, 2))
+        val surface = Surface(8, 8).also { it.canvas {
+            drawVertices(vertices, Paint(shader = Shader.SolidColor(ColorARGB.Green), antiAlias = false))
+            drawVertices(vertices, Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), .5f),
+                blendMode = BlendMode.DIFFERENCE, antiAlias = false))
+        } }
+        repeat(3) {
+            WgslFloatEnvelopeV1Oracle.assertAdmits(expected, surface.render().pixels.copyOfRange(0, 4))
+        }
+    }
+
+    @Test fun `Surface culled leading Core draw clears before surviving Vertices destination read`() {
+        val green = W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, 1f)
+        val transparent = W5aSolidOpacityCpuOracle.draw(ColorARGB.Transparent, 1f)
+        val source = solidSource(ColorF32.of(1f, 1f, 1f, 1f), .5f)
+        val expected = WgslFloatEnvelopeV1Oracle.drawDestination(source, MaterialPlanRef(1),
+            WgslFloatEnvelopeV1Oracle.clearAttachment(), BlendMode.DIFFERENCE)
+        val stale = WgslFloatEnvelopeV1Oracle.drawDestination(source, MaterialPlanRef(1),
+            requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(green)), BlendMode.DIFFERENCE)
+        listOf(stale, transparent).forEach { alternative -> assertDisjoint(expected,
+            WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+                (alternative as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels)) }
+        assertDisjoint(transparent, WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+            (green as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels))
+        val vertices = Vertices(VertexMode.TRIANGLES,
+            listOf(Point2F32(1f, 1f), Point2F32(7f, 1f), Point2F32(1f, 7f)), indices = listOf(0, 1, 2))
+        // The primer itself uses the prepared family, sharing the retained scene target.
+        val primer = Surface(8, 8).also { it.canvas {
+            drawVertices(Vertices(VertexMode.TRIANGLES,
+                listOf(Point2F32(-1f, -1f), Point2F32(18f, -1f), Point2F32(-1f, 18f))),
+                Paint(shader = Shader.SolidColor(ColorARGB.Green), antiAlias = false))
+        } }.render().pixels
+        WgslFloatEnvelopeV1Oracle.assertAdmits(green, primer.copyOfRange(0, 4))
+        val surface = Surface(8, 8).also { it.canvas {
+            drawRect(RectF32.ofLTRB(20f, 20f, 24f, 24f),
+                Paint(shader = Shader.SolidColor(ColorARGB.Red), antiAlias = false))
+            drawVertices(vertices, Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), .5f),
+                blendMode = BlendMode.DIFFERENCE, antiAlias = false))
+        } }
+        repeat(2) {
+            val pixels = surface.render().pixels
+            WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixels.copyOfRange((2 * 8 + 2) * 4, (2 * 8 + 2) * 4 + 4))
+            WgslFloatEnvelopeV1Oracle.assertAdmits(transparent, pixels.copyOfRange(0, 4))
+        }
+    }
+
     @Test fun `mixed frame Rect Point RRect Path A8 Vertices retains every middle write and captured source`() {
         val draws = listOf(
             W5bBlendCpuOracle.Draw(ColorARGB.Green, 1f, BlendMode.SRC_OVER),
@@ -188,6 +309,33 @@ class W5bBlendSurfacePixelTest {
                 WgslFloatEnvelopeV1Oracle.assertAdmits(expected, frame(ColorARGB.White, .5f, BlendMode.DIFFERENCE, rect))
             } catch (failure: org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceTerminalException) {
                 throw AssertionError("Public first destination control rect=$rect: ${failure.diagnostic}", failure)
+            }
+        }
+    }
+
+    @Test fun `destination region small scissored read fits public large Surface budget at nonzero origin`() {
+        val green = W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, 1f)
+        val material = solidSource(ColorF32.of(1f, 1f, 1f, 1f), .45f)
+        val background = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(green))
+        val inside = WgslFloatEnvelopeV1Oracle.drawDestination(material, MaterialPlanRef(1), background, BlendMode.DIFFERENCE)
+        assertDisjoint(inside, WgslFloatEnvelopeV1Oracle.sourceOverExclusion(material, MaterialPlanRef(1), background))
+        assertDisjoint(inside, WgslFloatEnvelopeV1Oracle.ConservativeExclusion((green as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels))
+        // Target and aligned readback each cost 64 KiB. The remaining 52 KiB admit
+        // a 4x4 destination region plus real pooled geometry/material resources.
+        val surface = Surface(128, 128, config = RenderConfig(frameLocalBudgetBytes = 180L * 1024L))
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 128f, 128f), Paint(shader = Shader.SolidColor(ColorARGB.Green), antiAlias = false))
+            clipRect(RectF32.ofLTRB(69f, 73f, 73f, 77f), antiAlias = false)
+            drawRect(RectF32.ofLTRB(67f, 71f, 75f, 79f), Paint(
+                shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), .45f),
+                blendMode = BlendMode.DIFFERENCE, antiAlias = false))
+        }
+        repeat(2) {
+            val pixels = surface.render().pixels
+            listOf(69 to 73, 72 to 76, 68 to 73, 73 to 76, 69 to 72, 69 to 77).forEach { (x, y) ->
+                val offset = (y * 128 + x) * 4
+                WgslFloatEnvelopeV1Oracle.assertAdmits(if (x in 69..72 && y in 73..76) inside else green,
+                    pixels.copyOfRange(offset, offset + 4))
             }
         }
     }

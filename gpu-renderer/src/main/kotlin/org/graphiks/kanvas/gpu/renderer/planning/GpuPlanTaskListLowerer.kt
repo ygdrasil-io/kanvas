@@ -447,20 +447,22 @@ public class GpuPlanTaskListLowerer {
                     else -> GPUFrameMemoryCategory.ReusableScratch
                 }, resource.byteSize,
                 if (resource.kind == org.graphiks.kanvas.gpu.plan.PlanResourceKind.Buffer) GPUFrameMemoryResourceKind.Buffer else GPUFrameMemoryResourceKind.Texture2D,
-                if (resource.kind == org.graphiks.kanvas.gpu.plan.PlanResourceKind.Buffer) null else bounds) }
+                resource.copyExtent()?.let { GPUPixelBounds(0, 0, it.width, it.height) }) }
             return org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlanner.plan(
                 org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetRequest(allocations,
                     graph.budget.maxFrameLocalBytes, limits)).takeIf { it.diagnostic == null &&
                     it.targetResidentBytes + it.peakFrameTransientBytes == graph.peakFrameLocalBytes }
         }
-        val snapshotBytes = if (graph.resources().any { it.role == PlanResourceRole.DestinationSnapshot }) shape.target.byteSize else 0L
+        val snapshot = graph.resources().singleOrNull { it.role == PlanResourceRole.DestinationSnapshot }
+        val snapshotBytes = snapshot?.byteSize ?: 0L
         val transientBytesI64 = try { Math.addExact(shape.staging.byteSize, snapshotBytes) } catch (_: ArithmeticException) { return null }
         val totalBytesI64 = try { Math.addExact(shape.target.byteSize, transientBytesI64) } catch (_: ArithmeticException) { return null }
         if (totalBytesI64 != graph.peakFrameLocalBytes || graph.peakFrameLocalBytes > graph.budget.maxFrameLocalBytes) return null
         val identity = compositeSessionIdentity ?: "w3.session.${generation.value}.${bounds.width}x${bounds.height}.rgba8unorm-srgb"
         val target = GPUFrameMemoryAllocation("$identity.target", GPUFrameMemoryCategory.CanonicalTarget, shape.target.byteSize, GPUFrameMemoryResourceKind.Texture2D, bounds)
         val staging = GPUFrameMemoryAllocation("$identity.staging", GPUFrameMemoryCategory.ReadbackStaging, shape.staging.byteSize, GPUFrameMemoryResourceKind.Buffer, null)
-        val snapshots = if (snapshotBytes == 0L) emptyList() else listOf(GPUFrameMemoryAllocation("$identity.snapshot", GPUFrameMemoryCategory.DestinationSnapshot, snapshotBytes, GPUFrameMemoryResourceKind.Texture2D, bounds))
+        val snapshots = if (snapshotBytes == 0L) emptyList() else listOf(GPUFrameMemoryAllocation("$identity.snapshot", GPUFrameMemoryCategory.DestinationSnapshot, snapshotBytes, GPUFrameMemoryResourceKind.Texture2D,
+            requireNotNull(snapshot?.copyExtent()).let { GPUPixelBounds(0, 0, it.width, it.height) }))
         return GPUFrameMemoryBudgetPlan(transientBytesI64, shape.target.byteSize, GPUFrameMemoryCategory.entries.associateWith { category -> when (category) { GPUFrameMemoryCategory.CanonicalTarget -> shape.target.byteSize; GPUFrameMemoryCategory.ReadbackStaging -> shape.staging.byteSize; GPUFrameMemoryCategory.DestinationSnapshot -> snapshotBytes; else -> 0L } }, limits.capabilityFacts("frame-memory-budget"), graph.budget.maxFrameLocalBytes, null, listOf(target, staging) + snapshots)
     }
 
@@ -480,10 +482,10 @@ public class GpuPlanTaskListLowerer {
             val clip = clips.singleOrNull()
             if (clip != null && (graph.passes().take(clip.passes().size) != clip.passes() ||
                 !clip.nativePayload.matchesDeclaredResources(resources))) return null
-            if (draws.none { it is W5bPointDraw } || draws.any { it !is SolidRectDraw && it !is W5bPointDraw } ||
+            if (draws.any { it !is SolidRectDraw && it !is W5bPointDraw } ||
                 draws.any { it.coverage != CoveragePlan.FullOrScissor } ||
                 renders.any { it.target != target.id || it.destinationVersionAfter == null } ||
-                graph.materialPlanTableOrNull() == null || resources.size !=
+                (graph.materialPlanTableOrNull() == null) != draws.isEmpty() || resources.size !=
                 2 + (if (draws.any { it.blend is BlendPlan.DestinationReadV1 }) 1 else 0) + (clip?.resources()?.size ?: 0)) return null
             return W3Graph(target, staging, renders.first(), readback, draws, graph.materialPlanTableOrNull(), graph)
         }
@@ -495,7 +497,15 @@ public class GpuPlanTaskListLowerer {
             val renders = passes.filterIsInstance<PlanPass.RenderPass>()
             val readback = passes.lastOrNull() as? PlanPass.ReadbackPass ?: return null
             val draws = renders.flatMap { it.draws() }
-            if (resources.size != 3 || snapshot.byteSize != target.byteSize || snapshot.copyExtent() != graph.targetExtent ||
+            val extent = snapshot.copyExtent() ?: return null
+            val copies = passes.filterIsInstance<PlanPass.TextureCopy>()
+            if (resources.size != 3 || copies.isEmpty() || copies.any { copy ->
+                    val region = copy.copySourceBoundsI32()
+                    region == null || region.isEmpty || region.left < 0 || region.top < 0 ||
+                        region.right > graph.targetExtent.width || region.bottom > graph.targetExtent.height ||
+                        region.width() > extent.width || region.height() > extent.height ||
+                        copy.destination != snapshot.id || copy.bytesPerRowI64?.rem(graph.capabilities.copyBytesPerRowAlignment.toLong()) != 0L
+                } ||
                 graph.materialPlanTableOrNull() == null || draws.any { it !is SolidRectDraw || it.coverage != CoveragePlan.FullOrScissor || it.sample != SamplePlan.SingleSample } ||
                 renders.any { it.target != target.id || it.destinationVersionAfter == null } ||
                 graph.dependencies() != passes.zipWithNext { before, after -> org.graphiks.kanvas.gpu.plan.PlanPassDependency(before.id, after.id) }) return null

@@ -1157,7 +1157,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)), emptyList(), emptyList(), w5bInitialClearV3 = step.w5bInitialClearV3)
             }
             if (witness.graph.passes().any { it is org.graphiks.kanvas.gpu.plan.PlanPass.TextureCopy }) {
-                val bounds = witness.scratch.targetBounds
+                val bounds = (witness.preparations.single { it.role == GPUFrameResourceRole.DestinationSnapshot }
+                    .descriptor as GPUFrameTextureDescriptor).logicalBounds
                 val texture = snapshotSetup.track(device.createTexture(TextureDescriptor(size = Extent3D(bounds.width.toUInt(), bounds.height.toUInt(), 1u),
                     format = GPUTextureFormat.RGBA8UnormSrgb, usage = GPUTextureUsage.CopyDst or GPUTextureUsage.TextureBinding,
                     label = "Kanvas.w5b.geometry.snapshot-v3")))
@@ -1167,10 +1168,11 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 snapshotSetup.track(requireNotNull(snapshot))
                 onDestinationSnapshotCreated()
                 encoderPlan.scopes.filter { it.operationKind == GPUEncoderOperationKind.CopyDestination }.forEach { scope ->
+                    val region = (framePlan.steps[scope.sourceStepIndex] as GPUFrameStep.CopyDestinationStep).logicalBounds
                     operands += GPUPreparedNativeScopeOperand.Copy(scope.sourceStepIndex, GPUEncoderOperationKind.CopyDestination,
                         GPUPreparedNativeTextureOperand(targetTexture, generation, GPUPreparedNativeOperandOwnership.Borrowed),
                         GPUPreparedNativeTextureOperand(texture, generation, GPUPreparedNativeOperandOwnership.Borrowed),
-                        textureLayout = GPUPreparedNativeTextureCopyLayout(0, 0, 0, 0, bounds.width, bounds.height))
+                        textureLayout = GPUPreparedNativeTextureCopyLayout(region.left, region.top, 0, 0, region.width, region.height))
                 }
             }
             operands += drafts.last().payload.scopeOperands.filterIsInstance<GPUPreparedNativeScopeOperand.Readback>()
@@ -6658,18 +6660,21 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             val destinationSnapshot = w5b?.takeIf { witness -> w5bLane == null && witness.graph.resources().any {
                 it.role == org.graphiks.kanvas.gpu.plan.PlanResourceRole.DestinationSnapshot
             } }?.let {
-                val texture = device.createTexture(TextureDescriptor(size = Extent3D(scratch.targetBounds.width.toUInt(),
-                    scratch.targetBounds.height.toUInt(), 1u), format = GPUTextureFormat.RGBA8UnormSrgb,
+                val bounds = (it.preparations.single { preparation -> preparation.role == GPUFrameResourceRole.DestinationSnapshot }
+                    .descriptor as GPUFrameTextureDescriptor).logicalBounds
+                val texture = device.createTexture(TextureDescriptor(size = Extent3D(bounds.width.toUInt(),
+                    bounds.height.toUInt(), 1u), format = GPUTextureFormat.RGBA8UnormSrgb,
                     usage = GPUTextureUsage.CopyDst or GPUTextureUsage.TextureBinding, label = "Kanvas.w5b.snapshot-v3")).tracked()
                 onDestinationSnapshotCreated()
                 GPUW5bDestinationSnapshotNativeV3(texture, texture.createView().tracked())
             }
             val copyOperands = encoderPlan.scopes.filter { it.operationKind == GPUEncoderOperationKind.CopyDestination }.map { scope ->
                 require(w5b != null && destinationSnapshot != null)
+                val region = (framePlan.steps[scope.sourceStepIndex] as GPUFrameStep.CopyDestinationStep).logicalBounds
                 GPUPreparedNativeScopeOperand.Copy(scope.sourceStepIndex, GPUEncoderOperationKind.CopyDestination,
                     GPUPreparedNativeTextureOperand(targetTexture, generation, GPUPreparedNativeOperandOwnership.Borrowed),
                     GPUPreparedNativeTextureOperand(destinationSnapshot.texture, generation, GPUPreparedNativeOperandOwnership.Borrowed),
-                    textureLayout = GPUPreparedNativeTextureCopyLayout(0, 0, 0, 0, scratch.targetBounds.width, scratch.targetBounds.height))
+                    textureLayout = GPUPreparedNativeTextureCopyLayout(region.left, region.top, 0, 0, region.width, region.height))
             }
             val readbackOperand = GPUPreparedNativeScopeOperand.Readback(
                 readbackScope.sourceStepIndex,

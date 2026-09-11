@@ -49,7 +49,7 @@ internal class W5bAnalyticRRectGraphLowerer {
                 else -> GPUFrameMemoryCategory.ReusableScratch
             }, resource.byteSize,
                 if (resource.kind == PlanResourceKind.Buffer) GPUFrameMemoryResourceKind.Buffer else GPUFrameMemoryResourceKind.Texture2D,
-                bounds.takeIf { resource.kind == PlanResourceKind.Texture2D },
+                resource.copyExtent()?.let { GPUPixelBounds(0, 0, it.width, it.height) },
                 resource.firstPassIndex, resource.lastPassIndexExclusive)
         }
         val memory = GPUFrameMemoryBudgetPlanner.plan(GPUFrameMemoryBudgetRequest(allocations,

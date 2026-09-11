@@ -1,5 +1,9 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+
+import org.graphiks.kanvas.gpu.renderer.destination.preparedDestinationBounds
+
 import org.graphiks.kanvas.gpu.renderer.planning.toPlanCapabilitySnapshot
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 
@@ -188,6 +192,7 @@ private data class GPUPreparedDestinationSnapshotPlan(
     val copiedBytes: Long,
     val copyLayout: GPUTextureCopyLayout,
     val targetGeneration: Long,
+    val logicalBounds: GPUPixelBounds,
 )
 
 /** One immutable, frame-global prepared-text instance buffer. */
@@ -2615,13 +2620,16 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                                             ),
                                         sampleContinuation = render.sampleContinuationKey,
                                         sourceIntermediate = null,
+                                        destinationVersion = (render.drawPackets.single { it.packetId == packet.packetId }
+                                            .blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead)
+                                            ?.sealedW5b?.requiredDestinationVersion,
                                     ),
-                                    logicalBounds = request.targetBounds,
+                                    logicalBounds = plan.logicalBounds,
                                     members = listOf(
                                         GPUDestinationReadMember(
                                             commandId = packet.commandIdValue.toString(),
                                             accessIndex = plan.groupIndex,
-                                            logicalBounds = request.targetBounds,
+                                            logicalBounds = plan.logicalBounds,
                                         ),
                                     ),
                                     copiedBytes = plan.copiedBytes,
@@ -2634,7 +2642,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                             materializations = plans.map { plan ->
                                 GPUDestinationSnapshotMaterialization.TextureCopy(
                                     groupIndex = plan.groupIndex,
-                                    logicalBounds = request.targetBounds,
+                                    logicalBounds = plan.logicalBounds,
                                 )
                             },
                             totalCopiedBytes = plans.fold(0L) { total, plan ->
@@ -2654,7 +2662,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                                 groupIndex = plan.groupIndex,
                                 source = request.target,
                                 snapshot = plan.snapshot,
-                                logicalBounds = request.targetBounds,
+                                logicalBounds = plan.logicalBounds,
                                 copyLayout = plan.copyLayout,
                                 consumers = listOf(
                                     GPUDestinationSnapshotConsumerRef(
@@ -3790,19 +3798,6 @@ private fun buildPreparedDestinationSnapshotPlans(
     val limits = requireNotNull(request.capabilities.limits) {
         "Prepared ColorGlyph destination snapshots require observed device limits."
     }
-    val logicalBytesPerRow = Math.multiplyExact(request.targetBounds.width.toLong(), 4L)
-    val paddedBytesPerRow = alignUpPreparedText(
-        logicalBytesPerRow,
-        limits.copyBytesPerRowAlignment,
-    )
-    val copiedBytes = Math.multiplyExact(
-        paddedBytesPerRow,
-        request.targetBounds.height.toLong(),
-    )
-    val textureBytes = Math.multiplyExact(
-        logicalBytesPerRow,
-        request.targetBounds.height.toLong(),
-    )
     return packets.mapNotNull { packet ->
         val semantic = request.semanticsByCommandId[packet.commandIdValue]
         // The snapshot machinery plans by command and blend only (family-agnostic): admitted
@@ -3820,6 +3815,11 @@ private fun buildPreparedDestinationSnapshotPlans(
         }
         packet
     }.mapIndexed { index, packet ->
+        val bounds = request.semanticsByCommandId.getValue(packet.commandIdValue).preparedDestinationBounds(request.targetBounds)
+        val logicalBytesPerRow = Math.multiplyExact(bounds.width.toLong(), 4L)
+        val paddedBytesPerRow = alignUpPreparedText(logicalBytesPerRow, limits.copyBytesPerRowAlignment)
+        val copiedBytes = Math.multiplyExact(paddedBytesPerRow, bounds.height.toLong())
+        val textureBytes = Math.multiplyExact(logicalBytesPerRow, bounds.height.toLong())
         val snapshot = GPUFrameTextureRef(
             "texture.prepared-surface.color-glyph-destination." +
                 "${request.baseTaskList.frameId.value}.$index",
@@ -3832,7 +3832,7 @@ private fun buildPreparedDestinationSnapshotPlans(
             preparation = GPUResourcePreparationRequest(
                 resource = snapshot,
                 descriptor = GPUFrameTextureDescriptor(
-                    logicalBounds = request.targetBounds,
+                    logicalBounds = bounds,
                     format = request.targetFormat,
                     sampleCount = 1,
                 ),
@@ -3851,14 +3851,15 @@ private fun buildPreparedDestinationSnapshotPlans(
                 category = GPUFrameMemoryCategory.DestinationSnapshot,
                 bytes = textureBytes,
                 resourceKind = GPUFrameMemoryResourceKind.Texture2D,
-                extent = request.targetBounds,
+                extent = bounds,
             ),
             copiedBytes = copiedBytes,
             copyLayout = GPUTextureCopyLayout(
                 bytesPerRow = paddedBytesPerRow,
-                rowsPerImage = request.targetBounds.height,
+                rowsPerImage = bounds.height,
             ),
             targetGeneration = packet.resourceGeneration,
+            logicalBounds = bounds,
         )
     }
 }

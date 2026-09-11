@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.renderer.destination.preparedDestinationBounds
+
 import io.ygdrasil.webgpu.GPUTextureFormat
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -1330,7 +1332,7 @@ internal class GPUPreparedSurfaceNativePreflight(
                 consumer.renderTaskId !in render.sourceTaskIds ||
                 render.sourceTaskIds.singleOrNull() != consumer.renderTaskId ||
                 copy.source != scenePreparation.resource ||
-                copy.logicalBounds != sceneDescriptor.logicalBounds ||
+                copy.logicalBounds != semantic.preparedDestinationBounds(sceneDescriptor.logicalBounds) ||
                 copy.sourceKey.target.value != scenePreparation.resource.value ||
                 copy.sourceKey.deviceGeneration != framePlan.capabilitySeal.deviceGeneration ||
                 copy.sourceKey.targetGeneration != packet.resourceGeneration &&
@@ -1493,6 +1495,10 @@ internal class GPUPreparedSurfaceNativePreflight(
                     "Prepared vertices destination reads require one shader destination blend.",
                 )
             val sealed = blend.sealedW5b
+            if (copy.sourceKey.destinationVersion != sealed?.requiredDestinationVersion) {
+                return emptyList<GPUPreparedVerticesDestinationReadAuthority>() to refused(
+                    "invalid.w5b.destination-version", "Vertices snapshot logical version changed.")
+            }
             val snapshotPreparation = preparations.singleOrNull { request ->
                 request.resource == copy.snapshot
             }
@@ -1529,7 +1535,7 @@ internal class GPUPreparedSurfaceNativePreflight(
                 consumer.renderTaskId !in render.sourceTaskIds ||
                 render.sourceTaskIds.singleOrNull() != consumer.renderTaskId ||
                 copy.source != scenePreparation.resource ||
-                copy.logicalBounds != sceneDescriptor.logicalBounds ||
+                copy.logicalBounds != semantic.preparedDestinationBounds(sceneDescriptor.logicalBounds) ||
                 copy.sourceKey.target.value != scenePreparation.resource.value ||
                 copy.sourceKey.deviceGeneration != framePlan.capabilitySeal.deviceGeneration ||
                 copy.sourceKey.targetGeneration != packet.resourceGeneration &&
@@ -1688,6 +1694,10 @@ internal class GPUPreparedSurfaceNativePreflight(
                     "Prepared TextA8 destination reads require one shader destination blend.",
                 )
             val sealed = blend.sealedW5b
+            if (copy.sourceKey.destinationVersion != sealed?.requiredDestinationVersion) {
+                return emptyList<GPUPreparedTextDestinationReadAuthority>() to refused(
+                    "invalid.w5b.destination-version", "TextA8 snapshot logical version changed.")
+            }
             val snapshotPreparation = preparations.singleOrNull { request ->
                 request.resource == copy.snapshot
             }
@@ -1724,7 +1734,7 @@ internal class GPUPreparedSurfaceNativePreflight(
                 consumer.renderTaskId !in render.sourceTaskIds ||
                 render.sourceTaskIds.singleOrNull() != consumer.renderTaskId ||
                 copy.source != scenePreparation.resource ||
-                copy.logicalBounds != sceneDescriptor.logicalBounds ||
+                copy.logicalBounds != semantic.preparedDestinationBounds(sceneDescriptor.logicalBounds) ||
                 copy.sourceKey.target.value != scenePreparation.resource.value ||
                 copy.sourceKey.deviceGeneration != framePlan.capabilitySeal.deviceGeneration ||
                 copy.sourceKey.targetGeneration != packet.resourceGeneration &&
@@ -3780,6 +3790,7 @@ internal class GPUPreparedSurfaceNativePreflight(
             )
         }
         val orderedRuns = mutableListOf<GPUPreparedSurfaceNativeRunPlan>()
+        val uploadedVerticesArtifactKeys = mutableSetOf<String>()
         framePlan.steps.forEachIndexed { sourceStepIndex, step ->
             val render = step as? GPUFrameStep.RenderPassStep ?: return@forEachIndexed
             val renderScope = scopeByStep[sourceStepIndex]
@@ -4036,11 +4047,14 @@ internal class GPUPreparedSurfaceNativePreflight(
                     } ?: throw IllegalArgumentException(
                         "Prepared-vertices run scope is missing",
                     )
+                    // A shared artifact has one frame upload, owned by its first run.
+                    val newlyUploadedArtifactKeys = runArtifacts.map { it.key }
+                        .filterTo(mutableSetOf()) { uploadedVerticesArtifactKeys.add(it) }
                     val verticesUploadScopeKeys = framePlan.steps
                         .mapIndexedNotNull { index, step ->
                             (step as? GPUFrameStep.UploadResourceStep)?.takeIf { upload ->
-                                upload.destination.value.contains("prepared-vertices.vertex") ||
-                                    upload.destination.value.contains("prepared-vertices.index")
+                                upload.staging == preparedVerticesStagingRef(framePlan.frameId) &&
+                                    preparedVerticesArtifactKeyOfUpload(upload) in newlyUploadedArtifactKeys
                             }?.let { exactScopeKeys.single { scope ->
                                 scope.sourceStepIndex == index
                             } }

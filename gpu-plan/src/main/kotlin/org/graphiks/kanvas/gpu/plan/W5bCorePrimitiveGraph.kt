@@ -14,11 +14,27 @@ public object W5bCorePrimitiveGraph {
         require(draws.isNotEmpty() && draws.any { it is W5bPointDraw } &&
             draws.all { it is W5bPointDraw || it is SolidRectDraw })
         require(draws.map { it.commandIndex }.distinct().size == draws.size)
+        // These bounds are owned by the admitted geometry. A fully clipped square
+        // has no consumer pixels and must not issue an empty destination copy.
+        val visibleDraws = draws.filter { draw ->
+            val bounds = when (draw) {
+                is W5bPointDraw -> draw.copyBoundsI32()
+                is SolidRectDraw -> draw.copyVisibleBounds()
+                else -> error("Unsupported admitted Core draw")
+            }
+            val scissor = when (draw) {
+                is W5bPointDraw -> draw.copyScissorI32()
+                is SolidRectDraw -> draw.copyScissor()
+                else -> error("Unsupported admitted Core draw")
+            }
+            maxOf(0, bounds.left, scissor.left) < minOf(extent.width, bounds.right, scissor.right) &&
+                maxOf(0, bounds.top, scissor.top) < minOf(extent.height, bounds.bottom, scissor.bottom)
+        }
         val targetBytesI64 = Math.multiplyExact(Math.multiplyExact(extent.width.toLong(), extent.height.toLong()), 4L)
         val widthBytesI64 = Math.multiplyExact(extent.width.toLong(), 4L)
         val alignmentI64 = capabilities.copyBytesPerRowAlignment.toLong()
         val rowBytesI64 = Math.addExact(widthBytesI64, (alignmentI64 - widthBytesI64 % alignmentI64) % alignmentI64)
-        return W5bDestinationGraphSealer.seal(id, CAPABILITY_ID, extent, capabilities, budget, draws, material,
+        return W5bDestinationGraphSealer.seal(id, CAPABILITY_ID, extent, capabilities, budget, visibleDraws, material,
             targetBytesI64, Math.multiplyExact(rowBytesI64, extent.height.toLong()), rowBytesI64)
     }
 

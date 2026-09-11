@@ -42,7 +42,7 @@ internal class W5bNativeGeometryGraphLowerer {
                 PlanResourceRole.DestinationSnapshot -> GPUFrameMemoryCategory.DestinationSnapshot
                 else -> GPUFrameMemoryCategory.ReusableScratch
             }, item.byteSize, if (item.kind == PlanResourceKind.Buffer) GPUFrameMemoryResourceKind.Buffer else GPUFrameMemoryResourceKind.Texture2D,
-            bounds.takeIf { item.kind == PlanResourceKind.Texture2D }, item.firstPassIndex, item.lastPassIndexExclusive) }
+            item.copyExtent()?.let { GPUPixelBounds(0, 0, it.width, it.height) }, item.firstPassIndex, item.lastPassIndexExclusive) }
         val memory = GPUFrameMemoryBudgetPlanner.plan(GPUFrameMemoryBudgetRequest(allocations,
             graph.budget.maxFrameLocalBytes, limits))
         require(memory.diagnostic == null && memory.peakFrameTransientBytes + memory.targetResidentBytes == graph.peakFrameLocalBytes)

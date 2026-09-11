@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.math.geometry.SizeI32
+import org.graphiks.math.geometry.RectI32
 
 /** Preflight and graph issuance for the integral W3 destination-read successor. */
 internal object W5bDestinationGraphSealer {
@@ -50,11 +51,26 @@ internal object W5bDestinationGraphSealer {
         val initialClearI32 = if (draws.isEmpty() || draws.first().blend is BlendPlan.DestinationReadV1) 1 else 0
         val stencilCountI32 = draws.count { it is PathDraw && it.strategy == PathFillStrategy.StencilCover }
         val passCountI32 = Math.addExact(Math.addExact(draws.size, destinationCountI32), initialClearI32 + stencilCountI32 + 1 + (clip?.passes()?.size ?: 0) + nativePrefix.size)
-        // One snapshot is reused only after its preceding consumer; native storage stays live
-        // through frame completion, so all three physical resources overlap in the budget.
+        val regions = draws.filter { it.blend is BlendPlan.DestinationReadV1 }
+            .associate { it.commandIndex to destinationBounds(it, extent) }
+        fun alignedRowBytesI64(widthI32: Int): Long {
+            val bytesI64 = Math.multiplyExact(widthI32.toLong(), 4L)
+            val alignmentI64 = capabilities.copyBytesPerRowAlignment.toLong()
+            return Math.addExact(bytesI64, (alignmentI64 - bytesI64 % alignmentI64) % alignmentI64)
+        }
+        val snapshotExtent = regions.values.takeIf { it.isNotEmpty() }?.let { bounds ->
+            val widthBytesI64 = alignedRowBytesI64(bounds.maxOf { it.width() })
+            require(widthBytesI64 % 4L == 0L) { "unsupported.w5b.destination-row-alignment" }
+            SizeI32(Math.toIntExact(widthBytesI64 / 4L), bounds.maxOf { it.height() })
+        }
+        // Every copy is consumed before the next target write. Physical storage is reusable
+        // across these disjoint logical lifetimes; its capacity is the maximum extent, never
+        // a union of draw positions. Budget the aligned physical rows through completion.
+        val snapshotBytesI64 = snapshotExtent?.let {
+            Math.multiplyExact(alignedRowBytesI64(it.width), it.height.toLong())
+        } ?: 0L
         val peakI64 = Math.addExact(geometryResources.fold(0L) { total, resource -> Math.addExact(total, resource.byteSize) },
-            Math.addExact(Math.addExact(Math.multiplyExact(targetBytesI64,
-            if (destinationCountI32 == 0) 1L else 2L), stagingBytesI64),
+            Math.addExact(Math.addExact(Math.addExact(targetBytesI64, snapshotBytesI64), stagingBytesI64),
             clip?.resources()?.fold(0L) { total, resource -> Math.addExact(total, resource.byteSize) } ?: 0L))
         val sourceRequirements = draws.map { draw -> RawMaterialRequirementsV2.of(requireNotNull(material),
             (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref) }
@@ -66,7 +82,7 @@ internal object W5bDestinationGraphSealer {
             format, extent, targetBytesI64, setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource),
             PlanResourceLifetime.FrameLocal, 0, passCountI32)
         val snapshot = if (destinationCountI32 == 0) null else PlanResource.of(PlanResourceRole.DestinationSnapshot, 0, PlanResourceKind.Texture2D,
-            format, extent, targetBytesI64, setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.Sampled),
+            format, requireNotNull(snapshotExtent), snapshotBytesI64, setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.Sampled),
             PlanResourceLifetime.FrameLocal, 0, passCountI32)
         val staging = PlanResource.of(PlanResourceRole.ReadbackStaging, 0, PlanResourceKind.Buffer,
             null, null, stagingBytesI64, setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead),
@@ -108,7 +124,9 @@ internal object W5bDestinationGraphSealer {
                     else blend.compositionAbiI32 == 3 && (blend.coverage == BlendCoverageEncodingV1.FullOrScissor ||
                         draw is AnalyticRectDraw || draw is AnalyticRRectDraw))
                 val version = DestinationVersionI64(versionI64)
-                passes += PlanPass.TextureCopy(copyOrdinalI32++, target.id, requireNotNull(snapshot).id, version)
+                val region = regions.getValue(draw.commandIndex)
+                passes += PlanPass.TextureCopy(copyOrdinalI32++, target.id, requireNotNull(snapshot).id, version,
+                    region, alignedRowBytesI64(region.width()))
                 val sealed = blend.copy(requiredDestinationVersion = version, snapshotResource = snapshot.id)
                 render(when (draw) {
                     is SolidRectDraw -> SolidRectDraw.ofMaterial(draw.commandIndex,
@@ -156,6 +174,45 @@ internal object W5bDestinationGraphSealer {
             passes.zipWithNext { before, after -> PlanPassDependency(before.id, after.id) }, peakI64,
             materialPlanTable = material.takeIf { draws.isNotEmpty() }, w5bW4eSource = w4eSource)
     }
+}
+
+/** Bounds are retained from the geometry owner; this never retessellates or estimates a draw. */
+private fun destinationBounds(draw: PlanDraw, extent: SizeI32): RectI32 {
+    val target = RectI32.ofLTRB(0, 0, extent.width, extent.height)
+    val scissor = when (draw) {
+        is SolidRectDraw -> draw.copyScissor()
+        is AnalyticRectDraw -> draw.copyScissor()
+        is AnalyticRRectDraw -> draw.copyScissor()
+        is W5bPointDraw -> draw.copyScissorI32()
+        is PathDraw -> draw.copyScissorI32()
+        else -> target
+    }
+    val bounds = when (draw) {
+        is SolidRectDraw -> draw.copyVisibleBounds()
+        // These raster bounds already contain the original analytic AA footprint.
+        is AnalyticRectDraw -> draw.copyRasterBounds()
+        is AnalyticRRectDraw -> draw.copyRasterBounds()
+        is W5bPointDraw -> draw.copyBoundsI32()
+        // W4e inverse consumers own a finite cover domain, not their finite interior bounds.
+        is W5bW4ePathDraw -> scissor
+        is PathDraw -> when (val geometry = draw.copyPathGeometry()) {
+            is PathDrawGeometry.Fill -> return geometry.valueF32.copyConservativeScissorI32().let { bounds ->
+                RectI32.ofLTRB(maxOf(0, scissor.left, bounds.left), maxOf(0, scissor.top, bounds.top),
+                    minOf(extent.width, scissor.right, bounds.right), minOf(extent.height, scissor.bottom, bounds.bottom))
+            }
+            is PathDrawGeometry.Stroke -> geometry.valueF32.copyConservativeBoundsF32()
+            else -> null
+        }?.let { bounds -> RectI32.ofLTRB(
+            kotlin.math.floor(bounds.left.toDouble()).coerceIn(0.0, extent.width.toDouble()).toInt(),
+            kotlin.math.floor(bounds.top.toDouble()).coerceIn(0.0, extent.height.toDouble()).toInt(),
+            kotlin.math.ceil(bounds.right.toDouble()).coerceIn(0.0, extent.width.toDouble()).toInt(),
+            kotlin.math.ceil(bounds.bottom.toDouble()).coerceIn(0.0, extent.height.toDouble()).toInt()) } ?: target
+        else -> target // Explicit unknown-bounds fallback.
+    }
+    val result = RectI32.ofLTRB(maxOf(0, scissor.left, bounds.left), maxOf(0, scissor.top, bounds.top),
+        minOf(extent.width, scissor.right, bounds.right), minOf(extent.height, scissor.bottom, bounds.bottom))
+    require(!result.isEmpty) { "invalid.w5b.destination-empty-region" }
+    return result
 }
 
 /** Validates every read against the last write and exact immediately preceding copy. */

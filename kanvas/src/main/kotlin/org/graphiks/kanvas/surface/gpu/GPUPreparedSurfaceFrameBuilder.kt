@@ -255,7 +255,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                         textInventory, verticesInventory ->
                         zeroSurvivorCandidate = operations.zeroSurvivorCandidate(
                             request.candidate.color.interpretation, textPreparation, verticesInventory, coreMaterialCandidates)
-                        GPUOpMapper.mapOperations(
+                        fun mapWithSceneClear(synthesizeSceneClear: Boolean) = GPUOpMapper.mapOperations(
                             operations = operations,
                             target = target,
                             config = config,
@@ -264,13 +264,19 @@ internal object GPUPreparedSurfaceFrameBuilder {
                             preparedVerticesInventory = verticesInventory,
                             elidedOperationIndices = elided,
                             w5aPointMaterialRefs = coreMaterialCandidates.mapValues { it.value.root },
-                            synthesizeSceneClear = zeroSurvivorCandidate != null || operations.requiresDstReadSceneClear(
+                            synthesizeSceneClear = synthesizeSceneClear,
+                        )
+                        // Pure first pass authenticates geometry/clip culling and operation
+                        // command ownership. Only its real survivors may decide initialization.
+                        val tentative = mapWithSceneClear(false)
+                        if (tentative.preparedRefusal != null) tentative
+                        else if (zeroSurvivorCandidate != null || operations.requiresDstReadSceneClear(
                                 interpretation = request.candidate.color.interpretation,
                                 textInventory = textInventory,
                                 verticesInventory = verticesInventory,
                                 corePlansByOperationIndex = coreMaterialCandidates,
-                            ),
-                        )
+                                mapping = tentative,
+                            )) mapWithSceneClear(true) else tentative
                     }
                 },
             )
@@ -669,7 +675,7 @@ private class GPUPreparedZeroSurvivorCandidate(
 /**
  * A leading destination reader needs a separate scene clear before its snapshot, because its
  * own render-pass loadOp executes after the copy. Decide from the already-prepared draw's sealed
- * final blend, after text/vertices validation and elision. The mapper inserts the clear before
+ * final blend, after mapper-owned Core/text culling and Vertices command binding. The mapper inserts the clear before
  * assigning command IDs while preserving the inventories' original operation indices.
  * Unpromoted draws retain their prepared legacy blend authority; no public mode is reclassified.
  */
@@ -678,6 +684,7 @@ private fun List<DisplayOp>.requiresDstReadSceneClear(
     textInventory: PreparedTextFrameInventory?,
     verticesInventory: PreparedVerticesFrameInventory,
     corePlansByOperationIndex: Map<Int, org.graphiks.kanvas.gpu.plan.EffectiveMaterialPlanner.Result.Ready>,
+    mapping: GPUOpMapping,
 ): Boolean {
     // EncodedPremulSrgb targets refuse translucent solids (unsupported.surface.prepared.
     // encoded-premul-srgb.translucent-solid); those frames keep today's fused-clear behavior.
@@ -691,8 +698,11 @@ private fun List<DisplayOp>.requiresDstReadSceneClear(
     ) {
         return false
     }
+    val survivingOperationIndices = mapping.commandIdsByOperationIndex.filterValues { it.isNotEmpty() }.keys +
+        mapping.preparedVerticesInventory?.mappedCommands.orEmpty().map { it.operationIndex }
     val firstVisual = withIndex().firstOrNull { (index, visual) ->
         visual.isVisualDraw() &&
+            index in survivingOperationIndices &&
             index !in textInventory?.elidedTextOperationIndices.orEmpty() &&
             index !in verticesInventory.elidedVerticesOperationIndices
             && corePlansByOperationIndex[index]?.blend != BlendPlan.NoOpV1

@@ -895,12 +895,20 @@ public sealed interface PlanPass {
         override val id: PlanPassId = checkedPassId(role, ordinal)
     }
 
-    public data class TextureCopy(
+    public class TextureCopy(
         override val ordinal: Int,
         public val source: PlanResourceId,
         public val destination: PlanResourceId,
         public val destinationVersion: DestinationVersionI64? = null,
+        sourceBoundsI32: RectI32? = null,
+        public val bytesPerRowI64: Long? = null,
     ) : PlanPass {
+        private val sourceBoundsSnapshotI32 = sourceBoundsI32?.copy()
+        public fun copySourceBoundsI32(): RectI32? = sourceBoundsSnapshotI32?.copy()
+        init {
+            require(destinationVersion == null || sourceBoundsSnapshotI32?.isEmpty == false &&
+                bytesPerRowI64 != null && bytesPerRowI64 >= Math.multiplyExact(sourceBoundsSnapshotI32.width().toLong(), 4L))
+        }
         override val role: PlanPassRole = PlanPassRole.TextureCopy
         override val id: PlanPassId = checkedPassId(role, ordinal)
     }

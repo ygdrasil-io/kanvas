@@ -348,7 +348,7 @@ ${requireNotNull(GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(
                 "    let destinationSize = vec2<f32>(textureDimensions(preparedVerticesDestination));\n" +
                     "    let destination = textureSampleLevel(\n" +
                     "        preparedVerticesDestination, preparedVerticesDestinationSampler,\n" +
-                    "        input.position.xy / destinationSize, 0.0,\n" +
+                    "        (input.position.xy - preparedVerticesDraw._padding) / destinationSize, 0.0,\n" +
                     "    );\n" +
                     "    return $PREPARED_VERTICES_BLEND_FUNCTION(sourcePremul, destination);\n",
             )

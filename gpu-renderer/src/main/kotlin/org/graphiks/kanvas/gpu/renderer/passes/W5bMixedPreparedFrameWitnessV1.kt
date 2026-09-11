@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.passes
 
+import org.graphiks.kanvas.gpu.renderer.destination.preparedDestinationBounds
+
 import org.graphiks.kanvas.gpu.plan.*
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.payloads.*
@@ -267,17 +269,19 @@ internal class W5bMixedPreparedFrameWitnessV1 private constructor(
                         org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity(consumerRender.target.value),
                         packet.resourceGeneration, frame.capabilitySeal.deviceGeneration, descriptor.format,
                         org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation.LinearPremul,
-                        consumerRender.sampleContinuation?.key, null)) { "invalid.w5b.mixed-copy-source" }
-                val tightBytesPerRowI64 = Math.multiplyExact(descriptor.logicalBounds.width.toLong(), 4L)
+                        consumerRender.sampleContinuation?.key, null, blend.requiredDestinationVersion)) { "invalid.w5b.mixed-copy-source" }
+                val tightBytesPerRowI64 = Math.multiplyExact(copy.logicalBounds.width.toLong(), 4L)
                 val alignmentI64 = timeline.capabilities.copyBytesPerRowAlignment.toLong()
                 val remainderI64 = tightBytesPerRowI64 % alignmentI64
                 val paddedBytesPerRowI64 = if (remainderI64 == 0L) tightBytesPerRowI64 else
                     Math.addExact(tightBytesPerRowI64, alignmentI64 - remainderI64)
-                val copiedBytesI64 = Math.multiplyExact(paddedBytesPerRowI64, descriptor.logicalBounds.height.toLong())
-                require(copy.copyLayout == GPUTextureCopyLayout(paddedBytesPerRowI64, descriptor.logicalBounds.height)) {
+                val copiedBytesI64 = Math.multiplyExact(paddedBytesPerRowI64, copy.logicalBounds.height.toLong())
+                require(copy.copyLayout == GPUTextureCopyLayout(paddedBytesPerRowI64, copy.logicalBounds.height)) {
                     "invalid.w5b.mixed-copy-layout"
                 }
                 if (packet in core) {
+                    require(copy.logicalBounds == requireNotNull(packet.semanticPayload)
+                        .preparedDestinationBounds(descriptor.logicalBounds)) { "invalid.w5b.mixed-copy-bounds" }
                     val originalTask = nativeCoreDestinationTasks.single { it.taskId in copy.sourceTaskIds }
                     val original = originalTask.payload.operations.filterIsInstance<GPUDestinationSnapshotOperation.TextureCopy>()
                         .single { operation -> operation.consumers.any { it.packetId == packet.packetId } }
@@ -299,15 +303,19 @@ internal class W5bMixedPreparedFrameWitnessV1 private constructor(
                     frame.steps.subList(copyIndex + 1, consumerIndex).filterIsInstance<GPUFrameStep.RenderPassStep>()
                         .flatMap { it.drawPackets }.all { it.role == GPUDrawPacketRole.PathStencilProducer })
                 val snapshot = preparations.single { it.resource == copy.snapshot }
+                val snapshotDescriptor = snapshot.descriptor as GPUFrameTextureDescriptor
+                val capacity = snapshotDescriptor.logicalBounds
                 require(snapshot.role == GPUFrameResourceRole.DestinationSnapshot &&
                     snapshot.lifetime == GPUFrameResourceLifetime.FrameLocal &&
-                    snapshot.descriptor == descriptor && copy.logicalBounds == descriptor.logicalBounds &&
-                    snapshot.byteSize == Math.multiplyExact(Math.multiplyExact(descriptor.logicalBounds.width.toLong(),
-                        descriptor.logicalBounds.height.toLong()), 4L) &&
+                    snapshotDescriptor.format == descriptor.format && snapshotDescriptor.sampleCount == 1 &&
+                    copy.logicalBounds.left >= descriptor.logicalBounds.left && copy.logicalBounds.top >= descriptor.logicalBounds.top &&
+                    copy.logicalBounds.right <= descriptor.logicalBounds.right && copy.logicalBounds.bottom <= descriptor.logicalBounds.bottom &&
+                    copy.logicalBounds.width <= capacity.width && copy.logicalBounds.height <= capacity.height &&
+                    snapshot.byteSize == Math.multiplyExact(Math.multiplyExact(capacity.width.toLong(), capacity.height.toLong()), 4L) &&
                     snapshot.usages == setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.TextureBinding))
                 require(frame.memoryBudget.allocations.single { it.label == snapshot.diagnosticLabel }.let { allocation ->
                     allocation.category == GPUFrameMemoryCategory.DestinationSnapshot && allocation.bytes == snapshot.byteSize &&
-                        allocation.resourceKind == GPUFrameMemoryResourceKind.Texture2D && allocation.extent == descriptor.logicalBounds
+                        allocation.resourceKind == GPUFrameMemoryResourceKind.Texture2D && allocation.extent == capacity
                 })
             }
             val physicalI64 = (listOf(frame.memoryBudget.targetResidentBytes, frame.memoryBudget.peakFrameTransientBytes) +

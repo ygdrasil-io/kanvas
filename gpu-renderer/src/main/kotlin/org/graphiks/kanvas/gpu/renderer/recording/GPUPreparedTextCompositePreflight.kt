@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
+import org.graphiks.kanvas.gpu.renderer.destination.preparedDestinationBounds
+
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -532,11 +534,11 @@ internal object GPUPreparedTextCompositePreflight {
                 affine[0],
                 affine[1],
                 affine[2],
-                0f.toRawBits(),
+                semantic.preparedDestinationBounds(target).left.toFloat().toRawBits(),
                 affine[3],
                 affine[4],
                 affine[5],
-                0f.toRawBits(),
+                semantic.preparedDestinationBounds(target).top.toFloat().toRawBits(),
             )
         } + when (val clipPlan = seal.clipPlan) {
             is GPUPreparedTextClipPlan.Direct -> List(8) { 0f.toRawBits() }

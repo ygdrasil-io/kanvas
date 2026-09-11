@@ -138,7 +138,8 @@ private fun sourceDrawsV2(
 
 /** Compose only the source expression. Existing coverage and fixed-function tail stay exact. */
 private fun composeSource(template: GPUW5aGeometryPipelineTemplate, source: W5aPacketMaterialSourceV2,
-    destination: GPUBlendPlan.ShaderBlendWithDstRead? = null): String {
+    destination: GPUBlendPlan.ShaderBlendWithDstRead? = null,
+    destinationBounds: org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds? = null): String {
     val target = requireNotNull(template.descriptor.fragment).targets.single()
     val blend = target.blend
     require(target.format == GPUTextureFormat.RGBA8UnormSrgb &&
@@ -203,7 +204,8 @@ private fun composeSource(template: GPUW5aGeometryPipelineTemplate, source: W5aP
             $formula
             fn kanvas_w5b_target(src: vec4<f32>, pixel: vec2<f32>${if (analyticCoverage) ", coverage: f32" else ""}) -> vec4<f32> {
                 let dst = textureSampleLevel(kanvas_w5b_destination, kanvas_w5b_sampler,
-                    pixel / vec2<f32>(textureDimensions(kanvas_w5b_destination)), 0.0);
+                    (pixel - vec2<f32>(${requireNotNull(destinationBounds).left}.0, ${destinationBounds.top}.0)) /
+                        vec2<f32>(textureDimensions(kanvas_w5b_destination)), 0.0);
                 let blended = kanvas_w5b_blend(src, dst);
                 ${if (scalar) "let mask_sample: vec4<f32> = textureLoad(kanvas_w5b_coverage, vec2<i32>(pixel), 0); let coverage = clamp(mask_sample.r, 0.0, 1.0); return dst + coverage * (blended - dst);" else if (analyticCoverage) "return dst + coverage * (blended - dst);" else "return blended;"}
             }
@@ -245,7 +247,14 @@ internal fun materializeW5aSourcePartitionV2(
     var replacement: GPUPreparedNativeFrameDraft? = null
     try {
         require(framePlan.w5aCombinedMemoryBudgetV2(limits).diagnostic == null)
-        val pipelines = mutableMapOf<Triple<GPURenderPipeline, String, Int>, Pair<GPUPreparedNativeRenderPipelineOperand, GPUBindGroupLayout>>()
+        data class SourcePipelineKey(
+            val geometryPipeline: GPURenderPipeline,
+            val sourceStructuralId: String,
+            val compositionAbiI32: Int,
+            val destinationKey: org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupKey?,
+            val destinationBounds: org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds?,
+        )
+        val pipelines = mutableMapOf<SourcePipelineKey, Pair<GPUPreparedNativeRenderPipelineOperand, GPUBindGroupLayout>>()
         val buffers = mutableMapOf<String, GPUBuffer>()
         val groups = mutableMapOf<Pair<String, GPUBindGroupLayout>, GPUPreparedNativeBindGroupOperand>()
         val destinationSnapshot = old.auxiliaryOwnedHandles.mapNotNull { it.handle as? GPUW5bDestinationSnapshotNativeV3 }.singleOrNull()
@@ -290,10 +299,13 @@ internal fun materializeW5aSourcePartitionV2(
                 val destination = (sourcePacket?.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead)
                     ?.also { requireNotNull(it.sealedW5b) { "W5 destination-read source lost its sealed final blend" } }
                 require(destination == null || destinationGroup != null)
+                val destinationCopy = destination?.let { framePlan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>()
+                    .single { copy -> copy.consumers.any { it.packetId == sourcePacket?.packetId } } }
                 val scalar = destination?.sealedW5b?.compositionAbiI32 == 4
                 require(!scalar || coverageGroup != null && packets[ordinalI32].corePrimitivePreparedAuthority?.w5bFrameWitnessV3 === coverage?.witness)
                 val base = requireNotNull(currentPipeline)
-                val key = Triple(base.pipeline, source.stage.structuralId, destination?.sealedW5b?.compositionAbiI32 ?: 2)
+                val key = SourcePipelineKey(base.pipeline, source.stage.structuralId, destination?.sealedW5b?.compositionAbiI32 ?: 2,
+                    destinationCopy?.sourceKey, destinationCopy?.logicalBounds)
                 val (pipeline, materialLayout) = pipelines.getOrPut(key) {
                     val template = templates.sourceTemplate(base.pipeline)
                         ?: old.auxiliaryOwnedHandles.asSequence().mapNotNull { it.handle as? GPUW5aGeometryPipelineTemplateProvider }
@@ -306,7 +318,7 @@ internal fun materializeW5aSourcePartitionV2(
                                 minBindingSize = source.stage.uniformByteCountI64.toULong()))),
                     )))
                     val shader = owned.own(device.createShaderModule(ShaderModuleDescriptor(
-                        label = "Kanvas.w5a.source-v2.${source.stage.structuralId}", code = composeSource(template, source, destination))))
+                        label = "Kanvas.w5a.source-v2.${source.stage.structuralId}", code = composeSource(template, source, destination, destinationCopy?.logicalBounds))))
                     val pipelineLayout = owned.own(device.createPipelineLayout(PipelineLayoutDescriptor(
                         label = "Kanvas.composed-abi-v${destination?.sealedW5b?.compositionAbiI32 ?: 2}",
                         bindGroupLayouts = listOf(template.groupZero, layout) +

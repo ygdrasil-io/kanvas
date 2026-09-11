@@ -1994,6 +1994,9 @@ private fun CanonicalHashSink.destinationSourceKey(
 ) {
     tag(name)
     tag("GPUDestinationSnapshotGroupKey")
+    nullable("destinationVersion", value.destinationVersion) { version ->
+        long("valueI64", version.valueI64)
+    }
     string("target", value.target.value)
     long("targetGeneration", value.targetGeneration)
     long("deviceGeneration", value.deviceGeneration.value)
@@ -2515,6 +2518,7 @@ private fun GPUDestinationSnapshotGroupKey.dumpDestinationSourceKey(): String {
             "depthStencilAttachment=${value.depthStencilAttachment?.value ?: "none"}"
     } ?: "sampleContinuation=none"
     return "sourceTarget=${target.value} targetGeneration=$targetGeneration " +
+        "destinationVersion=${destinationVersion?.valueI64 ?: "legacy"} " +
         "deviceGeneration=${deviceGeneration.value} format=${format.value} " +
         "color=${colorInterpretation.value} $continuation " +
         "sourceIntermediate=${sourceIntermediate?.value ?: "none"}"

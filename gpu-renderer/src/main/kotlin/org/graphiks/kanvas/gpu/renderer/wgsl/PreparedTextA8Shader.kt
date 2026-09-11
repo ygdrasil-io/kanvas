@@ -155,7 +155,7 @@ ${PREPARED_TEXT_CORNER_INDICES.joinToString(",\n") { "        ${it}u" }},
     let destination = textureSampleLevel(
         preparedTextDestination,
         preparedTextDestinationSampler,
-        input.position.xy / destinationSize,
+        (input.position.xy - vec2<f32>(drawUniforms.deviceToLocalRow0.w, drawUniforms.deviceToLocalRow1.w)) / destinationSize,
         0.0,
     );
     let fullCoverageBlend = $PREPARED_TEXT_BLEND_FUNCTION(preparedSource, destination);

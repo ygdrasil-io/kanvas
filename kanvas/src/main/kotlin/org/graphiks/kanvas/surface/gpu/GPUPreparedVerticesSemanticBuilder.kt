@@ -256,6 +256,11 @@ internal object GPUPreparedVerticesSemanticBuilder {
                     transformBytes = normalized.transformBytes,
                     targetBounds = targetBounds,
                     scissorBounds = scissor,
+                    conservativeDrawBounds = GPUPixelBounds(
+                        kotlin.math.floor(expectedBounds.left.toDouble()).coerceIn(0.0, target.width.toDouble()).toInt(),
+                        kotlin.math.floor(expectedBounds.top.toDouble()).coerceIn(0.0, target.height.toDouble()).toInt(),
+                        kotlin.math.ceil(expectedBounds.right.toDouble()).coerceIn(0.0, target.width.toDouble()).toInt(),
+                        kotlin.math.ceil(expectedBounds.bottom.toDouble()).coerceIn(0.0, target.height.toDouble()).toInt()),
                     targetFormat = normalized.layer.target.colorFormat,
                     clipIdentity = normalized.clipIdentity,
                     clipCoverageIdentity = normalized.clipCoverageIdentity,

@@ -42,6 +42,7 @@ data class GPUPreparedVerticesPayloadInput(
     val transformBytes: List<Int>,
     val targetBounds: GPUPixelBounds,
     val scissorBounds: GPUPixelBounds,
+    val conservativeDrawBounds: GPUPixelBounds? = null,
     val targetFormat: String,
     val clipIdentity: String,
     val clipCoverageIdentity: String,
@@ -100,6 +101,7 @@ internal class GPUPreparedVerticesPayloadSnapshot(
     val transformBytes = immutableList(input.transformBytes)
     val targetBounds = input.targetBounds.copy()
     val scissorBounds = input.scissorBounds.copy()
+    val conservativeDrawBounds = input.conservativeDrawBounds?.copy()
     val targetFormat = input.targetFormat
     val clipIdentity = input.clipIdentity
     val clipCoverageIdentity = input.clipCoverageIdentity
@@ -120,7 +122,7 @@ internal class GPUPreparedVerticesPayloadSnapshot(
         materialFrameSnapshot = authenticatedMaterial,
         materialPlanEmission = requireNotNull(materialPlanProvenance).remappedEmission(table, ref),
         topologyIdentity = topologyIdentity, transformBytes = transformBytes,
-        targetBounds = targetBounds, scissorBounds = scissorBounds, targetFormat = targetFormat,
+        targetBounds = targetBounds, scissorBounds = scissorBounds, conservativeDrawBounds = conservativeDrawBounds, targetFormat = targetFormat,
         clipIdentity = clipIdentity, clipCoverageIdentity = clipCoverageIdentity,
         primitiveColorPresent = primitiveColorPresent, primitiveBlendIdentity = primitiveBlendIdentity,
         w5bFinalBlendPlan = w5bFinalBlendPlan,
@@ -137,7 +139,7 @@ internal class GPUPreparedVerticesPayloadSnapshot(
             provenance.remappedEmission(provenance.sourcePlanTable, provenance.ref)
         },
         topologyIdentity = topologyIdentity, transformBytes = transformBytes,
-        targetBounds = targetBounds, scissorBounds = scissorBounds, targetFormat = targetFormat,
+        targetBounds = targetBounds, scissorBounds = scissorBounds, conservativeDrawBounds = conservativeDrawBounds, targetFormat = targetFormat,
         clipIdentity = clipIdentity, clipCoverageIdentity = clipCoverageIdentity,
         primitiveColorPresent = primitiveColorPresent, primitiveBlendIdentity = primitiveBlendIdentity,
         w5bFinalBlendPlan = plan,
@@ -190,6 +192,7 @@ internal class GPUPreparedVerticesPayloadSnapshot(
             .int("scissor.top", scissorBounds.top)
             .int("scissor.right", scissorBounds.right)
             .int("scissor.bottom", scissorBounds.bottom)
+            .text("conservativeDrawBounds", conservativeDrawBounds?.toString() ?: "unknown")
             .text("clip.identity", clipIdentity)
             .text("clip.coverageIdentity", clipCoverageIdentity)
             .boolean("primitiveColor.present", primitiveColorPresent)

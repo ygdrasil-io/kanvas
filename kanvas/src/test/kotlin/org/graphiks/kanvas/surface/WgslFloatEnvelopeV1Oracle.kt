@@ -185,7 +185,12 @@ internal object WgslFloatEnvelopeV1Oracle {
                 val correlated = expandAbsolute(affine, error)
                 return Interval(maxOf(ordinary.lower, correlated.lower), minOf(ordinary.upper, correlated.upper))
             }
-            fun unpremul(value: Interval, alpha: Interval) = if (alpha == Interval.ZERO) Interval.ZERO else wgslDivide(value, alpha)
+            fun unpremul(value: Interval, alpha: Interval) = when {
+                alpha.isExactly(Interval.ZERO) -> Interval.ZERO
+                // Opaque premultiplied input is already straight; no division is needed.
+                alpha.isExactly(Interval.ONE) -> value
+                else -> wgslDivide(value, alpha)
+            }
             fun split(original: Interval, countI32: Int): List<Interval> {
                 val width = upSubtract(original.upper, original.lower)
                 val bounds = (0..countI32).map { partI32 ->
@@ -286,14 +291,14 @@ internal object WgslFloatEnvelopeV1Oracle {
             BlendMode.DARKEN -> minimum(s, d)
             BlendMode.LIGHTEN -> maximum(s, d)
             BlendMode.COLOR_DODGE -> when {
-                d == Interval.ZERO -> Interval.ZERO
-                s == Interval.ONE -> Interval.ONE
+                d.isExactly(Interval.ZERO) -> Interval.ZERO
+                s.isExactly(Interval.ONE) -> Interval.ONE
                 s.upper < BigDecimal.ONE -> minimum(Interval.ONE, wgslDivide(d, Interval.ONE - s))
                 else -> error("Color dodge source crosses its singularity")
             }
             BlendMode.COLOR_BURN -> when {
-                d == Interval.ONE -> Interval.ONE
-                s == Interval.ZERO -> Interval.ZERO
+                d.isExactly(Interval.ONE) -> Interval.ONE
+                s.isExactly(Interval.ZERO) -> Interval.ZERO
                 s.lower > BigDecimal.ZERO -> Interval.ONE - minimum(Interval.ONE, wgslDivide(Interval.ONE - d, s))
                 else -> error("Color burn source crosses its singularity")
             }
@@ -834,6 +839,10 @@ internal object WgslFloatEnvelopeV1Oracle {
         val pairs = listOf(left.lower to right.lower, left.lower to right.upper, left.upper to right.lower, left.upper to right.upper)
         return Interval(pairs.minOf { lower(it.first, it.second) }, pairs.maxOf { upper(it.first, it.second) })
     }
+
+    // Directed subdivision changes BigDecimal scales, not numeric endpoint identity.
+    private fun Interval.isExactly(other: Interval): Boolean =
+        lower.compareTo(other.lower) == 0 && upper.compareTo(other.upper) == 0
 
     private operator fun Interval.plus(other: Interval): Interval = f32Envelope(directedBinary(this, other, ::downAdd, ::upAdd))
     private operator fun Interval.minus(other: Interval): Interval = f32Envelope(directedBinary(this, other, ::downSubtract, ::upSubtract))

@@ -136,7 +136,8 @@ internal class W5bPreparedFrameWitnessV3(
         graph.resources().singleOrNull { it.role == org.graphiks.kanvas.gpu.plan.PlanResourceRole.DestinationSnapshot }?.let {
             val resource = org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef(scratch.target.value.removeSuffix(".target") + ".snapshot")
             GPUResourcePreparationRequest(resource,
-                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor(scratch.targetBounds,
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor(requireNotNull(it.copyExtent()).let { extent ->
+                    org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, extent.width, extent.height) },
                     org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat.RGBA8UnormSrgb, 1),
                 org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.DestinationSnapshot,
                 setOf(org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.CopyDestination,
@@ -186,12 +187,14 @@ internal class W5bPreparedFrameWitnessV3(
                     org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity(scratch.target.value),
                     packet.resourceGeneration, capabilitySeal.deviceGeneration,
                     org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat.RGBA8UnormSrgb,
-                    org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation.LinearPremul, null, null),
+                    org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation.LinearPremul, null, null,
+                    blend.requiredDestinationVersion),
                 snapshot = org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef(
                     scratch.target.value.removeSuffix(".target") + ".snapshot"),
-                logicalBounds = scratch.targetBounds,
+                logicalBounds = requireNotNull(pass.copySourceBoundsI32()).let { bounds ->
+                    org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(bounds.left, bounds.top, bounds.right, bounds.bottom) },
                 copyLayout = org.graphiks.kanvas.gpu.renderer.resources.GPUTextureCopyLayout(
-                    (graph.passes().last() as PlanPass.ReadbackPass).bytesPerRow, scratch.targetBounds.height),
+                    requireNotNull(pass.bytesPerRowI64), requireNotNull(pass.copySourceBoundsI32()).height()),
                 consumers = listOf(org.graphiks.kanvas.gpu.renderer.recording.GPUDestinationSnapshotConsumerRef(
                     packet.commandIdValue.toString(), taskId(consumer), packet.packetId,
                     org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID(packet.commandIdValue))),

@@ -101,6 +101,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
         targetViewOperand: GPUPreparedNativeTextureViewOperand,
         destinationReadsByPacketId:
             Map<GPUDrawPacketID, GPUWgpu4kPreparedVerticesDestinationReadInput> = emptyMap(),
+        sharedBuffersByArtifactKey: MutableMap<String, PreparedVerticesBufferSet>? = null,
     ): GPUPreparedRenderRunMaterialization {
         plan.packets.firstOrNull { packet -> packet.material.sampledResources.isNotEmpty() }
             ?.let { packet ->
@@ -179,6 +180,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                         created = created,
                         bufferCreationCount = { bufferCreationCount += 1L },
                         setPipelineEmissions = { setPipelineEmissions += 1L },
+                        sharedBuffersByArtifactKey = sharedBuffersByArtifactKey,
                     )
                 }
             }
@@ -238,9 +240,13 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
         created: MutableList<AutoCloseable>,
         bufferCreationCount: () -> Unit,
         setPipelineEmissions: () -> Unit,
+        sharedBuffersByArtifactKey: MutableMap<String, PreparedVerticesBufferSet>?,
     ) {
-        val bufferByArtifactKey = linkedMapOf<String, PreparedVerticesBufferSet>()
+        val bufferByArtifactKey = sharedBuffersByArtifactKey ?: linkedMapOf()
+        val newlyCreatedArtifactKeys = mutableSetOf<String>()
         plan.resourcePlans.forEach { resourcePlan ->
+            if (resourcePlan.artifactKey in bufferByArtifactKey) return@forEach
+            newlyCreatedArtifactKeys += resourcePlan.artifactKey
             val artifact = requireNotNull(artifactByKey[resourcePlan.artifactKey]) {
                 "A prepared-vertices resource plan must retain its exact immutable artifact"
             }
@@ -278,7 +284,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                 },
             )
         }
-        bufferByArtifactKey.values.forEach { buffers ->
+        bufferByArtifactKey.filterKeys { it in newlyCreatedArtifactKeys }.values.forEach { buffers ->
             uniformUploads += preparedVerticesBufferUpload(
                 role = "vertex",
                 bytes = buffers.artifact.vertexBytesForUpload(),
@@ -483,7 +489,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
         bufferCreationCount()
         uniformUploads += preparedVerticesBufferUpload(
             role = "draw-uniforms",
-            bytes = preparedVerticesDrawUniformBytes(packet),
+            bytes = preparedVerticesDrawUniformBytes(packet, entry.destinationRead?.plan?.copyStep?.logicalBounds),
             destination = GPUPreparedNativeBufferOperand(
                 drawUniformBuffer,
                 actualDeviceGeneration,
@@ -817,7 +823,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
         ),
     )
 
-    private data class PreparedVerticesBufferSet(
+    internal data class PreparedVerticesBufferSet(
         val artifact: GPUPreparedVerticesUploadArtifact,
         val vertexBuffer: GPUPreparedNativeBufferOperand,
         val indexBuffer: GPUPreparedNativeBufferOperand?,
@@ -1277,6 +1283,7 @@ private fun <T : AutoCloseable> T.track(handles: MutableList<AutoCloseable>): T 
 
 private fun preparedVerticesDrawUniformBytes(
     packet: GPUDrawSemanticPayload.Vertices,
+    destinationBounds: org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds?,
 ): ByteArray {
     val values = packet.transformBytes.map(Float::fromBits)
     val buffer = ByteBuffer.allocate(PREPARED_VERTICES_DRAW_UNIFORM_SIZE_BYTES)
@@ -1289,8 +1296,8 @@ private fun preparedVerticesDrawUniformBytes(
     }
     buffer.putFloat(packet.targetBounds.width.toFloat())
     buffer.putFloat(packet.targetBounds.height.toFloat())
-    buffer.putFloat(0f)
-    buffer.putFloat(0f)
+    buffer.putFloat(destinationBounds?.left?.toFloat() ?: 0f)
+    buffer.putFloat(destinationBounds?.top?.toFloat() ?: 0f)
     return buffer.array()
 }
 
