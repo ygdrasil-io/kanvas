@@ -203,11 +203,13 @@ Task 5 est close par `8c2ba473d`, `ececa76c2`, `2344686c6`, puis la correction d
 - Consumes: every W5b-promoted family and destination version/resource plans.
 - Produces: one frame-wide ordered material/blend execution graph with transactional refusal and recovery on the same public Surface/runtime/backend.
 
-- [ ] Add RED mixed frames interleaving fixed-function, destination-read and `DST` across Rect → Point → RRect → Path → A8 → Vertices. Observe at least one pixel per middle command, one order counterfactual and every mutable captured source.
-- [ ] Add a public budget/capability refusal reachable from valid W5b input, followed by a valid W5b render on the same Surface when the public API permits it; otherwise use the same runtime/backend with distinct Surfaces and state that exact limitation. The refusal diagnostic and recovery pixels are the only assertions.
-- [ ] Seal destination versions and snapshot lifetimes before `Ready`; reject missing binding/texture/sampler/storage capability and I64 overflow before any native allocation. Preserve affine destination correlation in the oracle.
-- [ ] Ensure rollback owns every created texture/view/sampler/buffer/pipeline until completion and quarantines failed closes through existing pool journals. Do not add failure injection or lifecycle counters.
-- [ ] Run the complete W5b public suite and W5a/W3/W4 public regressions; commit `test(w5b): prove mixed blend ordering and recovery`.
+- [x] Add RED mixed frames interleaving fixed-function, destination-read and `DST` across Rect → Point → RRect → Path → A8 → Vertices. Observe at least one pixel per middle command, one order counterfactual and every mutable captured source.
+- [x] Add a public budget/capability refusal reachable from valid W5b input, followed by a valid W5b render on the same Surface when the public API permits it; otherwise use the same runtime/backend with distinct Surfaces and state that exact limitation. The refusal diagnostic and recovery pixels are the only assertions.
+- [x] Seal destination versions and snapshot lifetimes before `Ready`; reject missing binding/texture/sampler/storage capability and I64 overflow before any native allocation. Preserve affine destination correlation in the oracle.
+- [x] Ensure rollback owns every created texture/view/sampler/buffer/pipeline until completion and quarantines failed closes through existing pool journals. Do not add failure injection or lifecycle counters.
+- [x] Run the complete W5b public suite and W5a/W3/W4 public regressions; commit `test(w5b): prove mixed blend ordering and recovery`.
+
+Task 6 closed after three independent-review fix rounds. The mixed sibling now owns the ordered Core/A8/Vertices timeline, exact destination-copy contract, pre-allocation physical inventory, authentic `DST` elision and a Surface-confined zero-survivor proof that lowers to the existing transparent initialization clear. Final allowed regression: 146 selected public methods, 144 passed, 2 authentic AA4 skips, 0 failures/errors. Recovery uses distinct Surfaces on the same uninterrupted runtime/backend because the public display list and configuration are immutable; capability replacement and the aggregate mixed budget remain non-injectable through the public prepared API, so their typed branches have static review evidence rather than fabricated tests. The admitted ABI uses uniform buffers and sampled textures/samplers, not storage buffers. Independent scoped re-review verdict: READY.
 
 ### Task 7: Remove migrated blend fallbacks and update durable status
 
