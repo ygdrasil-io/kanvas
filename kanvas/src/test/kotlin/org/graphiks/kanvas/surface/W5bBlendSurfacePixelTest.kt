@@ -117,6 +117,16 @@ class W5bBlendSurfacePixelTest {
         val transparent = W5aSolidOpacityCpuOracle.draw(ColorARGB.Transparent, 1f)
         assertDisjoint(white, WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
             (transparent as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels))
+        val variedRed = W5aSolidOpacityCpuOracle.draw(ColorARGB.Red, .5f)
+        val variedExpected = WgslFloatEnvelopeV1Oracle.drawDestination(
+            solidSource(ColorF32.of(1f, 0f, 0f, 1f), .5f), MaterialPlanRef(1),
+            requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(green)), BlendMode.DIFFERENCE)
+        // Reusing the first draw's color would give the old white/overlap results.
+        listOf(variedRed to white, variedExpected to expected).forEach { (correct, stale) ->
+            assertDisjoint(correct, WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+                (stale as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels))
+        }
+        val secondSources = listOf(Triple(ColorARGB.White, white, expected), Triple(ColorARGB.Red, variedRed, variedExpected))
         val vertices = Vertices(VertexMode.TRIANGLES,
             listOf(Point2F32(0f, 0f), Point2F32(12f, 0f), Point2F32(0f, 12f)), indices = listOf(0, 1, 2))
         val surface = Surface(8, 8).also { it.canvas {
@@ -124,11 +134,11 @@ class W5bBlendSurfacePixelTest {
             drawVertices(vertices, Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), .5f),
                 blendMode = BlendMode.DIFFERENCE, antiAlias = false))
         } }
-        // Both destination draws share source and geometry. The middle opaque write
-        // makes their order observable; disjoint outer pixels detect either omission.
+        // Both destination draws share source structure and geometry, with equal or
+        // distinct color values. The middle write and outer pixels expose order/omission.
         val sameSource = Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), .5f),
             blendMode = BlendMode.DIFFERENCE, antiAlias = false)
-        val sameSourceSurface = Surface(8, 8).also { it.canvas {
+        val sameSourceSurfaces = secondSources.map { (color, _, _) -> Surface(8, 8).also { it.canvas {
             save()
             clipRect(RectF32.ofLTRB(0f, 0f, 5f, 6f), antiAlias = false)
             drawVertices(vertices, sameSource)
@@ -137,17 +147,21 @@ class W5bBlendSurfacePixelTest {
                 Paint(shader = Shader.SolidColor(ColorARGB.Green), antiAlias = false))
             save()
             clipRect(RectF32.ofLTRB(3f, 0f, 8f, 6f), antiAlias = false)
-            drawVertices(vertices, sameSource)
+            drawVertices(vertices, Paint(shader = Shader.Opacity(Shader.SolidColor(color), .5f),
+                blendMode = BlendMode.DIFFERENCE, antiAlias = false))
             restore()
-        } }
+        } } }
         repeat(3) {
             WgslFloatEnvelopeV1Oracle.assertAdmits(expected, surface.render().pixels.copyOfRange(0, 4))
-            val pixels = sameSourceSurface.render().pixels
-            listOf(Triple(1, 1, white), Triple(4, 1, expected), Triple(6, 1, white), Triple(7, 7, transparent))
-                .forEach { (xI32, yI32, color) ->
-                    val offsetI32 = (yI32 * 8 + xI32) * 4
-                    WgslFloatEnvelopeV1Oracle.assertAdmits(color, pixels.copyOfRange(offsetI32, offsetI32 + 4))
-                }
+            sameSourceSurfaces.zip(secondSources).forEach { (sharedSurface, second) ->
+                val (_, right, middle) = second
+                val pixels = sharedSurface.render().pixels
+                listOf(Triple(1, 1, white), Triple(4, 1, middle), Triple(6, 1, right), Triple(7, 7, transparent))
+                    .forEach { (xI32, yI32, color) ->
+                        val offsetI32 = (yI32 * 8 + xI32) * 4
+                        WgslFloatEnvelopeV1Oracle.assertAdmits(color, pixels.copyOfRange(offsetI32, offsetI32 + 4))
+                    }
+            }
         }
     }
 

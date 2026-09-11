@@ -675,7 +675,14 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
         val destination = entry.destinationRead?.plan?.blendPlan
         val key = PreparedVerticesPipelineKey(
             deviceGeneration = actualDeviceGeneration,
-            program = entry.program,
+            shader = PreparedVerticesShaderCompatibilityKey(
+                wgslSource = entry.program.wgslSource,
+                vertexEntryPoint = entry.program.vertexEntryPoint,
+                fragmentEntryPoint = entry.program.fragmentEntryPoint,
+                vertexLayoutHash = entry.program.vertexLayoutHash,
+                bindingLayoutHash = entry.program.bindingLayoutHash,
+                reflectedAbiHash = entry.program.reflectedAbiHash,
+            ),
             blendState = requirePreparedVerticesBlend(entry.drawPacket.blendPlan, entry.packet),
             targetFormat = entry.packet.targetFormat.toPreparedVerticesTargetFormat(),
             vertexLayout = entry.packet.artifact.layout,
@@ -699,14 +706,14 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
         )
         // Only cache misses acquire owners. A later run's ledger never acquires these
         // handles again, including when a later allocation fails and the frame rolls back.
-        return pipelineByKey.getOrPut(key) { createPipelineSet(key, created) }
+        return pipelineByKey.getOrPut(key) { createPipelineSet(key, entry.program, created) }
     }
 
     private fun createPipelineSet(
         key: PreparedVerticesPipelineKey,
+        program: GPUPreparedVerticesShaderProgram,
         created: MutableList<AutoCloseable>,
     ): PreparedVerticesPipelineSet {
-        val program = key.program
         val layout = key.vertexLayout
         val drawLayout = device.createBindGroupLayout(
             BindGroupLayoutDescriptor(
@@ -853,11 +860,11 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
      * no depth/stencil/culling, full sample mask, no alpha-to-coverage, and destination
      * group 2 is fragment float-2D texture binding 0 plus filtering sampler binding 1.
      * Destination versions/origins and material values belong to per-draw bindings,
-     * not pipeline compatibility; the program retains exact WGSL and reflected ABI.
+     * not pipeline compatibility; the shader key retains exact WGSL and reflected ABI.
      */
     private data class PreparedVerticesPipelineKey(
         val deviceGeneration: GPUDeviceGenerationID,
-        val program: GPUPreparedVerticesShaderProgram,
+        val shader: PreparedVerticesShaderCompatibilityKey,
         val blendState: GPUFixedFunctionBlendState,
         val targetFormat: GPUTextureFormat,
         val vertexLayout: GPUVertexLayoutPlan,
@@ -867,6 +874,19 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
         val drawUniformSizeBytesI32: Int,
         val materialUniformBinding: GPUPreparedMaterialUniformBinding?,
         val destination: PreparedVerticesDestinationPipelineKey?,
+    )
+
+    /** Excludes pipelineKeyHash: that admission identity includes material uniform
+     * values and paint alpha. The miss supplies its representative program separately
+     * for native creation/labels, without adding those values to cache equality.
+     */
+    private data class PreparedVerticesShaderCompatibilityKey(
+        val wgslSource: String,
+        val vertexEntryPoint: String,
+        val fragmentEntryPoint: String,
+        val vertexLayoutHash: String,
+        val bindingLayoutHash: String,
+        val reflectedAbiHash: String,
     )
 
     private data class PreparedVerticesDestinationPipelineKey(
