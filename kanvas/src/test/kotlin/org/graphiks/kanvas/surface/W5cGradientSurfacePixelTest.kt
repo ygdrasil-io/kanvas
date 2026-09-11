@@ -30,6 +30,110 @@ import kotlin.test.assertContentEquals
 
 class W5cGradientSurfacePixelTest {
     @Test
+    fun conicalGradientCoversFourLanesAndSelectsLargestValidRoot() {
+        val stops = List(17) { indexI32 -> GradientStop(
+            if (indexI32 in 8..9) .5f else indexI32 / 16f,
+            if (indexI32 <= 8) ColorARGB.Red else ColorARGB.Blue) }
+        // Equal radii give two positive-radius roots (x-3)/8 and (x+1)/8.
+        // At x=5 the smaller root is red and the required larger root is blue.
+        assertConicalLanes(Shader.ConicalGradient(Point2F32(1f, 1f), 2f,
+            Point2F32(9f, 1f), 2f, stops), listOf(2f to ColorARGB.Red, 5f to ColorARGB.Blue, 7f to ColorARGB.Blue))
+        // Negative A reverses the +/- formula ordering; only the positive-radius root survives.
+        assertConicalLanes(Shader.ConicalGradient(Point2F32(1f, 1f), 0f,
+            Point2F32(3f, 1f), 4f, stops), listOf(2f to ColorARGB.Red, 7f to ColorARGB.Blue))
+        // Off-axis sqrt(3) and interpolation pass through the common opacity/blend tail.
+        assertConicalLanes(Shader.ConicalGradient(Point2F32(1f, 2f), 2f,
+            Point2F32(9f, 2f), 2f, listOf(GradientStop(0f, ColorARGB.Black), GradientStop(1f, ColorARGB.White))),
+            listOf(2f to null), opacityF32 = 32f / 255f, blend = BlendMode.DIFFERENCE)
+    }
+
+    @Test
+    fun conicalGradientMasksFragmentsWithoutValidRoot() {
+        val singleton = listOf(GradientStop(.7f, ColorARGB.Green))
+        // Outside the strip |x-4|<=2 the discriminant is negative. One stop
+        // must keep this mask; reducing the source to Solid would fill white pixels.
+        assertConicalLanes(Shader.ConicalGradient(Point2F32(4f, 1f), 2f,
+            Point2F32(4f, 9f), 2f, singleton),
+            listOf(1f to ColorARGB.White, 4f to ColorARGB.Green, 7f to ColorARGB.White))
+        // Behind an expanding cone both finite roots have a negative radius.
+        assertConicalLanes(Shader.ConicalGradient(Point2F32(4f, 1f), 0f,
+            Point2F32(12f, 1f), 2f, singleton),
+            listOf(1f to ColorARGB.White, 7f to ColorARGB.Green))
+    }
+
+    @Test
+    fun conicalGradientCoversAllDegeneracyBranches() {
+        val stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(.5f, ColorARGB.Red),
+            GradientStop(.5f, ColorARGB.Blue), GradientStop(1f, ColorARGB.Blue))
+        assertConicalLanes(Shader.ConicalGradient(Point2F32(1f, 1f), 1f,
+            Point2F32(5f, 1f), 5f, stops), listOf(2f to ColorARGB.Red, 7f to ColorARGB.Blue))
+        assertConicalLanes(Shader.ConicalGradient(Point2F32(1f, 1f), 0f,
+            Point2F32(5f, 1f), 4f, stops), listOf(1f to ColorARGB.White, 7f to ColorARGB.Blue))
+        assertConicalLanes(Shader.ConicalGradient(Point2F32(1f, 1f), 2f,
+            Point2F32(1f, 1f), 6f, stops), listOf(2f to ColorARGB.Red, 7f to ColorARGB.Blue))
+        assertConicalLanes(Shader.ConicalGradient(Point2F32(1f, 1f), 6f,
+            Point2F32(1f, 1f), 2f, stops), listOf(2f to ColorARGB.Blue, 7f to ColorARGB.Red))
+        assertConicalLanes(Shader.ConicalGradient(Point2F32(1f, 1f), 0f,
+            Point2F32(1f, 1f), 4f, stops), listOf(1f to ColorARGB.White, 7f to ColorARGB.Blue))
+        assertConicalLanes(Shader.ConicalGradient(Point2F32(1f, 1f), 2f,
+            Point2F32(1f, 1f), 2f, stops),
+            listOf(2f to ColorARGB.Red, 3f to ColorARGB.Blue, 7f to ColorARGB.Blue))
+        assertConicalLanes(Shader.ConicalGradient(Point2F32(1f, 1f), 0f,
+            Point2F32(1f, 1f), 0f, stops), listOf(1f to ColorARGB.Blue, 7f to ColorARGB.Blue))
+        for ((startRadiusF32, endRadiusF32) in listOf(-1f to 2f, 2f to -1f,
+            Float.NaN to 2f, 2f to Float.POSITIVE_INFINITY)) {
+            val invalid = Surface(39, 43)
+            invalid.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 39f, 43f), Paint(shader = Shader.ConicalGradient(
+                Point2F32(1f, 1f), startRadiusF32, Point2F32(9f, 1f), endRadiusF32, stops), antiAlias = false)) }
+            val failure = assertThrows<IllegalStateException> { invalid.render() }
+            assertEquals(if (startRadiusF32 < 0f || endRadiusF32 < 0f) "unsupported.material.gradient.negative_radius"
+                else "non-finite-value", failure.message.orEmpty().substringBefore(':'))
+        }
+        val outsideDomain = Surface(41, 1)
+        outsideDomain.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 41f, 1f), Paint(shader = Shader.ConicalGradient(
+            Point2F32(0f, 0f), 1e20f, Point2F32(1f, 0f), 1e20f, stops), antiAlias = false)) }
+        assertInstanceOf(SceneCaptureResult.Captured::class.java, outsideDomain.snapshotScene())
+        val failure = assertThrows<IllegalStateException> { outsideDomain.render() }
+        assertEquals("unsupported.material.gradient.numeric-domain-unbounded", failure.message.orEmpty().substringBefore(':'))
+    }
+
+    private fun assertConicalLanes(shader: Shader.ConicalGradient, samples: List<Pair<Float, ColorARGB?>>,
+        opacityF32: Float = 1f, blend: BlendMode = BlendMode.SRC_OVER) {
+        val widthI32 = if (blend == BlendMode.SRC_OVER) 38 else 40
+        val surface = Surface(widthI32, 44)
+        surface.canvas {
+            // Distinct preceding range exercises the common frame slab and rebase.
+            drawRect(RectF32.ofLTRB(0f, 0f, widthI32.toFloat(), 44f), Paint(shader = Shader.LinearGradient(
+                Point2F32(0f, 0f), Point2F32(widthI32.toFloat(), 0f), listOf(GradientStop(0f, ColorARGB.White),
+                    GradientStop(1f, ColorARGB.White))), antiAlias = false))
+            repeat(4) { laneI32 ->
+                save()
+                concat(Matrix3x3F32.translation(.5f, laneI32 * 10f + .5f) * Matrix3x3F32.scaling(2f, 2f))
+                val paint = Paint(shader = Shader.Opacity(shader, opacityF32), blendMode = blend, antiAlias = false)
+                when (laneI32) {
+                    0 -> drawRect(RectF32.ofLTRB(-.25f, -.25f, 10.25f, 3.25f), paint)
+                    1 -> drawRRect(RRectF32.of(RectF32.ofLTRB(0f, 0f, 10f, 3f), CornerRadiiF32.of(.5f)), paint.copy(antiAlias = true))
+                    2 -> drawPath(Path().apply { moveTo(-1f, -1f); lineTo(14f, -1f); lineTo(-1f, 7f); close() }, paint)
+                    3 -> drawPath(Path().apply { moveTo(-1f, 1f); lineTo(11f, 1f) }, paint.copy(style = PaintStyle.STROKE, strokeWidth = 1f))
+                }
+                restore()
+            }
+        }
+        val pixels = surface.render().pixels
+        repeat(4) { laneI32 -> samples.forEach { (localXF32, color) ->
+            val offsetI32 = ((laneI32 * 10 + 2) * widthI32 + (localXF32 * 2).toInt()) * 4
+            if (color != null) assertContentEquals(ubyteArrayOf(color.red.toUByte(), color.green.toUByte(), color.blue.toUByte(), 255u),
+                pixels.copyOfRange(offsetI32, offsetI32 + 4), "Conical lane=$laneI32 x=$localXF32 shader=$shader")
+            val expected = W5cGradientCpuOracle.conicalClampSrgb(Point2F32(localXF32, 1f), shader.start, shader.startRadius,
+                shader.end, shader.endRadius, shader.stops).thenBlend(
+                W5bBlendCpuOracle.Draw(ColorARGB.White, 1f, BlendMode.SRC_OVER), blend, opacityF32)
+            require(expected is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { "Conical lane=$laneI32 x=$localXF32: $expected" }
+            WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixels.copyOfRange(offsetI32, offsetI32 + 4))
+        } }
+        assertContentEquals(ubyteArrayOf(255u, 255u, 255u, 255u), pixels.copyOfRange((44 * widthI32 - 1) * 4, 44 * widthI32 * 4))
+    }
+
+    @Test
     fun sweepGradientUsesClockwiseScreenAnglesOnFourLanes() {
         val stops = listOf(GradientStop(0f, ColorARGB.Red),
             GradientStop(.25f, ColorARGB.Red), GradientStop(.25f, ColorARGB.Green),

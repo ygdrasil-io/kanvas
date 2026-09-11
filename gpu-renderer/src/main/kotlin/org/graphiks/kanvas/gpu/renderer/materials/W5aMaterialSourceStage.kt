@@ -68,7 +68,8 @@ internal class W5aMaterialSourceStage private constructor(
                 when (binding) {
                     is MaterialBindingPlan.GradientV1 -> {
                         binding.copyUniformValuesF32().forEach(uniforms::putFloat)
-                        opaque = opaque && requireNotNull(table.gradientStopSlab).copyStops().all { it.straightSrgbF32.alpha == 1f }
+                        opaque = opaque && binding !is MaterialBindingPlan.ConicalGradientV1 &&
+                            requireNotNull(table.gradientStopSlab).copyStops().all { it.straightSrgbF32.alpha == 1f }
                     }
                     MaterialBindingPlan.EmptyV1 -> { repeat(4) { uniforms.putFloat(0f) }; opaque = false }
                     is MaterialBindingPlan.SolidRgbaF32V1 -> {
@@ -115,6 +116,15 @@ internal class W5aMaterialSourceStage private constructor(
                     uniforms.putFloat(sweep.sweepSpanDegreesF32)
                     repeat(3) { uniforms.putFloat(0f) }
                 }
+                val conical = (gradientBinding as? MaterialBindingPlan.ConicalGradientV1)?.degeneracy
+                if (conical != null) {
+                    conical.copyScalarsF32().forEach(uniforms::putFloat)
+                    repeat(3) { uniforms.putFloat(0f) }
+                    listOf(conical.conicalLinearEquation, conical.conicalCentersCoincident, conical.conicalRadiiEqual,
+                        conical.conicalFullyDegenerate, conical.conicalConcentric, conical.conicalSharedRadiusAboveEpsilon)
+                        .forEach { uniforms.putInt(if (it) 1 else 0) }
+                    uniforms.putInt(conical.conicalBranchTagU32.toInt()).putInt(0)
+                }
                 val inverseF32 = requireNotNull(coordinates).copyInverseCtmF32()
                 listOf(inverseF32.sx, inverseF32.kx, inverseF32.tx, 0f, inverseF32.ky, inverseF32.sy, inverseF32.ty, 0f,
                     inverseF32.persp0, inverseF32.persp1, inverseF32.persp2, 0f).forEach(uniforms::putFloat)
@@ -124,6 +134,10 @@ internal class W5aMaterialSourceStage private constructor(
                 ${chain.indices.joinToString("\n") { "    binding$it: vec4<f32>," }}
                 ${if (gradientBinding == null) "" else "    gradientHeader: vec4<u32>,\n    gradientFlags: vec4<u32>,\n" +
                     (if (gradientBinding is MaterialBindingPlan.SweepGradientV1) "    sweepParameters: vec4<f32>,\n" else "") +
+                    (if (gradientBinding is MaterialBindingPlan.ConicalGradientV1)
+                        "    conicalParameters0: vec4<f32>,\n    conicalParameters1: vec4<f32>,\n" +
+                            "    conicalParameters2: vec4<f32>,\n    conicalParameters3: vec4<f32>,\n" +
+                            "    conicalFlags0: vec4<u32>,\n    conicalFlags1: vec4<u32>,\n" else "") +
                     "    inverseRow0: vec4<f32>,\n    inverseRow1: vec4<f32>,\n    inverseRow2: vec4<f32>,"}
                 }
                 @group(1) @binding(0) var<uniform> w5aMaterial: W5aMaterialBlock;
@@ -176,6 +190,12 @@ internal class W5aMaterialSourceStage private constructor(
             val emitted = mutableMapOf<GradientNumericOperationGraphV1.Node, String>()
             var ordinalI32 = 0
             fun emit(node: GradientNumericOperationGraphV1.Node): String = emitted.getOrPut(node) {
+                // A control-flow mask dominates tile/search, including every stop load.
+                if (node.operation == GradientNumericOperationGraphV1.Operation.VALIDITY_MASK) {
+                    val valid = emit(node.inputs[1])
+                    code.append("if (!$valid) { return vec4<f32>(0.0); }\n")
+                    return@getOrPut emit(node.inputs[0])
+                }
                 val args = node.inputs.map(::emit)
                 val name = "gradientValue${ordinalI32++}"
                 val expression = when (node.operation) {
@@ -200,11 +220,24 @@ internal class W5aMaterialSourceStage private constructor(
                         GradientNumericOperationGraphV1.Input.FULL_TURN_DEGREES -> "360.0"
                         GradientNumericOperationGraphV1.Input.ZERO -> "0.0"
                         GradientNumericOperationGraphV1.Input.ONE -> "1.0"
+                        GradientNumericOperationGraphV1.Input.TWO -> "2.0"
+                        GradientNumericOperationGraphV1.Input.FOUR -> "4.0"
+                        GradientNumericOperationGraphV1.Input.CONICAL_DX -> "w5aMaterial.conicalParameters0.x"
+                        GradientNumericOperationGraphV1.Input.CONICAL_DY -> "w5aMaterial.conicalParameters0.y"
+                        GradientNumericOperationGraphV1.Input.CONICAL_START_RADIUS -> "w5aMaterial.conicalParameters0.z"
+                        GradientNumericOperationGraphV1.Input.CONICAL_END_RADIUS -> "w5aMaterial.conicalParameters0.w"
+                        GradientNumericOperationGraphV1.Input.CONICAL_DR -> "w5aMaterial.conicalParameters1.x"
+                        GradientNumericOperationGraphV1.Input.CONICAL_A -> "w5aMaterial.conicalParameters2.w"
                         else -> error("Unsupported sealed scalar input")
                     }
                     GradientNumericOperationGraphV1.Operation.INPUT_UNIFORM_FLAG -> when (node.input) {
                         GradientNumericOperationGraphV1.Input.DEGENERATE -> "(w5aMaterial.gradientFlags.x != 0u)"
                         GradientNumericOperationGraphV1.Input.LEADING_SEGMENT -> "(w5aMaterial.gradientFlags.z != 0u)"
+                        GradientNumericOperationGraphV1.Input.CONICAL_FULLY_DEGENERATE -> "(w5aMaterial.conicalFlags1.z == 0u)"
+                        GradientNumericOperationGraphV1.Input.CONICAL_CONCENTRIC -> "(w5aMaterial.conicalFlags1.z == 1u)"
+                        GradientNumericOperationGraphV1.Input.CONICAL_LINEAR_EQUATION -> "(w5aMaterial.conicalFlags1.z == 2u)"
+                        GradientNumericOperationGraphV1.Input.CONICAL_QUADRATIC -> "(w5aMaterial.conicalFlags1.z == 3u)"
+                        GradientNumericOperationGraphV1.Input.CONICAL_SHARED_RADIUS_ABOVE_EPSILON -> "(w5aMaterial.conicalFlags1.y != 0u)"
                         else -> error("Unsupported sealed flag input")
                     }
                     GradientNumericOperationGraphV1.Operation.INPUT_STOP_RANGE_U32 -> when (node.input) {
@@ -216,7 +249,12 @@ internal class W5aMaterialSourceStage private constructor(
                     GradientNumericOperationGraphV1.Operation.ADD_F32 -> "(${args[0]} + ${args[1]})"
                     GradientNumericOperationGraphV1.Operation.SUB_F32 -> "(${args[0]} - ${args[1]})"
                     GradientNumericOperationGraphV1.Operation.MUL_F32 -> "(${args[0]} * ${args[1]})"
-                    GradientNumericOperationGraphV1.Operation.DIV_F32 -> "(${args[0]} / ${args[1]})"
+                    GradientNumericOperationGraphV1.Operation.DIV_F32,
+                    GradientNumericOperationGraphV1.Operation.ROOT_DIV_F32 -> "(${args[0]} / ${args[1]})"
+                    GradientNumericOperationGraphV1.Operation.FINITE_ROOT_OR_ZERO_F32 -> "select(0.0, ${args[0]}, ${args[1]})"
+                    GradientNumericOperationGraphV1.Operation.ROOT_RADIUS_MUL_F32 -> "(${args[0]} * ${args[1]})"
+                    GradientNumericOperationGraphV1.Operation.ROOT_RADIUS_ADD_F32 -> "(${args[0]} + ${args[1]})"
+                    GradientNumericOperationGraphV1.Operation.ROOT_RADIUS_POSITIVE -> "(${args.single()} > 0.0)"
                     GradientNumericOperationGraphV1.Operation.SQRT_F32 -> "sqrt(${args.single()})"
                     GradientNumericOperationGraphV1.Operation.ATAN2_F32 -> "atan2(${args[0]}, ${args[1]})"
                     GradientNumericOperationGraphV1.Operation.FLOOR_F32 -> "floor(${args.single()})"
@@ -224,6 +262,10 @@ internal class W5aMaterialSourceStage private constructor(
                     GradientNumericOperationGraphV1.Operation.MAX_F32 -> "max(${args[0]}, ${args[1]})"
                     GradientNumericOperationGraphV1.Operation.COMPARE_F32 -> "(${args[0]} ${if (node.lessOrEqual) "<=" else "<"} ${args[1]})"
                     GradientNumericOperationGraphV1.Operation.SELECT -> "select(${args[0]}, ${args[1]}, ${args[2]})"
+                    GradientNumericOperationGraphV1.Operation.FINITE_F32 -> "((bitcast<u32>(${args.single()}) & 0x7f800000u) != 0x7f800000u)"
+                    GradientNumericOperationGraphV1.Operation.AND_FLAG -> "(${args[0]} && ${args[1]})"
+                    GradientNumericOperationGraphV1.Operation.OR_FLAG -> "(${args[0]} || ${args[1]})"
+                    GradientNumericOperationGraphV1.Operation.VALIDITY_MASK -> error("Mask is emitted before its color subtree")
                     GradientNumericOperationGraphV1.Operation.LOAD_STOP_POSITION_F32,
                     GradientNumericOperationGraphV1.Operation.LOAD_STOP_COLOR_SRGBA_F32 -> {
                         val index = if (node.relativeIndexI32 == -1) "max(${args[1]}, 1u) - 1u" else args[1]

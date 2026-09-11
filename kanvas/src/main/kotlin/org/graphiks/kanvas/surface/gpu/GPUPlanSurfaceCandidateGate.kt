@@ -42,7 +42,7 @@ internal object GPUPlanSurfaceCandidateGate {
             is Shader.LinearGradient -> source.tileMode == TileMode.CLAMP && source.interpolation == ColorSpaceInterpolation.SRGB
             is Shader.RadialGradient -> source.tileMode == TileMode.CLAMP && source.interpolation == ColorSpaceInterpolation.SRGB
             is Shader.SweepGradient -> source.tileMode == TileMode.CLAMP && source.interpolation == ColorSpaceInterpolation.SRGB
-            is Shader.ConicalGradient -> false
+            is Shader.ConicalGradient -> source.tileMode == TileMode.CLAMP && source.interpolation == ColorSpaceInterpolation.SRGB
             is Shader.WithLocalMatrix, is Shader.CoordClamp -> false
             else -> true
         }

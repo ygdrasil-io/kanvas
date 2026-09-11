@@ -35,6 +35,50 @@ public data class LinearGradientDegeneracyV1(public val axisXF32: Float, public 
 
 public data class RadialGradientDegeneracyV1(public val radialRadiusF32: Float, public val radialDegenerate: Boolean) : GradientDegeneracyV1
 
+/** Fixed roundTiesToEven preflight from W5 §7.2; shader branches consume this snapshot. */
+public data class ConicalGradientDegeneracyV1(
+    public val conicalDxF32: Float, public val conicalDyF32: Float,
+    public val conicalStartRadiusF32: Float, public val conicalEndRadiusF32: Float,
+    public val conicalDrF32: Float, public val conicalX2F32: Float, public val conicalY2F32: Float,
+    public val conicalDdF32: Float, public val conicalCenterLengthF32: Float,
+    public val conicalDr2F32: Float, public val conicalAbsDrF32: Float,
+    public val conicalAF32: Float, public val conicalScaleF32: Float,
+    public val conicalLinearEquation: Boolean, public val conicalCentersCoincident: Boolean,
+    public val conicalRadiiEqual: Boolean, public val conicalFullyDegenerate: Boolean,
+    public val conicalConcentric: Boolean, public val conicalSharedRadiusAboveEpsilon: Boolean,
+    public val conicalBranchTagU32: UInt,
+) : GradientDegeneracyV1 {
+    public fun copyScalarsF32(): List<Float> = listOf(conicalDxF32, conicalDyF32,
+        conicalStartRadiusF32, conicalEndRadiusF32, conicalDrF32, conicalX2F32, conicalY2F32,
+        conicalDdF32, conicalCenterLengthF32, conicalDr2F32, conicalAbsDrF32, conicalAF32, conicalScaleF32)
+    internal companion object {
+        fun of(startF32: Point2F32, startRadiusF32: Float, endF32: Point2F32, endRadiusF32: Float): ConicalGradientDegeneracyV1 {
+            val epsilonF32 = 0.000030517578125f
+            val dxF32 = endF32.x - startF32.x
+            val dyF32 = endF32.y - startF32.y
+            val drF32 = endRadiusF32 - startRadiusF32
+            val x2F32 = dxF32 * dxF32
+            val y2F32 = dyF32 * dyF32
+            val ddF32 = x2F32 + y2F32
+            val centerLengthF32 = kotlin.math.sqrt(ddF32)
+            val dr2F32 = drF32 * drF32
+            val absDrF32 = kotlin.math.abs(drF32)
+            val aF32 = ddF32 - dr2F32
+            val scaleF32 = epsilonF32 * maxOf(maxOf(1f, ddF32), dr2F32)
+            val linearEquation = kotlin.math.abs(aF32) <= scaleF32
+            val centersCoincident = centerLengthF32 <= epsilonF32
+            val radiiEqual = absDrF32 <= epsilonF32
+            val fullyDegenerate = centersCoincident && radiiEqual
+            val concentric = centersCoincident && !radiiEqual
+            val sharedRadiusAboveEpsilon = fullyDegenerate && endRadiusF32 > epsilonF32
+            val branchTagU32 = when { fullyDegenerate -> 0u; concentric -> 1u; linearEquation -> 2u; else -> 3u }
+            return ConicalGradientDegeneracyV1(dxF32, dyF32, startRadiusF32, endRadiusF32, drF32,
+                x2F32, y2F32, ddF32, centerLengthF32, dr2F32, absDrF32, aF32, scaleF32,
+                linearEquation, centersCoincident, radiiEqual, fullyDegenerate, concentric, sharedRadiusAboveEpsilon, branchTagU32)
+        }
+    }
+}
+
 public data class SweepGradientDegeneracyV1(
     public val startAngleDegreesF32: Float, public val endAngleDegreesF32: Float,
     public val sweepSpanDegreesF32: Float, public val sweepOrderingInvalid: Boolean,
@@ -85,6 +129,8 @@ public class GradientNumericAuthorityV1 private constructor(
                     binding.degeneracy == degeneracy
                 is MaterialBindingPlan.SweepGradientV1 -> program == MaterialProgramPlan.SweepGradientClampSrgbV1 &&
                     binding.degeneracy == degeneracy
+                is MaterialBindingPlan.ConicalGradientV1 -> program == MaterialProgramPlan.ConicalGradientClampSrgbV1 &&
+                    binding.degeneracy == degeneracy
             } && binding.stopRange == range && slab.canonicalIdentity == slabIdentity
 
     internal fun rebase(binding: MaterialBindingPlan.GradientV1, sourceSlab: GradientStopSlabPlanV1,
@@ -98,6 +144,22 @@ public class GradientNumericAuthorityV1 private constructor(
     }
 
     internal companion object {
+        fun sealConical(coordinates: MaterialCoordinatePlanV1, startF32: Point2F32, endF32: Point2F32,
+            degeneracy: ConicalGradientDegeneracyV1, slab: GradientStopSlabPlanV1,
+            localMagnitudeF64: Double, uniformMagnitudeF64: Double): GradientNumericAuthorityV1? {
+            if (degeneracy != ConicalGradientDegeneracyV1.of(startF32, degeneracy.conicalStartRadiusF32,
+                    endF32, degeneracy.conicalEndRadiusF32) || degeneracy.copyScalarsF32().any { !it.isFinite() } ||
+                degeneracy.conicalStartRadiusF32 < 0f || degeneracy.conicalEndRadiusF32 < 0f) return null
+            val schema = GradientNumericOperationGraphV1.conical()
+            val stops = slab.copyStops()
+            val proof = schema.proveConicalDomainV1(localMagnitudeF64, startF32, endF32, degeneracy, stops)
+            if (proof != GradientNumericDomainProofV1.ProvenFinite) return null
+            return GradientNumericAuthorityV1(GradientNumericOperationGraphV1.Conical(schema.root, proof),
+                MaterialProgramPlan.ConicalGradientClampSrgbV1, coordinates,
+                listOf(startF32.x, startF32.y, endF32.x, endF32.y), degeneracy,
+                GradientStopRangeV1(0u, stops.size.toUInt()), slab.canonicalIdentity, localMagnitudeF64, uniformMagnitudeF64)
+        }
+
         fun sealSweep(coordinates: MaterialCoordinatePlanV1, centerF32: Point2F32,
             degeneracy: SweepGradientDegeneracyV1, slab: GradientStopSlabPlanV1,
             localMagnitudeF64: Double, uniformMagnitudeF64: Double): GradientNumericAuthorityV1? {
@@ -160,7 +222,7 @@ internal sealed interface NormalizedGradientStopsV1 {
     data class Stops(val slab: GradientStopSlabPlanV1) : NormalizedGradientStopsV1
 }
 
-internal fun normalizeGradientStopsV1(input: List<GradientStop>): NormalizedGradientStopsV1 {
+internal fun normalizeGradientStopsV1(input: List<GradientStop>, preserveValidityMask: Boolean = false): NormalizedGradientStopsV1 {
     if (input.isEmpty()) return NormalizedGradientStopsV1.Refused(W5cPlanDiagnostics.EmptyStops)
     if (input.any { !it.position.isFinite() }) return NormalizedGradientStopsV1.Refused(W5cPlanDiagnostics.NonFinite)
     if ((input.size.toLong() + 2L) * 32L > Int.MAX_VALUE) return NormalizedGradientStopsV1.Refused(W5cPlanDiagnostics.StopBudget)
@@ -168,7 +230,9 @@ internal fun normalizeGradientStopsV1(input: List<GradientStop>): NormalizedGrad
     fun color(stop: GradientStop): ColorF32 = stop.color.let {
         ColorF32.of(it.redNormalized, it.greenNormalized, it.blueNormalized, it.alphaNormalized)
     }
-    if (input.size == 1) return NormalizedGradientStopsV1.Solid(color(input.single()))
+    if (input.size == 1) return if (preserveValidityMask) NormalizedGradientStopsV1.Stops(GradientStopSlabPlanV1.of(
+        listOf(GradientStopPlanV1(0f, color(input.single())), GradientStopPlanV1(1f, color(input.single())))))
+        else NormalizedGradientStopsV1.Solid(color(input.single()))
     val normalized = ArrayList<GradientStopPlanV1>(input.size + 2)
     var previousF32 = 0f
     for (stop in input) {
