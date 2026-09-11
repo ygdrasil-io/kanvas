@@ -66,6 +66,8 @@ public object DisplayOpSceneAdapter {
     ): SceneCaptureResult {
         val diagnostics = mutableListOf<RenderDiagnostic>()
         return try {
+            // Complete the metadata pass before any operation can map stops into IR.
+            CaptureContext(limits).preflightOperations(operations)
             val context = CaptureContext(limits)
             SceneCaptureResult.Captured(SceneSnapshot.of(extent, colorSpace, captureOperations(operations, limits, context)))
         } catch (failure: CaptureFailure) {
@@ -338,6 +340,53 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
     private var nodes: Int = 0
     private var graphNodes: Int = 0
 
+    /** Metadata only: no geometry, image, or gradient payload is copied here. */
+    fun preflightOperations(operations: List<DisplayOp>) {
+        operations.forEach { operation ->
+            countNode()
+            val paint = when (operation) {
+                is DisplayOp.DrawRect -> operation.paint
+                is DisplayOp.DrawRRect -> operation.paint
+                is DisplayOp.DrawPath -> operation.paint
+                is DisplayOp.DrawImage -> operation.paint
+                is DisplayOp.DrawText -> operation.paint
+                is DisplayOp.DrawPoint -> operation.paint
+                is DisplayOp.DrawPoints -> operation.paint
+                is DisplayOp.DrawDRRect -> operation.paint
+                is DisplayOp.DrawImageNine -> operation.paint
+                is DisplayOp.DrawImageLattice -> operation.paint
+                is DisplayOp.DrawPicture -> operation.paint
+                is DisplayOp.DrawVertices -> operation.paint
+                is DisplayOp.DrawMesh -> operation.paint
+                is DisplayOp.DrawAtlas -> operation.paint
+                is DisplayOp.BeginLayer -> operation.rec.paint
+                is DisplayOp.SetTransform, is DisplayOp.SetClip, DisplayOp.EndLayer,
+                is DisplayOp.DrawColor, is DisplayOp.Clear, is DisplayOp.Annotation,
+                is DisplayOp.FlushAndSnapshot -> null
+            }
+            paint?.let { preflightPaint(it, defaultMaterial = false, ::preflightPicture) }
+            when (operation) {
+                is DisplayOp.DrawPicture -> preflightPicture(operation.picture)
+                is DisplayOp.DrawMesh -> operation.mesh.program?.let {
+                    preflightMeshProgram(it, ::preflightPicture)
+                }
+                is DisplayOp.BeginLayer -> operation.rec.backdrop?.let {
+                    walkGraph(listOf(it), ::preflightPicture)
+                }
+                else -> Unit
+            }
+        }
+    }
+
+    private fun preflightPicture(picture: org.graphiks.kanvas.picture.Picture) {
+        enterPicture(picture)
+        try {
+            preflightOperations(picture.ops)
+        } finally {
+            leavePicture(picture)
+        }
+    }
+
     fun countNode() {
         nodes += 1
         if (nodes > limits.maxNodes) {
@@ -368,7 +417,11 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
      * cycles and oversized (but otherwise valid) public graphs a typed capture
      * failure rather than a stack overflow or a backend concern.
      */
-    fun preflightPaint(paint: org.graphiks.kanvas.paint.Paint, defaultMaterial: Boolean) {
+    fun preflightPaint(
+        paint: org.graphiks.kanvas.paint.Paint,
+        defaultMaterial: Boolean,
+        visitPicture: ((org.graphiks.kanvas.picture.Picture) -> Unit)? = null,
+    ) {
         val roots = buildList<Any> {
             paint.shader?.let(::add)
             paint.colorFilter?.let(::add)
@@ -378,10 +431,13 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
             paint.blender?.let(::add)
         }
         if (paint.shader == null && defaultMaterial) countGraphLeaf()
-        walkGraph(roots)
+        walkGraph(roots, visitPicture)
     }
 
-    fun preflightMeshProgram(program: MeshProgram) {
+    fun preflightMeshProgram(
+        program: MeshProgram,
+        visitPicture: ((org.graphiks.kanvas.picture.Picture) -> Unit)? = null,
+    ) {
         walkGraph(buildList {
             add(program.effect)
             program.children.entries.forEach { entry ->
@@ -391,7 +447,7 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
                     is org.graphiks.kanvas.paint.BlenderChild -> add(child.blender)
                 }
             }
-        })
+        }, visitPicture)
     }
 
     fun countGraphLeaf() {
@@ -401,7 +457,10 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
         }
     }
 
-    private fun walkGraph(roots: List<Any>) {
+    private fun walkGraph(
+        roots: List<Any>,
+        visitPicture: ((org.graphiks.kanvas.picture.Picture) -> Unit)? = null,
+    ) {
         data class Visit(val value: Any, val depth: Int, val leaving: Boolean)
         val active = IdentityHashMap<Any, Unit>()
         val pending = ArrayDeque<Visit>()
@@ -420,6 +479,7 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
             }
             countGraphLeaf()
             (visit.value as? Shader)?.let(gradientStops::reserve)
+            (visit.value as? ImageFilter.Picture)?.let { visitPicture?.invoke(it.picture) }
             pending.addLast(Visit(visit.value, visit.depth, true))
             graphChildren(visit.value).asReversed().forEach { child ->
                 pending.addLast(Visit(child, visit.depth + 1, false))

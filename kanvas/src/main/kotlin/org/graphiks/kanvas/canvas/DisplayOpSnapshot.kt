@@ -43,6 +43,7 @@ internal class GeometrySnapshotContext(
     private val gradientStops: RecordingGradientStopBudget? = null,
 ) {
     private val textBlobs = IdentityHashMap<TextBlob, TextBlob>()
+    private var pendingTextBlobs: IdentityHashMap<TextBlob, TextBlob>? = null
     private val images = IdentityHashMap<Image, Image>()
     private val shaders = IdentityHashMap<Shader, Shader>()
     private val colorFilters = IdentityHashMap<ColorFilter, ColorFilter>()
@@ -54,6 +55,24 @@ internal class GeometrySnapshotContext(
     private val mergeInputs = IdentityHashMap<ImageFilter.Merge, MutableList<ImageFilter>>()
 
     fun snapshot(operation: DisplayOp): DisplayOp {
+        clearOperationCaches()
+        return operation.snapshotGeometry(this)
+    }
+
+    /** Keep cross-operation aliases only when the destination accepts the snapshot. */
+    fun append(operation: DisplayOp, appendSnapshot: (DisplayOp) -> Unit) {
+        val pending = IdentityHashMap<TextBlob, TextBlob>()
+        pendingTextBlobs = pending
+        try {
+            appendSnapshot(snapshot(operation))
+            textBlobs.putAll(pending)
+        } finally {
+            pendingTextBlobs = null
+            clearOperationCaches()
+        }
+    }
+
+    private fun clearOperationCaches() {
         images.clear()
         shaders.clear()
         colorFilters.clear()
@@ -63,15 +82,14 @@ internal class GeometrySnapshotContext(
         colorRuntimeChildren.clear()
         imageRuntimeChildren.clear()
         mergeInputs.clear()
-        return operation.snapshotGeometry(this)
     }
 
     fun snapshot(blob: TextBlob): TextBlob {
-        val previous = textBlobs[blob]
+        val previous = pendingTextBlobs?.get(blob) ?: textBlobs[blob]
         if (previous != null && blob == previous) return previous
 
         return blob.snapshotGeometry().also {
-            textBlobs[blob] = it
+            (pendingTextBlobs ?: textBlobs)[blob] = it
         }
     }
 

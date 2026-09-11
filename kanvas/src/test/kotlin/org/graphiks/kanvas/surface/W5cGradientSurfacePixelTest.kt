@@ -5,8 +5,11 @@ package org.graphiks.kanvas.surface
 import org.graphiks.kanvas.canvas.SceneRecordingLimitException
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.GradientStop
+import org.graphiks.kanvas.paint.ImageFilter
+import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.render.ir.SceneCaptureLimits
 import org.graphiks.kanvas.render.ir.SceneCaptureResult
 import org.graphiks.math.color.ColorARGB
@@ -74,6 +77,76 @@ class W5cGradientSurfacePixelTest {
             surface.snapshotScene(SceneCaptureLimits(maxGradientStopsI32 = 16)),
         )
 
+        assertEquals("scene-capture-gradient-stops-exceeded", failure.diagnostics.single().code.value)
+    }
+
+    @Test
+    fun recordingStopLimitCannotBeBypassedByReusingRefusedShader() {
+        val surface = Surface(1, 1, captureLimits = SceneCaptureLimits(maxGradientStopsI32 = 16))
+        val reused = linearStops(9)
+        assertThrows<SceneRecordingLimitException> {
+            surface.canvas { drawRect(rect, Paint(shader = Shader.Blend(BlendMode.SRC_OVER, reused, linearStops(9)))) }
+        }
+        surface.canvas { drawRect(rect, Paint(shader = reused)) }
+
+        val failure = assertThrows<SceneRecordingLimitException> {
+            surface.canvas { drawRect(rect, Paint(shader = linearStops(8))) }
+        }
+
+        assertEquals("scene-recording-gradient-stops-exceeded", failure.diagnostic.code.value)
+        assertEquals(17L, failure.requestedI64)
+    }
+
+    @Test
+    fun captureStopLimitPreflightsAllOperationsBeforeStopValidation() {
+        val surface = Surface(1, 1)
+        val invalidFirst = linearStops(9).copy(stops = List(9) { GradientStop(Float.NaN, ColorARGB.Red) })
+        surface.canvas {
+            drawRect(rect, Paint(shader = invalidFirst))
+            drawRect(rect, Paint(shader = linearStops(8)))
+        }
+
+        val failure = assertInstanceOf(
+            SceneCaptureResult.Invalid::class.java,
+            surface.snapshotScene(SceneCaptureLimits(maxGradientStopsI32 = 16)),
+        )
+
+        assertEquals("scene-capture-gradient-stops-exceeded", failure.diagnostics.single().code.value)
+    }
+
+    @Test
+    fun captureStopLimitPreflightsNestedPicturesBeforeStopValidation() {
+        val recorder = PictureRecorder()
+        recorder.beginRecording(rect).drawRect(rect, Paint(shader = linearStops(8)))
+        val picture = recorder.finishRecordingAsPicture()
+        for (asImageFilter in listOf(false, true)) {
+            val surface = Surface(1, 1)
+            surface.canvas {
+                drawRect(rect, Paint(shader = linearStops(9).copy(stops = List(9) { GradientStop(Float.NaN, ColorARGB.Red) })))
+                if (asImageFilter) drawRect(rect, Paint(imageFilter = ImageFilter.Picture(picture)))
+                else drawPicture(picture)
+            }
+
+            val failure = assertInstanceOf(
+                SceneCaptureResult.Invalid::class.java,
+                surface.snapshotScene(SceneCaptureLimits(maxGradientStopsI32 = 16)),
+            )
+            assertEquals("scene-capture-gradient-stops-exceeded", failure.diagnostics.single().code.value)
+        }
+    }
+
+    @Test
+    fun captureStopLimitPreflightsMaskShadersBeforeStopValidation() {
+        val surface = Surface(1, 1)
+        surface.canvas {
+            drawRect(rect, Paint(shader = linearStops(9).copy(stops = List(9) { GradientStop(Float.NaN, ColorARGB.Red) })))
+            drawRect(rect, Paint(maskFilter = MaskFilter.Shader(linearStops(8))))
+        }
+
+        val failure = assertInstanceOf(
+            SceneCaptureResult.Invalid::class.java,
+            surface.snapshotScene(SceneCaptureLimits(maxGradientStopsI32 = 16)),
+        )
         assertEquals("scene-capture-gradient-stops-exceeded", failure.diagnostics.single().code.value)
     }
 
