@@ -131,14 +131,16 @@
 - Consumes: three ordered public `drawPoint` commands and the W5b blend/source plans from Tasks 1–2.
 - Produces: exact `Render(version n) -> Copy(version n) -> RenderConsumer(version n+1)` sequences for visible destination-read points without replacing core point geometry or its capacity contract.
 
-- [ ] Add a filterable public method `GPUAllApiBlendSurfaceTest.drawPointHistoricalW5bMatrix` that executes exactly the 45 cells: `{PLUS, MULTIPLY, OVERLAY, DARKEN, LIGHTEN, COLOR_DODGE, COLOR_BURN, HARD_LIGHT, SOFT_LIGHT, DIFFERENCE, EXCLUSION, HUE, SATURATION, COLOR, LUMINOSITY}` × `{UNCLIPPED, SCISSOR, ALPHA_MASK}`. Each cell keeps the existing three point commands and compares observable pixels to the independent oracle.
-- [ ] Change the generic matrix expectation for those same DrawPoint cells from terminal refusal to prepared rendering. Keep all unrelated API expectations unchanged.
-- [ ] Run only the filterable DrawPoint gate and verify all 45 cells RED on the current direct-geometry/preflight refusal or wrong pixel; no font or image fixture may execute in this command.
-- [ ] Preserve the core point fan/hairline authority from W5a. Seal shared V/I/U resources once for the ordered multi-render frame, and issue a distinct destination version for every visible target write. Do not convert points to paths and do not weaken the 64-point capacity boundary.
-- [ ] Keep W4e as the producer/owner of alpha-mask coverage and resources. The W5b scalar consumer ABI receives that sealed coverage, evaluates `blend(source,destination)`, then returns `destination + coverage * (blended - destination)`; it must not synthesize a scissor, premultiply only the source, or reuse clip handles as destination snapshots.
-- [ ] Materialize each required GPU copy/formula consumer with conservative bounds and exact row-pitch/budget accounting. A culled point produces neither a write version nor a snapshot.
-- [ ] Prove ordering, versions, scalar coverage and culling only through the filterable 45-cell public pixel gate and W5a public regressions. Do not add structural/order/witness tests or inspect internal tasks, counters, scopes, bind groups or shader text.
-- [ ] Verify the 45 cells GREEN with singleton/two-adjacent oracle sets, then run W5a Point/Points regressions and the 512/513 W5a resource-bound tests. Commit `feat(gpu-renderer): close W5b DrawPoint blend matrix`.
+- [x] Add a filterable public method `GPUAllApiBlendSurfaceTest.drawPointHistoricalW5bMatrix` that executes exactly the 45 cells: `{PLUS, MULTIPLY, OVERLAY, DARKEN, LIGHTEN, COLOR_DODGE, COLOR_BURN, HARD_LIGHT, SOFT_LIGHT, DIFFERENCE, EXCLUSION, HUE, SATURATION, COLOR, LUMINOSITY}` × `{UNCLIPPED, SCISSOR, ALPHA_MASK}`. Each cell keeps the existing three point commands and compares observable pixels to the independent oracle.
+- [x] Change the generic matrix expectation for those same DrawPoint cells from terminal refusal to prepared rendering. Keep all unrelated API expectations unchanged.
+- [x] Run only the filterable DrawPoint gate and verify all 45 cells RED on the current direct-geometry/preflight refusal or wrong pixel; no font or image fixture may execute in this command.
+- [x] Preserve the core point fan/hairline authority from W5a. Seal shared V/I/U resources once for the ordered multi-render frame, and issue a distinct destination version for every visible target write. Do not convert points to paths and do not weaken the 64-point capacity boundary.
+- [x] Keep W4e as the producer/owner of alpha-mask coverage and resources. The W5b scalar consumer ABI receives that sealed coverage, evaluates `blend(source,destination)`, then returns `destination + coverage * (blended - destination)`; it must not synthesize a scissor, premultiply only the source, or reuse clip handles as destination snapshots.
+- [x] Materialize each required GPU copy/formula consumer with conservative bounds and exact row-pitch/budget accounting. A culled point produces neither a write version nor a snapshot.
+- [x] Prove ordering, versions, scalar coverage and culling only through the filterable 45-cell public pixel gate and W5a public regressions. Do not add structural/order/witness tests or inspect internal tasks, counters, scopes, bind groups or shader text.
+- [x] Verify the 45 cells GREEN with singleton/two-adjacent oracle sets, then run W5a Point/Points regressions and the 512/513 W5a resource-bound tests. Commit `feat(gpu-renderer): close W5b DrawPoint blend matrix`.
+
+Task 3 est close par `66dcceffc`, `f7a37d704`, puis les corrections de review `3573d080b` et `3bf122590`; le gate public est GREEN45. La vérification finale couvre 20 méthodes JUnit sans échec, erreur ni skip, incluant les régressions W5b, W5a Point/Points et les bornes exactes 64/512/513. La re-review indépendante finale est `READY`, sans finding.
 
 ### Task 4: Promote Rect, RRect, Path fill, stroke and hairline blends
 
