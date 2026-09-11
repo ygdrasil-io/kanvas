@@ -34,4 +34,3 @@ internal class W5bGeneralResourceBindingsV3 private constructor(bindings: Map<St
         }
     }
 }
-
