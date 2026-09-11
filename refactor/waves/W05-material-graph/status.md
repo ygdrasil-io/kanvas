@@ -1,6 +1,6 @@
 # État W05 — material graph et final blends W5b
 
-W5a Solid/Opacity est close sur son périmètre. W5b, son nettoyage Task 7 et sa boucle de reviews Task 8 sont implémentés et vérifiés sur `codex/w5b-blends`, empilée sur `codex/w5a-solid-opacity`. Les deux reviews Sol indépendantes W5b sont `READY`; la publication de la PR empilée est la dernière action de Task 8. La prochaine tranche empilée est W5c : quatre gradients et stop buffer sans plafond de 16 stops.
+W5a Solid/Opacity est close sur son périmètre. W5b, son nettoyage Task 7 et sa boucle de reviews Task 8 sont implémentés et vérifiés sur `codex/w5b-blends`, empilée sur `codex/w5a-solid-opacity`. Les deux reviews Sol indépendantes W5b sont `READY`; la PR empilée W5b est `#2396`. La prochaine tranche empilée est W5c : quatre gradients et stop buffer sans plafond de 16 stops.
 
 ## Périmètre public promu W5b
 

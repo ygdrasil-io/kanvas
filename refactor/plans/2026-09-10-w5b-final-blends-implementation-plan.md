@@ -246,7 +246,7 @@ Task 7 closed by `b0ef1cbcf`: the exhaustive production audit is recorded in the
 - [x] Confirm `:kanvas` target inventory; run JS only if an authentic JS target exists. Do not invent an infrastructure substitute.
 - [x] Do not run font, codec, GM/dashboard/render/baseline, Skia integration or `jpg-color-cube` suites.
 - [x] Run `rtk git diff --check`, verify a clean worktree and inspect the full commit range from `codex/w5a-solid-opacity`.
-- [ ] Push `codex/w5b-blends` and create/update its PR with base `codex/w5a-solid-opacity`, exact public test counts, authentic skips, review verdicts, and deferred W5c–W5h scope.
+- [x] Push `codex/w5b-blends` and create/update its PR with base `codex/w5a-solid-opacity`, exact public test counts, authentic skips, review verdicts, and deferred W5c–W5h scope (`#2396`).
 
 Task 8 ferme les findings de spécification F1–F3 et les findings qualité F4–F7 aux commits `7382123bf`, `900f1dea7` et `e470bcee8`. Les deux re-reviews Sol sont `READY`. La vérification contrôleur finale du 11 septembre 2026 sélectionne 151 méthodes publiques : 149 réussites, 2 skips AA4 authentiques, 0 failure/error; GREEN45 passe aussi seul sur ses 45 cellules. Les Minors `SetSat`/oracle, cast legacy `GeneralPathDraw.withBlend` et assertion de primer du test budget Task 6 restent explicitement différés dans le status W05.
 
