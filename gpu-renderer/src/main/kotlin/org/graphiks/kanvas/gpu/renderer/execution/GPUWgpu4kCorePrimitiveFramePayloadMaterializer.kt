@@ -202,11 +202,13 @@ private class GPUW4eNativeOwnedHandles : AutoCloseable, GPUW5aGeometryPipelineTe
         own(device.createPipelineLayout(descriptor)).also { layouts[it] = descriptor.bindGroupLayouts.toList() }
 
     fun createRenderPipeline(device: GPUDevice, descriptor: RenderPipelineDescriptor,
-        coverage: GPUW5bInlineCoverageV3? = null): GPURenderPipeline =
+        coverage: GPUW5bInlineCoverageV3? = null,
+        coordinates: MaterialCoordinateSlotV1? = null): GPURenderPipeline =
         own(device.createRenderPipeline(descriptor)).also { pipeline ->
             val groupZero = layouts[descriptor.layout]?.singleOrNull()
             val source = shaders[descriptor.vertex.module]
-            if (groupZero != null && source != null) templates[pipeline] = GPUW5aGeometryPipelineTemplate(source, descriptor, groupZero, coverage)
+            if (groupZero != null && source != null) templates[pipeline] =
+                GPUW5aGeometryPipelineTemplate(source, descriptor, groupZero, coverage, coordinates)
         }
 
     override fun sourceTemplate(pipeline: GPURenderPipeline): GPUW5aGeometryPipelineTemplate? = templates[pipeline]
@@ -468,7 +470,7 @@ private fun createW4eConsumerPipeline(
         fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(
             format = format, blend = w4eFinalBlendState(finalBlend),
         ))),
-    ), GPUW5bInlineCoverageV3.NativeMask)
+    ), GPUW5bInlineCoverageV3.NativeMask, MaterialCoordinateSlotV1.Position)
     return GPUW4eNativePipeline(pipeline, bindGroupLayout)
 }
 
@@ -525,7 +527,7 @@ private fun createW4eBinaryConsumerPipeline(
         fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(
             format = format, blend = w4eSrcOverBlendState(),
         ))),
-    ))
+    ), coordinates = MaterialCoordinateSlotV1.Position)
     return GPUW4eNativePipeline(pipeline, bindGroupLayout)
 }
 
@@ -589,7 +591,7 @@ private fun createW4eMaskedPathPipeline(
         fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(
             format = format, blend = w4eFinalBlendState(finalBlend),
         ))),
-    ), GPUW5bInlineCoverageV3.NativeMask)
+    ), GPUW5bInlineCoverageV3.NativeMask, MaterialCoordinateSlotV1.Position)
     return GPUW4eNativePipeline(pipeline, bindGroupLayout)
 }
 
@@ -631,7 +633,7 @@ private fun createW4eUnmaskedCoverPipeline(
         fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(
             format = format, blend = w4eFinalBlendState(finalBlend),
         ))),
-    ), GPUW5bInlineCoverageV3.NativeFull)
+    ), GPUW5bInlineCoverageV3.NativeFull, MaterialCoordinateSlotV1.FragmentPosition)
     return GPUW4eNativePipeline(pipeline, bindGroupLayout)
 }
 
@@ -681,7 +683,7 @@ private fun createW4eUnmaskedPathPipeline(
         fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(
             format = format, blend = w4eFinalBlendState(finalBlend),
         ))),
-    ), GPUW5bInlineCoverageV3.NativeFull)
+    ), GPUW5bInlineCoverageV3.NativeFull, MaterialCoordinateSlotV1.FragmentPosition)
     return GPUW4eNativePipeline(pipeline, bindGroupLayout)
 }
 

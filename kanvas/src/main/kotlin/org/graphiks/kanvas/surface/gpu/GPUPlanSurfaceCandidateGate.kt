@@ -19,7 +19,7 @@ internal object GPUPlanSurfaceCandidateGate {
                     is DisplayOp.DrawPath -> operation.paint.shader
                     else -> null
                 }
-                if (!acceptsGradient(shader, operation is DisplayOp.DrawRect)) return@all false
+                if (!acceptsGradient(shader)) return@all false
                 operation is DisplayOp.DrawRect ||
                     operation is DisplayOp.DrawRRect ||
                     (operation is DisplayOp.DrawPath &&
@@ -30,7 +30,7 @@ internal object GPUPlanSurfaceCandidateGate {
                     operation is DisplayOp.Annotation
             }
 
-    private fun acceptsGradient(shader: Shader?, rect: Boolean): Boolean {
+    private fun acceptsGradient(shader: Shader?): Boolean {
         var source = shader
         var depthI32 = 0
         while (source is Shader.Opacity) {
@@ -39,8 +39,9 @@ internal object GPUPlanSurfaceCandidateGate {
             source = source.shader
         }
         return when (source) {
-            is Shader.LinearGradient -> rect && source.tileMode == TileMode.CLAMP && source.interpolation == ColorSpaceInterpolation.SRGB
+            is Shader.LinearGradient -> source.tileMode == TileMode.CLAMP && source.interpolation == ColorSpaceInterpolation.SRGB
             is Shader.RadialGradient, is Shader.SweepGradient, is Shader.ConicalGradient -> false
+            is Shader.WithLocalMatrix, is Shader.CoordClamp -> false
             else -> true
         }
     }

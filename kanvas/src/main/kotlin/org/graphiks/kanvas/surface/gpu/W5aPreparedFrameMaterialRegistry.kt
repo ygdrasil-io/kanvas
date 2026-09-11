@@ -8,6 +8,8 @@ import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.TileMode
+import org.graphiks.kanvas.paint.ColorSpaceInterpolation
 import org.graphiks.kanvas.render.ir.DisplayOpSceneAdapter
 import org.graphiks.kanvas.render.ir.SceneCaptureResult
 import org.graphiks.kanvas.render.ir.SceneCommand
@@ -57,11 +59,12 @@ internal data class W5aPreparedFrameMaterialRegistry(
                     is DisplayOp.DrawPoints -> operation.paint
                     else -> return@forEachIndexed
                 }
-                // Material-only candidate capture, exactly as in prepared Vertices. The real
-                // mapper owns all geometry/state validation and can discard this local source.
+                // Gradient numeric authority must see the actual geometry and captured CTM.
+                // Deferred Point(s) retain their existing material-only capture.
                 val captured = runCatching { DisplayOpSceneAdapter.capture(
-                    operations = listOf(DisplayOp.DrawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f),
-                        paint, Matrix3x3F32.Identity, ClipStack.WideOpen)),
+                    operations = listOf(if (operation is DisplayOp.DrawPoint || operation is DisplayOp.DrawPoints)
+                        DisplayOp.DrawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), paint, Matrix3x3F32.Identity, ClipStack.WideOpen)
+                        else operation),
                     extent = SceneExtent(width, height),
                     colorSpace = ColorSpace.SRGB,
                 ) }.getOrNull() as? SceneCaptureResult.Captured ?: return@forEachIndexed
@@ -69,7 +72,8 @@ internal data class W5aPreparedFrameMaterialRegistry(
                     ?: return@forEachIndexed
                 val planned = (if (operation is DisplayOp.DrawPoint || operation is DisplayOp.DrawPoints)
                     org.graphiks.kanvas.gpu.plan.W5bCorePrimitiveGraph.normalizeSource(draw.node, targetClamp)
-                    else EffectiveMaterialPlanner.planW5b(draw.node, targetClamp))
+                    else EffectiveMaterialPlanner.planW5b(draw.node, targetClamp,
+                        gradientDeviceBoundsI32 = org.graphiks.math.geometry.RectI32(0, 0, width, height)))
                     as? EffectiveMaterialPlanner.Result.Ready ?: return@forEachIndexed
                 plannedByOperationIndex[operationIndex] = planned
             }
@@ -121,10 +125,10 @@ internal data class W5aPreparedFrameMaterialRegistry(
 
         private fun DisplayOp.isW5aCoreMaterialCandidate(): Boolean = when (this) {
             is DisplayOp.DrawRect -> !paint.isStroke() &&
-                paint.shader.isW5aSolidOpacity()
+                paint.shader.isW5aSolidOpacity(allowLinear = true)
             is DisplayOp.DrawRRect -> !paint.isStroke() &&
-                paint.shader.isW5aSolidOpacity()
-            is DisplayOp.DrawPath -> paint.shader.isW5aSolidOpacity()
+                paint.shader.isW5aSolidOpacity(allowLinear = paint.antiAlias)
+            is DisplayOp.DrawPath -> paint.shader.isW5aSolidOpacity(allowLinear = true)
             is DisplayOp.DrawPoint ->
                 paint.blendMode in POINT_MATERIAL_BLENDS && paint.strokeCap != StrokeCap.ROUND &&
                     paint.shader.isW5aSolidOpacity()
@@ -135,14 +139,15 @@ internal data class W5aPreparedFrameMaterialRegistry(
             else -> false
         }
 
-        private fun Shader?.isW5aSolidOpacity(): Boolean {
+        private fun Shader?.isW5aSolidOpacity(allowLinear: Boolean = false): Boolean {
             var source = this
             var depth = 0
             while (source is Shader.Opacity) {
                 if (++depth > 64) return false
                 source = source.shader
             }
-            return source == null || source is Shader.SolidColor
+            return source == null || source is Shader.SolidColor || allowLinear && source is Shader.LinearGradient &&
+                source.tileMode == TileMode.CLAMP && source.interpolation == ColorSpaceInterpolation.SRGB
         }
 
         private val POINT_MATERIAL_BLENDS = setOf(BlendMode.SRC_OVER, BlendMode.PLUS, BlendMode.MULTIPLY,

@@ -509,7 +509,9 @@ internal class W4dGeneralNativeMaterializationSnapshot private constructor(
                 }
             ) return null
             val readback = graphPasses.lastOrNull() as? PlanPass.ReadbackPass ?: return null
-            val resources = graph.resources().map { resource ->
+            // Gradient storage is authenticated and realized by the shared material stage,
+            // never by the unchanged W4 native geometry/uniform inventory.
+            val resources = graph.resources().filter { it.role != PlanResourceRole.GradientStopData }.map { resource ->
                 val extent = resource.copyExtent()
                 W4dGeneralNativeResourceFact(
                     resourceId = resource.id.value,
@@ -646,7 +648,7 @@ internal class W4dGeneralNativeMaterializationSnapshot private constructor(
             if (allResourceIds.any { it !in known } || pathFacts.isEmpty()) return null
             return W4dGeneralNativeMaterializationSnapshot(
                 targetBounds = GPUPixelBounds(0, 0, graph.targetExtent.width, graph.targetExtent.height),
-                peakFrameLocalBytes = graph.peakFrameLocalBytes,
+                peakFrameLocalBytes = frameResources.peakFrameLocalBytes,
                 resourceFacts = resources,
                 pathPassFacts = pathFacts,
                 maskClearFacts = clearFacts,
@@ -880,7 +882,8 @@ internal class W4dGeneralNativeFrameResourceSeal private constructor(
                             passIndex in fact.firstPassIndex until fact.lastPassIndexExclusive
                     }.fold(0L) { total, fact -> Math.addExact(total, fact.byteSize) }
                 }
-                if (computedPeak != graph.peakFrameLocalBytes) return null
+                val materialBytesI64 = graph.materialPlanTableOrNull()?.gradientStopSlab?.byteSizeI64 ?: 0L
+                if (Math.addExact(computedPeak, materialBytesI64) != graph.peakFrameLocalBytes) return null
                 W4dGeneralNativeFrameResourceSeal(
                     pathPassIds = pathPassFacts.map(W4dGeneralNativePathPassFact::pathPassId),
                     vertexData = vertexData,

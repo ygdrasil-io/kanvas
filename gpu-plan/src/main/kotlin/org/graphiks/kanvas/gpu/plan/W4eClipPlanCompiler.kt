@@ -142,11 +142,13 @@ public class W4eClipPlanCompiler(
     private val w4dHardSeam = W4dGeneralPathPlanCompiler(
         strokePolicyF64 = org.graphiks.math.geometry.PathStrokePolicyF64(),
         acceptsNarrowTransforms = true,
+        retainGeometryConstructionGraph = true,
     )
     private val w4dAaSeam = W4dGeneralPathPlanCompiler(
         strokePolicyF64 = org.graphiks.math.geometry.PathStrokePolicyF64(),
         acceptsNarrowTransforms = true,
         forceAaFrame = true,
+        retainGeometryConstructionGraph = true,
     )
 
     override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
@@ -356,7 +358,7 @@ public class W4eClipPlanCompiler(
             if (successor && requiresAa) return promoted("W5b final blending requires the admitted single-sample W4e topology")
             // Preserve the admitted hard NoOp envelope and its logical target identity.
             val hardNoOpEnvelope = elidedNoOps && !requiresAa
-            RenderPlanResult.Ready(if (successor || hardNoOpEnvelope)
+            RenderPlanResult.Ready(if (successor || hardNoOpEnvelope || graph.materialPlanTableOrNull()?.gradientStopSlab != null)
                 issueW5bW4ePathGraph(graph, survivingFinalBlendsByCommandI32) else graph)
         } catch (_: W4eNativePayloadLimit) {
             resource(

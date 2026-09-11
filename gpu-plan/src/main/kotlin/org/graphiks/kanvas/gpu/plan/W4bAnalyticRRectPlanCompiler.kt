@@ -87,7 +87,7 @@ public class W4bAnalyticRRectPlanCompiler : GpuPlanCompiler {
                 ?: return resourceLimit(W4bPlanDiagnostics.SizeOverflow, "Selected draw became empty during planning")
             val scissor = if (sealed.clip == null) targetRaster else intersect(targetRaster, sealed.clip)
                 ?: return resourceLimit(W4bPlanDiagnostics.SizeOverflow, "Selected draw became empty during planning")
-            AnalyticRRectDraw.ofMaterial(sealed.commandIndex, sealed.material, sealed.origin, sealed.deviceShape, raster, scissor, sealed.blend)
+            AnalyticRRectDraw.ofMaterial(sealed.commandIndex, sealed.material, sealed.origin, sealed.deviceShape, raster, scissor, sealed.blend, sealed.coordinates)
         }
         val footprint = when (val memory = AnalyticRRectPlanBudget.calculate(extent, plannedDraws.size, capabilities, budget)) {
             is AnalyticRRectPlanBudgetResult.WithinBudget -> memory.footprint
@@ -168,7 +168,7 @@ public class W4bAnalyticRRectPlanCompiler : GpuPlanCompiler {
         if (scene.none { it is SceneCommand.Draw && it.node.origin == DrawOrigin.RRECT }) return Recognition.Gap("W4b requires rounded-rectangle provenance")
         if (materialRefusals.isNotEmpty()) return Recognition.MaterialRefused(materialRefusals)
         return Recognition.Accepted(draws, materialEntries.takeIf { it.isNotEmpty() }?.let(MaterialPlanTable::of),
-            if (elidedNoOpsI32 > 0 || draws.any { it.blend != BlendPlan.LegacySrcOverV1 }) W5B_CAPABILITY_ID else W5A_CAPABILITY_ID)
+            if (elidedNoOpsI32 > 0 || materialEntries.any { it.stopSlab != null } || draws.any { it.blend != BlendPlan.LegacySrcOverV1 }) W5B_CAPABILITY_ID else W5A_CAPABILITY_ID)
     }
 
     private fun recognizeDraw(
@@ -221,7 +221,7 @@ public class W4bAnalyticRRectPlanCompiler : GpuPlanCompiler {
             is EffectiveMaterialPlanner.Normalization.Source -> DrawRecognition.Accepted(
                 SealedDraw(index, appendMaterialPlan(materialEntries, planned.table, planned.root), normalizedDevice, node.origin, clip,
                     if (planned.blend is BlendPlan.FixedFunctionV1 && planned.blend.mode == BlendMode.SRC_OVER)
-                        BlendPlan.LegacySrcOverV1 else planned.blend),
+                        BlendPlan.LegacySrcOverV1 else planned.blend, MaterialCoordinatePlanV1.fromCtm(node.transform)),
             )
         }
     }
@@ -330,7 +330,7 @@ public class W4bAnalyticRRectPlanCompiler : GpuPlanCompiler {
         root: MaterialPlanRef,
     ): MaterialPlanRef {
         val offset = entries.size
-        incoming.entries().forEach { entry -> entries += MaterialPlanEntry(entry.program, entry.bindings) }
+        incoming.entries().forEach { entry -> entries += entry }
         return MaterialPlanRef(offset + root.indexI32)
     }
 
@@ -408,6 +408,7 @@ public class W4bAnalyticRRectPlanCompiler : GpuPlanCompiler {
         val origin: DrawOrigin,
         val clip: RectI32?,
         val blend: BlendPlan,
+        val coordinates: MaterialCoordinatePlanV1?,
     )
 
     private class W4bCandidate(

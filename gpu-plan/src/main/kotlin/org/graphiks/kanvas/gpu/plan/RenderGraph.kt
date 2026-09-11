@@ -122,7 +122,9 @@ public class RenderGraph private constructor(
                     while (materialPlanTable.entry(MaterialPlanRef(indexI32)).bindings is MaterialBindingPlan.OpacityF32V1) indexI32--
                     val entry = materialPlanTable.entry(MaterialPlanRef(indexI32))
                     if (entry.bindings is MaterialBindingPlan.LinearGradientV1) {
-                        require((draw is SolidRectDraw || draw is AnalyticRectDraw) && authority.coordinates != null) {
+                        require((draw is SolidRectDraw || draw is AnalyticRectDraw || draw is AnalyticRRectDraw ||
+                            draw is PathFillDraw || draw is PathStrokeDraw || draw is GeneralPathDraw ||
+                            draw is ClippedGeneralPathDraw || draw is BinaryMaskedPathDraw || draw is W5bW4ePathDraw) && authority.coordinates != null) {
                             W5cPlanDiagnostics.CoordinatesUnavailable
                         }
                         require(entry.bindings.numericAuthority.authenticates(entry.program, entry.bindings,
@@ -1080,10 +1082,13 @@ public class RenderGraph private constructor(
                     PlanResourceRole.CoverageMaskAccumulator,
                     PlanResourceRole.CoverageMaskScratch,
                     PlanResourceRole.CoverageMaskDepthStencil,
+                    PlanResourceRole.GradientStopData,
                 )
             }) { "Single-sample explicit paths may declare only their direct resource inventory" }
             val referencedResourceIds = passes.flatMap(::referencedResources).toSet()
-            require(resources.all { it.id in referencedResourceIds }) {
+            // The shared material source consumes the sealed stop slab separately from W4
+            // geometry references; producer-only passes still carry no material binding.
+            require(resources.all { it.id in referencedResourceIds || it.role == PlanResourceRole.GradientStopData }) {
                 "Single-sample explicit path resources must be consumed by a pass"
             }
             require(pathPasses.all { (_, pass) -> pass.draw.sample == SamplePlan.SingleSample }) {

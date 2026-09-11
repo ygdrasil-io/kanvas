@@ -45,6 +45,7 @@ public object EffectiveMaterialPlanner {
         targetClamp: BlendTargetClampV1,
         coverage: CoveragePlan = CoveragePlan.FullOrScissor,
         sample: SamplePlan = SamplePlan.SingleSample,
+        gradientDeviceBoundsI32: org.graphiks.math.geometry.RectI32? = null,
     ): Result = when (
         val source = normalize(
             draw = draw,
@@ -53,6 +54,7 @@ public object EffectiveMaterialPlanner {
             coverage = coverage,
             sample = sample,
             elideNoOp = false,
+            gradientDeviceBoundsI32 = gradientDeviceBoundsI32,
         )
     ) {
         Normalization.NoOp -> error("W5b source normalization must retain NoOp authority")
@@ -62,7 +64,8 @@ public object EffectiveMaterialPlanner {
 
     internal fun normalize(draw: DrawNode, targetClamp: BlendTargetClampV1, allowDestinationCandidate: Boolean = false,
         coverage: CoveragePlan = CoveragePlan.FullOrScissor, sample: SamplePlan = SamplePlan.SingleSample,
-        elideNoOp: Boolean = true): Normalization {
+        elideNoOp: Boolean = true,
+        gradientDeviceBoundsI32: org.graphiks.math.geometry.RectI32? = null): Normalization {
         val blend = FinalBlendPlanner.plan(draw.blend, coverage, sample, targetClamp,
             if (coverage == CoveragePlan.AnalyticScalarAA) BlendCoverageApplicationV1.SourceMultiplication
             else BlendCoverageApplicationV1.DestinationInterpolation)
@@ -101,7 +104,8 @@ public object EffectiveMaterialPlanner {
             is MaterialNode.LinearGradient -> {
                 if (material.tileMode != org.graphiks.kanvas.render.ir.TileMode.CLAMP ||
                     material.interpolation != org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB ||
-                    draw.origin != org.graphiks.kanvas.render.ir.DrawOrigin.RECT)
+                    draw.origin !in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.RECT,
+                        org.graphiks.kanvas.render.ir.DrawOrigin.RRECT, org.graphiks.kanvas.render.ir.DrawOrigin.PATH))
                     return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
                 when (val stops = normalizeGradientStopsV1(material.stops())) {
                     is NormalizedGradientStopsV1.Refused -> return Normalization.Refused(stops.code)
@@ -111,19 +115,29 @@ public object EffectiveMaterialPlanner {
                         val coordinates = MaterialCoordinatePlanV1.fromCtm(draw.transform)
                             ?: return Normalization.Refused(W5cPlanDiagnostics.CoordinatesUnavailable)
                         val inverseF32 = coordinates.copyInverseCtmF32()
-                        val bounds = (draw.geometry as? org.graphiks.kanvas.render.ir.GeometryNode.Rect)?.copyBounds()
-                            ?: return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
+                        val bounds = when (val geometry = draw.geometry) {
+                            is org.graphiks.kanvas.render.ir.GeometryNode.Rect -> geometry.copyBounds()
+                            is org.graphiks.kanvas.render.ir.GeometryNode.RRect -> geometry.copyShape().rect
+                            is org.graphiks.kanvas.render.ir.GeometryNode.Path -> null
+                            else -> return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
+                        }
+                        if (bounds == null && (gradientDeviceBoundsI32 == null || gradientDeviceBoundsI32.isEmpty))
+                            return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
                         val valuesF32 = listOf(material.start.x, material.start.y, material.end.x, material.end.y,
-                            bounds.left, bounds.top, bounds.right, bounds.bottom)
+                            bounds?.left ?: 0f, bounds?.top ?: 0f, bounds?.right ?: 0f, bounds?.bottom ?: 0f)
                         // Include the inverse-mapped raster footprint in the finite local domain.
                         val radiusF64 = (kotlin.math.abs(inverseF32.sx.toDouble()) + kotlin.math.abs(inverseF32.kx.toDouble()) +
                             kotlin.math.abs(inverseF32.ky.toDouble()) + kotlin.math.abs(inverseF32.sy.toDouble())) * 2.0
-                        val deviceCorners = listOf(org.graphiks.math.geometry.Point2F32(bounds.left, bounds.top),
+                        val deviceCorners = if (bounds == null) emptyList() else listOf(org.graphiks.math.geometry.Point2F32(bounds.left, bounds.top),
                             org.graphiks.math.geometry.Point2F32(bounds.right, bounds.top),
                             org.graphiks.math.geometry.Point2F32(bounds.left, bounds.bottom),
                             org.graphiks.math.geometry.Point2F32(bounds.right, bounds.bottom)).map(draw.transform::transform)
-                        val deviceXF64 = deviceCorners.maxOf { kotlin.math.abs(it.x.toDouble()) } + 2.0
-                        val deviceYF64 = deviceCorners.maxOf { kotlin.math.abs(it.y.toDouble()) } + 2.0
+                        // W4 already owns the conservative stroke/hairline raster bounds. Use
+                        // those facts directly; never rebuild an outline for material planning.
+                        val deviceXF64 = maxOf(deviceCorners.maxOfOrNull { kotlin.math.abs(it.x.toDouble()) } ?: 0.0,
+                            gradientDeviceBoundsI32?.let { maxOf(kotlin.math.abs(it.left.toDouble()), kotlin.math.abs(it.right.toDouble())) } ?: 0.0) + 2.0
+                        val deviceYF64 = maxOf(deviceCorners.maxOfOrNull { kotlin.math.abs(it.y.toDouble()) } ?: 0.0,
+                            gradientDeviceBoundsI32?.let { maxOf(kotlin.math.abs(it.top.toDouble()), kotlin.math.abs(it.bottom.toDouble())) } ?: 0.0) + 2.0
                         val mappingBoundF64 = maxOf(
                             kotlin.math.abs(inverseF32.sx.toDouble()) * deviceXF64 + kotlin.math.abs(inverseF32.kx.toDouble()) * deviceYF64 + kotlin.math.abs(inverseF32.tx.toDouble()),
                             kotlin.math.abs(inverseF32.ky.toDouble()) * deviceXF64 + kotlin.math.abs(inverseF32.sy.toDouble()) * deviceYF64 + kotlin.math.abs(inverseF32.ty.toDouble()),

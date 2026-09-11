@@ -314,6 +314,7 @@ private class W4dGeneralGraphDigestWriter {
                 is PlanDrawMaterialAuthority.MaterialV1 -> {
                     text("$prefix.material-authority", "material-v1")
                     i32("$prefix.material-ref", authority.ref.indexI32)
+                    text("$prefix.material-coordinates", authority.coordinates?.canonicalIdentity ?: "none")
                 }
                 is PlanDrawMaterialAuthority.LegacyColorV1 ->
                     throw IllegalArgumentException("W5a v2 seal requires a material authority")

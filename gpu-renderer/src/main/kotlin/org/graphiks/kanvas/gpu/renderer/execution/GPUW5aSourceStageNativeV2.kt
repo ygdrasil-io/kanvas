@@ -24,7 +24,10 @@ internal class GPUW5bCoverageNativeV4(val witness: org.graphiks.kanvas.gpu.rende
 }
 
 internal enum class GPUW5bInlineCoverageV3 { NativeMask, NativeFull }
-internal enum class MaterialCoordinateSlotV1 { RectDevicePosition }
+internal enum class MaterialCoordinateSlotV1(val devicePointWgsl: String) {
+    FragmentPosition("fragment_position.xy"),
+    Position("position.xy"),
+}
 
 /** Original, authenticated geometry descriptor. W5a changes no geometry or attachment state. */
 internal data class GPUW5aGeometryPipelineTemplate(
@@ -163,8 +166,8 @@ private fun composeSource(template: GPUW5aGeometryPipelineTemplate, source: W5aP
     require(slots.any(geometry::contains)) { "W5a source requires an authenticated color-writing geometry shader" }
     require(!geometry.contains("@group(1)")) { "W5a source group is already occupied" }
     val gradient = source.stage.gradientStopSlab != null
-    require(!gradient || template.materialCoordinateSlot == MaterialCoordinateSlotV1.RectDevicePosition)
-    val sourceExpression = if (gradient) "kanvas_material_source(w5c_local_point(fragment_position.xy))"
+    require(!gradient || template.materialCoordinateSlot != null)
+    val sourceExpression = if (gradient) "kanvas_material_source(w5c_local_point(${requireNotNull(template.materialCoordinateSlot).devicePointWgsl}))"
         else "kanvas_material_source(vec2<f32>(0.0))"
     val analyticCoverage = destination?.sealedW5b?.compositionAbiI32 == 3 &&
         destination.sourceCoverageEncoding == org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding.ScalarCoverageInShader

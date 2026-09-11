@@ -104,7 +104,8 @@ internal fun issueW5bNativeComposite(graphs: List<RenderGraph>): RenderGraph {
                 is PathFillDraw -> draw.withMaterialRef(ref)
                 is PathStrokeDraw -> draw.withMaterialRef(ref)
                 is GeneralPathDraw -> GeneralPathDraw.ofMaterial(draw.commandIndex, ref, draw.copyPathGeometry(),
-                    draw.strategy, draw.copyScissorI32(), draw.coverage, draw.sample, draw.blend)
+                    draw.strategy, draw.copyScissorI32(), draw.coverage, draw.sample, draw.blend,
+                    (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).coordinates)
                 else -> error("Unsupported native W5b composite geometry")
             }
             dataByCommand[draw.commandIndex] = data

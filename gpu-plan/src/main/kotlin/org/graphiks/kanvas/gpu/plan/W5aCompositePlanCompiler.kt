@@ -149,8 +149,7 @@ public class W5aCompositePlanV1 private constructor(
                         is SolidRectDraw -> draw.withMaterialRef(ref)
                         is AnalyticRRectDraw -> draw.withMaterialRef(ref)
                         is PathFillDraw -> draw.withMaterialRef(ref)
-                        is PathStrokeDraw -> PathStrokeDraw.ofMaterial(draw.commandIndex, ref,
-                            draw.copyGeometryF32(), draw.copyScissorI32(), draw.mode, draw.styleF64)
+                        is PathStrokeDraw -> draw.withMaterialRef(ref)
                         else -> error("Unrecognized native composite draw")
                     }
                 }
