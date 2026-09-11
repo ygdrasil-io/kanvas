@@ -32,7 +32,8 @@ internal fun issueW5bNativeComposite(graphs: List<RenderGraph>): RenderGraph {
     require(graphs.size in 2..W5aCompositePlanCompiler.MAX_LANES_I32)
     val first = graphs.first()
     val admitted = setOf(W3SolidRectPlanCompiler.CAPABILITY_ID, W3SolidRectPlanCompiler.W5A_CAPABILITY_ID,
-        W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID, W4bAnalyticRRectPlanCompiler.CAPABILITY_ID,
+        W4aAnalyticRectPlanCompiler.W5A_CAPABILITY_ID, W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID,
+        W4bAnalyticRRectPlanCompiler.CAPABILITY_ID,
         W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID, W4cPathFillPlanCompiler.CAPABILITY_ID,
         W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W4dPathStrokePlanCompiler.CAPABILITY_ID,
         W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, W4dGeneralPathPlanCompiler.W5A_HARD_CAPABILITY_ID,

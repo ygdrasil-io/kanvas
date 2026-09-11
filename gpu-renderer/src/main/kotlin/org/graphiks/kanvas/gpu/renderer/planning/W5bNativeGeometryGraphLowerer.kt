@@ -164,7 +164,7 @@ internal class W5bNativeGeometryGraphLowerer {
                     packets += built.map { it.packet }
                     scratches += W5bGeometryScratchV3.PathStroke(scratch, built.map { it.packet }, built.map { it.structuralPipelineKey })
                 }
-                W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID -> {
+                W4aAnalyticRectPlanCompiler.W5A_CAPABILITY_ID, W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID -> {
                     val analytic = draws.map { it as AnalyticRectDraw }
                     val footprint = (AnalyticRectPlanBudget.calculate(graph.targetExtent, analytic.size,
                         graph.capabilities, graph.budget) as AnalyticRectPlanBudgetResult.WithinBudget).footprint

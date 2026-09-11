@@ -112,6 +112,50 @@ class W5bBlendSurfacePixelTest {
         WgslFloatEnvelopeV1Oracle.assertAdmits(green, reverse.copyOfRange(36, 40))
     }
 
+    @Test fun `geometry W5a fractional SrcOver Rect composes with W5b destination geometry`() {
+        val background = W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, 1f)
+        val fringe = W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, .75f)
+        val source = halfWhiteSource()
+        val destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(background))
+        val expected = WgslFloatEnvelopeV1Oracle.drawDestination(source, MaterialPlanRef(1), destination, BlendMode.DIFFERENCE)
+        val sourceOnly = W5aSolidOpacityCpuOracle.draw(ColorARGB.White, .5f)
+        assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+            (background as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels))
+        assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.sourceOverExclusion(source, MaterialPlanRef(1), destination))
+        assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+            (sourceOnly as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels))
+        assertAll(listOf(false, true).map { rounded -> {
+            fun pixels(reverse: Boolean = false, mutateRectBefore: Boolean = false): UByteArray {
+                val rect = RectF32.ofLTRB(.25f, 0f, 4f, 4f)
+                val rrect = RRectF32.of(RectF32.ofLTRB(0f, 0f, 4f, 2f), CornerRadiiF32.of(.5f))
+                val path = Path().apply { moveTo(-1f, -1f); lineTo(5f, -1f); lineTo(-1f, 3f); close() }
+                if (mutateRectBefore) rect.offset(2f, 0f)
+                val recorder = PictureRecorder()
+                val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f))
+                fun background() = canvas.drawRect(rect, Paint(shader = Shader.SolidColor(ColorARGB.Green),
+                    blendMode = BlendMode.SRC_OVER, antiAlias = true))
+                fun foreground() {
+                    val paint = Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), .5f),
+                        blendMode = BlendMode.DIFFERENCE, antiAlias = rounded)
+                    if (rounded) canvas.drawRRect(rrect, paint) else canvas.drawPath(path, paint)
+                }
+                if (reverse) { foreground(); background() } else { background(); foreground() }
+                if (!mutateRectBefore) rect.offset(8f, 8f)
+                rrect.rect.offset(8f, 8f)
+                path.addRect(RectF32.ofLTRB(0f, 3f, 4f, 4f))
+                val picture = requireNotNull(Picture.fromByteArray(recorder.finishRecordingAsPicture().toByteArray()))
+                return Surface(4, 4).also { surface -> surface.canvas { picture.playback(this) } }.render().pixels
+            }
+            val forward = pixels()
+            // (1.5,0.5) is fully covered by each foreground and the fractional Rect.
+            WgslFloatEnvelopeV1Oracle.assertAdmits(expected, forward.copyOfRange(4, 8))
+            // The foreground is absent at (0.5,3.5); only the Rect's three-quarter fringe remains.
+            WgslFloatEnvelopeV1Oracle.assertAdmits(fringe, forward.copyOfRange(48, 52))
+            WgslFloatEnvelopeV1Oracle.assertAdmits(background, pixels(reverse = true).copyOfRange(4, 8))
+            WgslFloatEnvelopeV1Oracle.assertAdmits(sourceOnly, pixels(mutateRectBefore = true).copyOfRange(4, 8))
+        } })
+    }
+
     @Test fun `geometry transformed hard Paths retain final blends and captured math geometry`() = transformedGeometryBlends(false)
 
     @Test fun `geometry mixed transformed Paths retain distinct native lanes and final blends`() = transformedGeometryBlends(true)
