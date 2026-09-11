@@ -181,6 +181,7 @@ internal fun selectWgpu4kPreparedFramePayloadRoute(
             GPUWgpu4kPreparedFramePayloadRoute.CorePrimitive
         hasDestinationCopy &&
             (GPUDrawSemanticPayload.ColorGlyph::class in distinct ||
+                GPUDrawSemanticPayload.TextA8::class in distinct ||
                 GPUDrawSemanticPayload.Vertices::class in distinct) &&
             distinct.all { semanticClass ->
                 semanticClass == GPUDrawSemanticPayload.CorePrimitive::class ||

@@ -157,6 +157,7 @@ internal object GPUPreparedTextSemanticBuilder {
                                 instances = subRun.instances,
                                 material = subRun.draw.material,
                                 materialPlanProvenance = normalized.preparedW5aMaterialProvenance,
+                                w5bFinalBlendPlan = subRun.draw.materialPlan?.blend,
                                 deviceToLocal = deviceToLocal,
                                 targetBounds = targetBounds,
                                 scissorBounds = scissor,

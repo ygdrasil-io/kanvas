@@ -8,6 +8,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.glyph.GlyphStrikeKey
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.plan.BlendPlan
 import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
 import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.paint.Paint
@@ -68,6 +69,7 @@ internal enum class GPUPreparedTextRepresentation {
 internal data class GPUPreparedTextMaterialPlan(
     val table: MaterialPlanTable,
     val ref: MaterialPlanRef,
+    val blend: BlendPlan = BlendPlan.LegacySrcOverV1,
 ) {
     init {
         table.entry(ref)

@@ -34,15 +34,18 @@ object GPUPreparedTextNativeBlendDomain {
 
     fun refusalCodeOrNull(blendPlans: List<GPUBlendPlan?>): String? =
         REFUSAL_CODE.takeIf {
-            blendPlans.any { blendPlan -> blendPlan !is GPUBlendPlan.FixedFunctionBlend }
+            blendPlans.any { blendPlan ->
+                blendPlan !is GPUBlendPlan.FixedFunctionBlend &&
+                    blendPlan !is GPUBlendPlan.ShaderBlendWithDstRead
+            }
         }
 }
 
 /**
  * Pure Task 5 native-domain gate shared by recording and execution preflight.
  *
- * Non-fixed plans retain their semantic identity for later routes, but cannot enter the current
- * Prepared TextA8 native handoff.
+ * Prepared TextA8 admits fixed-function and sealed destination-read plans. Other plan kinds retain
+ * their semantic identity but cannot enter the native handoff.
  */
 internal fun preparedTextNativeBlendDomainRefusal(
     blendPlans: List<GPUBlendPlan?>,
@@ -51,7 +54,8 @@ internal fun preparedTextNativeBlendDomainRefusal(
         GPUPreparedTextCompositePreflightRefusal(
             code = GPUPreparedTextCompositePreflightRefusalCodes.NATIVE_BLEND,
             message =
-                "Prepared TextA8 native materialization requires a fixed-function blend plan.",
+                "Prepared TextA8 native materialization requires a fixed-function or " +
+                    "destination-read blend plan.",
         )
     } else {
         null
@@ -237,6 +241,8 @@ internal object GPUPreparedTextCompositePreflight {
         val coverageMaskVariant =
             actual.clipVariant ==
                 org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextClipVariant.CoverageMask
+        val destinationVariant = actual.destinationBlend != null
+        val destinationGroup = if (coverageMaskVariant) 4 else 3
         if (actual.bindingPlan.drawUniformGroup != 0 ||
             actual.bindingPlan.drawUniformBinding != 0 ||
             actual.bindingPlan.atlasTextureGroup != 2 ||
@@ -247,6 +253,14 @@ internal object GPUPreparedTextCompositePreflight {
             3.takeIf { coverageMaskVariant } ||
             actual.bindingPlan.coverageMaskTextureBinding !=
             0.takeIf { coverageMaskVariant } ||
+            actual.bindingPlan.destinationTextureGroup !=
+            destinationGroup.takeIf { destinationVariant } ||
+            actual.bindingPlan.destinationTextureBinding !=
+            0.takeIf { destinationVariant } ||
+            actual.bindingPlan.destinationSamplerGroup !=
+            destinationGroup.takeIf { destinationVariant } ||
+            actual.bindingPlan.destinationSamplerBinding !=
+            1.takeIf { destinationVariant } ||
             !actual.bindingPlan.materialFragment.matches(expectedFragment)
         ) {
             return bindingLayoutRefusal(
@@ -277,7 +291,8 @@ internal object GPUPreparedTextCompositePreflight {
             render.resourceUses.take(drawUniformIndex).any { use ->
                 use.role != GPUFrameResourceRole.GlyphAtlas &&
                     use.role != GPUFrameResourceRole.VertexData &&
-                    use.role != GPUFrameResourceRole.ClipMask
+                    use.role != GPUFrameResourceRole.ClipMask &&
+                    use.role != GPUFrameResourceRole.DestinationSnapshot
             } ||
             render.resourceUses.drop(drawUniformIndex + 1).any { use ->
                 use.role == GPUFrameResourceRole.GlyphAtlas ||

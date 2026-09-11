@@ -830,6 +830,9 @@ internal class GPUPreparedTextNativeProgramHandoff private constructor(
     val atlasTextureBinding: Int,
     val atlasSamplerBinding: Int,
     val coverageMaskTextureBinding: Int?,
+    val destinationTextureGroup: Int?,
+    val destinationTextureBinding: Int?,
+    val destinationSamplerBinding: Int?,
     val sourceHash: String,
     val abiHash: String,
     val targetFormatClass: String,
@@ -870,14 +873,26 @@ internal class GPUPreparedTextNativeProgramHandoff private constructor(
                 atlasSamplerBinding = program.bindingPlan.atlasSamplerBinding,
                 coverageMaskTextureBinding =
                     program.bindingPlan.coverageMaskTextureBinding,
+                destinationTextureGroup = program.bindingPlan.destinationTextureGroup,
+                destinationTextureBinding = program.bindingPlan.destinationTextureBinding,
+                destinationSamplerBinding = program.bindingPlan.destinationSamplerBinding,
                 sourceHash = program.sourceHash,
                 abiHash = program.abiHash,
                 targetFormatClass = program.targetFormatClass,
                 blendPlanIdentity = program.blendPlanIdentity,
-                fixedFunctionBlendState = checkNotNull(program.fixedFunctionBlendState) {
-                    "Prepared TextA8 native handoff requires preflight-authenticated " +
-                        "fixed-function blend state"
-                },
+                fixedFunctionBlendState = program.fixedFunctionBlendState
+                    ?: program.destinationBlend?.let {
+                        org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState(
+                            stateId = "w5b.prepared-text.destination-replace@v1",
+                            color = org.graphiks.kanvas.gpu.renderer.state
+                                .GPUFixedFunctionBlendComponent("one", "zero", "add"),
+                            alpha = org.graphiks.kanvas.gpu.renderer.state
+                                .GPUFixedFunctionBlendComponent("one", "zero", "add"),
+                            writeMask = "rgba",
+                        )
+                    } ?: error(
+                        "Prepared TextA8 native handoff requires an authenticated blend state",
+                    ),
                 sourceCoverageEncoding = program.sourceCoverageEncoding,
                 clipVariant = program.clipVariant,
                 vertexLayout = GPUPreparedTextVertexLayout(
@@ -1347,8 +1362,57 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 )
             }
         }
+        val preparedDestinationSnapshots = try {
+            buildPreparedDestinationSnapshotPlans(request, packets)
+        } catch (_: ArithmeticException) {
+            return refused(
+                "invalid.recording.prepared_surface_destination_snapshot",
+                "Prepared destination-snapshot byte accounting overflowed.",
+            )
+        } catch (failure: IllegalArgumentException) {
+            return refused(
+                "invalid.recording.prepared_surface_destination_snapshot",
+                failure.message ?: "Prepared destination-snapshot planning failed.",
+            )
+        }
+        val preparedTextPacketsById = packets.mapNotNull { packet ->
+            val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue) as?
+                GPUDrawSemanticPayload.TextA8 ?: return@mapNotNull null
+            val destination = preparedDestinationSnapshots.singleOrNull { plan ->
+                plan.packetId == packet.packetId
+            }
+            val preparedPacket = if (destination == null) {
+                packet.withSemantic(semantic)
+            } else {
+                val planned = semantic.w5bFinalBlendPlan as?
+                    org.graphiks.kanvas.gpu.plan.BlendPlan.DestinationReadV1
+                    ?: return refused(
+                        "invalid.recording.prepared_text_destination_plan",
+                        "Prepared TextA8 destination read lost its W5b plan authority.",
+                    )
+                val destinationVersion = packets
+                    .takeWhile { candidate -> candidate.packetId != packet.packetId }
+                    .map(GPUDrawPacket::commandIdValue)
+                    .distinct()
+                    .size
+                    .toLong()
+                val sealed = planned.copy(
+                    requiredDestinationVersion =
+                        org.graphiks.kanvas.gpu.plan.DestinationVersionI64(destinationVersion),
+                    snapshotResource =
+                        org.graphiks.kanvas.gpu.plan.PlanResourceId(destination.snapshot.value),
+                )
+                packet.withSemantic(
+                    semantic.withW5bFinalBlendPlan(sealed),
+                    blendOverride =
+                        org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.lower(sealed),
+                )
+            }
+            packet.packetId to preparedPacket
+        }.toMap()
         val r8Semantics = packets.mapNotNull { packet ->
-            when (val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue)) {
+            when (val semantic = preparedTextPacketsById[packet.packetId]?.semanticPayload
+                ?: request.semanticsByCommandId.getValue(packet.commandIdValue)) {
                 is GPUDrawSemanticPayload.TextA8 -> semantic
                 is GPUDrawSemanticPayload.ColorGlyph -> semantic
                 else -> null
@@ -1356,7 +1420,8 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         }
         val textA8Inputs = mutableListOf<GPUPreparedTextDrawUniformInput>()
         packets.forEach { packet ->
-            val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue) as?
+            val preparedPacket = preparedTextPacketsById[packet.packetId] ?: packet
+            val semantic = preparedPacket.semanticPayload as?
                 GPUDrawSemanticPayload.TextA8 ?: return@forEach
             val executionPlan = packet.clipExecutionPlan ?: return refused(
                 "invalid.recording.prepared_text_clip_plan",
@@ -1375,7 +1440,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         }
         preparedTextNativeBlendDomainRefusal(
             textA8Inputs.map { input ->
-                packets.single { packet -> packet.packetId == input.packetId }.blendPlan
+                preparedTextPacketsById.getValue(input.packetId).blendPlan
             },
         )?.let { refusal ->
             return refused(refusal.code, refusal.message)
@@ -1389,15 +1454,17 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     targetFormatClass = request.targetFormat.value,
                     blendPlanIdentity = input.semantic.blendPlanIdentity,
                     fixedFunctionBlendState = (
-                        packets.single { packet -> packet.packetId == input.packetId }.blendPlan as?
+                        preparedTextPacketsById.getValue(input.packetId).blendPlan as?
                             org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan.FixedFunctionBlend
                         )?.state,
                     sourceCoverageEncoding =
                         checkNotNull(
-                            packets.single { packet -> packet.packetId == input.packetId }
+                            preparedTextPacketsById.getValue(input.packetId)
                                 .blendPlan,
                         ).sourceCoverageEncoding,
                     clipVariant = input.clipPlan.variant,
+                    destinationBlend = preparedTextPacketsById.getValue(input.packetId).blendPlan as?
+                        org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan.ShaderBlendWithDstRead,
                 )
             ) {
                 is GPUPreparedTextCompositeProgramResult.Ready ->
@@ -1585,19 +1652,6 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 is GPUReadbackLayoutPlan.Refused ->
                     return GPUPreparedSurfaceFrameResult.Refused(plan.diagnostic)
             }
-        }
-        val preparedDestinationSnapshots = try {
-            buildPreparedDestinationSnapshotPlans(request, packets)
-        } catch (_: ArithmeticException) {
-            return refused(
-                "invalid.recording.prepared_surface_destination_snapshot",
-                "Prepared ColorGlyph destination-snapshot byte accounting overflowed.",
-            )
-        } catch (failure: IllegalArgumentException) {
-            return refused(
-                "invalid.recording.prepared_surface_destination_snapshot",
-                failure.message ?: "Prepared ColorGlyph destination-snapshot planning failed.",
-            )
         }
         val standaloneTextCoverageMaskResult = buildTextOnlyCoverageMaskProducerTopologies(
             request = request,
@@ -2024,6 +2078,8 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue)
             if (semantic is GPUDrawSemanticPayload.CorePrimitive) {
                 coreAssembly.packetByCommandId.getValue(packet.commandIdValue)
+            } else if (semantic is GPUDrawSemanticPayload.TextA8) {
+                listOf(preparedTextPacketsById.getValue(packet.packetId))
             } else if (semantic is GPUDrawSemanticPayload.Vertices) {
                 val destination = preparedDestinationSnapshots.singleOrNull { plan ->
                     plan.packetId == packet.packetId
@@ -3580,6 +3636,7 @@ private fun buildPreparedDestinationSnapshotPlans(
         // prepared families consume one TextureCopy per destination-reading packet.
         if (semantic !is GPUDrawSemanticPayload.ColorGlyph &&
             semantic !is GPUDrawSemanticPayload.CorePrimitive &&
+            semantic !is GPUDrawSemanticPayload.TextA8 &&
             semantic !is GPUDrawSemanticPayload.Vertices
         ) {
             return@mapNotNull null

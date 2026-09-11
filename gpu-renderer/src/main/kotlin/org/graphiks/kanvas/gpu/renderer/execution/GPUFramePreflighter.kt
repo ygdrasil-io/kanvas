@@ -7562,6 +7562,7 @@ internal class GPUFramePreflighter(
             val destinationPreparedPacketIds = packetsById.values
                 .filter { packet ->
                     (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
+                        packet.semanticPayload is GPUDrawSemanticPayload.TextA8 ||
                         packet.semanticPayload is GPUDrawSemanticPayload.Vertices) &&
                         packet.blendPlan?.destinationReadRequirement ==
                         org.graphiks.kanvas.gpu.renderer.passes
@@ -9473,6 +9474,15 @@ internal class GPUFramePreflighter(
                                     GPUPreparedNativeOperandRole.RenderBindGroup,
                                     GPUPreparedNativeOperandKind.BindGroup,
                                     "prepared-text:${packet.packetId.value}:coverage-mask-group",
+                                ),
+                            )
+                        }
+                        if (packet.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead) {
+                            add(
+                                key(
+                                    GPUPreparedNativeOperandRole.RenderBindGroup,
+                                    GPUPreparedNativeOperandKind.BindGroup,
+                                    "prepared-text:${packet.packetId.value}:destination-group",
                                 ),
                             )
                         }

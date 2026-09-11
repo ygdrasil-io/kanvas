@@ -3,6 +3,7 @@
 package org.graphiks.kanvas.surface
 
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.surface.gpu.GPUPreparedTextTestFixtures
 import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.gpu.plan.MaterialPlanEntry
 import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
@@ -17,6 +18,9 @@ import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
+import org.graphiks.kanvas.text.FontTypeface
+import org.graphiks.kanvas.text.KanvasGlyphRun
+import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.color.ColorF32
 import org.graphiks.math.geometry.RectF32
@@ -41,6 +45,152 @@ class W5bBlendSurfacePixelTest {
 
     @Test fun `prepared uncolored Vertices and Mesh no program retain destination blends and capture`() =
         preparedUncoloredVerticesBlends(listOf(BlendMode.DIFFERENCE))
+
+    @Test fun `prepared colored Vertices modulate source before fixed DST and destination blends`() {
+        val vertexColor = ColorARGB.of(255, 255, 255, 0)
+        val materialSource = solidSource(ColorF32.of(1f, 0f, 0f, 1f), .45f)
+        val replacementSource = solidSource(ColorF32.of(1f, 1f, 0f, 1f), .45f)
+        val background = W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, 1f)
+        val destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(background))
+
+        assertAll(listOf(BlendMode.DST_OUT, BlendMode.DST, BlendMode.DIFFERENCE).map { mode -> {
+            val expected = when (mode) {
+                BlendMode.DST -> background
+                BlendMode.DST_OUT -> W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, .55f)
+                else -> WgslFloatEnvelopeV1Oracle.drawDestination(
+                    materialSource,
+                    MaterialPlanRef(1),
+                    destination,
+                    mode,
+                )
+            }
+            if (mode == BlendMode.DIFFERENCE) {
+                val replacement = WgslFloatEnvelopeV1Oracle.drawDestination(
+                    replacementSource,
+                    MaterialPlanRef(1),
+                    destination,
+                    mode,
+                ) as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded
+                assertDisjoint(
+                    expected,
+                    WgslFloatEnvelopeV1Oracle.ConservativeExclusion(replacement.channels),
+                )
+            }
+
+            val positions = mutableListOf(
+                Point2F32(-1f, -1f),
+                Point2F32(5f, -1f),
+                Point2F32(-1f, 5f),
+            )
+            val colors = mutableListOf(vertexColor, vertexColor, vertexColor)
+            val vertices = Vertices(VertexMode.TRIANGLES, positions, colors = colors)
+            val recorder = PictureRecorder()
+            val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f))
+            canvas.drawRect(
+                RectF32.ofLTRB(0f, 0f, 4f, 4f),
+                Paint(shader = Shader.SolidColor(ColorARGB.Green), antiAlias = false),
+            )
+            canvas.drawVertices(
+                vertices,
+                Paint(
+                    shader = Shader.Opacity(Shader.SolidColor(ColorARGB.Red), .45f),
+                    blendMode = mode,
+                    antiAlias = false,
+                ),
+            )
+            val picture = recorder.finishRecordingAsPicture()
+            positions.indices.forEach { index -> positions[index] = Point2F32(10f + index, 10f) }
+            colors.indices.forEach { index -> colors[index] = ColorARGB.Transparent }
+
+            val observed = Surface(4, 4).also { surface ->
+                surface.canvas { picture.playback(this) }
+            }.render().pixels.copyOfRange(0, 4)
+            WgslFloatEnvelopeV1Oracle.assertAdmits(expected, observed)
+        } })
+    }
+
+    @Test fun `prepared resolved A8 text applies scalar coverage before fixed DST and destination blends`() {
+        val coverageF32 = 128f / 255f
+        val background = W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, 1f)
+        val destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(background))
+        val source = solidSource(ColorF32.of(1f, 0f, 0f, 1f), .5f)
+
+        assertAll(listOf(BlendMode.DST_OUT, BlendMode.DST, BlendMode.DIFFERENCE).map { mode -> {
+            val expected = when (mode) {
+                BlendMode.DST -> background
+                BlendMode.DST_OUT -> W5aSolidOpacityCpuOracle.draw(
+                    ColorARGB.Green,
+                    1f - .5f * coverageF32,
+                )
+                else -> WgslFloatEnvelopeV1Oracle.drawDestination(
+                    source,
+                    MaterialPlanRef(1),
+                    destination,
+                    mode,
+                    coverageF32,
+                )
+            }
+            if (mode == BlendMode.DIFFERENCE) {
+                assertDisjoint(
+                    expected,
+                    WgslFloatEnvelopeV1Oracle.sourceOverExclusion(
+                        source,
+                        MaterialPlanRef(1),
+                        destination,
+                        coverageF32,
+                    ),
+                )
+                assertDisjoint(
+                    expected,
+                    WgslFloatEnvelopeV1Oracle.destinationExclusion(
+                        source,
+                        MaterialPlanRef(1),
+                        destination,
+                        mode,
+                    ),
+                )
+            }
+
+            val glyphs = mutableListOf(GPUPreparedTextTestFixtures.A8_GLYPH_ID.toUShort())
+            val positions = mutableListOf(Point2F32(0f, 0f))
+            val blob = TextBlob(
+                glyphRuns = listOf(KanvasGlyphRun(glyphs, positions, fontSize = 48f)),
+                typeface = FontTypeface(
+                    GPUPreparedTextTestFixtures.colrFontBytesWithForegroundLayer(),
+                    "W5b resolved A8 fixture",
+                ),
+                fontSize = 48f,
+            )
+            val recorder = PictureRecorder()
+            recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 40f, 80f)).apply {
+                drawRect(
+                    RectF32.ofLTRB(0f, 0f, 40f, 80f),
+                    Paint(shader = Shader.SolidColor(ColorARGB.Green), antiAlias = false),
+                )
+                drawText(
+                    blob,
+                    4.25f,
+                    58.5f,
+                    Paint(
+                        shader = Shader.Opacity(Shader.SolidColor(ColorARGB.Red), .5f),
+                        blendMode = mode,
+                        antiAlias = false,
+                    ),
+                )
+            }
+            val picture = recorder.finishRecordingAsPicture()
+            glyphs[0] = 999u
+            positions[0] = Point2F32(Float.NaN, Float.NaN)
+
+            val pixels = Surface(40, 80).also { surface ->
+                surface.canvas { picture.playback(this) }
+            }.render().pixels
+            WgslFloatEnvelopeV1Oracle.assertAdmits(
+                expected,
+                pixels.copyOfRange((40 * 40 + 5) * 4, (40 * 40 + 6) * 4),
+            )
+        } })
+    }
 
     @Test fun `leading prepared Vertices and Mesh destination reads observe the cleared frame`() {
         val source = solidSource(ColorF32.of(1f, 1f, 1f, 1f), .45f)

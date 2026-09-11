@@ -1469,6 +1469,7 @@ data class GPUPreparedTextA8PayloadInput(
     val material: GPUPreparedMaterialProgram,
     val materialPlanProvenance:
         org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextMaterialPlanProvenance? = null,
+    val w5bFinalBlendPlan: org.graphiks.kanvas.gpu.plan.BlendPlan? = null,
     val deviceToLocal: GPUPreparedTextDeviceToLocalAffine,
     val targetBounds: GPUPixelBounds,
     val scissorBounds: GPUPixelBounds,
@@ -1809,6 +1810,7 @@ sealed interface GPUDrawSemanticPayload {
         material: GPUPreparedMaterialProgram,
         materialPlanProvenance:
             org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextMaterialPlanProvenance? = null,
+        val w5bFinalBlendPlan: org.graphiks.kanvas.gpu.plan.BlendPlan? = null,
         deviceToLocal: GPUPreparedTextDeviceToLocalAffine,
         val targetBounds: GPUPixelBounds,
         val scissorBounds: GPUPixelBounds,
@@ -1831,13 +1833,26 @@ sealed interface GPUDrawSemanticPayload {
         ): TextA8 {
             val provenance = requireNotNull(materialPlanProvenance).remap(table, ref)
             return TextA8(payloadRef, atlas, atlasGeneration, pageIndex, instances, material,
-                provenance, deviceToLocal, targetBounds, scissorBounds, clipIdentity, blendPlanIdentity,
+                provenance, w5bFinalBlendPlan, deviceToLocal, targetBounds, scissorBounds, clipIdentity, blendPlanIdentity,
                 capabilitySnapshotHash, frameProvenance, preparedTextA8CanonicalHash(
                     payloadRef, atlas, atlasGeneration, pageIndex, instances, material, provenance,
-                    deviceToLocal, targetBounds, scissorBounds, clipIdentity, blendPlanIdentity,
+                    w5bFinalBlendPlan, deviceToLocal, targetBounds, scissorBounds, clipIdentity, blendPlanIdentity,
                     capabilitySnapshotHash, frameProvenance,
                 ))
         }
+
+        fun withW5bFinalBlendPlan(
+            plan: org.graphiks.kanvas.gpu.plan.BlendPlan,
+        ): TextA8 = TextA8(
+            payloadRef, atlas, atlasGeneration, pageIndex, instances, material,
+            materialPlanProvenance, plan, deviceToLocal, targetBounds, scissorBounds,
+            clipIdentity, blendPlanIdentity, capabilitySnapshotHash, frameProvenance,
+            preparedTextA8CanonicalHash(
+                payloadRef, atlas, atlasGeneration, pageIndex, instances, material,
+                materialPlanProvenance, plan, deviceToLocal, targetBounds, scissorBounds,
+                clipIdentity, blendPlanIdentity, capabilitySnapshotHash, frameProvenance,
+            ),
+        )
 
         internal fun hasCanonicalHashIntegrity(): Boolean =
             canonicalHash == preparedTextA8CanonicalHash(
@@ -1848,6 +1863,7 @@ sealed interface GPUDrawSemanticPayload {
                 instances = instances,
                 material = material,
                 materialPlanProvenance = materialPlanProvenance,
+                w5bFinalBlendPlan = w5bFinalBlendPlan,
                 deviceToLocal = deviceToLocal,
                 targetBounds = targetBounds,
                 scissorBounds = scissorBounds,
@@ -2111,6 +2127,7 @@ class GPUPreparedTextPayloadGatherer {
             instances = instances,
             material = material,
             materialPlanProvenance = input.materialPlanProvenance,
+            w5bFinalBlendPlan = input.w5bFinalBlendPlan,
             deviceToLocal = input.deviceToLocal.copy(),
             targetBounds = input.targetBounds,
             scissorBounds = input.scissorBounds,
@@ -2126,6 +2143,7 @@ class GPUPreparedTextPayloadGatherer {
                 instances = instances,
                 material = material,
                 materialPlanProvenance = input.materialPlanProvenance,
+                w5bFinalBlendPlan = input.w5bFinalBlendPlan,
                 deviceToLocal = input.deviceToLocal,
                 targetBounds = input.targetBounds,
                 scissorBounds = input.scissorBounds,
@@ -3626,6 +3644,7 @@ private fun preparedTextA8CanonicalHash(
     material: GPUPreparedMaterialProgram,
     materialPlanProvenance:
         org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextMaterialPlanProvenance?,
+    w5bFinalBlendPlan: org.graphiks.kanvas.gpu.plan.BlendPlan?,
     deviceToLocal: GPUPreparedTextDeviceToLocalAffine,
     targetBounds: GPUPixelBounds,
     scissorBounds: GPUPixelBounds,
@@ -3677,6 +3696,10 @@ private fun preparedTextA8CanonicalHash(
         materialPlanProvenance?.let { provenance ->
             appendCanonicalField("material.w5aProvenance", provenance.canonicalIdentity())
         }
+        appendCanonicalField(
+            "blend.w5bPlan",
+            w5bFinalBlendPlan?.canonicalLabel.orEmpty(),
+        )
         appendCanonicalField(
             "deviceToLocal",
             deviceToLocal.rawBits().joinToString(","),

@@ -731,6 +731,7 @@ private fun GPUTaskList.authenticatedDestinationReadEvidence(
             require(
                 semantics[commandId] is GPUDrawSemanticPayload.ColorGlyph ||
                     semantics[commandId] is GPUDrawSemanticPayload.CorePrimitive ||
+                    semantics[commandId] is GPUDrawSemanticPayload.TextA8 ||
                     semantics[commandId] is GPUDrawSemanticPayload.Vertices ||
                     semantics[commandId] is GPUDrawSemanticPayload.MaskBlur,
             )
