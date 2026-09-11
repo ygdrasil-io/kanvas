@@ -5,6 +5,8 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedVerticesMaterialPlanProvenance
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFragment
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialSampledBinding
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.pipelines.GPUBlendFormulaProgramLibrary
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesLayoutAuthority
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUVertexLayoutPlan
@@ -61,6 +63,7 @@ object PreparedVerticesShaderAssembler {
         hasPrimitiveColor: Boolean,
         materialPlanProvenance: GPUPreparedVerticesMaterialPlanProvenance? = null,
         commandIdValueI32: Int? = null,
+        destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead? = null,
     ): GPUPreparedVerticesShaderResult = assembleObserved(
         layout = layout,
         topology = topology,
@@ -68,6 +71,7 @@ object PreparedVerticesShaderAssembler {
         hasPrimitiveColor = hasPrimitiveColor,
         materialPlanProvenance = materialPlanProvenance,
         commandIdValueI32 = commandIdValueI32,
+        destinationBlend = destinationBlend,
         validator = KanvasWGSLValidator(),
         reflectionProvider = KanvasWGSLReflectionProvider(),
     )
@@ -79,6 +83,7 @@ object PreparedVerticesShaderAssembler {
         hasPrimitiveColor: Boolean,
         materialPlanProvenance: GPUPreparedVerticesMaterialPlanProvenance? = null,
         commandIdValueI32: Int? = null,
+        destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead? = null,
         validator: WGSLValidator,
         reflectionProvider: WGSLReflectionProvider,
     ): GPUPreparedVerticesShaderResult {
@@ -113,7 +118,28 @@ object PreparedVerticesShaderAssembler {
         }
         val hasTexCoord = layout.attributes.contains("texcoord")
         val fragment = material.composableFragment
-        val source = preparedVerticesShaderSource(hasColor, hasTexCoord, fragment)
+        if (destinationBlend?.let { blend ->
+                blend.sourceCoverageEncoding !=
+                    org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding.None ||
+                    blend.sealedW5b == null ||
+                    GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(
+                        blend.mode.gpuLabel,
+                        blend.formulaId,
+                        PREPARED_VERTICES_BLEND_FUNCTION,
+                    ) == null
+            } == true
+        ) {
+            return preparedVerticesRefused(
+                GPUPreparedVerticesRefusalCodes.Material,
+                "Prepared vertices destination blend is not a sealed full/scissor W5b formula",
+            )
+        }
+        val source = preparedVerticesShaderSource(
+            hasColor,
+            hasTexCoord,
+            fragment,
+            destinationBlend,
+        )
 
         val parsedModule = validator.parse(source)
         if (parsedModule.syntaxErrors.isNotEmpty()) {
@@ -143,7 +169,7 @@ object PreparedVerticesShaderAssembler {
                 "Prepared vertices reflection did not prove the exact entry-point ABI",
             )
         }
-        preparedVerticesBindingMismatch(fragment, report.bindings)?.let { message ->
+        preparedVerticesBindingMismatch(fragment, destinationBlend != null, report.bindings)?.let { message ->
             return preparedVerticesRefused(GPUPreparedVerticesRefusalCodes.Material, message)
         }
         preparedVerticesLayoutMismatch(fragment, report.layouts)?.let { message ->
@@ -176,7 +202,7 @@ object PreparedVerticesShaderAssembler {
         }
 
         val vertexLayoutHash = preparedVerticesVertexLayoutHash(layout)
-        val bindingLayoutHash = preparedVerticesBindingLayoutHash(fragment)
+        val bindingLayoutHash = preparedVerticesBindingLayoutHash(fragment, destinationBlend)
         val reflectedAbiHash = preparedVerticesReflectedAbiHash(
             report = report,
             interfaceFacts = interfaceFacts,
@@ -188,6 +214,7 @@ object PreparedVerticesShaderAssembler {
             reflectedAbiHash = reflectedAbiHash,
             topology = topology,
             material = material,
+            destinationBlend = destinationBlend,
         )
         return GPUPreparedVerticesShaderResult.Ready(
             GPUPreparedVerticesShaderProgram(
@@ -213,6 +240,7 @@ private fun preparedVerticesShaderSource(
     hasColor: Boolean,
     hasTexCoord: Boolean,
     fragment: GPUPreparedMaterialFragment,
+    destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead?,
 ): String = listOf(
     """
 struct PreparedVerticesDrawUniforms {
@@ -275,6 +303,18 @@ struct PreparedVerticesDrawUniforms {
         append("}")
     },
     fragment.declarationsWgsl + "\n\n" + fragment.evaluationFunctionWgsl,
+    destinationBlend?.let { blend ->
+        """
+@group(2) @binding(0) var preparedVerticesDestination: texture_2d<f32>;
+@group(2) @binding(1) var preparedVerticesDestinationSampler: sampler;
+
+${requireNotNull(GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(
+    blend.mode.gpuLabel,
+    blend.formulaId,
+    PREPARED_VERTICES_BLEND_FUNCTION,
+))}
+        """.trimIndent()
+    }.orEmpty(),
     buildString {
         append("@fragment\n")
         append(
@@ -297,9 +337,21 @@ struct PreparedVerticesDrawUniforms {
                     "        input.primitiveColor.a,\n" +
                     "    );\n",
             )
-            append("    return materialPremul * decodedPrimitive;\n")
+            append("    let sourcePremul = materialPremul * decodedPrimitive;\n")
         } else {
-            append("    return materialPremul;\n")
+            append("    let sourcePremul = materialPremul;\n")
+        }
+        if (destinationBlend == null) {
+            append("    return sourcePremul;\n")
+        } else {
+            append(
+                "    let destinationSize = vec2<f32>(textureDimensions(preparedVerticesDestination));\n" +
+                    "    let destination = textureSampleLevel(\n" +
+                    "        preparedVerticesDestination, preparedVerticesDestinationSampler,\n" +
+                    "        (input.position.xy - preparedVerticesDraw._padding) / destinationSize, 0.0,\n" +
+                    "    );\n" +
+                    "    return $PREPARED_VERTICES_BLEND_FUNCTION(sourcePremul, destination);\n",
+            )
         }
         append("}")
     },
@@ -307,6 +359,7 @@ struct PreparedVerticesDrawUniforms {
 
 private fun preparedVerticesBindingMismatch(
     fragment: GPUPreparedMaterialFragment,
+    hasDestinationBlend: Boolean,
     bindings: List<WgslBindingReflection>,
 ): String? {
     val expected = buildList {
@@ -347,6 +400,28 @@ private fun preparedVerticesBindingMismatch(
                 PreparedBindingFacts(
                     group = sampledBinding.samplerGroup,
                     binding = sampledBinding.samplerBinding,
+                    resourceKind = "sampler",
+                    minBindingSize = null,
+                    sampleType = null,
+                    viewDimension = null,
+                ),
+            )
+        }
+        if (hasDestinationBlend) {
+            add(
+                PreparedBindingFacts(
+                    group = 2,
+                    binding = 0,
+                    resourceKind = "sampledTexture",
+                    minBindingSize = null,
+                    sampleType = "float",
+                    viewDimension = "2d",
+                ),
+            )
+            add(
+                PreparedBindingFacts(
+                    group = 2,
+                    binding = 1,
                     resourceKind = "sampler",
                     minBindingSize = null,
                     sampleType = null,
@@ -547,6 +622,7 @@ private fun preparedVerticesVertexLayoutHash(layout: GPUVertexLayoutPlan): Strin
 
 private fun preparedVerticesBindingLayoutHash(
     fragment: GPUPreparedMaterialFragment,
+    destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead?,
 ): String =
     CanonicalIdentityEncoder("prepared-vertices-binding-layout-v1")
         .text(
@@ -567,6 +643,13 @@ private fun preparedVerticesBindingLayoutHash(
                 "texture=${sampledBinding.textureGroup}:${sampledBinding.textureBinding};" +
                     "sampler=${sampledBinding.samplerGroup}:${sampledBinding.samplerBinding}"
             },
+        )
+        .text(
+            "destinationBlend",
+            destinationBlend?.let { blend ->
+                "group=2;textureBinding=0;samplerBinding=1;mode=${blend.mode.gpuLabel};" +
+                    "formula=${blend.formulaId}"
+            } ?: "none",
         )
         .digestIdentity()
 
@@ -593,6 +676,7 @@ private fun preparedVerticesPipelineKeyHash(
     reflectedAbiHash: String,
     topology: GPUVertexMode,
     material: GPUPreparedMaterialProgram,
+    destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead?,
 ): String =
     CanonicalIdentityEncoder("prepared-vertices-pipeline-key-v1")
         .text("vertexLayoutHash", vertexLayoutHash)
@@ -603,6 +687,10 @@ private fun preparedVerticesPipelineKeyHash(
         .text("fragmentEntryPoint", FRAGMENT_ENTRY_POINT)
         .text("materialKey", material.materialKey)
         .text("materialAbiHash", material.abiHash)
+        .text(
+            "destinationBlend",
+            destinationBlend?.let { "${it.mode.gpuLabel}:${it.formulaId}" } ?: "none",
+        )
         .digestIdentity()
 
 private fun wgslTypeNameOrNull(type: TypeDecl): String? = when (type) {
@@ -662,6 +750,7 @@ private data class PreparedLayoutMember(
 private const val VERTEX_ENTRY_POINT = "vs_main"
 private const val FRAGMENT_ENTRY_POINT = "fs_main"
 private const val MATERIAL_EVALUATION_FUNCTION = "kanvas_evaluate_material"
+private const val PREPARED_VERTICES_BLEND_FUNCTION = "kanvasPreparedVerticesBlend"
 private const val VERTEX_INPUT_STRUCT_NAME = "PreparedVerticesVertexInput"
 private const val VERTEX_OUTPUT_STRUCT_NAME = "PreparedVerticesVertexOutput"
 private const val DRAW_UNIFORMS_STRUCT_NAME = "PreparedVerticesDrawUniforms"

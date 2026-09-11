@@ -180,12 +180,15 @@ internal fun selectWgpu4kPreparedFramePayloadRoute(
             // formula pipelines sample it (Graphite DrawContext dst-copy recipe).
             GPUWgpu4kPreparedFramePayloadRoute.CorePrimitive
         hasDestinationCopy &&
-            GPUDrawSemanticPayload.ColorGlyph::class in distinct &&
+            (GPUDrawSemanticPayload.ColorGlyph::class in distinct ||
+                GPUDrawSemanticPayload.TextA8::class in distinct ||
+                GPUDrawSemanticPayload.Vertices::class in distinct) &&
             distinct.all { semanticClass ->
                 semanticClass == GPUDrawSemanticPayload.CorePrimitive::class ||
                     semanticClass == GPUDrawSemanticPayload.SampledImage::class ||
                     semanticClass == GPUDrawSemanticPayload.TextA8::class ||
-                    semanticClass == GPUDrawSemanticPayload.ColorGlyph::class
+                    semanticClass == GPUDrawSemanticPayload.ColorGlyph::class ||
+                    semanticClass == GPUDrawSemanticPayload.Vertices::class
             } -> GPUWgpu4kPreparedFramePayloadRoute.PreparedSurfaceMixed
         hasDestinationCopy && distinct.toSet() == setOf(GPUDrawSemanticPayload.MaskBlur::class) ||
         hasDestinationCopy && distinct.toSet() == setOf(
@@ -311,7 +314,18 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
             step.drawPackets.any { packet -> packet.role == GPUDrawPacketRole.W4ePrepared }
         }
         if (hasW4e) {
-            if (w4eRenderSteps.isEmpty() || w4eRenderSteps.any { step ->
+            val pointWitness = w4eRenderSteps.flatMap { it.drawPackets }.mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }
+                .firstOrNull()?.takeIf { it.clipPrefixV4 != null }
+            val nativeFinal = w4eRenderSteps.flatMap { it.drawPackets }.mapNotNull { it.w5bFinalFrameWitnessV3 }
+                .firstOrNull()?.takeIf { it.w4eLane != null }
+            if (nativeFinal != null && !nativeFinal.validates(framePlan)) return GPUPreparedNativeFramePayloadMaterialization.Refused(
+                "invalid.native-frame-payload.w5b-w4e", "W4e final-color materialization requires its complete sealed frame.")
+            val prefixSteps = when {
+                nativeFinal != null -> w4eRenderSteps.filter { step -> step.drawPackets.any(requireNotNull(nativeFinal.w4eLane)::owns) }
+                pointWitness != null && pointWitness.validates(framePlan) -> w4eRenderSteps.take(requireNotNull(pointWitness.clipPrefixV4).renders.size)
+                else -> w4eRenderSteps
+            }
+            if (prefixSteps.isEmpty() || prefixSteps.any { step ->
                     step.drawPackets.size != 1 || step.drawPackets.single().role != GPUDrawPacketRole.W4ePrepared
                 }) {
                 return GPUPreparedNativeFramePayloadMaterialization.Refused(
@@ -382,8 +396,12 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
         val semantics = reusableFramePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             .flatMap { step -> step.drawPackets.mapNotNull { it.semanticPayload } }
         val hasDestinationCopy = reusableFramePlan.steps.any { it is GPUFrameStep.CopyDestinationStep }
+        val clearOnlyWitness = reusableFramePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .mapNotNull { it.w5bInitialClearV3?.clearOnly }.singleOrNull()
         return when (
-            val route = selectWgpu4kPreparedFramePayloadRoute(
+            val route = if (clearOnlyWitness?.validates(reusableFramePlan) == true) {
+                GPUWgpu4kPreparedFramePayloadRoute.CorePrimitive
+            } else selectWgpu4kPreparedFramePayloadRoute(
                 semantics.map { it::class },
                 hasDestinationCopy,
             )

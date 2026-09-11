@@ -55,6 +55,90 @@ public class W4eClipPlanCompiler(
 ) : GpuPlanCompiler {
     public constructor() : this(ClipPreparationPolicyF64())
 
+    /**
+     * Producer-only W4e seam for an already admitted non-Path color consumer. All clip math,
+     * mask selection, producer samples and storage remain owned by this compiler.
+     */
+    public fun sealClipOnly(
+        clip: ClipStackNode,
+        extent: SizeI32,
+        capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+    ): W4eClipOnlyPlan {
+        require(extent.width in 1..capabilities.maxTextureDimension2D && extent.height in 1..capabilities.maxTextureDimension2D) {
+            "unsupported.w4e.clip-only-extent"
+        }
+        val operations = when (clip) {
+            is ClipStackNode.Operations -> clip
+            is ClipStackNode.DeviceRect -> ClipStackNode.Operations.of(listOf(ClipEntry(
+                GeometryNode.Rect.of(clip.copyBounds()), ClipOperation.INTERSECT, clip.antiAlias)))
+            else -> error("unsupported.w4e.clip-only-empty")
+        }
+        val domain = RectI32(0, 0, extent.width, extent.height)
+        val prepared = prepare(operations, domain, ClipWorkUsageI64(), forceMask = true)
+        require(prepared is PreparedResult.Ready) { "unsupported.w4e.clip-only-preparation" }
+        val stack = prepared.stack
+        require(stack.realization == Realization.Mask) { "unsupported.w4e.clip-only-mask" }
+        require(capabilityRefusal(capabilities, listOf(stack)) == null) { "unsupported.w4e.clip-only-capability" }
+        val prefixCountI32 = Math.addExact(1, Math.multiplyExact(stack.emittedEntries.size, 2))
+        // The producer token exports one post-prefix read. The owning color graph seals
+        // the final mask lifetime against its actual consumers, before any allocation.
+        val lastConsumerPassIndexExclusiveI32 = Math.addExact(prefixCountI32, 1)
+        val aa = stack.emittedEntries.any { it.antiAlias && it.geometryF32 !is ClipGeometryF32.Rect }
+        val hardPath = stack.emittedEntries.any { !it.antiAlias && it.geometryF32 is ClipGeometryF32.Path }
+        val oneBytesI64 = ClipPlanBudget.checkedMaskTextureBytesI64(extent.width, extent.height, 1)
+        val fourBytesI64 = ClipPlanBudget.checkedMaskTextureBytesI64(extent.width, extent.height, 4)
+        val resources = mutableListOf<PlanResource>()
+        val ids = maskResources(resources, MaskResourceLayout(0, 0, oneBytesI64, fourBytesI64,
+            lastConsumerPassIndexExclusiveI32, lastConsumerPassIndexExclusiveI32, prefixCountI32,
+            prefixCountI32.takeIf { aa }, prefixCountI32.takeIf { aa }, prefixCountI32.takeIf { hardPath }, aa, hardPath), extent)
+        val group = PlanAtomicGroupId("w4e.clip-only:0")
+        var accumulator = ids.firstAccumulator
+        val passes = mutableListOf<PlanPass>(PlanPass.ClipMaskInitialize(0, accumulator, domain, 1f, group))
+        stack.emittedEntries.forEachIndexed { indexI32, entry ->
+            val useAa = entry.antiAlias && entry.geometryF32 !is ClipGeometryF32.Rect
+            val target = if (useAa) requireNotNull(ids.multisampleScratch) else ids.scratch
+            val resolve = if (useAa) ids.scratch else null
+            val depth = when {
+                useAa -> ids.aaDepth
+                entry.geometryF32 is ClipGeometryF32.Path -> ids.hardDepth
+                else -> null
+            }
+            passes += PlanPass.ClipMaskProducer(indexI32, target, resolve, depth, if (useAa) 4 else 1,
+                entry.geometryF32, group, inverseCoverage = entry.inverseFill, antiAlias = entry.antiAlias)
+            val output = if (accumulator == ids.firstAccumulator) ids.secondAccumulator else ids.firstAccumulator
+            passes += PlanPass.ClipMaskFold(indexI32, accumulator, resolve ?: target, output,
+                entry.operation.toPlanOperation(), domain, group)
+            accumulator = output
+        }
+        resources.forEach { resource -> require(capabilities.supportsTexture(requireNotNull(resource.format),
+            resource.sampleCountI32, resource.usages())) { "unsupported.w4e.clip-only-capability" } }
+        fun dataResource(role: PlanResourceRole, usage: PlanResourceUsage, bytesI64: Long) = PlanResource.of(
+            role, 1, PlanResourceKind.Buffer, null, null, bytesI64,
+            setOf(PlanResourceUsage.CopyDestination, usage), PlanResourceLifetime.FrameLocal, 0, prefixCountI32)
+        val data = PlanDrawDataResources(planResourceId(PlanResourceRole.VertexData, 1),
+            planResourceId(PlanResourceRole.IndexData, 1), planResourceId(PlanResourceRole.UniformData, 1))
+        val declarations = listOf(dataResource(PlanResourceRole.VertexData, PlanResourceUsage.Vertex, 32L),
+            dataResource(PlanResourceRole.IndexData, PlanResourceUsage.Index, 24L),
+            dataResource(PlanResourceRole.UniformData, PlanResourceUsage.Uniform, 256L))
+        val payload = requireNotNull(W4eNativePayloadPlan.fromClipPrefix(passes, resources + declarations,
+            extent, capabilities, data)) { "resource.w4e.clip-only-native-payload" }
+        require(capabilities.maxBindGroupsI32?.let { it >= 1 } == true &&
+            capabilities.maxBindingsPerBindGroupI32?.let { it >= 2 } == true &&
+            capabilities.maxSampledTexturesPerShaderStageI32?.let { it >= 2 } == true &&
+            capabilities.maxUniformBuffersPerShaderStageI32?.let { it >= 1 } == true &&
+            payload.uniformSlices.all { it.byteSize <= (capabilities.maxUniformBufferBindingSizeBytesI64 ?: 0L) }) {
+            "unsupported.w4e.clip-only-binding-capability"
+        }
+        resources += listOf(dataResource(PlanResourceRole.VertexData, PlanResourceUsage.Vertex, payload.vertexCapacityBytes),
+            dataResource(PlanResourceRole.IndexData, PlanResourceUsage.Index, payload.indexCapacityBytes),
+            dataResource(PlanResourceRole.UniformData, PlanResourceUsage.Uniform, payload.uniformCapacityBytes))
+        require(resources.fold(0L) { totalI64, resource -> Math.addExact(totalI64, resource.byteSize) } <= budget.maxFrameLocalBytes) {
+            "resource.w4e.clip-only-budget"
+        }
+        return W4eClipOnlyPlan(operations, extent, capabilities, budget, passes, resources, accumulator, payload)
+    }
+
     private val w4dHardSeam = W4dGeneralPathPlanCompiler(
         strokePolicyF64 = org.graphiks.math.geometry.PathStrokePolicyF64(),
         acceptsNarrowTransforms = true,
@@ -69,6 +153,10 @@ public class W4eClipPlanCompiler(
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) return invalid("Scene and target differ")
         if (SceneSemanticValidator.validate(scene) is SceneSemanticValidationResult.Invalid) return invalid("Scene validation failed")
         if (scene.colorSpace != ColorSpace.SRGB) return gap("W4e supports only sRGB")
+        w4dHardSeam.finiteSceneError(scene)?.let { return invalid(it) }
+        if (scene.any { it !is SceneCommand.Draw && it !is SceneCommand.SetTransform &&
+            it !is SceneCommand.SetClip && it !is SceneCommand.Annotation })
+            return gap("W4e scene commands are outside the construction seam")
         val drawCommands = scene.filterIsInstance<SceneCommand.Draw>()
         val operationDraws = drawCommands
             .filter { it.node.clip is ClipStackNode.Operations }
@@ -76,13 +164,31 @@ public class W4eClipPlanCompiler(
         if (operationDraws.isEmpty() && inverseDraws.isEmpty()) {
             return gap("W4e requires an explicitly captured complex clip or inverse path draw")
         }
-        operationDraws.forEach { command ->
+        val finalBlendsByCommandI32 = scene.withIndex().mapNotNull { (indexI32, command) ->
+            val node = (command as? SceneCommand.Draw)?.node ?: return@mapNotNull null
+            val blend = FinalBlendPlanner.plan(node.blend, CoveragePlan.FullOrScissor, SamplePlan.SingleSample,
+                PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1(),
+                BlendCoverageApplicationV1.SourceMultiplication,
+                if (node.clip is ClipStackNode.Operations || node.hasInversePathFillRule())
+                    BlendCoverageEncodingV1.ScalarCoverageInShader else BlendCoverageEncodingV1.FullOrScissor)
+                ?: return@mapNotNull null
+            indexI32 to if (blend is BlendPlan.FixedFunctionV1 && blend.mode == org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER)
+                BlendPlan.SrcOver else blend
+        }.toMap()
+        val noOpCommandsI32 = finalBlendsByCommandI32.filterValues { it == BlendPlan.NoOpV1 }.keys
+        val activeDrawCommands = scene.withIndex().filter { it.value is SceneCommand.Draw && it.index !in noOpCommandsI32 }
+            .map { it.value as SceneCommand.Draw }
+        if (finalBlendsByCommandI32.values.any { it != BlendPlan.SrcOver } &&
+            drawCommands.any { it.node.geometry !is GeometryNode.Path })
+            return gap("W5b W4e color ownership retains actual Path geometry")
+        if (activeDrawCommands.isEmpty()) return GpuPlanSelection.Candidate(NoOpCandidate(this, scene.canonicalId, target))
+        activeDrawCommands.filter { it.node.clip is ClipStackNode.Operations }.forEach { command ->
             val operations = command.node.clip as ClipStackNode.Operations
             if (operations.entryCount > maxClipEntriesPerStackI32()) {
                 return limit("W4e accepts at most ${maxClipEntriesPerStackI32()} clip entries per stack")
             }
         }
-        val totalVisualDrawCount = scene.count { it is SceneCommand.Draw }
+        val totalVisualDrawCount = activeDrawCommands.size
         if (totalVisualDrawCount > MAX_DRAWS) return limit("W4e accepts at most 512 visual path draws")
 
         val domain = RectI32(0, 0, scene.extent.width, scene.extent.height)
@@ -92,11 +198,16 @@ public class W4eClipPlanCompiler(
         val inverseDomainSourcesByCommand = mutableMapOf<Int, PathDrawGeometry.InverseDomainSource>()
         val actuallyEmptyInverseCommands = mutableSetOf<Int>()
         var frameUsage = ClipWorkUsageI64()
-        var ownsW4eFeature = false
+        var ownsW4eFeature = noOpCommandsI32.isNotEmpty()
 
         scene.withIndex().forEach { (index, command) ->
             when (command) {
                 is SceneCommand.Draw -> {
+                    if (index in noOpCommandsI32) {
+                        normalized += SceneCommand.Annotation.of(org.graphiks.math.geometry.RectF32(0f, 0f, 0f, 0f),
+                            "w5b.w4e.no-op", index.toString())
+                        return@forEach
+                    }
                     val operations = command.node.clip as? ClipStackNode.Operations
                     // A W4d DeviceRect remains the construction seam's scissor authority.  An
                     // inverse domain is bounded by that same device-space rectangle before the
@@ -139,7 +250,9 @@ public class W4eClipPlanCompiler(
                             }
                         }
                     }
-                    normalized += SceneCommand.Draw(command.node.normalizedForW4dConstructionSeam(domain, inverse))
+                    val sealed = finalBlendsByCommandI32[index]
+                    val construction = command.node.normalizedForW4dConstructionSeam(domain, inverse)
+                    normalized += SceneCommand.Draw(if (sealed == null) construction else construction.copy(blend = org.graphiks.kanvas.render.ir.BlendNode.SrcOver))
                     // The candidate keeps the prepared stack map keyed by this exact canonical stack identity.
                     prepared?.consumerIndexes?.add(index)
                 }
@@ -163,19 +276,54 @@ public class W4eClipPlanCompiler(
         }
         return GpuPlanSelection.Candidate(Candidate(
             this, scene.canonicalId, target, constructionSeam, base, preparedByKey.values.toList(), inverseByCommand,
-            inverseDomainSourcesByCommand, actuallyEmptyInverseCommands,
+            inverseDomainSourcesByCommand, actuallyEmptyInverseCommands, finalBlendsByCommandI32,
         ))
     }
 
     override fun plan(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): RenderPlanResult<RenderGraph> {
+        if (candidate is NoOpCandidate) {
+            if (candidate.owner !== this) return invalidCandidate()
+            return try {
+                RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bGeometryLanePlanV3.clearOnly(
+                    PlanId("w5b.w4e.no-op.${candidate.sceneCanonicalId.value}"), W5B_HARD_CAPABILITY_ID,
+                    SizeI32(candidate.target.extent.width, candidate.target.extent.height), capabilities, budget, null)))
+            } catch (_: ArithmeticException) {
+                resource(W4ePlanDiagnostics.SizeOverflow, "W4e clear-only resources overflowed")
+            } catch (_: IllegalArgumentException) {
+                resource(W4ePlanDiagnostics.BudgetFrameLocalExceeded, "W4e clear-only frame exceeds its resource contract")
+            }
+        }
         val selected = candidate as? Candidate ?: return invalidCandidate()
         if (selected.owner !== this || !selected.matches()) return invalidCandidate()
         val requiresAa = selected.capabilityId == W5A_AA_CAPABILITY_ID
+        val survivingFinalBlendsByCommandI32 = selected.finalBlendsByCommandI32.filterValues { it != BlendPlan.NoOpV1 }
+        val successor = survivingFinalBlendsByCommandI32.values.any { it != BlendPlan.SrcOver }
+        val elidedNoOps = selected.finalBlendsByCommandI32.values.any { it == BlendPlan.NoOpV1 }
+        fun constructionGap(diagnostics: List<RenderDiagnostic>): RenderPlanResult<Nothing> =
+            if (successor || elidedNoOps) RenderPlanResult.GapOnPromotedScope(diagnostics)
+            else RenderPlanResult.GapNotMigrated(diagnostics)
+        // The original W4e feature may belong only to an elided NoOp. Its surviving plain
+        // Paths retain the construction seam's General authority, not an empty W4e inventory.
+        if (selected.stacks.isEmpty() && selected.inverseByCommand.isEmpty() && elidedNoOps) {
+            return when (val result = selected.constructionSeam.plan(selected.base, capabilities, budget)) {
+                is RenderPlanResult.Ready -> when {
+                    !successor && requiresAa -> result
+                    requiresAa -> promoted("W5b final blending requires the admitted single-sample path topology")
+                    else -> try {
+                        RenderPlanResult.Ready(issueW5bGeneralPathGraph(result.plan, survivingFinalBlendsByCommandI32))
+                    } catch (_: IllegalArgumentException) {
+                        resource(W4ePlanDiagnostics.PlanIdentityInvalid, "W4e plain survivor graph is invalid")
+                    }
+                }
+                is RenderPlanResult.GapNotMigrated -> constructionGap(result.diagnostics)
+                else -> result
+            }
+        }
         val maskStacks = selected.stacks.filter { it.realization == Realization.Mask }
         capabilityRefusal(capabilities, maskStacks)?.let { return it }
         val basePreview = when (val result = selected.constructionSeam.preflightFrame(selected.base, capabilities, budget)) {
             is RenderPlanResult.Ready -> result.plan
-            is RenderPlanResult.GapNotMigrated -> return RenderPlanResult.GapNotMigrated(listOf(
+            is RenderPlanResult.GapNotMigrated -> return constructionGap(listOf(
                 diag(W4ePlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W4d.2 construction seam declined W4e draw facts"),
             ))
             is RenderPlanResult.InvalidScene -> return invalidCandidate()
@@ -196,7 +344,7 @@ public class W4eClipPlanCompiler(
         // to issue its graph, under the caller's real budget rather than an unbounded surrogate.
         val base = when (val result = selected.constructionSeam.plan(selected.base, capabilities, budget)) {
             is RenderPlanResult.Ready -> result.plan
-            is RenderPlanResult.GapNotMigrated -> return RenderPlanResult.GapNotMigrated(listOf(
+            is RenderPlanResult.GapNotMigrated -> return constructionGap(listOf(
                 diag(W4ePlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W4d.2 construction seam declined W4e draw facts"),
             ))
             is RenderPlanResult.InvalidScene -> return invalidCandidate()
@@ -205,7 +353,11 @@ public class W4eClipPlanCompiler(
         }
         return try {
             val graph = insertClips(base, selected, capabilities, budget, requiresAa, framePreview)
-            RenderPlanResult.Ready(graph)
+            if (successor && requiresAa) return promoted("W5b final blending requires the admitted single-sample W4e topology")
+            // Preserve the admitted hard NoOp envelope and its logical target identity.
+            val hardNoOpEnvelope = elidedNoOps && !requiresAa
+            RenderPlanResult.Ready(if (successor || hardNoOpEnvelope)
+                issueW5bW4ePathGraph(graph, survivingFinalBlendsByCommandI32) else graph)
         } catch (_: W4eNativePayloadLimit) {
             resource(
                 W4ePlanDiagnostics.BudgetFrameLocalExceeded,
@@ -1084,6 +1236,12 @@ public class W4eClipPlanCompiler(
         val maskLayouts: Map<Int, MaskResourceLayout>,
     )
     private data class MaskResourceIds(val firstAccumulator: PlanResourceId, val secondAccumulator: PlanResourceId, val scratch: PlanResourceId, val multisampleScratch: PlanResourceId?, val aaDepth: PlanResourceId?, val hardDepth: PlanResourceId?)
+    private class NoOpCandidate(
+        val owner: W4eClipPlanCompiler,
+        override val sceneCanonicalId: org.graphiks.kanvas.render.ir.CanonicalId,
+        override val target: RenderTargetDescriptor,
+    ) : GpuPlanCandidate { override val capabilityId: String = W5B_HARD_CAPABILITY_ID }
+
     private class Candidate(
         val owner: W4eClipPlanCompiler,
         override val sceneCanonicalId: org.graphiks.kanvas.render.ir.CanonicalId,
@@ -1094,7 +1252,9 @@ public class W4eClipPlanCompiler(
         inverseByCommand: Map<Int, InversePathGeometryF32>,
         inverseDomainSourcesByCommand: Map<Int, PathDrawGeometry.InverseDomainSource>,
         actuallyEmptyInverseCommands: Set<Int>,
+        finalBlendsByCommandI32: Map<Int, BlendPlan>,
     ) : GpuPlanCandidate {
+        val finalBlendsByCommandI32 = Collections.unmodifiableMap(finalBlendsByCommandI32.toMap())
         override val capabilityId: String = if (base.capabilityId == W4dGeneralPathPlanCompiler.W5A_AA_CAPABILITY_ID) W5A_AA_CAPABILITY_ID else W5A_HARD_CAPABILITY_ID
         val stacks: List<PreparedStack> = Collections.unmodifiableList(stacks)
         val inverseByCommand: Map<Int, InversePathGeometryF32> = Collections.unmodifiableMap(inverseByCommand.toMap())
@@ -1110,6 +1270,7 @@ public class W4eClipPlanCompiler(
         if (this) planResourceId(role, ordinal) else null
 
     public companion object {
+        public const val W5B_HARD_CAPABILITY_ID: String = "w5b-w4e-path-hard-final-blend-v3"
         public const val HARD_CAPABILITY_ID: String = "solid-path-complex-clip-hard-1x-src-over-srgb-v1"
         public const val AA_CAPABILITY_ID: String = "solid-path-complex-clip-mixed-aa4-src-over-srgb-v1"
         /** W5a material-bearing successor to the historical [HARD_CAPABILITY_ID] contract. */
@@ -1125,4 +1286,23 @@ public class W4eClipPlanCompiler(
         private const val MAX_DRAWS: Int = 512
         private const val MAX_CLIP_ENTRIES: Int = 512
     }
+}
+
+/** Immutable, material-free W4e producer authority consumed by the W5b Point graph. */
+public class W4eClipOnlyPlan internal constructor(
+    public val operations: ClipStackNode.Operations,
+    extent: SizeI32,
+    public val capabilities: PlanCapabilitySnapshot,
+    public val budget: PlanBudget,
+    passes: List<PlanPass>,
+    resources: List<PlanResource>,
+    public val maskResource: PlanResourceId,
+    public val nativePayload: W4eNativePayloadPlan,
+) {
+    private val extentSnapshot = extent.copy()
+    private val passSnapshot = Collections.unmodifiableList(passes.toList())
+    private val resourceSnapshot = Collections.unmodifiableList(resources.toList())
+    public fun copyExtentI32(): SizeI32 = extentSnapshot.copy()
+    public fun passes(): List<PlanPass> = passSnapshot
+    public fun resources(): List<PlanResource> = resourceSnapshot
 }

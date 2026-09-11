@@ -113,6 +113,7 @@ public class GPUPlanW4dGeneralPreparedAuthority private constructor(
         uniformAlignmentBytes: Long,
         maxBufferSize: Long,
         maxDynamicUniformBuffersPerPipelineLayout: Long,
+        w5bResourceBindings: W5bGeneralResourceBindingsV3? = null,
     ): GPUW4dGeneralPreparedFrameMaterializationAuthority? =
         nativeMaterialization.bind(
             planId = planId,
@@ -125,6 +126,7 @@ public class GPUPlanW4dGeneralPreparedAuthority private constructor(
             uniformAlignmentBytes = uniformAlignmentBytes,
             maxBufferSize = maxBufferSize,
             maxDynamicUniformBuffersPerPipelineLayout = maxDynamicUniformBuffersPerPipelineLayout,
+            w5bResourceBindings = w5bResourceBindings,
         )
 
     /**
@@ -413,6 +415,7 @@ internal class W4dGeneralNativeMaterializationSnapshot private constructor(
         uniformAlignmentBytes: Long,
         maxBufferSize: Long,
         maxDynamicUniformBuffersPerPipelineLayout: Long,
+        w5bResourceBindings: W5bGeneralResourceBindingsV3? = null,
     ): GPUW4dGeneralPreparedFrameMaterializationAuthority? {
         if (sessionIdentity.isBlank() || capabilitySealHash.isBlank() || planId.isBlank() ||
             resourceFacts.map(W4dGeneralNativeResourceFact::resourceId).distinct().size != resourceFacts.size
@@ -425,6 +428,7 @@ internal class W4dGeneralNativeMaterializationSnapshot private constructor(
             maxBufferSize = maxBufferSize,
             maxDynamicUniformBuffersPerPipelineLayout = maxDynamicUniformBuffersPerPipelineLayout,
         ) ?: return null
+        require(w5bResourceBindings == null || w5bResourceBindings.values.keys == resourceFacts.map { it.resourceId }.toSet())
         val bindings = resourceFacts.map { fact ->
             val suffix = when (fact.role) {
                 PlanResourceRole.LogicalTarget -> "logical-target"
@@ -443,7 +447,7 @@ internal class W4dGeneralNativeMaterializationSnapshot private constructor(
             }
             W4dGeneralNativeResourceBinding(
                 fact = fact,
-                resource = resource,
+                resource = w5bResourceBindings?.values?.getValue(fact.resourceId) ?: resource,
                 attachmentIdentity = if (
                     fact.kind == PlanResourceKind.Texture2D &&
                     fact.role != PlanResourceRole.LogicalTarget

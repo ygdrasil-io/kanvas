@@ -86,12 +86,35 @@ public class W4eNativePayloadPlan private constructor(
             targetExtent: SizeI32,
             capabilities: PlanCapabilitySnapshot,
             materialPlanTable: MaterialPlanTable?,
+        ): W4eNativePayloadPlan? = build(passes, resources, targetExtent, capabilities, materialPlanTable, null)
+
+        /** W4e producer-only payload. No color/path draw or material may enter this authority. */
+        internal fun fromClipPrefix(
+            passes: List<PlanPass>,
+            resources: List<PlanResource>,
+            targetExtent: SizeI32,
+            capabilities: PlanCapabilitySnapshot,
+            data: PlanDrawDataResources,
+        ): W4eNativePayloadPlan? {
+            require(passes.isNotEmpty() && passes.all { it is PlanPass.ClipMaskInitialize ||
+                it is PlanPass.ClipMaskProducer || it is PlanPass.ClipMaskFold })
+            return build(passes, resources, targetExtent, capabilities, null, data)
+        }
+
+        private fun build(
+            passes: List<PlanPass>,
+            resources: List<PlanResource>,
+            targetExtent: SizeI32,
+            capabilities: PlanCapabilitySnapshot,
+            materialPlanTable: MaterialPlanTable?,
+            clipOnlyData: PlanDrawDataResources?,
         ): W4eNativePayloadPlan? = try {
             if (targetExtent.isEmpty()) return null
             val pathPasses = passes.filterIsInstance<PlanPass.PathRenderPass>()
             val dataResources = pathPasses.map(PlanPass.PathRenderPass::drawDataResources).distinct()
-            if (pathPasses.isEmpty() || dataResources.size != 1) return null
-            val data = dataResources.single()
+            if (clipOnlyData == null && (pathPasses.isEmpty() || dataResources.size != 1)) return null
+            if (clipOnlyData != null && pathPasses.isNotEmpty()) return null
+            val data = clipOnlyData ?: dataResources.single()
             val resourcesById = resources.associateBy(PlanResource::id)
             val vertex = resourcesById[data.vertex] ?: return null
             val index = resourcesById[data.index] ?: return null

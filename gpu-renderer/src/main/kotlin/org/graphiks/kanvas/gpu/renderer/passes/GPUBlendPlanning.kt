@@ -82,6 +82,7 @@ sealed interface GPUBlendPlan {
         override val mode: GPUBlendMode,
         val formulaId: String,
         override val sourceCoverageEncoding: GPUSourceCoverageEncoding,
+        val sealedW5b: org.graphiks.kanvas.gpu.plan.BlendPlan.DestinationReadV1? = null,
     ) : GPUBlendPlan {
         override val destinationReadRequirement =
             GPUBlendDestinationReadRequirement.DestinationTextureRequired
@@ -114,6 +115,17 @@ sealed interface GPUBlendPlan {
     }
 }
 
+/** The W5b W3 lane admits only plan-first fixed-function states and destination NoOp. */
+internal fun GPUBlendPlan.isW5bW3Blend(): Boolean = when (this) {
+    is GPUBlendPlan.FixedFunctionBlend -> sourceCoverageEncoding == GPUSourceCoverageEncoding.None
+    is GPUBlendPlan.NoOp -> mode == GPUBlendMode.DST
+    is GPUBlendPlan.ShaderBlendNoDstRead,
+    is GPUBlendPlan.ShaderBlendWithDstRead,
+    is GPUBlendPlan.LayerCompositeBlend,
+    is GPUBlendPlan.UnsupportedBlend,
+    -> false
+}
+
 /** Exact handle-free identity retained by semantic payloads without importing pass contracts. */
 fun GPUBlendPlan.canonicalIdentity(): String = when (this) {
     is GPUBlendPlan.FixedFunctionBlend ->
@@ -144,7 +156,16 @@ data class GPUBlendSpecializationRequest(
     val activeAttachmentSampled: Boolean = false,
 )
 
-/** Pure, exhaustive 29-mode blend-and-coverage specializer. */
+/**
+ * Legacy-only blend-and-coverage compatibility specializer.
+ *
+ * Pre-admission geometry recording and unpromoted material/image/text/layer routes still use
+ * this adapter. For final target composition after W5b ownership, callers must lower the
+ * compiler's sealed BlendPlan through W5bBlendPlanLowerer; source-child/primitive blends remain
+ * separate. This table is never a recovery path for a refused W5b plan. Deferred W5
+ * families leave this adapter at their promotion deadline (all H cells by W5h); layers belong
+ * to W6 and final legacy removal to W8.
+ */
 class GPUBlendPlanner {
     fun plan(request: GPUBlendSpecializationRequest): GPUBlendPlan {
         val child = planChild(request)
@@ -255,7 +276,7 @@ class GPUBlendPlanner {
 }
 
 /**
- * Projects a full-coverage blend plan onto the core-primitive analytic-shape lane. The
+ * Legacy pre-admission projection onto the core-primitive analytic-shape lane. The
  * analytic-shape shader emits `premul_rgba * coverage`, which reproduces the fixed-function
  * Porter-Duff factors for SRC_OVER/DST_OVER/DST_OUT/SRC_ATOP/XOR/SCREEN but cannot express the
  * geometric AA interpolation `dst + coverage * (blended - dst)` for CLEAR/SRC/SRC_IN/DST_IN/

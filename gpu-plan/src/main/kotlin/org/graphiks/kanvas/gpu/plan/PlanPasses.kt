@@ -20,7 +20,6 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 public enum class CoveragePlan { FullOrScissor, AnalyticScalarAA, StencilAA4, BinaryMaskCover4 }
 public enum class SamplePlan { SingleSample, Multisample4 }
-public enum class BlendPlan { SrcOver }
 public enum class AttachmentLoadPlan { ClearTransparent, Load }
 public enum class AttachmentStorePlan { Store }
 public enum class PlanDepthStencilLoadStore { ClearZeroStore, LoadStoreTestReset }
@@ -154,11 +153,10 @@ public class GeneralPathDraw private constructor(
     scissorI32: RectI32,
     override public val coverage: CoveragePlan,
     override public val sample: SamplePlan,
-) : PathRenderDraw {
+    override public val blend: BlendPlan = BlendPlan.SrcOver,
+) : PathRenderDraw, PathDraw {
     private val geometrySnapshot: PathDrawGeometry = geometry
     private val scissorSnapshotI32 = scissorI32.copy()
-
-    override public val blend: BlendPlan = BlendPlan.SrcOver
 
     override fun copyPathGeometry(): PathDrawGeometry = geometrySnapshot
 
@@ -199,6 +197,7 @@ public class GeneralPathDraw private constructor(
             scissorI32: RectI32,
             coverage: CoveragePlan,
             sample: SamplePlan,
+            blend: BlendPlan = BlendPlan.SrcOver,
         ): GeneralPathDraw {
             require(commandIndexI32 >= 0) { "Command index must not be negative" }
             require(!scissorI32.isEmpty) { "General path scissor must be non-empty" }
@@ -208,7 +207,7 @@ public class GeneralPathDraw private constructor(
             ) { "General path draws require an explicit hard or four-sample AA contract" }
             requirePathRenderGeometryForStrategy(geometry, strategy)
             return GeneralPathDraw(
-                commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material), geometry, strategy, scissorI32, coverage, sample,
+                commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material), geometry, strategy, scissorI32, coverage, sample, blend,
             )
         }
 
@@ -239,6 +238,12 @@ public class GeneralPathDraw private constructor(
         )
     }
 }
+
+/** Retains the same immutable General geometry without projecting it into a narrow path lane. */
+public fun GeneralPathDraw.withBlend(blend: BlendPlan): GeneralPathDraw = GeneralPathDraw.ofMaterial(
+    commandIndex, (materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref, copyPathGeometry(), strategy,
+    copyScissorI32(), coverage, sample, blend,
+)
 
 /** A W4d.2 direct path draw whose final coverage is constrained by a W4e clip plan. */
 public class ClippedGeneralPathDraw private constructor(
@@ -392,10 +397,10 @@ public class AnalyticRectDraw private constructor(
     deviceBounds: RectF32,
     rasterBounds: RectI32,
     scissor: RectI32,
+    override public val blend: BlendPlan = BlendPlan.LegacySrcOverV1,
 ) : PlanDraw {
     override public val coverage: CoveragePlan = CoveragePlan.AnalyticScalarAA
     override public val sample: SamplePlan = SamplePlan.SingleSample
-    override public val blend: BlendPlan = BlendPlan.SrcOver
     private val storedDeviceBounds = deviceBounds.copy()
     private val storedRasterBounds = rasterBounds.copy()
     private val storedScissor = scissor.copy()
@@ -436,6 +441,7 @@ public class AnalyticRectDraw private constructor(
             deviceBounds: RectF32,
             rasterBounds: RectI32,
             scissor: RectI32,
+            blend: BlendPlan = BlendPlan.LegacySrcOverV1,
         ): AnalyticRectDraw {
             require(commandIndexI32 >= 0) { "Command index must not be negative" }
             require(!deviceBounds.isEmpty && !rasterBounds.isEmpty && !scissor.isEmpty) {
@@ -447,6 +453,7 @@ public class AnalyticRectDraw private constructor(
                 deviceBounds,
                 rasterBounds,
                 scissor,
+                blend,
             )
         }
     }
@@ -459,10 +466,10 @@ public class AnalyticRRectDraw private constructor(
     deviceShape: RRectF32,
     rasterBounds: RectI32,
     scissor: RectI32,
+    override public val blend: BlendPlan = BlendPlan.LegacySrcOverV1,
 ) : PlanDraw {
     override public val coverage: CoveragePlan = CoveragePlan.AnalyticScalarAA
     override public val sample: SamplePlan = SamplePlan.SingleSample
-    override public val blend: BlendPlan = BlendPlan.SrcOver
     private val storedDeviceShape = RRectF32.of(
         deviceShape.rect.copy(),
         deviceShape.topLeft,
@@ -521,6 +528,7 @@ public class AnalyticRRectDraw private constructor(
             deviceShape: RRectF32,
             rasterBounds: RectI32,
             scissor: RectI32,
+            blend: BlendPlan = BlendPlan.LegacySrcOverV1,
         ): AnalyticRRectDraw {
             require(commandIndexI32 >= 0) { "Command index must not be negative" }
             require(origin == DrawOrigin.RECT || origin == DrawOrigin.RRECT) {
@@ -536,6 +544,7 @@ public class AnalyticRRectDraw private constructor(
                 deviceShape,
                 rasterBounds,
                 scissor,
+                blend,
             )
         }
     }
@@ -543,7 +552,7 @@ public class AnalyticRRectDraw private constructor(
 
 /** Reissues only the sealed W5 material reference; analytic RRect geometry remains native. */
 public fun AnalyticRRectDraw.withMaterialRef(material: MaterialPlanRef): AnalyticRRectDraw = AnalyticRRectDraw.ofMaterial(
-    commandIndex, material, origin, copyDeviceShape(), copyRasterBounds(), copyScissor(),
+    commandIndex, material, origin, copyDeviceShape(), copyRasterBounds(), copyScissor(), blend,
 )
 
 /** A sealed W4c path-fill draw whose geometry authority remains owned by `:math`. */
@@ -553,10 +562,10 @@ public class PathFillDraw private constructor(
     geometryF32: PathFillGeometryF32,
     override public val strategy: PathFillStrategy,
     scissorI32: RectI32,
+    override public val blend: BlendPlan = BlendPlan.LegacySrcOverV1,
 ) : PathDraw {
     override public val coverage: CoveragePlan = CoveragePlan.FullOrScissor
     override public val sample: SamplePlan = SamplePlan.SingleSample
-    override public val blend: BlendPlan = BlendPlan.SrcOver
     private val geometrySnapshotF32: PathFillGeometryF32 = geometryF32
     private val scissorSnapshotI32 = scissorI32.copy()
 
@@ -600,8 +609,9 @@ public class PathFillDraw private constructor(
             geometryF32: PathFillGeometryF32,
             strategy: PathFillStrategy,
             scissorI32: RectI32,
+            blend: BlendPlan = BlendPlan.LegacySrcOverV1,
         ): PathFillDraw = ofAuthority(
-            commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material), geometryF32, strategy, scissorI32,
+            commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material), geometryF32, strategy, scissorI32, blend,
         )
 
         private fun ofAuthority(
@@ -610,6 +620,7 @@ public class PathFillDraw private constructor(
             geometryF32: PathFillGeometryF32,
             strategy: PathFillStrategy,
             scissorI32: RectI32,
+            blend: BlendPlan,
         ): PathFillDraw {
             require(commandIndex >= 0) { "Command index must not be negative" }
             require(!scissorI32.isEmpty) { "Path fill scissor must be non-empty" }
@@ -617,14 +628,14 @@ public class PathFillDraw private constructor(
                 PathFillStrategy.DirectTriangle -> require(geometryF32.copyDirectTriangleF32OrNull() != null && geometryF32.copyStencilEdgeFanF32OrNull() == null)
                 PathFillStrategy.StencilCover -> require(geometryF32.copyDirectTriangleF32OrNull() == null && geometryF32.copyStencilEdgeFanF32OrNull() != null)
             }
-            return PathFillDraw(commandIndex, authority, geometryF32, strategy, scissorI32)
+            return PathFillDraw(commandIndex, authority, geometryF32, strategy, scissorI32, blend)
         }
     }
 }
 
 /** Reissues only the sealed W5 material reference; no Path is reconstructed from another shape. */
 public fun PathFillDraw.withMaterialRef(material: MaterialPlanRef): PathFillDraw = PathFillDraw.ofMaterial(
-    commandIndex, material, copyGeometryF32(), strategy, copyScissorI32(),
+    commandIndex, material, copyGeometryF32(), strategy, copyScissorI32(), blend,
 )
 
 /** A sealed W4d stroke draw whose immutable geometry authority remains owned by `:math`. */
@@ -635,10 +646,10 @@ public class PathStrokeDraw private constructor(
     public val mode: PathStrokeDrawMode,
     public val styleF64: PathStrokeStyleF64,
     scissorI32: RectI32,
+    override public val blend: BlendPlan = BlendPlan.SrcOver,
 ) : PathDraw {
     override public val coverage: CoveragePlan = CoveragePlan.FullOrScissor
     override public val sample: SamplePlan = SamplePlan.SingleSample
-    override public val blend: BlendPlan = BlendPlan.SrcOver
     private val geometrySnapshotF32: PathStrokeGeometryF32 = geometryF32
     private val scissorSnapshotI32 = scissorI32.copy()
     override val strategy: PathFillStrategy = pathFillStrategy(geometryF32.copyFillGeometryF32())
@@ -680,16 +691,21 @@ public class PathStrokeDraw private constructor(
             styleF64: PathStrokeStyleF64 = PathStrokeStyleF64(
                 PathStrokeWidthF64.Hairline, PathStrokeCap.Butt, PathStrokeJoin.Miter, 4.0,
             ),
+            blend: BlendPlan = BlendPlan.SrcOver,
         ): PathStrokeDraw {
             require(commandIndexI32 >= 0) { "Command index must not be negative" }
             require(!scissorI32.isEmpty) { "Path stroke scissor must be non-empty" }
             pathFillStrategy(geometryF32.copyFillGeometryF32())
             return PathStrokeDraw(
-                commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material), geometryF32, mode, styleF64, scissorI32,
+                commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material), geometryF32, mode, styleF64, scissorI32, blend,
             )
         }
     }
 }
+
+public fun PathStrokeDraw.withMaterialRef(material: MaterialPlanRef): PathStrokeDraw = PathStrokeDraw.ofMaterial(
+    commandIndex, material, copyGeometryF32(), copyScissorI32(), mode, styleF64, blend,
+)
 
 private fun pathFillStrategy(geometryF32: PathFillGeometryF32): PathFillStrategy = when {
     geometryF32.copyDirectTriangleF32OrNull() != null && geometryF32.copyStencilEdgeFanF32OrNull() == null ->
@@ -736,6 +752,7 @@ public sealed interface PlanPass {
         public val load: AttachmentLoadPlan,
         public val store: AttachmentStorePlan,
         public val drawDataResources: PlanDrawDataResources? = null,
+        public val destinationVersionAfter: DestinationVersionI64? = null,
     ) : PlanPass {
         override val role: PlanPassRole = PlanPassRole.MainRender
         override val id: PlanPassId = checkedPassId(role, ordinal)
@@ -840,6 +857,27 @@ public sealed interface PlanPass {
         override val id: PlanPassId = checkedPassId(role, ordinal)
     }
 
+    /** W5b geometry-only stencil writer. Source and final blend belong exclusively to its cover. */
+    public class StencilGeometryProducerV3 internal constructor(
+        override public val ordinal: Int,
+        public val target: PlanResourceId,
+        public val depthStencil: PlanResourceId,
+        public val commandIndexI32: Int,
+        geometry: PathDrawGeometry,
+        scissorI32: RectI32,
+        public val drawDataResources: PlanDrawDataResources,
+        public val atomicGroup: PlanAtomicGroupId,
+        public val load: AttachmentLoadPlan,
+        public val store: AttachmentStorePlan,
+    ) : PlanPass {
+        override public val role: PlanPassRole = PlanPassRole.StencilProducer
+        override public val id: PlanPassId = checkedPassId(role, ordinal)
+        private val storedGeometry = geometry
+        private val storedScissorI32 = scissorI32.copy()
+        public fun copyGeometry(): PathDrawGeometry = storedGeometry
+        public fun copyScissorI32(): RectI32 = storedScissorI32.copy()
+    }
+
     public class StencilCover(
         override val ordinal: Int,
         public val target: PlanResourceId,
@@ -851,16 +889,26 @@ public sealed interface PlanPass {
         public val store: AttachmentStorePlan,
         public val depthStencilAccess: PlanDepthStencilAccess,
         public val depthStencilLoadStore: PlanDepthStencilLoadStore,
+        public val destinationVersionAfter: DestinationVersionI64? = null,
     ) : PlanPass {
         override val role: PlanPassRole = PlanPassRole.StencilCover
         override val id: PlanPassId = checkedPassId(role, ordinal)
     }
 
-    public data class TextureCopy(
+    public class TextureCopy(
         override val ordinal: Int,
         public val source: PlanResourceId,
         public val destination: PlanResourceId,
+        public val destinationVersion: DestinationVersionI64? = null,
+        sourceBoundsI32: RectI32? = null,
+        public val bytesPerRowI64: Long? = null,
     ) : PlanPass {
+        private val sourceBoundsSnapshotI32 = sourceBoundsI32?.copy()
+        public fun copySourceBoundsI32(): RectI32? = sourceBoundsSnapshotI32?.copy()
+        init {
+            require(destinationVersion == null || sourceBoundsSnapshotI32?.isEmpty == false &&
+                bytesPerRowI64 != null && bytesPerRowI64 >= Math.multiplyExact(sourceBoundsSnapshotI32.width().toLong(), 4L))
+        }
         override val role: PlanPassRole = PlanPassRole.TextureCopy
         override val id: PlanPassId = checkedPassId(role, ordinal)
     }

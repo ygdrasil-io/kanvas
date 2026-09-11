@@ -349,13 +349,15 @@ internal class W4dGeneralPathGraphLowerer {
         } else null
     }
 
-    private fun packet(
+    internal fun packet(
         pass: PlanPass.PathRenderPass,
         paintOrder: Int,
         bounds: GPUPixelBounds,
         targetColorFormat: GPUColorFormat,
         graph: RenderGraph,
         w4ePreparedClipConsumer: GPUW4ePreparedClipConsumerAuthority? = null,
+        finalBlend: org.graphiks.kanvas.gpu.plan.BlendPlan = pass.draw.blend,
+        w5bMaterial: org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload? = null,
     ): BuiltPacket {
         val draw = pass.draw
         val scissor = draw.copyScissorI32()
@@ -435,6 +437,8 @@ internal class W4dGeneralPathGraphLowerer {
             resolveMaterialColor(graph.materialPlanTableOrNull(), draw.materialAuthority)
                 ?: error("Historical path color authority is invalid")
         }
+        val blend = if (producer) canonicalSolidRectSrcOverBlendPlan()
+            else W5bBlendPlanLowerer.lower(finalBlend)
         val semantic = GPUCorePrimitivePayloadGatherer().gatherPlannedW4dSemantic(
             GPUCorePrimitivePayloadInput(
                 commandIdValue = draw.commandIndex,
@@ -442,17 +446,16 @@ internal class W4dGeneralPathGraphLowerer {
                 geometry = geometryInput,
                 premultipliedRgba = listOf(color.red, color.green, color.blue, color.alpha),
                 material = if (!pass.phase.isColorProducing()) null else
-                    W5aMaterialPlanLowerer().material(graph.materialPlanTableOrNull(), draw.materialAuthority, draw.commandIndex),
+                    w5bMaterial ?: W5aMaterialPlanLowerer().material(graph.materialPlanTableOrNull(), draw.materialAuthority, draw.commandIndex),
                 targetBounds = bounds,
                 scissorBounds = scissorBounds,
                 clipCoveragePlan = clip.first,
                 clipExecutionPlanIdentity = clip.second.canonicalIdentity(),
-                blendPlanIdentity = canonicalSolidRectSrcOverBlendPlan().canonicalIdentity(),
+                blendPlanIdentity = blend.canonicalIdentity(),
                 frameProvenance = GPUFrameProvenance.None,
                 coverageMode = coverageMode(pass),
             ),
         )
-        val blend = canonicalSolidRectSrcOverBlendPlan()
         val sampleCount = samplePlan(pass.draw.sample).sampleCount
         val role = when {
             pass.phase.isStencilProducer() -> GPUDrawPacketRole.PathStencilProducer
@@ -577,7 +580,7 @@ internal class W4dGeneralPathGraphLowerer {
     }
 
     /** Copies only the typed resource slots issued by the sealed Task 7 frame authority. */
-    private fun w4dGeneralResourceUses(
+    internal fun w4dGeneralResourceUses(
         pass: PlanPass.PathRenderPass,
         authority: org.graphiks.kanvas.gpu.renderer.passes
             .GPUW4dGeneralPreparedFrameMaterializationAuthority,
@@ -819,7 +822,7 @@ internal class W4dGeneralPathGraphLowerer {
         val readbackBytes: Long,
     )
 
-    private data class BuiltPacket(
+    internal data class BuiltPacket(
         val packet: GPUDrawPacket,
         val structuralPipelineKey: org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey,
     )

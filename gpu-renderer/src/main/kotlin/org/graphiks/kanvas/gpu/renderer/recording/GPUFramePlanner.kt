@@ -69,7 +69,7 @@ private fun GPUDrawPacket.withPlannedPreparedVerticesRenderAuthority(): GPUDrawP
 /** Pure deterministic linearizer between finalized recordings and resource preflight. */
 object GPUFramePlanner {
     fun plan(taskList: GPUTaskList): GPUFramePlan {
-        validate(taskList)?.let { return taskList.atomicallyRefused(it) }
+        validateRecordingEnvelope(taskList)?.let { return taskList.atomicallyRefused(it) }
 
         val orderedTasks = stableTopologicalOrder(taskList)
             ?: return taskList.atomicallyRefused(
@@ -124,7 +124,8 @@ object GPUFramePlanner {
         )
     }
 
-    private fun validate(taskList: GPUTaskList): GPUDiagnostic? {
+    /** Shared recording identity/shape gate, also used before replacement lowering. */
+    internal fun validateRecordingEnvelope(taskList: GPUTaskList): GPUDiagnostic? {
         if (taskList.capabilitySeal.frameId != taskList.frameId ||
             taskList.recordingSeals.any { it.capabilitySealHash != taskList.capabilitySeal.sealHash }
         ) {
@@ -196,13 +197,14 @@ object GPUFramePlanner {
         }
         validateW4dGeneralContinuationBridges(w4dGeneralBridges)?.let { return it }
         renderTasks.forEach { task ->
-            if (task.drawPackets.map(GPUDrawPacket::passId).distinct().size != 1) {
+            val expectedPacketDomainCount = if (task.w5bInitialClearV3 != null) 0 else 1
+            if (task.drawPackets.map(GPUDrawPacket::passId).distinct().size != expectedPacketDomainCount) {
                 return diagnostic(
                     "invalid.frame_plan.render_packet_pass",
                     "Render task ${task.taskId.value} mixes pass identities",
                 )
             }
-            if (task.drawPackets.map(GPUDrawPacket::targetStateHash).distinct().size != 1) {
+            if (task.drawPackets.map(GPUDrawPacket::targetStateHash).distinct().size != expectedPacketDomainCount) {
                 return diagnostic(
                     "invalid.frame_plan.render_packet_target",
                     "Render task ${task.taskId.value} mixes target states",
@@ -308,7 +310,22 @@ object GPUFramePlanner {
             render.drawPackets.any { packet -> packet.role == GPUDrawPacketRole.W4ePrepared }
         }
         if (w4eRenders.isEmpty()) return null
-        if (w4eRenders.size != renders.size || w4eRenders.any { render ->
+        val pointWitness = renders.flatMap { it.drawPackets }.mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }
+            .firstOrNull()?.takeIf { it.clipPrefixV4 != null }
+        val exactPointPrefix = pointWitness?.let { witness ->
+            val prefix = requireNotNull(witness.clipPrefixV4)
+            renders.take(prefix.renders.size) == w4eRenders && prefix.renders.map { it.taskId } == w4eRenders.map { it.taskId } &&
+                w4eRenders.all { it.drawPackets.singleOrNull()?.w4ePreparedFrameAuthority === prefix.authority } &&
+                renders.drop(prefix.renders.size).flatMap { it.drawPackets }.all { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 === witness } &&
+                taskList.tasks.filterIsInstance<GPUTask.Readback>().size == 1
+        } == true
+        val nativeFinal = w4eRenders.first().drawPackets.singleOrNull()?.w5bFinalFrameWitnessV3
+        val exactNativeFinal = nativeFinal?.let { witness -> witness.w4eLane?.let { lane ->
+            taskList.tasks.map { it.taskId } == listOf(witness.prepareTaskId) + witness.graph.passes().map(witness::taskId) &&
+                taskList.dependencies == witness.dependencies && w4eRenders == lane.renders.values.toList() &&
+                renders.filter { it !in w4eRenders }.all { it.w5bInitialClearV3?.witness === witness }
+        } } == true
+        if ((!exactPointPrefix && !exactNativeFinal && w4eRenders.size != renders.size) || w4eRenders.any { render ->
                 render.drawPackets.singleOrNull()?.role != GPUDrawPacketRole.W4ePrepared
             }
         ) {
@@ -666,7 +683,9 @@ object GPUFramePlanner {
                         packet.commandIdValue != consumer.commandId.value ||
                         packet.blendPlan?.destinationReadRequirement !=
                         GPUBlendDestinationReadRequirement.DestinationTextureRequired ||
-                        (destination.taskId to render.taskId) !in directDependencies ||
+                        ((destination.taskId to render.taskId) !in directDependencies &&
+                            packet.w5bFinalFrameWitnessV3?.hasAtomicCopyBinding(
+                                destination.taskId, render.taskId, packet, taskList.dependencies) != true) ||
                         !consumerPacketIds.add(packet.packetId)
                     ) {
                         return invalidDestination(
@@ -713,15 +732,18 @@ object GPUFramePlanner {
                 val firstExecutionPoint = orderedExecutionPoints.first()
                 val lastExecutionPoint = orderedExecutionPoints.last()
                 val firstConsumer = consumerPoints.first()
+                val firstPacket = firstConsumer.first.drawPackets[firstConsumer.second]
+                val atomicProducer = firstPacket.w5bFinalFrameWitnessV3?.atomicCopyProducer(
+                    destination.taskId, firstConsumer.first.taskId, firstPacket, taskList.dependencies)
                 scheduledOperations += ScheduledDestinationOperation(
                     sourceTaskId = destination.taskId,
                     sourceKey = group.key,
                     operation = operation,
                     schedulePoint = RenderExecutionPoint(
-                        taskId = firstConsumer.first.taskId,
-                        packetIndex = firstConsumer.second,
+                        taskId = atomicProducer ?: firstConsumer.first.taskId,
+                        packetIndex = if (atomicProducer != null) 0 else firstConsumer.second,
                     ),
-                    lifetimeStart = firstExecutionPoint,
+                    lifetimeStart = atomicProducer?.let { OrderedRenderExecutionPoint(orderedIndex.getValue(it), 0) } ?: firstExecutionPoint,
                     lifetimeEnd = lastExecutionPoint,
                     consumerPacketIds = operation.consumers.map { it.packetId }.toSet(),
                 )
@@ -867,6 +889,13 @@ object GPUFramePlanner {
             }
 
             if (task is GPUTask.Render) {
+                if (task.w5bInitialClearV3 != null) {
+                    flushPendingRenderSlices()?.let { return Linearization.Refused(it) }
+                    steps += GPUFrameStep.RenderPassStep(task.target, task.loadStore, task.samplePlan,
+                        drawPackets = emptyList(), sourceTaskIds = listOf(task.taskId), batches = emptyList(),
+                        w5bInitialClearV3 = task.w5bInitialClearV3)
+                    return@forEach
+                }
                 val unsupported = task.drawPackets.singleOrNull()?.blendPlan as? GPUBlendPlan.UnsupportedBlend
                 if (unsupported != null) {
                     flushPendingRenderSlices()?.let { return Linearization.Refused(it) }
@@ -1212,12 +1241,12 @@ object GPUFramePlanner {
     private fun GPUTask.Render.packetWrites(
         packet: GPUDrawPacket,
         resource: GPUFrameResourceRef,
-    ): Boolean = target == resource && packet.blendPlan.writesColorAttachment() ||
+    ): Boolean = target == resource && packet.writesColorAttachment() ||
         resourceUses.any { it.write && it.resource == resource }
 
     private fun GPUTask.writes(resource: GPUFrameResourceRef): Boolean = when (this) {
         is GPUTask.Render ->
-            target == resource && drawPackets.any { it.blendPlan.writesColorAttachment() } ||
+            target == resource && drawPackets.any { it.writesColorAttachment() } ||
                 resourceUses.any { it.write && it.resource == resource }
         is GPUTask.Compute -> target == resource || resourceUses.any { it.write && it.resource == resource }
         is GPUTask.Copy -> destination == resource
@@ -1236,6 +1265,8 @@ object GPUFramePlanner {
         null,
         -> false
     }
+    private fun GPUDrawPacket.writesColorAttachment(): Boolean =
+        w5bFinalFrameWitnessV3?.ownsGeometryProducer(this) != true && blendPlan.writesColorAttachment()
 
     /**
      * A path cover still owns the stencil test/reset even when its color blend is destination-only.

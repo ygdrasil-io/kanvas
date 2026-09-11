@@ -23,6 +23,7 @@ internal enum class GPUPreparedVerticesOperationKind { DrawVertices, DrawMesh }
 internal data class GPUPreparedVerticesMaterialPlan(
     val table: MaterialPlanTable,
     val ref: MaterialPlanRef,
+    val blend: org.graphiks.kanvas.gpu.plan.BlendPlan,
 ) {
     init { table.entry(ref) }
 }

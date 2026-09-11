@@ -309,6 +309,7 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
         generationSeal: GPUPreparedGenerationSeal,
         dstRead: CorePrimitiveDestinationSnapshotHandles? = null,
         pathDepthStencilView: GPUTextureView? = null,
+        mixedInventory: GPUCorePrimitiveRenderRunSizingV1? = null,
     ): GPUCorePrimitiveRenderRunMaterialization {
         val routes = plans.mapNotNull { plan ->
             plan.routeSeal as? GPUCorePrimitiveNativeScopeRouteSeal.Routes
@@ -316,6 +317,8 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
         validateAcceptedPlans(plans, routes, generationSeal)?.let { refusal ->
             return refusal
         }
+        if (mixedInventory != null && mixedInventory != corePrimitiveRenderRunSizingV1(routes, limits.minUniformBufferOffsetAlignment))
+            return refused("invalid.native-core-primitive.mixed-inventory", "Native runs differ from their pre-allocation physical inventory.")
 
         val geometry = try {
             batchGeometry(routes)
@@ -427,7 +430,7 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
             val supportedPathComponents = setOf(
                 PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
                 PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY,
-            )
+            ) + if (mixedInventory != null) setOf(PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY) else emptySet()
             if (cacheKeys.values.any { key ->
                     key.componentIdentity !in supportedPathComponents &&
                         !key.componentIdentity.isCorePrimitiveDstRead()
@@ -503,6 +506,9 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                         componentIdentity = frameComponentIdentity,
                         sampleCount = 1,
                         dstRead = dstRead?.binding,
+                        expectedCapacities = mixedInventory?.capacities?.let {
+                            GPUWgpu4kCorePrimitiveFramePoolCapacities(it.vertexBytes, it.indexBytes, it.uniformBytes)
+                        },
                         additionalComponentIdentities = componentIdentities
                             .filterNot { identity -> identity == frameComponentIdentity }
                             .toSet(),
@@ -771,13 +777,9 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
             require(bytes.size.toLong() == route.uniformPlan.totalBytes)
             bytes
         }
-        var totalBytes = 0L
-        val bases = payloads.map { bytes ->
-            val base = alignUniformOffset(totalBytes, alignment)
-            totalBytes = Math.addExact(base, bytes.size.toLong())
-            require(totalBytes <= Int.MAX_VALUE.toLong())
-            base
-        }
+        val sizing = corePrimitiveRenderRunSizingV1(routes, alignment)
+        val totalBytes = sizing.uniformBytesI64
+        val bases = sizing.uniformBasesI64
         val packed = ByteArray(Math.toIntExact(totalBytes))
         payloads.forEachIndexed { index, bytes ->
             bytes.copyInto(packed, bases[index].toInt())
@@ -798,12 +800,6 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
             }
         }
         return BatchedUniforms(packed, totalBytes, offsetsByPlan)
-    }
-
-    private fun alignUniformOffset(value: Long, alignment: Long): Long {
-        require(value >= 0L && alignment > 0L)
-        val remainder = value % alignment
-        return if (remainder == 0L) value else Math.addExact(value, alignment - remainder)
     }
 
     private fun validateAcceptedPlans(
@@ -1217,4 +1213,40 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
     ) = GPUPlannedPathCorePrimitiveRenderRunMaterialization.Refused(code, message)
 
     override fun close() = Unit
+}
+
+/** Exact sizing shared with the existing native packing loops, with no cache or handle input. */
+internal data class GPUCorePrimitiveRenderRunSizingV1(
+    val vertexBytesI64: Long,
+    val indexBytesI64: Long,
+    val uniformBytesI64: Long,
+    val uniformBasesI64: List<Long>,
+    val capacities: org.graphiks.kanvas.gpu.renderer.resources.GPUCorePrimitiveFramePoolCapacities,
+)
+
+internal fun corePrimitiveRenderRunSizingV1(
+    routes: List<GPUCorePrimitiveNativeScopeRouteSeal.Routes>,
+    alignmentI64: Long,
+): GPUCorePrimitiveRenderRunSizingV1 {
+    require(routes.isNotEmpty() && alignmentI64 > 0L)
+    var vertexCountI64 = 0L
+    var indexCountI64 = 0L
+    var uniformBytesI64 = 0L
+    val bases = routes.map { route ->
+        val counts = GPUCorePrimitiveNativeScopeGeometryArena.countsI64(route)
+        vertexCountI64 = Math.addExact(vertexCountI64, counts.first)
+        indexCountI64 = Math.addExact(indexCountI64, counts.second)
+        val remainder = uniformBytesI64 % alignmentI64
+        val base = if (remainder == 0L) uniformBytesI64 else Math.addExact(uniformBytesI64, alignmentI64 - remainder)
+        uniformBytesI64 = Math.addExact(base, route.uniformPlan.totalBytes)
+        base
+    }
+    require(Math.multiplyExact(vertexCountI64, 2L) <= Int.MAX_VALUE && indexCountI64 <= Int.MAX_VALUE &&
+        uniformBytesI64 in 1L..Int.MAX_VALUE.toLong())
+    val vertexBytes = Math.multiplyExact(vertexCountI64, 2L * Float.SIZE_BYTES)
+    val indexBytes = Math.multiplyExact(indexCountI64, Int.SIZE_BYTES.toLong())
+    val capacities = requireNotNull(org.graphiks.kanvas.gpu.renderer.resources.corePrimitiveFramePoolCapacitiesOrNull(
+        vertexBytes, indexBytes, uniformBytesI64))
+    return GPUCorePrimitiveRenderRunSizingV1(vertexBytes, indexBytes, uniformBytesI64,
+        java.util.Collections.unmodifiableList(bases), capacities)
 }

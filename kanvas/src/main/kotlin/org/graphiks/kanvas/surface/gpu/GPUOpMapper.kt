@@ -105,6 +105,7 @@ internal data class GPUOpMapping(
     val preparedVerticesInventory: PreparedVerticesFrameInventory? = null,
     val allocatedCommandIds: Set<Int> = emptySet(),
     val commandIdsByOperationIndex: Map<Int, Set<Int>> = emptyMap(),
+    val hasSynthesizedSceneClear: Boolean = false,
 )
 
 internal data class GPUPreparedOperationRefusal(
@@ -131,6 +132,7 @@ internal object GPUOpMapper {
         preparedVerticesInventory: PreparedVerticesFrameInventory? = null,
         elidedOperationIndices: Set<Int> = emptySet(),
         w5aPointMaterialRefs: Map<Int, org.graphiks.kanvas.gpu.plan.MaterialPlanRef> = emptyMap(),
+        synthesizeSceneClear: Boolean = false,
     ): GPUOpMapping {
         val visual = mutableListOf<GPUFramePathVisualCommand>()
         val stateEvents = mutableListOf<GPUFramePathStateEvent>()
@@ -140,6 +142,15 @@ internal object GPUOpMapper {
         val preparedVerticesCommandIds = linkedMapOf<Int, Int>()
         val commandIdsByOperationIndex = mutableMapOf<Int, MutableSet<Int>>()
         var provenance = GPUFrameProvenance.None
+
+        if (synthesizeSceneClear) {
+            visual += requireNotNull(lowerPreparedCoreVisual(
+                operation = DisplayOp.Clear(ColorARGB.Transparent),
+                commandId = GPUDrawCommandID(0),
+                paintOrder = 0,
+                context = GPUPreparedImageLoweringContext(provenance, target, config, capabilities),
+            ))
+        }
 
         fun nextCommandId(): Int = Math.addExact(visual.size, preparedVerticesCommandIds.size)
 
@@ -698,6 +709,7 @@ internal object GPUOpMapper {
         }
         return GPUOpMapping(
             visualCommands = visual.toList(),
+            hasSynthesizedSceneClear = synthesizeSceneClear,
             stateEvents = stateEvents.toList(),
             culledTextOperationIndices = culledTextOperationIndices.toSet(),
             culledCoreOperationIndices = culledCoreOperationIndices.toSet(),

@@ -42,11 +42,13 @@ data class GPUPreparedVerticesPayloadInput(
     val transformBytes: List<Int>,
     val targetBounds: GPUPixelBounds,
     val scissorBounds: GPUPixelBounds,
+    val conservativeDrawBounds: GPUPixelBounds? = null,
     val targetFormat: String,
     val clipIdentity: String,
     val clipCoverageIdentity: String,
     val primitiveColorPresent: Boolean,
     val primitiveBlendIdentity: String?,
+    val w5bFinalBlendPlan: org.graphiks.kanvas.gpu.plan.BlendPlan? = null,
     val finalBlendIdentity: String,
     val capabilitySnapshotHash: String,
     val drawProvenance: String,
@@ -99,11 +101,13 @@ internal class GPUPreparedVerticesPayloadSnapshot(
     val transformBytes = immutableList(input.transformBytes)
     val targetBounds = input.targetBounds.copy()
     val scissorBounds = input.scissorBounds.copy()
+    val conservativeDrawBounds = input.conservativeDrawBounds?.copy()
     val targetFormat = input.targetFormat
     val clipIdentity = input.clipIdentity
     val clipCoverageIdentity = input.clipCoverageIdentity
     val primitiveColorPresent = input.primitiveColorPresent
     val primitiveBlendIdentity = input.primitiveBlendIdentity
+    val w5bFinalBlendPlan = input.w5bFinalBlendPlan
     val finalBlendIdentity = input.finalBlendIdentity
     val capabilitySnapshotHash = input.capabilitySnapshotHash
     val drawProvenance = input.drawProvenance
@@ -118,9 +122,27 @@ internal class GPUPreparedVerticesPayloadSnapshot(
         materialFrameSnapshot = authenticatedMaterial,
         materialPlanEmission = requireNotNull(materialPlanProvenance).remappedEmission(table, ref),
         topologyIdentity = topologyIdentity, transformBytes = transformBytes,
-        targetBounds = targetBounds, scissorBounds = scissorBounds, targetFormat = targetFormat,
+        targetBounds = targetBounds, scissorBounds = scissorBounds, conservativeDrawBounds = conservativeDrawBounds, targetFormat = targetFormat,
         clipIdentity = clipIdentity, clipCoverageIdentity = clipCoverageIdentity,
         primitiveColorPresent = primitiveColorPresent, primitiveBlendIdentity = primitiveBlendIdentity,
+        w5bFinalBlendPlan = w5bFinalBlendPlan,
+        finalBlendIdentity = finalBlendIdentity, capabilitySnapshotHash = capabilitySnapshotHash,
+        drawProvenance = drawProvenance, frameProvenance = frameProvenance,
+    ))
+
+    fun withW5bFinalBlendPlan(
+        plan: org.graphiks.kanvas.gpu.plan.BlendPlan,
+    ): GPUPreparedVerticesPayloadSnapshot = GPUPreparedVerticesPayloadSnapshot(GPUPreparedVerticesPayloadInput(
+        payloadRef = payloadRef, artifact = artifact, material = material,
+        materialFrameSnapshot = authenticatedMaterial,
+        materialPlanEmission = materialPlanProvenance?.let { provenance ->
+            provenance.remappedEmission(provenance.sourcePlanTable, provenance.ref)
+        },
+        topologyIdentity = topologyIdentity, transformBytes = transformBytes,
+        targetBounds = targetBounds, scissorBounds = scissorBounds, conservativeDrawBounds = conservativeDrawBounds, targetFormat = targetFormat,
+        clipIdentity = clipIdentity, clipCoverageIdentity = clipCoverageIdentity,
+        primitiveColorPresent = primitiveColorPresent, primitiveBlendIdentity = primitiveBlendIdentity,
+        w5bFinalBlendPlan = plan,
         finalBlendIdentity = finalBlendIdentity, capabilitySnapshotHash = capabilitySnapshotHash,
         drawProvenance = drawProvenance, frameProvenance = frameProvenance,
     ))
@@ -170,11 +192,14 @@ internal class GPUPreparedVerticesPayloadSnapshot(
             .int("scissor.top", scissorBounds.top)
             .int("scissor.right", scissorBounds.right)
             .int("scissor.bottom", scissorBounds.bottom)
+            .text("conservativeDrawBounds", conservativeDrawBounds?.toString() ?: "unknown")
             .text("clip.identity", clipIdentity)
             .text("clip.coverageIdentity", clipCoverageIdentity)
             .boolean("primitiveColor.present", primitiveColorPresent)
             .boolean("primitiveBlend.present", primitiveBlendIdentity != null)
             .text("primitiveBlend.identity", primitiveBlendIdentity ?: "none")
+            .boolean("finalBlend.w5b.present", w5bFinalBlendPlan != null)
+            .text("finalBlend.w5b.identity", w5bFinalBlendPlan?.canonicalLabel ?: "none")
             .text("finalBlend.identity", finalBlendIdentity)
             .text("capability.snapshotHash", capabilitySnapshotHash)
             .text("draw.provenance", drawProvenance)
@@ -303,6 +328,9 @@ object GPUPreparedVerticesPayloadGatherer {
             input.primitiveBlendIdentity?.isBlank() == true
         ) {
             return refused("invalid.renderer.prepared.vertices-identity", "primitive_blend_mismatch")
+        }
+        if (input.w5bFinalBlendPlan == org.graphiks.kanvas.gpu.plan.BlendPlan.NoOpV1) {
+            return refused("invalid.renderer.prepared.vertices-identity", "w5b_noop_not_elided")
         }
         if (input.capabilitySnapshotHash.isBlank()) {
             return refused("invalid.renderer.prepared.vertices-capability", "blank_capability")

@@ -150,12 +150,29 @@ internal class W4bSessionScratchV1(
     val poolCapacities: GPUCorePrimitiveFramePoolCapacities,
     val maxBufferSize: Long,
     val maxDynamicUniformBuffersPerPipelineLayout: Long,
+    private val w5bGeometryGraph: org.graphiks.kanvas.gpu.plan.RenderGraph? = null,
+    private val w5bGeometryLane: org.graphiks.kanvas.gpu.plan.W5bGeometryLanePlanV3? = null,
 ) {
     val packetIds: List<GPUDrawPacketID> = immutableList(packetIds)
     val commandIds: List<Int> = immutableList(commandIds)
     val draws: List<W4bSessionScratchDrawV1> = immutableList(draws)
 
     init {
+        if (w5bGeometryGraph != null) {
+            require(w5bGeometryGraph.verifyW5bGeometryCompilerWitness() && w5bGeometryGraph.id.value == planId)
+            if (w5bGeometryLane == null) require(
+                w5bGeometryGraph.capabilityId == org.graphiks.kanvas.gpu.plan.W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID)
+            else require(w5bGeometryGraph.w5bGeometryLanes().any { it === w5bGeometryLane } &&
+                w5bGeometryLane.capabilityId in setOf(org.graphiks.kanvas.gpu.plan.W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID,
+                    org.graphiks.kanvas.gpu.plan.W4bAnalyticRRectPlanCompiler.CAPABILITY_ID) &&
+                w5bGeometryLane.commandIndicesI32() == commandIds)
+            val consumers = w5bGeometryGraph.passes().filterIsInstance<org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass>()
+                .flatMap { it.draws() }.filter { w5bGeometryLane == null || it.commandIndex in commandIds }
+            require(consumers.map { it.commandIndex } == commandIds && consumers.zip(draws).all { (consumer, draw) ->
+                consumer is org.graphiks.kanvas.gpu.plan.AnalyticRRectDraw && consumer.origin == draw.origin &&
+                    consumer.copyDeviceShape() == draw.copyDeviceShape() && consumer.copyRasterBounds() == draw.copyRasterBounds()
+            })
+        }
         require(planId.isNotBlank() && capabilitySealHash.isNotBlank()) {
             "W4b scratch requires exact plan and capability seals"
         }
@@ -174,7 +191,7 @@ internal class W4bSessionScratchV1(
                 draws.size == packetIds.size &&
                 draws.map(W4bSessionScratchDrawV1::packetId) == packetIds &&
                 draws.map(W4bSessionScratchDrawV1::commandId) == commandIds &&
-                draws.any { draw -> draw.origin == DrawOrigin.RRECT },
+                (draws.any { draw -> draw.origin == DrawOrigin.RRECT } || w5bGeometryGraph != null),
         ) { "W4b scratch requires one ordered packet, command, and RRect snapshot per draw" }
         require(
             structuralPipelineKey.shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape &&

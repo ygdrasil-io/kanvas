@@ -49,6 +49,7 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
     private val table: MaterialPlanTable,
     refsByCommandIdI32: Map<Int, MaterialPlanRef>,
     private val sourceRefsByCommandIdI32: Map<Int, MaterialPlanRef>,
+    private val finalBlendsByCommandIdI32: Map<Int, org.graphiks.kanvas.gpu.plan.BlendPlan>,
     private val materialWitness: W5aMaterialPlanVersionWitnessV2,
 ) {
     private val refsByCommandId: Map<Int, MaterialPlanRef> =
@@ -60,6 +61,7 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
         val ref: MaterialPlanRef
         val sourceRef: MaterialPlanRef
         val sourcePlanTable: MaterialPlanTable
+        val finalBlend: org.graphiks.kanvas.gpu.plan.BlendPlan?
         val premultipliedRgbaF32: List<Float>
         fun validates(commandIdI32: Int): Boolean
     }
@@ -71,6 +73,8 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
         private val frameAuthority: W5aCorePrimitiveMaterialAuthorityV2,
     ) : MaterializedSolidV2 {
         override val sourcePlanTable: MaterialPlanTable get() = frameAuthority.table
+        override val finalBlend: org.graphiks.kanvas.gpu.plan.BlendPlan?
+            get() = frameAuthority.finalBlendsByCommandIdI32[commandIdI32]
         override val sourceRef: MaterialPlanRef get() = frameAuthority.sourceRefsByCommandIdI32.getValue(commandIdI32)
         override val premultipliedRgbaF32: List<Float> =
             java.util.Collections.unmodifiableList(ArrayList(rgba))
@@ -123,10 +127,12 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
             refsByCommandIdI32: Map<Int, MaterialPlanRef>,
             sourcePlansByCommandIdI32: Map<Int, Pair<MaterialPlanTable, MaterialPlanRef>> =
                 refsByCommandIdI32.mapValues { sourceTable to it.value },
+            finalBlendsByCommandIdI32: Map<Int, org.graphiks.kanvas.gpu.plan.BlendPlan> = emptyMap(),
         ): W5aCorePrimitiveMaterialAuthorityV2? {
             val refsByCommandId = refsByCommandIdI32
             if (refsByCommandId.isEmpty() || refsByCommandId.keys.any { it < 0 }) return null
             if (sourcePlansByCommandIdI32.keys != refsByCommandId.keys) return null
+            if (finalBlendsByCommandIdI32.isNotEmpty() && finalBlendsByCommandIdI32.keys != refsByCommandId.keys) return null
             val sourceRefs = linkedMapOf<Int, MaterialPlanRef>()
             refsByCommandId.forEach { (commandIdI32, ref) ->
                 val source = sourcePlansByCommandIdI32.getValue(commandIdI32)
@@ -148,7 +154,8 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
             val witness = W5aMaterialPlanVersionWitnessV2.issue(ownedTable, authorities)
                 ?: return null
             return W5aCorePrimitiveMaterialAuthorityV2(ownedTable, refsByCommandId,
-                java.util.Collections.unmodifiableMap(sourceRefs), witness)
+                java.util.Collections.unmodifiableMap(sourceRefs),
+                java.util.Collections.unmodifiableMap(LinkedHashMap(finalBlendsByCommandIdI32)), witness)
         }
     }
 }

@@ -20,6 +20,8 @@ public data class GpuPlanLoweringRequest(
     public val rendererAggregateMemoryBudgetBytes: Long? = null,
     internal val w5aCompositeSessionIdentity: String? = null,
     internal val w5aCompositeLaneOrdinal: Int? = null,
+    internal val w5bPreparedSemantics: Map<Int, org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive> = emptyMap(),
+    internal val w5bPreparedTarget: org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef? = null,
 ) {
     init {
         require(rendererAggregateMemoryBudgetBytes == null || rendererAggregateMemoryBudgetBytes > 0L) {

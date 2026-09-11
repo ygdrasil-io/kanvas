@@ -62,7 +62,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
         return when (val recognition = recognize(scene)) {
             is Recognition.MaterialRefused -> GpuPlanSelection.MaterialOnlyRefusal(CAPABILITY_ID, scene.canonicalId, target, recognition.refusals)
             is Recognition.Accepted -> GpuPlanSelection.Candidate(
-                W4cCandidate(this, scene.canonicalId, target, recognition.draws, recognition.materialPlanTable),
+                W4cCandidate(this, scene.canonicalId, target, recognition.draws, recognition.materialPlanTable, recognition.capabilityId),
             )
             is Recognition.Gap -> notCandidate(recognition.message)
             is Recognition.Invalid -> invalidSelection(recognition.message)
@@ -77,10 +77,11 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
         val materialEntries = mutableListOf<MaterialPlanEntry>()
         val materialRefusals = mutableListOf<EffectiveMaterialPlanner.Result.Refused>()
         var frameAttemptedEdgesBeforeI32 = 0
+        var elidedNoOpsI32 = 0
         for ((commandIndex, command) in scene.withIndex()) {
             when (command) {
                 is SceneCommand.Draw -> {
-                    if (draws.size + materialRefusals.size == MAX_DRAWS) {
+                    if (draws.size + materialRefusals.size + elidedNoOpsI32 == MAX_DRAWS) {
                         return Recognition.Gap("W4c accepts at most 512 visual path draws")
                     }
                     when (
@@ -92,6 +93,10 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
                             materialEntries = materialEntries,
                         )
                     ) {
+                        is DrawRecognition.NoOp -> {
+                            elidedNoOpsI32++
+                            frameAttemptedEdgesBeforeI32 = draw.frameAttemptedEdgesAfterI32
+                        }
                         is DrawRecognition.MaterialRefused -> {
                             materialRefusals += draw.refusal
                             frameAttemptedEdgesBeforeI32 = draw.frameAttemptedEdgesAfterI32
@@ -118,10 +123,11 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
             }
         }
         if (materialRefusals.isNotEmpty()) return Recognition.MaterialRefused(materialRefusals)
-        return if (draws.isEmpty()) {
+        return if (draws.isEmpty() && elidedNoOpsI32 == 0) {
             Recognition.Gap("W4c requires at least one visual path draw")
         } else {
-            Recognition.Accepted(draws, MaterialPlanTable.of(materialEntries))
+            Recognition.Accepted(draws, materialEntries.takeIf { it.isNotEmpty() }?.let(MaterialPlanTable::of),
+                if (elidedNoOpsI32 > 0 || draws.any { it.blend != BlendPlan.LegacySrcOverV1 }) W5B_CAPABILITY_ID else CAPABILITY_ID)
         }
     }
 
@@ -201,19 +207,23 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
                 } catch (_: ArithmeticException) {
                     return DrawRecognition.ResourceLimit("Frame attempted-edge count overflowed")
                 }
-                val material = when (val planned = EffectiveMaterialPlanner.plan(node)) {
-                    is EffectiveMaterialPlanner.Result.Refused -> return DrawRecognition.MaterialRefused(planned, attemptedAfter)
-                    is EffectiveMaterialPlanner.Result.Ready -> appendMaterialPlan(materialEntries, planned.table, planned.root)
+                val source = when (val planned = EffectiveMaterialPlanner.normalize(node, FORMAT.blendTargetClampV1(), true)) {
+                    EffectiveMaterialPlanner.Normalization.NoOp -> return DrawRecognition.NoOp(attemptedAfter)
+                    is EffectiveMaterialPlanner.Normalization.Refused -> return DrawRecognition.MaterialRefused(
+                        EffectiveMaterialPlanner.Result.Refused(planned.diagnosticCode), attemptedAfter)
+                    is EffectiveMaterialPlanner.Normalization.Source -> planned
                 }
                 DrawRecognition.Accepted(
                     SealedDraw(
                         commandIndex = commandIndex,
                         pathF32 = pathSnapshot,
                         transform = node.transform.copy(),
-                        material = material,
+                        material = appendMaterialPlan(materialEntries, source.table, source.root),
                         geometryF32 = geometryF32,
                         strategy = strategy,
                         scissorI32 = scissor.copy(),
+                        blend = if (source.blend is BlendPlan.FixedFunctionV1 && source.blend.mode == BlendMode.SRC_OVER)
+                            BlendPlan.LegacySrcOverV1 else source.blend,
                     ),
                     attemptedAfter,
                 )
@@ -238,7 +248,6 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
             paint.pathEffect == null &&
             paint.imageFilter == null &&
             paint.style == PaintStyleNode.FILL &&
-            paint.blendMode == BlendMode.SRC_OVER &&
             materialMatchesPaintAuthority(node)
     }
 
@@ -343,8 +352,8 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
 
     private fun w4cBlend(blend: BlendNode): Boolean = when (blend) {
         BlendNode.SrcOver -> true
-        is BlendNode.Mode -> blend.mode == BlendMode.SRC_OVER
-        is BlendNode.Paint -> blend.mode == BlendMode.SRC_OVER && blend.blender == null
+        is BlendNode.Mode -> true
+        is BlendNode.Paint -> blend.blender == null
         is BlendNode.Custom -> false
     }
 
@@ -408,6 +417,13 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
                 W4cPlanDiagnostics.CapabilityAllocationPolicy,
                 "W4c allocation facts are not positive powers of two",
             )
+        }
+        if (selected.draws.isEmpty()) return try {
+            RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bGeometryLanePlanV3.clearOnly(
+                PlanId(planIdentity(selected.sceneCanonicalId, target, capabilities, budget)), W5B_CAPABILITY_ID,
+                extent, capabilities, budget, selected.materialPlanTable)))
+        } catch (failure: IllegalArgumentException) {
+            resourceLimit(W4cPlanDiagnostics.PlanIdentityInvalid, failure.message ?: "Invalid W5b clear-only path frame")
         }
         val footprint = when (
             val memory = PathFillPlanBudget.calculate(
@@ -532,6 +548,17 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
                 null
             }
             val drawData = PlanDrawDataResources(vertex.id, index.id, uniform.id)
+            if (selected.capabilityId == W5B_CAPABILITY_ID) {
+                val draws = selected.draws.map { draw -> PathFillDraw.ofMaterial(draw.commandIndex, draw.material,
+                    draw.geometryF32, draw.strategy, draw.scissorI32, draw.blend) }
+                return RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bDestinationGraphSealer.seal(
+                    PlanId(planIdentity(selected.sceneCanonicalId, target, capabilities, budget)), W5B_CAPABILITY_ID,
+                    extent, capabilities, budget, draws, selected.materialPlanTable, footprint.targetBytes,
+                    footprint.readbackBytes, footprint.readbackBytesPerRow,
+                    geometryResources = listOfNotNull(vertex, index, uniform, depthStencil), drawDataResources = drawData,
+                    depthStencilByCommandI32 = draws.mapNotNull { draw -> depthStencil?.id?.let { draw.commandIndex to it } }.toMap(),
+                )))
+            }
             val passes = mutableListOf<PlanPass>()
             var renderOrdinal = 0
             var producerOrdinal = 0
@@ -728,13 +755,14 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
 
     private sealed interface Recognition {
         data class MaterialRefused(val refusals: List<EffectiveMaterialPlanner.Result.Refused>) : Recognition
-        data class Accepted(val draws: List<SealedDraw>, val materialPlanTable: MaterialPlanTable) : Recognition
+        data class Accepted(val draws: List<SealedDraw>, val materialPlanTable: MaterialPlanTable?, val capabilityId: String) : Recognition
         data class Gap(val message: String) : Recognition
         data class Invalid(val message: String) : Recognition
         data class ResourceLimit(val message: String) : Recognition
     }
 
     private sealed interface DrawRecognition {
+        data class NoOp(val frameAttemptedEdgesAfterI32: Int) : DrawRecognition
         data class MaterialRefused(val refusal: EffectiveMaterialPlanner.Result.Refused, val frameAttemptedEdgesAfterI32: Int) : DrawRecognition
         data class Accepted(
             val draw: SealedDraw,
@@ -760,6 +788,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
         val geometryF32: PathFillGeometryF32,
         val strategy: PathFillStrategy,
         val scissorI32: RectI32,
+        val blend: BlendPlan,
     )
 
     private class W4cCandidate(
@@ -767,9 +796,9 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
         override val sceneCanonicalId: CanonicalId,
         override val target: RenderTargetDescriptor,
         draws: List<SealedDraw>,
-        val materialPlanTable: MaterialPlanTable,
+        val materialPlanTable: MaterialPlanTable?,
+        override val capabilityId: String,
     ) : GpuPlanCandidate {
-        override val capabilityId: String = CAPABILITY_ID
 
         val draws: List<SealedDraw> = Collections.unmodifiableList(
             draws.map { draw ->
@@ -785,12 +814,13 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
         private val targetFingerprint = target.canonicalId
 
         fun hasMatchingFingerprints(): Boolean =
-            capabilityId == CAPABILITY_ID &&
+            capabilityId in setOf(CAPABILITY_ID, W5B_CAPABILITY_ID) &&
                 sceneCanonicalId == sceneFingerprint &&
                 target.canonicalId == targetFingerprint
     }
 
     public companion object {
+        public const val W5B_CAPABILITY_ID: String = "w5b-path-fill-final-blend-v3"
         /** Historical public graph contract; it carries only legacy per-draw colors. */
         public const val HISTORICAL_CAPABILITY_ID: String =
             "solid-path-fill-tessellation-stencil-hard-1x-simple-scissor-src-over-srgb-v1"

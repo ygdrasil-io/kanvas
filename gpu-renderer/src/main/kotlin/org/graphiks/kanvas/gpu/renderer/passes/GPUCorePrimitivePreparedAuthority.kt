@@ -223,6 +223,7 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
             val mode: GPUBlendMode,
             val formulaId: String,
             val sourceCoverage: GPUSourceCoverageEncoding,
+            val w5bCompositionAbiI32: Int? = null,
         ) : Blend
 
         data class NoOp(val mode: GPUBlendMode) : Blend
@@ -1036,6 +1037,7 @@ private fun GPUBlendPlan.corePrimitiveStructuralBlend():
             mode,
             formulaId,
             sourceCoverageEncoding,
+            sealedW5b?.compositionAbiI32,
         )
     is GPUBlendPlan.LayerCompositeBlend -> child.corePrimitiveStructuralBlend()
     is GPUBlendPlan.NoOp -> GPUCorePrimitiveRenderPipelineStructuralKey.Blend.NoOp(mode)
@@ -1675,7 +1677,7 @@ internal class W3SessionScratchV1(
     val targetBounds: GPUPixelBounds,
     packetIds: List<GPUDrawPacketID>,
     commandIds: List<Int>,
-    val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+    packetStructuralPipelineKeys: List<GPUCorePrimitiveRenderPipelineStructuralKey>,
     val uniformPlan: GPUUniformSlabPlan,
     /** Exact device limits used when sealing the physical encoder scratch. */
     val maxBufferSize: Long,
@@ -1684,9 +1686,15 @@ internal class W3SessionScratchV1(
     val indexBytes: Long,
     /** Exact minimum physical capacities allocated by the reusable native frame pool. */
     val poolCapacities: GPUCorePrimitiveFramePoolCapacities,
+    packetGeometryBytes: List<Pair<Long, Long>> = packetIds.map { 32L to 24L },
 ) {
+    private val packetGeometryBytes = immutableList(packetGeometryBytes)
     val packetIds: List<GPUDrawPacketID> = immutableList(packetIds)
     val commandIds: List<Int> = immutableList(commandIds)
+    val packetStructuralPipelineKeys: List<GPUCorePrimitiveRenderPipelineStructuralKey> =
+        immutableList(packetStructuralPipelineKeys)
+    val structuralPipelineKeys: List<GPUCorePrimitiveRenderPipelineStructuralKey> =
+        immutableList(this.packetStructuralPipelineKeys.distinct())
 
     init {
         require(planId.isNotBlank() && capabilitySealHash.isNotBlank()) {
@@ -1702,13 +1710,19 @@ internal class W3SessionScratchV1(
             this.commandIds.size == this.packetIds.size && this.commandIds.distinct().size == this.commandIds.size &&
             this.commandIds.all { it >= 0 }
         ) { "W3 scratch requires one ordered packet and command identity per draw" }
-        require(structuralPipelineKey.shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry &&
-            structuralPipelineKey.topology == GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList &&
-            structuralPipelineKey.sampleCount == 1 &&
-            structuralPipelineKey.uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2
+        require(this.packetStructuralPipelineKeys.size == this.packetIds.size &&
+            structuralPipelineKeys.all { structuralPipelineKey ->
+                structuralPipelineKey.shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry &&
+                    structuralPipelineKey.topology == GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList &&
+                    structuralPipelineKey.sampleCount == 1 &&
+                    structuralPipelineKey.uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2
+            }
         ) { "W3 scratch accepts only the direct single-sample uniform32 pipeline" }
-        require(vertexBytes == this.packetIds.size.toLong() * 32L &&
-            indexBytes == this.packetIds.size.toLong() * 24L &&
+        require(this.packetGeometryBytes.size == this.packetIds.size &&
+            this.packetGeometryBytes.all { (vertexI64, indexI64) -> vertexI64 in 32L..2048L &&
+                vertexI64 % 32L == 0L && indexI64 == vertexI64 / 32L * 24L } &&
+            vertexBytes == this.packetGeometryBytes.sumOf { it.first } &&
+            indexBytes == this.packetGeometryBytes.sumOf { it.second } &&
             vertexBytes <= Int.MAX_VALUE.toLong() && indexBytes <= Int.MAX_VALUE.toLong() &&
             uniformPlan.sourceLabel == SOURCE_LABEL &&
             uniformPlan.uploadBudgetBytes == maxBufferSize &&
@@ -1751,6 +1765,14 @@ internal class W3SessionScratchV1(
         expectedAlignmentBytes: Long,
         packets: List<GPUDrawPacket>,
     ): Boolean {
+        if (packetGeometryBytes != packets.map { packet ->
+            when (val geometry = (packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive)?.geometry) {
+                is org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry.TriangulatedPath ->
+                    geometry.vertices.size.toLong() * 4L to geometry.indices.size.toLong() * 4L
+                is org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry.Rect -> 32L to 24L
+                else -> return false
+            }
+        }) return false
         val payloads = packets.map { packet ->
             val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
                 ?: return false
@@ -1804,6 +1826,7 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
     val w4dGeneralPreparedAuthority: GPUPlanW4dGeneralPreparedAuthority? = null,
     val w4dGeneralFrameMaterializationAuthority:
         GPUW4dGeneralPreparedFrameMaterializationAuthority? = null,
+    val w5bFrameWitnessV3: W5bPreparedFrameWitnessV3? = null,
 ) {
     internal constructor(
         structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
@@ -1928,10 +1951,23 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
             w4cSessionScratch,
             w4dSessionScratch,
             scratchLane,
+            w5bFrameWitnessV3 = w5bFrameWitnessV3,
         )
     }
 
     internal companion object {
+        fun plannedW5b(
+            key: GPUCorePrimitiveRenderPipelineStructuralKey,
+            pipeline: GPURenderPipelineKey,
+            witness: W5bPreparedFrameWitnessV3,
+            analyticSeal: GPUCorePrimitiveAnalyticShapeUniformSeal? = null,
+            general: W5bGeometryScratchV3.General? = null,
+        ): GPUCorePrimitivePreparedPacketAuthority = GPUCorePrimitivePreparedPacketAuthority(
+            key, pipeline, null, analyticShapeUniformSeal = analyticSeal, scratchLane = ScratchLane.Legacy, w5bFrameWitnessV3 = witness,
+            w4dGeneralPreparedAuthority = general?.also { require(witness.geometryLanes.any { lane -> lane === it }) }?.authority,
+            w4dGeneralFrameMaterializationAuthority = general?.native,
+        )
+
         fun plannedW3(
             structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
             renderPipelineKey: GPURenderPipelineKey,

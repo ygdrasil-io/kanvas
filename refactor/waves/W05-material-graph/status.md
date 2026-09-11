@@ -1,8 +1,73 @@
-# État W05 — material graph, W5a Solid/Opacity
+# État W05 — material graph et final blends W5b
+
+W5a Solid/Opacity est close sur son périmètre. W5b, son nettoyage Task 7 et sa boucle de reviews Task 8 sont implémentés et vérifiés sur `codex/w5b-blends`, empilée sur `codex/w5a-solid-opacity`. Les deux reviews Sol indépendantes W5b sont `READY`; la PR empilée W5b est `#2396`. La prochaine tranche empilée est W5c : quatre gradients et stop buffer sans plafond de 16 stops.
+
+## Périmètre public promu W5b
+
+Le `BlendPlan` scellé est l'autorité finale après admission. `FinalBlendPlanner` classe dans `:gpu-plan`; `W5bBlendPlanLowerer` traduit ce plan sans relire le paint public. La source reste RGBA linéaire prémultipliée et le résultat reste `D + coverage × (blend(S,D) − D)`. `DST` est un `NoOp`; `PLUS` est fixed-function sur couverture full/scissor 1× avec clamp authentifié, et destination-read sur couverture scalaire. Les copies GPU portent target, device generation et `DestinationVersionI64`, sans réutilisation après une écriture intermédiaire, avec bounds conservateurs et row pitch/budget contrôlés. Aucune lecture CPU du target ne participe au blend.
+
+| Famille promue | Preuve publique conservée |
+| --- | --- |
+| Rect intégrale, fractional Rect, RRect analytique | fixed-function, `DST`, destination-read avec alpha non trivial et couverture analytique originale |
+| Path fill direct et stencil-cover | mêmes trois classes de blend, ordre et mutation du Path après capture `Picture`; producteurs stencil sans material/final blend effectif |
+| Path stroke et hairline, transforms généraux hard | géométrie W4 inchangée, mêmes classes de blend et capture mutable; AA4 reste un refus natif explicite |
+| W4e clips complexes, masques scalaires et inverse/D24S8 | consommateurs couleur promus; préfixes stencil/mask conservés, producteur 2×2 et quantification R8 originaux |
+| Point/Points | fan/hairline et limite de 64 points conservés; les 45 cellules historiques DrawPoint sont fermées sur trois commandes successives |
+| Text A8 déjà résolu | fixture existante `128/255`, fixed-function/`DST`/destination-read, mutation glyphs/positions; aucune génération de font ni promotion des glyphs couleur/LCD |
+| Vertices avec/sans couleurs et Mesh sans programme | modulation de la source avant blend final, trois classes de blend, mutation positions/couleurs/indices; `MeshProgram` demeure hors promotion |
+| Frame mixte Rect → Point → RRect → Path → A8 → Vertices | chaque famille observée, ordre contradictoire exclu, huit mutations publiques après capture, `DST` élidé; témoins de cible retenue et frames entièrement `DST` transparents |
+
+## Fermeture des 45 cellules DrawPoint
+
+La dette historique est fermée pour exactement `{PLUS, MULTIPLY, OVERLAY, DARKEN, LIGHTEN, COLOR_DODGE, COLOR_BURN, HARD_LIGHT, SOFT_LIGHT, DIFFERENCE, EXCLUSION, HUE, SATURATION, COLOR, LUMINOSITY}` × `{UNCLIPPED, SCISSOR, ALPHA_MASK}`. Chaque cellule garde ses trois draws et son oracle indépendant. Le gate dédié est filtrable sans charger de fixture font/image :
+
+```sh
+rtk proxy ./gradlew :kanvas:test --tests '*GPUAllApiBlendSurfaceTest.drawPointHistoricalW5bMatrix' --no-parallel --max-workers=1 --rerun-tasks -q
+```
+
+La caractérisation forcée Task 7 avant et après nettoyage, le 11 septembre 2026, a passé 146 méthodes publiques : W5b 45/45, W5a 47 sélectionnées dont 1 skip, W3/W4 `GPUPlanSurfacePixelTest` 53 sélectionnées dont 1 skip, et le gate DrawPoint (1 méthode, 45 cellules). Total : 144 passées, 2 skips, 0 failure/error. Le dernier run complet a terminé à 15:29:51 UTC, exit 0. Le filtre DrawPoint seul, lui aussi forcé, a terminé à 15:33:29 UTC : 1 méthode, 45 cellules, aucun failure/error/skip. Cette fermeture ciblée ne requalifie pas une baseline globale et ne prétend pas avoir rejoué les anciennes suites d'infrastructure.
+
+## Ownership et compatibilité restante
+
+Le routeur conserve uniquement les continuations candidate/capture-limit/`GapNotMigrated` antérieures à l'ownership. La soumission d'un token authentifié n'a plus accès à une continuation legacy. Dans W4e, les trois retours de construction `GapNotMigrated` deviennent `GapOnPromotedScope` après authentification d'un successor W5b ou d'une élision `NoOp`, en conservant exactement le diagnostic. Les color consumers W4c/W4d/General/W4e abaissent leur blend scellé; leur ancien choix booléen/nullable vers `SRC_OVER` est supprimé. Si un source-stage destination-read perd son seal W5b, le materializer refuse et utilise son rollback existant au lieu de produire la source seule.
+
+| Sites de production audités | Ownership et échéance |
+| --- | --- |
+| `EffectiveMaterialPlanner`, `FinalBlendPlanner`, compilers W3/W4 et bridges Core/A8/Vertices | classification avant `Ready`; un candidat material local ne vaut pas admission géométrique. Les aliases explicites `LegacySrcOverV1` des graphs historiques conservent leurs witnesses |
+| `GpuPlanTaskListLowerer`, lowerers W4a–W4e/W5b, witnesses et prepared task-list builder | plans W5b consommés et validés; aucune reclassification après ownership. Les champs `SRC_OVER` des producteurs couleur-disabled et du véritable clear initial ne sont pas des fallbacks de draw |
+| `GPUBlendPlanning.GPUBlendPlanner` et projection analytique | compatibilité seulement avant admission ou pour familles non promues. Retrait à leur promotion W5c–W5h; toutes les cellules `H` au plus tard W5h |
+| `GPUOpMapper`, `AnalysisContracts` et leurs wrappers `canonicalBlendPlan`/`canonicalPlan` | admission géométrique/recording legacy préalable au seal Core, ou dispatch non promu. Ils ne récupèrent jamais une frame W5b refusée; retrait du chemin promu à son admission, retrait legacy final W8 |
+| `GPUPreparedTextLowerer`/`GPUTextA8RoutePlanner`, `GPUPreparedVerticesLowerer` | plan préparé prioritaire et obligatoire sur les produits promus. Branche legacy uniquement sans ownership; primitive vertex blend interne distinct du blend final. Autres matériaux : W5c–W5h/H |
+| `GPUPreparedDrawImageLowerer`, Atlas/ImageGrid, image dispatch, glyphs couleur/LCD | hors W5b : images déjà décodées W5e et final-blend Image origin `H` avant W5h; glyphs hors A8 admis gardent leur refus/capability, font toujours exclue |
+| `GPUPreparedMaterialProgram`, `BlendWgslBuilder`, runtime-child/filter helpers et formules CPU legacy | blends à l'intérieur de la source, pas le blend final W5b; migrations W5f–W5h. Les dispatchers WGSL legacy à défaut source ne sont pas sélectionnés par la formule W5b validée |
+| `GPUIntermediatePlanner`, `compositeBlendPlan`, layer/composite capture, mask/image-filter dispatch | compatibilité layer/spatiale W6, hors promotion W5b. Le défaut composite-label historique n'est jamais une issue d'une frame W5b admise |
+| Native pipeline/cache defaults, `GPUW5aSourceStageNativeV2`, preflight/executor catches | plan/ABI et ressources exacts après ownership; défauts historiques seulement hors W5b ou producteurs. Échec natif terminal avec journal de rollback, jamais `SRC_OVER`, transparent ou source-only substitué |
+
+Cet audit est une inspection de production, pas une assertion de source shape. Le comportement étant déjà vert, Task 7 utilise l'exception de caractérisation avant/après autorisée pour les invariants non falsifiables via `Surface`; aucun RED artificiel ni test d'infrastructure n'est ajouté. Les rapports temporaires et le ledger exhaustif restent dans le workspace SDD ignoré. Aucun ancien document durable n'a été supprimé : l'historique W5a ci-dessous conserve ses preuves et ses limites.
+
+## Vérification et limites W5b
+
+Les compilations ciblées sont `:render-ir:compileKotlin`, `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin` et `:kanvas:compileKotlin`, forcées avec `--rerun-tasks --no-parallel --max-workers=1`. La régression publique reprend exactement la sélection Task 6 : toute W5b, les 47 méthodes Surface W5a (sans le test immutable-graph) et les 53 gates W3/W4 publics autorisés, plus GREEN45. Aucun test sur scopes, counters, packets, bindings ou détails internes ne sert de preuve. `:gpu-renderer:compileTestKotlin` a des erreurs historiques de sources de tests périmées et reste exclu des preuves.
+
+Clôture fraîche Task 8 au commit `e470bcee8`, le 11 septembre 2026 : les quatre compilations principales forcées sont vertes de 17:52:43 à 17:53:42 UTC. La régression publique complète forcée est verte de 17:53:51 à 17:56:12 UTC avec 151 méthodes sélectionnées, 149 réussies, 2 skips AA4 authentiques et 0 failure/error. GREEN45 rejoué seul est vert de 17:56:31 à 17:58:19 UTC : une méthode, 45 cellules, aucun failure/error/skip.
+
+Les reviews Task 8 ont fermé sept findings Important : copies destination bornées avec origine non nulle et version `DestinationVersionI64`; branches `COLOR_DODGE`/`COLOR_BURN` sans division singulière évaluée avidement; matérialisation ordonnée de plusieurs runs Vertices/Mesh; décision de clear après culling; indexation linéaire des ressources; cache de pipeline Vertices local à la frame, à ownership unique et clé typée indépendante des valeurs d'uniformes. Les deux re-reviews Sol sont `READY`, sans finding Critical/Important restant.
+
+Deux skips AA4 authentiques dans cette sélection : `public mixed AA4 frame keeps a hard Path binary cover materialized only at color output` avec `w4d.general.texture-sample-support-unavailable`, et `W4e public Path AA4 uses only binary fixtures after its exact native capability boundary` avec `w4e.clip.sample-count-unavailable`. Le troisième skip de la vérification historique W5a ci-dessous n'est pas inclus dans la sélection W5b; aucune réussite ni capability AA4 n'est simulée.
+
+`WgslFloatEnvelopeV1` accepte seulement un singleton ou deux codes RGBA8 adjacents, calculés analytiquement avec destination corrélée. Les fixtures W5a arbitraires 17/18 et 9/16 avec alpha Paint `253/255`, ainsi que les contre-exemples W5b dont les intervalles se chevauchent ou dépassent cette borne, restent `Unbounded` et ne sont pas des gates. Aucun seuil empirique ni garantie universelle sur tous les backends n'en découle.
+
+La preuve de budget utilise un input W5b valide de deux Rects puis `resource-limit.w5b.destination-budget` à 1150 bytes et des pixels de récupération. Le display list public est append-only et `Surface.config` immuable : la récupération utilise des Surfaces distinctes sur le même runtime/backend ininterrompu, puis rejoue la Surface valide. La configuration prepared n'expose ni remplacement de capabilities ni budget agrégé injectables. Ces branches typées, les limites I64, la comptabilité physique pré-allocation et la libération/quarantaine native sont inspectées statiquement; ni device loss ni allocation failure ne sont prouvés par injection. Les ABIs admis utilisent uniforms, textures échantillonnées et samplers; aucun storage buffer inutilisé n'est exigé.
+
+Le warning natif préexistant `Context leak detected, CoreAnalytics returned false` est toujours émis sans failure/error, avec les warnings JVM native-access/Unsafe. Les modules font peuvent se compiler transitivement; aucune suite font/codec/GM/dashboard/render/baseline/Skia/`jpg-color-cube` n'est exécutée. Le target `:kanvas` reste JVM, sans tâche JS/Node authentique. Le gap legacy Rect-gradient + RRect hard-edge `uniform slab` reste reporté. W5c vient ensuite; W5d matrices/tile, W5e images, W5f filters, W5g blend-children/noise et W5h runtime effects/H restent ouverts.
+
+Minors explicitement différés : le seuil `1e-10` de `SetSat` reste partagé par l'implémentation et l'oracle et devra être réévalué avant l'expansion des sources; `GeneralPathDraw.withBlend` conserve un cast de l'autorité material legacy; le test public budget/recovery Task 6 vérifie aussi les pixels du primer avant le checkpoint refusal/recovery prévu par le brief. Aucun de ces points ne bloque les gates publics W5b actuels.
+
+## Historique W5a — référence antérieure à W5b
 
 Révision de production initiale : `7dbaf8cdf672e836f6ec6d77b1734cb68b6669db` (« admit W5a frame materials after geometry validation »), continuation du correctif global `39ff21985bd1407958d3ba1e909a74bbedf50010` sur `e0b1f39ce23a8badbd10074eb308908a26725280`. La vérification de cette vague couvre aussi les commits de recovery `64e6429c`, `582606d7`, `cbd8ab5e`, `33c54c09`, `9891e117` et `9aa924e5c`. Les cinq findings Important, les minors et les résidus d'admission/noms publics des scoped re-reviews sont traités dans cette même vague. Les deux re-reviews globales Task 8 sont désormais `READY`; W5a est close pour son périmètre, sans élargir les gates aux suites hors périmètre.
 
-## Gates publiques W5a
+### Gates publiques W5a
 
 W5a implémente `Transparent`, `Solid` et `Opacity` sous `SRC_OVER`. Chaque draw promu porte une `MaterialV1` vers une table immuable. La frontière W3 différée a été vérifiée en production : la capability historique exige table `null` et uniquement `LegacyColorV1`; `W5A_CAPABILITY_ID` exige une table présente et uniquement `MaterialV1`. Les formes hybrides sont refusées.
 
@@ -25,7 +90,7 @@ W5a implémente `Transparent`, `Solid` et `Opacity` sous `SRC_OVER`. Chaque draw
 | Refus puis récupération du runtime/backend | `public W5b gradient refusal leaves the runtime able to render a later W5a frame` : W5a valide → gradient refusé `unsupported.material.w5a.kind` → W5a valide, sur trois instances Surface partageant le même runtime/backend sans dispose intermédiaire, et pixels avant/après identiques |
 | Absence d'ownership W5a | `hard edge gradient RRect outside W5a retains legacy pixels after caller stop mutation` : RRect hard-edge hors admission W4b, gradient rouge/bleu capturé en Picture, mutation des stops vers vert, pixels legacy rouge/bleu conservés |
 
-## Composition native Task 7
+### Composition native Task 7 W5a
 
 La capability distincte `w5a-native-rect-rrect-path-composite-v1` est sélectionnée après les capabilities standalone existantes. Elle partitionne les commandes en runs natifs ordonnés, conserve leurs indices publics et confie Rect à W3, RRect analytique à W4b, Path fill à W4c et stroke/hairline à W4d. Le choix Path suit aussi les sémantiques de paint et l'admission native, pas la seule classe de géométrie. W4c n'accepte plus de conversion Rect/RRect en Path. La borne de 512 runs est vérifiée immédiatement après l'inventaire linéaire et avant toute `SceneSnapshot` par lane, y compris si une source material ultérieure serait refusée.
 
@@ -45,7 +110,7 @@ Toutes les capacités V/I/U arrondies, y compris le scratch Rect W3 de cette com
 
 Les premières preuves RED ont révélé les anciennes exigences « toute la frame appartient à une seule lane », puis la limite des trois slots et la priorité de sélection devant W4b à 512 draws. Les corrections ajoutent une autorité composite et une gestion propre des ressources; elles ne relâchent pas les enveloppes standalone.
 
-## Audit des compilations alternatives Solid/Opacity
+### Audit des compilations alternatives Solid/Opacity W5a
 
 Le renderer génère maintenant le source-stage WGSL directement depuis chaque DAG numérique scellé, dans l'ordre des dépendances : sRGB→linear, prémultiplication et Opacity opèrent sur les bindings bruts en F32. `W5aMaterialPlanEvaluator` a été supprimé. Les anciens slots couleur de géométrie sont neutres, pas une seconde autorité. La queue du DAG est authentifiée à la couverture existante, au blend prémultiplié `SRC_OVER` et à l'attachement sRGB/clamp/UNORM8.
 
@@ -66,7 +131,7 @@ Cet audit porte sur le code de production. Les assertions W5a ajoutées dans les
 
 L'audit exhaustif des déclarations publiques ajoutées depuis la base empilée inclut les nombres dans les collections, maps, tableaux et types nullables. Les résidus `MaterializedSolidV2.premultipliedRgbaF32` et `issue(refsByCommandIdI32, sourcePlansByCommandIdI32)` sont corrigés; les KDoc décrivent le slot géométrique neutre et le source-stage fragment. Les signatures historiques inchangées et les overrides imposés par Kotlin ne sont pas présentés comme de nouvelles APIs W5a.
 
-## Enveloppe numérique des preuves publiques
+### Enveloppe numérique des preuves publiques W5a
 
 Le cas public Rect puis Point à source ARGB `(197, 211, 79, 41)`, opacité shader `0.5` et paint `173/255` a isolé le RED `channel=2 observed=18 expected=[17]`. L'audit de la disposition brute, du binding et de l'expression DAG n'a pas révélé de divergence : l'oracle appliquait à tort la précision du `pow` WGSL à l'attachement fixed-function. La fixture 17/18 a été retirée de la suite car sa borne portable élargie est `Unbounded`; elle reste un exemple documenté, non un gate assoupli.
 
@@ -76,7 +141,7 @@ La couverture multiplie la source dans le fragment avant les facteurs fixed-func
 
 La première propagation des bornes officielles a rendu 13 anciennes fixtures multi-draw `Unbounded`. Une recherche déterministe par endpoints et grille fixed-point a retenu seulement des témoins à fond primaire opaque, couche blanche avec opacité/alpha Paint non triviaux, puis primaire opaque : ils préservent l'ordre, la capture et les mutations, tout en satisfaisant la règle stricte du singleton ou de deux codes adjacents. Un contre-exemple public en ordre inversé reste rejeté dans la preuve à trois Points. La combinaison fractionnaire 9/16 avec deux opacités et alpha Paint `253/255` reste explicitement `Unbounded`; le témoin 9/16 retenu garde les deux opacités mais un alpha Paint exact. Les conversions fixed-function peuvent élargir au-delà de deux codes l'enveloppe d'une scène arbitraire; ces fixtures sélectionnées ne prouvent pas une borne universelle. Un tel résultat reste `Unbounded`, jamais un succès assoupli. Aucun pipeline destination-read n'a été ajouté.
 
-## Vérification
+### Vérification historique W5a
 
 Vérification JVM du correctif global Task 8 et de sa continuation, fraîche et sérielle, sur la série `7dbaf8c` → `9aa924e5c` :
 
@@ -92,7 +157,7 @@ Skips exacts : `public mixed AA4 frame keeps a hard Path binary cover materializ
 
 La commande planifiée `:kanvas:jsNodeTest` est absente : `:kanvas` applique `buildsrc.convention.kotlin-jvm` et l'inventaire Gradle ne publie aucune tâche JS/Node. Aucun substitut de test d'infrastructure n'a été exécuté.
 
-## Limites et suite
+### Limites de la clôture W5a
 
 - Les trois skips AA4 restent attachés à l'indisponibilité native documentée; aucune capability ni réussite AA4 n'est simulée.
 - SolidColor, Opacity et Paint sont immuables. La mutation publique observable porte sur Path, tableaux vertices et listes glyphs après capture.
@@ -101,4 +166,4 @@ La commande planifiée `:kanvas:jsNodeTest` est absente : `:kanvas` applique `bu
 - Aucun test d'infrastructure n'a servi de preuve. Les deux re-reviews globales Sol indépendantes de Task 8 sont `READY`; la validation reste fondée sur la revue de production et les pixels publics autorisés.
 - Le run public final émet aussi `Context leak detected, CoreAnalytics returned false`, sans failure/error ni correspondance dans les sources du repository; warning natif non attribué à un défaut du correctif, conservé explicitement dans le rapport plutôt que présenté comme absent.
 - Une variante exploratoire non retenue, gradient Rect suivi de gradient RRect hard-edge, atteint legacy mais y rencontre `invalid.preflight.core_primitive_direct_geometry_resources` (uniform slab). Ce refus de ressources legacy distinct, suivi comme gap non bloquant, reste hors de ce correctif; la preuve retenue concerne la RRect seule demandée.
-- W5b porte les blends communs; gradients, images, local matrices, filters, noise et runtime effects restent les tranches suivantes avec refus typés.
+- Cette clôture W5a précédait W5b; le périmètre actuel W5b et la suite W5c sont décrits en tête de document.

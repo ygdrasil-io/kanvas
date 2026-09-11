@@ -121,13 +121,28 @@ internal class W4cSessionScratchV1(
     val poolCapacities: GPUCorePrimitiveFramePoolCapacities,
     val maxBufferSize: Long,
     val maxDynamicUniformBuffersPerPipelineLayout: Long,
+    private val w5bGraph: org.graphiks.kanvas.gpu.plan.RenderGraph? = null,
 ) {
     val graphHash: String = planId
     val capabilityHash: String = capabilitySealHash
     val draws: List<W4cSessionScratchDrawV1> = immutableList(draws)
 
     init {
-        val materialV2 = W4cPathFillPlanCompiler.isW5aMaterialCapabilityId(capabilityId)
+        val materialV2 = W4cPathFillPlanCompiler.isW5aMaterialCapabilityId(capabilityId) || w5bGraph != null
+        if (w5bGraph != null) {
+            require(w5bGraph.verifyW5bGeometryCompilerWitness() && w5bGraph.id.value == planId &&
+                capabilityId == W4cPathFillPlanCompiler.W5B_CAPABILITY_ID)
+            val colors = w5bGraph.passes().flatMap { pass -> when (pass) {
+                is org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass -> pass.draws()
+                is org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover -> listOf(pass.draw)
+                else -> emptyList()
+            } }.filterIsInstance<org.graphiks.kanvas.gpu.plan.PathFillDraw>().filter { color -> this.draws.any { it.commandId == color.commandIndex } }
+            require(colors.size == this.draws.size && colors.zip(this.draws).all { (color, draw) ->
+                color.commandIndex == draw.commandId && color.copyGeometryF32() === draw.copyGeometryF32() &&
+                    color.strategy == draw.strategy && color.copyScissorI32().let { scissor ->
+                        draw.copyScissorBounds() == GPUPixelBounds(scissor.left, scissor.top, scissor.right, scissor.bottom)
+                    } })
+        }
         val usesStencil = this.draws.any { draw -> draw.strategy == PathFillStrategy.StencilCover }
         val expectedVertexUseful = this.draws.sumOf(W4cSessionScratchDrawV1::vertexRangeBytes)
         val expectedIndexUseful = this.draws.sumOf(W4cSessionScratchDrawV1::indexRangeBytes)
@@ -247,7 +262,7 @@ internal class W4cSessionScratchV1(
         val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive ?: return false
         val geometry = semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath ?: return false
         val draw = draws.singleOrNull { scratchDraw -> scratchDraw.commandId == packet.commandIdValue } ?: return false
-        val materialV2 = W4cPathFillPlanCompiler.isW5aMaterialCapabilityId(capabilityId)
+        val materialV2 = W4cPathFillPlanCompiler.isW5aMaterialCapabilityId(capabilityId) || w5bGraph != null
         val expectedSlotIndex = when (packet.role) {
             GPUDrawPacketRole.PathStencilProducer -> if (materialV2) draw.producerUniformSlotIndex else draw.uniformSlotIndex
             GPUDrawPacketRole.Shading, GPUDrawPacketRole.PathStencilCover -> draw.uniformSlotIndex
@@ -325,7 +340,18 @@ internal class W4cSessionScratchV1(
         renderPipelineKey: GPURenderPipelineKey,
     ): Boolean {
         val clipExecutionPlan = packet.clipExecutionPlan ?: return false
-        val canonicalBlend = canonicalSolidRectSrcOverBlendPlan()
+        val canonicalBlend = if (w5bGraph == null || packet.role == GPUDrawPacketRole.PathStencilProducer)
+            canonicalSolidRectSrcOverBlendPlan() else {
+            val color = w5bGraph.passes().flatMap { pass -> when (pass) {
+                is org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass -> pass.draws()
+                is org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover -> listOf(pass.draw)
+                else -> emptyList()
+            } }.singleOrNull { it.commandIndex == draw.commandId } ?: return false
+            org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.lower(color.blend)
+        }
+        if (w5bGraph != null && packet.role == GPUDrawPacketRole.PathStencilProducer &&
+            ((semantic.material as? org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.SolidColor)?.w5aAuthority != null ||
+                semantic.premultipliedRgba.any { it != 0f } || packet.w5aSourceStageV2 != null)) return false
         if (
             !clipExecutionPlan.isCorePrimitiveNoClipOrScissorExecution() ||
                 packet.blendPlan?.canonicalIdentity() != canonicalBlend.canonicalIdentity() ||

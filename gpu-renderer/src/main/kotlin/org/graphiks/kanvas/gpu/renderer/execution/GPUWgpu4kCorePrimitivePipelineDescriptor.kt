@@ -48,6 +48,7 @@ internal enum class GPUWgpu4kCorePrimitiveBlendProgram(
 ) {
     ColorWriteNone(null, null, null, null, null, null, null),
     DestinationNoOp(GPUBlendMode.DST, null, null, null, null, null, null),
+    PremulDst(GPUBlendMode.DST, "zero", "one", "add", "zero", "one", "add"),
     PremulClear(GPUBlendMode.CLEAR, "zero", "zero", "add", "zero", "zero", "add"),
     PremulSrc(GPUBlendMode.SRC, "one", "zero", "add", "one", "zero", "add"),
     PremulSrcOver(
@@ -115,6 +116,7 @@ internal enum class GPUWgpu4kCorePrimitiveBlendProgram(
         "one-minus-src-alpha",
         "add",
     ),
+    PremulPlus(GPUBlendMode.PLUS, "one", "one", "add", "one", "one", "add"),
     PremulModulate(GPUBlendMode.MODULATE, "zero", "src", "add", "zero", "src-alpha", "add"),
     PremulScreen(
         GPUBlendMode.SCREEN,
@@ -260,6 +262,10 @@ internal fun mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
             blendProgram = blendProgram,
         ),
         componentIdentity = when {
+            (structuralKey.blend as? GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination)
+                ?.w5bCompositionAbiI32 in 3..4 ->
+                if (structuralKey.shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape)
+                    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY else PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY
             structuralKey.blend is
                 GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination &&
                 program.isAnalyticShapeDstRead() ->
@@ -383,6 +389,20 @@ internal fun GPUCorePrimitiveRenderPipelineStructuralKey.corePrimitiveNativeComp
         blend is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination
     ) {
         val shader = blend as GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination
+        if (shader.w5bCompositionAbiI32 in 3..4) {
+            if (this.shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape) {
+                return PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY.takeIf {
+                    shader.w5bCompositionAbiI32 == 3 && shader.sourceCoverage == GPUSourceCoverageEncoding.ScalarCoverageInShader &&
+                        GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(shader.mode.gpuLabel, shader.formulaId) != null
+                }
+            }
+            return PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY.takeIf {
+                this.shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry &&
+                    shader.sourceCoverage == (if (shader.w5bCompositionAbiI32 == 4)
+                        GPUSourceCoverageEncoding.ScalarCoverageInShader else GPUSourceCoverageEncoding.None) &&
+                    GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(shader.mode.gpuLabel, shader.formulaId) != null
+            }
+        }
         if (this.shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape) {
             if (shader.sourceCoverage == GPUSourceCoverageEncoding.LCDCoverageInShader ||
                 GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(
@@ -458,10 +478,12 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
                     ) {
                         null
                     } else {
-                        GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeDstRead
+                        if (shader.w5bCompositionAbiI32 == 3 && shader.sourceCoverage == GPUSourceCoverageEncoding.ScalarCoverageInShader)
+                            GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver
+                        else GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeDstRead
                     }
                 }
-                blend.nativeShadingBlendProgramOrNull() == null -> null
+                blend.nativeShadingBlendProgramOrNull(analyticScalar = true) == null -> null
                 else -> GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver
             }
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticDRRect -> when {
@@ -692,18 +714,23 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeBlendProgramOrNull
             blend.fixedNativeBlendProgramOrNull() ==
                 GPUWgpu4kCorePrimitiveBlendProgram.PremulDstOut
         }
-    program == GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeDstRead ->
+    program == GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeDstRead ||
+        program == GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver &&
+            blend is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination ->
         blend.analyticShapeDstReadBlendProgramOrNull()
+    program == GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver ->
+        blend.nativeShadingBlendProgramOrNull(analyticScalar = true)
     else -> blend.nativeShadingBlendProgramOrNull()
 }
 
-private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.nativeShadingBlendProgramOrNull():
+private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.nativeShadingBlendProgramOrNull(analyticScalar: Boolean = false):
     GPUWgpu4kCorePrimitiveBlendProgram? = when (this) {
-    is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed -> fixedNativeBlendProgramOrNull()
+    is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed -> fixedNativeBlendProgramOrNull(analyticScalar)
     is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.NoOp ->
         GPUWgpu4kCorePrimitiveBlendProgram.DestinationNoOp.takeIf { mode == GPUBlendMode.DST }
     is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination ->
-        if (sourceCoverage != GPUSourceCoverageEncoding.None) {
+        if (sourceCoverage != (if (w5bCompositionAbiI32 == 4)
+                GPUSourceCoverageEncoding.ScalarCoverageInShader else GPUSourceCoverageEncoding.None)) {
             null
         } else if (
             GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(mode.gpuLabel, formulaId) == null
@@ -742,14 +769,15 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.nativePathCoverBle
     else -> null
 }
 
-private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.fixedNativeBlendProgramOrNull():
+private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.fixedNativeBlendProgramOrNull(analyticScalar: Boolean = false):
     GPUWgpu4kCorePrimitiveBlendProgram? {
     val fixed = this as? GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed ?: return null
     return GPUWgpu4kCorePrimitiveBlendProgram.entries.singleOrNull { candidate ->
         candidate.mode == fixed.mode &&
             !candidate.isDstRead() &&
             candidate.colorSourceFactor != null &&
-            fixed.sourceCoverage == GPUSourceCoverageEncoding.None &&
+            (fixed.sourceCoverage == GPUSourceCoverageEncoding.None ||
+                analyticScalar && fixed.sourceCoverage == GPUSourceCoverageEncoding.ScalarCoverageInShader) &&
             fixed.state.color.sourceFactor == candidate.colorSourceFactor &&
             fixed.state.color.destinationFactor == candidate.colorDestinationFactor &&
             fixed.state.color.operation == candidate.colorOperation &&
@@ -1343,7 +1371,7 @@ private fun GPUWgpu4kCorePrimitiveBlendProgram.toWgpuBlendStateOrNull(): BlendSt
     )
 }
 
-private fun String.toWgpuBlendFactor(): GPUBlendFactor = when (this) {
+internal fun String.toWgpuBlendFactor(): GPUBlendFactor = when (this) {
     "zero" -> GPUBlendFactor.Zero
     "one" -> GPUBlendFactor.One
     "src" -> GPUBlendFactor.Src
@@ -1355,7 +1383,7 @@ private fun String.toWgpuBlendFactor(): GPUBlendFactor = when (this) {
     else -> error("Unsupported CorePrimitive fixed-function blend factor: $this")
 }
 
-private fun String.toWgpuBlendOperation(): GPUBlendOperation = when (this) {
+internal fun String.toWgpuBlendOperation(): GPUBlendOperation = when (this) {
     "add" -> GPUBlendOperation.Add
     else -> error("Unsupported CorePrimitive fixed-function blend operation: $this")
 }

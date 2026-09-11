@@ -15,6 +15,7 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.WgslReflectionReport
 import org.graphiks.kanvas.gpu.renderer.wgsl.reflectWgslModule
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
 
@@ -28,6 +29,10 @@ data class GPUPreparedTextCompositeBindingPlan(
     val atlasSamplerBinding: Int,
     val coverageMaskTextureGroup: Int?,
     val coverageMaskTextureBinding: Int?,
+    val destinationTextureGroup: Int?,
+    val destinationTextureBinding: Int?,
+    val destinationSamplerGroup: Int?,
+    val destinationSamplerBinding: Int?,
 )
 
 internal sealed interface GPUPreparedTextCompositeAdmissionToken
@@ -49,6 +54,7 @@ internal sealed interface GPUPreparedTextAuthenticatedComposite {
     val fixedFunctionBlendState: GPUFixedFunctionBlendState?
     val sourceCoverageEncoding: GPUSourceCoverageEncoding
     val clipVariant: GPUPreparedTextClipVariant
+    val destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead?
     val pipelineKey: String
 }
 
@@ -59,6 +65,7 @@ private class GPUPreparedTextCompositeAdmission(
     val fixedFunctionBlendState: GPUFixedFunctionBlendState?,
     val sourceCoverageEncoding: GPUSourceCoverageEncoding,
     val clipVariant: GPUPreparedTextClipVariant,
+    val destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead?,
     observer: GPUPreparedTextCompositionObserver,
 ) {
     val wgslSource: String
@@ -112,6 +119,7 @@ private class GPUPreparedTextCompositeAdmission(
                 fragment,
                 sourceCoverageEncoding,
                 clipVariant,
+                destinationBlend,
             )
         }.getOrElse { failure ->
             preparedTextCompositeAdmissionRefused(
@@ -180,6 +188,26 @@ private class GPUPreparedTextCompositeAdmission(
                 COVERAGE_MASK_TEXTURE_BINDING.takeIf {
                     clipVariant == GPUPreparedTextClipVariant.CoverageMask
                 },
+            destinationTextureGroup = destinationBlend?.let {
+                if (clipVariant == GPUPreparedTextClipVariant.CoverageMask) {
+                    DESTINATION_WITH_COVERAGE_MASK_GROUP
+                } else {
+                    DESTINATION_GROUP
+                }
+            },
+            destinationTextureBinding = DESTINATION_TEXTURE_BINDING.takeIf {
+                destinationBlend != null
+            },
+            destinationSamplerGroup = destinationBlend?.let {
+                if (clipVariant == GPUPreparedTextClipVariant.CoverageMask) {
+                    DESTINATION_WITH_COVERAGE_MASK_GROUP
+                } else {
+                    DESTINATION_GROUP
+                }
+            },
+            destinationSamplerBinding = DESTINATION_SAMPLER_BINDING.takeIf {
+                destinationBlend != null
+            },
         )
         vertexLayout = exactVertexLayout
         sourceHash = exactSourceHash
@@ -218,6 +246,8 @@ private class IssuedGPUPreparedTextAuthenticatedComposite(
         get() = admission.sourceCoverageEncoding
     override val clipVariant: GPUPreparedTextClipVariant
         get() = admission.clipVariant
+    override val destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead?
+        get() = admission.destinationBlend
     override val pipelineKey: String get() = admission.pipelineKey
 }
 
@@ -238,6 +268,7 @@ class GPUPreparedTextCompositeProgram private constructor(
     val sourceCoverageEncoding: GPUSourceCoverageEncoding =
         admission.sourceCoverageEncoding
     val clipVariant: GPUPreparedTextClipVariant = admission.clipVariant
+    val destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead? = admission.destinationBlend
     val pipelineKey: String = admission.pipelineKey
 
     internal val admissionToken: GPUPreparedTextCompositeAdmissionToken
@@ -265,6 +296,7 @@ class GPUPreparedTextCompositeProgram private constructor(
             fixedFunctionBlendState == admission.fixedFunctionBlendState &&
             sourceCoverageEncoding == admission.sourceCoverageEncoding &&
             clipVariant == admission.clipVariant &&
+            destinationBlend == admission.destinationBlend &&
             pipelineKey == admission.pipelineKey
 
     companion object {
@@ -276,6 +308,7 @@ class GPUPreparedTextCompositeProgram private constructor(
             fixedFunctionBlendState: GPUFixedFunctionBlendState?,
             sourceCoverageEncoding: GPUSourceCoverageEncoding,
             clipVariant: GPUPreparedTextClipVariant,
+            destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead? = null,
             observer: GPUPreparedTextCompositionObserver,
         ): GPUPreparedTextCompositeProgramResult =
             try {
@@ -288,6 +321,7 @@ class GPUPreparedTextCompositeProgram private constructor(
                             fixedFunctionBlendState = fixedFunctionBlendState,
                             sourceCoverageEncoding = sourceCoverageEncoding,
                             clipVariant = clipVariant,
+                            destinationBlend = destinationBlend,
                             observer = observer,
                         ),
                     ),
@@ -335,6 +369,7 @@ object GPUPreparedTextShaderComposer {
         sourceCoverageEncoding: GPUSourceCoverageEncoding =
             GPUSourceCoverageEncoding.ModulateRGBA,
         clipVariant: GPUPreparedTextClipVariant = GPUPreparedTextClipVariant.None,
+        destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead? = null,
     ): GPUPreparedTextCompositeProgramResult = composeObserved(
         material = material,
         targetFormatClass = targetFormatClass,
@@ -342,6 +377,7 @@ object GPUPreparedTextShaderComposer {
         fixedFunctionBlendState = fixedFunctionBlendState,
         sourceCoverageEncoding = sourceCoverageEncoding,
         clipVariant = clipVariant,
+        destinationBlend = destinationBlend,
         observer = NoOpGPUPreparedTextCompositionObserver,
     )
 
@@ -352,6 +388,7 @@ object GPUPreparedTextShaderComposer {
         fixedFunctionBlendState: GPUFixedFunctionBlendState?,
         sourceCoverageEncoding: GPUSourceCoverageEncoding,
         clipVariant: GPUPreparedTextClipVariant,
+        destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead?,
         observer: GPUPreparedTextCompositionObserver,
     ): GPUPreparedTextCompositeProgramResult =
         GPUPreparedTextCompositeProgram.composeValidated(
@@ -361,6 +398,7 @@ object GPUPreparedTextShaderComposer {
             fixedFunctionBlendState = fixedFunctionBlendState,
             sourceCoverageEncoding = sourceCoverageEncoding,
             clipVariant = clipVariant,
+            destinationBlend = destinationBlend,
             observer = observer,
         )
 
@@ -394,11 +432,12 @@ private fun preparedTextCompositeSourceForFragment(
     fragment: GPUPreparedMaterialFragment,
     sourceCoverageEncoding: GPUSourceCoverageEncoding,
     clipVariant: GPUPreparedTextClipVariant,
+    destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead?,
 ): String = listOf(
     fragment.declarationsWgsl,
     fragment.evaluationFunctionWgsl,
     PreparedTextA8Shader.vertexWgsl,
-    PreparedTextA8Shader.fragmentWgsl(sourceCoverageEncoding, clipVariant),
+    PreparedTextA8Shader.fragmentWgsl(sourceCoverageEncoding, clipVariant, destinationBlend),
 ).joinToString("\n\n")
 
 private fun preparedTextReservedIdentifierCollision(
@@ -484,8 +523,8 @@ private fun preparedTextFinalModuleMismatch(
     preparedTextTaskBindingMismatch(report.bindings)?.let {
         return it
     }
-    if (!report.bindings.all { it.group in DRAW_UNIFORM_GROUP..COVERAGE_MASK_GROUP }) {
-        return "Prepared text final bindings must occupy only deterministic groups 0 through 3"
+    if (!report.bindings.all { it.group in DRAW_UNIFORM_GROUP..DESTINATION_WITH_COVERAGE_MASK_GROUP }) {
+        return "Prepared text final bindings must occupy only deterministic groups 0 through 4"
     }
     val drawUniformLayout = report.layouts
         .filter { layout -> layout.structName == DRAW_UNIFORM_STRUCT_NAME }
@@ -525,7 +564,9 @@ private fun preparedTextTaskBindingMismatch(
         .map(WgslBindingReflection::preparedTextAbi)
         .sortedWith(compareBy({ it.group }, { it.binding }))
     return if (actualBindings == EXPECTED_TASK_BINDINGS ||
-        actualBindings == EXPECTED_TASK_BINDINGS_WITH_COVERAGE_MASK
+        actualBindings == EXPECTED_TASK_BINDINGS_WITH_COVERAGE_MASK ||
+        actualBindings == EXPECTED_TASK_BINDINGS_WITH_DESTINATION ||
+        actualBindings == EXPECTED_TASK_BINDINGS_WITH_COVERAGE_MASK_AND_DESTINATION
     ) {
         null
     } else {
@@ -606,6 +647,10 @@ private const val ATLAS_TEXTURE_BINDING = 0
 private const val ATLAS_SAMPLER_BINDING = 1
 private const val COVERAGE_MASK_GROUP = 3
 private const val COVERAGE_MASK_TEXTURE_BINDING = 0
+private const val DESTINATION_GROUP = 3
+private const val DESTINATION_WITH_COVERAGE_MASK_GROUP = 4
+private const val DESTINATION_TEXTURE_BINDING = 0
+private const val DESTINATION_SAMPLER_BINDING = 1
 private const val VERTEX_ENTRY_POINT = "vs_main"
 private const val FRAGMENT_ENTRY_POINT = "fs_main"
 private const val REFUSAL_CODE = "unsupported.material.composition"
@@ -653,6 +698,54 @@ private val EXPECTED_TASK_BINDINGS_WITH_COVERAGE_MASK = immutableList(
         viewDimension = "2d",
         storageFormat = null,
         minBindingSize = null,
+    ),
+)
+private val EXPECTED_TASK_BINDINGS_WITH_DESTINATION = immutableList(
+    EXPECTED_TASK_BINDINGS + listOf(
+        PreparedTextBindingAbi(
+            group = DESTINATION_GROUP,
+            binding = DESTINATION_TEXTURE_BINDING,
+            resourceKind = "sampledTexture",
+            access = "read",
+            sampleType = "float",
+            viewDimension = "2d",
+            storageFormat = null,
+            minBindingSize = null,
+        ),
+        PreparedTextBindingAbi(
+            group = DESTINATION_GROUP,
+            binding = DESTINATION_SAMPLER_BINDING,
+            resourceKind = "sampler",
+            access = "read",
+            sampleType = null,
+            viewDimension = null,
+            storageFormat = null,
+            minBindingSize = null,
+        ),
+    ),
+)
+private val EXPECTED_TASK_BINDINGS_WITH_COVERAGE_MASK_AND_DESTINATION = immutableList(
+    EXPECTED_TASK_BINDINGS_WITH_COVERAGE_MASK + listOf(
+        PreparedTextBindingAbi(
+            group = DESTINATION_WITH_COVERAGE_MASK_GROUP,
+            binding = DESTINATION_TEXTURE_BINDING,
+            resourceKind = "sampledTexture",
+            access = "read",
+            sampleType = "float",
+            viewDimension = "2d",
+            storageFormat = null,
+            minBindingSize = null,
+        ),
+        PreparedTextBindingAbi(
+            group = DESTINATION_WITH_COVERAGE_MASK_GROUP,
+            binding = DESTINATION_SAMPLER_BINDING,
+            resourceKind = "sampler",
+            access = "read",
+            sampleType = null,
+            viewDimension = null,
+            storageFormat = null,
+            minBindingSize = null,
+        ),
     ),
 )
 private val EXPECTED_DRAW_UNIFORM_LAYOUT = PreparedTextDrawUniformLayoutAbi(

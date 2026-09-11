@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
+import org.graphiks.kanvas.gpu.renderer.destination.preparedDestinationBounds
+
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
@@ -293,11 +295,11 @@ internal fun buildPreparedTextDrawUniformBufferPlan(
         target.putFloat(affine.m00)
         target.putFloat(affine.m01)
         target.putFloat(affine.m02)
-        target.putFloat(0f)
+        target.putFloat(semantic.preparedDestinationBounds(semantic.targetBounds).left.toFloat())
         target.putFloat(affine.m10)
         target.putFloat(affine.m11)
         target.putFloat(affine.m12)
-        target.putFloat(0f)
+        target.putFloat(semantic.preparedDestinationBounds(semantic.targetBounds).top.toFloat())
         when (val clipPlan = input.clipPlan) {
             is GPUPreparedTextClipPlan.Direct -> repeat(8) { target.putFloat(0f) }
             is GPUPreparedTextClipPlan.CoverageMask -> repeat(8) { target.putFloat(0f) }

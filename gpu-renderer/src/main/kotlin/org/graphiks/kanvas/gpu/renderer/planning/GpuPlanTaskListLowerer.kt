@@ -18,6 +18,9 @@ import org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.SamplePlan
 import org.graphiks.kanvas.gpu.plan.SolidRectDraw
+import org.graphiks.kanvas.gpu.plan.PlanDraw
+import org.graphiks.kanvas.gpu.plan.W5bPointDraw
+import org.graphiks.kanvas.gpu.plan.W5bCorePrimitiveGraph
 import org.graphiks.kanvas.gpu.plan.W3SolidRectPlanCompiler
 import org.graphiks.kanvas.gpu.plan.W3PlanDiagnostics
 import org.graphiks.kanvas.gpu.plan.W4aAnalyticRectPlanCompiler
@@ -74,7 +77,6 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskPhase
 import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
-import org.graphiks.kanvas.gpu.renderer.recording.canonicalSolidRectSrcOverBlendPlan
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveTargetStateHash
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
@@ -110,11 +112,21 @@ public class GpuPlanTaskListLowerer {
         }
         if (request.graph.capabilities != current) return unsupported("The graph capability snapshot is stale.")
         if (request.graph.budget != request.currentBudget) return invalid("The graph budget is stale.")
+        if (request.graph.verifyW5bGeometryCompilerWitness() && request.graph.visualCommandCount == 0)
+            return lowerW3(request, current)
         return when (request.graph.capabilityId) {
+            W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID -> W5bAnalyticRRectGraphLowerer().lower(request)
+            org.graphiks.kanvas.gpu.plan.W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID,
+            W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID,
+            W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID,
+            W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID,
+            W4cPathFillPlanCompiler.W5B_CAPABILITY_ID -> W5bNativeGeometryGraphLowerer().lower(request)
+            W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID -> W5bAnalyticRectGraphLowerer().lower(request)
             org.graphiks.kanvas.gpu.plan.W5aCompositePlanCompiler.CAPABILITY_ID ->
                 W5aCompositeGraphLowerer().lower(request)
             W3SolidRectPlanCompiler.CAPABILITY_ID,
             W3SolidRectPlanCompiler.W5A_CAPABILITY_ID,
+            W5bCorePrimitiveGraph.CAPABILITY_ID,
             -> lowerW3(request, current)
             W4aAnalyticRectPlanCompiler.HISTORICAL_CAPABILITY_ID,
             W4aAnalyticRectPlanCompiler.CAPABILITY_ID,
@@ -159,23 +171,25 @@ public class GpuPlanTaskListLowerer {
     private fun lowerGraph(request: GpuPlanLoweringRequest, graph: W3Graph): GpuPlanLoweringResult = try {
         val targetBounds = GPUPixelBounds(0, 0, request.graph.targetExtent.width, request.graph.targetExtent.height)
         val sessionIdentity = request.w5aCompositeSessionIdentity
+            ?: request.w5bPreparedTarget?.value?.removeSuffix(".target")
             ?: "w3.session.${request.deviceGeneration.value}.${request.graph.targetExtent.width}x${request.graph.targetExtent.height}.rgba8unorm-srgb"
-        val target = GPUFrameTargetRef("$sessionIdentity.target")
+        val target = request.w5bPreparedTarget ?: GPUFrameTargetRef("$sessionIdentity.target")
         val staging = GPUFrameBufferRef("$sessionIdentity.staging")
         val targetPreparation = GPUResourcePreparationRequest(target, GPUFrameTextureDescriptor(targetBounds, GPUColorFormat.RGBA8UnormSrgb, 1), GPUFrameResourceRole.SceneTarget, setOf(GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceUsage.CopySource), GPUFrameResourceLifetime.FrameLocal, graph.target.byteSize, "$sessionIdentity.target")
         val stagingPreparation = GPUResourcePreparationRequest(staging, GPUFrameBufferDescriptor(graph.staging.byteSize, request.graph.capabilities.copyBytesPerRowAlignment.toLong()), GPUFrameResourceRole.ReadbackStaging, setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.MapRead), GPUFrameResourceLifetime.FrameLocal, graph.staging.byteSize, "$sessionIdentity.staging")
         val memory = memoryBudget(request.capabilities, request.graph, graph, targetBounds, request.deviceGeneration,
-            request.w5aCompositeSessionIdentity)
+            request.w5aCompositeSessionIdentity ?: request.w5bPreparedTarget?.value?.removeSuffix(".target"))
             ?: return invalid("The graph memory facts cannot be represented by the renderer.")
         val readback = GPUFrameReadbackRequest(GPUReadbackRequestID("w3.${request.graph.id.value}.readback"), targetBounds, GPUReadbackPixelFormat.Rgba8Unorm, GPUColorInterpretation.EncodedPremulSrgb)
-        val base = when (val rendered = renderOnlyTaskList(request, graph, target, staging, targetBounds, memory)) {
+        val base = when (val rendered = renderOnlyTaskList(request, graph, target, staging, targetBounds, memory,
+            targetPreparation, stagingPreparation, readback)) {
             is W3BaseTaskListResult.Ready -> rendered.taskList
             is W3BaseTaskListResult.Unsupported -> return GpuPlanLoweringResult.UnsupportedCapability(rendered.diagnostic)
             is W3BaseTaskListResult.Invalid -> return GpuPlanLoweringResult.InvalidPlan(rendered.diagnostic)
         }
         when (val assembled = GPUCorePrimitivePreparedFrameTaskListAssembler().buildPreplanned(
             GPUCorePrimitivePreplannedFrameRequest(request.graph.id, base, target, targetBounds, targetPreparation, staging, stagingPreparation, readback, memory, graph.render.id, graph.readback.id,
-                request.w5aCompositeSessionIdentity?.let { GPUW5aCompositeLaneWitnessV1(it, requireNotNull(request.w5aCompositeLaneOrdinal), request.graph.id.value, base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets).map(GPUDrawPacket::packetId)) }),
+                request.w5aCompositeSessionIdentity?.let { GPUW5aCompositeLaneWitnessV1(it, requireNotNull(request.w5aCompositeLaneOrdinal), request.graph.id.value, base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets).map(GPUDrawPacket::packetId)) }, graph.destinationGraph),
         )) {
             is GPUCorePrimitivePreparedFrameResult.Recorded -> GpuPlanLoweringResult.Lowered(assembled.taskList, readback.requestId.value)
             is GPUCorePrimitivePreparedFrameResult.Refused -> invalid(assembled.diagnostic.message)
@@ -191,19 +205,44 @@ public class GpuPlanTaskListLowerer {
         staging: GPUFrameBufferRef,
         targetBounds: GPUPixelBounds,
         memory: GPUFrameMemoryBudgetPlan,
+        targetPreparation: GPUResourcePreparationRequest,
+        stagingPreparation: GPUResourcePreparationRequest,
+        readback: GPUFrameReadbackRequest,
     ): W3BaseTaskListResult {
         val packets = mutableListOf<GPUDrawPacket>()
         graph.draws.forEachIndexed { paintOrder, draw ->
             val color = resolveMaterialColor(graph.materialPlanTable, draw.materialAuthority)
                 ?: return W3BaseTaskListResult.Invalid(invalidDiagnostic("W5 material authority is invalid."))
-            packets += packet(draw, color, paintOrder, targetBounds, graph.materialPlanTable)
+            packets += packet(draw, color, paintOrder, targetBounds, graph.materialPlanTable,
+                request.w5bPreparedSemantics[draw.commandIndex])
         }
         val replay = "w3:${request.graph.id.value}"
         val seal = GPUFrameCapabilitySeal.capture(request.frameId, request.deviceGeneration, request.capabilities)
+        if (graph.draws.isEmpty()) {
+            val witness = org.graphiks.kanvas.gpu.renderer.passes.W5bClearOnlyFrameWitnessV3(
+                requireNotNull(graph.destinationGraph), target, staging, seal,
+                GPURecordingSeal(request.recordingId, 0L, replay, replay, seal.sealHash), memory,
+                targetPreparation, stagingPreparation, readback)
+            val render = GPUTask.Render(witness.clearTaskId,
+                request.recordingId, GPUTaskPhase.Render, target, GPULoadStorePlan("clear", GPUStorePlan.Store),
+                GPUSamplePlan.SingleSampleFrame, drawPackets = emptyList(), batchEligibilityByPacketId = emptyMap(),
+                w5bInitialClearV3 = org.graphiks.kanvas.gpu.renderer.passes.W5bInitialClearV3(witness))
+            return W3BaseTaskListResult.Ready(GPUTaskList(request.frameId, seal,
+                listOf(GPURecordingSeal(request.recordingId, 0L, replay, replay, seal.sealHash)), replay,
+                listOf(render), emptyList(), GPUTaskPhase.entries, memory))
+        }
         val scratch = when (val sealed = sealW3Scratch(request, target, staging, targetBounds, seal.sealHash, packets)) {
             is W3SessionScratchSealResult.Sealed -> sealed.scratch
             is W3SessionScratchSealResult.Unsupported -> return W3BaseTaskListResult.Unsupported(sealed.diagnostic)
             is W3SessionScratchSealResult.Invalid -> return W3BaseTaskListResult.Invalid(sealed.diagnostic)
+        }
+        val w5bWitness = graph.destinationGraph?.let {
+            val clip = graph.draws.filterIsInstance<W5bPointDraw>().mapNotNull { point -> point.clipOnly }.distinct().singleOrNull()
+            org.graphiks.kanvas.gpu.renderer.passes.W5bPreparedFrameWitnessV3(it,
+                org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.Direct(scratch), seal,
+                GPURecordingSeal(request.recordingId, 0L, replay, replay, seal.sealHash), memory,
+                targetPreparation, stagingPreparation, readback, packets,
+                clip?.let { plan -> W4eClipGraphLowerer().lowerClipOnly(request, plan) })
         }
         packets.forEach { packet ->
             val semantic = packet.semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive
@@ -215,7 +254,10 @@ public class GpuPlanTaskListLowerer {
             val pipeline = packet.renderPipelineKey
                 ?: return W3BaseTaskListResult.Invalid(invalidDiagnostic("W3 packet is missing render pipeline authority."))
             packet.attachCorePrimitivePreparedAuthority(
-                GPUCorePrimitivePreparedPacketAuthority.plannedW3(
+                if (w5bWitness != null) GPUCorePrimitivePreparedPacketAuthority.plannedW5b(
+                    corePrimitiveRenderPipelineStructuralKey(semantic, clip, blend, 1,
+                        GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat()), pipeline, w5bWitness,
+                ) else GPUCorePrimitivePreparedPacketAuthority.plannedW3(
                     structuralPipelineKey = corePrimitiveRenderPipelineStructuralKey(
                         semantic,
                         clip,
@@ -234,7 +276,7 @@ public class GpuPlanTaskListLowerer {
         )
     }
 
-    private fun sealW3Scratch(
+    internal fun sealW3Scratch(
         request: GpuPlanLoweringRequest,
         target: GPUFrameTargetRef,
         staging: GPUFrameBufferRef,
@@ -291,14 +333,15 @@ public class GpuPlanTaskListLowerer {
         val first = packets.firstOrNull() ?: return W3SessionScratchSealResult.Invalid(
             invalidDiagnostic("W3 scratch requires at least one packet."),
         )
-        val semantic = first.semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive
-            ?: return W3SessionScratchSealResult.Invalid(invalidDiagnostic("W3 packet is missing CorePrimitive semantic authority."))
-        val clip = first.clipExecutionPlan
-            ?: return W3SessionScratchSealResult.Invalid(invalidDiagnostic("W3 packet is missing clip authority."))
-        val blend = first.blendPlan
-            ?: return W3SessionScratchSealResult.Invalid(invalidDiagnostic("W3 packet is missing blend authority."))
-        val vertexBytes = packets.size.toLong() * 32L
-        val indexBytes = packets.size.toLong() * 24L
+        val geometryBytes = packets.map { packet ->
+            when (val geometry = (packet.semanticPayload as org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive).geometry) {
+                is org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry.TriangulatedPath ->
+                    geometry.vertices.size.toLong() * 4L to geometry.indices.size.toLong() * 4L
+                else -> 32L to 24L
+            }
+        }
+        val vertexBytes = geometryBytes.sumOf { it.first }
+        val indexBytes = geometryBytes.sumOf { it.second }
         val poolCapacities = corePrimitiveFramePoolCapacitiesOrNull(
             vertexBytes,
             indexBytes,
@@ -316,19 +359,25 @@ public class GpuPlanTaskListLowerer {
                 targetBounds = targetBounds,
                 packetIds = packets.map(GPUDrawPacket::packetId),
                 commandIds = packets.map(GPUDrawPacket::commandIdValue),
-                structuralPipelineKey = corePrimitiveRenderPipelineStructuralKey(
-                    semantic,
-                    clip,
-                    blend,
-                    sampleCount = 1,
-                    colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
-                ),
+                packetStructuralPipelineKeys = packets.map { packet ->
+                    val semantic = packet.semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive
+                        ?: throw IllegalArgumentException("W3 packet is missing CorePrimitive semantic authority.")
+                    val clip = packet.clipExecutionPlan
+                        ?: throw IllegalArgumentException("W3 packet is missing clip authority.")
+                    val blend = packet.blendPlan
+                        ?: throw IllegalArgumentException("W3 packet is missing blend authority.")
+                    corePrimitiveRenderPipelineStructuralKey(
+                        semantic, clip, blend, sampleCount = 1,
+                        colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
+                    )
+                },
                 uniformPlan = plan,
                 maxBufferSize = maxBufferSize,
                 maxDynamicUniformBuffersPerPipelineLayout = maxDynamicUniformBuffers,
                 vertexBytes = vertexBytes,
                 indexBytes = indexBytes,
                 poolCapacities = poolCapacities,
+                packetGeometryBytes = geometryBytes,
             )
         } catch (_: IllegalArgumentException) {
             return W3SessionScratchSealResult.Invalid(invalidDiagnostic("W3 scratch packing is invalid."))
@@ -342,9 +391,10 @@ public class GpuPlanTaskListLowerer {
         }
     }
 
-    private fun packet(draw: SolidRectDraw, color: ColorF32, paintOrder: Int, target: GPUPixelBounds, materialPlanTable: MaterialPlanTable?): GPUDrawPacket {
-        val bounds = draw.copyVisibleBounds()
-        val scissor = draw.copyScissor()
+    internal fun packet(draw: PlanDraw, color: ColorF32, paintOrder: Int, target: GPUPixelBounds, materialPlanTable: MaterialPlanTable?,
+        prepared: org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive?): GPUDrawPacket {
+        val bounds = when (draw) { is SolidRectDraw -> draw.copyVisibleBounds(); is W5bPointDraw -> draw.copyBoundsI32(); else -> error("Unknown direct geometry") }
+        val scissor = when (draw) { is SolidRectDraw -> draw.copyScissor(); is W5bPointDraw -> draw.copyScissorI32(); else -> error("Unknown direct geometry") }
         require(bounds.roundTripsExactlyThroughF32() && scissor.roundTripsExactlyThroughF32()) {
             "W3 planned I32 bounds cannot round-trip exactly through renderer F32 values."
         }
@@ -352,9 +402,23 @@ public class GpuPlanTaskListLowerer {
         val scissorBounds = GPUPixelBounds(scissor.left, scissor.top, scissor.right, scissor.bottom)
         val clip = if (scissorBounds == target) GPUClipCoveragePlan.NoClip else GPUClipCoveragePlan.Scissor(GPUBounds(scissor.left.toFloat(), scissor.top.toFloat(), scissor.right.toFloat(), scissor.bottom.toFloat()))
         val execution = if (scissorBounds == target) GPUClipExecutionPlan.NoClip else GPUClipExecutionPlan.ScissorOnly(scissorBounds)
-        val blend = canonicalSolidRectSrcOverBlendPlan()
+        val blend = W5bBlendPlanLowerer.lower(draw.blend)
         val analysisRecordId = "analysis.fill_rect.${draw.commandIndex}"
-        val semantic = GPUCorePrimitivePayloadGatherer().gatherSemantic(GPUCorePrimitivePayloadInput(draw.commandIndex, GPUCorePrimitiveSourceFamily.Rect, GPUCorePrimitiveGeometryInput.Rect(rect.left, rect.top, rect.right, rect.bottom), listOf(color.red, color.green, color.blue, color.alpha), target, scissorBounds, clip, execution.canonicalIdentity(), blend.canonicalIdentity(), GPUFrameProvenance.None, GPUCorePrimitiveCoverageMode.FullOrScissor, analysisRecordId, "FillRect", GPUCorePrimitiveRectRouteAuthority.RectAxisAligned, corePrimitiveRectGeometryAuthority(rect, GPUTransformFacts.identity()), material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex)))
+        val semantic = if (draw is W5bPointDraw) {
+            val authentic = requireNotNull(prepared)
+            val geometry = authentic.geometry as org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry.TriangulatedPath
+            require(authentic.hasStructuralIntegrity() && authentic.sourceFamily == GPUCorePrimitiveSourceFamily.PointLine &&
+                geometry.vertices == draw.copyVerticesF32().toList() && geometry.indices == draw.copyIndicesI32().toList() &&
+                geometry.sourceContourStarts == draw.copyContourStartsI32().toList())
+            GPUCorePrimitivePayloadGatherer().gatherSemantic(GPUCorePrimitivePayloadInput(draw.commandIndex,
+                GPUCorePrimitiveSourceFamily.PointLine, GPUCorePrimitiveGeometryInput.TriangulatedPath(
+                    geometry.vertices, geometry.indices, geometry.sourceContourStarts, geometry.sourceVertexCount,
+                    geometry.coverBounds, geometry.geometryMode, geometry.fillRule, geometry.inverseFill,
+                    geometry.strokeStyle, geometry.sourceAuthority), listOf(color.red, color.green, color.blue, color.alpha),
+                target, scissorBounds, clip, execution.canonicalIdentity(), blend.canonicalIdentity(),
+                GPUFrameProvenance.None, GPUCorePrimitiveCoverageMode.FullOrScissor, authentic.analysisRecordId,
+                authentic.analysisCommandFamily, material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex)))
+        } else GPUCorePrimitivePayloadGatherer().gatherSemantic(GPUCorePrimitivePayloadInput(draw.commandIndex, GPUCorePrimitiveSourceFamily.Rect, GPUCorePrimitiveGeometryInput.Rect(rect.left, rect.top, rect.right, rect.bottom), listOf(color.red, color.green, color.blue, color.alpha), target, scissorBounds, clip, execution.canonicalIdentity(), blend.canonicalIdentity(), GPUFrameProvenance.None, GPUCorePrimitiveCoverageMode.FullOrScissor, analysisRecordId, "FillRect", GPUCorePrimitiveRectRouteAuthority.RectAxisAligned, corePrimitiveRectGeometryAuthority(rect, GPUTransformFacts.identity()), material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex)))
         val structuralKey = corePrimitiveRenderPipelineStructuralKey(
             semantic,
             execution,
@@ -367,16 +431,86 @@ public class GpuPlanTaskListLowerer {
 
     private fun memoryBudget(capabilities: GPUCapabilities, graph: RenderGraph, shape: W3Graph, bounds: GPUPixelBounds, generation: org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID, compositeSessionIdentity: String?): GPUFrameMemoryBudgetPlan? {
         val limits = capabilities.limits ?: return null
-        if (shape.target.byteSize + shape.staging.byteSize != graph.peakFrameLocalBytes || graph.peakFrameLocalBytes > graph.budget.maxFrameLocalBytes) return null
+        val pointClip = shape.draws.filterIsInstance<W5bPointDraw>().mapNotNull { it.clipOnly }.distinct().singleOrNull()
+        if (pointClip != null) {
+            val identity = compositeSessionIdentity ?: "w3.session.${generation.value}.${bounds.width}x${bounds.height}.rgba8unorm-srgb"
+            val allocations = graph.resources().map { resource -> GPUFrameMemoryAllocation(
+                when (resource.role) {
+                    PlanResourceRole.LogicalTarget -> "$identity.target"
+                    PlanResourceRole.DestinationSnapshot -> "$identity.snapshot"
+                    PlanResourceRole.ReadbackStaging -> "$identity.staging"
+                    else -> "w4e.${resource.id.value}"
+                }, when (resource.role) {
+                    PlanResourceRole.LogicalTarget -> GPUFrameMemoryCategory.CanonicalTarget
+                    PlanResourceRole.DestinationSnapshot -> GPUFrameMemoryCategory.DestinationSnapshot
+                    PlanResourceRole.ReadbackStaging -> GPUFrameMemoryCategory.ReadbackStaging
+                    else -> GPUFrameMemoryCategory.ReusableScratch
+                }, resource.byteSize,
+                if (resource.kind == org.graphiks.kanvas.gpu.plan.PlanResourceKind.Buffer) GPUFrameMemoryResourceKind.Buffer else GPUFrameMemoryResourceKind.Texture2D,
+                resource.copyExtent()?.let { GPUPixelBounds(0, 0, it.width, it.height) }) }
+            return org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlanner.plan(
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetRequest(allocations,
+                    graph.budget.maxFrameLocalBytes, limits)).takeIf { it.diagnostic == null &&
+                    it.targetResidentBytes + it.peakFrameTransientBytes == graph.peakFrameLocalBytes }
+        }
+        val snapshot = graph.resources().singleOrNull { it.role == PlanResourceRole.DestinationSnapshot }
+        val snapshotBytes = snapshot?.byteSize ?: 0L
+        val transientBytesI64 = try { Math.addExact(shape.staging.byteSize, snapshotBytes) } catch (_: ArithmeticException) { return null }
+        val totalBytesI64 = try { Math.addExact(shape.target.byteSize, transientBytesI64) } catch (_: ArithmeticException) { return null }
+        if (totalBytesI64 != graph.peakFrameLocalBytes || graph.peakFrameLocalBytes > graph.budget.maxFrameLocalBytes) return null
         val identity = compositeSessionIdentity ?: "w3.session.${generation.value}.${bounds.width}x${bounds.height}.rgba8unorm-srgb"
         val target = GPUFrameMemoryAllocation("$identity.target", GPUFrameMemoryCategory.CanonicalTarget, shape.target.byteSize, GPUFrameMemoryResourceKind.Texture2D, bounds)
         val staging = GPUFrameMemoryAllocation("$identity.staging", GPUFrameMemoryCategory.ReadbackStaging, shape.staging.byteSize, GPUFrameMemoryResourceKind.Buffer, null)
-        return GPUFrameMemoryBudgetPlan(shape.staging.byteSize, shape.target.byteSize, GPUFrameMemoryCategory.entries.associateWith { category -> when (category) { GPUFrameMemoryCategory.CanonicalTarget -> shape.target.byteSize; GPUFrameMemoryCategory.ReadbackStaging -> shape.staging.byteSize; else -> 0L } }, limits.capabilityFacts("frame-memory-budget"), graph.budget.maxFrameLocalBytes, null, listOf(target, staging))
+        val snapshots = if (snapshotBytes == 0L) emptyList() else listOf(GPUFrameMemoryAllocation("$identity.snapshot", GPUFrameMemoryCategory.DestinationSnapshot, snapshotBytes, GPUFrameMemoryResourceKind.Texture2D,
+            requireNotNull(snapshot?.copyExtent()).let { GPUPixelBounds(0, 0, it.width, it.height) }))
+        return GPUFrameMemoryBudgetPlan(transientBytesI64, shape.target.byteSize, GPUFrameMemoryCategory.entries.associateWith { category -> when (category) { GPUFrameMemoryCategory.CanonicalTarget -> shape.target.byteSize; GPUFrameMemoryCategory.ReadbackStaging -> shape.staging.byteSize; GPUFrameMemoryCategory.DestinationSnapshot -> snapshotBytes; else -> 0L } }, limits.capabilityFacts("frame-memory-budget"), graph.budget.maxFrameLocalBytes, null, listOf(target, staging) + snapshots)
     }
 
     private fun validateW3Graph(graph: RenderGraph): W3Graph? {
-        if (graph.capabilityId !in setOf(W3SolidRectPlanCompiler.CAPABILITY_ID, W3SolidRectPlanCompiler.W5A_CAPABILITY_ID) || graph.colorFormat != PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) return null
+        val geometryClearOnly = graph.verifyW5bGeometryCompilerWitness() && graph.visualCommandCount == 0 &&
+            graph.materialPlanTableOrNull() == null && graph.w5bGeometryLanes().isEmpty() && graph.passes().size == 2
+        if ((!geometryClearOnly && graph.capabilityId !in setOf(W3SolidRectPlanCompiler.CAPABILITY_ID, W3SolidRectPlanCompiler.W5A_CAPABILITY_ID, W5bCorePrimitiveGraph.CAPABILITY_ID)) || graph.colorFormat != PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) return null
         val resources = graph.resources()
+        if (graph.capabilityId == W5bCorePrimitiveGraph.CAPABILITY_ID) {
+            val target = resources.singleOrNull { it.role == PlanResourceRole.LogicalTarget } ?: return null
+            val staging = resources.singleOrNull { it.role == PlanResourceRole.ReadbackStaging } ?: return null
+            val renders = graph.passes().filterIsInstance<PlanPass.RenderPass>()
+            val readback = graph.passes().lastOrNull() as? PlanPass.ReadbackPass ?: return null
+            val draws = renders.flatMap { it.draws() }
+            val clips = draws.filterIsInstance<W5bPointDraw>().mapNotNull { it.clipOnly }.distinct()
+            if (clips.size > 1) return null
+            val clip = clips.singleOrNull()
+            if (clip != null && (graph.passes().take(clip.passes().size) != clip.passes() ||
+                !clip.nativePayload.matchesDeclaredResources(resources))) return null
+            if (draws.any { it !is SolidRectDraw && it !is W5bPointDraw } ||
+                draws.any { it.coverage != CoveragePlan.FullOrScissor } ||
+                renders.any { it.target != target.id || it.destinationVersionAfter == null } ||
+                (graph.materialPlanTableOrNull() == null) != draws.isEmpty() || resources.size !=
+                2 + (if (draws.any { it.blend is BlendPlan.DestinationReadV1 }) 1 else 0) + (clip?.resources()?.size ?: 0)) return null
+            return W3Graph(target, staging, renders.first(), readback, draws, graph.materialPlanTableOrNull(), graph)
+        }
+        if (resources.any { it.role == PlanResourceRole.DestinationSnapshot }) {
+            val target = resources.singleOrNull { it.role == PlanResourceRole.LogicalTarget } ?: return null
+            val staging = resources.singleOrNull { it.role == PlanResourceRole.ReadbackStaging } ?: return null
+            val snapshot = resources.singleOrNull { it.role == PlanResourceRole.DestinationSnapshot } ?: return null
+            val passes = graph.passes()
+            val renders = passes.filterIsInstance<PlanPass.RenderPass>()
+            val readback = passes.lastOrNull() as? PlanPass.ReadbackPass ?: return null
+            val draws = renders.flatMap { it.draws() }
+            val extent = snapshot.copyExtent() ?: return null
+            val copies = passes.filterIsInstance<PlanPass.TextureCopy>()
+            if (resources.size != 3 || copies.isEmpty() || copies.any { copy ->
+                    val region = copy.copySourceBoundsI32()
+                    region == null || region.isEmpty || region.left < 0 || region.top < 0 ||
+                        region.right > graph.targetExtent.width || region.bottom > graph.targetExtent.height ||
+                        region.width() > extent.width || region.height() > extent.height ||
+                        copy.destination != snapshot.id || copy.bytesPerRowI64?.rem(graph.capabilities.copyBytesPerRowAlignment.toLong()) != 0L
+                } ||
+                graph.materialPlanTableOrNull() == null || draws.any { it !is SolidRectDraw || it.coverage != CoveragePlan.FullOrScissor || it.sample != SamplePlan.SingleSample } ||
+                renders.any { it.target != target.id || it.destinationVersionAfter == null } ||
+                graph.dependencies() != passes.zipWithNext { before, after -> org.graphiks.kanvas.gpu.plan.PlanPassDependency(before.id, after.id) }) return null
+            return W3Graph(target, staging, renders.first(), readback, draws.filterIsInstance<SolidRectDraw>(), graph.materialPlanTableOrNull(), graph)
+        }
         if (resources.size != 2) return null
         val target = resources.singleOrNull { it.role == PlanResourceRole.LogicalTarget } ?: return null
         val staging = resources.singleOrNull { it.role == PlanResourceRole.ReadbackStaging } ?: return null
@@ -400,9 +534,9 @@ public class GpuPlanTaskListLowerer {
         val planDraws = render.draws()
         if (planDraws.any { it !is SolidRectDraw }) return null
         val draws = planDraws.filterIsInstance<SolidRectDraw>()
-        if (staging.id != expectedStagingResource.id || staging.ordinal != 0 || staging.kind != PlanResourceKind.Buffer || staging.format != null || staging.copyExtent() != null || staging.byteSize != expectedStaging || staging.usages() != setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead) || staging.lifetime != PlanResourceLifetime.FrameLocal || staging.firstPassIndex != 1 || staging.lastPassIndexExclusive != 2 || render.ordinal != 0 || readback.ordinal != 0 || render.id != expectedRenderId || readback.id != expectedReadbackId || render.target != target.id || readback.source != target.id || readback.staging != staging.id || readback.bytesPerRow != expectedRow || render.load != AttachmentLoadPlan.ClearTransparent || render.store != AttachmentStorePlan.Store || render.drawDataResources != null || graph.dependencies().singleOrNull()?.let { it.before == render.id && it.after == readback.id } != true || graph.visualCommandCount != draws.size || draws.size !in 1..512 || graph.peakFrameLocalBytes != expectedTargetBytes + expectedStaging) return null
+        if (staging.id != expectedStagingResource.id || staging.ordinal != 0 || staging.kind != PlanResourceKind.Buffer || staging.format != null || staging.copyExtent() != null || staging.byteSize != expectedStaging || staging.usages() != setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead) || staging.lifetime != PlanResourceLifetime.FrameLocal || staging.firstPassIndex != 1 || staging.lastPassIndexExclusive != 2 || render.ordinal != 0 || readback.ordinal != 0 || render.id != expectedRenderId || readback.id != expectedReadbackId || render.target != target.id || readback.source != target.id || readback.staging != staging.id || readback.bytesPerRow != expectedRow || render.load != AttachmentLoadPlan.ClearTransparent || render.store != AttachmentStorePlan.Store || render.drawDataResources != null || graph.dependencies().singleOrNull()?.let { it.before == render.id && it.after == readback.id } != true || graph.visualCommandCount != draws.size || (draws.size !in 1..512 && !(draws.isEmpty() && render.destinationVersionAfter?.valueI64 == 0L && graph.materialPlanTableOrNull() == null)) || graph.peakFrameLocalBytes != expectedTargetBytes + expectedStaging) return null
         val targetRect = org.graphiks.math.geometry.RectI32(0, 0, graph.targetExtent.width, graph.targetExtent.height)
-        if (draws.any { draw -> draw.coverage != CoveragePlan.FullOrScissor || draw.sample != SamplePlan.SingleSample || draw.blend != BlendPlan.SrcOver || draw.copyVisibleBounds().isEmpty || draw.copyScissor().isEmpty || !targetRect.copy().intersect(draw.copyVisibleBounds()) || !draw.copyVisibleBounds().copy().intersect(draw.copyScissor()) || draw.copyScissor() != draw.copyVisibleBounds() }) return null
+        if (draws.any { draw -> draw.coverage != CoveragePlan.FullOrScissor || draw.sample != SamplePlan.SingleSample || draw.copyVisibleBounds().isEmpty || draw.copyScissor().isEmpty || !targetRect.copy().intersect(draw.copyVisibleBounds()) || !draw.copyVisibleBounds().copy().intersect(draw.copyScissor()) || draw.copyScissor() != draw.copyVisibleBounds() }) return null
         val table = graph.materialPlanTableOrNull()
         if (draws.any { draw ->
                 when (val authority = draw.materialAuthority) {
@@ -418,9 +552,9 @@ public class GpuPlanTaskListLowerer {
             W3SolidRectPlanCompiler.W5A_CAPABILITY_ID -> if (
                 table == null || draws.any { it.materialAuthority !is PlanDrawMaterialAuthority.MaterialV1 }
             ) return null
-            else -> return null
+            else -> if (!geometryClearOnly || draws.isNotEmpty()) return null
         }
-        return W3Graph(target, staging, render, readback, draws, table)
+        return W3Graph(target, staging, render, readback, draws, table, graph.takeIf { draws.isEmpty() })
     }
 
     private data class W3Graph(
@@ -428,8 +562,9 @@ public class GpuPlanTaskListLowerer {
         val staging: PlanResource,
         val render: PlanPass.RenderPass,
         val readback: PlanPass.ReadbackPass,
-        val draws: List<SolidRectDraw>,
+        val draws: List<PlanDraw>,
         val materialPlanTable: MaterialPlanTable?,
+        val destinationGraph: RenderGraph? = null,
     )
 
     private fun resolveMaterialColor(
@@ -446,7 +581,7 @@ public class GpuPlanTaskListLowerer {
         data class Invalid(val diagnostic: RenderDiagnostic) : W3BaseTaskListResult
     }
 
-    private sealed interface W3SessionScratchSealResult {
+    internal sealed interface W3SessionScratchSealResult {
         data class Sealed(val scratch: W3SessionScratchV1) : W3SessionScratchSealResult
         data class Unsupported(val diagnostic: RenderDiagnostic) : W3SessionScratchSealResult
         data class Invalid(val diagnostic: RenderDiagnostic) : W3SessionScratchSealResult

@@ -80,14 +80,19 @@ internal class GPUPlanSurfaceRouter(
                 config.frameLocalBudgetBytes,
             )
         ) {
+            // No compiler owns a GapNotMigrated frame. This is the final legacy boundary.
             is GpuPlanSurfacePlanResult.GapNotMigrated -> legacy()
             is GpuPlanSurfacePlanResult.Terminal -> throw terminal(planned.diagnostics)
-            is GpuPlanSurfacePlanResult.Ready -> when (val submitted = planPort.submit(planned.token)) {
-                is GpuPlanSurfaceSubmitResult.Completed -> completed(submitted.output, format)
-                is GpuPlanSurfaceSubmitResult.Terminal -> throw terminal(submitted.diagnostics)
-            }
+            is GpuPlanSurfacePlanResult.Ready -> submitOwned(planned.token, format)
         }
     }
+
+    /** An authenticated ready token has no legacy continuation or public paint to reclassify. */
+    private fun submitOwned(token: GpuPlanSurfaceReadyToken, format: PixelFormat): RenderResult =
+        when (val submitted = planPort.submit(token)) {
+            is GpuPlanSurfaceSubmitResult.Completed -> completed(submitted.output, format)
+            is GpuPlanSurfaceSubmitResult.Terminal -> throw terminal(submitted.diagnostics)
+        }
 
     private fun completed(output: GpuFrameOutput, format: PixelFormat): RenderResult {
         val bytes = output.copyBytes()

@@ -16,6 +16,8 @@ public class W5aCompositePlanCompiler : GpuPlanCompiler {
     ) : GpuPlanCandidate { override val capabilityId: String = CAPABILITY_ID }
 
     override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
+        if (SceneSemanticValidator.validate(scene) is SceneSemanticValidationResult.Invalid)
+            return GpuPlanSelection.InvalidScene(listOf(diagnostic("Composite scene metadata is invalid")))
         val commands = scene.toList()
         val draws = commands.withIndex().filter { it.value is SceneCommand.Draw }
         fun kind(command: SceneCommand): Int? = when ((command as? SceneCommand.Draw)?.node?.geometry) {
@@ -44,17 +46,34 @@ public class W5aCompositePlanCompiler : GpuPlanCompiler {
             val indices = run.map { it.index }.toSet()
             // Metadata placeholders retain the original command indices, never geometry conversions.
             val laneScene = SceneSnapshot.of(scene.extent, scene.colorSpace, commands.mapIndexed { index, command ->
-                if (command is SceneCommand.Draw && index !in indices)
+                // Each DrawNode owns its complete transform/clip snapshot. Foreign metadata must
+                // not narrow another lane; the whole scene was validated before this projection.
+                if (command is SceneCommand.SetTransform || command is SceneCommand.SetClip ||
+                    command is SceneCommand.Draw && index !in indices)
                     SceneCommand.Annotation.of(RectF32(0f, 0f, 0f, 0f), "w5a.omitted-draw", index.toString())
                 else command
             })
-            val compiler: GpuPlanCompiler = when (kind(run.first().value)) {
+            var compiler: GpuPlanCompiler = when (kind(run.first().value)) {
                 0 -> W3SolidRectPlanCompiler()
                 1 -> W4bAnalyticRRectPlanCompiler()
                 2 -> W4cPathFillPlanCompiler()
                 else -> W4dPathStrokePlanCompiler()
             }
-            when (val selection = compiler.select(laneScene, target)) {
+            var selection = compiler.select(laneScene, target)
+            if (selection is GpuPlanSelection.NotCandidate && kind(run.first().value) == 0) {
+                compiler = W4aAnalyticRectPlanCompiler()
+                selection = compiler.select(laneScene, target)
+            }
+            if (selection is GpuPlanSelection.NotCandidate && kind(run.first().value) in setOf(2, 3) &&
+                draws.any { when (val blend = (it.value as SceneCommand.Draw).node.blend) {
+                    is BlendNode.Mode -> blend.mode != BlendMode.SRC_OVER
+                    is BlendNode.Paint -> blend.blender == null && blend.mode != BlendMode.SRC_OVER
+                    else -> false
+                } }) {
+                compiler = W4dGeneralPathPlanCompiler()
+                selection = compiler.select(laneScene, target)
+            }
+            when (selection) {
                 is GpuPlanSelection.Candidate -> lanes += Lane(compiler, selection.candidate)
                 is GpuPlanSelection.MaterialOnlyRefusal -> materialRefusals += selection.materialRefusals
                 else -> return selection
@@ -75,7 +94,12 @@ public class W5aCompositePlanCompiler : GpuPlanCompiler {
             else -> return result
         }
         return try {
-            RenderPlanResult.Ready(RenderGraph.issueW5aComposite(W5aCompositePlanV1.issue(graphs)))
+            if (graphs.any { graph -> graph.verifyW5bGeometryCompilerWitness() || graph.capabilityId == W4dGeneralPathPlanCompiler.W5A_HARD_CAPABILITY_ID || graph.passes().any {
+                it is PlanPass.TextureCopy || it is PlanPass.RenderPass && it.draws().any { draw ->
+                    draw.blend != BlendPlan.LegacySrcOverV1 && (draw.blend as? BlendPlan.FixedFunctionV1)?.mode != BlendMode.SRC_OVER
+                }
+            } }) RenderPlanResult.Ready(issueW5bNativeComposite(graphs))
+            else RenderPlanResult.Ready(RenderGraph.issueW5aComposite(W5aCompositePlanV1.issue(graphs)))
         } catch (_: W5aCompositeBudgetExceeded) {
             RenderPlanResult.ResourceLimitExceeded(listOf(diagnostic("Composite frame exceeds its aggregate memory budget")))
         } catch (failure: IllegalArgumentException) {

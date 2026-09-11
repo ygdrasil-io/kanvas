@@ -240,6 +240,15 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
         private const val VERSION: String = "w4e-prepared-authority-v1"
         private const val W5A_VERSION: String = "w4e-prepared-authority-w5a-material-v2"
 
+        fun issueClipOnly(planId: String, plan: org.graphiks.kanvas.gpu.plan.W4eClipOnlyPlan): GPUPlanW4ePreparedAuthority {
+            require(plan.nativePayload.matchesDeclaredResources(plan.resources()))
+            val facts = plan.passes().map { requireNotNull(clipPassFact(it)) }
+            require(facts.size == plan.passes().size && facts.first() is GPUW4ePreparedClipPassAuthority.Initialize)
+            return GPUPlanW4ePreparedAuthority("w4e-clip-only-v4", planId, "w4e-clip-only-v4",
+                plan.resources().map(::resourceFact), plan.passes().map { it.id.value }, emptyMap(),
+                facts.associateBy { it.passId }, emptyMap(), plan.nativePayload)
+        }
+
         fun issueAfterFullGraphValidation(graph: RenderGraph): GPUPlanW4ePreparedAuthority {
             require(
                 (W4eClipPlanCompiler.isLegacyCapabilityId(graph.capabilityId) ||

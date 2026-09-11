@@ -2,6 +2,8 @@ package org.graphiks.kanvas.gpu.renderer.wgsl
 
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.state.GPUSourceCoverageEncoding
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.pipelines.GPUBlendFormulaProgramLibrary
 
 data class GPUPreparedTextVertexAttribute(
     val location: Int,
@@ -142,11 +144,29 @@ ${PREPARED_TEXT_CORNER_INDICES.joinToString(",\n") { "        ${it}u" }},
     fun fragmentWgsl(
         sourceCoverageEncoding: GPUSourceCoverageEncoding,
         clipVariant: GPUPreparedTextClipVariant = GPUPreparedTextClipVariant.None,
+        destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead? = null,
     ): String {
-        val encodedSource = when (sourceCoverageEncoding) {
+        val encodedSource = if (destinationBlend != null) {
+            require(sourceCoverageEncoding == GPUSourceCoverageEncoding.ScalarCoverageInShader) {
+                "Prepared text destination blends require scalar coverage interpolation"
+            }
+            """
+    let destinationSize = vec2<f32>(textureDimensions(preparedTextDestination));
+    let destination = textureSampleLevel(
+        preparedTextDestination,
+        preparedTextDestinationSampler,
+        (input.position.xy - vec2<f32>(drawUniforms.deviceToLocalRow0.w, drawUniforms.deviceToLocalRow1.w)) / destinationSize,
+        0.0,
+    );
+    let fullCoverageBlend = $PREPARED_TEXT_BLEND_FUNCTION(preparedSource, destination);
+    return destination + coverageFactor * (fullCoverageBlend - destination);
+            """.trimIndent()
+        } else when (sourceCoverageEncoding) {
             GPUSourceCoverageEncoding.Coverage ->
                 "return vec4<f32>(coverageFactor);"
             GPUSourceCoverageEncoding.ModulateRGBA ->
+                "return coverageFactor * preparedSource;"
+            GPUSourceCoverageEncoding.ScalarCoverageInShader ->
                 "return coverageFactor * preparedSource;"
             GPUSourceCoverageEncoding.CoverageTimesOneMinusSourceAlpha ->
                 "return vec4<f32>(coverageFactor * (1.0 - preparedSource.a));"
@@ -188,6 +208,19 @@ fn prepared_text_mask_coverage(position: vec2<f32>) -> f32 {
         } else {
             ""
         }}
+${destinationBlend?.let { blend ->
+            val group = if (clipVariant == GPUPreparedTextClipVariant.CoverageMask) 4 else 3
+            """
+@group($group) @binding(0) var preparedTextDestination: texture_2d<f32>;
+@group($group) @binding(1) var preparedTextDestinationSampler: sampler;
+
+${requireNotNull(GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(
+    blend.mode.gpuLabel,
+    blend.formulaId,
+    PREPARED_TEXT_BLEND_FUNCTION,
+))}
+            """.trimIndent()
+        }.orEmpty()}
 
 $clipCoverageDeclarations
 
@@ -230,6 +263,7 @@ fn prepared_text_rect_coverage(position: vec2<f32>) -> f32 {
     let distance = length(max(q, vec2<f32>(0.0))) + min(max(q.x, q.y), 0.0);
     return prepared_text_clip_coverage(distance);
 }
+
 """.trimIndent()
             GPUPreparedTextClipVariant.AnalyticRRectHard,
             GPUPreparedTextClipVariant.AnalyticRRectAA,
@@ -366,3 +400,4 @@ private val PREPARED_TEXT_UV_CORNERS: List<PreparedTextUvCorner> = immutableList
     ),
 )
 private const val UV_LTRB_COMPONENTS = "xyzw"
+private const val PREPARED_TEXT_BLEND_FUNCTION = "kanvas_text_final_blend"

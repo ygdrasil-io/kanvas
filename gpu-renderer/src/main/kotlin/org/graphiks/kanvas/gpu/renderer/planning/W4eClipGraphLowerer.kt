@@ -65,6 +65,47 @@ import org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity
 
 /** Mechanical lowering for a complete W4e graph; clip classification is closed before entry. */
 internal class W4eClipGraphLowerer {
+    internal data class ClipPrefixV4(val renders: List<GPUTask.Render>, val preparations: List<GPUResourcePreparationRequest>,
+        val authority: org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedFrameAuthority,
+        val maskRef: GPUFrameTargetRef, val plan: org.graphiks.kanvas.gpu.plan.W4eClipOnlyPlan)
+
+    internal fun lowerClipOnly(request: GpuPlanLoweringRequest, plan: org.graphiks.kanvas.gpu.plan.W4eClipOnlyPlan): ClipPrefixV4 {
+        require(request.graph.passes().take(plan.passes().size) == plan.passes())
+        val bounds = GPUPixelBounds(0, 0, request.graph.targetExtent.width, request.graph.targetExtent.height)
+        val authority = GPUPlanW4ePreparedAuthority.issueClipOnly(request.graph.id.value, plan)
+        val session = "w4e.point-prefix.${request.deviceGeneration.value}.${request.graph.id.value}"
+        val declared = request.graph.resources().filter { resource -> plan.resources().any { it.id == resource.id } }
+        require(declared.size == plan.resources().size && plan.nativePayload.matchesDeclaredResources(declared))
+        val refs = declared.associate { it.id.value to ref(session, it) }
+        val seal = GPUFrameCapabilitySeal.capture(request.frameId, request.deviceGeneration, request.capabilities)
+        val renders = plan.passes().mapIndexed { index, pass ->
+            val packet = preparedClipPacket(pass, index, requireNotNull(authority.clipPassFor(pass.id.value)))
+            val target = when (pass) {
+                is PlanPass.ClipMaskInitialize -> pass.output
+                is PlanPass.ClipMaskProducer -> pass.target
+                is PlanPass.ClipMaskFold -> pass.output
+                else -> error("invalid.w4e.clip-only-pass")
+            }
+            val producer = pass as? PlanPass.ClipMaskProducer
+            GPUTask.Render(GPUTaskID("task.w4e.${request.graph.id.value}.${pass.id.value}"), request.recordingId,
+                GPUTaskPhase.Render, refs.getValue(target.value) as GPUFrameTargetRef,
+                org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan(loadLabel(pass), org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store),
+                if (producer?.sampleCountI32 == 4) GPUSamplePlan.MultisampleFrame(4) else GPUSamplePlan.SingleSampleFrame,
+                resourceUses = resourceUses(pass, refs, declared.associateBy { it.id.value }, null, null),
+                drawPackets = listOf(packet), batchEligibilityByPacketId = mapOf(packet.packetId to GPUPassBatchEligibility(
+                    kind = GPUPassBatchKind.SolidFill, queueGuard = GPUPassBatchQueueGuard(emptyList(), emptyList()))),
+                w4eMaskContinuation = producer?.takeIf { it.sampleCountI32 == 4 }?.let {
+                    GPUW4eMaskContinuationRequest(it.target.value, it.resolveTarget?.value,
+                        if (it.resolveTarget == null) GPUW4eMaskResolveAction.Skip else GPUW4eMaskResolveAction.ResolveCanonical)
+                })
+        }
+        val frame = authority.issueFrameAuthority(request.frameId.value, seal.sealHash, renders)
+        renders.forEach { it.drawPackets.single().attachW4ePreparedFrameAuthority(frame) }
+        require(frame.validatesRenders(request.frameId.value, seal.sealHash, renders))
+        return ClipPrefixV4(renders, declared.map { preparation(it, refs.getValue(it.id.value), bounds,
+            request.graph.capabilities.copyBytesPerRowAlignment.toLong()) }, frame, refs.getValue(plan.maskResource.value) as GPUFrameTargetRef, plan)
+    }
+
     fun lower(request: GpuPlanLoweringRequest): GpuPlanLoweringResult = try {
         val graph = request.graph
         if (!graph.verifyW4eCompilerWitness() ||
@@ -95,7 +136,7 @@ internal class W4eClipGraphLowerer {
             val path = pass as? PlanPass.PathRenderPass
             val consumer = path?.let { authority.consumerFor(it.id.value) }
             val preparedPath = path?.let { authority.pathFor(it.id.value) ?: return invalid() }
-            val packet = preparedPath?.let { pathPacket(it, consumer, index) }
+            val packet = preparedPath?.let { pathPacket(it, consumer, index, requireNotNull(path).draw.blend) }
                 ?: preparedClipPacket(pass, index, authority.clipPassFor(pass.id.value) ?: return invalid())
             if (path != null && path.phase in setOf(
                     org.graphiks.kanvas.gpu.plan.PathRenderPhase.SingleSampleDirectColor,
@@ -191,13 +232,13 @@ internal class W4eClipGraphLowerer {
         }
     } catch (_: IllegalArgumentException) { invalid() }
 
-    private fun ref(session: String, resource: PlanResource): GPUFrameResourceRef = when (resource.kind) {
+    internal fun ref(session: String, resource: PlanResource): GPUFrameResourceRef = when (resource.kind) {
         PlanResourceKind.Buffer -> GPUFrameBufferRef("$session.${resource.id.value}")
         PlanResourceKind.Texture2D -> GPUFrameTargetRef("$session.${resource.id.value}")
     }
 
     /** Prefix packets carry sealed native W4e clip authority; materialization executes each pass. */
-    private fun preparedClipPacket(
+    internal fun preparedClipPacket(
         pass: PlanPass,
         index: Int,
         preparedPass: GPUW4ePreparedClipPassAuthority,
@@ -224,10 +265,11 @@ internal class W4eClipGraphLowerer {
     )
 
     /** Complete path handoff with no W4d clip mapper, execution plan, or structural-key fallback. */
-    private fun pathPacket(
+    internal fun pathPacket(
         preparedPath: GPUW4ePreparedClipPassAuthority.Path,
         consumer: GPUW4ePreparedClipConsumerAuthority?,
         index: Int,
+        finalBlend: org.graphiks.kanvas.gpu.plan.BlendPlan,
     ): GPUDrawPacket = GPUDrawPacket(
         packetId = GPUDrawPacketID("packet.w4e.${preparedPath.passId}"),
         commandIdValue = preparedPath.commandIdValue,
@@ -241,7 +283,7 @@ internal class W4eClipGraphLowerer {
         renderStepId = org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID("w4e.prepared-path"),
         renderStepVersion = 1,
         role = GPUDrawPacketRole.W4ePrepared,
-        blendPlan = org.graphiks.kanvas.gpu.renderer.recording.canonicalSolidRectSrcOverBlendPlan(),
+        blendPlan = W5bBlendPlanLowerer.lower(finalBlend),
         bindingLayoutHash = "w4e.prepared-path.sealed-bindings",
         vertexSourceLabel = "w4e.prepared-path.sealed-geometry",
         targetStateHash = "w4e.prepared-path.attachments",
@@ -251,7 +293,7 @@ internal class W4eClipGraphLowerer {
         w4ePreparedPath = preparedPath,
     )
 
-    private fun loadLabel(pass: PlanPass): String = when (pass) {
+    internal fun loadLabel(pass: PlanPass): String = when (pass) {
         is PlanPass.ClipMaskInitialize -> "clear"
         is PlanPass.PathMaskClearPass -> "clear"
         is PlanPass.ClipMaskProducer -> "clear"
@@ -260,7 +302,7 @@ internal class W4eClipGraphLowerer {
         else -> "load"
     }
 
-    private fun depthStencilLoadStore(
+    internal fun depthStencilLoadStore(
         pass: PlanPass.PathRenderPass,
     ): org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan? = when (
         pass.depthStencilLoadStore
@@ -280,7 +322,7 @@ internal class W4eClipGraphLowerer {
             )
     }
 
-    private fun resourceUses(
+    internal fun resourceUses(
         pass: PlanPass,
         refs: Map<String, GPUFrameResourceRef>,
         resourcesById: Map<String, PlanResource>,
@@ -371,7 +413,7 @@ internal class W4eClipGraphLowerer {
             else -> GPUFrameResourceRole.ClipMask
         }
 
-    private fun preparation(resource: PlanResource, ref: GPUFrameResourceRef, bounds: GPUPixelBounds, alignment: Long): GPUResourcePreparationRequest {
+    internal fun preparation(resource: PlanResource, ref: GPUFrameResourceRef, bounds: GPUPixelBounds, alignment: Long): GPUResourcePreparationRequest {
         val role = sealedRoleFor(resource)
         val usages = resource.usages().map { usage -> when (usage) {
             PlanResourceUsage.RenderAttachment, PlanResourceUsage.DepthStencilAttachment -> GPUFrameResourceUsage.RenderAttachment
@@ -382,6 +424,7 @@ internal class W4eClipGraphLowerer {
             PlanResourceUsage.Vertex -> GPUFrameResourceUsage.Vertex
             PlanResourceUsage.Index -> GPUFrameResourceUsage.Index
             PlanResourceUsage.Uniform -> GPUFrameResourceUsage.Uniform
+            PlanResourceUsage.StorageRead -> GPUFrameResourceUsage.TextureBinding
         } }.toSet()
         val lifetime = when (resource.lifetime) { PlanResourceLifetime.FrameLocal -> GPUFrameResourceLifetime.FrameLocal }
         val descriptor = when (resource.kind) {

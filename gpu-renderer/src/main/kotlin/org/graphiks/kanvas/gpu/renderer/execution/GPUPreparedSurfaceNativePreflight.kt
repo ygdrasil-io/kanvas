@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.renderer.destination.preparedDestinationBounds
+
 import io.ygdrasil.webgpu.GPUTextureFormat
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -166,6 +168,9 @@ internal object GPUPreparedVerticesPreflightRefusalCodes {
     const val BUDGET = "unsupported.prepared-surface.vertices-budget"
     const val TARGET = "invalid.prepared-surface.vertices-target"
 }
+
+private fun GPUDrawPacket.preparedDestinationVersionV1(): Long =
+    w5bMixedFrameWitnessV1?.destinationVersion(this) ?: originalPaintOrder.toLong()
 
 private data class GPUPreparedSurfaceArtifactByteEvidence(
     val tightRgba8Bytes: ByteArray,
@@ -617,6 +622,105 @@ internal class GPUPreparedColorGlyphDestinationReadPlan(
     }
 }
 
+private data class GPUPreparedVerticesDestinationReadAuthority(
+    val copySourceStepIndex: Int,
+    val renderSourceStepIndex: Int,
+    val copyStep: GPUFrameStep.CopyDestinationStep,
+    val renderStep: GPUFrameStep.RenderPassStep,
+    val packet: GPUDrawPacket,
+    val semantic: GPUDrawSemanticPayload.Vertices,
+    val snapshotPreparation: GPUResourcePreparationRequest,
+    val blendPlan: GPUBlendPlan.ShaderBlendWithDstRead,
+)
+
+private data class GPUPreparedTextDestinationReadAuthority(
+    val copySourceStepIndex: Int,
+    val renderSourceStepIndex: Int,
+    val copyStep: GPUFrameStep.CopyDestinationStep,
+    val renderStep: GPUFrameStep.RenderPassStep,
+    val packet: GPUDrawPacket,
+    val semantic: GPUDrawSemanticPayload.TextA8,
+    val binding: GPUPreparedTextRenderBinding,
+    val snapshotPreparation: GPUResourcePreparationRequest,
+    val blendPlan: GPUBlendPlan.ShaderBlendWithDstRead,
+)
+
+internal class GPUPreparedTextDestinationReadPlan(
+    val copySourceStepIndex: Int,
+    val renderSourceStepIndex: Int,
+    val copyStep: GPUFrameStep.CopyDestinationStep,
+    val renderStep: GPUFrameStep.RenderPassStep,
+    val packet: GPUDrawPacket,
+    val semantic: GPUDrawSemanticPayload.TextA8,
+    val binding: GPUPreparedTextRenderBinding,
+    val snapshotPreparation: GPUResourcePreparationRequest,
+    val snapshotEvidence: GPUPreparedResourceEvidence,
+    val blendPlan: GPUBlendPlan.ShaderBlendWithDstRead,
+    val exactCopyScopeKey: GPUPreparedNativeScopeKey,
+    val exactRenderScopeKey: GPUPreparedNativeScopeKey,
+) {
+    init {
+        val sealed = requireNotNull(blendPlan.sealedW5b)
+        require(
+            copySourceStepIndex < renderSourceStepIndex &&
+                copyStep.snapshot == snapshotPreparation.resource &&
+                snapshotEvidence.logicalResource == snapshotPreparation.resource &&
+                snapshotEvidence.role == GPUFrameResourceRole.DestinationSnapshot &&
+                exactCopyScopeKey.sourceStepIndex == copySourceStepIndex &&
+                exactCopyScopeKey.operationKind == GPUEncoderOperationKind.CopyDestination &&
+                exactRenderScopeKey.sourceStepIndex == renderSourceStepIndex &&
+                exactRenderScopeKey.operationKind == GPUEncoderOperationKind.Render &&
+                sealed.snapshotResource?.value == copyStep.snapshot.value &&
+                sealed.requiredDestinationVersion.valueI64 == packet.preparedDestinationVersionV1() &&
+                semantic.w5bFinalBlendPlan == sealed &&
+                semantic.payloadRef.commandIdValue == packet.commandIdValue &&
+                binding.packetId == packet.packetId &&
+                binding.compositeProgram.destinationBlend?.let { programBlend ->
+                    programBlend.mode == blendPlan.mode &&
+                        programBlend.formulaId == blendPlan.formulaId &&
+                        programBlend.sourceCoverageEncoding == blendPlan.sourceCoverageEncoding
+                } == true,
+        ) {
+            "Prepared TextA8 destination-read plan must retain one exact sealed copy/formula consumer."
+        }
+    }
+}
+
+internal class GPUPreparedVerticesDestinationReadPlan(
+    val copySourceStepIndex: Int,
+    val renderSourceStepIndex: Int,
+    val copyStep: GPUFrameStep.CopyDestinationStep,
+    val renderStep: GPUFrameStep.RenderPassStep,
+    val packet: GPUDrawPacket,
+    val semantic: GPUDrawSemanticPayload.Vertices,
+    val snapshotPreparation: GPUResourcePreparationRequest,
+    val snapshotEvidence: GPUPreparedResourceEvidence,
+    val blendPlan: GPUBlendPlan.ShaderBlendWithDstRead,
+    val exactCopyScopeKey: GPUPreparedNativeScopeKey,
+    val exactRenderScopeKey: GPUPreparedNativeScopeKey,
+) {
+    init {
+        val sealed = requireNotNull(blendPlan.sealedW5b)
+        require(
+            copySourceStepIndex < renderSourceStepIndex &&
+                copyStep.snapshot == snapshotPreparation.resource &&
+                snapshotEvidence.logicalResource == snapshotPreparation.resource &&
+                snapshotEvidence.role == GPUFrameResourceRole.DestinationSnapshot &&
+                exactCopyScopeKey.sourceStepIndex == copySourceStepIndex &&
+                exactCopyScopeKey.operationKind == GPUEncoderOperationKind.CopyDestination &&
+                exactRenderScopeKey.sourceStepIndex == renderSourceStepIndex &&
+                exactRenderScopeKey.operationKind == GPUEncoderOperationKind.Render &&
+                sealed.snapshotResource?.value == copyStep.snapshot.value &&
+                sealed.requiredDestinationVersion.valueI64 ==
+                packet.preparedDestinationVersionV1() &&
+                semantic.w5bFinalBlendPlan == sealed &&
+                semantic.payloadRef.commandIdValue == packet.commandIdValue,
+        ) {
+            "Prepared vertices destination-read plan must retain one exact sealed copy/formula consumer."
+        }
+    }
+}
+
 internal class GPUPreparedSurfaceNativePreflightPlan(
     val frameId: GPUFrameID,
     val encoderPlanId: String,
@@ -630,11 +734,14 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
     val textPlan: GPUPreparedTextRenderRunPlan?,
     val colorGlyphPlan: GPUPreparedColorGlyphRenderRunPlan?,
     colorGlyphDestinationReads: List<GPUPreparedColorGlyphDestinationReadPlan>,
+    textDestinationReads: List<GPUPreparedTextDestinationReadPlan>,
+    verticesDestinationReads: List<GPUPreparedVerticesDestinationReadPlan>,
     coverageMaskRuns: List<GPUPreparedSurfaceCoverageMaskRunPlan>,
     layerTargets: List<GPUPreparedSurfaceLayerTargetPlan>,
     compositeRuns: List<GPUPreparedSurfaceLayerCompositeRunPlan>,
     exactScopeKeys: List<GPUPreparedNativeScopeKey>,
     val generationSeal: GPUPreparedGenerationSeal,
+    val mixedCoreProjection: org.graphiks.kanvas.gpu.renderer.passes.W5bMixedPreparedFrameWitnessV1.NativeProjection? = null,
 ) {
     val orderedRuns: List<GPUPreparedSurfaceNativeRunPlan> = immutableList(orderedRuns)
     val imageFrames: List<GPUPreparedSurfaceImageFramePlan> = immutableList(imageFrames)
@@ -643,6 +750,10 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
         immutableList(coverageMaskRuns)
     val colorGlyphDestinationReads: List<GPUPreparedColorGlyphDestinationReadPlan> =
         immutableList(colorGlyphDestinationReads)
+    val textDestinationReads: List<GPUPreparedTextDestinationReadPlan> =
+        immutableList(textDestinationReads)
+    val verticesDestinationReads: List<GPUPreparedVerticesDestinationReadPlan> =
+        immutableList(verticesDestinationReads)
     val layerTargets: List<GPUPreparedSurfaceLayerTargetPlan> = immutableList(layerTargets)
     val compositeRuns: List<GPUPreparedSurfaceLayerCompositeRunPlan> =
         immutableList(compositeRuns)
@@ -675,6 +786,7 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
             }
         }
         val expectedScopeKeysWithSharedUploads = buildList {
+            mixedCoreProjection?.let { addAll(it.copyScopeKeys) }
             addAll(this@GPUPreparedSurfaceNativePreflightPlan.imageFrames.map { it.uploadScopeKey })
             this@GPUPreparedSurfaceNativePreflightPlan.orderedRuns.forEach { run ->
                 when (run) {
@@ -689,6 +801,12 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
             textPlan?.let { addAll(it.exactScopeKeys) }
             colorGlyphPlan?.let { addAll(it.exactScopeKeys) }
             addAll(this@GPUPreparedSurfaceNativePreflightPlan.colorGlyphDestinationReads.map {
+                it.exactCopyScopeKey
+            })
+            addAll(this@GPUPreparedSurfaceNativePreflightPlan.textDestinationReads.map {
+                it.exactCopyScopeKey
+            })
+            addAll(this@GPUPreparedSurfaceNativePreflightPlan.verticesDestinationReads.map {
                 it.exactCopyScopeKey
             })
             addAll(this@GPUPreparedSurfaceNativePreflightPlan.coverageMaskRuns.map {
@@ -750,7 +868,8 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
             .map { run -> run.plan.routeSeal as GPUCorePrimitiveNativeScopeRouteSeal.Routes }
         if (coreRoutes.isNotEmpty()) {
             val commandIds = coreRoutes.flatMap { route -> route.commandIds }
-            require(commandIds.distinct().size == commandIds.size) {
+            require(if (mixedCoreProjection == null) commandIds.distinct().size == commandIds.size else
+                coreRoutes.flatMap { it.flattenedPacketIds } == mixedCoreProjection.packetIds) {
                 "Prepared CorePrimitive runs must retain unique sealed command authorities"
             }
         }
@@ -806,6 +925,10 @@ internal class GPUPreparedSurfaceNativePreflight(
             GPUPreparedColorGlyphCanonicalPlanAuthentication,
     ): GPUPreparedSurfaceNativePreflightResult.Refused? {
         val allRenders = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        allRenders.flatMap { it.drawPackets }.mapNotNull { it.w5bMixedFrameWitnessV1 }.firstOrNull()?.let { witness ->
+            if (!witness.validates(framePlan)) return refused("invalid.prepared-surface.w5b-mixed-frame",
+                "Mixed W5b requires its complete immutable frame before native projection.")
+        }
         val renders = allRenders.filterNot { render ->
             render.drawPackets.isNotEmpty() &&
                 render.drawPackets.all { packet ->
@@ -869,6 +992,18 @@ internal class GPUPreparedSurfaceNativePreflight(
             )
         }
         authenticateColorGlyphDestinationReads(
+            framePlan = framePlan,
+            renders = renders,
+            context = context,
+            capabilities = capabilities,
+        ).second?.let { return it }
+        authenticatePreparedVerticesDestinationReads(
+            framePlan = framePlan,
+            renders = renders,
+            context = context,
+            capabilities = capabilities,
+        ).second?.let { return it }
+        authenticatePreparedTextDestinationReads(
             framePlan = framePlan,
             renders = renders,
             context = context,
@@ -1018,15 +1153,23 @@ internal class GPUPreparedSurfaceNativePreflight(
         List<GPUPreparedColorGlyphDestinationReadAuthority>,
         GPUPreparedSurfaceNativePreflightResult.Refused?,
         > {
+        val colorGlyphPacketIds = renders.flatMap { render ->
+            render.drawPackets.filter { packet ->
+                packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph
+            }.map(GPUDrawPacket::packetId)
+        }.toSet()
         val indexedCopies = framePlan.steps.mapIndexedNotNull { index, step ->
             when (step) {
-                is GPUFrameStep.CopyDestinationStep -> index to step
+                is GPUFrameStep.CopyDestinationStep -> (index to step).takeIf {
+                    step.consumers.singleOrNull()?.packetId in colorGlyphPacketIds
+                }
                 else -> null
             }
         }
         val destinationPackets = renders.flatMap { render ->
             render.drawPackets.filter { packet ->
-                packet.blendPlan?.destinationReadRequirement ==
+                packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph &&
+                    packet.blendPlan?.destinationReadRequirement ==
                     org.graphiks.kanvas.gpu.renderer.passes
                         .GPUBlendDestinationReadRequirement.DestinationTextureRequired
             }
@@ -1189,7 +1332,7 @@ internal class GPUPreparedSurfaceNativePreflight(
                 consumer.renderTaskId !in render.sourceTaskIds ||
                 render.sourceTaskIds.singleOrNull() != consumer.renderTaskId ||
                 copy.source != scenePreparation.resource ||
-                copy.logicalBounds != sceneDescriptor.logicalBounds ||
+                copy.logicalBounds != semantic.preparedDestinationBounds(sceneDescriptor.logicalBounds) ||
                 copy.sourceKey.target.value != scenePreparation.resource.value ||
                 copy.sourceKey.deviceGeneration != framePlan.capabilitySeal.deviceGeneration ||
                 copy.sourceKey.targetGeneration != packet.resourceGeneration &&
@@ -1269,6 +1412,396 @@ internal class GPUPreparedSurfaceNativePreflight(
         }
         return authorities.sortedBy(
             GPUPreparedColorGlyphDestinationReadAuthority::copySourceStepIndex,
+        ) to null
+    }
+
+    private fun authenticatePreparedVerticesDestinationReads(
+        framePlan: GPUFramePlan,
+        renders: List<GPUFrameStep.RenderPassStep>,
+        context: GPUFramePreflightContext?,
+        capabilities: GPUCapabilities?,
+    ): Pair<
+        List<GPUPreparedVerticesDestinationReadAuthority>,
+        GPUPreparedSurfaceNativePreflightResult.Refused?,
+        > {
+        val verticesPacketIds = renders.flatMap { render ->
+            render.drawPackets.filter { packet ->
+                packet.semanticPayload is GPUDrawSemanticPayload.Vertices
+            }.map(GPUDrawPacket::packetId)
+        }.toSet()
+        val indexedCopies = framePlan.steps.mapIndexedNotNull { index, step ->
+            (step as? GPUFrameStep.CopyDestinationStep)?.takeIf { copy ->
+                copy.consumers.singleOrNull()?.packetId in verticesPacketIds
+            }?.let { copy -> index to copy }
+        }
+        val destinationPackets = renders.flatMap { render ->
+            render.drawPackets.filter { packet ->
+                packet.semanticPayload is GPUDrawSemanticPayload.Vertices &&
+                    packet.blendPlan?.destinationReadRequirement ==
+                    org.graphiks.kanvas.gpu.renderer.passes
+                        .GPUBlendDestinationReadRequirement.DestinationTextureRequired
+            }
+        }
+        if (indexedCopies.isEmpty() && destinationPackets.isEmpty()) {
+            return emptyList<GPUPreparedVerticesDestinationReadAuthority>() to null
+        }
+        if (indexedCopies.size != destinationPackets.size || indexedCopies.isEmpty()) {
+            return emptyList<GPUPreparedVerticesDestinationReadAuthority>() to refused(
+                "unsupported.prepared-surface.destination-copy",
+                "Every destination-reading prepared vertices packet requires one exact copy scope.",
+            )
+        }
+        val preparations = framePlan.steps
+            .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+        val scenePreparation = preparations.singleOrNull { request ->
+            request.role == GPUFrameResourceRole.SceneTarget
+        }
+        val sceneDescriptor = scenePreparation?.descriptor as? GPUFrameTextureDescriptor
+        if (scenePreparation == null || sceneDescriptor == null) {
+            return emptyList<GPUPreparedVerticesDestinationReadAuthority>() to refused(
+                "unsupported.prepared-surface.destination-copy",
+                "Prepared vertices destination reads require one exact scene texture.",
+            )
+        }
+        val renderEvidence = framePlan.steps.mapIndexedNotNull { index, step ->
+            (step as? GPUFrameStep.RenderPassStep)?.let { render -> index to render }
+        }
+        val consumedPacketIds = mutableSetOf<GPUDrawPacketID>()
+        val authorities = mutableListOf<GPUPreparedVerticesDestinationReadAuthority>()
+        indexedCopies.forEach { (copyIndex, copy) ->
+            val consumer = copy.consumers.singleOrNull()
+                ?: return emptyList<GPUPreparedVerticesDestinationReadAuthority>() to refused(
+                    "unsupported.prepared-surface.destination-copy",
+                    "Prepared vertices destination copies require one exact consumer.",
+                )
+            val (renderIndex, render) = renderEvidence.singleOrNull { (_, candidate) ->
+                candidate.drawPackets.any { packet -> packet.packetId == consumer.packetId }
+            } ?: return emptyList<GPUPreparedVerticesDestinationReadAuthority>() to refused(
+                "unsupported.prepared-surface.destination-copy",
+                "Prepared vertices destination copy lost its exact render consumer.",
+            )
+            val packet = render.drawPackets.single { candidate ->
+                candidate.packetId == consumer.packetId
+            }
+            val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.Vertices
+                ?: return emptyList<GPUPreparedVerticesDestinationReadAuthority>() to refused(
+                    "unsupported.prepared-surface.destination-copy",
+                    "Only prepared vertices packets may consume this destination copy.",
+                )
+            val blend = packet.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead
+                ?: return emptyList<GPUPreparedVerticesDestinationReadAuthority>() to refused(
+                    "unsupported.prepared-surface.destination-copy",
+                    "Prepared vertices destination reads require one shader destination blend.",
+                )
+            val sealed = blend.sealedW5b
+            if (copy.sourceKey.destinationVersion != sealed?.requiredDestinationVersion) {
+                return emptyList<GPUPreparedVerticesDestinationReadAuthority>() to refused(
+                    "invalid.w5b.destination-version", "Vertices snapshot logical version changed.")
+            }
+            val snapshotPreparation = preparations.singleOrNull { request ->
+                request.resource == copy.snapshot
+            }
+            val snapshotDescriptor = snapshotPreparation?.descriptor as? GPUFrameTextureDescriptor
+            val expectedTextureBytes = try {
+                Math.multiplyExact(
+                    Math.multiplyExact(copy.logicalBounds.width.toLong(), 4L),
+                    copy.logicalBounds.height.toLong(),
+                )
+            } catch (_: ArithmeticException) {
+                return emptyList<GPUPreparedVerticesDestinationReadAuthority>() to refused(
+                    "unsupported.prepared-surface.destination-copy",
+                    "Prepared vertices destination snapshot byte accounting overflowed.",
+                )
+            }
+            val minimumBytesPerRow = try {
+                Math.multiplyExact(copy.logicalBounds.width.toLong(), 4L)
+            } catch (_: ArithmeticException) {
+                return emptyList<GPUPreparedVerticesDestinationReadAuthority>() to refused(
+                    "unsupported.prepared-surface.destination-copy",
+                    "Prepared vertices destination snapshot row accounting overflowed.",
+                )
+            }
+            val copyAlignment = capabilities?.limits?.copyBytesPerRowAlignment
+            val formulaKnown = org.graphiks.kanvas.gpu.renderer.pipelines
+                .GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(
+                    blend.mode.gpuLabel,
+                    blend.formulaId,
+                ) != null
+            if (copyIndex >= renderIndex ||
+                !consumedPacketIds.add(packet.packetId) ||
+                consumer.commandId.value != packet.commandIdValue ||
+                consumer.groupingCommandId != packet.commandIdValue.toString() ||
+                consumer.renderTaskId !in render.sourceTaskIds ||
+                render.sourceTaskIds.singleOrNull() != consumer.renderTaskId ||
+                copy.source != scenePreparation.resource ||
+                copy.logicalBounds != semantic.preparedDestinationBounds(sceneDescriptor.logicalBounds) ||
+                copy.sourceKey.target.value != scenePreparation.resource.value ||
+                copy.sourceKey.deviceGeneration != framePlan.capabilitySeal.deviceGeneration ||
+                copy.sourceKey.targetGeneration != packet.resourceGeneration &&
+                copy.sourceKey.targetGeneration != PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION ||
+                context?.targetGeneration?.let { current ->
+                    copy.sourceKey.targetGeneration == current ||
+                        copy.sourceKey.targetGeneration == PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
+                } == false ||
+                copy.sourceKey.format != sceneDescriptor.format ||
+                sceneDescriptor.format != GPUColorFormat.RGBA8UnormSrgb ||
+                copy.sourceKey.colorInterpretation != GPUColorInterpretation.LinearPremul ||
+                copy.sourceKey.sampleContinuation != null ||
+                copy.sourceKey.sourceIntermediate != null ||
+                snapshotPreparation == null ||
+                snapshotDescriptor?.logicalBounds != copy.logicalBounds ||
+                snapshotDescriptor.format != sceneDescriptor.format ||
+                snapshotDescriptor.sampleCount != 1 ||
+                snapshotPreparation.role != GPUFrameResourceRole.DestinationSnapshot ||
+                snapshotPreparation.usages != setOf(
+                    GPUFrameResourceUsage.CopyDestination,
+                    GPUFrameResourceUsage.TextureBinding,
+                ) ||
+                snapshotPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+                snapshotPreparation.byteSize != expectedTextureBytes ||
+                copy.copyLayout.bytesPerRow < minimumBytesPerRow ||
+                copy.copyLayout.rowsPerImage != copy.logicalBounds.height ||
+                copyAlignment?.let { alignment ->
+                    copy.copyLayout.bytesPerRow % alignment != 0L
+                } == true ||
+                render.target != scenePreparation.resource ||
+                render.samplePlan != GPUSamplePlan.SingleSampleFrame ||
+                blend.sourceCoverageEncoding != GPUSourceCoverageEncoding.None ||
+                !formulaKnown ||
+                sealed == null ||
+                sealed.snapshotResource?.value != copy.snapshot.value ||
+                sealed.requiredDestinationVersion.valueI64 != packet.preparedDestinationVersionV1() ||
+                semantic.w5bFinalBlendPlan != sealed ||
+                semantic.finalBlendIdentity != blend.canonicalIdentity() ||
+                render.resourceUses.none { use ->
+                    use.resource == copy.snapshot &&
+                        use.role == GPUFrameResourceRole.DestinationSnapshot &&
+                        use.usage == GPUFrameResourceUsage.TextureBinding &&
+                        use.lifetime == GPUFrameResourceLifetime.FrameLocal &&
+                        !use.write
+                }
+            ) {
+                return emptyList<GPUPreparedVerticesDestinationReadAuthority>() to refused(
+                    "unsupported.prepared-surface.destination-copy",
+                    "Prepared vertices copy, version, snapshot, formula consumer, and resource facts are not exact.",
+                )
+            }
+            authorities += GPUPreparedVerticesDestinationReadAuthority(
+                copyIndex,
+                renderIndex,
+                copy,
+                render,
+                packet,
+                semantic,
+                snapshotPreparation,
+                blend,
+            )
+        }
+        if (consumedPacketIds != destinationPackets.map(GPUDrawPacket::packetId).toSet()) {
+            return emptyList<GPUPreparedVerticesDestinationReadAuthority>() to refused(
+                "unsupported.prepared-surface.destination-copy",
+                "Prepared vertices copy consumers do not exactly cover destination-reading packets.",
+            )
+        }
+        return authorities.sortedBy(
+            GPUPreparedVerticesDestinationReadAuthority::copySourceStepIndex,
+        ) to null
+    }
+
+    private fun authenticatePreparedTextDestinationReads(
+        framePlan: GPUFramePlan,
+        renders: List<GPUFrameStep.RenderPassStep>,
+        context: GPUFramePreflightContext?,
+        capabilities: GPUCapabilities?,
+    ): Pair<
+        List<GPUPreparedTextDestinationReadAuthority>,
+        GPUPreparedSurfaceNativePreflightResult.Refused?,
+        > {
+        val textPacketIds = renders.flatMap { render ->
+            render.drawPackets.filter { packet ->
+                packet.semanticPayload is GPUDrawSemanticPayload.TextA8
+            }.map(GPUDrawPacket::packetId)
+        }.toSet()
+        val indexedCopies = framePlan.steps.mapIndexedNotNull { index, step ->
+            (step as? GPUFrameStep.CopyDestinationStep)?.takeIf { copy ->
+                copy.consumers.singleOrNull()?.packetId in textPacketIds
+            }?.let { copy -> index to copy }
+        }
+        val destinationPackets = renders.flatMap { render ->
+            render.drawPackets.filter { packet ->
+                packet.semanticPayload is GPUDrawSemanticPayload.TextA8 &&
+                    packet.blendPlan?.destinationReadRequirement ==
+                    org.graphiks.kanvas.gpu.renderer.passes
+                        .GPUBlendDestinationReadRequirement.DestinationTextureRequired
+            }
+        }
+        if (indexedCopies.isEmpty() && destinationPackets.isEmpty()) {
+            return emptyList<GPUPreparedTextDestinationReadAuthority>() to null
+        }
+        if (indexedCopies.size != destinationPackets.size || indexedCopies.isEmpty()) {
+            return emptyList<GPUPreparedTextDestinationReadAuthority>() to refused(
+                "unsupported.prepared-surface.destination-copy",
+                "Every destination-reading prepared TextA8 packet requires one exact copy scope.",
+            )
+        }
+        val preparations = framePlan.steps
+            .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+        val scenePreparation = preparations.singleOrNull { request ->
+            request.role == GPUFrameResourceRole.SceneTarget
+        }
+        val sceneDescriptor = scenePreparation?.descriptor as? GPUFrameTextureDescriptor
+        if (scenePreparation == null || sceneDescriptor == null) {
+            return emptyList<GPUPreparedTextDestinationReadAuthority>() to refused(
+                "unsupported.prepared-surface.destination-copy",
+                "Prepared TextA8 destination reads require one exact scene texture.",
+            )
+        }
+        val renderEvidence = framePlan.steps.mapIndexedNotNull { index, step ->
+            (step as? GPUFrameStep.RenderPassStep)?.let { render -> index to render }
+        }
+        val consumedPacketIds = mutableSetOf<GPUDrawPacketID>()
+        val authorities = mutableListOf<GPUPreparedTextDestinationReadAuthority>()
+        indexedCopies.forEach { (copyIndex, copy) ->
+            val consumer = copy.consumers.singleOrNull()
+                ?: return emptyList<GPUPreparedTextDestinationReadAuthority>() to refused(
+                    "unsupported.prepared-surface.destination-copy",
+                    "Prepared TextA8 destination copies require one exact consumer.",
+                )
+            val (renderIndex, render) = renderEvidence.singleOrNull { (_, candidate) ->
+                candidate.drawPackets.any { packet -> packet.packetId == consumer.packetId }
+            } ?: return emptyList<GPUPreparedTextDestinationReadAuthority>() to refused(
+                "unsupported.prepared-surface.destination-copy",
+                "Prepared TextA8 destination copy lost its exact render consumer.",
+            )
+            val packet = render.drawPackets.single { candidate ->
+                candidate.packetId == consumer.packetId
+            }
+            val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.TextA8
+                ?: return emptyList<GPUPreparedTextDestinationReadAuthority>() to refused(
+                    "unsupported.prepared-surface.destination-copy",
+                    "Only prepared TextA8 packets may consume this destination copy.",
+                )
+            val binding = render.preparedTextBindingsByPacketId[packet.packetId]
+                ?: return emptyList<GPUPreparedTextDestinationReadAuthority>() to refused(
+                    "unsupported.prepared-surface.destination-copy",
+                    "Prepared TextA8 destination read lost its exact render binding.",
+                )
+            val blend = packet.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead
+                ?: return emptyList<GPUPreparedTextDestinationReadAuthority>() to refused(
+                    "unsupported.prepared-surface.destination-copy",
+                    "Prepared TextA8 destination reads require one shader destination blend.",
+                )
+            val sealed = blend.sealedW5b
+            if (copy.sourceKey.destinationVersion != sealed?.requiredDestinationVersion) {
+                return emptyList<GPUPreparedTextDestinationReadAuthority>() to refused(
+                    "invalid.w5b.destination-version", "TextA8 snapshot logical version changed.")
+            }
+            val snapshotPreparation = preparations.singleOrNull { request ->
+                request.resource == copy.snapshot
+            }
+            val snapshotDescriptor = snapshotPreparation?.descriptor as? GPUFrameTextureDescriptor
+            val expectedTextureBytes = try {
+                Math.multiplyExact(
+                    Math.multiplyExact(copy.logicalBounds.width.toLong(), 4L),
+                    copy.logicalBounds.height.toLong(),
+                )
+            } catch (_: ArithmeticException) {
+                return emptyList<GPUPreparedTextDestinationReadAuthority>() to refused(
+                    "unsupported.prepared-surface.destination-copy",
+                    "Prepared TextA8 destination snapshot byte accounting overflowed.",
+                )
+            }
+            val minimumBytesPerRow = try {
+                Math.multiplyExact(copy.logicalBounds.width.toLong(), 4L)
+            } catch (_: ArithmeticException) {
+                return emptyList<GPUPreparedTextDestinationReadAuthority>() to refused(
+                    "unsupported.prepared-surface.destination-copy",
+                    "Prepared TextA8 destination snapshot row accounting overflowed.",
+                )
+            }
+            val copyAlignment = capabilities?.limits?.copyBytesPerRowAlignment
+            val formulaKnown = org.graphiks.kanvas.gpu.renderer.pipelines
+                .GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(
+                    blend.mode.gpuLabel,
+                    blend.formulaId,
+                ) != null
+            if (copyIndex >= renderIndex ||
+                !consumedPacketIds.add(packet.packetId) ||
+                consumer.commandId.value != packet.commandIdValue ||
+                consumer.groupingCommandId != packet.commandIdValue.toString() ||
+                consumer.renderTaskId !in render.sourceTaskIds ||
+                render.sourceTaskIds.singleOrNull() != consumer.renderTaskId ||
+                copy.source != scenePreparation.resource ||
+                copy.logicalBounds != semantic.preparedDestinationBounds(sceneDescriptor.logicalBounds) ||
+                copy.sourceKey.target.value != scenePreparation.resource.value ||
+                copy.sourceKey.deviceGeneration != framePlan.capabilitySeal.deviceGeneration ||
+                copy.sourceKey.targetGeneration != packet.resourceGeneration &&
+                copy.sourceKey.targetGeneration != PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION ||
+                context?.targetGeneration?.let { current ->
+                    copy.sourceKey.targetGeneration == current ||
+                        copy.sourceKey.targetGeneration == PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
+                } == false ||
+                copy.sourceKey.format != sceneDescriptor.format ||
+                sceneDescriptor.format != GPUColorFormat.RGBA8UnormSrgb ||
+                copy.sourceKey.colorInterpretation != GPUColorInterpretation.LinearPremul ||
+                copy.sourceKey.sampleContinuation != null ||
+                copy.sourceKey.sourceIntermediate != null ||
+                snapshotPreparation == null ||
+                snapshotDescriptor?.logicalBounds != copy.logicalBounds ||
+                snapshotDescriptor.format != sceneDescriptor.format ||
+                snapshotDescriptor.sampleCount != 1 ||
+                snapshotPreparation.role != GPUFrameResourceRole.DestinationSnapshot ||
+                snapshotPreparation.usages != setOf(
+                    GPUFrameResourceUsage.CopyDestination,
+                    GPUFrameResourceUsage.TextureBinding,
+                ) ||
+                snapshotPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+                snapshotPreparation.byteSize != expectedTextureBytes ||
+                copy.copyLayout.bytesPerRow < minimumBytesPerRow ||
+                copy.copyLayout.rowsPerImage != copy.logicalBounds.height ||
+                copyAlignment?.let { alignment -> copy.copyLayout.bytesPerRow % alignment != 0L } == true ||
+                render.target != scenePreparation.resource ||
+                render.samplePlan != GPUSamplePlan.SingleSampleFrame ||
+                blend.sourceCoverageEncoding != GPUSourceCoverageEncoding.ScalarCoverageInShader ||
+                !formulaKnown ||
+                sealed == null ||
+                sealed.snapshotResource?.value != copy.snapshot.value ||
+                sealed.requiredDestinationVersion.valueI64 != packet.preparedDestinationVersionV1() ||
+                semantic.w5bFinalBlendPlan != sealed ||
+                semantic.blendPlanIdentity != blend.canonicalIdentity() ||
+                binding.compositeProgram.destinationBlend?.let { programBlend ->
+                    programBlend.mode == blend.mode &&
+                        programBlend.formulaId == blend.formulaId &&
+                        programBlend.sourceCoverageEncoding == blend.sourceCoverageEncoding
+                } != true ||
+                render.resourceUses.none { use ->
+                    use.resource == copy.snapshot &&
+                        use.role == GPUFrameResourceRole.DestinationSnapshot &&
+                        use.usage == GPUFrameResourceUsage.TextureBinding &&
+                        use.lifetime == GPUFrameResourceLifetime.FrameLocal &&
+                        !use.write
+                }
+            ) {
+                return emptyList<GPUPreparedTextDestinationReadAuthority>() to refused(
+                    "unsupported.prepared-surface.destination-copy",
+                    "Prepared TextA8 copy, version, snapshot, formula consumer, and resource facts are not exact.",
+                )
+            }
+            authorities += GPUPreparedTextDestinationReadAuthority(
+                copyIndex, renderIndex, copy, render, packet, semantic, binding,
+                snapshotPreparation, blend,
+            )
+        }
+        if (consumedPacketIds != destinationPackets.map(GPUDrawPacket::packetId).toSet()) {
+            return emptyList<GPUPreparedTextDestinationReadAuthority>() to refused(
+                "unsupported.prepared-surface.destination-copy",
+                "Prepared TextA8 copy consumers do not exactly cover destination-reading packets.",
+            )
+        }
+        return authorities.sortedBy(
+            GPUPreparedTextDestinationReadAuthority::copySourceStepIndex,
         ) to null
     }
 
@@ -1883,7 +2416,10 @@ internal class GPUPreparedSurfaceNativePreflight(
                 }
             targetPreparations.values
                 .filter { request ->
-                    request.role == GPUFrameResourceRole.DestinationSnapshot
+                    request.role == GPUFrameResourceRole.DestinationSnapshot &&
+                        framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+                            .mapNotNull { it.w5bMixedFrameWitnessV1 }.firstOrNull()?.takeIf { it.validates(framePlan) }
+                            ?.coreCopies?.none { it.snapshot == request.resource } != false
                 }
                 .forEach { request ->
                     val descriptor = when (val value = request.descriptor) {
@@ -2383,6 +2919,8 @@ internal class GPUPreparedSurfaceNativePreflight(
                     hasPrimitiveColor = semantic.primitiveColorPresent,
                     materialPlanProvenance = semantic.materialPlanProvenance,
                     commandIdValueI32 = semantic.payloadRef.commandIdValue,
+                    destinationBlend = evidence.packet.blendPlan as?
+                        GPUBlendPlan.ShaderBlendWithDstRead,
                 )
             ) {
                 is GPUPreparedVerticesShaderResult.Ready -> null
@@ -2713,6 +3251,10 @@ internal class GPUPreparedSurfaceNativePreflight(
     private fun validatePreparedSurfaceDependencies(
         framePlan: GPUFramePlan,
     ): GPUPreparedSurfaceNativePreflightResult.Refused? {
+        framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+            .mapNotNull { it.w5bMixedFrameWitnessV1 }.firstOrNull()?.takeIf { it.coreCopies.isNotEmpty() && it.validates(framePlan) }?.let { witness ->
+                return validatePreparedSurfaceDependencies(witness.preparedDependencyProjection(framePlan))
+            }
         val prepareTaskId = framePlan.steps
             .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
             .singleOrNull()
@@ -3248,6 +3790,16 @@ internal class GPUPreparedSurfaceNativePreflight(
             )
         }
         val orderedRuns = mutableListOf<GPUPreparedSurfaceNativeRunPlan>()
+        val exactScopeKeyByStep = exactScopeKeys.associateBy(GPUPreparedNativeScopeKey::sourceStepIndex)
+        val verticesUploadScopeByResource = buildMap {
+            val verticesStaging = preparedVerticesStagingRef(framePlan.frameId)
+            framePlan.steps.forEachIndexed { index, step ->
+                if (step is GPUFrameStep.UploadResourceStep && step.staging == verticesStaging) {
+                    put(step.destination, exactScopeKeyByStep.getValue(index))
+                }
+            }
+        }
+        val uploadedVerticesArtifactKeys = mutableSetOf<String>()
         framePlan.steps.forEachIndexed { sourceStepIndex, step ->
             val render = step as? GPUFrameStep.RenderPassStep ?: return@forEachIndexed
             val renderScope = scopeByStep[sourceStepIndex]
@@ -3255,9 +3807,7 @@ internal class GPUPreparedSurfaceNativePreflight(
                     "invalid.prepared-surface.encoder-plan",
                     "A mixed render run is absent from the full encoder plan.",
                 )
-            val renderScopeKey = exactScopeKeys.single { scope ->
-                scope.sourceStepIndex == sourceStepIndex
-            }
+            val renderScopeKey = exactScopeKeyByStep.getValue(sourceStepIndex)
             val corePackets = render.drawPackets.filter {
                 it.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
             }
@@ -3459,11 +4009,10 @@ internal class GPUPreparedSurfaceNativePreflight(
                     val runPlans = runArtifacts.map { artifact ->
                         buildVerticesFrameResourcePlan(artifact, deviceGeneration)
                     }
+                    val runPlanByArtifactKey = runPlans.associateBy { it.artifactKey }
                     val drawFacts = render.drawPackets.map { packet ->
                         val semantic = packet.semanticPayload as GPUDrawSemanticPayload.Vertices
-                        val plan = runPlans.singleOrNull { plan ->
-                            plan.artifactKey == semantic.artifact.key
-                        } ?: throw IllegalArgumentException(
+                        val plan = runPlanByArtifactKey[semantic.artifact.key] ?: throw IllegalArgumentException(
                             "Prepared-vertices run artifact plan is missing",
                         )
                         GPUPreparedVerticesDrawFacts(
@@ -3486,6 +4035,8 @@ internal class GPUPreparedSurfaceNativePreflight(
                                 hasPrimitiveColor = semantic.primitiveColorPresent,
                                 materialPlanProvenance = semantic.materialPlanProvenance,
                                 commandIdValueI32 = semantic.payloadRef.commandIdValue,
+                                destinationBlend = packet.blendPlan as?
+                                    GPUBlendPlan.ShaderBlendWithDstRead,
                             )
                         ) {
                             is GPUPreparedVerticesShaderResult.Ready ->
@@ -3497,20 +4048,23 @@ internal class GPUPreparedSurfaceNativePreflight(
                                 )
                         }
                     }
-                    val exactScopeKey = exactScopeKeys.singleOrNull { scope ->
-                        scope.sourceStepIndex == sourceStepIndex
-                    } ?: throw IllegalArgumentException(
-                        "Prepared-vertices run scope is missing",
-                    )
-                    val verticesUploadScopeKeys = framePlan.steps
-                        .mapIndexedNotNull { index, step ->
-                            (step as? GPUFrameStep.UploadResourceStep)?.takeIf { upload ->
-                                upload.destination.value.contains("prepared-vertices.vertex") ||
-                                    upload.destination.value.contains("prepared-vertices.index")
-                            }?.let { exactScopeKeys.single { scope ->
-                                scope.sourceStepIndex == index
-                            } }
+                    // A shared artifact has one frame upload, owned by its first run.
+                    val newlyUploadedArtifactKeys = runArtifacts.map { it.key }
+                        .filter { uploadedVerticesArtifactKeys.add(it) }
+                    // Recording orders all vertex uploads before all index uploads, each
+                    // by artifact key. Recover only this run's new resources in that order.
+                    val verticesUploadScopeKeys = buildList {
+                        newlyUploadedArtifactKeys.forEach { artifactKey ->
+                            add(verticesUploadScopeByResource.getValue(
+                                preparedVerticesVertexBufferRef(framePlan.frameId, artifactKey),
+                            ))
                         }
+                        newlyUploadedArtifactKeys.forEach { artifactKey ->
+                            verticesUploadScopeByResource[
+                                preparedVerticesIndexBufferRef(framePlan.frameId, artifactKey)
+                            ]?.let(::add)
+                        }
+                    }
                     GPUPreparedSurfaceNativeRunPlan.Vertices(
                         GPUPreparedVerticesRenderRunPlan(
                             sourceScopeIndex = sourceStepIndex,
@@ -3519,7 +4073,7 @@ internal class GPUPreparedSurfaceNativePreflight(
                             resourcePlans = runPlans,
                             drawFacts = drawFacts,
                             shaderProgramByPacketId = shaderProgramByPacketId,
-                            exactScopeKey = exactScopeKey,
+                            exactScopeKey = renderScopeKey,
                             uploadScopeKeys = verticesUploadScopeKeys,
                         ),
                     )
@@ -3746,6 +4300,73 @@ internal class GPUPreparedSurfaceNativePreflight(
                 },
             )
         }
+        val verticesDestinationAuthorities = authenticatePreparedVerticesDestinationReads(
+            framePlan = framePlan,
+            renders = renders,
+            context = null,
+            capabilities = null,
+        ).let { (authorities, refusal) ->
+            if (refusal != null) return refusal
+            authorities
+        }
+        val verticesDestinationReads = verticesDestinationAuthorities.map { authority ->
+            val snapshotEvidence = evidenceByResource[authority.copyStep.snapshot]
+                ?: return refused(
+                    "invalid.prepared-surface.destination-copy-resource",
+                    "Prepared vertices destination snapshot has no exact resource evidence.",
+                )
+            GPUPreparedVerticesDestinationReadPlan(
+                copySourceStepIndex = authority.copySourceStepIndex,
+                renderSourceStepIndex = authority.renderSourceStepIndex,
+                copyStep = authority.copyStep,
+                renderStep = authority.renderStep,
+                packet = authority.packet,
+                semantic = authority.semantic,
+                snapshotPreparation = authority.snapshotPreparation,
+                snapshotEvidence = snapshotEvidence,
+                blendPlan = authority.blendPlan,
+                exactCopyScopeKey = exactScopeKeys.single { scope ->
+                    scope.sourceStepIndex == authority.copySourceStepIndex
+                },
+                exactRenderScopeKey = exactScopeKeys.single { scope ->
+                    scope.sourceStepIndex == authority.renderSourceStepIndex
+                },
+            )
+        }
+        val textDestinationAuthorities = authenticatePreparedTextDestinationReads(
+            framePlan = framePlan,
+            renders = renders,
+            context = null,
+            capabilities = null,
+        ).let { (authorities, refusal) ->
+            if (refusal != null) return refusal
+            authorities
+        }
+        val textDestinationReads = textDestinationAuthorities.map { authority ->
+            val snapshotEvidence = evidenceByResource[authority.copyStep.snapshot]
+                ?: return refused(
+                    "invalid.prepared-surface.destination-copy-resource",
+                    "Prepared TextA8 destination snapshot has no exact resource evidence.",
+                )
+            GPUPreparedTextDestinationReadPlan(
+                copySourceStepIndex = authority.copySourceStepIndex,
+                renderSourceStepIndex = authority.renderSourceStepIndex,
+                copyStep = authority.copyStep,
+                renderStep = authority.renderStep,
+                packet = authority.packet,
+                semantic = authority.semantic,
+                binding = authority.binding,
+                snapshotPreparation = authority.snapshotPreparation,
+                snapshotEvidence = snapshotEvidence,
+                blendPlan = authority.blendPlan,
+                exactCopyScopeKey = exactScopeKeys.single { scope ->
+                    scope.sourceStepIndex == authority.copySourceStepIndex
+                },
+                exactRenderScopeKey = exactScopeKeys.single { scope ->
+                    scope.sourceStepIndex == authority.renderSourceStepIndex
+                },
+            )
+        }
         val sceneTarget = framePlan.steps
             .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
             .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
@@ -3950,11 +4571,19 @@ internal class GPUPreparedSurfaceNativePreflight(
                     textPlan = textPlan,
                     colorGlyphPlan = colorGlyphPlan,
                     colorGlyphDestinationReads = colorGlyphDestinationReads,
+                    textDestinationReads = textDestinationReads,
+                    verticesDestinationReads = verticesDestinationReads,
                     coverageMaskRuns = coverageMaskRuns,
                     layerTargets = layerTargets,
                     compositeRuns = compositeRuns,
                     exactScopeKeys = exactScopeKeys,
                     generationSeal = generationSeal,
+                    mixedCoreProjection = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+                        .flatMap { it.drawPackets }.mapNotNull { it.w5bMixedFrameWitnessV1 }.firstOrNull()?.let { witness ->
+                            org.graphiks.kanvas.gpu.renderer.passes.W5bMixedPreparedFrameWitnessV1.NativeProjection.issue(
+                                witness, framePlan, exactScopeKeys,
+                                orderedRuns.filterIsInstance<GPUPreparedSurfaceNativeRunPlan.Core>().map { it.plan })
+                        },
                 ),
             )
         } catch (_: IllegalArgumentException) {
@@ -4940,6 +5569,15 @@ internal object GPUPreparedSurfaceEncoderScopeAuthority {
                         ),
                     )
                 }
+                if (packet.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead) {
+                    add(
+                        key(
+                            GPUPreparedNativeOperandRole.RenderBindGroup,
+                            GPUPreparedNativeOperandKind.BindGroup,
+                            "prepared-text:${packet.packetId.value}:destination-group",
+                        ),
+                    )
+                }
                 add(
                 key(
                     GPUPreparedNativeOperandRole.RenderVertexBuffer,
@@ -5077,7 +5715,26 @@ internal object GPUPreparedSurfaceEncoderScopeAuthority {
             stream.operandBridge
         }
         val keys = bridges.mapNotNull(::bridgeKey)
-        return if (keys.size != bridges.size) emptyList() else target + keys
+        if (keys.size != bridges.size) return emptyList()
+        if (render.drawPackets.all { packet ->
+                packet.semanticPayload is GPUDrawSemanticPayload.Vertices
+            }
+        ) {
+            val destinationBindGroups = render.drawPackets.count { packet ->
+                packet.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead
+            }
+            val firstBuffer = keys.indexOfFirst { candidate ->
+                candidate.kind == GPUPreparedNativeOperandKind.Buffer
+            }.let { index -> if (index < 0) keys.size else index }
+            return target + keys.take(firstBuffer) + List(destinationBindGroups) { index ->
+                key(
+                    GPUPreparedNativeOperandRole.RenderBindGroup,
+                    GPUPreparedNativeOperandKind.BindGroup,
+                    "prepared-vertices:destination-bind-group:$index",
+                )
+            } + keys.drop(firstBuffer)
+        }
+        return target + keys
     }
 }
 

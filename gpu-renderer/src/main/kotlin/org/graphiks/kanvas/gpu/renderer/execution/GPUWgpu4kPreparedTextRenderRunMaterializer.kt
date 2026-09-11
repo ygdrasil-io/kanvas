@@ -31,6 +31,11 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedTextureUploadLayout
 import org.graphiks.kanvas.gpu.renderer.resources.GPUR8FrameResourcePlan
 
+internal data class GPUWgpu4kPreparedTextDestinationReadInput(
+    val plan: GPUPreparedTextDestinationReadPlan,
+    val snapshotView: GPUTextureView,
+)
+
 internal sealed interface GPUPreparedTextTextureUploadPlan {
     val exactScopeKey: GPUPreparedNativeScopeKey
 
@@ -102,6 +107,10 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
         actualDeviceGeneration: GPUDeviceGenerationID,
         preparedR8Resources: GPUWgpu4kPreparedR8FrameResources,
         coverageMaskViews: Map<GPUFrameTargetRef, GPUTextureView> = emptyMap(),
+        destinationReadsByPacketId: Map<
+            org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID,
+            GPUWgpu4kPreparedTextDestinationReadInput,
+            > = emptyMap(),
     ): GPUPreparedRenderRunMaterialization {
         val requiredCoverageMasks = plan.bindings
             .mapNotNull(GPUPreparedTextRenderBinding::coverageMaskResource)
@@ -110,6 +119,21 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
             return GPUPreparedRenderRunMaterialization.Refused(
                 code = "invalid.native.prepared-text.coverage-mask-resources",
                 message = "Prepared TextA8 CoverageMask views must exactly match sealed resources.",
+                facts = mapOf("boundary" to "native"),
+            )
+        }
+        val requiredDestinationPacketIds = plan.bindings.filter { binding ->
+            binding.nativeProgram.destinationTextureBinding != null
+        }.map(GPUPreparedTextRenderBinding::packetId).toSet()
+        if (destinationReadsByPacketId.keys != requiredDestinationPacketIds ||
+            destinationReadsByPacketId.any { (packetId, input) ->
+                input.plan.packet.packetId != packetId ||
+                    input.plan.binding.packetId != packetId
+            }
+        ) {
+            return GPUPreparedRenderRunMaterialization.Refused(
+                code = "invalid.native.prepared-text.destination-resources",
+                message = "Prepared TextA8 destination views must exactly match sealed packets.",
                 facts = mapOf("boundary" to "native"),
             )
         }
@@ -289,6 +313,14 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
                         coverageMaskViews.getValue(resource),
                     ).track(created)
                 }
+                val destinationGroup = destinationReadsByPacketId[binding.packetId]?.let { input ->
+                    createDestinationGroup(
+                        acquisition,
+                        binding.nativeProgram.destinationTextureBinding,
+                        binding.nativeProgram.destinationSamplerBinding,
+                        input.snapshotView,
+                    ).track(created)
+                }
                 val commands = buildList {
                     add(
                         GPUPreparedNativeRenderCommand.SetPipeline(
@@ -340,6 +372,18 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
                                 3,
                                 GPUPreparedNativeBindGroupOperand(
                                     coverageMaskGroup,
+                                    actualDeviceGeneration,
+                                    GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                                ),
+                            ),
+                        )
+                    }
+                    if (destinationGroup != null) {
+                        add(
+                            GPUPreparedNativeRenderCommand.SetBindGroup(
+                                requireNotNull(binding.nativeProgram.destinationTextureGroup),
+                                GPUPreparedNativeBindGroupOperand(
+                                    destinationGroup,
                                     actualDeviceGeneration,
                                     GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
                                 ),
@@ -550,6 +594,25 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
             layout = requireNotNull(acquisition.coverageMaskBindGroupLayout),
             entries = listOf(
                 BindGroupEntry(requireNotNull(binding).toUInt(), maskView),
+            ),
+        ),
+    )
+
+    private fun createDestinationGroup(
+        acquisition: GPUWgpu4kPreparedTextPipelineAcquisition,
+        textureBinding: Int?,
+        samplerBinding: Int?,
+        destinationView: GPUTextureView,
+    ): GPUBindGroup = device.createBindGroup(
+        BindGroupDescriptor(
+            label = "Kanvas.frame.preparedText.destination-group",
+            layout = requireNotNull(acquisition.destinationBindGroupLayout),
+            entries = listOf(
+                BindGroupEntry(requireNotNull(textureBinding).toUInt(), destinationView),
+                BindGroupEntry(
+                    requireNotNull(samplerBinding).toUInt(),
+                    requireNotNull(acquisition.destinationSampler),
+                ),
             ),
         ),
     )

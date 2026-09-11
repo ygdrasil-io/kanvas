@@ -49,6 +49,7 @@ object GPUBlendFormulaProgramLibrary {
     val advancedHelpersWgsl: String = """
         fn kanvasUnpremul(color: vec4f) -> vec3f {
             if (color.a == 0.0) { return vec3f(0.0); }
+            if (color.a == 1.0) { return color.rgb; }
             return color.rgb / color.a;
         }
 
@@ -56,21 +57,23 @@ object GPUBlendFormulaProgramLibrary {
         fn kanvasSat(c: vec3f) -> f32 {
             return max(max(c.r, c.g), c.b) - min(min(c.r, c.g), c.b);
         }
+        fn kanvasColorDodgeChannel(cb: f32, cs: f32) -> f32 {
+            if (cb == 0.0) { return 0.0; }
+            if (cs == 1.0) { return 1.0; }
+            return min(1.0, cb / (1.0 - cs));
+        }
         fn kanvasColorDodge(cb: vec3f, cs: vec3f) -> vec3f {
-            let dodged = select(
-                min(vec3f(1.0), cb / (vec3f(1.0) - cs)),
-                vec3f(1.0),
-                cs == vec3f(1.0),
-            );
-            return select(dodged, vec3f(0.0), cb == vec3f(0.0));
+            return vec3f(kanvasColorDodgeChannel(cb.r, cs.r),
+                kanvasColorDodgeChannel(cb.g, cs.g), kanvasColorDodgeChannel(cb.b, cs.b));
+        }
+        fn kanvasColorBurnChannel(cb: f32, cs: f32) -> f32 {
+            if (cb == 1.0) { return 1.0; }
+            if (cs == 0.0) { return 0.0; }
+            return 1.0 - min(1.0, (1.0 - cb) / cs);
         }
         fn kanvasColorBurn(cb: vec3f, cs: vec3f) -> vec3f {
-            let burned = select(
-                vec3f(1.0) - min(vec3f(1.0), (vec3f(1.0) - cb) / cs),
-                vec3f(0.0),
-                cs == vec3f(0.0),
-            );
-            return select(burned, vec3f(1.0), cb == vec3f(1.0));
+            return vec3f(kanvasColorBurnChannel(cb.r, cs.r),
+                kanvasColorBurnChannel(cb.g, cs.g), kanvasColorBurnChannel(cb.b, cs.b));
         }
         fn kanvasHardLight(cb: vec3f, cs: vec3f) -> vec3f {
             let multiply = 2.0 * cs * cb;

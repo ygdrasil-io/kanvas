@@ -229,6 +229,12 @@ data class GPULimits(
     val maxBufferSize: Long? = null,
     /** Facade-observed dynamic uniform binding limit; absent until the selected backend reports it. */
     val maxDynamicUniformBuffersPerPipelineLayout: Long? = null,
+    val maxBindGroupsI32: Int? = null,
+    val maxBindingsPerBindGroupI32: Int? = null,
+    val maxSamplersPerShaderStageI32: Int? = null,
+    val maxSampledTexturesPerShaderStageI32: Int? = null,
+    val maxUniformBuffersPerShaderStageI32: Int? = null,
+    val maxUniformBufferBindingSizeBytesI64: Long? = null,
 ) {
     init {
         require(maxTextureDimension2D > 0L) { "GPULimits.maxTextureDimension2D must be positive" }
@@ -249,6 +255,9 @@ data class GPULimits(
             "GPULimits.maxDynamicUniformBuffersPerPipelineLayout must be non-negative when observed"
         }
         require(source.isNotBlank()) { "GPULimits.source must not be blank" }
+        require(listOf(maxBindGroupsI32, maxBindingsPerBindGroupI32, maxSamplersPerShaderStageI32,
+            maxSampledTexturesPerShaderStageI32, maxUniformBuffersPerShaderStageI32).all { it == null || it >= 0 })
+        require(maxUniformBufferBindingSizeBytesI64 == null || maxUniformBufferBindingSizeBytesI64 > 0L)
     }
 
     /** Converts these limits to deterministic capability facts for diagnostics and evidence dumps. */
@@ -276,7 +285,14 @@ data class GPULimits(
                 affectsValidity = true,
                 evidenceLabel = evidenceLabel,
             ),
-        ) + listOfNotNull(
+        ) + listOf(
+            "maxBindGroups" to maxBindGroupsI32,
+            "maxBindingsPerBindGroup" to maxBindingsPerBindGroupI32,
+            "maxSamplersPerShaderStage" to maxSamplersPerShaderStageI32,
+            "maxSampledTexturesPerShaderStage" to maxSampledTexturesPerShaderStageI32,
+            "maxUniformBuffersPerShaderStage" to maxUniformBuffersPerShaderStageI32,
+            "maxUniformBufferBindingSize" to maxUniformBufferBindingSizeBytesI64,
+        ).mapNotNull { (name, value) -> value?.let { GPUCapabilityFact(name, source, it.toString(), true, evidenceLabel) } } + listOfNotNull(
             maxBufferSize?.let { observedMaxBufferSize ->
                 GPUCapabilityFact(
                     name = "maxBufferSize",

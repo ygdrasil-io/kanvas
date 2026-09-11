@@ -1414,7 +1414,10 @@ internal class PreparedGPUFrame(
                 "PreparedGPUFrame encoder resource generations must exactly match the semantic step"
             }
             if (step is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep) {
-                val sealedW4e = step.drawPackets.all { packet ->
+                step.drawPackets.firstOrNull()?.w5bFinalFrameWitnessV3?.takeIf { it.w4eLane != null }?.let { witness ->
+                    require(witness.validates(semanticPlan)) { "Prepared W4e final-color scopes require their complete sealed frame" }
+                }
+                val sealedW4e = step.drawPackets.isNotEmpty() && step.drawPackets.all { packet ->
                     packet.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared
                 }
                 require(scope.corePrimitiveDirectNativeRouteSeal !== GPUCorePrimitiveDirectNativeRouteSeal.Missing) {
@@ -1481,7 +1484,15 @@ internal class PreparedGPUFrame(
                     semanticPlan.steps.filterIsInstance<org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep>())) {
                     "Prepared composite frames require their exact ordered lane authority"
                 }
-                val plannedPathFrame = if (compositeAuthority != null) {
+                val w5bPathWitness = step.drawPackets.singleOrNull()?.let { packet ->
+                    packet.corePrimitivePreparedAuthority?.w5bFrameWitnessV3?.takeIf {
+                        it.scratchFor(packet) is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath
+                    }
+                }
+                if (w5bPathWitness != null) require(w5bPathWitness.validates(semanticPlan)) {
+                    "Prepared W5b path scopes require the exact compiler-owned frame"
+                }
+                val plannedPathFrame = if (w5bPathWitness != null) true else if (compositeAuthority != null) {
                     step.drawPackets.all { it.corePrimitivePreparedAuthority?.let { authority ->
                         authority.w4cSessionScratch != null || authority.w4dSessionScratch != null
                     } == true }
@@ -1494,7 +1505,7 @@ internal class PreparedGPUFrame(
                 val w4dGeneralScope = sealedW4e || plannedPathAuthority
                     ?.w4dGeneralFrameMaterializationAuthority != null
                 val hasPlannedPathAuthority = plannedPathAuthority?.w4cSessionScratch != null ||
-                    plannedPathAuthority?.w4dSessionScratch != null
+                    plannedPathAuthority?.w4dSessionScratch != null || w5bPathWitness != null
                 val expectedPlannedPathLoadStore = when (plannedPathPacket?.role) {
                     org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilProducer ->
                         org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
@@ -1613,7 +1624,9 @@ internal class PreparedGPUFrame(
                 require(sealedW4e || stream.sourcePacketIds == step.expectedRenderCommandPacketIds(scope)) {
                     "PreparedGPUFrame render command stream must have exact per-packet command structure"
                 }
-                require(stream.sourcePassIds == step.drawPackets.map { it.passId }.distinct()) {
+                val expectedPassIds = step.w5bInitialClearV3?.let { listOf("w5b.${it.graph.id.value}.initial-clear") }
+                    ?: step.drawPackets.map { it.passId }.distinct()
+                require(stream.sourcePassIds == expectedPassIds) {
                     "PreparedGPUFrame render command stream must retain original pass identities"
                 }
                 require(stream.commandLabels == scope.facadeOperationClasses) {
@@ -2041,7 +2054,11 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFac
     when (this) {
         is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep -> buildList {
             add("beginRenderPass")
-            if (drawPackets.all { packet ->
+            if (w5bInitialClearV3 != null) {
+                add("endRenderPass")
+                return@buildList
+            }
+            if (drawPackets.isNotEmpty() && drawPackets.all { packet ->
                     packet.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared
                 }
             ) {

@@ -21,6 +21,7 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramComp
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramResult
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
+import org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer
 import org.graphiks.kanvas.gpu.renderer.recording.canonicalSnapshotHash
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.KanvasPreparedRuntimeEffectResolver
 import org.graphiks.kanvas.image.Image
@@ -521,7 +522,9 @@ internal object GPUPreparedTextLowerer {
                     ),
                 )
         }
-        val blendPlan = paint.blendMode.toGpuBlendFacts().copy(
+        val blendPlan = materialPlan?.let { planned ->
+            W5bBlendPlanLowerer.lowerForRecording(planned.blend)
+        } ?: paint.blendMode.toGpuBlendFacts().copy(
             sourceAlpha = material.preCoverageSourceAlpha,
         ).canonicalBlendPlan(
             coverage = coverage,

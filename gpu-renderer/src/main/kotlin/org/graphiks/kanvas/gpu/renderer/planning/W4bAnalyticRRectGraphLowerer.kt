@@ -493,17 +493,19 @@ internal class W4bAnalyticRRectGraphLowerer {
     private fun intersect(first: RectI32, second: RectI32): RectI32? =
         first.copy().takeIf { candidate -> candidate.intersect(second) }
 
-    private fun packet(
+    internal fun packet(
         draw: AnalyticRRectDraw,
         color: ColorF32,
         paintOrder: Int,
         target: GPUPixelBounds,
         materialPlanTable: MaterialPlanTable?,
+        w5b: Boolean = false,
     ): W4bBuiltPacket {
+        val lane = if (w5b) "w5b.w4b" else "w4b"
         val shape = draw.copyDeviceShape()
         val raster = draw.copyRasterBounds()
         val scissor = draw.copyScissor()
-        val packetId = GPUDrawPacketID("packet.w4b.${draw.commandIndex}")
+        val packetId = GPUDrawPacketID("packet.$lane.${draw.commandIndex}")
         val plannedScissor = GPUPixelBounds(scissor.left, scissor.top, scissor.right, scissor.bottom)
         val scratchDraw = W4bSessionScratchDrawV1(
             packetId,
@@ -531,7 +533,7 @@ internal class W4bAnalyticRRectGraphLowerer {
         } else {
             GPUClipExecutionPlan.ScissorOnly(plannedScissor)
         }
-        val blend = canonicalSolidRectSrcOverBlendPlan()
+        val blend = W5bBlendPlanLowerer.lower(draw.blend)
         val analysisRecordId = "analysis.fill_rrect.${draw.commandIndex}"
         val semantic = GPUCorePrimitivePayloadGatherer().gatherSemantic(
             GPUCorePrimitivePayloadInput(
@@ -564,10 +566,10 @@ internal class W4bAnalyticRRectGraphLowerer {
                 packetId = packetId,
                 commandIdValue = draw.commandIndex,
                 analysisRecordId = analysisRecordId,
-                passId = "pass.w4b.main",
+                passId = "pass.$lane.main",
                 layerId = "root",
-                bindingListId = "binding.w4b.${draw.commandIndex}",
-                insertionReasonCode = "w4b-analytic-rrect",
+                bindingListId = "binding.$lane.${draw.commandIndex}",
+                insertionReasonCode = "$lane-analytic-rrect",
                 sortKey = paintOrder.toLong(),
                 sortKeyPreimage = "paint-order:$paintOrder",
                 renderStepId = GPURenderStepID(CORE_PRIMITIVE_RENDER_STEP_IDENTITY),
@@ -761,7 +763,7 @@ internal class W4bAnalyticRRectGraphLowerer {
         is PlanDrawMaterialAuthority.MaterialV1 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }
     }
 
-    private data class W4bBuiltPacket(
+    internal data class W4bBuiltPacket(
         val packet: GPUDrawPacket,
         val scratchDraw: W4bSessionScratchDrawV1,
         val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,

@@ -3,7 +3,8 @@ package org.graphiks.kanvas.surface.gpu
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.gpu.plan.EffectiveMaterialPlanner
-import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.gpu.plan.BlendTargetClampV1
+import org.graphiks.kanvas.gpu.plan.CoveragePlan
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.render.ir.DisplayOpSceneAdapter
 import org.graphiks.kanvas.render.ir.SceneCaptureResult
@@ -11,7 +12,7 @@ import org.graphiks.kanvas.render.ir.SceneCommand
 import org.graphiks.kanvas.render.ir.SceneExtent
 
 /**
- * Captures only W5a text candidates before prepared glyph lowering.
+ * Captures the W5a material and W5b final-blend authority before prepared glyph lowering.
  *
  * Text keeps its established glyph, atlas, and coverage preparation.  A sealed W5a material
  * pair is issued only after the lowerer has proved that the whole prepared run is A8 coverage.
@@ -36,10 +37,13 @@ internal class W5aPreparedTextMaterialBridge private constructor(
             )
         }.getOrNull() as? SceneCaptureResult.Captured ?: return null
         val draw = captured.scene.singleOrNull() as? SceneCommand.Draw ?: return null
-        // W5b and later material kinds never acquire W5a text ownership.
-        val planned = EffectiveMaterialPlanner.plan(draw.node)
+        val planned = EffectiveMaterialPlanner.planW5b(
+            draw = draw.node,
+            targetClamp = BlendTargetClampV1.UnitInterval,
+            coverage = CoveragePlan.AnalyticScalarAA,
+        )
             as? EffectiveMaterialPlanner.Result.Ready ?: return null
-        return GPUPreparedTextMaterialPlan(planned.table, planned.root)
+        return GPUPreparedTextMaterialPlan(planned.table, planned.root, planned.blend)
     }
 
     internal companion object {
@@ -64,7 +68,7 @@ internal class W5aPreparedTextMaterialBridge private constructor(
         }
 
         private fun DisplayOp.DrawText.isW5aPreparedTextCandidate(): Boolean =
-            paint.blendMode == BlendMode.SRC_OVER && paint.shader.isW5aSolidOpacity()
+            paint.shader.isW5aSolidOpacity()
 
         private fun Shader?.isW5aSolidOpacity(): Boolean {
             var source = this

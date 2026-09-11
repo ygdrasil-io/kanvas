@@ -1406,9 +1406,26 @@ internal class GPUFrameExecutor(
         val composite = allRenders.flatMap { it.drawPackets }.mapNotNull { it.w5aCompositeFrameAuthority }.firstOrNull()
         if (composite != null && !composite.validates(frame.semanticPlan, allRenders)) return executionDiagnostic(
             "invalid.native-frame-payload.w5a-composite", "Composite execution requires its exact lane and packet authority.")
+        val w4eFinal = allRenders.flatMap { it.drawPackets }.mapNotNull { it.w5bFinalFrameWitnessV3 }
+            .firstOrNull()?.takeIf { it.w4eLane != null }
+        if (w4eFinal != null && !w4eFinal.validates(frame.semanticPlan)) return executionDiagnostic(
+            "invalid.native-frame-payload.w5b-w4e", "W4e execution requires its complete final-color frame.")
+        val w5bGeometry = allRenders.flatMap { it.drawPackets }.mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }
+            .firstOrNull()?.takeIf { it.geometryLanes.any { lane -> lane is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath } }
+        if (w5bGeometry != null && !w5bGeometry.validates(frame.semanticPlan)) return executionDiagnostic(
+            "invalid.native-frame-payload.w5b-path-authority", "W5b path execution lost its exact geometry/color frame authority.")
+        val w5bGeneral = allRenders.flatMap { it.drawPackets }.mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }
+            .firstOrNull()?.takeIf { it.geometryLanes.any { lane -> lane is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.General } }
+        if (w5bGeneral != null && !w5bGeneral.validates(frame.semanticPlan)) return executionDiagnostic(
+            "invalid.native-frame-payload.w5b-general-authority", "General execution lost the complete sealed W5b frame.")
         val renders = frame.semanticPlan.steps.mapIndexedNotNull { stepIndex, step ->
             (step as? GPUFrameStep.RenderPassStep)?.let { render -> Triple(stepIndex, render, render.drawPackets.singleOrNull()) }
-        }.filter { (_, render, _) -> composite == null || render.drawPackets.all {
+        }.filter { (_, render, _) -> if (w4eFinal != null) render.drawPackets.any(requireNotNull(w4eFinal.w4eLane)::owns)
+        else if (w5bGeneral != null) render.drawPackets.isNotEmpty() && render.drawPackets.all {
+            w5bGeneral.scratchFor(it) is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.General
+        } else if (w5bGeometry != null) render.drawPackets.isNotEmpty() && render.drawPackets.all {
+            w5bGeometry.scratchFor(it) is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath
+        } else composite == null || render.drawPackets.all {
             it.corePrimitivePreparedAuthority?.let { authority -> authority.w4cSessionScratch != null || authority.w4dSessionScratch != null } == true
         } }
         val writableLoads = renders.filter { (_, render, _) ->
@@ -1417,20 +1434,29 @@ internal class GPUFrameExecutor(
                     .WritableStencil)?.loadOperation ==
                 org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Load
         }
-        val hasW4c = frame.semanticPlan.hasSealedW4cSessionMarker()
+        val hasW4c = frame.semanticPlan.hasSealedW4cSessionMarker() || w5bGeometry != null
         val hasW4d = frame.semanticPlan.hasSealedW4dSessionMarker()
+        val pointWitness = allRenders.flatMap { it.drawPackets }.mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }
+            .firstOrNull()?.takeIf { it.clipPrefixV4 != null }
         val hasW4e = renders.isNotEmpty() && renders.all { (_, _, packet) ->
             packet?.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared
         }
-        if (hasW4e) {
+        if (hasW4e || pointWitness != null || w4eFinal != null) {
             val renderSteps = frame.semanticPlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             val w4ePackets = renderSteps.flatMap(GPUFrameStep.RenderPassStep::drawPackets)
                 .filter { packet -> packet.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared }
             val authority = w4ePackets.firstOrNull()?.w4ePreparedFrameAuthority
-            if (w4ePackets.size != renderSteps.size || authority == null || !authority.validatesRenderSteps(
+            if (pointWitness != null && !pointWitness.validates(frame.semanticPlan)) return executionDiagnostic(
+                "invalid.native-frame-payload.w5b-clip-frame-authority", "Point execution requires its exact clip-prefix and color frame authority.")
+            val w4eSteps = when {
+                w4eFinal != null -> renderSteps.filter { step -> step.drawPackets.any(requireNotNull(w4eFinal.w4eLane)::owns) }
+                pointWitness != null -> renderSteps.take(requireNotNull(pointWitness.clipPrefixV4).renders.size)
+                else -> renderSteps
+            }
+            if (w4ePackets.size != w4eSteps.size || authority == null || !authority.validatesRenderSteps(
                     frame.semanticPlan.frameId.value,
                     frame.semanticPlan.capabilitySeal.sealHash,
-                    renderSteps,
+                    w4eSteps,
                 )
             ) {
                 return executionDiagnostic(
@@ -1444,6 +1470,7 @@ internal class GPUFrameExecutor(
             )
             w4eSceneContinuationPayloadDiagnostic(frame, exactPayload)?.let { return it }
             val renderScopes = exactPayload.scopeOperands.filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+                .filter { w4eFinal == null || it.sourceStepIndex in renders.map { row -> row.first } }
             return if (renderScopes.size != renders.size ||
                 renderScopes.map(GPUPreparedNativeScopeOperand.Render::sourceStepIndex) !=
                     renders.map { (stepIndex, _, _) -> stepIndex }
@@ -1633,7 +1660,9 @@ internal class GPUFrameExecutor(
             "unsupported.native-frame-payload.$lane-missing",
             "A planned $laneName frame requires one consumed native payload before encoding.",
         )
-        val plannedScratch: Any = if (hasW4d) {
+        val plannedScratch: Any = if (w5bGeometry != null) {
+            w5bGeometry.geometryLanes.filterIsInstance<org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath>().first().nativeAuthority
+        } else if (hasW4d) {
             renders.mapNotNull { (_, _, packet) ->
                 packet?.corePrimitivePreparedAuthority?.w4dSessionScratch
             }.firstOrNull()
@@ -1653,10 +1682,12 @@ internal class GPUFrameExecutor(
                 "Each planned $laneName render scope must contain exactly one packet.",
             )
             val packetScratch = exactPacket.corePrimitivePreparedAuthority?.let { authority ->
-                if (composite != null) authority.w4dSessionScratch ?: authority.w4cSessionScratch
+                if (w5bGeometry != null) (w5bGeometry.scratchFor(exactPacket) as org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath).nativeAuthority
+                else if (composite != null) authority.w4dSessionScratch ?: authority.w4cSessionScratch
                 else if (hasW4d) authority.w4dSessionScratch else authority.w4cSessionScratch
             }
-            val expectedScratch = if (composite == null) plannedScratch else composite.lanes.singleOrNull { lane ->
+            val expectedScratch = if (w5bGeometry != null) (w5bGeometry.scratchFor(exactPacket) as org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath).nativeAuthority
+            else if (composite == null) plannedScratch else composite.lanes.singleOrNull { lane ->
                 lane.packets.any { it === exactPacket }
             }?.packets?.firstOrNull()?.corePrimitivePreparedAuthority?.let { authority ->
                 authority.w4dSessionScratch ?: authority.w4cSessionScratch
@@ -1739,7 +1770,7 @@ internal class GPUFrameExecutor(
                     "$laneName path producer and cover operands must retain their exact writable stencil state.",
                 )
             }
-            val previousDepthView = if (composite == null) sharedPathDepthStencilView else compositeDepthViews[expectedScratch]
+            val previousDepthView = if (composite == null && w5bGeometry == null) sharedPathDepthStencilView else compositeDepthViews[expectedScratch]
             if (previousDepthView != null && previousDepthView !== depthStencil.view) {
                 return executionDiagnostic(
                     "invalid.native-frame-payload.$lane-depth-stencil-continuity",
@@ -1747,7 +1778,7 @@ internal class GPUFrameExecutor(
                 )
             }
             sharedPathDepthStencilView = depthStencil.view
-            if (composite != null) compositeDepthViews[expectedScratch] = depthStencil.view
+            if (composite != null || w5bGeometry != null) compositeDepthViews[expectedScratch] = depthStencil.view
         }
         val coverStepIndices = renders.mapNotNull { (stepIndex, _, packet) ->
             stepIndex.takeIf {

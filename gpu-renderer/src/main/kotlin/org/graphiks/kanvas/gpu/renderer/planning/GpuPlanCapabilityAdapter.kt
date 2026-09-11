@@ -201,6 +201,12 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
             supportedDepthStencilFormats = depthStencilFormats,
             supportedTextureSampleSupports = sampleSupports,
             supportedTextureResolveSupports = resolveSupports,
+            maxBindGroupsI32 = observedLimits.maxBindGroupsI32,
+            maxBindingsPerBindGroupI32 = observedLimits.maxBindingsPerBindGroupI32,
+            maxSamplersPerShaderStageI32 = observedLimits.maxSamplersPerShaderStageI32,
+            maxSampledTexturesPerShaderStageI32 = observedLimits.maxSampledTexturesPerShaderStageI32,
+            maxUniformBuffersPerShaderStageI32 = observedLimits.maxUniformBuffersPerShaderStageI32,
+            maxUniformBufferBindingSizeBytesI64 = observedLimits.maxUniformBufferBindingSizeBytesI64,
         )
         GpuPlanCapabilityAdapterResult.Supported(snapshot)
     } catch (_: IllegalArgumentException) {

@@ -10,6 +10,7 @@ import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
 import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.gpu.plan.MaterialProgramPlan
 import org.graphiks.kanvas.gpu.plan.NumericOperationGraphV1
+import org.graphiks.kanvas.paint.BlendMode
 
 /**
  * Independent W5a oracle. All node values are intervals over real arithmetic,
@@ -31,12 +32,57 @@ internal object WgslFloatEnvelopeV1Oracle {
             internal val channels: List<Set<Int>>,
             internal val state: AttachmentState,
         ) : DrawResult
-        data class Unbounded(val reason: String) : DrawResult
+        data class Unbounded(val reason: String, internal val exclusionOnlyChannels: List<Set<Int>>? = null) : DrawResult
     }
 
     internal class AttachmentState internal constructor(internal val linearPremul: Array<Interval>)
 
     fun clearAttachment(): AttachmentState = AttachmentState(Array(4) { Interval.ZERO })
+
+    /** Exclusion proof only: deliberately not a DrawResult and never admitted by assertAdmits. */
+    class ConservativeExclusion internal constructor(internal val channels: List<Set<Int>>)
+
+    fun destinationExclusion(table: MaterialPlanTable, root: MaterialPlanRef, destination: AttachmentState,
+        mode: BlendMode, coverageF32: Float = 1f, scalarMask: Boolean = false): ConservativeExclusion {
+        val result = drawDestination(table, root, destination, mode, coverageF32, scalarMask)
+        return ConservativeExclusion(when (result) {
+            is DrawResult.Bounded -> result.channels
+            is DrawResult.Unbounded -> requireNotNull(result.exclusionOnlyChannels) { result.reason }
+        })
+    }
+
+    fun hasPositiveArtisticTerm(table: MaterialPlanTable, root: MaterialPlanRef, destination: AttachmentState,
+        mode: BlendMode): Boolean {
+        val source = evaluateMaterialSource(table, root, destination.linearPremul, Interval.ONE)
+        val dst = destination.linearPremul
+        if (source[3].lower <= BigDecimal.ZERO || dst[3].lower <= BigDecimal.ZERO) return false
+        val s = Array(3) { wgslDivide(source[it], source[3]) }
+        val d = Array(3) { wgslDivide(dst[it], dst[3]) }
+        val color = if (mode in NON_SEPARABLE_MODES) artisticNonSeparable(s, d, mode)
+            else Array(3) { artisticSeparable(s[it], d[it], mode) }
+        return color.any { it.lower > BigDecimal.ZERO }
+    }
+
+    fun sourceOverExclusion(table: MaterialPlanTable, root: MaterialPlanRef, destination: AttachmentState, coverageF32: Float = 1f): ConservativeExclusion {
+        val values = evaluateProgram(table, root, destination.linearPremul, w4eRectMaskCoverage(coverageF32))
+        return ConservativeExclusion(values.mapIndexed { channel, value ->
+            if (channel < 3) codesForSrgbAttachment(value) else codesFor(value)
+        })
+    }
+
+    private fun w4eRectMaskCoverage(coverageF32: Float): Interval {
+        fun sampledMask(codes: Set<Int>): Interval = f32Envelope(Interval(
+            downDivide(BigDecimal(codes.minOrNull()!!), UNORM_MAX), upDivide(BigDecimal(codes.maxOrNull()!!), UNORM_MAX)))
+        if (coverageF32 != .5f) return Interval.input(coverageF32)
+        val producerCodes = codesFor(Interval.input(coverageF32))
+        // W4e's integer INTERSECT fold rounds the producer's sampled byte, multiplies it
+        // by the initialized accumulator byte (255), then stores the rounded quotient.
+        val foldedCodes = producerCodes.flatMap { codeI32 ->
+            val foldedI32 = (255 * codeI32 + 127) / 255
+            codesFor(wgslDivide(Interval.input(foldedI32.toFloat()), Interval.input(255f)))
+        }.toSet()
+        return sampledMask(foldedCodes)
+    }
 
     /** Interprets the published program/binding graph and produces its direct RGBA8 code sets. */
     fun draw(
@@ -67,6 +113,28 @@ internal object WgslFloatEnvelopeV1Oracle {
         is DrawResult.Unbounded -> error("WgslFloatEnvelopeV1 is unbounded: ${result.reason}")
     }
 
+    /** Closes SRC_IN against the stored attachment left by the preceding draw. */
+    fun drawSrcIn(
+        table: MaterialPlanTable,
+        root: MaterialPlanRef,
+        destination: AttachmentState,
+    ): DrawResult {
+        val blended = try {
+            val source = evaluateMaterialSource(table, root, destination.linearPremul, Interval.ONE)
+            Array(4) { channel -> fixedFunctionSrcIn(source[channel].clamp01(), destination.linearPremul[3].clamp01()) }
+        } catch (failure: IllegalArgumentException) {
+            return DrawResult.Unbounded(failure.message.orEmpty())
+        } catch (failure: ArithmeticException) {
+            return DrawResult.Unbounded(failure.message.orEmpty())
+        }
+        val encoded = blended.mapIndexed { channel, value -> if (channel < 3) attachmentEncode(value) else value }
+        val codes = encoded.mapIndexed { channel, value -> if (channel < 3) codesForSrgbAttachment(value) else codesFor(value) }
+        if (codes.any { it.isEmpty() || it.size > 2 || it.maxOrNull()!! - it.minOrNull()!! > 1 }) {
+            return DrawResult.Unbounded("Attachment code sets exceed two adjacent codes: $codes")
+        }
+        return DrawResult.Bounded(codes, AttachmentState(decodeStoredAttachment(codes)))
+    }
+
     fun assertAdmits(expected: DrawResult, observedRgba8: UByteArray) {
         require(observedRgba8.size == 4)
         val bounded = expected as? DrawResult.Bounded
@@ -77,6 +145,301 @@ internal object WgslFloatEnvelopeV1Oracle {
             }
         }
     }
+
+    /** Independent shader blend closure. The target writes directly, without fixed blend math. */
+    fun drawDestination(
+        table: MaterialPlanTable,
+        root: MaterialPlanRef,
+        destination: AttachmentState,
+        mode: BlendMode,
+        coverageF32: Float = 1f,
+        scalarMask: Boolean = false,
+    ): DrawResult {
+        val values = try {
+            val dst = destination.linearPremul
+            val src = evaluateMaterialSource(table, root, dst, Interval.ONE)
+            // Historical W4e Rect AA producer writes an exactly half-covered edge into
+            // linear RGBA8. INTERSECT then stores that sampled coverage in the accumulator.
+            // Both conversions and the final texture decode belong to the independent bound.
+            val coverage = if (scalarMask) w4eRectMaskCoverage(coverageF32) else Interval.input(coverageF32)
+            fun applyCoverage(value: Interval, destination: Interval): Interval {
+                if (coverageF32 == 1f && !scalarMask) return value
+                val delta = value - destination
+                val product = coverage * delta
+                val ordinary = hull(destination + product, fma(coverage, delta, destination))
+                // D + F*(B-D) is affine in each of the independent B,D,F inputs.
+                // Evaluate shared F at both endpoints, then retain every subtraction,
+                // multiplication and addition/FMA rounding allowed by the original form.
+                val affine = hull(*listOf(coverage.lower, coverage.upper).map { f ->
+                    val covered = directedBinary(Interval.point(f), value, ::downMultiply, ::upMultiply)
+                    val retained = directedBinary(Interval.point(BigDecimal.ONE.subtract(f)), destination, ::downMultiply, ::upMultiply)
+                    directedBinary(covered, retained, ::downAdd, ::upAdd)
+                }.toTypedArray())
+                val subtractionError = roundingEnvelopeError(directedBinary(value, destination, ::downSubtract, ::upSubtract))
+                val multiplyError = roundingEnvelopeError(directedBinary(coverage, delta, ::downMultiply, ::upMultiply))
+                val additionError = maxOf(roundingEnvelopeError(directedBinary(destination, product, ::downAdd, ::upAdd)),
+                    roundingEnvelopeError(directedBinary(destination,
+                        directedBinary(coverage, delta, ::downMultiply, ::upMultiply), ::downAdd, ::upAdd)))
+                val error = upAdd(upMultiply(maxOf(coverage.lower.abs(), coverage.upper.abs()), subtractionError),
+                    upAdd(multiplyError, additionError))
+                val correlated = expandAbsolute(affine, error)
+                return Interval(maxOf(ordinary.lower, correlated.lower), minOf(ordinary.upper, correlated.upper))
+            }
+            fun unpremul(value: Interval, alpha: Interval) = when {
+                alpha.isExactly(Interval.ZERO) -> Interval.ZERO
+                // Opaque premultiplied input is already straight; no division is needed.
+                alpha.isExactly(Interval.ONE) -> value
+                else -> wgslDivide(value, alpha)
+            }
+            fun split(original: Interval, countI32: Int): List<Interval> {
+                val width = upSubtract(original.upper, original.lower)
+                val bounds = (0..countI32).map { partI32 ->
+                    if (partI32 == 0) original.lower else if (partI32 == countI32) original.upper else
+                        downAdd(original.lower, downDivide(downMultiply(width, BigDecimal(partI32)), BigDecimal(countI32)))
+                }
+                return bounds.zipWithNext { lower, upper -> Interval(lower, upper) }
+            }
+            // Cover the whole RGB box, not just its widest axis: HSL reuses all three
+            // destination components in SetSat, luminosity and ClipColor.
+            val hslDomains = if (mode in NON_SEPARABLE_MODES) split(dst[0], 8).flatMap { r ->
+                split(dst[1], 8).flatMap { g -> split(dst[2], 8).map { b -> arrayOf(r, g, b) } }
+            } else emptyList()
+            val hslColors = hslDomains.map { domain -> artisticNonSeparable(
+                Array(3) { unpremul(src[it], src[3]) }, Array(3) { unpremul(domain[it], dst[3]) }, mode) }
+            val blended = Array(4) { channel ->
+                if (mode == BlendMode.PLUS) {
+                    val original = dst[channel]
+                    val count = 64
+                    val width = upSubtract(original.upper, original.lower)
+                    val bounds = (0..count).map { part -> if (part == 0) original.lower else if (part == count) original.upper else
+                        downAdd(original.lower, downDivide(downMultiply(width, BigDecimal(part)), BigDecimal(count))) }
+                    hull(*bounds.zipWithNext().map { (lower, upper) ->
+                        val d = Interval(lower, upper)
+                        applyCoverage((src[channel] + d).clamp01(), d)
+                    }.toTypedArray())
+                }
+                else if (channel == 3) applyCoverage(sourceOver(src[3], dst[3], Interval.ONE - src[3]), dst[3]) else {
+                    // Shared destination terms must not lose their correlation through a
+                    // wide interval. Directed domain subdivision tightens the enclosure;
+                    // it adds no tolerance and covers every original destination value.
+                    val domains = hslDomains.ifEmpty { split(dst[channel], 64).map { partition ->
+                        Array(3) { if (it == channel) partition else dst[it] }
+                    } }
+                    hull(*domains.mapIndexed { indexI32, domain ->
+                        // The HSL color and all three consumers share this exact RGB
+                        // cell. Hull only after blend and scalar coverage evaluation.
+                        val destinationChannel = domain[channel]
+                        val s = unpremul(src[channel], src[3])
+                        val d = unpremul(destinationChannel, dst[3])
+                        val color = if (mode in NON_SEPARABLE_MODES) hslColors[indexI32][channel] else artisticSeparable(s, d, mode)
+                        val left = src[channel] * (Interval.ONE - dst[3])
+                        val right = destinationChannel * (Interval.ONE - src[3])
+                        val product = hull((src[3] * dst[3]) * color, src[3] * (dst[3] * color))
+                        applyCoverage(hull((left + right) + product, left + (right + product), (left + product) + right,
+                            fma(src[channel], Interval.ONE - dst[3], right + product),
+                            fma(destinationChannel, Interval.ONE - src[3], left + product),
+                            fma(src[3] * dst[3], color, left + right),
+                            fma(src[3], dst[3] * color, left + right)), destinationChannel)
+                    }.toTypedArray())
+                }
+            }
+            Array(4) { channel -> blended[channel].clamp01() }
+        } catch (failure: IllegalArgumentException) {
+            return DrawResult.Unbounded(failure.message.orEmpty())
+        } catch (failure: ArithmeticException) {
+            return DrawResult.Unbounded(failure.message.orEmpty())
+        }
+        val codes = values.mapIndexed { channel, value -> if (channel < 3) codesForSrgbAttachment(attachmentEncode(value)) else codesFor(value) }
+        if (codes.any { it.isEmpty() || it.size > 2 || it.maxOrNull()!! - it.minOrNull()!! > 1 }) {
+            return DrawResult.Unbounded("Attachment code sets exceed two adjacent codes: $codes", codes)
+        }
+        return DrawResult.Bounded(codes, AttachmentState(decodeStoredAttachment(codes)))
+    }
+
+    /** ONE/ONE/Add includes the same permitted fixed precision schedules as SRC_OVER. */
+    fun drawPlus(table: MaterialPlanTable, root: MaterialPlanRef, destination: AttachmentState): DrawResult {
+        val src = evaluateMaterialSource(table, root, destination.linearPremul, Interval.ONE)
+        val codes = Array(4) { channel ->
+            val source = src[channel].clamp01()
+            val dst = destination.linearPremul[channel].clamp01()
+            val floating = (source + dst).clamp01()
+            val fixed = directedBinary(fixedPrecisionEnvelope(source, conversion = true), dst, ::downAdd, ::upAdd).clamp01()
+            val value = hull(floating, fixed)
+            if (channel < 3) codesForSrgbAttachment(attachmentEncode(value)) else codesFor(value)
+        }.toList()
+        if (codes.any { it.isEmpty() || it.size > 2 || it.maxOrNull()!! - it.minOrNull()!! > 1 }) {
+            return DrawResult.Unbounded("Attachment code sets exceed two adjacent codes: $codes")
+        }
+        return DrawResult.Bounded(codes, AttachmentState(decodeStoredAttachment(codes)))
+    }
+
+    /** W3C blend equations, evaluated only by the independent directed arithmetic above. */
+    private fun artisticSeparable(s: Interval, d: Interval, mode: BlendMode): Interval {
+        val two = Interval.input(2f)
+        fun minimum(a: Interval, b: Interval) = Interval(minOf(a.lower, b.lower), minOf(a.upper, b.upper))
+        fun maximum(a: Interval, b: Interval) = Interval(maxOf(a.lower, b.lower), maxOf(a.upper, b.upper))
+        fun branch(value: Interval, split: BigDecimal, lower: (Interval) -> Interval, upper: (Interval) -> Interval): Interval = when {
+            value.upper <= split -> lower(value)
+            value.lower > split -> upper(value)
+            else -> hull(lower(Interval(value.lower, split)), upper(Interval(split, value.upper)))
+        }
+        fun hardLight(source: Interval, backdrop: Interval) = branch(source, HALF,
+            { two * it * backdrop }, { Interval.ONE - two * (Interval.ONE - it) * (Interval.ONE - backdrop) })
+        return when (mode) {
+            BlendMode.MULTIPLY -> s * d
+            BlendMode.OVERLAY -> hardLight(d, s)
+            BlendMode.DARKEN -> minimum(s, d)
+            BlendMode.LIGHTEN -> maximum(s, d)
+            BlendMode.COLOR_DODGE -> when {
+                d.isExactly(Interval.ZERO) -> Interval.ZERO
+                s.isExactly(Interval.ONE) -> Interval.ONE
+                s.upper < BigDecimal.ONE -> minimum(Interval.ONE, wgslDivide(d, Interval.ONE - s))
+                else -> error("Color dodge source crosses its singularity")
+            }
+            BlendMode.COLOR_BURN -> when {
+                d.isExactly(Interval.ONE) -> Interval.ONE
+                s.isExactly(Interval.ZERO) -> Interval.ZERO
+                s.lower > BigDecimal.ZERO -> Interval.ONE - minimum(Interval.ONE, wgslDivide(Interval.ONE - d, s))
+                else -> error("Color burn source crosses its singularity")
+            }
+            BlendMode.HARD_LIGHT -> hardLight(s, d)
+            BlendMode.SOFT_LIGHT -> branch(s, HALF,
+                { source -> d - (Interval.ONE - two * source) * d * (Interval.ONE - d) },
+                { source ->
+                    val curve = branch(d, BigDecimal("0.25"),
+                        { ((Interval.input(16f) * it - Interval.input(12f)) * it + Interval.input(4f)) * it },
+                        { value ->
+                            // WGSL 15.7.4.1: sqrt inherits 1/inverseSqrt(x); inverseSqrt
+                            // admits 2 ULP, and the outer division retains its own 2.5 ULP.
+                            val exactInverse = Interval(downDivide(BigDecimal.ONE, value.upper.sqrt(MC_UP)),
+                                upDivide(BigDecimal.ONE, value.lower.sqrt(MC_DOWN)))
+                            wgslDivide(Interval.ONE, f32Envelope(expandUlps(exactInverse, BigDecimal("2"))))
+                        })
+                    d + (two * source - Interval.ONE) * (curve - d)
+                })
+            BlendMode.DIFFERENCE -> (d - s).let {
+                Interval(if (it.lower.signum() <= 0 && it.upper.signum() >= 0) BigDecimal.ZERO else minOf(it.lower.abs(), it.upper.abs()),
+                    maxOf(it.lower.abs(), it.upper.abs()))
+            }
+            BlendMode.EXCLUSION -> s + d - two * s * d
+            else -> error("No independent separable destination proof for $mode")
+        }
+    }
+
+    private fun artisticNonSeparable(source: Array<Interval>, destination: Array<Interval>, mode: BlendMode): Array<Interval> {
+        fun absolute(value: Interval) = maxOf(value.lower.abs(), value.upper.abs())
+        // preserveF32 encloses the neighbour on each side of a rounded endpoint;
+        // two ULPs bound that whole enclosure, including a half-ULP first rounding.
+        fun roundingError(value: Interval) = roundingEnvelopeError(value)
+        fun stableMinimum(color: Array<Interval>, indexI32: Int) = color.indices.filter { it != indexI32 }.all { color[indexI32].upper <= color[it].lower }
+        fun stableMaximum(color: Array<Interval>, indexI32: Int) = color.indices.filter { it != indexI32 }.all { color[indexI32].lower >= color[it].upper }
+        // For q = hi-lo, the two legal evaluations q1/q2 may round independently.
+        // fl(q1*f)/q2 differs from f by at most
+        // (2*error(q)*abs(f) + error(product))/min(abs(q2)) + error(division).
+        // This retains the shared variable without deleting any WGSL rounding schedule.
+        fun sharedQuotientError(hi: Interval, lo: Interval, factor: Interval): BigDecimal {
+            val exactQ = directedBinary(hi, lo, ::downSubtract, ::upSubtract)
+            val q = hi - lo
+            require(q.lower.signum() == q.upper.signum() && q.lower.signum() != 0)
+            val product = directedBinary(q, factor, ::downMultiply, ::upMultiply)
+            val quotient = wgslDivide(f32Envelope(product), q)
+            val qError = upMultiply(BigDecimal.TWO, roundingError(exactQ))
+            val residual = upDivide(upAdd(upMultiply(qError, absolute(factor)), roundingError(product)),
+                minOf(q.lower.abs(), q.upper.abs()))
+            return upAdd(residual, upMultiply(upAdd(DIVISION_ULPS, BigDecimal.TWO), roundingError(quotient)))
+        }
+        fun minimum(color: Array<Interval>) = Interval(color.minOf { it.lower }, color.minOf { it.upper })
+        fun maximum(color: Array<Interval>) = Interval(color.maxOf { it.lower }, color.maxOf { it.upper })
+        val weights = arrayOf(Interval.input(.3f), Interval.input(.59f), Interval.input(.11f))
+        fun luminosity(color: Array<Interval>): Interval {
+            return hull(*(0..2).flatMap { a -> (0..2).filter { it != a }.flatMap { b ->
+                val c = 3 - a - b
+                val first = color[a] * weights[a]
+                val second = color[b] * weights[b]
+                val third = color[c] * weights[c]
+                listOf((first + second) + third, first + (second + third),
+                    fma(color[a], weights[a], second + third),
+                    fma(color[a], weights[a], fma(color[b], weights[b], third)))
+            } }.toTypedArray())
+        }
+        fun luminosityRoundingError(color: Array<Interval>): BigDecimal {
+            val products = color.indices.map { directedBinary(color[it], weights[it], ::downMultiply, ::upMultiply) }
+            val productErrors = products.fold(BigDecimal.ZERO) { sum, product -> upAdd(sum, roundingError(product)) }
+            val sumMagnitude = products.fold(productErrors) { sum, product -> upAdd(sum, absolute(product)) }
+            // Three products and two additions enclose every permutation and both
+            // nested FMA schedules admitted by luminosity above.
+            return upAdd(productErrors, upMultiply(BigDecimal.TWO, roundingError(Interval(sumMagnitude.negate(), sumMagnitude))))
+        }
+        fun saturation(color: Array<Interval>) = maximum(color) - minimum(color)
+        fun setSaturation(color: Array<Interval>, saturation: Interval): Array<Interval> {
+            val lo = minimum(color)
+            val hi = maximum(color)
+            val range = hi - lo
+            // Execute the WGSL max/select, including boxes crossing range == 0.
+            // Equal interval endpoints do not prove that the RGB variables coincide.
+            if (range.upper <= BigDecimal.ZERO) return Array(3) { Interval.ZERO }
+            val epsilon = decimal(1.0e-10f)
+            val denominator = Interval(maxOf(range.lower, epsilon), maxOf(range.upper, epsilon))
+            return Array(3) {
+                val scaled = when {
+                    stableMinimum(color, it) -> Interval.ZERO
+                    // Cancellation is valid only when max cannot select epsilon.
+                    stableMaximum(color, it) && range.lower >= epsilon ->
+                        expandAbsolute(saturation, sharedQuotientError(hi, lo, saturation))
+                    else -> wgslDivide((color[it] - lo) * saturation, denominator)
+                }
+                if (range.lower <= BigDecimal.ZERO) hull(Interval.ZERO, scaled) else scaled
+            }
+        }
+        fun setLuminosity(color: Array<Interval>, lum: Interval): Array<Interval> {
+            val originalLuminosity = luminosity(color)
+            val delta = lum - originalLuminosity
+            val shifted = Array(3) { color[it] + delta }
+            val weightSum = weights.fold(BigDecimal.ZERO) { sum, weight -> sum.add(weight.lower) }
+            val residual = directedBinary(delta, Interval.point(weightSum.subtract(BigDecimal.ONE)), ::downMultiply, ::upMultiply)
+            var error = upAdd(luminosityRoundingError(color), roundingError(directedBinary(lum, originalLuminosity, ::downSubtract, ::upSubtract)))
+            color.indices.forEach { indexI32 -> error = upAdd(error, upMultiply(weights[indexI32].upper.abs(),
+                roundingError(directedBinary(color[indexI32], delta, ::downAdd, ::upAdd)))) }
+            error = upAdd(error, luminosityRoundingError(shifted))
+            // dot(c + delta, w) = targetLum + delta*(sum(w)-1), plus the
+            // explicitly bounded original dot/subtraction/vector-add/new-dot errors.
+            val correlated = expandAbsolute(directedBinary(lum, residual, ::downAdd, ::upAdd), error)
+            val general = luminosity(shifted)
+            val l = Interval(maxOf(general.lower, correlated.lower), minOf(general.upper, correlated.upper))
+            val n = minimum(shifted)
+            val x = maximum(shifted)
+            var result = shifted
+            if (n.lower < BigDecimal.ZERO) {
+                val clipped = Array(3) {
+                    if (stableMinimum(shifted, it)) expandAbsolute(Interval.ZERO,
+                        upAdd(sharedQuotientError(n, l, l), roundingError(l + (Interval.ZERO - l))))
+                    else l + wgslDivide((shifted[it] - l) * l, l - n)
+                }
+                result = if (n.upper < BigDecimal.ZERO) clipped else Array(3) { hull(result[it], clipped[it]) }
+            }
+            if (x.upper > BigDecimal.ONE) {
+                val clipped = Array(3) {
+                    if (n.lower >= BigDecimal.ZERO && stableMaximum(shifted, it)) {
+                        val factor = Interval.ONE - l
+                        val error = upAdd(sharedQuotientError(x, l, factor), upAdd(
+                            roundingError(directedBinary(Interval.ONE, l, ::downSubtract, ::upSubtract)), roundingError(l + factor)))
+                        expandAbsolute(Interval.ONE, error)
+                    } else l + wgslDivide((result[it] - l) * (Interval.ONE - l), x - l)
+                }
+                result = if (x.lower > BigDecimal.ONE) clipped else Array(3) { hull(result[it], clipped[it]) }
+            }
+            return result
+        }
+        return when (mode) {
+            BlendMode.HUE -> setLuminosity(setSaturation(source, saturation(destination)), luminosity(destination))
+            BlendMode.SATURATION -> setLuminosity(setSaturation(destination, saturation(source)), luminosity(destination))
+            BlendMode.COLOR -> setLuminosity(source, luminosity(destination))
+            BlendMode.LUMINOSITY -> setLuminosity(destination, luminosity(source))
+            else -> error("No independent nonseparable destination proof for $mode")
+        }
+    }
+
+    private val NON_SEPARABLE_MODES = setOf(BlendMode.HUE, BlendMode.SATURATION, BlendMode.COLOR, BlendMode.LUMINOSITY)
 
     private fun evaluateProgram(
         table: MaterialPlanTable,
@@ -115,6 +478,31 @@ internal object WgslFloatEnvelopeV1Oracle {
             opacity = (bindings as? MaterialBindingPlan.OpacityF32V1)?.alphaF32?.let(Interval::input),
         )
         return evaluate(entry.program.copyNumericOperationGraphV1().root, inputs).rgba()
+    }
+
+    private fun evaluateMaterialSource(
+        table: MaterialPlanTable,
+        root: MaterialPlanRef,
+        destination: Array<Interval>,
+        coverage: Interval,
+    ): Array<Interval> {
+        fun materialSource(ref: MaterialPlanRef): Array<Interval> {
+            val entry = table.entry(ref)
+            val bindings = entry.bindings
+            val inputs = Inputs(
+                solid = (bindings as? MaterialBindingPlan.SolidRgbaF32V1)?.copyRgbaF32()?.let {
+                    arrayOf(Interval.input(it.red), Interval.input(it.green), Interval.input(it.blue), Interval.input(it.alpha))
+                },
+                material = if (entry.program is MaterialProgramPlan.OpacityV1 && ref.indexI32 > 0) {
+                    { materialSource(MaterialPlanRef(ref.indexI32 - 1)) }
+                } else null,
+                destination = destination,
+                coverage = coverage,
+                opacity = (bindings as? MaterialBindingPlan.OpacityF32V1)?.alphaF32?.let(Interval::input),
+            )
+            return evaluate(sourceNode(entry.program.copyNumericOperationGraphV1()), inputs).rgba()
+        }
+        return materialSource(root)
     }
 
     private data class Inputs(
@@ -232,6 +620,22 @@ internal object WgslFloatEnvelopeV1Oracle {
         return exactAdd(sourceTimesOne, product(destination, inverseAlpha)).clamp01()
     }
 
+    /** SRC_IN is source * destination.a; the ZERO destination term admits no extra fusion. */
+    private fun fixedFunctionSrcIn(source: Interval, destinationAlpha: Interval): Interval {
+        if (source == Interval.ZERO || destinationAlpha == Interval.ZERO) return Interval.ZERO
+        val floating = source * destinationAlpha
+        val fixedSource = fixedPrecisionEnvelope(source, conversion = true)
+        val fixedAlpha = fixedPrecisionEnvelope(destinationAlpha, conversion = true)
+        val fixed = when {
+            fixedAlpha == Interval.ONE -> fixedSource
+            fixedSource == Interval.ONE -> fixedAlpha
+            else -> fixedPrecisionEnvelope(
+                directedBinary(fixedSource, fixedAlpha, ::downMultiply, ::upMultiply), conversion = false,
+            )
+        }
+        return floating.hull(fixed).clamp01()
+    }
+
     /**
      * Keep the coarse quantization lattice explicit: replacing its rounding by
      * an unconditional +/-LSB would invent errors for exact zero and one.
@@ -241,6 +645,10 @@ internal object WgslFloatEnvelopeV1Oracle {
      */
     private fun fixedPrecisionEnvelope(value: Interval, conversion: Boolean): Interval {
         val clamped = value.clamp01()
+        // A preserved or flushed subnormal is still below the least UNORM8 code;
+        // it therefore quantizes exactly to zero rather than acquiring a generic
+        // FLOAT-to-UNORM error interval.
+        if (clamped.upper <= F32_MIN_NORMAL) return Interval.ZERO
         if (clamped == Interval.ZERO || clamped == Interval.ONE) return clamped
         var result = clamped
         for (bits in 8..24) {
@@ -276,7 +684,13 @@ internal object WgslFloatEnvelopeV1Oracle {
         directedTernary(a, b, c),
     )
 
-    private fun toLinear(value: Interval): Interval = piecewiseTransfer(
+    private val linearTransferCache = mutableMapOf<Interval, Interval>()
+    private fun toLinear(value: Interval): Interval = linearTransferCache.getOrPut(value) {
+        // The actual source producer returns these constants before any arithmetic.
+        // Interior division/pow/log/F32 bounds are unchanged.
+        if (value.lower.signum() == 0 && value.upper.signum() == 0) Interval.ZERO
+        else if (value.lower.compareTo(BigDecimal.ONE) == 0 && value.upper.compareTo(BigDecimal.ONE) == 0) Interval.ONE
+        else piecewiseTransfer(
         value,
         SRGB_BREAK,
         { x -> wgslDivide(Interval.point(x), Interval.point(SRGB_LINEAR_SCALE)) },
@@ -284,7 +698,7 @@ internal object WgslFloatEnvelopeV1Oracle {
             wgslDivide(Interval.point(x) + Interval.point(SRGB_OFFSET), Interval.point(SRGB_ENCODE_SCALE)),
             Interval.point(SRGB_TO_LINEAR_EXPONENT),
         ) },
-    )
+    ) }
 
     /** Exact real sRGB reference, before the attachment's documented integer-code error. */
     private fun attachmentEncode(value: Interval): Interval = piecewiseTransfer(
@@ -327,6 +741,7 @@ internal object WgslFloatEnvelopeV1Oracle {
      */
     private fun nthRoot(value: BigDecimal, degree: Int): Interval? {
         if (value == BigDecimal.ZERO) return Interval.ZERO
+        if (value == BigDecimal.ONE) return Interval.ONE
         var low = BigDecimal.ZERO
         var high = value.max(BigDecimal.ONE)
         repeat(ROOT_BISECTION_STEPS) {
@@ -379,6 +794,18 @@ internal object WgslFloatEnvelopeV1Oracle {
 
     private fun f32Envelope(exact: Interval): Interval = hull(preserveF32(exact), flushSubnormal(exact))
 
+    /** Radius containing rounded endpoints, both adjacent F32 values, and FTZ. */
+    private fun roundingEnvelopeError(value: Interval): BigDecimal {
+        fun endpointSpacing(endpoint: BigDecimal): BigDecimal {
+            val rounded = endpoint.toFloat()
+            val center = decimal(rounded)
+            return maxOf(upSubtract(decimal(Math.nextUp(rounded)), center),
+                upSubtract(center, decimal(Math.nextDown(rounded))))
+        }
+        return upAdd(upMultiply(BigDecimal.TWO,
+            maxOf(endpointSpacing(value.lower), endpointSpacing(value.upper))), F32_MIN_NORMAL)
+    }
+
     /** Containment expands rounded endpoints to adjacent F32 values, never a Double ULP. */
     private fun preserveF32(exact: Interval): Interval {
         if (exact.lower.compareTo(exact.upper) == 0) {
@@ -413,10 +840,15 @@ internal object WgslFloatEnvelopeV1Oracle {
         return Interval(pairs.minOf { lower(it.first, it.second) }, pairs.maxOf { upper(it.first, it.second) })
     }
 
+    // Directed subdivision changes BigDecimal scales, not numeric endpoint identity.
+    private fun Interval.isExactly(other: Interval): Boolean =
+        lower.compareTo(other.lower) == 0 && upper.compareTo(other.upper) == 0
+
     private operator fun Interval.plus(other: Interval): Interval = f32Envelope(directedBinary(this, other, ::downAdd, ::upAdd))
     private operator fun Interval.minus(other: Interval): Interval = f32Envelope(directedBinary(this, other, ::downSubtract, ::upSubtract))
     private operator fun Interval.times(other: Interval): Interval = f32Envelope(directedBinary(this, other, ::downMultiply, ::upMultiply))
-    private fun Interval.clamp01(): Interval = Interval(lower.max(BigDecimal.ZERO), upper.min(BigDecimal.ONE))
+    private fun Interval.clamp01(): Interval = Interval(lower.max(BigDecimal.ZERO).min(BigDecimal.ONE),
+        upper.max(BigDecimal.ZERO).min(BigDecimal.ONE))
     private fun Interval.hull(other: Interval): Interval = hull(this, other)
     private fun hull(vararg intervals: Interval): Interval = Interval(intervals.minOf { it.lower }, intervals.maxOf { it.upper })
 

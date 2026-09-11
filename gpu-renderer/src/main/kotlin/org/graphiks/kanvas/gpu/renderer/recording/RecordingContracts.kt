@@ -181,8 +181,10 @@ data class GPURecording(
     val featureAssumptions: List<String>,
     val recordedCommands: List<NormalizedDrawCommand> = emptyList(),
     private val semanticOnlyDrawEntries: List<GPUSemanticOnlyDraw> = emptyList(),
+    private val pointAuthorityEntries: Map<Int, GPURecordedPointAuthorityV3> = emptyMap(),
 ) {
     val semanticOnlyDraws: List<GPUSemanticOnlyDraw> = immutableList(semanticOnlyDrawEntries)
+    val pointAuthorities: Map<Int, GPURecordedPointAuthorityV3> = immutableMap(pointAuthorityEntries)
 }
 
 /** Closed handle-free draw evidence that deliberately has no executable pass or pipeline. */
@@ -358,6 +360,12 @@ class GPURecorder(
             semanticOnlyDrawEntries = plans.mapNotNull { plan ->
                 (plan as? GPURecordedPlan.SemanticOnly)?.draw
             },
+            pointAuthorityEntries = taskList.tasks.filterIsInstance<GPUTask.Render>().flatMap { it.drawPackets }
+                .mapNotNull { packet ->
+                    commands.singleOrNull { it.commandId.value == packet.commandIdValue }?.let { command ->
+                        GPURecordedPointAuthorityV3.issue(command, packet)?.let { packet.commandIdValue to it }
+                    }
+                }.toMap(),
         )
 
         closedRecording = recording
@@ -867,6 +875,7 @@ sealed interface GPUTask {
         val w4eMaskContinuation: GPUW4eMaskContinuationRequest? = null,
         /** Dedicated W4e scene MSAA continuation; it never uses generic or W4d.2 authority. */
         val w4eSceneContinuation: GPUW4eSceneContinuationRequest? = null,
+        val w5bInitialClearV3: org.graphiks.kanvas.gpu.renderer.passes.W5bInitialClearV3? = null,
     ) : GPUTask {
         val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
         val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
@@ -911,7 +920,10 @@ sealed interface GPUTask {
             require(w4eMaskContinuation == null || w4eSceneContinuation == null) {
                 "One W4e render scope cannot own both mask and scene continuations"
             }
-            require(drawPackets.isNotEmpty()) { "GPUTask.Render.drawPackets must not be empty" }
+            require(if (w5bInitialClearV3 == null) drawPackets.isNotEmpty() else
+                drawPackets.isEmpty() && w5bInitialClearV3.matches(target, loadStore, samplePlan)) {
+                "GPUTask.Render requires draws or the exact sealed W5b initial clear"
+            }
             require(batchEligibilityByPacketId.keys == drawPackets.map { it.packetId }.toSet()) {
                 "GPUTask.Render batching eligibility must cover every packet exactly"
             }
@@ -944,8 +956,8 @@ sealed interface GPUTask {
             }
         }
 
-        val passId: String get() = drawPackets.first().passId
-        val analysisRecordId: String get() = drawPackets.first().analysisRecordId
+        val passId: String get() = w5bInitialClearV3?.let { "w5b.${it.graph.id.value}.initial-clear" } ?: drawPackets.first().passId
+        val analysisRecordId: String get() = w5bInitialClearV3?.let { "w5b.${it.graph.id.value}.initial-clear" } ?: drawPackets.first().analysisRecordId
         val renderStepIds: List<String> get() = drawPackets.map { it.renderStepId.value }
         val pipelineKeyHashes: List<String> get() = drawPackets.mapNotNull { it.renderPipelineKey?.value }
         val preMaterialization: Boolean get() = true

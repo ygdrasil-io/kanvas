@@ -335,7 +335,9 @@ internal object GPUPreparedVerticesLowerer {
         } else {
             resolvedMaterial.preCoverageSourceAlpha
         }
-        val blendPlan = finalBlend.copy(sourceAlpha = finalSourceAlpha)
+        val blendPlan = materialPlan?.blend?.let(
+            org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer::lowerForRecording,
+        ) ?: finalBlend.copy(sourceAlpha = finalSourceAlpha)
             .canonicalBlendPlan(
                 coverage = GPUCoverageConsumption.FullOrScissor,
                 targetFormatClass = target.colorFormat,
