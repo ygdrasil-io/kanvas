@@ -181,11 +181,13 @@ Final verification (2026-09-11): 107 exact public JUnit methods selected, 105 pa
 - Consumes: admitted W5a A8 text and prepared vertices payloads plus the sealed W5b blend.
 - Produces: the same source material/coverage composition followed by fixed-function, `NoOp`, or destination-read final blend; Mesh without program remains the public vertices path.
 
-- [ ] Add RED public tests using the existing already-resolved A8 glyph fixture, Vertices with/without colors, and Mesh without program. Each has fixed-function, `DST`, and destination-read cells; mutate glyph lists/vertex arrays after capture and require unchanged pixels.
-- [ ] Verify RED without invoking font generation, font suites, codec or image loading.
-- [ ] Carry the sealed W5b plan through prepared text/vertices payloads and reuse the common lowerer. Vertex colors modulate the W5 source before the final draw blend; A8 coverage multiplies the source before the final blend equation.
-- [ ] Preserve existing typed refusal precedence for color glyphs, invalid clips/transforms and `MeshProgram`; those paths do not acquire W5b ownership.
-- [ ] Run W5b text/vertices tests plus W5a A8/Vertices/Picture mutation regressions; commit `feat(gpu-renderer): consume W5b blends in prepared families`.
+- [x] Add RED public tests using the existing already-resolved A8 glyph fixture, Vertices with/without colors, and Mesh without program. Each has fixed-function, `DST`, and destination-read cells; mutate glyph lists/vertex arrays after capture and require unchanged pixels.
+- [x] Verify RED without invoking font generation, font suites, codec or image loading.
+- [x] Carry the sealed W5b plan through prepared text/vertices payloads and reuse the common lowerer. Vertex colors modulate the W5 source before the final draw blend; A8 coverage multiplies the source before the final blend equation.
+- [x] Preserve existing typed refusal precedence for color glyphs, invalid clips/transforms and `MeshProgram`; those paths do not acquire W5b ownership.
+- [x] Run W5b text/vertices tests plus W5a A8/Vertices/Picture mutation regressions; commit `feat(gpu-renderer): consume W5b blends in prepared families`.
+
+Task 5 est close par `8c2ba473d`, `ececa76c2`, `2344686c6`, puis la correction de review `c4a93234d`. Les preuves publiques finales couvrent 50 méthodes JUnit sans échec, erreur ni skip : W5b 39/39, dix régressions W5a A8/Vertices/Mesh et le gate historique DrawPoint GREEN45. Quatre compilations main forcées passent. Le clear d'une frame préparée commençant par un lecteur de destination dépend désormais du `BlendPlan.DestinationReadV1` scellé, sans mirror set de modes; les trois régressions retained-session `CLEAR`, `DST_IN` et `MODULATE` sont strictement transparentes. L'échec préexistant de `:gpu-renderer:compileTestKotlin` reste documenté dans le rapport Task 5 et n'est pas aggravé. La re-review indépendante finale est `READY`, sans nouveau finding.
 
 ### Task 6: Prove mixed-frame ordering, budgets and recovery
 
