@@ -149,15 +149,25 @@ private fun composeSource(template: GPUW5aGeometryPipelineTemplate, source: W5aP
     require(slots.any(geometry::contains)) { "W5a source requires an authenticated color-writing geometry shader" }
     require(!geometry.contains("@group(1)")) { "W5a source group is already occupied" }
     val sourceExpression = "kanvas_material_source(vec2<f32>(0.0))"
+    val analyticCoverage = destination?.sealedW5b?.compositionAbiI32 == 3 &&
+        destination.sourceCoverageEncoding == org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding.ScalarCoverageInShader
     val tail = if (destination == null) "" else {
         val scalar = destination.sealedW5b?.compositionAbiI32 == 4
-        require(destination.sourceCoverageEncoding == if (scalar)
+        require(destination.sourceCoverageEncoding == if (scalar || analyticCoverage)
             org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding.ScalarCoverageInShader
             else org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding.None) {
             "W5b W3 destination tail requires sealed full/scissor coverage"
         }
-        require(geometry.contains("fn fs_main()") && !geometry.contains("@group(2)"))
-        geometry = geometry.replace("fn fs_main()", "fn fs_main(@builtin(position) fragment_position: vec4<f32>)")
+        require(!geometry.contains("@group(2)"))
+        if (analyticCoverage) {
+            require(geometry.contains("fn fs_main(@builtin(position) fragment_position: vec4<f32>)") &&
+                geometry.contains("return analytic.premul_rgba * coverage;"))
+            geometry = geometry.replace("return analytic.premul_rgba * coverage;",
+                "return kanvas_w5b_target($sourceExpression, fragment_position.xy, coverage);")
+        } else {
+            require(geometry.contains("fn fs_main()"))
+            geometry = geometry.replace("fn fs_main()", "fn fs_main(@builtin(position) fragment_position: vec4<f32>)")
+        }
         val formula = requireNotNull(GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(
             destination.mode.gpuLabel, destination.formulaId, "kanvas_w5b_blend"))
         """
@@ -165,15 +175,15 @@ private fun composeSource(template: GPUW5aGeometryPipelineTemplate, source: W5aP
             @group(2) @binding(1) var kanvas_w5b_sampler: sampler;
             ${if (scalar) "@group(3) @binding(0) var kanvas_w5b_coverage: texture_2d<f32>;" else ""}
             $formula
-            fn kanvas_w5b_target(src: vec4<f32>, pixel: vec2<f32>) -> vec4<f32> {
+            fn kanvas_w5b_target(src: vec4<f32>, pixel: vec2<f32>${if (analyticCoverage) ", coverage: f32" else ""}) -> vec4<f32> {
                 let dst = textureSampleLevel(kanvas_w5b_destination, kanvas_w5b_sampler,
                     pixel / vec2<f32>(textureDimensions(kanvas_w5b_destination)), 0.0);
                 let blended = kanvas_w5b_blend(src, dst);
-                ${if (scalar) "let mask_sample: vec4<f32> = textureLoad(kanvas_w5b_coverage, vec2<i32>(pixel), 0); let coverage = clamp(mask_sample.r, 0.0, 1.0); return dst + coverage * (blended - dst);" else "return blended;"}
+                ${if (scalar) "let mask_sample: vec4<f32> = textureLoad(kanvas_w5b_coverage, vec2<i32>(pixel), 0); let coverage = clamp(mask_sample.r, 0.0, 1.0); return dst + coverage * (blended - dst);" else if (analyticCoverage) "return dst + coverage * (blended - dst);" else "return blended;"}
             }
         """.trimIndent().replace(Regex("\\bvec([234])([fiu])\\b")) { "vec${it.groupValues[1]}<${it.groupValues[2]}32>" }
     }
-    slots.forEach { slot -> geometry = geometry.replace(slot, if (destination == null) sourceExpression
+    slots.forEach { slot -> geometry = geometry.replace(slot, if (destination == null || analyticCoverage) sourceExpression
         else "kanvas_w5b_target($sourceExpression, fragment_position.xy)") }
     val result = geometry + "\n" + source.stage.declarationsWgsl + "\n" + tail
     val composed = (validateColorWgsl("w5a-source-v2:${source.stage.structuralId}", result) as? GPUColorWgslValidation.Validated)

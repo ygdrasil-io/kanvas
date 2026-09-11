@@ -161,7 +161,7 @@ internal object WgslFloatEnvelopeV1Oracle {
             // Historical W4e Rect AA producer writes an exactly half-covered edge into
             // linear RGBA8. INTERSECT then stores that sampled coverage in the accumulator.
             // Both conversions and the final texture decode belong to the independent bound.
-            val coverage = w4eRectMaskCoverage(coverageF32)
+            val coverage = if (scalarMask) w4eRectMaskCoverage(coverageF32) else Interval.input(coverageF32)
             fun applyCoverage(value: Interval, destination: Interval): Interval {
                 if (coverageF32 == 1f && !scalarMask) return value
                 val delta = value - destination

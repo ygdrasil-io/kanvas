@@ -22,6 +22,7 @@ public class RenderGraph private constructor(
     private val w4eCompilerWitness: W4eCompilerWitness?,
     private val materialPlanTable: MaterialPlanTable?,
     private val w5aCompositePlan: W5aCompositePlanV1? = null,
+    private val w5bGeometryIssued: Boolean = false,
 ) {
     private val storedTargetExtent: SizeI32 = targetExtent.copy()
     public val targetExtent: SizeI32
@@ -38,6 +39,8 @@ public class RenderGraph private constructor(
     public fun materialPlanTableOrNull(): MaterialPlanTable? = materialPlanTable
 
     public fun w5aCompositePlanOrNull(): W5aCompositePlanV1? = w5aCompositePlan
+
+    public fun verifyW5bGeometryCompilerWitness(): Boolean = w5bGeometryIssued
 
     /** Verifies that this exact immutable graph snapshot was issued by the W4d compiler. */
     public fun verifyW4dCompilerWitness(): Boolean =
@@ -58,6 +61,15 @@ public class RenderGraph private constructor(
     public fun w4eNativePayloadOrNull(): W4eNativePayloadPlan? = w4eNativePayloadPlan
 
     public companion object {
+        internal fun issueW5bGeometry(graph: RenderGraph): RenderGraph {
+            require(graph.capabilityId == W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID)
+            require(graph.passes().filterIsInstance<PlanPass.RenderPass>().flatMap { it.draws() }.all {
+                it is AnalyticRectDraw && it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1
+            })
+            return RenderGraph(graph.id, graph.capabilityId, graph.targetExtent, graph.colorFormat, graph.capabilities,
+                graph.budget, graph.visualCommandCount, graph.resources(), graph.passes(), graph.dependencies(),
+                graph.peakFrameLocalBytes, null, null, null, null, graph.materialPlanTable, w5bGeometryIssued = true)
+        }
         /** Only the composite compiler can issue this distinct, lane-owned graph representation. */
         internal fun issueW5aComposite(composite: W5aCompositePlanV1): RenderGraph {
             val lanes = composite.lanes()

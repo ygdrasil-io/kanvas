@@ -1960,8 +1960,9 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
             key: GPUCorePrimitiveRenderPipelineStructuralKey,
             pipeline: GPURenderPipelineKey,
             witness: W5bPreparedFrameWitnessV3,
+            analyticSeal: GPUCorePrimitiveAnalyticShapeUniformSeal? = null,
         ): GPUCorePrimitivePreparedPacketAuthority = GPUCorePrimitivePreparedPacketAuthority(
-            key, pipeline, null, scratchLane = ScratchLane.Legacy, w5bFrameWitnessV3 = witness,
+            key, pipeline, null, analyticShapeUniformSeal = analyticSeal, scratchLane = ScratchLane.Legacy, w5bFrameWitnessV3 = witness,
         )
 
         fun plannedW3(

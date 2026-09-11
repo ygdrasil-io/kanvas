@@ -263,7 +263,9 @@ internal fun mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
         ),
         componentIdentity = when {
             (structuralKey.blend as? GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination)
-                ?.w5bCompositionAbiI32 in 3..4 -> PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY
+                ?.w5bCompositionAbiI32 in 3..4 ->
+                if (structuralKey.shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape)
+                    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY else PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY
             structuralKey.blend is
                 GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination &&
                 program.isAnalyticShapeDstRead() ->
@@ -388,6 +390,12 @@ internal fun GPUCorePrimitiveRenderPipelineStructuralKey.corePrimitiveNativeComp
     ) {
         val shader = blend as GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination
         if (shader.w5bCompositionAbiI32 in 3..4) {
+            if (this.shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape) {
+                return PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY.takeIf {
+                    shader.w5bCompositionAbiI32 == 3 && shader.sourceCoverage == GPUSourceCoverageEncoding.ScalarCoverageInShader &&
+                        GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(shader.mode.gpuLabel, shader.formulaId) != null
+                }
+            }
             return PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY.takeIf {
                 this.shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry &&
                     shader.sourceCoverage == (if (shader.w5bCompositionAbiI32 == 4)
@@ -470,10 +478,12 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
                     ) {
                         null
                     } else {
-                        GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeDstRead
+                        if (shader.w5bCompositionAbiI32 == 3 && shader.sourceCoverage == GPUSourceCoverageEncoding.ScalarCoverageInShader)
+                            GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver
+                        else GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeDstRead
                     }
                 }
-                blend.nativeShadingBlendProgramOrNull() == null -> null
+                blend.nativeShadingBlendProgramOrNull(analyticScalar = true) == null -> null
                 else -> GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver
             }
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticDRRect -> when {
@@ -704,14 +714,18 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeBlendProgramOrNull
             blend.fixedNativeBlendProgramOrNull() ==
                 GPUWgpu4kCorePrimitiveBlendProgram.PremulDstOut
         }
-    program == GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeDstRead ->
+    program == GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeDstRead ||
+        program == GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver &&
+            blend is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination ->
         blend.analyticShapeDstReadBlendProgramOrNull()
+    program == GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver ->
+        blend.nativeShadingBlendProgramOrNull(analyticScalar = true)
     else -> blend.nativeShadingBlendProgramOrNull()
 }
 
-private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.nativeShadingBlendProgramOrNull():
+private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.nativeShadingBlendProgramOrNull(analyticScalar: Boolean = false):
     GPUWgpu4kCorePrimitiveBlendProgram? = when (this) {
-    is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed -> fixedNativeBlendProgramOrNull()
+    is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed -> fixedNativeBlendProgramOrNull(analyticScalar)
     is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.NoOp ->
         GPUWgpu4kCorePrimitiveBlendProgram.DestinationNoOp.takeIf { mode == GPUBlendMode.DST }
     is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination ->
@@ -755,14 +769,15 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.nativePathCoverBle
     else -> null
 }
 
-private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.fixedNativeBlendProgramOrNull():
+private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.fixedNativeBlendProgramOrNull(analyticScalar: Boolean = false):
     GPUWgpu4kCorePrimitiveBlendProgram? {
     val fixed = this as? GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed ?: return null
     return GPUWgpu4kCorePrimitiveBlendProgram.entries.singleOrNull { candidate ->
         candidate.mode == fixed.mode &&
             !candidate.isDstRead() &&
             candidate.colorSourceFactor != null &&
-            fixed.sourceCoverage == GPUSourceCoverageEncoding.None &&
+            (fixed.sourceCoverage == GPUSourceCoverageEncoding.None ||
+                analyticScalar && fixed.sourceCoverage == GPUSourceCoverageEncoding.ScalarCoverageInShader) &&
             fixed.state.color.sourceFactor == candidate.colorSourceFactor &&
             fixed.state.color.destinationFactor == candidate.colorDestinationFactor &&
             fixed.state.color.operation == candidate.colorOperation &&

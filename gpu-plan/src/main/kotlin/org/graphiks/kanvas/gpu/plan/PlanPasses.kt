@@ -391,10 +391,10 @@ public class AnalyticRectDraw private constructor(
     deviceBounds: RectF32,
     rasterBounds: RectI32,
     scissor: RectI32,
+    override public val blend: BlendPlan = BlendPlan.LegacySrcOverV1,
 ) : PlanDraw {
     override public val coverage: CoveragePlan = CoveragePlan.AnalyticScalarAA
     override public val sample: SamplePlan = SamplePlan.SingleSample
-    override public val blend: BlendPlan = BlendPlan.SrcOver
     private val storedDeviceBounds = deviceBounds.copy()
     private val storedRasterBounds = rasterBounds.copy()
     private val storedScissor = scissor.copy()
@@ -435,6 +435,7 @@ public class AnalyticRectDraw private constructor(
             deviceBounds: RectF32,
             rasterBounds: RectI32,
             scissor: RectI32,
+            blend: BlendPlan = BlendPlan.LegacySrcOverV1,
         ): AnalyticRectDraw {
             require(commandIndexI32 >= 0) { "Command index must not be negative" }
             require(!deviceBounds.isEmpty && !rasterBounds.isEmpty && !scissor.isEmpty) {
@@ -446,6 +447,7 @@ public class AnalyticRectDraw private constructor(
                 deviceBounds,
                 rasterBounds,
                 scissor,
+                blend,
             )
         }
     }

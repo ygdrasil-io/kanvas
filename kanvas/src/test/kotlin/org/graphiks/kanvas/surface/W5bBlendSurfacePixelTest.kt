@@ -21,11 +21,68 @@ import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertAll
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class W5bBlendSurfacePixelTest {
     @AfterEach fun disposeGpuRuntime() = GPUBackendRuntimeFactory.dispose()
+
+    @Test fun `geometry Rect retains fixed DST and destination blends`() = geometryBlends(GeometryFamily.Rect)
+    @Test fun `geometry fractional Rect retains fixed DST and destination blends`() = geometryBlends(GeometryFamily.FractionalRect)
+    private enum class GeometryFamily { Rect, FractionalRect }
+
+    /** Catches lost blend/coverage, stale destination, reordered draws and mutable geometry reuse. */
+    private fun geometryBlends(family: GeometryFamily) {
+        assertAll(listOf(BlendMode.DST_OUT, BlendMode.DST, BlendMode.DIFFERENCE).map { mode -> {
+            val coverage = if (family == GeometryFamily.FractionalRect) .75f else 1f
+            val opacity = if (mode == BlendMode.DIFFERENCE) .45f else if (coverage != 1f) .75f else .5f
+            val background = W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, 1f)
+            val state = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(background))
+            val material = solidSource(ColorF32.of(1f, 1f, 1f, 1f), opacity)
+            val expected = when (mode) {
+                BlendMode.DST -> background
+                // Green is an exact stored endpoint; all products here are binary exact.
+                BlendMode.DST_OUT -> W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, 1f - opacity * coverage)
+                else -> WgslFloatEnvelopeV1Oracle.drawDestination(material, MaterialPlanRef(1), state, mode, coverage)
+            }
+            assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.sourceOverExclusion(material, MaterialPlanRef(1), state, coverage))
+            if (mode != BlendMode.DST) assertDisjoint(expected,
+                WgslFloatEnvelopeV1Oracle.ConservativeExclusion((background as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels))
+            if (coverage != 1f && mode != BlendMode.DST) {
+                val full = if (mode == BlendMode.DST_OUT) WgslFloatEnvelopeV1Oracle.sourceOverExclusion(
+                    solidSource(ColorF32.of(0f, 1f, 0f, 1f), 1f - opacity), MaterialPlanRef(1),
+                    WgslFloatEnvelopeV1Oracle.clearAttachment())
+                    else WgslFloatEnvelopeV1Oracle.destinationExclusion(material, MaterialPlanRef(1), state, mode)
+                assertDisjoint(expected, full)
+            }
+            fun recordGeometry(reverse: Boolean, mutateBefore: Boolean = false): Picture {
+                val rect = RectF32.ofLTRB(if (coverage == 1f) 0f else .25f, 0f, 2f, 2f)
+                fun mutate() {
+                    rect.offset(8f, 8f)
+                }
+                if (mutateBefore) mutate()
+                val recorder = PictureRecorder()
+                val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f))
+                val sourcePaint = Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), opacity),
+                    blendMode = mode, antiAlias = family == GeometryFamily.FractionalRect)
+                fun source() = canvas.drawRect(rect, sourcePaint)
+                fun destination() = canvas.drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f),
+                    Paint(shader = Shader.SolidColor(ColorARGB.Green), antiAlias = true))
+                if (reverse) { source(); destination() } else { destination(); source() }
+                if (!mutateBefore) mutate()
+                return requireNotNull(Picture.fromByteArray(recorder.finishRecordingAsPicture().toByteArray()))
+            }
+            fun pixel(picture: Picture): UByteArray = Surface(4, 4).also { surface ->
+                surface.canvas { picture.playback(this) }
+            }.render().pixels.copyOfRange(0, 4)
+            WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixel(recordGeometry(false)))
+            if (mode != BlendMode.DST) {
+                WgslFloatEnvelopeV1Oracle.assertAdmits(background, pixel(recordGeometry(true)))
+                WgslFloatEnvelopeV1Oracle.assertAdmits(background, pixel(recordGeometry(false, mutateBefore = true)))
+            }
+        } })
+    }
 
     @Test
     fun `Surface W5b point does not hide a later round point refusal`() {

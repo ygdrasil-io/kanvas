@@ -56,12 +56,15 @@ public sealed interface BlendPlan {
 }
 
 /** Backend-neutral classifier. Renderers lower an already-selected [BlendPlan] only. */
+public enum class BlendCoverageApplicationV1 { SourceMultiplication, DestinationInterpolation }
+
 public object FinalBlendPlanner {
     public fun plan(
         blend: BlendNode,
         coverage: CoveragePlan,
         sample: SamplePlan,
         targetClamp: BlendTargetClampV1,
+        coverageApplication: BlendCoverageApplicationV1 = BlendCoverageApplicationV1.DestinationInterpolation,
     ): BlendPlan? {
         val mode = when (blend) {
             BlendNode.SrcOver -> BlendMode.SRC_OVER
@@ -75,7 +78,11 @@ public object FinalBlendPlanner {
         } else {
             BlendCoverageEncodingV1.ScalarCoverageInShader
         }
-        fixed(mode, coverageEncoding, targetClamp)?.let { return it }
+        if (coverageEncoding == BlendCoverageEncodingV1.FullOrScissor ||
+            coverage == CoveragePlan.AnalyticScalarAA && sample == SamplePlan.SingleSample &&
+                coverageApplication == BlendCoverageApplicationV1.SourceMultiplication) {
+            fixed(mode, coverageEncoding, targetClamp)?.let { return it }
+        }
         return BlendPlan.DestinationReadV1(
             mode = mode,
             formulaIdentity = if (mode == BlendMode.PLUS) "plus_exact@v1" else "${mode.name.lowercase()}@v1",
@@ -89,9 +96,12 @@ public object FinalBlendPlanner {
         coverage: BlendCoverageEncodingV1,
         targetClamp: BlendTargetClampV1,
     ): BlendPlan.FixedFunctionV1? {
-        if (coverage != BlendCoverageEncodingV1.FullOrScissor) return null
+        if (coverage != BlendCoverageEncodingV1.FullOrScissor && mode !in setOf(
+                BlendMode.SRC_OVER, BlendMode.DST_OVER, BlendMode.DST_OUT,
+                BlendMode.SRC_ATOP, BlendMode.XOR, BlendMode.SCREEN,
+            )) return null
         fun state(source: BlendFactorV1, destination: BlendFactorV1) = BlendPlan.FixedFunctionV1(
-            mode, source, destination, source, destination,
+            mode, source, destination, source, destination, coverage = coverage,
         )
         return when (mode) {
             BlendMode.CLEAR -> state(BlendFactorV1.Zero, BlendFactorV1.Zero)
@@ -112,6 +122,7 @@ public object FinalBlendPlanner {
             BlendMode.SCREEN -> BlendPlan.FixedFunctionV1(
                 mode, BlendFactorV1.One, BlendFactorV1.OneMinusSrcColor,
                 BlendFactorV1.One, BlendFactorV1.OneMinusSrcAlpha,
+                coverage = coverage,
             )
             BlendMode.PLUS -> if (targetClamp == BlendTargetClampV1.UnitInterval) {
                 state(BlendFactorV1.One, BlendFactorV1.One)

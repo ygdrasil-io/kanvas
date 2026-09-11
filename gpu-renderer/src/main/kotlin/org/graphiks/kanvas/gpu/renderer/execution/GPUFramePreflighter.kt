@@ -268,7 +268,9 @@ internal class GPUFramePreflighter(
             }
             val physicalBytes = try {
                 val capacities = w5b.scratch.poolCapacities
-                (listOf(w5b.graph.peakFrameLocalBytes, capacities.vertexBytes, capacities.indexBytes, capacities.uniformBytes) +
+                (listOf(w5b.graph.peakFrameLocalBytes) +
+                    (if (w5b.scratch is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.Direct)
+                        listOf(capacities.vertexBytes, capacities.indexBytes, capacities.uniformBytes) else emptyList()) +
                     materialBytes.map { it.bytes }).fold(0L, Math::addExact)
             } catch (_: ArithmeticException) {
                 return GPUFramePreflightResult.Refused(diagnostic("resource.preflight.w5b-overflow", "W5b native inventory arithmetic overflow."))

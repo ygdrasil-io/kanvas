@@ -36,8 +36,11 @@ public object EffectiveMaterialPlanner {
             } else Result.Ready(source.table, source.root, source.blend)
         }
 
-    internal fun normalize(draw: DrawNode, targetClamp: BlendTargetClampV1, allowDestinationCandidate: Boolean = false): Normalization {
-        val blend = FinalBlendPlanner.plan(draw.blend, CoveragePlan.FullOrScissor, SamplePlan.SingleSample, targetClamp)
+    internal fun normalize(draw: DrawNode, targetClamp: BlendTargetClampV1, allowDestinationCandidate: Boolean = false,
+        coverage: CoveragePlan = CoveragePlan.FullOrScissor, sample: SamplePlan = SamplePlan.SingleSample): Normalization {
+        val blend = FinalBlendPlanner.plan(draw.blend, coverage, sample, targetClamp,
+            if (coverage == CoveragePlan.AnalyticScalarAA) BlendCoverageApplicationV1.SourceMultiplication
+            else BlendCoverageApplicationV1.DestinationInterpolation)
             ?: return Normalization.Refused(W5aPlanDiagnostics.UnsupportedDrawState)
         if (blend is BlendPlan.DestinationReadV1 && !allowDestinationCandidate) {
             return Normalization.Refused("unsupported.w5b.destination-read.task-2")

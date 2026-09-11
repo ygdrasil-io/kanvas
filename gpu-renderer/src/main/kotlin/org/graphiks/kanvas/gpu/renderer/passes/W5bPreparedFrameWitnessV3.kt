@@ -97,7 +97,7 @@ internal class W5bClearOnlyFrameWitnessV3(
 /** Separate W5b execution authority; the W3 object is reused solely for exact V/I/U packing. */
 internal class W5bPreparedFrameWitnessV3(
     val graph: RenderGraph,
-    val scratch: W3SessionScratchV1,
+    val scratch: W5bGeometryScratchV3,
     private val capabilitySeal: GPUFrameCapabilitySeal,
     private val recordingSeal: GPURecordingSeal,
     memoryBudget: GPUFrameMemoryBudgetPlan,
@@ -189,7 +189,8 @@ internal class W5bPreparedFrameWitnessV3(
     init {
         require(graph.id.value == scratch.planId)
         require(graph.passes().any { it is PlanPass.TextureCopy } ||
-            graph.capabilityId == org.graphiks.kanvas.gpu.plan.W5bCorePrimitiveGraph.CAPABILITY_ID)
+            graph.capabilityId in setOf(org.graphiks.kanvas.gpu.plan.W5bCorePrimitiveGraph.CAPABILITY_ID,
+                org.graphiks.kanvas.gpu.plan.W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID))
         require(scratch.fitsDeviceLimits(graph.capabilities.maxBufferSizeBytes,
             graph.capabilities.maxDynamicUniformBuffersPerPipelineLayout.toLong()))
         require(capabilitySeal.sealHash == scratch.capabilitySealHash && recordingSeal.capabilitySealHash == capabilitySeal.sealHash)

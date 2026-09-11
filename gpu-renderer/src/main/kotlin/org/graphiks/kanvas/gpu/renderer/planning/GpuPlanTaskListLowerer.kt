@@ -113,6 +113,7 @@ public class GpuPlanTaskListLowerer {
         if (request.graph.capabilities != current) return unsupported("The graph capability snapshot is stale.")
         if (request.graph.budget != request.currentBudget) return invalid("The graph budget is stale.")
         return when (request.graph.capabilityId) {
+            W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID -> W5bAnalyticRectGraphLowerer().lower(request)
             org.graphiks.kanvas.gpu.plan.W5aCompositePlanCompiler.CAPABILITY_ID ->
                 W5aCompositeGraphLowerer().lower(request)
             W3SolidRectPlanCompiler.CAPABILITY_ID,
@@ -229,7 +230,8 @@ public class GpuPlanTaskListLowerer {
         }
         val w5bWitness = graph.destinationGraph?.let {
             val clip = graph.draws.filterIsInstance<W5bPointDraw>().mapNotNull { point -> point.clipOnly }.distinct().singleOrNull()
-            org.graphiks.kanvas.gpu.renderer.passes.W5bPreparedFrameWitnessV3(it, scratch, seal,
+            org.graphiks.kanvas.gpu.renderer.passes.W5bPreparedFrameWitnessV3(it,
+                org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.Direct(scratch), seal,
                 GPURecordingSeal(request.recordingId, 0L, replay, replay, seal.sealHash), memory,
                 targetPreparation, stagingPreparation, readback, packets,
                 clip?.let { plan -> W4eClipGraphLowerer().lowerClipOnly(request, plan) })

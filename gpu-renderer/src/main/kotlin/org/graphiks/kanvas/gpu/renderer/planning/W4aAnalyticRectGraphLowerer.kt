@@ -450,13 +450,15 @@ internal class W4aAnalyticRectGraphLowerer {
             draw.copyDeviceBounds().bottom,
         ).any { value -> value.toLong().toFloat() != value }
 
-    private fun packet(
+    internal fun packet(
         draw: AnalyticRectDraw,
         color: ColorF32,
         paintOrder: Int,
         target: GPUPixelBounds,
         materialPlanTable: MaterialPlanTable?,
+        w5b: Boolean = false,
     ): W4aBuiltPacket {
+        val lane = if (w5b) "w5b.w4a" else "w4a"
         val device = draw.copyDeviceBounds()
         val raster = draw.copyRasterBounds()
         val scissor = draw.copyScissor()
@@ -479,7 +481,7 @@ internal class W4aAnalyticRectGraphLowerer {
         } else {
             GPUClipExecutionPlan.ScissorOnly(plannedScissor)
         }
-        val blend = canonicalSolidRectSrcOverBlendPlan()
+        val blend = W5bBlendPlanLowerer.lower(draw.blend)
         val analysisRecordId = "analysis.fill_rect.${draw.commandIndex}"
         val semantic = GPUCorePrimitivePayloadGatherer().gatherSemantic(
             GPUCorePrimitivePayloadInput(
@@ -517,13 +519,13 @@ internal class W4aAnalyticRectGraphLowerer {
             colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
         )
         val packet = GPUDrawPacket(
-            packetId = GPUDrawPacketID("packet.w4a.${draw.commandIndex}"),
+            packetId = GPUDrawPacketID("packet.$lane.${draw.commandIndex}"),
             commandIdValue = draw.commandIndex,
             analysisRecordId = analysisRecordId,
-            passId = "pass.w4a.main",
+            passId = "pass.$lane.main",
             layerId = "root",
-            bindingListId = "binding.w4a.${draw.commandIndex}",
-            insertionReasonCode = "w4a-analytic-rect",
+            bindingListId = "binding.$lane.${draw.commandIndex}",
+            insertionReasonCode = "$lane-analytic-rect",
             sortKey = paintOrder.toLong(),
             sortKeyPreimage = "paint-order:$paintOrder",
             renderStepId = GPURenderStepID(CORE_PRIMITIVE_RENDER_STEP_IDENTITY),
@@ -644,7 +646,7 @@ internal class W4aAnalyticRectGraphLowerer {
         is PlanDrawMaterialAuthority.MaterialV1 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }
     }
 
-    private data class W4aBuiltPacket(
+    internal data class W4aBuiltPacket(
         val packet: GPUDrawPacket,
         val scratchDraw: W4aSessionScratchDrawV1,
     )

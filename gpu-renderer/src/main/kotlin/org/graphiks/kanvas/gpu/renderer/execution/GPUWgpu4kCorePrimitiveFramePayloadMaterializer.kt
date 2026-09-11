@@ -1082,7 +1082,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             if (clip is GPUPreparedNativeFramePayloadMaterialization.Refused) return retain(clip)
             drafts += (clip as GPUPreparedNativeFramePayloadMaterialization.Materialized).draft
             val color = materializeW3SessionScratch(framePlan, encoder(false), resources, generationSeal,
-                renders[prefix.renders.size], witness.scratch, w5b = witness)
+                renders[prefix.renders.size], null, w5b = witness)
             if (color is GPUPreparedNativeFramePayloadMaterialization.Refused) return retain(color)
             drafts += (color as GPUPreparedNativeFramePayloadMaterialization.Materialized).draft
             val operands = drafts.flatMap { it.payload.scopeOperands }
@@ -1337,7 +1337,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             .mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }.firstOrNull()
         if (w5bWitness != null) {
             return materializeW3SessionScratch(framePlan, encoderPlan, resources, generationSeal,
-                candidateRenderSteps.first(), w5bWitness.scratch, w5b = w5bWitness)
+                candidateRenderSteps.first(), null, w5b = w5bWitness)
         }
         val w3Render = candidateRenderSteps.singleOrNull()
         val w3Scratch = w3Render?.drawPackets?.firstOrNull()
@@ -6200,10 +6200,11 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         resources: GPUPreparedResourceSet,
         generationSeal: GPUPreparedGenerationSeal,
         renderStep: GPUFrameStep.RenderPassStep,
-        scratch: W3SessionScratchV1,
+        directScratch: W3SessionScratchV1?,
         composite: W5aCompositeNativeLaneV1? = null,
         w5b: org.graphiks.kanvas.gpu.renderer.passes.W5bPreparedFrameWitnessV3? = null,
     ): GPUPreparedNativeFramePayloadMaterialization {
+        val scratch = w5b?.scratch ?: org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.Direct(requireNotNull(directScratch))
         val renderSteps = if (w5b == null) listOf(renderStep) else framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             .filter { step -> step.drawPackets.none { it.role == GPUDrawPacketRole.W4ePrepared } }
         val packets = renderSteps.flatMap { it.drawPackets }
@@ -6266,7 +6267,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 ),
                 packets,
             ) ||
-            packets.any { if (w5b == null) it.corePrimitivePreparedAuthority?.w3SessionScratch !== scratch
+            packets.any { if (w5b == null) it.corePrimitivePreparedAuthority?.w3SessionScratch !== directScratch
                 else it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 !== w5b } ||
             scratch.uniformPlan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
             scratch.uniformPlan.deviceGeneration != generationSeal.deviceGeneration.value ||
@@ -6291,7 +6292,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             )
         }
         val coreSemantics = semantics.filterNotNull()
-        val routes = coreSemantics.mapIndexed { index, semantic ->
+        val routes = if (scratch is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.AnalyticRect) emptyList() else coreSemantics.mapIndexed { index, semantic ->
             validateCorePrimitiveDirectNativeRoute(
                 semantic,
                 semantic.scissorBounds,
@@ -6307,7 +6308,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             )
         }
         val arena = try {
-            packCorePrimitiveFrameGeometry(routes)
+            if (scratch is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.AnalyticRect)
+                packW4aSessionGeometry(scratch.authority) else packCorePrimitiveFrameGeometry(routes)
         } catch (failure: Throwable) {
             return refused(
                 "invalid.native-core-primitive.w3-geometry",
@@ -6321,10 +6323,11 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         }
         val uniformBytes = ByteArray(scratch.uniformPlan.totalBytes.toInt())
         coreSemantics.forEachIndexed { index, semantic ->
-            val bytes = semantic.payloadRef.uniformBlock?.bytes?.map(Int::toByte)?.toByteArray()
+            val bytes = if (scratch is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.AnalyticRect)
+                scratch.copyUniformPayloadI32(index) else semantic.payloadRef.uniformBlock?.bytes?.map(Int::toByte)?.toByteArray()
                 ?: return refused("invalid.native-core-primitive.w3-uniform", "W3 packet uniform payload is missing.")
             val slot = scratch.uniformPlan.slots[index]
-            if (bytes.size != 32 || slot.payloadBytes != 32L ||
+            if (bytes.size.toLong() != scratch.uniformPayloadBytesI64 || slot.payloadBytes != scratch.uniformPayloadBytesI64 ||
                 slot.alignedOffset + bytes.size > uniformBytes.size
             ) {
                 return refused("invalid.native-core-primitive.w3-uniform", "W3 uniform packing is not exact.")

@@ -15,6 +15,8 @@ internal object W5bDestinationGraphSealer {
         targetBytesI64: Long,
         stagingBytesI64: Long,
         rowBytesI64: Long,
+        geometryResources: List<PlanResource> = emptyList(),
+        drawDataResources: PlanDrawDataResources? = null,
     ): RenderGraph {
         val clips = draws.filterIsInstance<W5bPointDraw>().mapNotNull { it.clipOnly }.distinct()
         require(clips.size <= 1)
@@ -36,14 +38,15 @@ internal object W5bDestinationGraphSealer {
         require(!readsDestination || capabilities.supportsTexture(format, 1, setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.Sampled))) {
             "unsupported.w5b.destination-texture"
         }
-        require(destinationCountI32 > 0 || capabilityId == W5bCorePrimitiveGraph.CAPABILITY_ID)
+        require(destinationCountI32 > 0 || capabilityId in setOf(W5bCorePrimitiveGraph.CAPABILITY_ID, W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID))
         val initialClearI32 = if (draws.first().blend is BlendPlan.DestinationReadV1) 1 else 0
         val passCountI32 = Math.addExact(Math.addExact(draws.size, destinationCountI32), initialClearI32 + 1 + (clip?.passes()?.size ?: 0))
         // One snapshot is reused only after its preceding consumer; native storage stays live
         // through frame completion, so all three physical resources overlap in the budget.
-        val peakI64 = Math.addExact(Math.addExact(Math.multiplyExact(targetBytesI64,
+        val peakI64 = Math.addExact(geometryResources.fold(0L) { total, resource -> Math.addExact(total, resource.byteSize) },
+            Math.addExact(Math.addExact(Math.multiplyExact(targetBytesI64,
             if (destinationCountI32 == 0) 1L else 2L), stagingBytesI64),
-            clip?.resources()?.fold(0L) { total, resource -> Math.addExact(total, resource.byteSize) } ?: 0L)
+            clip?.resources()?.fold(0L) { total, resource -> Math.addExact(total, resource.byteSize) } ?: 0L))
         val sourceRequirements = draws.map { draw -> RawMaterialRequirementsV2.of(material,
             (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref) }
         require(sourceRequirements.all { it.uniformByteCountI64 <= requireNotNull(capabilities.maxUniformBufferBindingSizeBytesI64) &&
@@ -67,7 +70,7 @@ internal object W5bDestinationGraphSealer {
             if (draw != null) versionI64 = Math.addExact(versionI64, 1L)
             passes += PlanPass.RenderPass(renderOrdinalI32++, target.id, listOfNotNull(draw),
                 if (renderOrdinalI32 == 1) AttachmentLoadPlan.ClearTransparent else AttachmentLoadPlan.Load,
-                AttachmentStorePlan.Store, destinationVersionAfter = DestinationVersionI64(versionI64))
+                AttachmentStorePlan.Store, drawDataResources, destinationVersionAfter = DestinationVersionI64(versionI64))
         }
         if (initialClearI32 == 1) render(null)
         draws.forEach { draw ->
@@ -75,7 +78,7 @@ internal object W5bDestinationGraphSealer {
             if (blend is BlendPlan.DestinationReadV1) {
                 require(if ((draw as? W5bPointDraw)?.clipOnly != null)
                     blend.compositionAbiI32 == 4 && blend.coverage == BlendCoverageEncodingV1.ScalarCoverageInShader
-                    else blend.compositionAbiI32 == 3 && blend.coverage == BlendCoverageEncodingV1.FullOrScissor)
+                    else blend.compositionAbiI32 == 3 && (blend.coverage == BlendCoverageEncodingV1.FullOrScissor || draw is AnalyticRectDraw))
                 val version = DestinationVersionI64(versionI64)
                 passes += PlanPass.TextureCopy(copyOrdinalI32++, target.id, requireNotNull(snapshot).id, version)
                 val sealed = blend.copy(requiredDestinationVersion = version, snapshotResource = snapshot.id)
@@ -84,6 +87,9 @@ internal object W5bDestinationGraphSealer {
                         (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref,
                         draw.copyVisibleBounds(), draw.copyScissor(), draw.coverage, draw.sample, sealed)
                     is W5bPointDraw -> draw.withBlend(sealed)
+                    is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(draw.commandIndex,
+                        (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref,
+                        draw.copyDeviceBounds(), draw.copyRasterBounds(), draw.copyScissor(), sealed)
                     else -> error("unsupported.w5b.destination-geometry")
                 })
             } else render(draw)
@@ -101,7 +107,10 @@ internal object W5bDestinationGraphSealer {
                 resource.usages(), resource.lifetime, 0, last + 1, resource.sampleCountI32)
         }
         return RenderGraph.of(id, capabilityId, extent, format.value, capabilities, budget, draws.size,
-            listOfNotNull(target, snapshot, staging) + clipResources, passes,
+            listOfNotNull(target, snapshot, staging) + clipResources + geometryResources.map { resource ->
+                PlanResource.of(resource.role, resource.ordinal, resource.kind, resource.format, resource.copyExtent(),
+                    resource.byteSize, resource.usages(), resource.lifetime, 0, passCountI32, resource.sampleCountI32)
+            }, passes,
             passes.zipWithNext { before, after -> PlanPassDependency(before.id, after.id) }, peakI64,
             materialPlanTable = material)
     }
