@@ -49,7 +49,12 @@ internal class W5aPreparedVerticesMaterialBridge private constructor(
             ?: return refused("capture_refused")
         val draw = scene.singleOrNull() as? SceneCommand.Draw
             ?: return refused("capture_shape")
-        return when (val planned = EffectiveMaterialPlanner.plan(draw.node)) {
+        return when (
+            val planned = EffectiveMaterialPlanner.planW5b(
+                draw.node,
+                org.graphiks.kanvas.gpu.plan.BlendTargetClampV1.UnitInterval,
+            )
+        ) {
             is EffectiveMaterialPlanner.Result.Ready ->
                 Result.Ready(
                     GPUPreparedVerticesMaterialPlan(

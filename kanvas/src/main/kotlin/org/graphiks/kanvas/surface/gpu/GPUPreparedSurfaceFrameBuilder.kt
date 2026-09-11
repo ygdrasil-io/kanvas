@@ -590,16 +590,18 @@ internal object GPUPreparedSurfaceFrameBuilder {
  * `visualOperationCount` N+1 (N recorded visuals), the native evidence reports one extra render
  * pass, draw, and pipeline bind, and the executor's `opsDispatched` is N+1 by design — the clear
  * IS a dispatched op. The synthesis never flips a builder-NoOp frame to Ready: it fires only for
- * frames whose first visual op is a non-empty destination-reading text op (empty-glyph text ops
- * are skipped when locating the first visual, and empty-glyph-only frames stay NoOp).
+ * frames whose first visual op is a non-empty destination-reading prepared draw (empty-glyph text
+ * ops are skipped when locating the first visual, and empty-glyph-only frames stay NoOp).
  *
  * Known non-synthesized shapes (documented, not handled): elidable non-empty text first ops whose
  * blend is outside [PREPARED_DST_READ_TEXT_BLEND_MODES] (e.g. an opaque DST_IN text elides to a
  * no-op while a later dst-read text fuses the clear). Such frames keep the retained-target
- * behavior above; no current test shape exercises them. LCD (subpixel) text cannot reach this
- * lane: its blend plan is always `ShaderBlendWithDstRead` (GPUSubpixelLcd.lcdBlendPlan), which the
- * prepared-surface lane refuses for TextA8 at `invalid.preflight.text.blend`
- * (GPUPreparedSurfaceFrameTaskListBuilder), so no LCD frame ever renders through the copy lane.
+ * behavior above; no current test shape exercises them. Vertices and no-program Mesh use the
+ * full-or-scissor destination-read set, so fixed-function modes never gain a synthetic command.
+ * LCD (subpixel) text cannot reach this lane: its blend plan is always
+ * `ShaderBlendWithDstRead` (GPUSubpixelLcd.lcdBlendPlan), which the prepared-surface lane refuses
+ * for TextA8 at `invalid.preflight.text.blend` (GPUPreparedSurfaceFrameTaskListBuilder), so no LCD
+ * frame ever renders through the copy lane.
  */
 private fun List<DisplayOp>.withSynthesizedDstReadSceneClear(
     interpretation: GPUColorInterpretation,
@@ -623,8 +625,18 @@ private fun List<DisplayOp>.withSynthesizedDstReadSceneClear(
         visual.isVisualDraw() &&
             (visual !is DisplayOp.DrawText || visual.blob.glyphRuns.any { run -> run.glyphs.isNotEmpty() })
     } ?: return this
-    val text = firstVisual as? DisplayOp.DrawText ?: return this
-    if (text.paint.blendMode !in PREPARED_DST_READ_TEXT_BLEND_MODES) return this
+    val destinationRead = when (firstVisual) {
+        is DisplayOp.DrawText ->
+            firstVisual.paint.blendMode in PREPARED_DST_READ_TEXT_BLEND_MODES
+        is DisplayOp.DrawVertices ->
+            firstVisual.paint.blendMode in PREPARED_DST_READ_FULL_COVERAGE_BLEND_MODES
+        is DisplayOp.DrawMesh ->
+            firstVisual.mesh.program == null &&
+                (firstVisual.blendMode ?: firstVisual.paint.blendMode) in
+                PREPARED_DST_READ_FULL_COVERAGE_BLEND_MODES
+        else -> false
+    }
+    if (!destinationRead) return this
     return listOf(
         DisplayOp.Clear(ColorARGB.Transparent),
     ) + this
@@ -686,6 +698,23 @@ internal val PREPARED_DST_READ_TEXT_BLEND_MODES: Set<BlendMode> = setOf(
     BlendMode.LUMINOSITY,
 )
 
+private val PREPARED_DST_READ_FULL_COVERAGE_BLEND_MODES: Set<BlendMode> = setOf(
+    BlendMode.MULTIPLY,
+    BlendMode.OVERLAY,
+    BlendMode.DARKEN,
+    BlendMode.LIGHTEN,
+    BlendMode.COLOR_DODGE,
+    BlendMode.COLOR_BURN,
+    BlendMode.HARD_LIGHT,
+    BlendMode.SOFT_LIGHT,
+    BlendMode.DIFFERENCE,
+    BlendMode.EXCLUSION,
+    BlendMode.HUE,
+    BlendMode.SATURATION,
+    BlendMode.COLOR,
+    BlendMode.LUMINOSITY,
+)
+
 private fun GPUTaskList.authenticatedDestinationReadEvidence(
     semantics: Map<Int, GPUDrawSemanticPayload>,
     operationFamilyByCommandId: Map<Int, String>,
@@ -702,6 +731,7 @@ private fun GPUTaskList.authenticatedDestinationReadEvidence(
             require(
                 semantics[commandId] is GPUDrawSemanticPayload.ColorGlyph ||
                     semantics[commandId] is GPUDrawSemanticPayload.CorePrimitive ||
+                    semantics[commandId] is GPUDrawSemanticPayload.Vertices ||
                     semantics[commandId] is GPUDrawSemanticPayload.MaskBlur,
             )
             val render = rendersByTaskId.getValue(consumer.renderTaskId)
@@ -711,9 +741,17 @@ private fun GPUTaskList.authenticatedDestinationReadEvidence(
             }
             val blend = packet.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead
                 ?: error("Prepared destination evidence requires shader blending")
+            val semantic = requireNotNull(semantics[commandId])
             GPUPreparedSurfaceDestinationReadEvidence(
                 commandId = commandId,
                 operationFamily = operationFamilyByCommandId[commandId]
+                    ?: (semantic as? GPUDrawSemanticPayload.Vertices)?.let { vertices ->
+                        if (vertices.drawProvenance == "drawMesh:no-program") {
+                            DisplayOp.DrawMesh::class.java.simpleName
+                        } else {
+                            DisplayOp.DrawVertices::class.java.simpleName
+                        }
+                    }
                     ?: error("Prepared destination evidence requires one exact source operation"),
                 sourceLabel = packet.vertexSourceLabel,
                 snapshotLabel = copy.snapshot.value,

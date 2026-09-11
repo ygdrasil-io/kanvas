@@ -191,10 +191,51 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                             view = view,
                         )
                 }
-            val destinationCopyOperands = destinationNativeResources.values.map { resource ->
-                val bounds = resource.plan.copyStep.logicalBounds
+            val verticesDestinationNativeResources = accepted.verticesDestinationReads
+                .associate { destination ->
+                    val allocation = requireNotNull(
+                        destination.snapshotEvidence.textureAllocation,
+                    ) {
+                        "Accepted prepared vertices destination snapshot requires texture allocation evidence"
+                    }
+                    val texture = setupLedger.track(
+                        device.createTexture(
+                            TextureDescriptor(
+                                size = Extent3D(
+                                    allocation.backingWidth.toUInt(),
+                                    allocation.backingHeight.toUInt(),
+                                    1u,
+                                ),
+                                format = GPUTextureFormat.RGBA8UnormSrgb,
+                                usage = GPUTextureUsage.CopyDst or GPUTextureUsage.TextureBinding,
+                                label = "Kanvas.frame.preparedVertices.destinationSnapshot",
+                            ),
+                        ),
+                    )
+                    onDestinationSnapshotCreated()
+                    val view = setupLedger.track(texture.createView())
+                    onDestinationSnapshotViewCreated()
+                    destination.packet.packetId to
+                        PreparedVerticesDestinationNativeResource(destination, texture, view)
+                }
+            val destinationCopyOperands = (
+                destinationNativeResources.values.map { resource ->
+                    DestinationNativeCopy(
+                        resource.plan.copySourceStepIndex,
+                        resource.plan.copyStep.logicalBounds,
+                        resource.texture,
+                    )
+                } + verticesDestinationNativeResources.values.map { resource ->
+                    DestinationNativeCopy(
+                        resource.plan.copySourceStepIndex,
+                        resource.plan.copyStep.logicalBounds,
+                        resource.texture,
+                    )
+                }
+                ).map { resource ->
+                val bounds = resource.bounds
                 GPUPreparedNativeScopeOperand.Copy(
-                    sourceStepIndex = resource.plan.copySourceStepIndex,
+                    sourceStepIndex = resource.sourceStepIndex,
                     operationKind = GPUEncoderOperationKind.CopyDestination,
                     source = GPUPreparedNativeTextureOperand(
                         targetTexture,
@@ -753,6 +794,13 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                             verticesRuns.single(),
                             generationSeal.deviceGeneration,
                             targetViewOperand,
+                            destinationReadsByPacketId =
+                                verticesDestinationNativeResources.mapValues { (_, resource) ->
+                                    GPUWgpu4kPreparedVerticesDestinationReadInput(
+                                        resource.plan,
+                                        resource.view,
+                                    )
+                                },
                         )
                 ) {
                     is GPUPreparedRenderRunMaterialization.Ready -> result
@@ -1045,6 +1093,25 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                     }
                     destinationNativeResources.values
                         .map(PreparedColorGlyphDestinationNativeResource::texture)
+                        .takeIf(List<GPUTexture>::isNotEmpty)
+                        ?.let { textures ->
+                            add(
+                                GPUPreparedNativeAuxiliaryHandle(
+                                    GPUPreparedNativeCompletionAnchor(textures),
+                                    GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                                ),
+                            )
+                        }
+                    verticesDestinationNativeResources.values.forEach { resource ->
+                        add(
+                            GPUPreparedNativeAuxiliaryHandle(
+                                resource.view,
+                                GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                            ),
+                        )
+                    }
+                    verticesDestinationNativeResources.values
+                        .map(PreparedVerticesDestinationNativeResource::texture)
                         .takeIf(List<GPUTexture>::isNotEmpty)
                         ?.let { textures ->
                             add(
@@ -1698,6 +1765,18 @@ private data class PreparedColorGlyphDestinationNativeResource(
     val plan: GPUPreparedColorGlyphDestinationReadPlan,
     val texture: GPUTexture,
     val view: GPUTextureView,
+)
+
+private data class PreparedVerticesDestinationNativeResource(
+    val plan: GPUPreparedVerticesDestinationReadPlan,
+    val texture: GPUTexture,
+    val view: GPUTextureView,
+)
+
+private data class DestinationNativeCopy(
+    val sourceStepIndex: Int,
+    val bounds: GPUPixelBounds,
+    val texture: GPUTexture,
 )
 
 private fun GPUBlendMode.preparedLayerCompositeBlendState(): String = when (this) {

@@ -11,7 +11,18 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 
 /** Renderer adapter: lowers a sealed W5b plan and never classifies a draw. */
 public object W5bBlendPlanLowerer {
-    public fun lower(plan: BlendPlan): GPUBlendPlan = when (plan) {
+    /** Lowers a graph-sealed plan for native execution. */
+    public fun lower(plan: BlendPlan): GPUBlendPlan = lower(plan, requireDestinationSeal = true)
+
+    /**
+     * Retains the selected plan in a recording packet before the frame assigns the destination
+     * version and snapshot resource. This performs the same exhaustive mapping as [lower] and
+     * never reclassifies a public blend mode.
+     */
+    public fun lowerForRecording(plan: BlendPlan): GPUBlendPlan =
+        lower(plan, requireDestinationSeal = false)
+
+    private fun lower(plan: BlendPlan, requireDestinationSeal: Boolean): GPUBlendPlan = when (plan) {
         BlendPlan.LegacySrcOverV1 -> legacySrcOver()
         BlendPlan.NoOpV1 -> GPUBlendPlan.NoOp(GPUBlendMode.DST, "sealed-w5b-dst-noop")
         is BlendPlan.FixedFunctionV1 -> GPUBlendPlan.FixedFunctionBlend(
@@ -25,7 +36,8 @@ public object W5bBlendPlanLowerer {
             sourceCoverageEncoding = coverage(plan.coverage),
         )
         is BlendPlan.DestinationReadV1 -> {
-            require(plan.compositionAbiI32 in 3..4 && plan.snapshotResource != null &&
+            require(plan.compositionAbiI32 in 3..4 &&
+                (!requireDestinationSeal || plan.snapshotResource != null) &&
                 plan.requiredDestinationVersion.valueI64 >= 0L &&
                 org.graphiks.kanvas.gpu.renderer.pipelines.GPUBlendFormulaProgramLibrary
                     .selectedFullCoverageFunctionWgsl(plan.mode.name.lowercase(), plan.formulaIdentity) != null) {

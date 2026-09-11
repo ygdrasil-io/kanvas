@@ -261,6 +261,7 @@ internal object GPUPreparedVerticesSemanticBuilder {
                     clipCoverageIdentity = normalized.clipCoverageIdentity,
                     primitiveColorPresent = normalized.primitiveColorPresent,
                     primitiveBlendIdentity = normalized.primitiveBlendIdentity,
+                    w5bFinalBlendPlan = draw.materialPlan?.blend,
                     finalBlendIdentity = draw.blendPlan.canonicalIdentity(),
                     capabilitySnapshotHash = normalized.capabilitySnapshotHash,
                     drawProvenance = normalized.drawProvenance,

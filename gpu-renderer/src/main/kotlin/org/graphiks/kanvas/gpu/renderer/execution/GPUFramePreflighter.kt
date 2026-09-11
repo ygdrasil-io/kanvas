@@ -7559,9 +7559,10 @@ internal class GPUFramePreflighter(
                 .filterIsInstance<GPUFrameStep.RenderPassStep>()
                 .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
                 .associateBy(GPUDrawPacket::packetId)
-            val destinationColorGlyphPacketIds = packetsById.values
+            val destinationPreparedPacketIds = packetsById.values
                 .filter { packet ->
-                    packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph &&
+                    (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
+                        packet.semanticPayload is GPUDrawSemanticPayload.Vertices) &&
                         packet.blendPlan?.destinationReadRequirement ==
                         org.graphiks.kanvas.gpu.renderer.passes
                             .GPUBlendDestinationReadRequirement.DestinationTextureRequired
@@ -7571,9 +7572,9 @@ internal class GPUFramePreflighter(
             val copyConsumerPacketIds = destinationCopies
                 .flatMap(GPUFrameStep.CopyDestinationStep::consumers)
                 .map { consumer -> consumer.packetId }
-            if (destinationColorGlyphPacketIds.isEmpty() ||
+            if (destinationPreparedPacketIds.isEmpty() ||
                 copyConsumerPacketIds.size != copyConsumerPacketIds.distinct().size ||
-                copyConsumerPacketIds.toSet() != destinationColorGlyphPacketIds ||
+                copyConsumerPacketIds.toSet() != destinationPreparedPacketIds ||
                 destinationCopies.map(GPUFrameStep.CopyDestinationStep::snapshot)
                     .distinct().size != destinationCopies.size
             ) {
@@ -9604,39 +9605,62 @@ internal class GPUFramePreflighter(
                         targetKeys + depthStencilKeys + pipelineKeys + geometryKeys + bindGroupKeys
                     }
                 } else {
-                    targetKeys + nativeBridges.map { bridge ->
-                when (bridge.operand.kind) {
-                    org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.RenderPipeline ->
-                        key(
-                            GPUPreparedNativeOperandRole.RenderPipeline,
-                            GPUPreparedNativeOperandKind.RenderPipeline,
-                            "${bridge.commandLabel}:${bridge.operand.label}",
-                            GPUPreparedNativeOperandOwnership.Borrowed,
-                        )
-                    org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.BindGroup ->
-                        key(
-                            GPUPreparedNativeOperandRole.RenderBindGroup,
-                            GPUPreparedNativeOperandKind.BindGroup,
-                            "${bridge.commandLabel}:${bridge.operand.label}",
-                            drawOperandOwnership,
-                        )
-                    org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.VertexBuffer ->
-                        key(
-                            GPUPreparedNativeOperandRole.RenderVertexBuffer,
-                            GPUPreparedNativeOperandKind.Buffer,
-                            "${bridge.commandLabel}:${bridge.operand.label}",
-                            drawOperandOwnership,
-                        )
-                    org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.IndexBuffer ->
-                        key(
-                            GPUPreparedNativeOperandRole.RenderIndexBuffer,
-                            GPUPreparedNativeOperandKind.Buffer,
-                            "${bridge.commandLabel}:${bridge.operand.label}",
-                            drawOperandOwnership,
-                        )
-                    else -> error("Render native operand bridge contains an unsupported operand kind")
-                }
-            }
+                    val bridgeKeys = nativeBridges.map { bridge ->
+                        when (bridge.operand.kind) {
+                            org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.RenderPipeline ->
+                                key(
+                                    GPUPreparedNativeOperandRole.RenderPipeline,
+                                    GPUPreparedNativeOperandKind.RenderPipeline,
+                                    "${bridge.commandLabel}:${bridge.operand.label}",
+                                    GPUPreparedNativeOperandOwnership.Borrowed,
+                                )
+                            org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.BindGroup ->
+                                key(
+                                    GPUPreparedNativeOperandRole.RenderBindGroup,
+                                    GPUPreparedNativeOperandKind.BindGroup,
+                                    "${bridge.commandLabel}:${bridge.operand.label}",
+                                    drawOperandOwnership,
+                                )
+                            org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.VertexBuffer ->
+                                key(
+                                    GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                                    GPUPreparedNativeOperandKind.Buffer,
+                                    "${bridge.commandLabel}:${bridge.operand.label}",
+                                    drawOperandOwnership,
+                                )
+                            org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.IndexBuffer ->
+                                key(
+                                    GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                                    GPUPreparedNativeOperandKind.Buffer,
+                                    "${bridge.commandLabel}:${bridge.operand.label}",
+                                    drawOperandOwnership,
+                                )
+                            else -> error(
+                                "Render native operand bridge contains an unsupported operand kind",
+                            )
+                        }
+                    }
+                    if (step.drawPackets.all { packet ->
+                            packet.semanticPayload is GPUDrawSemanticPayload.Vertices
+                        }
+                    ) {
+                        val destinationBindGroups = step.drawPackets.count { packet ->
+                            packet.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead
+                        }
+                        val firstBuffer = bridgeKeys.indexOfFirst { candidate ->
+                            candidate.kind == GPUPreparedNativeOperandKind.Buffer
+                        }.let { index -> if (index < 0) bridgeKeys.size else index }
+                        targetKeys + bridgeKeys.take(firstBuffer) +
+                            List(destinationBindGroups) { index ->
+                                key(
+                                    GPUPreparedNativeOperandRole.RenderBindGroup,
+                                    GPUPreparedNativeOperandKind.BindGroup,
+                                    "prepared-vertices:destination-bind-group:$index",
+                                )
+                            } + bridgeKeys.drop(firstBuffer)
+                    } else {
+                        targetKeys + bridgeKeys
+                    }
                 }
             }
             is GPUFrameStep.ComputePassStep -> step.dispatches.mapIndexed { index, dispatch ->

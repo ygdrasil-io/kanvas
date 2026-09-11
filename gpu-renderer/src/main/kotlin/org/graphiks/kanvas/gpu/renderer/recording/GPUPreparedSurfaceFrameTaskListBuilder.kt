@@ -173,8 +173,8 @@ internal data class GPURecordedVerticesUpload(
     val resources: GPUVerticesFrameResourcePlan,
 )
 
-/** One frame-local Task 5 destination snapshot reserved for an exact ColorGlyph packet. */
-private data class GPUPreparedColorGlyphDestinationSnapshotPlan(
+/** One frame-local W5b destination snapshot reserved for one exact prepared-family packet. */
+private data class GPUPreparedDestinationSnapshotPlan(
     val groupIndex: Int,
     val packetId: GPUDrawPacketID,
     val commandIdValue: Int,
@@ -1586,8 +1586,8 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     return GPUPreparedSurfaceFrameResult.Refused(plan.diagnostic)
             }
         }
-        val colorGlyphDestinationSnapshots = try {
-            buildPreparedColorGlyphDestinationSnapshotPlans(request, packets)
+        val preparedDestinationSnapshots = try {
+            buildPreparedDestinationSnapshotPlans(request, packets)
         } catch (_: ArithmeticException) {
             return refused(
                 "invalid.recording.prepared_surface_destination_snapshot",
@@ -1614,7 +1614,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             )
         }
         val enclosingAllocations = buildList {
-            colorGlyphDestinationSnapshots.forEach { plan -> add(plan.allocation) }
+            preparedDestinationSnapshots.forEach { plan -> add(plan.allocation) }
             standaloneTextCoverageMasks.forEach { topology -> add(topology.allocation) }
             imagePlans.forEach { plan -> addAll(plan.memoryAllocations) }
             recordedR8Uploads.forEach { upload -> addAll(upload.resources.memoryAllocations) }
@@ -1762,8 +1762,8 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             request.targetBounds,
             request.targetFormat,
         )
-        preparations += colorGlyphDestinationSnapshots.map(
-            GPUPreparedColorGlyphDestinationSnapshotPlan::preparation,
+        preparations += preparedDestinationSnapshots.map(
+            GPUPreparedDestinationSnapshotPlan::preparation,
         )
         imagePlans.forEach { plan ->
             preparations += plan.preparationRequests
@@ -2024,6 +2024,39 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue)
             if (semantic is GPUDrawSemanticPayload.CorePrimitive) {
                 coreAssembly.packetByCommandId.getValue(packet.commandIdValue)
+            } else if (semantic is GPUDrawSemanticPayload.Vertices) {
+                val destination = preparedDestinationSnapshots.singleOrNull { plan ->
+                    plan.packetId == packet.packetId
+                }
+                if (destination == null) {
+                    listOf(packet.withSemantic(semantic))
+                } else {
+                    val planned = semantic.w5bFinalBlendPlan as?
+                        org.graphiks.kanvas.gpu.plan.BlendPlan.DestinationReadV1
+                        ?: return refused(
+                            "invalid.recording.prepared_vertices_destination_plan",
+                            "Prepared vertices destination read lost its W5b plan authority.",
+                        )
+                    val destinationVersion = packets
+                        .takeWhile { candidate -> candidate.packetId != packet.packetId }
+                        .map(GPUDrawPacket::commandIdValue)
+                        .distinct()
+                        .size
+                        .toLong()
+                    val sealed = planned.copy(
+                        requiredDestinationVersion =
+                            org.graphiks.kanvas.gpu.plan.DestinationVersionI64(destinationVersion),
+                        snapshotResource =
+                            org.graphiks.kanvas.gpu.plan.PlanResourceId(destination.snapshot.value),
+                    )
+                    listOf(
+                        packet.withSemantic(
+                            semantic.withW5bFinalBlendPlan(sealed),
+                            blendOverride =
+                                org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.lower(sealed),
+                        ),
+                    )
+                }
             } else {
                 listOf(packet.withSemantic(semantic))
             }
@@ -2035,7 +2068,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             recordedMaterialUploads.size +
             coverageMaskProducerRenders.size +
             routeRuns.size +
-            (if (colorGlyphDestinationSnapshots.isNotEmpty()) 1L else 0L) +
+            (if (preparedDestinationSnapshots.isNotEmpty()) 1L else 0L) +
             (if (readbackRequest != null) 1L else 0L) +
             verticesUploadTasks.size
         val predictedDependencyCount =
@@ -2049,9 +2082,9 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     }
                 }.toLong() +
                 routeRuns.size.toLong() +
-                if (colorGlyphDestinationSnapshots.isNotEmpty()) {
-                    1L + colorGlyphDestinationSnapshots.map(
-                        GPUPreparedColorGlyphDestinationSnapshotPlan::packetId,
+                if (preparedDestinationSnapshots.isNotEmpty()) {
+                    1L + preparedDestinationSnapshots.map(
+                        GPUPreparedDestinationSnapshotPlan::packetId,
                     ).map { packetId ->
                         routeRuns.indexOfFirst { run ->
                             run.any { packet -> packet.packetId == packetId }
@@ -2162,7 +2195,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 buildList {
                     addAll(atlasUses)
                     run.mapNotNull { packet ->
-                        colorGlyphDestinationSnapshots.singleOrNull { plan ->
+                        preparedDestinationSnapshots.singleOrNull { plan ->
                             plan.packetId == packet.packetId
                         }
                     }.forEach { destination ->
@@ -2271,7 +2304,23 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     }
                 }
             } else if (run.first().semanticPayload is GPUDrawSemanticPayload.Vertices) {
-                run.flatMap { packet ->
+                buildList {
+                    run.mapNotNull { packet ->
+                        preparedDestinationSnapshots.singleOrNull { plan ->
+                            plan.packetId == packet.packetId
+                        }
+                    }.forEach { destination ->
+                        add(
+                            GPUFrameResourceUse(
+                                destination.snapshot,
+                                GPUFrameResourceRole.DestinationSnapshot,
+                                GPUFrameResourceUsage.TextureBinding,
+                                GPUFrameResourceLifetime.FrameLocal,
+                                write = false,
+                            ),
+                        )
+                    }
+                    addAll(run.flatMap { packet ->
                     val semantic = packet.semanticPayload as GPUDrawSemanticPayload.Vertices
                     val plan = verticesPlanByArtifactKey.getValue(semantic.artifact.key)
                     listOfNotNull(
@@ -2295,6 +2344,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                             )
                         },
                     )
+                    })
                 }.distinct()
             } else {
                 run.flatMap { packet ->
@@ -2439,7 +2489,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         }
 
         val dependencies = mutableListOf<GPUTaskDependency>()
-        val destinationTask = colorGlyphDestinationSnapshots
+        val destinationTask = preparedDestinationSnapshots
             .takeIf { plans -> plans.isNotEmpty() }
             ?.let { plans ->
                 val renderByPacketId = renders.flatMap { render ->
@@ -3504,10 +3554,10 @@ sealed interface GPUPreparedSaveLayerFrameHandling {
     }
 }
 
-private fun buildPreparedColorGlyphDestinationSnapshotPlans(
+private fun buildPreparedDestinationSnapshotPlans(
     request: GPUPreparedSurfaceFrameRequest,
     packets: List<GPUDrawPacket>,
-): List<GPUPreparedColorGlyphDestinationSnapshotPlan> {
+): List<GPUPreparedDestinationSnapshotPlan> {
     val limits = requireNotNull(request.capabilities.limits) {
         "Prepared ColorGlyph destination snapshots require observed device limits."
     }
@@ -3526,10 +3576,11 @@ private fun buildPreparedColorGlyphDestinationSnapshotPlans(
     )
     return packets.mapNotNull { packet ->
         val semantic = request.semanticsByCommandId[packet.commandIdValue]
-        // The snapshot machinery plans by command and blend only (family-agnostic): ColorGlyph
-        // and core-primitive packets both consume one TextureCopy per destination-reading packet.
+        // The snapshot machinery plans by command and blend only (family-agnostic): admitted
+        // prepared families consume one TextureCopy per destination-reading packet.
         if (semantic !is GPUDrawSemanticPayload.ColorGlyph &&
-            semantic !is GPUDrawSemanticPayload.CorePrimitive
+            semantic !is GPUDrawSemanticPayload.CorePrimitive &&
+            semantic !is GPUDrawSemanticPayload.Vertices
         ) {
             return@mapNotNull null
         }
@@ -3544,7 +3595,7 @@ private fun buildPreparedColorGlyphDestinationSnapshotPlans(
             "texture.prepared-surface.color-glyph-destination." +
                 "${request.baseTaskList.frameId.value}.$index",
         )
-        GPUPreparedColorGlyphDestinationSnapshotPlan(
+        GPUPreparedDestinationSnapshotPlan(
             groupIndex = index,
             packetId = packet.packetId,
             commandIdValue = packet.commandIdValue,
@@ -4033,6 +4084,7 @@ private fun GPUDrawPacket.withSemantic(
     semantic: GPUDrawSemanticPayload,
     clipCoverageOverride: GPUClipCoveragePlan? = clipCoveragePlan,
     clipExecutionOverride: GPUClipExecutionPlan? = clipExecutionPlan,
+    blendOverride: org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan? = blendPlan,
 ) = GPUDrawPacket(
     packetId = packetId,
     commandIdValue = commandIdValue,
@@ -4046,7 +4098,7 @@ private fun GPUDrawPacket.withSemantic(
     renderStepId = renderStepId,
     renderStepVersion = renderStepVersion,
     role = role,
-    blendPlan = blendPlan,
+    blendPlan = blendOverride,
     renderPipelineKey = renderPipelineKey,
     computePipelineKey = computePipelineKey,
     bindingLayoutHash = bindingLayoutHash,

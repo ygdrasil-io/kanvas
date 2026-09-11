@@ -1779,6 +1779,7 @@ sealed interface GPUDrawSemanticPayload {
         val clipCoverageIdentity = snapshot.clipCoverageIdentity
         val primitiveColorPresent = snapshot.primitiveColorPresent
         val primitiveBlendIdentity = snapshot.primitiveBlendIdentity
+        val w5bFinalBlendPlan = snapshot.w5bFinalBlendPlan
         val finalBlendIdentity = snapshot.finalBlendIdentity
         val capabilitySnapshotHash = snapshot.capabilitySnapshotHash
         val drawProvenance = snapshot.drawProvenance
@@ -1789,6 +1790,10 @@ sealed interface GPUDrawSemanticPayload {
             table: org.graphiks.kanvas.gpu.plan.MaterialPlanTable,
             ref: org.graphiks.kanvas.gpu.plan.MaterialPlanRef,
         ): Vertices = Vertices(snapshot.withW5aFrameMaterial(table, ref))
+
+        fun withW5bFinalBlendPlan(
+            plan: org.graphiks.kanvas.gpu.plan.BlendPlan,
+        ): Vertices = Vertices(snapshot.withW5bFinalBlendPlan(plan))
 
         fun hasCanonicalHashIntegrity(): Boolean =
             canonicalHash == snapshot.canonicalHash()

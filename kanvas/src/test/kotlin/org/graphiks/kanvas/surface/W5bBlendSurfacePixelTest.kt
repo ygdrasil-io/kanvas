@@ -42,6 +42,76 @@ class W5bBlendSurfacePixelTest {
     @Test fun `prepared uncolored Vertices and Mesh no program retain destination blends and capture`() =
         preparedUncoloredVerticesBlends(listOf(BlendMode.DIFFERENCE))
 
+    @Test fun `leading prepared Vertices and Mesh destination reads observe the cleared frame`() {
+        val source = solidSource(ColorF32.of(1f, 1f, 1f, 1f), .45f)
+        val expected = WgslFloatEnvelopeV1Oracle.drawDestination(
+            source,
+            MaterialPlanRef(1),
+            WgslFloatEnvelopeV1Oracle.clearAttachment(),
+            BlendMode.DIFFERENCE,
+        )
+        val retainedGreen = WgslFloatEnvelopeV1Oracle.drawDestination(
+            source,
+            MaterialPlanRef(1),
+            requireNotNull(
+                WgslFloatEnvelopeV1Oracle.nextAttachment(
+                    W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, 1f),
+                ),
+            ),
+            BlendMode.DIFFERENCE,
+        )
+        assertDisjoint(
+            expected,
+            WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+                (retainedGreen as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels,
+            ),
+        )
+
+        assertAll(PreparedVertexFamily.entries.map { family -> {
+            Surface(4, 4).also { retained ->
+                retained.canvas {
+                    drawRect(
+                        RectF32.ofLTRB(0f, 0f, 4f, 4f),
+                        Paint(shader = Shader.SolidColor(ColorARGB.Green), antiAlias = false),
+                    )
+                }
+            }.render()
+
+            val positions = mutableListOf(
+                Point2F32(-1f, -1f),
+                Point2F32(5f, -1f),
+                Point2F32(-1f, 5f),
+            )
+            val vertices = Vertices(
+                VertexMode.TRIANGLES,
+                positions,
+                indices = mutableListOf(0, 1, 2),
+            )
+            val paint = Paint(
+                shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), .45f),
+                blendMode = if (family == PreparedVertexFamily.Vertices) {
+                    BlendMode.DIFFERENCE
+                } else {
+                    BlendMode.SRC_OVER
+                },
+                antiAlias = false,
+            )
+            val pixel = Surface(4, 4).also { surface ->
+                surface.canvas {
+                    when (family) {
+                        PreparedVertexFamily.Vertices -> drawVertices(vertices, paint)
+                        PreparedVertexFamily.MeshNoProgram -> drawMesh(
+                            Mesh(vertices, bounds = RectF32.ofLTRB(-1f, -1f, 5f, 5f)),
+                            paint,
+                            BlendMode.DIFFERENCE,
+                        )
+                    }
+                }
+            }.render().pixels.copyOfRange(0, 4)
+            WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixel)
+        } })
+    }
+
     private fun preparedUncoloredVerticesBlends(modes: List<BlendMode>) {
         assertAll(PreparedVertexFamily.entries.flatMap { family ->
             modes.map { mode -> {

@@ -180,12 +180,14 @@ internal fun selectWgpu4kPreparedFramePayloadRoute(
             // formula pipelines sample it (Graphite DrawContext dst-copy recipe).
             GPUWgpu4kPreparedFramePayloadRoute.CorePrimitive
         hasDestinationCopy &&
-            GPUDrawSemanticPayload.ColorGlyph::class in distinct &&
+            (GPUDrawSemanticPayload.ColorGlyph::class in distinct ||
+                GPUDrawSemanticPayload.Vertices::class in distinct) &&
             distinct.all { semanticClass ->
                 semanticClass == GPUDrawSemanticPayload.CorePrimitive::class ||
                     semanticClass == GPUDrawSemanticPayload.SampledImage::class ||
                     semanticClass == GPUDrawSemanticPayload.TextA8::class ||
-                    semanticClass == GPUDrawSemanticPayload.ColorGlyph::class
+                    semanticClass == GPUDrawSemanticPayload.ColorGlyph::class ||
+                    semanticClass == GPUDrawSemanticPayload.Vertices::class
             } -> GPUWgpu4kPreparedFramePayloadRoute.PreparedSurfaceMixed
         hasDestinationCopy && distinct.toSet() == setOf(GPUDrawSemanticPayload.MaskBlur::class) ||
         hasDestinationCopy && distinct.toSet() == setOf(

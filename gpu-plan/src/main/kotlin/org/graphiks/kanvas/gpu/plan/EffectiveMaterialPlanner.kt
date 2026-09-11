@@ -36,8 +36,33 @@ public object EffectiveMaterialPlanner {
             } else Result.Ready(source.table, source.root, source.blend)
         }
 
+    /**
+     * Normalizes an admitted W5 source and final blend together. Destination-read candidates and
+     * `DST` remain plans so prepared-family bridges can carry them to the frame sealer unchanged.
+     */
+    public fun planW5b(
+        draw: DrawNode,
+        targetClamp: BlendTargetClampV1,
+        coverage: CoveragePlan = CoveragePlan.FullOrScissor,
+        sample: SamplePlan = SamplePlan.SingleSample,
+    ): Result = when (
+        val source = normalize(
+            draw = draw,
+            targetClamp = targetClamp,
+            allowDestinationCandidate = true,
+            coverage = coverage,
+            sample = sample,
+            elideNoOp = false,
+        )
+    ) {
+        Normalization.NoOp -> error("W5b source normalization must retain NoOp authority")
+        is Normalization.Refused -> Result.Refused(source.diagnosticCode)
+        is Normalization.Source -> Result.Ready(source.table, source.root, source.blend)
+    }
+
     internal fun normalize(draw: DrawNode, targetClamp: BlendTargetClampV1, allowDestinationCandidate: Boolean = false,
-        coverage: CoveragePlan = CoveragePlan.FullOrScissor, sample: SamplePlan = SamplePlan.SingleSample): Normalization {
+        coverage: CoveragePlan = CoveragePlan.FullOrScissor, sample: SamplePlan = SamplePlan.SingleSample,
+        elideNoOp: Boolean = true): Normalization {
         val blend = FinalBlendPlanner.plan(draw.blend, coverage, sample, targetClamp,
             if (coverage == CoveragePlan.AnalyticScalarAA) BlendCoverageApplicationV1.SourceMultiplication
             else BlendCoverageApplicationV1.DestinationInterpolation)
@@ -45,7 +70,7 @@ public object EffectiveMaterialPlanner {
         if (blend is BlendPlan.DestinationReadV1 && !allowDestinationCandidate) {
             return Normalization.Refused("unsupported.w5b.destination-read.task-2")
         }
-        if (allowDestinationCandidate && blend == BlendPlan.NoOpV1) return Normalization.NoOp
+        if (allowDestinationCandidate && elideNoOp && blend == BlendPlan.NoOpV1) return Normalization.NoOp
         if (draw.effects !is EffectStack.Empty || draw.resource != null || draw.operationBlendMode != null) {
             return Normalization.Refused(W5aPlanDiagnostics.UnsupportedDrawState)
         }

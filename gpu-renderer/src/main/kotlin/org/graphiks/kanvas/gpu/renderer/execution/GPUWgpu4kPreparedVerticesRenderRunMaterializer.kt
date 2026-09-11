@@ -18,18 +18,28 @@ import io.ygdrasil.webgpu.GPUBufferBindingType
 import io.ygdrasil.webgpu.GPUBufferUsage
 import io.ygdrasil.webgpu.GPUColorWrite
 import io.ygdrasil.webgpu.GPUDevice
+import io.ygdrasil.webgpu.GPUAddressMode
+import io.ygdrasil.webgpu.GPUFilterMode
+import io.ygdrasil.webgpu.GPUMipmapFilterMode
 import io.ygdrasil.webgpu.GPUPipelineLayout
 import io.ygdrasil.webgpu.GPUPrimitiveTopology
 import io.ygdrasil.webgpu.GPURenderPipeline
 import io.ygdrasil.webgpu.GPUShaderModule
 import io.ygdrasil.webgpu.GPUShaderStage
+import io.ygdrasil.webgpu.GPUSamplerBindingType
 import io.ygdrasil.webgpu.GPUTextureFormat
+import io.ygdrasil.webgpu.GPUTextureSampleType
+import io.ygdrasil.webgpu.GPUTextureViewDimension
+import io.ygdrasil.webgpu.GPUTextureView
 import io.ygdrasil.webgpu.GPUVertexFormat
 import io.ygdrasil.webgpu.GPUVertexStepMode
 import io.ygdrasil.webgpu.PipelineLayoutDescriptor
 import io.ygdrasil.webgpu.PrimitiveState
 import io.ygdrasil.webgpu.RenderPipelineDescriptor
+import io.ygdrasil.webgpu.SamplerBindingLayout
+import io.ygdrasil.webgpu.SamplerDescriptor
 import io.ygdrasil.webgpu.ShaderModuleDescriptor
+import io.ygdrasil.webgpu.TextureBindingLayout
 import io.ygdrasil.webgpu.VertexAttribute
 import io.ygdrasil.webgpu.VertexBufferLayout
 import io.ygdrasil.webgpu.VertexState
@@ -59,6 +69,11 @@ private const val PREPARED_VERTICES_SAMPLED_RESOURCE_SCOPE = "none"
 /** Shared alignment of every packed prepared-vertices subrange. */
 private const val PREPARED_VERTICES_PACK_ALIGNMENT = 4L
 
+internal data class GPUWgpu4kPreparedVerticesDestinationReadInput(
+    val plan: GPUPreparedVerticesDestinationReadPlan,
+    val snapshotView: GPUTextureView,
+)
+
 /**
  * Materializes one accepted prepared-vertices run into frame-owned buffers, one target-bound
  * render scope, and transferable completion owners.
@@ -84,6 +99,8 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
         plan: GPUPreparedVerticesRenderRunPlan,
         actualDeviceGeneration: GPUDeviceGenerationID,
         targetViewOperand: GPUPreparedNativeTextureViewOperand,
+        destinationReadsByPacketId:
+            Map<GPUDrawPacketID, GPUWgpu4kPreparedVerticesDestinationReadInput> = emptyMap(),
     ): GPUPreparedRenderRunMaterialization {
         plan.packets.firstOrNull { packet -> packet.material.sampledResources.isNotEmpty() }
             ?.let { packet ->
@@ -96,6 +113,18 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
             }
         val created = mutableListOf<AutoCloseable>()
         return try {
+            val destinationPacketIds = plan.renderStep.drawPackets.filter { packet ->
+                packet.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead
+            }.map(GPUDrawPacket::packetId).toSet()
+            require(destinationReadsByPacketId.keys == destinationPacketIds &&
+                destinationReadsByPacketId.all { (packetId, input) ->
+                    input.plan.packet.packetId == packetId &&
+                        input.plan.renderStep === plan.renderStep &&
+                        input.plan.exactRenderScopeKey == plan.exactScopeKey
+                }
+            ) {
+                "Prepared vertices destination inputs must exactly match sealed render packets"
+            }
             val artifactByKey = plan.packets
                 .map(GPUDrawSemanticPayload.Vertices::artifact)
                 .distinctBy { artifact -> artifact.key }
@@ -111,6 +140,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                     program = requireNotNull(plan.shaderProgramByPacketId[drawPacket.packetId]) {
                         "A prepared-vertices packet must retain its exact shader program"
                     },
+                    destinationRead = destinationReadsByPacketId[drawPacket.packetId],
                 )
             }
             val uniformUploads = mutableListOf<GPUPreparedNativeBufferUpload>()
@@ -272,7 +302,8 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                 createPipelineSet(
                     program = entry.program,
                     packet = entry.packet,
-                    blendState = requireFixedFunctionBlend(plan, entry.packet),
+                    blendState = requirePreparedVerticesBlend(plan, entry.packet),
+                    hasDestinationRead = entry.destinationRead != null,
                     created = created,
                 )
             }
@@ -380,7 +411,8 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
             createPipelineSet(
                 program = firstEntry.program,
                 packet = firstEntry.packet,
-                blendState = requireFixedFunctionBlend(plan, firstEntry.packet),
+                blendState = requirePreparedVerticesBlend(plan, firstEntry.packet),
+                hasDestinationRead = firstEntry.destinationRead != null,
                 created = created,
             )
         }
@@ -524,6 +556,34 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                 },
             ),
         ).track(created)
+        val destinationGroup = entry.destinationRead?.let { destination ->
+            val sampler = device.createSampler(
+                SamplerDescriptor(
+                    addressModeU = GPUAddressMode.ClampToEdge,
+                    addressModeV = GPUAddressMode.ClampToEdge,
+                    addressModeW = GPUAddressMode.ClampToEdge,
+                    magFilter = GPUFilterMode.Nearest,
+                    minFilter = GPUFilterMode.Nearest,
+                    mipmapFilter = GPUMipmapFilterMode.Nearest,
+                    lodMinClamp = 0f,
+                    lodMaxClamp = 0f,
+                    compare = null,
+                    maxAnisotropy = 1u.toUShort(),
+                    label = "Kanvas.frame.preparedVertices.destinationSampler",
+                ),
+            ).track(created)
+            device.createBindGroup(
+                BindGroupDescriptor(
+                    label = "Kanvas.frame.preparedVertices.destinationGroup." +
+                        packet.payloadRef.commandIdValue,
+                    layout = requireNotNull(pipelineSet.destinationBindGroupLayout),
+                    entries = listOf(
+                        BindGroupEntry(binding = 0u, resource = destination.snapshotView),
+                        BindGroupEntry(binding = 1u, resource = sampler),
+                    ),
+                ),
+            ).track(created)
+        }
         add(
             GPUPreparedNativeRenderCommand.SetBindGroup(
                 0,
@@ -534,6 +594,18 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                 ),
             ),
         )
+        destinationGroup?.let { bindGroup ->
+            add(
+                GPUPreparedNativeRenderCommand.SetBindGroup(
+                    2,
+                    GPUPreparedNativeBindGroupOperand(
+                        bindGroup,
+                        actualDeviceGeneration,
+                        GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                    ),
+                ),
+            )
+        }
         add(
             GPUPreparedNativeRenderCommand.SetBindGroup(
                 1,
@@ -602,6 +674,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
         program: GPUPreparedVerticesShaderProgram,
         packet: GPUDrawSemanticPayload.Vertices,
         blendState: GPUFixedFunctionBlendState,
+        hasDestinationRead: Boolean,
         created: MutableList<AutoCloseable>,
     ): PreparedVerticesPipelineSet {
         val layout = packet.artifact.layout
@@ -642,6 +715,31 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                 entries = materialEntries,
             ),
         ).track(created)
+        val destinationLayout = if (hasDestinationRead) {
+            device.createBindGroupLayout(
+                BindGroupLayoutDescriptor(
+                    label = "Kanvas.frame.preparedVertices.destinationLayout",
+                    entries = listOf(
+                        BindGroupLayoutEntry(
+                            binding = 0u,
+                            visibility = GPUShaderStage.Fragment,
+                            texture = TextureBindingLayout(
+                                sampleType = GPUTextureSampleType.Float,
+                                viewDimension = GPUTextureViewDimension.TwoD,
+                                multisampled = false,
+                            ),
+                        ),
+                        BindGroupLayoutEntry(
+                            binding = 1u,
+                            visibility = GPUShaderStage.Fragment,
+                            sampler = SamplerBindingLayout(GPUSamplerBindingType.Filtering),
+                        ),
+                    ),
+                ),
+            ).track(created)
+        } else {
+            null
+        }
         val shader = device.createShaderModule(
             ShaderModuleDescriptor(
                 label = "Kanvas.frame.preparedVertices.shader.${program.pipelineKeyHash}",
@@ -651,7 +749,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
         val pipelineLayout = device.createPipelineLayout(
             PipelineLayoutDescriptor(
                 label = "Kanvas.frame.preparedVertices.pipelineLayout",
-                bindGroupLayouts = listOf(drawLayout, materialLayout),
+                bindGroupLayouts = listOfNotNull(drawLayout, materialLayout, destinationLayout),
             ),
         ).track(created)
         val pipeline = device.createRenderPipeline(
@@ -699,6 +797,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
         return PreparedVerticesPipelineSet(
             drawBindGroupLayout = drawLayout,
             materialBindGroupLayout = materialLayout,
+            destinationBindGroupLayout = destinationLayout,
             pipelineLayout = pipelineLayout,
             pipeline = pipeline,
             shader = shader,
@@ -727,6 +826,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
     private data class PreparedVerticesPipelineSet(
         val drawBindGroupLayout: GPUBindGroupLayout,
         val materialBindGroupLayout: GPUBindGroupLayout,
+        val destinationBindGroupLayout: GPUBindGroupLayout?,
         val pipelineLayout: GPUPipelineLayout,
         val pipeline: GPURenderPipeline,
         val shader: GPUShaderModule,
@@ -739,6 +839,7 @@ internal data class PreparedVerticesPacketEntry(
     val packet: GPUDrawSemanticPayload.Vertices,
     val fact: GPUPreparedVerticesDrawFacts,
     val program: GPUPreparedVerticesShaderProgram,
+    val destinationRead: GPUWgpu4kPreparedVerticesDestinationReadInput?,
 ) {
     /** Derives the deterministic batching candidate for this packet. */
     fun toBatchCandidate(): GPUPreparedVerticesBatchCandidate = GPUPreparedVerticesBatchCandidate(
@@ -756,7 +857,8 @@ internal data class PreparedVerticesPacketEntry(
         finalBlendIdentity = packet.finalBlendIdentity,
         clipIdentity = packet.clipIdentity,
         layerId = drawPacket.layerId,
-        destinationReadClass = PREPARED_VERTICES_DESTINATION_READ_CLASS,
+        destinationReadClass = destinationRead?.plan?.blendPlan?.formulaId
+            ?: PREPARED_VERTICES_DESTINATION_READ_CLASS,
         filterCompositeScope = PREPARED_VERTICES_FILTER_COMPOSITE_SCOPE,
         sampledResourceScope = PREPARED_VERTICES_SAMPLED_RESOURCE_SCOPE,
         commandOrderBand = drawPacket.insertionReasonCode,
@@ -1140,7 +1242,7 @@ private fun preparedVerticesBatchingCounters(
     )
 }
 
-private fun requireFixedFunctionBlend(
+private fun requirePreparedVerticesBlend(
     plan: GPUPreparedVerticesRenderRunPlan,
     packet: GPUDrawSemanticPayload.Vertices,
 ): GPUFixedFunctionBlendState {
@@ -1149,6 +1251,20 @@ private fun requireFixedFunctionBlend(
         .blendPlan
     return when (blendPlan) {
         is GPUBlendPlan.FixedFunctionBlend -> blendPlan.state
+        is GPUBlendPlan.ShaderBlendWithDstRead -> GPUFixedFunctionBlendState(
+            stateId = "w5b.destination-replace@v1",
+            color = org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent(
+                "one",
+                "zero",
+                "add",
+            ),
+            alpha = org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent(
+                "one",
+                "zero",
+                "add",
+            ),
+            writeMask = "rgba",
+        )
         else -> throw IllegalArgumentException(
             "Prepared-vertices packet ${packet.payloadRef.commandIdValue} requires " +
                 "an exact fixed-function blend plan",
