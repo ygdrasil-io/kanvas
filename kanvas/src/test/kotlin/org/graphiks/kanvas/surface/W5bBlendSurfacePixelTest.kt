@@ -353,6 +353,79 @@ class W5bBlendSurfacePixelTest {
         } })
     }
 
+    @Test fun `geometry sequential General Difference and Exclusion preserve distinct captured results after W4e NoOp`() {
+        val gray = ColorARGB.of(255, 224, 224, 224)
+        val backgroundGray = ColorARGB.of(255, 128, 128, 128)
+        val background = WgslFloatEnvelopeV1Oracle.drawDestination(
+            solidSource(ColorF32.of(128f / 255f, 128f / 255f, 128f / 255f, 1f), .9921875f), MaterialPlanRef(1),
+            WgslFloatEnvelopeV1Oracle.clearAttachment(), BlendMode.DIFFERENCE)
+        val state = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(background))
+        val material = solidSource(ColorF32.of(224f / 255f, 224f / 255f, 224f / 255f, 1f), .45f)
+        val blue = solidSource(ColorF32.of(0f, 0f, 1f, 1f), .5f)
+        val modes = listOf(BlendMode.DIFFERENCE, BlendMode.EXCLUSION, BlendMode.DIFFERENCE)
+        fun picture(mode: BlendMode, reverse: Boolean, mutateBefore: Boolean): Picture {
+            val path = Path().apply { moveTo(-1f, -1f); lineTo(5f, -1f); lineTo(-1f, 5f); close() }
+            fun mutate() { path.addRect(RectF32.ofLTRB(0f, 3f, 4f, 4f)) }
+            if (mutateBefore) mutate()
+            val recorder = PictureRecorder()
+            val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f))
+            fun foreground() {
+                canvas.concat(Matrix3x3F32.skewing(.25f, 0f))
+                canvas.drawPath(path, Paint(shader = Shader.Opacity(Shader.SolidColor(gray), .45f),
+                    blendMode = mode, antiAlias = false))
+                canvas.resetMatrix()
+            }
+            fun destination() {
+                val full = Path().apply { addRect(RectF32.ofLTRB(-10f, -10f, 10f, 10f)) }
+                canvas.drawPath(full, Paint(shader = Shader.SolidColor(ColorARGB.Black),
+                    blendMode = BlendMode.CLEAR, antiAlias = false))
+                canvas.drawPath(full, Paint(shader = Shader.Opacity(Shader.SolidColor(backgroundGray), .9921875f),
+                    blendMode = BlendMode.DIFFERENCE, antiAlias = false))
+            }
+            if (reverse) { foreground(); destination() } else { destination(); foreground() }
+            if (!mutateBefore) mutate()
+            return requireNotNull(Picture.fromByteArray(recorder.finishRecordingAsPicture().toByteArray()))
+        }
+        fun pixels(mode: BlendMode, reverse: Boolean = false, mutateBefore: Boolean = false) = Surface(4, 4).also { surface ->
+            surface.canvas {
+                picture(mode, reverse, mutateBefore).playback(this)
+                save()
+                clipPath(Path().apply { addRect(RectF32.ofLTRB(0f, 0f, 4f, 4f)) }, antiAlias = true)
+                drawPath(Path().apply {
+                    addRect(RectF32.ofLTRB(1f, 1f, 3f, 3f))
+                    fillType = org.graphiks.kanvas.geometry.FillType.INVERSE_WINDING
+                }, Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.Blue), .5f),
+                    blendMode = BlendMode.DST, antiAlias = true))
+                restore()
+            }
+        }.render().pixels
+        val expectedByMode = modes.distinct().associateWith { mode ->
+            WgslFloatEnvelopeV1Oracle.drawDestination(material, MaterialPlanRef(1), state, mode).also {
+                require(it is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { "$mode: $it" }
+            }
+        }
+        // Keep one runtime alive for A -> B -> A; the 0.5,0.5 sample is inside both sources.
+        for (mode in modes) {
+            val other = if (mode == BlendMode.DIFFERENCE) BlendMode.EXCLUSION else BlendMode.DIFFERENCE
+            val expected = expectedByMode.getValue(mode)
+            assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.destinationExclusion(material, MaterialPlanRef(1), state, other))
+            assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.sourceOverExclusion(material, MaterialPlanRef(1), state))
+            assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+                (background as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels))
+            assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.sourceOverExclusion(blue, MaterialPlanRef(1),
+                requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(expected))))
+            val actual = pixels(mode)
+            WgslFloatEnvelopeV1Oracle.assertAdmits(expected, actual.copyOfRange(0, 4))
+            WgslFloatEnvelopeV1Oracle.assertAdmits(background, actual.copyOfRange(56, 60))
+        }
+        for (mode in modes.distinct()) {
+            val expected = expectedByMode.getValue(mode)
+            WgslFloatEnvelopeV1Oracle.assertAdmits(background, pixels(mode, reverse = true).copyOfRange(0, 4))
+            // Inverse-skew (2.5,3.5) -> (1.625,3.5): only the pre-capture appended rectangle covers it.
+            WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixels(mode, mutateBefore = true).copyOfRange(56, 60))
+        }
+    }
+
     @Test fun `geometry W4e NoOp leaves the plain AA SrcOver survivor on its authentic route`() =
         w4eNoOpAaSurvivor(clipped = false)
 
