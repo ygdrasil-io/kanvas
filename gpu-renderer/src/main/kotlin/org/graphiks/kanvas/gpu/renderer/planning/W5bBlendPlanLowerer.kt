@@ -25,7 +25,7 @@ internal object W5bBlendPlanLowerer {
             sourceCoverageEncoding = coverage(plan.coverage),
         )
         is BlendPlan.DestinationReadV1 -> {
-            require(plan.compositionAbiI32 == 3 && plan.snapshotResource != null &&
+            require(plan.compositionAbiI32 in 3..4 && plan.snapshotResource != null &&
                 plan.requiredDestinationVersion.valueI64 >= 0L &&
                 org.graphiks.kanvas.gpu.renderer.pipelines.GPUBlendFormulaProgramLibrary
                     .selectedFullCoverageFunctionWgsl(plan.mode.name.lowercase(), plan.formulaIdentity) != null) {

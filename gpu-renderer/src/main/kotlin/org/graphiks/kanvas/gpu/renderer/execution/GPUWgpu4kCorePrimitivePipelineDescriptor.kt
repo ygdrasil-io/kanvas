@@ -263,7 +263,7 @@ internal fun mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
         ),
         componentIdentity = when {
             (structuralKey.blend as? GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination)
-                ?.w5bCompositionAbiI32 == 3 -> PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY
+                ?.w5bCompositionAbiI32 in 3..4 -> PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY
             structuralKey.blend is
                 GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination &&
                 program.isAnalyticShapeDstRead() ->
@@ -387,10 +387,11 @@ internal fun GPUCorePrimitiveRenderPipelineStructuralKey.corePrimitiveNativeComp
         blend is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination
     ) {
         val shader = blend as GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination
-        if (shader.w5bCompositionAbiI32 == 3) {
+        if (shader.w5bCompositionAbiI32 in 3..4) {
             return PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY.takeIf {
                 this.shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry &&
-                    shader.sourceCoverage == GPUSourceCoverageEncoding.None &&
+                    shader.sourceCoverage == (if (shader.w5bCompositionAbiI32 == 4)
+                        GPUSourceCoverageEncoding.ScalarCoverageInShader else GPUSourceCoverageEncoding.None) &&
                     GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(shader.mode.gpuLabel, shader.formulaId) != null
             }
         }
@@ -714,7 +715,8 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.nativeShadingBlend
     is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.NoOp ->
         GPUWgpu4kCorePrimitiveBlendProgram.DestinationNoOp.takeIf { mode == GPUBlendMode.DST }
     is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ShaderWithDestination ->
-        if (sourceCoverage != GPUSourceCoverageEncoding.None) {
+        if (sourceCoverage != (if (w5bCompositionAbiI32 == 4)
+                GPUSourceCoverageEncoding.ScalarCoverageInShader else GPUSourceCoverageEncoding.None)) {
             null
         } else if (
             GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(mode.gpuLabel, formulaId) == null

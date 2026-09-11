@@ -122,6 +122,7 @@ data class GPUPreparedSurfaceFrameRequest(
     val maskBlurIntermediateBudgetBytes: Long = 67_108_864L,
     val w5aCoreMaterialAuthority: org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2? = null,
     val w5bPointBlends: Map<Int, org.graphiks.kanvas.gpu.plan.BlendPlan> = emptyMap(),
+    val w5bPointClips: Map<Int, org.graphiks.kanvas.render.ir.ClipStackNode> = emptyMap(),
 )
 
 /** Checked structural ceilings applied before one prepared task graph is published. */

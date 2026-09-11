@@ -1049,6 +1049,62 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         }
     }
 
+    private fun materializeW5bPointClipV4(framePlan: GPUFramePlan, encoderPlan: GPUCommandEncoderPlan,
+        resources: GPUPreparedResourceSet, generationSeal: GPUPreparedGenerationSeal,
+        witness: org.graphiks.kanvas.gpu.renderer.passes.W5bPreparedFrameWitnessV3): GPUPreparedNativeFramePayloadMaterialization {
+        if (!witness.validates(framePlan)) return refused("invalid.native-w5b.clip-v4", "Point clip composition lost its graph authority.")
+        val prefix = requireNotNull(witness.clipPrefixV4)
+        val renders = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        val clipRenders = renders.take(prefix.renders.size)
+        val prefixIndices = clipRenders.map { framePlan.steps.indexOf(it) }.toSet()
+        fun encoder(prefixOnly: Boolean) = GPUCommandEncoderPlan.ordered(encoderPlan.planId, encoderPlan.contextIdentity,
+            encoderPlan.deviceGeneration, encoderPlan.targetGeneration,
+            encoderPlan.scopes.filter { (it.sourceStepIndex in prefixIndices) == prefixOnly })
+        val drafts = mutableListOf<GPUPreparedNativeFrameDraft>()
+        var transferred = false
+        val cleanup = AutoCloseable {
+            if (!transferred) {
+                drafts.removeAll { it.disposeBeforeRegistration() }
+                check(drafts.isEmpty()) { "W5b clip composite cleanup remains pending" }
+            }
+        }
+        fun retain(result: GPUPreparedNativeFramePayloadMaterialization.Refused) = result.copy(
+            retainedCloseOwner = AutoCloseable {
+                var first: Throwable? = null
+                try { cleanup.close() } catch (failure: Throwable) { first = failure }
+                try { result.retainedCloseOwner?.close() } catch (failure: Throwable) {
+                    if (first == null) first = failure else first.addSuppressed(failure)
+                }
+                first?.let { throw it }
+            })
+        try {
+            val clip = materializeW4ePrepared(framePlan, encoder(true), resources, generationSeal, clipRenders, witness)
+            if (clip is GPUPreparedNativeFramePayloadMaterialization.Refused) return retain(clip)
+            drafts += (clip as GPUPreparedNativeFramePayloadMaterialization.Materialized).draft
+            val color = materializeW3SessionScratch(framePlan, encoder(false), resources, generationSeal,
+                renders[prefix.renders.size], witness.scratch, w5b = witness)
+            if (color is GPUPreparedNativeFramePayloadMaterialization.Refused) return retain(color)
+            drafts += (color as GPUPreparedNativeFramePayloadMaterialization.Materialized).draft
+            val operands = drafts.flatMap { it.payload.scopeOperands }
+            val byStep = operands.associateBy { it.sourceStepIndex }
+            require(byStep.size == operands.size && byStep.keys == encoderPlan.scopes.map { it.sourceStepIndex }.toSet())
+            val keys = encoderPlan.scopes.map { GPUPreparedNativeScopeKey(it.sourceStepIndex, it.operationKind,
+                it.resourceGenerationLabels, it.nativeOperandKeys) }
+            val payload = GPUPreparedNativeFramePayload(GPUPreparedNativeFrameIdentity(framePlan.frameId,
+                encoderPlan.contextIdentity, encoderPlan.planId, generationSeal.deviceGeneration, generationSeal.targetGeneration, keys),
+                encoderPlan.scopes.map { byStep.getValue(it.sourceStepIndex) }, encoderPlan.scopes.map { it.nativeOperandKeys },
+                auxiliaryOwnedHandles = drafts.flatMap { it.payload.auxiliaryOwnedHandles },
+                leaseLifecycle = GPUPreparedNativeCompositeFrameLeaseLifecycle(drafts.map { requireNotNull(it.payload.leaseLifecycle) }),
+                clipDepthStencilViewAuthority = drafts.flatMap { it.payload.clipDepthStencilViewAuthority.entries }.associate { it.toPair() })
+            val combined = GPUPreparedNativeFrameDraft(payload)
+            require(drafts.all { it.transferOwnershipToComposite(combined) })
+            transferred = true
+            return GPUPreparedNativeFramePayloadMaterialization.Materialized(combined)
+        } catch (failure: Throwable) {
+            return retain(refused("failed.native-w5b.clip-v4", "W5b clip composition failed: ${failure.message.orEmpty()}"))
+        } finally { runCatching { cleanup.close() } }
+    }
+
     override fun materializeReusable(
         framePlan: GPUFramePlan,
         encoderPlan: GPUCommandEncoderPlan,
@@ -1069,6 +1125,9 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         candidateRenderSteps.mapNotNull { it.w5bInitialClearV3?.clearOnly }.firstOrNull()?.let { witness ->
             return materializeW5bClearOnly(framePlan, encoderPlan, resources, generationSeal, witness)
         }
+        val pointClipWitness = candidateRenderSteps.flatMap { it.drawPackets }
+            .mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }.firstOrNull()?.takeIf { it.clipPrefixV4 != null }
+        if (pointClipWitness != null) return materializeW5bPointClipV4(framePlan, encoderPlan, resources, generationSeal, pointClipWitness)
         val w4ePackets = candidateRenderSteps.flatMap(GPUFrameStep.RenderPassStep::drawPackets)
             .filter { packet -> packet.role == GPUDrawPacketRole.W4ePrepared }
         if (w4ePackets.isNotEmpty()) {
@@ -2759,11 +2818,13 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         resources: GPUPreparedResourceSet,
         generationSeal: GPUPreparedGenerationSeal,
         renderSteps: List<GPUFrameStep.RenderPassStep>,
+        clipOnlyV4: org.graphiks.kanvas.gpu.renderer.passes.W5bPreparedFrameWitnessV3? = null,
     ): GPUPreparedNativeFramePayloadMaterialization {
         class Refusal(val code: String, val detail: String) : RuntimeException(detail)
         data class Entry(val index: Int, val render: GPUFrameStep.RenderPassStep, val scope: GPUCommandEncoderScopePlan, val packet: GPUDrawPacket)
         val entries = framePlan.steps.mapIndexedNotNull { index, step ->
             val render = step as? GPUFrameStep.RenderPassStep ?: return@mapIndexedNotNull null
+            if (render !in renderSteps) return@mapIndexedNotNull null
             val packet = render.drawPackets.singleOrNull() ?: return refused("invalid.native-core-primitive.w4e-authority", "W4e requires one packet per render scope.")
             val scope = encoderPlan.scopes.singleOrNull { it.sourceStepIndex == index && it.operationKind == GPUEncoderOperationKind.Render }
                 ?: return refused("invalid.native-core-primitive.w4e-scope", "W4e render scope is absent.")
@@ -2778,12 +2839,12 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             return refused("invalid.native-core-primitive.w4e-authority", "W4e scopes disagree about their sealed frame-native payload authority.")
         }
         val nativePayload = frameAuthority.nativePayload
-        val readback = framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>().singleOrNull()
-            ?: return refused("invalid.native-core-primitive.w4e-readback", "W4e requires one readback step.")
-        val readbackScope = encoderPlan.scopes.singleOrNull { it.sourceStepIndex == framePlan.steps.indexOf(readback) && it.operationKind == GPUEncoderOperationKind.Readback }
-            ?: return refused("invalid.native-core-primitive.w4e-readback", "W4e readback scope is absent.")
-        val output = resources.outputOwnedReadbacks.singleOrNull()
-            ?: return refused("invalid.native-core-primitive.w4e-readback", "W4e requires one output-owned staging lease.")
+        val readback = if (clipOnlyV4 != null) null else (framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>().singleOrNull()
+            ?: return refused("invalid.native-core-primitive.w4e-readback", "W4e requires one readback step."))
+        val readbackScope = if (clipOnlyV4 != null) null else (encoderPlan.scopes.singleOrNull { it.sourceStepIndex == framePlan.steps.indexOf(requireNotNull(readback)) && it.operationKind == GPUEncoderOperationKind.Readback }
+            ?: return refused("invalid.native-core-primitive.w4e-readback", "W4e readback scope is absent."))
+        val output = if (clipOnlyV4 != null) null else (resources.outputOwnedReadbacks.singleOrNull()
+            ?: return refused("invalid.native-core-primitive.w4e-readback", "W4e requires one output-owned staging lease."))
         val requests = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>().flatMap(GPUFrameStep.PrepareResourcesStep::requests)
             .associateBy(GPUResourcePreparationRequest::diagnosticLabel)
         fun requireNativeBuffer(
@@ -4021,20 +4082,23 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             } catch (failure: IllegalArgumentException) {
                 throw IllegalArgumentException("W4e scope ${entry.packet.passId} is not a closed native draw group: ${failure.message}", failure)
             } }
+            val readbackOperand = output?.let { output ->
             val staging = device.createBuffer(BufferDescriptor(output.stagingLease.backingBufferBytes.toULong(), GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst, false, "Kanvas.frame.w4e.readback")).tracked()
-            val readbackOperand = GPUPreparedNativeScopeOperand.Readback(readbackScope.sourceStepIndex,
+            GPUPreparedNativeScopeOperand.Readback(requireNotNull(readbackScope).sourceStepIndex,
                 GPUPreparedNativeTextureOperand(sceneTexture, generationSeal.deviceGeneration),
                 GPUPreparedNativeBufferOperand(staging, generationSeal.deviceGeneration, GPUPreparedNativeOperandOwnership.OutputOwnedReadback),
                 GPUPreparedNativeReadbackLayout(output.request.sourceBounds.left, output.request.sourceBounds.top, output.layout.width, output.layout.height,
-                    output.layout.paddedBytesPerRow, output.layout.rowsPerImage, output.layout.bufferOffset, output.layout.totalBufferBytes, GPUTextureFormat.RGBA8UnormSrgb))
-            val byStep = (renders + readbackOperand).associateBy(GPUPreparedNativeScopeOperand::sourceStepIndex)
+                    output.layout.paddedBytesPerRow, output.layout.rowsPerImage, output.layout.bufferOffset, output.layout.totalBufferBytes, GPUTextureFormat.RGBA8UnormSrgb)) }
+            val byStep = (renders + listOfNotNull(readbackOperand)).associateBy(GPUPreparedNativeScopeOperand::sourceStepIndex)
             val scopeKeys = encoderPlan.scopes.map { GPUPreparedNativeScopeKey(it.sourceStepIndex, it.operationKind, it.resourceGenerationLabels, it.nativeOperandKeys) }
             val payload = GPUPreparedNativeFramePayload(GPUPreparedNativeFrameIdentity(framePlan.frameId, encoderPlan.contextIdentity, encoderPlan.planId,
                 generationSeal.deviceGeneration, generationSeal.targetGeneration, scopeKeys), encoderPlan.scopes.map { requireNotNull(byStep[it.sourceStepIndex]) },
                 encoderPlan.scopes.map(GPUCommandEncoderScopePlan::nativeOperandKeys),
                 auxiliaryOwnedHandles = listOf(
                     GPUPreparedNativeAuxiliaryHandle(owned, GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion),
-                ),
+                ) + listOfNotNull(clipOnlyV4?.let { witness -> GPUPreparedNativeAuxiliaryHandle(
+                    GPUW5bCoverageNativeV4(witness, attachment(requireNotNull(witness.clipPrefixV4).plan.maskResource.value).view),
+                    GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion) }),
                 leaseLifecycle = GPUW4eAttachmentLeaseLifecycle(requireNotNull(lease)))
             synchronized(this) { preRegistrationHandles.transferAll(); materializing = false; transferred = true }
             GPUPreparedNativeFramePayloadMaterialization.Materialized(GPUPreparedNativeFrameDraft(payload))
@@ -6141,6 +6205,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         w5b: org.graphiks.kanvas.gpu.renderer.passes.W5bPreparedFrameWitnessV3? = null,
     ): GPUPreparedNativeFramePayloadMaterialization {
         val renderSteps = if (w5b == null) listOf(renderStep) else framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .filter { step -> step.drawPackets.none { it.role == GPUDrawPacketRole.W4ePrepared } }
         val packets = renderSteps.flatMap { it.drawPackets }
         val semantics = packets.map { it.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive }
         val readbackStep = framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>()

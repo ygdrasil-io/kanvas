@@ -228,7 +228,9 @@ public class GpuPlanTaskListLowerer {
             is W3SessionScratchSealResult.Invalid -> return W3BaseTaskListResult.Invalid(sealed.diagnostic)
         }
         val w5bWitness = graph.destinationGraph?.let {
-            org.graphiks.kanvas.gpu.renderer.passes.W5bPreparedFrameWitnessV3(it, scratch)
+            val clip = graph.draws.filterIsInstance<W5bPointDraw>().mapNotNull { point -> point.clipOnly }.distinct().singleOrNull()
+            org.graphiks.kanvas.gpu.renderer.passes.W5bPreparedFrameWitnessV3(it, scratch,
+                clip?.let { plan -> W4eClipGraphLowerer().lowerClipOnly(request, plan) })
         }
         packets.forEach { packet ->
             val semantic = packet.semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive
@@ -417,6 +419,28 @@ public class GpuPlanTaskListLowerer {
 
     private fun memoryBudget(capabilities: GPUCapabilities, graph: RenderGraph, shape: W3Graph, bounds: GPUPixelBounds, generation: org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID, compositeSessionIdentity: String?): GPUFrameMemoryBudgetPlan? {
         val limits = capabilities.limits ?: return null
+        val pointClip = shape.draws.filterIsInstance<W5bPointDraw>().mapNotNull { it.clipOnly }.distinct().singleOrNull()
+        if (pointClip != null) {
+            val identity = compositeSessionIdentity ?: "w3.session.${generation.value}.${bounds.width}x${bounds.height}.rgba8unorm-srgb"
+            val allocations = graph.resources().map { resource -> GPUFrameMemoryAllocation(
+                when (resource.role) {
+                    PlanResourceRole.LogicalTarget -> "$identity.target"
+                    PlanResourceRole.DestinationSnapshot -> "$identity.snapshot"
+                    PlanResourceRole.ReadbackStaging -> "$identity.staging"
+                    else -> "w4e.${resource.id.value}"
+                }, when (resource.role) {
+                    PlanResourceRole.LogicalTarget -> GPUFrameMemoryCategory.CanonicalTarget
+                    PlanResourceRole.DestinationSnapshot -> GPUFrameMemoryCategory.DestinationSnapshot
+                    PlanResourceRole.ReadbackStaging -> GPUFrameMemoryCategory.ReadbackStaging
+                    else -> GPUFrameMemoryCategory.ReusableScratch
+                }, resource.byteSize,
+                if (resource.kind == org.graphiks.kanvas.gpu.plan.PlanResourceKind.Buffer) GPUFrameMemoryResourceKind.Buffer else GPUFrameMemoryResourceKind.Texture2D,
+                if (resource.kind == org.graphiks.kanvas.gpu.plan.PlanResourceKind.Buffer) null else bounds) }
+            return org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlanner.plan(
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetRequest(allocations,
+                    graph.budget.maxFrameLocalBytes, limits)).takeIf { it.diagnostic == null &&
+                    it.targetResidentBytes + it.peakFrameTransientBytes == graph.peakFrameLocalBytes }
+        }
         val snapshotBytes = if (graph.resources().any { it.role == PlanResourceRole.DestinationSnapshot }) shape.target.byteSize else 0L
         val transientBytesI64 = try { Math.addExact(shape.staging.byteSize, snapshotBytes) } catch (_: ArithmeticException) { return null }
         val totalBytesI64 = try { Math.addExact(shape.target.byteSize, transientBytesI64) } catch (_: ArithmeticException) { return null }
@@ -437,11 +461,16 @@ public class GpuPlanTaskListLowerer {
             val renders = graph.passes().filterIsInstance<PlanPass.RenderPass>()
             val readback = graph.passes().lastOrNull() as? PlanPass.ReadbackPass ?: return null
             val draws = renders.flatMap { it.draws() }
+            val clips = draws.filterIsInstance<W5bPointDraw>().mapNotNull { it.clipOnly }.distinct()
+            if (clips.size > 1) return null
+            val clip = clips.singleOrNull()
+            if (clip != null && (graph.passes().take(clip.passes().size) != clip.passes() ||
+                !clip.nativePayload.matchesDeclaredResources(resources))) return null
             if (draws.none { it is W5bPointDraw } || draws.any { it !is SolidRectDraw && it !is W5bPointDraw } ||
                 draws.any { it.coverage != CoveragePlan.FullOrScissor } ||
                 renders.any { it.target != target.id || it.destinationVersionAfter == null } ||
                 graph.materialPlanTableOrNull() == null || resources.size !=
-                2 + if (draws.any { it.blend is BlendPlan.DestinationReadV1 }) 1 else 0) return null
+                2 + (if (draws.any { it.blend is BlendPlan.DestinationReadV1 }) 1 else 0) + (clip?.resources()?.size ?: 0)) return null
             return W3Graph(target, staging, renders.first(), readback, draws, graph.materialPlanTableOrNull(), graph)
         }
         if (resources.any { it.role == PlanResourceRole.DestinationSnapshot }) {

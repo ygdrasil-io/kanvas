@@ -30,7 +30,7 @@ class W5bInitialClearV3 private constructor(
     internal val graph: RenderGraph get() = witness?.graph ?: requireNotNull(clearOnly).graph
     internal fun matches(target: GPUFrameTargetRef,
         loadStore: GPULoadStorePlan, sample: GPUSamplePlan): Boolean {
-        val first = graph.passes().firstOrNull() as? PlanPass.RenderPass ?: return false
+        val first = graph.passes().filterIsInstance<PlanPass.RenderPass>().firstOrNull() ?: return false
         return first.draws().isEmpty() && first.destinationVersionAfter?.valueI64 == 0L &&
             first.load == org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan.ClearTransparent &&
             first.store == org.graphiks.kanvas.gpu.plan.AttachmentStorePlan.Store &&
@@ -99,6 +99,7 @@ internal class W5bClearOnlyFrameWitnessV3(
 internal class W5bPreparedFrameWitnessV3(
     val graph: RenderGraph,
     val scratch: W3SessionScratchV1,
+    val clipPrefixV4: org.graphiks.kanvas.gpu.renderer.planning.W4eClipGraphLowerer.ClipPrefixV4? = null,
 ) {
     init {
         require(graph.id.value == scratch.planId)
@@ -109,7 +110,29 @@ internal class W5bPreparedFrameWitnessV3(
     }
 
     fun validates(frame: GPUFramePlan): Boolean {
-        val renders = frame.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        val allRenders = frame.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        val prefix = clipPrefixV4
+        val prefixRenders = if (prefix == null) emptyList() else allRenders.take(prefix.renders.size)
+        if (prefix != null) {
+            val prepare = frame.steps.firstOrNull() as? GPUFrameStep.PrepareResourcesStep ?: return false
+            if (frame.steps.count { it is GPUFrameStep.PrepareResourcesStep } != 1 ||
+                frame.steps.any { it !is GPUFrameStep.PrepareResourcesStep && it !is GPUFrameStep.RenderPassStep &&
+                    it !is GPUFrameStep.CopyDestinationStep && it !is GPUFrameStep.ReadbackCopyStep } ||
+                frame.steps.lastOrNull() !is GPUFrameStep.ReadbackCopyStep ||
+                prepare.sourceTaskIds.singleOrNull()?.value != "task.w5b.${graph.id.value}.prepare" ||
+                prepare.requests.size != prefix.preparations.size + 3 ||
+                prepare.requests.map { it.resource.value }.toSet() !=
+                (prefix.preparations.map { it.resource.value } + scratch.target.value + scratch.staging.value +
+                    (scratch.target.value.removeSuffix(".target") + ".snapshot")).toSet() ||
+                frame.memoryBudget.targetResidentBytes + frame.memoryBudget.peakFrameTransientBytes != graph.peakFrameLocalBytes) return false
+            val taskIds = frame.steps.map { it.sourceTaskIds.singleOrNull() ?: return false }
+            if (frame.dependencies.map { it.fromTaskId to it.toTaskId } != taskIds.zipWithNext()) return false
+        }
+        if (prefix != null && (!prefix.authority.validatesRenderSteps(frame.frameId.value, frame.capabilitySeal.sealHash, prefixRenders) ||
+            prefixRenders.map { it.sourceTaskIds.singleOrNull() } != prefix.renders.map { it.taskId } ||
+            frame.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>().flatMap { it.requests }
+                .filter { request -> prefix.preparations.any { it.resource == request.resource } } != prefix.preparations)) return false
+        val renders = allRenders.drop(prefixRenders.size)
         val planned = graph.passes().filterIsInstance<PlanPass.RenderPass>()
         if (renders.size != planned.size || frame.capabilitySeal.sealHash != scratch.capabilitySealHash) return false
         val operations = frame.steps.filter { it is GPUFrameStep.RenderPassStep ||
@@ -126,6 +149,9 @@ internal class W5bPreparedFrameWitnessV3(
                 actual.sourceKey.deviceGeneration != frame.capabilitySeal.deviceGeneration
             is PlanPass.ReadbackPass -> actual !is GPUFrameStep.ReadbackCopyStep || actual.source != scratch.target ||
                 actual.staging != scratch.staging || actual.request.requestId.value != "w3.${graph.id.value}.readback"
+            is PlanPass.ClipMaskInitialize, is PlanPass.ClipMaskProducer, is PlanPass.ClipMaskFold ->
+                prefix == null || actual !is GPUFrameStep.RenderPassStep || actual !in prefixRenders ||
+                    actual.drawPackets.singleOrNull()?.w4ePreparedClipPass?.passId != expected.id.value
             else -> true
         } }) return false
         if (renders.zip(planned).any { (actual, sealed) ->

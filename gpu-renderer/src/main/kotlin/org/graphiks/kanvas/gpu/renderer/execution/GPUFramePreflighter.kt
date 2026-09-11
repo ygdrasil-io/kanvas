@@ -299,7 +299,13 @@ internal class GPUFramePreflighter(
                 ),
             )
         }
-        val w4eRenders = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        val allW4eCandidateRenders = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        val pointComposite = allW4eCandidateRenders.flatMap { it.drawPackets }
+            .mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }.firstOrNull()?.takeIf { it.clipPrefixV4 != null }
+        if (pointComposite != null && !pointComposite.validates(framePlan)) return GPUFramePreflightResult.Refused(
+            diagnostic("invalid.preflight.w5b_clip_v4", "W5b clip-only composition does not match its complete sealed graph."))
+        val w4eRenders = if (pointComposite == null) allW4eCandidateRenders else
+            allW4eCandidateRenders.take(requireNotNull(pointComposite.clipPrefixV4).renders.size)
         val w4ePackets = w4eRenders.flatMap(GPUFrameStep.RenderPassStep::drawPackets)
             .filter { packet -> packet.role == GPUDrawPacketRole.W4ePrepared }
         if (w4ePackets.isNotEmpty()) {
@@ -3645,6 +3651,11 @@ internal class GPUFramePreflighter(
     /** W4e's scene continuation is a closed Task 7 ABI, not a generic or W4d.2 exception. */
     private fun validateW4eSceneMsaaContinuation(framePlan: GPUFramePlan): GPUDiagnostic? {
         fun refused(message: String) = diagnostic("invalid.preflight.w4e_scene_msaa_authority", message)
+        val pointWitness = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+            .mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }.firstOrNull()?.takeIf { it.clipPrefixV4 != null }
+        if (pointWitness != null) return if (pointWitness.validates(framePlan) &&
+            framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().all { it.w4eSceneContinuation == null && it.sampleContinuation == null }) null
+            else refused("W5b clip-only frame cannot carry a Path scene continuation.")
         val renders = framePlan.w4eRenderSteps()
         if (renders.isEmpty() || framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().size != renders.size) {
             return refused("W4e requires one closed prepared render sequence.")
@@ -8053,7 +8064,7 @@ internal class GPUFramePreflighter(
                 GPUCommandOperandMaterializationRequest(
                     targetId = context.targetId,
                     taskIds = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
-                        .filter { it.w5bInitialClearV3 == null }
+                        .filter { it.drawPackets.any { packet -> packet.role != GPUDrawPacketRole.W4ePrepared } }
                         .flatMap { it.sourceTaskIds }.map { it.value }.distinct(),
                     resourcePlanLabels = operands.map { it.label },
                     operands = operands,

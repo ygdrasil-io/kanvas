@@ -93,7 +93,7 @@ internal class W5aMaterialSourceStage private constructor(
                     return $child;
                 }
             """.trimIndent()
-            return W5aMaterialSourceStage(table.entry(root).program.structuralId.value,
+            return W5aMaterialSourceStage(table.entry(root).program.structuralId.value + ":srgb-endpoints-v1",
                 declarations, chain.size, uniforms.array(), opaque)
         }
 
@@ -114,10 +114,15 @@ internal class W5aMaterialSourceStage private constructor(
 
         // One source-stage implementation shared by all renderer consumers of this DAG opcode.
         val SRGB_TO_LINEAR_WGSL: String = """
+            fn w5a_srgb_channel_to_linear(value: f32) -> f32 {
+                if (value == 0.0) { return 0.0; }
+                if (value == 1.0) { return 1.0; }
+                if (value <= 0.04045) { return value / 12.92; }
+                return pow((value + 0.055) / 1.055, 2.4);
+            }
             fn w5a_srgb_to_linear(value: vec4<f32>) -> vec4<f32> {
-                let low = value.rgb / vec3<f32>(12.92);
-                let high = pow((value.rgb + vec3<f32>(0.055)) / vec3<f32>(1.055), vec3<f32>(2.4));
-                return vec4<f32>(select(high, low, value.rgb <= vec3<f32>(0.04045)), value.a);
+                return vec4<f32>(w5a_srgb_channel_to_linear(value.r),
+                    w5a_srgb_channel_to_linear(value.g), w5a_srgb_channel_to_linear(value.b), value.a);
             }
         """.trimIndent()
     }

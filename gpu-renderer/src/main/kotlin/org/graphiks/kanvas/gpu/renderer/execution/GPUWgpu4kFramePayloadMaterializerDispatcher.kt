@@ -311,7 +311,11 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
             step.drawPackets.any { packet -> packet.role == GPUDrawPacketRole.W4ePrepared }
         }
         if (hasW4e) {
-            if (w4eRenderSteps.isEmpty() || w4eRenderSteps.any { step ->
+            val pointWitness = w4eRenderSteps.flatMap { it.drawPackets }.mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }
+                .firstOrNull()?.takeIf { it.clipPrefixV4 != null }
+            val prefixSteps = if (pointWitness != null && pointWitness.validates(framePlan))
+                w4eRenderSteps.take(requireNotNull(pointWitness.clipPrefixV4).renders.size) else w4eRenderSteps
+            if (prefixSteps.isEmpty() || prefixSteps.any { step ->
                     step.drawPackets.size != 1 || step.drawPackets.single().role != GPUDrawPacketRole.W4ePrepared
                 }) {
                 return GPUPreparedNativeFramePayloadMaterialization.Refused(

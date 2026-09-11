@@ -65,6 +65,47 @@ import org.graphiks.kanvas.render.ir.RenderDiagnosticSeverity
 
 /** Mechanical lowering for a complete W4e graph; clip classification is closed before entry. */
 internal class W4eClipGraphLowerer {
+    internal data class ClipPrefixV4(val renders: List<GPUTask.Render>, val preparations: List<GPUResourcePreparationRequest>,
+        val authority: org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedFrameAuthority,
+        val maskRef: GPUFrameTargetRef, val plan: org.graphiks.kanvas.gpu.plan.W4eClipOnlyPlan)
+
+    internal fun lowerClipOnly(request: GpuPlanLoweringRequest, plan: org.graphiks.kanvas.gpu.plan.W4eClipOnlyPlan): ClipPrefixV4 {
+        require(request.graph.passes().take(plan.passes().size) == plan.passes())
+        val bounds = GPUPixelBounds(0, 0, request.graph.targetExtent.width, request.graph.targetExtent.height)
+        val authority = GPUPlanW4ePreparedAuthority.issueClipOnly(request.graph.id.value, plan)
+        val session = "w4e.point-prefix.${request.deviceGeneration.value}.${request.graph.id.value}"
+        val declared = request.graph.resources().filter { resource -> plan.resources().any { it.id == resource.id } }
+        require(declared.size == plan.resources().size && plan.nativePayload.matchesDeclaredResources(declared))
+        val refs = declared.associate { it.id.value to ref(session, it) }
+        val seal = GPUFrameCapabilitySeal.capture(request.frameId, request.deviceGeneration, request.capabilities)
+        val renders = plan.passes().mapIndexed { index, pass ->
+            val packet = preparedClipPacket(pass, index, requireNotNull(authority.clipPassFor(pass.id.value)))
+            val target = when (pass) {
+                is PlanPass.ClipMaskInitialize -> pass.output
+                is PlanPass.ClipMaskProducer -> pass.target
+                is PlanPass.ClipMaskFold -> pass.output
+                else -> error("invalid.w4e.clip-only-pass")
+            }
+            val producer = pass as? PlanPass.ClipMaskProducer
+            GPUTask.Render(GPUTaskID("task.w4e.${request.graph.id.value}.${pass.id.value}"), request.recordingId,
+                GPUTaskPhase.Render, refs.getValue(target.value) as GPUFrameTargetRef,
+                org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan(loadLabel(pass), org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store),
+                if (producer?.sampleCountI32 == 4) GPUSamplePlan.MultisampleFrame(4) else GPUSamplePlan.SingleSampleFrame,
+                resourceUses = resourceUses(pass, refs, declared.associateBy { it.id.value }, null, null),
+                drawPackets = listOf(packet), batchEligibilityByPacketId = mapOf(packet.packetId to GPUPassBatchEligibility(
+                    kind = GPUPassBatchKind.SolidFill, queueGuard = GPUPassBatchQueueGuard(emptyList(), emptyList()))),
+                w4eMaskContinuation = producer?.takeIf { it.sampleCountI32 == 4 }?.let {
+                    GPUW4eMaskContinuationRequest(it.target.value, it.resolveTarget?.value,
+                        if (it.resolveTarget == null) GPUW4eMaskResolveAction.Skip else GPUW4eMaskResolveAction.ResolveCanonical)
+                })
+        }
+        val frame = authority.issueFrameAuthority(request.frameId.value, seal.sealHash, renders)
+        renders.forEach { it.drawPackets.single().attachW4ePreparedFrameAuthority(frame) }
+        require(frame.validatesRenders(request.frameId.value, seal.sealHash, renders))
+        return ClipPrefixV4(renders, declared.map { preparation(it, refs.getValue(it.id.value), bounds,
+            request.graph.capabilities.copyBytesPerRowAlignment.toLong()) }, frame, refs.getValue(plan.maskResource.value) as GPUFrameTargetRef, plan)
+    }
+
     fun lower(request: GpuPlanLoweringRequest): GpuPlanLoweringResult = try {
         val graph = request.graph
         if (!graph.verifyW4eCompilerWitness() ||

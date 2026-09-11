@@ -16,10 +16,15 @@ internal object W5bDestinationGraphSealer {
         stagingBytesI64: Long,
         rowBytesI64: Long,
     ): RenderGraph {
+        val clips = draws.filterIsInstance<W5bPointDraw>().mapNotNull { it.clipOnly }.distinct()
+        require(clips.size <= 1)
+        val clip = clips.singleOrNull()
+        require(clip == null || capabilityId == W5bCorePrimitiveGraph.CAPABILITY_ID &&
+            clip.capabilities == capabilities && clip.budget == budget && clip.copyExtentI32() == extent)
         require(draws.none { it.blend == BlendPlan.NoOpV1 }) { "NoOp draws must be elided before graph issuance" }
-        require(capabilities.maxBindGroupsI32?.let { it >= 3 } == true &&
+        require(capabilities.maxBindGroupsI32?.let { it >= if (clip == null) 3 else 4 } == true &&
             capabilities.maxBindingsPerBindGroupI32?.let { it >= 2 } == true &&
-            capabilities.maxSampledTexturesPerShaderStageI32?.let { it >= 1 } == true &&
+            capabilities.maxSampledTexturesPerShaderStageI32?.let { it >= if (clip == null) 1 else 2 } == true &&
             capabilities.maxSamplersPerShaderStageI32?.let { it >= 1 } == true &&
             capabilities.maxUniformBuffersPerShaderStageI32?.let { it >= 2 } == true &&
             capabilities.maxUniformBufferBindingSizeBytesI64?.let { it >= 32L } == true) {
@@ -32,11 +37,12 @@ internal object W5bDestinationGraphSealer {
         val destinationCountI32 = draws.count { it.blend is BlendPlan.DestinationReadV1 }
         require(destinationCountI32 > 0 || capabilityId == W5bCorePrimitiveGraph.CAPABILITY_ID)
         val initialClearI32 = if (draws.first().blend is BlendPlan.DestinationReadV1) 1 else 0
-        val passCountI32 = Math.addExact(Math.addExact(draws.size, destinationCountI32), initialClearI32 + 1)
+        val passCountI32 = Math.addExact(Math.addExact(draws.size, destinationCountI32), initialClearI32 + 1 + (clip?.passes()?.size ?: 0))
         // One snapshot is reused only after its preceding consumer; native storage stays live
         // through frame completion, so all three physical resources overlap in the budget.
-        val peakI64 = Math.addExact(Math.multiplyExact(targetBytesI64,
-            if (destinationCountI32 == 0) 1L else 2L), stagingBytesI64)
+        val peakI64 = Math.addExact(Math.addExact(Math.multiplyExact(targetBytesI64,
+            if (destinationCountI32 == 0) 1L else 2L), stagingBytesI64),
+            clip?.resources()?.fold(0L) { total, resource -> Math.addExact(total, resource.byteSize) } ?: 0L)
         val sourceRequirements = draws.map { draw -> RawMaterialRequirementsV2.of(material,
             (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref) }
         require(sourceRequirements.all { it.uniformByteCountI64 <= requireNotNull(capabilities.maxUniformBufferBindingSizeBytesI64) &&
@@ -55,7 +61,7 @@ internal object W5bDestinationGraphSealer {
         var versionI64 = 0L
         var renderOrdinalI32 = 0
         var copyOrdinalI32 = 0
-        val passes = mutableListOf<PlanPass>()
+        val passes = (clip?.passes().orEmpty()).toMutableList()
         fun render(draw: PlanDraw?) {
             if (draw != null) versionI64 = Math.addExact(versionI64, 1L)
             passes += PlanPass.RenderPass(renderOrdinalI32++, target.id, listOfNotNull(draw),
@@ -66,7 +72,9 @@ internal object W5bDestinationGraphSealer {
         draws.forEach { draw ->
             val blend = draw.blend
             if (blend is BlendPlan.DestinationReadV1) {
-                require(blend.compositionAbiI32 == 3 && blend.coverage == BlendCoverageEncodingV1.FullOrScissor)
+                require(if ((draw as? W5bPointDraw)?.clipOnly != null)
+                    blend.compositionAbiI32 == 4 && blend.coverage == BlendCoverageEncodingV1.ScalarCoverageInShader
+                    else blend.compositionAbiI32 == 3 && blend.coverage == BlendCoverageEncodingV1.FullOrScissor)
                 val version = DestinationVersionI64(versionI64)
                 passes += PlanPass.TextureCopy(copyOrdinalI32++, target.id, requireNotNull(snapshot).id, version)
                 val sealed = blend.copy(requiredDestinationVersion = version, snapshotResource = snapshot.id)
@@ -80,8 +88,19 @@ internal object W5bDestinationGraphSealer {
             } else render(draw)
         }
         passes += PlanPass.ReadbackPass(0, target.id, staging.id, rowBytesI64)
+        val clipResources = clip?.resources().orEmpty().map { resource ->
+            val last = passes.indexOfLast { pass -> when (pass) {
+                is PlanPass.ClipMaskInitialize -> pass.output == resource.id
+                is PlanPass.ClipMaskProducer -> resource.id in listOfNotNull(pass.target, pass.resolveTarget, pass.depthStencil)
+                is PlanPass.ClipMaskFold -> resource.id in listOf(pass.previous, pass.source, pass.output)
+                is PlanPass.RenderPass -> pass.draws().filterIsInstance<W5bPointDraw>().any { it.clipOnly?.maskResource == resource.id }
+                else -> false
+            } }.let { if (it < 0) requireNotNull(clip).passes().lastIndex else it }
+            PlanResource.of(resource.role, resource.ordinal, resource.kind, resource.format, resource.copyExtent(), resource.byteSize,
+                resource.usages(), resource.lifetime, 0, last + 1, resource.sampleCountI32)
+        }
         return RenderGraph.of(id, capabilityId, extent, format.value, capabilities, budget, draws.size,
-            listOfNotNull(target, snapshot, staging), passes,
+            listOfNotNull(target, snapshot, staging) + clipResources, passes,
             passes.zipWithNext { before, after -> PlanPassDependency(before.id, after.id) }, peakI64,
             materialPlanTable = material)
     }
@@ -105,7 +124,8 @@ internal fun validateW5bDestinationVersions(passes: List<PlanPass>) {
                     val copy = passes.getOrNull(indexI32 - 1) as? PlanPass.TextureCopy
                     require(pass.draws().size == 1 && copy != null && copy.source == pass.target &&
                         copy.destination == blend.snapshotResource && copy.destinationVersion == blend.requiredDestinationVersion &&
-                        blend.requiredDestinationVersion.valueI64 == versionI64 && blend.compositionAbiI32 == 3) {
+                        blend.requiredDestinationVersion.valueI64 == versionI64 &&
+                        (blend.compositionAbiI32 == 3 || blend.compositionAbiI32 == 4 && (draw as? W5bPointDraw)?.clipOnly != null)) {
                         "invalid.w5b.stale-destination-snapshot"
                     }
                 }
@@ -116,6 +136,8 @@ internal fun validateW5bDestinationVersions(passes: List<PlanPass>) {
                 "invalid.w5b.destination-copy-version"
             }
             is PlanPass.ReadbackPass -> Unit
+            is PlanPass.ClipMaskInitialize, is PlanPass.ClipMaskProducer, is PlanPass.ClipMaskFold ->
+                require(!hasRendered) { "invalid.w5b.clip-prefix-order" }
             else -> error("invalid.w5b.destination-pass")
         }
     }

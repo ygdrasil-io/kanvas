@@ -63,6 +63,11 @@ import org.junit.jupiter.api.TestFactory
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUAllApiBlendSurfaceTest {
     @Test
+    fun drawPointHistoricalW5bMatrix() = drawPointHistoricalW5bContexts(
+        listOf(BlendContext.UNCLIPPED, BlendContext.SCISSOR, BlendContext.ALPHA_MASK),
+    )
+
+    @Test
     fun drawPointHistoricalW5bFullScissorMatrix() = drawPointHistoricalW5bContexts(
         listOf(BlendContext.UNCLIPPED, BlendContext.SCISSOR),
     )
@@ -77,28 +82,36 @@ class GPUAllApiBlendSurfaceTest {
             BlendMode.EXCLUSION, BlendMode.HUE, BlendMode.SATURATION,
             BlendMode.COLOR, BlendMode.LUMINOSITY,
         )
-        val fixtures = modes.associateWith(W5bBlendCpuOracle::pointFixture)
         assertAll("DrawPoint historical W5b matrix", modes.flatMap { mode -> contexts.map { context ->
             Executable {
                 try {
-                    val (source, destination) = fixtures.getValue(mode)
+                    val (source, edge, destination, centerDestination, centerSetup) = W5bBlendCpuOracle.historicalPointFixture(mode)
+                    val ordinarySource = if (centerSetup == null) source else edge
+                    val edgeSource = if (context == BlendContext.ALPHA_MASK) edge else ordinarySource
                     val api = BlendCase("DrawPoint", Point2F32(16f, 16f), Point2F32(10f, 16f), Point2F32(12f, 16f)) {
                         val paint = Paint(shader = Shader.Opacity(Shader.SolidColor(source.color), source.opacityF32),
                             antiAlias = false, blendMode = mode)
                         drawPoint(16f, 16f, paint)
-                        drawPoint(10f, 16f, paint)
-                        drawPoint(12f, 16f, paint)
+                        drawPoint(10f, 16f, Paint(shader = Shader.Opacity(Shader.SolidColor(ordinarySource.color), ordinarySource.opacityF32),
+                            antiAlias = false, blendMode = mode))
+                        drawPoint(12f, 16f, Paint(shader = Shader.Opacity(Shader.SolidColor(edgeSource.color), edgeSource.opacityF32),
+                            antiAlias = false, blendMode = mode))
                     }
-                    val backgroundPaint = Paint(shader = Shader.Opacity(Shader.SolidColor(destination.color), destination.opacityF32),
-                        antiAlias = false)
-                    val gpu = renderGpu(api, mode, context, backgroundPaint = backgroundPaint)
+                    fun preparationPaint(draw: W5bBlendCpuOracle.Draw) = Paint(
+                        shader = if (draw.opacityF32 == 1f) Shader.SolidColor(draw.color)
+                            else Shader.Opacity(Shader.SolidColor(draw.color), draw.opacityF32),
+                        antiAlias = false, blendMode = draw.mode)
+                    val backgroundPaint = preparationPaint(destination)
+                    val gpu = renderGpu(api, mode, context, backgroundPaint = backgroundPaint,
+                        centerSetup = centerSetup?.let(::preparationPaint),
+                        backgroundPrelude = destination.preparation.map(::preparationPaint))
                     val pixels = gpu.pixels
-                    W5bBlendCpuOracle.assertPoint(source, destination, 1f, pixels.copyOfRange(0, 4))
-                    W5bBlendCpuOracle.assertPoint(source, destination,
-                        if (context == BlendContext.UNCLIPPED) 1f else 0f, pixels.copyOfRange(4, 8))
-                    W5bBlendCpuOracle.assertPoint(source, destination,
+                    W5bBlendCpuOracle.assertPoint(source, centerDestination, 1f, pixels.copyOfRange(0, 4), context == BlendContext.ALPHA_MASK)
+                    W5bBlendCpuOracle.assertPoint(ordinarySource, destination,
+                        if (context == BlendContext.UNCLIPPED) 1f else 0f, pixels.copyOfRange(4, 8), context == BlendContext.ALPHA_MASK)
+                    W5bBlendCpuOracle.assertPoint(edgeSource, destination,
                         if (context == BlendContext.ALPHA_MASK) .5f else 1f,
-                        readPixel(gpu.result, Point2F32(12f, 16f)))
+                        readPixel(gpu.result, Point2F32(12f, 16f)), context == BlendContext.ALPHA_MASK)
                 } catch (failure: Throwable) {
                     throw AssertionError("DrawPoint/${mode.name}/${context.name}: ${failure.message} " +
                         (failure as? GPUPreparedSurfaceTerminalException)?.diagnostic?.facts.orEmpty(), failure)
@@ -261,10 +274,14 @@ class GPUAllApiBlendSurfaceTest {
         context: BlendContext,
         decisions: MutableList<GPUPreparedSurfaceRouteDecision> = mutableListOf(),
         backgroundPaint: Paint = Paint.fill(DESTINATION).copy(antiAlias = false),
+        backgroundPrelude: List<Paint> = emptyList(),
+        centerSetup: Paint? = null,
     ): GpuPixel {
         val surface = Surface(SURFACE_SIZE, SURFACE_SIZE)
         surface.canvas {
+                backgroundPrelude.forEach { drawRect(SURFACE_RECT, it) }
                 drawRect(SURFACE_RECT, backgroundPaint)
+                centerSetup?.let { drawRect(RectF32(16f, 16f, 17f, 17f), it) }
                 when (context) {
                     BlendContext.UNCLIPPED -> api.drawForContext(this, mode, context)
                     BlendContext.SCISSOR -> {
@@ -637,9 +654,9 @@ class GPUAllApiBlendSurfaceTest {
                     context == BlendContext.ALPHA_MASK &&
                         mode in MULTI_RENDER_DST_COPY_MODES &&
                         api.name == "DrawPoint" ->
-                        // The DrawPoint fixture draws three separate point commands, so its
-                        // dst-read frame is a four-render shape whose direct-resource seal fails.
-                        ProductRouteExpectation.Terminal(PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL)
+                        // W5b composes the original W4e clip producer with three ordered
+                        // Point consumers, each using its own sealed destination version.
+                        ProductRouteExpectation.Prepared
                     context == BlendContext.ALPHA_MASK ->
                         // Non-SRC_OVER analytic-clip blends stay refused on the
                         // lane's exact pipeline-identity code (blend programs are a separate

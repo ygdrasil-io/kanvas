@@ -16,6 +16,13 @@ internal class GPUW5bDestinationSnapshotNativeV3(val texture: GPUTexture, val vi
     override fun close() { try { view.close() } finally { texture.close() } }
 }
 
+/** Borrowed canonical W4e mask view: its composite attachment lease owns the lifetime. */
+internal class GPUW5bCoverageNativeV4(val witness: org.graphiks.kanvas.gpu.renderer.passes.W5bPreparedFrameWitnessV3,
+    val view: GPUTextureView) : AutoCloseable {
+    init { require(witness.clipPrefixV4 != null) }
+    override fun close() = Unit
+}
+
 /** Original, authenticated geometry descriptor. W5a changes no geometry or attachment state. */
 internal data class GPUW5aGeometryPipelineTemplate(
     val source: String,
@@ -36,6 +43,7 @@ internal class GPUW5aNativeSourceBindingV2(
     val buffer: GPUBuffer,
     val byteCapacityI64: Long,
     val destinationGroupV3: GPUPreparedNativeBindGroupOperand? = null,
+    val coverageGroupV4: GPUPreparedNativeBindGroupOperand? = null,
 ) {
     init {
         require(drawOrdinalI32 >= 0 && byteCapacityI64 == source.stage.uniformByteCountI64)
@@ -76,11 +84,15 @@ internal fun validatesW5aSourcePartitionV2(framePlan: GPUFramePlan, payload: GPU
                 binding.drawOrdinalI32 == source.first && binding.source === source.second &&
                     (binding.destinationGroupV3 != null) == ((render.drawPackets.getOrNull(source.first)?.blendPlan
                         as? GPUBlendPlan.ShaderBlendWithDstRead)?.sealedW5b != null) &&
+                    (binding.coverageGroupV4 != null) == ((render.drawPackets.getOrNull(source.first)?.blendPlan
+                        as? GPUBlendPlan.ShaderBlendWithDstRead)?.sealedW5b?.compositionAbiI32 == 4) &&
                     binding.byteCapacityI64 == source.second.stage.uniformByteCountI64 &&
                     binding.pipeline.deviceGeneration == payload.identity.deviceGeneration &&
                     binding.bindGroup.deviceGeneration == payload.identity.deviceGeneration &&
                     owners.any { it.owns(binding.buffer) && it.owns(binding.pipeline.pipeline) && it.owns(binding.bindGroup.bindGroup) &&
-                        (binding.destinationGroupV3 == null || it.owns(binding.destinationGroupV3.bindGroup)) } &&
+                        (binding.destinationGroupV3 == null || it.owns(binding.destinationGroupV3.bindGroup)) &&
+                        (binding.coverageGroupV4 == null || it.owns(binding.coverageGroupV4.bindGroup)) } &&
+                    (binding.coverageGroupV4 == null || binding.coverageGroupV4.deviceGeneration == payload.identity.deviceGeneration) &&
                     (binding.destinationGroupV3 == null || binding.destinationGroupV3.deviceGeneration == payload.identity.deviceGeneration)
             }
     }
@@ -122,7 +134,7 @@ private fun composeSource(template: GPUW5aGeometryPipelineTemplate, source: W5aP
         (if (destination == null) blend != null && listOf(blend.color, blend.alpha).all { it.operation == GPUBlendOperation.Add }
         else blend != null && listOf(blend.color, blend.alpha).all {
             it.operation == GPUBlendOperation.Add && it.srcFactor == GPUBlendFactor.One && it.dstFactor == GPUBlendFactor.Zero
-        } && destination.sealedW5b?.compositionAbiI32 == 3)) {
+        } && destination.sealedW5b?.compositionAbiI32 in 3..4)) {
         "W5b source DAG requires an authenticated premultiplied fixed-function sRGB attachment tail"
     }
     // The renderer reflection parser uses explicit scalar type parameters; W4e's native
@@ -138,7 +150,10 @@ private fun composeSource(template: GPUW5aGeometryPipelineTemplate, source: W5aP
     require(!geometry.contains("@group(1)")) { "W5a source group is already occupied" }
     val sourceExpression = "kanvas_material_source(vec2<f32>(0.0))"
     val tail = if (destination == null) "" else {
-        require(destination.sourceCoverageEncoding == org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding.None) {
+        val scalar = destination.sealedW5b?.compositionAbiI32 == 4
+        require(destination.sourceCoverageEncoding == if (scalar)
+            org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding.ScalarCoverageInShader
+            else org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding.None) {
             "W5b W3 destination tail requires sealed full/scissor coverage"
         }
         require(geometry.contains("fn fs_main()") && !geometry.contains("@group(2)"))
@@ -148,11 +163,13 @@ private fun composeSource(template: GPUW5aGeometryPipelineTemplate, source: W5aP
         """
             @group(2) @binding(0) var kanvas_w5b_destination: texture_2d<f32>;
             @group(2) @binding(1) var kanvas_w5b_sampler: sampler;
+            ${if (scalar) "@group(3) @binding(0) var kanvas_w5b_coverage: texture_2d<f32>;" else ""}
             $formula
             fn kanvas_w5b_target(src: vec4<f32>, pixel: vec2<f32>) -> vec4<f32> {
                 let dst = textureSampleLevel(kanvas_w5b_destination, kanvas_w5b_sampler,
                     pixel / vec2<f32>(textureDimensions(kanvas_w5b_destination)), 0.0);
-                return kanvas_w5b_blend(src, dst);
+                let blended = kanvas_w5b_blend(src, dst);
+                ${if (scalar) "let mask_sample: vec4<f32> = textureLoad(kanvas_w5b_coverage, vec2<i32>(pixel), 0); let coverage = clamp(mask_sample.r, 0.0, 1.0); return dst + coverage * (blended - dst);" else "return blended;"}
             }
         """.trimIndent().replace(Regex("\\bvec([234])([fiu])\\b")) { "vec${it.groupValues[1]}<${it.groupValues[2]}32>" }
     }
@@ -165,7 +182,7 @@ private fun composeSource(template: GPUW5aGeometryPipelineTemplate, source: W5aP
     require(original.validation.success && composed.validation.success &&
         original.bindings.all { it.group == 0 } &&
         composed.bindings.filter { it.group == 0 } == original.bindings &&
-        composed.bindings.size == original.bindings.size + (if (destination == null) 1 else 3) && material != null &&
+        composed.bindings.size == original.bindings.size + (if (destination == null) 1 else if (destination.sealedW5b?.compositionAbiI32 == 4) 4 else 3) && material != null &&
         material.binding == 0 && material.resourceKind == "uniformBuffer" &&
         material.minBindingSize?.toLong() == source.stage.uniformByteCountI64) {
         "W5a composed ABI must preserve geometry bindings and add exactly its raw group-1 block"
@@ -192,10 +209,19 @@ internal fun materializeW5aSourcePartitionV2(
     var replacement: GPUPreparedNativeFrameDraft? = null
     try {
         require(framePlan.w5aCombinedMemoryBudgetV2(limits).diagnostic == null)
-        val pipelines = mutableMapOf<Pair<GPURenderPipeline, String>, Pair<GPUPreparedNativeRenderPipelineOperand, GPUBindGroupLayout>>()
+        val pipelines = mutableMapOf<Triple<GPURenderPipeline, String, Int>, Pair<GPUPreparedNativeRenderPipelineOperand, GPUBindGroupLayout>>()
         val buffers = mutableMapOf<String, GPUBuffer>()
         val groups = mutableMapOf<Pair<String, GPUBindGroupLayout>, GPUPreparedNativeBindGroupOperand>()
         val destinationSnapshot = old.auxiliaryOwnedHandles.mapNotNull { it.handle as? GPUW5bDestinationSnapshotNativeV3 }.singleOrNull()
+        val coverage = old.auxiliaryOwnedHandles.mapNotNull { it.handle as? GPUW5bCoverageNativeV4 }.singleOrNull()
+        require(coverage == null || coverage.witness.validates(framePlan))
+        val coverageLayout = coverage?.let { owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(
+            label = "Kanvas.w5b.w4e-coverage-group3-abi-v4", entries = listOf(BindGroupLayoutEntry(
+                binding = 0u, visibility = GPUShaderStage.Fragment,
+                texture = TextureBindingLayout(sampleType = GPUTextureSampleType.Float)))))) }
+        val coverageGroup = coverage?.let { GPUPreparedNativeBindGroupOperand(owned.own(device.createBindGroup(
+            BindGroupDescriptor(label = "Kanvas.w5b.w4e-coverage-v4", layout = requireNotNull(coverageLayout),
+                entries = listOf(BindGroupEntry(binding = 0u, resource = it.view))))), generation) }
         val destinationLayout = destinationSnapshot?.let { owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(
             label = "Kanvas.w5b.destination-group2-abi-v3", entries = listOf(
                 BindGroupLayoutEntry(binding = 0u, visibility = GPUShaderStage.Fragment,
@@ -227,8 +253,10 @@ internal fun materializeW5aSourcePartitionV2(
                 val destination = (packets.getOrNull(ordinalI32)?.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead)
                     ?.takeIf { it.sealedW5b != null }
                 require(destination == null || destinationGroup != null)
+                val scalar = destination?.sealedW5b?.compositionAbiI32 == 4
+                require(!scalar || coverageGroup != null && packets[ordinalI32].corePrimitivePreparedAuthority?.w5bFrameWitnessV3 === coverage?.witness)
                 val base = requireNotNull(currentPipeline)
-                val key = base.pipeline to source.stage.structuralId
+                val key = Triple(base.pipeline, source.stage.structuralId, destination?.sealedW5b?.compositionAbiI32 ?: 2)
                 val (pipeline, materialLayout) = pipelines.getOrPut(key) {
                     val template = templates.sourceTemplate(base.pipeline)
                         ?: old.auxiliaryOwnedHandles.asSequence().mapNotNull { it.handle as? GPUW5aGeometryPipelineTemplateProvider }
@@ -243,8 +271,10 @@ internal fun materializeW5aSourcePartitionV2(
                     val shader = owned.own(device.createShaderModule(ShaderModuleDescriptor(
                         label = "Kanvas.w5a.source-v2.${source.stage.structuralId}", code = composeSource(template, source, destination))))
                     val pipelineLayout = owned.own(device.createPipelineLayout(PipelineLayoutDescriptor(
-                        label = if (destination == null) "Kanvas.w5a.composed-abi-v2" else "Kanvas.w5b.composed-abi-v3",
-                        bindGroupLayouts = listOf(template.groupZero, layout) + if (destination == null) emptyList() else listOf(requireNotNull(destinationLayout)))))
+                        label = "Kanvas.composed-abi-v${destination?.sealedW5b?.compositionAbiI32 ?: 2}",
+                        bindGroupLayouts = listOf(template.groupZero, layout) +
+                            (if (destination == null) emptyList() else listOf(requireNotNull(destinationLayout))) +
+                            (if (scalar) listOf(requireNotNull(coverageLayout)) else emptyList()))))
                     val descriptor = template.descriptor
                     val native = owned.own(device.createRenderPipeline(descriptor.copy(
                         label = "Kanvas.w5a.fragment-source-v2.${source.stage.structuralId}",
@@ -272,7 +302,7 @@ internal fun materializeW5aSourcePartitionV2(
                             resource = BufferBinding(buffer = buffer, offset = 0uL, size = bytes.size.toULong())))))), generation)
                 }
                 bindings += GPUW5aNativeSourceBindingV2(ordinalI32, source, pipeline, group, buffer, bytes.size.toLong(),
-                    destinationGroup.takeIf { destination != null })
+                    destinationGroup.takeIf { destination != null }, coverageGroup.takeIf { scalar })
             }
               GPUPreparedNativeScopeOperand.Render(operand.sourceStepIndex, operand.pass, operand.commands,
                   operand.semanticPayloads, operand.operandLayout, operand.operationKind, operand.passSegment, bindings,

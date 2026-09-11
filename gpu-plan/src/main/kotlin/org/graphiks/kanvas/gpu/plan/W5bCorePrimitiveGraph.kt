@@ -40,6 +40,7 @@ public class W5bPointDraw private constructor(
     boundsI32: RectI32,
     scissorI32: RectI32,
     override public val blend: BlendPlan,
+    public val clipOnly: W4eClipOnlyPlan?,
 ) : PlanDraw {
     private val vertices = verticesF32.copyOf()
     private val indices = indicesI32.copyOf()
@@ -55,12 +56,12 @@ public class W5bPointDraw private constructor(
     public fun copyBoundsI32(): RectI32 = bounds.copy()
     public fun copyScissorI32(): RectI32 = scissor.copy()
     internal fun withBlend(plan: BlendPlan): W5bPointDraw = W5bPointDraw(commandIndex, materialAuthority,
-        vertices, indices, contours, bounds, scissor, plan)
+        vertices, indices, contours, bounds, scissor, plan, clipOnly)
 
     public companion object {
         public fun of(commandIndexI32: Int, material: MaterialPlanRef, verticesF32: FloatArray,
             indicesI32: IntArray, contourStartsI32: IntArray, boundsI32: RectI32,
-            scissorI32: RectI32, blend: BlendPlan): W5bPointDraw {
+            scissorI32: RectI32, blend: BlendPlan, clipOnly: W4eClipOnlyPlan? = null): W5bPointDraw {
             require(commandIndexI32 >= 0 && !boundsI32.isEmpty && !scissorI32.isEmpty)
             require(contourStartsI32.size in 1..64 && verticesF32.size == contourStartsI32.size * 8 &&
                 indicesI32.size == contourStartsI32.size * 6 && verticesF32.all(Float::isFinite))
@@ -69,8 +70,18 @@ public class W5bPointDraw private constructor(
                 vertexI32 == indexI32 / 6 * 4 + intArrayOf(0, 1, 2, 0, 2, 3)[indexI32 % 6]
             })
             require(blend != BlendPlan.NoOpV1)
+            val finalBlend = if (clipOnly == null) blend else {
+                val mode = when (blend) {
+                    is BlendPlan.FixedFunctionV1 -> blend.mode
+                    is BlendPlan.DestinationReadV1 -> blend.mode
+                    else -> error("unsupported.w5b.point-mask-blend")
+                }
+                (requireNotNull(FinalBlendPlanner.plan(org.graphiks.kanvas.render.ir.BlendNode.Mode(mode),
+                    CoveragePlan.AnalyticScalarAA, SamplePlan.SingleSample, BlendTargetClampV1.Unavailable)) as BlendPlan.DestinationReadV1)
+                    .copy(compositionAbiI32 = 4)
+            }
             return W5bPointDraw(commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material),
-                verticesF32, indicesI32, contourStartsI32, boundsI32, scissorI32, blend)
+                verticesF32, indicesI32, contourStartsI32, boundsI32, scissorI32, finalBlend, clipOnly)
         }
     }
 }

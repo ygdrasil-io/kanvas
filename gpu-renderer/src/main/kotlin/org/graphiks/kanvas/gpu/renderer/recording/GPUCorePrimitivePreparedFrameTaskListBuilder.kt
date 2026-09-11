@@ -1811,7 +1811,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 snapshotPlan?.let { GPUResourcePreparationRequest(snapshot, GPUFrameTextureDescriptor(request.targetBounds, GPUColorFormat.RGBA8UnormSrgb, 1),
                     GPUFrameResourceRole.DestinationSnapshot,
                     setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.TextureBinding),
-                    GPUFrameResourceLifetime.FrameLocal, it.byteSize, snapshot.value) }))
+                    GPUFrameResourceLifetime.FrameLocal, it.byteSize, snapshot.value) }) + witness.clipPrefixV4?.preparations.orEmpty())
         fun taskId(pass: org.graphiks.kanvas.gpu.plan.PlanPass) = GPUTaskID("task.w5b.${graph.id.value}.${pass.id.value}")
         val renders = graph.passes().filterIsInstance<org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass>().associateWith { pass ->
             val selected = pass.draws().map { packets.getValue(it.commandIndex) }
@@ -1820,8 +1820,11 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 GPUSamplePlan.SingleSampleFrame,
                 provisionalSegmentKey = GPUProvisionalRenderSegmentKey("w5b.${graph.id.value}.${pass.id.value}"),
                 w5bInitialClearV3 = if (selected.isEmpty()) org.graphiks.kanvas.gpu.renderer.passes.W5bInitialClearV3(witness) else null,
-                resourceUses = if (selected.any { it.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead }) listOf(
-                    GPUFrameResourceUse(snapshot, GPUFrameResourceRole.DestinationSnapshot, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false)) else emptyList(),
+                resourceUses = (if (selected.any { it.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead }) listOf(
+                    GPUFrameResourceUse(snapshot, GPUFrameResourceRole.DestinationSnapshot, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false)) else emptyList()) +
+                    (if (pass.draws().filterIsInstance<org.graphiks.kanvas.gpu.plan.W5bPointDraw>().any { it.clipOnly != null }) listOf(
+                        GPUFrameResourceUse(requireNotNull(witness.clipPrefixV4).maskRef, GPUFrameResourceRole.ClipMask,
+                            GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false)) else emptyList()),
                 drawPackets = selected, batchEligibilityByPacketId = selected.associate { it.packetId to base.batchEligibilityByPacketId.getValue(it.packetId) })
         }
         val passes = graph.passes()
@@ -1848,13 +1851,20 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 }
                 is org.graphiks.kanvas.gpu.plan.PlanPass.ReadbackPass -> GPUTask.Readback(taskId(pass),
                     base.recordingId, GPUTaskPhase.Readback, request.target, request.staging, request.readbackRequest)
+                is org.graphiks.kanvas.gpu.plan.PlanPass.ClipMaskInitialize,
+                is org.graphiks.kanvas.gpu.plan.PlanPass.ClipMaskProducer,
+                is org.graphiks.kanvas.gpu.plan.PlanPass.ClipMaskFold ->
+                    requireNotNull(witness.clipPrefixV4).renders.single { it.drawPackets.single().w4ePreparedClipPass?.passId == pass.id.value }
                 else -> return refused("invalid.w5b.preplanned", "W5b graph contains an unsupported pass.")
             }
         }
         return GPUCorePrimitivePreparedFrameResult.Recorded(GPUTaskList(request.baseTaskList.frameId,
             request.baseTaskList.capabilitySeal, request.baseTaskList.recordingSeals, request.baseTaskList.expectedReplayKeyHash,
             tasks, tasks.zipWithNext { before, after -> GPUTaskDependency(before.taskId, after.taskId, "w5b-version-order",
-                GPUTaskUseToken("${before.taskId.value}->${after.taskId.value}"), "w5b-version-order") },
+                GPUTaskUseToken("${before.taskId.value}->${after.taskId.value}"), "w5b-version-order",
+                (before as? GPUTask.Render)?.drawPackets?.singleOrNull()?.w4ePreparedClipPass?.atomicGroupId
+                    ?.takeIf { it == (after as? GPUTask.Render)?.drawPackets?.singleOrNull()?.w4ePreparedClipPass?.atomicGroupId }
+                    ?.let(::GPUTaskAtomicGroupID)) },
             request.baseTaskList.phaseOrder, request.memoryBudget))
     }
 

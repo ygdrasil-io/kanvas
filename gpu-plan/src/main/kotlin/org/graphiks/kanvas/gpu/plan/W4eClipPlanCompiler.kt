@@ -55,6 +55,90 @@ public class W4eClipPlanCompiler(
 ) : GpuPlanCompiler {
     public constructor() : this(ClipPreparationPolicyF64())
 
+    /**
+     * Producer-only W4e seam for an already admitted non-Path color consumer. All clip math,
+     * mask selection, producer samples and storage remain owned by this compiler.
+     */
+    public fun sealClipOnly(
+        clip: ClipStackNode,
+        extent: SizeI32,
+        capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+    ): W4eClipOnlyPlan {
+        require(extent.width in 1..capabilities.maxTextureDimension2D && extent.height in 1..capabilities.maxTextureDimension2D) {
+            "unsupported.w4e.clip-only-extent"
+        }
+        val operations = when (clip) {
+            is ClipStackNode.Operations -> clip
+            is ClipStackNode.DeviceRect -> ClipStackNode.Operations.of(listOf(ClipEntry(
+                GeometryNode.Rect.of(clip.copyBounds()), ClipOperation.INTERSECT, clip.antiAlias)))
+            else -> error("unsupported.w4e.clip-only-empty")
+        }
+        val domain = RectI32(0, 0, extent.width, extent.height)
+        val prepared = prepare(operations, domain, ClipWorkUsageI64(), forceMask = true)
+        require(prepared is PreparedResult.Ready) { "unsupported.w4e.clip-only-preparation" }
+        val stack = prepared.stack
+        require(stack.realization == Realization.Mask) { "unsupported.w4e.clip-only-mask" }
+        require(capabilityRefusal(capabilities, listOf(stack)) == null) { "unsupported.w4e.clip-only-capability" }
+        val prefixCountI32 = Math.addExact(1, Math.multiplyExact(stack.emittedEntries.size, 2))
+        // The producer token exports one post-prefix read. The owning color graph seals
+        // the final mask lifetime against its actual consumers, before any allocation.
+        val lastConsumerPassIndexExclusiveI32 = Math.addExact(prefixCountI32, 1)
+        val aa = stack.emittedEntries.any { it.antiAlias && it.geometryF32 !is ClipGeometryF32.Rect }
+        val hardPath = stack.emittedEntries.any { !it.antiAlias && it.geometryF32 is ClipGeometryF32.Path }
+        val oneBytesI64 = ClipPlanBudget.checkedMaskTextureBytesI64(extent.width, extent.height, 1)
+        val fourBytesI64 = ClipPlanBudget.checkedMaskTextureBytesI64(extent.width, extent.height, 4)
+        val resources = mutableListOf<PlanResource>()
+        val ids = maskResources(resources, MaskResourceLayout(0, 0, oneBytesI64, fourBytesI64,
+            lastConsumerPassIndexExclusiveI32, lastConsumerPassIndexExclusiveI32, prefixCountI32,
+            prefixCountI32.takeIf { aa }, prefixCountI32.takeIf { aa }, prefixCountI32.takeIf { hardPath }, aa, hardPath), extent)
+        val group = PlanAtomicGroupId("w4e.clip-only:0")
+        var accumulator = ids.firstAccumulator
+        val passes = mutableListOf<PlanPass>(PlanPass.ClipMaskInitialize(0, accumulator, domain, 1f, group))
+        stack.emittedEntries.forEachIndexed { indexI32, entry ->
+            val useAa = entry.antiAlias && entry.geometryF32 !is ClipGeometryF32.Rect
+            val target = if (useAa) requireNotNull(ids.multisampleScratch) else ids.scratch
+            val resolve = if (useAa) ids.scratch else null
+            val depth = when {
+                useAa -> ids.aaDepth
+                entry.geometryF32 is ClipGeometryF32.Path -> ids.hardDepth
+                else -> null
+            }
+            passes += PlanPass.ClipMaskProducer(indexI32, target, resolve, depth, if (useAa) 4 else 1,
+                entry.geometryF32, group, inverseCoverage = entry.inverseFill, antiAlias = entry.antiAlias)
+            val output = if (accumulator == ids.firstAccumulator) ids.secondAccumulator else ids.firstAccumulator
+            passes += PlanPass.ClipMaskFold(indexI32, accumulator, resolve ?: target, output,
+                entry.operation.toPlanOperation(), domain, group)
+            accumulator = output
+        }
+        resources.forEach { resource -> require(capabilities.supportsTexture(requireNotNull(resource.format),
+            resource.sampleCountI32, resource.usages())) { "unsupported.w4e.clip-only-capability" } }
+        fun dataResource(role: PlanResourceRole, usage: PlanResourceUsage, bytesI64: Long) = PlanResource.of(
+            role, 1, PlanResourceKind.Buffer, null, null, bytesI64,
+            setOf(PlanResourceUsage.CopyDestination, usage), PlanResourceLifetime.FrameLocal, 0, prefixCountI32)
+        val data = PlanDrawDataResources(planResourceId(PlanResourceRole.VertexData, 1),
+            planResourceId(PlanResourceRole.IndexData, 1), planResourceId(PlanResourceRole.UniformData, 1))
+        val declarations = listOf(dataResource(PlanResourceRole.VertexData, PlanResourceUsage.Vertex, 32L),
+            dataResource(PlanResourceRole.IndexData, PlanResourceUsage.Index, 24L),
+            dataResource(PlanResourceRole.UniformData, PlanResourceUsage.Uniform, 256L))
+        val payload = requireNotNull(W4eNativePayloadPlan.fromClipPrefix(passes, resources + declarations,
+            extent, capabilities, data)) { "resource.w4e.clip-only-native-payload" }
+        require(capabilities.maxBindGroupsI32?.let { it >= 1 } == true &&
+            capabilities.maxBindingsPerBindGroupI32?.let { it >= 2 } == true &&
+            capabilities.maxSampledTexturesPerShaderStageI32?.let { it >= 2 } == true &&
+            capabilities.maxUniformBuffersPerShaderStageI32?.let { it >= 1 } == true &&
+            payload.uniformSlices.all { it.byteSize <= (capabilities.maxUniformBufferBindingSizeBytesI64 ?: 0L) }) {
+            "unsupported.w4e.clip-only-binding-capability"
+        }
+        resources += listOf(dataResource(PlanResourceRole.VertexData, PlanResourceUsage.Vertex, payload.vertexCapacityBytes),
+            dataResource(PlanResourceRole.IndexData, PlanResourceUsage.Index, payload.indexCapacityBytes),
+            dataResource(PlanResourceRole.UniformData, PlanResourceUsage.Uniform, payload.uniformCapacityBytes))
+        require(resources.fold(0L) { totalI64, resource -> Math.addExact(totalI64, resource.byteSize) } <= budget.maxFrameLocalBytes) {
+            "resource.w4e.clip-only-budget"
+        }
+        return W4eClipOnlyPlan(operations, extent, capabilities, budget, passes, resources, accumulator, payload)
+    }
+
     private val w4dHardSeam = W4dGeneralPathPlanCompiler(
         strokePolicyF64 = org.graphiks.math.geometry.PathStrokePolicyF64(),
         acceptsNarrowTransforms = true,
@@ -1125,4 +1209,23 @@ public class W4eClipPlanCompiler(
         private const val MAX_DRAWS: Int = 512
         private const val MAX_CLIP_ENTRIES: Int = 512
     }
+}
+
+/** Immutable, material-free W4e producer authority consumed by the W5b Point graph. */
+public class W4eClipOnlyPlan internal constructor(
+    public val operations: ClipStackNode.Operations,
+    extent: SizeI32,
+    public val capabilities: PlanCapabilitySnapshot,
+    public val budget: PlanBudget,
+    passes: List<PlanPass>,
+    resources: List<PlanResource>,
+    public val maskResource: PlanResourceId,
+    public val nativePayload: W4eNativePayloadPlan,
+) {
+    private val extentSnapshot = extent.copy()
+    private val passSnapshot = Collections.unmodifiableList(passes.toList())
+    private val resourceSnapshot = Collections.unmodifiableList(resources.toList())
+    public fun copyExtentI32(): SizeI32 = extentSnapshot.copy()
+    public fun passes(): List<PlanPass> = passSnapshot
+    public fun resources(): List<PlanResource> = resourceSnapshot
 }

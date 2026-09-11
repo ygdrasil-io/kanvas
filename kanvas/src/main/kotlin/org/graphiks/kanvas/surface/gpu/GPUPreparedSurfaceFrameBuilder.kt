@@ -431,6 +431,10 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 coreMaterialCandidates[operationIndex]?.let { candidate -> commandIds.map { it to candidate } }.orEmpty()
             }.toMap()
             val frameMaterials = W5aPreparedFrameMaterialRegistry.seal(admittedSemantics, corePlansByCommandId)
+            val pointClipCandidates = W5aPreparedFrameMaterialRegistry.capturePointClips(operations)
+            val pointClips = mapping.commandIdsByOperationIndex.flatMap { (operationIndex, commandIds) ->
+                pointClipCandidates[operationIndex]?.let { clip -> commandIds.filter(admittedSemantics::containsKey).map { it to clip } }.orEmpty()
+            }.toMap()
             val semantics = admittedSemantics.mapValues { (commandId, semantic) ->
                 val ref = frameMaterials?.refsByCommandId?.get(commandId)
                 if (ref == null) semantic else when (semantic) {
@@ -447,6 +451,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     targetBounds = request.targetBounds,
                     semanticsByCommandId = semantics,
                     w5bPointBlends = corePlansByCommandId.mapValues { it.value.blend },
+                    w5bPointClips = pointClips,
                     w5aCoreMaterialAuthority = frameMaterials?.let { materials ->
                         val refs = materials.refsByCommandId.filterKeys { commandId ->
                             (semantics[commandId] as? GPUDrawSemanticPayload.CorePrimitive)?.material is

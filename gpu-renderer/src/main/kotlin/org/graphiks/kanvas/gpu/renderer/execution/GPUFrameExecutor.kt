@@ -1427,10 +1427,14 @@ internal class GPUFrameExecutor(
             val w4ePackets = renderSteps.flatMap(GPUFrameStep.RenderPassStep::drawPackets)
                 .filter { packet -> packet.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.W4ePrepared }
             val authority = w4ePackets.firstOrNull()?.w4ePreparedFrameAuthority
-            if (w4ePackets.size != renderSteps.size || authority == null || !authority.validatesRenderSteps(
+            val pointWitness = renderSteps.flatMap { it.drawPackets }.mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }
+                .firstOrNull()?.takeIf { it.clipPrefixV4 != null }
+            val w4eSteps = if (pointWitness != null && pointWitness.validates(frame.semanticPlan))
+                renderSteps.take(requireNotNull(pointWitness.clipPrefixV4).renders.size) else renderSteps
+            if (w4ePackets.size != w4eSteps.size || authority == null || !authority.validatesRenderSteps(
                     frame.semanticPlan.frameId.value,
                     frame.semanticPlan.capabilitySeal.sealHash,
-                    renderSteps,
+                    w4eSteps,
                 )
             ) {
                 return executionDiagnostic(

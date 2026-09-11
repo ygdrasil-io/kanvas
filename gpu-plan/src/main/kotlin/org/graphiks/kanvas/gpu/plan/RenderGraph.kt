@@ -761,6 +761,7 @@ public class RenderGraph private constructor(
 
         private fun PlanDraw.clipStrategies(): List<ClipPlanStrategy> = when (this) {
             is ClippedPlanDraw -> listOf(strategy) + source.clipStrategies()
+            is W5bPointDraw -> listOfNotNull(clipOnly?.let { ClipPlanStrategy.Mask(it.maskResource) })
             else -> emptyList()
         }
 

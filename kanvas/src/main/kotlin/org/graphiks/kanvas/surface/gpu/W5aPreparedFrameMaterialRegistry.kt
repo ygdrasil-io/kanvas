@@ -30,6 +30,16 @@ internal data class W5aPreparedFrameMaterialRegistry(
     val refsByCommandId: Map<Int, MaterialPlanRef>,
 ) {
     internal companion object {
+        fun capturePointClips(operations: List<DisplayOp>): Map<Int, org.graphiks.kanvas.render.ir.ClipStackNode> =
+            operations.mapIndexedNotNull { index, operation ->
+                val clip = when (operation) {
+                    is DisplayOp.DrawPoint -> operation.clip
+                    is DisplayOp.DrawPoints -> operation.clip
+                    else -> return@mapIndexedNotNull null
+                }
+                if (clip == ClipStack.WideOpen) null else index to DisplayOpSceneAdapter.captureClip(clip)
+            }.toMap()
+
         fun captureCoreCandidates(
             operations: List<DisplayOp>,
             width: Int,
@@ -59,7 +69,7 @@ internal data class W5aPreparedFrameMaterialRegistry(
                     ?: return@forEachIndexed
                 val planned = (if (operation is DisplayOp.DrawPoint || operation is DisplayOp.DrawPoints)
                     org.graphiks.kanvas.gpu.plan.W5bCorePrimitiveGraph.normalizeSource(draw.node, targetClamp)
-                    else EffectiveMaterialPlanner.plan(draw.node))
+                    else EffectiveMaterialPlanner.plan(draw.node, targetClamp))
                     as? EffectiveMaterialPlanner.Result.Ready ?: return@forEachIndexed
                 plannedByOperationIndex[operationIndex] = planned
             }
@@ -110,7 +120,7 @@ internal data class W5aPreparedFrameMaterialRegistry(
         }
 
         private fun DisplayOp.isW5aCoreMaterialCandidate(): Boolean = when (this) {
-            is DisplayOp.DrawRect -> !paint.isStroke() && paint.blendMode == BlendMode.SRC_OVER &&
+            is DisplayOp.DrawRect -> !paint.isStroke() && paint.blendMode in setOf(BlendMode.SRC_OVER, BlendMode.SRC, BlendMode.PLUS) &&
                 paint.shader.isW5aSolidOpacity()
             is DisplayOp.DrawRRect -> !paint.isStroke() && paint.blendMode == BlendMode.SRC_OVER &&
                 paint.shader.isW5aSolidOpacity()

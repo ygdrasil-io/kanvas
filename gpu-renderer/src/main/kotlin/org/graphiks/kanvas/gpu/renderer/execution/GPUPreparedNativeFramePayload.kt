@@ -1070,6 +1070,7 @@ internal sealed interface GPUPreparedNativeScopeOperand {
                     add(GPUPreparedNativeRenderCommand.SetPipeline(source?.pipeline ?: requireNotNull(base)))
                     source?.let { add(GPUPreparedNativeRenderCommand.SetBindGroup(1, it.bindGroup)) }
                     source?.destinationGroupV3?.let { add(GPUPreparedNativeRenderCommand.SetBindGroup(2, it)) }
+                    source?.coverageGroupV4?.let { add(GPUPreparedNativeRenderCommand.SetBindGroup(3, it)) }
                 }
                 add(command)
             }

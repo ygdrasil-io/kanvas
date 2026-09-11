@@ -309,7 +309,16 @@ object GPUFramePlanner {
             render.drawPackets.any { packet -> packet.role == GPUDrawPacketRole.W4ePrepared }
         }
         if (w4eRenders.isEmpty()) return null
-        if (w4eRenders.size != renders.size || w4eRenders.any { render ->
+        val pointWitness = renders.flatMap { it.drawPackets }.mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }
+            .firstOrNull()?.takeIf { it.clipPrefixV4 != null }
+        val exactPointPrefix = pointWitness?.let { witness ->
+            val prefix = requireNotNull(witness.clipPrefixV4)
+            renders.take(prefix.renders.size) == w4eRenders && prefix.renders.map { it.taskId } == w4eRenders.map { it.taskId } &&
+                w4eRenders.all { it.drawPackets.singleOrNull()?.w4ePreparedFrameAuthority === prefix.authority } &&
+                renders.drop(prefix.renders.size).flatMap { it.drawPackets }.all { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 === witness } &&
+                taskList.tasks.filterIsInstance<GPUTask.Readback>().size == 1
+        } == true
+        if ((!exactPointPrefix && w4eRenders.size != renders.size) || w4eRenders.any { render ->
                 render.drawPackets.singleOrNull()?.role != GPUDrawPacketRole.W4ePrepared
             }
         ) {
