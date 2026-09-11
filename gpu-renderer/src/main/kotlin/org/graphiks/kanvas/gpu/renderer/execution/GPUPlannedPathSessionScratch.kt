@@ -206,6 +206,12 @@ internal class GPUPlannedPathSessionScratch private constructor(
     ): Boolean = packetAuthority(packet, structuralPipelineKey, renderPipelineKey)
 
     companion object {
+        fun from(scratch: org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath,
+            w5b: org.graphiks.kanvas.gpu.renderer.passes.W5bPreparedFrameWitnessV3): GPUPlannedPathSessionScratch = when (scratch) {
+                is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.PathFill -> from(scratch.authority, w5b)
+                is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.PathStroke -> from(scratch.authority, w5b)
+            }
+
         fun from(scratch: W4cSessionScratchV1,
             w5b: org.graphiks.kanvas.gpu.renderer.passes.W5bPreparedFrameWitnessV3? = null): GPUPlannedPathSessionScratch =
             GPUPlannedPathSessionScratch(
@@ -275,7 +281,8 @@ internal class GPUPlannedPathSessionScratch private constructor(
                 },
             )
 
-        fun from(scratch: W4dSessionScratchV1): GPUPlannedPathSessionScratch =
+        fun from(scratch: W4dSessionScratchV1,
+            w5b: org.graphiks.kanvas.gpu.renderer.passes.W5bPreparedFrameWitnessV3? = null): GPUPlannedPathSessionScratch =
             GPUPlannedPathSessionScratch(
                 lane = Lane.W4d,
                 planId = scratch.planId,
@@ -334,7 +341,9 @@ internal class GPUPlannedPathSessionScratch private constructor(
                     )
                 },
                 authorityOwner = { authority ->
-                    authority.w4dSessionScratch === scratch &&
+                    (if (w5b != null) authority.w5bFrameWitnessV3 === w5b &&
+                        w5b.geometryLanes.any { it is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.PathStroke && it.authority === scratch }
+                    else authority.w4dSessionScratch === scratch) &&
                         authority.w3SessionScratch == null && authority.w4aSessionScratch == null &&
                         authority.w4bSessionScratch == null && authority.w4cSessionScratch == null
                 },

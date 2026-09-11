@@ -640,10 +640,10 @@ public class PathStrokeDraw private constructor(
     public val mode: PathStrokeDrawMode,
     public val styleF64: PathStrokeStyleF64,
     scissorI32: RectI32,
+    override public val blend: BlendPlan = BlendPlan.SrcOver,
 ) : PathDraw {
     override public val coverage: CoveragePlan = CoveragePlan.FullOrScissor
     override public val sample: SamplePlan = SamplePlan.SingleSample
-    override public val blend: BlendPlan = BlendPlan.SrcOver
     private val geometrySnapshotF32: PathStrokeGeometryF32 = geometryF32
     private val scissorSnapshotI32 = scissorI32.copy()
     override val strategy: PathFillStrategy = pathFillStrategy(geometryF32.copyFillGeometryF32())
@@ -685,16 +685,21 @@ public class PathStrokeDraw private constructor(
             styleF64: PathStrokeStyleF64 = PathStrokeStyleF64(
                 PathStrokeWidthF64.Hairline, PathStrokeCap.Butt, PathStrokeJoin.Miter, 4.0,
             ),
+            blend: BlendPlan = BlendPlan.SrcOver,
         ): PathStrokeDraw {
             require(commandIndexI32 >= 0) { "Command index must not be negative" }
             require(!scissorI32.isEmpty) { "Path stroke scissor must be non-empty" }
             pathFillStrategy(geometryF32.copyFillGeometryF32())
             return PathStrokeDraw(
-                commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material), geometryF32, mode, styleF64, scissorI32,
+                commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material), geometryF32, mode, styleF64, scissorI32, blend,
             )
         }
     }
 }
+
+public fun PathStrokeDraw.withMaterialRef(material: MaterialPlanRef): PathStrokeDraw = PathStrokeDraw.ofMaterial(
+    commandIndex, material, copyGeometryF32(), copyScissorI32(), mode, styleF64, blend,
+)
 
 private fun pathFillStrategy(geometryF32: PathFillGeometryF32): PathFillStrategy = when {
     geometryF32.copyDirectTriangleF32OrNull() != null && geometryF32.copyStencilEdgeFanF32OrNull() == null ->

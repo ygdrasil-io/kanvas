@@ -588,7 +588,7 @@ internal class GPUFramePreflighter(
             )
         }
         val w5bPathValidation = w5b?.takeIf { witness -> witness.geometryLanes.any {
-            it is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.PathFill
+            it is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath
         } }?.let { validateW5bPathGeometry(framePlan, it) }
         val pureValidation = pureValidation(
             framePlan,
@@ -3020,8 +3020,8 @@ internal class GPUFramePreflighter(
         val directRoutes = linkedMapOf<GPUCorePrimitiveDirectNativeFrameRouteKey, GPUCorePrimitiveDirectNativeRoute.Accepted>()
         val pathRoutes = linkedMapOf<GPUCorePrimitivePathStencilNativeFrameRouteKey, GPUCorePrimitivePathStencilNativeRoute.AcceptedPair>()
         val unifiedRoutes = linkedMapOf<GPUCorePrimitiveNativeScopeFrameRouteKey, GPUCorePrimitiveNativeScopeRouteSeal.Routes>()
-        witness.geometryLanes.filterIsInstance<org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.PathFill>().forEach { lane ->
-            val scratch = GPUPlannedPathSessionScratch.from(lane.authority, witness)
+        witness.geometryLanes.filterIsInstance<org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath>().forEach { lane ->
+            val scratch = GPUPlannedPathSessionScratch.from(lane, witness)
             val packets = witness.packetsFor(lane)
             require(scratch.uniformPlan.totalBytes in 1L..Int.MAX_VALUE.toLong())
             val bytes = ByteArray(scratch.uniformPlan.totalBytes.toInt())

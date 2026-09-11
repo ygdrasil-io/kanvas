@@ -1101,9 +1101,9 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     })
                 val lane = W5bNativeLaneV3(witness, scratch, buffer)
                 val result = when (scratch) {
-                    is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.PathFill ->
+                    is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath ->
                         materializePlannedPathSessionScratch(framePlan, laneEncoder, resources, generationSeal, selected,
-                            GPUPlannedPathSessionScratch.from(scratch.authority, witness), w5bLane = lane)
+                            GPUPlannedPathSessionScratch.from(scratch, witness), w5bLane = lane)
                     else -> materializeW3SessionScratch(framePlan, laneEncoder, resources, generationSeal,
                         selected.first(), null, w5b = witness, w5bLane = lane)
                 }
@@ -6432,7 +6432,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.AnalyticRect -> packW4aSessionGeometry(scratch.authority)
                 is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.AnalyticRRect -> packW4bSessionGeometry(scratch.authority)
                 is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.Direct -> packCorePrimitiveFrameGeometry(routes)
-                is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.PathFill -> error("Path geometry requires the sealed path packer")
+                is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath -> error("Path geometry requires the sealed path packer")
             }
         } catch (failure: Throwable) {
             return refused(
@@ -6453,7 +6453,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.Direct ->
                     semantic.payloadRef.uniformBlock?.bytes?.map(Int::toByte)?.toByteArray()
                         ?: return refused("invalid.native-core-primitive.w3-uniform", "W3 packet uniform payload is missing.")
-                is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.PathFill -> error("Path uniform slots require the sealed path packer")
+                is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath -> error("Path uniform slots require the sealed path packer")
             }
             val slot = scratch.uniformPlan.slots[index]
             if (bytes.size.toLong() != scratch.uniformPayloadBytesI64 || slot.payloadBytes != scratch.uniformPayloadBytesI64 ||

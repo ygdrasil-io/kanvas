@@ -10,6 +10,7 @@ import org.graphiks.kanvas.gpu.plan.MaterialProgramPlan
 import org.graphiks.kanvas.gpu.plan.MaterialBindingPlan
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.StrokeCap
@@ -37,8 +38,10 @@ class W5bBlendSurfacePixelTest {
     @Test fun `geometry RRect retains fixed DST and destination blends`() = geometryBlends(GeometryFamily.RRect)
     @Test fun `geometry direct Path retains fixed DST and destination blends`() = geometryBlends(GeometryFamily.DirectPath)
     @Test fun `geometry stencil Path retains fixed DST and destination blends`() = geometryBlends(GeometryFamily.StencilPath)
+    @Test fun `geometry stroke retains fixed DST and destination blends`() = geometryBlends(GeometryFamily.Stroke)
+    @Test fun `geometry hairline retains fixed DST and destination blends`() = geometryBlends(GeometryFamily.Hairline)
 
-    private enum class GeometryFamily { Rect, FractionalRect, RRect, DirectPath, StencilPath }
+    private enum class GeometryFamily { Rect, FractionalRect, RRect, DirectPath, StencilPath, Stroke, Hairline }
 
     /** Catches lost blend/coverage, stale destination, reordered draws and mutable geometry reuse. */
     private fun geometryBlends(family: GeometryFamily) {
@@ -72,19 +75,23 @@ class W5bBlendSurfacePixelTest {
                     when (family) {
                         GeometryFamily.DirectPath -> { moveTo(-1f, -1f); lineTo(5f, -1f); lineTo(-1f, 5f); close() }
                         GeometryFamily.StencilPath -> { moveTo(-1f, -1f); lineTo(5f, -1f); lineTo(5f, 5f); lineTo(2f, 2f); lineTo(-1f, 5f); close() }
-                        else -> Unit
+                        else -> { moveTo(-1f, .5f); lineTo(5f, .5f) }
                     }
                 }
                 fun mutate() {
                     rect.offset(8f, 8f)
                     rounded.rect.offset(8f, 8f)
-                    path.addRect(RectF32.ofLTRB(0f, 3f, 4f, 4f))
+                    if (family in setOf(GeometryFamily.Stroke, GeometryFamily.Hairline)) {
+                        path.moveTo(-1f, 3.5f); path.lineTo(5f, 3.5f)
+                    } else path.addRect(RectF32.ofLTRB(0f, 3f, 4f, 4f))
                 }
                 if (mutateBefore) mutate()
                 val recorder = PictureRecorder()
                 val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f))
                 val sourcePaint = Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), opacity),
-                    blendMode = mode, antiAlias = family in setOf(GeometryFamily.FractionalRect, GeometryFamily.RRect))
+                    blendMode = mode, antiAlias = family in setOf(GeometryFamily.FractionalRect, GeometryFamily.RRect),
+                    style = if (family in setOf(GeometryFamily.Stroke, GeometryFamily.Hairline)) PaintStyle.STROKE else PaintStyle.FILL,
+                    strokeWidth = if (family == GeometryFamily.Hairline) 0f else 1f)
                 fun source() = when (family) {
                     GeometryFamily.Rect, GeometryFamily.FractionalRect -> canvas.drawRect(rect, sourcePaint)
                     GeometryFamily.RRect -> canvas.drawRRect(rounded, sourcePaint)
@@ -104,7 +111,7 @@ class W5bBlendSurfacePixelTest {
                 WgslFloatEnvelopeV1Oracle.assertAdmits(background, pixel(recordGeometry(true)))
                 if (family in setOf(GeometryFamily.Rect, GeometryFamily.FractionalRect, GeometryFamily.RRect))
                     WgslFloatEnvelopeV1Oracle.assertAdmits(background, pixel(recordGeometry(false, mutateBefore = true)))
-                if (family in setOf(GeometryFamily.DirectPath, GeometryFamily.StencilPath)) {
+                if (family in setOf(GeometryFamily.DirectPath, GeometryFamily.StencilPath, GeometryFamily.Stroke, GeometryFamily.Hairline)) {
                     WgslFloatEnvelopeV1Oracle.assertAdmits(background, pixel(recordGeometry(false), 52))
                     WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixel(recordGeometry(false, mutateBefore = true), 52))
                 }

@@ -42,7 +42,7 @@ internal object W5bDestinationGraphSealer {
         }
         require(destinationCountI32 > 0 || capabilityId in setOf(W5bCorePrimitiveGraph.CAPABILITY_ID,
             W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID, W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID,
-            W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID))
+            W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID))
         val initialClearI32 = if (draws.isEmpty() || draws.first().blend is BlendPlan.DestinationReadV1) 1 else 0
         val stencilCountI32 = draws.count { it is PathDraw && it.strategy == PathFillStrategy.StencilCover }
         val passCountI32 = Math.addExact(Math.addExact(draws.size, destinationCountI32), initialClearI32 + stencilCountI32 + 1 + (clip?.passes()?.size ?: 0))
@@ -118,6 +118,9 @@ internal object W5bDestinationGraphSealer {
                     is PathFillDraw -> PathFillDraw.ofMaterial(draw.commandIndex,
                         (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref,
                         draw.copyGeometryF32(), draw.strategy, draw.copyScissorI32(), sealed)
+                    is PathStrokeDraw -> PathStrokeDraw.ofMaterial(draw.commandIndex,
+                        (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref, draw.copyGeometryF32(),
+                        draw.copyScissorI32(), draw.mode, draw.styleF64, sealed)
                     else -> error("unsupported.w5b.destination-geometry")
                 })
             } else render(draw)

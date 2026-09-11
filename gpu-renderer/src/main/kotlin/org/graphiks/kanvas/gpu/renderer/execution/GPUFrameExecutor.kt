@@ -1407,13 +1407,13 @@ internal class GPUFrameExecutor(
         if (composite != null && !composite.validates(frame.semanticPlan, allRenders)) return executionDiagnostic(
             "invalid.native-frame-payload.w5a-composite", "Composite execution requires its exact lane and packet authority.")
         val w5bGeometry = allRenders.flatMap { it.drawPackets }.mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }
-            .firstOrNull()?.takeIf { it.geometryLanes.any { lane -> lane is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.PathFill } }
+            .firstOrNull()?.takeIf { it.geometryLanes.any { lane -> lane is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath } }
         if (w5bGeometry != null && !w5bGeometry.validates(frame.semanticPlan)) return executionDiagnostic(
             "invalid.native-frame-payload.w5b-path-authority", "W5b path execution lost its exact geometry/color frame authority.")
         val renders = frame.semanticPlan.steps.mapIndexedNotNull { stepIndex, step ->
             (step as? GPUFrameStep.RenderPassStep)?.let { render -> Triple(stepIndex, render, render.drawPackets.singleOrNull()) }
         }.filter { (_, render, _) -> if (w5bGeometry != null) render.drawPackets.isNotEmpty() && render.drawPackets.all {
-            w5bGeometry.scratchFor(it) is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.PathFill
+            w5bGeometry.scratchFor(it) is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath
         } else composite == null || render.drawPackets.all {
             it.corePrimitivePreparedAuthority?.let { authority -> authority.w4cSessionScratch != null || authority.w4dSessionScratch != null } == true
         } }
@@ -1645,7 +1645,7 @@ internal class GPUFrameExecutor(
             "A planned $laneName frame requires one consumed native payload before encoding.",
         )
         val plannedScratch: Any = if (w5bGeometry != null) {
-            w5bGeometry.geometryLanes.filterIsInstance<org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.PathFill>().first().authority
+            w5bGeometry.geometryLanes.filterIsInstance<org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath>().first().nativeAuthority
         } else if (hasW4d) {
             renders.mapNotNull { (_, _, packet) ->
                 packet?.corePrimitivePreparedAuthority?.w4dSessionScratch
@@ -1666,11 +1666,11 @@ internal class GPUFrameExecutor(
                 "Each planned $laneName render scope must contain exactly one packet.",
             )
             val packetScratch = exactPacket.corePrimitivePreparedAuthority?.let { authority ->
-                if (w5bGeometry != null) (w5bGeometry.scratchFor(exactPacket) as org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.PathFill).authority
+                if (w5bGeometry != null) (w5bGeometry.scratchFor(exactPacket) as org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath).nativeAuthority
                 else if (composite != null) authority.w4dSessionScratch ?: authority.w4cSessionScratch
                 else if (hasW4d) authority.w4dSessionScratch else authority.w4cSessionScratch
             }
-            val expectedScratch = if (w5bGeometry != null) (w5bGeometry.scratchFor(exactPacket) as org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.PathFill).authority
+            val expectedScratch = if (w5bGeometry != null) (w5bGeometry.scratchFor(exactPacket) as org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath).nativeAuthority
             else if (composite == null) plannedScratch else composite.lanes.singleOrNull { lane ->
                 lane.packets.any { it === exactPacket }
             }?.packets?.firstOrNull()?.corePrimitivePreparedAuthority?.let { authority ->

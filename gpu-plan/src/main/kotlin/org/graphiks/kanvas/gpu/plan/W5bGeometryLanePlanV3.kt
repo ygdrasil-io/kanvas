@@ -34,7 +34,8 @@ internal fun issueW5bNativeComposite(graphs: List<RenderGraph>): RenderGraph {
     val admitted = setOf(W3SolidRectPlanCompiler.W5A_CAPABILITY_ID,
         W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID, W4bAnalyticRRectPlanCompiler.CAPABILITY_ID,
         W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID, W4cPathFillPlanCompiler.CAPABILITY_ID,
-        W4cPathFillPlanCompiler.W5B_CAPABILITY_ID)
+        W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W4dPathStrokePlanCompiler.CAPABILITY_ID,
+        W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID)
     require(graphs.all { it.capabilityId in admitted && it.targetExtent == first.targetExtent &&
         it.capabilities == first.capabilities && it.budget == first.budget && it.colorFormat == first.colorFormat })
     val activeGraphs = graphs.filter { it.visualCommandCount > 0 }
@@ -88,6 +89,7 @@ internal fun issueW5bNativeComposite(graphs: List<RenderGraph>): RenderGraph {
                     draw.copyRasterBounds(), draw.copyScissor(), draw.blend)
                 is AnalyticRRectDraw -> draw.withMaterialRef(ref)
                 is PathFillDraw -> draw.withMaterialRef(ref)
+                is PathStrokeDraw -> draw.withMaterialRef(ref)
                 else -> error("Unsupported native W5b composite geometry")
             }
             dataByCommand[draw.commandIndex] = data

@@ -102,6 +102,39 @@ internal class W5bNativeGeometryGraphLowerer {
                     packets += built.map { it.packet }
                     scratches += W5bGeometryScratchV3.PathFill(scratch, built.map { it.packet }, built.map { it.structuralPipelineKey })
                 }
+                W4dPathStrokePlanCompiler.CAPABILITY_ID, W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID -> {
+                    val paths = draws.map { it as PathDraw }
+                    val passes = graph.passes().filter { pass -> when (pass) {
+                        is PlanPass.RenderPass -> pass.draws().singleOrNull()?.commandIndex in commands
+                        is PlanPass.StencilGeometryProducerV3 -> pass.commandIndexI32 in commands
+                        is PlanPass.StencilCover -> pass.draw.commandIndex in commands
+                        else -> false
+                    } }
+                    val builder = W4dPathStrokeGraphLowerer()
+                    val built = passes.map { builder.w5bPacket(it, paths, table, bounds) }
+                    val footprint = (PathStrokePlanBudget.calculate(graph.targetExtent, paths.map { when (val geometry = it.copyPathGeometry()) {
+                        is PathDrawGeometry.Fill -> geometry.valueF32
+                        is PathDrawGeometry.Stroke -> geometry.valueF32.copyFillGeometryF32()
+                        else -> error("W4d keeps only its fill or stroke geometry")
+                    } },
+                        graph.capabilities, graph.budget, usesW5aMaterialContract = true) as PathStrokePlanBudgetResult.WithinBudget).footprint
+                    require(listOf(resource(data.vertex).byteSize, resource(data.index).byteSize, resource(data.uniform).byteSize) ==
+                        listOf(footprint.vertexCapacityBytes, footprint.indexCapacityBytes, footprint.uniformCapacityBytes))
+                    var cursorI32 = 0
+                    val visuals = paths.map { draw ->
+                        val start = cursorI32
+                        cursorI32 += if (draw.strategy == PathFillStrategy.StencilCover) 2 else 1
+                        W4dPathStrokeGraphLowerer.W4dVisualDraw(draw, start,
+                            passes.filterIsInstance<PlanPass.StencilCover>().singleOrNull { it.draw.commandIndex == draw.commandIndex }?.atomicGroup?.value)
+                    }
+                    val facts = W4dPathStrokeGraphLowerer.W4dGraph(W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID,
+                        targetResource, stagingResource, resource(data.vertex), resource(data.index), resource(data.uniform),
+                        lane.depthStencil?.let(::resource), passes, graph.passes().last() as PlanPass.ReadbackPass, visuals, footprint, table)
+                    val scratch = requireNotNull(builder.sealScratch(facts, built, graph.id.value, W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, target, staging, bounds,
+                        lane.depthStencil, seal.sealHash, request.deviceGeneration.value, maxBuffer, maxDynamic, graph))
+                    packets += built.map { it.packet }
+                    scratches += W5bGeometryScratchV3.PathStroke(scratch, built.map { it.packet }, built.map { it.structuralPipelineKey })
+                }
                 else -> error("W5b native geometry lane is not yet lowered: ${lane.capabilityId}")
             }
         }

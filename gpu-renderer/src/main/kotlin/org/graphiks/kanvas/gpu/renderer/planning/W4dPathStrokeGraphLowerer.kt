@@ -119,6 +119,26 @@ import org.graphiks.math.color.ColorF32
 
 /** Lowers only the authenticated W4d path-draw graph; it never re-enters Scene IR or legacy tessellation. */
 internal class W4dPathStrokeGraphLowerer {
+    internal fun w5bPacket(pass: PlanPass, draws: List<PathDraw>, table: MaterialPlanTable,
+        bounds: GPUPixelBounds): W4dBuiltPass {
+        val command = when (pass) {
+            is PlanPass.RenderPass -> pass.draws().single().commandIndex
+            is PlanPass.StencilGeometryProducerV3 -> pass.commandIndexI32
+            is PlanPass.StencilCover -> pass.draw.commandIndex
+            else -> error("Not a W5b path geometry pass")
+        }
+        val draw = draws.single { it.commandIndex == command }
+        val producer = pass is PlanPass.StencilGeometryProducerV3
+        if (producer) require(pass.copyGeometry() == draw.copyPathGeometry() && pass.copyScissorI32() == draw.copyScissorI32())
+        val clip = clipFor(draw, bounds)
+        return packet(draw, draws.indexOf(draw), pass.id.value,
+            if (producer) GPUDrawPacketRole.PathStencilProducer else if (pass is PlanPass.StencilCover)
+                GPUDrawPacketRole.PathStencilCover else GPUDrawPacketRole.Shading,
+            if (draw.strategy == PathFillStrategy.StencilCover) GPUCorePrimitiveCoverageMode.Stencil1x else GPUCorePrimitiveCoverageMode.FullOrScissor,
+            if (producer) GPUClipCoveragePlan.NoClip else clip.coverage,
+            if (producer) GPUClipExecutionPlan.NoClip else clip.execution, table, bounds, w5b = true)
+    }
+
     fun lower(request: GpuPlanLoweringRequest): GpuPlanLoweringResult = try {
         if (!(W4dPathStrokePlanCompiler.isHistoricalCapabilityId(request.graph.capabilityId) ||
                 W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(request.graph.capabilityId))) {
@@ -651,6 +671,7 @@ internal class W4dPathStrokeGraphLowerer {
         clipExecution: GPUClipExecutionPlan,
         materialPlanTable: MaterialPlanTable?,
         targetBounds: GPUPixelBounds,
+        w5b: Boolean = false,
     ): W4dBuiltPass {
         val geometry = draw.copyFillGeometryF32()
         val scissor = draw.copyScissorI32()
@@ -669,6 +690,8 @@ internal class W4dPathStrokeGraphLowerer {
                     ?: error("W5 material authority is invalid for a color-writing path phase")
             else -> error("W4d emits only direct and path-stencil roles")
         }
+        val blend = if (w5b && role != GPUDrawPacketRole.PathStencilProducer) W5bBlendPlanLowerer.lower(draw.blend)
+            else canonicalSolidRectSrcOverBlendPlan()
         val semantic = GPUCorePrimitivePayloadGatherer().gatherPlannedW4dSemantic(
             GPUCorePrimitivePayloadInput(
                 commandIdValue = draw.commandIndex,
@@ -681,12 +704,11 @@ internal class W4dPathStrokeGraphLowerer {
                 scissorBounds = plannedScissor,
                 clipCoveragePlan = clipCoverage,
                 clipExecutionPlanIdentity = clipExecution.canonicalIdentity(),
-                blendPlanIdentity = canonicalSolidRectSrcOverBlendPlan().canonicalIdentity(),
+                blendPlanIdentity = blend.canonicalIdentity(),
                 frameProvenance = GPUFrameProvenance.None,
                 coverageMode = coverageMode,
             ),
         )
-        val blend = canonicalSolidRectSrcOverBlendPlan()
         val structuralKey = when (role) {
             GPUDrawPacketRole.Shading -> corePrimitiveRenderPipelineStructuralKey(
                 semantic,
@@ -810,7 +832,7 @@ internal class W4dPathStrokeGraphLowerer {
         }
     }
 
-    private fun sealScratch(
+    internal fun sealScratch(
         graph: W4dGraph,
         builtPasses: List<W4dBuiltPass>,
         planId: String,
@@ -823,8 +845,9 @@ internal class W4dPathStrokeGraphLowerer {
         deviceGeneration: Long,
         maxBufferSize: Long,
         maxDynamicUniformBuffers: Long,
+        w5bGraph: RenderGraph? = null,
     ): W4dSessionScratchV1? {
-        val materialV2 = W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)
+        val materialV2 = W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId) || w5bGraph != null
         val payloads = graph.visualDraws.flatMap { visual ->
             val passCount = if (materialV2 && visual.draw.strategy == PathFillStrategy.StencilCover) 2 else 1
             (0 until passCount).map { passOffset ->
@@ -907,7 +930,8 @@ internal class W4dPathStrokeGraphLowerer {
                 renderPassIds = graph.renderPasses.map(PlanPass::id),
                 readbackPassId = graph.readback.id,
                 resourceLastPassIndexExclusive = graph.renderPasses.size + 1,
-                depthStencilFirstPassIndex = graph.depthStencil?.firstPassIndex,
+                depthStencilFirstPassIndex = if (w5bGraph != null && graph.depthStencil != null)
+                    graph.renderPasses.indexOfFirst { it is PlanPass.StencilGeometryProducerV3 } else graph.depthStencil?.firstPassIndex,
                 draws = draws,
                 uniformPlan = uniformPlan,
                 uniformStrideBytes = graph.footprint.uniformStrideBytes,
@@ -921,6 +945,7 @@ internal class W4dPathStrokeGraphLowerer {
                 poolCapacities = poolCapacities,
                 maxBufferSize = maxBufferSize,
                 maxDynamicUniformBuffersPerPipelineLayout = maxDynamicUniformBuffers,
+                w5bGraph = w5bGraph,
             )
         } catch (_: IllegalArgumentException) {
             null
@@ -1044,7 +1069,7 @@ internal class W4dPathStrokeGraphLowerer {
 
     private fun Long.isPositivePowerOfTwo(): Boolean = this > 0L && this and (this - 1L) == 0L
 
-    private data class W4dGraph(
+    internal data class W4dGraph(
         val capabilityId: String,
         val target: PlanResource,
         val staging: PlanResource,
@@ -1067,13 +1092,13 @@ internal class W4dPathStrokeGraphLowerer {
         is PlanDrawMaterialAuthority.MaterialV1 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }
     }
 
-    private data class W4dVisualDraw(
+    internal data class W4dVisualDraw(
         val draw: PathDraw,
         val firstPassIndex: Int,
         val atomicGroupId: String?,
     )
 
-    private data class W4dBuiltPass(
+    internal data class W4dBuiltPass(
         val packet: GPUDrawPacket,
         val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
     )

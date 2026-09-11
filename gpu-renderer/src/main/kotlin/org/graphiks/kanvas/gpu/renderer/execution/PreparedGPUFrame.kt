@@ -1483,7 +1483,7 @@ internal class PreparedGPUFrame(
                 }
                 val w5bPathWitness = step.drawPackets.singleOrNull()?.let { packet ->
                     packet.corePrimitivePreparedAuthority?.w5bFrameWitnessV3?.takeIf {
-                        it.scratchFor(packet) is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.PathFill
+                        it.scratchFor(packet) is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath
                     }
                 }
                 if (w5bPathWitness != null) require(w5bPathWitness.validates(semanticPlan)) {

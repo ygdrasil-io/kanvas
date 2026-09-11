@@ -67,15 +67,16 @@ public class RenderGraph private constructor(
         internal fun issueW5bGeometry(graph: RenderGraph, lanes: List<W5bGeometryLanePlanV3> = emptyList()): RenderGraph {
             require(graph.capabilityId in setOf(W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID,
                 W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID, W4cPathFillPlanCompiler.W5B_CAPABILITY_ID,
+                W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID,
                 W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID))
             require(graph.passes().filterIsInstance<PlanPass.RenderPass>().flatMap { it.draws() }.all {
-                (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw) &&
+                (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw || it is PathStrokeDraw) &&
                     it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1
             })
             return RenderGraph(graph.id, graph.capabilityId, graph.targetExtent, graph.colorFormat, graph.capabilities,
                 graph.budget, graph.visualCommandCount, graph.resources(), graph.passes(), graph.dependencies(),
                 graph.peakFrameLocalBytes, null, null, null, null, graph.materialPlanTable, w5bGeometryIssued = true,
-                w5bGeometryLanes = if (lanes.isEmpty() && graph.capabilityId == W4cPathFillPlanCompiler.W5B_CAPABILITY_ID && graph.visualCommandCount > 0) {
+                w5bGeometryLanes = if (lanes.isEmpty() && graph.capabilityId in setOf(W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID) && graph.visualCommandCount > 0) {
                     val colors = visualDraws(graph.passes())
                     listOf(W5bGeometryLanePlanV3(graph, colors.map { it.commandIndex },
                         PlanDrawDataResources(graph.resources().single { it.role == PlanResourceRole.VertexData }.id,
@@ -194,13 +195,13 @@ public class RenderGraph private constructor(
                     colorFormat,
                     visualCommandCount,
                 )
-            } else if (capabilityId in setOf(W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID)) {
+            } else if (capabilityId in setOf(W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID)) {
                 validateW5bGeometryPasses(passes, resourcesById, visualCommandCount)
             } else {
                 validateStencilAtomicContracts(passes, dependencies, resources, resourcesById, capabilities, targetExtent)
             }
             validateVisualCommandOrder(passes)
-            if (capabilityId !in setOf(W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID)) validatePathDrawContracts(
+            if (capabilityId !in setOf(W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID)) validatePathDrawContracts(
                 passes,
                 dependencies,
                 resources,
