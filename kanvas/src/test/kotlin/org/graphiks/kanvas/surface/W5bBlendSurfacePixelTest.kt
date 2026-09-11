@@ -24,6 +24,9 @@ import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.CornerRadiiF32
+import org.graphiks.kanvas.types.Mesh
+import org.graphiks.kanvas.types.VertexMode
+import org.graphiks.kanvas.types.Vertices
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertAll
@@ -32,6 +35,102 @@ import kotlin.test.assertTrue
 
 class W5bBlendSurfacePixelTest {
     @AfterEach fun disposeGpuRuntime() = GPUBackendRuntimeFactory.dispose()
+
+    @Test fun `prepared uncolored Vertices and Mesh no program retain fixed and DST blends`() =
+        preparedUncoloredVerticesBlends(listOf(BlendMode.DST_OUT, BlendMode.DST))
+
+    @Test fun `prepared uncolored Vertices and Mesh no program retain destination blends and capture`() =
+        preparedUncoloredVerticesBlends(listOf(BlendMode.DIFFERENCE))
+
+    private fun preparedUncoloredVerticesBlends(modes: List<BlendMode>) {
+        assertAll(PreparedVertexFamily.entries.flatMap { family ->
+            modes.map { mode -> {
+                val opacityF32 = if (mode == BlendMode.DIFFERENCE) .45f else .5f
+                val background = W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, 1f)
+                val source = solidSource(ColorF32.of(1f, 1f, 1f, 1f), opacityF32)
+                val destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(background))
+                val expected = when (mode) {
+                    BlendMode.DST -> background
+                    // Opaque endpoint green multiplied by the binary-exact inverse source alpha.
+                    BlendMode.DST_OUT -> W5aSolidOpacityCpuOracle.draw(
+                        ColorARGB.Green,
+                        1f - opacityF32,
+                    )
+                    else -> WgslFloatEnvelopeV1Oracle.drawDestination(
+                        source,
+                        MaterialPlanRef(1),
+                        destination,
+                        mode,
+                    )
+                }
+                if (mode != BlendMode.DST) {
+                    assertDisjoint(
+                        expected,
+                        WgslFloatEnvelopeV1Oracle.sourceOverExclusion(
+                            source,
+                            MaterialPlanRef(1),
+                            destination,
+                        ),
+                    )
+                    assertDisjoint(
+                        expected,
+                        WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+                            (background as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels,
+                        ),
+                    )
+                }
+
+                fun pixel(reverse: Boolean): UByteArray {
+                    val positions = mutableListOf(
+                        Point2F32(-1f, -1f),
+                        Point2F32(5f, -1f),
+                        Point2F32(-1f, 5f),
+                    )
+                    val indices = mutableListOf(0, 1, 2)
+                    val vertices = Vertices(VertexMode.TRIANGLES, positions, indices = indices)
+                    val recorder = PictureRecorder()
+                    val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f))
+                    fun sourceDraw() {
+                        val paint = Paint(
+                            shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), opacityF32),
+                            blendMode = if (family == PreparedVertexFamily.Vertices) mode else BlendMode.SRC_OVER,
+                            antiAlias = false,
+                        )
+                        when (family) {
+                            PreparedVertexFamily.Vertices -> canvas.drawVertices(vertices, paint)
+                            PreparedVertexFamily.MeshNoProgram -> canvas.drawMesh(
+                                Mesh(vertices, bounds = RectF32.ofLTRB(-1f, -1f, 5f, 5f)),
+                                paint,
+                                mode,
+                            )
+                        }
+                    }
+                    fun destinationDraw() = canvas.drawRect(
+                        RectF32.ofLTRB(0f, 0f, 4f, 4f),
+                        Paint(shader = Shader.SolidColor(ColorARGB.Green), antiAlias = false),
+                    )
+                    if (reverse) {
+                        sourceDraw()
+                        destinationDraw()
+                    } else {
+                        destinationDraw()
+                        sourceDraw()
+                    }
+                    val picture = recorder.finishRecordingAsPicture()
+                    positions.indices.forEach { index -> positions[index] = Point2F32(10f + index, 10f) }
+                    indices[0] = 2
+                    return Surface(4, 4).also { surface ->
+                        surface.canvas { picture.playback(this) }
+                    }.render().pixels.copyOfRange(0, 4)
+                }
+
+                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixel(reverse = false))
+                if (mode != BlendMode.DST) {
+                    WgslFloatEnvelopeV1Oracle.assertAdmits(background, pixel(reverse = true))
+                }
+            } }
+        })
+    }
 
 
     @Test fun `geometry Rect retains fixed DST and destination blends`() = geometryBlends(GeometryFamily.Rect)
@@ -509,6 +608,8 @@ class W5bBlendSurfacePixelTest {
     }
 
     private enum class GeometryFamily { Rect, FractionalRect, RRect, DirectPath, StencilPath, Stroke, Hairline }
+
+    private enum class PreparedVertexFamily { Vertices, MeshNoProgram }
 
     /** Catches lost blend/coverage, stale destination, reordered draws and mutable geometry reuse. */
     private fun geometryBlends(family: GeometryFamily, noOpOnly: Boolean = false) {

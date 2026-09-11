@@ -10,8 +10,8 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 
 /** Renderer adapter: lowers a sealed W5b plan and never classifies a draw. */
-internal object W5bBlendPlanLowerer {
-    fun lower(plan: BlendPlan): GPUBlendPlan = when (plan) {
+public object W5bBlendPlanLowerer {
+    public fun lower(plan: BlendPlan): GPUBlendPlan = when (plan) {
         BlendPlan.LegacySrcOverV1 -> legacySrcOver()
         BlendPlan.NoOpV1 -> GPUBlendPlan.NoOp(GPUBlendMode.DST, "sealed-w5b-dst-noop")
         is BlendPlan.FixedFunctionV1 -> GPUBlendPlan.FixedFunctionBlend(

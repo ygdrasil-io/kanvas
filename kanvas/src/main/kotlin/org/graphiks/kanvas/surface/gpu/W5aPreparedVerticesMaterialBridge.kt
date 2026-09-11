@@ -4,7 +4,6 @@ import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.gpu.plan.EffectiveMaterialPlanner
-import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.render.ir.DisplayOpSceneAdapter
 import org.graphiks.kanvas.render.ir.SceneCaptureResult
@@ -52,7 +51,13 @@ internal class W5aPreparedVerticesMaterialBridge private constructor(
             ?: return refused("capture_shape")
         return when (val planned = EffectiveMaterialPlanner.plan(draw.node)) {
             is EffectiveMaterialPlanner.Result.Ready ->
-                Result.Ready(GPUPreparedVerticesMaterialPlan(planned.table, planned.root))
+                Result.Ready(
+                    GPUPreparedVerticesMaterialPlan(
+                        planned.table,
+                        planned.root,
+                        planned.blend,
+                    ),
+                )
             is EffectiveMaterialPlanner.Result.Refused -> Result.Refused(
                 code = org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.Material,
                 facts = mapOf(
@@ -83,10 +88,9 @@ internal class W5aPreparedVerticesMaterialBridge private constructor(
             W5aPreparedVerticesMaterialBridge(operations.toList(), width, height)
 
         private fun DisplayOp.isW5aPreparedVerticesCandidate(): Boolean = when (this) {
-            is DisplayOp.DrawVertices -> paint.blendMode == BlendMode.SRC_OVER &&
-                paint.shader.isW5aSolidOpacity()
+            is DisplayOp.DrawVertices -> paint.shader.isW5aSolidOpacity()
             is DisplayOp.DrawMesh -> mesh.program == null &&
-                (blendMode ?: paint.blendMode) == BlendMode.SRC_OVER && paint.shader.isW5aSolidOpacity()
+                paint.shader.isW5aSolidOpacity()
             else -> false
         }
 
