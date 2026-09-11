@@ -62,9 +62,10 @@ public class RenderGraph private constructor(
 
     public companion object {
         internal fun issueW5bGeometry(graph: RenderGraph): RenderGraph {
-            require(graph.capabilityId == W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID)
+            require(graph.capabilityId in setOf(W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID,
+                W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID))
             require(graph.passes().filterIsInstance<PlanPass.RenderPass>().flatMap { it.draws() }.all {
-                it is AnalyticRectDraw && it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1
+                (it is AnalyticRectDraw || it is AnalyticRRectDraw) && it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1
             })
             return RenderGraph(graph.id, graph.capabilityId, graph.targetExtent, graph.colorFormat, graph.capabilities,
                 graph.budget, graph.visualCommandCount, graph.resources(), graph.passes(), graph.dependencies(),

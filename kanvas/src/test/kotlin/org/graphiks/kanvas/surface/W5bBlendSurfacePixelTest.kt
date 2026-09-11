@@ -19,6 +19,8 @@ import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.color.ColorF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.geometry.RRectF32
+import org.graphiks.math.geometry.CornerRadiiF32
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertAll
@@ -30,12 +32,13 @@ class W5bBlendSurfacePixelTest {
 
     @Test fun `geometry Rect retains fixed DST and destination blends`() = geometryBlends(GeometryFamily.Rect)
     @Test fun `geometry fractional Rect retains fixed DST and destination blends`() = geometryBlends(GeometryFamily.FractionalRect)
-    private enum class GeometryFamily { Rect, FractionalRect }
+    @Test fun `geometry RRect retains fixed DST and destination blends`() = geometryBlends(GeometryFamily.RRect)
+    private enum class GeometryFamily { Rect, FractionalRect, RRect }
 
     /** Catches lost blend/coverage, stale destination, reordered draws and mutable geometry reuse. */
     private fun geometryBlends(family: GeometryFamily) {
         assertAll(listOf(BlendMode.DST_OUT, BlendMode.DST, BlendMode.DIFFERENCE).map { mode -> {
-            val coverage = if (family == GeometryFamily.FractionalRect) .75f else 1f
+            val coverage = if (family != GeometryFamily.Rect) .75f else 1f
             val opacity = if (mode == BlendMode.DIFFERENCE) .45f else if (coverage != 1f) .75f else .5f
             val background = W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, 1f)
             val state = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(background))
@@ -58,15 +61,18 @@ class W5bBlendSurfacePixelTest {
             }
             fun recordGeometry(reverse: Boolean, mutateBefore: Boolean = false): Picture {
                 val rect = RectF32.ofLTRB(if (coverage == 1f) 0f else .25f, 0f, 2f, 2f)
+                val rounded = RRectF32.of(RectF32.ofLTRB(.25f, .25f, 3.75f, 3.75f), CornerRadiiF32.of(.5f))
                 fun mutate() {
                     rect.offset(8f, 8f)
+                    rounded.rect.offset(8f, 8f)
                 }
                 if (mutateBefore) mutate()
                 val recorder = PictureRecorder()
                 val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f))
                 val sourcePaint = Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), opacity),
-                    blendMode = mode, antiAlias = family == GeometryFamily.FractionalRect)
-                fun source() = canvas.drawRect(rect, sourcePaint)
+                    blendMode = mode, antiAlias = family != GeometryFamily.Rect)
+                fun source() = if (family == GeometryFamily.RRect) canvas.drawRRect(rounded, sourcePaint)
+                    else canvas.drawRect(rect, sourcePaint)
                 fun destination() = canvas.drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f),
                     Paint(shader = Shader.SolidColor(ColorARGB.Green), antiAlias = true))
                 if (reverse) { source(); destination() } else { destination(); source() }
@@ -75,7 +81,11 @@ class W5bBlendSurfacePixelTest {
             }
             fun pixel(picture: Picture): UByteArray = Surface(4, 4).also { surface ->
                 surface.canvas { picture.playback(this) }
-            }.render().pixels.copyOfRange(0, 4)
+            }.render().pixels.let { pixels ->
+                // (1.5, .5) is beyond the top-left tangent x=.75, in the .75-covered straight strip.
+                val offset = if (family == GeometryFamily.RRect) 4 else 0
+                pixels.copyOfRange(offset, offset + 4)
+            }
             WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixel(recordGeometry(false)))
             if (mode != BlendMode.DST) {
                 WgslFloatEnvelopeV1Oracle.assertAdmits(background, pixel(recordGeometry(true)))

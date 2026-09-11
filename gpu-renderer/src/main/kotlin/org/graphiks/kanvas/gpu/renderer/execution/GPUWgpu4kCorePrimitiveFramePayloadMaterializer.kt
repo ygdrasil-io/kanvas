@@ -6292,7 +6292,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             )
         }
         val coreSemantics = semantics.filterNotNull()
-        val routes = if (scratch is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.AnalyticRect) emptyList() else coreSemantics.mapIndexed { index, semantic ->
+        val routes = if (scratch !is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.Direct) emptyList() else coreSemantics.mapIndexed { index, semantic ->
             validateCorePrimitiveDirectNativeRoute(
                 semantic,
                 semantic.scissorBounds,
@@ -6308,8 +6308,11 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             )
         }
         val arena = try {
-            if (scratch is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.AnalyticRect)
-                packW4aSessionGeometry(scratch.authority) else packCorePrimitiveFrameGeometry(routes)
+            when (scratch) {
+                is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.AnalyticRect -> packW4aSessionGeometry(scratch.authority)
+                is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.AnalyticRRect -> packW4bSessionGeometry(scratch.authority)
+                is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.Direct -> packCorePrimitiveFrameGeometry(routes)
+            }
         } catch (failure: Throwable) {
             return refused(
                 "invalid.native-core-primitive.w3-geometry",
@@ -6323,9 +6326,13 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         }
         val uniformBytes = ByteArray(scratch.uniformPlan.totalBytes.toInt())
         coreSemantics.forEachIndexed { index, semantic ->
-            val bytes = if (scratch is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.AnalyticRect)
-                scratch.copyUniformPayloadI32(index) else semantic.payloadRef.uniformBlock?.bytes?.map(Int::toByte)?.toByteArray()
-                ?: return refused("invalid.native-core-primitive.w3-uniform", "W3 packet uniform payload is missing.")
+            val bytes = when (scratch) {
+                is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.AnalyticRect -> scratch.copyUniformPayloadI32(index)
+                is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.AnalyticRRect -> scratch.copyUniformPayloadI32(index)
+                is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.Direct ->
+                    semantic.payloadRef.uniformBlock?.bytes?.map(Int::toByte)?.toByteArray()
+                        ?: return refused("invalid.native-core-primitive.w3-uniform", "W3 packet uniform payload is missing.")
+            }
             val slot = scratch.uniformPlan.slots[index]
             if (bytes.size.toLong() != scratch.uniformPayloadBytesI64 || slot.payloadBytes != scratch.uniformPayloadBytesI64 ||
                 slot.alignedOffset + bytes.size > uniformBytes.size

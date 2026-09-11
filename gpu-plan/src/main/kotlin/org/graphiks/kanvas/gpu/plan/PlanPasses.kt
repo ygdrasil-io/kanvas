@@ -460,10 +460,10 @@ public class AnalyticRRectDraw private constructor(
     deviceShape: RRectF32,
     rasterBounds: RectI32,
     scissor: RectI32,
+    override public val blend: BlendPlan = BlendPlan.LegacySrcOverV1,
 ) : PlanDraw {
     override public val coverage: CoveragePlan = CoveragePlan.AnalyticScalarAA
     override public val sample: SamplePlan = SamplePlan.SingleSample
-    override public val blend: BlendPlan = BlendPlan.SrcOver
     private val storedDeviceShape = RRectF32.of(
         deviceShape.rect.copy(),
         deviceShape.topLeft,
@@ -522,6 +522,7 @@ public class AnalyticRRectDraw private constructor(
             deviceShape: RRectF32,
             rasterBounds: RectI32,
             scissor: RectI32,
+            blend: BlendPlan = BlendPlan.LegacySrcOverV1,
         ): AnalyticRRectDraw {
             require(commandIndexI32 >= 0) { "Command index must not be negative" }
             require(origin == DrawOrigin.RECT || origin == DrawOrigin.RRECT) {
@@ -537,6 +538,7 @@ public class AnalyticRRectDraw private constructor(
                 deviceShape,
                 rasterBounds,
                 scissor,
+                blend,
             )
         }
     }
@@ -544,7 +546,7 @@ public class AnalyticRRectDraw private constructor(
 
 /** Reissues only the sealed W5 material reference; analytic RRect geometry remains native. */
 public fun AnalyticRRectDraw.withMaterialRef(material: MaterialPlanRef): AnalyticRRectDraw = AnalyticRRectDraw.ofMaterial(
-    commandIndex, material, origin, copyDeviceShape(), copyRasterBounds(), copyScissor(),
+    commandIndex, material, origin, copyDeviceShape(), copyRasterBounds(), copyScissor(), blend,
 )
 
 /** A sealed W4c path-fill draw whose geometry authority remains owned by `:math`. */

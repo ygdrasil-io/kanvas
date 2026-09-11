@@ -38,7 +38,8 @@ internal object W5bDestinationGraphSealer {
         require(!readsDestination || capabilities.supportsTexture(format, 1, setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.Sampled))) {
             "unsupported.w5b.destination-texture"
         }
-        require(destinationCountI32 > 0 || capabilityId in setOf(W5bCorePrimitiveGraph.CAPABILITY_ID, W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID))
+        require(destinationCountI32 > 0 || capabilityId in setOf(W5bCorePrimitiveGraph.CAPABILITY_ID,
+            W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID, W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID))
         val initialClearI32 = if (draws.first().blend is BlendPlan.DestinationReadV1) 1 else 0
         val passCountI32 = Math.addExact(Math.addExact(draws.size, destinationCountI32), initialClearI32 + 1 + (clip?.passes()?.size ?: 0))
         // One snapshot is reused only after its preceding consumer; native storage stays live
@@ -78,7 +79,8 @@ internal object W5bDestinationGraphSealer {
             if (blend is BlendPlan.DestinationReadV1) {
                 require(if ((draw as? W5bPointDraw)?.clipOnly != null)
                     blend.compositionAbiI32 == 4 && blend.coverage == BlendCoverageEncodingV1.ScalarCoverageInShader
-                    else blend.compositionAbiI32 == 3 && (blend.coverage == BlendCoverageEncodingV1.FullOrScissor || draw is AnalyticRectDraw))
+                    else blend.compositionAbiI32 == 3 && (blend.coverage == BlendCoverageEncodingV1.FullOrScissor ||
+                        draw is AnalyticRectDraw || draw is AnalyticRRectDraw))
                 val version = DestinationVersionI64(versionI64)
                 passes += PlanPass.TextureCopy(copyOrdinalI32++, target.id, requireNotNull(snapshot).id, version)
                 val sealed = blend.copy(requiredDestinationVersion = version, snapshotResource = snapshot.id)
@@ -90,6 +92,9 @@ internal object W5bDestinationGraphSealer {
                     is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(draw.commandIndex,
                         (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref,
                         draw.copyDeviceBounds(), draw.copyRasterBounds(), draw.copyScissor(), sealed)
+                    is AnalyticRRectDraw -> AnalyticRRectDraw.ofMaterial(draw.commandIndex,
+                        (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref, draw.origin,
+                        draw.copyDeviceShape(), draw.copyRasterBounds(), draw.copyScissor(), sealed)
                     else -> error("unsupported.w5b.destination-geometry")
                 })
             } else render(draw)
