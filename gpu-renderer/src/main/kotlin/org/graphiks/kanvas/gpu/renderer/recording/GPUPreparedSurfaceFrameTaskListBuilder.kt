@@ -128,7 +128,6 @@ data class GPUPreparedSurfaceFrameRequest(
     val w5bPointClips: Map<Int, org.graphiks.kanvas.render.ir.ClipStackNode> = emptyMap(),
     val w5bPointCaptures: Map<Int, W5bPreparedPointCaptureV3> = emptyMap(),
     val synthesizedSceneClearCommandIdI32: Int? = null,
-    val elidedNoOpFrame: org.graphiks.kanvas.gpu.plan.W5bElidedNoOpFrameV1? = null,
 )
 
 /** Checked structural ceilings applied before one prepared task graph is published. */
@@ -1162,7 +1161,12 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         }
         val allCore = request.semanticsByCommandId.values
             .all { it is GPUDrawSemanticPayload.CorePrimitive }
-        if (allCore && request.elidedNoOpFrame == null) {
+        val soleSceneInitialization = request.synthesizedSceneClearCommandIdI32 != null && packets.size == 1
+        if (soleSceneInitialization && !hasExactSoleSceneInitialization(request, packets)) {
+            return refused("invalid.recording.w5b-mixed-initialization",
+                "A sole synthesized clear must authenticate the complete mapped frame.")
+        }
+        if (allCore && !soleSceneInitialization) {
             @Suppress("UNCHECKED_CAST")
             val coreSemantics = request.semanticsByCommandId as
                 Map<Int, GPUDrawSemanticPayload.CorePrimitive>
@@ -2988,12 +2992,8 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             is GPUDrawSemanticPayload.Vertices -> semantic.w5bFinalBlendPlan
             else -> null
         } }
-        if (request.elidedNoOpFrame == null &&
+        if (!hasExactSoleSceneInitialization(request, packets) &&
             finalBlends.all(org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer::isLegacySrcOverEquivalent)) return null
-        if (request.elidedNoOpFrame != null) require(request.synthesizedSceneClearCommandIdI32 == 0 &&
-            packets.size == 1 && packets.single().commandIdValue == 0 && snapshots.isEmpty()) {
-            "invalid.w5b.mixed-zero-survivor-initialization"
-        }
         val capability = request.capabilities.toPlanCapabilitySnapshot(request.baseTaskList.capabilitySeal.deviceGeneration)
             as? org.graphiks.kanvas.gpu.renderer.planning.GpuPlanCapabilityAdapterResult.Supported
             ?: throw MixedUnsupportedCapability()
@@ -3037,9 +3037,39 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             org.graphiks.kanvas.gpu.plan.W5bMixedFramePlanV1.Input(packet.commandIdValue, source.first, source.second,
                 blend, snapshot?.let { org.graphiks.kanvas.gpu.plan.PlanResourceId(it) })
         }
+        require(inputs.isNotEmpty() || hasExactSoleSceneInitialization(request, packets) && snapshots.isEmpty()) {
+            "invalid.w5b.mixed-zero-survivor-initialization"
+        }
         return org.graphiks.kanvas.gpu.plan.W5bMixedFramePlanV1.seal(
             org.graphiks.kanvas.gpu.plan.PlanResourceId(request.target.value), capability.snapshot,
-            org.graphiks.kanvas.gpu.plan.PlanBudget(budgetI64), inputs, request.elidedNoOpFrame)
+            org.graphiks.kanvas.gpu.plan.PlanBudget(budgetI64), inputs)
+    }
+
+    /** The renderer authenticates only the submitted mapped frame, never upstream operation elision. */
+    private fun hasExactSoleSceneInitialization(
+        request: GPUPreparedSurfaceFrameRequest,
+        packets: List<GPUDrawPacket>,
+    ): Boolean {
+        if (request.synthesizedSceneClearCommandIdI32 != 0 || packets.size != 1 ||
+            request.semanticsByCommandId.keys != setOf(0)) return false
+        val base = request.baseTaskList
+        if (GPUFramePlanner.validateRecordingEnvelope(base) != null ||
+            base.recordingSeals.size != 1 || base.phaseOrder != GPUTaskPhase.entries ||
+            base.diagnostics.isNotEmpty() || base.compositeCommands.isNotEmpty() ||
+            base.memoryBudget.allocations.isNotEmpty() || base.dependencies.isNotEmpty()) return false
+        val render = base.tasks.singleOrNull() as? GPUTask.Render ?: return false
+        val packet = packets.single()
+        val semantic = request.semanticsByCommandId.getValue(0) as? GPUDrawSemanticPayload.CorePrimitive ?: return false
+        return render.drawPackets.size == 1 && render.drawPackets.single() === packet &&
+            render.recordingId == base.recordingSeals.single().recordingId && render.target.value == "frame.scene" &&
+            render.phase == GPUTaskPhase.Render && render.compositeMembership == null &&
+            render.loadStore == org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan("load", GPUStorePlan.Store) &&
+            render.resourceUses.isEmpty() && render.depthStencilLoadStore == null && render.sampleContinuationKey == null &&
+            render.preparedImageBindingsByPacketId.isEmpty() && render.preparedTextBindingsByPacketId.isEmpty() &&
+            render.samplePlan == org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan.SingleSampleFrame && packet.diagnostics.isEmpty() &&
+            packet.frameProvenance == org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance.None &&
+            packet.hasCorePrimitiveSemanticAuthority(semantic, request.capabilities) &&
+            org.graphiks.kanvas.gpu.renderer.passes.isW5bPreparedSceneInitialization(packet, semantic, request.targetBounds)
     }
 
     private fun prepareCoreAuthorityBaseTaskList(

@@ -243,7 +243,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 )
             }
             textPreparation as GPUPreparedTextFrameInventoryPreparation.Ready
-            var elidedNoOpFrame: org.graphiks.kanvas.gpu.plan.W5bElidedNoOpFrameV1? = null
+            var zeroSurvivorCandidate: GPUPreparedZeroSurvivorCandidate? = null
             val verticesPreparation = GPUPreparedVerticesFramePreparer.prepare(
                 operations = operations,
                 target = request.targetFacts,
@@ -253,8 +253,8 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 mappingBoundary = flatElidedOperationIndices.let { elided ->
                     GPUPreparedFrameMappingBoundary { operations, target, config, capabilities,
                         textInventory, verticesInventory ->
-                        elidedNoOpFrame = operations.sealElidedNoOpFrame(
-                            request.candidate.color.interpretation, textPreparation, verticesInventory)
+                        zeroSurvivorCandidate = operations.zeroSurvivorCandidate(
+                            request.candidate.color.interpretation, textPreparation, verticesInventory, coreMaterialCandidates)
                         GPUOpMapper.mapOperations(
                             operations = operations,
                             target = target,
@@ -264,7 +264,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                             preparedVerticesInventory = verticesInventory,
                             elidedOperationIndices = elided,
                             w5aPointMaterialRefs = coreMaterialCandidates.mapValues { it.value.root },
-                            synthesizeSceneClear = elidedNoOpFrame != null || operations.requiresDstReadSceneClear(
+                            synthesizeSceneClear = zeroSurvivorCandidate != null || operations.requiresDstReadSceneClear(
                                 interpretation = request.candidate.color.interpretation,
                                 textInventory = textInventory,
                                 verticesInventory = verticesInventory,
@@ -408,7 +408,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                         diagnostic(gathered.code, gathered.message, gathered.facts),
                     )
             }
-            val admittedSemantics = when (val gathered = GPUPreparedSurfaceSemanticBuilder.gather(
+            val validatedSemantics = when (val gathered = GPUPreparedSurfaceSemanticBuilder.gather(
                 visualCommands = preparedMapping.visualCommands,
                 normalizedCommands = normalizedCommands,
                 recording = recording,
@@ -421,14 +421,19 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 is GPUPreparedSurfaceSemanticGatherResult.Refused ->
                     return GPUPreparedSurfaceFrameBuildResult.Refused(gathered.diagnostic)
             }
-            preflightUnmaterializedPreparedVertices(recording, admittedSemantics)?.let { diagnostic ->
+            preflightUnmaterializedPreparedVertices(recording, validatedSemantics)?.let { diagnostic ->
                 return GPUPreparedSurfaceFrameBuildResult.Refused(diagnostic)
             }
             // The real mapper/recorder/semantic lowerers have now validated geometry, clip,
             // budgets and elision. Only their admitted payloads acquire frame material ownership.
-            val corePlansByCommandId = mapping.commandIdsByOperationIndex.flatMap { (operationIndex, commandIds) ->
+            val validatedCorePlansByCommandId = mapping.commandIdsByOperationIndex.flatMap { (operationIndex, commandIds) ->
                 coreMaterialCandidates[operationIndex]?.let { candidate -> commandIds.map { it to candidate } }.orEmpty()
             }.toMap()
+            val zeroProjection = zeroSurvivorCandidate?.projectValidated(
+                mapping, recording.taskList, validatedSemantics, validatedCorePlansByCommandId)
+            val admittedSemantics = zeroProjection?.semantics ?: validatedSemantics
+            val corePlansByCommandId = if (zeroProjection == null) validatedCorePlansByCommandId
+                else validatedCorePlansByCommandId.filterKeys(admittedSemantics::containsKey)
             val frameMaterials = W5aPreparedFrameMaterialRegistry.seal(admittedSemantics, corePlansByCommandId)
             val pointClipCandidates = W5aPreparedFrameMaterialRegistry.capturePointClips(operations)
             val pointClips = mapping.commandIdsByOperationIndex.flatMap { (operationIndex, commandIds) ->
@@ -444,14 +449,13 @@ internal object GPUPreparedSurfaceFrameBuilder {
             }
             when (val prepared = taskListBuilder.build(
                 GPUPreparedSurfaceFrameRequest(
-                    baseTaskList = recording.taskList,
+                    baseTaskList = zeroProjection?.taskList ?: recording.taskList,
                     capabilities = request.capabilities,
                     target = request.target,
                     targetBounds = request.targetBounds,
                     semanticsByCommandId = semantics,
                     w5bPointBlends = corePlansByCommandId.mapValues { it.value.blend },
                     synthesizedSceneClearCommandIdI32 = 0.takeIf { mapping.hasSynthesizedSceneClear },
-                    elidedNoOpFrame = elidedNoOpFrame,
                     w5bPointClips = pointClips,
                     w5bPointCaptures = recording.pointAuthorities.mapNotNull { (commandId, authority) ->
                         val original = admittedSemantics[commandId] as? GPUDrawSemanticPayload.CorePrimitive
@@ -542,7 +546,8 @@ internal object GPUPreparedSurfaceFrameBuilder {
                         readbackRequestId = splitTaskList.tasks.filterIsInstance<GPUTask.Readback>()
                             .singleOrNull()?.request?.requestId ?: request.readbackRequestId,
                         visualOperationCount = preparedMapping.visualCommands.count { visual ->
-                            visual.normalized.commandId.value !in layerChildrenCommandIds
+                            visual.normalized.commandId.value !in layerChildrenCommandIds &&
+                                (zeroProjection == null || visual.normalized.commandId.value in admittedSemantics)
                         },
                         stateEventCount = mapping.stateEvents.count { event ->
                             event.kind == GPUFramePathStateKind.Transform ||
@@ -581,19 +586,25 @@ internal object GPUPreparedSurfaceFrameBuilder {
 }
 
 /** Only exhaustive, already-validated prepared NoOps may request zero-survivor initialization. */
-private fun List<DisplayOp>.sealElidedNoOpFrame(
+private fun List<DisplayOp>.zeroSurvivorCandidate(
     interpretation: GPUColorInterpretation,
     text: GPUPreparedTextFrameInventoryPreparation.Ready,
     vertices: PreparedVerticesFrameInventory,
-): org.graphiks.kanvas.gpu.plan.W5bElidedNoOpFrameV1? {
+    corePlans: Map<Int, org.graphiks.kanvas.gpu.plan.EffectiveMaterialPlanner.Result.Ready>,
+): GPUPreparedZeroSurvivorCandidate? {
     if (interpretation != GPUColorInterpretation.LinearPremul || any {
             it is DisplayOp.BeginLayer || it is DisplayOp.EndLayer || it is DisplayOp.DrawPicture
         }) return null
     val visuals = withIndex().filter { it.value.isVisualDraw() }
-    if (visuals.isEmpty() || visuals.any { it.value !is DisplayOp.DrawText &&
-            it.value !is DisplayOp.DrawVertices && it.value !is DisplayOp.DrawMesh }) return null
+    val prepared = visuals.filter { it.value is DisplayOp.DrawText ||
+        it.value is DisplayOp.DrawVertices || it.value is DisplayOp.DrawMesh }
+    if (prepared.isEmpty()) return null // Core-only keeps its historical authority.
+    val core = visuals.filterNot { it in prepared }.associate { visual ->
+        val plan = corePlans[visual.index]?.takeIf { it.blend == BlendPlan.NoOpV1 } ?: return null
+        visual.index to plan
+    }
     val noOps = text.elidedNoOps + vertices.elidedNoOps
-    if (noOps.map { it.operationIndexI32 }.sorted() != visuals.map { it.index }) return null
+    if ((noOps.map { it.operationIndexI32 } + core.keys).sorted() != visuals.map { it.index }) return null
     val inventory = text.inventory
     require(inventory.pages.isEmpty() && inventory.subRunsByOperationIndex.isEmpty() &&
         inventory.strokePathsByOperationIndex.isEmpty() && inventory.maskIdentityByGlyphUse.isEmpty() &&
@@ -601,10 +612,58 @@ private fun List<DisplayOp>.sealElidedNoOpFrame(
         vertices.commands.isEmpty() && vertices.mappedCommands.isEmpty() && vertices.artifactsByKey.isEmpty() &&
         vertices.materialsByKey.isEmpty() && vertices.artifactKeyByOperationIndex.isEmpty() &&
         vertices.vertexUploadRanges.isEmpty() && vertices.indexUploadRanges.isEmpty() &&
-        vertices.elidedVerticesOperationIndices == visuals.filter { it.value !is DisplayOp.DrawText }.map { it.index }.toSet()) {
+        vertices.elidedVerticesOperationIndices == prepared.filter { it.value !is DisplayOp.DrawText }.map { it.index }.toSet()) {
         "invalid.w5b.elided-source-inventory"
     }
-    return org.graphiks.kanvas.gpu.plan.W5bElidedNoOpFrameV1.seal(visuals.map { it.index }, noOps)
+    return GPUPreparedZeroSurvivorCandidate(java.util.Collections.unmodifiableMap(LinkedHashMap(core)))
+}
+
+/** A request for initialization, not authority to omit an unvalidated Core operation. */
+private class GPUPreparedZeroSurvivorCandidate(
+    private val corePlans: Map<Int, org.graphiks.kanvas.gpu.plan.EffectiveMaterialPlanner.Result.Ready>,
+) {
+    class Projection(val taskList: GPUTaskList, val semantics: Map<Int, GPUDrawSemanticPayload>)
+
+    fun projectValidated(
+        mapping: GPUOpMapping,
+        base: GPUTaskList,
+        semantics: Map<Int, GPUDrawSemanticPayload>,
+        plansByCommandId: Map<Int, org.graphiks.kanvas.gpu.plan.EffectiveMaterialPlanner.Result.Ready>,
+    ): Projection {
+        require(mapping.hasSynthesizedSceneClear)
+        val noOpIds = corePlans.flatMap { (operationIndexI32, source) ->
+            val ids = mapping.commandIdsByOperationIndex[operationIndexI32].orEmpty()
+            require(ids.isNotEmpty() || operationIndexI32 in mapping.culledCoreOperationIndices)
+            ids.onEach { id -> require(plansByCommandId[id] === source && source.blend == BlendPlan.NoOpV1) }
+        }
+        require(noOpIds.distinct().size == noOpIds.size && 0 !in noOpIds)
+        val renders = base.tasks.filterIsInstance<GPUTask.Render>()
+        val packets = renders.flatMap { it.drawPackets }
+        require(base.tasks.size == renders.size && base.compositeCommands.isEmpty() &&
+            base.memoryBudget.allocations.isEmpty() && base.memoryBudget.diagnostic == null &&
+            base.diagnostics.none { it.isTerminal } && packets.all { it.diagnostics.isEmpty() } &&
+            renders.all { it.resourceUses.isEmpty() && it.preparedImageBindingsByPacketId.isEmpty() &&
+                it.preparedTextBindingsByPacketId.isEmpty() && it.compositeMembership == null })
+        val ids = packets.map { it.commandIdValue }
+        require(ids.distinct().size == ids.size && ids.toSet() == noOpIds.toSet() + 0 &&
+            semantics.keys == ids.toSet() && semantics.all { (id, semantic) ->
+                semantic.payloadRef.commandIdValue == id && semantic is GPUDrawSemanticPayload.CorePrimitive
+            } && packets.filter { it.commandIdValue in noOpIds }.all { it.blendPlan is GPUBlendPlan.NoOp }) {
+            "invalid.surface.prepared.zero-survivor-projection"
+        }
+        val clear = renders.single { render -> render.drawPackets.any { it.commandIdValue == 0 } }
+        require(clear.drawPackets.size == 1 && packets.first() === clear.drawPackets.single())
+        val taskOrder = base.tasks.map { it.taskId }
+        require(taskOrder.distinct().size == taskOrder.size && base.dependencies.all { edge ->
+            val from = taskOrder.indexOf(edge.fromTaskId)
+            val to = taskOrder.indexOf(edge.toTaskId)
+            from >= 0 && to > from && edge.reasonCode == "preserve.paint.order"
+        })
+        return Projection(GPUTaskList(base.frameId, base.capabilitySeal, base.recordingSeals,
+            base.expectedReplayKeyHash, listOf(clear), emptyList(), base.phaseOrder,
+            base.memoryBudget, base.diagnostics, base.compositeCommands),
+            java.util.Collections.singletonMap(0, semantics.getValue(0)))
+    }
 }
 
 /**

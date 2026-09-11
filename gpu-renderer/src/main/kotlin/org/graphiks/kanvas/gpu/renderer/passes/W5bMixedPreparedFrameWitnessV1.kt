@@ -207,25 +207,13 @@ internal class W5bMixedPreparedFrameWitnessV1 private constructor(
             val initialization = synthesizedSceneClearCommandIdI32?.let { id ->
                 require(id == 0)
                 packets.first().also { packet ->
-                    val semantic = packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive
-                    val material = semantic.material as GPUCorePrimitiveMaterialPayload.SolidColor
-                    val blend = packet.blendPlan as GPUBlendPlan.FixedFunctionBlend
-                    require(packet.commandIdValue == id && packet.originalPaintOrder == 0 &&
-                        packet.role == GPUDrawPacketRole.Shading && packet.w5aSourceStageV2 == null &&
-                        semantic.geometry is GPUCorePrimitiveGeometry.Rect && semantic.sourceFamily == GPUCorePrimitiveSourceFamily.Rect &&
-                        semantic.rectGeometryAuthority?.isIdentityFullTarget(descriptor.logicalBounds) == true &&
-                        semantic.targetBounds == descriptor.logicalBounds && semantic.scissorBounds == descriptor.logicalBounds &&
-                        packet.clipExecutionPlan == GPUClipExecutionPlan.NoClip &&
-                        semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor &&
-                        material.w5aAuthority == null && material.premultipliedRgba.all { it == 0f } &&
-                        blend.state.color == org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent("one", "zero", "add") &&
-                        blend.state.alpha == blend.state.color && blend.state.writeMask == "rgba" &&
-                        blend.sourceCoverageEncoding == GPUSourceCoverageEncoding.None &&
+                    require(isW5bPreparedSceneInitialization(packet, packet.semanticPayload, descriptor.logicalBounds) &&
                         renders.first().drawPackets == listOf(packet)) { "invalid.w5b.mixed-initial-clear" }
                 }
             }
             val colors = packets.filter { it.role != GPUDrawPacketRole.PathStencilProducer && it !== initialization }
-            if (timeline.elidedNoOpFrame != null) require(timeline.draws.isEmpty() &&
+            // This authority starts at the mapped frame, not the original Surface operation list.
+            if (timeline.draws.isEmpty()) require(
                 initialization != null && packets == listOf(initialization) && renders.size == 1 &&
                 frame.steps.none { it is GPUFrameStep.UploadResourceStep || it is GPUFrameStep.CopyDestinationStep } &&
                 nativeCoreDestinationTasks.isEmpty()) { "invalid.w5b.mixed-zero-survivor-domain" }
@@ -336,4 +324,26 @@ internal class W5bMixedPreparedFrameWitnessV1 private constructor(
             return witness
         }
     }
+}
+
+/** Exact existing initialization geometry/material/blend, shared before and after native lowering. */
+internal fun isW5bPreparedSceneInitialization(
+    packet: GPUDrawPacket,
+    payload: GPUDrawSemanticPayload?,
+    targetBounds: org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds,
+): Boolean {
+    val semantic = payload as? GPUDrawSemanticPayload.CorePrimitive ?: return false
+    val material = semantic.material as? GPUCorePrimitiveMaterialPayload.SolidColor ?: return false
+    val blend = packet.blendPlan as? GPUBlendPlan.FixedFunctionBlend ?: return false
+    return packet.commandIdValue == 0 && packet.originalPaintOrder == 0 &&
+        packet.role == GPUDrawPacketRole.Shading && packet.w5aSourceStageV2 == null &&
+        semantic.geometry is GPUCorePrimitiveGeometry.Rect && semantic.sourceFamily == GPUCorePrimitiveSourceFamily.Rect &&
+        semantic.rectGeometryAuthority?.isIdentityFullTarget(targetBounds) == true &&
+        semantic.targetBounds == targetBounds && semantic.scissorBounds == targetBounds &&
+        packet.clipExecutionPlan == GPUClipExecutionPlan.NoClip &&
+        semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor &&
+        material.w5aAuthority == null && material.premultipliedRgba.all { it == 0f } &&
+        blend.state.color == org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent("one", "zero", "add") &&
+        blend.state.alpha == blend.state.color && blend.state.writeMask == "rgba" &&
+        blend.sourceCoverageEncoding == GPUSourceCoverageEncoding.None
 }

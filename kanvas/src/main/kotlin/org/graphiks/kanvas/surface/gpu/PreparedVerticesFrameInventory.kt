@@ -130,9 +130,9 @@ internal class PreparedVerticesFrameInventory internal constructor(
     val capabilitySnapshotHash: String,
     val metrics: PreparedVerticesFrameMetrics,
     val limitEvidence: PreparedVerticesFrameLimitEvidence,
-    elidedNoOps: List<org.graphiks.kanvas.gpu.plan.W5bElidedNoOpFrameV1.Operation> = emptyList(),
+    elidedNoOps: List<GPUPreparedElidedNoOpOperation> = emptyList(),
 ) {
-    val elidedNoOps: List<org.graphiks.kanvas.gpu.plan.W5bElidedNoOpFrameV1.Operation> =
+    val elidedNoOps: List<GPUPreparedElidedNoOpOperation> =
         Collections.unmodifiableList(ArrayList(elidedNoOps))
     val commands: List<PreparedVerticesFrameCommand> =
         Collections.unmodifiableList(commands.toList())
@@ -350,7 +350,7 @@ internal object PreparedVerticesFrameInventoryBuilder {
         val elidedNoOps = elided.mapNotNull { draw ->
             draw.materialPlan?.takeIf { it.blend == org.graphiks.kanvas.gpu.plan.BlendPlan.NoOpV1 &&
                 draw.blendPlan is GPUBlendPlan.NoOp }?.let { material ->
-                org.graphiks.kanvas.gpu.plan.W5bElidedNoOpFrameV1.Operation.seal(
+                GPUPreparedElidedNoOpOperation.fromValidated(
                     draw.operationIndex, material.table, material.ref, material.blend)
             }
         }

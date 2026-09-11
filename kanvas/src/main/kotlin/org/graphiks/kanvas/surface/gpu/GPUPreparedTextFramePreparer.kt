@@ -25,7 +25,7 @@ internal sealed interface GPUPreparedTextFrameInventoryPreparation {
     data class Ready(
         val inventory: PreparedTextFrameInventory,
         val metrics: GPUPreparedTextFrameMetrics,
-        val elidedNoOps: List<org.graphiks.kanvas.gpu.plan.W5bElidedNoOpFrameV1.Operation> = emptyList(),
+        val elidedNoOps: List<GPUPreparedElidedNoOpOperation> = emptyList(),
     ) : GPUPreparedTextFrameInventoryPreparation
 
     data class Refused(val refusal: GPUPreparedOperationRefusal) :
@@ -74,7 +74,7 @@ internal object GPUPreparedTextFramePreparer {
     ): GPUPreparedTextFrameInventoryPreparation {
         val preparedDraws = ArrayList<GPUPreparedTextDraw>()
         val elidedTextOperationIndices = linkedSetOf<Int>()
-        val elidedNoOps = ArrayList<org.graphiks.kanvas.gpu.plan.W5bElidedNoOpFrameV1.Operation>()
+        val elidedNoOps = ArrayList<GPUPreparedElidedNoOpOperation>()
         val loweringStartedAt = System.nanoTime()
         operations.forEachIndexed { operationIndex, operation ->
             if (operation !is DisplayOp.DrawText) return@forEachIndexed
@@ -95,7 +95,7 @@ internal object GPUPreparedTextFramePreparer {
                     if (lowered.draw.blendPlan is GPUBlendPlan.NoOp) {
                         lowered.draw.materialPlan?.let { material ->
                             if (material.blend == org.graphiks.kanvas.gpu.plan.BlendPlan.NoOpV1) {
-                                elidedNoOps += org.graphiks.kanvas.gpu.plan.W5bElidedNoOpFrameV1.Operation.seal(
+                                elidedNoOps += GPUPreparedElidedNoOpOperation.fromValidated(
                                     operationIndex, material.table, material.ref, material.blend)
                             }
                         }

@@ -271,7 +271,11 @@ class W5bBlendSurfacePixelTest {
             assertDisjoint(transparent, WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
                 (counterfactual as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels))
         }
-        fun frame(color: ColorARGB, mode: BlendMode): UByteArray = Surface(16, 16).also { surface -> surface.canvas {
+        assertDisjoint(green, WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+            (white as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels))
+        fun frame(color: ColorARGB, mode: BlendMode, coreMode: BlendMode? = null): UByteArray = Surface(16, 16).also { surface -> surface.canvas {
+            coreMode?.let { drawRect(RectF32.ofLTRB(0f, 0f, 16f, 16f),
+                Paint(shader = Shader.SolidColor(ColorARGB.Green), blendMode = it, antiAlias = false)) }
             drawVertices(Vertices(VertexMode.TRIANGLES,
                 listOf(Point2F32(0f, 0f), Point2F32(16f, 0f), Point2F32(0f, 16f))),
                 Paint(shader = Shader.SolidColor(color), blendMode = mode, antiAlias = false))
@@ -281,6 +285,14 @@ class W5bBlendSurfacePixelTest {
         val noOp = frame(ColorARGB.White, BlendMode.DST)
         for (offsetI32 in noOp.indices step 4) {
             WgslFloatEnvelopeV1Oracle.assertAdmits(transparent, noOp.copyOfRange(offsetI32, offsetI32 + 4))
+        }
+        val coreSurvivor = frame(ColorARGB.White, BlendMode.DST, BlendMode.SRC_OVER)
+        for (offsetI32 in coreSurvivor.indices step 4) {
+            WgslFloatEnvelopeV1Oracle.assertAdmits(green, coreSurvivor.copyOfRange(offsetI32, offsetI32 + 4))
+        }
+        val allNoOp = frame(ColorARGB.White, BlendMode.DST, BlendMode.DST)
+        for (offsetI32 in allNoOp.indices step 4) {
+            WgslFloatEnvelopeV1Oracle.assertAdmits(transparent, allNoOp.copyOfRange(offsetI32, offsetI32 + 4))
         }
     }
 
