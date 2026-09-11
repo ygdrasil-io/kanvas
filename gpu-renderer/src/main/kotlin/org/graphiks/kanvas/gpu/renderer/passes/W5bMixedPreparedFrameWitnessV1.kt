@@ -30,17 +30,19 @@ internal class W5bMixedPreparedFrameWitnessV1 private constructor(
     class Refusal internal constructor(val reason: RefusalReason) : IllegalArgumentException(reason.code)
 
     private val frameHash = frame.stableHash()
-    private var sealedNativeInventory: GPUCorePrimitiveRenderRunSizingV1? = null
+    private data class NativeInventory(val coreSizing: GPUCorePrimitiveRenderRunSizingV1?)
+    private var sealedNativeInventory: NativeInventory? = null
 
-    fun nativeInventory(actual: GPUFramePlan): GPUCorePrimitiveRenderRunSizingV1 {
+    fun nativeInventory(actual: GPUFramePlan): GPUCorePrimitiveRenderRunSizingV1? {
         require(validates(actual))
-        return requireNotNull(sealedNativeInventory)
+        return requireNotNull(sealedNativeInventory).coreSizing
     }
 
     /** Only authenticated native routes can determine physical packing and pool capacities. */
     fun sealNativeInventory(actual: GPUFramePlan, routes: GPUCorePrimitiveNativeScopeFrameRouteSeal,
         limits: org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits) {
         require(validates(actual))
+        require(timeline.capabilities.copyBytesPerRowAlignment.toLong() == limits.copyBytesPerRowAlignment)
         actual.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             .flatMap { it.preparedTextBindingsByPacketId.values }.forEach { binding ->
                 admit(RefusalReason.TextBindingCapability, limits.maxSampledTexturesPerShaderStageI32 != null && limits.maxSamplersPerShaderStageI32 != null &&
@@ -80,17 +82,24 @@ internal class W5bMixedPreparedFrameWitnessV1 private constructor(
             require(render.drawPackets.all { it.semanticPayload is GPUDrawSemanticPayload.CorePrimitive })
             routes.retainedFor(indexed.index, render.drawPackets.map { it.packetId }) as GPUCorePrimitiveNativeScopeRouteSeal.Routes
         }
-        val sizing = corePrimitiveRenderRunSizingV1(nativeRoutes, limits.minUniformBufferOffsetAlignment)
+        val sizing = if (nativeRoutes.isEmpty()) {
+            require(coreRenders.isEmpty() && coreCopies.isEmpty() &&
+                admittedPackets.none { it.semanticPayload is GPUDrawSemanticPayload.CorePrimitive } &&
+                actual.steps.indices.none(routes::hasRouteForStep))
+            null
+        } else corePrimitiveRenderRunSizingV1(nativeRoutes, limits.minUniformBufferOffsetAlignment)
         admit(RefusalReason.UniformBinding, nativeRoutes.flatMap { it.uniformPlan.slots }.all {
             it.payloadBytes <= requireNotNull(limits.maxUniformBufferBindingSizeBytesI64)
         })
-        val capacities = listOf(sizing.capacities.vertexBytes, sizing.capacities.indexBytes, sizing.capacities.uniformBytes)
+        val capacities = sizing?.capacities?.let { listOf(it.vertexBytes, it.indexBytes, it.uniformBytes) }.orEmpty()
         admit(RefusalReason.NativeBuffer, capacities.all { it <= requireNotNull(limits.maxBufferSize) })
         val bufferRefs = coreRenders.flatMap { (it.value as GPUFrameStep.RenderPassStep).resourceUses }
             .filter { it.role in setOf(GPUFrameResourceRole.VertexData, GPUFrameResourceRole.IndexData, GPUFrameResourceRole.UniformData) }
             .map { it.resource }.toSet()
         val preparations = actual.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>().single().requests
         val replaced = preparations.filter { it.resource in bufferRefs }
+        require((sizing == null) == coreRenders.isEmpty())
+        if (sizing == null) require(capacities.isEmpty() && bufferRefs.isEmpty() && replaced.isEmpty())
         require(replaced.size == bufferRefs.size)
         val replacedLabels = replaced.map { it.diagnosticLabel }.toSet()
         require(replacedLabels.size == replaced.size && replaced.all { preparation ->
@@ -101,8 +110,9 @@ internal class W5bMixedPreparedFrameWitnessV1 private constructor(
         val physicalBytesI64 = (actual.memoryBudget.allocations.filterNot { it.label in replacedLabels }.map { it.bytes } +
             actual.w5aMaterialAllocationsV2().map { it.bytes } + capacities).fold(0L, Math::addExact)
         admit(RefusalReason.PhysicalBudget, physicalBytesI64 <= timeline.budget.maxFrameLocalBytes)
-        require(sealedNativeInventory == null || sealedNativeInventory == sizing)
-        sealedNativeInventory = sizing
+        val inventory = NativeInventory(sizing)
+        require(sealedNativeInventory == null || sealedNativeInventory == inventory)
+        sealedNativeInventory = inventory
     }
     class NativeProjection private constructor(
         val copyScopeKeys: List<GPUPreparedNativeScopeKey>,
@@ -164,7 +174,9 @@ internal class W5bMixedPreparedFrameWitnessV1 private constructor(
         }
 
         fun issue(timeline: W5bMixedFramePlanV1, taskList: GPUTaskList,
-            nativeCorePackets: List<GPUDrawPacket>, synthesizedSceneClearCommandIdI32: Int? = null): W5bMixedPreparedFrameWitnessV1 {
+            nativeCorePackets: List<GPUDrawPacket>, nativeCoreDestinationTasks: List<GPUTask.DestinationSnapshots>,
+            nativeCorePreparations: List<GPUResourcePreparationRequest>, nativeCoreAllocations: List<GPUFrameMemoryAllocation>,
+            synthesizedSceneClearCommandIdI32: Int? = null): W5bMixedPreparedFrameWitnessV1 {
             val frame = GPUFramePlanner.plan(taskList)
             require(!frame.atomicallyRefused && frame.diagnostics.none { it.isTerminal } &&
                 frame.phaseOrder == GPUTaskPhase.entries && frame.memoryBudget.diagnostic == null) {
@@ -176,6 +188,8 @@ internal class W5bMixedPreparedFrameWitnessV1 private constructor(
             require(core.size == nativeCorePackets.size && core.zip(nativeCorePackets).all { (a, b) -> a === b }) {
                 "invalid.w5b.mixed-native-projection"
             }
+            if (core.isEmpty()) require(nativeCoreDestinationTasks.isEmpty() && nativeCorePreparations.isEmpty() &&
+                nativeCoreAllocations.isEmpty()) { "invalid.w5b.mixed-empty-core-resources" }
             require(renders.isNotEmpty() && renders.all { it.target.value == timeline.targetId.value &&
                 it.samplePlan == GPUSamplePlan.SingleSampleFrame && it.sampleContinuation == null &&
                 it.loadStore.storePlan == GPUStorePlan.Store && it.loadStore.clearColorLabel == null } &&
@@ -255,6 +269,36 @@ internal class W5bMixedPreparedFrameWitnessV1 private constructor(
                     consumer.packetId == packet.packetId && consumer.commandId.value == draw.commandIndexI32)
                 val copyIndex = frame.steps.indexOf(copy)
                 val consumerIndex = frame.steps.indexOfFirst { it is GPUFrameStep.RenderPassStep && packet in it.drawPackets }
+                val consumerRender = frame.steps[consumerIndex] as GPUFrameStep.RenderPassStep
+                require(consumer.renderTaskId in consumerRender.sourceTaskIds &&
+                    copy.sourceKey == org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupKey(
+                        org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity(consumerRender.target.value),
+                        packet.resourceGeneration, frame.capabilitySeal.deviceGeneration, descriptor.format,
+                        org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation.LinearPremul,
+                        consumerRender.sampleContinuation?.key, null)) { "invalid.w5b.mixed-copy-source" }
+                val tightBytesPerRowI64 = Math.multiplyExact(descriptor.logicalBounds.width.toLong(), 4L)
+                val alignmentI64 = timeline.capabilities.copyBytesPerRowAlignment.toLong()
+                val remainderI64 = tightBytesPerRowI64 % alignmentI64
+                val paddedBytesPerRowI64 = if (remainderI64 == 0L) tightBytesPerRowI64 else
+                    Math.addExact(tightBytesPerRowI64, alignmentI64 - remainderI64)
+                val copiedBytesI64 = Math.multiplyExact(paddedBytesPerRowI64, descriptor.logicalBounds.height.toLong())
+                require(copy.copyLayout == GPUTextureCopyLayout(paddedBytesPerRowI64, descriptor.logicalBounds.height)) {
+                    "invalid.w5b.mixed-copy-layout"
+                }
+                if (packet in core) {
+                    val originalTask = nativeCoreDestinationTasks.single { it.taskId in copy.sourceTaskIds }
+                    val original = originalTask.payload.operations.filterIsInstance<GPUDestinationSnapshotOperation.TextureCopy>()
+                        .single { operation -> operation.consumers.any { it.packetId == packet.packetId } }
+                    val originalGroup = originalTask.payload.grouping.groups[original.groupIndex]
+                    require(copy.sourceKey == originalGroup.key && copy.source == original.source &&
+                        copy.snapshot == original.snapshot && copy.logicalBounds == original.logicalBounds &&
+                        copy.logicalBounds == originalGroup.logicalBounds && copy.copyLayout == original.copyLayout &&
+                        copiedBytesI64 == originalGroup.copiedBytes && original.sourceIntermediate == null &&
+                        original.consumers.single().let { child -> child.packetId == consumer.packetId &&
+                            child.commandId == consumer.commandId && child.groupingCommandId == consumer.groupingCommandId }) {
+                        "invalid.w5b.mixed-child-copy"
+                    }
+                }
                 require(copyIndex in 1 until consumerIndex)
                 if (initialization != null) require(frame.steps.indexOf(renders.first()) < copyIndex)
                 val precedingColors = frame.steps.take(copyIndex).filterIsInstance<GPUFrameStep.RenderPassStep>()
@@ -278,6 +322,8 @@ internal class W5bMixedPreparedFrameWitnessV1 private constructor(
                 frame.w5aMaterialAllocationsV2().map { it.bytes }).fold(0L, Math::addExact)
             admit(RefusalReason.PhysicalBudget, physicalI64 <= timeline.budget.maxFrameLocalBytes)
             val coreIds = core.map { it.packetId }.toSet()
+            require(nativeCoreDestinationTasks.flatMap { it.payload.operations }.size ==
+                copies.count { it.consumers.single().packetId in coreIds }) { "invalid.w5b.mixed-child-copy-count" }
             require(copies.filter { it.consumers.single().packetId in coreIds }.map { it.snapshot }.distinct().size <= 1)
             val witness = W5bMixedPreparedFrameWitnessV1(timeline, frame, immutableList(packets),
                 immutableList(copies.filter { it.consumers.single().packetId in coreIds }))

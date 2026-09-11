@@ -1308,6 +1308,35 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         val imageUploadByArtifactKey = recordedImageUploads.associateBy { upload ->
             upload.resources.bindingRequests.first().artifactKey
         }
+        val preparedDestinationSnapshots = try {
+            buildPreparedDestinationSnapshotPlans(request, packets)
+        } catch (_: ArithmeticException) {
+            return refused(
+                "invalid.recording.prepared_surface_destination_snapshot",
+                "Prepared destination-snapshot byte accounting overflowed.",
+            )
+        } catch (failure: IllegalArgumentException) {
+            return refused(
+                "invalid.recording.prepared_surface_destination_snapshot",
+                failure.message ?: "Prepared destination-snapshot planning failed.",
+            )
+        }
+        val mixedTimeline = try {
+            buildW5bMixedTimeline(request, packets, preparedDestinationSnapshots, configuredAggregateBudgetBytes)
+        } catch (failure: org.graphiks.kanvas.gpu.plan.W5bMixedFramePlanV1.Refusal) {
+            return refused(failure.reason.code, "Mixed W5b timeline admission refused.")
+        } catch (_: MixedUnsupportedCapability) {
+            return refused("unsupported.w5b.mixed-capability", "Mixed W5b requires an observed plan capability snapshot.")
+        } catch (failure: IllegalArgumentException) {
+            return refused("invalid.recording.w5b-mixed-timeline", failure.message ?: "Mixed W5b timeline refused.")
+        } catch (_: ArithmeticException) {
+            return refused("resource-limit.w5b.mixed-overflow", "Mixed W5b timeline arithmetic overflowed.")
+        }
+        if (mixedTimeline != null) {
+            val noOps = mixedTimeline.draws.filter { it.blend == org.graphiks.kanvas.gpu.plan.BlendPlan.NoOpV1 }
+                .map { it.commandIndexI32 }.toSet()
+            packets = packets.filterNot { it.commandIdValue in noOps }
+        }
         val verticesSemantics = packets.mapNotNull { packet ->
             request.semanticsByCommandId.getValue(packet.commandIdValue) as?
                 GPUDrawSemanticPayload.Vertices
@@ -1365,35 +1394,6 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     "Prepared vertices staging layout overflowed.",
                 )
             }
-        }
-        val preparedDestinationSnapshots = try {
-            buildPreparedDestinationSnapshotPlans(request, packets)
-        } catch (_: ArithmeticException) {
-            return refused(
-                "invalid.recording.prepared_surface_destination_snapshot",
-                "Prepared destination-snapshot byte accounting overflowed.",
-            )
-        } catch (failure: IllegalArgumentException) {
-            return refused(
-                "invalid.recording.prepared_surface_destination_snapshot",
-                failure.message ?: "Prepared destination-snapshot planning failed.",
-            )
-        }
-        val mixedTimeline = try {
-            buildW5bMixedTimeline(request, packets, preparedDestinationSnapshots, configuredAggregateBudgetBytes)
-        } catch (failure: org.graphiks.kanvas.gpu.plan.W5bMixedFramePlanV1.Refusal) {
-            return refused(failure.reason.code, "Mixed W5b timeline admission refused.")
-        } catch (_: MixedUnsupportedCapability) {
-            return refused("unsupported.w5b.mixed-capability", "Mixed W5b requires an observed plan capability snapshot.")
-        } catch (failure: IllegalArgumentException) {
-            return refused("invalid.recording.w5b-mixed-timeline", failure.message ?: "Mixed W5b timeline refused.")
-        } catch (_: ArithmeticException) {
-            return refused("resource-limit.w5b.mixed-overflow", "Mixed W5b timeline arithmetic overflowed.")
-        }
-        if (mixedTimeline != null) {
-            val noOps = mixedTimeline.draws.filter { it.blend == org.graphiks.kanvas.gpu.plan.BlendPlan.NoOpV1 }
-                .map { it.commandIndexI32 }.toSet()
-            packets = packets.filterNot { it.commandIdValue in noOps }
         }
         val preparedTextPacketsById = packets.mapNotNull { packet ->
             val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue) as?
@@ -2955,6 +2955,8 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 org.graphiks.kanvas.gpu.renderer.passes.W5bMixedPreparedFrameWitnessV1.issue(
                     mixedTimeline, completeTaskList,
                     packets.flatMap { coreAssembly.packetByCommandId[it.commandIdValue].orEmpty() },
+                    coreAssembly.destinationTasks,
+                    coreAssembly.preparations, coreAssembly.memoryBudget?.allocations.orEmpty(),
                     request.synthesizedSceneClearCommandIdI32,
                 )
             } catch (failure: org.graphiks.kanvas.gpu.renderer.passes.W5bMixedPreparedFrameWitnessV1.Refusal) {
@@ -2976,11 +2978,14 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         snapshots: List<GPUPreparedDestinationSnapshotPlan>,
         budgetI64: Long,
     ): org.graphiks.kanvas.gpu.plan.W5bMixedFramePlanV1? {
-        val sources = request.semanticsByCommandId.values.filterIsInstance<GPUDrawSemanticPayload.CorePrimitive>()
-            .mapNotNull { (it.material as? org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.SolidColor)?.w5aAuthority }
-        if (sources.none { source -> source.finalBlend?.let { selected ->
-                !org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.isLegacySrcOverEquivalent(selected)
-            } == true }) return null
+        val finalBlends = request.semanticsByCommandId.values.mapNotNull { semantic -> when (semantic) {
+            is GPUDrawSemanticPayload.CorePrimitive -> (semantic.material as?
+                org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.SolidColor)?.w5aAuthority?.finalBlend
+            is GPUDrawSemanticPayload.TextA8 -> semantic.w5bFinalBlendPlan
+            is GPUDrawSemanticPayload.Vertices -> semantic.w5bFinalBlendPlan
+            else -> null
+        } }
+        if (finalBlends.all(org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer::isLegacySrcOverEquivalent)) return null
         val capability = request.capabilities.toPlanCapabilitySnapshot(request.baseTaskList.capabilitySeal.deviceGeneration)
             as? org.graphiks.kanvas.gpu.renderer.planning.GpuPlanCapabilityAdapterResult.Supported
             ?: throw MixedUnsupportedCapability()

@@ -215,6 +215,54 @@ class W5bBlendSurfacePixelTest {
         WgslFloatEnvelopeV1Oracle.assertAdmits(expected, healthy.render().pixels.copyOfRange(0, 4))
     }
 
+    @Test fun `mixed frame prepared destination after DST keeps historical Core write versions`() {
+        val expected = W5bBlendCpuOracle.mixedPixel(listOf(
+            W5bBlendCpuOracle.Draw(ColorARGB.Green, 1f, BlendMode.SRC_OVER) to 1f,
+            W5bBlendCpuOracle.Draw(ColorARGB.Red, .5f, BlendMode.DIFFERENCE) to 1f,
+        ))
+        val omitted = W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, 1f)
+        val replaced = W5aSolidOpacityCpuOracle.draw(ColorARGB.Red, .5f)
+        val noOpWritten = W5bBlendCpuOracle.mixedPixel(listOf(
+            W5bBlendCpuOracle.Draw(ColorARGB.White, 1f, BlendMode.SRC_OVER) to 1f,
+            W5bBlendCpuOracle.Draw(ColorARGB.Red, .5f, BlendMode.DIFFERENCE) to 1f,
+        ))
+        listOf(omitted, replaced, noOpWritten).forEach { counterfactual ->
+            assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+                (counterfactual as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels))
+        }
+        val pixels = Surface(40, 80).also { surface -> surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 40f, 80f), Paint(shader = Shader.SolidColor(ColorARGB.Green), antiAlias = false))
+            drawVertices(Vertices(VertexMode.TRIANGLES, listOf(Point2F32(0f, 0f), Point2F32(40f, 0f), Point2F32(0f, 80f))),
+                Paint(shader = Shader.SolidColor(ColorARGB.White), blendMode = BlendMode.DST, antiAlias = false))
+            drawVertices(Vertices(VertexMode.TRIANGLES, listOf(Point2F32(0f, 0f), Point2F32(40f, 0f), Point2F32(0f, 80f))),
+                Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.Red), .5f), blendMode = BlendMode.DIFFERENCE, antiAlias = false))
+        } }.render().pixels
+        val offsetI32 = (40 * 10 + 10) * 4
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixels.copyOfRange(offsetI32, offsetI32 + 4))
+    }
+
+    @Test fun `mixed frame Vertices DST has no consumer beside Core destination`() {
+        val expected = W5bBlendCpuOracle.mixedPixel(listOf(
+            W5bBlendCpuOracle.Draw(ColorARGB.Green, 1f, BlendMode.SRC_OVER) to 1f,
+            W5bBlendCpuOracle.Draw(ColorARGB.White, .5f, BlendMode.DIFFERENCE) to 1f,
+        ))
+        assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+            (W5aSolidOpacityCpuOracle.draw(ColorARGB.White, 1f) as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels))
+        fun frame(includeNoOp: Boolean): UByteArray = Surface(16, 16).also { surface -> surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 16f, 16f), Paint(shader = Shader.SolidColor(ColorARGB.Green), antiAlias = false))
+            drawPoint(4f, 4f, Paint(strokeWidth = 8f, shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), .5f),
+                blendMode = BlendMode.DIFFERENCE, antiAlias = false))
+            if (includeNoOp) drawVertices(Vertices(VertexMode.TRIANGLES,
+                listOf(Point2F32(0f, 0f), Point2F32(16f, 0f), Point2F32(0f, 16f))),
+                Paint(shader = Shader.SolidColor(ColorARGB.White), blendMode = BlendMode.DST, antiAlias = false))
+            drawVertices(Vertices(VertexMode.TRIANGLES,
+                listOf(Point2F32(12f, 12f), Point2F32(16f, 12f), Point2F32(12f, 16f))),
+                Paint(shader = Shader.SolidColor(ColorARGB.Red), antiAlias = false))
+        } }.render().pixels.copyOfRange((16 * 4 + 4) * 4, (16 * 4 + 4) * 4 + 4)
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, frame(false))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, frame(true))
+    }
+
     @Test fun `prepared uncolored Vertices and Mesh no program retain fixed and DST blends`() =
         preparedUncoloredVerticesBlends(listOf(BlendMode.DST_OUT, BlendMode.DST))
 
