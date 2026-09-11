@@ -31,14 +31,23 @@ public class W5bGeometryLanePlanV3 internal constructor(
 internal fun issueW5bNativeComposite(graphs: List<RenderGraph>): RenderGraph {
     require(graphs.size in 2..W5aCompositePlanCompiler.MAX_LANES_I32)
     val first = graphs.first()
-    val admitted = setOf(W3SolidRectPlanCompiler.W5A_CAPABILITY_ID,
+    val admitted = setOf(W3SolidRectPlanCompiler.CAPABILITY_ID, W3SolidRectPlanCompiler.W5A_CAPABILITY_ID,
         W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID, W4bAnalyticRRectPlanCompiler.CAPABILITY_ID,
         W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID, W4cPathFillPlanCompiler.CAPABILITY_ID,
         W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W4dPathStrokePlanCompiler.CAPABILITY_ID,
         W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID)
     require(graphs.all { it.capabilityId in admitted && it.targetExtent == first.targetExtent &&
         it.capabilities == first.capabilities && it.budget == first.budget && it.colorFormat == first.colorFormat })
+    require(graphs.filter { it.capabilityId == W3SolidRectPlanCompiler.CAPABILITY_ID }.all {
+        it.visualCommandCount == 0 && it.materialPlanTableOrNull() == null
+    })
     val activeGraphs = graphs.filter { it.visualCommandCount > 0 }
+    if (activeGraphs.isEmpty()) {
+        val identity = java.security.MessageDigest.getInstance("SHA-256").digest(
+            graphs.joinToString("|") { it.id.value }.encodeToByteArray()).joinToString("") { "%02x".format(it) }
+        return RenderGraph.issueW5bGeometry(W5bGeometryLanePlanV3.clearOnly(PlanId("w5b.composite.$identity"),
+            W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID, first.targetExtent, first.capabilities, first.budget, null))
+    }
     val interned = MaterialPlanTable.intern(activeGraphs.map { requireNotNull(it.materialPlanTableOrNull()) })
     val lanes = mutableListOf<W5bGeometryLanePlanV3>()
     val geometryResources = mutableListOf<PlanResource>()

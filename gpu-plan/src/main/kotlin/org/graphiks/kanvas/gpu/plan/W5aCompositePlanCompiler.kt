@@ -48,13 +48,18 @@ public class W5aCompositePlanCompiler : GpuPlanCompiler {
                     SceneCommand.Annotation.of(RectF32(0f, 0f, 0f, 0f), "w5a.omitted-draw", index.toString())
                 else command
             })
-            val compiler: GpuPlanCompiler = when (kind(run.first().value)) {
+            var compiler: GpuPlanCompiler = when (kind(run.first().value)) {
                 0 -> W3SolidRectPlanCompiler()
                 1 -> W4bAnalyticRRectPlanCompiler()
                 2 -> W4cPathFillPlanCompiler()
                 else -> W4dPathStrokePlanCompiler()
             }
-            when (val selection = compiler.select(laneScene, target)) {
+            var selection = compiler.select(laneScene, target)
+            if (selection is GpuPlanSelection.NotCandidate && kind(run.first().value) == 0) {
+                compiler = W4aAnalyticRectPlanCompiler()
+                selection = compiler.select(laneScene, target)
+            }
+            when (selection) {
                 is GpuPlanSelection.Candidate -> lanes += Lane(compiler, selection.candidate)
                 is GpuPlanSelection.MaterialOnlyRefusal -> materialRefusals += selection.materialRefusals
                 else -> return selection

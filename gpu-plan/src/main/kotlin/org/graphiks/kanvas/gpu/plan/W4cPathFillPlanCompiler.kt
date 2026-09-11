@@ -81,7 +81,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
         for ((commandIndex, command) in scene.withIndex()) {
             when (command) {
                 is SceneCommand.Draw -> {
-                    if (draws.size + materialRefusals.size == MAX_DRAWS) {
+                    if (draws.size + materialRefusals.size + elidedNoOpsI32 == MAX_DRAWS) {
                         return Recognition.Gap("W4c accepts at most 512 visual path draws")
                     }
                     when (
@@ -387,13 +387,6 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
 
         val target = selected.target
         val extent = SizeI32(target.extent.width, target.extent.height)
-        if (selected.draws.isEmpty()) return try {
-            RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bGeometryLanePlanV3.clearOnly(
-                PlanId(planIdentity(selected.sceneCanonicalId, target, capabilities, budget)), W5B_CAPABILITY_ID,
-                extent, capabilities, budget, selected.materialPlanTable)))
-        } catch (failure: IllegalArgumentException) {
-            resourceLimit(W4cPlanDiagnostics.PlanIdentityInvalid, failure.message ?: "Invalid W5b clear-only path frame")
-        }
         if (extent.width > capabilities.maxTextureDimension2D || extent.height > capabilities.maxTextureDimension2D) {
             return promoted(
                 W4cPlanDiagnostics.CapabilityTextureDimension,
@@ -424,6 +417,13 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
                 W4cPlanDiagnostics.CapabilityAllocationPolicy,
                 "W4c allocation facts are not positive powers of two",
             )
+        }
+        if (selected.draws.isEmpty()) return try {
+            RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bGeometryLanePlanV3.clearOnly(
+                PlanId(planIdentity(selected.sceneCanonicalId, target, capabilities, budget)), W5B_CAPABILITY_ID,
+                extent, capabilities, budget, selected.materialPlanTable)))
+        } catch (failure: IllegalArgumentException) {
+            resourceLimit(W4cPlanDiagnostics.PlanIdentityInvalid, failure.message ?: "Invalid W5b clear-only path frame")
         }
         val footprint = when (
             val memory = PathFillPlanBudget.calculate(

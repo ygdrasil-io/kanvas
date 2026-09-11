@@ -51,6 +51,7 @@ internal class W5bNativeGeometryGraphLowerer {
         val recording = GPURecordingSeal(request.recordingId, 0L, replay, replay, seal.sealHash)
         val packets = mutableListOf<GPUDrawPacket>()
         val scratches = mutableListOf<W5bGeometryScratchV3>()
+        val analyticUniformSeals = mutableMapOf<GPUDrawPacketID, GPUCorePrimitiveAnalyticShapeUniformSeal>()
         for (lane in lanes) {
             val commands = lane.commandIndicesI32().toSet()
             val draws = graph.passes().flatMap { pass -> when (pass) {
@@ -135,6 +136,88 @@ internal class W5bNativeGeometryGraphLowerer {
                     packets += built.map { it.packet }
                     scratches += W5bGeometryScratchV3.PathStroke(scratch, built.map { it.packet }, built.map { it.structuralPipelineKey })
                 }
+                W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID -> {
+                    val analytic = draws.map { it as AnalyticRectDraw }
+                    val footprint = (AnalyticRectPlanBudget.calculate(graph.targetExtent, analytic.size,
+                        graph.capabilities, graph.budget) as AnalyticRectPlanBudgetResult.WithinBudget).footprint
+                    val vertexResource = resource(data.vertex)
+                    val indexResource = resource(data.index)
+                    val uniformResource = resource(data.uniform)
+                    require(vertexResource.byteSize == footprint.vertexCapacityBytes &&
+                        indexResource.byteSize == footprint.indexCapacityBytes && uniformResource.byteSize == footprint.uniformCapacityBytes)
+                    val built = analytic.mapIndexed { index, draw -> W4aAnalyticRectGraphLowerer().packet(draw,
+                        requireNotNull(W5aMaterialPlanLowerer().lower(table,
+                            (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref)), index, bounds, table, w5b = true) }
+                    val lanePackets = built.map { it.packet }
+                    val semantics = lanePackets.map { it.semanticPayload as GPUDrawSemanticPayload.CorePrimitive }
+                    val semanticAuthorities = semantics.map(GPUCorePrimitivePreparedSemanticAuthority::capture)
+                    val payloads = semantics.mapIndexed { index, semantic ->
+                        (buildCorePrimitiveAnalyticShapeUniform(semantic, semanticAuthorities[index]) as
+                            GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted).bytes }
+                    val uniformPlan = (GPUUniformSlabPlanner.plan(W4aSessionScratchV1.SOURCE_LABEL,
+                        request.deviceGeneration.value, footprint.uniformStrideBytes, uniformResource.byteSize,
+                        lanePackets.mapIndexed { index, packet -> GPUUniformSlabPayload("analytic-shape-draw-${packet.commandIdValue}", payloads[index]) },
+                        maxBuffer, maxDynamic) as GPUUniformSlabPlanningResult.Accepted).plan
+                    val keys = lanePackets.mapIndexed { index, packet -> corePrimitiveRenderPipelineStructuralKey(semantics[index],
+                        requireNotNull(packet.clipExecutionPlan), requireNotNull(packet.blendPlan), 1,
+                        GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat()) }
+                    val scratch = W4aSessionScratchV1(graph.id.value, seal.sealHash, request.deviceGeneration.value,
+                        target, staging, bounds, vertexResource.id, indexResource.id, uniformResource.id,
+                        lanePackets.map { it.packetId }, lanePackets.map { it.commandIdValue }, built.map { it.scratchDraw }, keys.first(),
+                        uniformPlan, footprint.uniformStrideBytes, footprint.vertexUsefulBytes, footprint.indexUsefulBytes,
+                        footprint.uniformUsefulBytes, vertexResource.byteSize, indexResource.byteSize, uniformResource.byteSize,
+                        requireNotNull(corePrimitiveFramePoolCapacitiesOrNull(footprint.vertexUsefulBytes,
+                            footprint.indexUsefulBytes, footprint.uniformUsefulBytes)), maxBuffer, maxDynamic)
+                    lanePackets.forEachIndexed { index, packet ->
+                        analyticUniformSeals[packet.packetId] = GPUCorePrimitiveAnalyticShapeUniformSeal(uniformPlan, index,
+                            packet.commandIdValue, packet.packetId, semanticAuthorities[index], semantics[index].scissorBounds,
+                            keys[index], requireNotNull(packet.renderPipelineKey), CORE_PRIMITIVE_ANALYTIC_SHAPE_BINDING_LAYOUT_HASH,
+                            PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION, payloads[index])
+                    }
+                    packets += lanePackets
+                    scratches += W5bGeometryScratchV3.AnalyticRect(scratch, lanePackets, keys, payloads)
+                }
+                W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID, W4bAnalyticRRectPlanCompiler.CAPABILITY_ID -> {
+                    val analytic = draws.map { it as AnalyticRRectDraw }
+                    val footprint = (AnalyticRRectPlanBudget.calculate(graph.targetExtent, analytic.size,
+                        graph.capabilities, graph.budget) as AnalyticRRectPlanBudgetResult.WithinBudget).footprint
+                    val vertexResource = resource(data.vertex)
+                    val indexResource = resource(data.index)
+                    val uniformResource = resource(data.uniform)
+                    require(vertexResource.byteSize == footprint.vertexCapacityBytes &&
+                        indexResource.byteSize == footprint.indexCapacityBytes && uniformResource.byteSize == footprint.uniformCapacityBytes)
+                    val built = analytic.mapIndexed { index, draw -> W4bAnalyticRRectGraphLowerer().packet(draw,
+                        requireNotNull(W5aMaterialPlanLowerer().lower(table,
+                            (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref)), index, bounds, table, w5b = true) }
+                    val lanePackets = built.map { it.packet }
+                    val semantics = lanePackets.map { it.semanticPayload as GPUDrawSemanticPayload.CorePrimitive }
+                    val semanticAuthorities = semantics.map(GPUCorePrimitivePreparedSemanticAuthority::capture)
+                    val payloads = semantics.mapIndexed { index, semantic ->
+                        (buildCorePrimitiveAnalyticShapeUniform(semantic, semanticAuthorities[index]) as
+                            GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted).bytes }
+                    val uniformPlan = (GPUUniformSlabPlanner.plan(W4bSessionScratchV1.SOURCE_LABEL,
+                        request.deviceGeneration.value, footprint.uniformStrideBytes, uniformResource.byteSize,
+                        lanePackets.mapIndexed { index, packet -> GPUUniformSlabPayload("analytic-shape-draw-${packet.commandIdValue}", payloads[index]) },
+                        maxBuffer, maxDynamic) as GPUUniformSlabPlanningResult.Accepted).plan
+                    val keys = lanePackets.mapIndexed { index, packet -> corePrimitiveRenderPipelineStructuralKey(semantics[index],
+                        requireNotNull(packet.clipExecutionPlan), requireNotNull(packet.blendPlan), 1,
+                        GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat()) }
+                    val scratch = W4bSessionScratchV1(graph.id.value, seal.sealHash, request.deviceGeneration.value,
+                        target, staging, bounds, vertexResource.id, indexResource.id, uniformResource.id,
+                        lanePackets.map { it.packetId }, lanePackets.map { it.commandIdValue }, built.map { it.scratchDraw }, keys.first(),
+                        uniformPlan, footprint.uniformStrideBytes, footprint.vertexUsefulBytes, footprint.indexUsefulBytes,
+                        footprint.uniformUsefulBytes, vertexResource.byteSize, indexResource.byteSize, uniformResource.byteSize,
+                        requireNotNull(corePrimitiveFramePoolCapacitiesOrNull(footprint.vertexUsefulBytes,
+                            footprint.indexUsefulBytes, footprint.uniformUsefulBytes)), maxBuffer, maxDynamic, graph, lane)
+                    lanePackets.forEachIndexed { index, packet ->
+                        analyticUniformSeals[packet.packetId] = GPUCorePrimitiveAnalyticShapeUniformSeal(uniformPlan, index,
+                            packet.commandIdValue, packet.packetId, semanticAuthorities[index], semantics[index].scissorBounds,
+                            keys[index], requireNotNull(packet.renderPipelineKey), CORE_PRIMITIVE_ANALYTIC_SHAPE_BINDING_LAYOUT_HASH,
+                            PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION, payloads[index])
+                    }
+                    packets += lanePackets
+                    scratches += W5bGeometryScratchV3.AnalyticRRect(scratch, lanePackets, keys, payloads)
+                }
                 else -> error("W5b native geometry lane is not yet lowered: ${lane.capabilityId}")
             }
         }
@@ -144,7 +227,7 @@ internal class W5bNativeGeometryGraphLowerer {
             targetPreparation, stagingPreparation, readback, packets, geometryLanes = scratches)
         scratches.forEach { scratch -> witness.packetsFor(scratch).forEachIndexed { index, packet ->
             packet.attachCorePrimitivePreparedAuthority(GPUCorePrimitivePreparedPacketAuthority.plannedW5b(
-                scratch.packetStructuralPipelineKeys[index], requireNotNull(packet.renderPipelineKey), witness))
+                scratch.packetStructuralPipelineKeys[index], requireNotNull(packet.renderPipelineKey), witness, analyticUniformSeals[packet.packetId]))
         } }
         val render = GPUTask.Render(GPUTaskID("task.w5b.geometry.${graph.id.value}.packing"), request.recordingId,
             GPUTaskPhase.Render, target, GPULoadStorePlan("clear", GPUStorePlan.Store), GPUSamplePlan.SingleSampleFrame,

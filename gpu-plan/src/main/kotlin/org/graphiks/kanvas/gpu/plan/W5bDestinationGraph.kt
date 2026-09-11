@@ -66,7 +66,7 @@ internal object W5bDestinationGraphSealer {
             PlanResourceLifetime.FrameLocal, 0, passCountI32)
         val staging = PlanResource.of(PlanResourceRole.ReadbackStaging, 0, PlanResourceKind.Buffer,
             null, null, stagingBytesI64, setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead),
-            PlanResourceLifetime.FrameLocal, 0, passCountI32)
+            PlanResourceLifetime.FrameLocal, if (draws.isEmpty()) 1 else 0, passCountI32)
         var versionI64 = 0L
         var renderOrdinalI32 = 0
         var copyOrdinalI32 = 0

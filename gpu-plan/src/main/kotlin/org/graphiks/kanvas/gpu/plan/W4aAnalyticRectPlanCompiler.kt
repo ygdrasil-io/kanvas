@@ -69,6 +69,11 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
         if (!validAllocationFacts(capabilities)) {
             return promoted(W4aPlanDiagnostics.CapabilityAllocationPolicy, "W4a allocation facts are not power-of-two aligned")
         }
+        if (selected.draws.isEmpty()) return try {
+            RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bGeometryLanePlanV3.clearOnly(
+                PlanId(planIdentity(selected.sceneCanonicalId, target, capabilities, budget)), W5B_CAPABILITY_ID,
+                extent, capabilities, budget, null)))
+        } catch (_: IllegalArgumentException) { resourceLimit(W4aPlanDiagnostics.SizeOverflow, "W4a clear-only frame exceeds its resource contract") }
         val plannedDraws = selected.draws.map { sealed ->
             val raster = rasterBounds(sealed.deviceBounds) ?: return resourceLimit(W4aPlanDiagnostics.SizeOverflow, "Device raster bounds exceed I32")
             val targetRaster = intersect(raster, targetBounds(extent))
@@ -152,11 +157,11 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
             is SceneCommand.Annotation -> if (!finite(command.copyBounds())) return Recognition.Invalid("Annotation bounds are non-finite")
             else -> return Recognition.Gap("Scene command is outside W4a")
         }
-        if (draws.isEmpty() && materialRefusals.isEmpty()) return Recognition.Gap("W4a requires at least one visible draw")
-        if (draws.size + materialRefusals.size > MAX_DRAWS) return Recognition.Gap("W4a accepts at most 512 visual draws")
+        if (draws.isEmpty() && materialRefusals.isEmpty() && elidedNoOpsI32 == 0) return Recognition.Gap("W4a requires at least one visible draw")
+        if (draws.size + materialRefusals.size + elidedNoOpsI32 > MAX_DRAWS) return Recognition.Gap("W4a accepts at most 512 visual draws")
         if (!refusedFractionalEdge && draws.none { hasFractionalEdge(it.deviceBounds) }) return Recognition.Gap("W4a requires a fractional device edge")
         if (materialRefusals.isNotEmpty()) return Recognition.MaterialRefused(materialRefusals)
-        return Recognition.Accepted(draws, MaterialPlanTable.of(materialEntries),
+        return Recognition.Accepted(draws, materialEntries.takeIf { it.isNotEmpty() }?.let(MaterialPlanTable::of),
             if (elidedNoOpsI32 > 0 || draws.any { it.blend != BlendPlan.LegacySrcOverV1 }) W5B_CAPABILITY_ID else W5A_CAPABILITY_ID)
     }
 
@@ -320,7 +325,7 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
         data class MaterialRefused(val refusals: List<EffectiveMaterialPlanner.Result.Refused>) : Recognition
         data class Accepted(
             val draws: List<SealedDraw>,
-            val materialPlanTable: MaterialPlanTable,
+            val materialPlanTable: MaterialPlanTable?,
             val capabilityId: String,
         ) : Recognition
         data class Gap(val message: String) : Recognition
@@ -334,7 +339,7 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
         override val sceneCanonicalId: CanonicalId,
         override val target: RenderTargetDescriptor,
         draws: List<SealedDraw>,
-        val materialPlanTable: MaterialPlanTable,
+        val materialPlanTable: MaterialPlanTable?,
         override val capabilityId: String,
     ) : GpuPlanCandidate {
         val draws: List<SealedDraw> = Collections.unmodifiableList(draws.map { it.copy(deviceBounds = it.deviceBounds.copy(), clip = it.clip?.copy()) })

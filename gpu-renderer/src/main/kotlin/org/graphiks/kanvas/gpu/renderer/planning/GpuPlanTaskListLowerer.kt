@@ -112,6 +112,8 @@ public class GpuPlanTaskListLowerer {
         }
         if (request.graph.capabilities != current) return unsupported("The graph capability snapshot is stale.")
         if (request.graph.budget != request.currentBudget) return invalid("The graph budget is stale.")
+        if (request.graph.verifyW5bGeometryCompilerWitness() && request.graph.visualCommandCount == 0)
+            return lowerW3(request, current)
         return when (request.graph.capabilityId) {
             W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID -> W5bAnalyticRRectGraphLowerer().lower(request)
             org.graphiks.kanvas.gpu.plan.W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID,
@@ -461,7 +463,9 @@ public class GpuPlanTaskListLowerer {
     }
 
     private fun validateW3Graph(graph: RenderGraph): W3Graph? {
-        if (graph.capabilityId !in setOf(W3SolidRectPlanCompiler.CAPABILITY_ID, W3SolidRectPlanCompiler.W5A_CAPABILITY_ID, W5bCorePrimitiveGraph.CAPABILITY_ID) || graph.colorFormat != PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) return null
+        val geometryClearOnly = graph.verifyW5bGeometryCompilerWitness() && graph.visualCommandCount == 0 &&
+            graph.materialPlanTableOrNull() == null && graph.w5bGeometryLanes().isEmpty() && graph.passes().size == 2
+        if ((!geometryClearOnly && graph.capabilityId !in setOf(W3SolidRectPlanCompiler.CAPABILITY_ID, W3SolidRectPlanCompiler.W5A_CAPABILITY_ID, W5bCorePrimitiveGraph.CAPABILITY_ID)) || graph.colorFormat != PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) return null
         val resources = graph.resources()
         if (graph.capabilityId == W5bCorePrimitiveGraph.CAPABILITY_ID) {
             val target = resources.singleOrNull { it.role == PlanResourceRole.LogicalTarget } ?: return null
@@ -536,7 +540,7 @@ public class GpuPlanTaskListLowerer {
             W3SolidRectPlanCompiler.W5A_CAPABILITY_ID -> if (
                 table == null || draws.any { it.materialAuthority !is PlanDrawMaterialAuthority.MaterialV1 }
             ) return null
-            else -> return null
+            else -> if (!geometryClearOnly || draws.isNotEmpty()) return null
         }
         return W3Graph(target, staging, render, readback, draws, table, graph.takeIf { draws.isEmpty() })
     }
