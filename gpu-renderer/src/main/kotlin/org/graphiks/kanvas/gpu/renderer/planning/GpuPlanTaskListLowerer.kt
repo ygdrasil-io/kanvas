@@ -117,6 +117,7 @@ public class GpuPlanTaskListLowerer {
         return when (request.graph.capabilityId) {
             W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID -> W5bAnalyticRRectGraphLowerer().lower(request)
             org.graphiks.kanvas.gpu.plan.W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID,
+            W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID,
             W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID,
             W4cPathFillPlanCompiler.W5B_CAPABILITY_ID -> W5bNativeGeometryGraphLowerer().lower(request)
             W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID -> W5bAnalyticRectGraphLowerer().lower(request)

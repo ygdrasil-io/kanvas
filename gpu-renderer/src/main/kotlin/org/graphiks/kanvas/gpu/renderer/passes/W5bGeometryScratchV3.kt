@@ -6,6 +6,73 @@ import org.graphiks.kanvas.gpu.renderer.resources.*
 
 /** Sealed geometry ownership used by the shared final-blend envelope. */
 internal sealed class W5bGeometryScratchV3 {
+    /** Original W4d.2 native bytes plus a sealed final-color envelope, never narrow-path packing. */
+    class General(
+        override val planId: String,
+        val sourceGraph: org.graphiks.kanvas.gpu.plan.RenderGraph,
+        val authority: GPUPlanW4dGeneralPreparedAuthority,
+        val native: GPUW4dGeneralPreparedFrameMaterializationAuthority,
+        packets: List<GPUDrawPacket>,
+        keys: List<GPUCorePrimitiveRenderPipelineStructuralKey>,
+        val maxBufferSizeI64: Long,
+        val maxDynamicUniformBuffersI64: Long,
+    ) : W5bGeometryScratchV3() {
+        val sourcePasses = org.graphiks.kanvas.gpu.renderer.collections.immutableList(
+            sourceGraph.passes().filterIsInstance<org.graphiks.kanvas.gpu.plan.PlanPass.PathRenderPass>())
+        private val admittedPackets = org.graphiks.kanvas.gpu.renderer.collections.immutableList(packets)
+        override val packetIds = org.graphiks.kanvas.gpu.renderer.collections.immutableList(packets.map { it.packetId })
+        override val commandIds = org.graphiks.kanvas.gpu.renderer.collections.immutableList(packets.map { it.commandIdValue })
+        override val packetStructuralPipelineKeys = org.graphiks.kanvas.gpu.renderer.collections.immutableList(keys)
+        override val capabilitySealHash get() = native.capabilitySealHash
+        override val deviceGeneration get() = native.deviceGeneration.value
+        override val target get() = native.resource(native.readbackSourceResourceId) as GPUFrameTargetRef
+        override val staging get() = native.resource(native.readbackStagingResourceId) as GPUFrameBufferRef
+        override val targetBounds get() = native.targetBounds
+        override val uniformPlan get() = native.uniformSlab.plan
+        override val vertexBytes get() = native.frameResources.vertexUsefulBytes
+        override val indexBytes get() = native.frameResources.indexUsefulBytes
+        override val poolCapacities = requireNotNull(corePrimitiveFramePoolCapacitiesOrNull(
+            native.frameResources.vertexUsefulBytes, native.frameResources.indexUsefulBytes, native.frameResources.uniformReservedBytes))
+        override val uniformPayloadBytesI64 = 32L
+        init {
+            require(sourceGraph.capabilityId == org.graphiks.kanvas.gpu.plan.W4dGeneralPathPlanCompiler.W5A_HARD_CAPABILITY_ID &&
+                authority.preflightRevalidates(sourceGraph, sourcePasses))
+            require(sourcePasses.size == packets.size && keys.size == packets.size &&
+                native.pathPassFacts.map { it.pathPassId } == sourcePasses.map { it.id.value })
+            require(poolCapacities.vertexBytes == native.frameResources.vertexCapacityBytes &&
+                poolCapacities.indexBytes == native.frameResources.indexCapacityBytes &&
+                poolCapacities.uniformBytes == native.frameResources.uniformCapacityBytes)
+            require(sourcePasses.all { it.draw is org.graphiks.kanvas.gpu.plan.GeneralPathDraw &&
+                it.draw.sample == org.graphiks.kanvas.gpu.plan.SamplePlan.SingleSample })
+        }
+        fun sourcePass(packet: GPUDrawPacket) = sourcePasses[admittedPackets.indexOfFirst { it === packet }.also { require(it >= 0) }]
+        fun geometryResourceUses(commandI32: Int, producer: Boolean): List<GPUFrameResourceUse> {
+            val pass = sourcePasses.single { it.draw.commandIndex == commandI32 &&
+                (it.phase == org.graphiks.kanvas.gpu.plan.PathRenderPhase.SingleSampleStencilProducer) == producer }
+            return org.graphiks.kanvas.gpu.renderer.planning.W4dGeneralPathGraphLowerer().w4dGeneralResourceUses(pass, native)
+        }
+        fun ownsProducer(packet: GPUDrawPacket, pass: org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3): Boolean {
+            val source = sourcePass(packet)
+            return source.id.value == packet.passId && source.draw.commandIndex == pass.commandIndexI32 &&
+                source.phase == org.graphiks.kanvas.gpu.plan.PathRenderPhase.SingleSampleStencilProducer &&
+                source.atomicGroup == pass.atomicGroup
+        }
+        override fun hasExactUniformPayloads(expectedAlignmentBytes: Long, packets: List<GPUDrawPacket>): Boolean =
+            expectedAlignmentBytes == uniformPlan.alignmentBytes && packets.size == admittedPackets.size &&
+                packets.zip(admittedPackets).all { (a, b) -> a === b } &&
+                packets.withIndex().all { (index, packet) ->
+                    val prepared = packet.corePrimitivePreparedAuthority ?: return false
+                    prepared.w4dGeneralPreparedAuthority === authority && prepared.w4dGeneralFrameMaterializationAuthority === native &&
+                        prepared.structuralPipelineKey == packetStructuralPipelineKeys[index] &&
+                        authority.matchesPreparedPacket(packet, sourcePasses[index], prepared.structuralPipelineKey, prepared.renderPipelineKey)
+                } && uniformPlan.hasExactPayloads(W4dGeneralNativeUniformSlabSeal.SOURCE_LABEL, deviceGeneration,
+                    expectedAlignmentBytes, sourcePasses.map { pass ->
+                        GPUUniformSlabPayload("w4d-general-${pass.id.value}", requireNotNull(authority.nativeUniformPayloadFor(pass)))
+                    })
+        override fun fitsDeviceLimits(maxBufferSize: Long, maxDynamicUniformBuffersPerPipelineLayout: Long): Boolean =
+            maxBufferSize == maxBufferSizeI64 && maxDynamicUniformBuffersPerPipelineLayout == maxDynamicUniformBuffersI64 &&
+                listOf(poolCapacities.vertexBytes, poolCapacities.indexBytes, poolCapacities.uniformBytes).all { it <= maxBufferSize }
+    }
     sealed class NativePath : W5bGeometryScratchV3() {
         abstract val nativeAuthority: Any
     }

@@ -1961,8 +1961,11 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
             pipeline: GPURenderPipelineKey,
             witness: W5bPreparedFrameWitnessV3,
             analyticSeal: GPUCorePrimitiveAnalyticShapeUniformSeal? = null,
+            general: W5bGeometryScratchV3.General? = null,
         ): GPUCorePrimitivePreparedPacketAuthority = GPUCorePrimitivePreparedPacketAuthority(
             key, pipeline, null, analyticShapeUniformSeal = analyticSeal, scratchLane = ScratchLane.Legacy, w5bFrameWitnessV3 = witness,
+            w4dGeneralPreparedAuthority = general?.also { require(witness.geometryLanes.any { lane -> lane === it }) }?.authority,
+            w4dGeneralFrameMaterializationAuthority = general?.native,
         )
 
         fun plannedW3(

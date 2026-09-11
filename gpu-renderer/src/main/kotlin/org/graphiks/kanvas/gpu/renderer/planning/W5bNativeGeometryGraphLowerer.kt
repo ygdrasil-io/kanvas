@@ -20,7 +20,7 @@ internal class W5bNativeGeometryGraphLowerer {
         val maxBuffer = requireNotNull(limits.maxBufferSize)
         val maxDynamic = requireNotNull(limits.maxDynamicUniformBuffersPerPipelineLayout)
         val bounds = GPUPixelBounds(0, 0, graph.targetExtent.width, graph.targetExtent.height)
-        val identity = "w5b.geometry.${request.deviceGeneration.value}.${bounds.width}x${bounds.height}.rgba8unorm-srgb"
+        val identity = "w3.session.${request.deviceGeneration.value}.${bounds.width}x${bounds.height}.rgba8unorm-srgb"
         val target = GPUFrameTargetRef("$identity.target")
         val staging = GPUFrameBufferRef("$identity.staging")
         val table = requireNotNull(graph.materialPlanTableOrNull())
@@ -61,6 +61,26 @@ internal class W5bNativeGeometryGraphLowerer {
             } }.filter { it.commandIndex in commands }
             val data = requireNotNull(lane.drawDataResources)
             when (lane.capabilityId) {
+                W4dGeneralPathPlanCompiler.W5A_HARD_CAPABILITY_ID -> {
+                    val source = lane.sourceGraph
+                    val sourcePasses = source.passes().filterIsInstance<PlanPass.PathRenderPass>()
+                    val authority = GPUPlanW4dGeneralPreparedAuthority.issueAfterFullGraphValidation(source, sourcePasses)
+                    require(authority.preflightRevalidates(source, sourcePasses))
+                    val builder = W4dGeneralPathGraphLowerer()
+                    val sealedColors = draws.associateBy { it.commandIndex }
+                    val built = sourcePasses.mapIndexed { index, pass -> builder.packet(pass, index, bounds,
+                        GPUColorFormat.RGBA8UnormSrgb, source, w5bBlend = sealedColors.getValue(pass.draw.commandIndex).blend) }
+                    val bindings = W5bGeneralResourceBindingsV3.issue(graph, lane, target, staging)
+                    val native = requireNotNull(authority.bindNativeMaterializationFrame(identity, seal.sealHash,
+                        request.deviceGeneration, sourcePasses.zip(built).associate { (pass, packet) -> pass.id.value to packet.structuralPipelineKey },
+                        sourcePasses.associate { it.id.value to requireNotNull(authority.nativeUniformPayloadFor(it)) },
+                        limits.minUniformBufferOffsetAlignment, maxBuffer, maxDynamic, bindings))
+                    require(listOf(resource(data.vertex).byteSize, resource(data.index).byteSize, resource(data.uniform).byteSize) ==
+                        listOf(native.frameResources.vertexCapacityBytes, native.frameResources.indexCapacityBytes, native.frameResources.uniformCapacityBytes))
+                    packets += built.map { it.packet }
+                    scratches += W5bGeometryScratchV3.General(graph.id.value, source, authority, native,
+                        built.map { it.packet }, built.map { it.structuralPipelineKey }, maxBuffer, maxDynamic)
+                }
                 W3SolidRectPlanCompiler.W5A_CAPABILITY_ID -> {
                     require(draws.all { it is SolidRectDraw })
                     val builder = GpuPlanTaskListLowerer()
@@ -227,7 +247,7 @@ internal class W5bNativeGeometryGraphLowerer {
             targetPreparation, stagingPreparation, readback, packets, geometryLanes = scratches)
         scratches.forEach { scratch -> witness.packetsFor(scratch).forEachIndexed { index, packet ->
             packet.attachCorePrimitivePreparedAuthority(GPUCorePrimitivePreparedPacketAuthority.plannedW5b(
-                scratch.packetStructuralPipelineKeys[index], requireNotNull(packet.renderPipelineKey), witness, analyticUniformSeals[packet.packetId]))
+                scratch.packetStructuralPipelineKeys[index], requireNotNull(packet.renderPipelineKey), witness, analyticUniformSeals[packet.packetId], scratch as? W5bGeometryScratchV3.General))
         } }
         val render = GPUTask.Render(GPUTaskID("task.w5b.geometry.${graph.id.value}.packing"), request.recordingId,
             GPUTaskPhase.Render, target, GPULoadStorePlan("clear", GPUStorePlan.Store), GPUSamplePlan.SingleSampleFrame,

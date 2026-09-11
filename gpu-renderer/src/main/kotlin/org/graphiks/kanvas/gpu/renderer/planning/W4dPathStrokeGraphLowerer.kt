@@ -475,6 +475,7 @@ internal class W4dPathStrokeGraphLowerer {
         val direct = geometry.copyDirectTriangleF32OrNull()
         val stencil = geometry.copyStencilEdgeFanF32OrNull()
         val exactMode = when (draw) {
+            is org.graphiks.kanvas.gpu.plan.GeneralPathDraw -> false
             is PathFillDraw -> true
             is PathStrokeDraw -> when (draw.mode) {
                 PathStrokeDrawMode.Stroke -> when (val width = draw.styleF64.widthF64) {
@@ -1137,6 +1138,7 @@ private fun PathDraw.copyFillGeometryF32(): PathFillGeometryF32 = when (val geom
 }
 
 private fun PathDraw.expectedAtomicGroupId(): String = when (this) {
+    is org.graphiks.kanvas.gpu.plan.GeneralPathDraw -> error("General geometry requires its own native authority")
     is PathFillDraw -> "w4c:$commandIndex"
     is PathStrokeDraw -> "w4d:$commandIndex"
 }

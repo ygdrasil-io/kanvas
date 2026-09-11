@@ -3802,10 +3802,10 @@ internal class GPUFramePreflighter(
         val msaaRenders = renders.filter { render ->
             render.samplePlan == GPUSamplePlan.MultisampleFrame(4)
         }
-        if (renders.isEmpty() || framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().size !=
-            renders.size
-        ) {
-            return refused("W4d.2 MSAA requires one closed all-path render sequence.")
+        val w5b = renders.firstOrNull()?.drawPackets?.singleOrNull()?.corePrimitivePreparedAuthority?.w5bFrameWitnessV3
+        if (renders.isEmpty() || (w5b == null && framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().size != renders.size) ||
+            (w5b != null && (!w5b.validates(framePlan) || msaaRenders.isNotEmpty()))) {
+            return refused("W4d.2 requires its original closed frame or a complete sealed W5b single-sample envelope.")
         }
         val packets = renders.map { render -> render.drawPackets.singleOrNull() ?: return refused(
             "W4d.2 MSAA render scopes must retain exactly one sealed path packet.",
@@ -3898,14 +3898,20 @@ internal class GPUFramePreflighter(
         val native = packets.firstOrNull()?.corePrimitivePreparedAuthority
             ?.w4dGeneralFrameMaterializationAuthority
             ?: return refused("W4d.2 packets require one sealed native materialization table.")
+        val w5b = packets.first().corePrimitivePreparedAuthority?.w5bFrameWitnessV3
+        val w5bGeneral = w5b?.scratchFor(packets.first()) as? org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.General
+        if (w5b != null && (w5bGeneral?.native !== native || !w5b.validates(framePlan) ||
+            packets.any { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 !== w5b ||
+                w5b.scratchFor(it) !== w5bGeneral }))
+            return refused("General native rows lost their complete W5b frame and lane identity.")
         if (packets.any { packet ->
                 packet.corePrimitivePreparedAuthority?.w4dGeneralFrameMaterializationAuthority !== native
             } || native.deviceGeneration != context.deviceGeneration ||
             native.capabilitySealHash != framePlan.capabilitySeal.sealHash ||
             native.targetBounds.isEmpty ||
             framePlan.recordingSeals.size != 1 ||
-            framePlan.recordingSeals.single().compatibilityKeyHash != "w4d-general:${native.planId}" ||
-            framePlan.recordingSeals.single().replayKeyHash != "w4d-general:${native.planId}"
+            (w5b == null && (framePlan.recordingSeals.single().compatibilityKeyHash != "w4d-general:${native.planId}" ||
+            framePlan.recordingSeals.single().replayKeyHash != "w4d-general:${native.planId}"))
         ) {
             return refused("W4d.2 native materialization table is stale or not common to the frame.")
         }
@@ -3999,15 +4005,15 @@ internal class GPUFramePreflighter(
                         native.structuralPipelineKey(fact.pathPassId) ||
                     render.target != native.resource(fact.targetResourceId) ||
                     render.samplePlan.sampleCount != fact.sampleCountI32 ||
-                    render.resourceUses != expectedResourceUses ||
+                    (w5b == null && render.resourceUses != expectedResourceUses) ||
                     render.depthStencilLoadStore != expectedDepthStencilLoadStore ||
                     !hasExactConsumerUniform64 ||
-                    render.loadStore.loadOp != (if (foldedMaskClear) {
+                    (w5b == null && render.loadStore.loadOp != (if (foldedMaskClear) {
                         "clear"
                     } else when (fact.load) {
                         org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan.ClearTransparent -> "clear"
                         org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan.Load -> "load"
-                    }) ||
+                    })) ||
                     render.loadStore.storePlan != GPUStorePlan.Store
             }
         ) {

@@ -120,7 +120,8 @@ internal class W5bPreparedFrameWitnessV3(
         packet.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 === this &&
         packet.corePrimitivePreparedAuthority?.structuralPipelineKey?.blend == GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ColorWriteNone &&
         graph.passes().filterIsInstance<PlanPass.StencilGeometryProducerV3>().any {
-            it.commandIndexI32 == packet.commandIdValue && it.id.value == packet.passId
+            it.commandIndexI32 == packet.commandIdValue && (it.id.value == packet.passId ||
+                (scratchFor(packet) as? W5bGeometryScratchV3.General)?.ownsProducer(packet, it) == true)
         }
     private val memory = memoryBudget.snapshotForFramePlan()
     private val packetResourceGenerations = org.graphiks.kanvas.gpu.renderer.collections.immutableMap(
@@ -219,7 +220,9 @@ internal class W5bPreparedFrameWitnessV3(
             actual.copyLayout == expected.copyLayout && actual.consumers == expected.consumers &&
             actual.sourceTaskIds == expected.sourceTaskIds
     }
-    private fun colorResourceUses(pass: PlanPass.RenderPass) = buildList {
+    fun colorResourceUses(pass: PlanPass.RenderPass) = buildList {
+        pass.draws().forEach { draw -> geometryLanes.filterIsInstance<W5bGeometryScratchV3.General>()
+            .singleOrNull { draw.commandIndex in it.commandIds }?.let { addAll(it.geometryResourceUses(draw.commandIndex, false)) } }
         if (pass.draws().any { it.blend is org.graphiks.kanvas.gpu.plan.BlendPlan.DestinationReadV1 }) add(
             org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(
                 org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef(scratch.target.value.removeSuffix(".target") + ".snapshot"),
@@ -240,7 +243,10 @@ internal class W5bPreparedFrameWitnessV3(
             is PlanPass.StencilCover -> pass.depthStencil
             else -> error("Not a stencil pass")
         }
-        add(org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(depthStencilRef(depth),
+        val commandI32 = if (pass is PlanPass.StencilGeometryProducerV3) pass.commandIndexI32 else (pass as PlanPass.StencilCover).draw.commandIndex
+        val general = geometryLanes.filterIsInstance<W5bGeometryScratchV3.General>().singleOrNull { commandI32 in it.commandIds }
+        if (general != null) addAll(general.geometryResourceUses(commandI32, pass is PlanPass.StencilGeometryProducerV3))
+        else add(org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(depthStencilRef(depth),
             org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.PathDepthStencil,
             org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.RenderAttachment,
             org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, true))
@@ -264,6 +270,7 @@ internal class W5bPreparedFrameWitnessV3(
                 org.graphiks.kanvas.gpu.plan.W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID,
                 org.graphiks.kanvas.gpu.plan.W4cPathFillPlanCompiler.W5B_CAPABILITY_ID,
                 org.graphiks.kanvas.gpu.plan.W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID,
+                org.graphiks.kanvas.gpu.plan.W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID,
                 org.graphiks.kanvas.gpu.plan.W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID))
         require(this.geometryLanes.isNotEmpty() && this.geometryLanes.first() === scratch &&
             this.geometryLanes.all { it.planId == graph.id.value && it.target == scratch.target && it.staging == scratch.staging &&

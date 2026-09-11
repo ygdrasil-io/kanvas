@@ -1816,11 +1816,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 GPUSamplePlan.SingleSampleFrame,
                 provisionalSegmentKey = GPUProvisionalRenderSegmentKey("w5b.${graph.id.value}.${pass.id.value}"),
                 w5bInitialClearV3 = if (selected.isEmpty()) org.graphiks.kanvas.gpu.renderer.passes.W5bInitialClearV3(witness) else null,
-                resourceUses = (if (selected.any { it.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead }) listOf(
-                    GPUFrameResourceUse(snapshot, GPUFrameResourceRole.DestinationSnapshot, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false)) else emptyList()) +
-                    (if (pass.draws().filterIsInstance<org.graphiks.kanvas.gpu.plan.W5bPointDraw>().any { it.clipOnly != null }) listOf(
-                        GPUFrameResourceUse(requireNotNull(witness.clipPrefixV4).maskRef, GPUFrameResourceRole.ClipMask,
-                            GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false)) else emptyList()),
+                resourceUses = witness.colorResourceUses(pass),
                 drawPackets = selected, batchEligibilityByPacketId = selected.associate { it.packetId to base.batchEligibilityByPacketId.getValue(it.packetId) })
         }
         val passes = graph.passes()

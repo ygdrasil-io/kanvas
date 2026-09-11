@@ -153,11 +153,10 @@ public class GeneralPathDraw private constructor(
     scissorI32: RectI32,
     override public val coverage: CoveragePlan,
     override public val sample: SamplePlan,
-) : PathRenderDraw {
+    override public val blend: BlendPlan = BlendPlan.SrcOver,
+) : PathRenderDraw, PathDraw {
     private val geometrySnapshot: PathDrawGeometry = geometry
     private val scissorSnapshotI32 = scissorI32.copy()
-
-    override public val blend: BlendPlan = BlendPlan.SrcOver
 
     override fun copyPathGeometry(): PathDrawGeometry = geometrySnapshot
 
@@ -198,6 +197,7 @@ public class GeneralPathDraw private constructor(
             scissorI32: RectI32,
             coverage: CoveragePlan,
             sample: SamplePlan,
+            blend: BlendPlan = BlendPlan.SrcOver,
         ): GeneralPathDraw {
             require(commandIndexI32 >= 0) { "Command index must not be negative" }
             require(!scissorI32.isEmpty) { "General path scissor must be non-empty" }
@@ -207,7 +207,7 @@ public class GeneralPathDraw private constructor(
             ) { "General path draws require an explicit hard or four-sample AA contract" }
             requirePathRenderGeometryForStrategy(geometry, strategy)
             return GeneralPathDraw(
-                commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material), geometry, strategy, scissorI32, coverage, sample,
+                commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material), geometry, strategy, scissorI32, coverage, sample, blend,
             )
         }
 
@@ -238,6 +238,12 @@ public class GeneralPathDraw private constructor(
         )
     }
 }
+
+/** Retains the same immutable General geometry without projecting it into a narrow path lane. */
+public fun GeneralPathDraw.withBlend(blend: BlendPlan): GeneralPathDraw = GeneralPathDraw.ofMaterial(
+    commandIndex, (materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref, copyPathGeometry(), strategy,
+    copyScissorI32(), coverage, sample, blend,
+)
 
 /** A W4d.2 direct path draw whose final coverage is constrained by a W4e clip plan. */
 public class ClippedGeneralPathDraw private constructor(

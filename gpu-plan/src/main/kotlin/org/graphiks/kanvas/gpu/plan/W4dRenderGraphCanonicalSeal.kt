@@ -236,6 +236,7 @@ private class W4dGraphDigestWriter {
         text("$prefix.type", when (pathDraw) {
             is PathFillDraw -> "fill"
             is PathStrokeDraw -> "stroke"
+            is GeneralPathDraw -> error("W4d narrow witness cannot consume General geometry")
         })
         i32("$prefix.command-index", pathDraw.commandIndex)
         if (materialV2) {
@@ -262,6 +263,7 @@ private class W4dGraphDigestWriter {
         text("$prefix.strategy", pathDraw.strategy.name)
         rect("$prefix.scissor", pathDraw.copyScissorI32())
         when (pathDraw) {
+            is GeneralPathDraw -> error("W4d narrow witness cannot consume General geometry")
             is PathFillDraw -> fillGeometry("$prefix.geometry.fill", pathDraw.copyGeometryF32())
             is PathStrokeDraw -> {
                 strokeGeometry("$prefix.geometry.stroke", pathDraw.copyGeometryF32())

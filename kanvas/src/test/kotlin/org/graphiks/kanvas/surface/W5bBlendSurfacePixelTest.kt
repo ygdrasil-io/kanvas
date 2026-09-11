@@ -22,6 +22,7 @@ import org.graphiks.math.color.ColorF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RRectF32
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.CornerRadiiF32
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
@@ -109,6 +110,88 @@ class W5bBlendSurfacePixelTest {
         val reverse = pixels(true)
         WgslFloatEnvelopeV1Oracle.assertAdmits(green, reverse.copyOfRange(4, 8))
         WgslFloatEnvelopeV1Oracle.assertAdmits(green, reverse.copyOfRange(36, 40))
+    }
+
+    @Test fun `geometry transformed hard Paths retain final blends and captured math geometry`() {
+        assertAll(listOf(GeometryFamily.DirectPath, GeometryFamily.StencilPath, GeometryFamily.Stroke, GeometryFamily.Hairline).flatMap { family ->
+            listOf(BlendMode.DST_OUT, BlendMode.DST, BlendMode.DIFFERENCE).map { mode -> {
+                val opacity = if (mode == BlendMode.DIFFERENCE) .45f else .5f
+                val background = W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, 1f)
+                val destination = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(background))
+                val white = solidSource(ColorF32.of(1f, 1f, 1f, 1f), opacity)
+                val expected = when (mode) {
+                    BlendMode.DST -> background
+                    BlendMode.DST_OUT -> W5aSolidOpacityCpuOracle.draw(ColorARGB.Green, .5f)
+                    else -> WgslFloatEnvelopeV1Oracle.drawDestination(white, MaterialPlanRef(1), destination, mode)
+                }
+                assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.sourceOverExclusion(white, MaterialPlanRef(1), destination))
+                if (mode != BlendMode.DST) assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+                    (background as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels))
+                fun record(reverse: Boolean, mutateBefore: Boolean): Picture {
+                    val source = Path().apply { when (family) {
+                        GeometryFamily.DirectPath -> { moveTo(-1f, -1f); lineTo(5f, -1f); lineTo(-1f, 5f); close() }
+                        GeometryFamily.StencilPath -> { moveTo(-1f, -1f); lineTo(5f, -1f); lineTo(5f, 5f); lineTo(2f, 2f); lineTo(-1f, 5f); close() }
+                        else -> { moveTo(-1f, .5f); lineTo(5f, .5f) }
+                    } }
+                    fun mutate() {
+                        if (family in setOf(GeometryFamily.Stroke, GeometryFamily.Hairline)) {
+                            source.moveTo(-1f, 3.5f); source.lineTo(5f, 3.5f)
+                        } else source.addRect(RectF32.ofLTRB(0f, 3f, 4f, 4f))
+                    }
+                    if (mutateBefore) mutate()
+                    val recorder = PictureRecorder()
+                    val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f))
+                    canvas.concat(Matrix3x3F32.skewing(.25f, 0f))
+                    fun foreground() = canvas.drawPath(source, Paint(
+                        shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), opacity), antiAlias = false,
+                        blendMode = mode, style = if (family in setOf(GeometryFamily.Stroke, GeometryFamily.Hairline)) PaintStyle.STROKE else PaintStyle.FILL,
+                        strokeWidth = if (family == GeometryFamily.Hairline) 0f else 1f))
+                    fun background() = canvas.drawPath(Path().apply { addRect(RectF32.ofLTRB(-10f, -10f, 10f, 10f)) },
+                        Paint(shader = Shader.SolidColor(ColorARGB.Green), antiAlias = false))
+                    if (reverse) { foreground(); background() } else { background(); foreground() }
+                    if (!mutateBefore) mutate()
+                    return requireNotNull(Picture.fromByteArray(recorder.finishRecordingAsPicture().toByteArray()))
+                }
+                fun pixels(reverse: Boolean = false, mutateBefore: Boolean = false) = Surface(4, 4).also { surface ->
+                    surface.canvas { record(reverse, mutateBefore).playback(this) }
+                }.render().pixels
+                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixels().copyOfRange(0, 4))
+                if (mode != BlendMode.DST) {
+                    WgslFloatEnvelopeV1Oracle.assertAdmits(background, pixels(reverse = true).copyOfRange(0, 4))
+                    // At (2.5,3.5), inverse-skew x=1.625: original paths are outside,
+                    // while each appended rectangle/line covers the sample.
+                    WgslFloatEnvelopeV1Oracle.assertAdmits(background, pixels().copyOfRange(56, 60))
+                    WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixels(mutateBefore = true).copyOfRange(56, 60))
+                }
+            } }
+        })
+    }
+
+    @Test fun `geometry transformed NoOp preserves the authentic AA4 refusal and recovery`() {
+        val path = Path().apply { moveTo(-1f, -1f); lineTo(5f, -1f); lineTo(-1f, 5f); close() }
+        val white = solidSource(ColorF32.of(1f, 1f, 1f, 1f), .5f)
+        val clear = W5aSolidOpacityCpuOracle.draw(ColorARGB.Transparent, 0f)
+        assertDisjoint(clear, WgslFloatEnvelopeV1Oracle.sourceOverExclusion(white, MaterialPlanRef(1),
+            WgslFloatEnvelopeV1Oracle.clearAttachment()))
+        fun surface(mode: BlendMode, aa: Boolean) = Surface(4, 4).also {
+            it.canvas {
+                concat(Matrix3x3F32.skewing(.25f, 0f))
+                drawPath(path, Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.White), .5f),
+                    blendMode = mode, antiAlias = aa))
+            }
+        }
+        WgslFloatEnvelopeV1Oracle.assertAdmits(clear, surface(BlendMode.DST, false).render().pixels.copyOfRange(0, 4))
+        for (mode in listOf(BlendMode.DST, BlendMode.DIFFERENCE)) {
+            val failure = assertFailsWith<org.graphiks.kanvas.surface.gpu.GPUPlanSurfaceTerminalException> {
+                surface(mode, true).render()
+            }
+            kotlin.test.assertEquals("w4d.general.texture-sample-support-unavailable", failure.code)
+        }
+        val expected = W5aSolidOpacityCpuOracle.draw(ColorARGB.White, .5f)
+        assertDisjoint(expected, WgslFloatEnvelopeV1Oracle.ConservativeExclusion(
+            (clear as WgslFloatEnvelopeV1Oracle.DrawResult.Bounded).channels))
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected,
+            surface(BlendMode.SRC, false).render().pixels.copyOfRange(0, 4))
     }
 
     private enum class GeometryFamily { Rect, FractionalRect, RRect, DirectPath, StencilPath, Stroke, Hairline }

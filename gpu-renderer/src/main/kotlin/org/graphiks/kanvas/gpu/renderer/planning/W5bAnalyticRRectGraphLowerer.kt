@@ -30,7 +30,7 @@ internal class W5bAnalyticRRectGraphLowerer {
         require(vertexResource.byteSize == footprint.vertexCapacityBytes &&
             indexResource.byteSize == footprint.indexCapacityBytes && uniformResource.byteSize == footprint.uniformCapacityBytes)
         val bounds = GPUPixelBounds(0, 0, graph.targetExtent.width, graph.targetExtent.height)
-        val identity = "w5b.w4b.session.${request.deviceGeneration.value}.${bounds.width}x${bounds.height}.rgba8unorm-srgb"
+        val identity = "w3.session.${request.deviceGeneration.value}.${bounds.width}x${bounds.height}.rgba8unorm-srgb"
         val target = GPUFrameTargetRef("$identity.target")
         val staging = GPUFrameBufferRef("$identity.staging")
         val targetPreparation = GPUResourcePreparationRequest(target,

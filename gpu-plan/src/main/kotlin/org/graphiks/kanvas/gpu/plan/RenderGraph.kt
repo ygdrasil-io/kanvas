@@ -67,10 +67,10 @@ public class RenderGraph private constructor(
         internal fun issueW5bGeometry(graph: RenderGraph, lanes: List<W5bGeometryLanePlanV3> = emptyList()): RenderGraph {
             require(graph.capabilityId in setOf(W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID,
                 W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID, W4cPathFillPlanCompiler.W5B_CAPABILITY_ID,
-                W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID,
+                W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID,
                 W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID))
             require(graph.passes().filterIsInstance<PlanPass.RenderPass>().flatMap { it.draws() }.all {
-                (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw || it is PathStrokeDraw) &&
+                (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw || it is PathStrokeDraw || it is GeneralPathDraw) &&
                     it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1
             })
             return RenderGraph(graph.id, graph.capabilityId, graph.targetExtent, graph.colorFormat, graph.capabilities,
@@ -173,7 +173,7 @@ public class RenderGraph private constructor(
             require(dependencies.distinct().size == dependencies.size) { "Dependencies must be unique" }
             validatePassCapabilities(passes, capabilities)
             validateW5bDestinationVersions(passes)
-            validateColorPasses(passes, resourcesById, targetExtent, colorFormat)
+            validateColorPasses(passes, resourcesById, targetExtent, colorFormat, capabilityId)
             val usesExplicitAa4PathPasses = passes.any {
                 it is PlanPass.PathMaskClearPass || it is PlanPass.PathRenderPass
             }
@@ -195,13 +195,13 @@ public class RenderGraph private constructor(
                     colorFormat,
                     visualCommandCount,
                 )
-            } else if (capabilityId in setOf(W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID)) {
+            } else if (capabilityId in setOf(W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID)) {
                 validateW5bGeometryPasses(passes, resourcesById, visualCommandCount)
             } else {
                 validateStencilAtomicContracts(passes, dependencies, resources, resourcesById, capabilities, targetExtent)
             }
             validateVisualCommandOrder(passes)
-            if (capabilityId !in setOf(W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID)) validatePathDrawContracts(
+            if (capabilityId !in setOf(W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID)) validatePathDrawContracts(
                 passes,
                 dependencies,
                 resources,
@@ -413,6 +413,7 @@ public class RenderGraph private constructor(
             resourcesById: Map<PlanResourceId, PlanResource>,
             targetExtent: SizeI32,
             colorFormat: PlanLogicalColorFormat,
+            capabilityId: String,
         ) {
             val colorPasses = passes.mapNotNull { pass ->
                 when (pass) {
@@ -421,7 +422,8 @@ public class RenderGraph private constructor(
                         require(pass.draws().all { it.sample == SamplePlan.SingleSample }) {
                             "Legacy render passes require single-sample draws"
                         }
-                        require(pass.draws().none { it.unwrapClippedSource() is PathRenderDraw }) {
+                        require(pass.draws().none { it.unwrapClippedSource().let { source -> source is PathRenderDraw &&
+                            !(source is GeneralPathDraw && capabilityId == W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID) } }) {
                             "General and binary masked path draws require explicit path render passes"
                         }
                         pass.draws().map { it.unwrapClippedSource() }.filterIsInstance<PathDraw>().forEach { draw ->
@@ -1677,7 +1679,7 @@ public class RenderGraph private constructor(
             visualCommandCount: Int,
         ) {
             val visualDraws = visualDraws(passes)
-            if (visualDraws.none { it.unwrapClippedSource() is PathDraw }) return
+            if (visualDraws.none { it.unwrapClippedSource().let { source -> source is PathFillDraw || source is PathStrokeDraw } }) return
 
             require(passes.all {
                 it is PlanPass.RenderPass ||

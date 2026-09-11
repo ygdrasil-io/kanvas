@@ -1101,6 +1101,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     })
                 val lane = W5bNativeLaneV3(witness, scratch, buffer)
                 val result = when (scratch) {
+                    is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.General ->
+                        materializeW4dGeneral(framePlan, laneEncoder, resources, generationSeal, selected, scratch.native, lane)
                     is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath ->
                         materializePlannedPathSessionScratch(framePlan, laneEncoder, resources, generationSeal, selected,
                             GPUPlannedPathSessionScratch.from(scratch, witness), w5bLane = lane)
@@ -1275,6 +1277,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             .mapNotNull { it.w5aCompositeFrameAuthority }.firstOrNull()
         if (compositeAuthority != null) return materializeW5aComposite(
             framePlan, encoderPlan, resources, generationSeal, candidateRenderSteps, compositeAuthority)
+        val generalSuccessor = candidateRenderSteps.flatMap { it.drawPackets }.mapNotNull {
+            it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }.firstOrNull()?.takeIf { witness ->
+                witness.geometryLanes.any { it is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.General } }
+        if (generalSuccessor != null) return materializeW5bGeometryLanes(framePlan, encoderPlan, resources, generationSeal, generalSuccessor)
         val w4dGeneralAuthority = candidateRenderSteps.flatMap(GPUFrameStep.RenderPassStep::drawPackets)
             .mapNotNull { packet ->
                 packet.corePrimitivePreparedAuthority?.w4dGeneralFrameMaterializationAuthority
@@ -4267,6 +4273,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         generationSeal: GPUPreparedGenerationSeal,
         renderSteps: List<GPUFrameStep.RenderPassStep>,
         authority: GPUW4dGeneralPreparedFrameMaterializationAuthority,
+        w5bLane: W5bNativeLaneV3? = null,
     ): GPUPreparedNativeFramePayloadMaterialization {
         data class Entry(
             val sourceStepIndex: Int,
@@ -4281,6 +4288,9 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             val refusalMessage: String,
         ) : RuntimeException(refusalMessage)
 
+        if (w5bLane != null && (!w5bLane.witness.validates(framePlan) ||
+            (w5bLane.scratch as? org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.General)?.native !== authority))
+            return refused("invalid.native-w5b.general", "General geometry lost its complete final-color frame authority.")
         if (authority.deviceGeneration != generationSeal.deviceGeneration ||
             authority.capabilitySealHash != framePlan.capabilitySeal.sealHash ||
             authority.targetBounds.width != preparedSceneTarget.width ||
@@ -4297,6 +4307,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         val entries = buildList {
             framePlan.steps.forEachIndexed { sourceStepIndex, step ->
                 val render = step as? GPUFrameStep.RenderPassStep ?: return@forEachIndexed
+                if (w5bLane != null && render !in renderSteps) return@forEachIndexed
                 val packet = render.drawPackets.singleOrNull()
                     ?: return refused(
                         "invalid.native-core-primitive.w4d-general-authority",
@@ -4548,7 +4559,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 frameResources.indexCapacityBytes,
                 frameResources.uniformCapacityBytes,
             )
-            lease = when (val checkout = sessionCache.acquireFrame(
+            lease = when (val checkout = (if (w5bLane == null) sessionCache::acquireFrame else sessionCache::acquireW5aCompositeFrame)(
                 GPUWgpu4kCorePrimitiveFramePoolRequirements(
                     deviceGeneration = generationSeal.deviceGeneration,
                     vertexBytes = vertexBytes,
@@ -4656,7 +4667,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         clear.atomicGroupId == entry.fact.atomicGroupId &&
                         clear.followingPathPassId == entry.fact.pathPassId
                 }?.let { clear -> consumedMaskClears.add(clear.passId) } == true
-                val loadOperation = if (clearMask || entry.fact.load == AttachmentLoadPlan.ClearTransparent) {
+                val loadOperation = if (if (w5bLane != null) entry.render.loadStore.loadOp == "clear"
+                    else clearMask || entry.fact.load == AttachmentLoadPlan.ClearTransparent) {
                     GPUPreparedNativeLoadOperation.Clear
                 } else {
                     GPUPreparedNativeLoadOperation.Load
@@ -4735,7 +4747,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     "W4d.2 sealed mask-clear facts do not bind exactly one native producer pass.",
                 )
             }
-            val staging = device.createBuffer(
+            val staging = w5bLane?.sharedReadback ?: device.createBuffer(
                 BufferDescriptor(
                     size = output.stagingLease.backingBufferBytes.toULong(),
                     usage = GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst,
@@ -6432,6 +6444,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.AnalyticRect -> packW4aSessionGeometry(scratch.authority)
                 is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.AnalyticRRect -> packW4bSessionGeometry(scratch.authority)
                 is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.Direct -> packCorePrimitiveFrameGeometry(routes)
+                is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.General -> error("General geometry retains its original native authority")
                 is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath -> error("Path geometry requires the sealed path packer")
             }
         } catch (failure: Throwable) {
@@ -6453,6 +6466,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.Direct ->
                     semantic.payloadRef.uniformBlock?.bytes?.map(Int::toByte)?.toByteArray()
                         ?: return refused("invalid.native-core-primitive.w3-uniform", "W3 packet uniform payload is missing.")
+                is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.General -> error("General uniform slots retain their original native authority")
                 is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath -> error("Path uniform slots require the sealed path packer")
             }
             val slot = scratch.uniformPlan.slots[index]

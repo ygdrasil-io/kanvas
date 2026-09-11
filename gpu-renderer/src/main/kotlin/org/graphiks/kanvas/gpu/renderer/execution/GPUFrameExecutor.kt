@@ -1410,9 +1410,15 @@ internal class GPUFrameExecutor(
             .firstOrNull()?.takeIf { it.geometryLanes.any { lane -> lane is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath } }
         if (w5bGeometry != null && !w5bGeometry.validates(frame.semanticPlan)) return executionDiagnostic(
             "invalid.native-frame-payload.w5b-path-authority", "W5b path execution lost its exact geometry/color frame authority.")
+        val w5bGeneral = allRenders.flatMap { it.drawPackets }.mapNotNull { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 }
+            .firstOrNull()?.takeIf { it.geometryLanes.any { lane -> lane is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.General } }
+        if (w5bGeneral != null && !w5bGeneral.validates(frame.semanticPlan)) return executionDiagnostic(
+            "invalid.native-frame-payload.w5b-general-authority", "General execution lost the complete sealed W5b frame.")
         val renders = frame.semanticPlan.steps.mapIndexedNotNull { stepIndex, step ->
             (step as? GPUFrameStep.RenderPassStep)?.let { render -> Triple(stepIndex, render, render.drawPackets.singleOrNull()) }
-        }.filter { (_, render, _) -> if (w5bGeometry != null) render.drawPackets.isNotEmpty() && render.drawPackets.all {
+        }.filter { (_, render, _) -> if (w5bGeneral != null) render.drawPackets.isNotEmpty() && render.drawPackets.all {
+            w5bGeneral.scratchFor(it) is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.General
+        } else if (w5bGeometry != null) render.drawPackets.isNotEmpty() && render.drawPackets.all {
             w5bGeometry.scratchFor(it) is org.graphiks.kanvas.gpu.renderer.passes.W5bGeometryScratchV3.NativePath
         } else composite == null || render.drawPackets.all {
             it.corePrimitivePreparedAuthority?.let { authority -> authority.w4cSessionScratch != null || authority.w4dSessionScratch != null } == true
