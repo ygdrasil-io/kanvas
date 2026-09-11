@@ -34,6 +34,7 @@ internal data class W5aPreparedFrameMaterialRegistry(
             operations: List<DisplayOp>,
             width: Int,
             height: Int,
+            targetClamp: org.graphiks.kanvas.gpu.plan.BlendTargetClampV1,
         ): Map<Int, EffectiveMaterialPlanner.Result.Ready> {
             val plannedByOperationIndex = linkedMapOf<Int, EffectiveMaterialPlanner.Result.Ready>()
             operations.forEachIndexed { operationIndex, operation ->
@@ -56,7 +57,9 @@ internal data class W5aPreparedFrameMaterialRegistry(
                 ) }.getOrNull() as? SceneCaptureResult.Captured ?: return@forEachIndexed
                 val draw = captured.scene.singleOrNull() as? SceneCommand.Draw
                     ?: return@forEachIndexed
-                val planned = EffectiveMaterialPlanner.plan(draw.node)
+                val planned = (if (operation is DisplayOp.DrawPoint || operation is DisplayOp.DrawPoints)
+                    org.graphiks.kanvas.gpu.plan.W5bCorePrimitiveGraph.normalizeSource(draw.node, targetClamp)
+                    else EffectiveMaterialPlanner.plan(draw.node))
                     as? EffectiveMaterialPlanner.Result.Ready ?: return@forEachIndexed
                 plannedByOperationIndex[operationIndex] = planned
             }
@@ -113,11 +116,11 @@ internal data class W5aPreparedFrameMaterialRegistry(
                 paint.shader.isW5aSolidOpacity()
             is DisplayOp.DrawPath -> paint.blendMode == BlendMode.SRC_OVER && paint.shader.isW5aSolidOpacity()
             is DisplayOp.DrawPoint ->
-                paint.blendMode == BlendMode.SRC_OVER && paint.strokeCap != StrokeCap.ROUND &&
+                paint.blendMode in POINT_MATERIAL_BLENDS && paint.strokeCap != StrokeCap.ROUND &&
                     paint.shader.isW5aSolidOpacity()
             is DisplayOp.DrawPoints ->
                 mode == PointMode.POINTS &&
-                    paint.blendMode == BlendMode.SRC_OVER && paint.strokeCap != StrokeCap.ROUND &&
+                    paint.blendMode in POINT_MATERIAL_BLENDS && paint.strokeCap != StrokeCap.ROUND &&
                     paint.shader.isW5aSolidOpacity()
             else -> false
         }
@@ -131,5 +134,10 @@ internal data class W5aPreparedFrameMaterialRegistry(
             }
             return source == null || source is Shader.SolidColor
         }
+
+        private val POINT_MATERIAL_BLENDS = setOf(BlendMode.SRC_OVER, BlendMode.PLUS, BlendMode.MULTIPLY,
+            BlendMode.OVERLAY, BlendMode.DARKEN, BlendMode.LIGHTEN, BlendMode.COLOR_DODGE, BlendMode.COLOR_BURN,
+            BlendMode.HARD_LIGHT, BlendMode.SOFT_LIGHT, BlendMode.DIFFERENCE, BlendMode.EXCLUSION,
+            BlendMode.HUE, BlendMode.SATURATION, BlendMode.COLOR, BlendMode.LUMINOSITY)
     }
 }

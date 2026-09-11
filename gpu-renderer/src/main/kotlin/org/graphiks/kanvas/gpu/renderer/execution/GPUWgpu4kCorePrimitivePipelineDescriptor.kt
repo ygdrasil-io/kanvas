@@ -116,6 +116,7 @@ internal enum class GPUWgpu4kCorePrimitiveBlendProgram(
         "one-minus-src-alpha",
         "add",
     ),
+    PremulPlus(GPUBlendMode.PLUS, "one", "one", "add", "one", "one", "add"),
     PremulModulate(GPUBlendMode.MODULATE, "zero", "src", "add", "zero", "src-alpha", "add"),
     PremulScreen(
         GPUBlendMode.SCREEN,

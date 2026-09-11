@@ -1686,7 +1686,9 @@ internal class W3SessionScratchV1(
     val indexBytes: Long,
     /** Exact minimum physical capacities allocated by the reusable native frame pool. */
     val poolCapacities: GPUCorePrimitiveFramePoolCapacities,
+    packetGeometryBytes: List<Pair<Long, Long>> = packetIds.map { 32L to 24L },
 ) {
+    private val packetGeometryBytes = immutableList(packetGeometryBytes)
     val packetIds: List<GPUDrawPacketID> = immutableList(packetIds)
     val commandIds: List<Int> = immutableList(commandIds)
     val packetStructuralPipelineKeys: List<GPUCorePrimitiveRenderPipelineStructuralKey> =
@@ -1716,8 +1718,11 @@ internal class W3SessionScratchV1(
                     structuralPipelineKey.uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2
             }
         ) { "W3 scratch accepts only the direct single-sample uniform32 pipeline" }
-        require(vertexBytes == this.packetIds.size.toLong() * 32L &&
-            indexBytes == this.packetIds.size.toLong() * 24L &&
+        require(this.packetGeometryBytes.size == this.packetIds.size &&
+            this.packetGeometryBytes.all { (vertexI64, indexI64) -> vertexI64 in 32L..2048L &&
+                vertexI64 % 32L == 0L && indexI64 == vertexI64 / 32L * 24L } &&
+            vertexBytes == this.packetGeometryBytes.sumOf { it.first } &&
+            indexBytes == this.packetGeometryBytes.sumOf { it.second } &&
             vertexBytes <= Int.MAX_VALUE.toLong() && indexBytes <= Int.MAX_VALUE.toLong() &&
             uniformPlan.sourceLabel == SOURCE_LABEL &&
             uniformPlan.uploadBudgetBytes == maxBufferSize &&
@@ -1760,6 +1765,14 @@ internal class W3SessionScratchV1(
         expectedAlignmentBytes: Long,
         packets: List<GPUDrawPacket>,
     ): Boolean {
+        if (packetGeometryBytes != packets.map { packet ->
+            when (val geometry = (packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive)?.geometry) {
+                is org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry.TriangulatedPath ->
+                    geometry.vertices.size.toLong() * 4L to geometry.indices.size.toLong() * 4L
+                is org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry.Rect -> 32L to 24L
+                else -> return false
+            }
+        }) return false
         val payloads = packets.map { packet ->
             val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
                 ?: return false

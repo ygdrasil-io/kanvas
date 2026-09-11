@@ -25,6 +25,7 @@ import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.surface.Surface
+import org.graphiks.kanvas.surface.W5bBlendCpuOracle
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.KanvasGlyphRun
@@ -43,6 +44,8 @@ import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assertions.assertAll
+import org.junit.jupiter.api.function.Executable
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.Test
@@ -59,6 +62,51 @@ import org.junit.jupiter.api.TestFactory
  */
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUAllApiBlendSurfaceTest {
+    @Test
+    fun drawPointHistoricalW5bFullScissorMatrix() = drawPointHistoricalW5bContexts(
+        listOf(BlendContext.UNCLIPPED, BlendContext.SCISSOR),
+    )
+
+    private fun drawPointHistoricalW5bContexts(contexts: List<BlendContext>) {
+        val session = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(session != null, "GPU backend unavailable in current environment")
+        val modes = listOf(
+            BlendMode.PLUS, BlendMode.MULTIPLY, BlendMode.OVERLAY, BlendMode.DARKEN,
+            BlendMode.LIGHTEN, BlendMode.COLOR_DODGE, BlendMode.COLOR_BURN,
+            BlendMode.HARD_LIGHT, BlendMode.SOFT_LIGHT, BlendMode.DIFFERENCE,
+            BlendMode.EXCLUSION, BlendMode.HUE, BlendMode.SATURATION,
+            BlendMode.COLOR, BlendMode.LUMINOSITY,
+        )
+        val fixtures = modes.associateWith(W5bBlendCpuOracle::pointFixture)
+        assertAll("DrawPoint historical W5b matrix", modes.flatMap { mode -> contexts.map { context ->
+            Executable {
+                try {
+                    val (source, destination) = fixtures.getValue(mode)
+                    val api = BlendCase("DrawPoint", Point2F32(16f, 16f), Point2F32(10f, 16f), Point2F32(12f, 16f)) {
+                        val paint = Paint(shader = Shader.Opacity(Shader.SolidColor(source.color), source.opacityF32),
+                            antiAlias = false, blendMode = mode)
+                        drawPoint(16f, 16f, paint)
+                        drawPoint(10f, 16f, paint)
+                        drawPoint(12f, 16f, paint)
+                    }
+                    val backgroundPaint = Paint(shader = Shader.Opacity(Shader.SolidColor(destination.color), destination.opacityF32),
+                        antiAlias = false)
+                    val gpu = renderGpu(api, mode, context, backgroundPaint = backgroundPaint)
+                    val pixels = gpu.pixels
+                    W5bBlendCpuOracle.assertPoint(source, destination, 1f, pixels.copyOfRange(0, 4))
+                    W5bBlendCpuOracle.assertPoint(source, destination,
+                        if (context == BlendContext.UNCLIPPED) 1f else 0f, pixels.copyOfRange(4, 8))
+                    W5bBlendCpuOracle.assertPoint(source, destination,
+                        if (context == BlendContext.ALPHA_MASK) .5f else 1f,
+                        readPixel(gpu.result, Point2F32(12f, 16f)))
+                } catch (failure: Throwable) {
+                    throw AssertionError("DrawPoint/${mode.name}/${context.name}: ${failure.message} " +
+                        (failure as? GPUPreparedSurfaceTerminalException)?.diagnostic?.facts.orEmpty(), failure)
+                }
+            }
+        } })
+    }
+
     /**
      * Proves that [ALPHA_MASK_EDGE] is a real half-covered pixel for the fixture rather than an
      * assumed coordinate. The 0.5 F used by the independent blend oracle remains geometric; this
@@ -212,10 +260,11 @@ class GPUAllApiBlendSurfaceTest {
         mode: BlendMode,
         context: BlendContext,
         decisions: MutableList<GPUPreparedSurfaceRouteDecision> = mutableListOf(),
+        backgroundPaint: Paint = Paint.fill(DESTINATION).copy(antiAlias = false),
     ): GpuPixel {
         val surface = Surface(SURFACE_SIZE, SURFACE_SIZE)
         surface.canvas {
-                drawRect(SURFACE_RECT, Paint.fill(DESTINATION).copy(antiAlias = false))
+                drawRect(SURFACE_RECT, backgroundPaint)
                 when (context) {
                     BlendContext.UNCLIPPED -> api.drawForContext(this, mode, context)
                     BlendContext.SCISSOR -> {
@@ -596,12 +645,7 @@ class GPUAllApiBlendSurfaceTest {
                         // lane's exact pipeline-identity code (blend programs are a separate
                         // feature).
                         ProductRouteExpectation.Terminal(PREPARED_SESSION_CACHE_PIPELINE_REFUSAL)
-                    mode in MULTI_RENDER_DST_COPY_MODES -> if (api.name == "DrawPoint") {
-                        // The DrawPoint fixture draws three separate point commands, so its
-                        // dst-read frame is a four-render shape whose direct-resource seal
-                        // fails before the two-render dst-copy admission.
-                        ProductRouteExpectation.Terminal(PREPARED_DIRECT_GEOMETRY_RESOURCES_REFUSAL)
-                    } else {
+                    mode in MULTI_RENDER_DST_COPY_MODES -> {
                         // The single DrawPoints command splits into the admitted
                         // two-render dst-copy shape (destination pass, ordered snapshot copy,
                         // consuming pass) on the prepared direct lane.

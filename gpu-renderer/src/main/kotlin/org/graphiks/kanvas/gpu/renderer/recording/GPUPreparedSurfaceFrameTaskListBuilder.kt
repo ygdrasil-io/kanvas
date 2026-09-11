@@ -121,6 +121,7 @@ data class GPUPreparedSurfaceFrameRequest(
     /** Legacy mask-blur intermediate budget (RenderConfig.maxMaskBlurIntermediateBytes). */
     val maskBlurIntermediateBudgetBytes: Long = 67_108_864L,
     val w5aCoreMaterialAuthority: org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2? = null,
+    val w5bPointBlends: Map<Int, org.graphiks.kanvas.gpu.plan.BlendPlan> = emptyMap(),
 )
 
 /** Checked structural ceilings applied before one prepared task graph is published. */
@@ -928,6 +929,8 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     semantic.material is org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1
             }
         ) return refused("invalid.material.w5a_core_authority", "W5a core material references require a sealed frame authority.")
+        org.graphiks.kanvas.gpu.renderer.planning.W5bPreparedPointBridgeV3.lower(request,
+            configuredAggregateBudgetBytes)?.let { return it }
         request.baseTaskList.tasks.filterIsInstance<GPUTask.Refused>().firstOrNull()?.let {
             return GPUPreparedSurfaceFrameResult.Refused(it.diagnostic.atRecordingBoundary())
         }

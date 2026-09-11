@@ -10,6 +10,7 @@ import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
 import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.gpu.plan.MaterialProgramPlan
 import org.graphiks.kanvas.gpu.plan.NumericOperationGraphV1
+import org.graphiks.kanvas.paint.BlendMode
 
 /**
  * Independent W5a oracle. All node values are intervals over real arithmetic,
@@ -124,11 +125,14 @@ internal object WgslFloatEnvelopeV1Oracle {
             val coverage = Interval.input(coverageF32)
             fun unpremul(value: Interval, alpha: Interval) = if (alpha == Interval.ZERO) Interval.ZERO else wgslDivide(value, alpha)
             val blended = Array(4) { channel ->
-                if (channel == 3) sourceOver(src[3], dst[3], Interval.ONE - src[3]) else {
+                if (mode == BlendMode.PLUS) (src[channel] + dst[channel]).clamp01()
+                else if (channel == 3) sourceOver(src[3], dst[3], Interval.ONE - src[3]) else {
                     // Shared destination terms must not lose their correlation through a
                     // wide interval. Directed domain subdivision tightens the enclosure;
                     // it adds no tolerance and covers every original destination value.
-                    val original = dst[channel]
+                    val partitionChannelI32 = if (mode in NON_SEPARABLE_MODES)
+                        (0..2).maxBy { dst[it].upper.subtract(dst[it].lower) } else channel
+                    val original = dst[partitionChannelI32]
                     val partitionsI32 = 64
                     val width = upSubtract(original.upper, original.lower)
                     val bounds = (0..partitionsI32).map { partI32 ->
@@ -136,17 +140,14 @@ internal object WgslFloatEnvelopeV1Oracle {
                             downAdd(original.lower, downDivide(downMultiply(width, BigDecimal(partI32)), BigDecimal(partitionsI32)))
                     }
                     hull(*bounds.zipWithNext().map { (lower, upper) ->
-                        val destinationChannel = Interval(lower, upper)
+                        val partition = Interval(lower, upper)
+                        val destinationChannel = if (channel == partitionChannelI32) partition else dst[channel]
                         val s = unpremul(src[channel], src[3])
                         val d = unpremul(destinationChannel, dst[3])
-                        val color = when (mode) {
-                            org.graphiks.kanvas.paint.BlendMode.MULTIPLY -> s * d
-                            org.graphiks.kanvas.paint.BlendMode.DIFFERENCE -> (d - s).let {
-                                Interval(if (it.lower.signum() <= 0 && it.upper.signum() >= 0) BigDecimal.ZERO else minOf(it.lower.abs(), it.upper.abs()),
-                                    maxOf(it.lower.abs(), it.upper.abs()))
-                            }
-                            else -> error("No independent destination proof for $mode")
-                        }
+                        val color = if (mode in NON_SEPARABLE_MODES) artisticNonSeparable(
+                            Array(3) { unpremul(src[it], src[3]) },
+                            Array(3) { unpremul(if (it == partitionChannelI32) partition else dst[it], dst[3]) }, mode,
+                        )[channel] else artisticSeparable(s, d, mode)
                         val left = src[channel] * (Interval.ONE - dst[3])
                         val right = destinationChannel * (Interval.ONE - src[3])
                         val product = hull((src[3] * dst[3]) * color, src[3] * (dst[3] * color))
@@ -174,6 +175,127 @@ internal object WgslFloatEnvelopeV1Oracle {
         }
         return DrawResult.Bounded(codes, AttachmentState(decodeStoredAttachment(codes)))
     }
+
+    /** ONE/ONE/Add includes the same permitted fixed precision schedules as SRC_OVER. */
+    fun drawPlus(table: MaterialPlanTable, root: MaterialPlanRef, destination: AttachmentState): DrawResult {
+        val src = evaluateMaterialSource(table, root, destination.linearPremul, Interval.ONE)
+        val codes = Array(4) { channel ->
+            val source = src[channel].clamp01()
+            val dst = destination.linearPremul[channel].clamp01()
+            val floating = (source + dst).clamp01()
+            val fixed = directedBinary(fixedPrecisionEnvelope(source, conversion = true), dst, ::downAdd, ::upAdd).clamp01()
+            val value = hull(floating, fixed)
+            if (channel < 3) codesForSrgbAttachment(attachmentEncode(value)) else codesFor(value)
+        }.toList()
+        if (codes.any { it.isEmpty() || it.size > 2 || it.maxOrNull()!! - it.minOrNull()!! > 1 }) {
+            return DrawResult.Unbounded("Attachment code sets exceed two adjacent codes: $codes")
+        }
+        return DrawResult.Bounded(codes, AttachmentState(decodeStoredAttachment(codes)))
+    }
+
+    /** W3C blend equations, evaluated only by the independent directed arithmetic above. */
+    private fun artisticSeparable(s: Interval, d: Interval, mode: BlendMode): Interval {
+        val two = Interval.input(2f)
+        fun minimum(a: Interval, b: Interval) = Interval(minOf(a.lower, b.lower), minOf(a.upper, b.upper))
+        fun maximum(a: Interval, b: Interval) = Interval(maxOf(a.lower, b.lower), maxOf(a.upper, b.upper))
+        fun branch(value: Interval, split: BigDecimal, lower: (Interval) -> Interval, upper: (Interval) -> Interval): Interval = when {
+            value.upper <= split -> lower(value)
+            value.lower > split -> upper(value)
+            else -> hull(lower(Interval(value.lower, split)), upper(Interval(split, value.upper)))
+        }
+        fun hardLight(source: Interval, backdrop: Interval) = branch(source, HALF,
+            { two * it * backdrop }, { Interval.ONE - two * (Interval.ONE - it) * (Interval.ONE - backdrop) })
+        return when (mode) {
+            BlendMode.MULTIPLY -> s * d
+            BlendMode.OVERLAY -> hardLight(d, s)
+            BlendMode.DARKEN -> minimum(s, d)
+            BlendMode.LIGHTEN -> maximum(s, d)
+            BlendMode.COLOR_DODGE -> when {
+                d == Interval.ZERO -> Interval.ZERO
+                s == Interval.ONE -> Interval.ONE
+                s.upper < BigDecimal.ONE -> minimum(Interval.ONE, wgslDivide(d, Interval.ONE - s))
+                else -> error("Color dodge source crosses its singularity")
+            }
+            BlendMode.COLOR_BURN -> when {
+                d == Interval.ONE -> Interval.ONE
+                s == Interval.ZERO -> Interval.ZERO
+                s.lower > BigDecimal.ZERO -> Interval.ONE - minimum(Interval.ONE, wgslDivide(Interval.ONE - d, s))
+                else -> error("Color burn source crosses its singularity")
+            }
+            BlendMode.HARD_LIGHT -> hardLight(s, d)
+            BlendMode.SOFT_LIGHT -> branch(s, HALF,
+                { source -> d - (Interval.ONE - two * source) * d * (Interval.ONE - d) },
+                { source ->
+                    val curve = branch(d, BigDecimal("0.25"),
+                        { ((Interval.input(16f) * it - Interval.input(12f)) * it + Interval.input(4f)) * it },
+                        { value ->
+                            // WGSL 15.7.4.1: sqrt inherits 1/inverseSqrt(x); inverseSqrt
+                            // admits 2 ULP, and the outer division retains its own 2.5 ULP.
+                            val exactInverse = Interval(downDivide(BigDecimal.ONE, value.upper.sqrt(MC_UP)),
+                                upDivide(BigDecimal.ONE, value.lower.sqrt(MC_DOWN)))
+                            wgslDivide(Interval.ONE, f32Envelope(expandUlps(exactInverse, BigDecimal("2"))))
+                        })
+                    d + (two * source - Interval.ONE) * (curve - d)
+                })
+            BlendMode.DIFFERENCE -> (d - s).let {
+                Interval(if (it.lower.signum() <= 0 && it.upper.signum() >= 0) BigDecimal.ZERO else minOf(it.lower.abs(), it.upper.abs()),
+                    maxOf(it.lower.abs(), it.upper.abs()))
+            }
+            BlendMode.EXCLUSION -> s + d - two * s * d
+            else -> error("No independent separable destination proof for $mode")
+        }
+    }
+
+    private fun artisticNonSeparable(source: Array<Interval>, destination: Array<Interval>, mode: BlendMode): Array<Interval> {
+        fun minimum(color: Array<Interval>) = Interval(color.minOf { it.lower }, color.minOf { it.upper })
+        fun maximum(color: Array<Interval>) = Interval(color.maxOf { it.lower }, color.maxOf { it.upper })
+        fun luminosity(color: Array<Interval>): Interval {
+            val weights = arrayOf(Interval.input(.3f), Interval.input(.59f), Interval.input(.11f))
+            return hull(*(0..2).flatMap { a -> (0..2).filter { it != a }.flatMap { b ->
+                val c = 3 - a - b
+                val first = color[a] * weights[a]
+                val second = color[b] * weights[b]
+                val third = color[c] * weights[c]
+                listOf((first + second) + third, first + (second + third),
+                    fma(color[a], weights[a], second + third),
+                    fma(color[a], weights[a], fma(color[b], weights[b], third)))
+            } }.toTypedArray())
+        }
+        fun saturation(color: Array<Interval>) = maximum(color) - minimum(color)
+        fun setSaturation(color: Array<Interval>, saturation: Interval): Array<Interval> {
+            val lo = minimum(color)
+            val hi = maximum(color)
+            if (hi == lo) return Array(3) { Interval.ZERO }
+            require(hi.lower > lo.upper) { "Ambiguous nonseparable saturation denominator" }
+            return Array(3) { wgslDivide((color[it] - lo) * saturation, hi - lo) }
+        }
+        fun setLuminosity(color: Array<Interval>, lum: Interval): Array<Interval> {
+            val delta = lum - luminosity(color)
+            val shifted = Array(3) { color[it] + delta }
+            val l = luminosity(shifted)
+            val n = minimum(shifted)
+            val x = maximum(shifted)
+            var result = shifted
+            if (n.lower < BigDecimal.ZERO) {
+                val clipped = Array(3) { l + wgslDivide((shifted[it] - l) * l, l - n) }
+                result = if (n.upper < BigDecimal.ZERO) clipped else Array(3) { hull(result[it], clipped[it]) }
+            }
+            if (x.upper > BigDecimal.ONE) {
+                val clipped = Array(3) { l + wgslDivide((result[it] - l) * (Interval.ONE - l), x - l) }
+                result = if (x.lower > BigDecimal.ONE) clipped else Array(3) { hull(result[it], clipped[it]) }
+            }
+            return result
+        }
+        return when (mode) {
+            BlendMode.HUE -> setLuminosity(setSaturation(source, saturation(destination)), luminosity(destination))
+            BlendMode.SATURATION -> setLuminosity(setSaturation(destination, saturation(source)), luminosity(destination))
+            BlendMode.COLOR -> setLuminosity(source, luminosity(destination))
+            BlendMode.LUMINOSITY -> setLuminosity(destination, luminosity(source))
+            else -> error("No independent nonseparable destination proof for $mode")
+        }
+    }
+
+    private val NON_SEPARABLE_MODES = setOf(BlendMode.HUE, BlendMode.SATURATION, BlendMode.COLOR, BlendMode.LUMINOSITY)
 
     private fun evaluateProgram(
         table: MaterialPlanTable,
@@ -558,7 +680,8 @@ internal object WgslFloatEnvelopeV1Oracle {
     private operator fun Interval.plus(other: Interval): Interval = f32Envelope(directedBinary(this, other, ::downAdd, ::upAdd))
     private operator fun Interval.minus(other: Interval): Interval = f32Envelope(directedBinary(this, other, ::downSubtract, ::upSubtract))
     private operator fun Interval.times(other: Interval): Interval = f32Envelope(directedBinary(this, other, ::downMultiply, ::upMultiply))
-    private fun Interval.clamp01(): Interval = Interval(lower.max(BigDecimal.ZERO), upper.min(BigDecimal.ONE))
+    private fun Interval.clamp01(): Interval = Interval(lower.max(BigDecimal.ZERO).min(BigDecimal.ONE),
+        upper.max(BigDecimal.ZERO).min(BigDecimal.ONE))
     private fun Interval.hull(other: Interval): Interval = hull(this, other)
     private fun hull(vararg intervals: Interval): Interval = Interval(intervals.minOf { it.lower }, intervals.maxOf { it.upper })
 

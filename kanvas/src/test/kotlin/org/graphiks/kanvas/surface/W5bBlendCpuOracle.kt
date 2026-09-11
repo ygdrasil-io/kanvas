@@ -15,6 +15,54 @@ import org.graphiks.math.color.ColorF32
 /** Public-test-only final-blend oracle closed by the independent WGSL/attachment envelope. */
 internal object W5bBlendCpuOracle {
     data class Draw(val color: ColorARGB, val opacityF32: Float, val mode: BlendMode)
+    private val pointResults = mutableMapOf<Triple<Draw, Draw, Float>, WgslFloatEnvelopeV1Oracle.DrawResult>()
+    private val backgrounds = mutableMapOf<Draw, WgslFloatEnvelopeV1Oracle.DrawResult>()
+
+    /** Fixed before rendering; every actual channel must retain the independent strict envelope. */
+    fun pointFixture(mode: BlendMode): Pair<Draw, Draw> {
+        val color = when (mode) {
+            BlendMode.PLUS -> ColorARGB.White
+            BlendMode.OVERLAY, BlendMode.DARKEN, BlendMode.LIGHTEN, BlendMode.HARD_LIGHT,
+            BlendMode.SOFT_LIGHT -> ColorARGB.of(255, 240, 192, 128)
+            BlendMode.EXCLUSION, BlendMode.HUE -> ColorARGB.of(255, 192, 224, 240)
+            else -> ColorARGB.of(255, 224, 240, 192)
+        }
+        val opacityF32 = when (mode) {
+            BlendMode.PLUS, BlendMode.COLOR_BURN, BlendMode.SOFT_LIGHT, BlendMode.LUMINOSITY -> .9375f
+            BlendMode.DIFFERENCE -> .75f
+            else -> .875f
+        }
+        val source = Draw(color, opacityF32, mode)
+        val destination = Draw(if (mode == BlendMode.HUE) ColorARGB.Blue else ColorARGB.Green, .0625f, BlendMode.SRC_OVER)
+        val background = point(source, destination, 0f) as? WgslFloatEnvelopeV1Oracle.DrawResult.Bounded
+            ?: error("Point fixture background is unbounded")
+        val full = point(source, destination, 1f) as? WgslFloatEnvelopeV1Oracle.DrawResult.Bounded
+            ?: error("Point fixture $mode is unbounded")
+        assertTrue(full.channels.zip(background.channels).any { (a, b) -> a.intersect(b).isEmpty() },
+            "$mode must change its destination")
+        val exclusion = WgslFloatEnvelopeV1Oracle.sourceOverExclusion(table(source.color, source.opacityF32),
+            MaterialPlanRef(1), background.state)
+        assertTrue(full.channels.zip(exclusion.channels).any { (a, b) -> a.intersect(b).isEmpty() },
+            "$mode must be analytically disjoint from SRC_OVER")
+        return source to destination
+    }
+
+    fun assertPoint(source: Draw, destination: Draw, coverageF32: Float, actual: UByteArray) {
+        val expected = point(source, destination, coverageF32)
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, actual)
+    }
+
+    fun point(source: Draw, destination: Draw, coverageF32: Float): WgslFloatEnvelopeV1Oracle.DrawResult =
+        pointResults.getOrPut(Triple(source, destination, coverageF32)) { pointUncached(source, destination, coverageF32) }
+
+    private fun pointUncached(source: Draw, destination: Draw, coverageF32: Float): WgslFloatEnvelopeV1Oracle.DrawResult {
+        val background = backgrounds.getOrPut(destination) { W5aSolidOpacityCpuOracle.draw(destination.color, destination.opacityF32) }
+        if (coverageF32 == 0f || background is WgslFloatEnvelopeV1Oracle.DrawResult.Unbounded) return background
+        val attachment = requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(background))
+        val material = table(source.color, source.opacityF32)
+        return if (source.mode == BlendMode.PLUS && coverageF32 == 1f) WgslFloatEnvelopeV1Oracle.drawPlus(material, MaterialPlanRef(1), attachment)
+        else WgslFloatEnvelopeV1Oracle.drawDestination(material, MaterialPlanRef(1), attachment, source.mode, coverageF32)
+    }
 
     fun assertOrder(draws: List<Draw>, actual: UByteArray, reversedActual: UByteArray) {
         val forward = replay(draws)

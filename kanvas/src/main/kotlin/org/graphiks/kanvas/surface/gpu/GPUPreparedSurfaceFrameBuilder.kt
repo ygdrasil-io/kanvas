@@ -221,6 +221,9 @@ internal object GPUPreparedSurfaceFrameBuilder {
             val coreMaterialCandidates = if (request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul) {
                 W5aPreparedFrameMaterialRegistry.captureCoreCandidates(
                     operations, request.targetBounds.width, request.targetBounds.height,
+                    if (GPUColorFormat(request.targetFacts.colorFormat) == GPUColorFormat.RGBA8UnormSrgb)
+                        org.graphiks.kanvas.gpu.plan.BlendTargetClampV1.UnitInterval
+                    else org.graphiks.kanvas.gpu.plan.BlendTargetClampV1.Unavailable,
                 )
             } else emptyMap()
             val textMaterials = if (request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul) {
@@ -443,6 +446,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     target = request.target,
                     targetBounds = request.targetBounds,
                     semanticsByCommandId = semantics,
+                    w5bPointBlends = corePlansByCommandId.mapValues { it.value.blend },
                     w5aCoreMaterialAuthority = frameMaterials?.let { materials ->
                         val refs = materials.refsByCommandId.filterKeys { commandId ->
                             (semantics[commandId] as? GPUDrawSemanticPayload.CorePrimitive)?.material is
@@ -513,7 +517,8 @@ internal object GPUPreparedSurfaceFrameBuilder {
                         )
                     GPUPreparedSurfaceFrameBuildResult.Ready(
                         taskList = splitTaskList,
-                        readbackRequestId = request.readbackRequestId,
+                        readbackRequestId = splitTaskList.tasks.filterIsInstance<GPUTask.Readback>()
+                            .singleOrNull()?.request?.requestId ?: request.readbackRequestId,
                         visualOperationCount = preparedMapping.visualCommands.count { visual ->
                             visual.normalized.commandId.value !in layerChildrenCommandIds
                         },

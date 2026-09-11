@@ -102,7 +102,8 @@ internal class W5bPreparedFrameWitnessV3(
 ) {
     init {
         require(graph.id.value == scratch.planId)
-        require(graph.passes().any { it is PlanPass.TextureCopy })
+        require(graph.passes().any { it is PlanPass.TextureCopy } ||
+            graph.capabilityId == org.graphiks.kanvas.gpu.plan.W5bCorePrimitiveGraph.CAPABILITY_ID)
         require(scratch.fitsDeviceLimits(graph.capabilities.maxBufferSizeBytes,
             graph.capabilities.maxDynamicUniformBuffersPerPipelineLayout.toLong()))
     }

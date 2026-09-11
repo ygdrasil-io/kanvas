@@ -1805,13 +1805,13 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             return refused("invalid.w5b.preplanned", "W5b prepared authority contradicts its graph.")
         }
         val snapshot = GPUFrameTextureRef(request.target.value.removeSuffix(".target") + ".snapshot")
-        val snapshotPlan = graph.resources().single { it.role == org.graphiks.kanvas.gpu.plan.PlanResourceRole.DestinationSnapshot }
+        val snapshotPlan = graph.resources().singleOrNull { it.role == org.graphiks.kanvas.gpu.plan.PlanResourceRole.DestinationSnapshot }
         val prepare = GPUTask.PrepareResources(GPUTaskID("task.w5b.${graph.id.value}.prepare"), base.recordingId,
-            GPUTaskPhase.Prepare, listOf(request.targetPreparation, request.stagingPreparation,
-                GPUResourcePreparationRequest(snapshot, GPUFrameTextureDescriptor(request.targetBounds, GPUColorFormat.RGBA8UnormSrgb, 1),
+            GPUTaskPhase.Prepare, listOfNotNull(request.targetPreparation, request.stagingPreparation,
+                snapshotPlan?.let { GPUResourcePreparationRequest(snapshot, GPUFrameTextureDescriptor(request.targetBounds, GPUColorFormat.RGBA8UnormSrgb, 1),
                     GPUFrameResourceRole.DestinationSnapshot,
                     setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.TextureBinding),
-                    GPUFrameResourceLifetime.FrameLocal, snapshotPlan.byteSize, snapshot.value)))
+                    GPUFrameResourceLifetime.FrameLocal, it.byteSize, snapshot.value) }))
         fun taskId(pass: org.graphiks.kanvas.gpu.plan.PlanPass) = GPUTaskID("task.w5b.${graph.id.value}.${pass.id.value}")
         val renders = graph.passes().filterIsInstance<org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass>().associateWith { pass ->
             val selected = pass.draws().map { packets.getValue(it.commandIndex) }

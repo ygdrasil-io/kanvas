@@ -6366,10 +6366,13 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 selectedStep.drawPackets.map { it.semanticPayload as GPUDrawSemanticPayload.CorePrimitive },
                 w5bInitialClearV3 = selectedStep.w5bInitialClearV3,
             ) }
-            val destinationSnapshot = w5b?.let {
+            val destinationSnapshot = w5b?.takeIf { witness -> witness.graph.resources().any {
+                it.role == org.graphiks.kanvas.gpu.plan.PlanResourceRole.DestinationSnapshot
+            } }?.let {
                 val texture = device.createTexture(TextureDescriptor(size = Extent3D(scratch.targetBounds.width.toUInt(),
                     scratch.targetBounds.height.toUInt(), 1u), format = GPUTextureFormat.RGBA8UnormSrgb,
                     usage = GPUTextureUsage.CopyDst or GPUTextureUsage.TextureBinding, label = "Kanvas.w5b.snapshot-v3")).tracked()
+                onDestinationSnapshotCreated()
                 GPUW5bDestinationSnapshotNativeV3(texture, texture.createView().tracked())
             }
             val copyOperands = encoderPlan.scopes.filter { it.operationKind == GPUEncoderOperationKind.CopyDestination }.map { scope ->
