@@ -181,8 +181,10 @@ data class GPURecording(
     val featureAssumptions: List<String>,
     val recordedCommands: List<NormalizedDrawCommand> = emptyList(),
     private val semanticOnlyDrawEntries: List<GPUSemanticOnlyDraw> = emptyList(),
+    private val pointAuthorityEntries: Map<Int, GPURecordedPointAuthorityV3> = emptyMap(),
 ) {
     val semanticOnlyDraws: List<GPUSemanticOnlyDraw> = immutableList(semanticOnlyDrawEntries)
+    val pointAuthorities: Map<Int, GPURecordedPointAuthorityV3> = immutableMap(pointAuthorityEntries)
 }
 
 /** Closed handle-free draw evidence that deliberately has no executable pass or pipeline. */
@@ -358,6 +360,12 @@ class GPURecorder(
             semanticOnlyDrawEntries = plans.mapNotNull { plan ->
                 (plan as? GPURecordedPlan.SemanticOnly)?.draw
             },
+            pointAuthorityEntries = taskList.tasks.filterIsInstance<GPUTask.Render>().flatMap { it.drawPackets }
+                .mapNotNull { packet ->
+                    commands.singleOrNull { it.commandId.value == packet.commandIdValue }?.let { command ->
+                        GPURecordedPointAuthorityV3.issue(command, packet)?.let { packet.commandIdValue to it }
+                    }
+                }.toMap(),
         )
 
         closedRecording = recording

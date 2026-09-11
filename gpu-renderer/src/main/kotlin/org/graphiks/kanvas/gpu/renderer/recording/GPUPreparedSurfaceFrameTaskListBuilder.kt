@@ -123,6 +123,7 @@ data class GPUPreparedSurfaceFrameRequest(
     val w5aCoreMaterialAuthority: org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2? = null,
     val w5bPointBlends: Map<Int, org.graphiks.kanvas.gpu.plan.BlendPlan> = emptyMap(),
     val w5bPointClips: Map<Int, org.graphiks.kanvas.render.ir.ClipStackNode> = emptyMap(),
+    val w5bPointCaptures: Map<Int, W5bPreparedPointCaptureV3> = emptyMap(),
 )
 
 /** Checked structural ceilings applied before one prepared task graph is published. */

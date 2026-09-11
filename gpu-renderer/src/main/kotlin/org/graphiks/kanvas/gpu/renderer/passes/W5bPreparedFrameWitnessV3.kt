@@ -104,9 +104,12 @@ internal class W5bPreparedFrameWitnessV3(
     targetPreparation: GPUResourcePreparationRequest,
     stagingPreparation: GPUResourcePreparationRequest,
     private val readbackRequest: GPUFrameReadbackRequest,
+    packets: List<GPUDrawPacket>,
     val clipPrefixV4: org.graphiks.kanvas.gpu.renderer.planning.W4eClipGraphLowerer.ClipPrefixV4? = null,
 ) {
     private val memory = memoryBudget.snapshotForFramePlan()
+    private val packetResourceGenerations = org.graphiks.kanvas.gpu.renderer.collections.immutableMap(
+        packets.associate { it.packetId to it.resourceGeneration })
     val prepareTaskId = GPUTaskID("task.w5b.${graph.id.value}.prepare")
     val preparations = immutableList(listOfNotNull(targetPreparation, stagingPreparation,
         graph.resources().singleOrNull { it.role == org.graphiks.kanvas.gpu.plan.PlanResourceRole.DestinationSnapshot }?.let {
@@ -130,6 +133,46 @@ internal class W5bPreparedFrameWitnessV3(
             "w5b-version-order", atomic(before)?.takeIf { it == atomic(after) }
                 ?.let { org.graphiks.kanvas.gpu.renderer.recording.GPUTaskAtomicGroupID(it) })
     })
+    // One immutable copy authority is consumed by both task emission and frame validation.
+    // The following packet's sealed blend retains the destination version; the copy must
+    // refer to precisely that packet/task, never merely to a consumer with the same count.
+    private val copies = org.graphiks.kanvas.gpu.renderer.collections.immutableMap(
+        graph.passes().mapIndexedNotNull { index, pass ->
+            if (pass !is PlanPass.TextureCopy) return@mapIndexedNotNull null
+            val consumer = graph.passes()[index + 1] as PlanPass.RenderPass
+            val draw = consumer.draws().single()
+            val blend = draw.blend as org.graphiks.kanvas.gpu.plan.BlendPlan.DestinationReadV1
+            val packet = packets.single { it.commandIdValue == draw.commandIndex }
+            require(pass.source == consumer.target && pass.destination == blend.snapshotResource &&
+                pass.destinationVersion == blend.requiredDestinationVersion &&
+                packet.blendPlan == org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.lower(blend))
+            pass.id to GPUFrameStep.CopyDestinationStep(
+                source = scratch.target,
+                sourceKey = org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupKey(
+                    org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity(scratch.target.value),
+                    packet.resourceGeneration, capabilitySeal.deviceGeneration,
+                    org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat.RGBA8UnormSrgb,
+                    org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation.LinearPremul, null, null),
+                snapshot = org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef(
+                    scratch.target.value.removeSuffix(".target") + ".snapshot"),
+                logicalBounds = scratch.targetBounds,
+                copyLayout = org.graphiks.kanvas.gpu.renderer.resources.GPUTextureCopyLayout(
+                    (graph.passes().last() as PlanPass.ReadbackPass).bytesPerRow, scratch.targetBounds.height),
+                consumers = listOf(org.graphiks.kanvas.gpu.renderer.recording.GPUDestinationSnapshotConsumerRef(
+                    packet.commandIdValue.toString(), taskId(consumer), packet.packetId,
+                    org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID(packet.commandIdValue))),
+                sourceTaskIds = listOf(taskId(pass)),
+            )
+        }.toMap())
+    fun copyAuthority(pass: PlanPass.TextureCopy): GPUFrameStep.CopyDestinationStep = copies.getValue(pass.id)
+
+    private fun validatesCopy(actual: GPUFrameStep.CopyDestinationStep, pass: PlanPass.TextureCopy): Boolean {
+        val expected = copyAuthority(pass)
+        return actual.source == expected.source && actual.sourceKey == expected.sourceKey &&
+            actual.snapshot == expected.snapshot && actual.logicalBounds == expected.logicalBounds &&
+            actual.copyLayout == expected.copyLayout && actual.consumers == expected.consumers &&
+            actual.sourceTaskIds == expected.sourceTaskIds
+    }
     private fun colorResourceUses(pass: PlanPass.RenderPass) = buildList {
         if (pass.draws().any { it.blend is org.graphiks.kanvas.gpu.plan.BlendPlan.DestinationReadV1 }) add(
             org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(
@@ -189,9 +232,7 @@ internal class W5bPreparedFrameWitnessV3(
                 actual.depthStencilLoadStore != null || actual.w4eMaskContinuation != null || actual.w4eSceneContinuation != null ||
                 actual.preparedImageBindingsByPacketId.isNotEmpty() || actual.preparedTextBindingsByPacketId.isNotEmpty()
             is PlanPass.TextureCopy -> actual !is GPUFrameStep.CopyDestinationStep ||
-                actual.source != scratch.target || actual.snapshot.value != scratch.target.value.removeSuffix(".target") + ".snapshot" ||
-                actual.logicalBounds != scratch.targetBounds || actual.consumers.size != 1 ||
-                actual.sourceKey.deviceGeneration != frame.capabilitySeal.deviceGeneration
+                !validatesCopy(actual, expected)
             is PlanPass.ReadbackPass -> actual !is GPUFrameStep.ReadbackCopyStep || actual.source != scratch.target ||
                 actual.staging != scratch.staging || actual.request != readbackRequest
             is PlanPass.ClipMaskInitialize, is PlanPass.ClipMaskProducer, is PlanPass.ClipMaskFold ->
@@ -204,6 +245,7 @@ internal class W5bPreparedFrameWitnessV3(
                 actual.drawPackets.any { it.corePrimitivePreparedAuthority?.w5bFrameWitnessV3 !== this } ||
                 actual.drawPackets.zip(sealed.draws()).any { (packet, draw) ->
                     packet.blendPlan != org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.lower(draw.blend) ||
+                        packet.resourceGeneration != packetResourceGenerations[packet.packetId] ||
                         packet.diagnostics.isNotEmpty()
                 }
         }) return false

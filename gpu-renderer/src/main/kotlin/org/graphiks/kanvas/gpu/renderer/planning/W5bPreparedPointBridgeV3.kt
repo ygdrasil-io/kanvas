@@ -53,6 +53,12 @@ internal object W5bPreparedPointBridgeV3 {
                 from >= 0 && to > from
             }) { "W5b base dependency order changed" }
             packets.zip(semantics).forEach { (packet, semantic) ->
+                if (semantic.sourceFamily == GPUCorePrimitiveSourceFamily.PointLine) {
+                    require(request.w5bPointCaptures[packet.commandIdValue]?.validates(packet, semantic,
+                        request.w5bPointBlends[packet.commandIdValue], request.w5bPointClips[packet.commandIdValue]) == true) {
+                        "W5b Point packet, geometry, material, blend or clip capture changed"
+                    }
+                }
                 require(packet.hasCorePrimitiveSemanticAuthority(semantic, request.capabilities)) { "W5b captured geometry authority changed" }
                 require(semantic.targetBounds == request.targetBounds) { "W5b semantic target bounds changed" }
                 require(semantic.payloadRef.commandIdValue == packet.commandIdValue) { "W5b semantic command identity changed" }

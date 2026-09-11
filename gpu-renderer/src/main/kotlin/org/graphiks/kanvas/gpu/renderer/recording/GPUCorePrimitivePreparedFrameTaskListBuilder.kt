@@ -1823,25 +1823,19 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 drawPackets = selected, batchEligibilityByPacketId = selected.associate { it.packetId to base.batchEligibilityByPacketId.getValue(it.packetId) })
         }
         val passes = graph.passes()
-        val tasks = listOf(prepare) + passes.mapIndexed { index, pass ->
+        val tasks = listOf(prepare) + passes.map { pass ->
             when (pass) {
                 is org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass -> renders.getValue(pass)
                 is org.graphiks.kanvas.gpu.plan.PlanPass.TextureCopy -> {
-                    val consumer = renders.getValue(passes[index + 1] as org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass)
-                    val packet = consumer.drawPackets.single()
-                    val key = GPUDestinationSnapshotGroupKey(GPUTargetIdentity(request.target.value),
-                        packet.resourceGeneration, baseTaskGeneration(request), GPUColorFormat.RGBA8UnormSrgb,
-                        corePrimitiveDestinationSnapshotColorInterpretation(GPUColorFormat.RGBA8UnormSrgb), null, null)
-                    val member = GPUDestinationReadMember(packet.commandIdValue.toString(), 0, request.targetBounds)
-                    val row = (passes.last() as org.graphiks.kanvas.gpu.plan.PlanPass.ReadbackPass).bytesPerRow
-                    val copied = Math.multiplyExact(row, request.targetBounds.height.toLong())
-                    val group = GPUDestinationSnapshotGroup(key, request.targetBounds, listOf(member), copied, emptyList())
-                    val operation = GPUDestinationSnapshotOperation.TextureCopy(0, request.target, snapshot, request.targetBounds,
-                        GPUTextureCopyLayout(row, request.targetBounds.height), listOf(GPUDestinationSnapshotConsumerRef(
-                            packet.commandIdValue.toString(), consumer.taskId, packet.packetId, GPUDrawCommandID(packet.commandIdValue))))
-                    GPUTask.DestinationSnapshots(taskId(pass), base.recordingId, GPUTaskPhase.Copy,
+                    val authority = witness.copyAuthority(pass)
+                    val member = GPUDestinationReadMember(authority.consumers.single().groupingCommandId, 0, authority.logicalBounds)
+                    val copied = Math.multiplyExact(authority.copyLayout.bytesPerRow, authority.copyLayout.rowsPerImage.toLong())
+                    val group = GPUDestinationSnapshotGroup(authority.sourceKey, authority.logicalBounds, listOf(member), copied, emptyList())
+                    val operation = GPUDestinationSnapshotOperation.TextureCopy(0, authority.source, authority.snapshot,
+                        authority.logicalBounds, authority.copyLayout, authority.consumers)
+                    GPUTask.DestinationSnapshots(authority.sourceTaskIds.single(), base.recordingId, GPUTaskPhase.Copy,
                         GPUDestinationSnapshotTaskPayload(GPUDestinationSnapshotGroupingResult(listOf(group),
-                            listOf(GPUDestinationSnapshotMaterialization.TextureCopy(0, request.targetBounds)),
+                            listOf(GPUDestinationSnapshotMaterialization.TextureCopy(0, authority.logicalBounds)),
                             copied, emptyList(), emptyList()), listOf(operation)))
                 }
                 is org.graphiks.kanvas.gpu.plan.PlanPass.ReadbackPass -> GPUTask.Readback(taskId(pass),
@@ -1858,8 +1852,6 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             tasks, witness.dependencies,
             request.baseTaskList.phaseOrder, request.memoryBudget))
     }
-
-    private fun baseTaskGeneration(request: GPUCorePrimitivePreplannedFrameRequest) = request.baseTaskList.capabilitySeal.deviceGeneration
 
     private fun hasExactW3Envelope(
         request: GPUCorePrimitivePreplannedFrameRequest,

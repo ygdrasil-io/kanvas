@@ -452,6 +452,19 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     semanticsByCommandId = semantics,
                     w5bPointBlends = corePlansByCommandId.mapValues { it.value.blend },
                     w5bPointClips = pointClips,
+                    w5bPointCaptures = recording.pointAuthorities.mapNotNull { (commandId, authority) ->
+                        val original = admittedSemantics[commandId] as? GPUDrawSemanticPayload.CorePrimitive
+                        val materials = frameMaterials
+                        val ref = materials?.refsByCommandId?.get(commandId)
+                        val blend = corePlansByCommandId[commandId]?.blend
+                        // Only W5b's existing DirectTriangles lane acquires this join. Wider
+                        // W5a Points keep their original stencil geometry and prepared route.
+                        val directPoint = (original?.geometry as?
+                            org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry.TriangulatedPath)
+                            ?.geometryMode == org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode.DirectTriangles
+                        if (original == null || !directPoint || ref == null || blend == null) null else commandId to
+                            authority.capturePrepared(original, blend, pointClips[commandId], materials.table, ref)
+                    }.toMap(),
                     w5aCoreMaterialAuthority = frameMaterials?.let { materials ->
                         val refs = materials.refsByCommandId.filterKeys { commandId ->
                             (semantics[commandId] as? GPUDrawSemanticPayload.CorePrimitive)?.material is
