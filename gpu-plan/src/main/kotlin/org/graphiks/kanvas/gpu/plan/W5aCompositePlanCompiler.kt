@@ -144,7 +144,7 @@ public class W5aCompositePlanV1 private constructor(
             val remapped = graphs.mapIndexed { lane, graph ->
                 val copied = mutableMapOf<PlanDraw, PlanDraw>()
                 fun draw(draw: PlanDraw): PlanDraw = copied.getOrPut(draw) {
-                    val ref = interned.remap(lane, (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref)
+                    val ref = interned.remap(lane, draw.materialAuthority.materialPlanRef())
                     when (draw) {
                         is SolidRectDraw -> draw.withMaterialRef(ref)
                         is AnalyticRRectDraw -> draw.withMaterialRef(ref)

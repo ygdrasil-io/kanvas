@@ -96,7 +96,7 @@ internal fun issueW5bNativeComposite(graphs: List<RenderGraph>): RenderGraph {
             graph.w5bGeometryLanes().single().sourceGraph else graph
         lanes += W5bGeometryLanePlanV3(geometrySource, draws.map { it.commandIndex }, data, depth)
         draws.forEach { draw ->
-            val ref = interned.remap(ordinal, (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref)
+            val ref = interned.remap(ordinal, draw.materialAuthority.materialPlanRef())
             colors += when (draw) {
                 is SolidRectDraw -> draw.withMaterialRef(ref)
                 is AnalyticRectDraw -> draw.withMaterialRef(ref)
@@ -134,7 +134,7 @@ internal fun validateW5bGeometryPasses(passes: List<PlanPass>, resources: Map<Pl
         else -> emptyList()
     } }
     require(colors.size == visualCommandCountI32 && colors.zipWithNext().all { (a, b) -> a.commandIndex < b.commandIndex })
-    require(colors.all { it.sample == SamplePlan.SingleSample && it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1 && it.blend != BlendPlan.NoOpV1 })
+    require(colors.all { it.sample == SamplePlan.SingleSample && (it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1 || it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2) && it.blend != BlendPlan.NoOpV1 })
     fun data(value: PlanDrawDataResources) {
         for ((id, role, usage) in listOf(Triple(value.vertex, PlanResourceRole.VertexData, PlanResourceUsage.Vertex),
             Triple(value.index, PlanResourceRole.IndexData, PlanResourceUsage.Index),

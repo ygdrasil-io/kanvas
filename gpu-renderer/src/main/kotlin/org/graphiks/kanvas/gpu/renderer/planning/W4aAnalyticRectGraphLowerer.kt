@@ -256,13 +256,14 @@ internal class W4aAnalyticRectGraphLowerer {
         if (draws.any { draw ->
                 when (val authority = draw.materialAuthority) {
                     is PlanDrawMaterialAuthority.LegacyColorV1 -> false
+                    is PlanDrawMaterialAuthority.MaterialV2 -> table == null || authority.ref.indexI32 >= table.sizeI32
                     is PlanDrawMaterialAuthority.MaterialV1 -> table == null || authority.ref.indexI32 >= table.sizeI32
                 }
             } || when (graph.capabilityId) {
                 W4aAnalyticRectPlanCompiler.HISTORICAL_CAPABILITY_ID ->
                     table != null || draws.any { it.materialAuthority !is PlanDrawMaterialAuthority.LegacyColorV1 }
                 W4aAnalyticRectPlanCompiler.CAPABILITY_ID ->
-                    table == null || draws.any { it.materialAuthority !is PlanDrawMaterialAuthority.MaterialV1 }
+                    table == null || draws.any { it.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1 }
                 else -> true
             }
         ) return null
@@ -643,6 +644,7 @@ internal class W4aAnalyticRectGraphLowerer {
         authority: PlanDrawMaterialAuthority,
     ): ColorF32? = when (authority) {
         is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
+        is PlanDrawMaterialAuthority.MaterialV2 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }
         is PlanDrawMaterialAuthority.MaterialV1 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }
     }
 

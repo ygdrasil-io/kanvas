@@ -12,6 +12,15 @@ internal class W5aMaterialPlanLowerer {
         authority: org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority,
         commandIdI32: Int,
     ): org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload? {
+        if (authority is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV2) {
+            val owner = org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2.issue(
+                requireNotNull(table), mapOf(commandIdI32 to authority.ref),
+                coordinatesV2ByCommandIdI32 = mapOf(commandIdI32 to authority.coordinates),
+            ) ?: error("Invalid W5d source authority")
+            return org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.SolidColor(
+                requireNotNull(owner.materializeSource(commandIdI32, authority.ref)),
+            )
+        }
         if (authority !is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV1) return null
         val owner = org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2.issue(
             requireNotNull(table), mapOf(commandIdI32 to authority.ref),
@@ -26,7 +35,8 @@ internal class W5aMaterialPlanLowerer {
             var indexI32 = root.indexI32
             while (table.entry(MaterialPlanRef(indexI32)).bindings is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.OpacityF32V1) indexI32--
             val entry = table.entry(MaterialPlanRef(indexI32))
-            if (entry.bindings is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.GradientV1)
+            if (entry.bindings is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.GradientV1 ||
+                entry.bindings is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.GradientV2)
                 return ColorF32.Transparent
         }
         return W5aMaterialSourceStage.lower(table, root)?.let { ColorF32.Transparent }

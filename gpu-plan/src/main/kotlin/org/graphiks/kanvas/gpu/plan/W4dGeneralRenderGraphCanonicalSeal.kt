@@ -112,6 +112,7 @@ private class W4dGeneralGraphDigestWriter {
             i32("$prefix.program.version", entry.program.versionI32)
             text("$prefix.program.id", entry.program.structuralId.value)
             when (val binding = entry.bindings) {
+                is MaterialBindingPlan.GradientV2 -> error(W5dPlanDiagnostics.CoordinatePlanSchema)
                 is MaterialBindingPlan.GradientV1 -> {
                     text("$prefix.binding", binding.toString())
                     text("$prefix.stop-slab", requireNotNull(table.gradientStopSlab).canonicalIdentity)
@@ -311,6 +312,7 @@ private class W4dGeneralGraphDigestWriter {
         i32("$prefix.command-index", draw.commandIndex)
         if (materialV2) {
             when (val authority = draw.materialAuthority) {
+                is PlanDrawMaterialAuthority.MaterialV2 -> error(W5dPlanDiagnostics.CoordinatePlanSchema)
                 is PlanDrawMaterialAuthority.MaterialV1 -> {
                     text("$prefix.material-authority", "material-v1")
                     i32("$prefix.material-ref", authority.ref.indexI32)

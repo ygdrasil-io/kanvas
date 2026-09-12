@@ -77,6 +77,9 @@ public object EffectiveMaterialPlanner {
         if (draw.effects !is EffectStack.Empty || draw.resource != null || draw.operationBlendMode != null) {
             return Normalization.Refused(W5aPlanDiagnostics.UnsupportedDrawState)
         }
+        val addressing = GradientAddressingCaptureV2.capture(draw.material)
+        if (addressing is GradientAddressingCaptureV2.Ready && addressing.coordinateNodes.isNotEmpty())
+            return normalizeW5d(draw, blend, addressing)
         var material = draw.material
         val opacityInnerToOuter = mutableListOf<Float>()
         var visited = 0
@@ -239,6 +242,57 @@ public object EffectiveMaterialPlanner {
                 MaterialProgramPlan.OpacityV1(child),
                 MaterialBindingPlan.OpacityF32V1.of(paintAlpha),
             )
+        }
+        return Normalization.Source(MaterialPlanTable.of(entries), MaterialPlanRef(entries.lastIndex), blend)
+    }
+
+    private fun normalizeW5d(draw: DrawNode, blend: BlendPlan, capture: GradientAddressingCaptureV2.Ready): Normalization {
+        val linear = capture.leaf as? MaterialNode.LinearGradient
+            ?: return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
+        val local = capture.coordinateNodes.singleOrNull() as? CoordinateNodeV2.LocalMatrix
+            ?: return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
+        if (linear.tileMode != org.graphiks.kanvas.render.ir.TileMode.CLAMP ||
+            linear.interpolation != org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB ||
+            draw.origin != org.graphiks.kanvas.render.ir.DrawOrigin.RECT || draw.geometry !is org.graphiks.kanvas.render.ir.GeometryNode.Rect)
+            return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
+        val coordinates = when (val result = MaterialCoordinatePlanV2.fromCtmAndLocal(draw.transform, local.copyMatrixF32())) {
+            is MaterialCoordinatePlanV2.Build.Ready -> result.coordinates
+            is MaterialCoordinatePlanV2.Build.Refused -> return Normalization.Refused(result.code)
+        }
+        val stops = when (val normalized = normalizeGradientStopsV1(linear.stops(), preserveValidityMask = true)) {
+            is NormalizedGradientStopsV1.Stops -> normalized.slab
+            is NormalizedGradientStopsV1.Refused -> return Normalization.Refused(normalized.code)
+            is NormalizedGradientStopsV1.Solid -> error("V2 retains a stop authority")
+        }
+        val bounds = (draw.geometry as org.graphiks.kanvas.render.ir.GeometryNode.Rect).copyBounds()
+        val deviceCorners = listOf(org.graphiks.math.geometry.Point2F32(bounds.left, bounds.top),
+            org.graphiks.math.geometry.Point2F32(bounds.right, bounds.top),
+            org.graphiks.math.geometry.Point2F32(bounds.left, bounds.bottom),
+            org.graphiks.math.geometry.Point2F32(bounds.right, bounds.bottom)).map(draw.transform::transform)
+        var magnitudeF64 = deviceCorners.maxOf { maxOf(kotlin.math.abs(it.x.toDouble()), kotlin.math.abs(it.y.toDouble())) } + 2.0
+        for (operation in coordinates.copyOperations()) {
+            val matrixF32 = operation.copyMatrixF32()
+            magnitudeF64 = maxOf(
+                (kotlin.math.abs(matrixF32.sx.toDouble()) + kotlin.math.abs(matrixF32.kx.toDouble())) * magnitudeF64 + kotlin.math.abs(matrixF32.tx.toDouble()),
+                (kotlin.math.abs(matrixF32.ky.toDouble()) + kotlin.math.abs(matrixF32.sy.toDouble())) * magnitudeF64 + kotlin.math.abs(matrixF32.ty.toDouble()),
+            ) * 1.00001 + 64.0 * java.lang.Float.MIN_NORMAL
+            if (!magnitudeF64.isFinite() || magnitudeF64 > 1e8) return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
+        }
+        val tileGraph = GradientTileOperationGraphV2.clamp()
+        val program = GradientAddressingProgramV2(GradientFamilyV2.LINEAR, tileGraph.requestedMode,
+            tileGraph.effectiveMode, tileGraph.contractId, coordinates.topologyIdentity)
+        val degeneracy = LinearGradientDegeneracyV1.of(linear.start, linear.end)
+        val uniformMagnitudeF64 = listOf(linear.start.x, linear.start.y, linear.end.x, linear.end.y).maxOf { kotlin.math.abs(it.toDouble()) }
+        val numeric = GradientNumericAuthorityV2.sealLinear(program, coordinates, linear.start, linear.end,
+            degeneracy, stops, magnitudeF64, uniformMagnitudeF64)
+            ?: return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
+        val entries = mutableListOf(MaterialPlanEntry(program, MaterialBindingPlan.LinearGradientV2(linear.start, linear.end,
+            GradientStopRangeV1(0u, stops.copyStops().size.toUInt()), degeneracy, numeric), stops))
+        val paintAlphaF32 = draw.paint?.takeIf { it.shader != null }?.color?.alphaNormalized ?: 1f
+        for (alphaF32 in listOf(capture.opacityF32, paintAlphaF32)) {
+            if (!alphaF32.isFinite() || alphaF32 !in 0f..1f) return Normalization.Refused(W5aPlanDiagnostics.InvalidOpacity)
+            if (alphaF32 != 1f) entries += MaterialPlanEntry(MaterialProgramPlan.OpacityV1(entries.last().program),
+                MaterialBindingPlan.OpacityF32V1.of(alphaF32))
         }
         return Normalization.Source(MaterialPlanTable.of(entries), MaterialPlanRef(entries.lastIndex), blend)
     }

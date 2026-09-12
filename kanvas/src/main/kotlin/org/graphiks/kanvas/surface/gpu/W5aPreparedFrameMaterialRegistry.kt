@@ -8,8 +8,6 @@ import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.Shader
-import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.paint.ColorSpaceInterpolation
 import org.graphiks.kanvas.render.ir.DisplayOpSceneAdapter
 import org.graphiks.kanvas.render.ir.SceneCaptureResult
 import org.graphiks.kanvas.render.ir.SceneCommand
@@ -125,7 +123,7 @@ internal data class W5aPreparedFrameMaterialRegistry(
 
         private fun DisplayOp.isW5aCoreMaterialCandidate(): Boolean = when (this) {
             is DisplayOp.DrawRect -> !paint.isStroke() &&
-                paint.shader.isW5aSolidOpacity(allowGradient = true)
+                (paint.shader?.isW5dGradientCandidateV2() == true || paint.shader.isW5aSolidOpacity(allowGradient = true))
             is DisplayOp.DrawRRect -> !paint.isStroke() &&
                 paint.shader.isW5aSolidOpacity(allowGradient = paint.antiAlias)
             is DisplayOp.DrawPath -> paint.shader.isW5aSolidOpacity(allowGradient = true)
@@ -146,13 +144,7 @@ internal data class W5aPreparedFrameMaterialRegistry(
                 if (++depth > 64) return false
                 source = source.shader
             }
-            return source == null || source is Shader.SolidColor || allowGradient && when (source) {
-                is Shader.LinearGradient -> source.tileMode == TileMode.CLAMP && source.interpolation == ColorSpaceInterpolation.SRGB
-                is Shader.RadialGradient -> source.tileMode == TileMode.CLAMP && source.interpolation == ColorSpaceInterpolation.SRGB
-                is Shader.SweepGradient -> source.tileMode == TileMode.CLAMP && source.interpolation == ColorSpaceInterpolation.SRGB
-                is Shader.ConicalGradient -> source.tileMode == TileMode.CLAMP && source.interpolation == ColorSpaceInterpolation.SRGB
-                else -> false
-            }
+            return source == null || source is Shader.SolidColor || allowGradient && this?.isW5dGradientCandidateV2(allowLocalMatrix = false) == true
         }
 
         private val POINT_MATERIAL_BLENDS = setOf(BlendMode.SRC_OVER, BlendMode.PLUS, BlendMode.MULTIPLY,

@@ -116,6 +116,8 @@ public sealed interface PlanDraw {
         get() = PlanDrawMaterialAuthority.LegacyColorV1.of(color)
     public val materialCoordinates: MaterialCoordinatePlanV1?
         get() = (materialAuthority as? PlanDrawMaterialAuthority.MaterialV1)?.coordinates
+    public val materialCoordinatesV2: MaterialCoordinatePlanV2?
+        get() = (materialAuthority as? PlanDrawMaterialAuthority.MaterialV2)?.coordinates
     public val coverage: CoveragePlan
     public val sample: SamplePlan
     public val blend: BlendPlan
@@ -384,17 +386,19 @@ public class SolidRectDraw private constructor(
             sample: SamplePlan = SamplePlan.SingleSample,
             blend: BlendPlan = BlendPlan.SrcOver,
             coordinates: MaterialCoordinatePlanV1? = null,
+            coordinatesV2: MaterialCoordinatePlanV2? = null,
         ): SolidRectDraw {
             require(commandIndexI32 >= 0) { "Command index must be non-negative" }
             require(!visibleBounds.isEmpty && !scissor.isEmpty) { "Draw rectangles must be non-empty" }
-            return SolidRectDraw(commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material, coordinates), visibleBounds, scissor, coverage, sample, blend)
+            return SolidRectDraw(commandIndexI32, coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
+                ?: PlanDrawMaterialAuthority.MaterialV1(material, coordinates), visibleBounds, scissor, coverage, sample, blend)
         }
     }
 }
 
 /** Reissues only the sealed W5 material reference; geometry and raster facts are copied verbatim. */
 public fun SolidRectDraw.withMaterialRef(material: MaterialPlanRef): SolidRectDraw = SolidRectDraw.ofMaterial(
-    commandIndex, material, copyVisibleBounds(), copyScissor(), coverage, sample, blend, materialCoordinates,
+    commandIndex, material, copyVisibleBounds(), copyScissor(), coverage, sample, blend, materialCoordinates, materialCoordinatesV2,
 )
 
 public class AnalyticRectDraw private constructor(
@@ -451,6 +455,7 @@ public class AnalyticRectDraw private constructor(
             scissor: RectI32,
             blend: BlendPlan = BlendPlan.LegacySrcOverV1,
             coordinates: MaterialCoordinatePlanV1? = null,
+            coordinatesV2: MaterialCoordinatePlanV2? = null,
         ): AnalyticRectDraw {
             require(commandIndexI32 >= 0) { "Command index must not be negative" }
             require(!deviceBounds.isEmpty && !rasterBounds.isEmpty && !scissor.isEmpty) {
@@ -458,7 +463,8 @@ public class AnalyticRectDraw private constructor(
             }
             return AnalyticRectDraw(
                 commandIndexI32,
-                PlanDrawMaterialAuthority.MaterialV1(material, coordinates),
+                coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
+                    ?: PlanDrawMaterialAuthority.MaterialV1(material, coordinates),
                 deviceBounds,
                 rasterBounds,
                 scissor,
@@ -469,7 +475,7 @@ public class AnalyticRectDraw private constructor(
 }
 
 public fun AnalyticRectDraw.withMaterialRef(material: MaterialPlanRef): AnalyticRectDraw = AnalyticRectDraw.ofMaterial(
-    commandIndex, material, copyDeviceBounds(), copyRasterBounds(), copyScissor(), blend, materialCoordinates,
+    commandIndex, material, copyDeviceBounds(), copyRasterBounds(), copyScissor(), blend, materialCoordinates, materialCoordinatesV2,
 )
 
 public class AnalyticRRectDraw private constructor(

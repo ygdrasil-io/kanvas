@@ -94,6 +94,7 @@ public class GPUPreparedTextMaterialPlanProvenance internal constructor(
             is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.OpacityF32V1 ->
                 value.alphaF32.toRawBits().toString()
             org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.EmptyV1 -> "empty"
+            is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.GradientV2 -> error("W5d gradients do not admit Text")
             is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.GradientV1 -> error("W5c gradients do not admit Text")
         }
         "${entry.program.structuralId.value}@${entry.program.versionI32}:${entry.bindings.versionI32}:$binding"

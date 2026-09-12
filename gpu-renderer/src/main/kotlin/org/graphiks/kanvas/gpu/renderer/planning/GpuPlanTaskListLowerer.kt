@@ -544,6 +544,7 @@ public class GpuPlanTaskListLowerer {
         if (draws.any { draw ->
                 when (val authority = draw.materialAuthority) {
                     is PlanDrawMaterialAuthority.LegacyColorV1 -> false
+                    is PlanDrawMaterialAuthority.MaterialV2 -> table == null || authority.ref.indexI32 >= table.sizeI32
                     is PlanDrawMaterialAuthority.MaterialV1 -> table == null || authority.ref.indexI32 >= table.sizeI32
                 }
             }
@@ -553,7 +554,7 @@ public class GpuPlanTaskListLowerer {
                 table != null || draws.any { it.materialAuthority !is PlanDrawMaterialAuthority.LegacyColorV1 }
             ) return null
             W3SolidRectPlanCompiler.W5A_CAPABILITY_ID -> if (
-                table == null || draws.any { it.materialAuthority !is PlanDrawMaterialAuthority.MaterialV1 }
+                table == null || draws.any { it.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1 }
             ) return null
             else -> if (!geometryClearOnly || draws.isNotEmpty()) return null
         }
@@ -575,6 +576,7 @@ public class GpuPlanTaskListLowerer {
         authority: PlanDrawMaterialAuthority,
     ): ColorF32? = when (authority) {
         is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
+        is PlanDrawMaterialAuthority.MaterialV2 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }
         is PlanDrawMaterialAuthority.MaterialV1 -> W5aMaterialPlanLowerer().lower(requireNotNull(table), authority.ref)
     }
 

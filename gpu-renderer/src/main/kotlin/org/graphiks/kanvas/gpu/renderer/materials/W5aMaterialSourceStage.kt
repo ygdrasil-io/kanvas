@@ -25,6 +25,7 @@ internal class W5aMaterialSourceStage private constructor(
     uniformBytes: ByteArray,
     val provenOpaque: Boolean,
     val gradientStopSlab: GradientStopSlabPlanV1?,
+    val coordinateFunctionName: String = "w5c_local_point",
 ) {
     data class Binding(val bindingI32: Int, val resourceKind: String)
     val bindingManifest: List<Binding> = listOf(Binding(0, "uniformBuffer")) +
@@ -66,6 +67,7 @@ internal class W5aMaterialSourceStage private constructor(
                 val (source, binding) = pair
                 val input = "w5aMaterial.binding$bindingIndexI32"
                 when (binding) {
+                    is MaterialBindingPlan.GradientV2 -> return null
                     is MaterialBindingPlan.GradientV1 -> {
                         binding.copyUniformValuesF32().forEach(uniforms::putFloat)
                         opaque = opaque && binding !is MaterialBindingPlan.ConicalGradientV1 &&
@@ -161,6 +163,84 @@ internal class W5aMaterialSourceStage private constructor(
                 declarations, chain.size, uniforms.array(), opaque, table.gradientStopSlab.takeIf { gradientBinding != null })
         }
 
+
+        /** V2 is verified directly; the V1 overload never receives a V2 numeric authority. */
+        fun lower(table: MaterialPlanTable, root: MaterialPlanRef,
+            coordinates: org.graphiks.kanvas.gpu.plan.MaterialCoordinatePlanV2): W5aMaterialSourceStage? {
+            if (root.indexI32 !in 0 until table.sizeI32) return null
+            val opacities = mutableListOf<MaterialBindingPlan.OpacityF32V1>()
+            var ref = root
+            while (table.entry(ref).bindings is MaterialBindingPlan.OpacityF32V1) {
+                opacities += table.entry(ref).bindings as MaterialBindingPlan.OpacityF32V1
+                if (ref.indexI32 == 0) return null
+                ref = MaterialPlanRef(ref.indexI32 - 1)
+            }
+            val entry = table.entry(ref)
+            val program = entry.program as? org.graphiks.kanvas.gpu.plan.GradientAddressingProgramV2 ?: return null
+            val binding = entry.bindings as? MaterialBindingPlan.LinearGradientV2 ?: return null
+            val slab = table.gradientStopSlab ?: return null
+            val numeric = binding.numericAuthority
+            if (!numeric.authenticates(program, binding, slab, coordinates)) return null
+            val requirements = RawMaterialRequirementsV2.of(table, root)
+            if (requirements.uniformByteCountI64 > Int.MAX_VALUE) return null
+            val uniforms = ByteBuffer.allocate(requirements.uniformByteCountI64.toInt()).order(ByteOrder.LITTLE_ENDIAN)
+            binding.copyUniformValuesF32().forEach(uniforms::putFloat)
+            for (opacity in opacities.asReversed()) {
+                uniforms.putFloat(opacity.alphaF32)
+                repeat(3) { uniforms.putFloat(0f) }
+            }
+            uniforms.putInt(binding.stopRange.baseIndexU32.toInt()).putInt(binding.stopRange.countU32.toInt()).putInt(0).putInt(0)
+            uniforms.putInt(if (binding.gradientDegenerate) 1 else 0)
+            repeat(3) { uniforms.putInt(0) }
+            binding.degeneracy.copyScalarsF32().forEach(uniforms::putFloat)
+            repeat(2) { uniforms.putFloat(0f) }
+            val operations = coordinates.copyOperations()
+            if (operations.size != 2) return null
+            for (operation in operations) {
+                val m = operation.copyMatrixF32()
+                listOf(m.sx, m.kx, m.tx, 0f, m.ky, m.sy, m.ty, 0f, m.persp0, m.persp1, m.persp2, 0f).forEach(uniforms::putFloat)
+            }
+            val statements = StringBuilder("    let straight = w5c_gradient(localPosition);\n" +
+                "    let linear = w5a_srgb_to_linear(straight);\n" +
+                "    let value0 = vec4<f32>(linear.rgb * linear.a, linear.a);\n")
+            for (indexI32 in opacities.indices) {
+                statements.append("    let value${indexI32 + 1} = value$indexI32 * w5aMaterial.binding${indexI32 + 1}.x;\n")
+            }
+            val declarations = """
+                struct W5aMaterialBlock {
+                ${(0..opacities.size).joinToString("\n") { "    binding$it: vec4<f32>," }}
+                    gradientHeader: vec4<u32>,
+                    gradientFlags: vec4<u32>,
+                    linearParameters0: vec4<f32>,
+                    linearParameters1: vec4<f32>,
+                    inverseRow0: vec4<f32>,
+                    inverseRow1: vec4<f32>,
+                    inverseRow2: vec4<f32>,
+                    inverseLocalRow0: vec4<f32>,
+                    inverseLocalRow1: vec4<f32>,
+                    inverseLocalRow2: vec4<f32>,
+                }
+                @group(1) @binding(0) var<uniform> w5aMaterial: W5aMaterialBlock;
+                $SRGB_TO_LINEAR_WGSL
+                ${gradientDeclarationsWgsl(numeric.graph, numeric.tileGraph)}
+                fn w5d_local_point(pixel: vec2<f32>) -> vec2<f32> {
+                    let p = w5c_local_point(pixel);
+                    let x = (w5aMaterial.inverseLocalRow0.x * p.x + w5aMaterial.inverseLocalRow0.y * p.y) + w5aMaterial.inverseLocalRow0.z;
+                    let y = (w5aMaterial.inverseLocalRow1.x * p.x + w5aMaterial.inverseLocalRow1.y * p.y) + w5aMaterial.inverseLocalRow1.z;
+                    return vec2<f32>(x, y);
+                }
+                fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {
+                    $statements
+                    return value${opacities.size};
+                }
+            """.trimIndent()
+            check(uniforms.position() == uniforms.capacity())
+            return W5aMaterialSourceStage(table.entry(root).program.structuralId.value + ":srgb-endpoints-v1",
+                declarations, requirements.bindingCountI32, uniforms.array(),
+                opacities.all { it.alphaF32 == 1f } && slab.copyStops().all { it.straightSrgbF32.alpha == 1f },
+                slab, "w5d_local_point")
+        }
+
         /** Exact partition proof; altered blend/coverage/destination/attachment graphs fail closed. */
         fun sourceForFixedFunctionTail(graph: NumericOperationGraphV1): NumericOperationGraphV1.Node? {
             if (graph.contractId != "WgslFloatEnvelopeV1") return null
@@ -191,8 +271,10 @@ internal class W5aMaterialSourceStage private constructor(
         """.trimIndent()
 
         /** Lowers every executed gradient node, including the explicit bounded search body. */
-        private fun gradientDeclarationsWgsl(graph: GradientNumericOperationGraphV1): String {
+        private fun gradientDeclarationsWgsl(graph: GradientNumericOperationGraphV1,
+            tileGraph: org.graphiks.kanvas.gpu.plan.GradientTileOperationGraphV2? = null): String {
             require(graph.contractId == "WgslFloatEnvelopeV1" && graph.domainProof == GradientNumericDomainProofV1.ProvenFinite)
+            if (tileGraph != null) require(tileGraph == org.graphiks.kanvas.gpu.plan.GradientTileOperationGraphV2.clamp())
             val code = StringBuilder()
             val emitted = mutableMapOf<GradientNumericOperationGraphV1.Node, String>()
             var ordinalI32 = 0
@@ -202,6 +284,19 @@ internal class W5aMaterialSourceStage private constructor(
                     val valid = emit(node.inputs[1])
                     code.append("if (!$valid) { return vec4<f32>(0.0); }\n")
                     return@getOrPut emit(node.inputs[0])
+                }
+                // Replace the family graph's CLAMP node with the separately sealed V2 tile operation.
+                if (tileGraph != null && node.operation == GradientNumericOperationGraphV1.Operation.SELECT &&
+                    node.type == GradientNumericOperationGraphV1.ValueType.ScalarF32 &&
+                    node.inputs[0].operation == GradientNumericOperationGraphV1.Operation.MAX_F32 &&
+                    node.inputs[1].input == GradientNumericOperationGraphV1.Input.ONE) {
+                    fun tile(nodeV2: org.graphiks.kanvas.gpu.plan.GradientTileOperationNodeV2.ScalarF32): String = when (nodeV2) {
+                        org.graphiks.kanvas.gpu.plan.GradientTileOperationNodeV2.InputTF32 -> emit(node.inputs[0].inputs[0])
+                        is org.graphiks.kanvas.gpu.plan.GradientTileOperationNodeV2.ClampF32 -> "clamp(${tile(nodeV2.input)}, 0.0, 1.0)"
+                    }
+                    val name = "gradientValue${ordinalI32++}"
+                    code.append("let $name = ${tile(tileGraph.outputTF32)};\n")
+                    return@getOrPut name
                 }
                 val args = node.inputs.map(::emit)
                 val name = "gradientValue${ordinalI32++}"

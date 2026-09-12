@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.passes
 import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
 import org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority
+import org.graphiks.kanvas.gpu.plan.materialPlanRef
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.materializeW5aSolid
@@ -16,7 +17,7 @@ internal class W5aMaterialPlanVersionWitnessV2 private constructor(
     private val programVersionsI32: List<Int>,
 ) {
     internal fun validates(): Boolean =
-        programVersionsI32.isNotEmpty() && programVersionsI32.all { it == MATERIAL_PLAN_VERSION_I32 }
+        programVersionsI32.isNotEmpty() && programVersionsI32.all { it == MATERIAL_PLAN_VERSION_I32 || it == 2 }
 
     internal companion object {
         const val MATERIAL_PLAN_VERSION_I32: Int = 1
@@ -26,10 +27,10 @@ internal class W5aMaterialPlanVersionWitnessV2 private constructor(
             authorities: List<PlanDrawMaterialAuthority>,
         ): W5aMaterialPlanVersionWitnessV2? {
             val materialTable = table ?: return null
-            if (authorities.isEmpty() || authorities.any { it !is PlanDrawMaterialAuthority.MaterialV1 }) return null
+            if (authorities.isEmpty() || authorities.any { it is PlanDrawMaterialAuthority.LegacyColorV1 }) return null
             val versions = try {
                 authorities.map { authority ->
-                    materialTable.entry((authority as PlanDrawMaterialAuthority.MaterialV1).ref).program.versionI32
+                    materialTable.entry(authority.materialPlanRef()).program.versionI32
                 }
             } catch (_: IllegalArgumentException) {
                 return null
@@ -52,6 +53,7 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
     private val finalBlendsByCommandIdI32: Map<Int, org.graphiks.kanvas.gpu.plan.BlendPlan>,
     private val materialWitness: W5aMaterialPlanVersionWitnessV2,
     private val coordinatesByCommandIdI32: Map<Int, org.graphiks.kanvas.gpu.plan.MaterialCoordinatePlanV1>,
+    private val coordinatesV2ByCommandIdI32: Map<Int, org.graphiks.kanvas.gpu.plan.MaterialCoordinatePlanV2>,
 ) {
     private val refsByCommandId: Map<Int, MaterialPlanRef> =
         java.util.Collections.unmodifiableMap(LinkedHashMap(refsByCommandIdI32))
@@ -64,6 +66,7 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
         val sourcePlanTable: MaterialPlanTable
         val finalBlend: org.graphiks.kanvas.gpu.plan.BlendPlan?
         val coordinates: org.graphiks.kanvas.gpu.plan.MaterialCoordinatePlanV1?
+        val coordinatesV2: org.graphiks.kanvas.gpu.plan.MaterialCoordinatePlanV2?
         val premultipliedRgbaF32: List<Float>
         fun validates(commandIdI32: Int): Boolean
     }
@@ -77,6 +80,8 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
         override val sourcePlanTable: MaterialPlanTable get() = frameAuthority.table
         override val coordinates: org.graphiks.kanvas.gpu.plan.MaterialCoordinatePlanV1?
             get() = frameAuthority.coordinatesByCommandIdI32[commandIdI32]
+        override val coordinatesV2: org.graphiks.kanvas.gpu.plan.MaterialCoordinatePlanV2?
+            get() = frameAuthority.coordinatesV2ByCommandIdI32[commandIdI32]
         override val finalBlend: org.graphiks.kanvas.gpu.plan.BlendPlan?
             get() = frameAuthority.finalBlendsByCommandIdI32[commandIdI32]
         override val sourceRef: MaterialPlanRef get() = frameAuthority.sourceRefsByCommandIdI32.getValue(commandIdI32)
@@ -90,8 +95,8 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
     private fun validates(commandIdI32: Int, ref: MaterialPlanRef): Boolean =
         materialWitness.validates() && refsByCommandId[commandIdI32] == ref &&
             ref.indexI32 < table.sizeI32 &&
-            table.entry(ref).program.versionI32 == W5aMaterialPlanVersionWitnessV2.MATERIAL_PLAN_VERSION_I32 &&
-            table.entry(ref).bindings.versionI32 == W5aMaterialPlanVersionWitnessV2.MATERIAL_PLAN_VERSION_I32
+            table.entry(ref).program.versionI32 in 1..2 &&
+            table.entry(ref).bindings.versionI32 == table.entry(ref).program.versionI32
 
     internal fun materializeSource(commandIdI32: Int, materialRef: MaterialPlanRef): MaterializedSolidV2? {
         if (!validates(commandIdI32, materialRef)) return null
@@ -133,26 +138,34 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
                 refsByCommandIdI32.mapValues { sourceTable to it.value },
             finalBlendsByCommandIdI32: Map<Int, org.graphiks.kanvas.gpu.plan.BlendPlan> = emptyMap(),
             coordinatesByCommandIdI32: Map<Int, org.graphiks.kanvas.gpu.plan.MaterialCoordinatePlanV1> = emptyMap(),
+            coordinatesV2ByCommandIdI32: Map<Int, org.graphiks.kanvas.gpu.plan.MaterialCoordinatePlanV2> = emptyMap(),
         ): W5aCorePrimitiveMaterialAuthorityV2? {
             val refsByCommandId = refsByCommandIdI32
             if (refsByCommandId.isEmpty() || refsByCommandId.keys.any { it < 0 }) return null
+            if (coordinatesV2ByCommandIdI32.keys.any { it !in refsByCommandId || it in coordinatesByCommandIdI32 }) return null
             if (sourcePlansByCommandIdI32.keys != refsByCommandId.keys) return null
             if (finalBlendsByCommandIdI32.isNotEmpty() && finalBlendsByCommandIdI32.keys != refsByCommandId.keys) return null
             val sourceRefs = linkedMapOf<Int, MaterialPlanRef>()
             refsByCommandId.forEach { (commandIdI32, ref) ->
                 val source = sourcePlansByCommandIdI32.getValue(commandIdI32)
                 val coordinates = coordinatesByCommandIdI32[commandIdI32]
-                val original = org.graphiks.kanvas.gpu.renderer.materials.W5aMaterialSourceStage.lower(source.first, source.second, coordinates) ?: return null
-                val rebased = org.graphiks.kanvas.gpu.renderer.materials.W5aMaterialSourceStage.lower(sourceTable, ref, coordinates) ?: return null
+                val coordinatesV2 = coordinatesV2ByCommandIdI32[commandIdI32]
+                val original = (if (coordinatesV2 == null)
+                    org.graphiks.kanvas.gpu.renderer.materials.W5aMaterialSourceStage.lower(source.first, source.second, coordinates)
+                    else org.graphiks.kanvas.gpu.renderer.materials.W5aMaterialSourceStage.lower(source.first, source.second, coordinatesV2)) ?: return null
+                val rebased = (if (coordinatesV2 == null)
+                    org.graphiks.kanvas.gpu.renderer.materials.W5aMaterialSourceStage.lower(sourceTable, ref, coordinates)
+                    else org.graphiks.kanvas.gpu.renderer.materials.W5aMaterialSourceStage.lower(sourceTable, ref, coordinatesV2)) ?: return null
                 if (original.canonicalIdentity != rebased.canonicalIdentity) return null
                 sourceRefs[commandIdI32] = source.second
             }
             // MaterialPlanTable is immutable and was defensively snapshot at frame capture.
             val ownedTable = sourceTable
-            val authorities = refsByCommandId.values.map { ref ->
+            val authorities = refsByCommandId.map { (commandIdI32, ref) ->
                 try {
                     ownedTable.entry(ref)
-                    PlanDrawMaterialAuthority.MaterialV1(ref)
+                    coordinatesV2ByCommandIdI32[commandIdI32]?.let { PlanDrawMaterialAuthority.MaterialV2(ref, it) }
+                        ?: PlanDrawMaterialAuthority.MaterialV1(ref)
                 } catch (_: IllegalArgumentException) {
                     return null
                 }
@@ -162,7 +175,8 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
             return W5aCorePrimitiveMaterialAuthorityV2(ownedTable, refsByCommandId,
                 java.util.Collections.unmodifiableMap(sourceRefs),
                 java.util.Collections.unmodifiableMap(LinkedHashMap(finalBlendsByCommandIdI32)), witness,
-                java.util.Collections.unmodifiableMap(LinkedHashMap(coordinatesByCommandIdI32)))
+                java.util.Collections.unmodifiableMap(LinkedHashMap(coordinatesByCommandIdI32)),
+                java.util.Collections.unmodifiableMap(LinkedHashMap(coordinatesV2ByCommandIdI32)))
         }
     }
 }
