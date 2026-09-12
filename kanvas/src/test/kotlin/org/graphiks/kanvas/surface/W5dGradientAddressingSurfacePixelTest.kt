@@ -147,6 +147,37 @@ class W5dGradientAddressingSurfacePixelTest {
         }
     }
 
+    @Test fun singleStopDerivedOverflowRefusesBeforeSolidAndRecovers() {
+        // Finite operands are insufficient: end-start/span and squared deltas
+        // must be validated before a one-stop gradient can collapse to Solid.
+        val failures = mutableListOf<String>()
+        for (mode in TileMode.entries) for (countI32 in listOf(1, 2))
+            for (family in listOf(GradientFixtureFamily.LINEAR, GradientFixtureFamily.SWEEP, GradientFixtureFamily.CONICAL)) {
+                val stops = List(countI32) { indexI32 -> GradientStop(indexI32.toFloat(), ColorARGB.Blue) }
+                val leaf = when (family) {
+                    GradientFixtureFamily.LINEAR -> Shader.LinearGradient(Point2F32(-Float.MAX_VALUE, 0f),
+                        Point2F32(Float.MAX_VALUE, 0f), stops, tileMode = mode)
+                    GradientFixtureFamily.SWEEP -> Shader.SweepGradient(Point2F32(0f, 0f),
+                        -Float.MAX_VALUE, Float.MAX_VALUE, stops, tileMode = mode)
+                    GradientFixtureFamily.CONICAL -> Shader.ConicalGradient(Point2F32(-Float.MAX_VALUE, 0f), 1f,
+                        Point2F32(Float.MAX_VALUE, 0f), 1f, stops, tileMode = mode)
+                    else -> error("No derived radial overflow fixture")
+                }
+                val recorder = PictureRecorder()
+                recorder.beginRecording(bounds).drawRect(bounds, Paint(shader = Shader.WithLocalMatrix(leaf, Matrix3x3F32()),
+                    antiAlias = false))
+                val picture = recorder.finishRecordingAsPicture()
+                val surface = Surface(1, 1)
+                surface.canvas { picture.playback(this) }
+                try {
+                    val failure = assertThrows<IllegalStateException> { surface.render() }
+                    assertEquals("unsupported.material.gradient.numeric-domain-unbounded", failure.message.orEmpty().substringBefore(':'))
+                } catch (failure: AssertionError) { failures += "$family $mode stops=$countI32: ${failure.message}" }
+                assertContentEquals(W5dGradientAddressingCpuOracle.redPixel(), renderPixel(linearGradient()))
+            }
+        kotlin.test.assertTrue(failures.isEmpty(), failures.joinToString("\n"))
+    }
+
     @Test fun sweepFullCoverageForcesClamp() = familyFixtures(listOf(GradientFixtureFamily.SWEEP), fullSweep = true)
 
     @Test fun conicalInvalidRootStaysTransparentBeforeTile() {

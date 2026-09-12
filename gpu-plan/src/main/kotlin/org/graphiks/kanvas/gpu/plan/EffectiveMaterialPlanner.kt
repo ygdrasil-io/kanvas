@@ -287,6 +287,23 @@ public object EffectiveMaterialPlanner {
         if (radial != null && radial.radius < 0f ||
             conical != null && (conical.startRadius < 0f || conical.endRadius < 0f))
             return Normalization.Refused(W5cPlanDiagnostics.NegativeRadius)
+        // Family validity precedes stop normalization, including the Solid
+        // shortcut: finite inputs can still overflow a derived delta/span/square.
+        val familyDegeneracy: GradientDegeneracyV1 = when {
+            linear != null -> LinearGradientDegeneracyV1.of(linear.start, linear.end)
+            radial != null -> RadialGradientDegeneracyV1(radial.radius, radial.radius <= 0.000030517578125f)
+            sweep != null -> requireNotNull(sweepDegeneracy)
+            else -> requireNotNull(conical).let { ConicalGradientDegeneracyV1.of(it.start, it.startRadius, it.end, it.endRadius) }
+        }
+        val derivedScalarsF32 = when (familyDegeneracy) {
+            is LinearGradientDegeneracyV1 -> familyDegeneracy.copyScalarsF32()
+            is RadialGradientDegeneracyV1 -> listOf(familyDegeneracy.radialRadiusF32)
+            is SweepGradientDegeneracyV1 -> with(familyDegeneracy) {
+                listOf(startAngleDegreesF32, endAngleDegreesF32, sweepSpanDegreesF32)
+            }
+            is ConicalGradientDegeneracyV1 -> familyDegeneracy.copyScalarsF32()
+        }
+        if (derivedScalarsF32.any { !it.isFinite() }) return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
         val requested = linear?.tileMode ?: radial?.tileMode ?: sweep?.tileMode ?: requireNotNull(conical).tileMode
         // Canonicalize full coverage before stop normalization and program identity.
         val effective = if (sweepDegeneracy?.sweepFullCoverage == true) GradientTileModeV2.CLAMP
@@ -334,12 +351,6 @@ public object EffectiveMaterialPlanner {
         } ?: return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
         val magnitudeF64 = coordinates.proveCoordinateDomainF64(deviceBoundsF32)
             ?: return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
-        val familyDegeneracy: GradientDegeneracyV1 = when {
-            linear != null -> LinearGradientDegeneracyV1.of(linear.start, linear.end)
-            radial != null -> RadialGradientDegeneracyV1(radial.radius, radial.radius <= 0.000030517578125f)
-            sweep != null -> requireNotNull(sweepDegeneracy)
-            else -> requireNotNull(conical).let { ConicalGradientDegeneracyV1.of(it.start, it.startRadius, it.end, it.endRadius) }
-        }
         val consumesAverage = familyDegeneracy.consumesAverage(tileGraph.effectiveMode)
         val averageSrgbaF32 = if (consumesAverage) stops.exactAverageSrgbaF32() else null
         val program = GradientAddressingProgramV2(family, tileGraph.requestedMode,
