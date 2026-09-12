@@ -114,6 +114,41 @@ public class RenderGraph private constructor(
             materialPlanTable: MaterialPlanTable? = null,
             w5bW4eSource: RenderGraph? = null,
         ): RenderGraph {
+            val stopSlab = materialPlanTable?.gradientStopSlab
+            if (stopSlab != null) {
+                visualDraws(passes).forEach { draw ->
+                    val authority = draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1
+                    var indexI32 = authority.ref.indexI32
+                    while (materialPlanTable.entry(MaterialPlanRef(indexI32)).bindings is MaterialBindingPlan.OpacityF32V1) indexI32--
+                    val entry = materialPlanTable.entry(MaterialPlanRef(indexI32))
+                    if (entry.bindings is MaterialBindingPlan.GradientV1) {
+                        require((draw is SolidRectDraw || draw is AnalyticRectDraw || draw is AnalyticRRectDraw ||
+                            draw is PathFillDraw || draw is PathStrokeDraw || draw is GeneralPathDraw ||
+                            draw is ClippedGeneralPathDraw || draw is BinaryMaskedPathDraw || draw is W5bW4ePathDraw) && authority.coordinates != null) {
+                            W5cPlanDiagnostics.CoordinatesUnavailable
+                        }
+                        require(entry.bindings.numericAuthority.authenticates(entry.program, entry.bindings,
+                            stopSlab, requireNotNull(authority.coordinates))) { W5cPlanDiagnostics.NumericDomainUnbounded }
+                    }
+                }
+            }
+            if (stopSlab != null && resources.none { it.role == PlanResourceRole.GradientStopData }) {
+                stopSlab.requireStorageCapabilities(capabilities)
+                val sourceBytesI64 = visualDraws(passes).fold(0L) { totalI64, draw ->
+                    val authority = draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1
+                    val source = RawMaterialRequirementsV2.of(materialPlanTable, authority.ref)
+                    require(capabilities.maxUniformBufferBindingSizeBytesI64?.let { source.uniformByteCountI64 <= it } == true &&
+                        source.uniformByteCountI64 <= capabilities.maxBufferSizeBytes) { W5cPlanDiagnostics.StorageUnavailable }
+                    Math.addExact(totalI64, source.uniformByteCountI64)
+                }
+                val peakI64 = Math.addExact(peakFrameLocalBytes, stopSlab.byteSizeI64)
+                require(Math.addExact(peakI64, sourceBytesI64) <= budget.maxFrameLocalBytes) { W5cPlanDiagnostics.StopBudget }
+                val stopResource = PlanResource.of(PlanResourceRole.GradientStopData, 0, PlanResourceKind.Buffer,
+                    null, null, stopSlab.byteSizeI64, setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination),
+                    PlanResourceLifetime.FrameLocal, 0, passes.size)
+                return of(id, capabilityId, targetExtent, colorFormat, capabilities, budget, visualCommandCount,
+                    resources + stopResource, passes, dependencies, peakI64, materialPlanTable, w5bW4eSource)
+            }
             require(w5bW4eSource == null || capabilityId == W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID &&
                 w5bW4eSource.verifyW4eCompilerWitness() && w5bW4eSource.capabilityId == W4eClipPlanCompiler.W5A_HARD_CAPABILITY_ID)
             require(capabilityId != W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID || visualCommandCount == 0 || w5bW4eSource != null)
@@ -1047,10 +1082,13 @@ public class RenderGraph private constructor(
                     PlanResourceRole.CoverageMaskAccumulator,
                     PlanResourceRole.CoverageMaskScratch,
                     PlanResourceRole.CoverageMaskDepthStencil,
+                    PlanResourceRole.GradientStopData,
                 )
             }) { "Single-sample explicit paths may declare only their direct resource inventory" }
             val referencedResourceIds = passes.flatMap(::referencedResources).toSet()
-            require(resources.all { it.id in referencedResourceIds }) {
+            // The shared material source consumes the sealed stop slab separately from W4
+            // geometry references; producer-only passes still carry no material binding.
+            require(resources.all { it.id in referencedResourceIds || it.role == PlanResourceRole.GradientStopData }) {
                 "Single-sample explicit path resources must be consumed by a pass"
             }
             require(pathPasses.all { (_, pass) -> pass.draw.sample == SamplePlan.SingleSample }) {

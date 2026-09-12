@@ -38,6 +38,29 @@ public fun Matrix3x3F64.isFinite(): Boolean =
         kyF64.isFinite() && syF64.isFinite() && tyF64.isFinite() &&
         persp0F64.isFinite() && persp1F64.isFinite() && persp2F64.isFinite()
 
+/** Cofactor inversion in F64, with one checked F32 projection at the public boundary. */
+public fun Matrix3x3F64.invertToMatrix3x3F32OrNull(): Matrix3x3F32? {
+    if (!isFinite()) return null
+    val aF64 = syF64 * persp2F64 - tyF64 * persp1F64
+    val bF64 = tyF64 * persp0F64 - kyF64 * persp2F64
+    val cF64 = kyF64 * persp1F64 - syF64 * persp0F64
+    val determinantF64 = sxF64 * aF64 + kxF64 * bF64 + txF64 * cF64
+    if (!determinantF64.isFinite() || determinantF64 == 0.0) return null
+    val inverseF64 = doubleArrayOf(
+        aF64, txF64 * persp1F64 - kxF64 * persp2F64, kxF64 * tyF64 - txF64 * syF64,
+        bF64, sxF64 * persp2F64 - txF64 * persp0F64, txF64 * kyF64 - sxF64 * tyF64,
+        cF64, kxF64 * persp0F64 - sxF64 * persp1F64, sxF64 * syF64 - kxF64 * kyF64,
+    )
+    val projectedF32 = inverseF64.map { coefficientF64 ->
+        // JS Float values are Numbers; materialize the IEEE F32 projection on both targets.
+        val valueF32 = Float.fromBits((coefficientF64 / determinantF64).toFloat().toRawBits())
+        if (!valueF32.isFinite()) return null
+        if (valueF32 == 0f) 0f else valueF32
+    }
+    return Matrix3x3F32(projectedF32[0], projectedF32[1], projectedF32[2], projectedF32[3],
+        projectedF32[4], projectedF32[5], projectedF32[6], projectedF32[7], projectedF32[8])
+}
+
 /**
  * Classifies this transform with exact IEEE-754 comparisons.
  *

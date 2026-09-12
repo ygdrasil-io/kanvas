@@ -98,6 +98,7 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
             GPURendererFeature.RenderPass -> PlanOperationCapability.RenderPass
             GPURendererFeature.CopyUpload -> PlanOperationCapability.CopyUpload
             GPURendererFeature.UniformBuffer -> PlanOperationCapability.UniformBuffer
+            GPURendererFeature.StorageBuffer -> PlanOperationCapability.StorageBuffer
             GPURendererFeature.Readback -> PlanOperationCapability.Readback
             else -> null
         }
@@ -207,6 +208,8 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
             maxSampledTexturesPerShaderStageI32 = observedLimits.maxSampledTexturesPerShaderStageI32,
             maxUniformBuffersPerShaderStageI32 = observedLimits.maxUniformBuffersPerShaderStageI32,
             maxUniformBufferBindingSizeBytesI64 = observedLimits.maxUniformBufferBindingSizeBytesI64,
+            maxStorageBufferBindingSizeBytesI64 = observedLimits.maxStorageBufferBindingSizeBytesI64,
+            maxStorageBuffersPerShaderStageI32 = observedLimits.maxStorageBuffersPerShaderStageI32,
         )
         GpuPlanCapabilityAdapterResult.Supported(snapshot)
     } catch (_: IllegalArgumentException) {

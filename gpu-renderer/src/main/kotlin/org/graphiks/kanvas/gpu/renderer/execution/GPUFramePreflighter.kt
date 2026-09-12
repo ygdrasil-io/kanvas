@@ -5235,6 +5235,15 @@ internal class GPUFramePreflighter(
         } catch (_: ArithmeticException) {
             return false
         }
+        val stopSlabs = packets.mapNotNull { it.w5aSourceStageV2?.stage?.gradientStopSlab }
+            .distinctBy { it.canonicalIdentity }
+        if (stopSlabs.size > 1) return false
+        val stopBytesI64 = stopSlabs.singleOrNull()?.byteSizeI64 ?: 0L
+        if (stopBytesI64 > maxBufferSize || stagingBytes > Long.MAX_VALUE - stopBytesI64) return false
+        val transientBytesI64 = stagingBytes + stopBytesI64
+        val stopAllocations = if (stopBytesI64 == 0L) emptyList() else listOf(GPUFrameMemoryAllocation(
+            render.target.value.removeSuffix(".target") + ".gradient-stops", GPUFrameMemoryCategory.ReusableScratch,
+            stopBytesI64, GPUFrameMemoryResourceKind.Buffer, null))
         return framePlan.steps.size == 3 &&
             framePlan.steps[0] is GPUFrameStep.PrepareResourcesStep &&
             framePlan.steps[1] === render && framePlan.steps[2] === readback &&
@@ -5314,8 +5323,8 @@ internal class GPUFramePreflighter(
             staging.lifetime == GPUFrameResourceLifetime.FrameLocal && staging.byteSize == stagingBytes &&
             stagingDescriptor?.byteSize == stagingBytes &&
             stagingDescriptor.alignmentBytes == limits.copyBytesPerRowAlignment &&
-            framePlan.memoryBudget.allocations.size == 2 &&
-            framePlan.memoryBudget.allocations.map { it.category } == listOf(
+            framePlan.memoryBudget.allocations.size == 2 + stopAllocations.size &&
+            framePlan.memoryBudget.allocations.take(2).map { it.category } == listOf(
                 GPUFrameMemoryCategory.CanonicalTarget,
                 GPUFrameMemoryCategory.ReadbackStaging,
             ) && framePlan.memoryBudget.allocations[0].bytes == targetBytes &&
@@ -5323,10 +5332,10 @@ internal class GPUFramePreflighter(
             framePlan.memoryBudget.allocations[1].bytes == stagingBytes &&
             framePlan.memoryBudget.allocations[1].extent == null &&
             framePlan.memoryBudget.targetResidentBytes == targetBytes &&
-            framePlan.memoryBudget.peakFrameTransientBytes == stagingBytes &&
-            targetBytes <= Long.MAX_VALUE - stagingBytes &&
-            targetBytes + stagingBytes <= framePlan.memoryBudget.configuredAggregateBudgetBytes &&
-            framePlan.memoryBudget.allocations.none { it.category == GPUFrameMemoryCategory.ReusableScratch }
+            framePlan.memoryBudget.peakFrameTransientBytes == transientBytesI64 &&
+            targetBytes <= Long.MAX_VALUE - transientBytesI64 &&
+            targetBytes + transientBytesI64 <= framePlan.memoryBudget.configuredAggregateBudgetBytes &&
+            framePlan.memoryBudget.allocations.drop(2) == stopAllocations
     }
 
     /** W4b seals the full ScalarAA RRect envelope before generic native-route classification. */

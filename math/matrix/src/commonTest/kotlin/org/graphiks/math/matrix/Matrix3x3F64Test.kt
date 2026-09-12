@@ -4,8 +4,37 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.test.assertNull
 
 class Matrix3x3F64Test {
+    @Test
+    fun inverseIdentityCanonicalizesSignedZero() {
+        val inverseF32 = Matrix3x3F64(kxF64 = -0.0).invertToMatrix3x3F32OrNull()!!
+        assertEquals(Matrix3x3F32.Identity, inverseF32)
+        assertEquals(0, inverseF32.kx.toBits())
+    }
+
+    @Test
+    fun inverseAffinePreservesExactPublicValues() {
+        assertEquals(Matrix3x3F32(sx = .5f, kx = -.25f, tx = -3f, sy = .25f, ty = 1f),
+            Matrix3x3F64(sxF64 = 2.0, kxF64 = 2.0, txF64 = 4.0, syF64 = 4.0, tyF64 = -4.0)
+                .invertToMatrix3x3F32OrNull())
+    }
+
+    @Test
+    fun inversePerspectivePreservesExactPublicValues() {
+        assertEquals(Matrix3x3F32(persp0 = -.25f, persp1 = .5f),
+            Matrix3x3F64(persp0F64 = .25, persp1F64 = -.5).invertToMatrix3x3F32OrNull())
+    }
+
+    @Test
+    fun inverseRefusesSingularNonFiniteAndNonRepresentableProjection() {
+        assertNull(Matrix3x3F64(sxF64 = 0.0).invertToMatrix3x3F32OrNull())
+        assertNull(Matrix3x3F64(kxF64 = Double.NaN).invertToMatrix3x3F32OrNull())
+        assertNull(Matrix3x3F64(txF64 = Double.POSITIVE_INFINITY).invertToMatrix3x3F32OrNull())
+        assertNull(Matrix3x3F64(sxF64 = 1e-100).invertToMatrix3x3F32OrNull())
+    }
+
     @Test
     fun `classification distinguishes identity axis aligned general affine and perspective exactly`() {
         assertEquals(PathTransformClass.Identity, Matrix3x3F64().classifyPathTransform())

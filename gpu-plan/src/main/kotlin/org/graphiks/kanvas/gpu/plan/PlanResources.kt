@@ -16,6 +16,7 @@ public enum class PlanResourceRole {
     VertexData,
     IndexData,
     UniformData,
+    GradientStopData,
     DepthStencil,
     DestinationSnapshot,
 }

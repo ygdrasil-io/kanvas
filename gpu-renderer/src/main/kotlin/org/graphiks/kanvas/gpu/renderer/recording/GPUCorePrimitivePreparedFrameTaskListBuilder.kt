@@ -1943,16 +1943,24 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
 
         val targetBytes = request.targetPreparation.byteSize
         val stagingBytes = request.stagingPreparation.byteSize
+        val stopSlabs = render.drawPackets.mapNotNull { it.w5aSourceStageV2?.stage?.gradientStopSlab }
+            .distinctBy { it.canonicalIdentity }
+        if (stopSlabs.size > 1) return false
+        val stopBytesI64 = stopSlabs.singleOrNull()?.byteSizeI64 ?: 0L
+        if (stopBytesI64 > deviceLimits.maxBufferSize || stagingBytes > Long.MAX_VALUE - stopBytesI64) return false
+        val transientBytesI64 = stagingBytes + stopBytesI64
         val totals = request.memoryBudget.categoryTotals
         if (targetBytes <= 0L || stagingBytes <= 0L ||
             totals[GPUFrameMemoryCategory.CanonicalTarget] != targetBytes ||
             totals[GPUFrameMemoryCategory.ReadbackStaging] != stagingBytes ||
-            totals.filterKeys { it != GPUFrameMemoryCategory.CanonicalTarget && it != GPUFrameMemoryCategory.ReadbackStaging }
+            totals[GPUFrameMemoryCategory.ReusableScratch] != stopBytesI64 ||
+            totals.filterKeys { it !in setOf(GPUFrameMemoryCategory.CanonicalTarget,
+                GPUFrameMemoryCategory.ReadbackStaging, GPUFrameMemoryCategory.ReusableScratch) }
                 .values.any { it != 0L } ||
             request.memoryBudget.targetResidentBytes != targetBytes ||
-            request.memoryBudget.peakFrameTransientBytes != stagingBytes ||
-            targetBytes > Long.MAX_VALUE - stagingBytes ||
-            targetBytes + stagingBytes > request.memoryBudget.configuredAggregateBudgetBytes ||
+            request.memoryBudget.peakFrameTransientBytes != transientBytesI64 ||
+            targetBytes > Long.MAX_VALUE - transientBytesI64 ||
+            targetBytes + transientBytesI64 > request.memoryBudget.configuredAggregateBudgetBytes ||
             request.memoryBudget.deviceLimitFacts.isEmpty()
         ) return false
 
@@ -1971,7 +1979,9 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 GPUFrameMemoryResourceKind.Buffer,
                 null,
             ),
-        )
+        ) + if (stopBytesI64 == 0L) emptyList() else listOf(GPUFrameMemoryAllocation(
+            w3SessionIdentity(request) + ".gradient-stops", GPUFrameMemoryCategory.ReusableScratch,
+            stopBytesI64, GPUFrameMemoryResourceKind.Buffer, null))
         return request.memoryBudget.allocations == expectedAllocations
     }
 
@@ -2056,7 +2066,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             "maxDynamicUniformBuffersPerPipelineLayout",
         )
         val w5bNames = setOf("maxBindGroups", "maxBindingsPerBindGroup", "maxSamplersPerShaderStage",
-            "maxSampledTexturesPerShaderStage", "maxUniformBuffersPerShaderStage", "maxUniformBufferBindingSize")
+            "maxSampledTexturesPerShaderStage", "maxUniformBuffersPerShaderStage", "maxUniformBufferBindingSize",
+            "maxStorageBufferBindingSize", "maxStorageBuffersPerShaderStage")
         if (facts.filter { it.name !in w5bNames }.map { it.name } != expectedNames ||
             facts.map { it.name }.distinct().size != facts.size ||
             facts.filter { it.name in w5bNames }.any { it.value.toLongOrNull()?.let { value -> value < 0L || value.toString() != it.value } != false }) return null

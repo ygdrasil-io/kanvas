@@ -433,7 +433,7 @@ class GPUDrawPacket(
             }?.let { witness ->
                 require(witness.validates(commandIdValue))
                 org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2.issue(
-                    witness.sourcePlanTable, witness.ref, commandIdValue)
+                    witness.sourcePlanTable, witness.ref, commandIdValue, witness.coordinates)
             }
         private set
 

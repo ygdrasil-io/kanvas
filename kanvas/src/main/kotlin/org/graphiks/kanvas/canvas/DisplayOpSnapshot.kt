@@ -6,6 +6,7 @@ import org.graphiks.kanvas.geometry.toCompatibilityPath
 import org.graphiks.kanvas.geometry.toPathF32
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.ColorFilter
+import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.MeshChildren
@@ -38,8 +39,11 @@ internal fun List<DisplayOp>.snapshotGeometry(): List<DisplayOp> {
 }
 
 /** Snapshot state that must be shared for one append or complete operation copy. */
-internal class GeometrySnapshotContext {
+internal class GeometrySnapshotContext(
+    private val gradientStops: RecordingGradientStopBudget? = null,
+) {
     private val textBlobs = IdentityHashMap<TextBlob, TextBlob>()
+    private var pendingTextBlobs: IdentityHashMap<TextBlob, TextBlob>? = null
     private val images = IdentityHashMap<Image, Image>()
     private val shaders = IdentityHashMap<Shader, Shader>()
     private val colorFilters = IdentityHashMap<ColorFilter, ColorFilter>()
@@ -51,6 +55,24 @@ internal class GeometrySnapshotContext {
     private val mergeInputs = IdentityHashMap<ImageFilter.Merge, MutableList<ImageFilter>>()
 
     fun snapshot(operation: DisplayOp): DisplayOp {
+        clearOperationCaches()
+        return operation.snapshotGeometry(this)
+    }
+
+    /** Keep cross-operation aliases only when the destination accepts the snapshot. */
+    fun append(operation: DisplayOp, appendSnapshot: (DisplayOp) -> Unit) {
+        val pending = IdentityHashMap<TextBlob, TextBlob>()
+        pendingTextBlobs = pending
+        try {
+            appendSnapshot(snapshot(operation))
+            textBlobs.putAll(pending)
+        } finally {
+            pendingTextBlobs = null
+            clearOperationCaches()
+        }
+    }
+
+    private fun clearOperationCaches() {
         images.clear()
         shaders.clear()
         colorFilters.clear()
@@ -60,15 +82,14 @@ internal class GeometrySnapshotContext {
         colorRuntimeChildren.clear()
         imageRuntimeChildren.clear()
         mergeInputs.clear()
-        return operation.snapshotGeometry(this)
     }
 
     fun snapshot(blob: TextBlob): TextBlob {
-        val previous = textBlobs[blob]
+        val previous = pendingTextBlobs?.get(blob) ?: textBlobs[blob]
         if (previous != null && blob == previous) return previous
 
         return blob.snapshotGeometry().also {
-            textBlobs[blob] = it
+            (pendingTextBlobs ?: textBlobs)[blob] = it
         }
     }
 
@@ -102,10 +123,10 @@ internal class GeometrySnapshotContext {
                     is Shader.CoordClamp -> shaders[value] = value.copy(shader = shaders.getValue(value.shader), subset = value.subset.snapshotGeometry())
                     is Shader.WithWorkingColorSpace -> shaders[value] = value.copy(shader = shaders.getValue(value.shader))
                     is Shader.Image -> shaders[value] = value.copy(image = snapshot(value.image))
-                    is Shader.LinearGradient -> shaders[value] = value.copy(stops = value.stops.toList())
-                    is Shader.RadialGradient -> shaders[value] = value.copy(stops = value.stops.toList())
-                    is Shader.SweepGradient -> shaders[value] = value.copy(stops = value.stops.toList())
-                    is Shader.ConicalGradient -> shaders[value] = value.copy(stops = value.stops.toList())
+                    is Shader.LinearGradient -> shaders[value] = value.copy(stops = snapshotStops(value.stops))
+                    is Shader.RadialGradient -> shaders[value] = value.copy(stops = snapshotStops(value.stops))
+                    is Shader.SweepGradient -> shaders[value] = value.copy(stops = snapshotStops(value.stops))
+                    is Shader.ConicalGradient -> shaders[value] = value.copy(stops = snapshotStops(value.stops))
                     is Shader.SolidColor,
                     is Shader.PerlinNoise,
                     is Shader.FractalNoise,
@@ -129,6 +150,11 @@ internal class GeometrySnapshotContext {
             }
         }
         return shaders.getValue(shader)
+    }
+
+    private fun snapshotStops(stops: List<GradientStop>): List<GradientStop> {
+        gradientStops?.reserveGradientStops(stops.size)
+        return stops.toList()
     }
 
     fun snapshot(filter: ColorFilter): ColorFilter {

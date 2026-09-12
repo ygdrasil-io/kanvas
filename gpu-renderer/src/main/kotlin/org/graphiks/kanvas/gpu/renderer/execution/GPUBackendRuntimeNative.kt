@@ -1266,6 +1266,8 @@ private class WgpuBackendSession(
             maxSampledTexturesPerShaderStageI32 = deviceLimits.maxSampledTexturesPerShaderStage.toLong().takeIf { it <= Int.MAX_VALUE }?.toInt(),
             maxUniformBuffersPerShaderStageI32 = deviceLimits.maxUniformBuffersPerShaderStage.toLong().takeIf { it <= Int.MAX_VALUE }?.toInt(),
             maxUniformBufferBindingSizeBytesI64 = observedMaxBufferSize(deviceLimits.maxUniformBufferBindingSize),
+            maxStorageBufferBindingSizeBytesI64 = observedMaxBufferSize(deviceLimits.maxStorageBufferBindingSize),
+            maxStorageBuffersPerShaderStageI32 = deviceLimits.maxStorageBuffersPerShaderStage.toLong().takeIf { it <= Int.MAX_VALUE }?.toInt(),
             source = "device.limits",
         )
     }
@@ -1322,7 +1324,9 @@ private class WgpuBackendSession(
                 GPURendererFeature.Readback,
                 GPURendererFeature.UniformBuffer,
                 GPURendererFeature.TextureSampling,
-            ),
+            ) + if (glfw.wgpuContext.device.limits.maxStorageBuffersPerShaderStage > 0u &&
+                glfw.wgpuContext.device.limits.maxStorageBufferBindingSize > 0uL)
+                setOf(GPURendererFeature.StorageBuffer) else emptySet(),
         )
 
     override val runtimeTelemetry: GPUBackendRuntimeTelemetry

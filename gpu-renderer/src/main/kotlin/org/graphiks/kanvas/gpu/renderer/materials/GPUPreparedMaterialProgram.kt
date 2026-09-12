@@ -1130,6 +1130,7 @@ private fun MaterialPlanTable.hasNonFiniteW5aBindings(root: MaterialPlanRef): Bo
     while (index >= 0) {
         val entry = runCatching { entry(MaterialPlanRef(index)) }.getOrNull() ?: return false
         when (val bindings = entry.bindings) {
+            is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.GradientV1 -> return false
             is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.SolidRgbaF32V1 -> {
                 val color = bindings.copyRgbaF32()
                 return listOf(color.red, color.green, color.blue, color.alpha).any { !it.isFinite() }

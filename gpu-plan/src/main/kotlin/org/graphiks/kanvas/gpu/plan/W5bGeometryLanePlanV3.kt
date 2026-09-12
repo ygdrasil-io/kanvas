@@ -99,13 +99,13 @@ internal fun issueW5bNativeComposite(graphs: List<RenderGraph>): RenderGraph {
             val ref = interned.remap(ordinal, (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref)
             colors += when (draw) {
                 is SolidRectDraw -> draw.withMaterialRef(ref)
-                is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(draw.commandIndex, ref, draw.copyDeviceBounds(),
-                    draw.copyRasterBounds(), draw.copyScissor(), draw.blend)
+                is AnalyticRectDraw -> draw.withMaterialRef(ref)
                 is AnalyticRRectDraw -> draw.withMaterialRef(ref)
                 is PathFillDraw -> draw.withMaterialRef(ref)
                 is PathStrokeDraw -> draw.withMaterialRef(ref)
                 is GeneralPathDraw -> GeneralPathDraw.ofMaterial(draw.commandIndex, ref, draw.copyPathGeometry(),
-                    draw.strategy, draw.copyScissorI32(), draw.coverage, draw.sample, draw.blend)
+                    draw.strategy, draw.copyScissorI32(), draw.coverage, draw.sample, draw.blend,
+                    (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).coordinates)
                 else -> error("Unsupported native W5b composite geometry")
             }
             dataByCommand[draw.commandIndex] = data

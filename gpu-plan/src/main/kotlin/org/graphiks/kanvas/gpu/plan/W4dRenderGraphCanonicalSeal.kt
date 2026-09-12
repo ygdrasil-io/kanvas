@@ -114,6 +114,10 @@ private class W4dGraphDigestWriter {
             i32("$prefix.program.version", entry.program.versionI32)
             text("$prefix.program.id", entry.program.structuralId.value)
             when (val binding = entry.bindings) {
+                is MaterialBindingPlan.GradientV1 -> {
+                    text("$prefix.binding", binding.toString())
+                    text("$prefix.stop-slab", requireNotNull(table.gradientStopSlab).canonicalIdentity)
+                }
                 MaterialBindingPlan.EmptyV1 -> text("$prefix.binding", "empty-v1")
                 is MaterialBindingPlan.SolidRgbaF32V1 -> {
                     text("$prefix.binding", "solid-rgba-f32-v1")
@@ -245,6 +249,7 @@ private class W4dGraphDigestWriter {
                 is PlanDrawMaterialAuthority.MaterialV1 -> {
                     text("$prefix.material-authority", "material-v1")
                     i32("$prefix.material-ref", authority.ref.indexI32)
+                    text("$prefix.material-coordinates", authority.coordinates?.canonicalIdentity ?: "none")
                 }
                 is PlanDrawMaterialAuthority.LegacyColorV1 ->
                     throw IllegalArgumentException("W5a v2 seal requires a material authority")

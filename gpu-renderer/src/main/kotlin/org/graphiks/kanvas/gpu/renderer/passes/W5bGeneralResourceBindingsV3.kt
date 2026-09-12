@@ -17,7 +17,8 @@ internal class W5bGeneralResourceBindingsV3 private constructor(bindings: Map<St
             require(graph.targetExtent == source.targetExtent && graph.capabilities == source.capabilities && graph.budget == source.budget)
             require(target.value.endsWith(".target") && staging.value == target.value.removeSuffix(".target") + ".staging")
             val identity = target.value.removeSuffix(".target")
-            return W5bGeneralResourceBindingsV3(source.resources().associate { item ->
+            // The merged stop slab belongs to the shared W5 source stage, not native W4 geometry.
+            return W5bGeneralResourceBindingsV3(source.resources().filter { it.role != PlanResourceRole.GradientStopData }.associate { item ->
                 val successorId = when (item.role) {
                     PlanResourceRole.LogicalTarget, PlanResourceRole.ReadbackStaging -> graph.resources().single { it.role == item.role }.id
                     PlanResourceRole.VertexData -> requireNotNull(lane.drawDataResources).vertex

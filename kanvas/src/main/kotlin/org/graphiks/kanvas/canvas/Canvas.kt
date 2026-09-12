@@ -34,7 +34,8 @@ import org.graphiks.math.matrix.mapAxisAlignedRect
  * the internal buffer for subsequent rendering by a pipeline consumer.
  */
 class Canvas internal constructor(buffer: DisplayListBuffer) {
-    private val buffer: DisplayListBuffer = GeometrySnapshotDisplayListBuffer(buffer)
+    private val buffer: DisplayListBuffer =
+        if (buffer is SnapshotOwningDisplayListBuffer) buffer else GeometrySnapshotDisplayListBuffer(buffer)
     private var currentTransform = Matrix3x3F32.Identity
     /** Clip exposed to Canvas queries such as [quickReject] and [localClipBounds]. */
     private var currentClip: ClipStack = ClipStack.WideOpen

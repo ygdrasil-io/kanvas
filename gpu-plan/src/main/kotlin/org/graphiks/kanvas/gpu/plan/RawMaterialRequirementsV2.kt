@@ -17,7 +17,15 @@ public class RawMaterialRequirementsV2 private constructor(
                 indexI32--
                 countI32 = Math.addExact(countI32, 1)
             }
-            return RawMaterialRequirementsV2(countI32, Math.multiplyExact(countI32.toLong(), BINDING_STRIDE_BYTES_I64))
+            val gradient = table.entry(MaterialPlanRef(indexI32)).bindings is MaterialBindingPlan.GradientV1
+            return RawMaterialRequirementsV2(countI32, Math.addExact(
+                Math.multiplyExact(countI32.toLong(), BINDING_STRIDE_BYTES_I64),
+                when (table.entry(MaterialPlanRef(indexI32)).bindings) {
+                    is MaterialBindingPlan.LinearGradientV1 -> 112L // common 80 + 2 sealed scalar vectors
+                    is MaterialBindingPlan.ConicalGradientV1 -> 176L // common 80 + 4 scalar vectors + 2 flag vectors
+                    is MaterialBindingPlan.SweepGradientV1 -> 96L
+                    else -> if (gradient) 80L else 0L
+                }))
         }
     }
 }

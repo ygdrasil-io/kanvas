@@ -25,6 +25,7 @@ public sealed interface NumericOperationGraphV1 {
         public vararg val inputs: ValueType,
     ) {
         INPUT_SOLID_SRGBA_STRAIGHT(ValueType.SrgbaStraightF32),
+        INPUT_GRADIENT_SRGBA_STRAIGHT(ValueType.SrgbaStraightF32),
         INPUT_MATERIAL_LINEAR_PREMUL(ValueType.LinearPremulRgbaF32),
         INPUT_DESTINATION_LINEAR_PREMUL(ValueType.LinearPremulRgbaF32),
         INPUT_COVERAGE_F32(ValueType.CoverageF32),
@@ -87,6 +88,9 @@ public sealed interface NumericOperationGraphV1 {
                 listOf(Node(Operation.SRGB_TO_LINEAR, listOf(Node(Operation.INPUT_SOLID_SRGBA_STRAIGHT)))),
             ),
         )
+
+        public fun gradient(): NumericOperationGraphV1 = output(Node(Operation.PREMULTIPLY,
+            listOf(Node(Operation.SRGB_TO_LINEAR, listOf(Node(Operation.INPUT_GRADIENT_SRGBA_STRAIGHT))))))
 
         /** Full source-to-attachment graph for an opacity wrapper. */
         public fun opacity(): NumericOperationGraphV1 = output(

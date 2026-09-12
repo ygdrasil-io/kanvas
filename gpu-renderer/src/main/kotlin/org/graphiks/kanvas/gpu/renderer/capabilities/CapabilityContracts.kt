@@ -29,6 +29,7 @@ enum class GPURendererFeature(val dumpLabel: String) {
     CopyUpload("copy-upload"),
     Readback("readback"),
     UniformBuffer("uniform-buffer"),
+    StorageBuffer("storage-buffer"),
     TextureSampling("texture-sampling"),
 }
 
@@ -235,6 +236,8 @@ data class GPULimits(
     val maxSampledTexturesPerShaderStageI32: Int? = null,
     val maxUniformBuffersPerShaderStageI32: Int? = null,
     val maxUniformBufferBindingSizeBytesI64: Long? = null,
+    val maxStorageBufferBindingSizeBytesI64: Long? = null,
+    val maxStorageBuffersPerShaderStageI32: Int? = null,
 ) {
     init {
         require(maxTextureDimension2D > 0L) { "GPULimits.maxTextureDimension2D must be positive" }
@@ -258,6 +261,8 @@ data class GPULimits(
         require(listOf(maxBindGroupsI32, maxBindingsPerBindGroupI32, maxSamplersPerShaderStageI32,
             maxSampledTexturesPerShaderStageI32, maxUniformBuffersPerShaderStageI32).all { it == null || it >= 0 })
         require(maxUniformBufferBindingSizeBytesI64 == null || maxUniformBufferBindingSizeBytesI64 > 0L)
+        require(maxStorageBufferBindingSizeBytesI64 == null || maxStorageBufferBindingSizeBytesI64 > 0L)
+        require(maxStorageBuffersPerShaderStageI32 == null || maxStorageBuffersPerShaderStageI32 >= 0)
     }
 
     /** Converts these limits to deterministic capability facts for diagnostics and evidence dumps. */
@@ -292,6 +297,8 @@ data class GPULimits(
             "maxSampledTexturesPerShaderStage" to maxSampledTexturesPerShaderStageI32,
             "maxUniformBuffersPerShaderStage" to maxUniformBuffersPerShaderStageI32,
             "maxUniformBufferBindingSize" to maxUniformBufferBindingSizeBytesI64,
+            "maxStorageBufferBindingSize" to maxStorageBufferBindingSizeBytesI64,
+            "maxStorageBuffersPerShaderStage" to maxStorageBuffersPerShaderStageI32?.toLong(),
         ).mapNotNull { (name, value) -> value?.let { GPUCapabilityFact(name, source, it.toString(), true, evidenceLabel) } } + listOfNotNull(
             maxBufferSize?.let { observedMaxBufferSize ->
                 GPUCapabilityFact(

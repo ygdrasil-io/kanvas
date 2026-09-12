@@ -127,7 +127,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
             Recognition.Gap("W4c requires at least one visual path draw")
         } else {
             Recognition.Accepted(draws, materialEntries.takeIf { it.isNotEmpty() }?.let(MaterialPlanTable::of),
-                if (elidedNoOpsI32 > 0 || draws.any { it.blend != BlendPlan.LegacySrcOverV1 }) W5B_CAPABILITY_ID else CAPABILITY_ID)
+                if (elidedNoOpsI32 > 0 || materialEntries.any { it.stopSlab != null } || draws.any { it.blend != BlendPlan.LegacySrcOverV1 }) W5B_CAPABILITY_ID else CAPABILITY_ID)
         }
     }
 
@@ -207,7 +207,8 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
                 } catch (_: ArithmeticException) {
                     return DrawRecognition.ResourceLimit("Frame attempted-edge count overflowed")
                 }
-                val source = when (val planned = EffectiveMaterialPlanner.normalize(node, FORMAT.blendTargetClampV1(), true)) {
+                val source = when (val planned = EffectiveMaterialPlanner.normalize(node, FORMAT.blendTargetClampV1(), true,
+                    gradientDeviceBoundsI32 = scissor)) {
                     EffectiveMaterialPlanner.Normalization.NoOp -> return DrawRecognition.NoOp(attemptedAfter)
                     is EffectiveMaterialPlanner.Normalization.Refused -> return DrawRecognition.MaterialRefused(
                         EffectiveMaterialPlanner.Result.Refused(planned.diagnosticCode), attemptedAfter)
@@ -219,6 +220,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
                         pathF32 = pathSnapshot,
                         transform = node.transform.copy(),
                         material = appendMaterialPlan(materialEntries, source.table, source.root),
+                        coordinates = MaterialCoordinatePlanV1.fromCtm(node.transform),
                         geometryF32 = geometryF32,
                         strategy = strategy,
                         scissorI32 = scissor.copy(),
@@ -359,7 +361,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
 
     private fun appendMaterialPlan(entries: MutableList<MaterialPlanEntry>, incoming: MaterialPlanTable, root: MaterialPlanRef): MaterialPlanRef {
         val offset = entries.size
-        incoming.entries().forEach { entry -> entries += MaterialPlanEntry(entry.program, entry.bindings) }
+        incoming.entries().forEach { entry -> entries += entry }
         return MaterialPlanRef(offset + root.indexI32)
     }
 
@@ -550,7 +552,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
             val drawData = PlanDrawDataResources(vertex.id, index.id, uniform.id)
             if (selected.capabilityId == W5B_CAPABILITY_ID) {
                 val draws = selected.draws.map { draw -> PathFillDraw.ofMaterial(draw.commandIndex, draw.material,
-                    draw.geometryF32, draw.strategy, draw.scissorI32, draw.blend) }
+                    draw.geometryF32, draw.strategy, draw.scissorI32, draw.blend, draw.coordinates) }
                 return RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bDestinationGraphSealer.seal(
                     PlanId(planIdentity(selected.sceneCanonicalId, target, capabilities, budget)), W5B_CAPABILITY_ID,
                     extent, capabilities, budget, draws, selected.materialPlanTable, footprint.targetBytes,
@@ -571,6 +573,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
                     geometryF32 = sealed.geometryF32,
                     strategy = sealed.strategy,
                     scissorI32 = sealed.scissorI32,
+                    coordinates = sealed.coordinates,
                 )
                 val load = if (firstColorAttachment) {
                     AttachmentLoadPlan.ClearTransparent
@@ -785,6 +788,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
         val pathF32: PathF32,
         val transform: Matrix3x3F32,
         val material: MaterialPlanRef,
+        val coordinates: MaterialCoordinatePlanV1?,
         val geometryF32: PathFillGeometryF32,
         val strategy: PathFillStrategy,
         val scissorI32: RectI32,

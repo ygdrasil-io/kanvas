@@ -532,7 +532,7 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
         val source = (result as? GPUCorePrimitiveNativeShaderResult.Ready)?.plan?.wgslSource ?: return null
         return GPUW5aGeometryPipelineTemplate(source,
             corePrimitiveWgpu4kRenderPipelineDescriptor(key.pipelineIdentity, acquired.shader, acquired.pipelineLayout),
-            acquired.bindGroupLayout)
+            acquired.bindGroupLayout, materialCoordinateSlot = MaterialCoordinateSlotV1.FragmentPosition)
     }
 
     private val framePoolFactory = object : GPUWgpu4kCorePrimitiveFramePoolFactory {

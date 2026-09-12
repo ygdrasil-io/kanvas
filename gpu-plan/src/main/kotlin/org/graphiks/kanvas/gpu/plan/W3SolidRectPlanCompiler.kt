@@ -141,8 +141,8 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
             )
         } catch (failure: IllegalArgumentException) {
             val reason = failure.message.orEmpty()
-            if (reason.startsWith("unsupported.w5b.")) promoted(diag(RenderDiagnosticCode(reason), RenderDiagnosticDomain.CAPABILITY, reason))
-            else if (reason.startsWith("resource-limit.w5b.")) resourceLimit(diag(RenderDiagnosticCode(reason), RenderDiagnosticDomain.RESOURCE, reason))
+            if (reason.startsWith("unsupported.w5b.") || reason.startsWith("unsupported.material.gradient.")) promoted(diag(RenderDiagnosticCode(reason), RenderDiagnosticDomain.CAPABILITY, reason))
+            else if (reason.startsWith("resource-limit.w5b.") || reason.startsWith("resource.material.gradient.")) resourceLimit(diag(RenderDiagnosticCode(reason), RenderDiagnosticDomain.RESOURCE, reason))
             else promoted(diag(W3PlanDiagnostics.PlanIdentityInvalid, RenderDiagnosticDomain.TARGET, "W3 graph invariants were not satisfied: $reason"))
         } catch (_: ArithmeticException) {
             resourceLimit(diag(W3PlanDiagnostics.SizeOverflow, RenderDiagnosticDomain.RESOURCE, "W5b destination size/version overflow"))
@@ -254,6 +254,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
                             clipped,
                             clipped,
                             blend = planned.blend,
+                            coordinates = MaterialCoordinatePlanV1.fromCtm(node.transform),
                         ),
                     )
                 }
@@ -370,7 +371,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
     ): MaterialPlanRef {
         val offset = entries.size
         incoming.entries().forEach { entry ->
-            entries += MaterialPlanEntry(entry.program, entry.bindings)
+            entries += entry
         }
         return MaterialPlanRef(offset + root.indexI32)
     }

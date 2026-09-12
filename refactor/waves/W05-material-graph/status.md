@@ -1,6 +1,80 @@
-# État W05 — material graph et final blends W5b
+# État W05 — material graph, final blends et gradients W5c
 
-W5a Solid/Opacity est close sur son périmètre. W5b, son nettoyage Task 7 et sa boucle de reviews Task 8 sont implémentés et vérifiés sur `codex/w5b-blends`, empilée sur `codex/w5a-solid-opacity`. Les deux reviews Sol indépendantes W5b sont `READY`; la PR empilée W5b est `#2396`. La prochaine tranche empilée est W5c : quatre gradients et stop buffer sans plafond de 16 stops.
+W5c est close au niveau fonctionnel sur `codex/w5c-gradients`, empilée sur W5b : les quatre gradients CLAMP/SRGB sans local matrix sont promus sur Rect, RRect analytique, Path fill et Path stroke. La clôture Task 7 est complétée par le correctif Task 8 `d5b9307a0`, qui scelle le tuple F32 Linear et ajoute un pixel public biaxial discriminant. La vérification finale du 12 septembre 2026 compte 125 méthodes, 124 passées, un skip AA4 et aucune failure/error XML. La commande Gradle reste en échec à cause du crash natif post-assertions de l'executor, exit 133; elle n'est pas présentée comme verte. W5d est la prochaine tranche empilée.
+
+## Frontière et preuves publiques W5c
+
+| Source CLAMP/SRGB | Lanes promues et preuves |
+| --- | --- |
+| Linear | Rect intégrale/fractionnaire, RRect analytique, Path fill direct/stencil et stroke/hairline; coordonnées locales, endpoints implicites, hard stops, 1/2/16/17 stops, mutation après Picture; tuple F32 scellé et pixel biaxial sensible à la fusion/réassociation |
+| Radial | Les quatre lanes; rayon nul/petit/négatif, singleton, interpolation et composition Opacity/blend |
+| Sweep | Les quatre lanes; angles écran clockwise, spans partiels/étendus, limites et dégénérescences, hard stops et Opacity/blend |
+| Conical | Les quatre lanes; plus grande racine valide, masque des fragments sans racine, singleton conservant le masque, branches linéaire/concentrique/dégénérée et Opacity/blend |
+
+`mixedGradientFramePreservesOrderRangesOpacityAndBlend` intercale Linear Rect → Radial RRect analytique avec `Opacity(0.5)` et `DIFFERENCE` → Sweep Path fill → Conical Path stroke. Linear/Sweep réutilisent une séquence exacte; Radial/Conical partagent une seconde séquence distincte de 17 stops. Chacun des quatre draws intermédiaires possède un pixel non recouvert, vérifié dans les deux ordres. Trois recouvrements entre voisins ont chacun un contre-exemple d'ordre inversé, avec attentes indépendantes et couleurs différentes. Les draws initial/final ont aussi leurs témoins propres. Aucune assertion de range, buffer, compteur, scope ou détail privé ne remplace ces pixels.
+
+`gradientFrameBudgetRefusesThenRuntimeRecovers` rend un gradient de 257 stops sous un budget public de 1 MiB, reçoit `resource.material.gradient.stop-budget` à `RenderConfig.frameLocalBudgetBytes = 4096`, puis rend immédiatement les mêmes pixels bleus exacts sur la Surface valide, sans interrompre le runtime/backend. La Surface refusée est distincte : son recording est append-only et sa configuration immuable, sans opération publique pour retirer la frame refusée ou changer le budget.
+
+`authenticStorageCapabilityEitherRendersOrRefusesTyped` ne consulte l'adapter de production qu'à travers `Surface.render()`. Son budget logiciel explicite de 1 MiB suffit à sa petite frame de 17 stops. Le résultat authentique observé est `exact pixels rendered`, sans skip. La branche conditionnelle accepte seulement `unsupported.material.gradient.storage-capability` pour feature/limite/bindings indisponibles, ou `resource.material.gradient.stop-budget` pour une taille physique de buffer/binding insuffisante. Cette branche de refus n'a pas été exercée sur cet adapter; aucune capability n'a été injectée.
+
+## Ressources et ownership W5c
+
+L'audit de production confirme l'interning ordonné par première occurrence, la déduplication des séquences normalisées exactes, les plages réécrites et les autorités numériques rebasées dans la table de frame. Les clés structurelles des programmes excluent toujours données et nombre de stops. Les bindings/ranges, le contenu canonique du slab, les versions de programme/ABI et les coordonnées/provenances scellées restent portés par les autorités de frame existantes.
+
+Le comptage brut précède les copies de recording/capture. Les bornes des séquences normalisées et des plages U32, les tailles hôte, les additions/multiplications de bytes, les tailles physique et de binding, les nombres de bindings et le budget combiné sont contrôlés avant readiness. Le buffer storage de frame est alloué/uploadé une fois par le source materializer, emprunté par les consommateurs et retenu jusqu'à leur completion. Les handles restent dans les journals existants de fermeture/rollback/quarantaine. Ces invariants sont une inspection de production, pas des tests d'infrastructure ni une simulation de panne native.
+
+Après admission, les quatre familles et les quatre lanes consomment le material scellé; la soumission propriétaire n'a pas de continuation legacy. Aucun chemin promu supplémentaire à supprimer n'a été trouvé dans Task 7. Les classes de gradients historiques restent nécessaires avant admission pour les combinaisons W5d/W5f/W5h; les chemins image/font/codec n'ont pas été modifiés.
+
+## Historique W5c Task 7 — avant le correctif Linear
+
+Avant toute modification de production, la commande exacte Step 2 a finalement passé 3/3 méthodes sur la base `27427d799`. Les deux premières tentatives avaient 2 passées et une expectation `Unbounded` dans le fixture mixte : opacité fixed-function, puis soustraction destination-read près de zéro. Ces échecs de domaine d'oracle ne sont pas des RED de production. Le fixture retenu conserve l'opacité et un blend destination-read, sans changer l'oracle ni élargir sa borne singleton/deux codes adjacents. La production reste inchangée dans Task 7.
+
+```sh
+rtk ./gradlew :kanvas:test --tests '*W5cGradientSurfacePixelTest.mixedGradientFrame*' --tests '*W5cGradientSurfacePixelTest.gradientFrameBudget*' --tests '*W5cGradientSurfacePixelTest.authenticStorageCapability*' --no-parallel --rerun-tasks
+```
+
+## Correctif et reviews W5c Task 8
+
+La review globale Sol initiale était `NOT READY` : Linear recalculait `dx`, `dy` et `length²` dans le shader alors que W5 §7.2 exige leur tuple F32 preflight scellé. Le commit `d5b9307a0` — `fix(gpu): consume sealed W5c linear tuple` — capture, authentifie et sérialise `linearDx`, `linearDy`, `linearX2`, `linearY2`, `linearLen2`, `linearLength` et `linearDegenerate`. WGSL consomme directement les valeurs nécessaires. L'identifiant structurel Linear porte `uniform-v2-numeric-v2`; le buffer uniforme existant contient les deux vecteurs supplémentaires, sans nouveau binding ni second buffer.
+
+`linearBiaxialHardStopConsumesRoundedPreflightLength` a fait RED sur la production intacte : bleu attendu, rouge rendu à cause de la fusion/réassociation du calcul de `length²`. L'attente est dérivée d'opérations Kotlin Float explicites et d'une sélection locale des stops, sans factory Linear de production ni élargissement de tolérance. Le témoin passe après le correctif. La re-review du finding le marque `addressed`; la review distincte du lifecycle des ressources est `READY`. Ces conclusions restent distinctes du résultat de la commande Gradle.
+
+## Vérification finale W5c Task 8 — 12 septembre 2026
+
+Le controller a exécuté les commandes suivantes après le correctif :
+
+```sh
+rtk ./gradlew :render-ir:compileKotlin :gpu-plan:compileKotlin :gpu-renderer:compileKotlin :kanvas:compileKotlin --no-parallel
+rtk ./gradlew :kanvas:test --tests '*W5cGradientSurfacePixelTest*' --tests '*W5bBlendSurfacePixelTest*' --tests '*W5aMaterialSurfacePixelTest*' --no-parallel --rerun-tasks
+rtk git diff --check
+```
+
+Compilation : `BUILD SUCCESSFUL`, exit 0. La sélection publique forcée produit les XML frais suivants; tous les timestamps sont en UTC le 12 septembre 2026 :
+
+| Classe | Méthodes | Passées | Failures | Errors | Skips | Timestamp XML |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| W5cGradientSurfacePixelTest | 27 | 27 | 0 | 0 | 0 | 00:51:35.732Z |
+| W5bBlendSurfacePixelTest | 50 | 50 | 0 | 0 | 0 | 00:51:10.841Z |
+| W5aMaterialSurfacePixelTest | 48 | 47 | 0 | 0 | 1 | 00:50:58.809Z |
+| Total | 125 | 124 | 0 | 0 | 1 | — |
+
+La capability W5c authentique rend `exact pixels rendered`.
+
+Le seul skip AA4 est `public mixed AA4 frame keeps a hard Path binary cover materialized only at color output`, refus authentique `w4d.general.texture-sample-support-unavailable`. Les autres skips AA4 de l'historique W3/W4 ci-dessous ne font pas partie de cette sélection.
+
+Après toutes les assertions, `Gradle Test Executor 263` sort avec **133** et Gradle avec **1** (`BUILD FAILED`). C'est la caveat native/AppKit déjà suivie; les résultats XML n'en font pas un succès de commande. Aucun contournement du harness, reset de runtime ou masquage du crash n'a été ajouté. Les warnings JVM native-access/Unsafe et CoreAnalytics historiques restent distincts des résultats des méthodes.
+
+## Limites et suite après W5c
+
+- Le gap d'intégration connu entre les IDs de cible du composite historique W5a et de la session W5b, avec deux Surfaces de même extent sur le même runtime/backend, reste différé. Il n'est pas nécessaire de le corriger pour exprimer honnêtement la gate mixte destination-read; aucune garantie générale sur cette transition de routes n'est ajoutée.
+- L'oracle Conical reste conservateur lorsque l'intervalle de B traverse zéro : il peut produire un faux `DomainUnbounded`, jamais un faux `Bounded`. Aucune tolérance élargie ni prétention de conformance exhaustive.
+- AA4 et les capabilities physiques absentes ne sont jamais simulés; allocation failure, device loss et récupération après panne native ne sont pas prouvés par injection.
+- W5d reste ouvert pour REPEAT/MIRROR/DECAL, `WithLocalMatrix` et `CoordClamp`; c'est la prochaine stack. W5f conserve LINEAR/OKLAB/HSL/OKLCH et les filters, W5h les gradients Point(s)/Text/Vertices/Mesh et autres cellules H. W5e images, W5g blend-children/noise et les autres runtime effects W5h restent planifiés.
+- Aucune suite GM/dashboard/render-regeneration/Skia/font/codec/`jpg-color-cube` n'a été exécutée. Les modules peuvent compiler transitivement. Seuls ce status et `refactor/README.md` reçoivent la documentation durable; les rapports d'agents restent dans le workspace SDD ignoré.
+
+## Historique W5b — référence antérieure à W5c
+
+W5a Solid/Opacity est close sur son périmètre. W5b, son nettoyage Task 7 et sa boucle de reviews Task 8 ont été implémentés et vérifiés sur `codex/w5b-blends`, empilée sur `codex/w5a-solid-opacity`. Les deux reviews Sol indépendantes W5b sont `READY`; la PR empilée W5b est `#2396`. Les sections historiques suivantes décrivent cette clôture avant W5c.
 
 ## Périmètre public promu W5b
 

@@ -30,8 +30,9 @@ public object PaintSceneAdapter {
             throw CaptureFailure("picture-filter-requires-context", "Picture image filters require scene capture context")
         },
     ): PaintNode {
-        paint.shader?.let { preflightShader(it, limits) }
-        (paint.maskFilter as? MaskFilter.Shader)?.shader?.let { preflightShader(it, limits) }
+        val gradientStops = GradientStopCaptureBudget(limits.maxGradientStopsI32)
+        paint.shader?.let { preflightShader(it, limits, gradientStops) }
+        (paint.maskFilter as? MaskFilter.Shader)?.shader?.let { preflightShader(it, limits, gradientStops) }
         return PaintNode(
             color = paint.color,
             shader = paint.shader?.toMaterial(captureImage),
@@ -60,7 +61,7 @@ public object PaintSceneAdapter {
      * Bounds public shader graphs before [Shader.toMaterial] recursively copies
      * them.  Direct [capture] callers do not have DisplayOp capture's preflight.
      */
-    private fun preflightShader(root: Shader, limits: SceneCaptureLimits) {
+    private fun preflightShader(root: Shader, limits: SceneCaptureLimits, gradientStops: GradientStopCaptureBudget) {
         data class Visit(val shader: Shader, val depth: Int, val leaving: Boolean)
 
         val active = IdentityHashMap<Shader, Unit>()
@@ -83,6 +84,7 @@ public object PaintSceneAdapter {
             if (nodes > limits.graphLimits.maxNodes) {
                 throw CaptureFailure("graph-node-limit", "Paint, effect, or material graph exceeds configured nodes")
             }
+            gradientStops.reserve(visit.shader)
             pending.addLast(Visit(visit.shader, visit.depth, leaving = true))
             shaderChildren(visit.shader).asReversed().forEach { child ->
                 pending.addLast(Visit(child, visit.depth + 1, leaving = false))
@@ -444,3 +446,26 @@ public object PaintSceneAdapter {
 }
 
 private fun FloatArray.checked(field: String): FloatArray { forEach { it.checked(field) }; return copyOf() }
+
+/** Counts input metadata before any stop sequence is mapped into Render IR. */
+internal class GradientStopCaptureBudget(private val maxGradientStopsI32: Int) {
+    private var stopsI64 = 0L
+
+    fun reserve(shader: Shader) {
+        val countI32 = when (shader) {
+            is Shader.LinearGradient -> shader.stops.size
+            is Shader.RadialGradient -> shader.stops.size
+            is Shader.SweepGradient -> shader.stops.size
+            is Shader.ConicalGradient -> shader.stops.size
+            else -> return
+        }
+        val requestedI64 = Math.addExact(stopsI64, countI32.toLong())
+        if (requestedI64 > maxGradientStopsI32.toLong()) {
+            throw CaptureFailure(
+                "scene-capture-gradient-stops-exceeded",
+                "Capture requests $requestedI64 gradient stops, exceeding limit $maxGradientStopsI32",
+            )
+        }
+        stopsI64 = requestedI64
+    }
+}
