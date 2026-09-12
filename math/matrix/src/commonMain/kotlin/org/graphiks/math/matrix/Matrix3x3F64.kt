@@ -39,7 +39,11 @@ public fun Matrix3x3F64.isFinite(): Boolean =
         persp0F64.isFinite() && persp1F64.isFinite() && persp2F64.isFinite()
 
 /** Cofactor inversion in F64, with one checked F32 projection at the public boundary. */
-public fun Matrix3x3F64.invertToMatrix3x3F32OrNull(): Matrix3x3F32? {
+public fun Matrix3x3F64.invertToMatrix3x3F32OrNull(): Matrix3x3F32? =
+    invertFiniteOrNull()?.toFiniteMatrix3x3F32OrNull()
+
+/** Finite F64 cofactor inverse, or null for singular/non-finite input or result. */
+public fun Matrix3x3F64.invertFiniteOrNull(): Matrix3x3F64? {
     if (!isFinite()) return null
     val aF64 = syF64 * persp2F64 - tyF64 * persp1F64
     val bF64 = tyF64 * persp0F64 - kyF64 * persp2F64
@@ -51,15 +55,59 @@ public fun Matrix3x3F64.invertToMatrix3x3F32OrNull(): Matrix3x3F32? {
         bF64, sxF64 * persp2F64 - txF64 * persp0F64, txF64 * kyF64 - sxF64 * tyF64,
         cF64, kxF64 * persp0F64 - sxF64 * persp1F64, sxF64 * syF64 - kxF64 * kyF64,
     )
-    val projectedF32 = inverseF64.map { coefficientF64 ->
+    val coefficientsF64 = inverseF64.map { coefficientF64 ->
+        val valueF64 = coefficientF64 / determinantF64
+        if (!valueF64.isFinite()) return null
+        if (valueF64 == 0.0) 0.0 else valueF64
+    }
+    return matrixFromCoefficientsF64(coefficientsF64)
+}
+
+/** Checked IEEE F32 projection, with canonical positive zero on JVM and JS. */
+public fun Matrix3x3F64.toFiniteMatrix3x3F32OrNull(): Matrix3x3F32? {
+    if (!isFinite()) return null
+    val projectedF32 = coefficientsF64().map { coefficientF64 ->
         // JS Float values are Numbers; materialize the IEEE F32 projection on both targets.
-        val valueF32 = Float.fromBits((coefficientF64 / determinantF64).toFloat().toRawBits())
+        val valueF32 = Float.fromBits(coefficientF64.toFloat().toRawBits())
         if (!valueF32.isFinite()) return null
         if (valueF32 == 0f) 0f else valueF32
     }
     return Matrix3x3F32(projectedF32[0], projectedF32[1], projectedF32[2], projectedF32[3],
         projectedF32[4], projectedF32[5], projectedF32[6], projectedF32[7], projectedF32[8])
 }
+
+/**
+ * Composes outer-to-inner matrices as `matrices[0] * matrices[1] * ...` in F64.
+ * Empty input is identity. Throws [IllegalArgumentException] for non-finite
+ * input or an intermediate F64 product that cannot be represented finitely.
+ */
+public fun composeInOrderF64(matrices: List<Matrix3x3F32>): Matrix3x3F64 {
+    var productF64 = Matrix3x3F64()
+    for (matrixF32 in matrices) {
+        val nextF64 = matrixF32.toMatrix3x3F64()
+        require(nextF64.isFinite()) { "Ordered matrix composition requires finite coefficients" }
+        val leftF64 = productF64.coefficientsF64()
+        val rightF64 = nextF64.coefficientsF64()
+        productF64 = matrixFromCoefficientsF64(List(9) { indexI32 ->
+            val rowI32 = indexI32 / 3
+            val columnI32 = indexI32 % 3
+            val valueF64 = (leftF64[rowI32 * 3] * rightF64[columnI32] +
+                leftF64[rowI32 * 3 + 1] * rightF64[columnI32 + 3]) +
+                leftF64[rowI32 * 3 + 2] * rightF64[columnI32 + 6]
+            if (valueF64 == 0.0) 0.0 else valueF64
+        })
+        require(productF64.isFinite()) { "Ordered matrix composition overflowed F64" }
+    }
+    return productF64
+}
+
+private fun Matrix3x3F64.coefficientsF64(): List<Double> =
+    listOf(sxF64, kxF64, txF64, kyF64, syF64, tyF64, persp0F64, persp1F64, persp2F64)
+
+private fun matrixFromCoefficientsF64(coefficientsF64: List<Double>): Matrix3x3F64 = Matrix3x3F64(
+    coefficientsF64[0], coefficientsF64[1], coefficientsF64[2], coefficientsF64[3],
+    coefficientsF64[4], coefficientsF64[5], coefficientsF64[6], coefficientsF64[7], coefficientsF64[8],
+)
 
 /**
  * Classifies this transform with exact IEEE-754 comparisons.

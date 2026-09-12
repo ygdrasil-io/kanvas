@@ -17,11 +17,13 @@ internal fun Shader.isW5dGradientCandidateV2(allowLocalMatrix: Boolean = true, a
             is Shader.Opacity -> source = node.shader
             is Shader.WithLocalMatrix -> {
                 if (!allowLocalMatrix) return false
-                if (node.matrix.persp0 != 0f || node.matrix.persp1 != 0f || node.matrix.persp2 != 1f) return false
+                // Invalid coefficients belong to the admitted planner's precise diagnostics.
+                if (node.matrix.persp0.isFinite() && node.matrix.persp1.isFinite() && node.matrix.persp2.isFinite() &&
+                    (node.matrix.persp0 != 0f || node.matrix.persp1 != 0f || node.matrix.persp2 != 1f)) return false
                 localCountI32++
                 source = node.shader
             }
-            is Shader.LinearGradient -> return localCountI32 <= 1 && node.tileMode == TileMode.CLAMP &&
+            is Shader.LinearGradient -> return node.tileMode == TileMode.CLAMP &&
                 node.interpolation == ColorSpaceInterpolation.SRGB
             is Shader.RadialGradient -> return localCountI32 == 0 && node.tileMode == TileMode.CLAMP &&
                 node.interpolation == ColorSpaceInterpolation.SRGB

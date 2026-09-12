@@ -5,6 +5,12 @@ import org.graphiks.kanvas.paint.GradientStop
 
 /** Independent public fixture: inverse translation is x - 3, with nested shader and paint opacity. */
 internal object W5dGradientAddressingCpuOracle {
+    // Hand-derived endpoint colors: inverse x = 8.5 is blue; inverse x = .5 is red.
+    @OptIn(ExperimentalUnsignedTypes::class)
+    fun bluePixel(): UByteArray = ubyteArrayOf(0u, 0u, 255u, 255u)
+    @OptIn(ExperimentalUnsignedTypes::class)
+    fun redPixel(): UByteArray = ubyteArrayOf(255u, 0u, 0u, 255u)
+
     fun evaluate(pixelXI32: Int, stops: List<GradientStop>, ctmScaleXF32: Float = 1f): WgslFloatEnvelopeV1Oracle.DrawResult.Bounded {
         // The fixture has an exact dy=0 axis and a power-of-two denominator. Samples
         // are inside constant spans, so every permitted coordinate schedule selects

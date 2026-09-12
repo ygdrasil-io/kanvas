@@ -249,13 +249,11 @@ public object EffectiveMaterialPlanner {
     private fun normalizeW5d(draw: DrawNode, blend: BlendPlan, capture: GradientAddressingCaptureV2.Ready): Normalization {
         val linear = capture.leaf as? MaterialNode.LinearGradient
             ?: return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
-        val local = capture.coordinateNodes.singleOrNull() as? CoordinateNodeV2.LocalMatrix
-            ?: return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
         if (linear.tileMode != org.graphiks.kanvas.render.ir.TileMode.CLAMP ||
             linear.interpolation != org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB ||
             draw.origin != org.graphiks.kanvas.render.ir.DrawOrigin.RECT || draw.geometry !is org.graphiks.kanvas.render.ir.GeometryNode.Rect)
             return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
-        val coordinates = when (val result = MaterialCoordinatePlanV2.fromCtmAndLocal(draw.transform, local.copyMatrixF32())) {
+        val coordinates = when (val result = MaterialCoordinatePlanV2.fromCtmAndNodes(draw.transform, capture.coordinateNodes)) {
             is MaterialCoordinatePlanV2.Build.Ready -> result.coordinates
             is MaterialCoordinatePlanV2.Build.Refused -> return Normalization.Refused(result.code)
         }
@@ -271,7 +269,10 @@ public object EffectiveMaterialPlanner {
             org.graphiks.math.geometry.Point2F32(bounds.right, bounds.bottom)).map(draw.transform::transform)
         var magnitudeF64 = deviceCorners.maxOf { maxOf(kotlin.math.abs(it.x.toDouble()), kotlin.math.abs(it.y.toDouble())) } + 2.0
         for (operation in coordinates.copyOperations()) {
-            val matrixF32 = operation.copyMatrixF32()
+            val matrixF32 = when (operation) {
+                is MaterialCoordinateOperationV2.InverseMatrixF32 -> operation.inverseF32
+                is MaterialCoordinateOperationV2.ClampRectF32 -> return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
+            }
             magnitudeF64 = maxOf(
                 (kotlin.math.abs(matrixF32.sx.toDouble()) + kotlin.math.abs(matrixF32.kx.toDouble())) * magnitudeF64 + kotlin.math.abs(matrixF32.tx.toDouble()),
                 (kotlin.math.abs(matrixF32.ky.toDouble()) + kotlin.math.abs(matrixF32.sy.toDouble())) * magnitudeF64 + kotlin.math.abs(matrixF32.ty.toDouble()),

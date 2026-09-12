@@ -9,6 +9,7 @@ import org.graphiks.kanvas.gpu.plan.RawMaterialRequirementsV2
 import org.graphiks.kanvas.gpu.plan.NumericOperationGraphV1
 import org.graphiks.kanvas.gpu.plan.NumericOperationGraphV1.Operation
 import org.graphiks.kanvas.gpu.plan.MaterialCoordinatePlanV1
+import org.graphiks.kanvas.gpu.plan.MaterialCoordinateOperationV2
 import org.graphiks.kanvas.gpu.plan.GradientStopSlabPlanV1
 import org.graphiks.kanvas.gpu.plan.GradientNumericOperationGraphV1
 import org.graphiks.kanvas.gpu.plan.GradientNumericDomainProofV1
@@ -195,10 +196,30 @@ internal class W5aMaterialSourceStage private constructor(
             binding.degeneracy.copyScalarsF32().forEach(uniforms::putFloat)
             repeat(2) { uniforms.putFloat(0f) }
             val operations = coordinates.copyOperations()
-            if (operations.size != 2) return null
+            val coordinateFields = StringBuilder()
+            val coordinateStatements = StringBuilder("    var pointF32 = pixel;\n")
             for (operation in operations) {
-                val m = operation.copyMatrixF32()
-                listOf(m.sx, m.kx, m.tx, 0f, m.ky, m.sy, m.ty, 0f, m.persp0, m.persp1, m.persp2, 0f).forEach(uniforms::putFloat)
+                when (operation) {
+                    is MaterialCoordinateOperationV2.InverseMatrixF32 -> {
+                        val matrixF32 = operation.inverseF32
+                        listOf(matrixF32.sx, matrixF32.kx, matrixF32.tx, 0f,
+                            matrixF32.ky, matrixF32.sy, matrixF32.ty, 0f,
+                            matrixF32.persp0, matrixF32.persp1, matrixF32.persp2, 0f).forEach(uniforms::putFloat)
+                    }
+                    is MaterialCoordinateOperationV2.ClampRectF32 -> return null
+                }
+            }
+            for (indexI32 in operations.indices) {
+                repeat(3) { rowI32 -> coordinateFields.append("    coordinate${indexI32}Row$rowI32: vec4<f32>,\n") }
+                coordinateStatements.append("""
+                    let x$indexI32 = (w5aMaterial.coordinate${indexI32}Row0.x * pointF32.x + w5aMaterial.coordinate${indexI32}Row0.y * pointF32.y) + w5aMaterial.coordinate${indexI32}Row0.z;
+                    let y$indexI32 = (w5aMaterial.coordinate${indexI32}Row1.x * pointF32.x + w5aMaterial.coordinate${indexI32}Row1.y * pointF32.y) + w5aMaterial.coordinate${indexI32}Row1.z;
+                    pointF32 = vec2<f32>(x$indexI32, y$indexI32);
+                    if (!all((bitcast<vec2<u32>>(pointF32) & vec2<u32>(0x7f800000u)) != vec2<u32>(0x7f800000u))) {
+                        return W5dLocalPointV2(vec2<f32>(0.0), false);
+                    }
+
+                """.trimIndent())
             }
             val statements = StringBuilder("    let straight = w5c_gradient(localPosition);\n" +
                 "    let linear = w5a_srgb_to_linear(straight);\n" +
@@ -213,23 +234,19 @@ internal class W5aMaterialSourceStage private constructor(
                     gradientFlags: vec4<u32>,
                     linearParameters0: vec4<f32>,
                     linearParameters1: vec4<f32>,
-                    inverseRow0: vec4<f32>,
-                    inverseRow1: vec4<f32>,
-                    inverseRow2: vec4<f32>,
-                    inverseLocalRow0: vec4<f32>,
-                    inverseLocalRow1: vec4<f32>,
-                    inverseLocalRow2: vec4<f32>,
+                    $coordinateFields
                 }
                 @group(1) @binding(0) var<uniform> w5aMaterial: W5aMaterialBlock;
                 $SRGB_TO_LINEAR_WGSL
                 ${gradientDeclarationsWgsl(numeric.graph, numeric.tileGraph)}
-                fn w5d_local_point(pixel: vec2<f32>) -> vec2<f32> {
-                    let p = w5c_local_point(pixel);
-                    let x = (w5aMaterial.inverseLocalRow0.x * p.x + w5aMaterial.inverseLocalRow0.y * p.y) + w5aMaterial.inverseLocalRow0.z;
-                    let y = (w5aMaterial.inverseLocalRow1.x * p.x + w5aMaterial.inverseLocalRow1.y * p.y) + w5aMaterial.inverseLocalRow1.z;
-                    return vec2<f32>(x, y);
+                struct W5dLocalPointV2 { pointF32: vec2<f32>, valid: bool, }
+                fn w5d_local_point(pixel: vec2<f32>) -> W5dLocalPointV2 {
+                    $coordinateStatements
+                    return W5dLocalPointV2(pointF32, true);
                 }
-                fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {
+                fn kanvas_material_source(localPoint: W5dLocalPointV2) -> vec4<f32> {
+                    if (!localPoint.valid) { return vec4<f32>(0.0); }
+                    let localPosition = localPoint.pointF32;
                     $statements
                     return value${opacities.size};
                 }
@@ -397,9 +414,7 @@ internal class W5aMaterialSourceStage private constructor(
                 name
             }
             val result = emit(graph.root)
-            return """
-                struct GradientStopV1 { positionAndReserved: vec4<f32>, straightColor: vec4<f32>, }
-                @group(1) @binding(1) var<storage, read> w5cStops: array<GradientStopV1>;
+            val coordinatesV1Wgsl = if (tileGraph != null) "" else """
                 fn w5c_local_point(pixel: vec2<f32>) -> vec2<f32> {
                     let p = vec3<f32>(pixel, 1.0);
                     let x = (w5aMaterial.inverseRow0.x * p.x + w5aMaterial.inverseRow0.y * p.y) + w5aMaterial.inverseRow0.z;
@@ -408,6 +423,11 @@ internal class W5aMaterialSourceStage private constructor(
                     if (w == 1.0) { return vec2<f32>(x, y); }
                     return vec2<f32>(x, y) / w;
                 }
+            """.trimIndent()
+            return """
+                struct GradientStopV1 { positionAndReserved: vec4<f32>, straightColor: vec4<f32>, }
+                @group(1) @binding(1) var<storage, read> w5cStops: array<GradientStopV1>;
+                $coordinatesV1Wgsl
                 fn w5c_interpolate(left: vec4<f32>, right: vec4<f32>, low: f32, high: f32, t: f32) -> vec4<f32> {
                     if (high <= low) { return right; }
                     if (t == low || all(left == right)) { return left; }
