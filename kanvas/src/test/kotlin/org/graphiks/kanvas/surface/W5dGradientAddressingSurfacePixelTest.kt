@@ -26,6 +26,150 @@ import org.graphiks.kanvas.surface.W5dGradientAddressingCpuOracle.GradientFixtur
 import org.graphiks.kanvas.surface.W5dGradientAddressingCpuOracle.W5dPublicLane
 
 class W5dGradientAddressingSurfacePixelTest {
+    private val irregularStops = listOf(
+        GradientStop(0f, ColorARGB.of(191, 17, 253, 5)),
+        GradientStop(.1f, ColorARGB.of(113, 241, 7, 199)),
+        GradientStop(.1f, ColorARGB.of(67, 3, 149, 251)),
+        GradientStop(1f, ColorARGB.of(229, 101, 37, 11)),
+    )
+
+    private fun degenerateShader(family: GradientFixtureFamily, mode: TileMode,
+        stops: List<GradientStop> = irregularStops): Shader {
+        val centerF32 = Point2F32(4.5f, 4.5f)
+        return when (family) {
+            GradientFixtureFamily.LINEAR -> Shader.LinearGradient(centerF32, centerF32, stops, tileMode = mode)
+            GradientFixtureFamily.RADIAL -> Shader.RadialGradient(centerF32, 0f, stops, tileMode = mode)
+            GradientFixtureFamily.SWEEP -> Shader.SweepGradient(centerF32, 0f, 0f, stops, tileMode = mode)
+            GradientFixtureFamily.CONICAL -> Shader.ConicalGradient(centerF32, 2f, centerF32, 2f, stops, tileMode = mode)
+        }
+    }
+
+    private fun assertAddressedPixels(shader: Shader, expected: (Int) -> WgslFloatEnvelopeV1Oracle.DrawResult,
+        exactAlphaU32: UInt? = null) {
+        val expectedPixels = listOf(1, 2, 4, 6, 7).associateWith(expected)
+        // One row per lane, preserving the shader point y=4.5 in every row.
+        // Batch the four lanes in a public Picture, then render that Picture twice.
+        val recorder = PictureRecorder()
+        val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 9f, 4f))
+        for ((rowI32, lane) in W5dPublicLane.entries.withIndex()) {
+            canvas.save()
+            canvas.translate(0f, rowI32 - 4f)
+            val boundsF32 = RectF32.ofLTRB(0f, 4f, 9f, 5f)
+            // DIFFERENCE over transparent retains the source and closes the
+            // independent attachment envelope without fixed-function UNORM blending.
+            val paint = Paint(shader = shader, antiAlias = false, blendMode = BlendMode.DIFFERENCE)
+            when (lane) {
+                W5dPublicLane.RECT -> canvas.drawRect(boundsF32, paint)
+                W5dPublicLane.RRECT -> canvas.drawRRect(RRectF32.of(boundsF32, CornerRadiiF32.of(.5f)), paint.copy(antiAlias = true))
+                W5dPublicLane.PATH_FILL -> canvas.drawPath(Path().apply { addRect(boundsF32) }, paint)
+                W5dPublicLane.PATH_STROKE -> canvas.drawPath(Path().apply { moveTo(0f, 4.5f); lineTo(9f, 4.5f) },
+                    paint.copy(style = PaintStyle.STROKE, strokeWidth = 1f))
+            }
+            canvas.restore()
+        }
+        val picture = recorder.finishRecordingAsPicture()
+        var previousPixels: UByteArray? = null
+        repeat(2) {
+            val surface = Surface(9, 4)
+            surface.canvas { picture.playback(this) }
+            val pixels = surface.render().pixels
+            for (rowI32 in 0..3) for ((xI32, expectedPixel) in expectedPixels) {
+                val offsetI32 = (rowI32 * 9 + xI32) * 4
+                WgslFloatEnvelopeV1Oracle.assertAdmits(expectedPixel, pixels.copyOfRange(offsetI32, offsetI32 + 4))
+                if (exactAlphaU32 != null) assertEquals(exactAlphaU32, pixels[offsetI32 + 3].toUInt())
+            }
+            previousPixels?.let { assertContentEquals(it, pixels) }
+            previousPixels = pixels
+        }
+    }
+
+    private fun exactAverageFamilies(families: List<GradientFixtureFamily>) {
+        // Removing the sealed average or accumulating trapezoids in Float changes these pixels.
+        val adversarialStops = irregularStops.zip(listOf(127, 137, 56, 198)) { stop, alphaI32 ->
+            stop.copy(color = ColorARGB.of(alphaI32, 255, 255, 255))
+        }
+        val alphaF32 = W5dGradientAddressingCpuOracle.exactAverageF32(adversarialStops).last()
+        val sequentialF32 = adversarialStops.zipWithNext().fold(0f) { sumF32, (left, right) ->
+            sumF32 + (right.position - left.position) * (left.color.alphaNormalized + right.color.alphaNormalized) * .5f
+        }
+        assertEquals(.5f, alphaF32)
+        assertEquals(128, kotlin.math.round(alphaF32 * 255.0).toInt())
+        assertEquals(127, kotlin.math.round(sequentialF32 * 255.0).toInt())
+        val failures = mutableListOf<String>()
+        for (family in families) for (mode in listOf(TileMode.REPEAT, TileMode.MIRROR))
+            for (stops in listOf(irregularStops, adversarialStops)) {
+                val expected = W5dGradientAddressingCpuOracle.straightPixel(W5dGradientAddressingCpuOracle.exactAverageF32(stops))
+                try {
+                    assertAddressedPixels(Shader.WithLocalMatrix(degenerateShader(family, mode, stops), Matrix3x3F32()),
+                        { expected }, if (stops == adversarialStops) 128u else null)
+                } catch (failure: Exception) { failures += "$family $mode: ${failure.message}" }
+                catch (failure: AssertionError) { failures += "$family $mode: ${failure.message}" }
+            }
+        kotlin.test.assertTrue(failures.isEmpty(), failures.joinToString("\n"))
+    }
+
+    @Test fun degenerateLinearAndRadialUseExactAverageForRepeatMirror() =
+        exactAverageFamilies(listOf(GradientFixtureFamily.LINEAR, GradientFixtureFamily.RADIAL))
+
+    @Test fun degenerateSweepAndConicalUseExactAverageForRepeatMirror() =
+        exactAverageFamilies(listOf(GradientFixtureFamily.SWEEP, GradientFixtureFamily.CONICAL))
+
+    @Test fun degenerateDecalIsTransparent() {
+        for (family in GradientFixtureFamily.entries) assertAddressedPixels(degenerateShader(family, TileMode.DECAL),
+            { W5dGradientAddressingCpuOracle.colorPixel(ColorARGB.Transparent) })
+    }
+
+    @Test fun degenerateClampKeepsW5cLastColorRules() {
+        for (family in listOf(GradientFixtureFamily.LINEAR, GradientFixtureFamily.RADIAL, GradientFixtureFamily.SWEEP))
+            for (wrapped in listOf(false, true)) {
+                val shader = degenerateShader(family, TileMode.CLAMP)
+                assertAddressedPixels(if (wrapped) Shader.WithLocalMatrix(shader, Matrix3x3F32()) else shader,
+                    { W5dGradientAddressingCpuOracle.colorPixel(irregularStops.last().color) })
+            }
+        val leading = Shader.SweepGradient(Point2F32(4.5f, 4.5f), 90f, 90f, irregularStops)
+        assertAddressedPixels(Shader.WithLocalMatrix(leading, Matrix3x3F32()), { xI32 ->
+            W5dGradientAddressingCpuOracle.colorPixel(if (xI32 < 4) irregularStops.last().color else irregularStops.first().color)
+        })
+    }
+
+    @Test fun singleStopCollapsePreservesFamilyRulesUnderAddressing() {
+        // A zero-w coordinate must disappear with a collapsed Solid. Conical's
+        // identical stops retain the invalid-root mask instead.
+        val stops = listOf(GradientStop(.3f, ColorARGB.Blue))
+        for (mode in TileMode.entries) for (family in GradientFixtureFamily.entries) {
+            val leaf = if (family == GradientFixtureFamily.CONICAL) Shader.ConicalGradient(
+                Point2F32(4.5f, 14.5f), 1f, Point2F32(6.5f, 14.5f), 1f, stops, tileMode = mode)
+            else degenerateShader(family, mode, stops)
+            val shader = Shader.WithLocalMatrix(Shader.CoordClamp(leaf, RectF32.ofLTRB(0f, 0f, 9f, 9f)),
+                Matrix3x3F32(sx = 4.5f, tx = 1f, persp0 = 1f, persp2 = 0f))
+            assertAddressedPixels(shader, { W5dGradientAddressingCpuOracle.colorPixel(
+                if (family == GradientFixtureFamily.CONICAL) ColorARGB.Transparent else ColorARGB.Blue) })
+        }
+    }
+
+    @Test fun sweepFullCoverageForcesClamp() = familyFixtures(listOf(GradientFixtureFamily.SWEEP), fullSweep = true)
+
+    @Test fun conicalInvalidRootStaysTransparentBeforeTile() {
+        for (mode in TileMode.entries) assertAddressedPixels(Shader.WithLocalMatrix(Shader.ConicalGradient(
+            Point2F32(4.5f, 14.5f), 1f, Point2F32(6.5f, 14.5f), 1f, irregularStops, tileMode = mode), Matrix3x3F32()),
+            { W5dGradientAddressingCpuOracle.colorPixel(ColorARGB.Transparent) })
+        for (mode in TileMode.entries) {
+            val invalid = Shader.ConicalGradient(Point2F32(0f, 0f), -1f, Point2F32(0f, 0f), -1f,
+                listOf(GradientStop(0f, ColorARGB.Blue)), tileMode = mode)
+            val failure = assertThrows<IllegalStateException> { renderPixel(Shader.WithLocalMatrix(invalid, Matrix3x3F32())) }
+            assertEquals("unsupported.material.gradient.negative_radius", failure.message.orEmpty().substringBefore(':'))
+            assertContentEquals(W5dGradientAddressingCpuOracle.redPixel(), renderPixel(linearGradient()))
+        }
+    }
+
+    @Test fun conicalFullyDegenerateClampKeepsCircularHardStop() {
+        for (wrapped in listOf(false, true)) {
+            val shader = degenerateShader(GradientFixtureFamily.CONICAL, TileMode.CLAMP)
+            assertAddressedPixels(if (wrapped) Shader.WithLocalMatrix(shader, Matrix3x3F32()) else shader,
+                { xI32 -> W5dGradientAddressingCpuOracle.colorPixel(if (xI32 == 4) irregularStops.first().color else irregularStops.last().color) })
+        }
+    }
+
     @Test
     fun allGradientFamiliesTileModesAndLanesMatchOracle() = familyFixtures(GradientFixtureFamily.entries)
 

@@ -360,6 +360,9 @@ internal fun materializeW5aSourcePartitionV2(
                     GPUPreparedNativeRenderPipelineOperand(native, generation) to layout
                 }
                 val bytes = source.stage.uniformBytes
+                // The authenticated source layout already includes a reachable
+                // degenerate average, if any. Native upload never integrates colors.
+                require(bytes.size.toLong() == source.stage.uniformByteCountI64)
                 val buffer = buffers.getOrPut(source.stage.canonicalIdentity) {
                     owned.own(device.createBuffer(BufferDescriptor(size = bytes.size.toULong(),
                         usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst, label = "Kanvas.w5a.raw-source-v2"))).also {

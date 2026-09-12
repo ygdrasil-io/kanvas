@@ -88,13 +88,15 @@ public sealed interface MaterialBindingPlan {
         public val stopRange: GradientStopRangeV1
         public val numericAuthority: GradientNumericAuthorityV2
         public val gradientDegenerate: Boolean
+        public val degenerateAverageSrgbaF32: GradientAverageSrgbaF32?
         public fun copyUniformValuesF32(): List<Float>
         public fun rebind(range: GradientStopRangeV1, authority: GradientNumericAuthorityV2 = numericAuthority): GradientV2
     }
 
     public data class LinearGradientV2(public val startF32: Point2F32, public val endF32: Point2F32,
         override val stopRange: GradientStopRangeV1, public val degeneracy: LinearGradientDegeneracyV1,
-        override val numericAuthority: GradientNumericAuthorityV2) : GradientV2 {
+        override val numericAuthority: GradientNumericAuthorityV2,
+        override val degenerateAverageSrgbaF32: GradientAverageSrgbaF32?) : GradientV2 {
         override val gradientDegenerate: Boolean get() = degeneracy.linearDegenerate
         override fun copyUniformValuesF32(): List<Float> = listOf(startF32.x, startF32.y, endF32.x, endF32.y)
         override fun rebind(range: GradientStopRangeV1, authority: GradientNumericAuthorityV2): GradientV2 =
@@ -103,7 +105,8 @@ public sealed interface MaterialBindingPlan {
 
     public data class RadialGradientV2(public val centerF32: Point2F32, public val radiusF32: Float,
         override val stopRange: GradientStopRangeV1, public val degeneracy: RadialGradientDegeneracyV1,
-        override val numericAuthority: GradientNumericAuthorityV2) : GradientV2 {
+        override val numericAuthority: GradientNumericAuthorityV2,
+        override val degenerateAverageSrgbaF32: GradientAverageSrgbaF32?) : GradientV2 {
         override val gradientDegenerate: Boolean get() = degeneracy.radialDegenerate
         override fun copyUniformValuesF32(): List<Float> = listOf(centerF32.x, centerF32.y, radiusF32, 0f)
         override fun rebind(range: GradientStopRangeV1, authority: GradientNumericAuthorityV2): GradientV2 =
@@ -112,7 +115,8 @@ public sealed interface MaterialBindingPlan {
 
     public data class SweepGradientV2(public val centerF32: Point2F32,
         override val stopRange: GradientStopRangeV1, public val degeneracy: SweepGradientDegeneracyV1,
-        override val numericAuthority: GradientNumericAuthorityV2) : GradientV2 {
+        override val numericAuthority: GradientNumericAuthorityV2,
+        override val degenerateAverageSrgbaF32: GradientAverageSrgbaF32?) : GradientV2 {
         override val gradientDegenerate: Boolean get() = degeneracy.sweepDegenerate
         override fun copyUniformValuesF32(): List<Float> = listOf(centerF32.x, centerF32.y,
             degeneracy.startAngleDegreesF32, degeneracy.endAngleDegreesF32)
@@ -122,7 +126,8 @@ public sealed interface MaterialBindingPlan {
 
     public data class ConicalGradientV2(public val startF32: Point2F32, public val endF32: Point2F32,
         override val stopRange: GradientStopRangeV1, public val degeneracy: ConicalGradientDegeneracyV1,
-        override val numericAuthority: GradientNumericAuthorityV2) : GradientV2 {
+        override val numericAuthority: GradientNumericAuthorityV2,
+        override val degenerateAverageSrgbaF32: GradientAverageSrgbaF32?) : GradientV2 {
         override val gradientDegenerate: Boolean get() = degeneracy.conicalFullyDegenerate
         override fun copyUniformValuesF32(): List<Float> = listOf(startF32.x, startF32.y, endF32.x, endF32.y)
         override fun rebind(range: GradientStopRangeV1, authority: GradientNumericAuthorityV2): GradientV2 =

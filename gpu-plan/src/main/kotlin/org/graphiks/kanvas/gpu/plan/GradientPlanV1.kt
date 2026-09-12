@@ -30,6 +30,14 @@ public class GradientStopSlabPlanV1 private constructor(stops: List<GradientStop
 }
 
 public sealed interface GradientDegeneracyV1
+
+internal fun GradientDegeneracyV1.consumesAverage(effectiveTileMode: GradientTileModeV2): Boolean =
+    effectiveTileMode in setOf(GradientTileModeV2.REPEAT, GradientTileModeV2.MIRROR) && when (this) {
+        is LinearGradientDegeneracyV1 -> linearDegenerate
+        is RadialGradientDegeneracyV1 -> radialDegenerate
+        is SweepGradientDegeneracyV1 -> sweepDegenerate && !sweepOrderingInvalid && !sweepFullCoverage
+        is ConicalGradientDegeneracyV1 -> conicalFullyDegenerate
+    }
 public data class LinearGradientDegeneracyV1(
     public val linearDxF32: Float, public val linearDyF32: Float,
     public val linearX2F32: Float, public val linearY2F32: Float,

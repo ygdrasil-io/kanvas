@@ -20,13 +20,13 @@ public class RawMaterialRequirementsV2 private constructor(
             val gradient = table.entry(MaterialPlanRef(indexI32)).bindings is MaterialBindingPlan.GradientV1
             return RawMaterialRequirementsV2(countI32, Math.addExact(
                 Math.multiplyExact(countI32.toLong(), BINDING_STRIDE_BYTES_I64),
-                when (table.entry(MaterialPlanRef(indexI32)).bindings) {
-                    is MaterialBindingPlan.GradientV2 -> Math.addExact(32L + when (table.entry(MaterialPlanRef(indexI32)).bindings) {
+                when (val binding = table.entry(MaterialPlanRef(indexI32)).bindings) {
+                    is MaterialBindingPlan.GradientV2 -> Math.addExact(32L +
+                        (if (binding.degenerateAverageSrgbaF32 != null) 16L else 0L) + when (binding) {
                         is MaterialBindingPlan.LinearGradientV2 -> 32L
                         is MaterialBindingPlan.RadialGradientV2 -> 0L
                         is MaterialBindingPlan.SweepGradientV2 -> 16L
                         is MaterialBindingPlan.ConicalGradientV2 -> 96L
-                        else -> error("Expected V2 gradient")
                     }, requireNotNull(table.coordinatesV2(root)).uniformByteSizeI64)
                     is MaterialBindingPlan.LinearGradientV1 -> 112L // common 80 + 2 sealed scalar vectors
                     is MaterialBindingPlan.ConicalGradientV1 -> 176L // common 80 + 4 scalar vectors + 2 flag vectors

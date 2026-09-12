@@ -88,10 +88,11 @@ public data class GradientAddressingProgramV2(
     public val effectiveTileMode: GradientTileModeV2,
     public val tileGraphId: String,
     public val coordinateTopologyId: String,
+    public val consumesDegenerateAverage: Boolean,
 ) : MaterialProgramPlan {
     override val versionI32: Int = 2
     override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId(
-        "w5d-gradient-v2:${family.name}:${requestedTileMode.name}:${effectiveTileMode.name}:$tileGraphId:$coordinateTopologyId",
+        "w5d-gradient-v2:${family.name}:${requestedTileMode.name}:${effectiveTileMode.name}:$tileGraphId:$coordinateTopologyId:average=$consumesDegenerateAverage",
     )
     override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.gradient()
 }
@@ -104,6 +105,7 @@ public class GradientNumericAuthorityV2 private constructor(
     public val coordinates: MaterialCoordinatePlanV2,
     uniformValuesF32: List<Float>,
     private val degeneracy: GradientDegeneracyV1,
+    private val degenerateAverageSrgbaF32: GradientAverageSrgbaF32?,
     private val range: GradientStopRangeV1,
     private val slabIdentity: String,
     private val localMagnitudeF64: Double,
@@ -111,7 +113,7 @@ public class GradientNumericAuthorityV2 private constructor(
 ) {
     private val uniformValuesF32 = immutableList(uniformValuesF32)
     internal val domainIdentity: String = "gradient-domain-v2:${program.structuralId.value}:${graph.contractId}:" +
-        "${this.uniformValuesF32}:$degeneracy:${coordinates.canonicalIdentity}:${tileGraph.contractId}:" +
+        "${this.uniformValuesF32}:$degeneracy:$degenerateAverageSrgbaF32:${coordinates.canonicalIdentity}:${tileGraph.contractId}:" +
         "${localMagnitudeF64.toBits()}:${uniformMagnitudeF64.toBits()}"
     public val canonicalIdentity: String = "$domainIdentity:$range:$slabIdentity"
     public fun authenticates(program: GradientAddressingProgramV2, binding: MaterialBindingPlan.GradientV2,
@@ -120,6 +122,7 @@ public class GradientNumericAuthorityV2 private constructor(
             graph.domainProof == GradientNumericDomainProofV1.ProvenFinite && this.coordinates == coordinates &&
             tileGraph == program.requestedTileMode.operationGraph() &&
             tileGraph.effectiveMode == program.effectiveTileMode && binding.copyUniformValuesF32() == uniformValuesF32 &&
+            binding.degenerateAverageSrgbaF32 == degenerateAverageSrgbaF32 &&
             when (binding) {
                 is MaterialBindingPlan.LinearGradientV2 -> binding.degeneracy == degeneracy
                 is MaterialBindingPlan.RadialGradientV2 -> binding.degeneracy == degeneracy
@@ -134,10 +137,18 @@ public class GradientNumericAuthorityV2 private constructor(
         fun sequence(slab: GradientStopSlabPlanV1, selected: GradientStopRangeV1): List<GradientStopPlanV1> =
             slab.copyStops().subList(selected.baseIndexU32.toInt(), (selected.baseIndexU32 + selected.countU32).toInt())
         require(sequence(sourceSlab, range) == sequence(newSlab, newRange)) { W5dPlanDiagnostics.CoordinatePlanSchema }
-        return GradientNumericAuthorityV2(graph, tileGraph, program, coordinates, uniformValuesF32, degeneracy,
+        return GradientNumericAuthorityV2(graph, tileGraph, program, coordinates, uniformValuesF32, degeneracy, degenerateAverageSrgbaF32,
             newRange, newSlab.canonicalIdentity, localMagnitudeF64, uniformMagnitudeF64)
     }
     internal companion object {
+        private fun averageMatches(program: GradientAddressingProgramV2, degeneracy: GradientDegeneracyV1,
+            averageSrgbaF32: GradientAverageSrgbaF32?): Boolean =
+            program.consumesDegenerateAverage == degeneracy.consumesAverage(program.effectiveTileMode) &&
+                (averageSrgbaF32 != null) == program.consumesDegenerateAverage &&
+                (averageSrgbaF32 == null || with(averageSrgbaF32) {
+                    listOf(redF32, greenF32, blueF32, alphaF32).all { it.isFinite() && it in 0f..1f }
+                })
+
         private fun matches(program: GradientAddressingProgramV2, coordinates: MaterialCoordinatePlanV2,
             family: GradientFamilyV2, tile: GradientTileOperationGraphV2): Boolean =
             program.family == family && program.effectiveTileMode == tile.effectiveMode &&
@@ -145,7 +156,9 @@ public class GradientNumericAuthorityV2 private constructor(
 
         fun sealConical(program: GradientAddressingProgramV2, coordinates: MaterialCoordinatePlanV2, startF32: Point2F32, endF32: Point2F32,
             degeneracy: ConicalGradientDegeneracyV1, slab: GradientStopSlabPlanV1,
-            localMagnitudeF64: Double, uniformMagnitudeF64: Double): GradientNumericAuthorityV2? {
+            localMagnitudeF64: Double, uniformMagnitudeF64: Double,
+            degenerateAverageSrgbaF32: GradientAverageSrgbaF32?): GradientNumericAuthorityV2? {
+            if (!averageMatches(program, degeneracy, degenerateAverageSrgbaF32)) return null
             if (degeneracy != ConicalGradientDegeneracyV1.of(startF32, degeneracy.conicalStartRadiusF32,
                     endF32, degeneracy.conicalEndRadiusF32) || degeneracy.copyScalarsF32().any { !it.isFinite() } ||
                 degeneracy.conicalStartRadiusF32 < 0f || degeneracy.conicalEndRadiusF32 < 0f) return null
@@ -157,13 +170,15 @@ public class GradientNumericAuthorityV2 private constructor(
             if (proof != GradientNumericDomainProofV1.ProvenFinite) return null
             return GradientNumericAuthorityV2(GradientNumericOperationGraphV1.Conical(schema.root, proof),
                 tile, program, coordinates,
-                listOf(startF32.x, startF32.y, endF32.x, endF32.y), degeneracy,
+                listOf(startF32.x, startF32.y, endF32.x, endF32.y), degeneracy, degenerateAverageSrgbaF32,
                 GradientStopRangeV1(0u, stops.size.toUInt()), slab.canonicalIdentity, localMagnitudeF64, uniformMagnitudeF64)
         }
 
         fun sealSweep(program: GradientAddressingProgramV2, coordinates: MaterialCoordinatePlanV2, centerF32: Point2F32,
             degeneracy: SweepGradientDegeneracyV1, slab: GradientStopSlabPlanV1,
-            localMagnitudeF64: Double, uniformMagnitudeF64: Double): GradientNumericAuthorityV2? {
+            localMagnitudeF64: Double, uniformMagnitudeF64: Double,
+            degenerateAverageSrgbaF32: GradientAverageSrgbaF32?): GradientNumericAuthorityV2? {
+            if (!averageMatches(program, degeneracy, degenerateAverageSrgbaF32)) return null
             if (degeneracy != SweepGradientDegeneracyV1.of(degeneracy.startAngleDegreesF32, degeneracy.endAngleDegreesF32) ||
                 degeneracy.sweepOrderingInvalid || listOf(degeneracy.startAngleDegreesF32,
                     degeneracy.endAngleDegreesF32, degeneracy.sweepSpanDegreesF32).any { !it.isFinite() }) return null
@@ -176,13 +191,15 @@ public class GradientNumericAuthorityV2 private constructor(
             if (proof != GradientNumericDomainProofV1.ProvenFinite) return null
             return GradientNumericAuthorityV2(GradientNumericOperationGraphV1.Sweep(schema.root, proof),
                 tile, program, coordinates,
-                listOf(centerF32.x, centerF32.y, degeneracy.startAngleDegreesF32, degeneracy.endAngleDegreesF32), degeneracy,
+                listOf(centerF32.x, centerF32.y, degeneracy.startAngleDegreesF32, degeneracy.endAngleDegreesF32), degeneracy, degenerateAverageSrgbaF32,
                 GradientStopRangeV1(0u, stops.size.toUInt()), slab.canonicalIdentity, localMagnitudeF64, uniformMagnitudeF64)
         }
 
         fun sealRadial(program: GradientAddressingProgramV2, coordinates: MaterialCoordinatePlanV2, centerF32: Point2F32, radiusF32: Float,
             degeneracy: RadialGradientDegeneracyV1, slab: GradientStopSlabPlanV1,
-            localMagnitudeF64: Double, uniformMagnitudeF64: Double): GradientNumericAuthorityV2? {
+            localMagnitudeF64: Double, uniformMagnitudeF64: Double,
+            degenerateAverageSrgbaF32: GradientAverageSrgbaF32?): GradientNumericAuthorityV2? {
+            if (!averageMatches(program, degeneracy, degenerateAverageSrgbaF32)) return null
             if (!radiusF32.isFinite() || radiusF32 < 0f || degeneracy !=
                 RadialGradientDegeneracyV1(radiusF32, radiusF32 <= 0.000030517578125f)) return null
             val tile = program.requestedTileMode.operationGraph()
@@ -193,13 +210,15 @@ public class GradientNumericAuthorityV2 private constructor(
             if (proof != GradientNumericDomainProofV1.ProvenFinite) return null
             return GradientNumericAuthorityV2(GradientNumericOperationGraphV1.Radial(schema.root, proof),
                 tile, program, coordinates,
-                listOf(centerF32.x, centerF32.y, radiusF32, 0f), degeneracy,
+                listOf(centerF32.x, centerF32.y, radiusF32, 0f), degeneracy, degenerateAverageSrgbaF32,
                 GradientStopRangeV1(0u, stops.size.toUInt()), slab.canonicalIdentity, localMagnitudeF64, uniformMagnitudeF64)
         }
 
         fun sealLinear(program: GradientAddressingProgramV2, coordinates: MaterialCoordinatePlanV2,
             startF32: Point2F32, endF32: Point2F32, degeneracy: LinearGradientDegeneracyV1,
-            slab: GradientStopSlabPlanV1, localMagnitudeF64: Double, uniformMagnitudeF64: Double): GradientNumericAuthorityV2? {
+            slab: GradientStopSlabPlanV1, localMagnitudeF64: Double, uniformMagnitudeF64: Double,
+            degenerateAverageSrgbaF32: GradientAverageSrgbaF32?): GradientNumericAuthorityV2? {
+            if (!averageMatches(program, degeneracy, degenerateAverageSrgbaF32)) return null
             val tile = program.requestedTileMode.operationGraph()
             if (program.family != GradientFamilyV2.LINEAR || program.requestedTileMode != tile.requestedMode ||
                 program.effectiveTileMode != tile.effectiveMode || program.tileGraphId != tile.contractId ||
@@ -211,7 +230,7 @@ public class GradientNumericAuthorityV2 private constructor(
             val proof = schema.proveLinearDomainV1(localMagnitudeF64, uniformMagnitudeF64, degeneracy, stops, startF32, endF32)
             if (proof != GradientNumericDomainProofV1.ProvenFinite) return null
             return GradientNumericAuthorityV2(GradientNumericOperationGraphV1.Linear(schema.root, proof), tile,
-                program, coordinates, listOf(startF32.x, startF32.y, endF32.x, endF32.y), degeneracy,
+                program, coordinates, listOf(startF32.x, startF32.y, endF32.x, endF32.y), degeneracy, degenerateAverageSrgbaF32,
                 GradientStopRangeV1(0u, stops.size.toUInt()), slab.canonicalIdentity, localMagnitudeF64, uniformMagnitudeF64)
         }
     }

@@ -10,6 +10,31 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 /** Independent public fixture: inverse translation is x - 3, with nested shader and paint opacity. */
 internal object W5dGradientAddressingCpuOracle {
+    // Decimal arithmetic on exact Double expansions of F32 inputs is independent
+    // of the planner's binary integer accumulator and explicit IEEE rounding.
+    fun exactAverageF32(stops: List<GradientStop>): List<Float> = (0..3).map { channelI32 ->
+        fun channelF32(stop: GradientStop): Float = with(stop.color) {
+            listOf(redNormalized, greenNormalized, blueNormalized, alphaNormalized)[channelI32]
+        }
+        stops.zipWithNext().fold(java.math.BigDecimal.ZERO) { sum, (left, right) ->
+            sum + (java.math.BigDecimal(right.position.toDouble()) - java.math.BigDecimal(left.position.toDouble())) *
+                (java.math.BigDecimal(channelF32(left).toDouble()) + java.math.BigDecimal(channelF32(right).toDouble())) /
+                java.math.BigDecimal(2)
+        }.toFloat()
+    }
+
+    // The four-lane Picture places local strip y=[4,5] at device row r by
+    // translation (0,r-4). Its fragment center (x+.5,r+.5) therefore maps
+    // independently to (x+.5,(r+.5)-(r-4)) = (x+.5,4.5). Every sample is
+    // inside its lane's full coverage; the supplied straight color is at that
+    // unchanged shader point (including Sweep axes and Conical circle equality).
+    fun straightPixel(rgbaF32: List<Float>): WgslFloatEnvelopeV1Oracle.DrawResult =
+        WgslFloatEnvelopeV1Oracle.gradientThenBlend({ rgbaF32.map(WgslFloatEnvelopeV1Oracle.Interval::input).toTypedArray() },
+            1f, WgslFloatEnvelopeV1Oracle.clearAttachment(), BlendMode.DIFFERENCE)
+
+    fun colorPixel(color: ColorARGB): WgslFloatEnvelopeV1Oracle.DrawResult = straightPixel(
+        listOf(color.redNormalized, color.greenNormalized, color.blueNormalized, color.alphaNormalized))
+
     enum class GradientFixtureFamily { LINEAR, RADIAL, SWEEP, CONICAL }
     enum class W5dPublicLane { RECT, RRECT, PATH_FILL, PATH_STROKE }
 

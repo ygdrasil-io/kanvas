@@ -215,6 +215,10 @@ internal class W5aMaterialSourceStage private constructor(
                 uniforms.putInt(conical.conicalBranchTagU32.toInt()).putInt(0)
             }
             val operations = coordinates.copyOperations()
+            val averageSrgbaF32 = binding.degenerateAverageSrgbaF32
+            averageSrgbaF32?.let {
+                listOf(it.redF32, it.greenF32, it.blueF32, it.alphaF32).forEach(uniforms::putFloat)
+            }
             val coordinateFields = StringBuilder()
             val coordinateStatements = StringBuilder("    var state = W5dLocalPointV2(pixel, true);\n")
             for (operation in operations) {
@@ -278,11 +282,12 @@ internal class W5aMaterialSourceStage private constructor(
                         is MaterialBindingPlan.ConicalGradientV2 -> "conicalParameters0: vec4<f32>,\nconicalParameters1: vec4<f32>,\n" +
                             "conicalParameters2: vec4<f32>,\nconicalParameters3: vec4<f32>,\nconicalFlags0: vec4<u32>,\nconicalFlags1: vec4<u32>,"
                     }}
+                    ${if (program.consumesDegenerateAverage) "degenerateAverageSrgbaF32: vec4<f32>," else ""}
                     $coordinateFields
                 }
                 @group(1) @binding(0) var<uniform> w5aMaterial: W5aMaterialBlock;
                 $SRGB_TO_LINEAR_WGSL
-                ${gradientDeclarationsWgsl(numeric.graph, numeric.tileGraph)}
+                ${gradientDeclarationsWgsl(numeric.graph, numeric.tileGraph, program.consumesDegenerateAverage)}
                 $W5D_SAFE_DIVIDE_WGSL
                 struct W5dLocalPointV2 { pointF32: vec2<f32>, valid: bool, }
                 fn w5d_local_point(pixel: vec2<f32>) -> W5dLocalPointV2 {
@@ -383,7 +388,8 @@ internal class W5aMaterialSourceStage private constructor(
 
         /** Lowers every executed gradient node, including the explicit bounded search body. */
         private fun gradientDeclarationsWgsl(graph: GradientNumericOperationGraphV1,
-            tileGraph: org.graphiks.kanvas.gpu.plan.GradientTileOperationGraphV2? = null): String {
+            tileGraph: org.graphiks.kanvas.gpu.plan.GradientTileOperationGraphV2? = null,
+            consumesDegenerateAverage: Boolean = false): String {
             require(graph.contractId == "WgslFloatEnvelopeV1" && graph.domainProof == GradientNumericDomainProofV1.ProvenFinite)
             val code = StringBuilder()
             val emitted = mutableMapOf<GradientNumericOperationGraphV1.Node, String>()
@@ -515,6 +521,12 @@ internal class W5aMaterialSourceStage private constructor(
                     return left + (right - left) * weight;
                 }
                 fn w5c_gradient(localPosition: vec2<f32>) -> vec4<f32> {
+                    ${when {
+                        consumesDegenerateAverage -> "if (w5aMaterial.gradientFlags.x != 0u) { return w5aMaterial.degenerateAverageSrgbaF32; }"
+                        tileGraph?.effectiveMode == org.graphiks.kanvas.gpu.plan.GradientTileModeV2.DECAL ->
+                            "if (w5aMaterial.gradientFlags.x != 0u) { return vec4<f32>(0.0); }"
+                        else -> ""
+                    }}
                     $code
                     return $result;
                 }
