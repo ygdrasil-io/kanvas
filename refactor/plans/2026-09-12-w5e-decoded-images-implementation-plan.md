@@ -24,6 +24,7 @@
 - The sampled color domain is linear premultiplied RGBA. OPAQUE forces alpha to one; UNPREMUL converts straight RGB then premultiplies; PREMUL safely unpremultiplies in source space, converts, then premultiplies; alpha zero produces zero RGB. A8 is a scalar mask and never undergoes color-space conversion.
 - Direct RGBA applies only paint alpha before the established effect/blend/coverage chain. Direct A8 applies its mask to paint color or paint shader, including paint alpha. Paint RGB never tints a direct RGBA image.
 - Coordinates use pixel centers. Nearest selects `floor(s)`, Linear uses four taps around `s - 0.5`, Cubic uses sixteen Mitchell–Netravali taps. Every tap is tiled before fetch. DECAL contributes transparent taps without weight renormalization.
+- `ImageNumericAuthorityV1` authenticates the coordinate, sampling, tile and color/alpha operation graph against `WgslFloatEnvelopeV1`. Projective validity and every F32→I32 index conversion are bounded before admission; an unbounded envelope refuses instead of relying on backend conversion behavior.
 - Direct image operations force CLAMP/CLAMP. Image shaders preserve independent X/Y CLAMP, REPEAT, MIRROR or DECAL. Sampling and tile modes never participate in the upload key.
 - Once the W5e gate claims an operation, planner, budget, allocation, shader compilation, submission or readback failure is terminal. There is no prepared-image or legacy-material fallback after ownership.
 - Public behavior tests use `Surface`, `Canvas`, `Picture`, `render()`, public pixels, public statistics and public diagnostics only. They do not inspect cache entries, artifacts, lowerers, plan internals, resource providers, handles, bind groups, uniform bytes or call counters. No new infrastructure test is introduced.
@@ -42,6 +43,7 @@
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/canvas/DisplayOpSnapshot.kt`
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/canvas/Canvas.kt`
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/picture/Picture.kt`
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/render/ir/ResourceSceneAdapter.kt`
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/render/ir/DisplayOpSceneAdapter.kt`
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/render/ir/SceneDisplayOpAdapter.kt`
 - Modify: `render-ir/src/main/kotlin/org/graphiks/kanvas/render/ir/GeometryNode.kt`
@@ -52,9 +54,9 @@
 
 **Interfaces:**
 - Consumes: public `Image`, `SamplingOptions`, image draw APIs and immutable math geometry.
-- Produces: stride-preserving `Image`, explicit direct sampling, `ImagePatch` v2, distinct `ImageNine`, Picture v10/schema v4, and backward-compatible public Picture replay.
+- Produces: stride-preserving `Image`/resource conversion, explicit direct sampling, `ImagePatch` v2, distinct `ImageNine`, Picture v10/schema v4, and backward-compatible public Picture payload replay.
 
-- [ ] **Step 1: Write public RED tests for capture and compatibility.** Add methods `drawImageSamplingIsPreservedByPictureRoundTrip`, `cubicBitsArePreservedByPictureRoundTrip`, `legacyImagePayloadDefaultsToNearest`, `imageNineRoundTripKeepsItsDistinctGeometry`, and `pixelRowBytesSurvivesPictureRoundTrip`. Exercise replay through a public recording `Surface` and pixels; use a checked-in minimal v9 byte fixture generated from the existing format before changing the writer. Do not call `SceneArchiveCodec` directly from the tests.
+- [ ] **Step 1: Write public RED tests for capture and compatibility.** Add methods `drawImageSamplingPayloadRoundTripIsStable`, `cubicBitsProduceDistinctStablePicturePayloads`, `legacyImagePayloadDefaultsToNearest`, `imageNinePayloadRemainsDistinctFromImagePatch`, and `pixelRowBytesPayloadRoundTripIsStable`. Exercise only public Picture recording/serialize/deserialize/serialize APIs; use a checked-in minimal v9 byte fixture generated from the existing format before changing the writer. These tests prove payload conservation without requiring a backend that Tasks 2/5/6 have not delivered. The corresponding pixel/replay semantics are explicit gates in those later tasks. Do not call `SceneArchiveCodec` directly from the tests.
 
 - [ ] **Step 2: Run the focused methods and verify RED.**
 
@@ -75,7 +77,7 @@ public data class Image(
     public val pixels: ByteArray? = null,
     public val colorSpace: ColorSpace = ColorSpace.SRGB,
     public val alphaType: AlphaType = colorType.defaultAlphaType(),
-    public val rowBytesI32: Int = width * colorType.bytesPerPixel,
+    public val rowBytesI32: Int = logicalRowBytesI32(width, colorType),
 )
 
 public data class DrawImage(
@@ -89,13 +91,15 @@ public data class DrawImage(
 ) : DisplayOp
 ```
 
-Add trailing `colorSpace` and `rowBytesI32` parameters to `Image.fromPixels`, plus a `drawImageRect(image, src, dst, sampling, paint)` overload, and have every no-sampling overload record Nearest. Remove the `paint.copy(shader = image.makeShader(...))` bridge. Preserve `rowBytesI32` in `reinterpretColorSpace`, surface capture and every snapshot copy. Validate only representation-level invariants in public constructors; planner-level budget/device limits remain in `:gpu-plan`.
+`logicalRowBytesI32` performs checked I64 multiplication, requires I32 representability and throws `IllegalArgumentException("image.row-bytes-overflow")` at the public construction boundary. Add trailing `colorSpace` and `rowBytesI32` parameters to `Image.fromPixels`, plus a `drawImageRect(image, src, dst, sampling, paint)` overload, and have every no-sampling overload record Nearest. Remove the `paint.copy(shader = image.makeShader(...))` bridge. Preserve `rowBytesI32` in `reinterpretColorSpace`, surface capture and every snapshot copy. Validate only representation-level invariants in public constructors; planner-level budget/device limits remain in `:gpu-plan`.
+
+In `ResourceSceneAdapter`, pass `image.rowBytesI32` into `ImageResourceSnapshot.fromPixels` and restore it in `toImage`; never recompute a tight stride. Add `SceneCaptureLimits.maxImageBytesI64` and preflight cumulative canonical logical image bytes before any pixel copy, using checked I64 arithmetic and a stable capture diagnostic. The capture memoizes one immutable snapshot per canonical image resource so a shader and direct draw cannot copy or budget it twice.
 
 - [ ] **Step 4: Version the IR geometry without creating geometry outside math.** Change `GeometryNode.ImagePatch` to canonical ID `geometry-image-patch-v2` and add `sampling: ImageSampling`. Add `GeometryNode.ImageNine(image, center: RectF32, destination: RectF32, sampling = Nearest)` with its own canonical tag. Validate `DrawOrigin.IMAGE` ↔ `ImagePatch` and `DrawOrigin.IMAGE_NINE` ↔ `ImageNine` in `EffectNode`; retain `RectF32` from `:math:geometry`.
 
 - [ ] **Step 5: Advance internal codecs atomically.** Write Picture v10/archive schema v4, accept Picture v8/v9/v10, and enforce schema maxima 2/3/4 respectively. Schema v4 writes ImagePatch sampling and a new ImageNine tag. Schema ≤3 reads ImagePatch without sampling as Nearest and normalizes an `IMAGE_NINE` origin plus historical ImagePatch into current ImageNine. Preserve Cubic `B` and `C` with raw F32 bits and include sampling in canonical identities. Update both adapters and Picture replay to use source rect plus explicit sampling.
 
-- [ ] **Step 6: Verify public GREEN, compilation and backward replay.**
+- [ ] **Step 6: Verify public payload GREEN, compilation and backward decode.**
 
 ```bash
 rtk ./gradlew :render-ir:compileKotlin :kanvas:compileKotlin --no-parallel
@@ -116,10 +120,14 @@ rtk git commit -m "feat(image): version W5e image capture semantics"
 - Create: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W5eImagePlanDiagnostics.kt`
 - Create: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/ImageUploadPlanV1.kt`
 - Create: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/ImageSampleExecutionPlanV1.kt`
+- Create: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/ImageNumericOperationGraphV1.kt`
+- Create: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/ImageNumericAuthorityV1.kt`
+- Create: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanCacheResourceRequest.kt`
 - Create: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W5eImagePlanCompiler.kt`
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/MaterialPlan.kt`
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/EffectiveMaterialPlanner.kt`
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanPasses.kt`
+- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PlanResources.kt`
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/CapabilityCompilerChain.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/color/ColorContracts.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUMaterialTextureFrameResourcePlan.kt`
@@ -127,6 +135,7 @@ rtk git commit -m "feat(image): version W5e image capture semantics"
 - Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/W5eImagePlanLowerer.kt`
 - Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/W5ePreparedFrameWitnessV1.kt`
 - Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUW5eImageNativeV1.kt`
+- Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUW5eDecodedImageSessionCache.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuPlanTaskListLowerer.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/GpuRenderContext.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kFramePayloadMaterializerDispatcher.kt`
@@ -139,7 +148,7 @@ rtk git commit -m "feat(image): version W5e image capture semantics"
 - Consumes: one RGBA_8888/PREMUL `ImagePatch`, Nearest, CLAMP/CLAMP, W5b final blend and W4 target/coverage contracts.
 - Produces: the first terminal `DrawImage` path through a sealed image plan, content-keyed upload, texture/view binding and public exact pixels.
 
-- [ ] **Step 1: Write public RED tests.** Add `rgbaPremulNearestDrawImageIsPlanOwned`, `sourceRectAndNegativeDestinationPreservePixelCenters`, `capturedPixelsIgnoreLaterSourceMutation`, `unsupportedExternalResourceStaysPreAdmission`, and `failedPromotedDrawRecoversOnSameRuntime`. Choose a 3×2 asymmetric fixture so a legacy stretch, wrong origin, or shader bridge cannot match. Assert public pixels and public routed statistics only.
+- [ ] **Step 1: Write public RED tests.** Add `rgbaPremulNearestDrawImageIsPlanOwned`, `sourceRectAndNegativeDestinationPreservePixelCenters`, `capturedPixelsIgnoreLaterSourceMutation`, `unsupportedExternalResourceStaysPreAdmission`, `unboundedProjectiveImageCoordinatesRefuseAndRecover`, and `failedPromotedDrawRecoversOnSameRuntime`. Choose a 3×2 asymmetric fixture so a legacy stretch, wrong origin, or shader bridge cannot match. Assert public pixels and public routed statistics only.
 
 - [ ] **Step 2: Run the first vertical-slice methods and verify RED at the current gate.**
 
@@ -147,7 +156,7 @@ rtk git commit -m "feat(image): version W5e image capture semantics"
 rtk ./gradlew :kanvas:test --tests '*W5eDecodedImageSurfacePixelTest.rgbaPremulNearestDrawImageIsPlanOwned' --tests '*W5eDecodedImageSurfacePixelTest.sourceRectAndNegativeDestinationPreservePixelCenters' --no-parallel --rerun-tasks
 ```
 
-- [ ] **Step 3: Define one sealed semantic contract.** `ImageUploadPlanV1` stores copied width/height I32, logical row bytes I64, source row bytes I64, byte count I64, logical format, physical format and a content identity computed row-by-row over logical bytes. `ImageSampleExecutionPlanV1` stores the upload, `ImageCoordinatePlanV1`, `ImageSamplingPlanV1`, tile X/Y, `ImageColorAlphaPlanV1`, immutable cells and total budget. It exposes copies, stable IDs and scalar facts only—never `Image`, `ByteBuffer`, native device, texture, view, sampler or bind group.
+- [ ] **Step 3: Define one sealed semantic and numeric contract.** `ImageUploadPlanV1` stores copied width/height I32, logical row bytes I64, source row bytes I64, byte count I64, logical format, physical format and a content identity computed row-by-row over logical bytes. `ImageSampleExecutionPlanV1` stores the upload, `ImageCoordinatePlanV1`, `ImageSamplingPlanV1`, tile X/Y, `ImageColorAlphaPlanV1`, immutable cells, cache request and total pessimistic budget. It exposes copies, stable IDs and scalar facts only—never `Image`, `ByteBuffer`, native device, texture, view, sampler or bind group.
 
 ```kotlin
 public enum class ImageChannelOrderV1 { RGBA, BGRA, ALPHA }
@@ -181,9 +190,13 @@ public data class MaterialV3(
 
 Extend `NumericOperationGraphV1` with explicit image-color and image-mask graph factories, then implement `copyNumericOperationGraphV1()` on both V3 programs. Extend `MaterialPlanTable` validation/interning explicitly for ColorV3, MaskV3 and their child adjacency. Do not reinterpret V1/V2 authorities. In this slice, only ColorV3 + RGBA_8888/PREMUL + Nearest is admitted.
 
+`ImageNumericOperationGraphV1` describes inverse projection, homogeneous divide, source/destination mapping, pixel-center shift, `floor`, tap offsets, integer conversion, tile addressing, texel conversion and accumulation. `ImageNumericAuthorityV1.seal(...)` evaluates that graph over the transformed device bounds with `WgslFloatEnvelopeV1`; it refuses a projective denominator interval containing zero, non-finite/unbounded samples, Cubic offset overflow, or any floor result outside the WGSL I32 conversion domain. The authority authenticates program, binding, coordinates, sampling and tile topology. The WGSL consumer first applies the sealed projective-validity mask and never lets an invalid value reach `floor` or I32 conversion.
+
+Add `PlanResourceLifetime.DeviceSessionCache` and a handle-free `PlanCacheResourceRequest` carrying canonical physical identity, kind, format, dimensions, usages, ABI version and byte size. Existing W4 lowerers remain exhaustive and reject that lifetime outside the W5e path. Frame budgeting always includes the full texture size even on a later cache hit.
+
 - [ ] **Step 4: Compile a dedicated image graph without one-draw-per-cell leakage.** `W5eImagePlanCompiler` selects only direct ImagePatch scenes in this slice, validates all semantic facts before Ready, creates one logical `ImageDrawV1` per public command and keeps its cell list internal to that draw. Visual command counts, ordering and final blend remain per public operation. Register the compiler before legacy gaps in `GpuRenderContext.createProduction` and dispatch its capability in `GpuPlanTaskListLowerer`.
 
-- [ ] **Step 5: Materialize only physical facts.** Generalize `GPUMaterialTextureFrameResourcePlan` to R8/RGBA8 with an explicit bytes-per-pixel I32 and add `GPUColorFormat.R8Unorm`; remove sampling from upload identity. Reuse prepared-image cache/resource ownership only after `ImageSampleExecutionPlanV1` exists. `GPUW5eImageNativeV1` validates device generation and witness, builds the upload/texture/view/bindings, and cannot inspect `DisplayOp`, `Paint`, `Shader` or public `Image`.
+- [ ] **Step 5: Materialize only physical facts with session ownership.** Generalize the staging half of `GPUMaterialTextureFrameResourcePlan` to R8/RGBA8 with an explicit bytes-per-pixel I32 and add `GPUColorFormat.R8Unorm`; remove sampling from upload identity. `GPUW5eDecodedImageSessionCache` owns texture/view entries under a key prefixed by device generation, accepts only `PlanCacheResourceRequest`, and has injected `maxEntriesI32`/`maxBytesI64` limits. A miss evicts least-recently-used zero-lease entries until both limits fit, then uploads transactionally; a hit only increments its lease. A lease is held through GPU completion and released in success/failure cleanup; device loss closes the whole generation. Pipeline/layout caching remains separate. `GPUW5eImageNativeV1` validates generation and witness, acquires the cache lease and builds bindings; it cannot inspect `DisplayOp`, `Paint`, `Shader` or public `Image`.
 
 - [ ] **Step 6: Close the router after admission.** Extend `GPUPlanSurfaceCandidateGate` only for the exact Task 2 slice. A typed pre-admission result remains eligible for existing behavior; Candidate/Ready becomes terminal. The router must not call `GPUPreparedDrawImageLowerer` after W5e ownership, including allocation or native failures.
 
@@ -271,7 +284,7 @@ rtk git commit -m "feat(gpu): normalize W5e image color and alpha"
 rtk ./gradlew :kanvas:test --tests '*W5eImageShaderSurfacePixelTest*' --no-parallel --rerun-tasks
 ```
 
-- [ ] **Step 3: Capture shader coordinates exactly once.** Compose inverse CTM and inverse image local matrix in F64 using `:math:matrix`, project finite coefficients to F32 and seal them in `ImageCoordinatePlanV1`. Preserve transform order and projective validity. Reject singular, non-finite or non-F32-representable inverses with image-specific public codes. The renderer consumes the sealed matrix and never reconstructs API conventions.
+- [ ] **Step 3: Capture shader coordinates exactly once.** Compose inverse CTM and inverse image local matrix in F64 using `:math:matrix`, project finite coefficients to F32 and seal them in `ImageCoordinatePlanV1`. Preserve transform order and projective validity. Reject singular, non-finite or non-F32-representable inverses with image-specific public codes. Use `ImageNumericAuthorityV1` over the Rect/Path device bounds to reject a projective horizon or coordinate envelope whose floor/tap indices cannot be converted to I32; include a public `hugeFiniteImageShaderCoordinatesRefuseAndRecover` gate. The renderer consumes the sealed matrix/validity contract and never reconstructs API conventions.
 
 - [ ] **Step 4: Extend the material path, not W4 geometry.** Teach `EffectiveMaterialPlanner` to build ColorV3 for a color image shader and MaskV3 over Solid for an A8 image shader. Extend W5 source packets, binding layout and native source stage with stable texture bindings after material uniform/gradient storage while preserving destination read at group 2. W4a Rect and W4c Path fill retain their existing draws, clips, coverage and witnesses.
 
@@ -311,7 +324,7 @@ rtk git commit -m "feat(gpu): promote W5e rect and path image shaders"
 rtk ./gradlew :kanvas:test --tests '*W5eDecodedImageSurfacePixelTest.nearestAndLinearUsePixelCenters' --tests '*W5eImageShaderSurfacePixelTest.tileModesApplyPerTapOnBothAxes' --tests '*W5eImageShaderSurfacePixelTest.decalLinearDoesNotRenormalizeWeights' --no-parallel --rerun-tasks
 ```
 
-- [ ] **Step 3: Seal sampling/tile topology in the plan.** `ImageSamplingPlanV1.Nearest` and `.Linear` are structural variants. `ImageTileModePlanV1` records X/Y modes and a stable topology ID; direct compiler emits CLAMP/CLAMP regardless of paint. Validate positive image extents before any modulo operation.
+- [ ] **Step 3: Seal sampling/tile topology in the plan.** `ImageSamplingPlanV1.Nearest` and `.Linear` are structural variants. `ImageTileModePlanV1` records X/Y modes and a stable topology ID; direct compiler emits CLAMP/CLAMP regardless of paint. Validate positive image extents before any modulo operation. Reseal `ImageNumericAuthorityV1` for the selected tap halo and addressing graph; REPEAT/MIRROR are permitted only when every pre-reduction value and integer conversion has a finite proved envelope.
 
 - [ ] **Step 4: Emit one shared manual evaluator.** Implement integer address functions and explicit `textureLoad`: Nearest uses `floor(s)`; Linear uses `u=s-0.5`, base `floor(u)` and four bilinear weights. Address each tap before fetch, return transparent for DECAL and never renormalize. Apply channel/color/alpha conversion per tap before interpolation so filtering occurs in linear premultiplied space. Do not create or bind a hardware sampler.
 
@@ -356,7 +369,7 @@ rtk ./gradlew :kanvas:test --tests '*W5eDecodedImageSurfacePixelTest.cubicDrawIm
 - [ ] **Step 5: Verify GREEN, replay preservation and commit.**
 
 ```bash
-rtk ./gradlew :kanvas:test --tests '*W5eDecodedImageSurfacePixelTest*' --tests '*W5eImageShaderSurfacePixelTest*' --tests '*W5ePictureImageSamplingTest.cubicBitsArePreservedByPictureRoundTrip' --no-parallel --rerun-tasks
+rtk ./gradlew :kanvas:test --tests '*W5eDecodedImageSurfacePixelTest*' --tests '*W5eImageShaderSurfacePixelTest*' --tests '*W5ePictureImageSamplingTest.cubicBitsProduceDistinctStablePicturePayloads' --no-parallel --rerun-tasks
 rtk git diff --check
 rtk git add render-ir/src/main/kotlin/org/graphiks/kanvas/render/ir/GeometryNode.kt gpu-plan/src/main/kotlin gpu-renderer/src/main/kotlin kanvas/src/test/kotlin/org/graphiks/kanvas/surface
 rtk git commit -m "feat(gpu): add W5e cubic image sampling"
@@ -393,7 +406,7 @@ rtk ./gradlew :kanvas:test --tests '*W5eImageFamiliesSurfacePixelTest.imageNineP
 - [ ] **Step 5: Verify GREEN, Picture distinction and commit.**
 
 ```bash
-rtk ./gradlew :kanvas:test --tests '*W5eImageFamiliesSurfacePixelTest*' --tests '*W5ePictureImageSamplingTest.imageNineRoundTripKeepsItsDistinctGeometry' --no-parallel --rerun-tasks
+rtk ./gradlew :kanvas:test --tests '*W5eImageFamiliesSurfacePixelTest*' --tests '*W5ePictureImageSamplingTest.imageNinePayloadRemainsDistinctFromImagePatch' --no-parallel --rerun-tasks
 rtk git diff --check
 rtk git add gpu-plan/src/main/kotlin gpu-renderer/src/main/kotlin kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5eImageFamiliesSurfacePixelTest.kt
 rtk git commit -m "feat(gpu): promote W5e image nine"
@@ -423,7 +436,7 @@ rtk git commit -m "feat(gpu): promote W5e image nine"
 rtk ./gradlew :kanvas:test --tests '*W5eImageFamiliesSurfacePixelTest.latticeCellsMatchPublicSemantics' --tests '*W5eImageFamiliesSurfacePixelTest.atlasEntriesKeepTransformsColorsAndBlend' --tests '*W5eImageFamiliesSurfacePixelTest.imageFamiliesKeepMixedCommandOrder' --no-parallel --rerun-tasks
 ```
 
-- [ ] **Step 3: Seal Lattice decomposition.** Validate division ordering/range, rectangle/flag/color cardinalities and checked cell count before allocation. Produce fixed/stretch/transparent cell facts in source order, transform each to destination, retain declared sampling and encode colors as material modulation exactly once. Refuse an unsupported lattice flag instead of approximating.
+- [ ] **Step 3: Seal Lattice decomposition.** Validate division ordering/range, rectangle/flag/color cardinalities and checked cell count before allocation. The cell contract is exhaustive: `SampledV1(source: RectF32, destination: RectF32)`, `SolidV1(destination: RectF32, color: ColorARGB)` or `OmittedV1(destination: RectF32)`. A present `cellRects` table supplies the destination rectangle for the corresponding cell; otherwise destination bounds come from fixed/stretch band decomposition. `DEFAULT` emits SampledV1 with declared sampling, `TRANSPARENT` emits OmittedV1, and `FIXED_COLOR` emits SolidV1 without sampling the image. Apply paint/effects/final blend once to the selected cell source. Include a fixture with red FIXED_COLOR over blue source texels so modulation cannot pass. Refuse an unsupported lattice flag instead of approximating.
 
 - [ ] **Step 4: Seal Atlas entries.** Preserve every entry transform and source rect; never merge to a bounding box. Atlas sampling is Nearest because the public operation exposes none. Apply optional entry color with the public Atlas blend, then paint alpha/effects and operation final blend once. Keep Atlas entry count and byte budgets checked in I64.
 
@@ -469,7 +482,7 @@ rtk ./gradlew :kanvas:test --tests '*W5eImageConvergenceSurfaceTest*' --no-paral
 
 - [ ] **Step 3: Delete or neutralize duplicate semantics.** Remove promoted-lane sampling extraction from `Paint.shader`, format/color/alpha choice, tile choice, family classification and fallback from the prepared-image lowerers. If a class remains for unpromoted operations or physical resource transport, rename/document it as physical-only and make its input a sealed W5e plan/artifact. Keep no second candidate predicate.
 
-- [ ] **Step 4: Audit budgets, identities and lifetimes.** Prove by code path that upload keys ignore object identity, row padding, sampling and tile modes but include logical format/dimensions/content. Texture/view keys include device generation. Pipeline keys include structural program facts, not pixel contents or numeric Cubic values. Close per-attempt leases in `finally`; only provider-owned cached resources survive. Every preflight limit is checked before handle creation.
+- [ ] **Step 4: Audit budgets, identities and lifetimes.** Prove by code path that upload keys ignore object identity, row padding, sampling and tile modes but include logical format/dimensions/content. Texture/view keys begin with device generation. Pipeline keys include structural program facts, not pixel contents or numeric Cubic values. Verify `DeviceSessionCache` requests, pessimistic hit budgeting, entry/byte limits, zero-lease LRU eviction, transactional miss refusal, completion-held leases and generation invalidation. Close per-attempt leases in `finally`; only cache-owned resources survive. Every preflight limit is checked before handle creation.
 
 - [ ] **Step 5: Run the full public W5e and preceding-wave regression.**
 
@@ -480,11 +493,10 @@ rtk ./gradlew :kanvas:test --tests '*W5e*' --tests '*W5dGradientAddressingSurfac
 
 Capture the Gradle exit status and inspect only fresh XML produced by this run. If native teardown still exits 133 after assertions, report the run as Gradle failure with the precise XML pass/skip/fail counts; never relabel it as success.
 
-- [ ] **Step 6: Run targeted decoded-image Skia GMs only.** Use the existing exact-name runner filter for `nearest_half_pixel_image`, `image-surface`, `image-shader`, `localmatriximageshader`, `alpha_image`, and `draw_image_set`, after verifying that each selected fixture consumes in-memory decoded pixels. Exclude any GM requiring external codec evolution, fonts, anisotropic/mipmap behavior, other W5h lanes, or `jpg-color-cube`. Record unsupported cases as named W5h/integration gaps, not silent exclusions.
+- [ ] **Step 6: Run targeted decoded-image Skia GMs only.** Use the existing exact-name runner filter for `nearest_half_pixel_image`, `image-shader`, `localmatriximageshader`, `alpha_image`, and `draw_image_set`, after verifying that each selected fixture consumes in-memory decoded pixels. Exclude any GM requiring external codec evolution, fonts, anisotropic/mipmap behavior, other W5h lanes, or `jpg-color-cube`. Record `image-surface` explicitly as font-dependent and therefore outside this gate. Record unsupported cases as named W5h/integration gaps, not silent exclusions.
 
 ```bash
 rtk ./gradlew :integration-tests:skia:test --tests '*SkiaGmRunner*' -Dkanvas.gm.name=nearest_half_pixel_image --no-parallel --rerun-tasks
-rtk ./gradlew :integration-tests:skia:test --tests '*SkiaGmRunner*' -Dkanvas.gm.name=image-surface --no-parallel --rerun-tasks
 rtk ./gradlew :integration-tests:skia:test --tests '*SkiaGmRunner*' -Dkanvas.gm.name=image-shader --no-parallel --rerun-tasks
 rtk ./gradlew :integration-tests:skia:test --tests '*SkiaGmRunner*' -Dkanvas.gm.name=localmatriximageshader -Dkanvas.gm.includeBlocking=true --no-parallel --rerun-tasks
 rtk ./gradlew :integration-tests:skia:test --tests '*SkiaGmRunner*' -Dkanvas.gm.name=alpha_image -Dkanvas.gm.includeBlocking=true --no-parallel --rerun-tasks
