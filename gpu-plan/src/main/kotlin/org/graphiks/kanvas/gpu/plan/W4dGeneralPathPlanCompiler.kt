@@ -269,6 +269,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                         commandIndex = commandIndex,
                         material = material,
                         coordinates = MaterialCoordinatePlanV1.fromCtm(node.transform),
+                        coordinatesV2 = source.table.coordinatesV2(source.root),
                         geometry = prepared.pathGeometry,
                         strategy = strategy(prepared.geometry),
                         scissorI32 = scissor.copy(),
@@ -414,6 +415,9 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                     extent, capabilities, budget, null)))
             if (anyAa) planAa(selected, capabilities, budget, geometry, anyHard, hardStencil)
             else planHard(selected, capabilities, budget, geometry, hardStencil)
+        } catch (failure: RawMaterialRequirementsV2.Refusal) {
+            resource(org.graphiks.kanvas.render.ir.RenderDiagnosticCode(failure.code),
+                "W4d.2 material frame exceeds its aggregate memory budget")
         } catch (_: ArithmeticException) {
             resource(W4dGeneralPlanDiagnostics.SizeOverflow, "W4d.2 arithmetic overflowed")
         } catch (_: IllegalArgumentException) {
@@ -892,7 +896,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     }
 
     private fun generalDraw(sealed: SealedDraw, coverage: CoveragePlan, sample: SamplePlan): GeneralPathDraw =
-        GeneralPathDraw.ofMaterial(sealed.commandIndex, sealed.material, sealed.geometry, sealed.strategy, sealed.scissorI32, coverage, sample, coordinates = sealed.coordinates)
+        GeneralPathDraw.ofMaterial(sealed.commandIndex, sealed.material, sealed.geometry, sealed.strategy, sealed.scissorI32, coverage, sample,
+            coordinates = sealed.coordinates, coordinatesV2 = sealed.coordinatesV2)
 
     private fun coreCapabilities(capabilities: PlanCapabilitySnapshot, extent: SizeI32): Boolean =
         extent.width <= capabilities.maxTextureDimension2D && extent.height <= capabilities.maxTextureDimension2D &&
@@ -1181,7 +1186,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     }
     private sealed interface DrawResult { data class NoOp(val frameWorkUsageI64: PathStrokeWorkUsageI64) : DrawResult; data class MaterialRefused(val refusal: EffectiveMaterialPlanner.Result.Refused, val frameWorkUsageI64: PathStrokeWorkUsageI64) : DrawResult; data class Ready(val draw: SealedDraw, val frameWorkUsageI64: PathStrokeWorkUsageI64) : DrawResult; data class Empty(val frameWorkUsageI64: PathStrokeWorkUsageI64) : DrawResult; data class Gap(val message: String) : DrawResult; data class Invalid(val message: String) : DrawResult; data class Horizon(val message: String) : DrawResult; data class Limit(val message: String) : DrawResult }
     private sealed interface Prepared { data class Ready(val geometry: org.graphiks.math.geometry.PathFillGeometryF32, val pathGeometry: PathDrawGeometry, val frameWorkUsageI64: PathStrokeWorkUsageI64) : Prepared; data class Empty(val frameWorkUsageI64: PathStrokeWorkUsageI64) : Prepared; data class Invalid(val message: String) : Prepared; data class Horizon(val message: String) : Prepared; data class Limit(val message: String) : Prepared }
-    private data class SealedDraw(val commandIndex: Int, val material: MaterialPlanRef, val geometry: PathDrawGeometry, val strategy: PathFillStrategy, val scissorI32: RectI32, val requestsAntiAlias: Boolean, val blend: BlendPlan, val coordinates: MaterialCoordinatePlanV1?)
+    private data class SealedDraw(val commandIndex: Int, val material: MaterialPlanRef, val geometry: PathDrawGeometry, val strategy: PathFillStrategy, val scissorI32: RectI32, val requestsAntiAlias: Boolean, val blend: BlendPlan, val coordinates: MaterialCoordinatePlanV1?, val coordinatesV2: MaterialCoordinatePlanV2?)
     private data class ResourceLife(val ordinal: Int, val first: Int, val last: Int)
     private data class W4dGeneralAaTopology(
         val passCount: Int,

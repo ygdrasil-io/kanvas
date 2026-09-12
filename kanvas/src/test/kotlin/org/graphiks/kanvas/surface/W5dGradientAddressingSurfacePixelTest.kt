@@ -26,6 +26,109 @@ import org.graphiks.kanvas.surface.W5dGradientAddressingCpuOracle.GradientFixtur
 import org.graphiks.kanvas.surface.W5dGradientAddressingCpuOracle.W5dPublicLane
 
 class W5dGradientAddressingSurfacePixelTest {
+    @Test fun admittedFamiliesPreserveInvalidCoordinatesForPreciseRefusal() {
+        val stops = linearGradient().stops
+        val leaves = TileMode.entries.flatMap { mode -> listOf(
+            linearGradient().copy(tileMode = mode),
+            Shader.RadialGradient(Point2F32(0f, 0f), 8f, stops, tileMode = mode),
+            Shader.SweepGradient(Point2F32(0f, 0f), 0f, 180f, stops, tileMode = mode),
+            Shader.ConicalGradient(Point2F32(0f, 0f), 0f, Point2F32(0f, 0f), 8f, stops, tileMode = mode),
+        ) }
+        val failures = mutableListOf<String>()
+        for (leaf in leaves) for (matrix in listOf(true, false)) {
+            val shader = if (matrix) Shader.WithLocalMatrix(leaf, Matrix3x3F32(tx = Float.NaN))
+                else Shader.CoordClamp(leaf, RectF32.ofLTRB(0f, 0f, Float.POSITIVE_INFINITY, 1f))
+            val failure = runCatching { renderPixel(shader) }.exceptionOrNull()
+            val expected = if (matrix) "unsupported.material.gradient.local-matrix-non-finite"
+                else "unsupported.material.gradient.coord-clamp-non-finite"
+            if (failure !is IllegalStateException || failure.message.orEmpty().substringBefore(':') != expected)
+                failures += "${leaf::class.simpleName}/$matrix: ${failure?.javaClass?.simpleName}: ${failure?.message}"
+            assertContentEquals(W5dGradientAddressingCpuOracle.redPixel(), renderPixel(linearGradient()))
+        }
+        assertEquals(emptyList<String>(), failures)
+    }
+
+    @Test fun sweepFullCoveragePreservesRequestedTileBudgetIdentity() {
+        val frameBoundsF32 = RectF32.ofLTRB(0f, 0f, 17f, 1f)
+        fun source(mode: TileMode): Shader {
+            var shader: Shader = Shader.SweepGradient(Point2F32(0f, 0f), 0f, 360f,
+                listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Red)), tileMode = mode)
+            repeat(20) { shader = Shader.WithLocalMatrix(Shader.CoordClamp(shader, frameBoundsF32), Matrix3x3F32()) }
+            return shader
+        }
+        fun frame(budgetI64: Long, distinct: Boolean) = Surface(17, 1,
+            config = RenderConfig(frameLocalBudgetBytes = budgetI64)).also { surface -> surface.canvas {
+            repeat(64) { indexI32 ->
+                val shader = if (indexI32 < 4) source(if (distinct) TileMode.entries[indexI32] else TileMode.CLAMP)
+                    else Shader.SolidColor(ColorARGB.Red)
+                val paint = Paint(shader = shader, antiAlias = indexI32 % 2 != 0)
+                if (indexI32 % 2 == 0) drawRect(frameBoundsF32, paint)
+                else drawRRect(RRectF32.of(RectF32.ofLTRB(-1f, -1f, 18f, 2f), CornerRadiiF32.of(.5f)), paint)
+            }
+        } }
+        val red = UByteArray(68) { if (it % 4 == 0 || it % 4 == 3) 255u else 0u }
+        val healthy = frame(1L shl 22, distinct = true)
+        assertContentEquals(red, healthy.render().pixels)
+        assertContentEquals(red, frame(1_577_000L, distinct = false).render().pixels)
+        val failure = assertThrows<IllegalStateException> { frame(1_577_000L, distinct = true).render() }
+        assertEquals("resource.material.gradient.coordinate-uniform-budget", failure.message.orEmpty().substringBefore(':'), failure.message)
+        assertContentEquals(red, healthy.render().pixels)
+    }
+
+    @Test fun generalHardEdgePathTransportsOrderedCoordinates() {
+        // General direct/stencil, W5b mixed Rect/General, and General-only final
+        // blend all retain coordinates. Fresh extents avoid only the known target-ID gap.
+        for (variantI32 in 0..3) {
+            val widthI32 = 18 + variantI32
+            val surface = Surface(widthI32, 2)
+            surface.canvas {
+                if (variantI32 == 2) drawRect(RectF32.ofLTRB(0f, 0f, widthI32.toFloat(), 2f),
+                    Paint(color = ColorARGB.Green, antiAlias = false))
+                rotate(.25f, px = 2f, py = 2f)
+                val path = Path().apply {
+                    if (variantI32 == 1) addRect(RectF32.ofLTRB(-10f, -10f, 40f, 40f))
+                    else { moveTo(-10f, -10f); lineTo(40f, -10f); lineTo(-10f, 40f); close() }
+                }
+                if (variantI32 == 3) drawPath(path, Paint(color = ColorARGB.Green, antiAlias = false))
+                drawPath(path, Paint(shader = Shader.WithLocalMatrix(Shader.CoordClamp(linearGradient(),
+                    RectF32.ofLTRB(6f, 0f, 8f, 1f)), Matrix3x3F32.translation(-1f, 0f)), antiAlias = false,
+                    blendMode = if (variantI32 >= 2) BlendMode.DIFFERENCE else BlendMode.SRC_OVER))
+            }
+            val expected = UByteArray(widthI32 * 2 * 4) {
+                if (it % 4 >= 2 || variantI32 >= 2 && it % 4 == 1) 255u else 0u
+            }
+            repeat(3) { assertContentEquals(expected, surface.render().pixels) }
+        }
+        assertContentEquals(W5dGradientAddressingCpuOracle.redPixel(), renderPixel(linearGradient()))
+    }
+
+    @Test fun generalCoordinateUniformBudgetRefusesPreciselyAndRecovers() {
+        // An odd number of identical EVEN_ODD contours retains full coverage.
+        // Their real geometry reservations put the public budget above resident
+        // staging without growing the readback extent or changing a runtime owner.
+        val subsetF32 = RectF32.ofLTRB(0f, 0f, 23f, 1f)
+        val leaf = linearGradient().copy(stops = listOf(
+            GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Red)))
+        var wrapped: Shader = leaf
+        repeat(20) { wrapped = Shader.WithLocalMatrix(Shader.CoordClamp(wrapped, subsetF32), Matrix3x3F32()) }
+        fun frame(budgetI64: Long, coordinates: Boolean) = Surface(23, 1,
+            config = RenderConfig(frameLocalBudgetBytes = budgetI64)).also { surface -> surface.canvas {
+            rotate(.25f, px = 12f, py = .5f)
+            val path = Path().apply {
+                fillType = org.graphiks.kanvas.geometry.FillType.EVEN_ODD
+                repeat(911) { addRect(RectF32.ofLTRB(-1f, -1f, 25f, 2f)) }
+            }
+            repeat(9) { drawPath(path, Paint(shader = if (coordinates) wrapped else leaf, antiAlias = false)) }
+        } }
+        val red = UByteArray(23 * 4) { if (it % 4 == 0 || it % 4 == 3) 255u else 0u }
+        val healthy = frame(1L shl 22, coordinates = true)
+        assertContentEquals(red, healthy.render().pixels)
+        assertContentEquals(red, frame(1_582_000L, coordinates = false).render().pixels)
+        val failure = assertThrows<IllegalStateException> { frame(1_582_000L, coordinates = true).render() }
+        assertEquals("resource.material.gradient.coordinate-uniform-budget", failure.message.orEmpty().substringBefore(':'), failure.message)
+        assertContentEquals(red, healthy.render().pixels)
+    }
+
     @Test fun mixedFramePreservesOrderAcrossFamiliesTilesWrappersLanesAndBlends() {
         // Reordering any lane hides its two-column witness; the final stroke reads
         // the green destination and adds half-linear red. The independent W5b

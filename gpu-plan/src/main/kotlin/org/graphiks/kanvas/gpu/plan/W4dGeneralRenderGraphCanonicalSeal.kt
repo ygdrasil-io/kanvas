@@ -112,7 +112,17 @@ private class W4dGeneralGraphDigestWriter {
             i32("$prefix.program.version", entry.program.versionI32)
             text("$prefix.program.id", entry.program.structuralId.value)
             when (val binding = entry.bindings) {
-                is MaterialBindingPlan.GradientV2 -> error(W5dPlanDiagnostics.CoordinatePlanSchema)
+                is MaterialBindingPlan.GradientV2 -> {
+                    text("$prefix.binding", "gradient-v2")
+                    text("$prefix.numeric-authority", binding.numericAuthority.canonicalIdentity)
+                    binding.copyUniformValuesF32().forEachIndexed { valueIndexI32, valueF32 ->
+                        f32("$prefix.uniform[$valueIndexI32]", valueF32)
+                    }
+                    i64("$prefix.stop-base", binding.stopRange.baseIndexU32.toLong())
+                    i64("$prefix.stop-count", binding.stopRange.countU32.toLong())
+                    text("$prefix.stop-slab", requireNotNull(table.gradientStopSlab).canonicalIdentity)
+                    text("$prefix.degenerate-average", binding.degenerateAverageSrgbaF32.toString())
+                }
                 is MaterialBindingPlan.GradientV1 -> {
                     text("$prefix.binding", binding.toString())
                     text("$prefix.stop-slab", requireNotNull(table.gradientStopSlab).canonicalIdentity)
@@ -312,7 +322,11 @@ private class W4dGeneralGraphDigestWriter {
         i32("$prefix.command-index", draw.commandIndex)
         if (materialV2) {
             when (val authority = draw.materialAuthority) {
-                is PlanDrawMaterialAuthority.MaterialV2 -> error(W5dPlanDiagnostics.CoordinatePlanSchema)
+                is PlanDrawMaterialAuthority.MaterialV2 -> {
+                    text("$prefix.material-authority", "material-v2")
+                    i32("$prefix.material-ref", authority.ref.indexI32)
+                    text("$prefix.material-coordinates", authority.coordinates.canonicalIdentity)
+                }
                 is PlanDrawMaterialAuthority.MaterialV1 -> {
                     text("$prefix.material-authority", "material-v1")
                     i32("$prefix.material-ref", authority.ref.indexI32)

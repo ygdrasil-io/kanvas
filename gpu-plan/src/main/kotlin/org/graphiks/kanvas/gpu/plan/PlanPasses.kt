@@ -203,6 +203,7 @@ public class GeneralPathDraw private constructor(
             sample: SamplePlan,
             blend: BlendPlan = BlendPlan.SrcOver,
             coordinates: MaterialCoordinatePlanV1? = null,
+            coordinatesV2: MaterialCoordinatePlanV2? = null,
         ): GeneralPathDraw {
             require(commandIndexI32 >= 0) { "Command index must not be negative" }
             require(!scissorI32.isEmpty) { "General path scissor must be non-empty" }
@@ -212,7 +213,8 @@ public class GeneralPathDraw private constructor(
             ) { "General path draws require an explicit hard or four-sample AA contract" }
             requirePathRenderGeometryForStrategy(geometry, strategy)
             return GeneralPathDraw(
-                commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material, coordinates), geometry, strategy, scissorI32, coverage, sample, blend,
+                commandIndexI32, coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
+                    ?: PlanDrawMaterialAuthority.MaterialV1(material, coordinates), geometry, strategy, scissorI32, coverage, sample, blend,
             )
         }
 
@@ -246,8 +248,8 @@ public class GeneralPathDraw private constructor(
 
 /** Retains the same immutable General geometry without projecting it into a narrow path lane. */
 public fun GeneralPathDraw.withBlend(blend: BlendPlan): GeneralPathDraw = GeneralPathDraw.ofMaterial(
-    commandIndex, (materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref, copyPathGeometry(), strategy,
-    copyScissorI32(), coverage, sample, blend, materialCoordinates,
+    commandIndex, materialAuthority.materialPlanRef(), copyPathGeometry(), strategy,
+    copyScissorI32(), coverage, sample, blend, materialCoordinates, materialCoordinatesV2,
 )
 
 /** A W4d.2 direct path draw whose final coverage is constrained by a W4e clip plan. */

@@ -73,7 +73,7 @@ public class RenderGraph private constructor(
                 (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw || it is PathStrokeDraw || it is GeneralPathDraw || it is W5bW4ePathDraw) &&
                     (it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1 ||
                         (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw ||
-                            it is PathFillDraw || it is PathStrokeDraw) && it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2)
+                            it is PathFillDraw || it is PathStrokeDraw || it is GeneralPathDraw) && it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2)
             })
             return RenderGraph(graph.id, graph.capabilityId, graph.targetExtent, graph.colorFormat, graph.capabilities,
                 graph.budget, graph.visualCommandCount, graph.resources(), graph.passes(), graph.dependencies(),
@@ -125,7 +125,8 @@ public class RenderGraph private constructor(
                     val entry = materialPlanTable.entry(MaterialPlanRef(indexI32))
                     if (entry.bindings is MaterialBindingPlan.GradientV2) {
                         require((draw is SolidRectDraw || draw is AnalyticRectDraw || draw is AnalyticRRectDraw ||
-                            draw is PathFillDraw || draw is PathStrokeDraw) && authority is PlanDrawMaterialAuthority.MaterialV2) {
+                            draw is PathFillDraw || draw is PathStrokeDraw || draw is GeneralPathDraw ||
+                            draw is BinaryMaskedPathDraw) && authority is PlanDrawMaterialAuthority.MaterialV2) {
                             W5dPlanDiagnostics.CoordinatePlanSchema
                         }
                         require(entry.program is GradientAddressingProgramV2 && entry.bindings.numericAuthority.authenticates(
@@ -1240,6 +1241,7 @@ public class RenderGraph private constructor(
                 PlanResourceRole.MultisampleColorTarget,
                 PlanResourceRole.PathHardEdgeMask,
                 PlanResourceRole.PathHardEdgeDepthStencil,
+                PlanResourceRole.GradientStopData,
                 PlanResourceRole.CoverageMaskAccumulator,
                 PlanResourceRole.CoverageMaskScratch,
                 PlanResourceRole.CoverageMaskMultisampleScratch,
@@ -1260,7 +1262,7 @@ public class RenderGraph private constructor(
                     pass.phase == PathRenderPhase.MultisampleStencilColorCover
             }
             require(resources.all { resource ->
-                resource.id in referencedResourceIds ||
+                resource.id in referencedResourceIds || resource.role == PlanResourceRole.GradientStopData ||
                     (!hasAaColorPath && resource.role == PlanResourceRole.DepthStencil && resource.sampleCountI32 == 4)
             }) {
                 "AA4 graph resources must be consumed by an explicit pass"

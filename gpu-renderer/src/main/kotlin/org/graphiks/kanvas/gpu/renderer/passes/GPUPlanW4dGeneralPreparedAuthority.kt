@@ -540,7 +540,9 @@ internal class W4dGeneralNativeMaterializationSnapshot private constructor(
                         PathRenderPhase.HardEdgeBinaryColorCover,
                     )) {
                         when (val authority = pass.draw.materialAuthority) {
-                            is PlanDrawMaterialAuthority.MaterialV2 -> return null
+                            is PlanDrawMaterialAuthority.MaterialV2 ->
+                                W5aMaterialPlanLowerer().lower(graph.materialPlanTableOrNull() ?: return null, authority.ref)
+                                    ?: return null
                             is PlanDrawMaterialAuthority.MaterialV1 ->
                                 W5aMaterialPlanLowerer().lower(graph.materialPlanTableOrNull() ?: return null, authority.ref)
                                     ?: return null

@@ -155,15 +155,17 @@ public object PaintSceneAdapter {
             } }),
         )
 
-    /** Preserve coordinate values for typed validation of the admitted Linear wrapper grammar. */
+    /** Preserve coordinate values for typed validation of every admitted W5d leaf. */
     private fun Shader.preservesW5dMatrices(): Boolean {
         var source = this
         while (true) when (val node = source) {
             is Shader.Opacity -> source = node.shader
             is Shader.WithLocalMatrix -> source = node.shader
             is Shader.CoordClamp -> source = node.shader
-            is Shader.LinearGradient -> return node.tileMode == org.graphiks.kanvas.paint.TileMode.CLAMP &&
-                node.interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB
+            is Shader.LinearGradient -> return node.interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB
+            is Shader.RadialGradient -> return node.interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB
+            is Shader.SweepGradient -> return node.interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB
+            is Shader.ConicalGradient -> return node.interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB
             else -> return false
         }
     }

@@ -305,10 +305,10 @@ public object EffectiveMaterialPlanner {
         }
         if (derivedScalarsF32.any { !it.isFinite() }) return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
         val requested = linear?.tileMode ?: radial?.tileMode ?: sweep?.tileMode ?: requireNotNull(conical).tileMode
-        // Canonicalize full coverage before stop normalization and program identity.
-        val effective = if (sweepDegeneracy?.sweepFullCoverage == true) GradientTileModeV2.CLAMP
-            else GradientTileModeV2.valueOf(requested.name)
-        val tileGraph = effective.operationGraph()
+        // Full coverage changes only effective addressing/stop normalization;
+        // the original requested mode remains part of the sealed program identity.
+        val tileGraph = GradientTileModeV2.valueOf(requested.name).operationGraph(
+            fullCoverageClamp = sweepDegeneracy?.sweepFullCoverage == true)
         fun source(base: MaterialPlanEntry): Normalization {
             val entries = mutableListOf(base)
             val paintAlphaF32 = draw.paint?.takeIf { it.shader != null }?.color?.alphaNormalized ?: 1f

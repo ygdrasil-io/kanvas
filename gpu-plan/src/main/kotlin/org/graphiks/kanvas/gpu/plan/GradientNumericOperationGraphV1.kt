@@ -175,8 +175,6 @@ public sealed interface GradientNumericOperationGraphV1 {
                         lower(node.otherwise), lower(node.selected), lower(node.condition))
                     is GradientTileOperationNodeV2.AndValidity -> Node(Operation.AND_FLAG, ValueType.ValidityFlag,
                         listOf(lower(node.left), lower(node.right)))
-                    // Kept as a source-compatible node type; no sealed V2 factory emits it.
-                    is GradientTileOperationNodeV2.ClampF32 -> error("Unsealed legacy tile node")
                 }
             }
             val tiled = lower(tileGraph.outputTF32)

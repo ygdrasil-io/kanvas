@@ -9,7 +9,6 @@ public sealed interface GradientTileOperationNodeV2 {
     public sealed interface Flag : GradientTileOperationNodeV2
     public data object InputTF32 : ScalarF32
     public data object InputValidity : Flag
-    public data class ClampF32(public val input: ScalarF32) : ScalarF32
     public data class ConstantF32(public val valueF32: Float) : ScalarF32
     public data class MulF32(public val left: ScalarF32, public val right: ScalarF32) : ScalarF32
     public data class SubF32(public val left: ScalarF32, public val right: ScalarF32) : ScalarF32
@@ -33,6 +32,8 @@ public sealed interface GradientTileOperationGraphV2 {
         public fun repeat(): GradientTileOperationGraphV2 = Repeat
         public fun mirror(): GradientTileOperationGraphV2 = Mirror
         public fun decal(): GradientTileOperationGraphV2 = Decal
+        internal fun fullCoverageClamp(requestedMode: GradientTileModeV2): GradientTileOperationGraphV2 =
+            FullCoverageClamp(requestedMode)
 
         private val t = GradientTileOperationNodeV2.InputTF32
         private val zero = GradientTileOperationNodeV2.ConstantF32(0f)
@@ -41,6 +42,11 @@ public sealed interface GradientTileOperationGraphV2 {
             val lower = GradientTileOperationNodeV2.SelectF32(t, zero, GradientTileOperationNodeV2.CompareF32(t, zero))
             return GradientTileOperationNodeV2.SelectF32(lower, one, GradientTileOperationNodeV2.CompareF32(one, lower))
         }
+    }
+    private data class FullCoverageClamp(override val requestedMode: GradientTileModeV2) : GradientTileOperationGraphV2 {
+        override val effectiveMode: GradientTileModeV2 = GradientTileModeV2.CLAMP
+        override val outputTF32: GradientTileOperationNodeV2.ScalarF32 = Clamp.outputTF32
+        override val validity: GradientTileOperationNodeV2.Flag = Clamp.validity
     }
     private data object Clamp : GradientTileOperationGraphV2 {
         override val requestedMode: GradientTileModeV2 = GradientTileModeV2.CLAMP
@@ -77,7 +83,8 @@ public sealed interface GradientTileOperationGraphV2 {
     }
 }
 
-internal fun GradientTileModeV2.operationGraph(): GradientTileOperationGraphV2 = when (this) {
+internal fun GradientTileModeV2.operationGraph(fullCoverageClamp: Boolean = false): GradientTileOperationGraphV2 =
+    if (fullCoverageClamp) GradientTileOperationGraphV2.fullCoverageClamp(this) else when (this) {
     GradientTileModeV2.CLAMP -> GradientTileOperationGraphV2.clamp()
     GradientTileModeV2.REPEAT -> GradientTileOperationGraphV2.repeat()
     GradientTileModeV2.MIRROR -> GradientTileOperationGraphV2.mirror()

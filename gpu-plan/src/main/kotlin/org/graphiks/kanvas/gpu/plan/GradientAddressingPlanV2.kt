@@ -120,7 +120,8 @@ public class GradientNumericAuthorityV2 private constructor(
         slab: GradientStopSlabPlanV1, coordinates: MaterialCoordinatePlanV2): Boolean =
         program == this.program && graph.contractId == "WgslFloatEnvelopeV1" &&
             graph.domainProof == GradientNumericDomainProofV1.ProvenFinite && this.coordinates == coordinates &&
-            tileGraph == program.requestedTileMode.operationGraph() &&
+            tileGraph == program.requestedTileMode.operationGraph(
+                fullCoverageClamp = (degeneracy as? SweepGradientDegeneracyV1)?.sweepFullCoverage == true) &&
             tileGraph.effectiveMode == program.effectiveTileMode && binding.copyUniformValuesF32() == uniformValuesF32 &&
             binding.degenerateAverageSrgbaF32 == degenerateAverageSrgbaF32 &&
             when (binding) {
@@ -151,7 +152,8 @@ public class GradientNumericAuthorityV2 private constructor(
 
         private fun matches(program: GradientAddressingProgramV2, coordinates: MaterialCoordinatePlanV2,
             family: GradientFamilyV2, tile: GradientTileOperationGraphV2): Boolean =
-            program.family == family && program.effectiveTileMode == tile.effectiveMode &&
+            program.family == family && program.requestedTileMode == tile.requestedMode &&
+                program.effectiveTileMode == tile.effectiveMode &&
                 program.tileGraphId == tile.contractId && program.coordinateTopologyId == coordinates.topologyIdentity
 
         fun sealConical(program: GradientAddressingProgramV2, coordinates: MaterialCoordinatePlanV2, startF32: Point2F32, endF32: Point2F32,
@@ -182,7 +184,7 @@ public class GradientNumericAuthorityV2 private constructor(
             if (degeneracy != SweepGradientDegeneracyV1.of(degeneracy.startAngleDegreesF32, degeneracy.endAngleDegreesF32) ||
                 degeneracy.sweepOrderingInvalid || listOf(degeneracy.startAngleDegreesF32,
                     degeneracy.endAngleDegreesF32, degeneracy.sweepSpanDegreesF32).any { !it.isFinite() }) return null
-            val tile = program.requestedTileMode.operationGraph()
+            val tile = program.requestedTileMode.operationGraph(fullCoverageClamp = degeneracy.sweepFullCoverage)
             if (!matches(program, coordinates, GradientFamilyV2.SWEEP, tile) ||
                 (degeneracy.sweepFullCoverage && tile.effectiveMode != GradientTileModeV2.CLAMP)) return null
             val schema = GradientNumericOperationGraphV1.sweep(tile)

@@ -14,6 +14,8 @@ internal fun PlanDraw.withW5dCoordinates(coordinates: MaterialCoordinatePlanV2):
         copyGeometryF32(), strategy, copyScissorI32(), blend, coordinatesV2 = coordinates)
     is PathStrokeDraw -> PathStrokeDraw.ofMaterial(commandIndex, materialAuthority.materialPlanRef(),
         copyGeometryF32(), copyScissorI32(), mode, styleF64, blend, coordinatesV2 = coordinates)
+    is GeneralPathDraw -> GeneralPathDraw.ofMaterial(commandIndex, materialAuthority.materialPlanRef(),
+        copyPathGeometry(), strategy, copyScissorI32(), coverage, sample, blend, coordinatesV2 = coordinates)
     else -> error(W5dPlanDiagnostics.CoordinatePlanSchema)
 }
 
@@ -120,7 +122,7 @@ internal fun issueW5bNativeComposite(graphs: List<RenderGraph>): RenderGraph {
                 is PathStrokeDraw -> draw.withMaterialRef(ref)
                 is GeneralPathDraw -> GeneralPathDraw.ofMaterial(draw.commandIndex, ref, draw.copyPathGeometry(),
                     draw.strategy, draw.copyScissorI32(), draw.coverage, draw.sample, draw.blend,
-                    (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).coordinates)
+                    draw.materialCoordinates, draw.materialCoordinatesV2)
                 else -> error("Unsupported native W5b composite geometry")
             }
             dataByCommand[draw.commandIndex] = data
