@@ -202,11 +202,7 @@ public object EffectiveMaterialPlanner {
                                 MaterialBindingPlan.RadialGradientV1(radial.center, radial.radius, stopRange, degeneracy, numericAuthority), stops.slab)
                         } else {
                             requireNotNull(linear)
-                            val dxF32 = linear.end.x - linear.start.x
-                            val dyF32 = linear.end.y - linear.start.y
-                            val lengthSquaredF32 = dxF32 * dxF32 + dyF32 * dyF32
-                            val degeneracy = LinearGradientDegeneracyV1(dxF32, dyF32, lengthSquaredF32,
-                                kotlin.math.sqrt(lengthSquaredF32) <= 0.000030517578125f)
+                            val degeneracy = LinearGradientDegeneracyV1.of(linear.start, linear.end)
                             val numericAuthority = GradientNumericAuthorityV1.sealLinear(coordinates, linear.start, linear.end,
                                 degeneracy, stops.slab, mappingBoundF64, uniformMagnitudeF64)
                                 ?: return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)

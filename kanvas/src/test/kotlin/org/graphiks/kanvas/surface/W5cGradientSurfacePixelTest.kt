@@ -31,6 +31,44 @@ import kotlin.test.assertTrue
 
 class W5cGradientSurfacePixelTest {
     @Test
+    fun linearBiaxialHardStopConsumesRoundedPreflightLength() {
+        val startF32 = Point2F32(0f, .5f)
+        val endF32 = Point2F32(.5453823208808899f, 1.242221713066101f)
+        // W5 §7.2 rounds every operation before the next. Fusing either
+        // square into the sum instead produces 0.8483349680900574f.
+        val linearDxF32 = endF32.x - startF32.x
+        val linearDyF32 = endF32.y - startF32.y
+        val linearX2F32 = linearDxF32 * linearDxF32
+        val linearY2F32 = linearDyF32 * linearDyF32
+        val linearLen2F32 = linearX2F32 + linearY2F32
+        val linearLengthF32 = kotlin.math.sqrt(linearLen2F32)
+        val linearDegenerate = linearLengthF32 <= .000030517578125f
+        val localPointF32 = Point2F32(.5f, .5f)
+        val pxF32 = localPointF32.x - startF32.x
+        val pyF32 = localPointF32.y - startF32.y
+        val dotXF32 = pxF32 * linearDxF32
+        val dotYF32 = pyF32 * linearDyF32
+        val dotF32 = dotXF32 + dotYF32
+        val tF32 = if (linearDegenerate) 1f else (dotF32 / linearLen2F32).coerceIn(0f, 1f)
+        val hardStopF32 = .3214428126811981f
+        val stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(hardStopF32, ColorARGB.Red),
+            GradientStop(hardStopF32, ColorARGB.Blue), GradientStop(1f, ColorARGB.Blue))
+        // Independent upper_bound selection. The selected constant-color span
+        // needs no interpolation; opaque SRC_OVER on transparent preserves it.
+        val selected = stops.indexOfLast { it.position <= tF32 }
+        val expectedColor = stops[selected].color
+        val expected = ubyteArrayOf(expectedColor.red.toUByte(), expectedColor.green.toUByte(),
+            expectedColor.blue.toUByte(), expectedColor.alpha.toUByte())
+        val surface = Surface(1, 1)
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(
+                shader = Shader.LinearGradient(startF32, endF32, stops), antiAlias = false))
+        }
+        assertContentEquals(expected, surface.render().pixels,
+            "The biaxial hard stop must use the immediately rounded preflight length squared")
+    }
+
+    @Test
     fun mixedGradientFramePreservesOrderRangesOpacityAndBlend() {
         val reused = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(.5f, ColorARGB.Red),
             GradientStop(.5f, ColorARGB.Blue), GradientStop(1f, ColorARGB.Blue))

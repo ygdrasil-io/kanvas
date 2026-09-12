@@ -101,6 +101,15 @@ internal object W5cGradientCpuOracle {
                 Operation.INPUT_UNIFORM_F32 -> scalarF32(when (node.input) {
                     Input.START_X -> startF32.x; Input.START_Y -> startF32.y
                     Input.END_X -> endF32.x; Input.END_Y -> endF32.y
+                    Input.LINEAR_DX -> endF32.x - startF32.x
+                    Input.LINEAR_DY -> endF32.y - startF32.y
+                    Input.LINEAR_LEN2 -> {
+                        val dxF32 = endF32.x - startF32.x
+                        val dyF32 = endF32.y - startF32.y
+                        val x2F32 = dxF32 * dxF32
+                        val y2F32 = dyF32 * dyF32
+                        x2F32 + y2F32
+                    }
                     Input.CENTER_X -> startF32.x; Input.CENTER_Y -> startF32.y
                     Input.RADIUS -> requireNotNull(radiusF32)
                     Input.START_DEGREES -> requireNotNull(sweepAnglesF32).first

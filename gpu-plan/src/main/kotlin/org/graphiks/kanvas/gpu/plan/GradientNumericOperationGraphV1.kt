@@ -29,6 +29,7 @@ public sealed interface GradientNumericOperationGraphV1 {
     public enum class Input { X, Y, START_X, START_Y, END_X, END_Y, CENTER_X, CENTER_Y, RADIUS,
         START_DEGREES, END_DEGREES, SPAN_DEGREES, LEADING_SEGMENT, MIN_NORMAL, TWO_PI,
         QUARTER, HALF, THREE_QUARTERS, FULL_TURN_DEGREES, ZERO, ONE, TWO, FOUR, DEGENERATE, STOPS, PROBE,
+        LINEAR_DX, LINEAR_DY, LINEAR_LEN2,
         CONICAL_DX, CONICAL_DY, CONICAL_START_RADIUS, CONICAL_END_RADIUS, CONICAL_DR, CONICAL_A,
         CONICAL_FULLY_DEGENERATE, CONICAL_CONCENTRIC, CONICAL_LINEAR_EQUATION, CONICAL_QUADRATIC,
         CONICAL_SHARED_RADIUS_ABOVE_EPSILON }
@@ -58,7 +59,12 @@ public sealed interface GradientNumericOperationGraphV1 {
         public val maxIntermediateMagnitudeF64: Double = if (clampInterpolationWeightToUnitInterval) 1e38 else 1e27
         /** Per-operation finite domain includes all FMA and sum-of-products schedules. */
         public val maxMagnitudeF64: Double = when (operation) {
-            Operation.INPUT_LOCAL_POINT_F32, Operation.INPUT_UNIFORM_F32 -> 1e8
+            Operation.INPUT_LOCAL_POINT_F32 -> 1e8
+            Operation.INPUT_UNIFORM_F32 -> when (input) {
+                Input.LINEAR_DX, Input.LINEAR_DY -> 2.000001e8
+                Input.LINEAR_LEN2 -> 8.0001e16
+                else -> 1e8
+            }
             Operation.SUB_F32 -> 2.000001e8
             Operation.MUL_F32 -> 8.0001e16
             Operation.ADD_F32 -> 8.0001e16
@@ -129,12 +135,12 @@ public sealed interface GradientNumericOperationGraphV1 {
 
         public fun linear(): GradientNumericOperationGraphV1 {
             val one = input(Input.ONE)
-            val dx = scalar(Operation.SUB_F32, input(Input.END_X), input(Input.START_X))
-            val dy = scalar(Operation.SUB_F32, input(Input.END_Y), input(Input.START_Y))
+            val dx = input(Input.LINEAR_DX)
+            val dy = input(Input.LINEAR_DY)
             val px = scalar(Operation.SUB_F32, input(Input.X), input(Input.START_X))
             val py = scalar(Operation.SUB_F32, input(Input.Y), input(Input.START_Y))
             val dot = scalar(Operation.ADD_F32, scalar(Operation.MUL_F32, px, dx), scalar(Operation.MUL_F32, py, dy))
-            val length = scalar(Operation.ADD_F32, scalar(Operation.MUL_F32, dx, dx), scalar(Operation.MUL_F32, dy, dy))
+            val length = input(Input.LINEAR_LEN2)
             val degenerate = Node(Operation.INPUT_UNIFORM_FLAG, ValueType.ValidityFlag, input = Input.DEGENERATE)
             val safeLength = scalar(Operation.SELECT, length, one, degenerate)
             val numerator = scalar(Operation.SELECT, dot, one, degenerate)
@@ -333,15 +339,19 @@ internal fun GradientNumericOperationGraphV1.proveLinearDomainV1(
     startF32: org.graphiks.math.geometry.Point2F32,
     endF32: org.graphiks.math.geometry.Point2F32,
 ): GradientNumericDomainProofV1 {
-    // The expanded form may cancel large products even when (end-start)^2 looks harmless.
+    // Retain the existing conservative endpoint-domain admission bound. The
+    // denominator itself is now a sealed F32 input, never a fragment expression.
     val xSumF64 = kotlin.math.abs(startF32.x.toDouble()) + kotlin.math.abs(endF32.x.toDouble())
     val ySumF64 = kotlin.math.abs(startF32.y.toDouble()) + kotlin.math.abs(endF32.y.toDouble())
     val dxF64 = endF32.x.toDouble() - startF32.x.toDouble()
     val dyF64 = endF32.y.toDouble() - startF32.y.toDouble()
     val lengthErrorF64 = (xSumF64 * xSumF64 + ySumF64 * ySumF64) * reassociationRoundoffFactorF64 +
         64.0 * java.lang.Float.MIN_NORMAL
-    val minimumLengthF64 = if (degeneracy.degenerate) 1.0 else dxF64 * dxF64 + dyF64 * dyF64 - lengthErrorF64
-    return proveGradientDomainV1(localMagnitudeF64, uniformMagnitudeF64, minimumLengthF64, stops)
+    val minimumLengthF64 = if (degeneracy.linearDegenerate) 1.0 else
+        minOf(degeneracy.linearLen2F32.toDouble(), dxF64 * dxF64 + dyF64 * dyF64 - lengthErrorF64)
+    return proveGradientDomainV1(localMagnitudeF64, uniformMagnitudeF64, minimumLengthF64, stops,
+        mapOf(Input.LINEAR_DX to degeneracy.linearDxF32, Input.LINEAR_DY to degeneracy.linearDyF32,
+            Input.LINEAR_LEN2 to degeneracy.linearLen2F32))
 }
 
 internal fun GradientNumericOperationGraphV1.proveRadialDomainV1(
@@ -484,6 +494,7 @@ internal fun GradientNumericOperationGraphV1.proveConicalDomainV1(
 private fun GradientNumericOperationGraphV1.proveGradientDomainV1(
     localMagnitudeF64: Double, uniformMagnitudeF64: Double, minimumLengthF64: Double,
     stops: List<GradientStopPlanV1>,
+    sealedInputsF32: Map<Input, Float> = emptyMap(),
 ): GradientNumericDomainProofV1 {
     val bounds = mutableMapOf<GradientNumericOperationGraphV1.Node, Double>()
     val minimumGapF64 = stops.zipWithNext().mapNotNull { (a, b) ->
@@ -504,7 +515,7 @@ private fun GradientNumericOperationGraphV1.proveGradientDomainV1(
                 GradientNumericOperationGraphV1.Input.HALF -> .5
                 GradientNumericOperationGraphV1.Input.THREE_QUARTERS -> .75
                 GradientNumericOperationGraphV1.Input.FULL_TURN_DEGREES -> 360.0
-                else -> uniformMagnitudeF64
+                else -> sealedInputsF32[node.input]?.let { kotlin.math.abs(it.toDouble()) } ?: uniformMagnitudeF64
             }
             GradientNumericOperationGraphV1.Operation.ADD_F32,
             GradientNumericOperationGraphV1.Operation.SUB_F32 -> rounded(inputs.sum())

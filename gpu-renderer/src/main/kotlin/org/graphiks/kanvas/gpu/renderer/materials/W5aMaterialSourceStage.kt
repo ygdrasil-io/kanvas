@@ -112,6 +112,11 @@ internal class W5aMaterialSourceStage private constructor(
                     .putInt(if (sweep?.sweepOrderingInvalid == true) 1 else 0)
                     .putInt(if (sweep?.sweepClampLeadingSegment == true) 1 else 0)
                     .putInt(if (sweep?.sweepFullCoverage == true) 1 else 0)
+                val linear = (gradientBinding as? MaterialBindingPlan.LinearGradientV1)?.degeneracy
+                if (linear != null) {
+                    linear.copyScalarsF32().forEach(uniforms::putFloat)
+                    repeat(2) { uniforms.putFloat(0f) }
+                }
                 if (sweep != null) {
                     uniforms.putFloat(sweep.sweepSpanDegreesF32)
                     repeat(3) { uniforms.putFloat(0f) }
@@ -133,6 +138,8 @@ internal class W5aMaterialSourceStage private constructor(
                 struct W5aMaterialBlock {
                 ${chain.indices.joinToString("\n") { "    binding$it: vec4<f32>," }}
                 ${if (gradientBinding == null) "" else "    gradientHeader: vec4<u32>,\n    gradientFlags: vec4<u32>,\n" +
+                    (if (gradientBinding is MaterialBindingPlan.LinearGradientV1)
+                        "    linearParameters0: vec4<f32>,\n    linearParameters1: vec4<f32>,\n" else "") +
                     (if (gradientBinding is MaterialBindingPlan.SweepGradientV1) "    sweepParameters: vec4<f32>,\n" else "") +
                     (if (gradientBinding is MaterialBindingPlan.ConicalGradientV1)
                         "    conicalParameters0: vec4<f32>,\n    conicalParameters1: vec4<f32>,\n" +
@@ -206,6 +213,9 @@ internal class W5aMaterialSourceStage private constructor(
                         GradientNumericOperationGraphV1.Input.START_Y -> "w5aMaterial.binding0.y"
                         GradientNumericOperationGraphV1.Input.END_X -> "w5aMaterial.binding0.z"
                         GradientNumericOperationGraphV1.Input.END_Y -> "w5aMaterial.binding0.w"
+                        GradientNumericOperationGraphV1.Input.LINEAR_DX -> "w5aMaterial.linearParameters0.x"
+                        GradientNumericOperationGraphV1.Input.LINEAR_DY -> "w5aMaterial.linearParameters0.y"
+                        GradientNumericOperationGraphV1.Input.LINEAR_LEN2 -> "w5aMaterial.linearParameters1.x"
                         GradientNumericOperationGraphV1.Input.CENTER_X -> "w5aMaterial.binding0.x"
                         GradientNumericOperationGraphV1.Input.CENTER_Y -> "w5aMaterial.binding0.y"
                         GradientNumericOperationGraphV1.Input.RADIUS -> "w5aMaterial.binding0.z"

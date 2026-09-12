@@ -33,7 +33,9 @@ public sealed interface MaterialProgramPlan {
 
     public data object LinearGradientClampSrgbV1 : MaterialProgramPlan {
         override val versionI32: Int = 1
-        override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5c-linear-clamp-srgb-stop-abi-v1-numeric-v1")
+        // MaterialPlan remains V1; the code/binding layout revision is part of
+        // the structural ID authenticated by numeric and native authorities.
+        override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5c-linear-clamp-srgb-stop-abi-v1-uniform-v2-numeric-v2")
         override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.gradient()
         public fun copyGradientNumericOperationGraphV1(): GradientNumericOperationGraphV1 = GradientNumericOperationGraphV1.linear()
     }
@@ -85,7 +87,7 @@ public sealed interface MaterialBindingPlan {
         override val stopRange: GradientStopRangeV1, public val degeneracy: LinearGradientDegeneracyV1,
         override val numericAuthority: GradientNumericAuthorityV1) : GradientV1 {
         override val versionI32: Int = 1
-        override val gradientDegenerate: Boolean get() = degeneracy.degenerate
+        override val gradientDegenerate: Boolean get() = degeneracy.linearDegenerate
         override fun copyUniformValuesF32(): List<Float> = listOf(startF32.x, startF32.y, endF32.x, endF32.y)
         override fun rebind(range: GradientStopRangeV1, authority: GradientNumericAuthorityV1): GradientV1 =
             copy(stopRange = range, numericAuthority = authority)

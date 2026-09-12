@@ -30,8 +30,27 @@ public class GradientStopSlabPlanV1 private constructor(stops: List<GradientStop
 }
 
 public sealed interface GradientDegeneracyV1
-public data class LinearGradientDegeneracyV1(public val axisXF32: Float, public val axisYF32: Float,
-    public val lengthSquaredF32: Float, public val degenerate: Boolean) : GradientDegeneracyV1
+public data class LinearGradientDegeneracyV1(
+    public val linearDxF32: Float, public val linearDyF32: Float,
+    public val linearX2F32: Float, public val linearY2F32: Float,
+    public val linearLen2F32: Float, public val linearLengthF32: Float,
+    public val linearDegenerate: Boolean,
+) : GradientDegeneracyV1 {
+    public fun copyScalarsF32(): List<Float> = listOf(linearDxF32, linearDyF32,
+        linearX2F32, linearY2F32, linearLen2F32, linearLengthF32)
+    internal companion object {
+        fun of(startF32: Point2F32, endF32: Point2F32): LinearGradientDegeneracyV1 {
+            val dxF32 = endF32.x - startF32.x
+            val dyF32 = endF32.y - startF32.y
+            val x2F32 = dxF32 * dxF32
+            val y2F32 = dyF32 * dyF32
+            val len2F32 = x2F32 + y2F32
+            val lengthF32 = kotlin.math.sqrt(len2F32)
+            return LinearGradientDegeneracyV1(dxF32, dyF32, x2F32, y2F32,
+                len2F32, lengthF32, lengthF32 <= 0.000030517578125f)
+        }
+    }
+}
 
 public data class RadialGradientDegeneracyV1(public val radialRadiusF32: Float, public val radialDegenerate: Boolean) : GradientDegeneracyV1
 
@@ -179,6 +198,8 @@ public class GradientNumericAuthorityV1 private constructor(
         fun sealLinear(coordinates: MaterialCoordinatePlanV1, startF32: Point2F32, endF32: Point2F32,
             degeneracy: LinearGradientDegeneracyV1, slab: GradientStopSlabPlanV1,
             localMagnitudeF64: Double, uniformMagnitudeF64: Double): GradientNumericAuthorityV1? {
+            if (degeneracy != LinearGradientDegeneracyV1.of(startF32, endF32) ||
+                degeneracy.copyScalarsF32().any { !it.isFinite() }) return null
             val schema = MaterialProgramPlan.LinearGradientClampSrgbV1.copyGradientNumericOperationGraphV1()
             val stops = slab.copyStops()
             val proof = schema.proveLinearDomainV1(localMagnitudeF64, uniformMagnitudeF64, degeneracy, stops, startF32, endF32)
