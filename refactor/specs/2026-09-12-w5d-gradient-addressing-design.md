@@ -148,11 +148,22 @@ Le subset `CoordClamp` doit être fini et trié (`left <= right`,
 `top <= bottom`). Un axe vide, avec bornes égales, est valide et clampé sur
 cette coordonnée ; un rectangle inversé est refusé.
 
-Le WGSL applique une matrice homogène, puis la division par `w`. Si `w == 0` ou
-si le résultat n'est pas fini, le nœud produit un point sûr `(0,0)` et un bit de
-validité faux. Les nœuds suivants s'évaluent uniquement sur les valeurs sûres,
-et le matériau final est masqué transparent. Une valeur non finie ne peut pas
-entrer dans `floor`, `atan2`, la recherche de stops ou le blend.
+Le planner prouve d'abord avec `WgslFloatEnvelopeV1` que les trois produits
+scalaires homogènes ne débordent pas sur les bounds device propriétaires. Le
+WGSL vérifie ensuite `w` et une borne conservatrice du quotient **avant** toute
+division. Avec `QMAX = 2^126`, une composante `n / w` est admissible si `w` et
+`n` sont finis, `w != 0`, et soit `abs(w) >= 1 && abs(n) <= QMAX`, soit
+`abs(w) < 1 && abs(n) <= abs(w) * QMAX`. Cette multiplication ne peut pas
+déborder et garantit un quotient fini avec marge. La division vit dans une
+branche `if` exécutée uniquement lorsque X et Y satisfont cette borne ; elle ne
+doit pas être placée dans les arguments évalués d'un `select`.
+
+Si la preuve des produits scalaires échoue, ou si la garde de quotient échoue
+pour le fragment — notamment `w == 0` — le nœud produit le point sûr `(0,0)` et
+un bit de validité faux. Les nœuds suivants s'évaluent uniquement sur les
+valeurs sûres, et le matériau final est masqué transparent. Une valeur non
+finie ou indéterminée ne peut pas entrer dans `floor`, `atan2`, la recherche de
+stops ou le blend.
 
 Le domaine numérique combine les bounds device déjà propriétaires des lanes W4
 avec toutes les opérations de coordonnées. Une homographie courante et bornée
@@ -313,8 +324,9 @@ failpoints et tests d'infrastructure.
 
 La gate W5d couvre au minimum :
 
-1. les quatre tile modes sur chaque famille, avec `t` négatif, intérieur,
-   endpoints, entier positif/négatif et domaine supérieur à 1 ;
+1. les quatre tile modes sur chaque famille, avec intérieur, endpoints, entier
+   positif et domaine supérieur à 1, plus les valeurs/entiers négatifs pour les
+   familles dont le paramètre géométrique peut authentiquement les produire ;
 2. hard stops aux frontières et à l'intérieur pour REPEAT/MIRROR/DECAL ;
 3. la règle moyenne des dégénérescences Linear/Radial/Sweep/Conical, avec stops
    irréguliers et alpha non trivial ;
@@ -328,7 +340,8 @@ La gate W5d couvre au minimum :
 9. matrices non finies, singulières, inverse non projetable, subset non trié,
    profondeur de graph existante et budget uniforme, suivis d'une récupération
    publique ;
-10. mutation après capture de matrices/subsets/stops via `Picture` ;
+10. mutation après capture des subsets/stops via `Picture`, et conservation de
+    matrices immuables distinctes à travers l'enregistrement ;
 11. une frame mixte combinant tile modes, wrappers, Opacity, blend W5b et les
     quatre lanes, avec ordre observable ;
 12. authentic AA4/capability : pixels exacts si disponible, sinon skip/refus

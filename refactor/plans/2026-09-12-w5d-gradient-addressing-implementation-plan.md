@@ -50,6 +50,7 @@
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/W5aMaterialSourceStage.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/W5aPacketMaterialSourceV2.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/planning/W5aMaterialPlanLowerer.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/W5aMaterialPlanAuthorityV2.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUW5aSourceStageNativeV2.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt`
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPlanSurfaceCandidateGate.kt`
@@ -110,7 +111,37 @@ internal sealed interface GradientAddressingCaptureV2 {
 
 - [ ] **Step 4: Implement bounded traversals over the two existing representations.** `GradientAddressingCaptureV2` traverses immutable `MaterialNode` outer-to-inner, multiplies Opacity values in the existing order, appends coordinate wrappers without reordering and stops only at one of the four W5c leaves. In `:kanvas`, create one internal `Shader.isW5dGradientCandidateV2()` helper used by both the candidate gate and prepared-frame registry; do not retain two separate Shader `when` lists. Both traversals consume the graph limits already established by capture, add no second public limit and use the same exhaustive wrapper/leaf enums. In this first slice they claim only Linear + CLAMP + Rect with Opacity/local-matrix wrappers; later tasks expand that readiness predicate without changing the captured grammar.
 
-- [ ] **Step 5: Build and lower the minimal immutable V2 authority.** Create `MaterialCoordinatePlanV2` with copied `InverseMatrixF32` operations, `uniformByteSizeI64`, `canonicalIdentity` and tag-only `topologyIdentity`. For this slice prepend inverse CTM and append the inverse of one affine local matrix, using F64 conversion/inversion from `:math:matrix`, then project finite coefficients to F32. Add `GradientAddressingProgramV2`/`GradientAddressingAuthorityV2` so the raw source key includes the coordinate tags while the 48-byte-per-matrix values remain in the material uniform. Keep `MaterialCoordinatePlanV1` unchanged and preserve W5c CLAMP behavior when no W5d wrapper exists.
+- [ ] **Step 5: Build and lower the complete V2 authority contract.** Create `MaterialCoordinatePlanV2` with copied `InverseMatrixF32` operations, `uniformByteSizeI64`, `canonicalIdentity` and tag-only `topologyIdentity`. For this slice prepend inverse CTM and append the inverse of one affine local matrix, using F64 conversion/inversion from `:math:matrix`, then project finite coefficients to F32. Add these variants before changing the lowerer:
+
+```kotlin
+public data class GradientAddressingProgramV2(
+    public val family: GradientFamilyV2,
+    public val requestedTileMode: GradientTileModeV2,
+    public val effectiveTileMode: GradientTileModeV2,
+    public val tileGraphId: String,
+    public val coordinateTopologyId: String,
+) : MaterialProgramPlan
+
+public sealed interface GradientV2 : MaterialBindingPlan {
+    public val stopRange: GradientStopRangeV1
+    public val numericAuthority: GradientNumericAuthorityV2
+    public val gradientDegenerate: Boolean
+    public fun copyUniformValuesF32(): List<Float>
+    public fun rebind(
+        range: GradientStopRangeV1,
+        authority: GradientNumericAuthorityV2 = numericAuthority,
+    ): GradientV2
+}
+
+public data class MaterialV2(
+    public val ref: MaterialPlanRef,
+    public val coordinates: MaterialCoordinatePlanV2,
+) : PlanDrawMaterialAuthority
+```
+
+Task 1 adds `LinearGradientV2`; Task 5 adds the other three family bindings with the same interface. `GradientNumericAuthorityV2.sealLinear(program, coordinates, startF32, endF32, degeneracy, slab, localMagnitudeF64, uniformMagnitudeF64): GradientNumericAuthorityV2?` seals the V1 family raw-parameter graph, V2 coordinate plan, V2 tile graph, Linear uniform tuple, degeneracy, stop range/slab and domain proof. Its public verification shape is `authenticates(program: GradientAddressingProgramV2, binding: GradientV2, slab: GradientStopSlabPlanV1, coordinates: MaterialCoordinatePlanV2): Boolean`; its internal `rebase(binding: GradientV2, sourceSlab: GradientStopSlabPlanV1, newRange: GradientStopRangeV1, newSlab: GradientStopSlabPlanV1): GradientNumericAuthorityV2` first authenticates, proves identical selected stop sequences and returns a new V2 authority. `MaterialPlanTable.of`, stop-slab rewrite, interning and `copyForInterning` handle `GradientV1` and `GradientV2` exhaustively without converting between them.
+
+`W5aMaterialPlanLowerer` keeps its existing `MaterialV1` branch byte-for-byte and adds an explicit `MaterialV2` branch. `W5aCorePrimitiveMaterialAuthorityV2.issue` receives a separate `coordinatesV2ByCommandIdI32` map; `W5aMaterialSourceStage` has distinct V1/V2 overloads and never attempts a V2 cast through `GradientNumericAuthorityV1`. The raw source key includes `tileGraphId` and `coordinateTopologyId`; the 48-byte-per-matrix values remain in the uniform. This preserves `MaterialCoordinatePlanV1`, all four `GradientV1` bindings and W5c CLAMP behavior unchanged.
 
 - [ ] **Step 6: Preserve the pre-admission boundary and terminal ownership.** Unknown source nodes, image sources, color filters, source blends, non-sRGB interpolation, `CoordClamp`, non-CLAMP modes and non-Rect lanes remain outside this first executable slice. Once the positive Linear draw is claimed and sealed, it cannot consult the legacy mapper. A finite singular matrix becomes a typed planner refusal; it is not downgraded to pre-admission or identity.
 
@@ -123,7 +154,7 @@ rtk git add gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan gpu-renderer/s
 rtk git commit -m "feat(gpu): deliver W5d affine linear slice"
 ```
 
-### Task 2: Seal ordered matrix segments and snapshot ownership
+### Task 2: Seal ordered matrix segments and Picture value preservation
 
 **Files:**
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/MaterialCoordinatePlanV2.kt`
@@ -140,16 +171,15 @@ rtk git commit -m "feat(gpu): deliver W5d affine linear slice"
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt`
 - Modify: `math/matrix/src/commonMain/kotlin/org/graphiks/math/matrix/Matrix3x3F64.kt`
 - Modify: `math/matrix/src/commonTest/kotlin/org/graphiks/math/matrix/Matrix3x3F64Test.kt`
-- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/canvas/DisplayOpSnapshot.kt`
 - Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/render/ir/PaintSceneAdapter.kt`
 - Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5dGradientAddressingSurfacePixelTest.kt`
 - Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5dGradientAddressingCpuOracle.kt`
 
 **Interfaces:**
 - Consumes: ordered `CoordinateNodeV2`, draw CTM, `Matrix3x3F32`/`Matrix3x3F64`, `RectF32`, W5c Linear bindings and the W4a Rect lane.
-- Produces: checked F64 segment composition/inversion, non-commutative ordered matrix chains, complete matrix validation and immutable Picture snapshot ownership on the existing affine Linear Rect slice.
+- Produces: checked F64 segment composition/inversion, non-commutative ordered matrix chains, complete matrix validation and preservation of distinct immutable matrix values through `Picture` on the existing affine Linear Rect slice.
 
-- [ ] **Step 1: Write public RED tests for order and snapshot ownership.** Add `linearLocalMatricesPreserveNonCommutativeOrder`, `linearLocalMatrixIsSnapshottedThroughPicture`, `nonFiniteAndSingularLocalMatricesRefusePrecisely`, and `unrepresentableInverseRefusesPrecisely`. Compare translate-then-rotate with rotate-then-translate using the same seventeen-stop Linear shader and assert different exact public pixels. Mutate the original matrix after `Picture` recording and prove the recorded pixels are unchanged. For each invalid case, assert only the public diagnostic prefix and then render a valid draw on the same eligible runtime.
+- [ ] **Step 1: Write public RED tests for order and Picture value preservation.** Add `linearLocalMatricesPreserveNonCommutativeOrder`, `linearDistinctLocalMatrixValuesSurvivePictureCapture`, `nonFiniteAndSingularLocalMatricesRefusePrecisely`, and `unrepresentableInverseRefusesPrecisely`. Compare translate-then-rotate with rotate-then-translate using the same seventeen-stop Linear shader and assert different exact public pixels. Record two Pictures from two distinct immutable `Matrix3x3F32` values and prove each preserves its own expected pixels; do not claim mutation of this immutable data class. For each invalid case, assert only the public diagnostic prefix and then render a valid draw on the same eligible runtime.
 
 ```kotlin
 val outerThenInner = Shader.WithLocalMatrix(
@@ -166,10 +196,10 @@ assertNotEquals(renderPixel(outerThenInner), renderPixel(reversed))
 - [ ] **Step 2: Run the four methods and verify RED on missing V2 coordinate consumption.**
 
 ```bash
-rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest.linearLocalMatricesPreserveNonCommutativeOrder' --tests '*W5dGradientAddressingSurfacePixelTest.linearLocalMatrixIsSnapshottedThroughPicture' --tests '*W5dGradientAddressingSurfacePixelTest.nonFiniteAndSingularLocalMatricesRefusePrecisely' --tests '*W5dGradientAddressingSurfacePixelTest.unrepresentableInverseRefusesPrecisely' --no-parallel --rerun-tasks
+rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest.linearLocalMatricesPreserveNonCommutativeOrder' --tests '*W5dGradientAddressingSurfacePixelTest.linearDistinctLocalMatrixValuesSurvivePictureCapture' --tests '*W5dGradientAddressingSurfacePixelTest.nonFiniteAndSingularLocalMatricesRefusePrecisely' --tests '*W5dGradientAddressingSurfacePixelTest.unrepresentableInverseRefusesPrecisely' --no-parallel --rerun-tasks
 ```
 
-Expected: valid local-matrix fixtures refuse or render legacy/wrong pixels, and the exact W5d diagnostics are absent.
+Expected: the non-commutative chain and at least one distinct Picture fixture refuse or render wrong pixels; non-finite/unrepresentable cases lack their exact W5d codes. The single affine slice and singular diagnostic delivered by Task 1 are GREEN controls, not RED evidence for Task 2.
 
 - [ ] **Step 3: Add only the reusable matrix operations to `:math:matrix`.** Implement checked F64 composition of an ordered segment and projection to `Matrix3x3F32`. Do not introduce a renderer-specific matrix class.
 
@@ -203,26 +233,9 @@ public class MaterialCoordinatePlanV2 private constructor(
 }
 ```
 
-The builder prepends inverse CTM, accumulates adjacent local matrices outer-to-inner and emits one inverse per adjacent segment. Matrix copies happen during `DisplayOpSnapshot` before caller mutation can race validation. `PaintSceneAdapter` preserves an admitted W5d matrix long enough for the planner to classify non-finite/singular/unrepresentable cases with W5d codes while retaining existing checked behavior for out-of-grammar materials. Identity segments may be omitted only if doing so leaves the same topology version and value seal; the Task 3 clamp boundaries always flush a segment.
+The builder prepends inverse CTM, accumulates adjacent local matrices outer-to-inner and emits one inverse per adjacent segment. `Matrix3x3F32` is immutable; the planner still snapshots its coefficients into the sealed F64/F32 authority before lowering. `PaintSceneAdapter` preserves an admitted W5d matrix long enough for the planner to classify non-finite/singular/unrepresentable cases with W5d codes while retaining existing checked behavior for out-of-grammar materials. Identity segments may be omitted only if doing so leaves the same topology version and value seal; the Task 3 clamp boundaries always flush a segment.
 
-- [ ] **Step 5: Extend the W5d program/binding authority without mutating V1 semantics.** The Task 1 material table may reuse the W5c family binding and stop range, but its W5d program is authenticated against the complete requested/effective tile mode and coordinate topology. Values remain outside the structural identity.
-
-```kotlin
-public data class GradientAddressingProgramV2(
-    public val family: GradientFamilyV2,
-    public val requestedTileMode: GradientTileModeV2,
-    public val effectiveTileMode: GradientTileModeV2,
-    public val coordinateTopology: String,
-) : MaterialProgramPlan
-
-public data class GradientAddressingAuthorityV2(
-    public val coordinates: MaterialCoordinatePlanV2,
-    public val coordinateSeal: String,
-    public val graphSeal: String,
-)
-```
-
-Keep the V2 draw/material authority instead of changing `MaterialCoordinatePlanV1` equality or uniform layout. Rebase/copy paths preserve the V2 seal when stop ranges are relocated.
+- [ ] **Step 5: Extend the exact V2 contracts from Task 1 to matrix chains.** `GradientAddressingProgramV2`, `LinearGradientV2`, `GradientNumericAuthorityV2` and `MaterialV2` keep the signatures fixed in Task 1. Recompute `coordinateTopologyId`, `coordinateSeal` and the V2 domain proof from the full segment list; `authenticates` and `rebase` remain the only paths to a lowered binding. No V2 value is routed through `GradientV1.numericAuthority` or `MaterialCoordinatePlanV1`.
 
 - [ ] **Step 6: Lower an arbitrary affine segment sequence.** Pack each inverse as three padded `vec4<f32>` values, 48 bytes, in operation order. Extend the Task 1 local-point function to consume all segments in order and retain `{ pointF32, valid }`. For Task 2 only, valid affine matrices are exercised; projective validity is completed in Task 3. Include the complete topology identity in the raw program/source key and values only in the immutable uniform payload.
 
@@ -230,9 +243,9 @@ Keep the V2 draw/material authority instead of changing `MaterialCoordinatePlanV
 
 ```bash
 rtk ./gradlew :math:matrix:jvmTest --tests '*Matrix3x3F64Test*' :math:matrix:jsNodeTest --no-parallel --rerun-tasks
-rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest.linearLocalMatricesPreserveNonCommutativeOrder' --tests '*W5dGradientAddressingSurfacePixelTest.linearLocalMatrixIsSnapshottedThroughPicture' --tests '*W5dGradientAddressingSurfacePixelTest.nonFiniteAndSingularLocalMatricesRefusePrecisely' --tests '*W5dGradientAddressingSurfacePixelTest.unrepresentableInverseRefusesPrecisely' --tests '*W5cGradientSurfacePixelTest.linearRectUsesLocalCoordinatesAndMoreThanSixteenStops' --no-parallel --rerun-tasks
+rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest.linearLocalMatricesPreserveNonCommutativeOrder' --tests '*W5dGradientAddressingSurfacePixelTest.linearDistinctLocalMatrixValuesSurvivePictureCapture' --tests '*W5dGradientAddressingSurfacePixelTest.nonFiniteAndSingularLocalMatricesRefusePrecisely' --tests '*W5dGradientAddressingSurfacePixelTest.unrepresentableInverseRefusesPrecisely' --tests '*W5cGradientSurfacePixelTest.linearRectUsesLocalCoordinatesAndMoreThanSixteenStops' --no-parallel --rerun-tasks
 rtk git diff --check
-rtk git add math/matrix gpu-plan/src/main/kotlin gpu-renderer/src/main/kotlin kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5dGradientAddressingSurfacePixelTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5dGradientAddressingCpuOracle.kt
+rtk git add math/matrix gpu-plan/src/main/kotlin gpu-renderer/src/main/kotlin kanvas/src/main/kotlin/org/graphiks/kanvas/render/ir/PaintSceneAdapter.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5dGradientAddressingSurfacePixelTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5dGradientAddressingCpuOracle.kt
 rtk git commit -m "feat(gpu): seal W5d coordinate plan"
 ```
 
@@ -275,30 +288,47 @@ rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest.local
 
 Expected: valid fixtures refuse or disagree with the independent oracle; invalid subsets lack the W5d diagnostic contract.
 
-- [ ] **Step 3: Seal clamp validation and layout in the planner.** Validate `isFinite`, `left <= right`, `top <= bottom`; equal edges are valid. Serialize one `ClampRectF32` as `(left, top, right, bottom)` in 16 bytes. Use checked I64 addition for all operations, reject before allocation when the plan exceeds `RawMaterialRequirementsV2`, device `maxUniformBufferBindingSize`, `Int.MAX_VALUE` or frame-local budget.
+- [ ] **Step 3: Seal clamp validation, layout and projective domains in the planner.** Validate `isFinite`, `left <= right`, `top <= bottom`; equal edges are valid. Serialize one `ClampRectF32` as `(left, top, right, bottom)` in 16 bytes. Use checked I64 addition for all operations, reject before allocation when the plan exceeds `RawMaterialRequirementsV2`, device `maxUniformBufferBindingSize`, `Int.MAX_VALUE` or frame-local budget. For every projective segment, extend `WgslFloatEnvelopeV1` over the owner lane's bounded device coordinates and prove each F32 multiply/add schedule for the three homogeneous rows finite. Refuse with `unsupported.material.gradient.numeric-domain-unbounded` when any row cannot be closed; crossing `w == 0` alone is not a planner refusal because the fragment guard below handles it.
 
 - [ ] **Step 4: Emit ordered coordinate WGSL with a validity carrier.** The generated function uses safe values after every matrix:
 
 ```wgsl
+const W5D_SAFE_QUOTIENT_MAX_F32: f32 = 8.507059173e37; // 2^126
+
+fn w5dQuotientFitsF32(numeratorF32: f32, denominatorF32: f32) -> bool {
+    let absNumeratorF32 = abs(numeratorF32);
+    let absDenominatorF32 = abs(denominatorF32);
+    let boundF32 = select(
+        absDenominatorF32 * W5D_SAFE_QUOTIENT_MAX_F32,
+        W5D_SAFE_QUOTIENT_MAX_F32,
+        absDenominatorF32 >= 1.0,
+    );
+    return absNumeratorF32 <= boundF32;
+}
+
 let homogeneous = inverseMatrix * vec3<f32>(state.pointF32, 1.0);
-let validW = state.valid && w5dFiniteF32(homogeneous.x) && w5dFiniteF32(homogeneous.y) &&
-    w5dFiniteF32(homogeneous.z) && homogeneous.z != 0.0;
-let quotient = select(vec2<f32>(0.0), homogeneous.xy / homogeneous.z, validW);
-let validPoint = validW && w5dFiniteF32(quotient.x) && w5dFiniteF32(quotient.y);
-state.pointF32 = select(vec2<f32>(0.0), quotient, validPoint);
-state.valid = validPoint;
+let canDivide = state.valid && w5dFiniteF32(homogeneous.x) &&
+    w5dFiniteF32(homogeneous.y) && w5dFiniteF32(homogeneous.z) &&
+    homogeneous.z != 0.0 && w5dQuotientFitsF32(homogeneous.x, homogeneous.z) &&
+    w5dQuotientFitsF32(homogeneous.y, homogeneous.z);
+var projectedPointF32 = vec2<f32>(0.0);
+if (canDivide) {
+    projectedPointF32 = homogeneous.xy / homogeneous.z;
+}
+state.pointF32 = projectedPointF32;
+state.valid = canDivide;
 ```
 
-Emit `w5dFiniteF32(valueF32)` as `valueF32 == valueF32 && abs(valueF32) <= 3.402823466e+38`; do not assume a non-standard WGSL `isFinite` built-in. Each clamp runs exactly at its list position against `state.pointF32`. The final source alpha is multiplied by coordinate validity after gradient evaluation, but invalid unsafe coordinates never enter that evaluation.
+Emit `w5dFiniteF32(valueF32)` as `valueF32 == valueF32 && abs(valueF32) <= 3.402823466e+38`; do not assume a non-standard WGSL `isFinite` built-in. The quotient bound is evaluated without division and cannot overflow: for `abs(w) < 1`, `abs(w) * 2^126 <= 2^126`; for `abs(w) >= 1`, the constant is used directly. The actual division exists only inside the guarded `if` and its magnitude is at most `2^126`. Each clamp runs exactly at its list position against `state.pointF32`. Invalid unsafe coordinates never enter family, tile, stop-search or blend evaluation; the source returns transparent directly when `state.valid` is false.
 
-- [ ] **Step 5: Extend the independent oracle with the same mathematical contract, not production helpers.** Evaluate matrices in F64 for fixture construction, round operands/results according to the WGSL envelope, carry `valid`, clamp only finite safe points and require singleton/two-code closure for the chosen pixels.
+- [ ] **Step 5: Extend the independent oracle with the same mathematical contract, not production helpers.** Enumerate the allowed F32 multiply/add schedules for each homogeneous row, require their finite closure, implement the pre-division `2^126` guard independently, divide only its bounded cases, carry `valid`, clamp only safe points and require singleton/two-code closure for the chosen pixels.
 
 - [ ] **Step 6: Verify GREEN, mutation safety and commit.**
 
 ```bash
 rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest.localClampLocalPreservesExactOrder' --tests '*W5dGradientAddressingSurfacePixelTest.adjacentDisjointClampsAreNotMerged' --tests '*W5dGradientAddressingSurfacePixelTest.projectiveLocalMatrixRendersBoundedPixelsAndMasksWZero' --tests '*W5dGradientAddressingSurfacePixelTest.coordClampRejectsNonFiniteAndUnsortedSubsets' --tests '*W5dGradientAddressingSurfacePixelTest.coordinateGraphDepthUsesExistingCaptureLimit' --no-parallel --rerun-tasks
 rtk git diff --check
-rtk git add gpu-plan/src/main/kotlin gpu-renderer/src/main/kotlin kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5dGradientAddressingSurfacePixelTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5dGradientAddressingCpuOracle.kt
+rtk git add gpu-plan/src/main/kotlin gpu-renderer/src/main/kotlin kanvas/src/main/kotlin/org/graphiks/kanvas/render/ir/PaintSceneAdapter.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5dGradientAddressingSurfacePixelTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5dGradientAddressingCpuOracle.kt
 rtk git commit -m "feat(gpu): preserve W5d coordinate ordering"
 ```
 
@@ -306,6 +336,7 @@ rtk git commit -m "feat(gpu): preserve W5d coordinate ordering"
 
 **Files:**
 - Create: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/GradientTileOperationGraphV2.kt`
+- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/GradientPlanV1.kt`
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/GradientAddressingPlanV2.kt`
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/GradientNumericOperationGraphV1.kt`
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/EffectiveMaterialPlanner.kt`
@@ -324,7 +355,7 @@ rtk git commit -m "feat(gpu): preserve W5d coordinate ordering"
 - Consumes: Linear raw `t`, V2 coordinate validity, W5c upper-bound stop evaluation and the four W5c geometry lanes.
 - Produces: one sealed tile operation graph shared by all families, exact endpoint rules, DECAL validity and Linear pixels on Rect/RRect/Path fill/Path stroke.
 
-- [ ] **Step 1: Write a public table-driven RED for every Linear tile boundary and lane.** Add `linearTileModesCoverSignedBoundariesOnEveryLane` and `linearHardStopsPreserveTileBoundaries`. For each lane and mode sample negative non-integer, negative integer, zero, interior hard stop, one, positive integer and greater-than-one non-integer values. Use no AA where supported so coverage does not obscure the tile boundary. Include nontrivial Opacity and one W5b destination-read blend case.
+- [ ] **Step 1: Write a public table-driven RED for every Linear tile boundary and lane.** Add `linearTileModesCoverSignedBoundariesOnEveryLane`, `linearHardStopsPreserveTileBoundaries`, and `nonClampDropsOnlyTheOuterEndpointDuplicate`. For each lane and mode sample negative non-integer, negative integer, zero, interior hard stop, one, positive integer and greater-than-one non-integer values. Give endpoint duplicates deliberately asymmetric colors: at `p == 0`, non-CLAMP must keep the right/interior color; at `p == 1`, it must keep the left/interior color. Use no AA where supported so coverage does not obscure the tile boundary. Include nontrivial Opacity and one W5b destination-read blend case.
 
 ```kotlin
 data class TileSample(
@@ -344,12 +375,14 @@ val repeatSamples = listOf(
 - [ ] **Step 2: Run the methods and verify RED for REPEAT/MIRROR/DECAL.**
 
 ```bash
-rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest.linearTileModesCoverSignedBoundariesOnEveryLane' --tests '*W5dGradientAddressingSurfacePixelTest.linearHardStopsPreserveTileBoundaries' --no-parallel --rerun-tasks
+rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest.linearTileModesCoverSignedBoundariesOnEveryLane' --tests '*W5dGradientAddressingSurfacePixelTest.linearHardStopsPreserveTileBoundaries' --tests '*W5dGradientAddressingSurfacePixelTest.nonClampDropsOnlyTheOuterEndpointDuplicate' --no-parallel --rerun-tasks
 ```
 
 Expected: CLAMP controls may pass; the other three modes refuse or disagree at signed/boundary samples.
 
-- [ ] **Step 3: Define a typed tile graph instead of four handwritten shader branches.**
+- [ ] **Step 3: Normalize non-CLAMP endpoint duplicates before defining the tile graph.** Add `normalizeGradientStopsV2(input, effectiveTileMode, preserveValidityMask)`. It delegates all W5c position normalization/hard-stop compaction first. When `effectiveTileMode != CLAMP`, it removes the first stop only when the first two normalized positions are both zero, and removes the last stop only when the last two positions are both one; implicit endpoints keep the remaining list at two or more entries. A Sweep whose requested mode is non-CLAMP but whose full-coverage rule produces effective CLAMP uses CLAMP normalization. The stop slab ABI and ordinary interior hard stops remain unchanged.
+
+- [ ] **Step 4: Define a typed tile graph instead of four handwritten shader branches.**
 
 ```kotlin
 public sealed interface GradientTileOperationGraphV2 {
@@ -363,82 +396,20 @@ public sealed interface GradientTileOperationGraphV2 {
 
 Its finite operation vocabulary is `INPUT_T_F32`, `CONSTANT_F32`, `MUL_F32`, `SUB_F32`, `FLOOR_F32`, `ABS_F32`, `COMPARE_F32`, `SELECT_F32` and `AND_VALIDITY`. Seal exact graph shape per requested/effective mode. The graph contains no family geometry, stop values or uniform coefficients.
 
-- [ ] **Step 4: Implement exact tile semantics in plan and WGSL.** CLAMP uses strict outside comparisons and preserves `t == 0/1`. REPEAT uses `t - floor(t)`. MIRROR uses `q = t - 2*floor(t*0.5)` then `1 - abs(q - 1)`. DECAL computes inclusive validity, clamps only the safe lookup parameter and masks strict outsiders. Combine tile validity with coordinate/family validity before source conversion.
+- [ ] **Step 5: Implement exact tile semantics in plan and WGSL.** CLAMP uses strict outside comparisons and preserves `t == 0/1`. REPEAT uses `t - floor(t)`. MIRROR uses `q = t - 2*floor(t*0.5)` then `1 - abs(q - 1)`. DECAL computes inclusive validity, clamps only the safe lookup parameter and masks strict outsiders. Combine tile validity with coordinate/family validity before source conversion.
 
-- [ ] **Step 5: Route Linear V2 through all four existing lanes.** Reuse the same W4 lane facts and W5b blend/coverage closure; do not add a Linear-specific geometry lowerer. Update candidate/registry parity so a valid non-CLAMP Linear draw cannot partially fall back by lane.
+- [ ] **Step 6: Route Linear V2 through all four existing lanes.** Reuse the same W4 lane facts and W5b blend/coverage closure; do not add a Linear-specific geometry lowerer. Update candidate/registry parity so a valid non-CLAMP Linear draw cannot partially fall back by lane.
 
-- [ ] **Step 6: Verify GREEN, W5b blend continuity and commit.**
+- [ ] **Step 7: Verify GREEN, W5b blend continuity and commit.**
 
 ```bash
-rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest.linearTileModesCoverSignedBoundariesOnEveryLane' --tests '*W5dGradientAddressingSurfacePixelTest.linearHardStopsPreserveTileBoundaries' --tests '*W5bBlendSurfacePixelTest*' --no-parallel --rerun-tasks
+rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest.linearTileModesCoverSignedBoundariesOnEveryLane' --tests '*W5dGradientAddressingSurfacePixelTest.linearHardStopsPreserveTileBoundaries' --tests '*W5dGradientAddressingSurfacePixelTest.nonClampDropsOnlyTheOuterEndpointDuplicate' --tests '*W5bBlendSurfacePixelTest*' --no-parallel --rerun-tasks
 rtk git diff --check
 rtk git add gpu-plan/src/main/kotlin gpu-renderer/src/main/kotlin kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5dGradientAddressingSurfacePixelTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5dGradientAddressingCpuOracle.kt
 rtk git commit -m "feat(gpu): tile W5d linear gradients"
 ```
 
-### Task 5: Seal exact degenerate averages and family precedence
-
-**Files:**
-- Create: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/GradientAverageSrgbaF32.kt`
-- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/GradientPlanV1.kt`
-- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/GradientAddressingPlanV2.kt`
-- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/EffectiveMaterialPlanner.kt`
-- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/RawMaterialRequirementsV2.kt`
-- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/W5aMaterialSourceStage.kt`
-- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUW5aSourceStageNativeV2.kt`
-- Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5dGradientAddressingSurfacePixelTest.kt`
-- Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5dGradientAddressingCpuOracle.kt`
-
-**Interfaces:**
-- Consumes: normalized immutable W5c stop slab/range, family degeneracy seals and requested/effective tile mode.
-- Produces: exact binary-rational trapezoid average, a 16-byte straight-sRGB average field only for reachable REPEAT/MIRROR degeneracy and correct CLAMP/DECAL/Sweep/Conical precedence.
-
-- [ ] **Step 1: Write public RED tests for all degenerate rules.** Add `degenerateLinearAndRadialUseExactAverageForRepeatMirror`, `degenerateSweepAndConicalUseExactAverageForRepeatMirror`, `degenerateDecalIsTransparent`, `degenerateClampKeepsW5cLastColorRules`, `singleStopCollapsePreservesFamilyRulesUnderAddressing`, `sweepFullCoverageForcesClamp`, `conicalInvalidRootStaysTransparentBeforeTile`, and `conicalFullyDegenerateClampKeepsCircularHardStop`. Use irregular positions, a zero-width hard stop and nontrivial alpha. Pick channel values whose exact integral differs by at least one RGBA8 code from sequential Float accumulation. The single-stop method proves Linear/Radial/Sweep collapse to Solid despite tile/wrappers while Conical retains two identical stops and its root mask.
-
-```kotlin
-val irregularStops = listOf(
-    GradientStop(0f, ColorARGB.of(191, 17, 253, 5)),
-    GradientStop(0.1f, ColorARGB.of(113, 241, 7, 199)),
-    GradientStop(0.1f, ColorARGB.of(67, 3, 149, 251)),
-    GradientStop(1f, ColorARGB.of(229, 101, 37, 11)),
-)
-```
-
-- [ ] **Step 2: Run the six methods and verify RED on missing average/precedence.**
-
-```bash
-rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest.degenerate*' --tests '*W5dGradientAddressingSurfacePixelTest.singleStopCollapsePreservesFamilyRulesUnderAddressing' --tests '*W5dGradientAddressingSurfacePixelTest.sweepFullCoverageForcesClamp' --tests '*W5dGradientAddressingSurfacePixelTest.conicalInvalidRootStaysTransparentBeforeTile' --tests '*W5dGradientAddressingSurfacePixelTest.conicalFullyDegenerateClampKeepsCircularHardStop' --no-parallel --rerun-tasks
-```
-
-Expected: non-CLAMP degenerate fixtures refuse or disagree; W5c CLAMP controls remain green.
-
-- [ ] **Step 3: Implement a local exact binary-rational accumulator in JVM `:gpu-plan`.** Decode each finite F32 channel/position into sign, integer significand and power-of-two exponent. Compute every trapezoid term exactly with `java.math.BigInteger`; normalize only at the final conversion. The public result type is:
-
-```kotlin
-public data class GradientAverageSrgbaF32(
-    public val redF32: Float,
-    public val greenF32: Float,
-    public val blueF32: Float,
-    public val alphaF32: Float,
-)
-```
-
-The final conversion implements IEEE-754 F32 roundTiesToEven explicitly. A zero-width interval contributes exactly zero. Do not expose the accumulator type publicly or move color integration into `:math`.
-
-- [ ] **Step 4: Compute/store the average only when the uniform degeneracy branch can consume it.** Reachability requires a family-degenerate binding plus requested/effective REPEAT or MIRROR. Authenticate the average with normalized stop range/slab identity, family degeneracy and tile graph. Serialize four F32 channels in 16 bytes; the W5c stop buffer remains unchanged.
-
-- [ ] **Step 5: Apply branch precedence before tile evaluation.** Family invalidity wins first. Degenerate CLAMP selects the W5c normative result, DECAL selects transparent, REPEAT/MIRROR select the sealed average. Sweep full coverage rewrites effective tile to CLAMP during planning. Conical invalid root never reaches a tile node; fully-degenerate Conical CLAMP retains its circular hard stop.
-
-- [ ] **Step 6: Verify GREEN, deterministic repeated rendering and commit.**
-
-```bash
-rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest.degenerate*' --tests '*W5dGradientAddressingSurfacePixelTest.singleStopCollapsePreservesFamilyRulesUnderAddressing' --tests '*W5dGradientAddressingSurfacePixelTest.sweepFullCoverageForcesClamp' --tests '*W5dGradientAddressingSurfacePixelTest.conicalInvalidRootStaysTransparentBeforeTile' --tests '*W5dGradientAddressingSurfacePixelTest.conicalFullyDegenerateClampKeepsCircularHardStop' --tests '*W5cGradientSurfacePixelTest*' --no-parallel --rerun-tasks
-rtk git diff --check
-rtk git add gpu-plan/src/main/kotlin gpu-renderer/src/main/kotlin kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5dGradientAddressingSurfacePixelTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5dGradientAddressingCpuOracle.kt
-rtk git commit -m "feat(gpu): seal W5d degenerate averages"
-```
-
-### Task 6: Extend all tile/coordinate semantics to every gradient family and lane
+### Task 5: Extend all tile/coordinate semantics to every gradient family and lane
 
 **Files:**
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/GradientAddressingPlanV2.kt`
@@ -459,7 +430,7 @@ rtk git commit -m "feat(gpu): seal W5d degenerate averages"
 - Consumes: common coordinate plan, common tile graph, W5c Radial/Sweep/Conical family parameter graphs and all four W5c lanes.
 - Produces: the complete 4 families × 4 modes × 4 lanes W5d matrix with local matrix/CoordClamp coverage and no family/lane legacy gap.
 
-- [ ] **Step 1: Write one public combinatorial RED plus focused family boundaries.** Add `allGradientFamiliesTileModesAndLanesMatchOracle`, `radialSignedPeriodsMatchOracle`, `sweepEndpointsAndFullCoverageMatchOracle`, and `conicalRootValidityPrecedesTile`. The combinatorial test samples at least one interior and one out-of-domain pixel for every family/mode/lane tuple; its fixtures alternate a non-identity local matrix and an ordered local-matrix/CoordClamp chain so every family and lane consumes the shared coordinate plan. Every fixture has seventeen stops or a wrapper so it cannot be satisfied by an unrelated legacy small-gradient path. Focused methods add signed integers, endpoints, hard stops and Conical root/no-root points.
+- [ ] **Step 1: Write one public combinatorial RED plus focused family boundaries.** Add `allGradientFamiliesTileModesAndLanesMatchOracle`, `radialNonNegativePeriodsMatchOracle`, `sweepEndpointsAndFullCoverageMatchOracle`, and `conicalRootValidityPrecedesTile`. The combinatorial test samples at least one interior and one out-of-domain pixel for every family/mode/lane tuple; its fixtures alternate a non-identity local matrix and an ordered local-matrix/CoordClamp chain so every family and lane consumes the shared coordinate plan. Every fixture has seventeen stops or a wrapper so it cannot be satisfied by an unrelated legacy small-gradient path. Focused methods add the signed tile periods each family can authentically produce, endpoints, hard stops and Conical root/no-root points. Radial samples zero, interior, one, positive integers and greater-than-one values because `length(P-center)/radius` is non-negative for admitted radii.
 
 ```kotlin
 for (family in GradientFixtureFamily.entries) {
@@ -475,24 +446,86 @@ for (family in GradientFixtureFamily.entries) {
 - [ ] **Step 2: Run the four methods and verify RED outside the completed Linear slice.**
 
 ```bash
-rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest.allGradientFamiliesTileModesAndLanesMatchOracle' --tests '*W5dGradientAddressingSurfacePixelTest.radialSignedPeriodsMatchOracle' --tests '*W5dGradientAddressingSurfacePixelTest.sweepEndpointsAndFullCoverageMatchOracle' --tests '*W5dGradientAddressingSurfacePixelTest.conicalRootValidityPrecedesTile' --no-parallel --rerun-tasks
+rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest.allGradientFamiliesTileModesAndLanesMatchOracle' --tests '*W5dGradientAddressingSurfacePixelTest.radialNonNegativePeriodsMatchOracle' --tests '*W5dGradientAddressingSurfacePixelTest.sweepEndpointsAndFullCoverageMatchOracle' --tests '*W5dGradientAddressingSurfacePixelTest.conicalRootValidityPrecedesTile' --no-parallel --rerun-tasks
 ```
 
-Expected: Linear entries pass after Task 5; Radial/Sweep/Conical non-CLAMP or wrapped entries refuse or disagree.
+Expected: Linear entries pass after Task 4; Radial/Sweep/Conical non-CLAMP or wrapped entries refuse or disagree.
 
-- [ ] **Step 3: Attach the common coordinate/tile authorities to Radial, Sweep and Conical.** Preserve each W5c family graph and sealed degeneracy tuple. Feed only the family raw `t` and family validity into `GradientTileOperationGraphV2`. Do not copy the tile formulas into family branches and do not recompute a sealed W5c tuple in the renderer.
+- [ ] **Step 3: Add the three remaining V2 binding/factory variants.** `RadialGradientV2`, `SweepGradientV2` and `ConicalGradientV2` implement `GradientV2` with the same `stopRange`, `numericAuthority`, `gradientDegenerate`, `copyUniformValuesF32` and `rebind` contract as Linear. Add typed `GradientNumericAuthorityV2.sealRadial`, `sealSweep` and `sealConical` factories with the W5c family values/degeneracy tuples plus V2 program, coordinates, tile graph, slab and domain bounds. Extend `MaterialPlanTable.of`, rewrite/interning/copy and renderer exhaustiveness for all four V2 variants.
 
-- [ ] **Step 4: Enforce family-specific precedence.** Radial uses signed raw periods from distance/radius. Sweep preserves exact endpoint rules, leading segment behavior and full-coverage CLAMP. Conical chooses its sealed valid root before tiling; no-root stays transparent for every mode. Coordinate invalidity dominates all three.
+- [ ] **Step 4: Attach the common coordinate/tile authorities to Radial, Sweep and Conical.** Preserve each W5c family raw-parameter graph and sealed degeneracy tuple. Feed only raw `t` and family validity into `GradientTileOperationGraphV2`. Do not copy tile formulas into family branches and do not recompute a sealed W5c tuple in the renderer. Sweep full coverage uses effective CLAMP before stop normalization and key creation. Conical chooses its sealed valid root before tile; no-root remains transparent.
 
-- [ ] **Step 5: Promote every family through all existing lanes.** Candidate gate, prepared registry, planner and lowerer must accept the same tuple set. Reuse Rect/RRect/Path fill/Path stroke geometry and W5b final blend. Hairline stroke remains the existing Path stroke lane. Point(s), Text, Vertices/Mesh and W5h cells remain pre-admission.
+- [ ] **Step 5: Promote every family through all existing lanes.** Candidate gate, prepared registry, planner and lowerer accept the same tuple set. Reuse Rect/RRect/Path fill/Path stroke geometry and W5b final blend. Hairline stroke remains the existing Path stroke lane. Point(s), Text, Vertices/Mesh and W5h cells remain pre-admission. Coordinate invalidity dominates family and tile evaluation in every lane.
 
 - [ ] **Step 6: Verify GREEN, W5c regression and commit.**
 
 ```bash
-rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest.allGradientFamiliesTileModesAndLanesMatchOracle' --tests '*W5dGradientAddressingSurfacePixelTest.radialSignedPeriodsMatchOracle' --tests '*W5dGradientAddressingSurfacePixelTest.sweepEndpointsAndFullCoverageMatchOracle' --tests '*W5dGradientAddressingSurfacePixelTest.conicalRootValidityPrecedesTile' --tests '*W5cGradientSurfacePixelTest*' --no-parallel --rerun-tasks
+rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest.allGradientFamiliesTileModesAndLanesMatchOracle' --tests '*W5dGradientAddressingSurfacePixelTest.radialNonNegativePeriodsMatchOracle' --tests '*W5dGradientAddressingSurfacePixelTest.sweepEndpointsAndFullCoverageMatchOracle' --tests '*W5dGradientAddressingSurfacePixelTest.conicalRootValidityPrecedesTile' --tests '*W5cGradientSurfacePixelTest*' --no-parallel --rerun-tasks
 rtk git diff --check
 rtk git add gpu-plan/src/main/kotlin gpu-renderer/src/main/kotlin kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5dGradientAddressingSurfacePixelTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5dGradientAddressingCpuOracle.kt
 rtk git commit -m "feat(gpu): complete W5d gradient families"
+```
+
+### Task 6: Seal exact degenerate averages and family precedence
+
+**Files:**
+- Create: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/GradientAverageSrgbaF32.kt`
+- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/GradientPlanV1.kt`
+- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/GradientAddressingPlanV2.kt`
+- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/EffectiveMaterialPlanner.kt`
+- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/RawMaterialRequirementsV2.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/W5aMaterialSourceStage.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUW5aSourceStageNativeV2.kt`
+- Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5dGradientAddressingSurfacePixelTest.kt`
+- Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5dGradientAddressingCpuOracle.kt`
+
+**Interfaces:**
+- Consumes: the four admitted V2 gradient bindings, normalized immutable stop slab/range, family degeneracy seals and requested/effective tile mode.
+- Produces: exact binary-rational trapezoid average, a 16-byte straight-sRGB average field only for reachable REPEAT/MIRROR degeneracy and correct CLAMP/DECAL/Sweep/Conical precedence.
+
+- [ ] **Step 1: Write public RED tests for all degenerate rules.** Add `degenerateLinearAndRadialUseExactAverageForRepeatMirror`, `degenerateSweepAndConicalUseExactAverageForRepeatMirror`, `degenerateDecalIsTransparent`, `degenerateClampKeepsW5cLastColorRules`, `singleStopCollapsePreservesFamilyRulesUnderAddressing`, `sweepFullCoverageForcesClamp`, `conicalInvalidRootStaysTransparentBeforeTile`, and `conicalFullyDegenerateClampKeepsCircularHardStop`. Use irregular positions, a zero-width hard stop and nontrivial alpha. Pick channel values whose exact integral differs by at least one RGBA8 code from sequential Float accumulation. The single-stop method proves Linear/Radial/Sweep collapse to Solid despite tile/wrappers while Conical retains two identical stops and its root mask.
+
+```kotlin
+val irregularStops = listOf(
+    GradientStop(0f, ColorARGB.of(191, 17, 253, 5)),
+    GradientStop(0.1f, ColorARGB.of(113, 241, 7, 199)),
+    GradientStop(0.1f, ColorARGB.of(67, 3, 149, 251)),
+    GradientStop(1f, ColorARGB.of(229, 101, 37, 11)),
+)
+```
+
+- [ ] **Step 2: Run the eight methods and verify RED only on missing average/precedence.**
+
+```bash
+rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest.degenerate*' --tests '*W5dGradientAddressingSurfacePixelTest.singleStopCollapsePreservesFamilyRulesUnderAddressing' --tests '*W5dGradientAddressingSurfacePixelTest.sweepFullCoverageForcesClamp' --tests '*W5dGradientAddressingSurfacePixelTest.conicalInvalidRootStaysTransparentBeforeTile' --tests '*W5dGradientAddressingSurfacePixelTest.conicalFullyDegenerateClampKeepsCircularHardStop' --no-parallel --rerun-tasks
+```
+
+Expected: all four families are admitted after Task 5; REPEAT/MIRROR degenerate pixels disagree because no average is sealed yet, while the Task 5 non-degenerate controls stay GREEN.
+
+- [ ] **Step 3: Implement a local exact binary-rational accumulator in JVM `:gpu-plan`.** Decode each finite F32 channel/position into sign, integer significand and power-of-two exponent. Compute every trapezoid term exactly with `java.math.BigInteger`; normalize only at the final conversion. The public result type is:
+
+```kotlin
+public data class GradientAverageSrgbaF32(
+    public val redF32: Float,
+    public val greenF32: Float,
+    public val blueF32: Float,
+    public val alphaF32: Float,
+)
+```
+
+The final conversion implements IEEE-754 F32 roundTiesToEven explicitly. A zero-width interval contributes exactly zero. Do not expose the accumulator type publicly or move color integration into `:math`.
+
+- [ ] **Step 4: Compute/store the average only when the uniform degeneracy branch can consume it.** Reachability requires a family-degenerate V2 binding plus requested/effective REPEAT or MIRROR. Authenticate the average with normalized stop range/slab identity, family degeneracy and tile graph. Serialize four F32 channels in 16 bytes; the W5c stop buffer remains unchanged.
+
+- [ ] **Step 5: Apply branch precedence before tile evaluation.** Family invalidity wins first. Degenerate CLAMP selects the W5c normative result, DECAL selects transparent, REPEAT/MIRROR select the sealed average. Sweep full coverage already has effective CLAMP from Task 5. Conical invalid root never reaches a tile node; fully-degenerate Conical CLAMP retains its circular hard stop.
+
+- [ ] **Step 6: Verify GREEN, deterministic repeated rendering and commit.**
+
+```bash
+rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest.degenerate*' --tests '*W5dGradientAddressingSurfacePixelTest.singleStopCollapsePreservesFamilyRulesUnderAddressing' --tests '*W5dGradientAddressingSurfacePixelTest.sweepFullCoverageForcesClamp' --tests '*W5dGradientAddressingSurfacePixelTest.conicalInvalidRootStaysTransparentBeforeTile' --tests '*W5dGradientAddressingSurfacePixelTest.conicalFullyDegenerateClampKeepsCircularHardStop' --tests '*W5cGradientSurfacePixelTest*' --no-parallel --rerun-tasks
+rtk git diff --check
+rtk git add gpu-plan/src/main/kotlin gpu-renderer/src/main/kotlin kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5dGradientAddressingSurfacePixelTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5dGradientAddressingCpuOracle.kt
+rtk git commit -m "feat(gpu): seal W5d degenerate averages"
 ```
 
 ### Task 7: Close mixed frames, budgets, capability and durable tracking
@@ -518,12 +551,12 @@ rtk git commit -m "feat(gpu): complete W5d gradient families"
 - Consumes: complete W5d source plans, authentic adapter/device limits, W5c frame-local resources, W4 lanes, W5b blends and existing rollback/completion/quarantine owners.
 - Produces: checked aggregate budgets, distinct structural layouts, public mixed-frame/ownership evidence, authentic capability/AA4 reporting and durable W5d status.
 
-- [ ] **Step 1: Write public RED aggregate tests.** Add `mixedFramePreservesOrderAcrossFamiliesTilesWrappersLanesAndBlends`, `coordinateUniformBudgetRefusesPreciselyAndRecovers`, `mixedCoordinateTopologiesRemainSemanticallyDistinct`, `capturedMatricesSubsetsAndStopsIgnorePostRecordMutation`, and `authenticAa4OrPreciseSkip`. The mixed frame draws overlapping Rect/RRect/Path fill/Path stroke entries with all four families, multiple tile modes, Opacity, local matrices, clamps and destination-read W5b blends; draw order must be observable in final pixels. The topology method renders two different operation orders in one frame and distinguishes them only through public pixels; it does not inspect a program key. The mutation method records a `Picture`, mutates the caller-owned matrix, subset and stop list, then renders the original snapshot.
+- [ ] **Step 1: Write public RED aggregate tests.** Add `mixedFramePreservesOrderAcrossFamiliesTilesWrappersLanesAndBlends`, `coordinateUniformBudgetRefusesPreciselyAndRecovers`, `mixedCoordinateTopologiesRemainSemanticallyDistinct`, `capturedSubsetsAndStopsIgnorePostRecordMutation`, and `authenticAa4OrPreciseSkip`. The mixed frame draws overlapping Rect/RRect/Path fill/Path stroke entries with all four families, multiple tile modes, Opacity, local matrices, clamps and destination-read W5b blends; draw order must be observable in final pixels. The topology method renders two different operation orders in one frame and distinguishes them only through public pixels; it does not inspect a program key. The mutation method records a `Picture`, mutates the caller-owned mutable subset and stop list, then renders the original snapshot. Distinct immutable matrix values are already covered by Task 2.
 
 - [ ] **Step 2: Run the aggregate methods and verify RED on at least the budget/aggregate closure.**
 
 ```bash
-rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest.mixedFramePreservesOrderAcrossFamiliesTilesWrappersLanesAndBlends' --tests '*W5dGradientAddressingSurfacePixelTest.coordinateUniformBudgetRefusesPreciselyAndRecovers' --tests '*W5dGradientAddressingSurfacePixelTest.mixedCoordinateTopologiesRemainSemanticallyDistinct' --tests '*W5dGradientAddressingSurfacePixelTest.capturedMatricesSubsetsAndStopsIgnorePostRecordMutation' --tests '*W5dGradientAddressingSurfacePixelTest.authenticAa4OrPreciseSkip' --no-parallel --rerun-tasks
+rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest.mixedFramePreservesOrderAcrossFamiliesTilesWrappersLanesAndBlends' --tests '*W5dGradientAddressingSurfacePixelTest.coordinateUniformBudgetRefusesPreciselyAndRecovers' --tests '*W5dGradientAddressingSurfacePixelTest.mixedCoordinateTopologiesRemainSemanticallyDistinct' --tests '*W5dGradientAddressingSurfacePixelTest.capturedSubsetsAndStopsIgnorePostRecordMutation' --tests '*W5dGradientAddressingSurfacePixelTest.authenticAa4OrPreciseSkip' --no-parallel --rerun-tasks
 ```
 
 Expected: the mixed aggregate/topology fixtures disagree until every path is sealed. The budget method uses only public `RenderConfig.frameLocalBudgetBytes` with a valid multi-draw workload; it never fabricates device limits. If an existing, more specific public resource diagnostic rejects the aggregate earlier, reformulate the workload rather than accepting the wrong failure.
@@ -566,7 +599,7 @@ rtk git commit -m "test(gpu): close W5d aggregate behavior"
 - [ ] **Step 4: Run fresh controller compilation and public verification.** Do not reuse agent output as final evidence.
 
 ```bash
-rtk ./gradlew :math:matrix:compileKotlinJvm :render-ir:compileKotlinJvm :gpu-plan:compileKotlinJvm :gpu-renderer:compileKotlinJvm :kanvas:compileKotlinJvm --no-parallel --rerun-tasks
+rtk ./gradlew :math:matrix:compileKotlinJvm :render-ir:compileKotlin :gpu-plan:compileKotlin :gpu-renderer:compileKotlin :kanvas:compileKotlin --no-parallel --rerun-tasks
 rtk ./gradlew :math:matrix:jvmTest --tests '*Matrix3x3F64Test*' :math:matrix:jsNodeTest --no-parallel --rerun-tasks
 rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest*' --tests '*W5cGradientSurfacePixelTest*' --tests '*W5bBlendSurfacePixelTest*' --tests '*W5aMaterialSurfacePixelTest*' --no-parallel --rerun-tasks
 rtk git diff --check
