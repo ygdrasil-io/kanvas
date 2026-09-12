@@ -52,31 +52,44 @@ public class MaterialCoordinatePlanV2 private constructor(operations: List<Mater
     internal companion object {
         fun fromCtmAndNodes(ctmF32: Matrix3x3F32, nodes: List<CoordinateNodeV2>): Build {
             val segment = mutableListOf<Matrix3x3F32>()
-            for (node in nodes) {
-                // Clamp boundaries become executable in Task 3; never combine through one.
-                val localF32 = (node as? CoordinateNodeV2.LocalMatrix)?.copyMatrixF32()
-                    ?: return Build.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
-                val localF64 = localF32.toMatrix3x3F64()
-                if (!localF64.isFinite()) return Build.Refused(W5dPlanDiagnostics.LocalMatrixNonFinite)
-                if (localF64.determinantF64() == 0.0) return Build.Refused(W5dPlanDiagnostics.LocalMatrixSingular)
-                if (localF32.persp0 != 0f || localF32.persp1 != 0f || localF32.persp2 != 1f)
-                    return Build.Refused(W5dPlanDiagnostics.LocalMatrixUnrepresentable)
-                segment += localF32
+            val operations = mutableListOf<MaterialCoordinateOperationV2>()
+            fun flushSegment(): String? {
+                if (segment.isEmpty()) return null
+                val composedF64 = try { composeInOrderF64(segment) } catch (_: IllegalArgumentException) {
+                    return W5dPlanDiagnostics.LocalMatrixUnrepresentable
+                }
+                if (composedF64.determinantF64() == 0.0) return W5dPlanDiagnostics.LocalMatrixSingular
+                val inverseF32 = composedF64.invertFiniteOrNull()?.toFiniteMatrix3x3F32OrNull()
+                    ?: return W5dPlanDiagnostics.LocalMatrixUnrepresentable
+                operations += MaterialCoordinateOperationV2.InverseMatrixF32(inverseF32)
+                segment.clear()
+                return null
             }
-            val composedF64 = try { composeInOrderF64(segment) } catch (_: IllegalArgumentException) {
-                return Build.Refused(W5dPlanDiagnostics.LocalMatrixUnrepresentable)
-            }
-            if (composedF64.determinantF64() == 0.0) return Build.Refused(W5dPlanDiagnostics.LocalMatrixSingular)
-            val inverseLocalF32 = composedF64.invertFiniteOrNull()?.toFiniteMatrix3x3F32OrNull()
-                ?: return Build.Refused(W5dPlanDiagnostics.LocalMatrixUnrepresentable)
             val inverseCtmF32 = ctmF32.toMatrix3x3F64().invertFiniteOrNull()?.toFiniteMatrix3x3F32OrNull()
                 ?: return Build.Refused(W5cPlanDiagnostics.CoordinatesUnavailable)
             if (inverseCtmF32.persp0 != 0f || inverseCtmF32.persp1 != 0f || inverseCtmF32.persp2 != 1f)
                 return Build.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
-            return Build.Ready(MaterialCoordinatePlanV2(listOf(
-                MaterialCoordinateOperationV2.InverseMatrixF32(inverseCtmF32),
-                MaterialCoordinateOperationV2.InverseMatrixF32(inverseLocalF32),
-            )))
+            operations += MaterialCoordinateOperationV2.InverseMatrixF32(inverseCtmF32)
+            for (node in nodes) {
+                when (node) {
+                    is CoordinateNodeV2.LocalMatrix -> {
+                        val localF32 = node.copyMatrixF32()
+                        val localF64 = localF32.toMatrix3x3F64()
+                        if (!localF64.isFinite()) return Build.Refused(W5dPlanDiagnostics.LocalMatrixNonFinite)
+                        if (localF64.determinantF64() == 0.0) return Build.Refused(W5dPlanDiagnostics.LocalMatrixSingular)
+                        segment += localF32
+                    }
+                    is CoordinateNodeV2.CoordClamp -> {
+                        val subsetF32 = node.copySubsetF32()
+                        if (!subsetF32.isFinite()) return Build.Refused(W5dPlanDiagnostics.CoordClampNonFinite)
+                        if (!subsetF32.isSorted()) return Build.Refused(W5dPlanDiagnostics.CoordClampUnsorted)
+                        flushSegment()?.let { return Build.Refused(it) }
+                        operations += MaterialCoordinateOperationV2.ClampRectF32(subsetF32)
+                    }
+                }
+            }
+            flushSegment()?.let { return Build.Refused(it) }
+            return Build.Ready(MaterialCoordinatePlanV2(operations))
         }
 
         private fun MaterialCoordinateOperationV2.snapshot(): MaterialCoordinateOperationV2 = when (this) {

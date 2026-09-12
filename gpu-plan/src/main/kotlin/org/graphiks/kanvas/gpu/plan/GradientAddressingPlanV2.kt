@@ -1,6 +1,86 @@
 package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.geometry.RectF32
+
+/** Scalar range proof for all reassociations/contractions of the emitted homogeneous rows. */
+internal fun MaterialCoordinatePlanV2.proveCoordinateDomainF64(deviceBoundsF32: RectF32): Double? {
+    if (!deviceBoundsF32.isFinite() || !deviceBoundsF32.isSorted()) return null
+    var finite = true
+    fun magnitude(range: ClosedFloatingPointRange<Double>): Double = maxOf(kotlin.math.abs(range.start), kotlin.math.abs(range.endInclusive))
+    fun rounded(lowerF64: Double, upperF64: Double): ClosedFloatingPointRange<Double> {
+        // Outward F64 endpoints plus a full F32 ULP cover rounding, and MIN_NORMAL covers FTZ.
+        val errorF64 = maxOf(kotlin.math.abs(lowerF64), kotlin.math.abs(upperF64)) * Math.scalb(1.0, -23) + java.lang.Float.MIN_NORMAL
+        val lower = Math.nextDown(lowerF64 - errorF64)
+        val upper = Math.nextUp(upperF64 + errorF64)
+        finite = finite && lower.isFinite() && upper.isFinite() &&
+            maxOf(kotlin.math.abs(lower), kotlin.math.abs(upper)) <= Float.MAX_VALUE.toDouble()
+        return lower..upper
+    }
+    fun input(valueF32: Float): ClosedFloatingPointRange<Double> {
+        val valueF64 = valueF32.toDouble()
+        return if (kotlin.math.abs(valueF64) < java.lang.Float.MIN_NORMAL) minOf(0.0, valueF64)..maxOf(0.0, valueF64)
+            else valueF64..valueF64
+    }
+    fun flushed(range: ClosedFloatingPointRange<Double>): ClosedFloatingPointRange<Double> =
+        if (range.start < java.lang.Float.MIN_NORMAL && range.endInclusive > -java.lang.Float.MIN_NORMAL)
+            minOf(0.0, range.start)..maxOf(0.0, range.endInclusive) else range
+    fun product(a: ClosedFloatingPointRange<Double>, b: ClosedFloatingPointRange<Double>): ClosedFloatingPointRange<Double> {
+        val values = listOf(a.start * b.start, a.start * b.endInclusive, a.endInclusive * b.start, a.endInclusive * b.endInclusive)
+        return values.min()..values.max()
+    }
+    fun add(a: ClosedFloatingPointRange<Double>, b: ClosedFloatingPointRange<Double>): ClosedFloatingPointRange<Double> =
+        rounded(a.start + b.start, a.endInclusive + b.endInclusive)
+    fun mul(a: ClosedFloatingPointRange<Double>, b: ClosedFloatingPointRange<Double>): ClosedFloatingPointRange<Double> =
+        product(a, b).let { rounded(it.start, it.endInclusive) }
+    fun fma(a: ClosedFloatingPointRange<Double>, b: ClosedFloatingPointRange<Double>, c: ClosedFloatingPointRange<Double>): ClosedFloatingPointRange<Double> =
+        product(a, b).let { rounded(it.start + c.start, it.endInclusive + c.endInclusive) }
+    var x = deviceBoundsF32.left.toDouble()..deviceBoundsF32.right.toDouble()
+    var y = deviceBoundsF32.top.toDouble()..deviceBoundsF32.bottom.toDouble()
+    fun row(aF32: Float, bF32: Float, cF32: Float): ClosedFloatingPointRange<Double> {
+        val a = input(aF32); val b = input(bF32); val c = input(cF32)
+        val ax = mul(a, x); val by = mul(b, y)
+        val schedules = listOf(add(add(ax, by), c), add(ax, add(by, c)), add(add(ax, c), by),
+            add(fma(a, x, c), by), add(fma(b, y, c), ax),
+            add(fma(a, x, by), c), add(fma(b, y, ax), c), fma(a, x, add(by, c)), fma(b, y, add(ax, c)),
+            fma(a, x, fma(b, y, c)), fma(b, y, fma(a, x, c)))
+        return schedules.minOf { it.start }..schedules.maxOf { it.endInclusive }
+    }
+    fun quotient(n: ClosedFloatingPointRange<Double>, w: ClosedFloatingPointRange<Double>): ClosedFloatingPointRange<Double> {
+        val values = listOf(n.start / w.start, n.start / w.endInclusive, n.endInclusive / w.start, n.endInclusive / w.endInclusive)
+        // The normal fraction division has the WGSL division error; exponent scaling is exact
+        // for normals. Enclose both surviving and flushed subnormal results.
+        val errorF64 = values.maxOf { kotlin.math.abs(it) } * Math.scalb(1.0, -20) + java.lang.Float.MIN_NORMAL
+        return rounded(values.min() - errorF64, values.max() + errorF64)
+    }
+    val operations = copyOperations()
+    for ((indexI32, operation) in operations.withIndex()) when (operation) {
+        is MaterialCoordinateOperationV2.ClampRectF32 -> {
+            val subsetF32 = operation.subsetF32
+            // This also closes a cross-zero quotient. No matrix may consume that open range.
+            x = flushed(subsetF32.left.toDouble()..subsetF32.right.toDouble())
+            y = flushed(subsetF32.top.toDouble()..subsetF32.bottom.toDouble())
+        }
+        is MaterialCoordinateOperationV2.InverseMatrixF32 -> {
+            val matrixF32 = operation.inverseF32
+            val hx = row(matrixF32.sx, matrixF32.kx, matrixF32.tx)
+            val hy = row(matrixF32.ky, matrixF32.sy, matrixF32.ty)
+            val hw = row(matrixF32.persp0, matrixF32.persp1, matrixF32.persp2)
+            if (!finite) return null
+            if (matrixF32.persp0 == 0f && matrixF32.persp1 == 0f && matrixF32.persp2 == 1f) {
+                x = hx
+                y = hy
+            } else if (hw.start <= 0.0 && hw.endInclusive >= 0.0) {
+                if (operations.getOrNull(indexI32 + 1) !is MaterialCoordinateOperationV2.ClampRectF32) return null
+            } else {
+                x = quotient(hx, hw)
+                y = quotient(hy, hw)
+                if (!finite) return null
+            }
+        }
+    }
+    return maxOf(magnitude(x), magnitude(y)).takeIf { it.isFinite() }
+}
 
 public data class GradientAddressingProgramV2(
     public val family: GradientFamilyV2,

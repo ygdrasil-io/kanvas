@@ -147,13 +147,16 @@ public class RenderGraph private constructor(
                     val authority = draw.materialAuthority
                     val source = RawMaterialRequirementsV2.of(materialPlanTable, authority.materialPlanRef())
                     require(capabilities.maxUniformBufferBindingSizeBytesI64?.let { source.uniformByteCountI64 <= it } == true &&
-                        source.uniformByteCountI64 <= capabilities.maxBufferSizeBytes) {
+                        source.uniformByteCountI64 <= capabilities.maxBufferSizeBytes && source.uniformByteCountI64 <= Int.MAX_VALUE) {
                         if (authority is PlanDrawMaterialAuthority.MaterialV2) W5dPlanDiagnostics.CoordinateUniformBudget else W5cPlanDiagnostics.StorageUnavailable
                     }
                     Math.addExact(totalI64, source.uniformByteCountI64)
                 }
                 val peakI64 = Math.addExact(peakFrameLocalBytes, stopSlab.byteSizeI64)
-                require(Math.addExact(peakI64, sourceBytesI64) <= budget.maxFrameLocalBytes) { W5cPlanDiagnostics.StopBudget }
+                require(Math.addExact(peakI64, sourceBytesI64) <= budget.maxFrameLocalBytes) {
+                    if (visualDraws(passes).any { it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2 })
+                        W5dPlanDiagnostics.CoordinateUniformBudget else W5cPlanDiagnostics.StopBudget
+                }
                 val stopResource = PlanResource.of(PlanResourceRole.GradientStopData, 0, PlanResourceKind.Buffer,
                     null, null, stopSlab.byteSizeI64, setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination),
                     PlanResourceLifetime.FrameLocal, 0, passes.size)

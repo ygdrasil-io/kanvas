@@ -12,14 +12,13 @@ internal fun Shader.isW5dGradientCandidateV2(allowLocalMatrix: Boolean = true, a
     val limits = GraphLimits()
     var visitedI32 = 0
     while (true) {
-        if (++visitedI32 > limits.maxDepth || visitedI32 > limits.maxNodes) return allowNonGradient
+        if (++visitedI32 > limits.maxDepth || visitedI32 > limits.maxNodes)
+            return allowNonGradient || (allowLocalMatrix && localCountI32 > 0)
         when (val node = source) {
             is Shader.Opacity -> source = node.shader
             is Shader.WithLocalMatrix -> {
                 if (!allowLocalMatrix) return false
-                // Invalid coefficients belong to the admitted planner's precise diagnostics.
-                if (node.matrix.persp0.isFinite() && node.matrix.persp1.isFinite() && node.matrix.persp2.isFinite() &&
-                    (node.matrix.persp0 != 0f || node.matrix.persp1 != 0f || node.matrix.persp2 != 1f)) return false
+                // Affine/projective and invalid coefficients belong to the same planner.
                 localCountI32++
                 source = node.shader
             }
@@ -31,7 +30,11 @@ internal fun Shader.isW5dGradientCandidateV2(allowLocalMatrix: Boolean = true, a
                 node.interpolation == ColorSpaceInterpolation.SRGB
             is Shader.ConicalGradient -> return localCountI32 == 0 && node.tileMode == TileMode.CLAMP &&
                 node.interpolation == ColorSpaceInterpolation.SRGB
-            is Shader.CoordClamp -> return false
+            is Shader.CoordClamp -> {
+                if (!allowLocalMatrix) return false
+                localCountI32++
+                source = node.shader
+            }
             is Shader.WithColorFilter, is Shader.WithWorkingColorSpace,
             is Shader.Blend, is Shader.Image, is Shader.RuntimeEffect, is Shader.SolidColor,
             is Shader.PerlinNoise, is Shader.FractalNoise -> return allowNonGradient && localCountI32 == 0

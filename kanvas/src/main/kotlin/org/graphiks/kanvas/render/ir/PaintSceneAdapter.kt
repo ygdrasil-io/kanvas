@@ -155,12 +155,13 @@ public object PaintSceneAdapter {
             } }),
         )
 
-    /** Preserve matrix coefficients only for the admitted affine Linear wrapper grammar. */
+    /** Preserve coordinate values for typed validation of the admitted Linear wrapper grammar. */
     private fun Shader.preservesW5dMatrices(): Boolean {
         var source = this
         while (true) when (val node = source) {
             is Shader.Opacity -> source = node.shader
             is Shader.WithLocalMatrix -> source = node.shader
+            is Shader.CoordClamp -> source = node.shader
             is Shader.LinearGradient -> return node.tileMode == org.graphiks.kanvas.paint.TileMode.CLAMP &&
                 node.interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB
             else -> return false
@@ -183,7 +184,8 @@ public object PaintSceneAdapter {
         is Shader.PerlinNoise -> MaterialNode.PerlinNoise(baseX.checked("shader.base-x"), baseY.checked("shader.base-y"), numOctaves, seed, tileSize?.checked("shader.tile-size"))
         is Shader.FractalNoise -> MaterialNode.FractalNoise(baseX.checked("shader.base-x"), baseY.checked("shader.base-y"), numOctaves, seed, tileSize?.checked("shader.tile-size"))
         is Shader.WithWorkingColorSpace -> MaterialNode.WithWorkingColorSpace(shader.toMaterial(captureImage, false), ColorInterpolation.valueOf(interpolation.name))
-        is Shader.CoordClamp -> MaterialNode.CoordClamp(shader.toMaterial(captureImage, false), subset.checked("shader.subset"))
+        is Shader.CoordClamp -> MaterialNode.CoordClamp(shader.toMaterial(captureImage, preserveW5dMatrices),
+            if (preserveW5dMatrices) subset.copy() else subset.checked("shader.subset"))
         is Shader.RuntimeEffect -> MaterialNode.RuntimeEffect.of(
             effect.toDescriptor(RuntimeEffectAbi.SHADER),
             uniforms.toRuntimeUniforms(),

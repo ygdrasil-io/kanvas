@@ -267,18 +267,14 @@ public object EffectiveMaterialPlanner {
             org.graphiks.math.geometry.Point2F32(bounds.right, bounds.top),
             org.graphiks.math.geometry.Point2F32(bounds.left, bounds.bottom),
             org.graphiks.math.geometry.Point2F32(bounds.right, bounds.bottom)).map(draw.transform::transform)
-        var magnitudeF64 = deviceCorners.maxOf { maxOf(kotlin.math.abs(it.x.toDouble()), kotlin.math.abs(it.y.toDouble())) } + 2.0
-        for (operation in coordinates.copyOperations()) {
-            val matrixF32 = when (operation) {
-                is MaterialCoordinateOperationV2.InverseMatrixF32 -> operation.inverseF32
-                is MaterialCoordinateOperationV2.ClampRectF32 -> return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
-            }
-            magnitudeF64 = maxOf(
-                (kotlin.math.abs(matrixF32.sx.toDouble()) + kotlin.math.abs(matrixF32.kx.toDouble())) * magnitudeF64 + kotlin.math.abs(matrixF32.tx.toDouble()),
-                (kotlin.math.abs(matrixF32.ky.toDouble()) + kotlin.math.abs(matrixF32.sy.toDouble())) * magnitudeF64 + kotlin.math.abs(matrixF32.ty.toDouble()),
-            ) * 1.00001 + 64.0 * java.lang.Float.MIN_NORMAL
-            if (!magnitudeF64.isFinite() || magnitudeF64 > 1e8) return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
-        }
+        // W3/W4a own axis-aligned device rectangles. Outward pixel edges enclose every
+        // fragment center (including fractional-edge AA), without losing X/Y correlation
+        // to an unrelated absolute-magnitude square before projective evaluation.
+        val deviceBoundsF32 = org.graphiks.math.geometry.RectF32.ofLTRB(
+            kotlin.math.floor(deviceCorners.minOf { it.x }), kotlin.math.floor(deviceCorners.minOf { it.y }),
+            kotlin.math.ceil(deviceCorners.maxOf { it.x }), kotlin.math.ceil(deviceCorners.maxOf { it.y }))
+        val magnitudeF64 = coordinates.proveCoordinateDomainF64(deviceBoundsF32)
+            ?: return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
         val tileGraph = GradientTileOperationGraphV2.clamp()
         val program = GradientAddressingProgramV2(GradientFamilyV2.LINEAR, tileGraph.requestedMode,
             tileGraph.effectiveMode, tileGraph.contractId, coordinates.topologyIdentity)
