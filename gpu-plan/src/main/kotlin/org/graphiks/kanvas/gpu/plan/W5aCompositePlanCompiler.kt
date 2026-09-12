@@ -100,6 +100,9 @@ public class W5aCompositePlanCompiler : GpuPlanCompiler {
                 }
             } }) RenderPlanResult.Ready(issueW5bNativeComposite(graphs))
             else RenderPlanResult.Ready(RenderGraph.issueW5aComposite(W5aCompositePlanV1.issue(graphs)))
+        } catch (failure: RawMaterialRequirementsV2.Refusal) {
+            RenderPlanResult.ResourceLimitExceeded(listOf(RenderDiagnostic(RenderDiagnosticCode(failure.code),
+                RenderDiagnosticDomain.RESOURCE, RenderDiagnosticSeverity.ERROR, "Composite material frame exceeds its aggregate memory budget")))
         } catch (_: W5aCompositeBudgetExceeded) {
             RenderPlanResult.ResourceLimitExceeded(listOf(diagnostic("Composite frame exceeds its aggregate memory budget")))
         } catch (failure: IllegalArgumentException) {

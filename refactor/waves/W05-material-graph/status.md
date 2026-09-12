@@ -1,6 +1,44 @@
-# État W05 — material graph, final blends et gradients W5c
+# État W05 — material graph, final blends et adressage des gradients W5d
 
-W5c est close au niveau fonctionnel sur `codex/w5c-gradients`, empilée sur W5b : les quatre gradients CLAMP/SRGB sans local matrix sont promus sur Rect, RRect analytique, Path fill et Path stroke. La clôture Task 7 est complétée par le correctif Task 8 `d5b9307a0`, qui scelle le tuple F32 Linear et ajoute un pixel public biaxial discriminant. La vérification finale du 12 septembre 2026 compte 125 méthodes, 124 passées, un skip AA4 et aucune failure/error XML. La commande Gradle reste en échec à cause du crash natif post-assertions de l'executor, exit 133; elle n'est pas présentée comme verte. W5d est la prochaine tranche empilée.
+W5d est close au niveau fonctionnel sur `codex/w5d-gradient-addressing`, empilée sur W5c : Linear/Radial/Sweep/Conical SRGB, CLAMP/REPEAT/MIRROR/DECAL, `WithLocalMatrix`, `CoordClamp`, coordonnées ordonnées et moyenne dégénérée sont promus sur Rect, RRect analytique, Path fill et Path stroke. Task 7 ferme la frame mixte et le budget agrégé par preuves publiques. Le 12 septembre 2026, la sélection W5d/W5c/W5b/W5a compte 160 méthodes, 158 passées, deux skips AA4 et aucune failure/error XML. Gradle reste en échec après les assertions, exit 1, avec worker natif exit 133; ce n'est pas un succès de commande.
+
+## Clôture W5d Task 7 — agrégats et preuves publiques
+
+Les cinq méthodes ajoutées sont `mixedFramePreservesOrderAcrossFamiliesTilesWrappersLanesAndBlends`, `coordinateUniformBudgetRefusesPreciselyAndRecovers`, `mixedCoordinateTopologiesRemainSemanticallyDistinct`, `capturedSubsetsAndStopsIgnorePostRecordMutation` et `authenticAa4OrPreciseSkip`. La frame mixte superpose Linear REPEAT Rect → Radial MIRROR RRect → Sweep DECAL Path fill → Conical CLAMP Path stroke, avec matrices locales, clamps, `Opacity(0.5)` et `DIFFERENCE`. Les témoins de chaque lane, la transparence au-dessus du seam Sweep et l'ordre inverse sont vérifiés par pixels; le pixel composé utilise l'enveloppe indépendante W5b existante. Aucun program key privé n'est inspecté. Deux topologies clamp/matrix coexistent dans une frame rouge/bleue, rendue trois fois. Une `Picture` reste rouge après mutation du subset et des stops appelants.
+
+Le workload de budget valide contient 32 draws en deux lanes contiguës, deux stops, 20 paires matrix/clamp et des valeurs de matrice distinctes. Il rend sous 1 MiB, refuse à `RenderConfig.frameLocalBudgetBytes = 65_536` avec `resource.material.gradient.coordinate-uniform-budget`, puis récupère sur le même runtime; le cycle est répété. Les essais trop grands ou refusés par les réserves géométriques ont été reformulés. Le RED retenu avant production était `w5a.composite.unsupported: resource-limit.w5b.destination-budget`, et non un manque de capacité synthétique.
+
+`RawMaterialRequirementsV2` centralise les tailles des champs famille, des headers, de l'éventuelle moyenne 16 bytes et des opérations coordonnées ordonnées, les additions/multiplications I64 contrôlées, les conversions U32/Int, la taille physique/binding uniforme, les nombres de bindings et l'alignement. Les sources utilisent des buffers non dynamiques à offset zéro. Les graphes simples, destination-read et mixtes délèguent leurs checks de binding et d'agrégat; le composite propage le diagnostic W5d avant `Ready`. `RenderGraph.kt`, `W5bDestinationGraph.kt` et `W5aCompositePlanCompiler.kt` sont les raccords supplémentaires explicitement autorisés pour cette fermeture, sans nouveau chemin de rendu.
+
+L'audit structure/valeurs confirme : famille, requested/effective tile, version du tile graph, présence de moyenne et séquence de tags coordonnées restent structurels; stops/ranges, tuples famille, opacity, bits matrices/subsets et moyenne restent dans les seals de valeurs. Raw authentifie de nouveau le plan et sa plage avant packing; un source-stage V2 incohérent refuse avec `schema.material.gradient.coordinate-plan` avant allocation native. La preuve de ces frontières internes reste une lecture de production; les tests observent exclusivement les API publiques.
+
+Les limites physiques viennent de `device.limits`, transportées par `GPUCapabilities.toPlanCapabilitySnapshot`; aucune valeur ni capability AA4 de test n'est ajoutée. Le résultat réel AA4 est `w4d.general.texture-sample-support-unavailable: W4d.2 four-sample color support is unavailable`; le test vérifie ce code et la récupération avant son skip. La branche AA4 positive avec pixels exacts reste non exercée sur cet adapter.
+
+L'ownership réutilise W5c sans nouveau handle, buffer ou cache W5d : `GPUW5aSourceOwnedHandlesV2` détient uniformes, layouts, pipelines et bind groups; `materializeGradientStopsV1` alloue/upload un seul stop buffer, emprunté par les groupes de la frame. Le payload transfère l'ensemble avec `PayloadOwnedCompletion`; l'exception de materialization conserve le draft dans le rollback existant. Après submit/completion, les fermetures réussies sont retirées et les fermetures incertaines restent en quarantine pour reprise. L'ABI du stop buffer reste deux vec4, 32 bytes par stop. Les renders répétés et la récupération après refus sont publics; aucune panne d'allocation/device loss ni lifetime de handle n'est simulée. L'ownership terminal ne reprend pas de continuation legacy.
+
+La régression forcée utilise :
+
+```sh
+rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest*' --tests '*W5cGradientSurfacePixelTest*' --tests '*W5bBlendSurfacePixelTest*' --tests '*W5aMaterialSurfacePixelTest*' --no-parallel --rerun-tasks
+```
+
+| Classe | Méthodes | Passées | Failures | Errors | Skips | Timestamp XML UTC, 12 septembre 2026 |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| W5aMaterialSurfacePixelTest | 48 | 47 | 0 | 0 | 1 | 13:42:30.173Z |
+| W5bBlendSurfacePixelTest | 50 | 50 | 0 | 0 | 0 | 13:42:42.444Z |
+| W5cGradientSurfacePixelTest | 27 | 27 | 0 | 0 | 0 | 13:43:08.322Z |
+| W5dGradientAddressingSurfacePixelTest | 35 | 34 | 0 | 0 | 1 | 13:43:53.959Z |
+| Total | 160 | 158 | 0 | 0 | 2 | — |
+
+Après auto-review de l'attente sRGB du seul nouveau pixel mixte, les cinq agrégats ont été rejoués avec `--no-parallel --rerun-tasks` : XML 13:47:03.357Z, quatre passés, un skip AA4, zéro failure/error, sur la même production. Le run complet termine avec `Gradle Test Executor 64` exit 133 et Gradle exit 1; le run final des agrégats avec executor 65 exit 133 et Gradle exit 1. Aucun contournement native-access/Unsafe, reset du runtime ou masquage de crash n'est ajouté.
+
+La compilation séparée `rtk ./gradlew :gpu-plan:compileKotlin :gpu-renderer:compileKotlin :kanvas:compileKotlin --no-parallel` termine `BUILD SUCCESSFUL`, exit 0. `rtk git diff --check` est propre. Cette auto-review Task 7 ne remplace pas une revue globale indépendante de la stack.
+
+Réserves maintenues : collision d'IDs de cible equal-extent entre composite W5a et session W5b sur le même runtime; intervalle Conical B-cross-zero conservateur pouvant donner un faux `DomainUnbounded`; absence de preuve AA4 positive et de panne native injectée. Le finding adjacent Minor Task 4, `GradientTileOperationNodeV2.ClampF32` public jamais émis/rejeté, reste différé sans aggravation dans Task 7. W5e images, W5f non-SRGB/filters, W5g et W5h/H restent ouverts. Aucun GM/dashboard/régénération/Skia/font/codec/baseline/`jpg-color-cube` n'a été exécuté; seuls ce document et `refactor/README.md` portent le suivi durable.
+
+## Historique W5c
+
+W5c est close au niveau fonctionnel sur `codex/w5c-gradients`, empilée sur W5b : les quatre gradients CLAMP/SRGB sans local matrix sont promus sur Rect, RRect analytique, Path fill et Path stroke. La clôture Task 7 est complétée par le correctif Task 8 `d5b9307a0`, qui scelle le tuple F32 Linear et ajoute un pixel public biaxial discriminant. Sa vérification finale du 12 septembre 2026 comptait 125 méthodes, 124 passées, un skip AA4 et aucune failure/error XML, avec Gradle exit 1 et crash natif post-assertions exit 133. Les sections suivantes conservent cet historique antérieur à W5d.
 
 ## Frontière et preuves publiques W5c
 
@@ -69,7 +107,7 @@ Après toutes les assertions, `Gradle Test Executor 263` sort avec **133** et Gr
 - Le gap d'intégration connu entre les IDs de cible du composite historique W5a et de la session W5b, avec deux Surfaces de même extent sur le même runtime/backend, reste différé. Il n'est pas nécessaire de le corriger pour exprimer honnêtement la gate mixte destination-read; aucune garantie générale sur cette transition de routes n'est ajoutée.
 - L'oracle Conical reste conservateur lorsque l'intervalle de B traverse zéro : il peut produire un faux `DomainUnbounded`, jamais un faux `Bounded`. Aucune tolérance élargie ni prétention de conformance exhaustive.
 - AA4 et les capabilities physiques absentes ne sont jamais simulés; allocation failure, device loss et récupération après panne native ne sont pas prouvés par injection.
-- W5d reste ouvert pour REPEAT/MIRROR/DECAL, `WithLocalMatrix` et `CoordClamp`; c'est la prochaine stack. W5f conserve LINEAR/OKLAB/HSL/OKLCH et les filters, W5h les gradients Point(s)/Text/Vertices/Mesh et autres cellules H. W5e images, W5g blend-children/noise et les autres runtime effects W5h restent planifiés.
+- À cette étape historique, W5d était la prochaine stack; sa clôture REPEAT/MIRROR/DECAL, `WithLocalMatrix` et `CoordClamp` est désormais décrite en tête. W5f conserve LINEAR/OKLAB/HSL/OKLCH et les filters, W5h les gradients Point(s)/Text/Vertices/Mesh et autres cellules H. W5e images, W5g blend-children/noise et les autres runtime effects W5h restent planifiés.
 - Aucune suite GM/dashboard/render-regeneration/Skia/font/codec/`jpg-color-cube` n'a été exécutée. Les modules peuvent compiler transitivement. Seuls ce status et `refactor/README.md` reçoivent la documentation durable; les rapports d'agents restent dans le workspace SDD ignoré.
 
 ## Historique W5b — référence antérieure à W5c

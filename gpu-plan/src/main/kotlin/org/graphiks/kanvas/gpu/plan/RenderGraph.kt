@@ -145,20 +145,16 @@ public class RenderGraph private constructor(
             }
             if (stopSlab != null && resources.none { it.role == PlanResourceRole.GradientStopData }) {
                 stopSlab.requireStorageCapabilities(capabilities)
-                val sourceBytesI64 = visualDraws(passes).fold(0L) { totalI64, draw ->
+                val sourceRequirements = visualDraws(passes).map { draw ->
                     val authority = draw.materialAuthority
                     val source = RawMaterialRequirementsV2.of(materialPlanTable, authority.materialPlanRef())
-                    require(capabilities.maxUniformBufferBindingSizeBytesI64?.let { source.uniformByteCountI64 <= it } == true &&
-                        source.uniformByteCountI64 <= capabilities.maxBufferSizeBytes && source.uniformByteCountI64 <= Int.MAX_VALUE) {
+                    require(source.fitsUniformBinding(capabilities)) {
                         if (authority is PlanDrawMaterialAuthority.MaterialV2) W5dPlanDiagnostics.CoordinateUniformBudget else W5cPlanDiagnostics.StorageUnavailable
                     }
-                    Math.addExact(totalI64, source.uniformByteCountI64)
+                    source
                 }
                 val peakI64 = Math.addExact(peakFrameLocalBytes, stopSlab.byteSizeI64)
-                require(Math.addExact(peakI64, sourceBytesI64) <= budget.maxFrameLocalBytes) {
-                    if (visualDraws(passes).any { it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2 })
-                        W5dPlanDiagnostics.CoordinateUniformBudget else W5cPlanDiagnostics.StopBudget
-                }
+                RawMaterialRequirementsV2.requireFrameBudget(sourceRequirements, peakI64, budget, W5cPlanDiagnostics.StopBudget)
                 val stopResource = PlanResource.of(PlanResourceRole.GradientStopData, 0, PlanResourceKind.Buffer,
                     null, null, stopSlab.byteSizeI64, setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination),
                     PlanResourceLifetime.FrameLocal, 0, passes.size)

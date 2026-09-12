@@ -26,6 +26,134 @@ import org.graphiks.kanvas.surface.W5dGradientAddressingCpuOracle.GradientFixtur
 import org.graphiks.kanvas.surface.W5dGradientAddressingCpuOracle.W5dPublicLane
 
 class W5dGradientAddressingSurfacePixelTest {
+    @Test fun mixedFramePreservesOrderAcrossFamiliesTilesWrappersLanesAndBlends() {
+        // Reordering any lane hides its two-column witness; the final stroke reads
+        // the green destination and adds half-linear red. The independent W5b
+        // envelope accounts for the final sRGB attachment quantization.
+        val rectF32 = RectF32.ofLTRB(0f, 0f, 10f, 4f)
+        fun stops(color: ColorARGB) = listOf(GradientStop(0f, color), GradientStop(.5f, color),
+            GradientStop(.5f, ColorARGB.White), GradientStop(1f, ColorARGB.White))
+        val shaders = listOf(
+            Shader.LinearGradient(Point2F32(0f, 0f), Point2F32(2f, 0f), stops(ColorARGB.Red), tileMode = TileMode.REPEAT),
+            Shader.RadialGradient(Point2F32(0f, 2f), 2f, stops(ColorARGB.Blue), tileMode = TileMode.MIRROR),
+            Shader.SweepGradient(Point2F32(0f, 2f), 0f, 180f, stops(ColorARGB.Green), tileMode = TileMode.DECAL),
+            Shader.ConicalGradient(Point2F32(0f, 2f), 0f, Point2F32(0f, 2f), 20f, stops(ColorARGB.Red)),
+        ).map { Shader.WithLocalMatrix(Shader.CoordClamp(it, rectF32), Matrix3x3F32.translation(-1f, 0f)) }
+        fun frame(reverse: Boolean): UByteArray {
+            val recorder = PictureRecorder()
+            val canvas = recorder.beginRecording(rectF32)
+            for (laneI32 in if (reverse) (0..3).reversed() else 0..3) {
+                val laneBoundsF32 = RectF32.ofLTRB(laneI32 * 2f, 0f, 10f, 4f)
+                val paint = Paint(shader = if (laneI32 == 3) Shader.Opacity(shaders[laneI32], .5f) else shaders[laneI32],
+                    antiAlias = false, blendMode = if (laneI32 == 3) BlendMode.DIFFERENCE else BlendMode.SRC_OVER)
+                when (laneI32) {
+                    0 -> canvas.drawRect(laneBoundsF32, paint)
+                    1 -> canvas.drawRRect(RRectF32.of(laneBoundsF32, CornerRadiiF32.of(.5f)), paint.copy(antiAlias = true))
+                    2 -> canvas.drawPath(Path().apply { addRect(laneBoundsF32) }, paint)
+                    3 -> canvas.drawPath(Path().apply { moveTo(6f, 2f); lineTo(10f, 2f) },
+                        paint.copy(style = PaintStyle.STROKE, strokeWidth = 4f))
+                }
+            }
+            val picture = recorder.finishRecordingAsPicture()
+            val surface = Surface(10, 4)
+            surface.canvas { picture.playback(this) }
+            val pixels = surface.render().pixels
+            assertContentEquals(pixels, surface.render().pixels)
+            return pixels
+        }
+        val forward = frame(false)
+        val reverse = frame(true)
+        // Above the Sweep seam DECAL reveals the radial's white half-period.
+        assertContentEquals(ubyteArrayOf(255u, 255u, 255u, 255u), forward.copyOfRange(60, 64))
+        for ((xI32, expected) in listOf(1 to ubyteArrayOf(255u, 0u, 0u, 255u),
+            3 to ubyteArrayOf(0u, 0u, 255u, 255u), 5 to ubyteArrayOf(0u, 255u, 0u, 255u))) {
+            val offsetI32 = (2 * 10 + xI32) * 4
+            assertContentEquals(expected, forward.copyOfRange(offsetI32, offsetI32 + 4))
+            assertContentEquals(W5dGradientAddressingCpuOracle.redPixel(), reverse.copyOfRange(offsetI32, offsetI32 + 4))
+        }
+        val strokeOffsetI32 = (2 * 10 + 7) * 4
+        WgslFloatEnvelopeV1Oracle.assertAdmits(W5bBlendCpuOracle.mixedPixel(listOf(
+            W5bBlendCpuOracle.Draw(ColorARGB.Green, 1f, BlendMode.SRC_OVER) to 1f,
+            W5bBlendCpuOracle.Draw(ColorARGB.Red, .5f, BlendMode.DIFFERENCE) to 1f)),
+            forward.copyOfRange(strokeOffsetI32, strokeOffsetI32 + 4))
+        assertContentEquals(W5dGradientAddressingCpuOracle.redPixel(), reverse.copyOfRange(strokeOffsetI32, strokeOffsetI32 + 4))
+    }
+
+    @Test fun coordinateUniformBudgetRefusesPreciselyAndRecovers() {
+        // Individually admissible lanes exceed the frame budget only once their
+        // ordered coordinate uniforms are added. No adapter limits are fabricated.
+        var shader: Shader = linearGradient().copy(stops = listOf(
+            GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Red)))
+        repeat(20) { shader = Shader.WithLocalMatrix(Shader.CoordClamp(shader, bounds), Matrix3x3F32()) }
+        fun frame(budgetI64: Long) = Surface(1, 1, config = RenderConfig(frameLocalBudgetBytes = budgetI64)).also { surface ->
+            surface.canvas {
+                repeat(32) { indexI32 ->
+                    val paint = Paint(shader = Shader.WithLocalMatrix(shader,
+                        Matrix3x3F32.translation(indexI32 / 128f, 0f)), antiAlias = indexI32 >= 16)
+                    if (indexI32 < 16) drawRect(bounds, paint)
+                    else drawRRect(RRectF32.of(RectF32.ofLTRB(-1f, -1f, 13f, 2f), CornerRadiiF32.of(.5f)), paint)
+                }
+            }
+        }
+        val healthy = frame(1L shl 20)
+        repeat(2) {
+            assertContentEquals(W5dGradientAddressingCpuOracle.redPixel(), healthy.render().pixels)
+            val failure = assertThrows<IllegalStateException> { frame(65_536L).render() }
+            assertEquals("resource.material.gradient.coordinate-uniform-budget", failure.message.orEmpty().substringBefore(':'), failure.message)
+            assertContentEquals(W5dGradientAddressingCpuOracle.redPixel(), healthy.render().pixels)
+        }
+    }
+
+    @Test fun mixedCoordinateTopologiesRemainSemanticallyDistinct() {
+        // Moving the clamp across translation changes x=1 to x=4.25. Both
+        // topologies coexist in one frame; only their final pixels are observed.
+        val subsetF32 = RectF32.ofLTRB(0f, 0f, 2f, 1f)
+        val inner = Shader.WithLocalMatrix(linearGradient(), Matrix3x3F32.scaling(2f, 1f))
+        val ordered = Shader.WithLocalMatrix(Shader.CoordClamp(inner, subsetF32), Matrix3x3F32.translation(-8f, 0f))
+        val moved = Shader.CoordClamp(Shader.WithLocalMatrix(inner, Matrix3x3F32.translation(-8f, 0f)), subsetF32)
+        val surface = Surface(2, 1)
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(shader = ordered, antiAlias = false))
+            translate(1f, 0f)
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(shader = moved, antiAlias = false))
+        }
+        repeat(3) { assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u, 0u, 0u, 255u, 255u), surface.render().pixels) }
+    }
+
+    @Test fun capturedSubsetsAndStopsIgnorePostRecordMutation() {
+        // A borrowed subset or stop list changes this recorded red pixel to blue.
+        val subsetF32 = RectF32.ofLTRB(0f, 0f, 2f, 1f)
+        val stops = linearGradient().stops.toMutableList()
+        val recorder = PictureRecorder()
+        recorder.beginRecording(bounds).drawRect(bounds, Paint(shader = Shader.CoordClamp(
+            linearGradient().copy(stops = stops), subsetF32), antiAlias = false))
+        val picture = recorder.finishRecordingAsPicture()
+        subsetF32.setLTRB(6f, 0f, 8f, 1f)
+        stops.replaceAll { it.copy(color = ColorARGB.Blue) }
+        repeat(3) {
+            val surface = Surface(1, 1)
+            surface.canvas { picture.playback(this) }
+            assertContentEquals(W5dGradientAddressingCpuOracle.redPixel(), surface.render().pixels)
+        }
+    }
+
+    @Test fun authenticAa4OrPreciseSkip() {
+        val surface = Surface(4, 4)
+        surface.canvas {
+            rotate(.25f, px = 2f, py = 2f)
+            drawPath(Path().apply { moveTo(-1f, -1f); lineTo(5f, -1f); lineTo(-1f, 5f); close() },
+                Paint(shader = Shader.WithLocalMatrix(linearGradient(), Matrix3x3F32()), antiAlias = true))
+        }
+        val pixels = try { surface.render().pixels } catch (failure: IllegalStateException) {
+            assertEquals("w4d.general.texture-sample-support-unavailable", failure.message.orEmpty().substringBefore(':'))
+            assertContentEquals(W5dGradientAddressingCpuOracle.redPixel(), renderPixel(linearGradient()))
+            org.junit.jupiter.api.Assumptions.assumeTrue(false, "Authentic AA4 unavailable: ${failure.message}")
+            throw failure
+        }
+        assertContentEquals(W5dGradientAddressingCpuOracle.redPixel(), pixels.copyOfRange(0, 4))
+        assertContentEquals(ubyteArrayOf(0u, 0u, 0u, 0u), pixels.copyOfRange(60, 64))
+    }
+
     private val irregularStops = listOf(
         GradientStop(0f, ColorARGB.of(191, 17, 253, 5)),
         GradientStop(.1f, ColorARGB.of(113, 241, 7, 199)),

@@ -74,15 +74,15 @@ internal object W5bDestinationGraphSealer {
             clip?.resources()?.fold(0L) { total, resource -> Math.addExact(total, resource.byteSize) } ?: 0L))
         val sourceRequirements = draws.map { draw ->
             RawMaterialRequirementsV2.of(requireNotNull(material), draw.materialAuthority.materialPlanRef()).also { source ->
-                require(source.uniformByteCountI64 <= requireNotNull(capabilities.maxUniformBufferBindingSizeBytesI64) &&
-                    source.uniformByteCountI64 <= capabilities.maxBufferSizeBytes) {
+                require(source.fitsUniformBinding(capabilities)) {
                     if (draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV2) W5dPlanDiagnostics.CoordinateUniformBudget
                     else "resource-limit.w5b.source-binding"
                 }
             }
         }
-        val sourceBytesI64 = sourceRequirements.fold(0L) { totalI64, source -> Math.addExact(totalI64, source.uniformByteCountI64) }
-        require(Math.addExact(peakI64, sourceBytesI64) <= budget.maxFrameLocalBytes) { "resource-limit.w5b.destination-budget" }
+        RawMaterialRequirementsV2.requireFrameBudget(sourceRequirements,
+            Math.addExact(peakI64, material?.gradientStopSlab?.byteSizeI64 ?: 0L), budget,
+            "resource-limit.w5b.destination-budget")
         val target = PlanResource.of(PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D,
             format, extent, targetBytesI64, setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource),
             PlanResourceLifetime.FrameLocal, 0, passCountI32)
