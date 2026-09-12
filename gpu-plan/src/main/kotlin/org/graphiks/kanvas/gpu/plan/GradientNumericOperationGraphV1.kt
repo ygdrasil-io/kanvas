@@ -155,7 +155,7 @@ public sealed interface GradientNumericOperationGraphV1 {
         private fun tiledStops(numerator: Node, safeLength: Node, familyValidity: Node,
             tileGraph: GradientTileOperationGraphV2): Node {
             val one = input(Input.ONE)
-            val raw = scalar(Operation.DIV_F32, numerator, safeLength)
+            val raw = if (safeLength.input == Input.ONE) numerator else scalar(Operation.DIV_F32, numerator, safeLength)
             val lowered = mutableMapOf<GradientTileOperationNodeV2, Node>()
             fun lower(node: GradientTileOperationNodeV2): Node = lowered.getOrPut(node) {
                 when (node) {
@@ -186,7 +186,7 @@ public sealed interface GradientNumericOperationGraphV1 {
             return Node(Operation.VALIDITY_MASK, ValueType.SrgbaStraightF32, listOf(color, lower(tileGraph.validity)))
         }
 
-        public fun radial(): GradientNumericOperationGraphV1 {
+        public fun radial(tileGraph: GradientTileOperationGraphV2? = null): GradientNumericOperationGraphV1 {
             val zero = input(Input.ZERO)
             val one = input(Input.ONE)
             val dx = scalar(Operation.SUB_F32, input(Input.X), input(Input.CENTER_X))
@@ -204,11 +204,13 @@ public sealed interface GradientNumericOperationGraphV1 {
             val degenerate = Node(Operation.INPUT_UNIFORM_FLAG, ValueType.ValidityFlag, input = Input.DEGENERATE)
             val radius = scalar(Operation.SELECT, input(Input.RADIUS), one, degenerate)
             val numerator = scalar(Operation.SELECT, distance, one, degenerate)
-            return Radial(clampStops(numerator, radius),
+            val valid = Node(Operation.COMPARE_F32, ValueType.ValidityFlag, listOf(one, one), lessOrEqual = true)
+            return Radial(if (tileGraph == null) clampStops(numerator, radius)
+                else tiledStops(numerator, radius, valid, tileGraph),
                 GradientNumericDomainProofV1.Unbounded(W5cPlanDiagnostics.NumericDomainUnbounded))
         }
 
-        public fun sweep(): GradientNumericOperationGraphV1 {
+        public fun sweep(tileGraph: GradientTileOperationGraphV2? = null): GradientNumericOperationGraphV1 {
             val zero = input(Input.ZERO)
             val one = input(Input.ONE)
             fun less(a: Node, b: Node): Node = Node(Operation.COMPARE_F32, ValueType.ValidityFlag, listOf(a, b))
@@ -242,12 +244,14 @@ public sealed interface GradientNumericOperationGraphV1 {
             val degenerateValue = scalar(Operation.SELECT, one, leadingValue, leading)
             val numerator = scalar(Operation.SELECT, mapped, degenerateValue, degenerate)
             val denominator = scalar(Operation.SELECT, input(Input.SPAN_DEGREES), one, degenerate)
-            // Full coverage is already CLAMP, as is every admitted Sweep tile mode.
-            return Sweep(clampStops(numerator, denominator),
+            // Full coverage has already selected effective CLAMP in the planner.
+            val valid = Node(Operation.COMPARE_F32, ValueType.ValidityFlag, listOf(one, one), lessOrEqual = true)
+            return Sweep(if (tileGraph == null) clampStops(numerator, denominator)
+                else tiledStops(numerator, denominator, valid, tileGraph),
                 GradientNumericDomainProofV1.Unbounded(W5cPlanDiagnostics.NumericDomainUnbounded))
         }
 
-        public fun conical(): GradientNumericOperationGraphV1 {
+        public fun conical(tileGraph: GradientTileOperationGraphV2? = null): GradientNumericOperationGraphV1 {
             val zero = input(Input.ZERO)
             val one = input(Input.ONE)
             val two = input(Input.TWO)
@@ -333,8 +337,8 @@ public sealed interface GradientNumericOperationGraphV1 {
                 compare(distance, input(Input.CONICAL_END_RADIUS))))
             val parameter = choose(selectedRoot, diskValue, fully)
             val valid = either(fully, selectedValid)
-            return Conical(Node(Operation.VALIDITY_MASK, ValueType.SrgbaStraightF32,
-                listOf(clampStops(parameter, one), valid)),
+            return Conical(if (tileGraph == null) Node(Operation.VALIDITY_MASK, ValueType.SrgbaStraightF32,
+                listOf(clampStops(parameter, one), valid)) else tiledStops(parameter, one, valid, tileGraph),
                 GradientNumericDomainProofV1.Unbounded(W5cPlanDiagnostics.NumericDomainUnbounded))
         }
 
@@ -455,6 +459,21 @@ internal fun GradientNumericOperationGraphV1.proveConicalDomainV1(
     fun bound(node: GradientNumericOperationGraphV1.Node): Double = boundsF64.getOrPut(node) {
         val valuesF64 = node.inputs.map(::bound)
         fun rounded(valueF64: Double): Double = valueF64 * (1.0 + reassociationRoundoffFactorF64) + java.lang.Float.MIN_NORMAL
+        // Correlated tile identities are valid across the entire finite F32 root domain.
+        // Above 2^24 every F32 is an even integer, so the period subtraction is zero.
+        // Below that threshold subtraction is bounded by one/two (including FTZ).
+        val repeatDifference = node.operation == Operation.SUB_F32 &&
+            node.inputs[1].operation == Operation.FLOOR_F32 && node.inputs[1].inputs.single() === node.inputs[0]
+        val halfScale = node.operation == Operation.MUL_F32 && node.inputs[1].input == Input.HALF
+        val periodScale = node.operation == Operation.MUL_F32 && node.inputs[0].input == Input.TWO &&
+            node.inputs[1].operation == Operation.FLOOR_F32 &&
+            node.inputs[1].inputs.single().let { it.operation == Operation.MUL_F32 && it.inputs[1].input == Input.HALF }
+        val mirrorDifference = node.operation == Operation.SUB_F32 && node.inputs[1].let { period ->
+            period.operation == Operation.MUL_F32 && period.inputs[0].input == Input.TWO &&
+                period.inputs[1].operation == Operation.FLOOR_F32 && period.inputs[1].inputs.single().let {
+                    it.operation == Operation.MUL_F32 && it.inputs[1].input == Input.HALF && it.inputs[0] === node.inputs[0]
+                }
+        }
         val magnitudeF64 = when (node.operation) {
             Operation.INPUT_LOCAL_POINT_F32 -> localMagnitudeF64
             Operation.INPUT_UNIFORM_F32 -> kotlin.math.abs(when (node.input) {
@@ -464,12 +483,18 @@ internal fun GradientNumericOperationGraphV1.proveConicalDomainV1(
                 Input.CONICAL_START_RADIUS -> degeneracy.conicalStartRadiusF32.toDouble()
                 Input.CONICAL_END_RADIUS -> degeneracy.conicalEndRadiusF32.toDouble()
                 Input.CONICAL_DR -> degeneracy.conicalDrF32.toDouble(); Input.CONICAL_A -> degeneracy.conicalAF32.toDouble()
-                Input.ZERO -> 0.0; Input.ONE -> 1.0; Input.TWO -> 2.0; Input.FOUR -> 4.0
+                Input.ZERO -> 0.0; Input.ONE -> 1.0; Input.TWO -> 2.0; Input.FOUR -> 4.0; Input.HALF -> .5
                 Input.MIN_NORMAL -> java.lang.Float.MIN_NORMAL.toDouble()
                 else -> { proven = false; Double.POSITIVE_INFINITY }
             })
-            Operation.ADD_F32, Operation.SUB_F32 -> rounded(valuesF64.sum())
-            Operation.MUL_F32 -> rounded(valuesF64[0] * valuesF64[1])
+            Operation.ADD_F32, Operation.SUB_F32 -> when {
+                repeatDifference -> 1.0
+                mirrorDifference -> 2.0
+                else -> rounded(valuesF64.sum())
+            }
+            Operation.MUL_F32 -> if (halfScale || periodScale) valuesF64[0] * valuesF64[1]
+                else rounded(valuesF64[0] * valuesF64[1])
+            Operation.FLOOR_F32 -> kotlin.math.ceil(valuesF64.single())
             Operation.ABS_F32 -> valuesF64.single()
             Operation.MAX_F32 -> valuesF64.max()
             Operation.SQRT_F32 -> {
@@ -520,7 +545,8 @@ internal fun GradientNumericOperationGraphV1.proveConicalDomainV1(
         // Safe roots can span the entire finite F32 range, but only selection,
         // comparison, MAX and predicate-only radius nodes may consume that range.
         val extended = node.operation in setOf(Operation.ROOT_DIV_F32, Operation.FINITE_ROOT_OR_ZERO_F32,
-            Operation.ROOT_RADIUS_MUL_F32, Operation.ROOT_RADIUS_ADD_F32, Operation.SELECT, Operation.MAX_F32, Operation.ABS_F32)
+            Operation.ROOT_RADIUS_MUL_F32, Operation.ROOT_RADIUS_ADD_F32, Operation.SELECT, Operation.MAX_F32,
+            Operation.ABS_F32, Operation.FLOOR_F32) || halfScale || periodScale
         proven = proven && magnitudeF64.isFinite() && magnitudeF64 <= if (extended) Float.MAX_VALUE.toDouble() else node.maxMagnitudeF64
         magnitudeF64
     }

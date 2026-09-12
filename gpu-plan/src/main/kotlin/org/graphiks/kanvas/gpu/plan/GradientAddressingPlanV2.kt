@@ -103,7 +103,7 @@ public class GradientNumericAuthorityV2 private constructor(
     private val program: GradientAddressingProgramV2,
     public val coordinates: MaterialCoordinatePlanV2,
     uniformValuesF32: List<Float>,
-    private val degeneracy: LinearGradientDegeneracyV1,
+    private val degeneracy: GradientDegeneracyV1,
     private val range: GradientStopRangeV1,
     private val slabIdentity: String,
     private val localMagnitudeF64: Double,
@@ -120,7 +120,12 @@ public class GradientNumericAuthorityV2 private constructor(
             graph.domainProof == GradientNumericDomainProofV1.ProvenFinite && this.coordinates == coordinates &&
             tileGraph == program.requestedTileMode.operationGraph() &&
             tileGraph.effectiveMode == program.effectiveTileMode && binding.copyUniformValuesF32() == uniformValuesF32 &&
-            when (binding) { is MaterialBindingPlan.LinearGradientV2 -> binding.degeneracy == degeneracy } &&
+            when (binding) {
+                is MaterialBindingPlan.LinearGradientV2 -> binding.degeneracy == degeneracy
+                is MaterialBindingPlan.RadialGradientV2 -> binding.degeneracy == degeneracy
+                is MaterialBindingPlan.SweepGradientV2 -> binding.degeneracy == degeneracy
+                is MaterialBindingPlan.ConicalGradientV2 -> binding.degeneracy == degeneracy
+            } &&
             binding.stopRange == range && slab.canonicalIdentity == slabIdentity
 
     internal fun rebase(binding: MaterialBindingPlan.GradientV2, sourceSlab: GradientStopSlabPlanV1,
@@ -133,6 +138,65 @@ public class GradientNumericAuthorityV2 private constructor(
             newRange, newSlab.canonicalIdentity, localMagnitudeF64, uniformMagnitudeF64)
     }
     internal companion object {
+        private fun matches(program: GradientAddressingProgramV2, coordinates: MaterialCoordinatePlanV2,
+            family: GradientFamilyV2, tile: GradientTileOperationGraphV2): Boolean =
+            program.family == family && program.effectiveTileMode == tile.effectiveMode &&
+                program.tileGraphId == tile.contractId && program.coordinateTopologyId == coordinates.topologyIdentity
+
+        fun sealConical(program: GradientAddressingProgramV2, coordinates: MaterialCoordinatePlanV2, startF32: Point2F32, endF32: Point2F32,
+            degeneracy: ConicalGradientDegeneracyV1, slab: GradientStopSlabPlanV1,
+            localMagnitudeF64: Double, uniformMagnitudeF64: Double): GradientNumericAuthorityV2? {
+            if (degeneracy != ConicalGradientDegeneracyV1.of(startF32, degeneracy.conicalStartRadiusF32,
+                    endF32, degeneracy.conicalEndRadiusF32) || degeneracy.copyScalarsF32().any { !it.isFinite() } ||
+                degeneracy.conicalStartRadiusF32 < 0f || degeneracy.conicalEndRadiusF32 < 0f) return null
+            val tile = program.requestedTileMode.operationGraph()
+            if (!matches(program, coordinates, GradientFamilyV2.CONICAL, tile)) return null
+            val schema = GradientNumericOperationGraphV1.conical(tile)
+            val stops = slab.copyStops()
+            val proof = schema.proveConicalDomainV1(localMagnitudeF64, startF32, endF32, degeneracy, stops)
+            if (proof != GradientNumericDomainProofV1.ProvenFinite) return null
+            return GradientNumericAuthorityV2(GradientNumericOperationGraphV1.Conical(schema.root, proof),
+                tile, program, coordinates,
+                listOf(startF32.x, startF32.y, endF32.x, endF32.y), degeneracy,
+                GradientStopRangeV1(0u, stops.size.toUInt()), slab.canonicalIdentity, localMagnitudeF64, uniformMagnitudeF64)
+        }
+
+        fun sealSweep(program: GradientAddressingProgramV2, coordinates: MaterialCoordinatePlanV2, centerF32: Point2F32,
+            degeneracy: SweepGradientDegeneracyV1, slab: GradientStopSlabPlanV1,
+            localMagnitudeF64: Double, uniformMagnitudeF64: Double): GradientNumericAuthorityV2? {
+            if (degeneracy != SweepGradientDegeneracyV1.of(degeneracy.startAngleDegreesF32, degeneracy.endAngleDegreesF32) ||
+                degeneracy.sweepOrderingInvalid || listOf(degeneracy.startAngleDegreesF32,
+                    degeneracy.endAngleDegreesF32, degeneracy.sweepSpanDegreesF32).any { !it.isFinite() }) return null
+            val tile = program.requestedTileMode.operationGraph()
+            if (!matches(program, coordinates, GradientFamilyV2.SWEEP, tile) ||
+                (degeneracy.sweepFullCoverage && tile.effectiveMode != GradientTileModeV2.CLAMP)) return null
+            val schema = GradientNumericOperationGraphV1.sweep(tile)
+            val stops = slab.copyStops()
+            val proof = schema.proveSweepDomainV1(localMagnitudeF64, uniformMagnitudeF64, degeneracy, stops)
+            if (proof != GradientNumericDomainProofV1.ProvenFinite) return null
+            return GradientNumericAuthorityV2(GradientNumericOperationGraphV1.Sweep(schema.root, proof),
+                tile, program, coordinates,
+                listOf(centerF32.x, centerF32.y, degeneracy.startAngleDegreesF32, degeneracy.endAngleDegreesF32), degeneracy,
+                GradientStopRangeV1(0u, stops.size.toUInt()), slab.canonicalIdentity, localMagnitudeF64, uniformMagnitudeF64)
+        }
+
+        fun sealRadial(program: GradientAddressingProgramV2, coordinates: MaterialCoordinatePlanV2, centerF32: Point2F32, radiusF32: Float,
+            degeneracy: RadialGradientDegeneracyV1, slab: GradientStopSlabPlanV1,
+            localMagnitudeF64: Double, uniformMagnitudeF64: Double): GradientNumericAuthorityV2? {
+            if (!radiusF32.isFinite() || radiusF32 < 0f || degeneracy !=
+                RadialGradientDegeneracyV1(radiusF32, radiusF32 <= 0.000030517578125f)) return null
+            val tile = program.requestedTileMode.operationGraph()
+            if (!matches(program, coordinates, GradientFamilyV2.RADIAL, tile)) return null
+            val schema = GradientNumericOperationGraphV1.radial(tile)
+            val stops = slab.copyStops()
+            val proof = schema.proveRadialDomainV1(localMagnitudeF64, uniformMagnitudeF64, degeneracy, stops)
+            if (proof != GradientNumericDomainProofV1.ProvenFinite) return null
+            return GradientNumericAuthorityV2(GradientNumericOperationGraphV1.Radial(schema.root, proof),
+                tile, program, coordinates,
+                listOf(centerF32.x, centerF32.y, radiusF32, 0f), degeneracy,
+                GradientStopRangeV1(0u, stops.size.toUInt()), slab.canonicalIdentity, localMagnitudeF64, uniformMagnitudeF64)
+        }
+
         fun sealLinear(program: GradientAddressingProgramV2, coordinates: MaterialCoordinatePlanV2,
             startF32: Point2F32, endF32: Point2F32, degeneracy: LinearGradientDegeneracyV1,
             slab: GradientStopSlabPlanV1, localMagnitudeF64: Double, uniformMagnitudeF64: Double): GradientNumericAuthorityV2? {

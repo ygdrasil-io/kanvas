@@ -22,8 +22,86 @@ import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import kotlin.test.assertContentEquals
+import org.graphiks.kanvas.surface.W5dGradientAddressingCpuOracle.GradientFixtureFamily
+import org.graphiks.kanvas.surface.W5dGradientAddressingCpuOracle.W5dPublicLane
 
 class W5dGradientAddressingSurfacePixelTest {
+    @Test
+    fun allGradientFamiliesTileModesAndLanesMatchOracle() = familyFixtures(GradientFixtureFamily.entries)
+
+    @Test
+    fun radialNonNegativePeriodsMatchOracle() = familyFixtures(listOf(GradientFixtureFamily.RADIAL))
+
+    @Test
+    fun sweepEndpointsAndFullCoverageMatchOracle() {
+        familyFixtures(listOf(GradientFixtureFamily.SWEEP))
+        familyFixtures(listOf(GradientFixtureFamily.SWEEP), sweepStartF32 = 90f)
+        familyFixtures(listOf(GradientFixtureFamily.SWEEP), fullSweep = true)
+    }
+
+    @Test
+    fun conicalRootValidityPrecedesTile() = familyFixtures(listOf(GradientFixtureFamily.CONICAL))
+
+    private fun familyFixtures(families: List<GradientFixtureFamily>, fullSweep: Boolean = false, sweepStartF32: Float = 0f) {
+        // Missing V2 admission, wrong coordinate order, root selection or tiling changes public pixels.
+        val failures = mutableListOf<String>()
+        for (family in families) for (mode in TileMode.entries) for (lane in W5dPublicLane.entries) {
+            val orderedClamp = (mode.ordinal + lane.ordinal) % 2 == 1
+            val stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(.5f, ColorARGB.Red),
+                GradientStop(.5f, ColorARGB.Blue), GradientStop(1f, ColorARGB.Blue))
+            val centerF32 = Point2F32(17.5f, 4.5f)
+            var shader: Shader = when (family) {
+                GradientFixtureFamily.LINEAR -> Shader.LinearGradient(centerF32, Point2F32(25.5f, 4.5f), stops, tileMode = mode)
+                GradientFixtureFamily.RADIAL -> Shader.RadialGradient(centerF32, 8f, stops, tileMode = mode)
+                GradientFixtureFamily.SWEEP -> Shader.SweepGradient(centerF32, sweepStartF32, if (fullSweep) 360f else 180f, stops, tileMode = mode)
+                GradientFixtureFamily.CONICAL -> Shader.ConicalGradient(Point2F32(19.5f, 4.5f), 2f,
+                    Point2F32(27.5f, 4.5f), 2f, stops, tileMode = mode)
+            }
+            if (orderedClamp) shader = Shader.CoordClamp(Shader.WithLocalMatrix(shader,
+                Matrix3x3F32.translation(1f, 0f)), RectF32.ofLTRB(0f, 0f, 28f, 8f))
+            shader = Shader.WithLocalMatrix(shader, Matrix3x3F32.translation(1f, 0f))
+            val boundsF32 = RectF32.ofLTRB(0f, 0f, 39f, 8f)
+            val recorder = PictureRecorder()
+            val canvas = recorder.beginRecording(boundsF32)
+            val paint = Paint(shader = shader, antiAlias = false)
+            when (lane) {
+                W5dPublicLane.RECT -> canvas.drawRect(boundsF32, paint)
+                W5dPublicLane.RRECT -> canvas.drawRRect(RRectF32.of(boundsF32, CornerRadiiF32.of(.5f)), paint.copy(antiAlias = true))
+                W5dPublicLane.PATH_FILL -> canvas.drawPath(Path().apply { addRect(boundsF32) }, paint)
+                W5dPublicLane.PATH_STROKE -> canvas.drawPath(Path().apply { moveTo(0f, 4f); lineTo(39f, 4f) },
+                    paint.copy(style = PaintStyle.STROKE, strokeWidth = 8f))
+            }
+            val picture = recorder.finishRecordingAsPicture()
+            try {
+                val surface = Surface(39, 8)
+                surface.canvas { picture.playback(this) }
+                val pixels = surface.render().pixels
+                // Axis samples include zero, interior, one, +2 and signed Linear/Conical periods.
+                // Sweep adds both sides of its seam; Conical adds authentic negative-discriminant points.
+                val shiftI32 = if (orderedClamp) 1 else 0
+                // A diagonal atan2 has the WGSL 4096-ULP envelope. Keep its samples
+                // inside constant spans. The upper vertical 270/180 quotient can
+                // straddle the MIRROR hard stop even with an exact cardinal angle.
+                val diagonalShiftI32 = if (sweepStartF32 == 90f) 1 else 0
+                val upperAxisShiftI32 = if (family == GradientFixtureFamily.SWEEP && !fullSweep && sweepStartF32 == 0f) 1 else 0
+                val samples = listOf(2, 8, 10, 16, 18, 20, 21, 22, 24, 26, 34).map { it + shiftI32 to 4 } +
+                    listOf(20 + shiftI32 + diagonalShiftI32 to 2, 20 + shiftI32 + diagonalShiftI32 to 6,
+                        16 + shiftI32 + diagonalShiftI32 to 2, 16 + shiftI32 + diagonalShiftI32 to 6,
+                        18 + shiftI32 + upperAxisShiftI32 to 2, 18 + shiftI32 to 6,
+                        22 + shiftI32 to 1)
+                for ((xI32, yI32) in samples) {
+                    val offsetI32 = (yI32 * 39 + xI32) * 4
+                    try {
+                        WgslFloatEnvelopeV1Oracle.assertAdmits(W5dGradientAddressingCpuOracle.familyPixel(
+                            family, mode, xI32, yI32, orderedClamp, fullSweep, sweepStartF32), pixels.copyOfRange(offsetI32, offsetI32 + 4))
+                    } catch (failure: AssertionError) { failures += "$family $mode $lane ($xI32,$yI32): ${failure.message}" }
+                    catch (failure: IllegalArgumentException) { failures += "$family $mode $lane ($xI32,$yI32) start=$sweepStartF32: ${failure.message}" }
+                }
+            } catch (failure: IllegalStateException) { failures += "$family $mode $lane: ${failure.message}" }
+        }
+        kotlin.test.assertTrue(failures.isEmpty(), failures.joinToString("\n"))
+    }
+
     @Test
     fun linearTileModesCoverSignedBoundariesOnEveryLane() = tileLanes()
 

@@ -21,7 +21,13 @@ public class RawMaterialRequirementsV2 private constructor(
             return RawMaterialRequirementsV2(countI32, Math.addExact(
                 Math.multiplyExact(countI32.toLong(), BINDING_STRIDE_BYTES_I64),
                 when (table.entry(MaterialPlanRef(indexI32)).bindings) {
-                    is MaterialBindingPlan.GradientV2 -> Math.addExact(64L, requireNotNull(table.coordinatesV2(root)).uniformByteSizeI64)
+                    is MaterialBindingPlan.GradientV2 -> Math.addExact(32L + when (table.entry(MaterialPlanRef(indexI32)).bindings) {
+                        is MaterialBindingPlan.LinearGradientV2 -> 32L
+                        is MaterialBindingPlan.RadialGradientV2 -> 0L
+                        is MaterialBindingPlan.SweepGradientV2 -> 16L
+                        is MaterialBindingPlan.ConicalGradientV2 -> 96L
+                        else -> error("Expected V2 gradient")
+                    }, requireNotNull(table.coordinatesV2(root)).uniformByteSizeI64)
                     is MaterialBindingPlan.LinearGradientV1 -> 112L // common 80 + 2 sealed scalar vectors
                     is MaterialBindingPlan.ConicalGradientV1 -> 176L // common 80 + 4 scalar vectors + 2 flag vectors
                     is MaterialBindingPlan.SweepGradientV1 -> 96L

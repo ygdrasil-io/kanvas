@@ -79,7 +79,13 @@ public object EffectiveMaterialPlanner {
         }
         val addressing = GradientAddressingCaptureV2.capture(draw.material)
         if (addressing is GradientAddressingCaptureV2.Ready &&
-            (addressing.coordinateNodes.isNotEmpty() || (addressing.leaf as? MaterialNode.LinearGradient)?.tileMode?.let {
+            (addressing.coordinateNodes.isNotEmpty() || when (val leaf = addressing.leaf) {
+                is MaterialNode.LinearGradient -> leaf.tileMode
+                is MaterialNode.RadialGradient -> leaf.tileMode
+                is MaterialNode.SweepGradient -> leaf.tileMode
+                is MaterialNode.ConicalGradient -> leaf.tileMode
+                else -> null
+            }?.let {
                 it != org.graphiks.kanvas.render.ir.TileMode.CLAMP
             } == true))
             return normalizeW5d(draw, blend, addressing, gradientDeviceBoundsI32)
@@ -252,8 +258,12 @@ public object EffectiveMaterialPlanner {
     private fun normalizeW5d(draw: DrawNode, blend: BlendPlan, capture: GradientAddressingCaptureV2.Ready,
         gradientDeviceBoundsI32: org.graphiks.math.geometry.RectI32?): Normalization {
         val linear = capture.leaf as? MaterialNode.LinearGradient
-            ?: return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
-        if (linear.interpolation != org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB ||
+        val radial = capture.leaf as? MaterialNode.RadialGradient
+        val sweep = capture.leaf as? MaterialNode.SweepGradient
+        val conical = capture.leaf as? MaterialNode.ConicalGradient
+        val interpolation = linear?.interpolation ?: radial?.interpolation ?: sweep?.interpolation
+            ?: conical?.interpolation ?: return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
+        if (interpolation != org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB ||
             draw.origin !in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.RECT,
                 org.graphiks.kanvas.render.ir.DrawOrigin.RRECT, org.graphiks.kanvas.render.ir.DrawOrigin.PATH))
             return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
@@ -261,8 +271,31 @@ public object EffectiveMaterialPlanner {
             is MaterialCoordinatePlanV2.Build.Ready -> result.coordinates
             is MaterialCoordinatePlanV2.Build.Refused -> return Normalization.Refused(result.code)
         }
-        val tileGraph = GradientTileModeV2.valueOf(linear.tileMode.name).operationGraph()
-        val stops = when (val normalized = normalizeGradientStopsV2(linear.stops(), tileGraph.effectiveMode, preserveValidityMask = true)) {
+        val family = when {
+            linear != null -> GradientFamilyV2.LINEAR
+            radial != null -> GradientFamilyV2.RADIAL
+            sweep != null -> GradientFamilyV2.SWEEP
+            else -> GradientFamilyV2.CONICAL
+        }
+        val sweepDegeneracy = sweep?.let { SweepGradientDegeneracyV1.of(it.startAngle, it.endAngle) }
+        if (sweep != null && listOf(sweep.center.x, sweep.center.y, sweep.startAngle, sweep.endAngle).any { !it.isFinite() })
+            return Normalization.Refused(W5cPlanDiagnostics.NonFinite)
+        if (sweepDegeneracy?.sweepOrderingInvalid == true) return Normalization.Refused(W5cPlanDiagnostics.SweepOrdering)
+        if (radial != null && listOf(radial.center.x, radial.center.y, radial.radius).any { !it.isFinite() })
+            return Normalization.Refused(W5cPlanDiagnostics.NonFinite)
+        if (conical != null && listOf(conical.start.x, conical.start.y, conical.end.x, conical.end.y,
+                conical.startRadius, conical.endRadius).any { !it.isFinite() })
+            return Normalization.Refused(W5cPlanDiagnostics.NonFinite)
+        if (radial != null && radial.radius < 0f ||
+            conical != null && (conical.startRadius < 0f || conical.endRadius < 0f))
+            return Normalization.Refused(W5cPlanDiagnostics.NegativeRadius)
+        val requested = linear?.tileMode ?: radial?.tileMode ?: sweep?.tileMode ?: requireNotNull(conical).tileMode
+        // Canonicalize full coverage before stop normalization and program identity.
+        val effective = if (sweepDegeneracy?.sweepFullCoverage == true) GradientTileModeV2.CLAMP
+            else GradientTileModeV2.valueOf(requested.name)
+        val tileGraph = effective.operationGraph()
+        val inputStops = linear?.stops() ?: radial?.stops() ?: sweep?.stops() ?: requireNotNull(conical).stops()
+        val stops = when (val normalized = normalizeGradientStopsV2(inputStops, tileGraph.effectiveMode, preserveValidityMask = true)) {
             is NormalizedGradientStopsV1.Stops -> normalized.slab
             is NormalizedGradientStopsV1.Refused -> return Normalization.Refused(normalized.code)
             is NormalizedGradientStopsV1.Solid -> error("V2 retains a stop authority")
@@ -288,15 +321,44 @@ public object EffectiveMaterialPlanner {
         } ?: return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
         val magnitudeF64 = coordinates.proveCoordinateDomainF64(deviceBoundsF32)
             ?: return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
-        val program = GradientAddressingProgramV2(GradientFamilyV2.LINEAR, tileGraph.requestedMode,
+        val program = GradientAddressingProgramV2(family, tileGraph.requestedMode,
             tileGraph.effectiveMode, tileGraph.contractId, coordinates.topologyIdentity)
-        val degeneracy = LinearGradientDegeneracyV1.of(linear.start, linear.end)
-        val uniformMagnitudeF64 = listOf(linear.start.x, linear.start.y, linear.end.x, linear.end.y).maxOf { kotlin.math.abs(it.toDouble()) }
-        val numeric = GradientNumericAuthorityV2.sealLinear(program, coordinates, linear.start, linear.end,
-            degeneracy, stops, magnitudeF64, uniformMagnitudeF64)
-            ?: return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
-        val entries = mutableListOf(MaterialPlanEntry(program, MaterialBindingPlan.LinearGradientV2(linear.start, linear.end,
-            GradientStopRangeV1(0u, stops.copyStops().size.toUInt()), degeneracy, numeric), stops))
+        val range = GradientStopRangeV1(0u, stops.copyStops().size.toUInt())
+        fun magnitude(valuesF32: List<Float>): Double = valuesF32.maxOf { kotlin.math.abs(it.toDouble()) }
+        val binding: MaterialBindingPlan.GradientV2 = when {
+            linear != null -> {
+                val degeneracy = LinearGradientDegeneracyV1.of(linear.start, linear.end)
+                val numeric = GradientNumericAuthorityV2.sealLinear(program, coordinates, linear.start, linear.end,
+                    degeneracy, stops, magnitudeF64, magnitude(listOf(linear.start.x, linear.start.y, linear.end.x, linear.end.y)))
+                    ?: return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
+                MaterialBindingPlan.LinearGradientV2(linear.start, linear.end, range, degeneracy, numeric)
+            }
+            radial != null -> {
+                val degeneracy = RadialGradientDegeneracyV1(radial.radius, radial.radius <= 0.000030517578125f)
+                val numeric = GradientNumericAuthorityV2.sealRadial(program, coordinates, radial.center, radial.radius,
+                    degeneracy, stops, magnitudeF64, magnitude(listOf(radial.center.x, radial.center.y, radial.radius)))
+                    ?: return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
+                MaterialBindingPlan.RadialGradientV2(radial.center, radial.radius, range, degeneracy, numeric)
+            }
+            sweep != null -> {
+                val degeneracy = requireNotNull(sweepDegeneracy)
+                val numeric = GradientNumericAuthorityV2.sealSweep(program, coordinates, sweep.center, degeneracy,
+                    stops, magnitudeF64, magnitude(listOf(sweep.center.x, sweep.center.y, sweep.startAngle,
+                        sweep.endAngle, degeneracy.sweepSpanDegreesF32)))
+                    ?: return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
+                MaterialBindingPlan.SweepGradientV2(sweep.center, range, degeneracy, numeric)
+            }
+            else -> {
+                requireNotNull(conical)
+                val degeneracy = ConicalGradientDegeneracyV1.of(conical.start, conical.startRadius, conical.end, conical.endRadius)
+                val numeric = GradientNumericAuthorityV2.sealConical(program, coordinates, conical.start, conical.end,
+                    degeneracy, stops, magnitudeF64, magnitude(listOf(conical.start.x, conical.start.y,
+                        conical.end.x, conical.end.y) + degeneracy.copyScalarsF32()))
+                    ?: return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
+                MaterialBindingPlan.ConicalGradientV2(conical.start, conical.end, range, degeneracy, numeric)
+            }
+        }
+        val entries = mutableListOf(MaterialPlanEntry(program, binding, stops))
         val paintAlphaF32 = draw.paint?.takeIf { it.shader != null }?.color?.alphaNormalized ?: 1f
         for (alphaF32 in listOf(capture.opacityF32, paintAlphaF32)) {
             if (!alphaF32.isFinite() || alphaF32 !in 0f..1f) return Normalization.Refused(W5aPlanDiagnostics.InvalidOpacity)

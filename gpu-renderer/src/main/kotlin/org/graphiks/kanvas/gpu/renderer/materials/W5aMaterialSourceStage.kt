@@ -178,7 +178,7 @@ internal class W5aMaterialSourceStage private constructor(
             }
             val entry = table.entry(ref)
             val program = entry.program as? org.graphiks.kanvas.gpu.plan.GradientAddressingProgramV2 ?: return null
-            val binding = entry.bindings as? MaterialBindingPlan.LinearGradientV2 ?: return null
+            val binding = entry.bindings as? MaterialBindingPlan.GradientV2 ?: return null
             val slab = table.gradientStopSlab ?: return null
             val numeric = binding.numericAuthority
             if (!numeric.authenticates(program, binding, slab, coordinates)) return null
@@ -191,10 +191,29 @@ internal class W5aMaterialSourceStage private constructor(
                 repeat(3) { uniforms.putFloat(0f) }
             }
             uniforms.putInt(binding.stopRange.baseIndexU32.toInt()).putInt(binding.stopRange.countU32.toInt()).putInt(0).putInt(0)
+            val sweep = (binding as? MaterialBindingPlan.SweepGradientV2)?.degeneracy
             uniforms.putInt(if (binding.gradientDegenerate) 1 else 0)
-            repeat(3) { uniforms.putInt(0) }
-            binding.degeneracy.copyScalarsF32().forEach(uniforms::putFloat)
-            repeat(2) { uniforms.putFloat(0f) }
+                .putInt(if (sweep?.sweepOrderingInvalid == true) 1 else 0)
+                .putInt(if (sweep?.sweepClampLeadingSegment == true) 1 else 0)
+                .putInt(if (sweep?.sweepFullCoverage == true) 1 else 0)
+            val linear = (binding as? MaterialBindingPlan.LinearGradientV2)?.degeneracy
+            if (linear != null) {
+                linear.copyScalarsF32().forEach(uniforms::putFloat)
+                repeat(2) { uniforms.putFloat(0f) }
+            }
+            if (sweep != null) {
+                uniforms.putFloat(sweep.sweepSpanDegreesF32)
+                repeat(3) { uniforms.putFloat(0f) }
+            }
+            val conical = (binding as? MaterialBindingPlan.ConicalGradientV2)?.degeneracy
+            if (conical != null) {
+                conical.copyScalarsF32().forEach(uniforms::putFloat)
+                repeat(3) { uniforms.putFloat(0f) }
+                listOf(conical.conicalLinearEquation, conical.conicalCentersCoincident, conical.conicalRadiiEqual,
+                    conical.conicalFullyDegenerate, conical.conicalConcentric, conical.conicalSharedRadiusAboveEpsilon)
+                    .forEach { uniforms.putInt(if (it) 1 else 0) }
+                uniforms.putInt(conical.conicalBranchTagU32.toInt()).putInt(0)
+            }
             val operations = coordinates.copyOperations()
             val coordinateFields = StringBuilder()
             val coordinateStatements = StringBuilder("    var state = W5dLocalPointV2(pixel, true);\n")
@@ -252,8 +271,13 @@ internal class W5aMaterialSourceStage private constructor(
                 ${(0..opacities.size).joinToString("\n") { "    binding$it: vec4<f32>," }}
                     gradientHeader: vec4<u32>,
                     gradientFlags: vec4<u32>,
-                    linearParameters0: vec4<f32>,
-                    linearParameters1: vec4<f32>,
+                    ${when (binding) {
+                        is MaterialBindingPlan.LinearGradientV2 -> "linearParameters0: vec4<f32>,\nlinearParameters1: vec4<f32>,"
+                        is MaterialBindingPlan.RadialGradientV2 -> ""
+                        is MaterialBindingPlan.SweepGradientV2 -> "sweepParameters: vec4<f32>,"
+                        is MaterialBindingPlan.ConicalGradientV2 -> "conicalParameters0: vec4<f32>,\nconicalParameters1: vec4<f32>,\n" +
+                            "conicalParameters2: vec4<f32>,\nconicalParameters3: vec4<f32>,\nconicalFlags0: vec4<u32>,\nconicalFlags1: vec4<u32>,"
+                    }}
                     $coordinateFields
                 }
                 @group(1) @binding(0) var<uniform> w5aMaterial: W5aMaterialBlock;
@@ -275,7 +299,8 @@ internal class W5aMaterialSourceStage private constructor(
             check(uniforms.position() == uniforms.capacity())
             return W5aMaterialSourceStage(table.entry(root).program.structuralId.value + ":srgb-endpoints-v1",
                 declarations, requirements.bindingCountI32, uniforms.array(),
-                numeric.tileGraph.effectiveMode != org.graphiks.kanvas.gpu.plan.GradientTileModeV2.DECAL &&
+                binding !is MaterialBindingPlan.ConicalGradientV2 &&
+                    numeric.tileGraph.effectiveMode != org.graphiks.kanvas.gpu.plan.GradientTileModeV2.DECAL &&
                     opacities.all { it.alphaF32 == 1f } && slab.copyStops().all { it.straightSrgbF32.alpha == 1f } &&
                     operations.filterIsInstance<MaterialCoordinateOperationV2.InverseMatrixF32>().all {
                         it.inverseF32.persp0 == 0f && it.inverseF32.persp1 == 0f && it.inverseF32.persp2 == 1f },

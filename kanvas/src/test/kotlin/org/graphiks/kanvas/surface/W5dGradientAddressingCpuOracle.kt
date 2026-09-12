@@ -10,6 +10,37 @@ import org.graphiks.math.matrix.Matrix3x3F32
 
 /** Independent public fixture: inverse translation is x - 3, with nested shader and paint opacity. */
 internal object W5dGradientAddressingCpuOracle {
+    enum class GradientFixtureFamily { LINEAR, RADIAL, SWEEP, CONICAL }
+    enum class W5dPublicLane { RECT, RRECT, PATH_FILL, PATH_STROKE }
+
+    fun familyPixel(family: GradientFixtureFamily, mode: TileMode, pixelXI32: Int, pixelYI32: Int,
+        orderedClamp: Boolean, fullSweep: Boolean = false, sweepStartF32: Float = 0f): WgslFloatEnvelopeV1Oracle.DrawResult {
+        // Independently invert the two literal translations, keeping the clamp between them.
+        val xF64 = if (orderedClamp) (pixelXI32 + .5 - 1).coerceIn(0.0, 28.0) - 1 else pixelXI32 + .5 - 1
+        val yF64 = pixelYI32 + .5
+        val dxF64 = xF64 - 17.5
+        val dyF64 = yF64 - 4.5
+        val valid = family != GradientFixtureFamily.CONICAL || kotlin.math.abs(dyF64) <= 2.0
+        val rawF64 = when (family) {
+            GradientFixtureFamily.LINEAR -> dxF64 / 8
+            GradientFixtureFamily.RADIAL -> kotlin.math.hypot(dxF64, dyF64) / 8
+            GradientFixtureFamily.SWEEP -> {
+                val angleF64 = (kotlin.math.atan2(dyF64, dxF64) * 180 / kotlin.math.PI + 360) % 360
+                (angleF64 - sweepStartF32) / ((if (fullSweep) 360 else 180) - sweepStartF32)
+            }
+            // Equal radii: largest valid root is (x-start + sqrt(r*r-dy*dy))/8.
+            GradientFixtureFamily.CONICAL -> (dxF64 - 2 + kotlin.math.sqrt(maxOf(0.0, 4 - dyF64 * dyF64))) / 8
+        }
+        val effective = if (fullSweep) TileMode.CLAMP else mode
+        val tF64 = when (effective) {
+            TileMode.CLAMP, TileMode.DECAL -> rawF64.coerceIn(0.0, 1.0)
+            TileMode.REPEAT -> rawF64 - kotlin.math.floor(rawF64)
+            TileMode.MIRROR -> 1 - kotlin.math.abs((rawF64 - 2 * kotlin.math.floor(rawF64 / 2)) - 1)
+        }
+        return tiledPixel(TileSample(rawF64.toFloat(), tF64.toFloat(), valid &&
+            (effective != TileMode.DECAL || rawF64 in 0.0..1.0)), effective, false, false)
+    }
+
     data class TileSample(val rawTF32: Float, val expectedTF32: Float, val expectedValid: Boolean = true)
 
     // Literal, hand-checked signed boundaries; no production tile or stop helper.

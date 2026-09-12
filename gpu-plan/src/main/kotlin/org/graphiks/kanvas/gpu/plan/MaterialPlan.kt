@@ -101,6 +101,34 @@ public sealed interface MaterialBindingPlan {
             copy(stopRange = range, numericAuthority = authority)
     }
 
+    public data class RadialGradientV2(public val centerF32: Point2F32, public val radiusF32: Float,
+        override val stopRange: GradientStopRangeV1, public val degeneracy: RadialGradientDegeneracyV1,
+        override val numericAuthority: GradientNumericAuthorityV2) : GradientV2 {
+        override val gradientDegenerate: Boolean get() = degeneracy.radialDegenerate
+        override fun copyUniformValuesF32(): List<Float> = listOf(centerF32.x, centerF32.y, radiusF32, 0f)
+        override fun rebind(range: GradientStopRangeV1, authority: GradientNumericAuthorityV2): GradientV2 =
+            copy(stopRange = range, numericAuthority = authority)
+    }
+
+    public data class SweepGradientV2(public val centerF32: Point2F32,
+        override val stopRange: GradientStopRangeV1, public val degeneracy: SweepGradientDegeneracyV1,
+        override val numericAuthority: GradientNumericAuthorityV2) : GradientV2 {
+        override val gradientDegenerate: Boolean get() = degeneracy.sweepDegenerate
+        override fun copyUniformValuesF32(): List<Float> = listOf(centerF32.x, centerF32.y,
+            degeneracy.startAngleDegreesF32, degeneracy.endAngleDegreesF32)
+        override fun rebind(range: GradientStopRangeV1, authority: GradientNumericAuthorityV2): GradientV2 =
+            copy(stopRange = range, numericAuthority = authority)
+    }
+
+    public data class ConicalGradientV2(public val startF32: Point2F32, public val endF32: Point2F32,
+        override val stopRange: GradientStopRangeV1, public val degeneracy: ConicalGradientDegeneracyV1,
+        override val numericAuthority: GradientNumericAuthorityV2) : GradientV2 {
+        override val gradientDegenerate: Boolean get() = degeneracy.conicalFullyDegenerate
+        override fun copyUniformValuesF32(): List<Float> = listOf(startF32.x, startF32.y, endF32.x, endF32.y)
+        override fun rebind(range: GradientStopRangeV1, authority: GradientNumericAuthorityV2): GradientV2 =
+            copy(stopRange = range, numericAuthority = authority)
+    }
+
     public data class LinearGradientV1(public val startF32: Point2F32, public val endF32: Point2F32,
         override val stopRange: GradientStopRangeV1, public val degeneracy: LinearGradientDegeneracyV1,
         override val numericAuthority: GradientNumericAuthorityV1) : GradientV1 {
@@ -212,7 +240,7 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
                     MaterialProgramPlan.RadialGradientClampSrgbV1 -> require(entry.bindings is MaterialBindingPlan.RadialGradientV1 && entry.stopSlab != null)
                     MaterialProgramPlan.SweepGradientClampSrgbV1 -> require(entry.bindings is MaterialBindingPlan.SweepGradientV1 && entry.stopSlab != null)
                     MaterialProgramPlan.ConicalGradientClampSrgbV1 -> require(entry.bindings is MaterialBindingPlan.ConicalGradientV1 && entry.stopSlab != null)
-                    is GradientAddressingProgramV2 -> require(entry.bindings is MaterialBindingPlan.LinearGradientV2 &&
+                    is GradientAddressingProgramV2 -> require(entry.bindings is MaterialBindingPlan.GradientV2 &&
                         entry.stopSlab != null && entry.bindings.numericAuthority.authenticates(program,
                             entry.bindings, entry.stopSlab, entry.bindings.numericAuthority.coordinates)) {
                         W5dPlanDiagnostics.CoordinatePlanSchema

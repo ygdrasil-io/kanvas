@@ -3,7 +3,6 @@ package org.graphiks.kanvas.surface.gpu
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.paint.ColorSpaceInterpolation
 import org.graphiks.kanvas.paint.Shader
-import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.render.ir.GraphLimits
 
 /** Shared W5c continuity and W5d readiness predicate for both admission consumers. */
@@ -39,12 +38,9 @@ private fun Shader.isW5dGradientCandidateV2(allowGradient: Boolean, allowNonGrad
                 source = node.shader
             }
             is Shader.LinearGradient -> return allowGradient && node.interpolation == ColorSpaceInterpolation.SRGB
-            is Shader.RadialGradient -> return allowGradient && localCountI32 == 0 && node.tileMode == TileMode.CLAMP &&
-                node.interpolation == ColorSpaceInterpolation.SRGB
-            is Shader.SweepGradient -> return allowGradient && localCountI32 == 0 && node.tileMode == TileMode.CLAMP &&
-                node.interpolation == ColorSpaceInterpolation.SRGB
-            is Shader.ConicalGradient -> return allowGradient && localCountI32 == 0 && node.tileMode == TileMode.CLAMP &&
-                node.interpolation == ColorSpaceInterpolation.SRGB
+            is Shader.RadialGradient -> return allowGradient && node.interpolation == ColorSpaceInterpolation.SRGB
+            is Shader.SweepGradient -> return allowGradient && node.interpolation == ColorSpaceInterpolation.SRGB
+            is Shader.ConicalGradient -> return allowGradient && node.interpolation == ColorSpaceInterpolation.SRGB
             is Shader.CoordClamp -> {
                 if (!allowGradient) return false
                 localCountI32++
