@@ -345,10 +345,10 @@ fn w5dBinaryPartsF32(valueF32: f32) -> W5dBinaryPartsF32 {
 fn w5dSafeDivideF32(numeratorF32: f32, denominatorF32: f32) -> W5dSafeDivideResultF32 {
     let numerator = w5dBinaryPartsF32(numeratorF32);
     let denominator = w5dBinaryPartsF32(denominatorF32);
-    if (!numerator.valid || !denominator.valid || denominatorF32 == 0.0) {
+    if (!numerator.valid || !denominator.valid || denominator.fractionF32 == 0.0) {
         return W5dSafeDivideResultF32(0.0, false);
     }
-    if (numeratorF32 == 0.0) {
+    if (numerator.fractionF32 == 0.0) {
         return W5dSafeDivideResultF32(0.0, true);
     }
     let fractionQuotientF32 = numerator.fractionF32 / denominator.fractionF32;
@@ -367,9 +367,9 @@ state.valid = state.valid && projectedX.valid && projectedY.valid;
 state.pointF32 = select(vec2<f32>(0.0), vec2<f32>(projectedX.valueF32, projectedY.valueF32), state.valid);
 ```
 
-Define `W5dSafeDivideResultF32(valueF32: f32, valid: bool)` next to the decomposition result. `bitcast`, shifts and `countLeadingZeros` normalize subnormal operands without floating-point overflow. The sole fraction division has a normal denominator of magnitude at least `0.5` and a result below `2`; `frexp` therefore receives a finite normal. `ldexp` is called only with exponent `<= 128`; lower exponents may flush a subnormal result to zero as WGSL permits, which the oracle envelopes. This path preserves the review counterexample with numerator near `2^127`, denominator `2^126` and quotient near `2`; it returns invalid only for a non-finite operand, zero denominator or genuinely overflowing F32 quotient. Each clamp runs exactly at its list position. Invalid coordinates return transparent before family, tile, stop-search or blend evaluation.
+Define `W5dSafeDivideResultF32(valueF32: f32, valid: bool)` next to the decomposition result. `bitcast`, shifts and `countLeadingZeros` normalize subnormal operands that survive WGSL's permitted input flush-to-zero without floating-point overflow. A flushed operand is classified as zero by its derived `fractionF32`; every zero decision uses that classified fraction, never a second comparison of the original float. The sole fraction division therefore has a normal denominator of magnitude at least `0.5` and a result below `2`; `frexp` receives a finite normal. `ldexp` is called only with exponent `<= 128`; lower exponents may flush a subnormal result to zero as WGSL permits, which the oracle envelopes. This path preserves the review counterexample with numerator near `2^127`, denominator `2^126` and quotient near `2`; it returns invalid only for a non-finite operand, a denominator classified as zero or a genuinely overflowing F32 quotient. Each clamp runs exactly at its list position. Invalid coordinates return transparent before family, tile, stop-search or blend evaluation.
 
-- [ ] **Step 5: Extend the independent oracle with the same mathematical contract, not production helpers.** Enumerate the allowed F32 multiply/add schedules for each homogeneous row and propagate their output envelope operation-by-operation. Independently decode normal/subnormal F32 bits, evaluate the bounded fraction division plus `frexp`/`ldexp` exponent rule, carry `valid`, clamp only safe points and require singleton/two-code closure for chosen pixels. Include WGSL flush-to-zero alternatives for subnormal final quotients. Add the finite large-numerator/large-denominator review counterexample as a public pixel control, and prove that only its neighboring exact `w == 0` sample is transparent.
+- [ ] **Step 5: Extend the independent oracle with the same mathematical contract, not production helpers.** Enumerate the allowed F32 multiply/add schedules for each homogeneous row and propagate their output envelope operation-by-operation. Independently decode normal/subnormal F32 bits, evaluate the bounded fraction division plus `frexp`/`ldexp` exponent rule, carry `valid`, clamp only safe points and require singleton/two-code closure for chosen pixels. Include both WGSL-permitted classifications of each subnormal input (surviving subnormal or flushed zero), as well as flush-to-zero alternatives for subnormal final quotients; the oracle must make its zero decision from the selected classified parts exactly once. Add the finite large-numerator/large-denominator review counterexample as a public pixel control, and prove that only its neighboring exact `w == 0` sample is transparent.
 
 - [ ] **Step 6: Verify GREEN, mutation safety and commit.**
 

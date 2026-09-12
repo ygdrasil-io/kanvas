@@ -151,10 +151,13 @@ cette coordonnée ; un rectangle inversé est refusé.
 Le planner prouve d'abord avec `WgslFloatEnvelopeV1` que les trois produits
 scalaires homogènes ne débordent pas sur les bounds device propriétaires. Le
 WGSL applique ensuite une division mise à l'échelle qui conserve tous les
-quotients F32 finis. Une décomposition par `bitcast<u32>` classe zéro,
-subnormal, normal et non-fini sans opération flottante spéculative. Elle
-reconstruit pour chaque valeur finie non nulle une fraction F32 normale dans
-`[0.5,1)` et un exposant I32, y compris depuis une mantisse subnormale. Les deux
+quotients F32 finis observables. Une décomposition par `bitcast<u32>` classe
+zéro, subnormal, normal et non-fini sans opération flottante spéculative. Le
+`bitcast` observe cependant l'opérande après tout flush-to-zero que WGSL peut
+autoriser : si un subnormal survit, la décomposition reconstruit une fraction
+F32 normale dans `[0.5,1)` et un exposant I32 ; s'il est flushé, elle le classe
+comme zéro. Les décisions de zéro utilisent exclusivement cette fraction
+dérivée, jamais une nouvelle comparaison du flottant d'origine. Les deux
 fractions normales sont divisées — leur quotient est borné dans `(0.5,2)` —,
 puis `frexp` le renormalise. La somme checked des exposants est passée à
 `ldexp` seulement si elle est `<= 128`; au-delà, le quotient F32 est réellement
@@ -165,9 +168,11 @@ spécification WGSL : <https://www.w3.org/TR/WGSL/#numeric-builtin-functions>.
 
 Un échec de la preuve des produits scalaires refuse le draw avant `Ready` avec
 `unsupported.material.gradient.numeric-domain-unbounded`. Après cette preuve,
-le fragment devient invalide seulement si `w == 0`, si une entrée est non finie
-ou si l'exposant normalisé prouve que le quotient F32 déborde. Un `w` subnormal
-ou très grand reste admis lorsque le quotient est fini. Le nœud invalide produit
+le fragment devient invalide seulement si la décomposition observe `w == 0`,
+si une entrée est non finie ou si l'exposant normalisé prouve que le quotient
+F32 déborde. Un `w` subnormal qui survit à l'évaluation, ou très grand, reste
+admis lorsque le quotient est fini ; un subnormal flushé est traité comme zéro,
+conformément à WGSL. Le nœud invalide produit
 le point sûr `(0,0)` et un bit de validité faux. Les nœuds suivants s'évaluent
 uniquement sur les valeurs sûres, et le matériau final est masqué transparent.
 Une valeur non finie ou indéterminée ne peut pas entrer dans `floor`, `atan2`,
