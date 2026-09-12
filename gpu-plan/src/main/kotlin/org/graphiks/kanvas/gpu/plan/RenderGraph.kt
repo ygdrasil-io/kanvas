@@ -72,7 +72,8 @@ public class RenderGraph private constructor(
             require(graph.passes().filterIsInstance<PlanPass.RenderPass>().flatMap { it.draws() }.all {
                 (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw || it is PathStrokeDraw || it is GeneralPathDraw || it is W5bW4ePathDraw) &&
                     (it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1 ||
-                        (it is SolidRectDraw || it is AnalyticRectDraw) && it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2)
+                        (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw ||
+                            it is PathFillDraw || it is PathStrokeDraw) && it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2)
             })
             return RenderGraph(graph.id, graph.capabilityId, graph.targetExtent, graph.colorFormat, graph.capabilities,
                 graph.budget, graph.visualCommandCount, graph.resources(), graph.passes(), graph.dependencies(),
@@ -123,7 +124,8 @@ public class RenderGraph private constructor(
                     while (materialPlanTable.entry(MaterialPlanRef(indexI32)).bindings is MaterialBindingPlan.OpacityF32V1) indexI32--
                     val entry = materialPlanTable.entry(MaterialPlanRef(indexI32))
                     if (entry.bindings is MaterialBindingPlan.GradientV2) {
-                        require((draw is SolidRectDraw || draw is AnalyticRectDraw) && authority is PlanDrawMaterialAuthority.MaterialV2) {
+                        require((draw is SolidRectDraw || draw is AnalyticRectDraw || draw is AnalyticRRectDraw ||
+                            draw is PathFillDraw || draw is PathStrokeDraw) && authority is PlanDrawMaterialAuthority.MaterialV2) {
                             W5dPlanDiagnostics.CoordinatePlanSchema
                         }
                         require(entry.program is GradientAddressingProgramV2 && entry.bindings.numericAuthority.authenticates(

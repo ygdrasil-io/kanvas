@@ -133,7 +133,7 @@ public sealed interface GradientNumericOperationGraphV1 {
                 else Operation.INPUT_UNIFORM_F32, ValueType.ScalarF32, input = slot)
         private fun scalar(op: Operation, vararg args: Node): Node = Node(op, ValueType.ScalarF32, args.toList())
 
-        public fun linear(): GradientNumericOperationGraphV1 {
+        public fun linear(tileGraph: GradientTileOperationGraphV2? = null): GradientNumericOperationGraphV1 {
             val one = input(Input.ONE)
             val dx = input(Input.LINEAR_DX)
             val dy = input(Input.LINEAR_DY)
@@ -144,8 +144,46 @@ public sealed interface GradientNumericOperationGraphV1 {
             val degenerate = Node(Operation.INPUT_UNIFORM_FLAG, ValueType.ValidityFlag, input = Input.DEGENERATE)
             val safeLength = scalar(Operation.SELECT, length, one, degenerate)
             val numerator = scalar(Operation.SELECT, dot, one, degenerate)
-            return Linear(clampStops(numerator, safeLength),
+            val valid = Node(Operation.COMPARE_F32, ValueType.ValidityFlag, listOf(one, one), lessOrEqual = true)
+            val root = if (tileGraph == null) clampStops(numerator, safeLength)
+                else tiledStops(numerator, safeLength, valid, tileGraph)
+            return Linear(root,
                 GradientNumericDomainProofV1.Unbounded(W5cPlanDiagnostics.NumericDomainUnbounded))
+        }
+
+        /** The single family-independent translation of the sealed tile grammar. */
+        private fun tiledStops(numerator: Node, safeLength: Node, familyValidity: Node,
+            tileGraph: GradientTileOperationGraphV2): Node {
+            val one = input(Input.ONE)
+            val raw = scalar(Operation.DIV_F32, numerator, safeLength)
+            val lowered = mutableMapOf<GradientTileOperationNodeV2, Node>()
+            fun lower(node: GradientTileOperationNodeV2): Node = lowered.getOrPut(node) {
+                when (node) {
+                    GradientTileOperationNodeV2.InputTF32 -> raw
+                    GradientTileOperationNodeV2.InputValidity -> familyValidity
+                    is GradientTileOperationNodeV2.ConstantF32 -> input(when (node.valueF32) {
+                        0f -> Input.ZERO; .5f -> Input.HALF; 1f -> Input.ONE; 2f -> Input.TWO
+                        else -> error("Unsupported sealed tile constant")
+                    })
+                    is GradientTileOperationNodeV2.MulF32 -> scalar(Operation.MUL_F32, lower(node.left), lower(node.right))
+                    is GradientTileOperationNodeV2.SubF32 -> scalar(Operation.SUB_F32, lower(node.left), lower(node.right))
+                    is GradientTileOperationNodeV2.FloorF32 -> scalar(Operation.FLOOR_F32, lower(node.input))
+                    is GradientTileOperationNodeV2.AbsF32 -> scalar(Operation.ABS_F32, lower(node.input))
+                    is GradientTileOperationNodeV2.CompareF32 -> Node(Operation.COMPARE_F32, ValueType.ValidityFlag,
+                        listOf(lower(node.left), lower(node.right)), lessOrEqual = node.lessOrEqual)
+                    is GradientTileOperationNodeV2.SelectF32 -> scalar(Operation.SELECT,
+                        lower(node.otherwise), lower(node.selected), lower(node.condition))
+                    is GradientTileOperationNodeV2.AndValidity -> Node(Operation.AND_FLAG, ValueType.ValidityFlag,
+                        listOf(lower(node.left), lower(node.right)))
+                    // Kept as a source-compatible node type; no sealed V2 factory emits it.
+                    is GradientTileOperationNodeV2.ClampF32 -> error("Unsealed legacy tile node")
+                }
+            }
+            val tiled = lower(tileGraph.outputTF32)
+            // CLAMP keeps W5c's scaled comparison, avoiding division error at hard stops.
+            val color = if (tileGraph.effectiveMode == GradientTileModeV2.CLAMP)
+                clampStops(numerator, safeLength, tiled) else clampStops(tiled, one)
+            return Node(Operation.VALIDITY_MASK, ValueType.SrgbaStraightF32, listOf(color, lower(tileGraph.validity)))
         }
 
         public fun radial(): GradientNumericOperationGraphV1 {
@@ -300,7 +338,7 @@ public sealed interface GradientNumericOperationGraphV1 {
                 GradientNumericDomainProofV1.Unbounded(W5cPlanDiagnostics.NumericDomainUnbounded))
         }
 
-        private fun clampStops(numerator: Node, safeLength: Node): Node {
+        private fun clampStops(numerator: Node, safeLength: Node, lookupTF32: Node? = null): Node {
             val zero = input(Input.ZERO)
             val one = input(Input.ONE)
             val projection = if (safeLength.input == Input.ONE) numerator else scalar(Operation.DIV_F32, numerator, safeLength)
@@ -320,7 +358,7 @@ public sealed interface GradientNumericOperationGraphV1 {
                 listOf(range, upper), relativeIndexI32 = offsetI32)
             val interpolated = Node(Operation.INTERPOLATE_SRGBA_STRAIGHT_F32, ValueType.SrgbaStraightF32, listOf(
                 load(Operation.LOAD_STOP_COLOR_SRGBA_F32, -1), load(Operation.LOAD_STOP_COLOR_SRGBA_F32, 0),
-                load(Operation.LOAD_STOP_POSITION_F32, -1), load(Operation.LOAD_STOP_POSITION_F32, 0), clamped,
+                load(Operation.LOAD_STOP_POSITION_F32, -1), load(Operation.LOAD_STOP_POSITION_F32, 0), lookupTF32 ?: clamped,
             ))
             val first = Node(Operation.LOAD_STOP_COLOR_SRGBA_F32, ValueType.SrgbaStraightF32, listOf(range,
                 Node(Operation.INPUT_STOP_RANGE_U32, ValueType.IndexU32, input = Input.ZERO)))
@@ -509,6 +547,7 @@ private fun GradientNumericOperationGraphV1.proveGradientDomainV1(
             GradientNumericOperationGraphV1.Operation.INPUT_UNIFORM_F32 -> when (node.input) {
                 GradientNumericOperationGraphV1.Input.ZERO -> 0.0
                 GradientNumericOperationGraphV1.Input.ONE -> 1.0
+                GradientNumericOperationGraphV1.Input.TWO -> 2.0
                 GradientNumericOperationGraphV1.Input.MIN_NORMAL -> java.lang.Float.MIN_NORMAL.toDouble()
                 GradientNumericOperationGraphV1.Input.TWO_PI -> 6.2831855f.toDouble()
                 GradientNumericOperationGraphV1.Input.QUARTER -> .25
@@ -562,6 +601,8 @@ private fun GradientNumericOperationGraphV1.proveGradientDomainV1(
                 else maxOf(inputs[0], inputs[1])
             }
             GradientNumericOperationGraphV1.Operation.MAX_F32 -> inputs.max()
+            GradientNumericOperationGraphV1.Operation.VALIDITY_MASK -> inputs[0]
+            GradientNumericOperationGraphV1.Operation.AND_FLAG -> 1.0
             GradientNumericOperationGraphV1.Operation.INTERPOLATE_SRGBA_STRAIGHT_F32 -> {
                 finite = finite && node.clampInterpolationWeightToUnitInterval &&
                     minimumGapF64 >= node.minimumPositiveDenominatorF64 &&

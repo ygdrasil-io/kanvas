@@ -272,3 +272,14 @@ internal fun normalizeGradientStopsV1(input: List<GradientStop>, preserveValidit
         return NormalizedGradientStopsV1.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
     return NormalizedGradientStopsV1.Stops(GradientStopSlabPlanV1.of(normalized))
 }
+
+/** W5c normalization remains authoritative; only exterior duplicate endpoints are removed. */
+internal fun normalizeGradientStopsV2(input: List<GradientStop>, effectiveTileMode: GradientTileModeV2,
+    preserveValidityMask: Boolean = false): NormalizedGradientStopsV1 {
+    val normalized = normalizeGradientStopsV1(input, preserveValidityMask)
+    if (effectiveTileMode == GradientTileModeV2.CLAMP || normalized !is NormalizedGradientStopsV1.Stops) return normalized
+    val stops = normalized.slab.copyStops().toMutableList()
+    if (stops[0].positionF32 == 0f && stops[1].positionF32 == 0f) stops.removeAt(0)
+    if (stops[stops.lastIndex].positionF32 == 1f && stops[stops.lastIndex - 1].positionF32 == 1f) stops.removeAt(stops.lastIndex)
+    return NormalizedGradientStopsV1.Stops(GradientStopSlabPlanV1.of(stops))
+}

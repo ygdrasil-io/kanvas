@@ -2,6 +2,21 @@ package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.math.geometry.SizeI32
 
+/** Rebind material coordinates only after W4 has issued the native lane geometry. */
+internal fun PlanDraw.withW5dCoordinates(coordinates: MaterialCoordinatePlanV2): PlanDraw = when (this) {
+    is SolidRectDraw -> SolidRectDraw.ofMaterial(commandIndex, materialAuthority.materialPlanRef(),
+        copyVisibleBounds(), copyScissor(), coverage, sample, blend, coordinatesV2 = coordinates)
+    is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(commandIndex, materialAuthority.materialPlanRef(),
+        copyDeviceBounds(), copyRasterBounds(), copyScissor(), blend, coordinatesV2 = coordinates)
+    is AnalyticRRectDraw -> AnalyticRRectDraw.ofMaterial(commandIndex, materialAuthority.materialPlanRef(),
+        origin, copyDeviceShape(), copyRasterBounds(), copyScissor(), blend, coordinatesV2 = coordinates)
+    is PathFillDraw -> PathFillDraw.ofMaterial(commandIndex, materialAuthority.materialPlanRef(),
+        copyGeometryF32(), strategy, copyScissorI32(), blend, coordinatesV2 = coordinates)
+    is PathStrokeDraw -> PathStrokeDraw.ofMaterial(commandIndex, materialAuthority.materialPlanRef(),
+        copyGeometryF32(), copyScissorI32(), mode, styleF64, blend, coordinatesV2 = coordinates)
+    else -> error(W5dPlanDiagnostics.CoordinatePlanSchema)
+}
+
 /** One authentic geometry lane inside an ordered W5b color envelope. */
 public class W5bGeometryLanePlanV3 internal constructor(
     public val sourceGraph: RenderGraph,

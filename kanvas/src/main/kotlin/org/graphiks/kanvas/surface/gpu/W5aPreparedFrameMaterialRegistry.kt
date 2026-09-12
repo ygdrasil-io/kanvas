@@ -125,8 +125,9 @@ internal data class W5aPreparedFrameMaterialRegistry(
             is DisplayOp.DrawRect -> !paint.isStroke() &&
                 (paint.shader?.isW5dGradientCandidateV2() == true || paint.shader.isW5aSolidOpacity(allowGradient = true))
             is DisplayOp.DrawRRect -> !paint.isStroke() &&
-                paint.shader.isW5aSolidOpacity(allowGradient = paint.antiAlias)
-            is DisplayOp.DrawPath -> paint.shader.isW5aSolidOpacity(allowGradient = true)
+                (paint.antiAlias && paint.shader?.isW5dGradientCandidateV2() == true ||
+                    paint.shader.isW5aSolidOpacity(allowGradient = paint.antiAlias))
+            is DisplayOp.DrawPath -> paint.shader?.isW5dGradientCandidateV2() == true || paint.shader.isW5aSolidOpacity(allowGradient = true)
             is DisplayOp.DrawPoint ->
                 paint.blendMode in POINT_MATERIAL_BLENDS && paint.strokeCap != StrokeCap.ROUND &&
                     paint.shader.isW5aSolidOpacity()

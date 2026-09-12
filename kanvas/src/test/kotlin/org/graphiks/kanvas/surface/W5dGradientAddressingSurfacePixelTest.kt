@@ -3,6 +3,9 @@
 package org.graphiks.kanvas.surface
 
 import org.graphiks.kanvas.paint.ColorFilter
+import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
@@ -11,6 +14,8 @@ import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.geometry.RRectF32
+import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
@@ -19,6 +24,68 @@ import org.junit.jupiter.api.assertThrows
 import kotlin.test.assertContentEquals
 
 class W5dGradientAddressingSurfacePixelTest {
+    @Test
+    fun linearTileModesCoverSignedBoundariesOnEveryLane() = tileLanes()
+
+    @Test
+    fun linearHardStopsPreserveTileBoundaries() = tileLanes(destinationBlend = true)
+
+    @Test
+    fun nonClampDropsOnlyTheOuterEndpointDuplicate() = tileLanes(endpointDuplicates = true)
+
+    private fun tileLanes(endpointDuplicates: Boolean = false, destinationBlend: Boolean = false) {
+        // Wrong signed tiling, endpoint pruning, upper_bound selection or lane admission
+        // changes these public pixels. All samples lie inside the existing W4 coverage.
+        val failures = mutableListOf<String>()
+        for (mode in TileMode.entries) for (laneI32 in 0..3) {
+            try {
+                val stops = buildList {
+                    if (endpointDuplicates) add(GradientStop(0f, ColorARGB.Black))
+                    add(GradientStop(0f, ColorARGB.Red)); add(GradientStop(.5f, ColorARGB.Red))
+                    if (endpointDuplicates) add(GradientStop(.5f, ColorARGB.Green))
+                    add(GradientStop(.5f, ColorARGB.Blue)); add(GradientStop(1f, ColorARGB.Blue))
+                    if (endpointDuplicates) add(GradientStop(1f, ColorARGB.Green))
+                }
+                var shader: Shader = Shader.LinearGradient(Point2F32(18.5f, 0f), Point2F32(26.5f, 0f), stops, tileMode = mode)
+                if (destinationBlend) shader = Shader.Opacity(shader, .5f)
+                val rectF32 = RectF32.ofLTRB(0f, 0f, 39f, 8f)
+                val recorder = PictureRecorder()
+                val canvas = recorder.beginRecording(rectF32)
+                val paint = Paint(shader = shader, antiAlias = false,
+                    blendMode = if (destinationBlend) BlendMode.DIFFERENCE else BlendMode.SRC_OVER)
+                when (laneI32) {
+                    0 -> canvas.drawRect(rectF32, paint)
+                    1 -> canvas.drawRRect(RRectF32.of(rectF32, CornerRadiiF32.of(.5f)), paint.copy(antiAlias = true))
+                    2 -> canvas.drawPath(Path().apply { addRect(rectF32) }, paint)
+                    3 -> canvas.drawPath(Path().apply { moveTo(0f, 4f); lineTo(39f, 4f) },
+                        paint.copy(style = PaintStyle.STROKE, strokeWidth = 8f))
+                }
+                val picture = recorder.finishRecordingAsPicture()
+                val surface = Surface(39, 8)
+                surface.canvas {
+                    if (destinationBlend) drawRect(rectF32, Paint(shader = Shader.SolidColor(ColorARGB.White), antiAlias = false))
+                    picture.playback(this)
+                }
+                val pixels = surface.render().pixels
+                for (sample in W5dGradientAddressingCpuOracle.tileSamples(mode)) {
+                    val pixelXI32 = (18f + sample.rawTF32 * 8f).toInt()
+                    val offsetI32 = (4 * 39 + pixelXI32) * 4
+                    try {
+                        WgslFloatEnvelopeV1Oracle.assertAdmits(W5dGradientAddressingCpuOracle.tiledPixel(
+                            sample, mode, endpointDuplicates, destinationBlend), pixels.copyOfRange(offsetI32, offsetI32 + 4))
+                    } catch (failure: AssertionError) {
+                        failures += "$mode lane=$laneI32 rawT=${sample.rawTF32}: ${failure.message}"
+                    } catch (failure: IllegalArgumentException) {
+                        failures += "$mode lane=$laneI32 rawT=${sample.rawTF32}: ${failure.message}"
+                    }
+                }
+            } catch (failure: IllegalStateException) {
+                failures += "$mode lane=$laneI32: ${failure.message}"
+            }
+        }
+        kotlin.test.assertTrue(failures.isEmpty(), failures.joinToString("\n"))
+    }
+
     @org.junit.jupiter.api.BeforeEach
     fun establishPublicRuntime() {
         assertContentEquals(W5dGradientAddressingCpuOracle.redPixel(), renderPixel(linearGradient()))

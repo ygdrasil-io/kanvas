@@ -78,8 +78,11 @@ public object EffectiveMaterialPlanner {
             return Normalization.Refused(W5aPlanDiagnostics.UnsupportedDrawState)
         }
         val addressing = GradientAddressingCaptureV2.capture(draw.material)
-        if (addressing is GradientAddressingCaptureV2.Ready && addressing.coordinateNodes.isNotEmpty())
-            return normalizeW5d(draw, blend, addressing)
+        if (addressing is GradientAddressingCaptureV2.Ready &&
+            (addressing.coordinateNodes.isNotEmpty() || (addressing.leaf as? MaterialNode.LinearGradient)?.tileMode?.let {
+                it != org.graphiks.kanvas.render.ir.TileMode.CLAMP
+            } == true))
+            return normalizeW5d(draw, blend, addressing, gradientDeviceBoundsI32)
         var material = draw.material
         val opacityInnerToOuter = mutableListOf<Float>()
         var visited = 0
@@ -246,36 +249,45 @@ public object EffectiveMaterialPlanner {
         return Normalization.Source(MaterialPlanTable.of(entries), MaterialPlanRef(entries.lastIndex), blend)
     }
 
-    private fun normalizeW5d(draw: DrawNode, blend: BlendPlan, capture: GradientAddressingCaptureV2.Ready): Normalization {
+    private fun normalizeW5d(draw: DrawNode, blend: BlendPlan, capture: GradientAddressingCaptureV2.Ready,
+        gradientDeviceBoundsI32: org.graphiks.math.geometry.RectI32?): Normalization {
         val linear = capture.leaf as? MaterialNode.LinearGradient
             ?: return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
-        if (linear.tileMode != org.graphiks.kanvas.render.ir.TileMode.CLAMP ||
-            linear.interpolation != org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB ||
-            draw.origin != org.graphiks.kanvas.render.ir.DrawOrigin.RECT || draw.geometry !is org.graphiks.kanvas.render.ir.GeometryNode.Rect)
+        if (linear.interpolation != org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB ||
+            draw.origin !in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.RECT,
+                org.graphiks.kanvas.render.ir.DrawOrigin.RRECT, org.graphiks.kanvas.render.ir.DrawOrigin.PATH))
             return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
         val coordinates = when (val result = MaterialCoordinatePlanV2.fromCtmAndNodes(draw.transform, capture.coordinateNodes)) {
             is MaterialCoordinatePlanV2.Build.Ready -> result.coordinates
             is MaterialCoordinatePlanV2.Build.Refused -> return Normalization.Refused(result.code)
         }
-        val stops = when (val normalized = normalizeGradientStopsV1(linear.stops(), preserveValidityMask = true)) {
+        val tileGraph = GradientTileModeV2.valueOf(linear.tileMode.name).operationGraph()
+        val stops = when (val normalized = normalizeGradientStopsV2(linear.stops(), tileGraph.effectiveMode, preserveValidityMask = true)) {
             is NormalizedGradientStopsV1.Stops -> normalized.slab
             is NormalizedGradientStopsV1.Refused -> return Normalization.Refused(normalized.code)
             is NormalizedGradientStopsV1.Solid -> error("V2 retains a stop authority")
         }
-        val bounds = (draw.geometry as org.graphiks.kanvas.render.ir.GeometryNode.Rect).copyBounds()
-        val deviceCorners = listOf(org.graphiks.math.geometry.Point2F32(bounds.left, bounds.top),
+        val bounds = when (val geometry = draw.geometry) {
+            is org.graphiks.kanvas.render.ir.GeometryNode.Rect -> geometry.copyBounds()
+            is org.graphiks.kanvas.render.ir.GeometryNode.RRect -> geometry.copyShape().rect
+            is org.graphiks.kanvas.render.ir.GeometryNode.Path -> null
+            else -> return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
+        }
+        val deviceCorners = bounds?.let { listOf(org.graphiks.math.geometry.Point2F32(bounds.left, bounds.top),
             org.graphiks.math.geometry.Point2F32(bounds.right, bounds.top),
             org.graphiks.math.geometry.Point2F32(bounds.left, bounds.bottom),
-            org.graphiks.math.geometry.Point2F32(bounds.right, bounds.bottom)).map(draw.transform::transform)
+            org.graphiks.math.geometry.Point2F32(bounds.right, bounds.bottom)).map(draw.transform::transform) }
         // W3/W4a own axis-aligned device rectangles. Outward pixel edges enclose every
         // fragment center (including fractional-edge AA), without losing X/Y correlation
         // to an unrelated absolute-magnitude square before projective evaluation.
-        val deviceBoundsF32 = org.graphiks.math.geometry.RectF32.ofLTRB(
+        val deviceBoundsF32 = if (deviceCorners != null) org.graphiks.math.geometry.RectF32.ofLTRB(
             kotlin.math.floor(deviceCorners.minOf { it.x }), kotlin.math.floor(deviceCorners.minOf { it.y }),
             kotlin.math.ceil(deviceCorners.maxOf { it.x }), kotlin.math.ceil(deviceCorners.maxOf { it.y }))
+        else gradientDeviceBoundsI32?.takeUnless { it.isEmpty }?.let {
+            org.graphiks.math.geometry.RectF32.ofLTRB(it.left.toFloat(), it.top.toFloat(), it.right.toFloat(), it.bottom.toFloat())
+        } ?: return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
         val magnitudeF64 = coordinates.proveCoordinateDomainF64(deviceBoundsF32)
             ?: return Normalization.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
-        val tileGraph = GradientTileOperationGraphV2.clamp()
         val program = GradientAddressingProgramV2(GradientFamilyV2.LINEAR, tileGraph.requestedMode,
             tileGraph.effectiveMode, tileGraph.contractId, coordinates.topologyIdentity)
         val degeneracy = LinearGradientDegeneracyV1.of(linear.start, linear.end)

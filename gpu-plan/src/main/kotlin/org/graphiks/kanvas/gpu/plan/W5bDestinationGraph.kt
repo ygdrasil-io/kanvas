@@ -119,7 +119,8 @@ internal object W5bDestinationGraphSealer {
                 load, AttachmentStorePlan.Store, data, destinationVersionAfter = DestinationVersionI64(versionI64))
         }
         if (initialClearI32 == 1) render(null)
-        draws.forEach { draw ->
+        draws.forEach { original ->
+            val draw = material?.coordinatesV2(original.materialAuthority.materialPlanRef())?.let(original::withW5dCoordinates) ?: original
             val blend = draw.blend
             if (blend is BlendPlan.DestinationReadV1) {
                 require(if (draw is W5bW4ePathDraw && blend.coverage == BlendCoverageEncodingV1.ScalarCoverageInShader)
@@ -143,15 +144,15 @@ internal object W5bDestinationGraphSealer {
                         draw.copyDeviceBounds(), draw.copyRasterBounds(), draw.copyScissor(), sealed, draw.materialCoordinates, draw.materialCoordinatesV2)
                     is AnalyticRRectDraw -> AnalyticRRectDraw.ofMaterial(draw.commandIndex,
                         draw.materialAuthority.materialPlanRef(), draw.origin,
-                        draw.copyDeviceShape(), draw.copyRasterBounds(), draw.copyScissor(), sealed, draw.materialCoordinates)
+                        draw.copyDeviceShape(), draw.copyRasterBounds(), draw.copyScissor(), sealed, draw.materialCoordinates, draw.materialCoordinatesV2)
                     is PathFillDraw -> PathFillDraw.ofMaterial(draw.commandIndex,
                         draw.materialAuthority.materialPlanRef(),
-                        draw.copyGeometryF32(), draw.strategy, draw.copyScissorI32(), sealed, draw.materialCoordinates)
+                        draw.copyGeometryF32(), draw.strategy, draw.copyScissorI32(), sealed, draw.materialCoordinates, draw.materialCoordinatesV2)
                     is W5bW4ePathDraw -> draw.withBlend(sealed)
                     is GeneralPathDraw -> draw.withBlend(sealed)
                     is PathStrokeDraw -> PathStrokeDraw.ofMaterial(draw.commandIndex,
                         draw.materialAuthority.materialPlanRef(), draw.copyGeometryF32(),
-                        draw.copyScissorI32(), draw.mode, draw.styleF64, sealed, draw.materialCoordinates)
+                        draw.copyScissorI32(), draw.mode, draw.styleF64, sealed, draw.materialCoordinates, draw.materialCoordinatesV2)
                     else -> error("unsupported.w5b.destination-geometry")
                 })
             } else render(draw)

@@ -59,7 +59,7 @@ internal class W5bAnalyticRRectGraphLowerer {
         val built = draws.mapIndexed { index, draw ->
             W4bAnalyticRRectGraphLowerer().packet(draw,
                 requireNotNull(W5aMaterialPlanLowerer().lower(table,
-                    (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref)), index, bounds, table, w5b = true)
+                    draw.materialAuthority.materialPlanRef())), index, bounds, table, w5b = true)
         }
         val packets = built.map { it.packet }
         val semantics = packets.map { it.semanticPayload as GPUDrawSemanticPayload.CorePrimitive }

@@ -281,6 +281,7 @@ internal class W5bPreparedFrameWitnessV3(
             graph.capabilityId in setOf(org.graphiks.kanvas.gpu.plan.W5bCorePrimitiveGraph.CAPABILITY_ID,
                 org.graphiks.kanvas.gpu.plan.W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID,
                 org.graphiks.kanvas.gpu.plan.W4cPathFillPlanCompiler.W5B_CAPABILITY_ID,
+                org.graphiks.kanvas.gpu.plan.W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID,
                 org.graphiks.kanvas.gpu.plan.W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID,
                 org.graphiks.kanvas.gpu.plan.W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID,
                 org.graphiks.kanvas.gpu.plan.W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID,

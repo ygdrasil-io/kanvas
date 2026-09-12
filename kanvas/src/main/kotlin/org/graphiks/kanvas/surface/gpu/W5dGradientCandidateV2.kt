@@ -22,8 +22,7 @@ internal fun Shader.isW5dGradientCandidateV2(allowLocalMatrix: Boolean = true, a
                 localCountI32++
                 source = node.shader
             }
-            is Shader.LinearGradient -> return node.tileMode == TileMode.CLAMP &&
-                node.interpolation == ColorSpaceInterpolation.SRGB
+            is Shader.LinearGradient -> return node.interpolation == ColorSpaceInterpolation.SRGB
             is Shader.RadialGradient -> return localCountI32 == 0 && node.tileMode == TileMode.CLAMP &&
                 node.interpolation == ColorSpaceInterpolation.SRGB
             is Shader.SweepGradient -> return localCountI32 == 0 && node.tileMode == TileMode.CLAMP &&

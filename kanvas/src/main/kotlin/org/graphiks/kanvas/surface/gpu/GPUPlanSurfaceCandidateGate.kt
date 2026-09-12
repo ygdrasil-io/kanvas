@@ -17,7 +17,10 @@ internal object GPUPlanSurfaceCandidateGate {
                     else -> null
                 }
                 if (shader != null && !shader.isW5dGradientCandidateV2(
-                    allowLocalMatrix = operation is DisplayOp.DrawRect && !operation.paint.isStroke(), allowNonGradient = true)) return@all false
+                    allowLocalMatrix = operation is DisplayOp.DrawPath ||
+                        operation is DisplayOp.DrawRect && !operation.paint.isStroke() ||
+                        operation is DisplayOp.DrawRRect && !operation.paint.isStroke() && operation.paint.antiAlias,
+                    allowNonGradient = true)) return@all false
                 operation is DisplayOp.DrawRect ||
                     operation is DisplayOp.DrawRRect ||
                     (operation is DisplayOp.DrawPath &&

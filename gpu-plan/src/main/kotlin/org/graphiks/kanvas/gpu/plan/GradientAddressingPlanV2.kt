@@ -118,7 +118,8 @@ public class GradientNumericAuthorityV2 private constructor(
         slab: GradientStopSlabPlanV1, coordinates: MaterialCoordinatePlanV2): Boolean =
         program == this.program && graph.contractId == "WgslFloatEnvelopeV1" &&
             graph.domainProof == GradientNumericDomainProofV1.ProvenFinite && this.coordinates == coordinates &&
-            tileGraph == GradientTileOperationGraphV2.clamp() && binding.copyUniformValuesF32() == uniformValuesF32 &&
+            tileGraph == program.requestedTileMode.operationGraph() &&
+            tileGraph.effectiveMode == program.effectiveTileMode && binding.copyUniformValuesF32() == uniformValuesF32 &&
             when (binding) { is MaterialBindingPlan.LinearGradientV2 -> binding.degeneracy == degeneracy } &&
             binding.stopRange == range && slab.canonicalIdentity == slabIdentity
 
@@ -135,13 +136,13 @@ public class GradientNumericAuthorityV2 private constructor(
         fun sealLinear(program: GradientAddressingProgramV2, coordinates: MaterialCoordinatePlanV2,
             startF32: Point2F32, endF32: Point2F32, degeneracy: LinearGradientDegeneracyV1,
             slab: GradientStopSlabPlanV1, localMagnitudeF64: Double, uniformMagnitudeF64: Double): GradientNumericAuthorityV2? {
-            val tile = GradientTileOperationGraphV2.clamp()
+            val tile = program.requestedTileMode.operationGraph()
             if (program.family != GradientFamilyV2.LINEAR || program.requestedTileMode != tile.requestedMode ||
                 program.effectiveTileMode != tile.effectiveMode || program.tileGraphId != tile.contractId ||
                 program.coordinateTopologyId != coordinates.topologyIdentity ||
                 degeneracy != LinearGradientDegeneracyV1.of(startF32, endF32) ||
                 degeneracy.copyScalarsF32().any { !it.isFinite() }) return null
-            val schema = GradientNumericOperationGraphV1.linear()
+            val schema = GradientNumericOperationGraphV1.linear(tile)
             val stops = slab.copyStops()
             val proof = schema.proveLinearDomainV1(localMagnitudeF64, uniformMagnitudeF64, degeneracy, stops, startF32, endF32)
             if (proof != GradientNumericDomainProofV1.ProvenFinite) return null

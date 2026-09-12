@@ -549,6 +549,7 @@ public class AnalyticRRectDraw private constructor(
             scissor: RectI32,
             blend: BlendPlan = BlendPlan.LegacySrcOverV1,
             coordinates: MaterialCoordinatePlanV1? = null,
+            coordinatesV2: MaterialCoordinatePlanV2? = null,
         ): AnalyticRRectDraw {
             require(commandIndexI32 >= 0) { "Command index must not be negative" }
             require(origin == DrawOrigin.RECT || origin == DrawOrigin.RRECT) {
@@ -559,7 +560,8 @@ public class AnalyticRRectDraw private constructor(
             }
             return AnalyticRRectDraw(
                 commandIndexI32,
-                PlanDrawMaterialAuthority.MaterialV1(material, coordinates),
+                coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
+                    ?: PlanDrawMaterialAuthority.MaterialV1(material, coordinates),
                 origin,
                 deviceShape,
                 rasterBounds,
@@ -573,7 +575,7 @@ public class AnalyticRRectDraw private constructor(
 /** Reissues only the sealed W5 material reference; analytic RRect geometry remains native. */
 public fun AnalyticRRectDraw.withMaterialRef(material: MaterialPlanRef): AnalyticRRectDraw = AnalyticRRectDraw.ofMaterial(
     commandIndex, material, origin, copyDeviceShape(), copyRasterBounds(), copyScissor(), blend,
-    materialCoordinates,
+    materialCoordinates, materialCoordinatesV2,
 )
 
 /** A sealed W4c path-fill draw whose geometry authority remains owned by `:math`. */
@@ -632,8 +634,10 @@ public class PathFillDraw private constructor(
             scissorI32: RectI32,
             blend: BlendPlan = BlendPlan.LegacySrcOverV1,
             coordinates: MaterialCoordinatePlanV1? = null,
+            coordinatesV2: MaterialCoordinatePlanV2? = null,
         ): PathFillDraw = ofAuthority(
-            commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material, coordinates), geometryF32, strategy, scissorI32, blend,
+            commandIndexI32, coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
+                ?: PlanDrawMaterialAuthority.MaterialV1(material, coordinates), geometryF32, strategy, scissorI32, blend,
         )
 
         private fun ofAuthority(
@@ -658,7 +662,7 @@ public class PathFillDraw private constructor(
 /** Reissues only the sealed W5 material reference; no Path is reconstructed from another shape. */
 public fun PathFillDraw.withMaterialRef(material: MaterialPlanRef): PathFillDraw = PathFillDraw.ofMaterial(
     commandIndex, material, copyGeometryF32(), strategy, copyScissorI32(), blend,
-    materialCoordinates,
+    materialCoordinates, materialCoordinatesV2,
 )
 
 /** A sealed W4d stroke draw whose immutable geometry authority remains owned by `:math`. */
@@ -716,12 +720,14 @@ public class PathStrokeDraw private constructor(
             ),
             blend: BlendPlan = BlendPlan.SrcOver,
             coordinates: MaterialCoordinatePlanV1? = null,
+            coordinatesV2: MaterialCoordinatePlanV2? = null,
         ): PathStrokeDraw {
             require(commandIndexI32 >= 0) { "Command index must not be negative" }
             require(!scissorI32.isEmpty) { "Path stroke scissor must be non-empty" }
             pathFillStrategy(geometryF32.copyFillGeometryF32())
             return PathStrokeDraw(
-                commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material, coordinates), geometryF32, mode, styleF64, scissorI32, blend,
+                commandIndexI32, coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
+                    ?: PlanDrawMaterialAuthority.MaterialV1(material, coordinates), geometryF32, mode, styleF64, scissorI32, blend,
             )
         }
     }
@@ -729,7 +735,7 @@ public class PathStrokeDraw private constructor(
 
 public fun PathStrokeDraw.withMaterialRef(material: MaterialPlanRef): PathStrokeDraw = PathStrokeDraw.ofMaterial(
     commandIndex, material, copyGeometryF32(), copyScissorI32(), mode, styleF64, blend,
-    materialCoordinates,
+    materialCoordinates, materialCoordinatesV2,
 )
 
 private fun pathFillStrategy(geometryF32: PathFillGeometryF32): PathFillStrategy = when {

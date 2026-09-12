@@ -275,7 +275,8 @@ internal class W5aMaterialSourceStage private constructor(
             check(uniforms.position() == uniforms.capacity())
             return W5aMaterialSourceStage(table.entry(root).program.structuralId.value + ":srgb-endpoints-v1",
                 declarations, requirements.bindingCountI32, uniforms.array(),
-                opacities.all { it.alphaF32 == 1f } && slab.copyStops().all { it.straightSrgbF32.alpha == 1f } &&
+                numeric.tileGraph.effectiveMode != org.graphiks.kanvas.gpu.plan.GradientTileModeV2.DECAL &&
+                    opacities.all { it.alphaF32 == 1f } && slab.copyStops().all { it.straightSrgbF32.alpha == 1f } &&
                     operations.filterIsInstance<MaterialCoordinateOperationV2.InverseMatrixF32>().all {
                         it.inverseF32.persp0 == 0f && it.inverseF32.persp1 == 0f && it.inverseF32.persp2 == 1f },
                 slab, "w5d_local_point")
@@ -359,7 +360,6 @@ internal class W5aMaterialSourceStage private constructor(
         private fun gradientDeclarationsWgsl(graph: GradientNumericOperationGraphV1,
             tileGraph: org.graphiks.kanvas.gpu.plan.GradientTileOperationGraphV2? = null): String {
             require(graph.contractId == "WgslFloatEnvelopeV1" && graph.domainProof == GradientNumericDomainProofV1.ProvenFinite)
-            if (tileGraph != null) require(tileGraph == org.graphiks.kanvas.gpu.plan.GradientTileOperationGraphV2.clamp())
             val code = StringBuilder()
             val emitted = mutableMapOf<GradientNumericOperationGraphV1.Node, String>()
             var ordinalI32 = 0
@@ -369,19 +369,6 @@ internal class W5aMaterialSourceStage private constructor(
                     val valid = emit(node.inputs[1])
                     code.append("if (!$valid) { return vec4<f32>(0.0); }\n")
                     return@getOrPut emit(node.inputs[0])
-                }
-                // Replace the family graph's CLAMP node with the separately sealed V2 tile operation.
-                if (tileGraph != null && node.operation == GradientNumericOperationGraphV1.Operation.SELECT &&
-                    node.type == GradientNumericOperationGraphV1.ValueType.ScalarF32 &&
-                    node.inputs[0].operation == GradientNumericOperationGraphV1.Operation.MAX_F32 &&
-                    node.inputs[1].input == GradientNumericOperationGraphV1.Input.ONE) {
-                    fun tile(nodeV2: org.graphiks.kanvas.gpu.plan.GradientTileOperationNodeV2.ScalarF32): String = when (nodeV2) {
-                        org.graphiks.kanvas.gpu.plan.GradientTileOperationNodeV2.InputTF32 -> emit(node.inputs[0].inputs[0])
-                        is org.graphiks.kanvas.gpu.plan.GradientTileOperationNodeV2.ClampF32 -> "clamp(${tile(nodeV2.input)}, 0.0, 1.0)"
-                    }
-                    val name = "gradientValue${ordinalI32++}"
-                    code.append("let $name = ${tile(tileGraph.outputTF32)};\n")
-                    return@getOrPut name
                 }
                 val args = node.inputs.map(::emit)
                 val name = "gradientValue${ordinalI32++}"

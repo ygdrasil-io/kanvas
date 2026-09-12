@@ -2,12 +2,47 @@ package org.graphiks.kanvas.surface
 
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.GradientStop
+import org.graphiks.kanvas.paint.TileMode
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 
 /** Independent public fixture: inverse translation is x - 3, with nested shader and paint opacity. */
 internal object W5dGradientAddressingCpuOracle {
+    data class TileSample(val rawTF32: Float, val expectedTF32: Float, val expectedValid: Boolean = true)
+
+    // Literal, hand-checked signed boundaries; no production tile or stop helper.
+    fun tileSamples(mode: TileMode): List<TileSample> {
+        val raw = listOf(-2f, -1.25f, -1f, 0f, .25f, .375f, .5f, .625f, .75f, 1f, 2f, 2.25f)
+        val tiled = when (mode) {
+            TileMode.CLAMP, TileMode.DECAL -> listOf(0f, 0f, 0f, 0f, .25f, .375f, .5f, .625f, .75f, 1f, 1f, 1f)
+            TileMode.REPEAT -> listOf(0f, .75f, 0f, 0f, .25f, .375f, .5f, .625f, .75f, 0f, 0f, .25f)
+            TileMode.MIRROR -> listOf(0f, .75f, 1f, 0f, .25f, .375f, .5f, .625f, .75f, 1f, 0f, .25f)
+        }
+        return raw.zip(tiled) { t, expected -> TileSample(t, expected, mode != TileMode.DECAL || t in 0f..1f) }
+    }
+
+    fun tiledPixel(sample: TileSample, mode: TileMode, endpointDuplicates: Boolean,
+        destinationBlend: Boolean): WgslFloatEnvelopeV1Oracle.DrawResult {
+        val color = when {
+            !sample.expectedValid -> ColorARGB.Transparent
+            endpointDuplicates && mode == TileMode.CLAMP && sample.rawTF32 < 0f -> ColorARGB.Black
+            endpointDuplicates && mode == TileMode.CLAMP && sample.rawTF32 >= 1f -> ColorARGB.Green
+            sample.expectedTF32 < .5f -> ColorARGB.Red
+            else -> ColorARGB.Blue
+        }
+        val rgbaF32 = listOf(color.redNormalized,
+            color.greenNormalized, color.blueNormalized, color.alphaNormalized)
+        fun source(values: List<Float>) = { values.map(WgslFloatEnvelopeV1Oracle.Interval::input).toTypedArray() }
+        val destination = if (destinationBlend) requireNotNull(WgslFloatEnvelopeV1Oracle.nextAttachment(
+            WgslFloatEnvelopeV1Oracle.gradientThenBlend(source(listOf(1f, 1f, 1f, 1f)), 1f,
+                WgslFloatEnvelopeV1Oracle.clearAttachment(), BlendMode.SRC_OVER)))
+        else WgslFloatEnvelopeV1Oracle.clearAttachment()
+        return WgslFloatEnvelopeV1Oracle.gradientThenBlend(source(rgbaF32), if (destinationBlend) .5f else 1f,
+            destination, if (destinationBlend) BlendMode.DIFFERENCE else BlendMode.SRC_OVER)
+    }
+
     private data class Parts(val fractionF64: Double, val exponentI32: Int, val valid: Boolean)
 
     // Decode integer bits independently of the production matrix/coordinate implementation.
