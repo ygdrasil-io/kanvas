@@ -1,7 +1,7 @@
 # W5e — Images décodées dans le material graph
 
 Date : 2026-09-12  
-Statut : conception validée, en attente de review documentaire  
+Statut : conception validée  
 Branche : `codex/w5e-decoded-images`  
 Base stackée : `codex/w5d-gradient-addressing`
 
