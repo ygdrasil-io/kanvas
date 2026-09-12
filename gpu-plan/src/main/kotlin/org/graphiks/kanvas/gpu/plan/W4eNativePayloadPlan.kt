@@ -276,6 +276,7 @@ public class W4eNativePayloadPlan private constructor(
             addUniform: (String, String, FloatArray) -> Boolean,
         ): Boolean {
             fun materialColor(): org.graphiks.math.color.ColorF32? = when (val authority = pass.draw.materialAuthority) {
+                is PlanDrawMaterialAuthority.MaterialV2 -> error(W5dPlanDiagnostics.CoordinatePlanSchema)
                 is PlanDrawMaterialAuthority.MaterialV1 -> materialPlanTable?.let { table ->
                     // W5a material source is evaluated by the renderer fragment DAG. This
                     // historical geometry block does not own a flattened material value.

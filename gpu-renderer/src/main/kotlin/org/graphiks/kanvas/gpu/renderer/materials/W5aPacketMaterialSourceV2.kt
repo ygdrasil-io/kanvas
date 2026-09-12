@@ -12,6 +12,11 @@ internal class W5aPacketMaterialSourceV2 private constructor(
 
     companion object {
         fun issue(table: MaterialPlanTable, ref: MaterialPlanRef, commandIdI32: Int,
+            coordinates: org.graphiks.kanvas.gpu.plan.MaterialCoordinatePlanV2): W5aPacketMaterialSourceV2 =
+            W5aPacketMaterialSourceV2(commandIdI32, requireNotNull(W5aMaterialSourceStage.lower(table, ref, coordinates)) {
+                org.graphiks.kanvas.gpu.plan.W5dPlanDiagnostics.CoordinatePlanSchema
+            })
+        fun issue(table: MaterialPlanTable, ref: MaterialPlanRef, commandIdI32: Int,
             coordinates: org.graphiks.kanvas.gpu.plan.MaterialCoordinatePlanV1? = null): W5aPacketMaterialSourceV2 =
             W5aPacketMaterialSourceV2(commandIdI32, requireNotNull(W5aMaterialSourceStage.lower(table, ref, coordinates)))
     }

@@ -83,6 +83,57 @@ public sealed interface MaterialBindingPlan {
         public fun rebind(range: GradientStopRangeV1, authority: GradientNumericAuthorityV1 = numericAuthority): GradientV1
     }
 
+    public sealed interface GradientV2 : MaterialBindingPlan {
+        override val versionI32: Int get() = 2
+        public val stopRange: GradientStopRangeV1
+        public val numericAuthority: GradientNumericAuthorityV2
+        public val gradientDegenerate: Boolean
+        public val degenerateAverageSrgbaF32: GradientAverageSrgbaF32?
+        public fun copyUniformValuesF32(): List<Float>
+        public fun rebind(range: GradientStopRangeV1, authority: GradientNumericAuthorityV2 = numericAuthority): GradientV2
+    }
+
+    public data class LinearGradientV2(public val startF32: Point2F32, public val endF32: Point2F32,
+        override val stopRange: GradientStopRangeV1, public val degeneracy: LinearGradientDegeneracyV1,
+        override val numericAuthority: GradientNumericAuthorityV2,
+        override val degenerateAverageSrgbaF32: GradientAverageSrgbaF32?) : GradientV2 {
+        override val gradientDegenerate: Boolean get() = degeneracy.linearDegenerate
+        override fun copyUniformValuesF32(): List<Float> = listOf(startF32.x, startF32.y, endF32.x, endF32.y)
+        override fun rebind(range: GradientStopRangeV1, authority: GradientNumericAuthorityV2): GradientV2 =
+            copy(stopRange = range, numericAuthority = authority)
+    }
+
+    public data class RadialGradientV2(public val centerF32: Point2F32, public val radiusF32: Float,
+        override val stopRange: GradientStopRangeV1, public val degeneracy: RadialGradientDegeneracyV1,
+        override val numericAuthority: GradientNumericAuthorityV2,
+        override val degenerateAverageSrgbaF32: GradientAverageSrgbaF32?) : GradientV2 {
+        override val gradientDegenerate: Boolean get() = degeneracy.radialDegenerate
+        override fun copyUniformValuesF32(): List<Float> = listOf(centerF32.x, centerF32.y, radiusF32, 0f)
+        override fun rebind(range: GradientStopRangeV1, authority: GradientNumericAuthorityV2): GradientV2 =
+            copy(stopRange = range, numericAuthority = authority)
+    }
+
+    public data class SweepGradientV2(public val centerF32: Point2F32,
+        override val stopRange: GradientStopRangeV1, public val degeneracy: SweepGradientDegeneracyV1,
+        override val numericAuthority: GradientNumericAuthorityV2,
+        override val degenerateAverageSrgbaF32: GradientAverageSrgbaF32?) : GradientV2 {
+        override val gradientDegenerate: Boolean get() = degeneracy.sweepDegenerate
+        override fun copyUniformValuesF32(): List<Float> = listOf(centerF32.x, centerF32.y,
+            degeneracy.startAngleDegreesF32, degeneracy.endAngleDegreesF32)
+        override fun rebind(range: GradientStopRangeV1, authority: GradientNumericAuthorityV2): GradientV2 =
+            copy(stopRange = range, numericAuthority = authority)
+    }
+
+    public data class ConicalGradientV2(public val startF32: Point2F32, public val endF32: Point2F32,
+        override val stopRange: GradientStopRangeV1, public val degeneracy: ConicalGradientDegeneracyV1,
+        override val numericAuthority: GradientNumericAuthorityV2,
+        override val degenerateAverageSrgbaF32: GradientAverageSrgbaF32?) : GradientV2 {
+        override val gradientDegenerate: Boolean get() = degeneracy.conicalFullyDegenerate
+        override fun copyUniformValuesF32(): List<Float> = listOf(startF32.x, startF32.y, endF32.x, endF32.y)
+        override fun rebind(range: GradientStopRangeV1, authority: GradientNumericAuthorityV2): GradientV2 =
+            copy(stopRange = range, numericAuthority = authority)
+    }
+
     public data class LinearGradientV1(public val startF32: Point2F32, public val endF32: Point2F32,
         override val stopRange: GradientStopRangeV1, public val degeneracy: LinearGradientDegeneracyV1,
         override val numericAuthority: GradientNumericAuthorityV1) : GradientV1 {
@@ -194,6 +245,11 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
                     MaterialProgramPlan.RadialGradientClampSrgbV1 -> require(entry.bindings is MaterialBindingPlan.RadialGradientV1 && entry.stopSlab != null)
                     MaterialProgramPlan.SweepGradientClampSrgbV1 -> require(entry.bindings is MaterialBindingPlan.SweepGradientV1 && entry.stopSlab != null)
                     MaterialProgramPlan.ConicalGradientClampSrgbV1 -> require(entry.bindings is MaterialBindingPlan.ConicalGradientV1 && entry.stopSlab != null)
+                    is GradientAddressingProgramV2 -> require(entry.bindings is MaterialBindingPlan.GradientV2 &&
+                        entry.stopSlab != null && entry.bindings.numericAuthority.authenticates(program,
+                            entry.bindings, entry.stopSlab, entry.bindings.numericAuthority.coordinates)) {
+                        W5dPlanDiagnostics.CoordinatePlanSchema
+                    }
                     is MaterialProgramPlan.OpacityV1 -> {
                         require(entry.bindings is MaterialBindingPlan.OpacityF32V1) {
                             "Opacity programs require opacity bindings"
@@ -205,26 +261,43 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
             val stops = mutableListOf<GradientStopPlanV1>()
             val ranges = linkedMapOf<List<GradientStopPlanV1>, GradientStopRangeV1>()
             val rewritten = entries.map { entry ->
-                val binding = entry.bindings as? MaterialBindingPlan.GradientV1 ?: return@map entry
+                val binding = entry.bindings
+                val originalRange = when (binding) {
+                    is MaterialBindingPlan.GradientV1 -> binding.stopRange
+                    is MaterialBindingPlan.GradientV2 -> binding.stopRange
+                    else -> return@map entry
+                }
                 val slabStops = requireNotNull(entry.stopSlab).copyStops()
-                val firstI64 = binding.stopRange.baseIndexU32.toLong()
-                val lastI64 = firstI64 + binding.stopRange.countU32.toLong()
+                val firstI64 = originalRange.baseIndexU32.toLong()
+                val lastI64 = firstI64 + originalRange.countU32.toLong()
                 require(lastI64 <= slabStops.size.toLong())
                 val sequence = slabStops.subList(firstI64.toInt(), lastI64.toInt()).toList()
                 val range = ranges.getOrPut(sequence) {
                     require((stops.size.toLong() + sequence.size) * 32L <= Int.MAX_VALUE)
                     GradientStopRangeV1(stops.size.toUInt(), sequence.size.toUInt()).also { stops += sequence }
                 }
-                entry.copy(bindings = binding.rebind(range))
+                entry.copy(bindings = when (binding) {
+                    is MaterialBindingPlan.GradientV1 -> binding.rebind(range)
+                    is MaterialBindingPlan.GradientV2 -> binding.rebind(range)
+                })
             }
             val slab = stops.takeIf { it.isNotEmpty() }?.let(GradientStopSlabPlanV1::of)
             return MaterialPlanTable(rewritten.mapIndexed { indexI32, entry ->
-                val binding = entry.bindings as? MaterialBindingPlan.GradientV1
-                val sealed = if (binding == null) entry else {
-                    val source = entries[indexI32]
-                    val original = source.bindings as MaterialBindingPlan.GradientV1
-                    entry.copy(bindings = binding.rebind(binding.stopRange, original.numericAuthority.rebase(
-                        original, requireNotNull(source.stopSlab), binding.stopRange, requireNotNull(slab))))
+                val binding = entry.bindings
+                val sealed = when (binding) {
+                    is MaterialBindingPlan.GradientV2 -> {
+                        val source = entries[indexI32]
+                        val original = source.bindings as MaterialBindingPlan.GradientV2
+                        entry.copy(bindings = binding.rebind(binding.stopRange, original.numericAuthority.rebase(
+                            original, requireNotNull(source.stopSlab), binding.stopRange, requireNotNull(slab))))
+                    }
+                    is MaterialBindingPlan.GradientV1 -> {
+                        val source = entries[indexI32]
+                        val original = source.bindings as MaterialBindingPlan.GradientV1
+                        entry.copy(bindings = binding.rebind(binding.stopRange, original.numericAuthority.rebase(
+                            original, requireNotNull(source.stopSlab), binding.stopRange, requireNotNull(slab))))
+                    }
+                    else -> entry
                 }
                 sealed.copy(stopSlab = slab)
             })
@@ -287,6 +360,7 @@ private fun MaterialPlanEntry.copyForInterning(): MaterialPlanEntry = MaterialPl
     when (val binding = bindings) {
         MaterialBindingPlan.EmptyV1 -> MaterialBindingPlan.EmptyV1
         is MaterialBindingPlan.GradientV1 -> binding.rebind(binding.stopRange)
+        is MaterialBindingPlan.GradientV2 -> binding.rebind(binding.stopRange)
         is MaterialBindingPlan.SolidRgbaF32V1 -> MaterialBindingPlan.SolidRgbaF32V1.of(binding.copyRgbaF32())
         is MaterialBindingPlan.OpacityF32V1 -> MaterialBindingPlan.OpacityF32V1.of(binding.alphaF32)
     }, stopSlab,
@@ -296,6 +370,13 @@ private fun MaterialPlanEntry.interningKey(): String = buildString {
     append(program.structuralId.value).append('|')
     when (val binding = bindings) {
         MaterialBindingPlan.EmptyV1 -> append("empty")
+        is MaterialBindingPlan.GradientV2 -> {
+            append(binding.copyUniformValuesF32()).append(binding.gradientDegenerate)
+            append(binding.numericAuthority.domainIdentity)
+            val values = requireNotNull(stopSlab).copyStops()
+            append(GradientStopSlabPlanV1.of(values.subList(binding.stopRange.baseIndexU32.toInt(),
+                (binding.stopRange.baseIndexU32 + binding.stopRange.countU32).toInt())).canonicalIdentity)
+        }
         is MaterialBindingPlan.GradientV1 -> {
             append(binding.copyUniformValuesF32()).append(binding.gradientDegenerate)
             append(binding.numericAuthority.domainIdentity)
@@ -313,6 +394,8 @@ private fun MaterialPlanEntry.interningKey(): String = buildString {
 
 /** Closed draw authority: W5 material references cannot coexist with legacy colours. */
 public sealed interface PlanDrawMaterialAuthority {
+    public data class MaterialV2(public val ref: MaterialPlanRef,
+        public val coordinates: MaterialCoordinatePlanV2) : PlanDrawMaterialAuthority
     public data class MaterialV1(public val ref: MaterialPlanRef,
         public val coordinates: MaterialCoordinatePlanV1? = null) : PlanDrawMaterialAuthority
 
@@ -324,4 +407,17 @@ public sealed interface PlanDrawMaterialAuthority {
             )
         }
     }
+}
+
+/** Reference extraction preserves the closed, versioned coordinate owner. */
+public fun PlanDrawMaterialAuthority.materialPlanRef(): MaterialPlanRef = when (this) {
+    is PlanDrawMaterialAuthority.MaterialV1 -> ref
+    is PlanDrawMaterialAuthority.MaterialV2 -> ref
+    is PlanDrawMaterialAuthority.LegacyColorV1 -> error("Legacy colors have no material reference")
+}
+
+internal fun MaterialPlanTable.coordinatesV2(root: MaterialPlanRef): MaterialCoordinatePlanV2? {
+    var indexI32 = root.indexI32
+    while (entry(MaterialPlanRef(indexI32)).bindings is MaterialBindingPlan.OpacityF32V1) indexI32--
+    return (entry(MaterialPlanRef(indexI32)).bindings as? MaterialBindingPlan.GradientV2)?.numericAuthority?.coordinates
 }

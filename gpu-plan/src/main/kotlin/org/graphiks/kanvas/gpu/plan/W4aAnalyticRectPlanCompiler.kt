@@ -80,7 +80,8 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
                 ?: return resourceLimit(W4aPlanDiagnostics.SizeOverflow, "Selected draw became empty during planning")
             val scissor = if (sealed.clip == null) targetRaster else intersect(targetRaster, sealed.clip)
                 ?: return resourceLimit(W4aPlanDiagnostics.SizeOverflow, "Selected draw became empty during planning")
-            AnalyticRectDraw.ofMaterial(sealed.commandIndex, sealed.material, sealed.deviceBounds, raster, scissor, sealed.blend, sealed.coordinates)
+            AnalyticRectDraw.ofMaterial(sealed.commandIndex, sealed.material, sealed.deviceBounds, raster, scissor, sealed.blend,
+                sealed.coordinates, selected.materialPlanTable?.coordinatesV2(sealed.material))
         }
         val footprint = when (val memory = AnalyticRectPlanBudget.calculate(extent, plannedDraws.size, capabilities, budget)) {
             is AnalyticRectPlanBudgetResult.WithinBudget -> memory.footprint
@@ -166,7 +167,7 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
         if (materialRefusals.isNotEmpty()) return Recognition.MaterialRefused(materialRefusals)
         return Recognition.Accepted(draws, materialEntries.takeIf { it.isNotEmpty() }?.let(MaterialPlanTable::of),
             if (elidedNoOpsI32 > 0 || draws.any { it.blend != BlendPlan.LegacySrcOverV1 } ||
-                materialEntries.any { it.bindings is MaterialBindingPlan.GradientV1 }) W5B_CAPABILITY_ID else W5A_CAPABILITY_ID)
+                materialEntries.any { it.bindings is MaterialBindingPlan.GradientV1 || it.bindings is MaterialBindingPlan.GradientV2 }) W5B_CAPABILITY_ID else W5A_CAPABILITY_ID)
     }
 
     private fun recognizeDraw(

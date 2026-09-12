@@ -8,8 +8,6 @@ import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.Shader
-import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.paint.ColorSpaceInterpolation
 import org.graphiks.kanvas.render.ir.DisplayOpSceneAdapter
 import org.graphiks.kanvas.render.ir.SceneCaptureResult
 import org.graphiks.kanvas.render.ir.SceneCommand
@@ -124,11 +122,9 @@ internal data class W5aPreparedFrameMaterialRegistry(
         }
 
         private fun DisplayOp.isW5aCoreMaterialCandidate(): Boolean = when (this) {
-            is DisplayOp.DrawRect -> !paint.isStroke() &&
-                paint.shader.isW5aSolidOpacity(allowGradient = true)
-            is DisplayOp.DrawRRect -> !paint.isStroke() &&
-                paint.shader.isW5aSolidOpacity(allowGradient = paint.antiAlias)
-            is DisplayOp.DrawPath -> paint.shader.isW5aSolidOpacity(allowGradient = true)
+            is DisplayOp.DrawRect -> isW5dGradientCandidateV2() || !paint.isStroke() && paint.shader.isW5aSolidOpacity()
+            is DisplayOp.DrawRRect -> isW5dGradientCandidateV2() || !paint.isStroke() && paint.shader.isW5aSolidOpacity()
+            is DisplayOp.DrawPath -> isW5dGradientCandidateV2() || paint.shader.isW5aSolidOpacity()
             is DisplayOp.DrawPoint ->
                 paint.blendMode in POINT_MATERIAL_BLENDS && paint.strokeCap != StrokeCap.ROUND &&
                     paint.shader.isW5aSolidOpacity()
@@ -139,20 +135,14 @@ internal data class W5aPreparedFrameMaterialRegistry(
             else -> false
         }
 
-        private fun Shader?.isW5aSolidOpacity(allowGradient: Boolean = false): Boolean {
+        private fun Shader?.isW5aSolidOpacity(): Boolean {
             var source = this
             var depth = 0
             while (source is Shader.Opacity) {
                 if (++depth > 64) return false
                 source = source.shader
             }
-            return source == null || source is Shader.SolidColor || allowGradient && when (source) {
-                is Shader.LinearGradient -> source.tileMode == TileMode.CLAMP && source.interpolation == ColorSpaceInterpolation.SRGB
-                is Shader.RadialGradient -> source.tileMode == TileMode.CLAMP && source.interpolation == ColorSpaceInterpolation.SRGB
-                is Shader.SweepGradient -> source.tileMode == TileMode.CLAMP && source.interpolation == ColorSpaceInterpolation.SRGB
-                is Shader.ConicalGradient -> source.tileMode == TileMode.CLAMP && source.interpolation == ColorSpaceInterpolation.SRGB
-                else -> false
-            }
+            return source == null || source is Shader.SolidColor
         }
 
         private val POINT_MATERIAL_BLENDS = setOf(BlendMode.SRC_OVER, BlendMode.PLUS, BlendMode.MULTIPLY,

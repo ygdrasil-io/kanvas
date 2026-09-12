@@ -30,6 +30,14 @@ public class GradientStopSlabPlanV1 private constructor(stops: List<GradientStop
 }
 
 public sealed interface GradientDegeneracyV1
+
+internal fun GradientDegeneracyV1.consumesAverage(effectiveTileMode: GradientTileModeV2): Boolean =
+    effectiveTileMode in setOf(GradientTileModeV2.REPEAT, GradientTileModeV2.MIRROR) && when (this) {
+        is LinearGradientDegeneracyV1 -> linearDegenerate
+        is RadialGradientDegeneracyV1 -> radialDegenerate
+        is SweepGradientDegeneracyV1 -> sweepDegenerate && !sweepOrderingInvalid && !sweepFullCoverage
+        is ConicalGradientDegeneracyV1 -> conicalFullyDegenerate
+    }
 public data class LinearGradientDegeneracyV1(
     public val linearDxF32: Float, public val linearDyF32: Float,
     public val linearX2F32: Float, public val linearY2F32: Float,
@@ -121,7 +129,7 @@ public data class SweepGradientDegeneracyV1(
 public class GradientNumericAuthorityV1 private constructor(
     public val graph: GradientNumericOperationGraphV1,
     private val program: MaterialProgramPlan,
-    private val coordinates: MaterialCoordinatePlanV1,
+    internal val coordinates: MaterialCoordinatePlanV1,
     uniformValuesF32: List<Float>,
     private val degeneracy: GradientDegeneracyV1,
     private val range: GradientStopRangeV1,
@@ -271,4 +279,15 @@ internal fun normalizeGradientStopsV1(input: List<GradientStop>, preserveValidit
             b.positionF32 - a.positionF32 < java.lang.Float.MIN_NORMAL })
         return NormalizedGradientStopsV1.Refused(W5cPlanDiagnostics.NumericDomainUnbounded)
     return NormalizedGradientStopsV1.Stops(GradientStopSlabPlanV1.of(normalized))
+}
+
+/** W5c normalization remains authoritative; only exterior duplicate endpoints are removed. */
+internal fun normalizeGradientStopsV2(input: List<GradientStop>, effectiveTileMode: GradientTileModeV2,
+    preserveValidityMask: Boolean = false): NormalizedGradientStopsV1 {
+    val normalized = normalizeGradientStopsV1(input, preserveValidityMask)
+    if (effectiveTileMode == GradientTileModeV2.CLAMP || normalized !is NormalizedGradientStopsV1.Stops) return normalized
+    val stops = normalized.slab.copyStops().toMutableList()
+    if (stops[0].positionF32 == 0f && stops[1].positionF32 == 0f) stops.removeAt(0)
+    if (stops[stops.lastIndex].positionF32 == 1f && stops[stops.lastIndex - 1].positionF32 == 1f) stops.removeAt(stops.lastIndex)
+    return NormalizedGradientStopsV1.Stops(GradientStopSlabPlanV1.of(stops))
 }

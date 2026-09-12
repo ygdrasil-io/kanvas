@@ -72,12 +72,17 @@ internal object W5bDestinationGraphSealer {
         val peakI64 = Math.addExact(geometryResources.fold(0L) { total, resource -> Math.addExact(total, resource.byteSize) },
             Math.addExact(Math.addExact(Math.addExact(targetBytesI64, snapshotBytesI64), stagingBytesI64),
             clip?.resources()?.fold(0L) { total, resource -> Math.addExact(total, resource.byteSize) } ?: 0L))
-        val sourceRequirements = draws.map { draw -> RawMaterialRequirementsV2.of(requireNotNull(material),
-            (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref) }
-        require(sourceRequirements.all { it.uniformByteCountI64 <= requireNotNull(capabilities.maxUniformBufferBindingSizeBytesI64) &&
-            it.uniformByteCountI64 <= capabilities.maxBufferSizeBytes }) { "resource-limit.w5b.source-binding" }
-        val sourceBytesI64 = sourceRequirements.fold(0L) { totalI64, source -> Math.addExact(totalI64, source.uniformByteCountI64) }
-        require(Math.addExact(peakI64, sourceBytesI64) <= budget.maxFrameLocalBytes) { "resource-limit.w5b.destination-budget" }
+        val sourceRequirements = draws.map { draw ->
+            RawMaterialRequirementsV2.of(requireNotNull(material), draw.materialAuthority.materialPlanRef()).also { source ->
+                require(source.fitsUniformBinding(capabilities)) {
+                    if (draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV2) W5dPlanDiagnostics.CoordinateUniformBudget
+                    else "resource-limit.w5b.source-binding"
+                }
+            }
+        }
+        RawMaterialRequirementsV2.requireFrameBudget(sourceRequirements,
+            Math.addExact(peakI64, material?.gradientStopSlab?.byteSizeI64 ?: 0L), budget,
+            "resource-limit.w5b.destination-budget")
         val target = PlanResource.of(PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D,
             format, extent, targetBytesI64, setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource),
             PlanResourceLifetime.FrameLocal, 0, passCountI32)
@@ -114,7 +119,8 @@ internal object W5bDestinationGraphSealer {
                 load, AttachmentStorePlan.Store, data, destinationVersionAfter = DestinationVersionI64(versionI64))
         }
         if (initialClearI32 == 1) render(null)
-        draws.forEach { draw ->
+        draws.forEach { original ->
+            val draw = material?.coordinatesV2(original.materialAuthority.materialPlanRef())?.let(original::withW5dCoordinates) ?: original
             val blend = draw.blend
             if (blend is BlendPlan.DestinationReadV1) {
                 require(if (draw is W5bW4ePathDraw && blend.coverage == BlendCoverageEncodingV1.ScalarCoverageInShader)
@@ -130,23 +136,23 @@ internal object W5bDestinationGraphSealer {
                 val sealed = blend.copy(requiredDestinationVersion = version, snapshotResource = snapshot.id)
                 render(when (draw) {
                     is SolidRectDraw -> SolidRectDraw.ofMaterial(draw.commandIndex,
-                        (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref,
-                        draw.copyVisibleBounds(), draw.copyScissor(), draw.coverage, draw.sample, sealed, draw.materialCoordinates)
+                        draw.materialAuthority.materialPlanRef(),
+                        draw.copyVisibleBounds(), draw.copyScissor(), draw.coverage, draw.sample, sealed, draw.materialCoordinates, draw.materialCoordinatesV2)
                     is W5bPointDraw -> draw.withBlend(sealed)
                     is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(draw.commandIndex,
-                        (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref,
-                        draw.copyDeviceBounds(), draw.copyRasterBounds(), draw.copyScissor(), sealed, draw.materialCoordinates)
+                        draw.materialAuthority.materialPlanRef(),
+                        draw.copyDeviceBounds(), draw.copyRasterBounds(), draw.copyScissor(), sealed, draw.materialCoordinates, draw.materialCoordinatesV2)
                     is AnalyticRRectDraw -> AnalyticRRectDraw.ofMaterial(draw.commandIndex,
-                        (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref, draw.origin,
-                        draw.copyDeviceShape(), draw.copyRasterBounds(), draw.copyScissor(), sealed, draw.materialCoordinates)
+                        draw.materialAuthority.materialPlanRef(), draw.origin,
+                        draw.copyDeviceShape(), draw.copyRasterBounds(), draw.copyScissor(), sealed, draw.materialCoordinates, draw.materialCoordinatesV2)
                     is PathFillDraw -> PathFillDraw.ofMaterial(draw.commandIndex,
-                        (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref,
-                        draw.copyGeometryF32(), draw.strategy, draw.copyScissorI32(), sealed, draw.materialCoordinates)
+                        draw.materialAuthority.materialPlanRef(),
+                        draw.copyGeometryF32(), draw.strategy, draw.copyScissorI32(), sealed, draw.materialCoordinates, draw.materialCoordinatesV2)
                     is W5bW4ePathDraw -> draw.withBlend(sealed)
                     is GeneralPathDraw -> draw.withBlend(sealed)
                     is PathStrokeDraw -> PathStrokeDraw.ofMaterial(draw.commandIndex,
-                        (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref, draw.copyGeometryF32(),
-                        draw.copyScissorI32(), draw.mode, draw.styleF64, sealed, draw.materialCoordinates)
+                        draw.materialAuthority.materialPlanRef(), draw.copyGeometryF32(),
+                        draw.copyScissorI32(), draw.mode, draw.styleF64, sealed, draw.materialCoordinates, draw.materialCoordinatesV2)
                     else -> error("unsupported.w5b.destination-geometry")
                 })
             } else render(draw)

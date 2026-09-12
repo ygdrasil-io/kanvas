@@ -155,25 +155,43 @@ public object PaintSceneAdapter {
             } }),
         )
 
-    private fun Shader.toMaterial(captureImage: (Image) -> ImageResourceSnapshot): MaterialNode = when (this) {
+    /** Preserve coordinate values for typed validation of every admitted W5d leaf. */
+    private fun Shader.preservesW5dMatrices(): Boolean {
+        var source = this
+        while (true) when (val node = source) {
+            is Shader.Opacity -> source = node.shader
+            is Shader.WithLocalMatrix -> source = node.shader
+            is Shader.CoordClamp -> source = node.shader
+            is Shader.LinearGradient -> return node.interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB
+            is Shader.RadialGradient -> return node.interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB
+            is Shader.SweepGradient -> return node.interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB
+            is Shader.ConicalGradient -> return node.interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB
+            else -> return false
+        }
+    }
+
+    private fun Shader.toMaterial(captureImage: (Image) -> ImageResourceSnapshot,
+        preserveW5dMatrices: Boolean = preservesW5dMatrices()): MaterialNode = when (this) {
         is Shader.SolidColor -> MaterialNode.Solid(color)
-        is Shader.Opacity -> MaterialNode.Opacity(shader.toMaterial(captureImage), alphaF32)
+        is Shader.Opacity -> MaterialNode.Opacity(shader.toMaterial(captureImage, preserveW5dMatrices), alphaF32)
         is Shader.LinearGradient -> MaterialNode.LinearGradient.of(start.checked("shader.start"), end.checked("shader.end"), stops.map { GradientStop(it.position.checked("shader.stop"), it.color) }, TileMode.valueOf(tileMode.name), ColorInterpolation.valueOf(interpolation.name))
         is Shader.RadialGradient -> MaterialNode.RadialGradient.of(center.checked("shader.center"), radius.checked("shader.radius"), stops.map { GradientStop(it.position.checked("shader.stop"), it.color) }, TileMode.valueOf(tileMode.name), ColorInterpolation.valueOf(interpolation.name))
         is Shader.SweepGradient -> MaterialNode.SweepGradient.of(center.checked("shader.center"), startAngle.checked("shader.start-angle"), endAngle.checked("shader.end-angle"), stops.map { GradientStop(it.position.checked("shader.stop"), it.color) }, TileMode.valueOf(tileMode.name), ColorInterpolation.valueOf(interpolation.name))
         is Shader.ConicalGradient -> MaterialNode.ConicalGradient.of(start.checked("shader.start"), startRadius.checked("shader.start-radius"), end.checked("shader.end"), endRadius.checked("shader.end-radius"), stops.map { GradientStop(it.position.checked("shader.stop"), it.color) }, TileMode.valueOf(tileMode.name), ColorInterpolation.valueOf(interpolation.name))
         is Shader.Image -> MaterialNode.ImageSample(captureImage(image), TileMode.valueOf(tileModeX.name), TileMode.valueOf(tileModeY.name), sampling.toImageSampling())
-        is Shader.Blend -> MaterialNode.Blend(BlendMode.valueOf(mode.name), dst.toMaterial(captureImage), src.toMaterial(captureImage))
-        is Shader.WithLocalMatrix -> MaterialNode.WithLocalMatrix(shader.toMaterial(captureImage), matrix.checked("shader.local-matrix"))
-        is Shader.WithColorFilter -> MaterialNode.WithColorFilter(shader.toMaterial(captureImage), filter.toNode(captureImage))
+        is Shader.Blend -> MaterialNode.Blend(BlendMode.valueOf(mode.name), dst.toMaterial(captureImage, false), src.toMaterial(captureImage, false))
+        is Shader.WithLocalMatrix -> MaterialNode.WithLocalMatrix(shader.toMaterial(captureImage, preserveW5dMatrices),
+            if (preserveW5dMatrices) matrix.copy() else matrix.checked("shader.local-matrix"))
+        is Shader.WithColorFilter -> MaterialNode.WithColorFilter(shader.toMaterial(captureImage, false), filter.toNode(captureImage))
         is Shader.PerlinNoise -> MaterialNode.PerlinNoise(baseX.checked("shader.base-x"), baseY.checked("shader.base-y"), numOctaves, seed, tileSize?.checked("shader.tile-size"))
         is Shader.FractalNoise -> MaterialNode.FractalNoise(baseX.checked("shader.base-x"), baseY.checked("shader.base-y"), numOctaves, seed, tileSize?.checked("shader.tile-size"))
-        is Shader.WithWorkingColorSpace -> MaterialNode.WithWorkingColorSpace(shader.toMaterial(captureImage), ColorInterpolation.valueOf(interpolation.name))
-        is Shader.CoordClamp -> MaterialNode.CoordClamp(shader.toMaterial(captureImage), subset.checked("shader.subset"))
+        is Shader.WithWorkingColorSpace -> MaterialNode.WithWorkingColorSpace(shader.toMaterial(captureImage, false), ColorInterpolation.valueOf(interpolation.name))
+        is Shader.CoordClamp -> MaterialNode.CoordClamp(shader.toMaterial(captureImage, preserveW5dMatrices),
+            if (preserveW5dMatrices) subset.copy() else subset.checked("shader.subset"))
         is Shader.RuntimeEffect -> MaterialNode.RuntimeEffect.of(
             effect.toDescriptor(RuntimeEffectAbi.SHADER),
             uniforms.toRuntimeUniforms(),
-            children.map { (name, child) -> RuntimeMaterialChild(name, child.toMaterial(captureImage)) },
+            children.map { (name, child) -> RuntimeMaterialChild(name, child.toMaterial(captureImage, false)) },
         )
     }
 

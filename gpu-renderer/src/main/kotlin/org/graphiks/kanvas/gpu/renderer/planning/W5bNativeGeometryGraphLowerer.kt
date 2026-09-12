@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.planning
 
+import org.graphiks.kanvas.gpu.plan.materialPlanRef
+
 import org.graphiks.kanvas.gpu.plan.*
 import org.graphiks.kanvas.gpu.renderer.color.*
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
@@ -94,7 +96,7 @@ internal class W5bNativeGeometryGraphLowerer {
                     val builder = GpuPlanTaskListLowerer()
                     val built = draws.mapIndexed { index, draw -> builder.packet(draw,
                         requireNotNull(W5aMaterialPlanLowerer().lower(table,
-                            (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref)), index, bounds, table, null) }
+                            draw.materialAuthority.materialPlanRef())), index, bounds, table, null) }
                     val scratch = (builder.sealW3Scratch(request, target, staging, bounds, seal.sealHash, built) as
                         GpuPlanTaskListLowerer.W3SessionScratchSealResult.Sealed).scratch
                     require(listOf(resource(data.vertex).byteSize, resource(data.index).byteSize, resource(data.uniform).byteSize) ==
@@ -175,7 +177,7 @@ internal class W5bNativeGeometryGraphLowerer {
                         indexResource.byteSize == footprint.indexCapacityBytes && uniformResource.byteSize == footprint.uniformCapacityBytes)
                     val built = analytic.mapIndexed { index, draw -> W4aAnalyticRectGraphLowerer().packet(draw,
                         requireNotNull(W5aMaterialPlanLowerer().lower(table,
-                            (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref)), index, bounds, table, w5b = true) }
+                            draw.materialAuthority.materialPlanRef())), index, bounds, table, w5b = true) }
                     val lanePackets = built.map { it.packet }
                     val semantics = lanePackets.map { it.semanticPayload as GPUDrawSemanticPayload.CorePrimitive }
                     val semanticAuthorities = semantics.map(GPUCorePrimitivePreparedSemanticAuthority::capture)
@@ -216,7 +218,7 @@ internal class W5bNativeGeometryGraphLowerer {
                         indexResource.byteSize == footprint.indexCapacityBytes && uniformResource.byteSize == footprint.uniformCapacityBytes)
                     val built = analytic.mapIndexed { index, draw -> W4bAnalyticRRectGraphLowerer().packet(draw,
                         requireNotNull(W5aMaterialPlanLowerer().lower(table,
-                            (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref)), index, bounds, table, w5b = true) }
+                            draw.materialAuthority.materialPlanRef())), index, bounds, table, w5b = true) }
                     val lanePackets = built.map { it.packet }
                     val semantics = lanePackets.map { it.semanticPayload as GPUDrawSemanticPayload.CorePrimitive }
                     val semanticAuthorities = semantics.map(GPUCorePrimitivePreparedSemanticAuthority::capture)

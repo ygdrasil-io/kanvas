@@ -14,6 +14,7 @@ public class W5bMixedFramePlanV1 private constructor(
         DestinationTexture("unsupported.w5b.mixed-destination-texture"),
         SourceBinding("resource-limit.w5b.mixed-source-binding"),
         SourceBudget("resource-limit.w5b.mixed-source-budget"),
+        CoordinateUniformBudget(W5dPlanDiagnostics.CoordinateUniformBudget),
     }
 
     /** Only this module's sealer can issue a typed admission refusal. */
@@ -63,14 +64,14 @@ public class W5bMixedFramePlanV1 private constructor(
                 PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), 1,
                 setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.Sampled)))
             var versionI64 = 0L
-            var sourceBytesI64 = slabs.fold(0L) { totalI64, slab -> Math.addExact(totalI64, slab.byteSizeI64) }
+            val stopBytesI64 = slabs.fold(0L) { totalI64, slab -> Math.addExact(totalI64, slab.byteSizeI64) }
+            val sourceRequirements = mutableListOf<RawMaterialRequirementsV2>()
             val draws = inputs.map { input ->
                 require(input.commandIndexI32 >= 0)
                 val source = RawMaterialRequirementsV2.of(input.sourceTable, input.sourceRef)
-                if (input.blend != BlendPlan.NoOpV1) sourceBytesI64 = Math.addExact(sourceBytesI64, source.uniformByteCountI64)
-                admit(RefusalReason.SourceBinding, input.blend == BlendPlan.NoOpV1 || capabilities.maxUniformBufferBindingSizeBytesI64?.let {
-                    source.uniformByteCountI64 <= it
-                } == true && source.uniformByteCountI64 <= capabilities.maxBufferSizeBytes)
+                if (input.blend != BlendPlan.NoOpV1) sourceRequirements += source
+                admit(if (source.hasCoordinatesV2) RefusalReason.CoordinateUniformBudget else RefusalReason.SourceBinding,
+                    input.blend == BlendPlan.NoOpV1 || source.fitsUniformBinding(capabilities))
                 val before = DestinationVersionI64(versionI64)
                 val blend = when (val selected = input.blend) {
                     is BlendPlan.DestinationReadV1 -> selected.copy(
@@ -88,7 +89,12 @@ public class W5bMixedFramePlanV1 private constructor(
                 Draw(input.commandIndexI32, input.sourceTable, input.sourceRef, blend,
                     before, DestinationVersionI64(versionI64))
             }
-            admit(RefusalReason.SourceBudget, sourceBytesI64 <= budget.maxFrameLocalBytes)
+            try {
+                RawMaterialRequirementsV2.requireFrameBudget(sourceRequirements, stopBytesI64, budget, RefusalReason.SourceBudget.code)
+            } catch (failure: RawMaterialRequirementsV2.Refusal) {
+                throw Refusal(if (failure.code == W5dPlanDiagnostics.CoordinateUniformBudget)
+                    RefusalReason.CoordinateUniformBudget else RefusalReason.SourceBudget)
+            }
             return W5bMixedFramePlanV1(targetId, capabilities, budget, draws)
         }
 

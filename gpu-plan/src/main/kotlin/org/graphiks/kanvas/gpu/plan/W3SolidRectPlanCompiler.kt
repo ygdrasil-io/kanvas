@@ -255,6 +255,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
                             clipped,
                             blend = planned.blend,
                             coordinates = MaterialCoordinatePlanV1.fromCtm(node.transform),
+                            coordinatesV2 = planned.table.coordinatesV2(planned.root),
                         ),
                     )
                 }

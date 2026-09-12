@@ -489,6 +489,11 @@ internal object GPUPreparedSurfaceFrameBuilder {
                                 finalBlendsByCommandIdI32 = refs.keys.associateWith { commandId ->
                                     corePlansByCommandId.getValue(commandId).blend
                                 },
+                                coordinatesV2ByCommandIdI32 = refs.keys.mapNotNull { commandId ->
+                                    corePlansByCommandId.getValue(commandId).table.entries().mapNotNull {
+                                        (it.bindings as? org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.GradientV2)?.numericAuthority?.coordinates
+                                    }.singleOrNull()?.let { commandId to it }
+                                }.toMap(),
                             ),
                         ) { "invalid.material.w5a_core_authority" }
                     },

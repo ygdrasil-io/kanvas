@@ -5,8 +5,42 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.assertNull
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 
 class Matrix3x3F64Test {
+    @Test
+    fun orderedCompositionPreservesIdentityAndNonCommutativeProducts() {
+        val translationF32 = Matrix3x3F32.translation(0f, -8f)
+        val rotationF32 = Matrix3x3F32(sx = 0f, kx = -1f, ky = 1f, sy = 0f)
+        assertEquals(Matrix3x3F64(), composeInOrderF64(emptyList()))
+        assertEquals(translationF32.toMatrix3x3F64(),
+            composeInOrderF64(listOf(Matrix3x3F32.Identity, translationF32, Matrix3x3F32.Identity)))
+        val translationThenRotationF64 = composeInOrderF64(listOf(translationF32, rotationF32))
+        val rotationThenTranslationF64 = composeInOrderF64(listOf(rotationF32, translationF32))
+        assertEquals(Matrix3x3F64(sxF64 = 0.0, kxF64 = -1.0, kyF64 = 1.0, syF64 = 0.0, tyF64 = -8.0),
+            translationThenRotationF64)
+        assertEquals(Matrix3x3F64(sxF64 = 0.0, kxF64 = -1.0, kyF64 = 1.0, syF64 = 0.0, txF64 = 8.0),
+            rotationThenTranslationF64)
+        assertNotEquals(translationThenRotationF64, rotationThenTranslationF64)
+        assertEquals(Matrix3x3F32(sx = 0f, kx = 1f, tx = 8f, ky = -1f, sy = 0f),
+            translationThenRotationF64.invertFiniteOrNull()?.toFiniteMatrix3x3F32OrNull())
+    }
+
+    @Test
+    fun orderedCompositionAndFiniteInverseRejectInvalidValues() {
+        assertFailsWith<IllegalArgumentException> { composeInOrderF64(listOf(Matrix3x3F32(tx = Float.NaN))) }
+        assertFailsWith<IllegalArgumentException> { composeInOrderF64(List(10) { Matrix3x3F32(sx = Float.MAX_VALUE) }) }
+        assertNull(composeInOrderF64(listOf(Matrix3x3F32.scaling(0f, 1f))).invertFiniteOrNull())
+        assertNull(Matrix3x3F64(kxF64 = Double.POSITIVE_INFINITY).invertFiniteOrNull())
+        assertNull(Matrix3x3F64(txF64 = Double.NaN).toFiniteMatrix3x3F32OrNull())
+        val inverseF64 = assertNotNull(Matrix3x3F64(sxF64 = 1e-100).invertFiniteOrNull())
+        assertTrue(inverseF64.isFinite())
+        assertNull(inverseF64.toFiniteMatrix3x3F32OrNull())
+        assertEquals(Matrix3x3F32.Identity, Matrix3x3F64(kxF64 = -0.0).invertFiniteOrNull()?.toFiniteMatrix3x3F32OrNull())
+    }
+
     @Test
     fun inverseIdentityCanonicalizesSignedZero() {
         val inverseF32 = Matrix3x3F64(kxF64 = -0.0).invertToMatrix3x3F32OrNull()!!

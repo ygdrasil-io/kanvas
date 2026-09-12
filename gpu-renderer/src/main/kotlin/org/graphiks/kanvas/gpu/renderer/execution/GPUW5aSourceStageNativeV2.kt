@@ -167,7 +167,7 @@ private fun composeSource(template: GPUW5aGeometryPipelineTemplate, source: W5aP
     require(!geometry.contains("@group(1)")) { "W5a source group is already occupied" }
     val gradient = source.stage.gradientStopSlab != null
     require(!gradient || template.materialCoordinateSlot != null)
-    val sourceExpression = if (gradient) "kanvas_material_source(w5c_local_point(${requireNotNull(template.materialCoordinateSlot).devicePointWgsl}))"
+    val sourceExpression = if (gradient) "kanvas_material_source(${source.stage.coordinateFunctionName}(${requireNotNull(template.materialCoordinateSlot).devicePointWgsl}))"
         else "kanvas_material_source(vec2<f32>(0.0))"
     val analyticCoverage = destination?.sealedW5b?.compositionAbiI32 == 3 &&
         destination.sourceCoverageEncoding == org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding.ScalarCoverageInShader
@@ -360,6 +360,9 @@ internal fun materializeW5aSourcePartitionV2(
                     GPUPreparedNativeRenderPipelineOperand(native, generation) to layout
                 }
                 val bytes = source.stage.uniformBytes
+                // The authenticated source layout already includes a reachable
+                // degenerate average, if any. Native upload never integrates colors.
+                require(bytes.size.toLong() == source.stage.uniformByteCountI64)
                 val buffer = buffers.getOrPut(source.stage.canonicalIdentity) {
                     owned.own(device.createBuffer(BufferDescriptor(size = bytes.size.toULong(),
                         usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst, label = "Kanvas.w5a.raw-source-v2"))).also {

@@ -71,7 +71,9 @@ public class RenderGraph private constructor(
                 W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID))
             require(graph.passes().filterIsInstance<PlanPass.RenderPass>().flatMap { it.draws() }.all {
                 (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw || it is PathStrokeDraw || it is GeneralPathDraw || it is W5bW4ePathDraw) &&
-                    it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1
+                    (it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1 ||
+                        (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw ||
+                            it is PathFillDraw || it is PathStrokeDraw || it is GeneralPathDraw) && it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2)
             })
             return RenderGraph(graph.id, graph.capabilityId, graph.targetExtent, graph.colorFormat, graph.capabilities,
                 graph.budget, graph.visualCommandCount, graph.resources(), graph.passes(), graph.dependencies(),
@@ -117,11 +119,21 @@ public class RenderGraph private constructor(
             val stopSlab = materialPlanTable?.gradientStopSlab
             if (stopSlab != null) {
                 visualDraws(passes).forEach { draw ->
-                    val authority = draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1
-                    var indexI32 = authority.ref.indexI32
+                    val authority = draw.materialAuthority
+                    var indexI32 = authority.materialPlanRef().indexI32
                     while (materialPlanTable.entry(MaterialPlanRef(indexI32)).bindings is MaterialBindingPlan.OpacityF32V1) indexI32--
                     val entry = materialPlanTable.entry(MaterialPlanRef(indexI32))
+                    if (entry.bindings is MaterialBindingPlan.GradientV2) {
+                        require((draw is SolidRectDraw || draw is AnalyticRectDraw || draw is AnalyticRRectDraw ||
+                            draw is PathFillDraw || draw is PathStrokeDraw || draw is GeneralPathDraw ||
+                            draw is BinaryMaskedPathDraw) && authority is PlanDrawMaterialAuthority.MaterialV2) {
+                            W5dPlanDiagnostics.CoordinatePlanSchema
+                        }
+                        require(entry.program is GradientAddressingProgramV2 && entry.bindings.numericAuthority.authenticates(
+                            entry.program, entry.bindings, stopSlab, authority.coordinates)) { W5dPlanDiagnostics.CoordinatePlanSchema }
+                    }
                     if (entry.bindings is MaterialBindingPlan.GradientV1) {
+                        require(authority is PlanDrawMaterialAuthority.MaterialV1) { W5cPlanDiagnostics.CoordinatesUnavailable }
                         require((draw is SolidRectDraw || draw is AnalyticRectDraw || draw is AnalyticRRectDraw ||
                             draw is PathFillDraw || draw is PathStrokeDraw || draw is GeneralPathDraw ||
                             draw is ClippedGeneralPathDraw || draw is BinaryMaskedPathDraw || draw is W5bW4ePathDraw) && authority.coordinates != null) {
@@ -134,15 +146,16 @@ public class RenderGraph private constructor(
             }
             if (stopSlab != null && resources.none { it.role == PlanResourceRole.GradientStopData }) {
                 stopSlab.requireStorageCapabilities(capabilities)
-                val sourceBytesI64 = visualDraws(passes).fold(0L) { totalI64, draw ->
-                    val authority = draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1
-                    val source = RawMaterialRequirementsV2.of(materialPlanTable, authority.ref)
-                    require(capabilities.maxUniformBufferBindingSizeBytesI64?.let { source.uniformByteCountI64 <= it } == true &&
-                        source.uniformByteCountI64 <= capabilities.maxBufferSizeBytes) { W5cPlanDiagnostics.StorageUnavailable }
-                    Math.addExact(totalI64, source.uniformByteCountI64)
+                val sourceRequirements = visualDraws(passes).map { draw ->
+                    val authority = draw.materialAuthority
+                    val source = RawMaterialRequirementsV2.of(materialPlanTable, authority.materialPlanRef())
+                    require(source.fitsUniformBinding(capabilities)) {
+                        if (authority is PlanDrawMaterialAuthority.MaterialV2) W5dPlanDiagnostics.CoordinateUniformBudget else W5cPlanDiagnostics.StorageUnavailable
+                    }
+                    source
                 }
                 val peakI64 = Math.addExact(peakFrameLocalBytes, stopSlab.byteSizeI64)
-                require(Math.addExact(peakI64, sourceBytesI64) <= budget.maxFrameLocalBytes) { W5cPlanDiagnostics.StopBudget }
+                RawMaterialRequirementsV2.requireFrameBudget(sourceRequirements, peakI64, budget, W5cPlanDiagnostics.StopBudget)
                 val stopResource = PlanResource.of(PlanResourceRole.GradientStopData, 0, PlanResourceKind.Buffer,
                     null, null, stopSlab.byteSizeI64, setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination),
                     PlanResourceLifetime.FrameLocal, 0, passes.size)
@@ -1228,6 +1241,7 @@ public class RenderGraph private constructor(
                 PlanResourceRole.MultisampleColorTarget,
                 PlanResourceRole.PathHardEdgeMask,
                 PlanResourceRole.PathHardEdgeDepthStencil,
+                PlanResourceRole.GradientStopData,
                 PlanResourceRole.CoverageMaskAccumulator,
                 PlanResourceRole.CoverageMaskScratch,
                 PlanResourceRole.CoverageMaskMultisampleScratch,
@@ -1248,7 +1262,7 @@ public class RenderGraph private constructor(
                     pass.phase == PathRenderPhase.MultisampleStencilColorCover
             }
             require(resources.all { resource ->
-                resource.id in referencedResourceIds ||
+                resource.id in referencedResourceIds || resource.role == PlanResourceRole.GradientStopData ||
                     (!hasAaColorPath && resource.role == PlanResourceRole.DepthStencil && resource.sampleCountI32 == 4)
             }) {
                 "AA4 graph resources must be consumed by an explicit pass"

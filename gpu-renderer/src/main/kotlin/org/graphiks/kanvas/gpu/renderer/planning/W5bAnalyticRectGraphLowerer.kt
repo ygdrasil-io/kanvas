@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.planning
 
+import org.graphiks.kanvas.gpu.plan.materialPlanRef
+
 import org.graphiks.kanvas.gpu.plan.*
 import org.graphiks.kanvas.gpu.renderer.color.*
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
@@ -59,7 +61,7 @@ internal class W5bAnalyticRectGraphLowerer {
         val built = draws.mapIndexed { index, draw ->
             W4aAnalyticRectGraphLowerer().packet(draw,
                 requireNotNull(W5aMaterialPlanLowerer().lower(table,
-                    (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref)), index, bounds, table, w5b = true)
+                    draw.materialAuthority.materialPlanRef())), index, bounds, table, w5b = true)
         }
         val packets = built.map { it.packet }
         val semantics = packets.map { it.semanticPayload as GPUDrawSemanticPayload.CorePrimitive }

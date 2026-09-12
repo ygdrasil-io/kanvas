@@ -2,6 +2,23 @@ package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.math.geometry.SizeI32
 
+/** Rebind material coordinates only after W4 has issued the native lane geometry. */
+internal fun PlanDraw.withW5dCoordinates(coordinates: MaterialCoordinatePlanV2): PlanDraw = when (this) {
+    is SolidRectDraw -> SolidRectDraw.ofMaterial(commandIndex, materialAuthority.materialPlanRef(),
+        copyVisibleBounds(), copyScissor(), coverage, sample, blend, coordinatesV2 = coordinates)
+    is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(commandIndex, materialAuthority.materialPlanRef(),
+        copyDeviceBounds(), copyRasterBounds(), copyScissor(), blend, coordinatesV2 = coordinates)
+    is AnalyticRRectDraw -> AnalyticRRectDraw.ofMaterial(commandIndex, materialAuthority.materialPlanRef(),
+        origin, copyDeviceShape(), copyRasterBounds(), copyScissor(), blend, coordinatesV2 = coordinates)
+    is PathFillDraw -> PathFillDraw.ofMaterial(commandIndex, materialAuthority.materialPlanRef(),
+        copyGeometryF32(), strategy, copyScissorI32(), blend, coordinatesV2 = coordinates)
+    is PathStrokeDraw -> PathStrokeDraw.ofMaterial(commandIndex, materialAuthority.materialPlanRef(),
+        copyGeometryF32(), copyScissorI32(), mode, styleF64, blend, coordinatesV2 = coordinates)
+    is GeneralPathDraw -> GeneralPathDraw.ofMaterial(commandIndex, materialAuthority.materialPlanRef(),
+        copyPathGeometry(), strategy, copyScissorI32(), coverage, sample, blend, coordinatesV2 = coordinates)
+    else -> error(W5dPlanDiagnostics.CoordinatePlanSchema)
+}
+
 /** One authentic geometry lane inside an ordered W5b color envelope. */
 public class W5bGeometryLanePlanV3 internal constructor(
     public val sourceGraph: RenderGraph,
@@ -96,7 +113,7 @@ internal fun issueW5bNativeComposite(graphs: List<RenderGraph>): RenderGraph {
             graph.w5bGeometryLanes().single().sourceGraph else graph
         lanes += W5bGeometryLanePlanV3(geometrySource, draws.map { it.commandIndex }, data, depth)
         draws.forEach { draw ->
-            val ref = interned.remap(ordinal, (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).ref)
+            val ref = interned.remap(ordinal, draw.materialAuthority.materialPlanRef())
             colors += when (draw) {
                 is SolidRectDraw -> draw.withMaterialRef(ref)
                 is AnalyticRectDraw -> draw.withMaterialRef(ref)
@@ -105,7 +122,7 @@ internal fun issueW5bNativeComposite(graphs: List<RenderGraph>): RenderGraph {
                 is PathStrokeDraw -> draw.withMaterialRef(ref)
                 is GeneralPathDraw -> GeneralPathDraw.ofMaterial(draw.commandIndex, ref, draw.copyPathGeometry(),
                     draw.strategy, draw.copyScissorI32(), draw.coverage, draw.sample, draw.blend,
-                    (draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1).coordinates)
+                    draw.materialCoordinates, draw.materialCoordinatesV2)
                 else -> error("Unsupported native W5b composite geometry")
             }
             dataByCommand[draw.commandIndex] = data
@@ -134,7 +151,7 @@ internal fun validateW5bGeometryPasses(passes: List<PlanPass>, resources: Map<Pl
         else -> emptyList()
     } }
     require(colors.size == visualCommandCountI32 && colors.zipWithNext().all { (a, b) -> a.commandIndex < b.commandIndex })
-    require(colors.all { it.sample == SamplePlan.SingleSample && it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1 && it.blend != BlendPlan.NoOpV1 })
+    require(colors.all { it.sample == SamplePlan.SingleSample && (it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1 || it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2) && it.blend != BlendPlan.NoOpV1 })
     fun data(value: PlanDrawDataResources) {
         for ((id, role, usage) in listOf(Triple(value.vertex, PlanResourceRole.VertexData, PlanResourceUsage.Vertex),
             Triple(value.index, PlanResourceRole.IndexData, PlanResourceUsage.Index),
