@@ -311,44 +311,65 @@ rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest.local
 
 Expected: valid fixtures refuse or disagree with the independent oracle; invalid subsets lack the W5d diagnostic contract.
 
-- [ ] **Step 3: Seal clamp validation, layout and projective domains in the planner.** Validate `isFinite`, `left <= right`, `top <= bottom`; equal edges are valid. Serialize one `ClampRectF32` as `(left, top, right, bottom)` in 16 bytes. Use checked I64 addition for all operations, reject before allocation when the plan exceeds `RawMaterialRequirementsV2`, device `maxUniformBufferBindingSize`, `Int.MAX_VALUE` or frame-local budget. Start from the owner lane's bounded device-coordinate envelope, prove each allowed F32 multiply/add schedule for the first homogeneous segment, then propagate its quotient envelope into the next operation; a clamp replaces that propagated X/Y envelope with the clamped subset before the following segment. Refuse with `unsupported.material.gradient.numeric-domain-unbounded` when any segment cannot close. Crossing `w == 0` alone is not a planner refusal because the fragment guard below handles it.
+- [ ] **Step 3: Seal clamp validation, layout and projective domains in the planner.** Validate `isFinite`, `left <= right`, `top <= bottom`; equal edges are valid. Serialize one `ClampRectF32` as `(left, top, right, bottom)` in 16 bytes. Use checked I64 addition for all operations, reject before allocation when the plan exceeds `RawMaterialRequirementsV2`, device `maxUniformBufferBindingSize`, `Int.MAX_VALUE` or frame-local budget. Start from the owner lane's bounded device-coordinate envelope, prove each allowed F32 multiply/add schedule for the first homogeneous segment, then propagate its quotient envelope into the next operation; a clamp replaces that propagated X/Y envelope with the clamped subset before the following segment. If a projective quotient is unbounded only because its `w` interval crosses zero, admit it only when the next coordinate operation is `ClampRectF32`, which closes the envelope before another matrix or family operation; otherwise refuse with `unsupported.material.gradient.numeric-domain-unbounded`. The public `w == 0` fixture therefore uses projective-matrix then clamp in evaluation order. Any other segment whose homogeneous rows or propagated output cannot close also refuses before `Ready`.
 
 - [ ] **Step 4: Emit ordered coordinate WGSL with a validity carrier.** The generated function uses safe values after every matrix:
 
 ```wgsl
-const W5D_MIN_NORMAL_F32: f32 = 1.175494351e-38;       // 2^-126
-const W5D_SAFE_QUOTIENT_MAX_F32: f32 = 8.507059173e37; // 2^126
+struct W5dBinaryPartsF32 {
+    fractionF32: f32, // normal, signed, magnitude in [0.5, 1)
+    exponentI32: i32,
+    valid: bool,
+}
 
-fn w5dQuotientFitsF32(numeratorF32: f32, denominatorF32: f32) -> bool {
-    let absNumeratorF32 = abs(numeratorF32);
-    let absDenominatorF32 = abs(denominatorF32);
-    if (absDenominatorF32 < W5D_MIN_NORMAL_F32 ||
-        absDenominatorF32 > W5D_SAFE_QUOTIENT_MAX_F32) {
-        return false;
+fn w5dBinaryPartsF32(valueF32: f32) -> W5dBinaryPartsF32 {
+    let bitsU32 = bitcast<u32>(valueF32);
+    let absBitsU32 = bitsU32 & 0x7fffffffu;
+    let exponentBitsU32 = (absBitsU32 >> 23u) & 0xffu;
+    let mantissaBitsU32 = absBitsU32 & 0x007fffffu;
+    if (exponentBitsU32 == 0xffu || absBitsU32 == 0u) {
+        return W5dBinaryPartsF32(0.0, 0, exponentBitsU32 != 0xffu);
     }
-    var boundF32 = W5D_SAFE_QUOTIENT_MAX_F32;
-    if (absDenominatorF32 < 1.0) {
-        boundF32 = absDenominatorF32 * W5D_SAFE_QUOTIENT_MAX_F32;
+    var fractionBitsU32 = (bitsU32 & 0x80000000u) | (126u << 23u) | mantissaBitsU32;
+    var exponentI32 = i32(exponentBitsU32) - 126;
+    if (exponentBitsU32 == 0u) {
+        let leadingI32 = 31 - i32(countLeadingZeros(mantissaBitsU32));
+        let normalizedU32 = mantissaBitsU32 << u32(23 - leadingI32);
+        fractionBitsU32 = (bitsU32 & 0x80000000u) | (126u << 23u) |
+            (normalizedU32 & 0x007fffffu);
+        exponentI32 = leadingI32 - 148;
     }
-    return absNumeratorF32 <= boundF32;
+    return W5dBinaryPartsF32(bitcast<f32>(fractionBitsU32), exponentI32, true);
+}
+
+fn w5dSafeDivideF32(numeratorF32: f32, denominatorF32: f32) -> W5dSafeDivideResultF32 {
+    let numerator = w5dBinaryPartsF32(numeratorF32);
+    let denominator = w5dBinaryPartsF32(denominatorF32);
+    if (!numerator.valid || !denominator.valid || denominatorF32 == 0.0) {
+        return W5dSafeDivideResultF32(0.0, false);
+    }
+    if (numeratorF32 == 0.0) {
+        return W5dSafeDivideResultF32(0.0, true);
+    }
+    let fractionQuotientF32 = numerator.fractionF32 / denominator.fractionF32;
+    let normalized = frexp(fractionQuotientF32);
+    let resultExponentI32 = numerator.exponentI32 - denominator.exponentI32 + normalized.exp;
+    if (resultExponentI32 > 128) {
+        return W5dSafeDivideResultF32(0.0, false);
+    }
+    return W5dSafeDivideResultF32(ldexp(normalized.fract, resultExponentI32), true);
 }
 
 let homogeneous = inverseMatrix * vec3<f32>(state.pointF32, 1.0);
-let canDivide = state.valid && w5dFiniteF32(homogeneous.x) &&
-    w5dFiniteF32(homogeneous.y) && w5dFiniteF32(homogeneous.z) &&
-    homogeneous.z != 0.0 && w5dQuotientFitsF32(homogeneous.x, homogeneous.z) &&
-    w5dQuotientFitsF32(homogeneous.y, homogeneous.z);
-var projectedPointF32 = vec2<f32>(0.0);
-if (canDivide) {
-    projectedPointF32 = homogeneous.xy / homogeneous.z;
-}
-state.pointF32 = projectedPointF32;
-state.valid = canDivide;
+let projectedX = w5dSafeDivideF32(homogeneous.x, homogeneous.z);
+let projectedY = w5dSafeDivideF32(homogeneous.y, homogeneous.z);
+state.valid = state.valid && projectedX.valid && projectedY.valid;
+state.pointF32 = select(vec2<f32>(0.0), vec2<f32>(projectedX.valueF32, projectedY.valueF32), state.valid);
 ```
 
-Emit `w5dFiniteF32(valueF32)` as `valueF32 == valueF32 && abs(valueF32) <= 3.402823466e+38`; do not assume a non-standard WGSL `isFinite` built-in. The quotient guard accepts only normal denominators in `[2^-126, 2^126]`. Its multiplication lives only in the `abs(w) < 1` branch and is then bounded by `2^126`; no `select` evaluates it speculatively. The actual division exists only inside the guarded `if` and its magnitude is at most `2^126`. Each clamp runs exactly at its list position against `state.pointF32`. Invalid unsafe coordinates never enter family, tile, stop-search or blend evaluation; the source returns transparent directly when `state.valid` is false.
+Define `W5dSafeDivideResultF32(valueF32: f32, valid: bool)` next to the decomposition result. `bitcast`, shifts and `countLeadingZeros` normalize subnormal operands without floating-point overflow. The sole fraction division has a normal denominator of magnitude at least `0.5` and a result below `2`; `frexp` therefore receives a finite normal. `ldexp` is called only with exponent `<= 128`; lower exponents may flush a subnormal result to zero as WGSL permits, which the oracle envelopes. This path preserves the review counterexample with numerator near `2^127`, denominator `2^126` and quotient near `2`; it returns invalid only for a non-finite operand, zero denominator or genuinely overflowing F32 quotient. Each clamp runs exactly at its list position. Invalid coordinates return transparent before family, tile, stop-search or blend evaluation.
 
-- [ ] **Step 5: Extend the independent oracle with the same mathematical contract, not production helpers.** Enumerate the allowed F32 multiply/add schedules for each homogeneous row, propagate their output envelope operation-by-operation, require finite closure, independently reject denominators outside `[2^-126, 2^126]`, apply the pre-division `2^126` quotient guard, divide only bounded cases, carry `valid`, clamp only safe points and require singleton/two-code closure for the chosen pixels. Include the WGSL flush-to-zero alternative for subnormal intermediate results in the envelope; those values never become accepted denominators.
+- [ ] **Step 5: Extend the independent oracle with the same mathematical contract, not production helpers.** Enumerate the allowed F32 multiply/add schedules for each homogeneous row and propagate their output envelope operation-by-operation. Independently decode normal/subnormal F32 bits, evaluate the bounded fraction division plus `frexp`/`ldexp` exponent rule, carry `valid`, clamp only safe points and require singleton/two-code closure for chosen pixels. Include WGSL flush-to-zero alternatives for subnormal final quotients. Add the finite large-numerator/large-denominator review counterexample as a public pixel control, and prove that only its neighboring exact `w == 0` sample is transparent.
 
 - [ ] **Step 6: Verify GREEN, mutation safety and commit.**
 

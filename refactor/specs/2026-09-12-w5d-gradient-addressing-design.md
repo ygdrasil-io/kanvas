@@ -150,29 +150,38 @@ cette coordonnée ; un rectangle inversé est refusé.
 
 Le planner prouve d'abord avec `WgslFloatEnvelopeV1` que les trois produits
 scalaires homogènes ne débordent pas sur les bounds device propriétaires. Le
-WGSL vérifie ensuite `w` et une borne conservatrice du quotient **avant** toute
-division. Avec `WMIN = 2^-126` et `QMAX = 2^126`, une composante `n / w` est
-admissible si `w` et `n` sont finis, `WMIN <= abs(w) <= QMAX`, et soit
-`abs(w) >= 1 && abs(n) <= QMAX`, soit `abs(w) < 1 &&
-abs(n) <= abs(w) * QMAX`. La multiplication du second cas vit dans une branche
-`if`, n'est donc jamais évaluée pour `abs(w) >= 1`, ne peut pas déborder et
-garantit un quotient fini avec marge. La division vit elle aussi dans une
-branche `if` exécutée uniquement lorsque X et Y satisfont cette borne ; elle ne
-doit pas être placée dans les arguments évalués d'un `select`.
+WGSL applique ensuite une division mise à l'échelle qui conserve tous les
+quotients F32 finis. Une décomposition par `bitcast<u32>` classe zéro,
+subnormal, normal et non-fini sans opération flottante spéculative. Elle
+reconstruit pour chaque valeur finie non nulle une fraction F32 normale dans
+`[0.5,1)` et un exposant I32, y compris depuis une mantisse subnormale. Les deux
+fractions normales sont divisées — leur quotient est borné dans `(0.5,2)` —,
+puis `frexp` le renormalise. La somme checked des exposants est passée à
+`ldexp` seulement si elle est `<= 128`; au-delà, le quotient F32 est réellement
+hors plage finie. La division et `ldexp` vivent dans une branche `if` après la
+classification de `w`; ils ne sont jamais placés dans les arguments évalués
+d'un `select`. La sémantique de `frexp`/`ldexp` et du flush-to-zero suit la
+spécification WGSL : <https://www.w3.org/TR/WGSL/#numeric-builtin-functions>.
 
 Un échec de la preuve des produits scalaires refuse le draw avant `Ready` avec
 `unsupported.material.gradient.numeric-domain-unbounded`. Après cette preuve,
-si la garde de quotient échoue pour un fragment — notamment `w == 0`, `w`
-subnormal ou `abs(w) > QMAX` — le nœud produit le point sûr `(0,0)` et un bit de
-validité faux. Les nœuds suivants s'évaluent uniquement sur les valeurs sûres,
-et le matériau final est masqué transparent. Une valeur non finie ou
-indéterminée ne peut pas entrer dans `floor`, `atan2`, la recherche de stops ou
-le blend.
+le fragment devient invalide seulement si `w == 0`, si une entrée est non finie
+ou si l'exposant normalisé prouve que le quotient F32 déborde. Un `w` subnormal
+ou très grand reste admis lorsque le quotient est fini. Le nœud invalide produit
+le point sûr `(0,0)` et un bit de validité faux. Les nœuds suivants s'évaluent
+uniquement sur les valeurs sûres, et le matériau final est masqué transparent.
+Une valeur non finie ou indéterminée ne peut pas entrer dans `floor`, `atan2`,
+la recherche de stops ou le blend.
 
 Le domaine numérique combine les bounds device déjà propriétaires des lanes W4
 avec toutes les opérations de coordonnées. Une homographie courante et bornée
 est admise ; une enveloppe que `WgslFloatEnvelopeV1` ne peut pas fermer reste un
-refus typé, sans élargissement empirique.
+refus typé, sans élargissement empirique. Quand l'intervalle de `w` traverse
+zéro et rend le quotient continu non borné, W5d ne l'admet que si l'opération
+suivante est un `CoordClamp`, qui referme l'enveloppe avant toute autre matrice
+ou opération de famille. Sans ce clamp ordonné, le draw refuse avec
+`unsupported.material.gradient.numeric-domain-unbounded`. Cette limite est une
+frontière d'admission explicite, jamais une substitution transparente.
 
 ## 5. Tile graph commun
 
