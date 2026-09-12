@@ -42,6 +42,7 @@
 - Create: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/GradientAddressingCaptureV2.kt`
 - Create: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/MaterialCoordinatePlanV2.kt`
 - Create: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/GradientAddressingPlanV2.kt`
+- Create: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/GradientTileOperationGraphV2.kt`
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/EffectiveMaterialPlanner.kt`
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/MaterialPlan.kt`
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/RawMaterialRequirementsV2.kt`
@@ -114,15 +115,37 @@ internal sealed interface GradientAddressingCaptureV2 {
 - [ ] **Step 5: Build and lower the complete V2 authority contract.** Create `MaterialCoordinatePlanV2` with copied `InverseMatrixF32` operations, `uniformByteSizeI64`, `canonicalIdentity` and tag-only `topologyIdentity`. For this slice prepend inverse CTM and append the inverse of one affine local matrix, using F64 conversion/inversion from `:math:matrix`, then project finite coefficients to F32. Add these variants before changing the lowerer:
 
 ```kotlin
+public enum class GradientFamilyV2 { LINEAR, RADIAL, SWEEP, CONICAL }
+public enum class GradientTileModeV2 { CLAMP, REPEAT, MIRROR, DECAL }
+
+public sealed interface GradientTileOperationNodeV2
+public sealed interface GradientTileOperationGraphV2 {
+    public val requestedMode: GradientTileModeV2
+    public val effectiveMode: GradientTileModeV2
+    public val outputTF32: GradientTileOperationNodeV2
+    public val validity: GradientTileOperationNodeV2
+    public val contractId: String get() = "gradient-tile-v2"
+    public companion object {
+        public fun clamp(): GradientTileOperationGraphV2
+    }
+}
+
 public data class GradientAddressingProgramV2(
     public val family: GradientFamilyV2,
     public val requestedTileMode: GradientTileModeV2,
     public val effectiveTileMode: GradientTileModeV2,
     public val tileGraphId: String,
     public val coordinateTopologyId: String,
-) : MaterialProgramPlan
+) : MaterialProgramPlan {
+    override val versionI32: Int = 2
+    override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId(
+        "w5d-gradient-v2:${family.name}:${requestedTileMode.name}:${effectiveTileMode.name}:$tileGraphId:$coordinateTopologyId",
+    )
+    override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.gradient()
+}
 
 public sealed interface GradientV2 : MaterialBindingPlan {
+    override val versionI32: Int get() = 2
     public val stopRange: GradientStopRangeV1
     public val numericAuthority: GradientNumericAuthorityV2
     public val gradientDegenerate: Boolean
@@ -139,7 +162,7 @@ public data class MaterialV2(
 ) : PlanDrawMaterialAuthority
 ```
 
-Task 1 adds `LinearGradientV2`; Task 5 adds the other three family bindings with the same interface. `GradientNumericAuthorityV2.sealLinear(program, coordinates, startF32, endF32, degeneracy, slab, localMagnitudeF64, uniformMagnitudeF64): GradientNumericAuthorityV2?` seals the V1 family raw-parameter graph, V2 coordinate plan, V2 tile graph, Linear uniform tuple, degeneracy, stop range/slab and domain proof. Its public verification shape is `authenticates(program: GradientAddressingProgramV2, binding: GradientV2, slab: GradientStopSlabPlanV1, coordinates: MaterialCoordinatePlanV2): Boolean`; its internal `rebase(binding: GradientV2, sourceSlab: GradientStopSlabPlanV1, newRange: GradientStopRangeV1, newSlab: GradientStopSlabPlanV1): GradientNumericAuthorityV2` first authenticates, proves identical selected stop sequences and returns a new V2 authority. `MaterialPlanTable.of`, stop-slab rewrite, interning and `copyForInterning` handle `GradientV1` and `GradientV2` exhaustively without converting between them.
+Task 1 creates `GradientTileOperationGraphV2` with its typed input/output/validity contract and the CLAMP graph only; Task 4 adds REPEAT/MIRROR/DECAL without changing this API. Task 1 also adds `LinearGradientV2`; Task 5 adds the other three family bindings with the same interface. `GradientNumericAuthorityV2.sealLinear(program, coordinates, startF32, endF32, degeneracy, slab, localMagnitudeF64, uniformMagnitudeF64): GradientNumericAuthorityV2?` seals the V1 family raw-parameter graph, V2 CLAMP tile graph, V2 coordinate plan, Linear uniform tuple, degeneracy, stop range/slab and domain proof. Its public verification shape is `authenticates(program: GradientAddressingProgramV2, binding: GradientV2, slab: GradientStopSlabPlanV1, coordinates: MaterialCoordinatePlanV2): Boolean`; its internal `rebase(binding: GradientV2, sourceSlab: GradientStopSlabPlanV1, newRange: GradientStopRangeV1, newSlab: GradientStopSlabPlanV1): GradientNumericAuthorityV2` first authenticates, proves identical selected stop sequences and returns a new V2 authority. `MaterialPlanTable.of`, stop-slab rewrite, interning and `copyForInterning` handle `GradientV1` and `GradientV2` exhaustively without converting between them.
 
 `W5aMaterialPlanLowerer` keeps its existing `MaterialV1` branch byte-for-byte and adds an explicit `MaterialV2` branch. `W5aCorePrimitiveMaterialAuthorityV2.issue` receives a separate `coordinatesV2ByCommandIdI32` map; `W5aMaterialSourceStage` has distinct V1/V2 overloads and never attempts a V2 cast through `GradientNumericAuthorityV1`. The raw source key includes `tileGraphId` and `coordinateTopologyId`; the 48-byte-per-matrix values remain in the uniform. This preserves `MaterialCoordinatePlanV1`, all four `GradientV1` bindings and W5c CLAMP behavior unchanged.
 
@@ -288,21 +311,25 @@ rtk ./gradlew :kanvas:test --tests '*W5dGradientAddressingSurfacePixelTest.local
 
 Expected: valid fixtures refuse or disagree with the independent oracle; invalid subsets lack the W5d diagnostic contract.
 
-- [ ] **Step 3: Seal clamp validation, layout and projective domains in the planner.** Validate `isFinite`, `left <= right`, `top <= bottom`; equal edges are valid. Serialize one `ClampRectF32` as `(left, top, right, bottom)` in 16 bytes. Use checked I64 addition for all operations, reject before allocation when the plan exceeds `RawMaterialRequirementsV2`, device `maxUniformBufferBindingSize`, `Int.MAX_VALUE` or frame-local budget. For every projective segment, extend `WgslFloatEnvelopeV1` over the owner lane's bounded device coordinates and prove each F32 multiply/add schedule for the three homogeneous rows finite. Refuse with `unsupported.material.gradient.numeric-domain-unbounded` when any row cannot be closed; crossing `w == 0` alone is not a planner refusal because the fragment guard below handles it.
+- [ ] **Step 3: Seal clamp validation, layout and projective domains in the planner.** Validate `isFinite`, `left <= right`, `top <= bottom`; equal edges are valid. Serialize one `ClampRectF32` as `(left, top, right, bottom)` in 16 bytes. Use checked I64 addition for all operations, reject before allocation when the plan exceeds `RawMaterialRequirementsV2`, device `maxUniformBufferBindingSize`, `Int.MAX_VALUE` or frame-local budget. Start from the owner lane's bounded device-coordinate envelope, prove each allowed F32 multiply/add schedule for the first homogeneous segment, then propagate its quotient envelope into the next operation; a clamp replaces that propagated X/Y envelope with the clamped subset before the following segment. Refuse with `unsupported.material.gradient.numeric-domain-unbounded` when any segment cannot close. Crossing `w == 0` alone is not a planner refusal because the fragment guard below handles it.
 
 - [ ] **Step 4: Emit ordered coordinate WGSL with a validity carrier.** The generated function uses safe values after every matrix:
 
 ```wgsl
+const W5D_MIN_NORMAL_F32: f32 = 1.175494351e-38;       // 2^-126
 const W5D_SAFE_QUOTIENT_MAX_F32: f32 = 8.507059173e37; // 2^126
 
 fn w5dQuotientFitsF32(numeratorF32: f32, denominatorF32: f32) -> bool {
     let absNumeratorF32 = abs(numeratorF32);
     let absDenominatorF32 = abs(denominatorF32);
-    let boundF32 = select(
-        absDenominatorF32 * W5D_SAFE_QUOTIENT_MAX_F32,
-        W5D_SAFE_QUOTIENT_MAX_F32,
-        absDenominatorF32 >= 1.0,
-    );
+    if (absDenominatorF32 < W5D_MIN_NORMAL_F32 ||
+        absDenominatorF32 > W5D_SAFE_QUOTIENT_MAX_F32) {
+        return false;
+    }
+    var boundF32 = W5D_SAFE_QUOTIENT_MAX_F32;
+    if (absDenominatorF32 < 1.0) {
+        boundF32 = absDenominatorF32 * W5D_SAFE_QUOTIENT_MAX_F32;
+    }
     return absNumeratorF32 <= boundF32;
 }
 
@@ -319,9 +346,9 @@ state.pointF32 = projectedPointF32;
 state.valid = canDivide;
 ```
 
-Emit `w5dFiniteF32(valueF32)` as `valueF32 == valueF32 && abs(valueF32) <= 3.402823466e+38`; do not assume a non-standard WGSL `isFinite` built-in. The quotient bound is evaluated without division and cannot overflow: for `abs(w) < 1`, `abs(w) * 2^126 <= 2^126`; for `abs(w) >= 1`, the constant is used directly. The actual division exists only inside the guarded `if` and its magnitude is at most `2^126`. Each clamp runs exactly at its list position against `state.pointF32`. Invalid unsafe coordinates never enter family, tile, stop-search or blend evaluation; the source returns transparent directly when `state.valid` is false.
+Emit `w5dFiniteF32(valueF32)` as `valueF32 == valueF32 && abs(valueF32) <= 3.402823466e+38`; do not assume a non-standard WGSL `isFinite` built-in. The quotient guard accepts only normal denominators in `[2^-126, 2^126]`. Its multiplication lives only in the `abs(w) < 1` branch and is then bounded by `2^126`; no `select` evaluates it speculatively. The actual division exists only inside the guarded `if` and its magnitude is at most `2^126`. Each clamp runs exactly at its list position against `state.pointF32`. Invalid unsafe coordinates never enter family, tile, stop-search or blend evaluation; the source returns transparent directly when `state.valid` is false.
 
-- [ ] **Step 5: Extend the independent oracle with the same mathematical contract, not production helpers.** Enumerate the allowed F32 multiply/add schedules for each homogeneous row, require their finite closure, implement the pre-division `2^126` guard independently, divide only its bounded cases, carry `valid`, clamp only safe points and require singleton/two-code closure for the chosen pixels.
+- [ ] **Step 5: Extend the independent oracle with the same mathematical contract, not production helpers.** Enumerate the allowed F32 multiply/add schedules for each homogeneous row, propagate their output envelope operation-by-operation, require finite closure, independently reject denominators outside `[2^-126, 2^126]`, apply the pre-division `2^126` quotient guard, divide only bounded cases, carry `valid`, clamp only safe points and require singleton/two-code closure for the chosen pixels. Include the WGSL flush-to-zero alternative for subnormal intermediate results in the envelope; those values never become accepted denominators.
 
 - [ ] **Step 6: Verify GREEN, mutation safety and commit.**
 
@@ -335,7 +362,7 @@ rtk git commit -m "feat(gpu): preserve W5d coordinate ordering"
 ### Task 4: Add the common tile graph for Linear on all W5c lanes
 
 **Files:**
-- Create: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/GradientTileOperationGraphV2.kt`
+- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/GradientTileOperationGraphV2.kt`
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/GradientPlanV1.kt`
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/GradientAddressingPlanV2.kt`
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/GradientNumericOperationGraphV1.kt`
@@ -382,15 +409,14 @@ Expected: CLAMP controls may pass; the other three modes refuse or disagree at s
 
 - [ ] **Step 3: Normalize non-CLAMP endpoint duplicates before defining the tile graph.** Add `normalizeGradientStopsV2(input, effectiveTileMode, preserveValidityMask)`. It delegates all W5c position normalization/hard-stop compaction first. When `effectiveTileMode != CLAMP`, it removes the first stop only when the first two normalized positions are both zero, and removes the last stop only when the last two positions are both one; implicit endpoints keep the remaining list at two or more entries. A Sweep whose requested mode is non-CLAMP but whose full-coverage rule produces effective CLAMP uses CLAMP normalization. The stop slab ABI and ordinary interior hard stops remain unchanged.
 
-- [ ] **Step 4: Define a typed tile graph instead of four handwritten shader branches.**
+- [ ] **Step 4: Extend the typed tile graph from Task 1 instead of adding handwritten shader branches.** Keep `GradientTileOperationGraphV2` and `GradientTileOperationNodeV2` unchanged; add the three missing factories to its companion:
 
 ```kotlin
-public sealed interface GradientTileOperationGraphV2 {
-    public val requestedMode: GradientTileModeV2
-    public val effectiveMode: GradientTileModeV2
-    public val outputTF32: Node
-    public val validity: Node
-    public val contractId: String get() = "gradient-tile-v2"
+public companion object {
+    public fun clamp(): GradientTileOperationGraphV2
+    public fun repeat(): GradientTileOperationGraphV2
+    public fun mirror(): GradientTileOperationGraphV2
+    public fun decal(): GradientTileOperationGraphV2
 }
 ```
 
@@ -515,7 +541,7 @@ public data class GradientAverageSrgbaF32(
 
 The final conversion implements IEEE-754 F32 roundTiesToEven explicitly. A zero-width interval contributes exactly zero. Do not expose the accumulator type publicly or move color integration into `:math`.
 
-- [ ] **Step 4: Compute/store the average only when the uniform degeneracy branch can consume it.** Reachability requires a family-degenerate V2 binding plus requested/effective REPEAT or MIRROR. Authenticate the average with normalized stop range/slab identity, family degeneracy and tile graph. Serialize four F32 channels in 16 bytes; the W5c stop buffer remains unchanged.
+- [ ] **Step 4: Compute/store the average only when the uniform degeneracy branch can consume it.** Add `degenerateAverageSrgbaF32: GradientAverageSrgbaF32?` to `GradientV2` and all four binding variants; `rebind` preserves it. The `sealLinear`, `sealRadial`, `sealSweep` and `sealConical` factories receive that value, require it non-null exactly for a family-degenerate binding whose effective mode is REPEAT/MIRROR, and authenticate it with normalized stop range/slab identity, family degeneracy and tile graph. Serialize four F32 channels in 16 bytes only for structural programs that consume the field; the W5c stop buffer remains unchanged.
 
 - [ ] **Step 5: Apply branch precedence before tile evaluation.** Family invalidity wins first. Degenerate CLAMP selects the W5c normative result, DECAL selects transparent, REPEAT/MIRROR select the sealed average. Sweep full coverage already has effective CLAMP from Task 5. Conical invalid root never reaches a tile node; fully-degenerate Conical CLAMP retains its circular hard stop.
 

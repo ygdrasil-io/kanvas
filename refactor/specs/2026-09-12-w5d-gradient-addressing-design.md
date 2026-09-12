@@ -151,19 +151,23 @@ cette coordonnée ; un rectangle inversé est refusé.
 Le planner prouve d'abord avec `WgslFloatEnvelopeV1` que les trois produits
 scalaires homogènes ne débordent pas sur les bounds device propriétaires. Le
 WGSL vérifie ensuite `w` et une borne conservatrice du quotient **avant** toute
-division. Avec `QMAX = 2^126`, une composante `n / w` est admissible si `w` et
-`n` sont finis, `w != 0`, et soit `abs(w) >= 1 && abs(n) <= QMAX`, soit
-`abs(w) < 1 && abs(n) <= abs(w) * QMAX`. Cette multiplication ne peut pas
-déborder et garantit un quotient fini avec marge. La division vit dans une
+division. Avec `WMIN = 2^-126` et `QMAX = 2^126`, une composante `n / w` est
+admissible si `w` et `n` sont finis, `WMIN <= abs(w) <= QMAX`, et soit
+`abs(w) >= 1 && abs(n) <= QMAX`, soit `abs(w) < 1 &&
+abs(n) <= abs(w) * QMAX`. La multiplication du second cas vit dans une branche
+`if`, n'est donc jamais évaluée pour `abs(w) >= 1`, ne peut pas déborder et
+garantit un quotient fini avec marge. La division vit elle aussi dans une
 branche `if` exécutée uniquement lorsque X et Y satisfont cette borne ; elle ne
 doit pas être placée dans les arguments évalués d'un `select`.
 
-Si la preuve des produits scalaires échoue, ou si la garde de quotient échoue
-pour le fragment — notamment `w == 0` — le nœud produit le point sûr `(0,0)` et
-un bit de validité faux. Les nœuds suivants s'évaluent uniquement sur les
-valeurs sûres, et le matériau final est masqué transparent. Une valeur non
-finie ou indéterminée ne peut pas entrer dans `floor`, `atan2`, la recherche de
-stops ou le blend.
+Un échec de la preuve des produits scalaires refuse le draw avant `Ready` avec
+`unsupported.material.gradient.numeric-domain-unbounded`. Après cette preuve,
+si la garde de quotient échoue pour un fragment — notamment `w == 0`, `w`
+subnormal ou `abs(w) > QMAX` — le nœud produit le point sûr `(0,0)` et un bit de
+validité faux. Les nœuds suivants s'évaluent uniquement sur les valeurs sûres,
+et le matériau final est masqué transparent. Une valeur non finie ou
+indéterminée ne peut pas entrer dans `floor`, `atan2`, la recherche de stops ou
+le blend.
 
 Le domaine numérique combine les bounds device déjà propriétaires des lanes W4
 avec toutes les opérations de coordonnées. Une homographie courante et bornée
@@ -376,8 +380,8 @@ W5a/W5b, intervalle Conical B conservateur, ainsi que W5e/W5f/W5g/W5h.
    Rect avec preuve non commutative.
 3. `CoordClamp` ordonné, homographie/validity mask et preuves de récupération.
 4. Tile graph commun Linear pour CLAMP/REPEAT/MIRROR/DECAL et frontières.
-5. Moyenne dégénérée exacte et règles spéciales Sweep/Conical.
-6. Extension des quatre familles aux quatre lanes, sans nouveau chemin legacy.
+5. Extension des quatre familles aux quatre lanes, sans nouveau chemin legacy.
+6. Moyenne dégénérée exacte et règles spéciales Sweep/Conical.
 7. Frame mixte, budgets/capabilities/ownership et documentation durable.
 8. Deux reviews indépendantes, vérification controller et PR stackée vers
    `codex/w5c-gradients`.
