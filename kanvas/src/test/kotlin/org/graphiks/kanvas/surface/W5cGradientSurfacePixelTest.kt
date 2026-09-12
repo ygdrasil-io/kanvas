@@ -27,8 +27,127 @@ import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import kotlin.test.assertContentEquals
+import kotlin.test.assertTrue
 
 class W5cGradientSurfacePixelTest {
+    @Test
+    fun mixedGradientFramePreservesOrderRangesOpacityAndBlend() {
+        val reused = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(.5f, ColorARGB.Red),
+            GradientStop(.5f, ColorARGB.Blue), GradientStop(1f, ColorARGB.Blue))
+        val distinct = List(17) { indexI32 -> GradientStop(
+            if (indexI32 in 8..9) .5f else indexI32 / 16f,
+            if (indexI32 <= 8) ColorARGB.Green else ColorARGB.White) }
+        val shaders = listOf(
+            Shader.LinearGradient(Point2F32(0f, 0f), Point2F32(10f, 0f), reused),
+            Shader.Opacity(Shader.RadialGradient(Point2F32(0f, 3f), 10f, distinct), .5f),
+            Shader.SweepGradient(Point2F32(5f, 3f), 0f, 360f, reused),
+            Shader.ConicalGradient(Point2F32(0f, 3f), 4f, Point2F32(16f, 3f), 4f, distinct),
+        )
+        fun frame(reversed: Boolean): UByteArray {
+            val surface = Surface(13, 19)
+            surface.canvas {
+                drawRect(RectF32.ofLTRB(0f, 0f, 13f, 19f), Paint(shader = Shader.SolidColor(ColorARGB.White), antiAlias = false))
+                for (laneI32 in if (reversed) (3 downTo 0) else (0..3)) {
+                    save()
+                    translate(0f, laneI32 * 4f)
+                    val paint = Paint(shader = shaders[laneI32], antiAlias = false,
+                        blendMode = if (laneI32 == 1) BlendMode.DIFFERENCE else BlendMode.SRC_OVER)
+                    when (laneI32) {
+                        0 -> drawRect(RectF32.ofLTRB(0f, 0f, 10f, 6f), paint)
+                        1 -> drawRRect(RRectF32.of(RectF32.ofLTRB(0f, 0f, 10f, 6f), CornerRadiiF32.of(.5f)),
+                            paint.copy(antiAlias = true))
+                        2 -> drawPath(Path().apply { addRect(RectF32.ofLTRB(0f, 0f, 10f, 6f)) }, paint)
+                        3 -> drawPath(Path().apply { moveTo(0f, 3f); lineTo(10f, 3f) },
+                            paint.copy(style = PaintStyle.STROKE, strokeWidth = 6f))
+                    }
+                    restore()
+                }
+                drawRect(RectF32.ofLTRB(11f, 18f, 13f, 19f), Paint(shader = Shader.SolidColor(ColorARGB.Black), antiAlias = false))
+            }
+            return surface.render().pixels
+        }
+        val forward = frame(false)
+        val reversed = frame(true)
+        val background = W5bBlendCpuOracle.Draw(ColorARGB.White, 1f, BlendMode.SRC_OVER)
+        val uniqueSources = listOf(
+            W5bBlendCpuOracle.Draw(ColorARGB.Red, 1f, BlendMode.SRC_OVER),
+            W5bBlendCpuOracle.Draw(ColorARGB.Green, .5f, BlendMode.DIFFERENCE),
+            W5bBlendCpuOracle.Draw(ColorARGB.Blue, 1f, BlendMode.SRC_OVER),
+            W5bBlendCpuOracle.Draw(ColorARGB.Green, 1f, BlendMode.SRC_OVER),
+        )
+        fun sample(pixels: UByteArray, pixelYI32: Int): UByteArray {
+            val offsetI32 = (pixelYI32 * 13 + 2) * 4
+            return pixels.copyOfRange(offsetI32, offsetI32 + 4)
+        }
+        // At x=2.5, y=4*lane+2.5 each middle draw has an uncovered witness.
+        // All parameters are strictly inside constant-color stop segments.
+        uniqueSources.forEachIndexed { laneI32, source ->
+            val expected = W5bBlendCpuOracle.mixedPixel(listOf(background to 1f, source to 1f))
+            for (pixels in listOf(forward, reversed)) {
+                val actual = sample(pixels, laneI32 * 4 + 2)
+                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, actual)
+                assertTrue(!actual.contentEquals(ubyteArrayOf(255u, 255u, 255u, 255u)), "Omitted lane $laneI32")
+            }
+        }
+        // Every adjacent pair overlaps; reversing order changes every witness.
+        // Sweep is red below its center and blue above it at this x.
+        for (laneI32 in 1..3) {
+            val preceding = if (laneI32 == 3) uniqueSources[2].copy(color = ColorARGB.Red) else uniqueSources[laneI32 - 1]
+            val current = uniqueSources[laneI32]
+            val expected = W5bBlendCpuOracle.mixedPixel(listOf(background to 1f, preceding to 1f, current to 1f))
+            val counterfactual = W5bBlendCpuOracle.mixedPixel(listOf(background to 1f, current to 1f, preceding to 1f))
+            val actual = sample(forward, laneI32 * 4)
+            val reordered = sample(reversed, laneI32 * 4)
+            WgslFloatEnvelopeV1Oracle.assertAdmits(expected, actual)
+            WgslFloatEnvelopeV1Oracle.assertAdmits(counterfactual, reordered)
+            assertTrue(!actual.contentEquals(reordered), "Order must remain observable at lane $laneI32")
+        }
+        for (pixels in listOf(forward, reversed)) {
+            assertContentEquals(ubyteArrayOf(255u, 255u, 255u, 255u), pixels.copyOfRange(48, 52))
+            assertContentEquals(ubyteArrayOf(0u, 0u, 0u, 255u), pixels.copyOfRange((13 * 19 - 1) * 4, 13 * 19 * 4))
+        }
+    }
+
+    @Test
+    fun gradientFrameBudgetRefusesThenRuntimeRecovers() {
+        val stops = List(257) { indexI32 -> GradientStop(indexI32 / 256f, ColorARGB.Blue) }
+        fun frame(budgetI64: Long) = Surface(13, 1, config = RenderConfig(frameLocalBudgetBytes = budgetI64)).also { surface ->
+            surface.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 13f, 1f), Paint(shader = Shader.LinearGradient(
+                Point2F32(0f, 0f), Point2F32(13f, 0f), stops), antiAlias = false)) }
+        }
+        val healthy = frame(1L shl 20)
+        val expected = UByteArray(13 * 4) { indexI32 -> if (indexI32 % 4 >= 2) 255u else 0u }
+        assertContentEquals(expected, healthy.render().pixels)
+        val failure = assertThrows<IllegalStateException> { frame(4096L).render() }
+        assertEquals("resource.material.gradient.stop-budget", failure.message.orEmpty().substringBefore(':'))
+        // Surface keeps its append-only recording and immutable RenderConfig. The
+        // valid Surface therefore differs, but the runtime/backend is never reset.
+        assertContentEquals(expected, healthy.render().pixels)
+    }
+
+    @Test
+    fun authenticStorageCapabilityEitherRendersOrRefusesTyped() {
+        val surface = Surface(7, 1, config = RenderConfig(frameLocalBudgetBytes = 1L shl 20))
+        surface.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 7f, 1f), Paint(shader = Shader.LinearGradient(
+            Point2F32(0f, 0f), Point2F32(7f, 0f), List(17) { indexI32 ->
+                GradientStop(indexI32 / 16f, ColorARGB.Blue)
+            }), antiAlias = false)) }
+        // Only the public render queries the production adapter. No test capability
+        // snapshot is supplied, and unrelated/native failures cannot satisfy this gate.
+        val result = try { surface.render() } catch (failure: IllegalStateException) {
+            // This tiny frame has ample software budget. The second code can
+            // therefore only express a real physical buffer/binding-size limit.
+            assertTrue(failure.message.orEmpty().substringBefore(':') in setOf(
+                "unsupported.material.gradient.storage-capability",
+                "resource.material.gradient.stop-budget",
+            ), failure.message)
+            println("W5c authentic storage capability: typed refusal (${failure.message})")
+            return
+        }
+        assertContentEquals(UByteArray(7 * 4) { indexI32 -> if (indexI32 % 4 >= 2) 255u else 0u }, result.pixels)
+        println("W5c authentic storage capability: exact pixels rendered")
+    }
+
     @Test
     fun conicalGradientCoversFourLanesAndSelectsLargestValidRoot() {
         val stops = List(17) { indexI32 -> GradientStop(
