@@ -81,27 +81,79 @@ class W5dGradientAddressingSurfacePixelTest {
 
     @Test fun coordinateUniformBudgetRefusesPreciselyAndRecovers() {
         // Individually admissible lanes exceed the frame budget only once their
-        // ordered coordinate uniforms are added. No adapter limits are fabricated.
+        // unique coordinate uniforms are added. 32 additional Solid lanes put the
+        // causal window above the public staging high-water mark from prior frames.
         var shader: Shader = linearGradient().copy(stops = listOf(
             GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Red)))
         repeat(20) { shader = Shader.WithLocalMatrix(Shader.CoordClamp(shader, bounds), Matrix3x3F32()) }
-        fun frame(budgetI64: Long) = Surface(1, 1, config = RenderConfig(frameLocalBudgetBytes = budgetI64)).also { surface ->
+        // All controls use the same otherwise-unused extent. This avoids the
+        // documented equal-extent target-ID collision with earlier suite frames.
+        fun frame(budgetI64: Long, wrapped: Boolean = true, distinct: Boolean = true) =
+            Surface(11, 1, config = RenderConfig(frameLocalBudgetBytes = budgetI64)).also { surface ->
             surface.canvas {
-                repeat(32) { indexI32 ->
-                    val paint = Paint(shader = Shader.WithLocalMatrix(shader,
-                        Matrix3x3F32.translation(indexI32 / 128f, 0f)), antiAlias = indexI32 >= 16)
-                    if (indexI32 < 16) drawRect(bounds, paint)
+                repeat(64) { indexI32 ->
+                    val source = if (indexI32 >= 32) Shader.SolidColor(ColorARGB.Red)
+                    else if (!wrapped) linearGradient().copy(stops = listOf(
+                        GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Red)))
+                    else if (distinct) Shader.WithLocalMatrix(shader, Matrix3x3F32.translation(indexI32 / 128f, 0f)) else shader
+                    val paint = Paint(shader = source, antiAlias = indexI32 % 2 != 0)
+                    if (indexI32 % 2 == 0) drawRect(bounds, paint)
                     else drawRRect(RRectF32.of(RectF32.ofLTRB(-1f, -1f, 13f, 2f), CornerRadiiF32.of(.5f)), paint)
                 }
             }
         }
-        val healthy = frame(1L shl 20)
+        val healthy = frame(1L shl 22)
+        val red = UByteArray(44) { if (it % 4 == 0 || it % 4 == 3) 255u else 0u }
+        assertContentEquals(red, healthy.render().pixels)
+        // The same draw workload with bare CLAMP fits. Reusing the exact wrapped
+        // value also fits: its one physical material allocation is not per-draw.
+        assertContentEquals(red, frame(1_590_000L, wrapped = false).render().pixels)
+        assertContentEquals(red, frame(1_590_000L, distinct = false).render().pixels)
         repeat(2) {
-            assertContentEquals(W5dGradientAddressingCpuOracle.redPixel(), healthy.render().pixels)
-            val failure = assertThrows<IllegalStateException> { frame(65_536L).render() }
+            assertContentEquals(red, healthy.render().pixels)
+            val failure = assertThrows<IllegalStateException> { frame(1_590_000L).render() }
             assertEquals("resource.material.gradient.coordinate-uniform-budget", failure.message.orEmpty().substringBefore(':'), failure.message)
-            assertContentEquals(W5dGradientAddressingCpuOracle.redPixel(), healthy.render().pixels)
+            assertContentEquals(red, healthy.render().pixels)
         }
+    }
+
+    @Test fun coordinateBudgetPreservesNonUniformOwnerDiagnostic() {
+        val surface = Surface(1, 1, config = RenderConfig(frameLocalBudgetBytes = 49_152L))
+        surface.canvas {
+            val paint = Paint(shader = Shader.WithLocalMatrix(linearGradient(), Matrix3x3F32()), antiAlias = false)
+            drawRect(bounds, paint)
+            drawRRect(RRectF32.of(RectF32.ofLTRB(-1f, -1f, 13f, 2f), CornerRadiiF32.of(.5f)), paint.copy(antiAlias = true))
+        }
+        val failure = assertThrows<IllegalStateException> { surface.render() }
+        // Geometry/target/readback already exceed this budget before V2 uniforms.
+        assertEquals("resource-limit.w5b.destination-budget", failure.message.orEmpty().substringBefore(':'), failure.message)
+        assertContentEquals(W5dGradientAddressingCpuOracle.redPixel(), renderPixel(linearGradient()))
+    }
+
+    @Test fun w5aOnlyCompositeBudgetsUniqueSourcesAndRecovers() {
+        // Solid/Opacity with SRC_OVER keeps the W5a-only composite branch. Each
+        // fresh extent avoids only the documented same-runtime target-ID collision.
+        // W5a folds nested opacity: these are 63 unique 32-byte values and one
+        // opaque 16-byte value, not artificially deep uniform blocks.
+        fun frame(budgetI64: Long, distinct: Boolean, widthI32: Int = 7) = Surface(widthI32, 1,
+            config = RenderConfig(frameLocalBudgetBytes = budgetI64)).also { surface ->
+            surface.canvas {
+                repeat(64) { indexI32 ->
+                    val shader = Shader.Opacity(Shader.SolidColor(ColorARGB.Red),
+                        if (!distinct || indexI32 == 63) 1f else .5f + indexI32 / 128f)
+                    val paint = Paint(shader = shader, antiAlias = indexI32 % 2 != 0)
+                    if (indexI32 % 2 == 0) drawRect(RectF32.ofLTRB(0f, 0f, widthI32.toFloat(), 1f), paint)
+                    else drawRRect(RRectF32.of(RectF32.ofLTRB(-1f, -1f, widthI32 + 1f, 2f), CornerRadiiF32.of(.5f)), paint)
+                }
+            }
+        }
+        fun red(widthI32: Int) = UByteArray(widthI32 * 4) { if (it % 4 == 0 || it % 4 == 3) 255u else 0u }
+        val healthy = frame(1L shl 22, distinct = true)
+        assertContentEquals(red(7), healthy.render().pixels)
+        assertContentEquals(red(8), frame(1_574_000L, distinct = false, widthI32 = 8).render().pixels)
+        val failure = assertThrows<IllegalStateException> { frame(1_574_000L, distinct = true, widthI32 = 10).render() }
+        assertEquals("w5a.composite.unsupported", failure.message.orEmpty().substringBefore(':'), failure.message)
+        assertContentEquals(red(12), frame(1L shl 22, distinct = true, widthI32 = 12).render().pixels)
     }
 
     @Test fun mixedCoordinateTopologiesRemainSemanticallyDistinct() {

@@ -1,7 +1,5 @@
 package org.graphiks.kanvas.gpu.renderer.materials
 
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import org.graphiks.kanvas.gpu.plan.MaterialBindingPlan
 import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
 import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
@@ -20,10 +18,9 @@ import org.graphiks.kanvas.gpu.plan.GradientNumericDomainProofV1
  * attachment partition before any source-stage code or raw binding is published.
  */
 internal class W5aMaterialSourceStage private constructor(
-    val structuralId: String,
+    requirements: RawMaterialRequirementsV2,
     val declarationsWgsl: String,
     val bindingCountI32: Int,
-    uniformBytes: ByteArray,
     val provenOpaque: Boolean,
     val gradientStopSlab: GradientStopSlabPlanV1?,
     val coordinateFunctionName: String = "w5c_local_point",
@@ -31,11 +28,11 @@ internal class W5aMaterialSourceStage private constructor(
     data class Binding(val bindingI32: Int, val resourceKind: String)
     val bindingManifest: List<Binding> = listOf(Binding(0, "uniformBuffer")) +
         if (gradientStopSlab == null) emptyList() else listOf(Binding(1, "storageBuffer"))
-    private val ownedUniformBytes = uniformBytes.copyOf()
+    val structuralId: String = requirements.structuralId
+    private val ownedUniformBytes = requirements.copyUniformBytes()
     val uniformBytes: ByteArray get() = ownedUniformBytes.copyOf()
     val uniformByteCountI64: Long get() = ownedUniformBytes.size.toLong()
-    val canonicalIdentity: String = structuralId + ":raw-v2:" + ownedUniformBytes.joinToString(",") +
-        (gradientStopSlab?.canonicalIdentity ?: "")
+    val canonicalIdentity: String = requirements.canonicalIdentity
     companion object {
         fun lower(table: MaterialPlanTable, root: MaterialPlanRef, coordinates: MaterialCoordinatePlanV1? = null): W5aMaterialSourceStage? {
             if (root.indexI32 !in 0 until table.sizeI32) return null
@@ -51,7 +48,6 @@ internal class W5aMaterialSourceStage private constructor(
             }
             val requirements = RawMaterialRequirementsV2.of(table, root)
             if (chain.size != requirements.bindingCountI32 || requirements.uniformByteCountI64 > Int.MAX_VALUE) return null
-            val uniforms = ByteBuffer.allocate(requirements.uniformByteCountI64.toInt()).order(ByteOrder.LITTLE_ENDIAN)
             val statements = StringBuilder()
             val gradientBinding = chain.map { it.second }.filterIsInstance<MaterialBindingPlan.GradientV1>().singleOrNull()
             if (gradientBinding != null && coordinates == null) return null
@@ -70,21 +66,17 @@ internal class W5aMaterialSourceStage private constructor(
                 when (binding) {
                     is MaterialBindingPlan.GradientV2 -> return null
                     is MaterialBindingPlan.GradientV1 -> {
-                        binding.copyUniformValuesF32().forEach(uniforms::putFloat)
                         opaque = opaque && binding !is MaterialBindingPlan.ConicalGradientV1 &&
                             requireNotNull(table.gradientStopSlab).copyStops().all { it.straightSrgbF32.alpha == 1f }
                     }
-                    MaterialBindingPlan.EmptyV1 -> { repeat(4) { uniforms.putFloat(0f) }; opaque = false }
+                    MaterialBindingPlan.EmptyV1 -> { opaque = false }
                     is MaterialBindingPlan.SolidRgbaF32V1 -> {
                         val color = binding.copyRgbaF32()
                         val values = listOf(color.red, color.green, color.blue, color.alpha)
                         if (values.any { !it.isFinite() || it !in 0f..1f }) return null
-                        values.forEach(uniforms::putFloat)
                         opaque = opaque && color.alpha == 1f
                     }
                     is MaterialBindingPlan.OpacityF32V1 -> {
-                        uniforms.putFloat(binding.alphaF32)
-                        repeat(3) { uniforms.putFloat(0f) }
                         opaque = opaque && binding.alphaF32 == 1f
                     }
                 }
@@ -106,36 +98,6 @@ internal class W5aMaterialSourceStage private constructor(
                     return name
                 }
                 child = emit(source) ?: return null
-            }
-            if (gradientBinding != null) {
-                uniforms.putInt(gradientBinding.stopRange.baseIndexU32.toInt()).putInt(gradientBinding.stopRange.countU32.toInt())
-                    .putInt(0).putInt(0)
-                val sweep = (gradientBinding as? MaterialBindingPlan.SweepGradientV1)?.degeneracy
-                uniforms.putInt(if (gradientBinding.gradientDegenerate) 1 else 0)
-                    .putInt(if (sweep?.sweepOrderingInvalid == true) 1 else 0)
-                    .putInt(if (sweep?.sweepClampLeadingSegment == true) 1 else 0)
-                    .putInt(if (sweep?.sweepFullCoverage == true) 1 else 0)
-                val linear = (gradientBinding as? MaterialBindingPlan.LinearGradientV1)?.degeneracy
-                if (linear != null) {
-                    linear.copyScalarsF32().forEach(uniforms::putFloat)
-                    repeat(2) { uniforms.putFloat(0f) }
-                }
-                if (sweep != null) {
-                    uniforms.putFloat(sweep.sweepSpanDegreesF32)
-                    repeat(3) { uniforms.putFloat(0f) }
-                }
-                val conical = (gradientBinding as? MaterialBindingPlan.ConicalGradientV1)?.degeneracy
-                if (conical != null) {
-                    conical.copyScalarsF32().forEach(uniforms::putFloat)
-                    repeat(3) { uniforms.putFloat(0f) }
-                    listOf(conical.conicalLinearEquation, conical.conicalCentersCoincident, conical.conicalRadiiEqual,
-                        conical.conicalFullyDegenerate, conical.conicalConcentric, conical.conicalSharedRadiusAboveEpsilon)
-                        .forEach { uniforms.putInt(if (it) 1 else 0) }
-                    uniforms.putInt(conical.conicalBranchTagU32.toInt()).putInt(0)
-                }
-                val inverseF32 = requireNotNull(coordinates).copyInverseCtmF32()
-                listOf(inverseF32.sx, inverseF32.kx, inverseF32.tx, 0f, inverseF32.ky, inverseF32.sy, inverseF32.ty, 0f,
-                    inverseF32.persp0, inverseF32.persp1, inverseF32.persp2, 0f).forEach(uniforms::putFloat)
             }
             val declarations = """
                 struct W5aMaterialBlock {
@@ -160,8 +122,8 @@ internal class W5aMaterialSourceStage private constructor(
                     return $child;
                 }
             """.trimIndent()
-            return W5aMaterialSourceStage(table.entry(root).program.structuralId.value + ":srgb-endpoints-v1",
-                declarations, chain.size, uniforms.array(), opaque, table.gradientStopSlab.takeIf { gradientBinding != null })
+            return W5aMaterialSourceStage(requirements,
+                declarations, chain.size, opaque, table.gradientStopSlab.takeIf { gradientBinding != null })
         }
 
 
@@ -184,59 +146,9 @@ internal class W5aMaterialSourceStage private constructor(
             if (!numeric.authenticates(program, binding, slab, coordinates)) return null
             val requirements = RawMaterialRequirementsV2.of(table, root)
             if (requirements.uniformByteCountI64 > Int.MAX_VALUE) return null
-            val uniforms = ByteBuffer.allocate(requirements.uniformByteCountI64.toInt()).order(ByteOrder.LITTLE_ENDIAN)
-            binding.copyUniformValuesF32().forEach(uniforms::putFloat)
-            for (opacity in opacities.asReversed()) {
-                uniforms.putFloat(opacity.alphaF32)
-                repeat(3) { uniforms.putFloat(0f) }
-            }
-            uniforms.putInt(binding.stopRange.baseIndexU32.toInt()).putInt(binding.stopRange.countU32.toInt()).putInt(0).putInt(0)
-            val sweep = (binding as? MaterialBindingPlan.SweepGradientV2)?.degeneracy
-            uniforms.putInt(if (binding.gradientDegenerate) 1 else 0)
-                .putInt(if (sweep?.sweepOrderingInvalid == true) 1 else 0)
-                .putInt(if (sweep?.sweepClampLeadingSegment == true) 1 else 0)
-                .putInt(if (sweep?.sweepFullCoverage == true) 1 else 0)
-            val linear = (binding as? MaterialBindingPlan.LinearGradientV2)?.degeneracy
-            if (linear != null) {
-                linear.copyScalarsF32().forEach(uniforms::putFloat)
-                repeat(2) { uniforms.putFloat(0f) }
-            }
-            if (sweep != null) {
-                uniforms.putFloat(sweep.sweepSpanDegreesF32)
-                repeat(3) { uniforms.putFloat(0f) }
-            }
-            val conical = (binding as? MaterialBindingPlan.ConicalGradientV2)?.degeneracy
-            if (conical != null) {
-                conical.copyScalarsF32().forEach(uniforms::putFloat)
-                repeat(3) { uniforms.putFloat(0f) }
-                listOf(conical.conicalLinearEquation, conical.conicalCentersCoincident, conical.conicalRadiiEqual,
-                    conical.conicalFullyDegenerate, conical.conicalConcentric, conical.conicalSharedRadiusAboveEpsilon)
-                    .forEach { uniforms.putInt(if (it) 1 else 0) }
-                uniforms.putInt(conical.conicalBranchTagU32.toInt()).putInt(0)
-            }
             val operations = coordinates.copyOperations()
-            val averageSrgbaF32 = binding.degenerateAverageSrgbaF32
-            averageSrgbaF32?.let {
-                listOf(it.redF32, it.greenF32, it.blueF32, it.alphaF32).forEach(uniforms::putFloat)
-            }
             val coordinateFields = StringBuilder()
             val coordinateStatements = StringBuilder("    var state = W5dLocalPointV2(pixel, true);\n")
-            for (operation in operations) {
-                when (operation) {
-                    is MaterialCoordinateOperationV2.InverseMatrixF32 -> {
-                        val matrixF32 = operation.inverseF32
-                        // The spare matrix lane carries a normal, sealed affine flag: shader
-                        // float comparisons of subnormal perspective coefficients could FTZ.
-                        val affineF32 = if (matrixF32.persp0 == 0f && matrixF32.persp1 == 0f && matrixF32.persp2 == 1f) 1f else 0f
-                        listOf(matrixF32.sx, matrixF32.kx, matrixF32.tx, 0f,
-                            matrixF32.ky, matrixF32.sy, matrixF32.ty, 0f,
-                            matrixF32.persp0, matrixF32.persp1, matrixF32.persp2, affineF32).forEach(uniforms::putFloat)
-                    }
-                    is MaterialCoordinateOperationV2.ClampRectF32 -> operation.subsetF32.let {
-                        listOf(it.left, it.top, it.right, it.bottom).forEach(uniforms::putFloat)
-                    }
-                }
-            }
             for (indexI32 in operations.indices) {
                 when (operations[indexI32]) {
                     is MaterialCoordinateOperationV2.ClampRectF32 -> {
@@ -301,9 +213,8 @@ internal class W5aMaterialSourceStage private constructor(
                     return value${opacities.size};
                 }
             """.trimIndent()
-            check(uniforms.position() == uniforms.capacity())
-            return W5aMaterialSourceStage(table.entry(root).program.structuralId.value + ":srgb-endpoints-v1",
-                declarations, requirements.bindingCountI32, uniforms.array(),
+            return W5aMaterialSourceStage(requirements,
+                declarations, requirements.bindingCountI32,
                 binding !is MaterialBindingPlan.ConicalGradientV2 &&
                     numeric.tileGraph.effectiveMode != org.graphiks.kanvas.gpu.plan.GradientTileModeV2.DECAL &&
                     opacities.all { it.alphaF32 == 1f } && slab.copyStops().all { it.straightSrgbF32.alpha == 1f } &&

@@ -101,9 +101,13 @@ internal class W5aCompositeGraphLowerer {
                 }
             }
         }
+        var stopSlabCounted = false
         val allocations = (rectAllocations + lowered.flatMapIndexed { ordinal, result -> result.taskList.memoryBudget.allocations.mapNotNull { allocation ->
             if (allocation.category == GPUFrameMemoryCategory.CanonicalTarget || allocation.category == GPUFrameMemoryCategory.ReadbackStaging) {
                 allocation.takeIf { ordinal == 0 }
+            } else if (allocation.label == "$session.gradient-stops") {
+                require(allocation.bytes == composite.materialTable.gradientStopSlab?.byteSizeI64)
+                if (stopSlabCounted) null else allocation.also { stopSlabCounted = true }
             } else allocation.copy(label = "${allocation.label}.lane.$ordinal")
         } }).map { it.copy(firstPassIndex = 0, lastPassIndexExclusive = tasks.size) }
         val budget = GPUFrameMemoryBudgetPlanner.plan(GPUFrameMemoryBudgetRequest(allocations,

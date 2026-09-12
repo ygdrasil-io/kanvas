@@ -84,13 +84,16 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
   `WithLocalMatrix`, `CoordClamp`, coordonnées ordonnées et moyenne dégénérée,
   sur Rect/RRect analytique/Path fill/stroke. Task 7 prouve frame mixte et ordre,
   topologies distinctes par pixels, capture immuable et récupération après refus
-  du budget public 65 536 bytes. `RawMaterialRequirementsV2` centralise les
-  exigences contrôlées; les owners W5c et l'ABI des stops restent inchangés.
-  La sélection forcée du 12 septembre 2026 W5d/W5c/W5b/W5a compte 160 méthodes :
-  158 passées, 0 failure/error XML, deux skips AA4 authentiques
-  `w4d.general.texture-sample-support-unavailable` (W5d 34/35, W5c 27/27,
-  W5b 50/50, W5a 47/48). Les cinq agrégats finaux passent aussi, sauf AA4.
-  Gradle test exit 1 après les assertions, avec workers 64 puis 65 exit 133,
+  du budget public. Le correctif de revue déduplique les allocations par la même
+  identité/packing Raw que le materializer, rend le diagnostic W5d causal et ferme
+  l'inventaire W5a-only. Les contrôles sans wrappers/source répétée réussissent aux
+  seuils publics 1 590 000 (W5d) et 1 574 000 (W5a-only), au-dessus du staging
+  résident historique, sans reset/pool modifié. Les owners W5c et l'ABI des stops restent inchangés.
+  La sélection conjointe forcée du 12 septembre 2026 W5d/W5c/W5b/W5a compte 162 méthodes :
+  160 passées, 0 failure/error XML, deux skips AA4 authentiques
+  `w4d.general.texture-sample-support-unavailable` (W5d 36/37, W5c 27/27,
+  W5b 50/50, W5a 47/48). Les trois témoins de correction ont un RED base puis GREEN public.
+  Gradle test exit 1 après les assertions, avec worker 79 exit 133,
   `BUILD FAILED`, sans contournement; le résultat XML reste distinct. Compilation
   ciblée séparée exit 0, `git diff --check` propre.
   Le gap d'IDs de cible entre composite W5a et session W5b de même extent et

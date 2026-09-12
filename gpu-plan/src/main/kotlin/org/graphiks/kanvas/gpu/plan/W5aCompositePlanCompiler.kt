@@ -3,8 +3,6 @@ package org.graphiks.kanvas.gpu.plan
 import org.graphiks.kanvas.render.ir.*
 import org.graphiks.math.geometry.RectF32
 
-private class W5aCompositeBudgetExceeded : RuntimeException()
-
 /** A separate capability: ordered native lanes, one material table and one target lifetime. */
 public class W5aCompositePlanCompiler : GpuPlanCompiler {
     private class Lane(val compiler: GpuPlanCompiler, val candidate: GpuPlanCandidate)
@@ -103,8 +101,6 @@ public class W5aCompositePlanCompiler : GpuPlanCompiler {
         } catch (failure: RawMaterialRequirementsV2.Refusal) {
             RenderPlanResult.ResourceLimitExceeded(listOf(RenderDiagnostic(RenderDiagnosticCode(failure.code),
                 RenderDiagnosticDomain.RESOURCE, RenderDiagnosticSeverity.ERROR, "Composite material frame exceeds its aggregate memory budget")))
-        } catch (_: W5aCompositeBudgetExceeded) {
-            RenderPlanResult.ResourceLimitExceeded(listOf(diagnostic("Composite frame exceeds its aggregate memory budget")))
         } catch (failure: IllegalArgumentException) {
             RenderPlanResult.GapOnPromotedScope(listOf(diagnostic(failure.message ?: "Invalid composite frame")))
         } catch (_: ArithmeticException) {
@@ -178,7 +174,7 @@ public class W5aCompositePlanV1 private constructor(
             } } }
             require(commandOrder.zipWithNext().all { (a, b) -> a < b })
             val shared = first.resources().filter { it.role == PlanResourceRole.LogicalTarget || it.role == PlanResourceRole.ReadbackStaging }
-                .sumOf { it.byteSize }
+                .fold(0L) { bytesI64, resource -> Math.addExact(bytesI64, resource.byteSize) }
             val rectScratch = graphs.map { graph ->
                 if (graph.capabilityId != W3SolidRectPlanCompiler.W5A_CAPABILITY_ID) emptyList() else {
                     val count = graph.visualCommandCount.toLong()
@@ -195,9 +191,22 @@ public class W5aCompositePlanV1 private constructor(
                 }
             }
             val rectBytes = rectScratch.flatten().fold(0L, Math::addExact)
-            val peak = graphs.fold(Math.addExact(shared, rectBytes)) { bytes, graph -> Math.addExact(bytes, graph.resources()
-                .filter { it.role != PlanResourceRole.LogicalTarget && it.role != PlanResourceRole.ReadbackStaging }.sumOf { it.byteSize }) }
-            if (peak > first.budget.maxFrameLocalBytes) throw W5aCompositeBudgetExceeded()
+            // Final physical inventory: target/readback once, geometry per lane,
+            // the interned stop slab once, and Raw allocations unique by value.
+            val stopBytesI64 = interned.table.gradientStopSlab?.byteSizeI64 ?: 0L
+            val peak = graphs.fold(Math.addExact(Math.addExact(shared, rectBytes), stopBytesI64)) { bytes, graph ->
+                graph.resources().filter { it.role != PlanResourceRole.LogicalTarget &&
+                    it.role != PlanResourceRole.ReadbackStaging && it.role != PlanResourceRole.GradientStopData }
+                    .fold(bytes) { bytesI64, resource -> Math.addExact(bytesI64, resource.byteSize) }
+            }
+            val sources = remapped.flatMap { graph -> graph.passes().flatMap { pass -> when (pass) {
+                is PlanPass.RenderPass -> pass.draws()
+                is PlanPass.StencilCover -> listOf(pass.draw)
+                else -> emptyList()
+            } } }.map { RawMaterialRequirementsV2.of(interned.table, it.materialAuthority.materialPlanRef()) }
+            RawMaterialRequirementsV2.requireFrameBudget(sources, peak, first.budget, "w5a.composite.unsupported")
+            // Kept non-uniform for the native lowerer's independent lifetime check;
+            // material uniforms are admitted above and owned by its existing stages.
             return W5aCompositePlanV1(remapped, interned.table, peak, rectScratch)
         }
     }

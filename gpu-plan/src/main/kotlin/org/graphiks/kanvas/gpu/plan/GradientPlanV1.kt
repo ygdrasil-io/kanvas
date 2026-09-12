@@ -129,7 +129,7 @@ public data class SweepGradientDegeneracyV1(
 public class GradientNumericAuthorityV1 private constructor(
     public val graph: GradientNumericOperationGraphV1,
     private val program: MaterialProgramPlan,
-    private val coordinates: MaterialCoordinatePlanV1,
+    internal val coordinates: MaterialCoordinatePlanV1,
     uniformValuesF32: List<Float>,
     private val degeneracy: GradientDegeneracyV1,
     private val range: GradientStopRangeV1,
