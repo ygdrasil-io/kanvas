@@ -47,6 +47,9 @@ class W5dGradientAddressingSurfacePixelTest {
                     if (endpointDuplicates) add(GradientStop(1f, ColorARGB.Green))
                 }
                 var shader: Shader = Shader.LinearGradient(Point2F32(18.5f, 0f), Point2F32(26.5f, 0f), stops, tileMode = mode)
+                // CLAMP without coordinates intentionally stays W5c/V1. Force the
+                // common V2 tile graph here, including both endpoint duplicates.
+                if (mode == TileMode.CLAMP) shader = Shader.WithLocalMatrix(shader, Matrix3x3F32())
                 if (destinationBlend) shader = Shader.Opacity(shader, .5f)
                 val rectF32 = RectF32.ofLTRB(0f, 0f, 39f, 8f)
                 val recorder = PictureRecorder()
@@ -168,6 +171,53 @@ class W5dGradientAddressingSurfacePixelTest {
         val surface = Surface(1, 1)
         surface.canvas { drawRect(bounds, Paint(shader = shader, antiAlias = false)) }
         return surface.render().pixels
+    }
+
+    @Test
+    fun bareClampPreservesW5cBudgetDiagnostic() {
+        val stops = List(257) { indexI32 -> GradientStop(indexI32 / 256f, ColorARGB.Blue) }
+        fun frame(budgetI64: Long) = Surface(13, 1,
+            config = RenderConfig(frameLocalBudgetBytes = budgetI64)).also { surface ->
+            surface.canvas { drawRect(bounds, Paint(shader = Shader.LinearGradient(
+                Point2F32(0f, 0f), Point2F32(13f, 0f), stops), antiAlias = false)) }
+        }
+        val healthy = frame(1L shl 20)
+        val expected = UByteArray(13 * 4) { indexI32 -> if (indexI32 % 4 >= 2) 255u else 0u }
+        assertContentEquals(expected, healthy.render().pixels)
+        val failure = assertThrows<IllegalStateException> { frame(4096L).render() }
+        // Routing this bare CLAMP through V2 changes this public diagnostic.
+        assertEquals("resource.material.gradient.stop-budget", failure.message.orEmpty().substringBefore(':'))
+        assertContentEquals(expected, healthy.render().pixels)
+    }
+
+    @Test
+    fun excludedLinearPaintLanesPreservePreparedRefusals() {
+        val failures = mutableListOf<String>()
+        for (mode in TileMode.entries) for (laneI32 in 0..2) for (wrapped in listOf(false, true))
+            for (endXF32 in listOf(8f, Float.NaN)) {
+            // Excluded paints must keep prepared refusal precedence even when
+            // gradient geometry is invalid; they do not belong to W5d capture.
+            val leaf = linearGradient().copy(tileMode = mode, end = Point2F32(endXF32, 0f))
+            val shader = if (wrapped) Shader.WithLocalMatrix(leaf, Matrix3x3F32()) else leaf
+            val surface = Surface(13, 8)
+            val rectF32 = RectF32.ofLTRB(1f, 1f, 12f, 7f)
+            surface.canvas {
+                val paint = Paint(shader = shader, antiAlias = laneI32 != 2,
+                    style = if (laneI32 == 2) PaintStyle.FILL else PaintStyle.STROKE, strokeWidth = 2f)
+                if (laneI32 == 0) drawRect(rectF32, paint)
+                else drawRRect(RRectF32.of(rectF32, CornerRadiiF32.of(1f)), paint)
+            }
+            try {
+                val failure = assertThrows<IllegalStateException> { surface.render() }
+                assertEquals(if (laneI32 == 0) "unsupported.stroke.rect_anti_alias"
+                    else "unsupported.material.mapping.linear_gradient_stop_count",
+                    failure.message.orEmpty().substringBefore(':'))
+            } catch (failure: AssertionError) {
+                failures += "$mode lane=$laneI32 wrapped=$wrapped endX=$endXF32: ${failure.message}"
+            }
+        }
+        assertContentEquals(W5dGradientAddressingCpuOracle.redPixel(), renderPixel(linearGradient()))
+        kotlin.test.assertTrue(failures.isEmpty(), failures.joinToString("\n"))
     }
 
     @Test
