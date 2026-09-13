@@ -23,6 +23,21 @@ import kotlin.test.assertEquals
 import org.graphiks.kanvas.surface.WgslFloatEnvelopeV1Oracle.Interval as I
 
 class W5eImageFamiliesSurfacePixelTest {
+    @Test fun imageNineSharedBoundarySelectionDoesNotDiscardAfterCancellation() {
+        // Independent constant-source expectation isolates an artificial transparent
+        // hole from legitimate nearest-coordinate rounding at this extreme scale.
+        val expected = List(6) { expectedLinear(listOf(1f, 0f, 0f, 1f)) }
+        val opaque = Image.fromPixels(3, 3, ByteArray(36) { index ->
+            if (index % 4 == 0 || index % 4 == 3) -1 else 0
+        }, alphaType = AlphaType.PREMUL, colorSpace = ColorSpace.LINEAR_SRGB)
+        val surface = Surface(2, 3)
+        surface.canvas { drawImageNine(opaque, center(), RectF32.ofLTRB(-16777216f, 0f, 2f, 3f), paint()) }
+        val result = surface.render()
+        assertPixels(expected, result.pixels)
+        assertEquals(1, result.stats.opsDispatched)
+        assertEquals(0, result.stats.opsRefused)
+    }
+
     @Test fun imageNinePreservesCornersAndStretchesEdgesAndCenter() {
         // A single stretched center patch loses eight distinct source colors.
         val axis = listOf(0, 1, 1, 1, 1, 1, 2)

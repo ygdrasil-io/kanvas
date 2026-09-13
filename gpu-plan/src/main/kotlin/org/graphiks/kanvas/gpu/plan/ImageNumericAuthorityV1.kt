@@ -190,6 +190,13 @@ public class ImageNumericAuthorityV1 private constructor(
             if (!finite) return null
             val cellSelection = cells?.let { sourceCells ->
                 if (sourceCells.size > 9) return null
+                // Containment consumes these shared local scalars, not separately
+                // normalized cell coordinates. Comparison operands are finite;
+                // identical copied endpoints make adjacent < / >= (or > / <=)
+                // predicates complementary for every permitted rounded local value.
+                val localXDomain = evaluate(graph.localXF32)
+                val localYDomain = evaluate(graph.localYF32)
+                if (!finite) return null
                 // Each graph covers the FULL enclosing device domain, including the
                 // exterior AA fragments that the outer selector bands extrapolate.
                 // Thus branch uncertainty cannot expose an unproved scalar/index path.
@@ -198,7 +205,7 @@ public class ImageNumericAuthorityV1 private constructor(
                     val proof = seal(program, upload, mapping, deviceBoundsF32, paintAlphaF32, sampling, tileModes) ?: return null
                     ImageCellSelectionPlanV1.Sample(cell, mapping, proof)
                 }
-                ImageCellSelectionPlanV1(cellSamples)
+                ImageCellSelectionPlanV1(cellSamples, coordinates.copyDestinationF32(), localXDomain, localYDomain)
             }
             return ImageNumericAuthorityV1(graph, program.structuralId, upload.contentIdentity, coordinates.canonicalIdentity,
                 paintAlphaF32.toRawBits(), samplingProof, deviceBoundsF32, cellSelection)

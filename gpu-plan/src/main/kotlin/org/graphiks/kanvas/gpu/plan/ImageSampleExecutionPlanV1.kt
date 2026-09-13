@@ -93,14 +93,14 @@ public sealed interface ImageMaterialProgramV3 : MaterialProgramPlan {
         public val sampling: ImageSamplingPlanV1, public val tileModes: ImageTileModePlanV1,
         override val selectsCells: Boolean = false) : ImageMaterialProgramV3 {
         override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5e-image-color-v3:$channelOrder:$alphaType:$transfer:$gamut:${sampling.topologyId}:${tileModes.topologyId}" +
-            if (selectsCells) ":nine-cell-selector-v1" else "")
+            if (selectsCells) ":nine-local-cell-selector-v2" else "")
         override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.imageColor()
     }
     public class MaskV3(public val child: MaterialProgramPlan, public val alphaType: ImageAlphaType,
         public val sampling: ImageSamplingPlanV1, public val tileModes: ImageTileModePlanV1,
         override val selectsCells: Boolean = false) : ImageMaterialProgramV3 {
         override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5e-image-mask-v3:$alphaType:${sampling.topologyId}:${tileModes.topologyId}(${child.structuralId.value})" +
-            if (selectsCells) ":nine-cell-selector-v1" else "")
+            if (selectsCells) ":nine-local-cell-selector-v2" else "")
         override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.imageMask()
     }
 }

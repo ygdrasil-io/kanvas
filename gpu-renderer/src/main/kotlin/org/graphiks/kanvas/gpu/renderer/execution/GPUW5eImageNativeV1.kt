@@ -33,9 +33,13 @@ internal object GPUW5eImageNativeV1 {
                 require(image.originalDraw.geometry is org.graphiks.kanvas.render.ir.GeometryNode.ImageNine &&
                     selector.samples.size <= selector.capacityI32 && selector.capacityI32 == 9 &&
                     selector.samples.all { sample ->
+                        val bounds = sample.cell.copyDestinationF32()
                         sample.numericAuthority.graph.sampling == image.execution.sampling &&
                             sample.numericAuthority.graph.tileModes == ImageTileModePlanV1.ClampClamp &&
-                            sample.coordinates.uniformValuesF32().all(Float::isFinite)
+                            sample.coordinates.uniformValuesF32().all(Float::isFinite) &&
+                            listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).all(Float::isFinite) &&
+                            (bounds.right > bounds.left) == (selector.directionX == ImageCellAxisDirectionV1.Increasing) &&
+                            (bounds.bottom > bounds.top) == (selector.directionY == ImageCellAxisDirectionV1.Increasing)
                     }) { W5eImagePlanDiagnostics.InvalidContract }
             }
         }

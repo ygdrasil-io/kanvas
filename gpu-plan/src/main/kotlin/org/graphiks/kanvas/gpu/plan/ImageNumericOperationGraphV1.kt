@@ -75,6 +75,8 @@ public class ImageNumericOperationGraphV1 private constructor(public val colorAl
         texelOperations().joinToString(",") { it.name } +
         (if (sampling is ImageSamplingPlanV1.Cubic) ":cubic-scalar-schedule-v1" else "")
     public val denominator: Node
+    public val localXF32: Node
+    public val localYF32: Node
     public val sourceX: Node
     public val sourceY: Node
     public val unitXF32: Node
@@ -142,13 +144,14 @@ public class ImageNumericOperationGraphV1 private constructor(public val colorAl
             binary(Operation.ADD_F32, binary(Operation.MUL_F32, uniform(indexI32), x),
                 binary(Operation.MUL_F32, uniform(indexI32 + 1), y)), uniform(indexI32 + 2))
         denominator = row(8)
-        fun unit(rowI32: Int, axisI32: Int): Node {
-            val local = binary(Operation.DIV_F32, row(rowI32), denominator)
+        localXF32 = binary(Operation.DIV_F32, row(0), denominator)
+        localYF32 = binary(Operation.DIV_F32, row(4), denominator)
+        fun unit(local: Node, axisI32: Int): Node {
             val relative = binary(Operation.SUB_F32, local, uniform(16 + axisI32))
             return binary(Operation.DIV_F32, relative, uniform(18 + axisI32))
         }
-        unitXF32 = unit(0, 0)
-        unitYF32 = unit(4, 1)
+        unitXF32 = unit(localXF32, 0)
+        unitYF32 = unit(localYF32, 1)
         fun source(unit: Node, axisI32: Int): Node {
             return binary(Operation.ADD_F32, uniform(12 + axisI32),
                 binary(Operation.MUL_F32, unit, uniform(14 + axisI32)))

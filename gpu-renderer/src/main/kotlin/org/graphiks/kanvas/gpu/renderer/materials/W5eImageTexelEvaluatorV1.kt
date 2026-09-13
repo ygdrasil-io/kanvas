@@ -84,7 +84,7 @@ internal object W5eImageTexelEvaluatorV1 {
         }.orEmpty()
         val selectorDeclarations = selection?.let { selector ->
             require(selector.capacityI32 == 9 && selector.samples.size <= selector.capacityI32 &&
-                selector.lowerInclusive && !selector.upperInclusive && selector.firstHit && selector.discardOnMiss)
+                selector.startInclusive && !selector.endInclusive && selector.firstHit && selector.discardOnMiss)
             val body = StringBuilder()
             val names = mutableMapOf<ImageNumericOperationGraphV1.Node, String>()
             fun scalar(node: ImageNumericOperationGraphV1.Node): String = names.getOrPut(node) {
@@ -94,29 +94,33 @@ internal object W5eImageTexelEvaluatorV1 {
                 name
             }
             val selectorDenominator = scalar(graph.denominator)
-            body.append("if (!w5e_finite($selectorDenominator) || abs($selectorDenominator) < 1.17549435e-38f) { return false; }\n")
-            val unitX = scalar(graph.unitXF32)
-            val unitY = scalar(graph.unitYF32)
-            val checks = listOf(unitX, unitY).mapIndexed { axisI32, value ->
-                "(outerEdges[$axisI32] == 1.0 || $value >= ${selector.lowerBoundF32}f) && " +
-                    "(outerEdges[${axisI32 + 2}] == 1.0 || $value < ${selector.upperBoundF32}f)"
+            body.append("if (!w5e_finite($selectorDenominator) || abs($selectorDenominator) < 1.17549435e-38f) { return $zero; }\n")
+            val localX = scalar(graph.localXF32)
+            val localY = scalar(graph.localYF32)
+            val checks = (0..1).map { axisI32 ->
+                val value = "pixelLocal[$axisI32]"
+                val increasing = "w5eImage.cellDirections[$axisI32] == ${ImageCellAxisDirectionV1.Increasing.flagF32}f"
+                "(outerEdges[$axisI32] == 1.0 || select($value <= cellBounds[$axisI32], $value >= cellBounds[$axisI32], $increasing)) && " +
+                    "(outerEdges[${axisI32 + 2}] == 1.0 || select($value > cellBounds[${axisI32 + 2}], $value < cellBounds[${axisI32 + 2}], $increasing))"
             }.joinToString(" && ")
             val dispatch = (0 until selector.capacityI32).joinToString("\n") { indexI32 ->
                 """
                     if (w5eImage.parameters.w > ${indexI32.toFloat()}f) {
                         let candidate = w5eImage.cells[$indexI32];
-                        if (w5e_cell_contains(pixel, candidate.source, candidate.destination, candidate.outerEdges)) {
+                        if (w5e_cell_contains(cellLocal, candidate.bounds, candidate.outerEdges)) {
                             return w5e_sample_cell(pixel, candidate.source, candidate.destination);
                         }
                     }
                 """.trimIndent()
             }
             """
-                fn w5e_cell_contains(pixel: vec2<f32>, cellSource: vec4<f32>, cellDestination: vec4<f32>, outerEdges: vec4<f32>) -> bool {
-                    $body
-                    return w5e_finite($unitX) && w5e_finite($unitY) && $checks;
+                fn w5e_cell_contains(pixelLocal: vec2<f32>, cellBounds: vec4<f32>, outerEdges: vec4<f32>) -> bool {
+                    return $checks;
                 }
                 fn w5e_image_sample(pixel: vec2<f32>) -> $returnType {
+                    $body
+                    if (!w5e_finite($localX) || !w5e_finite($localY)) { return $zero; }
+                    let cellLocal = vec2<f32>($localX, $localY);
                     $dispatch
                     discard;
                     return $zero;
@@ -214,11 +218,11 @@ internal object W5eImageTexelEvaluatorV1 {
         }
         return """
             ${child?.declarationsWgsl.orEmpty()}
-            ${if (selection != null) "struct W5eImageCell { source: vec4<f32>, destination: vec4<f32>, outerEdges: vec4<f32>, }" else ""}
+            ${if (selection != null) "struct W5eImageCell { source: vec4<f32>, destination: vec4<f32>, outerEdges: vec4<f32>, bounds: vec4<f32>, }" else ""}
             struct W5eImageBlock {
                 values0: vec4<f32>, values1: vec4<f32>, values2: vec4<f32>,
                 values3: vec4<f32>, values4: vec4<f32>, parameters: vec4<f32>, cubicParameters: vec4<f32>,
-                ${if (selection != null) "cells: array<W5eImageCell, ${selection.capacityI32}>," else ""}
+                ${if (selection != null) "cellDirections: vec4<f32>, cells: array<W5eImageCell, ${selection.capacityI32}>," else ""}
                 ${if (child != null) "child: W5aMaterialBlock," else ""}
             }
             @group(1) @binding(${layout.uniformBindingU32}) var<uniform> w5eImage: W5eImageBlock;

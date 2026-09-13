@@ -60,10 +60,14 @@ public object ImageCellDecomposerV1 {
     }
 }
 
+public enum class ImageCellAxisDirectionV1(public val flagF32: Float) { Increasing(1f), Decreasing(-1f) }
+
 /** Executable selector contract: source-oriented half-open cells, first hit, discard on miss.
  * Outer edges are unbounded because the original geometry owns fractional outer coverage.
- * Every unit coordinate is the same scalar graph used in its cell's sampling certificate. */
-public class ImageCellSelectionPlanV1 internal constructor(samples: List<Sample>) {
+ * One shared local XY result is compared directly with the copied destination endpoints;
+ * independently rounded normalized coordinates never decide cell membership. */
+public class ImageCellSelectionPlanV1 internal constructor(samples: List<Sample>, destinationF32: RectF32,
+    localXDomainF64: ClosedFloatingPointRange<Double>, localYDomainF64: ClosedFloatingPointRange<Double>) {
     public class Sample internal constructor(public val cell: ImageCellPlanV1.Sampled,
         public val coordinates: ImageCoordinatePlanV1, public val numericAuthority: ImageNumericAuthorityV1) {
         init {
@@ -72,16 +76,33 @@ public class ImageCellSelectionPlanV1 internal constructor(samples: List<Sample>
         }
     }
     public val samples: List<Sample> = immutableList(samples)
+    private val destination = destinationF32.copy()
+    private val localXDomain = localXDomainF64.start..localXDomainF64.endInclusive
+    private val localYDomain = localYDomainF64.start..localYDomainF64.endInclusive
+    public val directionX: ImageCellAxisDirectionV1 = if (destination.right > destination.left)
+        ImageCellAxisDirectionV1.Increasing else ImageCellAxisDirectionV1.Decreasing
+    public val directionY: ImageCellAxisDirectionV1 = if (destination.bottom > destination.top)
+        ImageCellAxisDirectionV1.Increasing else ImageCellAxisDirectionV1.Decreasing
     public val capacityI32: Int = 9
-    public val lowerBoundF32: Float = 0f
-    public val upperBoundF32: Float = 1f
-    public val lowerInclusive: Boolean = true
-    public val upperInclusive: Boolean = false
+    public val startInclusive: Boolean = true
+    public val endInclusive: Boolean = false
     public val firstHit: Boolean = true
     public val discardOnMiss: Boolean = true
-    public val topologyIdentity: String = "nine-first-hit-half-open-outer-coverage-discard-v1"
+    public val topologyIdentity: String = "nine-shared-local-endpoints-directed-half-open-outer-coverage-discard-v2"
     public val canonicalIdentity: String = "$topologyIdentity:capacity=$capacityI32:count=${samples.size}:" +
-        "bounds=${lowerBoundF32.toRawBits()}:${upperBoundF32.toRawBits()}:inclusive=$lowerInclusive:$upperInclusive:first=$firstHit:discard=$discardOnMiss:" +
+        "directions=$directionX:$directionY:inclusive=$startInclusive:$endInclusive:first=$firstHit:discard=$discardOnMiss:" +
+        "local-domain=${localXDomain.start.toRawBits()}:${localXDomain.endInclusive.toRawBits()}:${localYDomain.start.toRawBits()}:${localYDomain.endInclusive.toRawBits()}:" +
         samples.joinToString(";") { "${it.cell.canonicalIdentity}:${it.coordinates.canonicalIdentity}:${it.numericAuthority.canonicalIdentity}" }
-    init { require(samples.size <= capacityI32 && samples.all { it.cell.outerEdges.size == 4 }) }
+    public fun copyDirectionUniformValuesF32(): List<Float> = listOf(directionX.flagF32, directionY.flagF32, 0f, 0f)
+    init {
+        require(listOf(localXDomain.start, localXDomain.endInclusive, localYDomain.start, localYDomain.endInclusive).all {
+            it.isFinite() && kotlin.math.abs(it) <= Float.MAX_VALUE.toDouble()
+        }) { W5eImagePlanDiagnostics.NumericDomainUnbounded }
+        require(samples.size <= capacityI32 && samples.all { sample ->
+            val bounds = sample.cell.copyDestinationF32()
+            sample.cell.outerEdges.size == 4 && listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).all(Float::isFinite) &&
+                (bounds.right > bounds.left) == (directionX == ImageCellAxisDirectionV1.Increasing) &&
+                (bounds.bottom > bounds.top) == (directionY == ImageCellAxisDirectionV1.Increasing)
+        }) { W5eImagePlanDiagnostics.InvalidContract }
+    }
 }

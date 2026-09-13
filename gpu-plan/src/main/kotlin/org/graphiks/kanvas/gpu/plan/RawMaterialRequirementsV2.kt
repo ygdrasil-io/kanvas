@@ -9,10 +9,10 @@ public class ImageSourceLayoutV3 internal constructor(public val hasChildGradien
     public val uniformBindingU32: UInt = 0u
     public val gradientStorageBindingU32: UInt? = if (hasChildGradientStorage) 1u else null
     public val imageTextureBindingU32: UInt = if (hasChildGradientStorage) 2u else 1u
-    public val imageUniformByteCountI64: Long = if (selectsCells) 544L else 112L
+    public val imageUniformByteCountI64: Long = if (selectsCells) 704L else 112L
     public val structuralIdentity: String = "image-source-layout-v3:uniform0:" +
         (if (hasChildGradientStorage) "stops1:texture2" else "texture1") + ":cubic-parameters" +
-        if (selectsCells) ":nine-cell-selector-v1" else ""
+        if (selectsCells) ":nine-local-cell-selector-v2" else ""
 }
 
 /** Handle-free raw V2 binding layout, shared by capability sealing and native packing. */
@@ -87,11 +87,14 @@ public class RawMaterialRequirementsV2 private constructor(
                     val cubic = execution.sampling as? ImageSamplingPlanV1.Cubic
                     putFloat(cubic?.bF32 ?: 0f).putFloat(cubic?.cF32 ?: 0f).putFloat(0f).putFloat(0f)
                     execution.cellSelection?.let { selection ->
+                        selection.copyDirectionUniformValuesF32().forEach(::putFloat)
                         repeat(selection.capacityI32) { indexI32 ->
                             val sample = selection.samples.getOrNull(indexI32)
-                            if (sample == null) repeat(12) { putFloat(0f) } else {
+                            if (sample == null) repeat(16) { putFloat(0f) } else {
                                 sample.coordinates.uniformValuesF32().drop(12).forEach(::putFloat)
                                 sample.cell.outerEdges.forEach { putFloat(if (it) 1f else 0f) }
+                                val bounds = sample.cell.copyDestinationF32()
+                                listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).forEach(::putFloat)
                             }
                         }
                     }
