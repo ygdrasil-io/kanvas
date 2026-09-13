@@ -4,13 +4,32 @@ import org.graphiks.math.geometry.RectF32
 import kotlin.math.abs
 import kotlin.math.floor
 
+private class ImageAddressReductionFactV1(
+    private val mode: ImageTileAxisModePlanV1,
+    private val indexI32: IntRange,
+    private val dimensionI32: Int,
+    private val signedRemainderI32: IntRange?,
+    private val normalizedI32: IntRange?,
+    private val secondModuloI32: IntRange?,
+    private val mirrorFoldI32: IntRange?,
+    private val addressedI32: IntRange,
+) {
+    private fun IntRange.identity(): String = "${first}:${last}"
+    val canonicalIdentity: String = "$mode:${indexI32.identity()}:n=$dimensionI32:r=${signedRemainderI32?.identity()}:" +
+        "add=${normalizedI32?.identity()}:mod=${secondModuloI32?.identity()}:fold=${mirrorFoldI32?.identity()}:" +
+        "address=${addressedI32.identity()}"
+}
+
 /** Immutable arithmetic certificate for indices and the four-component linear sum. */
 private class ImageSamplingArithmeticProofV1(
     private val xPreReductionI32: IntRange,
     private val yPreReductionI32: IntRange,
+    private val xAddress: ImageAddressReductionFactV1,
+    private val yAddress: ImageAddressReductionFactV1,
     private val accumulatedComponentF32: ClosedFloatingPointRange<Double>,
 ) {
     val canonicalIdentity: String = "x=${xPreReductionI32.first}:${xPreReductionI32.last}:y=${yPreReductionI32.first}:${yPreReductionI32.last}:" +
+        "x-address=${xAddress.canonicalIdentity}:y-address=${yAddress.canonicalIdentity}:" +
         "acc=${accumulatedComponentF32.start.toRawBits()}:${accumulatedComponentF32.endInclusive.toRawBits()}"
 }
 
@@ -28,7 +47,7 @@ public class ImageNumericAuthorityV1 private constructor(
     public fun copyDeviceBoundsF32(): RectF32 = bounds.copy()
     public val canonicalIdentity: String = "${graph.topologyIdentity}:${programIdentity.value}:$uploadIdentity:$coordinateIdentity:" +
         listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).joinToString(",") { it.toRawBits().toString() } +
-        ":paint=$paintAlphaBitsI32:texel-domain-v1:unorm8:positive-alpha-ge-2^-9:all-intermediates-lt-2^36:" +
+        ":paint=$paintAlphaBitsI32:texel-domain-v1:unorm8:positive-alpha-ge-2^-9:signed-components-abs-lt-2^36:" +
         "sampling-arithmetic-v1:${samplingProof.canonicalIdentity}"
     public fun authenticates(program: ImageMaterialProgramV3, execution: ImageSampleExecutionPlanV1): Boolean =
         program.structuralId == programIdentity && execution.upload.contentIdentity == uploadIdentity &&
@@ -131,24 +150,59 @@ public class ImageNumericAuthorityV1 private constructor(
                 return low.toInt()..high.toInt()
             }
             fun plusOne(range: IntRange): IntRange = range.first..Math.addExact(range.last, 1)
-            fun address(range: IntRange, dimensionI32: Int, mode: ImageTileAxisModePlanV1): Boolean {
-                if (dimensionI32 <= 0) return false
-                return when (mode) {
-                    ImageTileAxisModePlanV1.CLAMP, ImageTileAxisModePlanV1.DECAL -> true
-                    ImageTileAxisModePlanV1.REPEAT -> true // i32 % positive n is defined over the complete I32 interval.
-                    ImageTileAxisModePlanV1.MIRROR -> {
-                        // Every intermediate in ((i % 2n) + 2n) % 2n and 2n - 1 - phase fits I32.
-                        dimensionI32 <= Int.MAX_VALUE / 2
-                    }
+            fun checkedI64(lowI64: Long, highI64: Long): IntRange? {
+                if (lowI64 < Int.MIN_VALUE.toLong() || highI64 > Int.MAX_VALUE.toLong()) return null
+                return lowI64.toInt()..highI64.toInt()
+            }
+            fun signedRemainder(indexI32: IntRange, divisorI32: Int): IntRange {
+                // WGSL's signed % keeps the dividend sign. These bounds cover every exact
+                // remainder over the authenticated pre-reduction interval, not a hardware cap.
+                val magnitudeI64 = divisorI32.toLong() - 1L
+                val lowI64 = when {
+                    indexI32.first >= 0 -> 0L
+                    else -> -minOf(magnitudeI64, -indexI32.first.toLong())
                 }
+                val highI64 = when {
+                    indexI32.last <= 0 -> 0L
+                    else -> minOf(magnitudeI64, indexI32.last.toLong())
+                }
+                return lowI64.toInt()..highI64.toInt()
+            }
+            fun reduction(indexI32: IntRange, dimensionI32: Int, mode: ImageTileAxisModePlanV1): ImageAddressReductionFactV1? {
+                if (dimensionI32 <= 0) return null
+                if (mode == ImageTileAxisModePlanV1.CLAMP || mode == ImageTileAxisModePlanV1.DECAL)
+                    return ImageAddressReductionFactV1(mode, indexI32, dimensionI32, null, null, null, null, 0..(dimensionI32 - 1))
+                val periodI32 = when (mode) {
+                    ImageTileAxisModePlanV1.REPEAT -> dimensionI32
+                    ImageTileAxisModePlanV1.MIRROR -> checkedI64(dimensionI32.toLong() * 2L, dimensionI32.toLong() * 2L)?.first
+                    else -> error("unreachable")
+                } ?: return null
+                val remainder = signedRemainder(indexI32, periodI32)
+                // This is the emitted (index % period) + period, checked in I64 before Ready.
+                val normalized = checkedI64(remainder.first.toLong() + periodI32.toLong(),
+                    remainder.last.toLong() + periodI32.toLong()) ?: return null
+                // The normalized dividend is positive, so its second signed % is [0, period - 1].
+                val secondModulo = 0..(periodI32 - 1)
+                val fold = if (mode == ImageTileAxisModePlanV1.MIRROR) {
+                    // This is the emitted min(phase, period - 1 - phase), with both subtraction
+                    // endpoints checked in I64 before its I32 WGSL evaluation.
+                    checkedI64(periodI32.toLong() - 1L - secondModulo.last.toLong(),
+                        periodI32.toLong() - 1L - secondModulo.first.toLong()) ?: return null
+                } else null
+                // With period = 2n, min(phase, period - 1 - phase) is exactly in [0, n - 1].
+                val addressed = if (mode == ImageTileAxisModePlanV1.MIRROR) 0..(dimensionI32 - 1) else secondModulo
+                return ImageAddressReductionFactV1(mode, indexI32, dimensionI32, remainder, normalized, secondModulo, fold, addressed)
             }
             val extra = if (graph.sampling == ImageSamplingPlanV1.Linear) 1 else 0
             val baseX = i32(evaluate(graph.baseXF32), extra) ?: return null
             val baseY = i32(evaluate(graph.baseYF32), extra) ?: return null
             val xPre = if (extra == 1) plusOne(baseX) else baseX
             val yPre = if (extra == 1) plusOne(baseY) else baseY
-            if (!address(xPre, upload.widthI32, graph.tileModes.x) || !address(yPre, upload.heightI32, graph.tileModes.y)) return null
-            if (graph.sampling == ImageSamplingPlanV1.Nearest) return ImageSamplingArithmeticProofV1(xPre, yPre, 0.0..Math.scalb(1.0, 36))
+            val xAddress = reduction(xPre, upload.widthI32, graph.tileModes.x) ?: return null
+            val yAddress = reduction(yPre, upload.heightI32, graph.tileModes.y) ?: return null
+            val signedTexelComponent = -Math.scalb(1.0, 36)..Math.scalb(1.0, 36)
+            if (graph.sampling == ImageSamplingPlanV1.Nearest)
+                return ImageSamplingArithmeticProofV1(xPre, yPre, xAddress, yAddress, signedTexelComponent)
 
             val weights = listOf(requireNotNull(graph.weight00F32), requireNotNull(graph.weight10F32),
                 requireNotNull(graph.weight01F32), requireNotNull(graph.weight11F32)).map(evaluate)
@@ -157,14 +211,13 @@ public class ImageNumericAuthorityV1 private constructor(
                 val candidates = listOf(a.start, a.endInclusive).flatMap { x -> listOf(b.start, b.endInclusive).map { y -> x * y } }
                 return rounded(candidates.min(), candidates.max(), false)
             }
-            val texelComponent = 0.0..Math.scalb(1.0, 36)
-            val weighted = weights.map { products(texelComponent, it) }
+            val weighted = weights.map { products(signedTexelComponent, it) }
             var accumulated = weighted.first()
             for (term in weighted.drop(1)) accumulated = rounded(accumulated.start + term.start,
                 accumulated.endInclusive + term.endInclusive, false)
             if (!accumulated.start.isFinite() || !accumulated.endInclusive.isFinite() ||
                 maxOf(abs(accumulated.start), abs(accumulated.endInclusive)) > Float.MAX_VALUE.toDouble()) return null
-            return ImageSamplingArithmeticProofV1(xPre, yPre, accumulated)
+            return ImageSamplingArithmeticProofV1(xPre, yPre, xAddress, yAddress, accumulated)
         }
 
         /**
@@ -176,9 +229,12 @@ public class ImageNumericAuthorityV1 private constructor(
          * including eagerly evaluated select alternatives. WGSL pow inherits log2, multiply,
          * exp2: log2 stays in (-6,12), the exponent in (-16,30), exp2 below 2^31 with
          * their full accuracy envelopes. Three gamut products (coefficients magnitude <2),
-         * every association/contraction, and premultiplication/paint opacity stay below 2^36.
-         * FTZ adds zero alternatives only. A8 returns [0,1]; its authenticated W5a/W5d child
-         * has its own finite source proof. These coarse bounds prove finiteness, not final bytes.
+         * every association/contraction, and premultiplication/paint opacity have absolute value
+         * below 2^36. Display-P3 conversion may make a linear component negative (for example
+         * the green/blue output of saturated red), so sampling uses the signed [-2^36, 2^36]
+         * component domain. FTZ adds zero alternatives only. A8 returns [0,1]; its authenticated
+         * W5a/W5d child has its own finite source proof. These coarse bounds prove finiteness,
+         * not final bytes.
          */
         private fun provesFiniteTexelDomain(color: ImageColorAlphaPlanV1, upload: ImageUploadPlanV1): Boolean {
             if (color.alphaType !in setOf(org.graphiks.kanvas.render.ir.ImageAlphaType.OPAQUE,
