@@ -32,7 +32,7 @@ internal object GPUPreparedSurfaceImageSource {
             ColorType.GRAY_8 -> GPUPreparedImageSourceFormat.Gray8
             else -> GPUPreparedImageSourceFormat.Unsupported
         }
-        val sourceRowBytes = image.width.toLong() * image.colorType.bytesPerPixel
+        val sourceRowBytes = image.rowBytesI32.toLong()
         return GPUPreparedImageArtifactFactory.prepare(
             GPUPreparedImageSourceInput(
                 GPUPreparedImageSourceClass.DecodedCpu, image.sourceId, image.width, image.height, format,

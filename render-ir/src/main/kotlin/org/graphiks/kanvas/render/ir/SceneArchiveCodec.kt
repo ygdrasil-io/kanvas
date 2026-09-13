@@ -530,7 +530,10 @@ private class ArchiveReader(private val data: ByteArray) {
         10 -> glyphRun()
         11 -> GeometryNode.TextBlob.of(list(::glyphRun), f32(), f32(), optional(::typeface), f32(), stringFloatMap())
         12 -> GeometryNode.Picture.of(scene(), rect())
-        13 -> GeometryNode.ImageNine.of(resourceRef(), rect(), rect(), sampling())
+        13 -> {
+            if (sceneArchiveSchemaVersion < 4) failTag<Unit>("geometry")
+            GeometryNode.ImageNine.of(resourceRef(), rect(), rect(), sampling())
+        }
         else -> failTag("geometry")
     } }
     fun atlasEntry(): GeometryNode.AtlasEntry = GeometryNode.AtlasEntry.of(matrix(), rect(), optional(::color))

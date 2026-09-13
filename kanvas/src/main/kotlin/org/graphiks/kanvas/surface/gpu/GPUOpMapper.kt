@@ -2582,16 +2582,11 @@ internal fun DisplayOp.DrawImage.toImageRectCommand(
     sampling: org.graphiks.kanvas.paint.SamplingOptions? = null,
 ): NormalizedDrawCommand.DrawImageRect {
     val image = this.image
-    val requestedSampling = sampling ?: this.paint?.let { p ->
-        val sh = p.shader
-        (sh as? org.graphiks.kanvas.paint.Shader.Image)?.sampling
-    }
+    val requestedSampling = sampling ?: this.sampling
     val samplingFilterMode = when (requestedSampling) {
         org.graphiks.kanvas.paint.SamplingOptions.NEAREST -> "nearest"
-        org.graphiks.kanvas.paint.SamplingOptions.LINEAR,
-        is org.graphiks.kanvas.paint.SamplingOptions.Cubic,
-        null,
-        -> "linear"
+        org.graphiks.kanvas.paint.SamplingOptions.LINEAR -> "linear"
+        is org.graphiks.kanvas.paint.SamplingOptions.Cubic -> "cubic"
     }
     val material = GPUMaterialDescriptor.ImageDraw(
         imageSourceId = image.sourceId,

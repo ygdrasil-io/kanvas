@@ -29,6 +29,152 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class W5eImageConvergenceSurfaceTest {
+    @Test fun unownedDirectImagesKeepExplicitLinearSampling() {
+        // A DrawColor keeps this entire frame outside W5e admission. Losing the
+        // explicit sampler turns the two interior gray pixels into black/white.
+        val linear = listOf(0f, .25f, .75f, 1f).map(::grayAttachment)
+        val nearest = listOf(0f, 0f, 1f, 1f).map(::grayAttachment)
+        for ((sampling, expected) in listOf(SamplingOptions.LINEAR to linear, SamplingOptions.NEAREST to nearest)) {
+            val surface = Surface(4, 1)
+            surface.canvas {
+                drawColor(ColorARGB.Black)
+                drawImage(blackWhiteImage(), rect(4f), sampling, Paint(antiAlias = false))
+            }
+            assertExpectedPixels(expected, surface.render().pixels)
+        }
+    }
+
+    @Test fun unownedDirectCubicKeepsItsTypedRefusal() {
+        val surface = Surface(4, 1)
+        surface.canvas {
+            drawColor(ColorARGB.Black)
+            drawImage(blackWhiteImage(), rect(4f), SamplingOptions.Cubic(0f, .5f), Paint(antiAlias = false))
+        }
+        val failure = assertThrows<IllegalStateException> { surface.render() }
+        assertEquals("unsupported.image.sampling_cubic", failure.message.orEmpty().substringBefore(':'))
+    }
+
+    @Test fun unownedPaddedImageRowsKeepDeclaredStrideAndSourceOffset() {
+        val rows = listOf(
+            listOf(ColorARGB.White, ColorARGB.Red, ColorARGB.Black, ColorARGB.Magenta),
+            listOf(ColorARGB.Red, ColorARGB.Green, ColorARGB.Blue, ColorARGB.Black),
+            listOf(ColorARGB.White, ColorARGB.Yellow, ColorARGB.Cyan, ColorARGB.Red))
+        val expected = endpointBytes(listOf(ColorARGB.Green, ColorARGB.Blue, ColorARGB.Yellow, ColorARGB.Cyan))
+        for (format in listOf(ColorType.RGBA_8888, ColorType.BGRA_8888)) {
+            val rowBytesI32 = 21
+            val payload = ByteArray(rowBytesI32 * 3) { 73 }
+            rows.forEachIndexed { rowI32, colors ->
+                endpointBytes(colors, format == ColorType.BGRA_8888).toByteArray().copyInto(payload, rowI32 * rowBytesI32)
+            }
+            val image = Image.fromPixels(4, 3, payload, format, alphaType = AlphaType.PREMUL, rowBytesI32 = rowBytesI32)
+            val surface = Surface(2, 2)
+            surface.canvas {
+                drawColor(ColorARGB.Black)
+                drawImageRect(image, RectF32.ofLTRB(1f, 1f, 3f, 3f), RectF32.ofLTRB(0f, 0f, 2f, 2f),
+                    SamplingOptions.NEAREST, Paint(antiAlias = false))
+            }
+            assertContentEquals(expected, surface.render().pixels, format.name)
+        }
+    }
+
+    @Test fun unownedSyntheticImageSamplersKeepHistoricalCompatibility() {
+        val linear = listOf(0f, .25f, .75f, 1f).map(::grayAttachment)
+        val nearest = listOf(0f, 0f, 1f, 1f).map(::grayAttachment)
+        val atlasExpected = listOf(0f, 1f, 0f, 0f).map(::grayAttachment)
+        val image = blackWhiteImage()
+        val shaderImage = image.copy(alphaType = AlphaType.UNPREMUL)
+        for (kind in listOf("rect", "nine", "lattice-linear", "lattice-nearest", "atlas")) {
+            val expected = when (kind) { "atlas", "rect" -> atlasExpected; "lattice-nearest" -> nearest; else -> linear }
+            val surface = Surface(4, 1)
+            surface.canvas {
+                drawColor(ColorARGB.Black)
+                when (kind) {
+                    "rect" -> drawRect(rect(2f), Paint(antiAlias = false,
+                        shader = Shader.Image(shaderImage, sampling = SamplingOptions.LINEAR)))
+                    // Legacy Nine/Atlas are historically Linear, unlike promoted Nearest.
+                    "nine" -> drawImageNine(image, rect(2f), rect(4f), Paint(antiAlias = false))
+                    "lattice-linear", "lattice-nearest" -> drawImageLattice(image, Lattice(emptyList(), emptyList()),
+                        rect(4f), sampling = if (kind == "lattice-linear") SamplingOptions.LINEAR else SamplingOptions.NEAREST,
+                        paint = Paint(antiAlias = false))
+                    "atlas" -> drawAtlas(image, listOf(Matrix3x3F32()), listOf(rect(2f)), paint = Paint(antiAlias = false))
+                }
+            }
+            val result = try { surface.render() } catch (failure: IllegalStateException) {
+                throw AssertionError("synthetic image kind=$kind", failure)
+            }
+            assertExpectedPixels(expected, result.pixels)
+        }
+        // Removing the old shader bridge must retain the grid's implicit WHITE paint.
+        val white = endpointBytes(listOf(ColorARGB.White))
+        for (nine in listOf(false, true)) {
+            val mask = Image.fromPixels(1, 1, byteArrayOf(-1), ColorType.ALPHA_8, alphaType = AlphaType.PREMUL)
+            val surface = Surface(1, 1)
+            surface.canvas {
+                drawColor(ColorARGB.Black)
+                if (nine) drawImageNine(mask, rect(), rect())
+                else drawImageLattice(mask, Lattice(emptyList(), emptyList()), rect())
+            }
+            assertContentEquals(white, surface.render().pixels)
+        }
+        val excluded = Surface(4, 1)
+        excluded.canvas {
+            drawColor(ColorARGB.Black)
+            drawRect(rect(4f), Paint(antiAlias = false, shader = Shader.WithLocalMatrix(
+                Shader.Image(image, sampling = SamplingOptions.LINEAR), Matrix3x3F32.scaling(2f, 1f))))
+        }
+        val failure = assertThrows<IllegalStateException> { excluded.render() }
+        assertEquals("unsupported.material.mapping.local_matrix", failure.message.orEmpty().substringBefore(':'))
+        val boundedRoute = Surface(2, 1, config = RenderConfig(preparedImageRoute = PreparedImageRoute.BOUNDED_NEAREST_1_TO_1))
+        boundedRoute.canvas {
+            drawColor(ColorARGB.Black)
+            drawRect(rect(2f), Paint(antiAlias = false, shader = Shader.Image(shaderImage, sampling = SamplingOptions.LINEAR)))
+        }
+        val samplingFailure = assertThrows<IllegalStateException> { boundedRoute.render() }
+        assertEquals("unsupported.image.sampling_filter", samplingFailure.message.orEmpty().substringBefore(':'))
+    }
+
+    @Test fun nonuniformOffsetMultirowSnapshotsPreserveRgbaAndBgraCopies() {
+        val colors = listOf(ColorARGB.White, ColorARGB.Red, ColorARGB.Black, ColorARGB.Magenta,
+            ColorARGB.Red, ColorARGB.Green, ColorARGB.Blue, ColorARGB.Black,
+            ColorARGB.White, ColorARGB.Yellow, ColorARGB.Cyan, ColorARGB.Red)
+        val subsetColors = listOf(ColorARGB.Green, ColorARGB.Blue, ColorARGB.Yellow, ColorARGB.Cyan)
+        val expected = endpointBytes(subsetColors)
+        for (format in PixelFormat.entries) {
+            val fullRaw = endpointBytes(colors, format == PixelFormat.BGRA8)
+            val subsetRaw = endpointBytes(subsetColors, format == PixelFormat.BGRA8)
+            val source = Surface(4, 3, format)
+            source.canvas { colors.forEachIndexed { indexI32, color ->
+                val xF32 = (indexI32 % 4).toFloat(); val yF32 = (indexI32 / 4).toFloat()
+                drawRect(RectF32.ofLTRB(xF32, yF32, xF32 + 1f, yF32 + 1f), paint().copy(color = color))
+            } }
+            assertContentEquals(fullRaw, assertNotNull(source.makeImageSnapshot().pixels).toUByteArray())
+            val subset = assertNotNull(source.makeImageSnapshot(RectF32.ofLTRB(1f, 1f, 3f, 3f)))
+                .copy().reinterpretColorSpace(ColorSpace.SRGB)
+            assertContentEquals(subsetRaw, assertNotNull(subset.pixels).toUByteArray())
+            val recorder = PictureRecorder()
+            recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 2f, 2f)).drawImage(subset,
+                RectF32.ofLTRB(0f, 0f, 2f, 2f), SamplingOptions.NEAREST, paint())
+            val restored = assertNotNull(Picture.fromByteArray(recorder.finishRecordingAsPicture().toByteArray()))
+            val replay = Surface(2, 2)
+            replay.canvas { restored.playback(this) }
+            assertContentEquals(expected, replay.render().pixels)
+        }
+    }
+
+    private fun blackWhiteImage() = Image.fromPixels(2, 1, byteArrayOf(0, 0, 0, -1, -1, -1, -1, -1), alphaType = AlphaType.PREMUL)
+    private fun grayAttachment(valueF32: Float) = bounded(WgslFloatEnvelopeV1Oracle.imageSourceAttachment(
+        arrayOf(WgslFloatEnvelopeV1Oracle.Interval.input(valueF32), WgslFloatEnvelopeV1Oracle.Interval.input(valueF32),
+            WgslFloatEnvelopeV1Oracle.Interval.input(valueF32), WgslFloatEnvelopeV1Oracle.Interval.ONE)))
+    private fun assertExpectedPixels(expected: List<WgslFloatEnvelopeV1Oracle.DrawResult.Bounded>, pixels: UByteArray) {
+        assertEquals(expected.size * 4, pixels.size)
+        expected.forEachIndexed { indexI32, value -> WgslFloatEnvelopeV1Oracle.assertAdmits(value,
+            pixels.copyOfRange(indexI32 * 4, indexI32 * 4 + 4)) }
+    }
+    private fun endpointBytes(colors: List<ColorARGB>, bgra: Boolean = false): UByteArray = colors.flatMap { color ->
+        val rgb = listOf(color.red, color.green, color.blue)
+        (if (bgra) rgb.reversed() else rgb) + color.alpha
+    }.map(Int::toUByte).toUByteArray()
+
     // Losing attachment premultiplication provenance makes translucent red replay
     // saturate to255 instead of remaining near188; expectations precede BOTH renders.
     @Test fun translucentSnapshotReplayPreservesSourceEncoding() {
