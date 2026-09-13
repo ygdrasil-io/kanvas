@@ -4,6 +4,7 @@ package org.graphiks.kanvas.surface
 
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.canvas.Canvas
+import org.graphiks.kanvas.canvas.SceneRecordingLimitException
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
@@ -15,6 +16,7 @@ import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
+import org.graphiks.kanvas.render.ir.SceneCaptureLimits
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
@@ -28,8 +30,32 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import org.graphiks.kanvas.surface.WgslFloatEnvelopeV1Oracle.Interval as I
 
 class W5eImageShaderSurfacePixelTest {
+    @Test fun imageCaptureByteRefusalRollsBackThenRendersOnTheSameSurface() {
+        for (pathI32 in 0..2) {
+            val surface = Surface(2, 1, captureLimits = SceneCaptureLimits(maxImageBytesI64 = 8L))
+            val oversized = Image.fromPixels(3, 1, ByteArray(12), alphaType = AlphaType.PREMUL)
+            val failure = assertThrows<SceneRecordingLimitException> {
+                surface.canvas {
+                    when (pathI32) {
+                        0 -> drawImage(oversized, RectF32.ofLTRB(0f, 0f, 2f, 1f), SamplingOptions.NEAREST)
+                        1 -> drawRect(RectF32.ofLTRB(0f, 0f, 2f, 1f), paint(Shader.Image(oversized)))
+                        else -> drawPath(Path().apply { addRect(RectF32.ofLTRB(0f, 0f, 2f, 1f)) }, paint(Shader.Image(oversized)))
+                    }
+                }
+            }
+            assertEquals("scene-recording-image-bytes-exceeded", failure.diagnostic.code.value)
+            // The refused append never entered this Surface's recording. No Clear/reset/discard.
+            surface.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 2f, 1f), paint(Shader.Image(image()))) }
+            val result = surface.render()
+            assertContentEquals((red + blue).toUByteArray(), result.pixels)
+            assertEquals(1, result.stats.opsDispatched)
+            assertEquals(0, result.stats.opsRefused)
+        }
+    }
+
     @Test fun pureDstImageFrameRetainsNoOpOwnershipWithoutSourceWork() {
         for (pathI32 in 0..2) {
             val surface = Surface(2, 1)
@@ -160,21 +186,42 @@ class W5eImageShaderSurfacePixelTest {
     }
 
     @Test fun pathFillImageShaderUsesCoverageAndFinalBlend() {
-        // SRC with W4e's analytic clip coverage must interpolate destination after source evaluation.
+        val oracle = WgslFloatEnvelopeV1Oracle
+        val imagePaint = paint(Shader.Image(Image.fromPixels(1, 1, byteArrayOf(-1, 0, 0, -1),
+            alphaType = AlphaType.PREMUL))).copy(color = ColorARGB.fromRGBA(0f, 0f, 0f, .5f))
+        val destination = oracle.imageSourceAttachment(arrayOf(I.ZERO, I.ZERO, I.ZERO, I.ONE))
+        require(destination is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { destination.toString() }
+        // One of four samples lies inside the DIFFERENCE rect: .25*255=63.75.
+        // The allowed +/-0.6 UNORM conversion error permits only64. Integer DIFFERENCE
+        // from255 leaves191, whose texture decode bounds the retained .75 coverage.
+        val coverage = oracle.imageUnorm8(191)
+        val rawAlpha = oracle.imageUnorm8(255)
+        val paintAlpha = I.input(imagePaint.color.alphaNormalized)
+        val sourceAlpha = oracle.gradientMultiply(rawAlpha, paintAlpha)
+        val straightRed = oracle.gradientDivide(oracle.imageUnorm8(255), rawAlpha)
+        val sourceRed = oracle.gradientMultiply(oracle.gradientMultiply(oracle.imageSrgbToLinear(straightRed), rawAlpha), paintAlpha)
+        val source = arrayOf(sourceRed, I.ZERO, I.ZERO, sourceAlpha)
+        val fullCoverage = oracle.imageSourceAttachment(source)
+        require(fullCoverage is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { fullCoverage.toString() }
+        val expected = oracle.imageSourceAttachment(Array(4) { channelI32 ->
+            val dst = destination.state.linearPremul[channelI32]
+            val delta = oracle.gradientSubtract(source[channelI32], dst)
+            oracle.gradientHull(oracle.gradientAdd(dst, oracle.gradientMultiply(coverage, delta)),
+                oracle.gradientFma(coverage, delta, dst))
+        })
+        require(expected is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { expected.toString() }
+        // Half-alpha SRC over opaque black distinguishes post-blend coverage (alpha~.625)
+        // from both SrcOver (alpha1) and source-only multiplication/replacement (alpha~.375).
         val surface = Surface(4, 4)
         surface.canvas {
-            drawPath(Path().apply { addRect(RectF32.ofLTRB(0f, 0f, 4f, 4f)) }, Paint(color = ColorARGB.Blue, antiAlias = false))
-            clipRect(RectF32.ofLTRB(-1f, -1f, .5f, 5f), ClipOp.DIFFERENCE, antiAlias = true)
-            drawPath(Path().apply { addRect(RectF32.ofLTRB(0f, 0f, 4f, 4f)) },
-                paint(Shader.Image(Image.fromPixels(1, 1, byteArrayOf(-1, 0, 0, -1), alphaType = AlphaType.PREMUL))))
+            drawPath(Path().apply { addRect(RectF32.ofLTRB(0f, 0f, 4f, 4f)) }, Paint(color = ColorARGB.Black, antiAlias = false))
+            clipRect(RectF32.ofLTRB(-1f, -1f, .5f, 1.5f), ClipOp.DIFFERENCE, antiAlias = true)
+            drawPath(Path().apply { addRect(RectF32.ofLTRB(0f, 0f, 4f, 4f)) }, imagePaint)
         }
         val result = surface.render()
-        pixel(result.pixels, 4, 1, 1, red)
-        // W4e's established 2x2 clip samples are at .25/.75: the first column retains two of four.
-        val edge = result.pixels.copyOfRange(16, 20).map(UByte::toInt)
-        assertEquals(255, edge[3])
-        assertEquals(0, edge[1])
-        check(edge[0] in 187..189 && edge[2] in 187..189) { "Expected .5 SRC coverage over blue, got $edge" }
+        oracle.assertAdmits(fullCoverage, result.pixels.copyOfRange(20, 24))
+        // At pixel(0,1), W4e's established .25/.75 2x2 positions retain three of four samples.
+        oracle.assertAdmits(expected, result.pixels.copyOfRange(16, 20))
         assertEquals(2, result.stats.opsDispatched)
         assertEquals(0, result.stats.opsRefused)
     }
@@ -206,7 +253,7 @@ class W5eImageShaderSurfacePixelTest {
         assertContentEquals((clear + red + red + blue + blue + clear).toUByteArray(), surface.render().pixels)
     }
 
-    @Test fun hugeFiniteImageShaderCoordinatesRefuseAndRecover() {
+    @Test fun hugeFiniteImageShaderCoordinatesRefuseAndRecoverOnSameRuntime() {
         val surface = Surface(2, 1)
         surface.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 2f, 1f), paint(
             Shader.WithLocalMatrix(Shader.Image(image()), Matrix3x3F32.translation(-1e20f, 0f)))) }
@@ -217,7 +264,7 @@ class W5eImageShaderSurfacePixelTest {
         assertContentEquals((red + blue).toUByteArray(), healthy.render().pixels)
     }
 
-    @Test fun invalidImageLocalMatricesRefuseAndRecover() {
+    @Test fun invalidImageLocalMatricesRefuseAndRecoverOnSameRuntime() {
         for ((matrixF32, code) in listOf(
             Matrix3x3F32(tx = Float.NaN) to "local-matrix-non-finite",
             Matrix3x3F32.scaling(0f, 1f) to "local-matrix-singular",
@@ -239,13 +286,13 @@ class W5eImageShaderSurfacePixelTest {
         val mask = Image.fromPixels(1, 1, byteArrayOf(-1), ColorType.ALPHA_8, alphaType = AlphaType.PREMUL)
         val surface = Surface(1, 1)
         val sourcePaint = paint(Shader.Opacity(Shader.Image(mask), .5f)).copy(color = ColorARGB.fromRGBA(0f, 1f, 0f, .5f))
+        // Independent source equations: linear(paint.rgb)*paint.a*shaderOpacity*A8.
+        val expected = W5eDecodedImageCpuOracle.colorPixel(ColorType.ALPHA_8, AlphaType.PREMUL,
+            org.graphiks.kanvas.color.ColorSpace.SRGB, byteArrayOf(-1), paintAlphaF32 = .5f, paintColor = sourcePaint.color)
+        require(expected is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { expected.toString() }
         surface.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), sourcePaint) }
         val result = surface.render()
-        assertEquals(0, result.pixels[0].toInt())
-        assertEquals(0, result.pixels[2].toInt())
-        check(result.pixels[1].toInt() in 136..138 && result.pixels[3].toInt() in 63..64) {
-            "Expected quarter-alpha green, got ${result.pixels.toList()}"
-        }
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels)
     }
 
     @Test fun fractionalDirectImageUsesExistingRectCoverage() {
@@ -275,6 +322,15 @@ class W5eImageShaderSurfacePixelTest {
     }
 
     @Test fun directImageUsesComplexClipCoverageAndFinalBlend() {
+        val oracle = WgslFloatEnvelopeV1Oracle
+        // Two of four clip samples: .5*255=127.5 permits only127/128 under +/-0.6.
+        // DIFFERENCE swaps those codes, and the integer fold preserves them.
+        val coverage = oracle.gradientHull(oracle.imageUnorm8(127), oracle.imageUnorm8(128))
+        val raw = oracle.imageUnorm8(255)
+        val sourceRed = oracle.gradientMultiply(oracle.imageSrgbToLinear(oracle.gradientDivide(raw, raw)), raw)
+        val expected = oracle.imageSourceAttachment(arrayOf(oracle.gradientMultiply(sourceRed, coverage),
+            I.ZERO, I.ZERO, oracle.gradientMultiply(raw, coverage)))
+        require(expected is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { expected.toString() }
         // A typed W4e clip producer precedes the image shading packet and must never sample the image.
         val surface = Surface(4, 2)
         surface.canvas {
@@ -285,7 +341,7 @@ class W5eImageShaderSurfacePixelTest {
         val result = surface.render()
         pixel(result.pixels, 4, 1, 0, red)
         pixel(result.pixels, 4, 2, 0, blue)
-        check(result.pixels[3].toInt() in 127..128)
+        oracle.assertAdmits(expected, result.pixels.copyOfRange(0, 4))
         assertEquals(1, result.stats.opsDispatched)
         assertEquals(0, result.stats.opsRefused)
     }
