@@ -342,12 +342,16 @@ internal fun materializeW5aSourcePartitionV2(
                         entries = listOf(BindGroupLayoutEntry(binding = 0u, visibility = GPUShaderStage.Fragment,
                             buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform, hasDynamicOffset = false,
                                 minBindingSize = source.stage.uniformByteCountI64.toULong()))) +
-                            if (source.stage.imageV3 != null) listOf(BindGroupLayoutEntry(binding = 1u,
-                                visibility = GPUShaderStage.Fragment, texture = TextureBindingLayout(sampleType = GPUTextureSampleType.Float)))
-                            else if (source.stage.gradientStopSlab == null) emptyList() else listOf(
-                                BindGroupLayoutEntry(binding = 1u, visibility = GPUShaderStage.Fragment,
-                                    buffer = BufferBindingLayout(type = GPUBufferBindingType.ReadOnlyStorage,
-                                        hasDynamicOffset = false, minBindingSize = 32uL))),
+                            source.stage.bindingManifest.filter { it.bindingI32 != 0 }.map { binding ->
+                                when (binding.resourceKind) {
+                                    "sampledTexture" -> BindGroupLayoutEntry(binding = binding.bindingI32.toUInt(),
+                                        visibility = GPUShaderStage.Fragment, texture = TextureBindingLayout(sampleType = GPUTextureSampleType.Float))
+                                    "storageBuffer" -> BindGroupLayoutEntry(binding = binding.bindingI32.toUInt(), visibility = GPUShaderStage.Fragment,
+                                        buffer = BufferBindingLayout(type = GPUBufferBindingType.ReadOnlyStorage,
+                                            hasDynamicOffset = false, minBindingSize = 32uL))
+                                    else -> error("Invalid source manifest resource")
+                                }
+                            },
                     )))
                     val shader = owned.own(device.createShaderModule(ShaderModuleDescriptor(
                         label = "Kanvas.w5a.source-v2.${source.stage.structuralId}", code = composeSource(template, source, destination, destinationCopy?.logicalBounds))))
@@ -388,9 +392,11 @@ internal fun materializeW5aSourcePartitionV2(
                 val group = groups.getOrPut(source.stage.canonicalIdentity to materialLayout) {
                     val entries = mutableListOf(BindGroupEntry(binding = 0u,
                         resource = BufferBinding(buffer = buffer, offset = 0uL, size = bytes.size.toULong())))
-                    source.stage.gradientStopSlab?.let { slab -> entries += BindGroupEntry(binding = 1u,
+                    source.stage.gradientStopSlab?.let { slab -> entries += BindGroupEntry(
+                        binding = source.stage.bindingManifest.single { it.resourceKind == "storageBuffer" }.bindingI32.toUInt(),
                         resource = BufferBinding(buffer = requireNotNull(stopBuffer), offset = 0uL, size = slab.byteSizeI64.toULong())) }
-                    imageLease?.let { entries += GPUW5eImageNativeV1.binding(it) }
+                    imageLease?.let { entries += GPUW5eImageNativeV1.binding(it,
+                        source.stage.bindingManifest.single { it.resourceKind == "sampledTexture" }.bindingI32.toUInt()) }
                     GPUPreparedNativeBindGroupOperand(owned.own(device.createBindGroup(BindGroupDescriptor(
                         label = "Kanvas.w5a.source-group1-v2", layout = materialLayout, entries = entries))), generation)
                 }

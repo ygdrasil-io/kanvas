@@ -11,11 +11,13 @@ internal object GPUPlanSurfaceCandidateGate {
         operations.any { it is DisplayOp.DrawImage } && operations.all { operation ->
             when (operation) {
                 is DisplayOp.DrawImage -> operation.image.pixels != null &&
-                    operation.image.colorType == org.graphiks.kanvas.image.ColorType.RGBA_8888 &&
-                    operation.image.alphaType == org.graphiks.kanvas.image.AlphaType.PREMUL &&
-                    operation.image.colorSpace == org.graphiks.kanvas.color.ColorSpace.SRGB &&
+                    operation.image.colorType in setOf(org.graphiks.kanvas.image.ColorType.RGBA_8888,
+                        org.graphiks.kanvas.image.ColorType.BGRA_8888, org.graphiks.kanvas.image.ColorType.SRGBA_8888,
+                        org.graphiks.kanvas.image.ColorType.ALPHA_8) &&
+                    operation.image.alphaType in setOf(org.graphiks.kanvas.image.AlphaType.OPAQUE,
+                        org.graphiks.kanvas.image.AlphaType.PREMUL, org.graphiks.kanvas.image.AlphaType.UNPREMUL) &&
                     operation.sampling == org.graphiks.kanvas.paint.SamplingOptions.NEAREST &&
-                    operation.paint.let { it == null || it.shader == null && it.blender == null &&
+                    operation.paint.let { it == null || it.blender == null &&
                         it.colorFilter == null && it.maskFilter == null && it.imageFilter == null &&
                         it.pathEffect == null && it.style == org.graphiks.kanvas.paint.PaintStyle.FILL } &&
                     operation.clip !is org.graphiks.kanvas.canvas.ClipStack.Complex &&

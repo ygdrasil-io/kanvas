@@ -32,8 +32,7 @@ private fun GPUFramePlan.w5eImageAllocationsV3(limits: GPULimits): List<GPUFrame
     steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
         .mapNotNull { it.materialSourcePartitionV3()?.stage?.imageV3?.cacheRequest }
         .distinctBy { it.canonicalPhysicalIdentity }.flatMap { request ->
-            val alignmentI64 = maxOf(256L, limits.copyBytesPerRowAlignment)
-            require(alignmentI64 % 256L == 0L && alignmentI64 % limits.copyBytesPerRowAlignment == 0L)
+            val alignmentI64 = lcmW5eAlignmentI64(256L, limits.copyBytesPerRowAlignment)
             val logicalRowI64 = Math.multiplyExact(request.widthI32.toLong(), request.format.bytesPerPixelI32.toLong())
             val rowI64 = Math.addExact(logicalRowI64, (alignmentI64 - logicalRowI64 % alignmentI64) % alignmentI64)
             listOf(
@@ -48,7 +47,25 @@ private fun GPUFramePlan.w5eImageAllocationsV3(limits: GPULimits): List<GPUFrame
 
 internal fun GPUFramePlan.w5aCombinedMemoryBudgetV2(limits: GPULimits): GPUFrameMemoryBudgetPlan =
     GPUFrameMemoryBudgetPlanner.plan(GPUFrameMemoryBudgetRequest(
-        allocations = memoryBudget.allocations + w5aMaterialAllocationsV2() + w5eImageAllocationsV3(limits),
+        allocations = memoryBudget.allocations + w5aMaterialAllocationsV2() + w5eImageAllocationsV3(limits) +
+            w5eChildStopAllocationsV3(),
         configuredAggregateBudgetBytes = memoryBudget.configuredAggregateBudgetBytes,
         deviceLimits = limits,
     ))
+
+/** The W5e construction graph is neutral; its image children's shared slab is owned here. */
+private fun GPUFramePlan.w5eChildStopAllocationsV3(): List<GPUFrameMemoryAllocation> =
+    steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+        .mapNotNull { it.materialSourcePartitionV3()?.stage?.takeIf { stage -> stage.imageV3 != null }?.gradientStopSlab }
+        .distinctBy { it.canonicalIdentity }.map { slab ->
+            GPUFrameMemoryAllocation("w5e.child-stops-v3.${slab.canonicalIdentity}", GPUFrameMemoryCategory.ReusableScratch,
+                slab.byteSizeI64, GPUFrameMemoryResourceKind.Buffer, null, 0, steps.size.coerceAtLeast(1))
+        }
+
+private fun lcmW5eAlignmentI64(leftI64: Long, rightI64: Long): Long {
+    require(leftI64 > 0L && rightI64 > 0L)
+    var left = leftI64
+    var right = rightI64
+    while (right != 0L) { val remainder = left % right; left = right; right = remainder }
+    return Math.multiplyExact(leftI64 / left, rightI64)
+}

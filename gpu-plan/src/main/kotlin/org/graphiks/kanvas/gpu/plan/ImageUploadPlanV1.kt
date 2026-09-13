@@ -28,21 +28,25 @@ public class ImageUploadPlanV1 private constructor(
 
     internal companion object {
         fun seal(pixels: ImageResourceSnapshot.Pixels): ImageUploadPlanV1 {
-            require(pixels.pixelFormat == ImagePixelFormat.RGBA_8888) { W5eImagePlanDiagnostics.UnsupportedSlice }
-            val logicalI64 = Math.multiplyExact(pixels.width.toLong(), 4L)
-            val sizeI64 = Math.multiplyExact(logicalI64, pixels.height.toLong())
-            require(pixels.width > 0 && pixels.height > 0 && pixels.rowBytes.toLong() >= logicalI64 && sizeI64 <= Int.MAX_VALUE) {
-                W5eImagePlanDiagnostics.InvalidLayout
-            }
+            val format = pixels.pixelFormat
+            require(format in setOf(ImagePixelFormat.RGBA_8888, ImagePixelFormat.BGRA_8888,
+                ImagePixelFormat.SRGBA_8888, ImagePixelFormat.ALPHA_8)) { W5eImagePlanDiagnostics.Format }
+            require(pixels.width > 0 && pixels.height > 0) { W5eImagePlanDiagnostics.Dimensions }
+            val logicalI64 = try { Math.multiplyExact(pixels.width.toLong(), format.bytesPerPixel.toLong()) }
+            catch (_: ArithmeticException) { throw IllegalArgumentException(W5eImagePlanDiagnostics.Overflow) }
+            val sizeI64 = try { Math.multiplyExact(logicalI64, pixels.height.toLong()) }
+            catch (_: ArithmeticException) { throw IllegalArgumentException(W5eImagePlanDiagnostics.Overflow) }
+            require(pixels.rowBytes.toLong() >= logicalI64) { W5eImagePlanDiagnostics.Stride }
+            require(sizeI64 <= Int.MAX_VALUE) { W5eImagePlanDiagnostics.Overflow }
             val source = pixels.copyPixels()
-            require(source.size.toLong() >= Math.multiplyExact(pixels.rowBytes.toLong(), pixels.height.toLong())) {
-                W5eImagePlanDiagnostics.InvalidLayout
-            }
+            val requiredPayloadI64 = try { Math.multiplyExact(pixels.rowBytes.toLong(), pixels.height.toLong()) }
+            catch (_: ArithmeticException) { throw IllegalArgumentException(W5eImagePlanDiagnostics.Overflow) }
+            require(source.size.toLong() >= requiredPayloadI64) { W5eImagePlanDiagnostics.Payload }
             val tight = ByteArray(sizeI64.toInt())
             for (rowI32 in 0 until pixels.height) source.copyInto(tight, Math.toIntExact(rowI32 * logicalI64),
                 Math.multiplyExact(rowI32, pixels.rowBytes), Math.addExact(Math.multiplyExact(rowI32, pixels.rowBytes), logicalI64.toInt()))
             return ImageUploadPlanV1(pixels.width, pixels.height, logicalI64, pixels.rowBytes.toLong(),
-                pixels.pixelFormat, ImagePhysicalFormatV1.RGBA8_UNORM, tight)
+                format, if (format == ImagePixelFormat.ALPHA_8) ImagePhysicalFormatV1.R8_UNORM else ImagePhysicalFormatV1.RGBA8_UNORM, tight)
         }
     }
 }

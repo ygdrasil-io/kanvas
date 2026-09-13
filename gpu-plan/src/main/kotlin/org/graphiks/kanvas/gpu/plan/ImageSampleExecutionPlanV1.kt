@@ -50,8 +50,8 @@ public sealed interface ImageMaterialProgramV3 : MaterialProgramPlan {
         override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5e-image-color-v3:$channelOrder:$alphaType:$transfer:$gamut")
         override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.imageColor()
     }
-    public class MaskV3(public val child: MaterialProgramPlan) : ImageMaterialProgramV3 {
-        override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5e-image-mask-v3(${child.structuralId.value})")
+    public class MaskV3(public val child: MaterialProgramPlan, public val alphaType: ImageAlphaType) : ImageMaterialProgramV3 {
+        override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5e-image-mask-v3:$alphaType(${child.structuralId.value})")
         override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.imageMask()
     }
 }
@@ -68,6 +68,7 @@ public class ImageSampleExecutionPlanV1 internal constructor(
     public val colorAlpha: ImageColorAlphaPlanV1,
     public val numericAuthority: ImageNumericAuthorityV1,
     public val paintAlphaF32: Float,
+    public val childSourceIdentity: String?,
     public val totalPessimisticBudgetBytesI64: Long,
 ) {
     public val sampling: ImageSamplingPlanV1 = ImageSamplingPlanV1.Nearest
@@ -78,6 +79,10 @@ public class ImageSampleExecutionPlanV1 internal constructor(
     public fun copySourceCellsF32(): List<RectF32> = listOf(coordinates.copySourceF32())
     public fun copyDestinationCellsF32(): List<RectF32> = listOf(coordinates.copyDestinationF32())
     public val canonicalIdentity: String = "image-execution-v1:${upload.contentIdentity}:${coordinates.canonicalIdentity}:$colorAlpha:" +
-        "${sampling.name}:${tileX.name}:${tileY.name}:${paintAlphaF32.toRawBits()}:${numericAuthority.canonicalIdentity}:budget=$totalPessimisticBudgetBytesI64"
-    init { require(paintAlphaF32.isFinite() && paintAlphaF32 in 0f..1f && totalPessimisticBudgetBytesI64 >= upload.byteCountI64) }
+        "${sampling.name}:${tileX.name}:${tileY.name}:${paintAlphaF32.toRawBits()}:" +
+        childSourceIdentity.orEmpty() +
+        ":${numericAuthority.canonicalIdentity}:budget=$totalPessimisticBudgetBytesI64"
+    init {
+        require(paintAlphaF32.isFinite() && paintAlphaF32 in 0f..1f && totalPessimisticBudgetBytesI64 >= upload.byteCountI64)
+    }
 }

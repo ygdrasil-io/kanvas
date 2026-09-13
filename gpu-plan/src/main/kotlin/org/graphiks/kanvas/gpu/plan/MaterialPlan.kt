@@ -225,6 +225,39 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
 
     public fun entries(): List<MaterialPlanEntry> = storedEntries.indices.map { entry(MaterialPlanRef(it)) }
 
+    /** Binding/coordinate/stop content identity independent of slab-range rebasing. */
+    public fun sourceIdentity(root: MaterialPlanRef): String {
+        val source = entry(root)
+        return source.interningKey() + if (source.program is MaterialProgramPlan.OpacityV1 || source.program is ImageMaterialProgramV3.MaskV3)
+            ":child:" + sourceIdentity(MaterialPlanRef(root.indexI32 - 1)) else ""
+    }
+
+    public fun authenticatesImage(root: MaterialPlanRef, execution: ImageSampleExecutionPlanV1): Boolean {
+        val source = entry(root)
+        val program = source.program as? ImageMaterialProgramV3 ?: return false
+        return (source.bindings as? ImageSampleV3)?.execution === execution &&
+            execution.numericAuthority.authenticates(program, execution) && when (program) {
+                is ImageMaterialProgramV3.ColorV3 -> execution.childSourceIdentity == null
+                is ImageMaterialProgramV3.MaskV3 -> root.indexI32 > 0 &&
+                    entry(MaterialPlanRef(root.indexI32 - 1)).program.structuralId == program.child.structuralId &&
+                    sourceIdentity(MaterialPlanRef(root.indexI32 - 1)) == execution.childSourceIdentity
+            }
+    }
+
+    public fun imageChildAuthority(root: MaterialPlanRef): PlanDrawMaterialAuthority? {
+        val execution = (entry(root).bindings as? ImageSampleV3)?.execution ?: return null
+        require(authenticatesImage(root, execution)) { W5eImagePlanDiagnostics.InvalidContract }
+        if (entry(root).program !is ImageMaterialProgramV3.MaskV3) return null
+        val child = MaterialPlanRef(root.indexI32 - 1)
+        var leaf = child
+        while (entry(leaf).bindings is MaterialBindingPlan.OpacityF32V1) leaf = MaterialPlanRef(leaf.indexI32 - 1)
+        return when (val binding = entry(leaf).bindings) {
+            is MaterialBindingPlan.GradientV2 -> PlanDrawMaterialAuthority.MaterialV2(child, binding.numericAuthority.coordinates)
+            is MaterialBindingPlan.GradientV1 -> PlanDrawMaterialAuthority.MaterialV1(child, binding.numericAuthority.coordinates)
+            else -> PlanDrawMaterialAuthority.MaterialV1(child)
+        }
+    }
+
     public companion object {
         /** Public bound for a closed W5a material table; rendering fails closed beyond it. */
         public const val MAX_ENTRIES_I32: Int = 2048
@@ -294,7 +327,7 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
                 })
             }
             val slab = stops.takeIf { it.isNotEmpty() }?.let(GradientStopSlabPlanV1::of)
-            return MaterialPlanTable(rewritten.mapIndexed { indexI32, entry ->
+            val table = MaterialPlanTable(rewritten.mapIndexed { indexI32, entry ->
                 val binding = entry.bindings
                 val sealed = when (binding) {
                     is MaterialBindingPlan.GradientV2 -> {
@@ -313,6 +346,14 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
                 }
                 sealed.copy(stopSlab = slab)
             })
+            table.entries().forEachIndexed { indexI32, entry ->
+                (entry.bindings as? ImageSampleV3)?.let {
+                    require(table.authenticatesImage(MaterialPlanRef(indexI32), it.execution)) {
+                        W5eImagePlanDiagnostics.InvalidContract
+                    }
+                }
+            }
+            return table
         }
 
         /**

@@ -397,6 +397,31 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
     /** Counts all direct and graph-referenced images before resource conversion begins. */
     private fun preflightImage(image: org.graphiks.kanvas.image.Image) {
         if (preflightImages.any { it.matchesCapturedImage(image) }) return
+        // Invalid public pixel layouts cannot enter immutable IR. Keep their promoted image
+        // diagnostics at this metadata boundary, before resource copying or GPU allocation.
+        if (image.pixels != null && image.colorType in setOf(org.graphiks.kanvas.image.ColorType.RGBA_8888,
+                org.graphiks.kanvas.image.ColorType.BGRA_8888, org.graphiks.kanvas.image.ColorType.SRGBA_8888,
+                org.graphiks.kanvas.image.ColorType.ALPHA_8) && image.alphaType in setOf(
+                org.graphiks.kanvas.image.AlphaType.OPAQUE, org.graphiks.kanvas.image.AlphaType.PREMUL,
+                org.graphiks.kanvas.image.AlphaType.UNPREMUL)) {
+            if (image.width <= 0 || image.height <= 0)
+                throw CaptureFailure("unsupported.material.image.dimensions", "Image dimensions must be positive")
+            val logicalRowI64: Long
+            val payloadI64: Long
+            try {
+                logicalRowI64 = Math.multiplyExact(image.width.toLong(), image.colorType.bytesPerPixel.toLong())
+                val logicalBytesI64 = Math.multiplyExact(logicalRowI64, image.height.toLong())
+                payloadI64 = Math.multiplyExact(image.rowBytesI32.toLong(), image.height.toLong())
+                if (logicalBytesI64 > Int.MAX_VALUE || payloadI64 > Int.MAX_VALUE)
+                    throw CaptureFailure("unsupported.material.image.overflow", "Image layout exceeds owned byte storage")
+            } catch (_: ArithmeticException) {
+                throw CaptureFailure("unsupported.material.image.overflow", "Image byte layout overflows I64")
+            }
+            if (image.rowBytesI32.toLong() < logicalRowI64)
+                throw CaptureFailure("unsupported.material.image.stride", "Image stride does not cover one logical row")
+            if (image.pixels.size.toLong() < payloadI64)
+                throw CaptureFailure("unsupported.material.image.payload", "Image payload does not cover declared rows")
+        }
         if (preflightImages.size >= limits.maxResources) {
             throw CaptureFailure("scene-resource-limit", "Capture has more than ${limits.maxResources} image resources")
         }

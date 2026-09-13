@@ -10,7 +10,8 @@ internal class W5ePreparedFrameWitnessV1(val bridge: W5eImageConstructionPlanV1,
     private val packets = packets.toList()
     private val geometry = requireNotNull(packets.firstOrNull()?.w5bFinalFrameWitnessV3)
     val sources: Map<GPUDrawPacketID, W5aPacketMaterialSourceV2> = bridge.imageDraws().zip(packets).associate { (image, packet) ->
-        packet.packetId to W5aPacketMaterialSourceV2.issueImageV3(image.execution, image.commandIndex)
+        require(bridge.materialTable.authenticatesImage(image.materialAuthority.ref, image.execution)) { W5eImagePlanDiagnostics.InvalidContract }
+        packet.packetId to W5aPacketMaterialSourceV2.issueImageV3(bridge.materialTable, image.materialAuthority.ref, image.commandIndex)
     }
     val canonicalIdentity: String = bridge.canonicalIdentity
     init {

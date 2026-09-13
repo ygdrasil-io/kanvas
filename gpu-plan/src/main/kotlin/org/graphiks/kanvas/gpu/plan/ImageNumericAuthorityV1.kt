@@ -10,25 +10,39 @@ public class ImageNumericAuthorityV1 private constructor(
     private val programIdentity: MaterialProgramPlanId,
     private val uploadIdentity: String,
     private val coordinateIdentity: String,
+    private val paintAlphaBitsI32: Int,
     deviceBoundsF32: RectF32,
 ) {
     private val bounds = deviceBoundsF32.copy()
     public fun copyDeviceBoundsF32(): RectF32 = bounds.copy()
     public val canonicalIdentity: String = "${graph.topologyIdentity}:${programIdentity.value}:$uploadIdentity:$coordinateIdentity:" +
-        listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).joinToString(",") { it.toRawBits().toString() }
+        listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).joinToString(",") { it.toRawBits().toString() } +
+        ":paint=$paintAlphaBitsI32:texel-domain-v1:unorm8:positive-alpha-ge-2^-9:all-intermediates-lt-2^36"
     public fun authenticates(program: ImageMaterialProgramV3, execution: ImageSampleExecutionPlanV1): Boolean =
         program.structuralId == programIdentity && execution.upload.contentIdentity == uploadIdentity &&
             execution.coordinates.canonicalIdentity == coordinateIdentity && execution.numericAuthority === this &&
+            execution.paintAlphaF32.toRawBits() == paintAlphaBitsI32 && execution.colorAlpha == graph.colorAlpha &&
             execution.sampling == ImageSamplingPlanV1.Nearest && execution.tileX == ImageTilePlanV1.CLAMP &&
-            execution.tileY == ImageTilePlanV1.CLAMP && program is ImageMaterialProgramV3.ColorV3 &&
-            execution.colorAlpha == ImageColorAlphaPlanV1(program.channelOrder, program.alphaType, program.transfer, program.gamut)
+            execution.tileY == ImageTilePlanV1.CLAMP &&
+            execution.colorAlpha == when (program) {
+                is ImageMaterialProgramV3.ColorV3 -> ImageColorAlphaPlanV1(program.channelOrder, program.alphaType, program.transfer, program.gamut)
+                is ImageMaterialProgramV3.MaskV3 -> ImageColorAlphaPlanV1(ImageChannelOrderV1.ALPHA, program.alphaType,
+                    ImageTransferPlanV1.NONE, ImageGamutPlanV1.NONE)
+            }
 
     internal companion object {
-        fun seal(program: ImageMaterialProgramV3.ColorV3, upload: ImageUploadPlanV1,
-            coordinates: ImageCoordinatePlanV1, deviceBoundsF32: RectF32): ImageNumericAuthorityV1? {
+        fun seal(program: ImageMaterialProgramV3, upload: ImageUploadPlanV1,
+            coordinates: ImageCoordinatePlanV1, deviceBoundsF32: RectF32, paintAlphaF32: Float): ImageNumericAuthorityV1? {
             if (listOf(deviceBoundsF32.left, deviceBoundsF32.top, deviceBoundsF32.right, deviceBoundsF32.bottom)
                     .any { !it.isFinite() } || !deviceBoundsF32.isSorted()) return null
-            val graph = ImageNumericOperationGraphV1.nearest()
+            if (!paintAlphaF32.isFinite() || paintAlphaF32 !in 0f..1f) return null
+            val color = when (program) {
+                is ImageMaterialProgramV3.ColorV3 -> ImageColorAlphaPlanV1(program.channelOrder, program.alphaType, program.transfer, program.gamut)
+                is ImageMaterialProgramV3.MaskV3 -> ImageColorAlphaPlanV1(ImageChannelOrderV1.ALPHA, program.alphaType,
+                    ImageTransferPlanV1.NONE, ImageGamutPlanV1.NONE)
+            }
+            if (!provesFiniteTexelDomain(color, upload)) return null
+            val graph = ImageNumericOperationGraphV1.nearest(color)
             val values = coordinates.uniformValuesF32()
             var finite = true
             fun rounded(lowF64: Double, highF64: Double, division: Boolean = false): ClosedFloatingPointRange<Double> {
@@ -68,7 +82,41 @@ public class ImageNumericAuthorityV1 private constructor(
             if (!finite || denominator.start <= 0.0 && denominator.endInclusive >= 0.0) return null
             val samples = listOf(evaluate(graph.sourceX), evaluate(graph.sourceY))
             if (!finite || samples.any { floor(it.start) < Int.MIN_VALUE.toDouble() || floor(it.endInclusive) > Int.MAX_VALUE.toDouble() }) return null
-            return ImageNumericAuthorityV1(graph, program.structuralId, upload.contentIdentity, coordinates.canonicalIdentity, deviceBoundsF32)
+            return ImageNumericAuthorityV1(graph, program.structuralId, upload.contentIdentity, coordinates.canonicalIdentity,
+                paintAlphaF32.toRawBits(), deviceBoundsF32)
+        }
+
+        /**
+         * A universal finite-domain proof for the authenticated byte upload, not a pixel oracle.
+         * UNORM8 endpoints are exact; every positive channel is at least 1/255 including its
+         * F32 conversion envelope, hence greater than 2^-9. The zero-alpha branch dominates
+         * division. With its full 2.5-ULP envelope, straight RGB is nonnegative and <2^10.
+         * The transfer's pow base (c + .055)/1.055 is strictly between 2^-5 and 2^11,
+         * including eagerly evaluated select alternatives. WGSL pow inherits log2, multiply,
+         * exp2: log2 stays in (-6,12), the exponent in (-16,30), exp2 below 2^31 with
+         * their full accuracy envelopes. Three gamut products (coefficients magnitude <2),
+         * every association/contraction, and premultiplication/paint opacity stay below 2^36.
+         * FTZ adds zero alternatives only. A8 returns [0,1]; its authenticated W5a/W5d child
+         * has its own finite source proof. These coarse bounds prove finiteness, not final bytes.
+         */
+        private fun provesFiniteTexelDomain(color: ImageColorAlphaPlanV1, upload: ImageUploadPlanV1): Boolean {
+            if (color.alphaType !in setOf(org.graphiks.kanvas.render.ir.ImageAlphaType.OPAQUE,
+                    org.graphiks.kanvas.render.ir.ImageAlphaType.PREMUL, org.graphiks.kanvas.render.ir.ImageAlphaType.UNPREMUL)) return false
+            return when (color.channelOrder) {
+                ImageChannelOrderV1.ALPHA -> upload.logicalFormat == org.graphiks.kanvas.render.ir.ImagePixelFormat.ALPHA_8 &&
+                    upload.physicalFormat == ImagePhysicalFormatV1.R8_UNORM && color.transfer == ImageTransferPlanV1.NONE && color.gamut == ImageGamutPlanV1.NONE
+                ImageChannelOrderV1.BGRA, ImageChannelOrderV1.RGBA -> {
+                    val formatMatches = if (color.channelOrder == ImageChannelOrderV1.BGRA)
+                        upload.logicalFormat == org.graphiks.kanvas.render.ir.ImagePixelFormat.BGRA_8888 else
+                        upload.logicalFormat in setOf(org.graphiks.kanvas.render.ir.ImagePixelFormat.RGBA_8888,
+                            org.graphiks.kanvas.render.ir.ImagePixelFormat.SRGBA_8888)
+                    formatMatches && upload.physicalFormat == ImagePhysicalFormatV1.RGBA8_UNORM &&
+                        (color.transfer == ImageTransferPlanV1.SRGB && color.gamut in setOf(ImageGamutPlanV1.SRGB, ImageGamutPlanV1.DISPLAY_P3) ||
+                            color.transfer == ImageTransferPlanV1.LINEAR && color.gamut == ImageGamutPlanV1.SRGB) &&
+                        (upload.logicalFormat != org.graphiks.kanvas.render.ir.ImagePixelFormat.SRGBA_8888 ||
+                            color.transfer == ImageTransferPlanV1.SRGB && color.gamut == ImageGamutPlanV1.SRGB)
+                }
+            }
         }
     }
 }

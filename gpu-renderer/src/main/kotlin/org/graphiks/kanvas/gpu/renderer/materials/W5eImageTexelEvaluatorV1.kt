@@ -1,20 +1,19 @@
 package org.graphiks.kanvas.gpu.renderer.materials
 
 import org.graphiks.kanvas.gpu.plan.*
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
+import org.graphiks.kanvas.gpu.plan.ImageNumericOperationGraphV1.TexelOperation
 
 /** Sole W5e sampling/color emitter. Task 3 extends this graph consumer, not a parallel sampler. */
 internal object W5eImageTexelEvaluatorV1 {
-    fun uniformBytes(execution: ImageSampleExecutionPlanV1): ByteArray = ByteBuffer.allocate(96).order(ByteOrder.LITTLE_ENDIAN).apply {
-        execution.coordinates.uniformValuesF32().forEach(::putFloat)
-        putFloat(execution.upload.widthI32.toFloat()).putFloat(execution.upload.heightI32.toFloat())
-        putFloat(execution.paintAlphaF32).putFloat(0f)
-    }.array()
-
-    fun declarations(execution: ImageSampleExecutionPlanV1): String {
+    fun declarations(execution: ImageSampleExecutionPlanV1, child: W5aMaterialSourceStage?, layout: ImageSourceLayoutV3): String {
         val graph = execution.numericAuthority.graph
-        require(graph.contractId == "WgslFloatEnvelopeV1" && graph.texelOperations() == ImageNumericOperationGraphV1.TexelOperation.entries)
+        val maskSource = execution.colorAlpha.channelOrder == ImageChannelOrderV1.ALPHA
+        require(maskSource == (child != null))
+        require(layout.hasChildGradientStorage == (child?.gradientStopSlab != null))
+        val returnType = if (maskSource) "f32" else "vec4<f32>"
+        val zero = if (maskSource) "0.0" else "vec4<f32>(0.0)"
+        require(graph.contractId == "WgslFloatEnvelopeV1" && graph.colorAlpha == execution.colorAlpha)
+        val texelOperations = graph.texelOperations()
         val statements = StringBuilder()
         val emitted = mutableMapOf<ImageNumericOperationGraphV1.Node, String>()
         fun emit(node: ImageNumericOperationGraphV1.Node): String = emitted.getOrPut(node) {
@@ -33,31 +32,59 @@ internal object W5eImageTexelEvaluatorV1 {
             name
         }
         val denominator = emit(graph.denominator)
-        statements.append("if (!w5e_finite($denominator) || abs($denominator) < 1.17549435e-38f) { return vec4<f32>(0.0); }\n")
+        statements.append("if (!w5e_finite($denominator) || abs($denominator) < 1.17549435e-38f) { return $zero; }\n")
         val x = emit(graph.sourceX)
         val y = emit(graph.sourceY)
+        val evaluateTexel = if (TexelOperation.RETURN_SCALAR_MASK in texelOperations) {
+            val mask = if (TexelOperation.ALPHA_OPAQUE in texelOperations) "1.0" else "encoded.r"
+            "return $mask;"
+        } else {
+            val rgb = if (TexelOperation.SWIZZLE_BGRA in texelOperations) "vec3<f32>(encoded.b, encoded.g, encoded.r)" else "encoded.rgb"
+            val alpha = if (TexelOperation.ALPHA_OPAQUE in texelOperations) "1.0" else "encoded.a"
+            val straight = if (TexelOperation.UNPREMULTIPLY_SOURCE in texelOperations)
+                "let straightRgb = $rgb / sourceAlpha;"
+            else "let straightRgb = $rgb;"
+            val transfer = if (TexelOperation.SRGB_TO_LINEAR in texelOperations)
+                "let linearRgb = w5a_srgb_to_linear(vec4<f32>(straightRgb, sourceAlpha)).rgb;" else "let linearRgb = straightRgb;"
+            val gamut = if (TexelOperation.DISPLAY_P3_TO_LINEAR_SRGB in texelOperations)
+                "let workingRgb = vec3<f32>(1.2247455 * linearRgb.r - 0.2249044 * linearRgb.g, " +
+                    "-0.0420581 * linearRgb.r + 1.0420810 * linearRgb.g, " +
+                    "-0.0196423 * linearRgb.r - 0.0786549 * linearRgb.g + 1.0985372 * linearRgb.b);"
+            else "let workingRgb = linearRgb;"
+            """
+                let sourceAlpha = $alpha;
+                if (sourceAlpha == 0.0) { return vec4<f32>(0.0); }
+                $straight
+                $transfer
+                $gamut
+                return vec4<f32>(workingRgb * sourceAlpha, sourceAlpha);
+            """.trimIndent()
+        }
         return """
+            ${child?.declarationsWgsl.orEmpty()}
             struct W5eImageBlock {
                 values0: vec4<f32>, values1: vec4<f32>, values2: vec4<f32>,
                 values3: vec4<f32>, values4: vec4<f32>, parameters: vec4<f32>,
+                ${if (child != null) "child: W5aMaterialBlock," else ""}
             }
-            @group(1) @binding(0) var<uniform> w5eImage: W5eImageBlock;
-            @group(1) @binding(1) var w5eTexture: texture_2d<f32>;
-            ${W5aMaterialSourceStage.SRGB_TO_LINEAR_WGSL}
+            @group(1) @binding(${layout.uniformBindingU32}) var<uniform> w5eImage: W5eImageBlock;
+            @group(1) @binding(${layout.imageTextureBindingU32}) var w5eTexture: texture_2d<f32>;
+            ${if (child == null) W5aMaterialSourceStage.SRGB_TO_LINEAR_WGSL else ""}
             fn w5e_finite(value: f32) -> bool { return (bitcast<u32>(value) & 0x7f800000u) != 0x7f800000u; }
             fn w5e_device_point(pixel: vec2<f32>) -> vec2<f32> { return pixel; }
-            fn kanvas_material_source(pixel: vec2<f32>) -> vec4<f32> {
+            fn w5e_image_sample(pixel: vec2<f32>) -> $returnType {
                 $statements
                 // Validity dominates floor and signed integer conversion, including dynamic faults.
                 if (!w5e_finite($x) || !w5e_finite($y) || $x < -2147483648.0 || $x >= 2147483648.0 ||
-                    $y < -2147483648.0 || $y >= 2147483648.0) { return vec4<f32>(0.0); }
+                    $y < -2147483648.0 || $y >= 2147483648.0) { return $zero; }
                 let ix = clamp(i32(floor($x)), 0, i32(w5eImage.parameters.x) - 1);
                 let iy = clamp(i32(floor($y)), 0, i32(w5eImage.parameters.y) - 1);
                 let encoded: vec4<f32> = textureLoad(w5eTexture, vec2<i32>(ix, iy), 0);
-                if (encoded.a == 0.0) { return vec4<f32>(0.0); }
-                let straight = vec4<f32>(encoded.rgb / encoded.a, encoded.a);
-                let linear = w5a_srgb_to_linear(straight);
-                return vec4<f32>(linear.rgb * encoded.a, encoded.a) * w5eImage.parameters.z;
+                $evaluateTexel
+            }
+            fn kanvas_material_source(pixel: vec2<f32>) -> vec4<f32> {
+                ${if (child == null) "return w5e_image_sample(pixel) * w5eImage.parameters.z;" else
+                    "return w5e_child_source(" + (if (child.gradientStopSlab == null) "pixel" else child.coordinateFunctionName + "(pixel)") + ") * w5e_image_sample(pixel);"}
             }
         """.trimIndent()
     }

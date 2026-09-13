@@ -609,6 +609,17 @@ internal object WgslFloatEnvelopeV1Oracle {
     fun gradientSubtract(a: Interval, b: Interval): Interval = a - b
     fun gradientMultiply(a: Interval, b: Interval): Interval = a * b
     fun gradientDivide(a: Interval, b: Interval): Interval = wgslDivide(a, b)
+    fun imageUnorm8(codeI32: Int): Interval = f32Envelope(Interval(
+        downDivide(BigDecimal(codeI32), UNORM_MAX), upDivide(BigDecimal(codeI32), UNORM_MAX)))
+    fun imageSrgbToLinear(value: Interval): Interval = toLinear(value)
+    fun imageSourceAttachment(source: Array<Interval>): DrawResult {
+        val codes = source.mapIndexed { channelI32, value ->
+            if (channelI32 < 3) codesForSrgbAttachment(attachmentEncode(value.clamp01())) else codesFor(value)
+        }
+        return if (codes.any { it.isEmpty() || it.size > 2 || it.max() - it.min() > 1 })
+            DrawResult.FixtureUnbounded("Image attachment exceeds two adjacent codes: $codes")
+        else DrawResult.Bounded(codes, AttachmentState(decodeStoredAttachment(codes)))
+    }
     fun gradientAtan2(y: Interval, x: Interval, accuracyUlpsF64: Double): Interval {
         // Independent corner enclosure. The eager graph guards keep both arguments
         // normal and nonzero; atan2 is monotone on each fixed-sign rectangle.

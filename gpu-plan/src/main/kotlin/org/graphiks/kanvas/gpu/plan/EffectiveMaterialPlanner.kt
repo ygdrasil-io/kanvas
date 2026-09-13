@@ -62,10 +62,22 @@ public object EffectiveMaterialPlanner {
         is Normalization.Source -> Result.Ready(source.table, source.root, source.blend)
     }
 
+    /** Paint child of an A8 image: original geometry/CTM remain the coordinate authority. */
+    internal fun planImageMaskSource(draw: DrawNode, deviceBoundsI32: org.graphiks.math.geometry.RectI32): Result {
+        require(draw.origin == org.graphiks.kanvas.render.ir.DrawOrigin.IMAGE &&
+            draw.geometry is org.graphiks.kanvas.render.ir.GeometryNode.ImagePatch)
+        return when (val result = normalize(draw, PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1(),
+            allowDestinationCandidate = true, elideNoOp = false, gradientDeviceBoundsI32 = deviceBoundsI32, imageMaskChild = true)) {
+            is Normalization.Source -> Result.Ready(result.table, result.root, result.blend)
+            is Normalization.Refused -> Result.Refused(result.diagnosticCode)
+            Normalization.NoOp -> error("Image child cannot elide its source")
+        }
+    }
+
     internal fun normalize(draw: DrawNode, targetClamp: BlendTargetClampV1, allowDestinationCandidate: Boolean = false,
         coverage: CoveragePlan = CoveragePlan.FullOrScissor, sample: SamplePlan = SamplePlan.SingleSample,
         elideNoOp: Boolean = true,
-        gradientDeviceBoundsI32: org.graphiks.math.geometry.RectI32? = null): Normalization {
+        gradientDeviceBoundsI32: org.graphiks.math.geometry.RectI32? = null, imageMaskChild: Boolean = false): Normalization {
         val blend = FinalBlendPlanner.plan(draw.blend, coverage, sample, targetClamp,
             if (coverage == CoveragePlan.AnalyticScalarAA) BlendCoverageApplicationV1.SourceMultiplication
             else BlendCoverageApplicationV1.DestinationInterpolation)
@@ -74,10 +86,12 @@ public object EffectiveMaterialPlanner {
             return Normalization.Refused("unsupported.w5b.destination-read.task-2")
         }
         if (allowDestinationCandidate && elideNoOp && blend == BlendPlan.NoOpV1) return Normalization.NoOp
-        if (draw.effects !is EffectStack.Empty || draw.resource != null || draw.operationBlendMode != null) {
+        if (draw.effects !is EffectStack.Empty || draw.resource != null && !imageMaskChild || draw.operationBlendMode != null) {
             return Normalization.Refused(W5aPlanDiagnostics.UnsupportedDrawState)
         }
-        val addressing = GradientAddressingCaptureV2.capture(draw.material)
+        val sourceMaterial = if (imageMaskChild) draw.paint?.shader ?: draw.paint?.let { MaterialNode.Solid(it.color) }
+            ?: MaterialNode.Solid(org.graphiks.math.color.ColorARGB.Black) else draw.material
+        val addressing = GradientAddressingCaptureV2.capture(sourceMaterial)
         if (addressing is GradientAddressingCaptureV2.Ready &&
             (addressing.coordinateNodes.isNotEmpty() || when (val leaf = addressing.leaf) {
                 is MaterialNode.LinearGradient -> leaf.tileMode
@@ -88,8 +102,8 @@ public object EffectiveMaterialPlanner {
             }?.let {
                 it != org.graphiks.kanvas.render.ir.TileMode.CLAMP
             } == true))
-            return normalizeW5d(draw, blend, addressing, gradientDeviceBoundsI32)
-        var material = draw.material
+            return normalizeW5d(draw, blend, addressing, gradientDeviceBoundsI32, imageMaskChild)
+        var material = sourceMaterial
         val opacityInnerToOuter = mutableListOf<Float>()
         var visited = 0
         while (material is MaterialNode.Opacity) {
@@ -141,7 +155,7 @@ public object EffectiveMaterialPlanner {
                 if (tileMode != org.graphiks.kanvas.render.ir.TileMode.CLAMP ||
                     interpolation != org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB ||
                     draw.origin !in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.RECT,
-                        org.graphiks.kanvas.render.ir.DrawOrigin.RRECT, org.graphiks.kanvas.render.ir.DrawOrigin.PATH))
+                        org.graphiks.kanvas.render.ir.DrawOrigin.RRECT, org.graphiks.kanvas.render.ir.DrawOrigin.PATH) && !imageMaskChild)
                     return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
                 when (val stops = normalizeGradientStopsV1(linear?.stops() ?: radial?.stops() ?: sweep?.stops()
                     ?: requireNotNull(conical).stops(), preserveValidityMask = conical != null)) {
@@ -156,6 +170,8 @@ public object EffectiveMaterialPlanner {
                             is org.graphiks.kanvas.render.ir.GeometryNode.Rect -> geometry.copyBounds()
                             is org.graphiks.kanvas.render.ir.GeometryNode.RRect -> geometry.copyShape().rect
                             is org.graphiks.kanvas.render.ir.GeometryNode.Path -> null
+                            is org.graphiks.kanvas.render.ir.GeometryNode.ImagePatch -> if (imageMaskChild) geometry.copyDestination()
+                                else return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
                             else -> return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
                         }
                         if (bounds == null && (gradientDeviceBoundsI32 == null || gradientDeviceBoundsI32.isEmpty))
@@ -256,7 +272,7 @@ public object EffectiveMaterialPlanner {
     }
 
     private fun normalizeW5d(draw: DrawNode, blend: BlendPlan, capture: GradientAddressingCaptureV2.Ready,
-        gradientDeviceBoundsI32: org.graphiks.math.geometry.RectI32?): Normalization {
+        gradientDeviceBoundsI32: org.graphiks.math.geometry.RectI32?, imageMaskChild: Boolean = false): Normalization {
         val linear = capture.leaf as? MaterialNode.LinearGradient
         val radial = capture.leaf as? MaterialNode.RadialGradient
         val sweep = capture.leaf as? MaterialNode.SweepGradient
@@ -265,7 +281,7 @@ public object EffectiveMaterialPlanner {
             ?: conical?.interpolation ?: return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
         if (interpolation != org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB ||
             draw.origin !in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.RECT,
-                org.graphiks.kanvas.render.ir.DrawOrigin.RRECT, org.graphiks.kanvas.render.ir.DrawOrigin.PATH))
+                org.graphiks.kanvas.render.ir.DrawOrigin.RRECT, org.graphiks.kanvas.render.ir.DrawOrigin.PATH) && !imageMaskChild)
             return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
         val family = when {
             linear != null -> GradientFamilyV2.LINEAR
@@ -334,6 +350,8 @@ public object EffectiveMaterialPlanner {
             is org.graphiks.kanvas.render.ir.GeometryNode.Rect -> geometry.copyBounds()
             is org.graphiks.kanvas.render.ir.GeometryNode.RRect -> geometry.copyShape().rect
             is org.graphiks.kanvas.render.ir.GeometryNode.Path -> null
+            is org.graphiks.kanvas.render.ir.GeometryNode.ImagePatch -> if (imageMaskChild) geometry.copyDestination()
+                else return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
             else -> return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
         }
         val deviceCorners = bounds?.let { listOf(org.graphiks.math.geometry.Point2F32(bounds.left, bounds.top),

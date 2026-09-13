@@ -3,6 +3,16 @@ package org.graphiks.kanvas.gpu.plan
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
+/** Typed image composition ABI; existing standalone V1/V2 layouts are unchanged. */
+public class ImageSourceLayoutV3 internal constructor(public val hasChildGradientStorage: Boolean) {
+    public val uniformBindingU32: UInt = 0u
+    public val gradientStorageBindingU32: UInt? = if (hasChildGradientStorage) 1u else null
+    public val imageTextureBindingU32: UInt = if (hasChildGradientStorage) 2u else 1u
+    public val imageUniformByteCountI64: Long = 96L
+    public val structuralIdentity: String = "image-source-layout-v3:uniform0:" +
+        if (hasChildGradientStorage) "stops1:texture2" else "texture1"
+}
+
 /** Handle-free raw V2 binding layout, shared by capability sealing and native packing. */
 public class RawMaterialRequirementsV2 private constructor(
     public val bindingCountI32: Int,
@@ -12,6 +22,8 @@ public class RawMaterialRequirementsV2 private constructor(
     public val structuralId: String,
     private val uniformBytes: ByteArray,
     slabIdentity: String,
+    private val imageSource: Boolean = false,
+    public val imageLayoutV3: ImageSourceLayoutV3? = null,
 ) {
     /** The materializer consumes this same immutable packing and allocation identity. */
     public fun copyUniformBytes(): ByteArray = uniformBytes.copyOf()
@@ -23,7 +35,7 @@ public class RawMaterialRequirementsV2 private constructor(
             uniformByteCountI64 % BINDING_STRIDE_BYTES_I64 == 0L &&
             capabilities.maxUniformBufferBindingSizeBytesI64?.let { uniformByteCountI64 <= it } == true &&
             uniformByteCountI64 <= capabilities.maxBufferSizeBytes &&
-            (!hasCoordinatesV2 || capabilities.minUniformBufferOffsetAlignment.let { it > 0 && it and (it - 1) == 0 } &&
+            (!(hasCoordinatesV2 || imageSource) || capabilities.minUniformBufferOffsetAlignment.let { it > 0 && it and (it - 1) == 0 } &&
                 capabilities.maxBindingsPerBindGroupI32?.let { it >= bindGroupEntryCountI32 } == true &&
                 capabilities.maxUniformBuffersPerShaderStageI32?.let { it >= 2 } == true &&
                 capabilities.maxBindGroupsI32?.let { it >= 2 } == true)
@@ -57,6 +69,26 @@ public class RawMaterialRequirementsV2 private constructor(
 
         public fun of(table: MaterialPlanTable, root: MaterialPlanRef): RawMaterialRequirementsV2 {
             require(root.indexI32 in 0 until table.sizeI32)
+            val image = table.entry(root).bindings as? ImageSampleV3
+            if (image != null) {
+                val execution = image.execution
+                require(table.authenticatesImage(root, execution)) { W5eImagePlanDiagnostics.InvalidContract }
+                val child = if (table.entry(root).program is ImageMaterialProgramV3.MaskV3)
+                    of(table, MaterialPlanRef(root.indexI32 - 1)) else null
+                val layout = ImageSourceLayoutV3(child?.bindGroupEntryCountI32 == 2)
+                val bytesI64 = Math.addExact(layout.imageUniformByteCountI64, child?.uniformByteCountI64 ?: 0L)
+                require(bytesI64 <= Int.MAX_VALUE) { W5eImagePlanDiagnostics.BindingLimit }
+                val bytes = ByteBuffer.allocate(bytesI64.toInt()).order(ByteOrder.LITTLE_ENDIAN).apply {
+                    execution.coordinates.uniformValuesF32().forEach(::putFloat)
+                    putFloat(execution.upload.widthI32.toFloat()).putFloat(execution.upload.heightI32.toFloat())
+                    putFloat(execution.paintAlphaF32).putFloat(0f)
+                    child?.copyUniformBytes()?.let(::put)
+                }.array()
+                return RawMaterialRequirementsV2(1 + (child?.bindingCountI32 ?: 0), bytesI64,
+                    child?.hasCoordinatesV2 == true, 1 + (child?.bindGroupEntryCountI32 ?: 1),
+                    table.entry(root).program.structuralId.value + ":" + layout.structuralIdentity + ":" + child?.structuralId.orEmpty(),
+                    bytes, execution.canonicalIdentity + (child?.canonicalIdentity ?: ""), imageSource = true, imageLayoutV3 = layout)
+            }
             var indexI32 = root.indexI32
             var countI32 = 1
             while (table.entry(MaterialPlanRef(indexI32)).bindings is MaterialBindingPlan.OpacityF32V1) {
