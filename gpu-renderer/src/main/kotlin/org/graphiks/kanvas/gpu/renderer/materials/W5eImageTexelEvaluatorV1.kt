@@ -159,8 +159,8 @@ internal object W5eImageTexelEvaluatorV1 {
         } else {
             val rgb = if (TexelOperation.SWIZZLE_BGRA in texelOperations) "vec3<f32>(encoded.b, encoded.g, encoded.r)" else "encoded.rgb"
             val alpha = if (TexelOperation.ALPHA_OPAQUE in texelOperations) "1.0" else "encoded.a"
-            val straight = if (TexelOperation.UNPREMULTIPLY_SOURCE in texelOperations)
-                "let straightRgb = $rgb / sourceAlpha;"
+            val straight = if (TexelOperation.UNIT_ALPHA_GUARDED_UNPREMULTIPLY_SOURCE in texelOperations)
+                "var straightRgb = $rgb;\nif (sourceAlpha != 1.0) { straightRgb = $rgb / sourceAlpha; }"
             else "let straightRgb = $rgb;"
             val transfer = if (TexelOperation.SRGB_TO_LINEAR in texelOperations)
                 "let linearRgb = w5a_srgb_to_linear(vec4<f32>(straightRgb, sourceAlpha)).rgb;" else "let linearRgb = straightRgb;"

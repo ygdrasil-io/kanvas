@@ -21,7 +21,7 @@ public class ImageAtlasBlendNumericAuthorityV1 private constructor(
 ) {
     public val formulaWgsl: String = operationGraph.sourceWgsl
     public val canonicalIdentity: String = "atlas-source-blend-graph-v1:${BlendFormulaProgramV1.REVISION_I32}:$mode:${color.value}:" +
-        "$uploadIdentity:$colorAlpha:mask=$maskChild:child=$childSourceIdentity:ops=$finiteOperationCountI64:max=${maximumMagnitudeF64.toRawBits()}:$formulaWgsl"
+        "$uploadIdentity:$colorAlpha:decode=${colorAlpha.unpremultiplyOperation}:mask=$maskChild:child=$childSourceIdentity:ops=$finiteOperationCountI64:max=${maximumMagnitudeF64.toRawBits()}:$formulaWgsl"
     public fun copyColorUniformF32(): List<Float> = listOf(color.redNormalized, color.greenNormalized, color.blueNormalized, color.alphaNormalized)
     public fun authenticates(upload: ImageUploadPlanV1, colorAlpha: ImageColorAlphaPlanV1, childSourceIdentity: String?): Boolean =
         upload.contentIdentity == uploadIdentity && colorAlpha == this.colorAlpha && this.childSourceIdentity == childSourceIdentity &&
@@ -98,8 +98,8 @@ public class ImageAtlasBlendNumericAuthorityV1 private constructor(
         }
         fun div(a: Domain, b: Domain): Domain {
             if (b.contains(0.0) || min(abs(b.lowF64), abs(b.highF64)) < java.lang.Float.MIN_NORMAL.toDouble()) throw Unbounded()
-            if (b == one) return a
-            if (a == zero) return zero
+            // Unlike exact +0/*1 identities, emitted WGSL division retains its
+            // accuracy envelope even for a divisor of one or numerator of zero.
             val quotients = listOf(a.lowF64 / b.lowF64, a.lowF64 / b.highF64, a.highF64 / b.lowF64, a.highF64 / b.highF64)
             return rounded(quotients.min(), quotients.max(), 8)
         }
@@ -108,7 +108,7 @@ public class ImageAtlasBlendNumericAuthorityV1 private constructor(
         fun absolute(a: Domain): Domain = Domain(if (a.contains(0.0)) 0.0 else min(abs(a.lowF64), abs(a.highF64)), max(abs(a.lowF64), abs(a.highF64)))
         fun root(a: Domain): Domain {
             if (a.lowF64 < 0.0) throw Unbounded()
-            if (a == zero || a == one) return a
+            if (a == zero) return zero
             // sqrt inherits reciprocal(inverseSqrt): 2 ULP plus division and rounding.
             return rounded(sqrt(a.lowF64), sqrt(a.highF64), 16)
         }
@@ -144,7 +144,14 @@ public class ImageAtlasBlendNumericAuthorityV1 private constructor(
             val alpha = if (facts.alphaType == ImageAlphaType.OPAQUE) one else channel(3)
             if (alpha == zero) return Array(4) { zero }
             val rgb = Array(3) { channel(if (facts.channelOrder == ImageChannelOrderV1.BGRA) 2 - it else it) }
-            var straight = if (facts.alphaType == ImageAlphaType.PREMUL) rgb.map { div(it, alpha) }.toTypedArray() else rgb
+            // This is the same typed guard emitted by W5eImageTexelEvaluatorV1,
+            // not an arithmetic identity for a division that still executes.
+            var straight = when (facts.unpremultiplyOperation) {
+                ImageNumericOperationGraphV1.TexelOperation.UNIT_ALPHA_GUARDED_UNPREMULTIPLY_SOURCE ->
+                    if (alpha == one) rgb else rgb.map { div(it, alpha) }.toTypedArray()
+                null -> rgb
+                else -> throw Unbounded()
+            }
             if (facts.transfer == ImageTransferPlanV1.SRGB) straight = straight.map(::transfer).toTypedArray()
             if (facts.gamut == ImageGamutPlanV1.DISPLAY_P3) straight = arrayOf(
                 sub(mul(constant(1.2247455), straight[0]), mul(constant(.2249044), straight[1])),
@@ -192,8 +199,9 @@ public class ImageAtlasBlendNumericAuthorityV1 private constructor(
             if (base.lowF64 <= 0.0) throw Unbounded()
             val logLow = kotlin.math.log2(base.lowF64)
             val logHigh = kotlin.math.log2(base.highF64)
-            // log2: absolute 2^-22 on [0.5,2], 3 ULP outside; use the union.
-            val logError = max(Math.scalb(1.0, -22), 4 * Math.ulp(max(abs(logLow), abs(logHigh)).toFloat()).toDouble())
+            // WgslFloatEnvelopeV1: absolute 2^-21 on [0.5,2], 3 ULP outside;
+            // retain their union, plus outward rounding, through mul and exp2.
+            val logError = max(Math.scalb(1.0, -21), 4 * Math.ulp(max(abs(logLow), abs(logHigh)).toFloat()).toDouble())
             val log = rounded(logLow - logError, logHigh + logError)
             val argument = mul(exponent, log)
             val ulpsI32 = kotlin.math.ceil(4 + 2 * max(abs(argument.lowF64), abs(argument.highF64))).toInt()

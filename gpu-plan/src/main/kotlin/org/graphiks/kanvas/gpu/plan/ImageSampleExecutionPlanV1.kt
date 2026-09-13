@@ -39,7 +39,12 @@ public class ImageTileModePlanV1(public val x: ImageTileAxisModePlanV1, public v
 }
 
 public data class ImageColorAlphaPlanV1(public val channelOrder: ImageChannelOrderV1,
-    public val alphaType: ImageAlphaType, public val transfer: ImageTransferPlanV1, public val gamut: ImageGamutPlanV1)
+    public val alphaType: ImageAlphaType, public val transfer: ImageTransferPlanV1, public val gamut: ImageGamutPlanV1) {
+    /** Colour decode branches on unit alpha before executing any division. */
+    public val unpremultiplyOperation: ImageNumericOperationGraphV1.TexelOperation?
+        get() = if (channelOrder != ImageChannelOrderV1.ALPHA && alphaType == ImageAlphaType.PREMUL)
+            ImageNumericOperationGraphV1.TexelOperation.UNIT_ALPHA_GUARDED_UNPREMULTIPLY_SOURCE else null
+}
 
 /** Immutable projection and cell mapping, preserving signed source/destination extents. */
 public class ImageCoordinatePlanV1 private constructor(inverseF32: Matrix3x3F32, sourceF32: RectF32, destinationF32: RectF32) {
@@ -96,6 +101,7 @@ public sealed interface ImageMaterialProgramV3 : MaterialProgramPlan {
         override val selectsCells: Boolean = false, override val latticeCellKinds: String? = null,
         override val atlasBlendMode: org.graphiks.kanvas.render.ir.BlendMode? = null) : ImageMaterialProgramV3 {
         override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5e-image-color-v3:$channelOrder:$alphaType:$transfer:$gamut:${sampling.topologyId}:${tileModes.topologyId}${atlasBlendMode?.let { ":atlas-source-blend-v1:$it" }.orEmpty()}" +
+            (if (alphaType == ImageAlphaType.PREMUL) ":unit-alpha-guard-v1" else "") +
             if (latticeCellKinds != null) ":lattice-cell-selector-v1:$latticeCellKinds" else if (selectsCells) ":nine-local-cell-selector-v2" else "")
         override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.imageColor()
     }

@@ -190,6 +190,38 @@ class W5eImageFamiliesSurfacePixelTest {
         assertPixels(healthyExpected, healthy.render().pixels)
     }
 
+    @Test fun atlasSoftLightNonendpointSrgbColorMatchesBoundedEquation() {
+        // Intermediate entry sRGB exercises pow(log2/exp2). Positive sampled
+        // destination channels all exceed 1/4, so SoftLight selects sqrt(d),
+        // while the red entry channel selects low and green/blue select high.
+        val entry = ColorARGB.of(160, 192, 224)
+        val destinationCodes = listOf(64, 128, 192)
+        fun add(a: I, b: I) = WgslFloatEnvelopeV1Oracle.gradientAdd(a, b)
+        fun sub(a: I, b: I) = WgslFloatEnvelopeV1Oracle.gradientSubtract(a, b)
+        fun mul(a: I, b: I) = WgslFloatEnvelopeV1Oracle.gradientMultiply(a, b)
+        val source = listOf(entry.redNormalized, entry.greenNormalized, entry.blueNormalized)
+            .map { WgslFloatEnvelopeV1Oracle.imageSrgbToLinear(I.input(it)) }
+        val resultSource = Array(4) { channel -> if (channel == 3) I.ONE else {
+            val d = WgslFloatEnvelopeV1Oracle.imageUnorm8(destinationCodes[channel])
+            val s = source[channel]
+            val twiceSource = mul(I.input(2f), s)
+            val root = WgslFloatEnvelopeV1Oracle.gradientSqrt(d)
+            val low = sub(d, mul(mul(sub(I.ONE, twiceSource), d), sub(I.ONE, d)))
+            val high = add(d, mul(sub(twiceSource, I.ONE), sub(root, d)))
+            if (channel == 0) low else high
+        } }
+        val expected = listOf(bounded(WgslFloatEnvelopeV1Oracle.imageSourceAttachment(resultSource)))
+        val image = Image.fromPixels(1, 1, byteArrayOf(64, 128.toByte(), 192.toByte(), -1),
+            alphaType = AlphaType.UNPREMUL, colorSpace = ColorSpace.LINEAR_SRGB)
+        val surface = Surface(1, 1)
+        surface.canvas { drawAtlas(image, listOf(Matrix3x3F32()), listOf(RectF32.ofLTRB(0f, 0f, 1f, 1f)),
+            listOf(entry), BlendMode.SOFT_LIGHT, paint()) }
+        val result = surface.render()
+        assertPixels(expected, result.pixels)
+        assertEquals(1, result.stats.opsDispatched)
+        assertEquals(0, result.stats.opsRefused)
+    }
+
     @Test fun latticeAndAtlasA8GradientChildrenRetainLocalCoordinates() {
         val expected = listOf(ColorARGB.Red, ColorARGB.Green, ColorARGB.Red, ColorARGB.Green).map {
             expectedLinear(listOf(it.redNormalized, it.greenNormalized, it.blueNormalized, 1f)) }

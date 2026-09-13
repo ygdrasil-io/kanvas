@@ -68,7 +68,7 @@ public class ImageNumericOperationGraphV1 private constructor(public val colorAl
         MITCHELL_NETRAVALI_KERNEL_F32, CLAMP_X_I32, CLAMP_Y_I32,
         REPEAT_X_I32, REPEAT_Y_I32, MIRROR_X_I32, MIRROR_Y_I32, DECAL_X_I32, DECAL_Y_I32, LOAD_UNORM8,
         SWIZZLE_BGRA, ALPHA_OPAQUE, ALPHA_STORED, ZERO_ALPHA_GUARD,
-        UNPREMULTIPLY_SOURCE, SRGB_TO_LINEAR, DISPLAY_P3_TO_LINEAR_SRGB,
+        UNIT_ALPHA_GUARDED_UNPREMULTIPLY_SOURCE, SRGB_TO_LINEAR, DISPLAY_P3_TO_LINEAR_SRGB,
         PREMULTIPLY_LINEAR, RETURN_SCALAR_MASK, ACCUMULATE_NEAREST, ACCUMULATE_LINEAR, ACCUMULATE_CUBIC_ROW_MAJOR, PAINT_OPACITY }
     public val contractId: String = "WgslFloatEnvelopeV1"
     public val topologyIdentity: String = "w5e-image-numeric-v1:inverse-project-divide-map:${sampling.topologyId}:${tileModes.topologyId}:$colorAlpha:" +
@@ -123,7 +123,7 @@ public class ImageNumericOperationGraphV1 private constructor(public val colorAl
         if (colorAlpha.channelOrder == ImageChannelOrderV1.ALPHA) add(TexelOperation.RETURN_SCALAR_MASK)
         else {
             add(TexelOperation.ZERO_ALPHA_GUARD)
-            if (colorAlpha.alphaType == org.graphiks.kanvas.render.ir.ImageAlphaType.PREMUL) add(TexelOperation.UNPREMULTIPLY_SOURCE)
+            colorAlpha.unpremultiplyOperation?.let(::add)
             if (colorAlpha.transfer == ImageTransferPlanV1.SRGB) add(TexelOperation.SRGB_TO_LINEAR)
             if (colorAlpha.gamut == ImageGamutPlanV1.DISPLAY_P3) add(TexelOperation.DISPLAY_P3_TO_LINEAR_SRGB)
             add(TexelOperation.PREMULTIPLY_LINEAR)
