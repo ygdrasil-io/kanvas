@@ -232,7 +232,7 @@ class Picture internal constructor(
                     )
                     is DisplayOp.DrawPoint -> canvas.drawPoint(op.x, op.y, op.paint)
                     is DisplayOp.DrawPoints -> canvas.drawPoints(op.mode, op.points, op.paint)
-                    is DisplayOp.DrawImage -> canvas.drawImage(op.image, op.dst, op.paint)
+                    is DisplayOp.DrawImage -> canvas.drawImage(op.image, op.dst, op.sampling, op.paint)
                     is DisplayOp.DrawImageNine -> canvas.drawImageNine(op.image, op.center, op.dst, op.paint)
                     is DisplayOp.DrawImageLattice -> canvas.drawImageLattice(
                         op.image,
@@ -309,8 +309,9 @@ class Picture internal constructor(
 // ---- Binary serialization helpers ------------------------------------------
 
 private val MAGIC = byteArrayOf(0x4B, 0x50, 0x49, 0x43)
-private const val FORMAT_VERSION = 9
-private const val STABLE_WIRE_VERSION = 9
+private const val FORMAT_VERSION = 10
+private const val STABLE_WIRE_VERSION = 10
+private const val PREVIOUS_STABLE_WIRE_VERSION = 9
 private const val HISTORICAL_WIRE_VERSION_V8 = 8
 
 // type discriminators
@@ -958,7 +959,9 @@ private fun decodePicture(data: ByteArray, decodedRuntimeEffects: MutableList<Ru
             SceneArchiveDecodeResult.LegacyV8 -> decodeHistoricalPictureV8(data, decodedRuntimeEffects)
             is SceneArchiveDecodeResult.Invalid -> null
         }
-        STABLE_WIRE_VERSION -> when (val decoded = SceneArchiveCodec.decodePicture(data)) {
+        PREVIOUS_STABLE_WIRE_VERSION,
+        STABLE_WIRE_VERSION,
+        -> when (val decoded = SceneArchiveCodec.decodePicture(data)) {
             is SceneArchiveDecodeResult.Decoded -> try {
                 Picture(decoded.copyCullRect(), SceneDisplayOpAdapter.toDisplayOps(decoded.scene))
             } catch (_: IllegalArgumentException) {

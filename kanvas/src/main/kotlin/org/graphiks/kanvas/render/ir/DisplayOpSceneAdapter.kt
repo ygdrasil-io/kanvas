@@ -34,12 +34,14 @@ public data class SceneCaptureLimits(
     public val maxNodes: Int = 4_096,
     public val maxResources: Int = 1_024,
     public val maxGradientStopsI32: Int = 65_536,
+    public val maxImageBytesI64: Long = 64L * 1024L * 1024L,
 ) {
     init {
         require(maxDepth > 0) { "SceneCaptureLimits.maxDepth must be positive" }
         require(maxNodes > 0) { "SceneCaptureLimits.maxNodes must be positive" }
         require(maxResources > 0) { "SceneCaptureLimits.maxResources must be positive" }
         require(maxGradientStopsI32 > 0) { "SceneCaptureLimits.maxGradientStopsI32 must be positive" }
+        require(maxImageBytesI64 > 0L) { "SceneCaptureLimits.maxImageBytesI64 must be positive" }
     }
 
     public companion object {
@@ -119,11 +121,11 @@ public object DisplayOpSceneAdapter {
         is DisplayOp.DrawDRRect -> draw(GeometryNode.DoubleRRect.of(operation.outer.checked("draw[$index].outer"), operation.inner.checked("draw[$index].inner")), operation.paint, operation.transform, operation.clip, DrawOrigin.DOUBLE_RRECT, limits, context = context)
         is DisplayOp.DrawPath -> draw(GeometryNode.Path(operation.path.toPathF32().checked("draw[$index].path")), operation.paint, operation.transform, operation.clip, if (operation.sourceOperation == "text-expanded") DrawOrigin.TEXT_EXPANDED_PATH else DrawOrigin.PATH, limits, context = context)
         is DisplayOp.DrawPoints -> draw(GeometryNode.Points.of(PointMode.valueOf(operation.mode.name), operation.points.map { point -> Point2F32(point.x.checked("draw[$index].point.x"), point.y.checked("draw[$index].point.y")) }), operation.paint, operation.transform, operation.clip, DrawOrigin.POINTS, limits, context = context)
-        is DisplayOp.DrawImage -> imageDraw(GeometryNode.ImagePatch.of(ResourceReference(ResourceId(operation.image.sourceId)), operation.src.checked("draw[$index].src"), operation.dst.checked("draw[$index].dst")), operation.paint, operation.transform, operation.clip, DrawOrigin.IMAGE, context.captureImage(operation.image), limits, context = context)
-        is DisplayOp.DrawImageNine -> imageDraw(GeometryNode.ImagePatch.of(ResourceReference(ResourceId(operation.image.sourceId)), operation.center.checked("draw[$index].center"), operation.dst.checked("draw[$index].dst")), operation.paint, operation.transform, operation.clip, DrawOrigin.IMAGE_NINE, context.captureImage(operation.image), limits, context = context)
+        is DisplayOp.DrawImage -> imageDraw(GeometryNode.ImagePatch.of(ResourceReference(ResourceId(operation.image.sourceId)), operation.src.checked("draw[$index].src"), operation.dst.checked("draw[$index].dst"), operation.sampling.toImageSampling()), operation.paint, operation.transform, operation.clip, DrawOrigin.IMAGE, context.captureImage(operation.image), limits, sampling = operation.sampling.toImageSampling(), context = context)
+        is DisplayOp.DrawImageNine -> imageDraw(GeometryNode.ImageNine.of(ResourceReference(ResourceId(operation.image.sourceId)), operation.center.checked("draw[$index].center"), operation.dst.checked("draw[$index].dst")), operation.paint, operation.transform, operation.clip, DrawOrigin.IMAGE_NINE, context.captureImage(operation.image), limits, context = context)
         is DisplayOp.DrawImageLattice -> imageDraw(
             GeometryNode.ImageLattice.of(ResourceReference(ResourceId(operation.image.sourceId)), operation.lattice.xDivs.toIntArray(), operation.lattice.yDivs.toIntArray(), operation.lattice.rects?.map { it.checked("draw[$index].lattice-rect") }, operation.lattice.colors, operation.lattice.flags?.map { LatticeCellFlag.valueOf(it.name) }, operation.dst.checked("draw[$index].dst"), operation.sampling.toImageSampling()),
-            operation.paint, operation.transform, operation.clip, DrawOrigin.IMAGE_LATTICE, context.captureImage(operation.image), limits, context = context,
+            operation.paint, operation.transform, operation.clip, DrawOrigin.IMAGE_LATTICE, context.captureImage(operation.image), limits, sampling = operation.sampling.toImageSampling(), context = context,
         )
         is DisplayOp.DrawAtlas -> {
             if (operation.transforms.size != operation.texRects.size || operation.colors?.size?.let { it != operation.transforms.size } == true) {
@@ -131,7 +133,7 @@ public object DisplayOpSceneAdapter {
             }
             imageDraw(
                 GeometryNode.Atlas.of(ResourceReference(ResourceId(operation.atlas.sourceId)), operation.transforms.indices.map { i -> GeometryNode.AtlasEntry.of(operation.transforms[i].checked("draw[$index].atlas-transform"), operation.texRects[i].checked("draw[$index].atlas-rect"), operation.colors?.get(i)) }),
-                operation.paint, operation.transform, operation.clip, DrawOrigin.ATLAS, context.captureImage(operation.atlas), limits, BlendMode.valueOf(operation.blendMode.name), context,
+                operation.paint, operation.transform, operation.clip, DrawOrigin.ATLAS, context.captureImage(operation.atlas), limits, BlendMode.valueOf(operation.blendMode.name), context = context,
             )
         }
         is DisplayOp.DrawVertices -> draw(operation.vertices.toGeometry(null), operation.paint, operation.transform, operation.clip, DrawOrigin.VERTICES, limits, context = context)
@@ -252,6 +254,7 @@ public object DisplayOpSceneAdapter {
         resource: ImageResourceSnapshot?,
         limits: SceneCaptureLimits,
         operationBlendMode: BlendMode? = null,
+        sampling: ImageSampling = ImageSampling.Nearest,
         context: CaptureContext,
     ): SceneCommand.Draw {
         val paint = sourcePaint?.let { capturePaint(it, limits, context, defaultMaterial = resource == null) }
@@ -259,7 +262,7 @@ public object DisplayOpSceneAdapter {
         if (resource == null && sourcePaint == null) context.countGraphLeaf()
         return SceneCommand.Draw(DrawNode(
             geometry = geometry,
-            material = resource?.let(MaterialNode::ImageSample) ?: paint?.shader ?: paint?.let { MaterialNode.Solid(it.color) } ?: MaterialNode.Transparent,
+            material = resource?.let { MaterialNode.ImageSample(it, sampling = sampling) } ?: paint?.shader ?: paint?.let { MaterialNode.Solid(it.color) } ?: MaterialNode.Transparent,
             coverage = paint?.let { if (it.antiAlias) CoverageRequest.ANTIALIASED else CoverageRequest.HARD_EDGE } ?: CoverageRequest.DEFAULT,
             clip = captureClip(clip), blend = paint?.toBlendNode() ?: BlendNode.SrcOver,
             effects = paint?.toEffectStack() ?: EffectStack.Empty, transform = transform.checked("draw.transform"), origin = origin, paint = paint,
@@ -337,6 +340,7 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
     private val gradientStops = GradientStopCaptureBudget(limits.maxGradientStopsI32)
     private val activePictures = IdentityHashMap<org.graphiks.kanvas.picture.Picture, Unit>()
     private val images = IdentityHashMap<org.graphiks.kanvas.image.Image, Unit>()
+    private var imageBytesI64 = 0L
     private var nodes: Int = 0
     private var graphNodes: Int = 0
 
@@ -395,8 +399,19 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
     }
 
     fun captureImage(image: org.graphiks.kanvas.image.Image): ImageResourceSnapshot {
-        if (images.put(image, Unit) == null && images.size > limits.maxResources) {
-            throw CaptureFailure("scene-resource-limit", "Capture has more than ${limits.maxResources} image resources")
+        if (images.put(image, Unit) == null) {
+            if (images.size > limits.maxResources) {
+                throw CaptureFailure("scene-resource-limit", "Capture has more than ${limits.maxResources} image resources")
+            }
+            val retainedBytesI64 = image.pixels?.size?.toLong() ?: 0L
+            imageBytesI64 = try {
+                Math.addExact(imageBytesI64, retainedBytesI64)
+            } catch (_: ArithmeticException) {
+                throw CaptureFailure("scene-capture-image-bytes-exceeded", "Capture image bytes overflow")
+            }
+            if (imageBytesI64 > limits.maxImageBytesI64) {
+                throw CaptureFailure("scene-capture-image-bytes-exceeded", "Capture requests $imageBytesI64 image bytes, exceeding limit ${limits.maxImageBytesI64}")
+            }
         }
         return ResourceSceneAdapter.captureImage(image)
     }

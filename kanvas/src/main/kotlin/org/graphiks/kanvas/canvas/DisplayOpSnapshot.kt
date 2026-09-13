@@ -41,6 +41,7 @@ internal fun List<DisplayOp>.snapshotGeometry(): List<DisplayOp> {
 /** Snapshot state that must be shared for one append or complete operation copy. */
 internal class GeometrySnapshotContext(
     private val gradientStops: RecordingGradientStopBudget? = null,
+    private val imageBytes: RecordingImageByteBudget? = null,
 ) {
     private val textBlobs = IdentityHashMap<TextBlob, TextBlob>()
     private var pendingTextBlobs: IdentityHashMap<TextBlob, TextBlob>? = null
@@ -93,9 +94,10 @@ internal class GeometrySnapshotContext(
         }
     }
 
-    fun snapshot(image: Image): Image = images[image] ?: image.copy(
-        pixels = image.pixels?.copyOf(),
-    ).also { images[image] = it }
+    fun snapshot(image: Image): Image = images[image] ?: run {
+        imageBytes?.reserveImage(image)
+        image.copy(pixels = image.pixels?.copyOf())
+    }.also { images[image] = it }
 
     fun snapshot(filter: MaskFilter): MaskFilter = maskFilters[filter] ?: when (filter) {
         is MaskFilter.Shader -> filter.copy(shader = snapshot(filter.shader))

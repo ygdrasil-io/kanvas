@@ -527,6 +527,7 @@ private fun validateDraw(value: DrawNode): SceneSemanticValidationResult.Invalid
         val resource = value.resource ?: return invalidScene("invalid-draw-resource", "${value.origin} draw requires an image resource")
         val geometryResourceId = when (val geometry = value.geometry) {
             is GeometryNode.ImagePatch -> geometry.image.id.value
+            is GeometryNode.ImageNine -> geometry.image.id.value
             is GeometryNode.ImageLattice -> geometry.image.id.value
             is GeometryNode.Atlas -> geometry.image.id.value
             else -> error("Geometry type was checked before extracting its resource")
@@ -555,9 +556,8 @@ private fun validateDraw(value: DrawNode): SceneSemanticValidationResult.Invalid
             }
         }
         DrawOrigin.POINTS -> requiresGeometry(GeometryNode.Points::class.java)?.let { return it }
-        DrawOrigin.IMAGE,
-        DrawOrigin.IMAGE_NINE,
-        -> requiresImage(GeometryNode.ImagePatch::class.java)?.let { return it }
+        DrawOrigin.IMAGE -> requiresImage(GeometryNode.ImagePatch::class.java)?.let { return it }
+        DrawOrigin.IMAGE_NINE -> requiresImage(GeometryNode.ImageNine::class.java)?.let { return it }
         DrawOrigin.IMAGE_LATTICE -> requiresImage(GeometryNode.ImageLattice::class.java)?.let { return it }
         DrawOrigin.ATLAS -> {
             requiresImage(GeometryNode.Atlas::class.java)?.let { return it }

@@ -27,9 +27,9 @@ import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.vector.Vector2F32
 
 /**
- * The owner of the version-9 Picture payload.
+ * The owner of the versioned Picture payload.
  *
- * A v8/v9 archive starts with the public `KPIC` magic, its version integer and the
+ * A v8/v9/v10 archive starts with the public `KPIC` magic, its version integer and the
  * cull rectangle.  The following negative marker occupies the old v8
  * `opCount` slot: it can therefore never be mistaken for a valid historical
  * v8 op count.  Historical Task 8 v8 streams deliberately return [LegacyV8]
@@ -37,11 +37,11 @@ import org.graphiks.math.vector.Vector2F32
  */
 public object SceneArchiveCodec {
     private val magic: ByteArray = byteArrayOf(0x4b, 0x50, 0x49, 0x43)
-    private const val pictureVersion: Int = 9
+    private const val pictureVersion: Int = 10
     private const val irMarker: Int = -1_391_019_346
-    private const val schemaVersion: Int = 3
+    private const val schemaVersion: Int = 4
 
-    /** Encodes a deeply immutable Scene IR as the sole v9 Picture writer. */
+    /** Encodes a deeply immutable Scene IR as the sole v10 Picture writer. */
     public fun encodePicture(scene: SceneSnapshot, cullRect: RectF32): ByteArray {
         requireSemanticValidity(scene)
         val writer = ArchiveWriter()
@@ -60,7 +60,7 @@ public object SceneArchiveCodec {
         return try {
             if (!reader.bytesEqual(magic)) return SceneArchiveDecodeResult.Invalid("invalid-magic", "Picture magic is not KPIC")
             val encodedPictureVersion = reader.i32()
-            if (encodedPictureVersion !in setOf(8, pictureVersion)) {
+            if (encodedPictureVersion !in setOf(8, 9, pictureVersion)) {
                 return SceneArchiveDecodeResult.Invalid("unknown-version", "Picture version is not supported")
             }
             val cull = reader.rect()
@@ -73,7 +73,12 @@ public object SceneArchiveCodec {
                 }
             }
             val decodedSchemaVersion = reader.i32()
-            val maxSchema = if (encodedPictureVersion == 8) 2 else schemaVersion
+            val maxSchema = when (encodedPictureVersion) {
+                8 -> 2
+                9 -> 3
+                pictureVersion -> schemaVersion
+                else -> 0
+            }
             if (decodedSchemaVersion !in 1..maxSchema) {
                 return SceneArchiveDecodeResult.Invalid("unknown-schema", "Scene archive schema is not supported")
             }
@@ -248,7 +253,9 @@ private class ArchiveWriter {
                 optional(value.copyIndices(), ::ints); optional(value.copyBounds(), ::rect)
                 optional(value.program, ::resourceRef); optional(value.meshProgram, ::meshProgram)
             }
-            is GeometryNode.ImagePatch -> { i32(7); resourceRef(value.image); rect(value.copySource()); rect(value.copyDestination()) }
+            is GeometryNode.ImagePatch -> {
+                i32(7); resourceRef(value.image); rect(value.copySource()); rect(value.copyDestination()); sampling(value.sampling)
+            }
             is GeometryNode.ImageLattice -> {
                 i32(8); resourceRef(value.image); ints(value.copyXDivs()); ints(value.copyYDivs())
                 optional(value.copyCellRects()) { list(it) { rect(it) } }; optional(value.copyColors()) { list(it) { color(it) } }
@@ -264,6 +271,9 @@ private class ArchiveWriter {
                 f32(value.fontSize); stringFloatMap(value.variationCoordinates())
             }
             is GeometryNode.Picture -> { i32(12); scene(value.scene); rect(value.copyCullRect()) }
+            is GeometryNode.ImageNine -> {
+                i32(13); resourceRef(value.image); rect(value.copyCenter()); rect(value.copyDestination()); sampling(value.sampling)
+            }
         }
     }
 
@@ -475,7 +485,23 @@ private class ArchiveReader(private val data: ByteArray) {
         else -> failTag("command")
     } }
     fun draw(): DrawNode = nested {
-        DrawNode(geometry(), material(), enum(), clip(), blend(), effects(), matrix(), enum(), optional(::paint), optional(::image), optional { enum<BlendMode>() })
+        val geometry = geometry()
+        val material = material()
+        val coverage = enum<CoverageRequest>()
+        val clip = clip()
+        val blend = blend()
+        val effects = effects()
+        val transform = matrix()
+        val origin = enum<DrawOrigin>()
+        val paint = optional(::paint)
+        val resource = optional(::image)
+        val operationBlendMode = optional { enum<BlendMode>() }
+        val normalizedGeometry = if (sceneArchiveSchemaVersion <= 3 && origin == DrawOrigin.IMAGE_NINE && geometry is GeometryNode.ImagePatch) {
+            GeometryNode.ImageNine.of(geometry.image, geometry.copySource(), geometry.copyDestination())
+        } else {
+            geometry
+        }
+        DrawNode(normalizedGeometry, material, coverage, clip, blend, effects, transform, origin, paint, resource, operationBlendMode)
     }
     fun layer(): LayerDescriptor = nested { LayerDescriptor.of(optional(::text), optional(::rect), optional(::material), optional(::paint), blend(), clip(), optional(::clip), effects(), effects(), matrix()) }
     fun paint(): PaintNode = nested { PaintNode(color(), optional(::material), enum(), optional(::blender), optional(::colorFilter), optional(::maskFilter), optional(::pathEffect), optional(::imageFilter), enum(), f32(), enum(), enum(), f32(), bool()) }
@@ -485,12 +511,19 @@ private class ArchiveReader(private val data: ByteArray) {
         1 -> GeometryNode.Rect.of(rect()); 2 -> GeometryNode.RRect.of(rrect()); 3 -> GeometryNode.DoubleRRect.of(rrect(), rrect()); 4 -> GeometryNode.Path(path())
         5 -> GeometryNode.Points.of(enum(), list(::point))
         6 -> GeometryNode.IndexedMesh.of(enum(), list(::point), optional { list(::point) }, optional { list(::color) }, optional(::ints), optional(::rect), optional(::resourceRef), optional(::meshProgram))
-        7 -> GeometryNode.ImagePatch.of(resourceRef(), rect(), rect())
+        7 -> {
+            val image = resourceRef()
+            val source = rect()
+            val destination = rect()
+            val sampling = if (sceneArchiveSchemaVersion >= 4) sampling() else ImageSampling.Nearest
+            GeometryNode.ImagePatch.of(image, source, destination, sampling)
+        }
         8 -> GeometryNode.ImageLattice.of(resourceRef(), ints(), ints(), optional { list(::rect) }, optional { list(::color) }, optional { list { enum<LatticeCellFlag>() } }, rect(), sampling())
         9 -> GeometryNode.Atlas.of(resourceRef(), list(::atlasEntry))
         10 -> glyphRun()
         11 -> GeometryNode.TextBlob.of(list(::glyphRun), f32(), f32(), optional(::typeface), f32(), stringFloatMap())
         12 -> GeometryNode.Picture.of(scene(), rect())
+        13 -> GeometryNode.ImageNine.of(resourceRef(), rect(), rect(), sampling())
         else -> failTag("geometry")
     } }
     fun atlasEntry(): GeometryNode.AtlasEntry = GeometryNode.AtlasEntry.of(matrix(), rect(), optional(::color))
@@ -554,7 +587,7 @@ private class ArchiveReader(private val data: ByteArray) {
                         perspectiveCaptureRefusal = bool(),
                         transformClass = text(),
                     )
-                    2, 3 -> clipTransformV2()
+                    2, 3, 4 -> clipTransformV2()
                     else -> throw ArchiveFailure("unknown-schema", "Scene archive schema is not supported")
                 }
                 ClipEntry(geometry, operation, antiAlias, transform)

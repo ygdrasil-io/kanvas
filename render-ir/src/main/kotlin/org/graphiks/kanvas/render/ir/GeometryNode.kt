@@ -128,20 +128,54 @@ public sealed interface GeometryNode : CanonicalValue {
         public val image: ResourceReference,
         source: RectF32,
         destination: RectF32,
+        public val sampling: ImageSampling,
     ) : GeometryNode {
         private val storedSource: RectF32 = source.copy()
         private val storedDestination: RectF32 = destination.copy()
         public fun copySource(): RectF32 = storedSource.copy()
         public fun copyDestination(): RectF32 = storedDestination.copy()
         override val canonicalId: CanonicalId = canonicalId(
-            "geometry-image-patch-v1",
+            "geometry-image-patch-v2",
             image.canonicalId.value,
             rectId("source", storedSource).value,
             rectId("destination", storedDestination).value,
+            sampling.canonicalId.value,
         )
         public companion object {
-            public fun of(image: ResourceReference, source: RectF32, destination: RectF32): ImagePatch =
-                ImagePatch(image, source, destination)
+            public fun of(
+                image: ResourceReference,
+                source: RectF32,
+                destination: RectF32,
+                sampling: ImageSampling = ImageSampling.Nearest,
+            ): ImagePatch = ImagePatch(image, source, destination, sampling)
+        }
+    }
+
+    public class ImageNine private constructor(
+        public val image: ResourceReference,
+        center: RectF32,
+        destination: RectF32,
+        public val sampling: ImageSampling,
+    ) : GeometryNode {
+        private val storedCenter: RectF32 = center.copy()
+        private val storedDestination: RectF32 = destination.copy()
+        public fun copyCenter(): RectF32 = storedCenter.copy()
+        public fun copyDestination(): RectF32 = storedDestination.copy()
+        override val canonicalId: CanonicalId = canonicalId(
+            "geometry-image-nine-v1",
+            image.canonicalId.value,
+            rectId("center", storedCenter).value,
+            rectId("destination", storedDestination).value,
+            sampling.canonicalId.value,
+        )
+
+        public companion object {
+            public fun of(
+                image: ResourceReference,
+                center: RectF32,
+                destination: RectF32,
+                sampling: ImageSampling = ImageSampling.Nearest,
+            ): ImageNine = ImageNine(image, center, destination, sampling)
         }
     }
 
@@ -383,6 +417,10 @@ public sealed interface ImageSampling : CanonicalValue {
     }
 
     public data class Cubic(public val b: Float, public val c: Float) : ImageSampling {
+        init {
+            require(b.isFinite() && b in 0f..1f) { "ImageSampling.Cubic.b must be finite and in [0, 1]" }
+            require(c.isFinite() && c in 0f..1f) { "ImageSampling.Cubic.c must be finite and in [0, 1]" }
+        }
         override val canonicalId: CanonicalId = canonicalId("image-sampling-cubic-v1", b.canonicalBits(), c.canonicalBits())
     }
 }

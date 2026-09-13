@@ -87,15 +87,16 @@ public object SceneDisplayOpAdapter {
                 val geometry = node.geometry as GeometryNode.Points
                 DisplayOp.DrawPoints(PointMode.valueOf(geometry.mode.name), geometry.toList(), requiredPaint(), node.transform, clip)
             }
-            DrawOrigin.IMAGE,
-            DrawOrigin.IMAGE_NINE,
-            -> {
+            DrawOrigin.IMAGE -> {
                 val geometry = node.geometry as GeometryNode.ImagePatch
-                if (node.origin == DrawOrigin.IMAGE) {
-                    DisplayOp.DrawImage(image(), geometry.copySource(), geometry.copyDestination(), paint, node.transform, clip)
-                } else {
-                    DisplayOp.DrawImageNine(image(), geometry.copySource(), geometry.copyDestination(), paint, node.transform, clip)
-                }
+                DisplayOp.DrawImage(
+                    image(), geometry.copySource(), geometry.copyDestination(), paint, node.transform, clip,
+                    geometry.sampling.toSamplingOptions(),
+                )
+            }
+            DrawOrigin.IMAGE_NINE -> {
+                val geometry = node.geometry as GeometryNode.ImageNine
+                DisplayOp.DrawImageNine(image(), geometry.copyCenter(), geometry.copyDestination(), paint, node.transform, clip)
             }
             DrawOrigin.IMAGE_LATTICE -> {
                 val geometry = node.geometry as GeometryNode.ImageLattice

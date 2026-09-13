@@ -139,9 +139,7 @@ class Canvas internal constructor(buffer: DisplayListBuffer) {
     /**
      * Draw an [image] scaled to fill [dst] with an explicit sampling policy.
      *
-     * The policy is recorded on the image shader so GPU lowering can either
-     * select the matching native sampler or report its stable unsupported
-     * diagnostic.
+     * The policy is recorded directly on the image operation.
      */
     fun drawImage(
         image: Image,
@@ -150,8 +148,7 @@ class Canvas internal constructor(buffer: DisplayListBuffer) {
         paint: Paint? = null,
     ) {
         val src = RectF32.ofLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat())
-        val samplingPaint = (paint ?: Paint()).copy(shader = image.makeShader(sampling = sampling))
-        buffer.append(DisplayOp.DrawImage(image, src, dst, samplingPaint, currentTransform, currentRecordedClip))
+        buffer.append(DisplayOp.DrawImage(image, src, dst, paint, currentTransform, currentRecordedClip, sampling))
     }
 
     /**
@@ -161,6 +158,17 @@ class Canvas internal constructor(buffer: DisplayListBuffer) {
      */
     fun drawImageRect(image: Image, src: RectF32, dst: RectF32, paint: Paint? = null) {
         buffer.append(DisplayOp.DrawImage(image, src, dst, paint, currentTransform, currentRecordedClip))
+    }
+
+    /** Draw a sub-region [src] with an explicit sampling policy. */
+    fun drawImageRect(
+        image: Image,
+        src: RectF32,
+        dst: RectF32,
+        sampling: SamplingOptions,
+        paint: Paint? = null,
+    ) {
+        buffer.append(DisplayOp.DrawImage(image, src, dst, paint, currentTransform, currentRecordedClip, sampling))
     }
 
     /** Draw a [TextBlob] at the given position with [paint]. */
