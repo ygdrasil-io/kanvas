@@ -417,10 +417,8 @@ public sealed interface ImageSampling : CanonicalValue {
     }
 
     public data class Cubic(public val b: Float, public val c: Float) : ImageSampling {
-        init {
-            require(b.isFinite() && b in 0f..1f) { "ImageSampling.Cubic.b must be finite and in [0, 1]" }
-            require(c.isFinite() && c in 0f..1f) { "ImageSampling.Cubic.c must be finite and in [0, 1]" }
-        }
+        // Raw bits are scene facts.  W5e owns their finite/range refusal so an invalid
+        // Cubic cannot be redirected into a legacy image path before native work.
         override val canonicalId: CanonicalId = canonicalId("image-sampling-cubic-v1", b.canonicalBits(), c.canonicalBits())
     }
 }

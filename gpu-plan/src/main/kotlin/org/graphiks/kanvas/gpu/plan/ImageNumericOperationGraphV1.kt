@@ -9,12 +9,13 @@ public class ImageNumericOperationGraphV1 private constructor(public val colorAl
         inputs: List<Node> = emptyList()) {
         public val inputs: List<Node> = immutableList(inputs)
     }
-    public enum class TexelOperation { PROJECTIVE_VALIDITY_MASK, PIXEL_CENTER_NEAREST, PIXEL_CENTER_LINEAR,
-        FLOOR_F32, CONVERT_I32, ZERO_TAP_OFFSET_I32, PLUS_ONE_TAP_OFFSET_I32, CLAMP_X_I32, CLAMP_Y_I32,
+    public enum class TexelOperation { PROJECTIVE_VALIDITY_MASK, PIXEL_CENTER_NEAREST, PIXEL_CENTER_LINEAR, PIXEL_CENTER_CUBIC,
+        FLOOR_F32, CONVERT_I32, MINUS_ONE_TAP_OFFSET_I32, ZERO_TAP_OFFSET_I32, PLUS_ONE_TAP_OFFSET_I32, PLUS_TWO_TAP_OFFSET_I32,
+        MITCHELL_NETRAVALI_KERNEL_F32, CLAMP_X_I32, CLAMP_Y_I32,
         REPEAT_X_I32, REPEAT_Y_I32, MIRROR_X_I32, MIRROR_Y_I32, DECAL_X_I32, DECAL_Y_I32, LOAD_UNORM8,
         SWIZZLE_BGRA, ALPHA_OPAQUE, ALPHA_STORED, ZERO_ALPHA_GUARD,
         UNPREMULTIPLY_SOURCE, SRGB_TO_LINEAR, DISPLAY_P3_TO_LINEAR_SRGB,
-        PREMULTIPLY_LINEAR, RETURN_SCALAR_MASK, ACCUMULATE_NEAREST, ACCUMULATE_LINEAR, PAINT_OPACITY }
+        PREMULTIPLY_LINEAR, RETURN_SCALAR_MASK, ACCUMULATE_NEAREST, ACCUMULATE_LINEAR, ACCUMULATE_CUBIC_ROW_MAJOR, PAINT_OPACITY }
     public val contractId: String = "WgslFloatEnvelopeV1"
     public val topologyIdentity: String = "w5e-image-numeric-v1:inverse-project-divide-map:${sampling.topologyId}:${tileModes.topologyId}:$colorAlpha:" +
         texelOperations().joinToString(",") { it.name }
@@ -34,9 +35,18 @@ public class ImageNumericOperationGraphV1 private constructor(public val colorAl
     public val weight11F32: Node?
     public fun texelOperations(): List<TexelOperation> = buildList {
         add(TexelOperation.PROJECTIVE_VALIDITY_MASK)
-        add(if (sampling == ImageSamplingPlanV1.Nearest) TexelOperation.PIXEL_CENTER_NEAREST else TexelOperation.PIXEL_CENTER_LINEAR)
+        add(when (sampling) {
+            ImageSamplingPlanV1.Nearest -> TexelOperation.PIXEL_CENTER_NEAREST
+            ImageSamplingPlanV1.Linear -> TexelOperation.PIXEL_CENTER_LINEAR
+            is ImageSamplingPlanV1.Cubic -> TexelOperation.PIXEL_CENTER_CUBIC
+        })
         addAll(listOf(TexelOperation.FLOOR_F32, TexelOperation.CONVERT_I32, TexelOperation.ZERO_TAP_OFFSET_I32))
-        if (sampling == ImageSamplingPlanV1.Linear) add(TexelOperation.PLUS_ONE_TAP_OFFSET_I32)
+        when (sampling) {
+            ImageSamplingPlanV1.Linear -> add(TexelOperation.PLUS_ONE_TAP_OFFSET_I32)
+            is ImageSamplingPlanV1.Cubic -> addAll(listOf(TexelOperation.MINUS_ONE_TAP_OFFSET_I32,
+                TexelOperation.PLUS_ONE_TAP_OFFSET_I32, TexelOperation.PLUS_TWO_TAP_OFFSET_I32, TexelOperation.MITCHELL_NETRAVALI_KERNEL_F32))
+            ImageSamplingPlanV1.Nearest -> Unit
+        }
         fun axis(mode: ImageTileAxisModePlanV1, x: Boolean) = when (mode) {
             ImageTileAxisModePlanV1.CLAMP -> if (x) TexelOperation.CLAMP_X_I32 else TexelOperation.CLAMP_Y_I32
             ImageTileAxisModePlanV1.REPEAT -> if (x) TexelOperation.REPEAT_X_I32 else TexelOperation.REPEAT_Y_I32
@@ -54,7 +64,11 @@ public class ImageNumericOperationGraphV1 private constructor(public val colorAl
             if (colorAlpha.transfer == ImageTransferPlanV1.SRGB) add(TexelOperation.SRGB_TO_LINEAR)
             if (colorAlpha.gamut == ImageGamutPlanV1.DISPLAY_P3) add(TexelOperation.DISPLAY_P3_TO_LINEAR_SRGB)
             add(TexelOperation.PREMULTIPLY_LINEAR)
-            add(if (sampling == ImageSamplingPlanV1.Nearest) TexelOperation.ACCUMULATE_NEAREST else TexelOperation.ACCUMULATE_LINEAR)
+            add(when (sampling) {
+                ImageSamplingPlanV1.Nearest -> TexelOperation.ACCUMULATE_NEAREST
+                ImageSamplingPlanV1.Linear -> TexelOperation.ACCUMULATE_LINEAR
+                is ImageSamplingPlanV1.Cubic -> TexelOperation.ACCUMULATE_CUBIC_ROW_MAJOR
+            })
             add(TexelOperation.PAINT_OPACITY)
         }
     }
@@ -78,8 +92,8 @@ public class ImageNumericOperationGraphV1 private constructor(public val colorAl
         sourceY = source(4, 1)
         val half = Node(Operation.CONSTANT_HALF_F32)
         val one = Node(Operation.CONSTANT_ONE_F32)
-        tapXF32 = if (sampling == ImageSamplingPlanV1.Linear) binary(Operation.SUB_F32, sourceX, half) else sourceX
-        tapYF32 = if (sampling == ImageSamplingPlanV1.Linear) binary(Operation.SUB_F32, sourceY, half) else sourceY
+        tapXF32 = if (sampling == ImageSamplingPlanV1.Nearest) sourceX else binary(Operation.SUB_F32, sourceX, half)
+        tapYF32 = if (sampling == ImageSamplingPlanV1.Nearest) sourceY else binary(Operation.SUB_F32, sourceY, half)
         baseXF32 = Node(Operation.FLOOR_F32, inputs = listOf(tapXF32))
         baseYF32 = Node(Operation.FLOOR_F32, inputs = listOf(tapYF32))
         if (sampling == ImageSamplingPlanV1.Linear) {

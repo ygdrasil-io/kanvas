@@ -6,6 +6,7 @@ import org.graphiks.math.geometry.RectF32
 import kotlin.math.floor
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.surface.WgslFloatEnvelopeV1Oracle.Interval as I
 
@@ -22,6 +23,7 @@ internal object W5eDecodedImageCpuOracle {
         tileX: TileMode,
         tileY: TileMode,
         paintAlphaF32: Float = 1f,
+        cubic: SamplingOptions.Cubic? = null,
     ): WgslFloatEnvelopeV1Oracle.DrawResult {
         require(widthI32 > 0 && heightI32 > 0)
         val oracle = WgslFloatEnvelopeV1Oracle
@@ -39,6 +41,9 @@ internal object W5eDecodedImageCpuOracle {
             val offsetI32 = (yI32 * widthI32 + xI32) * 4
             val raw = List(4) { channelI32 -> oracle.imageUnorm8(bytes[offsetI32 + channelI32].toInt() and 255) }
             val alpha = raw[3]
+            // Published alpha-zero equation dominates unpremultiplication before a
+            // transparent texel can participate in a filtered kernel.
+            if (alpha == I.ZERO) return Array(4) { I.ZERO }
             val straight = raw.take(3).map { oracle.gradientDivide(it, alpha) }
             val working = straight.map(oracle::imageSrgbToLinear)
             return Array(4) { channelI32 -> if (channelI32 == 3) alpha else oracle.gradientMultiply(working[channelI32], alpha) }
@@ -48,7 +53,37 @@ internal object W5eDecodedImageCpuOracle {
             val y = address(yI32, heightI32, tileY)
             return if (x == null || y == null) Array(4) { I.ZERO } else texel(x, y)
         }
-        val premul = if (!linear) tap(floor(sXF32).toInt(), floor(sYF32).toInt()) else {
+        val premul = when {
+            cubic != null -> {
+                fun weight(distanceF32: Float): I {
+                    val x = kotlin.math.abs(distanceF32)
+                    val b = cubic.B
+                    val c = cubic.C
+                    val value = when {
+                        x < 1f -> ((12f - 9f * b - 6f * c) * x * x * x +
+                            (-18f + 12f * b + 6f * c) * x * x + (6f - 2f * b)) / 6f
+                        x < 2f -> ((-b - 6f * c) * x * x * x + (6f * b + 30f * c) * x * x +
+                            (-12f * b - 48f * c) * x + (8f * b + 24f * c)) / 6f
+                        else -> 0f
+                    }
+                    return I.input(value)
+                }
+                val uX = sXF32 - .5f
+                val uY = sYF32 - .5f
+                val baseX = floor(uX).toInt()
+                val baseY = floor(uY).toInt()
+                Array(4) { channelI32 ->
+                    var sum = I.ZERO
+                    for (offsetY in -1..2) for (offsetX in -1..2) {
+                        val value = tap(baseX + offsetX, baseY + offsetY)[channelI32]
+                        val kernel = oracle.gradientMultiply(weight(uX - (baseX + offsetX)), weight(uY - (baseY + offsetY)))
+                        sum = oracle.gradientAdd(sum, oracle.gradientMultiply(value, kernel))
+                    }
+                    sum
+                }
+            }
+            !linear -> tap(floor(sXF32).toInt(), floor(sYF32).toInt())
+            else -> {
             val uX = sXF32 - .5f
             val uY = sYF32 - .5f
             val baseX = floor(uX).toInt()
@@ -66,6 +101,7 @@ internal object W5eDecodedImageCpuOracle {
             Array(4) { channelI32 -> taps.fold(I.ZERO) { sum, (value, weightX, weightY) ->
                 oracle.gradientAdd(sum, oracle.gradientMultiply(value[channelI32], oracle.gradientMultiply(weightX, weightY)))
             } }
+            }
         }
         return oracle.imageSourceAttachment(Array(4) { channelI32 ->
             oracle.gradientMultiply(premul[channelI32], I.input(paintAlphaF32))

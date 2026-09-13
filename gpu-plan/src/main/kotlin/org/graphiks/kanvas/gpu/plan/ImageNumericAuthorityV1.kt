@@ -45,7 +45,7 @@ public class ImageNumericAuthorityV1 private constructor(
 ) {
     private val bounds = deviceBoundsF32.copy()
     public fun copyDeviceBoundsF32(): RectF32 = bounds.copy()
-    public val canonicalIdentity: String = "${graph.topologyIdentity}:${programIdentity.value}:$uploadIdentity:$coordinateIdentity:" +
+    public val canonicalIdentity: String = "${graph.topologyIdentity}:sampling=${graph.sampling.bindingIdentity}:${programIdentity.value}:$uploadIdentity:$coordinateIdentity:" +
         listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).joinToString(",") { it.toRawBits().toString() } +
         ":paint=$paintAlphaBitsI32:texel-domain-v1:unorm8:positive-alpha-ge-2^-9:signed-components-abs-lt-2^36:" +
         "sampling-arithmetic-v1:${samplingProof.canonicalIdentity}"
@@ -142,14 +142,15 @@ public class ImageNumericAuthorityV1 private constructor(
             evaluate: (ImageNumericOperationGraphV1.Node) -> ClosedFloatingPointRange<Double>,
             rounded: (Double, Double, Boolean) -> ClosedFloatingPointRange<Double>,
         ): ImageSamplingArithmeticProofV1? {
-            fun i32(range: ClosedFloatingPointRange<Double>, extraHighI32: Int): IntRange? {
+            fun i32(range: ClosedFloatingPointRange<Double>, extraLowI32: Int, extraHighI32: Int): IntRange? {
                 val low = floor(range.start)
                 val high = floor(range.endInclusive)
-                if (!low.isFinite() || !high.isFinite() || low < Int.MIN_VALUE.toDouble() ||
+                if (!low.isFinite() || !high.isFinite() || low < Int.MIN_VALUE.toDouble() + extraLowI32 ||
                     high > Int.MAX_VALUE.toDouble() - extraHighI32) return null
                 return low.toInt()..high.toInt()
             }
-            fun plusOne(range: IntRange): IntRange = range.first..Math.addExact(range.last, 1)
+            fun offset(range: IntRange, lowI32: Int, highI32: Int): IntRange =
+                Math.addExact(range.first, lowI32)..Math.addExact(range.last, highI32)
             fun checkedI64(lowI64: Long, highI64: Long): IntRange? {
                 if (lowI64 < Int.MIN_VALUE.toLong() || highI64 > Int.MAX_VALUE.toLong()) return null
                 return lowI64.toInt()..highI64.toInt()
@@ -193,16 +194,33 @@ public class ImageNumericAuthorityV1 private constructor(
                 val addressed = if (mode == ImageTileAxisModePlanV1.MIRROR) 0..(dimensionI32 - 1) else secondModulo
                 return ImageAddressReductionFactV1(mode, indexI32, dimensionI32, remainder, normalized, secondModulo, fold, addressed)
             }
-            val extra = if (graph.sampling == ImageSamplingPlanV1.Linear) 1 else 0
-            val baseX = i32(evaluate(graph.baseXF32), extra) ?: return null
-            val baseY = i32(evaluate(graph.baseYF32), extra) ?: return null
-            val xPre = if (extra == 1) plusOne(baseX) else baseX
-            val yPre = if (extra == 1) plusOne(baseY) else baseY
+            val (extraLow, extraHigh) = when (graph.sampling) {
+                ImageSamplingPlanV1.Nearest -> 0 to 0
+                ImageSamplingPlanV1.Linear -> 0 to 1
+                is ImageSamplingPlanV1.Cubic -> 1 to 2
+            }
+            val baseX = i32(evaluate(graph.baseXF32), extraLow, extraHigh) ?: return null
+            val baseY = i32(evaluate(graph.baseYF32), extraLow, extraHigh) ?: return null
+            val xPre = offset(baseX, -extraLow, extraHigh)
+            val yPre = offset(baseY, -extraLow, extraHigh)
             val xAddress = reduction(xPre, upload.widthI32, graph.tileModes.x) ?: return null
             val yAddress = reduction(yPre, upload.heightI32, graph.tileModes.y) ?: return null
             val signedTexelComponent = -Math.scalb(1.0, 36)..Math.scalb(1.0, 36)
             if (graph.sampling == ImageSamplingPlanV1.Nearest)
                 return ImageSamplingArithmeticProofV1(xPre, yPre, xAddress, yAddress, signedTexelComponent)
+
+            if (graph.sampling is ImageSamplingPlanV1.Cubic) {
+                // For B,C in [0,1], each published one-dimensional Mitchell--Netravali
+                // coefficient is enclosed by [-2,2]; the separable coefficient is
+                // therefore [-4,4].  The emitted left-associated sixteen-term sum is
+                // checked before Ready, independently of pixel values.
+                var accumulated: ClosedFloatingPointRange<Double> = -Math.scalb(1.0, 38)..Math.scalb(1.0, 38)
+                repeat(15) { accumulated = rounded(accumulated.start - Math.scalb(1.0, 38),
+                    accumulated.endInclusive + Math.scalb(1.0, 38), false) }
+                if (!accumulated.start.isFinite() || !accumulated.endInclusive.isFinite() ||
+                    maxOf(abs(accumulated.start), abs(accumulated.endInclusive)) > Float.MAX_VALUE.toDouble()) return null
+                return ImageSamplingArithmeticProofV1(xPre, yPre, xAddress, yAddress, accumulated)
+            }
 
             val weights = listOf(requireNotNull(graph.weight00F32), requireNotNull(graph.weight10F32),
                 requireNotNull(graph.weight01F32), requireNotNull(graph.weight11F32)).map(evaluate)

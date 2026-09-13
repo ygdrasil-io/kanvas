@@ -16,8 +16,8 @@ internal object GPUPlanSurfaceCandidateGate {
                         org.graphiks.kanvas.image.ColorType.ALPHA_8) &&
                     operation.image.alphaType in setOf(org.graphiks.kanvas.image.AlphaType.OPAQUE,
                         org.graphiks.kanvas.image.AlphaType.PREMUL, org.graphiks.kanvas.image.AlphaType.UNPREMUL) &&
-                    operation.sampling in setOf(org.graphiks.kanvas.paint.SamplingOptions.NEAREST,
-                        org.graphiks.kanvas.paint.SamplingOptions.LINEAR) &&
+                    (operation.sampling in setOf(org.graphiks.kanvas.paint.SamplingOptions.NEAREST,
+                        org.graphiks.kanvas.paint.SamplingOptions.LINEAR) || operation.sampling is org.graphiks.kanvas.paint.SamplingOptions.Cubic) &&
                     operation.paint.let { it == null || it.blender == null &&
                         it.colorFilter == null && it.maskFilter == null && it.imageFilter == null &&
                         it.pathEffect == null && it.style == org.graphiks.kanvas.paint.PaintStyle.FILL }
@@ -39,8 +39,8 @@ internal object GPUPlanSurfaceCandidateGate {
         if (paint.style != org.graphiks.kanvas.paint.PaintStyle.FILL || paint.blender != null || paint.colorFilter != null ||
             paint.maskFilter != null || paint.imageFilter != null || paint.pathEffect != null) return false
         val leaf = paint.shader?.imageLeafW5e() ?: return false
-        return leaf.image.pixels != null && leaf.sampling in setOf(org.graphiks.kanvas.paint.SamplingOptions.NEAREST,
-            org.graphiks.kanvas.paint.SamplingOptions.LINEAR) &&
+        return leaf.image.pixels != null && (leaf.sampling in setOf(org.graphiks.kanvas.paint.SamplingOptions.NEAREST,
+            org.graphiks.kanvas.paint.SamplingOptions.LINEAR) || leaf.sampling is org.graphiks.kanvas.paint.SamplingOptions.Cubic) &&
             leaf.image.colorType in setOf(org.graphiks.kanvas.image.ColorType.RGBA_8888, org.graphiks.kanvas.image.ColorType.BGRA_8888,
                 org.graphiks.kanvas.image.ColorType.SRGBA_8888, org.graphiks.kanvas.image.ColorType.ALPHA_8) &&
             leaf.image.alphaType in setOf(org.graphiks.kanvas.image.AlphaType.OPAQUE, org.graphiks.kanvas.image.AlphaType.PREMUL,

@@ -269,8 +269,7 @@ public class W5eImagePlanCompiler : GpuPlanCompiler {
             source = when (val current = source) {
                 is MaterialNode.WithLocalMatrix -> current.material
                 is MaterialNode.Opacity -> current.material
-                is MaterialNode.ImageSample -> return current.image is ImageResourceSnapshot.Pixels &&
-                    current.sampling in setOf(ImageSampling.Nearest, ImageSampling.Linear)
+                is MaterialNode.ImageSample -> return current.image is ImageResourceSnapshot.Pixels
                 else -> return false
             }
         }

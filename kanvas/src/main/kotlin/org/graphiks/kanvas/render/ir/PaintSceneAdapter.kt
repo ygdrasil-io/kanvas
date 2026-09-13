@@ -371,7 +371,7 @@ public object PaintSceneAdapter {
     private fun SamplingOptions.toImageSampling(): ImageSampling = when (this) {
         SamplingOptions.NEAREST -> ImageSampling.Nearest
         SamplingOptions.LINEAR -> ImageSampling.Linear
-        is SamplingOptions.Cubic -> ImageSampling.Cubic(B.checked("sampling.b"), C.checked("sampling.c"))
+        is SamplingOptions.Cubic -> ImageSampling.Cubic(B, C)
     }
     private fun ImageSampling.toSampling(): SamplingOptions = when (this) {
         ImageSampling.Nearest -> SamplingOptions.NEAREST

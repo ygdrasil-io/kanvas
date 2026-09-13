@@ -36,11 +36,14 @@ public object EffectiveMaterialPlanner {
             }
             val sample = source as? MaterialNode.ImageSample
                 ?: throw IllegalArgumentException(W5eImagePlanDiagnostics.UnsupportedSlice)
-            val sampling = when (sample.sampling) {
+            val sampling = when (val requestedSampling = sample.sampling) {
                 org.graphiks.kanvas.render.ir.ImageSampling.Nearest -> ImageSamplingPlanV1.Nearest
                 org.graphiks.kanvas.render.ir.ImageSampling.Linear -> ImageSamplingPlanV1.Linear
-                is org.graphiks.kanvas.render.ir.ImageSampling.Cubic -> throw IllegalArgumentException(W5eImagePlanDiagnostics.UnsupportedSlice)
+                is org.graphiks.kanvas.render.ir.ImageSampling.Cubic -> ImageSamplingPlanV1.Cubic(requestedSampling.b.toRawBits(), requestedSampling.c.toRawBits())
             }
+            if (sampling is ImageSamplingPlanV1.Cubic && (!sampling.bF32.isFinite() || sampling.bF32 !in 0f..1f ||
+                    !sampling.cF32.isFinite() || sampling.cF32 !in 0f..1f))
+                throw IllegalArgumentException(W5eImagePlanDiagnostics.CubicParameters)
             val tileModes = if (direct) ImageTileModePlanV1.ClampClamp else ImageTileModePlanV1(
                 ImageTileAxisModePlanV1.valueOf(sample.tileModeX.name), ImageTileAxisModePlanV1.valueOf(sample.tileModeY.name))
             val pixels = sample.image as? org.graphiks.kanvas.render.ir.ImageResourceSnapshot.Pixels
@@ -100,7 +103,7 @@ public object EffectiveMaterialPlanner {
             val numeric = ImageNumericAuthorityV1.seal(program, upload, coordinates, boundsF32, paintAlphaF32, sampling, tileModes)
                 ?: throw IllegalArgumentException(W5eImagePlanDiagnostics.NumericDomainUnbounded)
             val execution = ImageSampleExecutionPlanV1(upload, coordinates, color, numeric, paintAlphaF32,
-                child?.table?.sourceIdentity(child.root), Math.addExact(upload.byteCountI64, 96L), sampling, tileModes)
+                child?.table?.sourceIdentity(child.root), Math.addExact(upload.byteCountI64, 112L), sampling, tileModes)
             val entries = child?.table?.entries().orEmpty() + MaterialPlanEntry(program, ImageSampleV3.of(execution))
             Result.Ready(MaterialPlanTable.of(entries), MaterialPlanRef(entries.lastIndex))
         } catch (failure: IllegalArgumentException) {

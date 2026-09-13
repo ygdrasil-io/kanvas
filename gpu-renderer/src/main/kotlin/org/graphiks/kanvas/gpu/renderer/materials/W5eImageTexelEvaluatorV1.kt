@@ -105,12 +105,33 @@ internal object W5eImageTexelEvaluatorV1 {
                     return tap00 * $weight00 + tap10 * $weight10 + tap01 * $weight01 + tap11 * $weight11;
                 """.trimIndent()
             }
+            is ImageSamplingPlanV1.Cubic -> {
+                val taps = buildString {
+                    for (row in -1..2) for (column in -1..2) {
+                        append("let tap${row + 1}${column + 1} = w5e_texel(baseXi32 + $column, baseYi32 + $row);\n")
+                    }
+                    append("var accumulated = vec4<f32>(0.0);\n".takeIf { !maskSource } ?: "var accumulated = 0.0;\n")
+                    for (row in -1..2) for (column in -1..2) {
+                        append("accumulated = accumulated + tap${row + 1}${column + 1} * " +
+                            "(w5e_cubic_weight($tapX - f32(baseXi32 + $column)) * w5e_cubic_weight($tapY - f32(baseYi32 + $row)));\n")
+                    }
+                }
+                """
+                    if (!w5e_finite($tapX) || !w5e_finite($tapY) || $tapX < -2147483647.0 || $tapX >= 2147483646.0 ||
+                        $tapY < -2147483647.0 || $tapY >= 2147483646.0) { return $zero; }
+                    $afterValidityStatements
+                    let baseXi32 = i32($baseX);
+                    let baseYi32 = i32($baseY);
+                    $taps
+                    return accumulated;
+                """.trimIndent()
+            }
         }
         return """
             ${child?.declarationsWgsl.orEmpty()}
             struct W5eImageBlock {
                 values0: vec4<f32>, values1: vec4<f32>, values2: vec4<f32>,
-                values3: vec4<f32>, values4: vec4<f32>, parameters: vec4<f32>,
+                values3: vec4<f32>, values4: vec4<f32>, parameters: vec4<f32>, cubicParameters: vec4<f32>,
                 ${if (child != null) "child: W5aMaterialBlock," else ""}
             }
             @group(1) @binding(${layout.uniformBindingU32}) var<uniform> w5eImage: W5eImageBlock;
@@ -118,6 +139,20 @@ internal object W5eImageTexelEvaluatorV1 {
             ${if (child == null) W5aMaterialSourceStage.SRGB_TO_LINEAR_WGSL else ""}
             fn w5e_finite(value: f32) -> bool { return (bitcast<u32>(value) & 0x7f800000u) != 0x7f800000u; }
             fn w5e_device_point(pixel: vec2<f32>) -> vec2<f32> { return pixel; }
+            fn w5e_cubic_weight(distance: f32) -> f32 {
+                let x = abs(distance);
+                let b = w5eImage.cubicParameters.x;
+                let c = w5eImage.cubicParameters.y;
+                if (x < 1.0) {
+                    return ((12.0 - 9.0 * b - 6.0 * c) * x * x * x +
+                        (-18.0 + 12.0 * b + 6.0 * c) * x * x + (6.0 - 2.0 * b)) / 6.0;
+                }
+                if (x < 2.0) {
+                    return ((-b - 6.0 * c) * x * x * x + (6.0 * b + 30.0 * c) * x * x +
+                        (-12.0 * b - 48.0 * c) * x + (8.0 * b + 24.0 * c)) / 6.0;
+                }
+                return 0.0;
+            }
             fn w5e_texel(ix: i32, iy: i32) -> $returnType {
                 $addressX
                 $addressY

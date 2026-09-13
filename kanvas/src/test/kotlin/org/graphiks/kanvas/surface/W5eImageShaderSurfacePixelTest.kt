@@ -34,6 +34,33 @@ import kotlin.test.assertEquals
 import org.graphiks.kanvas.surface.WgslFloatEnvelopeV1Oracle.Interval as I
 
 class W5eImageShaderSurfacePixelTest {
+    @Test fun cubicTileBoundariesMatchOracle() {
+        val bytes = byteArrayOf(
+            -1, 0, 0, -1, 0, -1, 0, -1,
+            0, 0, -1, -1, -1, -1, 0, -1,
+            0, -1, -1, -1, -1, 0, -1, -1,
+        )
+        val image = Image.fromPixels(2, 3, bytes, alphaType = AlphaType.PREMUL)
+        for (tileX in TileMode.entries) for (tileY in TileMode.entries) for (path in listOf(false, true)) {
+            val sampling = SamplingOptions.Cubic.CatmullRom
+            val surface = Surface(3, 3)
+            val shader = Shader.WithLocalMatrix(Shader.Image(image, tileX, tileY, sampling), Matrix3x3F32.translation(1.25f, 1.75f))
+            surface.canvas {
+                if (path) drawPath(Path().apply { addRect(RectF32.ofLTRB(0f, 0f, 3f, 3f)) }, paint(shader))
+                else drawRect(RectF32.ofLTRB(0f, 0f, 3f, 3f), paint(shader))
+            }
+            val result = surface.render()
+            for (yI32 in 0 until 3) for (xI32 in 0 until 3) {
+                val expected = W5eDecodedImageCpuOracle.sampledColorPixel(2, 3, bytes, xI32 - .75f, yI32 - 1.25f,
+                    false, tileX, tileY, cubic = sampling)
+                require(expected is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { "$tileX/$tileY/$path: $expected" }
+                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange((yI32 * 3 + xI32) * 4, (yI32 * 3 + xI32 + 1) * 4))
+            }
+            assertEquals(1, result.stats.opsDispatched, "$tileX/$tileY/$path")
+            assertEquals(0, result.stats.opsRefused, "$tileX/$tileY/$path")
+        }
+    }
+
     @Test fun tileModesApplyPerTapOnBothAxes() {
         val bytes = byteArrayOf(
             -1, 0, 0, -1, 0, -1, 0, -1,

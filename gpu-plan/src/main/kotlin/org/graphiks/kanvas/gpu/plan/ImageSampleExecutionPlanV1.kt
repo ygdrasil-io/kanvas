@@ -16,8 +16,15 @@ public enum class ImageGamutPlanV1 { SRGB, DISPLAY_P3, NONE }
 /** Structural filter selection; a texture upload never carries this semantic. */
 public sealed interface ImageSamplingPlanV1 {
     public val topologyId: String
-    public data object Nearest : ImageSamplingPlanV1 { override val topologyId: String = "nearest-floor-v1" }
-    public data object Linear : ImageSamplingPlanV1 { override val topologyId: String = "linear-four-tap-v1" }
+    public val bindingIdentity: String
+    public data object Nearest : ImageSamplingPlanV1 { override val topologyId: String = "nearest-floor-v1"; override val bindingIdentity: String = topologyId }
+    public data object Linear : ImageSamplingPlanV1 { override val topologyId: String = "linear-four-tap-v1"; override val bindingIdentity: String = topologyId }
+    public data class Cubic(public val bBitsI32: Int, public val cBitsI32: Int) : ImageSamplingPlanV1 {
+        override val topologyId: String = "cubic-sixteen-tap-v1"
+        override val bindingIdentity: String = "$topologyId:b=$bBitsI32:c=$cBitsI32"
+        public val bF32: Float get() = Float.fromBits(bBitsI32)
+        public val cF32: Float get() = Float.fromBits(cBitsI32)
+    }
 }
 
 public enum class ImageTileAxisModePlanV1 { CLAMP, REPEAT, MIRROR, DECAL }
@@ -114,7 +121,7 @@ public class ImageSampleExecutionPlanV1 internal constructor(
     public fun copySourceCellsF32(): List<RectF32> = listOf(coordinates.copySourceF32())
     public fun copyDestinationCellsF32(): List<RectF32> = listOf(coordinates.copyDestinationF32())
     public val canonicalIdentity: String = "image-execution-v1:${upload.contentIdentity}:${coordinates.canonicalIdentity}:$colorAlpha:" +
-        "${sampling.topologyId}:${tileModes.topologyId}:${paintAlphaF32.toRawBits()}:" +
+        "${sampling.bindingIdentity}:${tileModes.topologyId}:${paintAlphaF32.toRawBits()}:" +
         childSourceIdentity.orEmpty() +
         ":${numericAuthority.canonicalIdentity}:budget=$totalPessimisticBudgetBytesI64"
     init {

@@ -8,9 +8,9 @@ public class ImageSourceLayoutV3 internal constructor(public val hasChildGradien
     public val uniformBindingU32: UInt = 0u
     public val gradientStorageBindingU32: UInt? = if (hasChildGradientStorage) 1u else null
     public val imageTextureBindingU32: UInt = if (hasChildGradientStorage) 2u else 1u
-    public val imageUniformByteCountI64: Long = 96L
+    public val imageUniformByteCountI64: Long = 112L
     public val structuralIdentity: String = "image-source-layout-v3:uniform0:" +
-        if (hasChildGradientStorage) "stops1:texture2" else "texture1"
+        (if (hasChildGradientStorage) "stops1:texture2" else "texture1") + ":cubic-parameters"
 }
 
 /** Handle-free raw V2 binding layout, shared by capability sealing and native packing. */
@@ -82,6 +82,8 @@ public class RawMaterialRequirementsV2 private constructor(
                     execution.coordinates.uniformValuesF32().forEach(::putFloat)
                     putFloat(execution.upload.widthI32.toFloat()).putFloat(execution.upload.heightI32.toFloat())
                     putFloat(execution.paintAlphaF32).putFloat(0f)
+                    val cubic = execution.sampling as? ImageSamplingPlanV1.Cubic
+                    putFloat(cubic?.bF32 ?: 0f).putFloat(cubic?.cF32 ?: 0f).putFloat(0f).putFloat(0f)
                     child?.copyUniformBytes()?.let(::put)
                 }.array()
                 return RawMaterialRequirementsV2(1 + (child?.bindingCountI32 ?: 0), bytesI64,

@@ -18,4 +18,5 @@ public object W5eImagePlanDiagnostics {
     public const val FrameBudget: String = "resource.material.image.frame-budget"
     public const val Capability: String = "unsupported.material.image.capability"
     public const val InvalidContract: String = "invalid.material.image.contract"
+    public const val CubicParameters: String = "invalid.material.image.cubic-parameters"
 }

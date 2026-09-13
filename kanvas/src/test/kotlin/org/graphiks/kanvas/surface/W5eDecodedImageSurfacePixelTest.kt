@@ -19,6 +19,34 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 
 class W5eDecodedImageSurfacePixelTest {
+    @Test fun cubicDrawImageMatchesMitchellNetravaliOracle() {
+        // Removing the sixteen-tap kernel, or treating B/C as one default pair, changes
+        // this transparent-boundary fixture for at least one public Cubic selection.
+        val bytes = byteArrayOf(
+            -1, 0, 0, -1, 0, -1, 0, -1, 0, 0, -1, -1,
+            63, 127, -1, 0, -1, -1, 0, -1, -1, 0, -1, -1,
+        )
+        val image = Image.fromPixels(3, 2, bytes, alphaType = AlphaType.PREMUL)
+        val samplings = listOf(SamplingOptions.Cubic.Mitchell, SamplingOptions.Cubic.CatmullRom,
+            SamplingOptions.Cubic(Float.fromBits(0x3eaaaaaa), .5f), SamplingOptions.Cubic(Float.fromBits(0x3eaaaaab), .5f))
+        for (sampling in samplings) {
+            val surface = Surface(5, 4)
+            val source = RectF32.ofLTRB(-.5f, -.5f, 3.5f, 2.5f)
+            surface.canvas { drawImageRect(image, source, RectF32.ofLTRB(0f, 0f, 5f, 4f), sampling, paint()) }
+            val result = surface.render()
+            for (yI32 in 0 until 4) for (xI32 in 0 until 5) {
+                val expected = W5eDecodedImageCpuOracle.sampledColorPixel(3, 2, bytes,
+                    source.left + ((xI32 + .5f) / 5f) * (source.right - source.left),
+                    source.top + ((yI32 + .5f) / 4f) * (source.bottom - source.top), false,
+                    org.graphiks.kanvas.paint.TileMode.CLAMP, org.graphiks.kanvas.paint.TileMode.CLAMP, cubic = sampling)
+                require(expected is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { "$sampling: $expected" }
+                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange((yI32 * 5 + xI32) * 4, (yI32 * 5 + xI32 + 1) * 4))
+            }
+            assertEquals(1, result.stats.opsDispatched, sampling.toString())
+            assertEquals(0, result.stats.opsRefused, sampling.toString())
+        }
+    }
+
     @Test fun nearestAndLinearUsePixelCenters() {
         val bytes = byteArrayOf(
             -1, 0, 0, -1, 0, -1, 0, -1,
@@ -197,6 +225,18 @@ class W5eDecodedImageSurfacePixelTest {
             surface.canvas { drawImage(image, RectF32.ofLTRB(0f, 0f, 1f, 1f), SamplingOptions.NEAREST, paint()) }
             val failure = assertThrows<IllegalStateException> { surface.render() }
             assertEquals("unsupported.material.image.$code", failure.message.orEmpty().substringBefore(':'))
+            assertRecovery()
+        }
+    }
+
+    @Test fun invalidCubicParametersRefuseAndRecover() {
+        for (sampling in listOf(SamplingOptions.Cubic(Float.NaN, .5f), SamplingOptions.Cubic(-.01f, .5f),
+            SamplingOptions.Cubic(.5f, Float.POSITIVE_INFINITY), SamplingOptions.Cubic(.5f, 1.01f))) {
+            val surface = Surface(1, 1)
+            surface.canvas { drawImage(Image.fromPixels(1, 1, byteArrayOf(-1, 0, 0, -1), alphaType = AlphaType.PREMUL),
+                RectF32.ofLTRB(0f, 0f, 1f, 1f), sampling, paint()) }
+            val failure = assertThrows<IllegalStateException> { surface.render() }
+            assertEquals("invalid.material.image.cubic-parameters", failure.message.orEmpty().substringBefore(':'))
             assertRecovery()
         }
     }

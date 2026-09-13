@@ -26,6 +26,9 @@ internal object GPUW5eImageNativeV1 {
                 image.execution.numericAuthority.graph.tileModes == image.execution.tileModes) {
                 W5eImagePlanDiagnostics.InvalidContract
             }
+            val cubic = image.execution.sampling as? ImageSamplingPlanV1.Cubic
+            require(cubic == null || cubic.bF32.isFinite() && cubic.bF32 in 0f..1f &&
+                cubic.cF32.isFinite() && cubic.cF32 in 0f..1f) { W5eImagePlanDiagnostics.CubicParameters }
         }
         return expected.imageDraws().isNotEmpty()
     }
