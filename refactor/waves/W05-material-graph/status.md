@@ -1,4 +1,24 @@
-# État W05 — material graph, gradients et images décodées W5e
+# État W05 — material graph, gradients, images et color filters
+
+## W5f — plan relu et corrigé, prêt à exécuter
+
+Le [plan W5f](../../plans/2026-09-14-w5f-color-filters-implementation-plan.md)
+prépare huit livraisons séquentielles sur `codex/w5f-color-filters`, à partir de
+W5e `7a06459dde8fb3ba0a4c8287a8405bc1994ce883`. Les douze color filters
+non-runtime et les cinq domaines d'interpolation rejoignent l'autorité material
+commune, avec preuves publiques Rect/Path fill/images et les nouvelles interpolations
+sur les quatre lanes gradients déjà promues. La relecture indépendante Astra a
+produit cinq Important, sans Critical/Minor. Les cinq corrections sont intégrées:
+certificat source authentifié/corrélé, achromatisme polaire exact, préflight au
+premier snapshot, inventaire complet des readers V4 et matrice publique attribuée.
+La confirmation ciblée a marqué quatre ADDRESSED et la couverture PARTIAL pour
+une seule dépendance future; son ajustement local prescrit est appliqué, sans
+nouvelle décision produit ni boucle de review. Le plan est prêt pour l'exécution
+séquentielle SDD déjà choisie. Aucun code de production ou test W5f n'est implémenté;
+aucun nouveau résultat de test, verdict d'intégration ou PR W5f n'est revendiqué.
+Font, codecs externes et tests d'infrastructure restent exclus; les réserves W5e
+ci-dessous sont conservées. La future PR W5f sera stackée sur W5e #2399, sans
+modifier la PR parente.
 
 ## W5e — tranche fonctionnelle close, intégration réservée
 

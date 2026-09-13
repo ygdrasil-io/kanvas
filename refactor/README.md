@@ -45,6 +45,7 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 - [Plan W5a — Solid/Opacity](plans/2026-09-09-w5a-solid-opacity-implementation-plan.md)
 - [Plan W5b — final blends communs](plans/2026-09-10-w5b-final-blends-implementation-plan.md)
 - [Plan W5e — images décodées, neuf tâches séquentielles](plans/2026-09-12-w5e-decoded-images-implementation-plan.md)
+- [Plan W5f — color filters et interpolation, huit tâches séquentielles](plans/2026-09-14-w5f-color-filters-implementation-plan.md) — relu par Astra, cinq corrections intégrées et dernier ajustement de séquencement appliqué; prêt à exécuter, non implémenté.
 
 ### État et rapports finaux
 
