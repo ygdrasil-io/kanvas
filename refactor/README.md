@@ -84,14 +84,22 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 - [État W05 — Solid/Opacity, final blends, gradients et images décodées](waves/W05-material-graph/status.md)
   — W5e implémente DrawImage/Nine/Lattice/Atlas et ImageShader Rect/Path fill sous
   une autorité MaterialV3, avec sampling/stride/provenance de snapshot préservés
-  par capture/Picture10, et cache device borné. Revue Task9 puis branche en cours.
-  La régression forcée du 13 septembre 2026 compte 256 méthodes, 254 passées,
-  deux skips AA4, aucune failure/error d'assertion; Gradle exit1/worker130 exit133,
-  `BUILD FAILED`, compilation séparée exit0. Les cinq commandes GM décodés ont été
+  par capture/Picture10, et cache device borné. Les neuf tâches et leurs reviews
+  sont closes. La revue globale a produit deux Important et deux Minor, tous
+  corrigés dans une vague Astra puis approuvés par l'unique re-review Sol, sans
+  nouvelle régression identifiée. Sampling/stride legacy, copies non uniformes
+  RGBA/BGRA et garde schema4 du tag Nine sont fermés.
+  La régression forcée après correctifs du 13 septembre 2026 compte 262 méthodes,
+  260 passées, deux skips AA4, aucune failure/error d'assertion;
+  Gradle exit1/worker142 exit133, `BUILD FAILED`6m11s, compilation indépendante
+  séparée exit0. Contrôle indépendant final28/28 assertions passées,
+  Gradle1/worker143exit133. La PR stackée demandée reste en brouillon, basée sur
+  W5d #2398, et non prête à fusionner. Les cinq commandes GM décodés ont été
   tentées: quatre failures de rendu (producteurs/AA/legacy), une initialization
   failure (`alpha_image` absent du registre), aucun score produit ni preuve ISO.
   Font/codec exclus. Les réserves numériques Atlas, clip Picture générique,
-  close/rollback target-level et teardown natif restent documentées.
+  close/rollback target-level et teardown natif restent documentées, ainsi que la
+  convention de payload exact et les copies prévalidation du legacy non admis.
   L'ajout actualSceneTarget ferme la collision equal-extent antérieure.
   L'historique suivant décrit W5d avant cette tranche W5e.
   — W5d ferme Linear/Radial/Sweep/Conical SRGB et les quatre tile modes avec
@@ -127,7 +135,7 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 | W2 | `Scene IR` et frontières de modules | Capture backend-neutral et frontières de modules implémentées ; gate stricte **NON ATTEINTE** (431/443 captures, 12 dettes), rendu public encore legacy |
 | W3 | `gpu-plan` et premier `RenderGraph` | Capability rectangles solides/clip simple/`SrcOver` branchée et prouvée par pixels exacts ; baseline globale conservée (51 échecs connus, 0 erreur) |
 | W4 | Geometry/coverage | W4a ScalarAA Rect, W4b RRect analytique, W4c fills hard-edge et W4d.1 strokes/hairlines hard-edge sont atteints. W4d.2 ajoute les transforms F64 `Identity`/`AxisAlignedAffine`/`GeneralAffine`/`Perspective`, le graph AA4/resolve scellé et la lane hard générale prouvée byte-exact à travers `Surface`. W4e fournit hard mask 1×, inverse/D24S8 et oracle/matrice `Surface`; Task 9-fix1 clôt les 18 deltas frais, Task 9-fix2 élimine le fallback d'usages couleur implicite, et le correctif final post-revue couvre les consumers Rect/RRect/Path, les entrées/copies bornées et les buffers V/I/U scellés. `final-fix3` conserve ses preuves publiques de mutation/ordre; la pré-publication `.from` reste un constat statique, sans conclusion pixel sur l'identité du pool. La baseline globale historique reste 51 failures, 0 error et 2 skips, sans nouveau run global W5b. Les 45 DrawPoint sont désormais fermés par le gate public W5b; restent AA4 et `TopologyLimit` conservative F64→F32. Font/codec, GM/dashboard/baseline et `jpg-color-cube` exclus ([status](waves/W04-geometry-coverage/status.md)) |
-| W5 | Material graph, blends, gradients et images | W5a–W5d closes sur leurs périmètres. W5e implémente les neuf tâches decoded-image sous MaterialV3; revue Task9 puis branche en cours. Régression forcée13 septembre: 256 méthodes,254 passées,2skipsAA4,0failure/error d'assertion; Gradle1/worker130exit133, compilation0. GM ciblés:4failures de rendu et1défaut de registre, pas de score ISO; gaps producteurs/legacy et domaines Atlas conservateurs explicites. Equal-extent corrigé; Conical B-cross-zero/AA4/clip Picture/close/rollback target-level/teardown restent réservés. W5f/W5g/W5h/H ouverts ([status](waves/W05-material-graph/status.md)) |
+| W5 | Material graph, blends, gradients et images | W5a–W5e closes sur leurs périmètres fonctionnels. Les neuf tâches W5e sous MaterialV3, la review globale, sa vague de quatre corrections et l'unique re-review Sol sont closes. Régression forcée13 septembre après fix:262 méthodes,260 passées,2skipsAA4,0failure/error d'assertion; Gradle1/worker142exit133, compilation indépendante0. Final indépendant28/28 assertions passées, Gradle1/worker143exit133. PR W5e brouillon basée sur W5d #2398, non prête à fusionner. GM ciblés:4failures de rendu et1défaut de registre, pas de score ISO; gaps producteurs/legacy et domaines Atlas conservateurs explicites. Equal-extent corrigé; Conical B-cross-zero/AA4/clip Picture/close/rollback target-level/teardown restent réservés. W5f/W5g/W5h/H ouverts ([status](waves/W05-material-graph/status.md)) |
 | W6 | Layers et effets | Non démarrée |
 | W7 | Convergence GM | Non démarrée |
 | W8 | Retrait legacy et runtime | Non démarrée |

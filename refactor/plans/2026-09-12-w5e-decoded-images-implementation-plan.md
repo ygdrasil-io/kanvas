@@ -10,6 +10,53 @@
 
 **Spec:** `refactor/specs/2026-09-12-w5e-decoded-images-design.md`, governed by `refactor/specs/2026-09-09-w5-material-graph-design.md` and the sealed W5a–W5d contracts.
 
+## Execution status — 2026-09-13
+
+The nine task implementations and their independent Sol task reviews are complete.
+The original step checklists below preserve the approved execution contract; this
+table records actual task closure, including the explicitly documented rulings.
+
+| Task | Delivered slice | Status |
+| --- | --- | --- |
+| 1 | Explicit public sampling/stride, immutable capture, Picture10/schema4 and old8/9 reads | Complete |
+| 2 | Sealed MaterialV3 image plan, raw upload identity and bounded device cache | Complete |
+| 3 | Four formats, alpha/colour interpretation and authenticated A8 child material | Complete |
+| 4 | Rect/Path-fill ImageShader, direct fractional/General geometry and mixed material transport | Complete |
+| 5 | Shared Linear evaluator and independent X/Y tile modes | Complete |
+| 6 | Mitchell–Netravali Cubic, checked operation graph and independent WGSL-envelope oracle | Complete |
+| 7 | Distinct ImageNine, one outer coverage geometry and validated empty NoOps | Complete |
+| 8 | Regular/explicit Lattice and ordered Atlas, entry-colour proof and actual SceneTarget identity | Complete |
+| 9 | Typed snapshot representation across Image/IR/Picture/material, ownership/budget audit and public recovery | Complete |
+
+Task9 is committed in `a51c1d3ea`. The complete independent branch review covered
+`57d7bc2d5..a51c1d3ea` and identified two Important and two Minor findings.
+One complete Astra fix wave in `6c3b3b5aa` carries explicit sampling through all
+legacy synthetic producers, forwards the declared stride, adds discriminating
+nonuniform offset/multirow RGBA/BGRA copies, and rejects new Nine geometry in old
+archive schemas. The single scoped Sol re-review marks all four ADDRESSED, with
+no new Critical/Important/Minor breakage; spec compliance and code quality APPROVED.
+The functional W5e slice is closed with the execution/integration limits below,
+not a green build or a global ISO claim. No second wave or open fix finding.
+
+Post-fix forced public W5e/W5a–d covering: **262 methods,260 passed,2 historical AA4
+skips,0 assertion failures/errors**. Actual command: Gradle1/native worker142
+exit133, BUILD FAILED6m11s. Root independently inspected all nine fresh XML before
+the final narrow run overwrote the current files. Final committed-code root
+compile: exit0/908ms; convergence/Picture:28/28 assertions passed, Gradle1/native
+worker143exit133, BUILD FAILED6s. These are not green test commands.
+
+The five targeted GM commands yielded four rendering failures and one unregistered
+`alpha_image` that did not execute. No score/manifest, reference, render or dashboard
+changed. Public proofs do not establish native failure injection, positive AA4,
+public close, or same-target numeric rollback; the generic Picture clip remains
+inherited. Legacy stays semantic only before whole-frame admission, retains its
+pre-existing exact trailing-payload refusal and prevalidation copy debt, and
+explicitly refuses typed attachment snapshots there. W5f–h and W6–W8 stay open.
+Detailed fresh counts, timestamps, diagnostics and limits live in
+[the durable W05 status](../waves/W05-material-graph/status.md).
+The requested unique draft PR targets `codex/w5d-gradient-addressing`, depends on
+W5d #2398, and is not ready-to-merge.
+
 ## Global Constraints
 
 - Branch `codex/w5e-decoded-images` is stacked on `codex/w5d-gradient-addressing`; its PR targets `codex/w5d-gradient-addressing`.

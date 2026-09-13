@@ -1,12 +1,16 @@
 # État W05 — material graph, gradients et images décodées W5e
 
-## W5e — implémentation fonctionnelle, revue finale en cours
+## W5e — tranche fonctionnelle close, intégration réservée
 
 La branche `codex/w5e-decoded-images`, empilée sur W5d, implémente les neuf tâches du
 [plan W5e](../../plans/2026-09-12-w5e-decoded-images-implementation-plan.md), selon le
-[design approuvé](../../specs/2026-09-12-w5e-decoded-images-design.md). La clôture reste
-conditionnée à la revue indépendante de Task9 puis de toute la branche; aucune
-affirmation de succès Gradle ou de compatibilité quasi isopixel globale.
+[design approuvé](../../specs/2026-09-12-w5e-decoded-images-design.md). La revue
+indépendante Task9 est close; la revue complète a produit quatre findings, corrigés
+ensemble dans `6c3b3b5aa`. L'unique re-review Sol ciblée les marque tous ADDRESSED,
+sans nouvelle régression Critical/Important/Minor; spec compliance et code quality
+APPROVED. Cette clôture fonctionnelle ne signifie ni succès Gradle, ni branche prête
+à fusionner, ni compatibilité quasi isopixel globale. La PR demandée est un brouillon
+unique basé sur `codex/w5d-gradient-addressing`, dépendant de la PR W5d #2398.
 
 DrawImage, ImageNine, ImageLattice, Atlas, et ImageShader sur Rect/Path fill ont une
 autorité MaterialV3 commune, un évaluateur de texels partagé et une preuve numérique
@@ -34,7 +38,11 @@ typée `TRANSFER_ENCODED_LINEAR_PREMUL`, distincte du PREMUL source-space ordina
 Un nouveau tag d'image transporte cette distinction: les lecteurs10 intermédiaires
 plus anciens le refusent; aucune compatibilité forward skippable ni réparation
 heuristique d'anciens snapshots mal étiquetés. Full/subset, copy/reinterpret,
-Picture.playback et Atlas translucides ont des témoins publics.
+Picture.playback et Atlas translucides ont des témoins publics. Un témoin distinct
+4×3 non uniforme contrôle les copies full/subset `[1,1,3,3]` sur plusieurs lignes
+RGBA/BGRA, copy/reinterpret et replay Picture. Le nouveau tag géométrique Nine13
+exige schema4; les profils historiques8/9 et la normalisation ImagePatch restent
+valides, les archives anciennes portant ce nouveau tag sont rejetées.
 
 Après admission image, capture/plan/submit refusés sont terminaux, sans continuation
 legacy. Avant admission d'une frame complète, les lowerers historiques restent
@@ -42,7 +50,21 @@ explicitement des compatibilités sémantiques pour les formats/effects exclus, 
 des transports « physical-only ». Ils refusent un attachment snapshot avec
 `unsupported.image.prepared.premultiplication` plutôt que d'inventer une seconde
 conversion. Cette conservation est intentionnelle: l'autorité unique est celle des
-lanes promues, pas le retrait global du legacy prévu en W8.
+lanes promues, pas le retrait global du legacy prévu en W8. Le correctif final
+transmet sampling explicite et stride déclaré aux compatibilités non admises,
+y compris leurs constructeurs synthétiques: Nine/Atlas **legacy** gardent leur
+Linear historique, distinct du Nearest des lanes **promues**.
+
+### Clôture des reviews
+
+Le plan a été relu indépendamment par Astra avant l'implémentation. Les neuf tâches
+ont leurs reviews Sol closes; Sol n'a effectué aucune implémentation. La review
+globale sur `57d7bc2d5..a51c1d3ea` a demandé deux corrections Important et deux Minor.
+Une seule vague Astra complète et une seule re-review Sol sur `a51c1d3ea..6c3b3b5aa`
+ont fermé sampling legacy, stride, copies discriminantes et garde schema4 Nine.
+Aucun finding de cette vague n'est différé et aucune seconde boucle n'est ouverte.
+Les limites ci-dessous demeurent des gaps d'exécution/intégration, non des findings
+silencieusement effacés par l'approbation du code.
 
 ### Vérification publique fraîche — 13 septembre 2026
 
@@ -51,30 +73,35 @@ rtk ./gradlew :render-ir:compileKotlin :gpu-plan:compileKotlin :gpu-renderer:com
 rtk ./gradlew :kanvas:test --tests '*W5e*' --tests '*W5dGradientAddressingSurfacePixelTest*' --tests '*W5cGradientSurfacePixelTest*' --tests '*W5bBlendSurfacePixelTest*' --tests '*W5aMaterialSurfacePixelTest*' --no-parallel --rerun-tasks
 ```
 
-Compilation séparée: exit0. La sélection forcée complète compte **256 méthodes,
-254 passées, deux skips AA4, aucune failure/error XML d'assertion**.
+Compilation séparée du code final `6c3b3b5aa`: exit0, contrôle indépendant en908ms.
+La sélection forcée complète après les quatre corrections compte **262 méthodes,
+260 passées, deux skips AA4, aucune failure/error XML d'assertion**.
 
 | Suite publique | Méthodes | Passées | Skips | Timestamp XML UTC |
 | --- | ---: | ---: | ---: | --- |
-| W5ePictureImageSamplingTest | 12 | 12 | 0 | 16:17:25.118Z |
-| W5aMaterialSurfacePixelTest | 48 | 47 | 1 | 16:17:25.225Z |
-| W5bBlendSurfacePixelTest | 50 | 50 | 0 | 16:17:37.261Z |
-| W5cGradientSurfacePixelTest | 27 | 27 | 0 | 16:18:02.619Z |
-| W5dGradientAddressingSurfacePixelTest | 41 | 40 | 1 | 16:18:48.949Z |
-| W5eDecodedImageSurfacePixelTest | 14 | 14 | 0 | 16:20:13.195Z |
-| W5eImageConvergenceSurfaceTest | 10 | 10 | 0 | 16:20:34.605Z |
-| W5eImageFamiliesSurfacePixelTest | 27 | 27 | 0 | 16:20:35.027Z |
-| W5eImageShaderSurfacePixelTest | 27 | 27 | 0 | 16:21:04.515Z |
+| W5ePictureImageSamplingTest | 13 | 13 | 0 | 17:04:24.825Z |
+| W5aMaterialSurfacePixelTest | 48 | 47 | 1 | 17:04:24.917Z |
+| W5bBlendSurfacePixelTest | 50 | 50 | 0 | 17:04:36.633Z |
+| W5cGradientSurfacePixelTest | 27 | 27 | 0 | 17:05:01.006Z |
+| W5dGradientAddressingSurfacePixelTest | 41 | 40 | 1 | 17:05:43.929Z |
+| W5eDecodedImageSurfacePixelTest | 14 | 14 | 0 | 17:07:05.578Z |
+| W5eImageConvergenceSurfaceTest | 15 | 15 | 0 | 17:07:26.033Z |
+| W5eImageFamiliesSurfacePixelTest | 27 | 27 | 0 | 17:07:27.630Z |
+| W5eImageShaderSurfacePixelTest | 27 | 27 | 0 | 17:07:55.892Z |
 
-La commande termine en 6m27s, **Gradle exit1 / worker130 exit133 / BUILD FAILED**.
-L'XML synthétique de processus (16:17:22.379Z) compte une failure distincte. Les
+La commande termine en 6m11s, **Gradle exit1 / worker142 exit133 / BUILD FAILED**.
+L'XML synthétique de processus (17:04:22.192Z) compte une failure distincte. Les
 skips gardent `w4d.general.texture-sample-support-unavailable`. Le crash natif
 post-assertions reste le teardown AppKit/GLFW hors main thread diagnostiqué en
 lecture seule; ni reset/dispose ajouté aux tests ni workaround ne le masque.
-Le contrôle final convergence/Picture du même jour compte 22/22 méthodes passées,
-0skip/failure/error d'assertion (XML16:31:27.774Z/16:31:27.865Z), y compris
+Le contrôle indépendant final convergence/Picture du même code commité compte
+28/28 méthodes passées, 0skip/failure/error d'assertion
+(Picture13 XML17:11:37.994Z, convergence15 XML17:11:38.098Z), y compris
 l'assertion publique Render/Readback avant lecture des pixels. Gradle reste exit1,
-worker136exit133, BUILD FAILED1m6s; failure synthétique16:31:26.261Z distincte.
+worker143exit133, BUILD FAILED6s; failure synthétique17:11:36.495Z distincte.
+Les neuf XML de la sélection complète ont été inspectés et leurs faits conservés
+avant ce dernier run ciblé, qui remplace les fichiers XML courants. Le run Task9
+antérieur comptait256/254/2; ce n'est pas la preuve finale après correctifs.
 
 Les témoins de récupération distinguent capture transactionnelle suivie d'un rendu
 sur la **même Surface**, et refus de budget/numérique suivi d'une nouvelle Surface
@@ -138,6 +165,9 @@ restent hors de cette gate.
   suppression nominale de ces modes, ni un clamp ou une formule alternative.
 - Formats/mélanges/effects non promus gardent la frontière legacy avant admission;
   leurs combinaisons avec snapshots typés peuvent refuser explicitement.
+- Le legacy conserve son refus historique de payload au-delà de `rowBytes*height`;
+  la correction du stride n'élargit pas cette convention. Ses copies complètes
+  avant validation restent une dette explicite, pas une garantie de budget W5e.
 - W5f filters/couleurs restantes, W5g blend-children/noise et W5h runtime effects/H,
   layers W6 et convergence globale W7/retrait legacy W8 restent ouverts.
 
