@@ -157,7 +157,9 @@ public class ImageAtlasBlendNumericAuthorityV1 private constructor(
                 sub(mul(constant(1.2247455), straight[0]), mul(constant(.2249044), straight[1])),
                 add(mul(constant(-.0420581), straight[0]), mul(constant(1.0420810), straight[1])),
                 add(sub(mul(constant(-.0196423), straight[0]), mul(constant(.0786549), straight[1])), mul(constant(1.0985372), straight[2])))
-            return arrayOf(mul(straight[0], alpha), mul(straight[1], alpha), mul(straight[2], alpha), alpha)
+            return if (facts.premultiplication == org.graphiks.kanvas.render.ir.ImagePremultiplicationV1.TRANSFER_ENCODED_LINEAR_PREMUL)
+                arrayOf(straight[0], straight[1], straight[2], alpha)
+            else arrayOf(mul(straight[0], alpha), mul(straight[1], alpha), mul(straight[2], alpha), alpha)
         }
         override fun literal(valueF32: Float): Domain = input(valueF32)
         override fun exact(value: Domain): Float? = if (value.exact) value.lowF64.toFloat() else null

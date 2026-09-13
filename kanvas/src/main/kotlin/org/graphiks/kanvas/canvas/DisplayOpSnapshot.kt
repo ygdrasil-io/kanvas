@@ -295,7 +295,7 @@ internal class GeometrySnapshotContext(
 private fun Image.matchesCapturedImage(source: Image): Boolean =
     width == source.width && height == source.height && colorType == source.colorType &&
         sourceId == source.sourceId && colorSpace == source.colorSpace && alphaType == source.alphaType &&
-        rowBytesI32 == source.rowBytesI32 && when {
+        rowBytesI32 == source.rowBytesI32 && premultiplication == source.premultiplication && when {
             pixels == null || source.pixels == null -> pixels == null && source.pixels == null
             else -> pixels.contentEquals(source.pixels)
         }

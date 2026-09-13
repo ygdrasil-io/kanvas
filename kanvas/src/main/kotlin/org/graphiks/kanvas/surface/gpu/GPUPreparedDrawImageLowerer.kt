@@ -77,6 +77,7 @@ internal sealed interface GPUPreparedDrawImageLowering {
         GPUPreparedDrawImageLowering
 }
 
+/** Legacy semantic lowering only for unadmitted whole frames; owned W5e never calls this. */
 internal object GPUPreparedDrawImageLowerer {
     fun lower(
         operation: DisplayOp.DrawImage,

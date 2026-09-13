@@ -322,7 +322,14 @@ private class ArchiveWriter {
 
     fun image(value: ImageResourceSnapshot): Unit = nested {
         when (value) {
-            is ImageResourceSnapshot.Pixels -> { i32(1); imageMetadata(value); i32(value.rowBytes); byteArray(value.copyPixels()) }
+            is ImageResourceSnapshot.Pixels -> {
+                val ordinary = value.premultiplication == ImagePremultiplicationV1.SOURCE_SPACE
+                i32(if (ordinary) 1 else 3)
+                imageMetadata(value)
+                i32(value.rowBytes)
+                if (!ordinary) enum(value.premultiplication)
+                byteArray(value.copyPixels())
+            }
             is ExternalImageReference -> { i32(2); imageMetadata(value) }
         }
     }
@@ -558,7 +565,21 @@ private class ArchiveReader(private val data: ByteArray) {
         15 -> MaterialNode.WithWorkingColorSpace(material(), enum()); 16 -> MaterialNode.CoordClamp(material(), rect()); else -> failTag("material")
     } }
     fun stops(): List<GradientStop> = list { GradientStop(f32(), color()) }
-    fun image(): ImageResourceSnapshot = nested { when (i32()) { 1 -> { val meta = imageMetadata(); ImageResourceSnapshot.fromPixels(meta.sourceId, meta.width, meta.height, meta.format, meta.alpha, meta.colorSpace, i32(), byteArray()) }; 2 -> { val meta = imageMetadata(); ExternalImageReference.of(meta.sourceId, meta.width, meta.height, meta.format, meta.alpha, meta.colorSpace) }; else -> failTag("image") } }
+    fun image(): ImageResourceSnapshot = nested {
+        when (val tag = i32()) {
+            1, 3 -> {
+                if (tag == 3 && sceneArchiveSchemaVersion < 4) failTag<Unit>("image")
+                val meta = imageMetadata()
+                val rowBytes = i32()
+                val premultiplication = if (tag == 3) enum<ImagePremultiplicationV1>() else ImagePremultiplicationV1.SOURCE_SPACE
+                if (tag == 3 && premultiplication == ImagePremultiplicationV1.SOURCE_SPACE) failTag<Unit>("image premultiplication")
+                ImageResourceSnapshot.fromPixels(meta.sourceId, meta.width, meta.height, meta.format,
+                    meta.alpha, meta.colorSpace, rowBytes, byteArray(), premultiplication)
+            }
+            2 -> { val meta = imageMetadata(); ExternalImageReference.of(meta.sourceId, meta.width, meta.height, meta.format, meta.alpha, meta.colorSpace) }
+            else -> failTag("image")
+        }
+    }
     private data class ImageMeta(val sourceId: String, val width: Int, val height: Int, val format: ImagePixelFormat, val alpha: ImageAlphaType, val colorSpace: ColorSpace)
     private fun imageMetadata(): ImageMeta = ImageMeta(text(), i32().nonNegative("image width"), i32().nonNegative("image height"), enum(), enum(), colorSpace())
     fun descriptor(): RuntimeEffectDescriptor = nested { RuntimeEffectDescriptor.of(RuntimeEffectId(text()), enum(), RuntimeUniformLayout.of(list(::uniformSlot)), list { RuntimeChildSlot(text(), enum()) }, optional(::vertexLayout), optional(::module)) }

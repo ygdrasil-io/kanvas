@@ -77,7 +77,7 @@ public object EffectiveMaterialPlanner {
                 org.graphiks.kanvas.render.ir.ImagePixelFormat.ALPHA_8 -> ImageChannelOrderV1.ALPHA
                 else -> throw IllegalArgumentException(W5eImagePlanDiagnostics.Format)
             }
-            val color = if (channel == ImageChannelOrderV1.ALPHA)
+            val sourceColor = if (channel == ImageChannelOrderV1.ALPHA)
                 ImageColorAlphaPlanV1(channel, pixels.alphaType, ImageTransferPlanV1.NONE, ImageGamutPlanV1.NONE)
             else {
                 require(pixels.pixelFormat != org.graphiks.kanvas.render.ir.ImagePixelFormat.SRGBA_8888 ||
@@ -89,6 +89,7 @@ public object EffectiveMaterialPlanner {
                     else -> throw IllegalArgumentException(W5eImagePlanDiagnostics.ColorSpace)
                 }
             }
+            val color = sourceColor.copy(premultiplication = pixels.premultiplication)
             val baseChild = if (channel != ImageChannelOrderV1.ALPHA) null else if (direct) {
                 val childDraw = draw.copy(
                     transform = if (atlas != null) requireNotNull(constructionEntry).copyTransformF32() else draw.transform,
@@ -120,7 +121,7 @@ public object EffectiveMaterialPlanner {
                 is ImageCellPlanV1.SolidV1 -> "c"
                 is ImageCellPlanV1.OmittedV1 -> "o"
             } }
-            val program = if (child == null) ImageMaterialProgramV3.ColorV3(channel, color.alphaType, color.transfer, color.gamut, sampling, tileModes, nine != null || latticeCells != null, latticeKinds, atlasMode)
+            val program = if (child == null) ImageMaterialProgramV3.ColorV3(channel, color.alphaType, color.transfer, color.gamut, sampling, tileModes, nine != null || latticeCells != null, latticeKinds, atlasMode, color.premultiplication)
                 else ImageMaterialProgramV3.MaskV3(child.table.entry(child.root).program, color.alphaType, sampling, tileModes, nine != null || latticeCells != null, latticeKinds, atlasMode)
             val upload = ImageUploadPlanV1.seal(pixels)
             val cells = latticeCells ?: nine?.let { ImageCellDecomposerV1.nine(upload.widthI32, upload.heightI32, it.copyCenter(), it.copyDestination()) }

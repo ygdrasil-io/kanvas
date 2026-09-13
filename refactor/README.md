@@ -28,6 +28,7 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 - [Tranche W4c — fills de paths par tessellation/stencil](specs/2026-09-05-w4c-path-fills-design.md)
 - [Clôture W4d–W4e — strokes, transforms/AA et clips complexes](specs/2026-09-06-w4-remaining-geometry-coverage-design.md)
 - [Material graph W5 — Solid/Opacity](specs/2026-09-09-w5-material-graph-design.md)
+- [W5e — autorité commune des images décodées](specs/2026-09-12-w5e-decoded-images-design.md)
 
 ### Plans
 
@@ -43,6 +44,7 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 - [Plan W4e — clips complexes et inverse paths](plans/2026-09-06-w4e-complex-clips-implementation-plan.md)
 - [Plan W5a — Solid/Opacity](plans/2026-09-09-w5a-solid-opacity-implementation-plan.md)
 - [Plan W5b — final blends communs](plans/2026-09-10-w5b-final-blends-implementation-plan.md)
+- [Plan W5e — images décodées, neuf tâches séquentielles](plans/2026-09-12-w5e-decoded-images-implementation-plan.md)
 
 ### État et rapports finaux
 
@@ -79,7 +81,19 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
   `Render`/`Readback` du `RenderResult`, pour empêcher qu'un fallback legacy
   satisfasse seulement les pixels. Les deux skips AA4 restent explicites.
 - [État consolidé de la topologie hybride](progress/2026-08-31-hybrid-f64-f32-path-topology/progress.md)
-- [État W05 — Solid/Opacity, final blends et gradients](waves/W05-material-graph/status.md)
+- [État W05 — Solid/Opacity, final blends, gradients et images décodées](waves/W05-material-graph/status.md)
+  — W5e implémente DrawImage/Nine/Lattice/Atlas et ImageShader Rect/Path fill sous
+  une autorité MaterialV3, avec sampling/stride/provenance de snapshot préservés
+  par capture/Picture10, et cache device borné. Revue Task9 puis branche en cours.
+  La régression forcée du 13 septembre 2026 compte 256 méthodes, 254 passées,
+  deux skips AA4, aucune failure/error d'assertion; Gradle exit1/worker130 exit133,
+  `BUILD FAILED`, compilation séparée exit0. Les cinq commandes GM décodés ont été
+  tentées: quatre failures de rendu (producteurs/AA/legacy), une initialization
+  failure (`alpha_image` absent du registre), aucun score produit ni preuve ISO.
+  Font/codec exclus. Les réserves numériques Atlas, clip Picture générique,
+  close/rollback target-level et teardown natif restent documentées.
+  L'ajout actualSceneTarget ferme la collision equal-extent antérieure.
+  L'historique suivant décrit W5d avant cette tranche W5e.
   — W5d ferme Linear/Radial/Sweep/Conical SRGB et les quatre tile modes avec
   `WithLocalMatrix`, `CoordClamp`, coordonnées ordonnées et moyenne dégénérée,
   sur Rect/RRect analytique/Path fill/stroke. Task 7 prouve frame mixte, ordre,
@@ -97,8 +111,9 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
   restent distingués dans le rapport de correction. L'auto-review ne remplace pas
   la re-review globale indépendante.
   Le gap target-ID equal-extent et l'intervalle Conical B-cross-zero conservateur
-  restent explicites; AA4 positif n'est pas exercé. `ClampF32` non émis est retiré
-  avec son arm de rejet. W5e/W5f/W5g/W5h et les autres familles H restent ouverts.
+  étaient explicites à cette clôture; la collision equal-extent est corrigée en W5e.
+  AA4 positif n'est pas exercé. `ClampF32` non émis est retiré avec son arm de rejet.
+  W5f/W5g/W5h et les autres familles H restent ouverts.
 - [Rapport d'implémentation de l'admission conservative](progress/2026-09-01-conservative-hybrid-topology-admission/implementation-report.md)
 - [Revue de spécification de l'admission conservative](progress/2026-09-01-conservative-hybrid-topology-admission/spec-review.md)
 - [Revue qualité de l'admission conservative](progress/2026-09-01-conservative-hybrid-topology-admission/quality-review.md)
@@ -112,7 +127,7 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 | W2 | `Scene IR` et frontières de modules | Capture backend-neutral et frontières de modules implémentées ; gate stricte **NON ATTEINTE** (431/443 captures, 12 dettes), rendu public encore legacy |
 | W3 | `gpu-plan` et premier `RenderGraph` | Capability rectangles solides/clip simple/`SrcOver` branchée et prouvée par pixels exacts ; baseline globale conservée (51 échecs connus, 0 erreur) |
 | W4 | Geometry/coverage | W4a ScalarAA Rect, W4b RRect analytique, W4c fills hard-edge et W4d.1 strokes/hairlines hard-edge sont atteints. W4d.2 ajoute les transforms F64 `Identity`/`AxisAlignedAffine`/`GeneralAffine`/`Perspective`, le graph AA4/resolve scellé et la lane hard générale prouvée byte-exact à travers `Surface`. W4e fournit hard mask 1×, inverse/D24S8 et oracle/matrice `Surface`; Task 9-fix1 clôt les 18 deltas frais, Task 9-fix2 élimine le fallback d'usages couleur implicite, et le correctif final post-revue couvre les consumers Rect/RRect/Path, les entrées/copies bornées et les buffers V/I/U scellés. `final-fix3` conserve ses preuves publiques de mutation/ordre; la pré-publication `.from` reste un constat statique, sans conclusion pixel sur l'identité du pool. La baseline globale historique reste 51 failures, 0 error et 2 skips, sans nouveau run global W5b. Les 45 DrawPoint sont désormais fermés par le gate public W5b; restent AA4 et `TopologyLimit` conservative F64→F32. Font/codec, GM/dashboard/baseline et `jpg-color-cube` exclus ([status](waves/W04-geometry-coverage/status.md)) |
-| W5 | Material graph, final blends et gradients | W5a/W5b/W5c closes sur leurs périmètres; W5d couvre les quatre gradients SRGB, tiles, matrices/CoordClamp ordonnés et moyenne dégénérée. Le correctif Task 8 ferme capture, identité Sweep et transport General, avec budgets Raw précis. Sélection conjointe du 12 septembre 2026 : 166 méthodes, 164 passées, 0 failure/error XML, deux skips AA4; Gradle exit 1, worker 95 exit 133 post-assertions, compilation séparée exit 0. Gaps equal-extent et Conical B-cross-zero conservateur maintenus; AA4 positif non exercé, `Unbounded` non-gate. `ClampF32` mort retiré. Re-review globale distincte; W5e/W5f/W5g/W5h/H restent ouverts ([status](waves/W05-material-graph/status.md)) |
+| W5 | Material graph, blends, gradients et images | W5a–W5d closes sur leurs périmètres. W5e implémente les neuf tâches decoded-image sous MaterialV3; revue Task9 puis branche en cours. Régression forcée13 septembre: 256 méthodes,254 passées,2skipsAA4,0failure/error d'assertion; Gradle1/worker130exit133, compilation0. GM ciblés:4failures de rendu et1défaut de registre, pas de score ISO; gaps producteurs/legacy et domaines Atlas conservateurs explicites. Equal-extent corrigé; Conical B-cross-zero/AA4/clip Picture/close/rollback target-level/teardown restent réservés. W5f/W5g/W5h/H ouverts ([status](waves/W05-material-graph/status.md)) |
 | W6 | Layers et effets | Non démarrée |
 | W7 | Convergence GM | Non démarrée |
 | W8 | Retrait legacy et runtime | Non démarrée |

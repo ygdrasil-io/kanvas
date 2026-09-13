@@ -4,6 +4,7 @@ import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.kanvas.render.ir.ImagePremultiplicationV1
 
 data class Image(
     val width: Int,
@@ -14,9 +15,15 @@ data class Image(
     val colorSpace: ColorSpace = ColorSpace.SRGB,
     val alphaType: AlphaType = colorType.defaultAlphaType(),
     val rowBytesI32: Int = logicalRowBytesI32(width, colorType),
+    val premultiplication: ImagePremultiplicationV1 = ImagePremultiplicationV1.SOURCE_SPACE,
 ) {
     init {
         require(rowBytesI32 >= logicalRowBytesI32(width, colorType)) { "image.row-bytes-too-small" }
+        require(premultiplication == ImagePremultiplicationV1.SOURCE_SPACE ||
+            pixels != null && alphaType == AlphaType.PREMUL && colorType in setOf(
+                ColorType.RGBA_8888, ColorType.BGRA_8888, ColorType.SRGBA_8888)) {
+            "invalid.material.image.premultiplication"
+        }
     }
     companion object {
         fun decode(bytes: ByteArray, mimeType: String? = null): Image {
@@ -38,7 +45,8 @@ data class Image(
             alphaType: AlphaType = colorType.defaultAlphaType(),
             colorSpace: ColorSpace = ColorSpace.SRGB,
             rowBytesI32: Int = logicalRowBytesI32(width, colorType),
-        ): Image = Image(width, height, colorType, sourceId, pixels, colorSpace, alphaType, rowBytesI32)
+            premultiplication: ImagePremultiplicationV1 = ImagePremultiplicationV1.SOURCE_SPACE,
+        ): Image = Image(width, height, colorType, sourceId, pixels, colorSpace, alphaType, rowBytesI32, premultiplication)
 
         fun placeholder(width: Int, height: Int): Image =
             Image(width, height, ColorType.RGBA_8888, "placeholder:${width}x${height}")
@@ -57,14 +65,14 @@ data class Image(
      * `SkImage::reinterpretColorSpace`).
      */
     fun reinterpretColorSpace(newColorSpace: ColorSpace): Image =
-        Image(width, height, colorType, sourceId, pixels, newColorSpace, alphaType, rowBytesI32)
+        Image(width, height, colorType, sourceId, pixels, newColorSpace, alphaType, rowBytesI32, premultiplication)
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is Image) return false
         return width == other.width && height == other.height &&
             colorType == other.colorType && colorSpace == other.colorSpace && alphaType == other.alphaType &&
-            rowBytesI32 == other.rowBytesI32 && sourceId == other.sourceId
+            rowBytesI32 == other.rowBytesI32 && sourceId == other.sourceId && premultiplication == other.premultiplication
     }
 
     override fun hashCode(): Int {
@@ -75,6 +83,7 @@ data class Image(
         result = 31 * result + alphaType.hashCode()
         result = 31 * result + rowBytesI32
         result = 31 * result + sourceId.hashCode()
+        result = 31 * result + premultiplication.hashCode()
         return result
     }
 }

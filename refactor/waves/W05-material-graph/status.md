@@ -1,4 +1,147 @@
-# État W05 — material graph, final blends et adressage des gradients W5d
+# État W05 — material graph, gradients et images décodées W5e
+
+## W5e — implémentation fonctionnelle, revue finale en cours
+
+La branche `codex/w5e-decoded-images`, empilée sur W5d, implémente les neuf tâches du
+[plan W5e](../../plans/2026-09-12-w5e-decoded-images-implementation-plan.md), selon le
+[design approuvé](../../specs/2026-09-12-w5e-decoded-images-design.md). La clôture reste
+conditionnée à la revue indépendante de Task9 puis de toute la branche; aucune
+affirmation de succès Gradle ou de compatibilité quasi isopixel globale.
+
+DrawImage, ImageNine, ImageLattice, Atlas, et ImageShader sur Rect/Path fill ont une
+autorité MaterialV3 commune, un évaluateur de texels partagé et une preuve numérique
+liée aux opérations exécutées. Sont couverts RGBA/BGRA/SRGBA/A8,
+OPAQUE/PREMUL/UNPREMUL, SRGB/LINEAR_SRGB/DISPLAY_P3 (SRGBA exige SRGB),
+Nearest/Linear/Cubic et les quatre modes CLAMP/REPEAT/MIRROR/DECAL par axe pour les
+image shaders. Nine et Atlas restent Nearest conformément à leur API; Lattice
+conserve son sampling déclaré. Les limites numériques et les capabilities ne sont
+pas supprimées pour rendre ces familles nominalement universelles.
+
+Nine et Lattice régulière sélectionnent leurs cellules dans une géométrie extérieure
+unique, sans coutures AA internes. Lattice explicite et Atlas conservent leurs
+contributions ordonnées, leur owner logique original et leur inventaire exact;
+plus de neuf cellules restent distinctes. Les coordonnées de géométrie restent
+dans `:math` avec les types I/F32/64. Atlas transforme le rectangle local
+`[0,w]×[0,h]`, utilise l'origine source uniquement pour le sampling et applique
+entry color/source blend avant paint alpha/final blend. Les preuves publiques
+couvrent également les mélanges avec les lanes des vagues précédentes.
+
+Capture et Picture préservent sampling, stride, payload immuable et les aliases
+uniquement quand tous les faits et tous les octets correspondent. Picture10/schema4
+conserve les tags ordinaires/externe et les lectures historiques8/9. Les snapshots
+conservent les octets d'attachment et leur format/couleur réels, avec une provenance
+typée `TRANSFER_ENCODED_LINEAR_PREMUL`, distincte du PREMUL source-space ordinaire.
+Un nouveau tag d'image transporte cette distinction: les lecteurs10 intermédiaires
+plus anciens le refusent; aucune compatibilité forward skippable ni réparation
+heuristique d'anciens snapshots mal étiquetés. Full/subset, copy/reinterpret,
+Picture.playback et Atlas translucides ont des témoins publics.
+
+Après admission image, capture/plan/submit refusés sont terminaux, sans continuation
+legacy. Avant admission d'une frame complète, les lowerers historiques restent
+explicitement des compatibilités sémantiques pour les formats/effects exclus, pas
+des transports « physical-only ». Ils refusent un attachment snapshot avec
+`unsupported.image.prepared.premultiplication` plutôt que d'inventer une seconde
+conversion. Cette conservation est intentionnelle: l'autorité unique est celle des
+lanes promues, pas le retrait global du legacy prévu en W8.
+
+### Vérification publique fraîche — 13 septembre 2026
+
+```bash
+rtk ./gradlew :render-ir:compileKotlin :gpu-plan:compileKotlin :gpu-renderer:compileKotlin :kanvas:compileKotlin --no-parallel
+rtk ./gradlew :kanvas:test --tests '*W5e*' --tests '*W5dGradientAddressingSurfacePixelTest*' --tests '*W5cGradientSurfacePixelTest*' --tests '*W5bBlendSurfacePixelTest*' --tests '*W5aMaterialSurfacePixelTest*' --no-parallel --rerun-tasks
+```
+
+Compilation séparée: exit0. La sélection forcée complète compte **256 méthodes,
+254 passées, deux skips AA4, aucune failure/error XML d'assertion**.
+
+| Suite publique | Méthodes | Passées | Skips | Timestamp XML UTC |
+| --- | ---: | ---: | ---: | --- |
+| W5ePictureImageSamplingTest | 12 | 12 | 0 | 16:17:25.118Z |
+| W5aMaterialSurfacePixelTest | 48 | 47 | 1 | 16:17:25.225Z |
+| W5bBlendSurfacePixelTest | 50 | 50 | 0 | 16:17:37.261Z |
+| W5cGradientSurfacePixelTest | 27 | 27 | 0 | 16:18:02.619Z |
+| W5dGradientAddressingSurfacePixelTest | 41 | 40 | 1 | 16:18:48.949Z |
+| W5eDecodedImageSurfacePixelTest | 14 | 14 | 0 | 16:20:13.195Z |
+| W5eImageConvergenceSurfaceTest | 10 | 10 | 0 | 16:20:34.605Z |
+| W5eImageFamiliesSurfacePixelTest | 27 | 27 | 0 | 16:20:35.027Z |
+| W5eImageShaderSurfacePixelTest | 27 | 27 | 0 | 16:21:04.515Z |
+
+La commande termine en 6m27s, **Gradle exit1 / worker130 exit133 / BUILD FAILED**.
+L'XML synthétique de processus (16:17:22.379Z) compte une failure distincte. Les
+skips gardent `w4d.general.texture-sample-support-unavailable`. Le crash natif
+post-assertions reste le teardown AppKit/GLFW hors main thread diagnostiqué en
+lecture seule; ni reset/dispose ajouté aux tests ni workaround ne le masque.
+Le contrôle final convergence/Picture du même jour compte 22/22 méthodes passées,
+0skip/failure/error d'assertion (XML16:31:27.774Z/16:31:27.865Z), y compris
+l'assertion publique Render/Readback avant lecture des pixels. Gradle reste exit1,
+worker136exit133, BUILD FAILED1m6s; failure synthétique16:31:26.261Z distincte.
+
+Les témoins de récupération distinguent capture transactionnelle suivie d'un rendu
+sur la **même Surface**, et refus de budget/numérique suivi d'une nouvelle Surface
+sur le même runtime. Le second ne prouve pas un rollback de cible. Surface n'expose
+pas de close public: les renders répétés et la Surface suivante ne prouvent pas une
+fermeture explicite. Aucun test d'infrastructure/fake device/panne native injectée.
+
+### Budgets, identité et ownership
+
+La revue statique contrôle les clés upload par format logique/physique, dimensions
+et octets des lignes utiles, sans SourceId, padding, sampling, tiles ni provenance
+sémantique. Le cache texture/view est préfixé par génération device, limité à
+128 entrées/64MiB, avec LRU uniquement sur les entrées sans lease; la quarantine
+reste facturée. Un miss ne publie pas d'entrée partielle, mais ne restaure pas les
+victimes déjà évincées si une allocation ultérieure échoue. Les budgets sont
+pessimistes même en cas de hit. Les clés pipeline sont structurelles, sans pixels
+ni valeurs Cubic; les pipelines source restent per-attempt, pas un cache device
+persistant revendiqué. Les leases sont détenues jusqu'à completion/rollback,
+transférées dans un seul journal; seules les ressources cache-owned survivent à une
+completion réussie. Les échecs de cleanup sont conservés en quarantine et une
+failure queue retire conservativement la génération. Ces constats statiques ne
+sont pas des mesures publiques d'allocations, de hits ou de pannes natives.
+
+### GM décodés ciblés — quatre failures de rendu, un défaut de registre
+
+Les cinq sources utilisent des octets décodés en mémoire ou des snapshots Surface;
+aucune charge font/codec externe. Chaque tentative utilise le runner exact-name
+existant et son diagnostic PIXEL, sans changer fixtures, références, thresholds,
+renders ou dashboard. Leur seuil `minSimilarity=0.0` n'est qu'un smoke gate, pas
+une preuve ISO. Les sept tests de filtre sélectionnés par le wildcard historique
+ne comptent pas comme preuve pixel W5e.
+
+| GM | Résultat courant | Classification |
+| --- | --- | --- |
+| nearest_half_pixel_image | Gradle1, GM failure1, 16:24:13.629Z; pas de score | `invalid.surface.prepared.image-lowerer-authority` dans le snapshot producteur; mélange DrawColor/images non promu, gap d'intégration common/legacy |
+| image-shader | Gradle1, GM failure1, 16:25:40.138Z; pas de score | `unsupported.stroke.rect_anti_alias` dans le snapshot producteur, gap W4/W5h |
+| localmatriximageshader | Gradle1, GM failure1, 16:27:14.041Z; pas de score | `w4d.general.command-not-migrated`: le wrapper GM transforme les Rect traduits en Paths AA avec CTM identité; construction W4/AA4 non admise |
+| alpha_image | Gradle1, initialization failure1, 16:28:51.451Z; GM non exécuté | Classe absente du registre `META-INF/services`; aucun argument JUnit. Quand enregistrée, ColorFilter/BlurMask restent W5f/W5h |
+| draw_image_set | Gradle1, GM failure1, 16:30:06.318Z; pas de score | `unsupported.image.native_binding` avant admission W5e: frame avec ColorFilter/combinaisons W5f/W5h |
+
+Ces tentatives échouent avant génération du manifest: aucun `agentSummary`
+disponible, aucun score inventé.
+Les cinq commandes ont été tentées séquentiellement: quatre GM ont réellement
+échoué au rendu, `alpha_image` n'a pas été exécuté. Aucun skip/refus silencieux,
+aucun succès à seuil0% revendiqué. Le fichier de scores est resté byte-identique.
+`image-surface` est explicitement exclu car il
+charge LiberationSans et dessine des labels Font. Font, codecs externes,
+`jpg-color-cube`, mipmaps/anisotropic, régénération GM/dashboard et baseline globale
+restent hors de cette gate.
+
+### Gaps maintenus, sans les confondre avec une famille non implémentée
+
+- AA4 positif reste indisponible sur le backend actuel.
+- Teardown natif exit133, absence de close public et rollback target-level après
+  refus numérique ne sont pas prouvés/fermés par les assertions publiques.
+- Clip Picture générique garde son écart hérité; le témoin Nine emploie le clip
+  de destination équivalent et ne prouve pas le clip enregistré générique.
+- Atlas borne le payload complet et les chemins arithmétiques réellement exécutés:
+  certains contenus non-unit-alpha/P3, gradients et blends non séparables peuvent
+  refuser `unsupported.material.image.numeric-domain-unbounded`. Ce n'est pas une
+  suppression nominale de ces modes, ni un clamp ou une formule alternative.
+- Formats/mélanges/effects non promus gardent la frontière legacy avant admission;
+  leurs combinaisons avec snapshots typés peuvent refuser explicitement.
+- W5f filters/couleurs restantes, W5g blend-children/noise et W5h runtime effects/H,
+  layers W6 et convergence globale W7/retrait legacy W8 restent ouverts.
+
+## Historique W5d — gradients et adressage
 
 W5d couvre Linear/Radial/Sweep/Conical SRGB, CLAMP/REPEAT/MIRROR/DECAL, `WithLocalMatrix`, `CoordClamp`, coordonnées ordonnées et moyenne dégénérée sur Rect, RRect analytique, Path fill/stroke et General. Task 7 ferme frame mixte et allocations uniques; le correctif Task 8 ferme capture, identité Sweep et transport General. La sélection conjointe finale du 12 septembre 2026 compte 166 méthodes, 164 passées, deux skips AA4 et aucune failure/error XML. Gradle reste exit 1 avec worker natif exit 133 après les assertions : ce n'est pas un succès de commande. La re-review globale indépendante reste distincte de cette preuve et de l'auto-review.
 

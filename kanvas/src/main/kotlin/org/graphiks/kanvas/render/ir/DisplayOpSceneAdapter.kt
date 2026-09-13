@@ -632,7 +632,7 @@ private fun DisplayOp.imageForPreflight(): org.graphiks.kanvas.image.Image? = wh
 private fun org.graphiks.kanvas.image.Image.matchesCapturedImage(other: org.graphiks.kanvas.image.Image): Boolean =
     width == other.width && height == other.height && colorType == other.colorType &&
         sourceId == other.sourceId && colorSpace == other.colorSpace && alphaType == other.alphaType &&
-        rowBytesI32 == other.rowBytesI32 && when {
+        rowBytesI32 == other.rowBytesI32 && premultiplication == other.premultiplication && when {
             pixels == null || other.pixels == null -> pixels == null && other.pixels == null
             else -> pixels.contentEquals(other.pixels)
         }
@@ -644,7 +644,9 @@ private fun ImageResourceSnapshot.matchesCapturedImage(image: org.graphiks.kanva
         colorSpace != image.colorSpace
     ) return false
     return when (this) {
-        is ImageResourceSnapshot.Pixels -> image.pixels?.let { rowBytes == image.rowBytesI32 && hasPixels(it) } == true
+        is ImageResourceSnapshot.Pixels -> image.pixels?.let {
+            rowBytes == image.rowBytesI32 && premultiplication == image.premultiplication && hasPixels(it)
+        } == true
         is ExternalImageReference -> image.pixels == null
     }
 }

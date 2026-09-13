@@ -96,19 +96,24 @@ class W5eImageShaderSurfacePixelTest {
         )
         val image = Image.fromPixels(2, 3, bytes, alphaType = AlphaType.PREMUL)
         for (linear in listOf(false, true)) for (tileX in TileMode.entries) for (tileY in TileMode.entries) {
-            val surface = Surface(6, 7)
             val sampling = if (linear) SamplingOptions.LINEAR else SamplingOptions.NEAREST
             // u=s-.5 has fractions .25/.75, so every Linear tile pair crosses both
             // horizontal and vertical tap boundaries rather than exercising one tap.
             val shader = Shader.WithLocalMatrix(Shader.Image(image, tileX, tileY, sampling),
                 Matrix3x3F32.translation(1.75f, 2.25f))
-            surface.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 6f, 7f), paint(shader)) }
-            val result = surface.render()
-            for (yI32 in 0 until 7) for (xI32 in 0 until 6) {
+            val expectedPixels = List(42) { pixelI32 ->
+                val xI32 = pixelI32 % 6
+                val yI32 = pixelI32 / 6
                 val expected = W5eDecodedImageCpuOracle.sampledColorPixel(2, 3, bytes, xI32 - 1.25f, yI32 - 1.75f,
                     linear, tileX, tileY)
                 require(expected is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { "$sampling/$tileX/$tileY: $expected" }
-                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange((yI32 * 6 + xI32) * 4, (yI32 * 6 + xI32 + 1) * 4))
+                expected
+            }
+            val surface = Surface(6, 7)
+            surface.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 6f, 7f), paint(shader)) }
+            val result = surface.render()
+            expectedPixels.forEachIndexed { pixelI32, expected ->
+                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(pixelI32 * 4, (pixelI32 + 1) * 4))
             }
             assertEquals(1, result.stats.opsDispatched, "$sampling/$tileX/$tileY")
             assertEquals(0, result.stats.opsRefused, "$sampling/$tileX/$tileY")

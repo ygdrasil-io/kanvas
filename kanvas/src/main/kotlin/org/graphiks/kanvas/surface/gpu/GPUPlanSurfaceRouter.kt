@@ -61,6 +61,8 @@ internal class GPUPlanSurfaceRouter(
         if (width <= 0 || height <= 0) {
             throw GPUPlanSurfaceTerminalException("w3.surface.invalid_dimensions", "Surface dimensions must be positive.")
         }
+        // The compatibility lowerers below this continuation still own excluded
+        // formats/effects in unpromoted mixtures. They never receive an owned plan.
         if (!GPUPlanSurfaceCandidateGate.accepts(operations, config)) return legacy()
         val imageOwned = GPUPlanSurfaceCandidateGate.ownsW5eImages(operations)
 

@@ -33,7 +33,7 @@ internal data class GPUPreparedSdrColorContract(
     val readbackInterpretation: GPUColorInterpretation,
 )
 
-/** Returns the single prepared-image SDR contract without depending on image semantics. */
+/** Legacy prepared-image physical SDR storage, never the sealed W5e raw-UNORM contract. */
 internal fun preparedSdrColorContract(): GPUPreparedSdrColorContract =
     GPUPreparedSdrColorContract(
         colorSourceTextureFormat = GPUTextureFormat.RGBA8UnormSrgb,

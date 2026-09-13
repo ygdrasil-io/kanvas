@@ -34,11 +34,12 @@ internal sealed interface GPUPreparedAtlasLowering {
 }
 
 /**
- * Transactional affine atlas expansion.
+ * Legacy transactional affine atlas expansion for unadmitted whole frames.
  *
  * The complete logical atlas is validated before one artifact is prepared or one command is
  * exposed. Sprites then reuse the regular prepared-image lowerer with the exact composed affine
  * transform, so four-corner position/UV correspondence remains authoritative.
+ * W5e owns a distinct sealed family plan; it never reaches this compatibility path.
  */
 internal object GPUPreparedAtlasLowerer {
     fun lower(

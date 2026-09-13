@@ -169,13 +169,14 @@ internal object W5eImageTexelEvaluatorV1 {
                     "-0.0420581 * linearRgb.r + 1.0420810 * linearRgb.g, " +
                     "-0.0196423 * linearRgb.r - 0.0786549 * linearRgb.g + 1.0985372 * linearRgb.b);"
             else "let workingRgb = linearRgb;"
+            val outputRgb = if (TexelOperation.PREMULTIPLY_LINEAR in texelOperations) "workingRgb * sourceAlpha" else "workingRgb"
             """
                 let sourceAlpha = $alpha;
                 if (sourceAlpha == 0.0) { return vec4<f32>(0.0); }
                 $straight
                 $transfer
                 $gamut
-                return vec4<f32>(workingRgb * sourceAlpha, sourceAlpha);
+                return vec4<f32>($outputRgb, sourceAlpha);
             """.trimIndent()
         }
         fun address(axis: String, index: String, dimension: String, mode: ImageTileAxisModePlanV1): String = when (mode) {

@@ -39,6 +39,7 @@ internal sealed interface GPUPreparedImageGridLowering {
     ) : GPUPreparedImageGridLowering
 }
 
+/** Legacy Nine/Lattice compatibility before whole-frame admission, not W5e decomposition. */
 internal object GPUPreparedImageGridLowerer {
     private const val MAX_LATTICE_CELL_COUNT = 4096L
 

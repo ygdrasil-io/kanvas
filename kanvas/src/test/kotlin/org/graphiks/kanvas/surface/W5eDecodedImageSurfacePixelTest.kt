@@ -62,25 +62,35 @@ class W5eDecodedImageSurfacePixelTest {
         for ((sampling, linear) in listOf(SamplingOptions.NEAREST to false, SamplingOptions.LINEAR to true)) {
             // Exact source centres .5/.5 and 1.5/1.5 are a distinct direct-image
             // boundary from the fractional/outside matrix below.
-            val centres = Surface(2, 2)
-            centres.canvas { drawImageRect(image, RectF32.ofLTRB(0f, 0f, 2f, 2f), RectF32.ofLTRB(0f, 0f, 2f, 2f), sampling, paint()) }
-            val centreResult = centres.render()
-            for (yI32 in 0 until 2) for (xI32 in 0 until 2) {
+            val centreExpected = List(4) { pixelI32 ->
+                val xI32 = pixelI32 % 2
+                val yI32 = pixelI32 / 2
                 val expected = W5eDecodedImageCpuOracle.sampledColorPixel(2, 2, bytes, xI32 + .5f, yI32 + .5f, linear,
                     org.graphiks.kanvas.paint.TileMode.CLAMP, org.graphiks.kanvas.paint.TileMode.CLAMP)
                 require(expected is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { expected.toString() }
-                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, centreResult.pixels.copyOfRange((yI32 * 2 + xI32) * 4, (yI32 * 2 + xI32 + 1) * 4))
+                expected
             }
-            val surface = Surface(7, 7)
-            surface.canvas { drawImageRect(image, source, RectF32.ofLTRB(0f, 0f, 7f, 7f), sampling, paint()) }
-            val result = surface.render()
-            for (yI32 in 0 until 7) for (xI32 in 0 until 7) {
+            val expectedPixels = List(49) { pixelI32 ->
+                val xI32 = pixelI32 % 7
+                val yI32 = pixelI32 / 7
                 val sXF32 = source.left + ((xI32 + .5f) / 7f) * (source.right - source.left)
                 val sYF32 = source.top + ((yI32 + .5f) / 7f) * (source.bottom - source.top)
                 val expected = W5eDecodedImageCpuOracle.sampledColorPixel(2, 2, bytes, sXF32, sYF32, linear,
                     org.graphiks.kanvas.paint.TileMode.CLAMP, org.graphiks.kanvas.paint.TileMode.CLAMP)
                 require(expected is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { expected.toString() }
-                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange((yI32 * 7 + xI32) * 4, (yI32 * 7 + xI32 + 1) * 4))
+                expected
+            }
+            val centres = Surface(2, 2)
+            centres.canvas { drawImageRect(image, RectF32.ofLTRB(0f, 0f, 2f, 2f), RectF32.ofLTRB(0f, 0f, 2f, 2f), sampling, paint()) }
+            val centreResult = centres.render()
+            centreExpected.forEachIndexed { pixelI32, expected ->
+                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, centreResult.pixels.copyOfRange(pixelI32 * 4, (pixelI32 + 1) * 4))
+            }
+            val surface = Surface(7, 7)
+            surface.canvas { drawImageRect(image, source, RectF32.ofLTRB(0f, 0f, 7f, 7f), sampling, paint()) }
+            val result = surface.render()
+            expectedPixels.forEachIndexed { pixelI32, expected ->
+                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(pixelI32 * 4, (pixelI32 + 1) * 4))
             }
             assertEquals(1, result.stats.opsDispatched)
             assertEquals(0, result.stats.opsRefused)
