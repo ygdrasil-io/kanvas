@@ -30,17 +30,22 @@ class W5eDecodedImageSurfacePixelTest {
         val samplings = listOf(SamplingOptions.Cubic.Mitchell, SamplingOptions.Cubic.CatmullRom,
             SamplingOptions.Cubic(Float.fromBits(0x3eaaaaaa), .5f), SamplingOptions.Cubic(Float.fromBits(0x3eaaaaab), .5f))
         for (sampling in samplings) {
-            val surface = Surface(5, 4)
             val source = RectF32.ofLTRB(-.5f, -.5f, 3.5f, 2.5f)
-            surface.canvas { drawImageRect(image, source, RectF32.ofLTRB(0f, 0f, 5f, 4f), sampling, paint()) }
-            val result = surface.render()
-            for (yI32 in 0 until 4) for (xI32 in 0 until 5) {
+            val expectedPixels = List(20) { pixelI32 ->
+                val xI32 = pixelI32 % 5
+                val yI32 = pixelI32 / 5
                 val expected = W5eDecodedImageCpuOracle.sampledColorPixel(3, 2, bytes,
                     source.left + ((xI32 + .5f) / 5f) * (source.right - source.left),
                     source.top + ((yI32 + .5f) / 4f) * (source.bottom - source.top), false,
                     org.graphiks.kanvas.paint.TileMode.CLAMP, org.graphiks.kanvas.paint.TileMode.CLAMP, cubic = sampling)
                 require(expected is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { "$sampling: $expected" }
-                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange((yI32 * 5 + xI32) * 4, (yI32 * 5 + xI32 + 1) * 4))
+                expected
+            }
+            val surface = Surface(5, 4)
+            surface.canvas { drawImageRect(image, source, RectF32.ofLTRB(0f, 0f, 5f, 4f), sampling, paint()) }
+            val result = surface.render()
+            expectedPixels.forEachIndexed { pixelI32, expected ->
+                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(pixelI32 * 4, (pixelI32 + 1) * 4))
             }
             assertEquals(1, result.stats.opsDispatched, sampling.toString())
             assertEquals(0, result.stats.opsRefused, sampling.toString())

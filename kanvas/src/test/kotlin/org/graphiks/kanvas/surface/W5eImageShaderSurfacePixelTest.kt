@@ -34,6 +34,30 @@ import kotlin.test.assertEquals
 import org.graphiks.kanvas.surface.WgslFloatEnvelopeV1Oracle.Interval as I
 
 class W5eImageShaderSurfacePixelTest {
+    @Test fun invalidCubicParametersRefuseAndRecoverOnSameRuntime() {
+        // Routing a malformed image shader through legacy or swallowing its numeric
+        // refusal changes the public diagnostic; both Rect and Path must be owned.
+        val image = Image.fromPixels(1, 1, byteArrayOf(-1, 0, 0, -1), alphaType = AlphaType.PREMUL)
+        for (sampling in listOf(SamplingOptions.Cubic(Float.NaN, .5f), SamplingOptions.Cubic(-.01f, .5f),
+            SamplingOptions.Cubic(.5f, Float.POSITIVE_INFINITY), SamplingOptions.Cubic(.5f, 1.01f)))
+            for (path in listOf(false, true)) {
+                val surface = Surface(1, 1)
+                val shader = Shader.Image(image, TileMode.REPEAT, TileMode.MIRROR, sampling)
+                surface.canvas {
+                    if (path) drawPath(Path().apply { addRect(RectF32.ofLTRB(0f, 0f, 1f, 1f)) }, paint(shader))
+                    else drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), paint(shader))
+                }
+                val failure = assertThrows<IllegalStateException> { surface.render() }
+                assertEquals("invalid.material.image.cubic-parameters", failure.message.orEmpty().substringBefore(':'))
+                val recovered = Surface(1, 1)
+                recovered.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), paint(Shader.Image(image))) }
+                val result = recovered.render()
+                assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u), result.pixels)
+                assertEquals(1, result.stats.opsDispatched)
+                assertEquals(0, result.stats.opsRefused)
+            }
+    }
+
     @Test fun cubicTileBoundariesMatchOracle() {
         val bytes = byteArrayOf(
             -1, 0, 0, -1, 0, -1, 0, -1,
@@ -43,6 +67,12 @@ class W5eImageShaderSurfacePixelTest {
         val image = Image.fromPixels(2, 3, bytes, alphaType = AlphaType.PREMUL)
         for (tileX in TileMode.entries) for (tileY in TileMode.entries) for (path in listOf(false, true)) {
             val sampling = SamplingOptions.Cubic.CatmullRom
+            val expectedPixels = List(9) { pixelI32 ->
+                val expected = W5eDecodedImageCpuOracle.sampledColorPixel(2, 3, bytes, pixelI32 % 3 - .75f, pixelI32 / 3 - 1.25f,
+                    false, tileX, tileY, cubic = sampling)
+                require(expected is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { "$tileX/$tileY/$path: $expected" }
+                expected
+            }
             val surface = Surface(3, 3)
             val shader = Shader.WithLocalMatrix(Shader.Image(image, tileX, tileY, sampling), Matrix3x3F32.translation(1.25f, 1.75f))
             surface.canvas {
@@ -50,11 +80,8 @@ class W5eImageShaderSurfacePixelTest {
                 else drawRect(RectF32.ofLTRB(0f, 0f, 3f, 3f), paint(shader))
             }
             val result = surface.render()
-            for (yI32 in 0 until 3) for (xI32 in 0 until 3) {
-                val expected = W5eDecodedImageCpuOracle.sampledColorPixel(2, 3, bytes, xI32 - .75f, yI32 - 1.25f,
-                    false, tileX, tileY, cubic = sampling)
-                require(expected is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { "$tileX/$tileY/$path: $expected" }
-                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange((yI32 * 3 + xI32) * 4, (yI32 * 3 + xI32 + 1) * 4))
+            expectedPixels.forEachIndexed { pixelI32, expected ->
+                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(pixelI32 * 4, (pixelI32 + 1) * 4))
             }
             assertEquals(1, result.stats.opsDispatched, "$tileX/$tileY/$path")
             assertEquals(0, result.stats.opsRefused, "$tileX/$tileY/$path")

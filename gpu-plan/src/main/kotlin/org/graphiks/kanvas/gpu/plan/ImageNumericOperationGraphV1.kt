@@ -1,13 +1,67 @@
 package org.graphiks.kanvas.gpu.plan
 
+private fun imageScalarScheduleIdentity(roots: List<ImageNumericOperationGraphV1.Node>): String {
+    val indices = linkedMapOf<ImageNumericOperationGraphV1.Node, Int>()
+    fun visit(node: ImageNumericOperationGraphV1.Node) {
+        if (node in indices) return
+        node.inputs.forEach(::visit)
+        indices[node] = indices.size
+    }
+    roots.forEach(::visit)
+    return indices.entries.joinToString(";") { (node, indexI32) ->
+        "$indexI32:${node.operation}:${node.uniformIndexI32}:${node.constantBitsI32}:" +
+            node.inputs.joinToString(",") { indices.getValue(it).toString() }
+    } + ":roots=" + roots.joinToString(",") { indices.getValue(it).toString() }
+}
+
 /** Executed scalar schedule and selected tap/address topology. */
 public class ImageNumericOperationGraphV1 private constructor(public val colorAlpha: ImageColorAlphaPlanV1,
     public val sampling: ImageSamplingPlanV1, public val tileModes: ImageTileModePlanV1) {
     public enum class Operation { DEVICE_X_F32, DEVICE_Y_F32, UNIFORM_F32, CONSTANT_HALF_F32, CONSTANT_ONE_F32,
-        ADD_F32, SUB_F32, MUL_F32, DIV_F32, FLOOR_F32 }
+        ADD_F32, SUB_F32, MUL_F32, DIV_F32, FLOOR_F32, CONSTANT_F32, ABS_F32,
+        KERNEL_DISTANCE_F32, TAP_INDEX_F32, CUBIC_KERNEL_F32, TEXEL_COMPONENT_F32 }
     public class Node internal constructor(public val operation: Operation, public val uniformIndexI32: Int = -1,
-        inputs: List<Node> = emptyList()) {
+        inputs: List<Node> = emptyList(), public val constantBitsI32: Int = 0) {
         public val inputs: List<Node> = immutableList(inputs)
+    }
+    /** Branch domains are exact comparisons of abs(distance), not weight clamping. */
+    public class CubicKernelGraph internal constructor() {
+        public val distance: Node = Node(Operation.KERNEL_DISTANCE_F32)
+        public val absoluteDistance: Node = Node(Operation.ABS_F32, inputs = listOf(distance))
+        public val innerLimitF32: Float = 1f
+        public val outerLimitF32: Float = 2f
+        public val innerResult: Node
+        public val outerResult: Node
+        public val outsideResult: Node = Node(Operation.CONSTANT_F32, constantBitsI32 = 0f.toRawBits())
+        public val scheduleIdentity: String
+        init {
+            fun constant(value: Float) = Node(Operation.CONSTANT_F32, constantBitsI32 = value.toRawBits())
+            fun binary(operation: Operation, a: Node, b: Node) = Node(operation, inputs = listOf(a, b))
+            fun add(a: Node, b: Node) = binary(Operation.ADD_F32, a, b)
+            fun subtract(a: Node, b: Node) = binary(Operation.SUB_F32, a, b)
+            fun multiply(a: Node, b: Node) = binary(Operation.MUL_F32, a, b)
+            val b = Node(Operation.UNIFORM_F32, 24)
+            val c = Node(Operation.UNIFORM_F32, 25)
+            fun scaled(value: Float, parameter: Node) = multiply(constant(value), parameter)
+            fun polynomial(outer: Boolean): Node {
+                val coefficient3 = if (outer) subtract(subtract(constant(0f), b), scaled(6f, c))
+                    else subtract(subtract(constant(12f), scaled(9f, b)), scaled(6f, c))
+                val coefficient2 = if (outer) add(scaled(6f, b), scaled(30f, c))
+                    else add(add(constant(-18f), scaled(12f, b)), scaled(6f, c))
+                val x = absoluteDistance
+                val cubicTerm = multiply(multiply(multiply(coefficient3, x), x), x)
+                val squareTerm = multiply(multiply(coefficient2, x), x)
+                var numerator = add(cubicTerm, squareTerm)
+                if (outer) numerator = add(numerator, multiply(subtract(scaled(-12f, b), scaled(48f, c)), x))
+                val coefficient0 = if (outer) add(scaled(8f, b), scaled(24f, c))
+                    else subtract(constant(6f), scaled(2f, b))
+                return binary(Operation.DIV_F32, add(numerator, coefficient0), constant(6f))
+            }
+            innerResult = polynomial(false)
+            outerResult = polynomial(true)
+            scheduleIdentity = "ordered-abs-lt:${innerLimitF32.toRawBits()}:${outerLimitF32.toRawBits()}:otherwise:" +
+                imageScalarScheduleIdentity(listOf(innerResult, outerResult, outsideResult))
+        }
     }
     public enum class TexelOperation { PROJECTIVE_VALIDITY_MASK, PIXEL_CENTER_NEAREST, PIXEL_CENTER_LINEAR, PIXEL_CENTER_CUBIC,
         FLOOR_F32, CONVERT_I32, MINUS_ONE_TAP_OFFSET_I32, ZERO_TAP_OFFSET_I32, PLUS_ONE_TAP_OFFSET_I32, PLUS_TWO_TAP_OFFSET_I32,
@@ -18,7 +72,8 @@ public class ImageNumericOperationGraphV1 private constructor(public val colorAl
         PREMULTIPLY_LINEAR, RETURN_SCALAR_MASK, ACCUMULATE_NEAREST, ACCUMULATE_LINEAR, ACCUMULATE_CUBIC_ROW_MAJOR, PAINT_OPACITY }
     public val contractId: String = "WgslFloatEnvelopeV1"
     public val topologyIdentity: String = "w5e-image-numeric-v1:inverse-project-divide-map:${sampling.topologyId}:${tileModes.topologyId}:$colorAlpha:" +
-        texelOperations().joinToString(",") { it.name }
+        texelOperations().joinToString(",") { it.name } +
+        (if (sampling is ImageSamplingPlanV1.Cubic) ":cubic-scalar-schedule-v1" else "")
     public val denominator: Node
     public val sourceX: Node
     public val sourceY: Node
@@ -33,6 +88,10 @@ public class ImageNumericOperationGraphV1 private constructor(public val colorAl
     public val weight10F32: Node?
     public val weight01F32: Node?
     public val weight11F32: Node?
+    public val cubicKernel: CubicKernelGraph?
+    public val cubicWeightsF32: List<Node>
+    public val cubicAccumulationF32: Node?
+    public val cubicScheduleIdentity: String?
     public fun texelOperations(): List<TexelOperation> = buildList {
         add(TexelOperation.PROJECTIVE_VALIDITY_MASK)
         add(when (sampling) {
@@ -112,6 +171,28 @@ public class ImageNumericOperationGraphV1 private constructor(public val colorAl
             weight10F32 = null
             weight01F32 = null
             weight11F32 = null
+        }
+        if (sampling is ImageSamplingPlanV1.Cubic) {
+            cubicKernel = CubicKernelGraph()
+            fun weights(tap: Node, base: Node): List<Node> = (-1..2).map { offsetI32 ->
+                val index = Node(Operation.TAP_INDEX_F32, offsetI32, listOf(base))
+                Node(Operation.CUBIC_KERNEL_F32, inputs = listOf(binary(Operation.SUB_F32, tap, index)))
+            }
+            val weightsX = weights(tapXF32, baseXF32)
+            val weightsY = weights(tapYF32, baseYF32)
+            cubicWeightsF32 = immutableList((0 until 4).flatMap { rowI32 -> (0 until 4).map { columnI32 ->
+                binary(Operation.MUL_F32, weightsX[columnI32], weightsY[rowI32])
+            } })
+            val terms = cubicWeightsF32.mapIndexed { tapI32, weight ->
+                binary(Operation.MUL_F32, Node(Operation.TEXEL_COMPONENT_F32, tapI32), weight)
+            }
+            cubicAccumulationF32 = terms.drop(1).fold(terms.first()) { sum, term -> binary(Operation.ADD_F32, sum, term) }
+            cubicScheduleIdentity = cubicKernel.scheduleIdentity + ":row-major:" + imageScalarScheduleIdentity(listOf(cubicAccumulationF32))
+        } else {
+            cubicKernel = null
+            cubicWeightsF32 = emptyList()
+            cubicAccumulationF32 = null
+            cubicScheduleIdentity = null
         }
     }
     internal companion object {

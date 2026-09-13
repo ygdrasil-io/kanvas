@@ -20,7 +20,7 @@ private class ImageAddressReductionFactV1(
         "address=${addressedI32.identity()}"
 }
 
-/** Immutable arithmetic certificate for indices and the four-component linear sum. */
+/** Immutable arithmetic certificate for indices and the selected component sum. */
 private class ImageSamplingArithmeticProofV1(
     private val xPreReductionI32: IntRange,
     private val yPreReductionI32: IntRange,
@@ -48,7 +48,8 @@ public class ImageNumericAuthorityV1 private constructor(
     public val canonicalIdentity: String = "${graph.topologyIdentity}:sampling=${graph.sampling.bindingIdentity}:${programIdentity.value}:$uploadIdentity:$coordinateIdentity:" +
         listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).joinToString(",") { it.toRawBits().toString() } +
         ":paint=$paintAlphaBitsI32:texel-domain-v1:unorm8:positive-alpha-ge-2^-9:signed-components-abs-lt-2^36:" +
-        "sampling-arithmetic-v1:${samplingProof.canonicalIdentity}"
+        "sampling-arithmetic-v1:${samplingProof.canonicalIdentity}" +
+        graph.cubicScheduleIdentity?.let { ":$it" }.orEmpty()
     public fun authenticates(program: ImageMaterialProgramV3, execution: ImageSampleExecutionPlanV1): Boolean =
         program.structuralId == programIdentity && execution.upload.contentIdentity == uploadIdentity &&
             execution.coordinates.canonicalIdentity == coordinateIdentity && execution.numericAuthority === this &&
@@ -78,7 +79,12 @@ public class ImageNumericAuthorityV1 private constructor(
             if (!provesFiniteTexelDomain(color, upload)) return null
             if (upload.widthI32 <= 0 || upload.heightI32 <= 0) return null
             val graph = ImageNumericOperationGraphV1.of(color, sampling, tileModes)
-            val values = coordinates.uniformValuesF32()
+            val cubic = sampling as? ImageSamplingPlanV1.Cubic
+            val bF32 = cubic?.let { Float.fromBits(it.bBitsI32) } ?: 0f
+            val cF32 = cubic?.let { Float.fromBits(it.cBitsI32) } ?: 0f
+            if (!bF32.isFinite() || !cF32.isFinite() || bF32 !in 0f..1f || cF32 !in 0f..1f) return null
+            val values = coordinates.uniformValuesF32() +
+                listOf(upload.widthI32.toFloat(), upload.heightI32.toFloat(), paintAlphaF32, 0f, bF32, cF32, 0f, 0f)
             var finite = true
             fun rounded(lowF64: Double, highF64: Double, division: Boolean = false): ClosedFloatingPointRange<Double> {
                 // One full F32 ULP for basic ops, eight for division; include FTZ alternatives.
@@ -89,8 +95,9 @@ public class ImageNumericAuthorityV1 private constructor(
                 return low..high
             }
             val memo = mutableMapOf<ImageNumericOperationGraphV1.Node, ClosedFloatingPointRange<Double>>()
-            fun evaluate(node: ImageNumericOperationGraphV1.Node): ClosedFloatingPointRange<Double> = memo.getOrPut(node) {
-                val args = node.inputs.map(::evaluate)
+            fun evaluateWithMemo(node: ImageNumericOperationGraphV1.Node,
+                cache: MutableMap<ImageNumericOperationGraphV1.Node, ClosedFloatingPointRange<Double>>): ClosedFloatingPointRange<Double> = cache.getOrPut(node) {
+                val args = node.inputs.map { evaluateWithMemo(it, cache) }
                 when (node.operation) {
                     ImageNumericOperationGraphV1.Operation.DEVICE_X_F32 -> deviceBoundsF32.left.toDouble()..deviceBoundsF32.right.toDouble()
                     ImageNumericOperationGraphV1.Operation.DEVICE_Y_F32 -> deviceBoundsF32.top.toDouble()..deviceBoundsF32.bottom.toDouble()
@@ -99,6 +106,50 @@ public class ImageNumericAuthorityV1 private constructor(
                     }
                     ImageNumericOperationGraphV1.Operation.CONSTANT_HALF_F32 -> 0.5..0.5
                     ImageNumericOperationGraphV1.Operation.CONSTANT_ONE_F32 -> 1.0..1.0
+                    ImageNumericOperationGraphV1.Operation.CONSTANT_F32 -> Float.fromBits(node.constantBitsI32).toDouble().let { it..it }
+                    ImageNumericOperationGraphV1.Operation.KERNEL_DISTANCE_F32 -> {
+                        // A kernel invocation must supply this input; an unbound graph fails closed.
+                        finite = false
+                        0.0..0.0
+                    }
+                    ImageNumericOperationGraphV1.Operation.TEXEL_COMPONENT_F32 -> -Math.scalb(1.0, 36)..Math.scalb(1.0, 36)
+                    ImageNumericOperationGraphV1.Operation.ABS_F32 -> {
+                        val range = args.single()
+                        val low = when {
+                            range.start >= 0.0 -> range.start
+                            range.endInclusive <= 0.0 -> -range.endInclusive
+                            else -> 0.0
+                        }
+                        low..maxOf(abs(range.start), abs(range.endInclusive))
+                    }
+                    ImageNumericOperationGraphV1.Operation.TAP_INDEX_F32 -> {
+                        // The signed addition is checked before its conversion to F32. One
+                        // full ULP conservatively includes the integer-to-F32 rounding.
+                        val low = args.single().start + node.uniformIndexI32.toDouble()
+                        val high = args.single().endInclusive + node.uniformIndexI32.toDouble()
+                        if (low < Int.MIN_VALUE.toDouble() || high > Int.MAX_VALUE.toDouble()) {
+                            finite = false
+                            0.0..0.0
+                        } else rounded(low, high)
+                    }
+                    ImageNumericOperationGraphV1.Operation.CUBIC_KERNEL_F32 -> {
+                        val kernel = requireNotNull(graph.cubicKernel)
+                        val distance = args.single()
+                        val absolute = evaluateWithMemo(kernel.absoluteDistance, mutableMapOf(kernel.distance to distance))
+                        val alternatives = mutableListOf<ClosedFloatingPointRange<Double>>()
+                        val innerLimitF64 = kernel.innerLimitF32.toDouble()
+                        val outerLimitF64 = kernel.outerLimitF32.toDouble()
+                        fun branch(root: ImageNumericOperationGraphV1.Node, domain: ClosedFloatingPointRange<Double>) =
+                            evaluateWithMemo(root, mutableMapOf(kernel.distance to distance, kernel.absoluteDistance to domain))
+                        // These restrictions follow the emitted comparisons. Every polynomial
+                        // intermediate is evaluated in its actual branch, never weight-clamped.
+                        if (absolute.start < innerLimitF64)
+                            alternatives += branch(kernel.innerResult, absolute.start..minOf(absolute.endInclusive, innerLimitF64))
+                        if (absolute.endInclusive >= innerLimitF64 && absolute.start < outerLimitF64)
+                            alternatives += branch(kernel.outerResult, maxOf(absolute.start, innerLimitF64)..minOf(absolute.endInclusive, outerLimitF64))
+                        if (absolute.endInclusive >= outerLimitF64) alternatives += evaluateWithMemo(kernel.outsideResult, mutableMapOf())
+                        alternatives.minOf { it.start }..alternatives.maxOf { it.endInclusive }
+                    }
                     ImageNumericOperationGraphV1.Operation.ADD_F32 -> rounded(args[0].start + args[1].start, args[0].endInclusive + args[1].endInclusive)
                     ImageNumericOperationGraphV1.Operation.SUB_F32 -> rounded(args[0].start - args[1].endInclusive, args[0].endInclusive - args[1].start)
                     ImageNumericOperationGraphV1.Operation.MUL_F32, ImageNumericOperationGraphV1.Operation.DIV_F32 -> {
@@ -122,6 +173,7 @@ public class ImageNumericAuthorityV1 private constructor(
                     }
                 }
             }
+            fun evaluate(node: ImageNumericOperationGraphV1.Node): ClosedFloatingPointRange<Double> = evaluateWithMemo(node, memo)
             val denominator = evaluate(graph.denominator)
             if (!finite || denominator.start <= 0.0 && denominator.endInclusive >= 0.0) return null
             val samplingProof = proveSamplingArithmetic(graph, upload, ::evaluate, ::rounded) ?: return null
@@ -131,8 +183,8 @@ public class ImageNumericAuthorityV1 private constructor(
         }
 
         /**
-         * Mirrors the WGSL schedule exactly: F32 SUB_F32 for the half-pixel shift and fractions,
-         * four F32 weights, then the left-associated four-term component accumulation.  The I32
+         * Mirrors the selected WGSL schedule: the half-pixel shift, Linear fractions/weights or
+         * Cubic distance/kernel/product nodes, then the left-associated component accumulation. The I32
          * intervals are established before Clamp/Repeat/Mirror/Decal; modulo never receives an
          * unchecked conversion and MIRROR's 2n arithmetic is proven representable.
          */
@@ -210,13 +262,9 @@ public class ImageNumericAuthorityV1 private constructor(
                 return ImageSamplingArithmeticProofV1(xPre, yPre, xAddress, yAddress, signedTexelComponent)
 
             if (graph.sampling is ImageSamplingPlanV1.Cubic) {
-                // For B,C in [0,1], each published one-dimensional Mitchell--Netravali
-                // coefficient is enclosed by [-2,2]; the separable coefficient is
-                // therefore [-4,4].  The emitted left-associated sixteen-term sum is
-                // checked before Ready, independently of pixel values.
-                var accumulated: ClosedFloatingPointRange<Double> = -Math.scalb(1.0, 38)..Math.scalb(1.0, 38)
-                repeat(15) { accumulated = rounded(accumulated.start - Math.scalb(1.0, 38),
-                    accumulated.endInclusive + Math.scalb(1.0, 38), false) }
+                // Evaluation walks the same distance/branch/coefficient/polynomial,
+                // separable-product and row-major accumulation nodes the emitter consumes.
+                val accumulated = evaluate(requireNotNull(graph.cubicAccumulationF32))
                 if (!accumulated.start.isFinite() || !accumulated.endInclusive.isFinite() ||
                     maxOf(abs(accumulated.start), abs(accumulated.endInclusive)) > Float.MAX_VALUE.toDouble()) return null
                 return ImageSamplingArithmeticProofV1(xPre, yPre, xAddress, yAddress, accumulated)

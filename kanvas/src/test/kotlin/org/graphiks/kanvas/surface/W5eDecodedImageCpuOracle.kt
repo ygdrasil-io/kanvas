@@ -55,32 +55,71 @@ internal object W5eDecodedImageCpuOracle {
         }
         val premul = when {
             cubic != null -> {
-                fun weight(distanceF32: Float): I {
-                    val x = kotlin.math.abs(distanceF32)
-                    val b = cubic.B
-                    val c = cubic.C
-                    val value = when {
-                        x < 1f -> ((12f - 9f * b - 6f * c) * x * x * x +
-                            (-18f + 12f * b + 6f * c) * x * x + (6f - 2f * b)) / 6f
-                        x < 2f -> ((-b - 6f * c) * x * x * x + (6f * b + 30f * c) * x * x +
-                            (-12f * b - 48f * c) * x + (8f * b + 24f * c)) / 6f
-                        else -> 0f
+                // Independent published polynomials: constants are F32 inputs;
+                // every runtime coefficient, power, sum and division is enveloped.
+                fun constant(value: Float) = I.input(value)
+                fun scaled(value: Float, parameter: I) = oracle.gradientMultiply(constant(value), parameter)
+                val b = constant(cubic.B)
+                val c = constant(cubic.C)
+                fun weight(distance: I): I {
+                    val x = when {
+                        distance.lower.signum() >= 0 -> distance
+                        distance.upper.signum() <= 0 -> I(distance.upper.negate(), distance.lower.negate())
+                        else -> I(java.math.BigDecimal.ZERO, maxOf(distance.lower.abs(), distance.upper.abs()))
                     }
-                    return I.input(value)
-                }
-                val uX = sXF32 - .5f
-                val uY = sYF32 - .5f
-                val baseX = floor(uX).toInt()
-                val baseY = floor(uY).toInt()
-                Array(4) { channelI32 ->
-                    var sum = I.ZERO
-                    for (offsetY in -1..2) for (offsetX in -1..2) {
-                        val value = tap(baseX + offsetX, baseY + offsetY)[channelI32]
-                        val kernel = oracle.gradientMultiply(weight(uX - (baseX + offsetX)), weight(uY - (baseY + offsetY)))
-                        sum = oracle.gradientAdd(sum, oracle.gradientMultiply(value, kernel))
+                    val alternatives = mutableListOf<I>()
+                    fun polynomial(domain: I, outer: Boolean): I {
+                        val coefficient3 = if (outer) oracle.gradientSubtract(oracle.gradientSubtract(I.ZERO, b), scaled(6f, c))
+                            else oracle.gradientSubtract(oracle.gradientSubtract(constant(12f), scaled(9f, b)), scaled(6f, c))
+                        val coefficient2 = if (outer) oracle.gradientAdd(scaled(6f, b), scaled(30f, c))
+                            else oracle.gradientAdd(oracle.gradientAdd(constant(-18f), scaled(12f, b)), scaled(6f, c))
+                        val cubicTerm = oracle.gradientMultiply(oracle.gradientMultiply(oracle.gradientMultiply(coefficient3, domain), domain), domain)
+                        val squareTerm = oracle.gradientMultiply(oracle.gradientMultiply(coefficient2, domain), domain)
+                        var numerator = oracle.gradientAdd(cubicTerm, squareTerm)
+                        if (outer) {
+                            val coefficient1 = oracle.gradientSubtract(scaled(-12f, b), scaled(48f, c))
+                            numerator = oracle.gradientAdd(numerator, oracle.gradientMultiply(coefficient1, domain))
+                        }
+                        val coefficient0 = if (outer) oracle.gradientAdd(scaled(8f, b), scaled(24f, c))
+                            else oracle.gradientSubtract(constant(6f), scaled(2f, b))
+                        return oracle.gradientDivide(oracle.gradientAdd(numerator, coefficient0), constant(6f))
                     }
-                    sum
+                    val one = java.math.BigDecimal.ONE
+                    val two = java.math.BigDecimal(2)
+                    if (x.lower < one) alternatives += polynomial(I(x.lower, minOf(x.upper, one)), false)
+                    if (x.upper >= one && x.lower < two)
+                        alternatives += polynomial(I(maxOf(x.lower, one), minOf(x.upper, two)), true)
+                    if (x.upper >= two) alternatives += I.ZERO
+                    return oracle.gradientHull(*alternatives.toTypedArray())
                 }
+                val uX = oracle.gradientSubtract(constant(sXF32), constant(.5f))
+                val uY = oracle.gradientSubtract(constant(sYF32), constant(.5f))
+                fun bases(coordinate: I): IntRange {
+                    val low = coordinate.lower.setScale(0, java.math.RoundingMode.FLOOR).intValueExact()
+                    val high = coordinate.upper.setScale(0, java.math.RoundingMode.FLOOR).intValueExact()
+                    require(high.toLong() - low.toLong() <= 1L) { "Cubic fixture spans more than two floor alternatives" }
+                    return low..high
+                }
+                fun forBase(coordinate: I, baseI32: Int): I = I(
+                    maxOf(coordinate.lower, java.math.BigDecimal(baseI32)),
+                    minOf(coordinate.upper, java.math.BigDecimal(baseI32.toLong() + 1L)))
+                val colors = mutableMapOf<Pair<Int, Int>, Array<I>>()
+                val alternatives = mutableListOf<Array<I>>()
+                for (baseY in bases(uY)) for (baseX in bases(uX)) {
+                    val coordinateX = forBase(uX, baseX)
+                    val coordinateY = forBase(uY, baseY)
+                    val weightsX = (-1..2).map { weight(oracle.gradientSubtract(coordinateX, constant((baseX + it).toFloat()))) }
+                    val weightsY = (-1..2).map { weight(oracle.gradientSubtract(coordinateY, constant((baseY + it).toFloat()))) }
+                    val terms = (-1..2).flatMap { offsetY -> (-1..2).map { offsetX ->
+                        val value = colors.getOrPut((baseX + offsetX) to (baseY + offsetY)) { tap(baseX + offsetX, baseY + offsetY) }
+                        value to oracle.gradientMultiply(weightsX[offsetX + 1], weightsY[offsetY + 1])
+                    } }
+                    alternatives += Array(4) { channelI32 ->
+                        val weighted = terms.map { (value, kernel) -> oracle.gradientMultiply(value[channelI32], kernel) }
+                        weighted.drop(1).fold(weighted.first(), oracle::gradientAdd)
+                    }
+                }
+                Array(4) { channelI32 -> oracle.gradientHull(*alternatives.map { it[channelI32] }.toTypedArray()) }
             }
             !linear -> tap(floor(sXF32).toInt(), floor(sYF32).toInt())
             else -> {

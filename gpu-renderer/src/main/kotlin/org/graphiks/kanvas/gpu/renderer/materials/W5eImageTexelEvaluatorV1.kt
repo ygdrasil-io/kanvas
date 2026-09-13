@@ -17,25 +17,67 @@ internal object W5eImageTexelEvaluatorV1 {
         val texelOperations = graph.texelOperations()
         val statements = StringBuilder()
         val afterValidityStatements = StringBuilder()
+        val afterFetchStatements = StringBuilder()
         val emitted = mutableMapOf<ImageNumericOperationGraphV1.Node, String>()
-        fun emit(node: ImageNumericOperationGraphV1.Node, afterValidity: Boolean = false): String = emitted.getOrPut(node) {
-            val inputs = node.inputs.map { emit(it, afterValidity) }
-            val value = when (node.operation) {
-                ImageNumericOperationGraphV1.Operation.DEVICE_X_F32 -> "pixel.x"
-                ImageNumericOperationGraphV1.Operation.DEVICE_Y_F32 -> "pixel.y"
-                ImageNumericOperationGraphV1.Operation.UNIFORM_F32 -> "w5eImage.values${node.uniformIndexI32 / 4}[${node.uniformIndexI32 % 4}]"
-                ImageNumericOperationGraphV1.Operation.CONSTANT_HALF_F32 -> "0.5"
-                ImageNumericOperationGraphV1.Operation.CONSTANT_ONE_F32 -> "1.0"
-                ImageNumericOperationGraphV1.Operation.ADD_F32 -> "(${inputs[0]} + ${inputs[1]})"
-                ImageNumericOperationGraphV1.Operation.SUB_F32 -> "(${inputs[0]} - ${inputs[1]})"
-                ImageNumericOperationGraphV1.Operation.MUL_F32 -> "(${inputs[0]} * ${inputs[1]})"
-                ImageNumericOperationGraphV1.Operation.DIV_F32 -> "(${inputs[0]} / ${inputs[1]})"
-                ImageNumericOperationGraphV1.Operation.FLOOR_F32 -> "floor(${inputs[0]})"
+        fun expression(node: ImageNumericOperationGraphV1.Node, inputs: List<String>): String = when (node.operation) {
+            ImageNumericOperationGraphV1.Operation.DEVICE_X_F32 -> "pixel.x"
+            ImageNumericOperationGraphV1.Operation.DEVICE_Y_F32 -> "pixel.y"
+            ImageNumericOperationGraphV1.Operation.UNIFORM_F32 -> when {
+                node.uniformIndexI32 < 20 -> "w5eImage.values${node.uniformIndexI32 / 4}[${node.uniformIndexI32 % 4}]"
+                node.uniformIndexI32 < 24 -> "w5eImage.parameters[${node.uniformIndexI32 % 4}]"
+                else -> "w5eImage.cubicParameters[${node.uniformIndexI32 % 4}]"
             }
+            ImageNumericOperationGraphV1.Operation.CONSTANT_HALF_F32 -> "0.5"
+            ImageNumericOperationGraphV1.Operation.CONSTANT_ONE_F32 -> "1.0"
+            ImageNumericOperationGraphV1.Operation.CONSTANT_F32 -> "${Float.fromBits(node.constantBitsI32)}f"
+            ImageNumericOperationGraphV1.Operation.KERNEL_DISTANCE_F32 -> "distance"
+            ImageNumericOperationGraphV1.Operation.ABS_F32 -> "abs(${inputs.single()})"
+            ImageNumericOperationGraphV1.Operation.TAP_INDEX_F32 -> "f32(i32(${inputs.single()}) + ${node.uniformIndexI32})"
+            ImageNumericOperationGraphV1.Operation.CUBIC_KERNEL_F32 -> "w5e_cubic_weight(${inputs.single()})"
+            ImageNumericOperationGraphV1.Operation.TEXEL_COMPONENT_F32 -> "tap${node.uniformIndexI32 / 4}${node.uniformIndexI32 % 4}"
+            ImageNumericOperationGraphV1.Operation.ADD_F32 -> "(${inputs[0]} + ${inputs[1]})"
+            ImageNumericOperationGraphV1.Operation.SUB_F32 -> "(${inputs[0]} - ${inputs[1]})"
+            ImageNumericOperationGraphV1.Operation.MUL_F32 -> "(${inputs[0]} * ${inputs[1]})"
+            ImageNumericOperationGraphV1.Operation.DIV_F32 -> "(${inputs[0]} / ${inputs[1]})"
+            ImageNumericOperationGraphV1.Operation.FLOOR_F32 -> "floor(${inputs[0]})"
+        }
+        fun emit(node: ImageNumericOperationGraphV1.Node, afterValidity: Boolean = false, afterFetch: Boolean = false): String = emitted.getOrPut(node) {
+            val inputs = node.inputs.map { emit(it, afterValidity, afterFetch) }
+            val value = expression(node, inputs)
             val name = "imageValue${emitted.size}"
-            (if (afterValidity) afterValidityStatements else statements).append("let $name = $value;\n")
+            (if (afterFetch) afterFetchStatements else if (afterValidity) afterValidityStatements else statements).append("let $name = $value;\n")
             name
         }
+        val cubicKernelDeclarations = graph.cubicKernel?.let { kernel ->
+            fun branch(root: ImageNumericOperationGraphV1.Node, prefix: String): Pair<String, String> {
+                val body = StringBuilder()
+                val names = mutableMapOf(kernel.distance to "distance", kernel.absoluteDistance to "kernelAbsolute")
+                fun emitKernel(node: ImageNumericOperationGraphV1.Node): String = names.getOrPut(node) {
+                    val inputs = node.inputs.map(::emitKernel)
+                    val name = "$prefix${names.size}"
+                    body.append("let $name = ${expression(node, inputs)};\n")
+                    name
+                }
+                val result = emitKernel(root)
+                return body.toString() to result
+            }
+            val (innerBody, innerResult) = branch(kernel.innerResult, "innerKernelValue")
+            val (outerBody, outerResult) = branch(kernel.outerResult, "outerKernelValue")
+            """
+                fn w5e_cubic_weight(distance: f32) -> f32 {
+                    let kernelAbsolute = ${expression(kernel.absoluteDistance, listOf("distance"))};
+                    if (kernelAbsolute < ${kernel.innerLimitF32}f) {
+                        $innerBody
+                        return $innerResult;
+                    }
+                    if (kernelAbsolute < ${kernel.outerLimitF32}f) {
+                        $outerBody
+                        return $outerResult;
+                    }
+                    return ${expression(kernel.outsideResult, emptyList())};
+                }
+            """.trimIndent()
+        }.orEmpty()
         val denominator = emit(graph.denominator)
         statements.append("if (!w5e_finite($denominator) || abs($denominator) < 1.17549435e-38f) { return $zero; }\n")
         val x = emit(graph.sourceX)
@@ -106,14 +148,11 @@ internal object W5eImageTexelEvaluatorV1 {
                 """.trimIndent()
             }
             is ImageSamplingPlanV1.Cubic -> {
+                graph.cubicWeightsF32.forEach { emit(it, afterValidity = true) }
+                val accumulated = emit(requireNotNull(graph.cubicAccumulationF32), afterFetch = true)
                 val taps = buildString {
                     for (row in -1..2) for (column in -1..2) {
                         append("let tap${row + 1}${column + 1} = w5e_texel(baseXi32 + $column, baseYi32 + $row);\n")
-                    }
-                    append("var accumulated = vec4<f32>(0.0);\n".takeIf { !maskSource } ?: "var accumulated = 0.0;\n")
-                    for (row in -1..2) for (column in -1..2) {
-                        append("accumulated = accumulated + tap${row + 1}${column + 1} * " +
-                            "(w5e_cubic_weight($tapX - f32(baseXi32 + $column)) * w5e_cubic_weight($tapY - f32(baseYi32 + $row)));\n")
                     }
                 }
                 """
@@ -123,7 +162,8 @@ internal object W5eImageTexelEvaluatorV1 {
                     let baseXi32 = i32($baseX);
                     let baseYi32 = i32($baseY);
                     $taps
-                    return accumulated;
+                    $afterFetchStatements
+                    return $accumulated;
                 """.trimIndent()
             }
         }
@@ -139,20 +179,7 @@ internal object W5eImageTexelEvaluatorV1 {
             ${if (child == null) W5aMaterialSourceStage.SRGB_TO_LINEAR_WGSL else ""}
             fn w5e_finite(value: f32) -> bool { return (bitcast<u32>(value) & 0x7f800000u) != 0x7f800000u; }
             fn w5e_device_point(pixel: vec2<f32>) -> vec2<f32> { return pixel; }
-            fn w5e_cubic_weight(distance: f32) -> f32 {
-                let x = abs(distance);
-                let b = w5eImage.cubicParameters.x;
-                let c = w5eImage.cubicParameters.y;
-                if (x < 1.0) {
-                    return ((12.0 - 9.0 * b - 6.0 * c) * x * x * x +
-                        (-18.0 + 12.0 * b + 6.0 * c) * x * x + (6.0 - 2.0 * b)) / 6.0;
-                }
-                if (x < 2.0) {
-                    return ((-b - 6.0 * c) * x * x * x + (6.0 * b + 30.0 * c) * x * x +
-                        (-12.0 * b - 48.0 * c) * x + (8.0 * b + 24.0 * c)) / 6.0;
-                }
-                return 0.0;
-            }
+            $cubicKernelDeclarations
             fn w5e_texel(ix: i32, iy: i32) -> $returnType {
                 $addressX
                 $addressY
