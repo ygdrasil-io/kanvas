@@ -1530,6 +1530,7 @@ private fun CanonicalHashSink.packet(value: GPUDrawPacket) {
     tag("GPUDrawPacket")
     string("packetId", value.packetId.value)
     nullableString("w5aSourceStageV2", value.w5aSourceStageV2?.canonicalIdentity)
+    value.w5eImageFrameWitnessV1?.let { string("w5eImageSourceV3", it.canonicalIdentity) }
     int("commandIdValue", value.commandIdValue)
     string("analysisRecordId", value.analysisRecordId)
     string("passId", value.passId)
@@ -2376,6 +2377,7 @@ private fun GPUDrawPacket.stableDump(): String =
         "uniform=${uniformSlot?.let { "${it.slotId.value},${it.fingerprint.value},${it.byteOffset}" } ?: "none"}|" +
         "resource=${resourceSlot?.let { "${it.slotId.value},${it.fingerprint.value},${it.bindingIndex}" } ?: "none"}|" +
         "semantic=${semanticPayload?.stableDump() ?: "none"}|" +
+                (w5eImageFrameWitnessV1?.let { "imageV3=${it.canonicalIdentity}|" } ?: "") +
         "vertex=$vertexSourceLabel|scissor=${scissorBoundsHash ?: "none"}|" +
         "clipExecution=${clipExecutionPlan?.canonicalIdentity() ?: "none"}|" +
         "clipProducer=${clipProducerAuthority?.selectorIdentity ?: "none"}|target=$targetStateHash|" +

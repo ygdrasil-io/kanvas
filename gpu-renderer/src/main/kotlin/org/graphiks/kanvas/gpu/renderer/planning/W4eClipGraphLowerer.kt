@@ -426,10 +426,14 @@ internal class W4eClipGraphLowerer {
             PlanResourceUsage.Uniform -> GPUFrameResourceUsage.Uniform
             PlanResourceUsage.StorageRead -> GPUFrameResourceUsage.TextureBinding
         } }.toSet()
-        val lifetime = when (resource.lifetime) { PlanResourceLifetime.FrameLocal -> GPUFrameResourceLifetime.FrameLocal }
+        val lifetime = when (resource.lifetime) {
+            PlanResourceLifetime.FrameLocal -> GPUFrameResourceLifetime.FrameLocal
+            PlanResourceLifetime.DeviceSessionCache -> error("W4e cannot consume a W5e session cache resource")
+        }
         val descriptor = when (resource.kind) {
             PlanResourceKind.Buffer -> GPUFrameBufferDescriptor(resource.byteSize, alignment)
             PlanResourceKind.Texture2D -> GPUFrameTextureDescriptor(bounds, when (resource.format) {
+                is PlanTextureFormat.ImageV1 -> error("W4e cannot consume a W5e decoded-image format")
                 is PlanTextureFormat.Color -> GPUColorFormat.RGBA8UnormSrgb
                 PlanTextureFormat.CoverageMask -> GPUColorFormat.RGBA8Unorm
                 is PlanTextureFormat.DepthStencil -> GPUColorFormat("depth24plus-stencil8")

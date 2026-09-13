@@ -534,6 +534,9 @@ internal object WgslFloatEnvelopeV1Oracle {
         graph.root.inputs.single().inputs.single().inputs.single().inputs[1].inputs[0]
 
     private fun evaluate(node: NumericOperationGraphV1.Node, inputs: Inputs): Value = when (node.operation) {
+        NumericOperationGraphV1.Operation.INPUT_IMAGE_LINEAR_PREMUL,
+        NumericOperationGraphV1.Operation.INPUT_IMAGE_MASK_F32,
+        NumericOperationGraphV1.Operation.IMAGE_MASK_MULTIPLY -> error("This V1/V2 oracle does not evaluate W5e image nodes")
         NumericOperationGraphV1.Operation.INPUT_SOLID_SRGBA_STRAIGHT -> Rgba(requireNotNull(inputs.solid))
         NumericOperationGraphV1.Operation.INPUT_GRADIENT_SRGBA_STRAIGHT -> Rgba(requireNotNull(inputs.gradient).invoke())
         NumericOperationGraphV1.Operation.INPUT_MATERIAL_LINEAR_PREMUL -> Rgba(requireNotNull(inputs.material).invoke())

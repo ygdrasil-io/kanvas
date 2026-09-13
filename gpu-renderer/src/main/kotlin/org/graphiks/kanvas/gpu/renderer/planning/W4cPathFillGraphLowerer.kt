@@ -1055,6 +1055,7 @@ internal class W4cPathFillGraphLowerer {
         authority: PlanDrawMaterialAuthority,
     ): ColorF32? = when (authority) {
         is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
+        is PlanDrawMaterialAuthority.MaterialV3 -> error(org.graphiks.kanvas.gpu.plan.W5eImagePlanDiagnostics.InvalidContract)
         is PlanDrawMaterialAuthority.MaterialV2 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }
         is PlanDrawMaterialAuthority.MaterialV1 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }
     }

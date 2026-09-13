@@ -291,6 +291,7 @@ internal fun observedMaxBufferSize(value: ULong): Long? = when {
 private fun wgpuQueueCompletionRuntime(
     deviceGeneration: GPUDeviceGenerationID,
     queue: GPUQueue,
+    onQueueFailure: () -> Unit = {},
 ): GPUQueueCompletionAdapter = GPUQueueCompletionAdapter(
     deviceGeneration = deviceGeneration,
     requirement = GPUQueueCompletionCapabilityRequirement(
@@ -302,7 +303,14 @@ private fun wgpuQueueCompletionRuntime(
         capability = WGPU4K_QUEUE_COMPLETION_CAPABILITY,
         accepted = true,
     ),
-    invoker = GPUQueueCompletionInvoker { queue.onSubmittedWorkDone() },
+    invoker = GPUQueueCompletionInvoker {
+        try { queue.onSubmittedWorkDone() } catch (failure: Throwable) {
+            // The facade exposes no typed device-loss result. Any failed completion retires
+            // decoded resources conservatively, before ordinary completion cleanup releases leases.
+            try { onQueueFailure() } catch (cleanup: Throwable) { failure.addSuppressed(cleanup) }
+            throw failure
+        }
+    },
 )
 private val TARGET_SNAPSHOT_WGSL: String = """
 struct Uniforms {
@@ -1160,6 +1168,7 @@ private class WgpuBackendSession(
     private val queueCompletionRuntime = wgpuQueueCompletionRuntime(
         deviceGeneration = deviceGeneration,
         queue = glfw.wgpuContext.device.queue,
+        onQueueFailure = { decodedImageCache.retireGeneration() },
     )
     private val preparedSceneChildren = GPUPreparedSceneChildRegistry(::closeRuntimeResources)
     private val preparedSceneSetupRollbackQuarantine = GPUPreparedSceneSetupRollbackQuarantine()
@@ -1205,6 +1214,7 @@ private class WgpuBackendSession(
                                 addAll(quarantinedMaskBlurCaches)
                                 addAll(quarantinedDestinationCopyCaches)
                                 addAll(quarantinedSurfaceBlitCaches)
+                                if (!decodedImageCache.isClosed) add(decodedImageCache)
                             }
                         }
                     },
@@ -1272,6 +1282,10 @@ private class WgpuBackendSession(
         )
     }
     private var offscreenTargetOrdinalCounter = 0L
+    private val decodedImageCache = GPUW5eDecodedImageSessionCache(
+        glfw.wgpuContext.device, glfw.wgpuContext.device.queue, deviceGeneration.value,
+        requireNotNull(backendLimits.copyBytesPerRowAlignment), requireNotNull(backendLimits.maxBufferSize),
+    )
 
     override val adapterInfo: GPUBackendAdapterSummary? = adapterSummary(glfw.wgpuContext.adapter.info)
 
@@ -1637,6 +1651,7 @@ private class WgpuBackendSession(
                     surfaceTargetResolver = surfaceTargetResolver,
                     corePrimitiveLimits = backendLimits,
                     preparedSurfaceMixedMaterializer = preparedSurfaceMixedMaterializer,
+                    decodedImageCache = decodedImageCache,
                     onDestinationSnapshotCreated =
                         preparedSurfaceDestinationSnapshots::recordCreation,
                 )

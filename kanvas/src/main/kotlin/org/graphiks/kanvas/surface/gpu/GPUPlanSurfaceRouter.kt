@@ -62,12 +62,13 @@ internal class GPUPlanSurfaceRouter(
             throw GPUPlanSurfaceTerminalException("w3.surface.invalid_dimensions", "Surface dimensions must be positive.")
         }
         if (!GPUPlanSurfaceCandidateGate.accepts(operations, config)) return legacy()
+        val imageOwned = GPUPlanSurfaceCandidateGate.ownsW5eImages(operations)
 
         val extent = SceneExtent(width, height)
         val scene = when (val captured = capturePort.capture(operations, extent, ColorSpace.SRGB, captureLimits)) {
             is SceneCaptureResult.Captured -> captured.scene
             is SceneCaptureResult.Invalid -> {
-                if (captured.diagnostics.isNotEmpty() &&
+                if (!imageOwned && captured.diagnostics.isNotEmpty() &&
                     captured.diagnostics.all { it.code.value in CAPTURE_LIMIT_CODES }
                 ) return legacy()
                 throw terminal(captured.diagnostics)
@@ -81,7 +82,7 @@ internal class GPUPlanSurfaceRouter(
             )
         ) {
             // No compiler owns a GapNotMigrated frame. This is the final legacy boundary.
-            is GpuPlanSurfacePlanResult.GapNotMigrated -> legacy()
+            is GpuPlanSurfacePlanResult.GapNotMigrated -> if (imageOwned) throw terminal(planned.diagnostics) else legacy()
             is GpuPlanSurfacePlanResult.Terminal -> throw terminal(planned.diagnostics)
             is GpuPlanSurfacePlanResult.Ready -> submitOwned(planned.token, format)
         }

@@ -235,6 +235,18 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
             }
             entries.forEachIndexed { index, entry ->
                 when (val program = entry.program) {
+                    is ImageMaterialProgramV3.ColorV3 -> require(entry.bindings is ImageSampleV3 &&
+                        entry.bindings.execution.numericAuthority.authenticates(program, entry.bindings.execution)) {
+                        W5eImagePlanDiagnostics.InvalidContract
+                    }
+                    is ImageMaterialProgramV3.MaskV3 -> {
+                        require(entry.bindings is ImageSampleV3 && index > 0 &&
+                            entries[index - 1].program.structuralId == program.child.structuralId &&
+                            entry.bindings.execution.colorAlpha.channelOrder == ImageChannelOrderV1.ALPHA &&
+                            entry.bindings.execution.numericAuthority.authenticates(program, entry.bindings.execution)) {
+                            W5eImagePlanDiagnostics.InvalidContract
+                        }
+                    }
                     MaterialProgramPlan.TransparentV1 -> require(entry.bindings is MaterialBindingPlan.EmptyV1) {
                         "Transparent programs require empty bindings"
                     }
@@ -318,14 +330,14 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
                 val source = table.entries()
                 val laneRemap = mutableListOf<MaterialPlanRef>()
                 source.forEachIndexed { localIndex, entry ->
-                    val childRef = if (entry.program is MaterialProgramPlan.OpacityV1) laneRemap[localIndex - 1] else null
+                    val childRef = if (entry.program is MaterialProgramPlan.OpacityV1 || entry.program is ImageMaterialProgramV3.MaskV3) laneRemap[localIndex - 1] else null
                     val key = ChainKey(entry.interningKey(), childRef)
                     val index = indexByKey.getOrPut(key) {
                         var first = localIndex
                         if (childRef != null && childRef.indexI32 != entries.lastIndex) {
                             // V1 evaluates child at ref - 1. Reuse an existing whole chain, or append
                             // an exact contiguous copy; never append a parent after an unrelated child.
-                            while (source[first].program is MaterialProgramPlan.OpacityV1) first--
+                            while (source[first].program is MaterialProgramPlan.OpacityV1 || source[first].program is ImageMaterialProgramV3.MaskV3) first--
                         }
                         require(localIndex - first + 1 <= MAX_ENTRIES_I32 - entries.size) {
                             "A material table must contain at most $MAX_ENTRIES_I32 entries"
@@ -358,6 +370,7 @@ public class MaterialPlanTableInterning internal constructor(
 private fun MaterialPlanEntry.copyForInterning(): MaterialPlanEntry = MaterialPlanEntry(
     program,
     when (val binding = bindings) {
+        is ImageSampleV3 -> ImageSampleV3.of(binding.execution)
         MaterialBindingPlan.EmptyV1 -> MaterialBindingPlan.EmptyV1
         is MaterialBindingPlan.GradientV1 -> binding.rebind(binding.stopRange)
         is MaterialBindingPlan.GradientV2 -> binding.rebind(binding.stopRange)
@@ -369,6 +382,7 @@ private fun MaterialPlanEntry.copyForInterning(): MaterialPlanEntry = MaterialPl
 private fun MaterialPlanEntry.interningKey(): String = buildString {
     append(program.structuralId.value).append('|')
     when (val binding = bindings) {
+        is ImageSampleV3 -> append(binding.execution.canonicalIdentity)
         MaterialBindingPlan.EmptyV1 -> append("empty")
         is MaterialBindingPlan.GradientV2 -> {
             append(binding.copyUniformValuesF32()).append(binding.gradientDegenerate)
@@ -394,6 +408,8 @@ private fun MaterialPlanEntry.interningKey(): String = buildString {
 
 /** Closed draw authority: W5 material references cannot coexist with legacy colours. */
 public sealed interface PlanDrawMaterialAuthority {
+    public data class MaterialV3(public val ref: MaterialPlanRef,
+        public val imageCoordinates: ImageCoordinatePlanV1) : PlanDrawMaterialAuthority
     public data class MaterialV2(public val ref: MaterialPlanRef,
         public val coordinates: MaterialCoordinatePlanV2) : PlanDrawMaterialAuthority
     public data class MaterialV1(public val ref: MaterialPlanRef,
@@ -411,6 +427,7 @@ public sealed interface PlanDrawMaterialAuthority {
 
 /** Reference extraction preserves the closed, versioned coordinate owner. */
 public fun PlanDrawMaterialAuthority.materialPlanRef(): MaterialPlanRef = when (this) {
+    is PlanDrawMaterialAuthority.MaterialV3 -> ref
     is PlanDrawMaterialAuthority.MaterialV1 -> ref
     is PlanDrawMaterialAuthority.MaterialV2 -> ref
     is PlanDrawMaterialAuthority.LegacyColorV1 -> error("Legacy colors have no material reference")

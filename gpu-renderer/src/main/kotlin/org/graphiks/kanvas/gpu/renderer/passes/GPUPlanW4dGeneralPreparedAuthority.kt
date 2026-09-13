@@ -540,6 +540,7 @@ internal class W4dGeneralNativeMaterializationSnapshot private constructor(
                         PathRenderPhase.HardEdgeBinaryColorCover,
                     )) {
                         when (val authority = pass.draw.materialAuthority) {
+                            is PlanDrawMaterialAuthority.MaterialV3 -> error(org.graphiks.kanvas.gpu.plan.W5eImagePlanDiagnostics.InvalidContract)
                             is PlanDrawMaterialAuthority.MaterialV2 ->
                                 W5aMaterialPlanLowerer().lower(graph.materialPlanTableOrNull() ?: return null, authority.ref)
                                     ?: return null
@@ -556,6 +557,7 @@ internal class W4dGeneralNativeMaterializationSnapshot private constructor(
                 } else {
                     when (val authority = pass.draw.materialAuthority) {
                         is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
+                        is PlanDrawMaterialAuthority.MaterialV3 -> error(org.graphiks.kanvas.gpu.plan.W5eImagePlanDiagnostics.InvalidContract)
                         is PlanDrawMaterialAuthority.MaterialV2 -> return null
                         is PlanDrawMaterialAuthority.MaterialV1 -> return null
                     }

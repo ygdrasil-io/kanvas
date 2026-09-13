@@ -80,17 +80,8 @@ class GPUMaterialTextureFrameResourcePlan private constructor(
             require(sha256MaterialTexture(sourceBytes) == contentHash) {
                 "Prepared-material sampled bytes must match their content hash"
             }
-            val stagingBytes = ByteArray(stagingByteSize.toInt())
-            repeat(height) { row ->
-                val sourceOffset = Math.multiplyExact(row.toLong(), logicalBytesPerRow).toInt()
-                val destinationOffset = Math.multiplyExact(row.toLong(), stagingBytesPerRow).toInt()
-                sourceBytes.copyInto(
-                    destination = stagingBytes,
-                    destinationOffset = destinationOffset,
-                    startIndex = sourceOffset,
-                    endIndex = Math.addExact(sourceOffset, logicalBytesPerRow.toInt()),
-                )
-            }
+            val stagingBytes = GPUMaterialTextureUploadV1.of(width, height, 4, sourceBytes,
+                rowAlignment, limits.maxBufferSize ?: Long.MAX_VALUE).copyBytes()
             val identity = sha256MaterialTexture(
                 listOf(
                     "prepared-material-texture:v1",
@@ -99,7 +90,6 @@ class GPUMaterialTextureFrameResourcePlan private constructor(
                     contentHash,
                     width.toString(),
                     height.toString(),
-                    samplingFilterMode,
                     alphaOnly.toString(),
                 ).joinToString("\u0000").encodeToByteArray(),
             )
@@ -237,3 +227,29 @@ private fun sha256MaterialTexture(bytes: ByteArray): String =
     }
 
 private const val MATERIAL_TEXTURE_HEX = "0123456789abcdef"
+
+/** Format-neutral physical staging shared by prepared materials and W5e session uploads. */
+internal class GPUMaterialTextureUploadV1 private constructor(
+    val widthI32: Int, val heightI32: Int, val bytesPerPixelI32: Int,
+    val bytesPerRowI64: Long, bytes: ByteArray,
+) {
+    private val bytes = bytes.copyOf()
+    val byteSizeI64: Long get() = bytes.size.toLong()
+    fun copyBytes(): ByteArray = bytes.copyOf()
+    companion object {
+        fun of(widthI32: Int, heightI32: Int, bytesPerPixelI32: Int, logicalBytes: ByteArray,
+            rowAlignmentI64: Long, maxBufferBytesI64: Long): GPUMaterialTextureUploadV1 {
+            require(widthI32 > 0 && heightI32 > 0 && bytesPerPixelI32 in setOf(1, 4))
+            val logicalRowI64 = Math.multiplyExact(widthI32.toLong(), bytesPerPixelI32.toLong())
+            require(logicalBytes.size.toLong() == Math.multiplyExact(logicalRowI64, heightI32.toLong()))
+            val alignmentI64 = leastCommonMultipleMaterialTexture(256L, rowAlignmentI64)
+            val rowI64 = alignUpMaterialTexture(logicalRowI64, alignmentI64)
+            val sizeI64 = Math.multiplyExact(rowI64, heightI32.toLong())
+            require(sizeI64 <= Int.MAX_VALUE && sizeI64 <= maxBufferBytesI64)
+            val padded = ByteArray(sizeI64.toInt())
+            for (rowI32 in 0 until heightI32) logicalBytes.copyInto(padded,
+                Math.toIntExact(rowI32 * rowI64), Math.toIntExact(rowI32 * logicalRowI64), Math.toIntExact((rowI32 + 1L) * logicalRowI64))
+            return GPUMaterialTextureUploadV1(widthI32, heightI32, bytesPerPixelI32, rowI64, padded)
+        }
+    }
+}

@@ -122,6 +122,7 @@ public class RawMaterialRequirementsV2 private constructor(
             val uniforms = ByteBuffer.allocate(bytesI32).order(ByteOrder.LITTLE_ENDIAN)
             for (indexI32 in leafI32..root.indexI32) {
                 when (val binding = table.entry(MaterialPlanRef(indexI32)).bindings) {
+                    is ImageSampleV3 -> error(W5eImagePlanDiagnostics.InvalidContract)
                     is MaterialBindingPlan.GradientV1 -> binding.copyUniformValuesF32().forEach(uniforms::putFloat)
                     is MaterialBindingPlan.GradientV2 -> binding.copyUniformValuesF32().forEach(uniforms::putFloat)
                     MaterialBindingPlan.EmptyV1 -> repeat(4) { uniforms.putFloat(0f) }

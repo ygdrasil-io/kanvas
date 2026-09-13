@@ -8,9 +8,11 @@ internal class W5aPacketMaterialSourceV2 private constructor(
     val commandIdI32: Int,
     val stage: W5aMaterialSourceStage,
 ) {
-    val canonicalIdentity: String = "w5a-source-v2:$commandIdI32:${stage.canonicalIdentity}"
+    val canonicalIdentity: String = "${if (stage.imageV3 == null) "w5a-source-v2" else "w5e-source-v3"}:$commandIdI32:${stage.canonicalIdentity}"
 
     companion object {
+        fun issueImageV3(execution: org.graphiks.kanvas.gpu.plan.ImageSampleExecutionPlanV1, commandIdI32: Int): W5aPacketMaterialSourceV2 =
+            W5aPacketMaterialSourceV2(commandIdI32, W5aMaterialSourceStage.imageV3(execution))
         fun issue(table: MaterialPlanTable, ref: MaterialPlanRef, commandIdI32: Int,
             coordinates: org.graphiks.kanvas.gpu.plan.MaterialCoordinatePlanV2): W5aPacketMaterialSourceV2 =
             W5aPacketMaterialSourceV2(commandIdI32, requireNotNull(W5aMaterialSourceStage.lower(table, ref, coordinates)) {

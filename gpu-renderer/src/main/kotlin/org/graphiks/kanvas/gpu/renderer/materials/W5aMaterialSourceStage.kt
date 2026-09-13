@@ -18,22 +18,26 @@ import org.graphiks.kanvas.gpu.plan.GradientNumericDomainProofV1
  * attachment partition before any source-stage code or raw binding is published.
  */
 internal class W5aMaterialSourceStage private constructor(
-    requirements: RawMaterialRequirementsV2,
+    requirements: RawMaterialRequirementsV2?,
     val declarationsWgsl: String,
     val bindingCountI32: Int,
     val provenOpaque: Boolean,
     val gradientStopSlab: GradientStopSlabPlanV1?,
     val coordinateFunctionName: String = "w5c_local_point",
+    val imageV3: org.graphiks.kanvas.gpu.plan.ImageSampleExecutionPlanV1? = null,
 ) {
     data class Binding(val bindingI32: Int, val resourceKind: String)
     val bindingManifest: List<Binding> = listOf(Binding(0, "uniformBuffer")) +
-        if (gradientStopSlab == null) emptyList() else listOf(Binding(1, "storageBuffer"))
-    val structuralId: String = requirements.structuralId
-    private val ownedUniformBytes = requirements.copyUniformBytes()
+        if (imageV3 != null) listOf(Binding(1, "sampledTexture")) else if (gradientStopSlab == null) emptyList() else listOf(Binding(1, "storageBuffer"))
+    val structuralId: String = requirements?.structuralId ?: requireNotNull(imageV3).numericAuthority.graph.topologyIdentity
+    private val ownedUniformBytes = requirements?.copyUniformBytes() ?: W5eImageTexelEvaluatorV1.uniformBytes(requireNotNull(imageV3))
     val uniformBytes: ByteArray get() = ownedUniformBytes.copyOf()
     val uniformByteCountI64: Long get() = ownedUniformBytes.size.toLong()
-    val canonicalIdentity: String = requirements.canonicalIdentity
+    val canonicalIdentity: String = requirements?.canonicalIdentity ?: "image-source-v3:${requireNotNull(imageV3).canonicalIdentity}"
     companion object {
+        fun imageV3(execution: org.graphiks.kanvas.gpu.plan.ImageSampleExecutionPlanV1): W5aMaterialSourceStage =
+            W5aMaterialSourceStage(null, W5eImageTexelEvaluatorV1.declarations(execution), 1, false,
+                null, "w5e_device_point", execution)
         fun lower(table: MaterialPlanTable, root: MaterialPlanRef, coordinates: MaterialCoordinatePlanV1? = null): W5aMaterialSourceStage? {
             if (root.indexI32 !in 0 until table.sizeI32) return null
             val chain = mutableListOf<Pair<NumericOperationGraphV1.Node, MaterialBindingPlan>>()
@@ -64,6 +68,7 @@ internal class W5aMaterialSourceStage private constructor(
                 val (source, binding) = pair
                 val input = "w5aMaterial.binding$bindingIndexI32"
                 when (binding) {
+                    is org.graphiks.kanvas.gpu.plan.ImageSampleV3 -> return null
                     is MaterialBindingPlan.GradientV2 -> return null
                     is MaterialBindingPlan.GradientV1 -> {
                         opaque = opaque && binding !is MaterialBindingPlan.ConicalGradientV1 &&

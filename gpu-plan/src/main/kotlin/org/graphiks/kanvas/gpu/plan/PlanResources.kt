@@ -19,6 +19,7 @@ public enum class PlanResourceRole {
     GradientStopData,
     DepthStencil,
     DestinationSnapshot,
+    DecodedImageV1,
 }
 public enum class PlanResourceUsage {
     RenderAttachment,
@@ -32,7 +33,7 @@ public enum class PlanResourceUsage {
     DepthStencilAttachment,
     StorageRead,
 }
-public enum class PlanResourceLifetime { FrameLocal }
+public enum class PlanResourceLifetime { FrameLocal, DeviceSessionCache }
 
 /**
  * Primitive lifetime accounting used to preflight a frame before issuing any [PlanResource].
@@ -59,6 +60,7 @@ internal fun peakFrameLocalBytesI64(spans: List<FrameResourceSpan>, passCount: I
 }
 
 public sealed interface PlanTextureFormat {
+    public data class ImageV1(public val value: ImagePhysicalFormatV1) : PlanTextureFormat
     public data class Color(public val value: PlanLogicalColorFormat) : PlanTextureFormat
     public data class DepthStencil(public val value: PlanDepthStencilFormat) : PlanTextureFormat
     public object CoverageMask : PlanTextureFormat {
@@ -120,6 +122,9 @@ public class PlanResource private constructor(
                         "Textures require a format and non-empty extent"
                     }
                     when (format) {
+                        is PlanTextureFormat.ImageV1 -> require(role == PlanResourceRole.DecodedImageV1 &&
+                            lifetime == PlanResourceLifetime.DeviceSessionCache && sampleCountI32 == 1 &&
+                            usages == setOf(PlanResourceUsage.Sampled, PlanResourceUsage.CopyDestination))
                         is PlanTextureFormat.Color -> require(role != PlanResourceRole.DepthStencil) {
                             "Depth-stencil resources require a depth-stencil format"
                         }
@@ -183,6 +188,7 @@ public class PlanResource private constructor(
         }
 
         private fun textureBytesPerPixelI32(format: PlanTextureFormat): Int = when (format) {
+            is PlanTextureFormat.ImageV1 -> format.value.bytesPerPixelI32
             is PlanTextureFormat.Color,
             is PlanTextureFormat.DepthStencil,
             PlanTextureFormat.CoverageMask,

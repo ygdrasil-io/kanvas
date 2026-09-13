@@ -24,6 +24,7 @@ public class RenderGraph private constructor(
     private val w5aCompositePlan: W5aCompositePlanV1? = null,
     private val w5bGeometryIssued: Boolean = false,
     w5bGeometryLanes: List<W5bGeometryLanePlanV3> = emptyList(),
+    private val w5eImageConstruction: W5eImageConstructionPlanV1? = null,
 ) {
     private val storedTargetExtent: SizeI32 = targetExtent.copy()
     public val targetExtent: SizeI32
@@ -36,6 +37,7 @@ public class RenderGraph private constructor(
     public fun resources(): List<PlanResource> = storedResources
     public fun passes(): List<PlanPass> = storedPasses
     public fun dependencies(): List<PlanPassDependency> = storedDependencies
+    public fun w5eImageConstructionOrNull(): W5eImageConstructionPlanV1? = w5eImageConstruction
 
     /** Immutable W5 material authority, present only on material-plan graphs. */
     public fun materialPlanTableOrNull(): MaterialPlanTable? = materialPlanTable
@@ -64,6 +66,24 @@ public class RenderGraph private constructor(
     public fun w4eNativePayloadOrNull(): W4eNativePayloadPlan? = w4eNativePayloadPlan
 
     public companion object {
+        internal fun issueW5e(bridge: W5eImageConstructionPlanV1): RenderGraph {
+            val geometry = bridge.constructionGraph
+            val images = bridge.imageDraws().associateBy { it.commandIndex }
+            val cachedImages = bridge.imageDraws().map { it.execution.cacheRequest }
+                .distinctBy { it.canonicalPhysicalIdentity }.mapIndexed { ordinalI32, request ->
+                    PlanResource.of(PlanResourceRole.DecodedImageV1, ordinalI32, request.kind,
+                        PlanTextureFormat.ImageV1(request.format), SizeI32(request.widthI32, request.heightI32),
+                        request.byteSizeI64, request.usages(), request.lifetime, 0, geometry.passes().size)
+                }
+            val passes = geometry.passes().map { pass -> if (pass is PlanPass.RenderPass)
+                PlanPass.RenderPass(pass.ordinal, pass.target, pass.draws().map { images.getValue(it.commandIndex) },
+                    pass.load, pass.store, pass.drawDataResources, destinationVersionAfter = pass.destinationVersionAfter)
+                else pass }
+            return RenderGraph(PlanId(bridge.canonicalIdentity), W5eImagePlanCompiler.CAPABILITY_ID,
+                geometry.targetExtent, geometry.colorFormat, geometry.capabilities, geometry.budget, images.size,
+                geometry.resources() + cachedImages, passes, geometry.dependencies(), bridge.peakBytesI64,
+                null, null, null, null, bridge.materialTable, w5eImageConstruction = bridge)
+        }
         internal fun issueW5bGeometry(graph: RenderGraph, lanes: List<W5bGeometryLanePlanV3> = emptyList()): RenderGraph {
             require(graph.capabilityId in setOf(W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID,
                 W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID, W4cPathFillPlanCompiler.W5B_CAPABILITY_ID,
@@ -188,6 +208,7 @@ public class RenderGraph private constructor(
                         require(extent.width <= capabilities.maxTextureDimension2D &&
                             extent.height <= capabilities.maxTextureDimension2D) { "Texture extent exceeds capabilities" }
                         when (val format = requireNotNull(resource.format)) {
+                            is PlanTextureFormat.ImageV1 -> require(resource.lifetime == PlanResourceLifetime.DeviceSessionCache)
                             is PlanTextureFormat.Color -> require(format.value in capabilities.supportedFormats()) {
                                 "Color texture format is unsupported"
                             }

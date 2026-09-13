@@ -9,6 +9,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.materialSourcePartitionV3
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUBlendFormulaProgramLibrary
 
 /** Native realization of the separately sealed, reusable W5b snapshot resource. */
@@ -52,6 +53,7 @@ internal class GPUW5aNativeSourceBindingV2(
     val byteCapacityI64: Long,
     val destinationGroupV3: GPUPreparedNativeBindGroupOperand? = null,
     val coverageGroupV4: GPUPreparedNativeBindGroupOperand? = null,
+    val imageLeaseV3: GPUW5eDecodedImageSessionCache.Lease? = null,
 ) {
     init {
         require(drawOrdinalI32 >= 0 && byteCapacityI64 == source.stage.uniformByteCountI64)
@@ -96,11 +98,16 @@ internal fun validatesW5aSourcePartitionV2(framePlan: GPUFramePlan, payload: GPU
                     (binding.destinationGroupV3 != null) == (destination != null) &&
                     (binding.coverageGroupV4 != null) == (destination?.sealedW5b?.compositionAbiI32 == 4) &&
                     binding.byteCapacityI64 == source.second.stage.uniformByteCountI64 &&
+                    (binding.imageLeaseV3 != null) == (source.second.stage.imageV3 != null) &&
+                    (binding.imageLeaseV3 == null || source.second.stage.imageV3?.let {
+                        binding.imageLeaseV3.matches(it.cacheRequest, payload.identity.deviceGeneration.value)
+                    } == true) &&
                     binding.pipeline.deviceGeneration == payload.identity.deviceGeneration &&
                     binding.bindGroup.deviceGeneration == payload.identity.deviceGeneration &&
                     owners.any { it.owns(binding.buffer) && it.owns(binding.pipeline.pipeline) && it.owns(binding.bindGroup.bindGroup) &&
                         (binding.destinationGroupV3 == null || it.owns(binding.destinationGroupV3.bindGroup)) &&
                         (binding.coverageGroupV4 == null || it.owns(binding.coverageGroupV4.bindGroup)) } &&
+                    (binding.imageLeaseV3 == null || owners.any { it.owns(binding.imageLeaseV3) }) &&
                     (binding.coverageGroupV4 == null || binding.coverageGroupV4.deviceGeneration == payload.identity.deviceGeneration) &&
                     (binding.destinationGroupV3 == null || binding.destinationGroupV3.deviceGeneration == payload.identity.deviceGeneration)
             }
@@ -111,7 +118,7 @@ private fun nativeSourcePacketV3(packets: List<org.graphiks.kanvas.gpu.renderer.
     ordinalI32: Int, source: W5aPacketMaterialSourceV2) =
     packets.singleOrNull()?.takeIf { packet ->
         packet.w5bFinalFrameWitnessV3?.w4eLane?.owns(packet) == true &&
-            packet.w5aSourceStageV2 === source && packet.w4ePreparedFrameAuthority != null
+            packet.materialSourcePartitionV3() === source && packet.w4ePreparedFrameAuthority != null
     } ?: packets.getOrNull(ordinalI32)
 
 /** W4e inverse-domain packets seal an atomic stencil prefix plus one final color draw. */
@@ -119,7 +126,7 @@ private fun sourceDrawsV2(
     render: GPUFrameStep.RenderPassStep,
     operand: GPUPreparedNativeScopeOperand.Render,
 ): List<W5aPacketMaterialSourceV2?> {
-    if (render.drawPackets.none { it.w5aSourceStageV2 != null }) return emptyList()
+    if (render.drawPackets.none { it.materialSourcePartitionV3() != null }) return emptyList()
     val pipelines = buildList {
         var current: GPUPreparedNativeRenderPipelineOperand? = null
         operand.commands.forEach { command ->
@@ -129,7 +136,7 @@ private fun sourceDrawsV2(
             }
         }
     }
-    if (pipelines.size == render.drawPackets.size) return render.drawPackets.map { it.w5aSourceStageV2 }
+    if (pipelines.size == render.drawPackets.size) return render.drawPackets.map { it.materialSourcePartitionV3() }
     val packet = render.drawPackets.single()
     require(packet.w4ePreparedFrameAuthority != null && packet.w4ePreparedPath != null &&
         packet.w4ePreparedClipConsumer is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.InverseDomain &&
@@ -138,7 +145,7 @@ private fun sourceDrawsV2(
         } && pipelines.last().bindingPolicy == GPUPreparedNativeRenderPipelineBindingPolicy.BindGroupRequired) {
         "W5a source requires exact packet-to-native color draw order"
     }
-    return List(pipelines.size - 1) { null } + packet.w5aSourceStageV2
+    return List(pipelines.size - 1) { null } + packet.materialSourcePartitionV3()
 }
 
 /** Compose only the source expression. Existing coverage and fixed-function tail stay exact. */
@@ -165,9 +172,9 @@ private fun composeSource(template: GPUW5aGeometryPipelineTemplate, source: W5aP
         "consumer.premul_rgba", "consumer.color")
     require(slots.any(geometry::contains)) { "W5a source requires an authenticated color-writing geometry shader" }
     require(!geometry.contains("@group(1)")) { "W5a source group is already occupied" }
-    val gradient = source.stage.gradientStopSlab != null
-    require(!gradient || template.materialCoordinateSlot != null)
-    val sourceExpression = if (gradient) "kanvas_material_source(${source.stage.coordinateFunctionName}(${requireNotNull(template.materialCoordinateSlot).devicePointWgsl}))"
+    val requiresCoordinates = source.stage.gradientStopSlab != null || source.stage.imageV3 != null
+    require(!requiresCoordinates || template.materialCoordinateSlot != null)
+    val sourceExpression = if (requiresCoordinates) "kanvas_material_source(${source.stage.coordinateFunctionName}(${requireNotNull(template.materialCoordinateSlot).devicePointWgsl}))"
         else "kanvas_material_source(vec2<f32>(0.0))"
     val analyticCoverage = destination?.sealedW5b?.compositionAbiI32 == 3 &&
         destination.sourceCoverageEncoding == org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding.ScalarCoverageInShader
@@ -219,7 +226,7 @@ private fun composeSource(template: GPUW5aGeometryPipelineTemplate, source: W5aP
             }
         """.trimIndent().replace(Regex("\\bvec([234])([fiu])\\b")) { "vec${it.groupValues[1]}<${it.groupValues[2]}32>" }
     }
-    if (gradient && geometry.contains("fn fs_main()")) geometry = geometry.replace("fn fs_main()",
+    if (requiresCoordinates && geometry.contains("fn fs_main()")) geometry = geometry.replace("fn fs_main()",
         "fn fs_main(@builtin(position) fragment_position: vec4<f32>)")
     slots.forEach { slot -> geometry = geometry.replace(slot, if (destination == null || analyticCoverage) sourceExpression
         else "kanvas_w5b_target($sourceExpression, fragment_position.xy)") }
@@ -249,18 +256,19 @@ internal fun materializeW5aSourcePartitionV2(
     framePlan: GPUFramePlan,
     geometry: GPUPreparedNativeFramePayloadMaterialization,
     templates: GPUW5aGeometryPipelineTemplateProvider,
+    imageCache: GPUW5eDecodedImageSessionCache? = null,
 ): GPUPreparedNativeFramePayloadMaterialization {
     if (geometry !is GPUPreparedNativeFramePayloadMaterialization.Materialized) return geometry
     val renders = framePlan.steps.withIndex().filter { it.value is GPUFrameStep.RenderPassStep }
         .associate { it.index to (it.value as GPUFrameStep.RenderPassStep) }
-    if (renders.values.none { render -> render.drawPackets.any { it.w5aSourceStageV2 != null } }) return geometry
+    if (renders.values.none { render -> render.drawPackets.any { it.materialSourcePartitionV3() != null } }) return geometry
     val old = geometry.draft.payload
     val owned = GPUW5aSourceOwnedHandlesV2()
     val generation = old.identity.deviceGeneration
     var replacement: GPUPreparedNativeFrameDraft? = null
     try {
         require(framePlan.w5aCombinedMemoryBudgetV2(limits).diagnostic == null)
-        val stopSlabs = renders.values.flatMap { it.drawPackets }.mapNotNull { it.w5aSourceStageV2?.stage?.gradientStopSlab }
+        val stopSlabs = renders.values.flatMap { it.drawPackets }.mapNotNull { it.materialSourcePartitionV3()?.stage?.gradientStopSlab }
             .distinctBy { it.canonicalIdentity }
         require(stopSlabs.size <= 1) { "W5c requires one sealed frame stop slab" }
         val stopBuffer = stopSlabs.singleOrNull()?.let { materializeGradientStopsV1(device, queue, it, owned) }
@@ -274,6 +282,7 @@ internal fun materializeW5aSourcePartitionV2(
         val pipelines = mutableMapOf<SourcePipelineKey, Pair<GPUPreparedNativeRenderPipelineOperand, GPUBindGroupLayout>>()
         val buffers = mutableMapOf<String, GPUBuffer>()
         val groups = mutableMapOf<Pair<String, GPUBindGroupLayout>, GPUPreparedNativeBindGroupOperand>()
+        val imageLeases = mutableMapOf<String, GPUW5eDecodedImageSessionCache.Lease>()
         val destinationSnapshot = old.auxiliaryOwnedHandles.mapNotNull { it.handle as? GPUW5bDestinationSnapshotNativeV3 }.singleOrNull()
         val coverage = old.auxiliaryOwnedHandles.mapNotNull { it.handle as? GPUW5bCoverageNativeV4 }.singleOrNull()
         require(coverage == null || coverage.witness.validates(framePlan))
@@ -302,7 +311,7 @@ internal fun materializeW5aSourcePartitionV2(
         val operands = old.scopeOperands.map { operand ->
             if (operand !is GPUPreparedNativeScopeOperand.Render) return@map operand
             val packets = renders.getValue(operand.sourceStepIndex).drawPackets
-            if (packets.none { it.w5aSourceStageV2 != null }) return@map operand
+            if (packets.none { it.materialSourcePartitionV3() != null }) return@map operand
             val sources = sourceDrawsV2(renders.getValue(operand.sourceStepIndex), operand)
             var currentPipeline: GPUPreparedNativeRenderPipelineOperand? = null
             var drawOrdinalI32 = 0
@@ -333,7 +342,9 @@ internal fun materializeW5aSourcePartitionV2(
                         entries = listOf(BindGroupLayoutEntry(binding = 0u, visibility = GPUShaderStage.Fragment,
                             buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform, hasDynamicOffset = false,
                                 minBindingSize = source.stage.uniformByteCountI64.toULong()))) +
-                            if (source.stage.gradientStopSlab == null) emptyList() else listOf(
+                            if (source.stage.imageV3 != null) listOf(BindGroupLayoutEntry(binding = 1u,
+                                visibility = GPUShaderStage.Fragment, texture = TextureBindingLayout(sampleType = GPUTextureSampleType.Float)))
+                            else if (source.stage.gradientStopSlab == null) emptyList() else listOf(
                                 BindGroupLayoutEntry(binding = 1u, visibility = GPUShaderStage.Fragment,
                                     buffer = BufferBindingLayout(type = GPUBufferBindingType.ReadOnlyStorage,
                                         hasDynamicOffset = false, minBindingSize = 32uL))),
@@ -369,16 +380,22 @@ internal fun materializeW5aSourcePartitionV2(
                         queue.writeBuffer(it, 0uL, ArrayBuffer.of(bytes), 0uL, bytes.size.toULong())
                     }
                 }
+                val imageLease = source.stage.imageV3?.let { execution ->
+                    imageLeases.getOrPut(execution.cacheRequest.canonicalPhysicalIdentity) {
+                        owned.own(GPUW5eImageNativeV1.acquire(requireNotNull(imageCache), execution.cacheRequest, generation.value))
+                    }
+                }
                 val group = groups.getOrPut(source.stage.canonicalIdentity to materialLayout) {
                     val entries = mutableListOf(BindGroupEntry(binding = 0u,
                         resource = BufferBinding(buffer = buffer, offset = 0uL, size = bytes.size.toULong())))
                     source.stage.gradientStopSlab?.let { slab -> entries += BindGroupEntry(binding = 1u,
                         resource = BufferBinding(buffer = requireNotNull(stopBuffer), offset = 0uL, size = slab.byteSizeI64.toULong())) }
+                    imageLease?.let { entries += GPUW5eImageNativeV1.binding(it) }
                     GPUPreparedNativeBindGroupOperand(owned.own(device.createBindGroup(BindGroupDescriptor(
                         label = "Kanvas.w5a.source-group1-v2", layout = materialLayout, entries = entries))), generation)
                 }
                 bindings += GPUW5aNativeSourceBindingV2(ordinalI32, source, pipeline, group, buffer, bytes.size.toLong(),
-                    destinationGroup.takeIf { destination != null }, coverageGroup.takeIf { scalar })
+                    destinationGroup.takeIf { destination != null }, coverageGroup.takeIf { scalar }, imageLease)
             }
               GPUPreparedNativeScopeOperand.Render(operand.sourceStepIndex, operand.pass, operand.commands,
                   operand.semanticPayloads, operand.operandLayout, operand.operationKind, operand.passSegment, bindings,
