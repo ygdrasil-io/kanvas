@@ -26,6 +26,7 @@ public class ImmutableBytes private constructor(bytes: ByteArray) : CanonicalVal
     private val values: ByteArray = bytes.copyOf()
 
     internal val size: Int get() = values.size
+    internal fun hasContent(values: ByteArray): Boolean = this.values.contentEquals(values)
     public fun copyToByteArray(): ByteArray = values.copyOf()
     override val canonicalId: CanonicalId = canonicalSequenceId("immutable-bytes-v1", values.map(Byte::toString))
     override fun equals(other: Any?): Boolean = other is ImmutableBytes && values.contentEquals(other.values)
@@ -131,6 +132,8 @@ public sealed interface ImageResourceSnapshot : ResourceSnapshot {
         }
 
         public fun copyPixels(): ByteArray = storedPixels.copyToByteArray()
+        /** Compares caller bytes without exposing this snapshot's owned storage. */
+        public fun hasPixels(pixels: ByteArray): Boolean = storedPixels.hasContent(pixels)
         override val canonicalId: CanonicalId = canonicalId(
             "image-resource-pixels-v1",
             sourceId,
@@ -551,11 +554,15 @@ internal fun matrixCanonicalId(tag: String, value: Matrix3x3F32): CanonicalId = 
 
 private fun minimumRowBytes(width: Int, format: ImagePixelFormat): Int {
     require(width > 0) { "Image width must be positive" }
-    return try {
-        Math.multiplyExact(width, format.bytesPerPixel)
+    val rowBytesI64 = try {
+        Math.multiplyExact(width.toLong(), format.bytesPerPixel.toLong())
     } catch (error: ArithmeticException) {
         throw IllegalArgumentException("Image row byte count overflows Int", error)
     }
+    if (rowBytesI64 !in 0L..Int.MAX_VALUE.toLong()) {
+        throw IllegalArgumentException("Image row byte count overflows Int")
+    }
+    return rowBytesI64.toInt()
 }
 
 private fun checkedPixelByteCount(rowBytes: Int, height: Int): Long = try {

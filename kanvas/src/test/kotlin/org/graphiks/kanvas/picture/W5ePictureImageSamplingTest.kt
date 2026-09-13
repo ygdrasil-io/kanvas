@@ -1,8 +1,5 @@
 package org.graphiks.kanvas.picture
 
-import org.graphiks.kanvas.canvas.Canvas
-import org.graphiks.kanvas.canvas.DisplayListBuffer
-import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.canvas.SceneRecordingLimitException
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
@@ -14,39 +11,36 @@ import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import java.nio.ByteBuffer
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertFalse
 
 class W5ePictureImageSamplingTest {
     @Test
-    fun `explicit image sampling preserves paint shader through Picture replay`() {
+    fun `Picture replay preserves partial image source sampling and paint shader`() {
         val image = Image.fromPixels(
-            width = 1,
+            width = 2,
             height = 1,
-            pixels = byteArrayOf(-1),
-            colorType = ColorType.ALPHA_8,
-            sourceId = "w5e-alpha-mask",
+            pixels = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8),
+            colorType = ColorType.RGBA_8888,
+            sourceId = "w5e-partial-source",
         )
-        val picture = PictureRecorder().also { recorder ->
-            recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 1f, 1f)).drawImage(
+        val picture = record {
+            drawImageRect(
                 image = image,
-                dst = RectF32.ofLTRB(0f, 0f, 1f, 1f),
+                src = RectF32.ofLTRB(1f, 0f, 2f, 1f),
+                dst = RectF32.ofLTRB(0f, 0f, 2f, 2f),
                 sampling = SamplingOptions.LINEAR,
                 paint = Paint(shader = Shader.SolidColor(ColorARGB.Red)),
             )
-        }.finishRecordingAsPicture()
+        }
 
         val restored = assertNotNull(Picture.fromByteArray(picture.toByteArray()))
-        val replay = RecordingBuffer()
-        restored.playback(Canvas(replay))
+        val replayed = replayIntoPicture(restored)
 
-        assertEquals(
-            Shader.SolidColor(ColorARGB.Red),
-            assertIs<DisplayOp.DrawImage>(replay.ops().single()).paint?.shader,
-        )
+        assertContentEquals(picture.toByteArray(), replayed.toByteArray())
     }
 
     @Test
@@ -118,14 +112,109 @@ class W5ePictureImageSamplingTest {
     }
 
     @Test
+    fun `repeated unchanged aliases share one retained budget reservation`() {
+        val source = Image.fromPixels(1, 1, byteArrayOf(1, 2, 3, 4), sourceId = "w5e-alias")
+        val recorder = PictureRecorder(SceneCaptureLimits(maxImageBytesI64 = 4))
+        val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 1f, 1f))
+
+        canvas.drawImage(source, RectF32.ofLTRB(0f, 0f, 1f, 1f))
+        canvas.drawImage(source, RectF32.ofLTRB(0f, 0f, 1f, 1f))
+
+        assertContentEquals(
+            record(cullRect = RectF32.ofLTRB(0f, 0f, 1f, 1f)) {
+                drawImage(source, RectF32.ofLTRB(0f, 0f, 1f, 1f))
+                drawImage(source, RectF32.ofLTRB(0f, 0f, 1f, 1f))
+            }.toByteArray(),
+            recorder.finishRecordingAsPicture().toByteArray(),
+        )
+    }
+
+    @Test
+    fun `changed source bytes reserve a distinct retained snapshot`() {
+        val sourcePixels = byteArrayOf(1, 2, 3, 4)
+        val source = Image.fromPixels(1, 1, sourcePixels, sourceId = "w5e-changed-source")
+        val recorder = PictureRecorder(SceneCaptureLimits(maxImageBytesI64 = 7))
+        val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 1f, 1f))
+
+        canvas.drawImage(source, RectF32.ofLTRB(0f, 0f, 1f, 1f))
+        sourcePixels[0] = 9
+
+        val refusal = assertFailsWith<SceneRecordingLimitException> {
+            canvas.drawImage(source, RectF32.ofLTRB(0f, 0f, 1f, 1f))
+        }
+
+        assertEquals("scene-recording-image-bytes-exceeded", refusal.diagnostic.code.value)
+        sourcePixels[0] = 1
+        canvas.drawImage(source, RectF32.ofLTRB(0f, 0f, 1f, 1f))
+        assertContentEquals(
+            record(cullRect = RectF32.ofLTRB(0f, 0f, 1f, 1f)) {
+                drawImage(source, RectF32.ofLTRB(0f, 0f, 1f, 1f))
+                drawImage(source, RectF32.ofLTRB(0f, 0f, 1f, 1f))
+            }.toByteArray(),
+            recorder.finishRecordingAsPicture().toByteArray(),
+        )
+    }
+
+    @Test
+    fun `failed image reservation rolls back and permits a later valid capture`() {
+        val recorder = PictureRecorder(SceneCaptureLimits(maxImageBytesI64 = 4))
+        val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 1f, 1f))
+        val oversized = Image.fromPixels(1, 1, ByteArray(5), sourceId = "w5e-oversized")
+        val accepted = Image.fromPixels(1, 1, byteArrayOf(1, 2, 3, 4), sourceId = "w5e-accepted")
+
+        assertFailsWith<SceneRecordingLimitException> {
+            canvas.drawImage(oversized, RectF32.ofLTRB(0f, 0f, 1f, 1f))
+        }
+        canvas.drawImage(accepted, RectF32.ofLTRB(0f, 0f, 1f, 1f))
+
+        assertContentEquals(
+            record(cullRect = RectF32.ofLTRB(0f, 0f, 1f, 1f)) {
+                drawImage(accepted, RectF32.ofLTRB(0f, 0f, 1f, 1f))
+            }.toByteArray(),
+            recorder.finishRecordingAsPicture().toByteArray(),
+        )
+    }
+
+    @Test
     fun `legacyImagePayloadDefaultsToNearest`() {
         val bytes = java.util.Base64.getDecoder().decode(
             requireNotNull(javaClass.getResource("/picture/format-9-image-nearest.base64")).readText().trim(),
         )
-        val replay = RecordingBuffer()
-        assertNotNull(Picture.fromByteArray(bytes)).playback(Canvas(replay))
+        val replayed = replayIntoPicture(assertNotNull(Picture.fromByteArray(bytes)))
 
-        assertEquals(SamplingOptions.NEAREST, assertIs<DisplayOp.DrawImage>(replay.ops().single { it is DisplayOp.DrawImage }).sampling)
+        assertContentEquals(readFixture("format-10-v9-image-nearest-expected.base64"), replayed.toByteArray())
+    }
+
+    @Test
+    fun `legacy v8 image payload replays through the public recorder`() {
+        val legacy = assertNotNull(Picture.fromByteArray(readFixture("format-8-image-nearest.base64")))
+
+        assertContentEquals(
+            record {
+                drawImage(
+                    Image.fromPixels(1, 1, byteArrayOf(1, 2, 3, 4), sourceId = "w5e-v8-image"),
+                    RectF32.ofLTRB(0f, 0f, 2f, 2f),
+                    SamplingOptions.NEAREST,
+                )
+            }.toByteArray(),
+            replayIntoPicture(legacy).toByteArray(),
+        )
+    }
+
+    @Test
+    fun `historical v9 image nine patch normalizes through public replay`() {
+        val historical = assertNotNull(Picture.fromByteArray(readFixture("format-9-image-nine.base64")))
+
+        assertContentEquals(
+            record {
+                drawImageNine(
+                    image(),
+                    RectF32.ofLTRB(1f, 1f, 2f, 2f),
+                    RectF32.ofLTRB(0f, 0f, 3f, 3f),
+                )
+            }.toByteArray(),
+            replayIntoPicture(historical).toByteArray(),
+        )
     }
 
     private fun image(): Image = Image.fromPixels(
@@ -135,10 +224,21 @@ class W5ePictureImageSamplingTest {
         sourceId = "w5e-image",
     )
 
-    private fun record(draw: org.graphiks.kanvas.canvas.Canvas.() -> Unit): Picture =
+    private fun record(
+        cullRect: RectF32 = RectF32.ofLTRB(0f, 0f, 3f, 3f),
+        draw: org.graphiks.kanvas.canvas.Canvas.() -> Unit,
+    ): Picture =
         PictureRecorder().also { recorder ->
-            recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 3f, 3f)).draw()
+            recorder.beginRecording(cullRect).draw()
         }.finishRecordingAsPicture()
+
+    private fun replayIntoPicture(picture: Picture): Picture = PictureRecorder().also { recorder ->
+        picture.playback(recorder.beginRecording(picture.cullRect))
+    }.finishRecordingAsPicture()
+
+    private fun readFixture(name: String): ByteArray = java.util.Base64.getDecoder().decode(
+        requireNotNull(javaClass.getResource("/picture/$name")).readText().trim(),
+    )
 
     private fun assertStablePicturePayload(picture: Picture) {
         val bytes = picture.toByteArray()
@@ -147,14 +247,4 @@ class W5ePictureImageSamplingTest {
         kotlin.test.assertContentEquals(bytes, restored.toByteArray())
     }
 
-
-    private class RecordingBuffer : DisplayListBuffer {
-        private val recorded = mutableListOf<DisplayOp>()
-
-        override fun append(op: DisplayOp) {
-            recorded += op
-        }
-
-        override fun ops(): List<DisplayOp> = recorded.toList()
-    }
 }

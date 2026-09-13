@@ -339,7 +339,9 @@ public object DisplayOpSceneAdapter {
 private class CaptureContext(private val limits: SceneCaptureLimits) {
     private val gradientStops = GradientStopCaptureBudget(limits.maxGradientStopsI32)
     private val activePictures = IdentityHashMap<org.graphiks.kanvas.picture.Picture, Unit>()
-    private val images = IdentityHashMap<org.graphiks.kanvas.image.Image, Unit>()
+    private val preflightImages = mutableListOf<org.graphiks.kanvas.image.Image>()
+    private val capturedImages = mutableListOf<ImageResourceSnapshot>()
+    private var preflightImageBytesI64 = 0L
     private var imageBytesI64 = 0L
     private var nodes: Int = 0
     private var graphNodes: Int = 0
@@ -348,6 +350,7 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
     fun preflightOperations(operations: List<DisplayOp>) {
         operations.forEach { operation ->
             countNode()
+            operation.imageForPreflight()?.let(::preflightImage)
             val paint = when (operation) {
                 is DisplayOp.DrawRect -> operation.paint
                 is DisplayOp.DrawRRect -> operation.paint
@@ -391,6 +394,25 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
         }
     }
 
+    /** Counts all direct and graph-referenced images before resource conversion begins. */
+    private fun preflightImage(image: org.graphiks.kanvas.image.Image) {
+        if (preflightImages.any { it.matchesCapturedImage(image) }) return
+        if (preflightImages.size >= limits.maxResources) {
+            throw CaptureFailure("scene-resource-limit", "Capture has more than ${limits.maxResources} image resources")
+        }
+        val requestedBytesI64 = image.pixels?.size?.toLong() ?: 0L
+        preflightImageBytesI64 = try {
+            Math.addExact(preflightImageBytesI64, requestedBytesI64)
+        } catch (_: ArithmeticException) {
+            throw CaptureFailure("scene-capture-image-bytes-exceeded", "Capture image bytes overflow")
+        }
+        if (preflightImageBytesI64 > limits.maxImageBytesI64) {
+            throw CaptureFailure("scene-capture-image-bytes-exceeded", "Capture requests $preflightImageBytesI64 image bytes, exceeding limit ${limits.maxImageBytesI64}")
+        }
+        // This list is confined to metadata preflight and is discarded before resource allocation.
+        preflightImages += image
+    }
+
     fun countNode() {
         nodes += 1
         if (nodes > limits.maxNodes) {
@@ -399,21 +421,20 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
     }
 
     fun captureImage(image: org.graphiks.kanvas.image.Image): ImageResourceSnapshot {
-        if (images.put(image, Unit) == null) {
-            if (images.size > limits.maxResources) {
-                throw CaptureFailure("scene-resource-limit", "Capture has more than ${limits.maxResources} image resources")
-            }
-            val retainedBytesI64 = image.pixels?.size?.toLong() ?: 0L
-            imageBytesI64 = try {
-                Math.addExact(imageBytesI64, retainedBytesI64)
-            } catch (_: ArithmeticException) {
-                throw CaptureFailure("scene-capture-image-bytes-exceeded", "Capture image bytes overflow")
-            }
-            if (imageBytesI64 > limits.maxImageBytesI64) {
-                throw CaptureFailure("scene-capture-image-bytes-exceeded", "Capture requests $imageBytesI64 image bytes, exceeding limit ${limits.maxImageBytesI64}")
-            }
+        capturedImages.firstOrNull { it.matchesCapturedImage(image) }?.let { return it }
+        if (capturedImages.size >= limits.maxResources) {
+            throw CaptureFailure("scene-resource-limit", "Capture has more than ${limits.maxResources} image resources")
         }
-        return ResourceSceneAdapter.captureImage(image)
+        val retainedBytesI64 = image.pixels?.size?.toLong() ?: 0L
+        imageBytesI64 = try {
+            Math.addExact(imageBytesI64, retainedBytesI64)
+        } catch (_: ArithmeticException) {
+            throw CaptureFailure("scene-capture-image-bytes-exceeded", "Capture image bytes overflow")
+        }
+        if (imageBytesI64 > limits.maxImageBytesI64) {
+            throw CaptureFailure("scene-capture-image-bytes-exceeded", "Capture requests $imageBytesI64 image bytes, exceeding limit ${limits.maxImageBytesI64}")
+        }
+        return ResourceSceneAdapter.captureImage(image).also(capturedImages::add)
     }
 
     fun enterPicture(picture: org.graphiks.kanvas.picture.Picture) {
@@ -494,6 +515,7 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
             }
             countGraphLeaf()
             (visit.value as? Shader)?.let(gradientStops::reserve)
+            (visit.value as? Shader.Image)?.let { preflightImage(it.image) }
             (visit.value as? ImageFilter.Picture)?.let { visitPicture?.invoke(it.picture) }
             pending.addLast(Visit(visit.value, visit.depth, true))
             graphChildren(visit.value).asReversed().forEach { child ->
@@ -571,6 +593,34 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
         GraphValidationResult.Valid -> Unit
         is GraphValidationResult.DepthLimitExceeded -> throw CaptureFailure("graph-depth-limit", "Effect graph exceeds depth ${result.maxDepth}")
         is GraphValidationResult.NodeLimitExceeded -> throw CaptureFailure("graph-node-limit", "Effect graph exceeds ${result.maxNodes} nodes")
+    }
+}
+
+private fun DisplayOp.imageForPreflight(): org.graphiks.kanvas.image.Image? = when (this) {
+    is DisplayOp.DrawImage -> image
+    is DisplayOp.DrawImageNine -> image
+    is DisplayOp.DrawImageLattice -> image
+    is DisplayOp.DrawAtlas -> atlas
+    else -> null
+}
+
+private fun org.graphiks.kanvas.image.Image.matchesCapturedImage(other: org.graphiks.kanvas.image.Image): Boolean =
+    width == other.width && height == other.height && colorType == other.colorType &&
+        sourceId == other.sourceId && colorSpace == other.colorSpace && alphaType == other.alphaType &&
+        rowBytesI32 == other.rowBytesI32 && when {
+            pixels == null || other.pixels == null -> pixels == null && other.pixels == null
+            else -> pixels.contentEquals(other.pixels)
+        }
+
+private fun ImageResourceSnapshot.matchesCapturedImage(image: org.graphiks.kanvas.image.Image): Boolean {
+    if (
+        sourceId != image.sourceId || width != image.width || height != image.height ||
+        pixelFormat.name != image.colorType.name || alphaType.name != image.alphaType.name ||
+        colorSpace != image.colorSpace
+    ) return false
+    return when (this) {
+        is ImageResourceSnapshot.Pixels -> image.pixels?.let { rowBytes == image.rowBytesI32 && hasPixels(it) } == true
+        is ExternalImageReference -> image.pixels == null
     }
 }
 

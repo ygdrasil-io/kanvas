@@ -232,7 +232,7 @@ class Picture internal constructor(
                     )
                     is DisplayOp.DrawPoint -> canvas.drawPoint(op.x, op.y, op.paint)
                     is DisplayOp.DrawPoints -> canvas.drawPoints(op.mode, op.points, op.paint)
-                    is DisplayOp.DrawImage -> canvas.drawImage(op.image, op.dst, op.sampling, op.paint)
+                    is DisplayOp.DrawImage -> canvas.drawImageRect(op.image, op.src, op.dst, op.sampling, op.paint)
                     is DisplayOp.DrawImageNine -> canvas.drawImageNine(op.image, op.center, op.dst, op.paint)
                     is DisplayOp.DrawImageLattice -> canvas.drawImageLattice(
                         op.image,

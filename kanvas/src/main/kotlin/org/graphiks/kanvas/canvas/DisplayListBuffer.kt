@@ -105,31 +105,24 @@ internal class RecordingGradientStopBudget(private val maxGradientStopsI32: Int)
 
 /** Retained public pixel bytes are budgeted before every defensive snapshot copy. */
 internal class RecordingImageByteBudget(private val maxImageBytesI64: Long) {
-    private val accepted = java.util.IdentityHashMap<org.graphiks.kanvas.image.Image, Unit>()
-    private val pending = java.util.IdentityHashMap<org.graphiks.kanvas.image.Image, Long>()
     private var committedBytesI64 = 0L
     private var pendingBytesI64 = 0L
 
-    fun reserveImage(image: org.graphiks.kanvas.image.Image) {
-        if (accepted.containsKey(image) || pending.containsKey(image)) return
-        val requestedBytesI64 = image.pixels?.size?.toLong() ?: 0L
+    fun reserveImageBytes(requestedBytesI64: Long) {
         val totalBytesI64 = try {
             Math.addExact(Math.addExact(committedBytesI64, pendingBytesI64), requestedBytesI64)
         } catch (_: ArithmeticException) {
             throw imageLimitFailure(Long.MAX_VALUE)
         }
         if (totalBytesI64 > maxImageBytesI64) throw imageLimitFailure(totalBytesI64)
-        pending[image] = requestedBytesI64
         pendingBytesI64 = Math.addExact(pendingBytesI64, requestedBytesI64)
     }
 
     fun append(block: () -> Unit) {
         try {
             block()
-            pending.forEach { (image, _) -> accepted[image] = Unit }
             committedBytesI64 = Math.addExact(committedBytesI64, pendingBytesI64)
         } finally {
-            pending.clear()
             pendingBytesI64 = 0L
         }
     }
