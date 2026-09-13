@@ -206,11 +206,23 @@ public class GpuRenderBackend(
                 return RenderExecutionResult.InvalidPlan(listOf(lowering.diagnostic))
         }
 
+        // A prepared session seals one canonical target ref for its whole lifetime.
+        // Different construction compilers may use distinct refs at the same extent.
+        val targetDeclaration = loweredPlan.taskList.tasks
+            .filterIsInstance<org.graphiks.kanvas.gpu.renderer.recording.GPUTask.PrepareResources>()
+            .flatMap { it.requests }.singleOrNull {
+                it.role == org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.SceneTarget
+            } ?: return invalid("The lowered frame requires one exact SceneTarget declaration.")
+        val sceneTarget = targetDeclaration.resource as? org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
+            ?: return invalid("The lowered SceneTarget has the wrong resource type.")
+        if (targetDeclaration.descriptor !is org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor)
+            return invalid("The lowered SceneTarget requires a texture descriptor.")
         val key = GpuRenderSessionKey(
             deviceGeneration = snapshot.deviceGeneration,
             width = targetConfig.extent.width,
             height = targetConfig.extent.height,
             internalFormat = targetConfig.internalFormat,
+            sceneTarget = sceneTarget,
         )
         val reservation = when (val prepared = try {
             context.acquirePrepared(key)

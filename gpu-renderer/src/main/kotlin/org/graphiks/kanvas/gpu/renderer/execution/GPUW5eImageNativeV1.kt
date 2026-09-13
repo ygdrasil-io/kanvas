@@ -27,11 +27,17 @@ internal object GPUW5eImageNativeV1 {
                 W5eImagePlanDiagnostics.InvalidContract
             }
             val cubic = image.execution.sampling as? ImageSamplingPlanV1.Cubic
+            require(image.execution.atlasBlend?.let { blend ->
+                image.originalDraw.geometry is org.graphiks.kanvas.render.ir.GeometryNode.Atlas &&
+                    blend.color == image.constructionEntry.atlasEntryColor && blend.mode == image.originalDraw.operationBlendMode &&
+                    blend.authenticates(image.execution.upload, image.execution.colorAlpha, image.execution.childSourceIdentity)
+            } != false) { W5eImagePlanDiagnostics.InvalidContract }
             require(cubic == null || cubic.bF32.isFinite() && cubic.bF32 in 0f..1f &&
                 cubic.cF32.isFinite() && cubic.cF32 in 0f..1f) { W5eImagePlanDiagnostics.CubicParameters }
             image.execution.cellSelection?.let { selector ->
-                require(image.originalDraw.geometry is org.graphiks.kanvas.render.ir.GeometryNode.ImageNine &&
-                    selector.samples.size <= selector.capacityI32 && selector.capacityI32 == 9 &&
+                require((image.originalDraw.geometry is org.graphiks.kanvas.render.ir.GeometryNode.ImageNine && !selector.lattice ||
+                    image.originalDraw.geometry is org.graphiks.kanvas.render.ir.GeometryNode.ImageLattice && selector.lattice) &&
+                    selector.cells.size <= selector.capacityI32 && (selector.lattice || selector.capacityI32 == 9) &&
                     selector.samples.all { sample ->
                         val bounds = sample.cell.copyDestinationF32()
                         sample.numericAuthority.graph.sampling == image.execution.sampling &&

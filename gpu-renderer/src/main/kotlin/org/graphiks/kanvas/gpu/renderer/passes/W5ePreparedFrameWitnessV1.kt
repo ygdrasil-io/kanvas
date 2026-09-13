@@ -37,10 +37,11 @@ public class W5ePreparedFrameWitnessV1 internal constructor(internal val bridge:
     }
     init {
         require(base.w5eConstructionV1 == null && base.w5ePreparedFrameV1 == null &&
-            packets.none { it.commandIdValue in bridge.noOpDraws() } &&
+            packets.none { it.commandIdValue in bridge.omittedConstructionIndicesI32() } &&
             packets.map { it.packetId }.distinct().size == packets.size &&
             consumers.groupingBy { it.commandIdValue }.eachCount() ==
                 (expectedByCommandI32.keys + ordinaryByCommandI32.keys).associateWith { 1 } &&
+            consumers.map { it.commandIdValue } == bridge.colorConstructionOrderI32() &&
             consumers.all { it.w5aSourceStageV2 != null }) { W5eImagePlanDiagnostics.InvalidContract }
         packets.forEach { it.attachW5eImageFrameWitnessV1(this) }
     }

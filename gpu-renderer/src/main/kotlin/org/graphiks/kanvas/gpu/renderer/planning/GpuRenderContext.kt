@@ -41,6 +41,9 @@ public data class GpuRenderSessionKey(
     public val width: Int,
     public val height: Int,
     public val internalFormat: PlanLogicalColorFormat,
+    /** Null retains source compatibility for legacy explicit context callers only.
+     * Owned backend frames always supply their actual lowered SceneTarget declaration. */
+    public val sceneTarget: org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef? = null,
 ) {
     init {
         require(deviceGeneration >= 0 && width > 0 && height > 0)

@@ -8,7 +8,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 /** Cheap composition admission only: it intentionally has no Scene or backend dependency. */
 internal object GPUPlanSurfaceCandidateGate {
     fun ownsW5eImages(operations: List<DisplayOp>): Boolean =
-        operations.any { it is DisplayOp.DrawImage || it is DisplayOp.DrawImageNine || it.isW5eShaderOperation() } && operations.all { operation ->
+        operations.any { it is DisplayOp.DrawImage || it is DisplayOp.DrawImageNine || it is DisplayOp.DrawImageLattice || it is DisplayOp.DrawAtlas || it.isW5eShaderOperation() } && operations.all { operation ->
             when (operation) {
                 is DisplayOp.DrawImage -> operation.image.pixels != null &&
                     operation.image.colorType in setOf(org.graphiks.kanvas.image.ColorType.RGBA_8888,
@@ -31,6 +31,24 @@ internal object GPUPlanSurfaceCandidateGate {
                         it.colorFilter == null && it.maskFilter == null && it.imageFilter == null &&
                         it.pathEffect == null && it.style == org.graphiks.kanvas.paint.PaintStyle.FILL }
                 is DisplayOp.DrawRect -> operation.isW5eShaderOperation() || operation.paint.shader?.imageLeafW5e() == null
+                is DisplayOp.DrawImageLattice -> operation.image.pixels != null &&
+                    operation.image.colorType in setOf(org.graphiks.kanvas.image.ColorType.RGBA_8888,
+                        org.graphiks.kanvas.image.ColorType.BGRA_8888, org.graphiks.kanvas.image.ColorType.SRGBA_8888,
+                        org.graphiks.kanvas.image.ColorType.ALPHA_8) &&
+                    operation.image.alphaType in setOf(org.graphiks.kanvas.image.AlphaType.OPAQUE,
+                        org.graphiks.kanvas.image.AlphaType.PREMUL, org.graphiks.kanvas.image.AlphaType.UNPREMUL) &&
+                    (operation.sampling in setOf(org.graphiks.kanvas.paint.SamplingOptions.NEAREST,
+                        org.graphiks.kanvas.paint.SamplingOptions.LINEAR) || operation.sampling is org.graphiks.kanvas.paint.SamplingOptions.Cubic) &&
+                    operation.paint.let { it == null || it.blender == null && it.colorFilter == null && it.maskFilter == null &&
+                        it.imageFilter == null && it.pathEffect == null && it.style == org.graphiks.kanvas.paint.PaintStyle.FILL }
+                is DisplayOp.DrawAtlas -> operation.atlas.pixels != null &&
+                    operation.atlas.colorType in setOf(org.graphiks.kanvas.image.ColorType.RGBA_8888,
+                        org.graphiks.kanvas.image.ColorType.BGRA_8888, org.graphiks.kanvas.image.ColorType.SRGBA_8888,
+                        org.graphiks.kanvas.image.ColorType.ALPHA_8) &&
+                    operation.atlas.alphaType in setOf(org.graphiks.kanvas.image.AlphaType.OPAQUE,
+                        org.graphiks.kanvas.image.AlphaType.PREMUL, org.graphiks.kanvas.image.AlphaType.UNPREMUL) &&
+                    operation.paint.let { it == null || it.blender == null && it.colorFilter == null && it.maskFilter == null &&
+                        it.imageFilter == null && it.pathEffect == null && it.style == org.graphiks.kanvas.paint.PaintStyle.FILL }
                 is DisplayOp.DrawPath -> operation.sourceOperation == DrawPathSourceOperation.DRAW_PATH.stableName &&
                     (operation.isW5eShaderOperation() || operation.paint.shader?.imageLeafW5e() == null)
                 is DisplayOp.DrawRRect -> operation.paint.shader?.imageLeafW5e() == null

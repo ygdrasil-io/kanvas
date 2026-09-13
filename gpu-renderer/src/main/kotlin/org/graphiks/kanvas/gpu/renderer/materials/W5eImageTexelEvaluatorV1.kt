@@ -8,12 +8,23 @@ internal object W5eImageTexelEvaluatorV1 {
     fun declarations(execution: ImageSampleExecutionPlanV1, child: W5aMaterialSourceStage?, layout: ImageSourceLayoutV3): String {
         val graph = execution.numericAuthority.graph
         val selection = execution.cellSelection
+        val atlasBlend = execution.atlasBlend
         require(layout.selectsCells == (selection != null))
+        require(layout.hasAtlasColor == (atlasBlend != null) && (atlasBlend == null || selection == null))
         val maskSource = execution.colorAlpha.channelOrder == ImageChannelOrderV1.ALPHA
         require(maskSource == (child != null))
         require(layout.hasChildGradientStorage == (child?.gradientStopSlab != null))
         val returnType = if (maskSource) "f32" else "vec4<f32>"
         val zero = if (maskSource) "0.0" else "vec4<f32>(0.0)"
+        fun sampledSource(expression: String): String = if (child == null) "$expression * w5eImage.parameters.z" else
+            "w5e_child_source(" + (if (child.gradientStopSlab == null) "pixel" else child.coordinateFunctionName + "(pixel)") + ") * $expression"
+        val materialSource = if (atlasBlend == null) {
+            if (selection?.lattice == true) "return w5e_lattice_source(pixel);" else "return ${sampledSource("w5e_image_sample(pixel)")};"
+        } else {
+            val image = if (child == null) "w5e_image_sample(pixel)" else sampledSource("w5e_image_sample(pixel)")
+            "let entry = w5a_srgb_to_linear(w5eImage.atlasColor); " +
+                "return w5e_atlas_blend(vec4f(entry.rgb * entry.a, entry.a), $image) * w5eImage.parameters.z;"
+        }
         require(graph.contractId == "WgslFloatEnvelopeV1" && graph.colorAlpha == execution.colorAlpha &&
             graph.sampling == execution.sampling && graph.tileModes == execution.tileModes)
         val texelOperations = graph.texelOperations()
@@ -83,8 +94,9 @@ internal object W5eImageTexelEvaluatorV1 {
             """.trimIndent()
         }.orEmpty()
         val selectorDeclarations = selection?.let { selector ->
-            require(selector.capacityI32 == 9 && selector.samples.size <= selector.capacityI32 &&
+            require((selector.lattice || selector.capacityI32 == 9) && selector.cells.size <= selector.capacityI32 &&
                 selector.startInclusive && !selector.endInclusive && selector.firstHit && selector.discardOnMiss)
+            val selectorZero = if (selector.lattice) "vec4<f32>(0.0)" else zero
             val body = StringBuilder()
             val names = mutableMapOf<ImageNumericOperationGraphV1.Node, String>()
             fun scalar(node: ImageNumericOperationGraphV1.Node): String = names.getOrPut(node) {
@@ -94,7 +106,7 @@ internal object W5eImageTexelEvaluatorV1 {
                 name
             }
             val selectorDenominator = scalar(graph.denominator)
-            body.append("if (!w5e_finite($selectorDenominator) || abs($selectorDenominator) < 1.17549435e-38f) { return $zero; }\n")
+            body.append("if (!w5e_finite($selectorDenominator) || abs($selectorDenominator) < 1.17549435e-38f) { return $selectorZero; }\n")
             val localX = scalar(graph.localXF32)
             val localY = scalar(graph.localYF32)
             val checks = (0..1).map { axisI32 ->
@@ -104,11 +116,17 @@ internal object W5eImageTexelEvaluatorV1 {
                     "(outerEdges[${axisI32 + 2}] == 1.0 || select($value > cellBounds[${axisI32 + 2}], $value < cellBounds[${axisI32 + 2}], $increasing))"
             }.joinToString(" && ")
             val dispatch = (0 until selector.capacityI32).joinToString("\n") { indexI32 ->
+                val contribution = if (!selector.lattice) "return w5e_sample_cell(pixel, candidate.source, candidate.destination);" else
+                    when (selector.cells.getOrNull(indexI32)) {
+                        is ImageCellPlanV1.Sampled -> "return ${sampledSource("w5e_sample_cell(pixel, candidate.source, candidate.destination)")};"
+                        is ImageCellPlanV1.SolidV1 -> "let color = w5a_srgb_to_linear(candidate.color); let alpha = color.a * w5eImage.cellDirections.z; return vec4<f32>(color.rgb * alpha, alpha);"
+                        else -> "discard; return vec4<f32>(0.0);"
+                    }
                 """
                     if (w5eImage.parameters.w > ${indexI32.toFloat()}f) {
                         let candidate = w5eImage.cells[$indexI32];
                         if (w5e_cell_contains(cellLocal, candidate.bounds, candidate.outerEdges)) {
-                            return w5e_sample_cell(pixel, candidate.source, candidate.destination);
+                            $contribution
                         }
                     }
                 """.trimIndent()
@@ -117,13 +135,13 @@ internal object W5eImageTexelEvaluatorV1 {
                 fn w5e_cell_contains(pixelLocal: vec2<f32>, cellBounds: vec4<f32>, outerEdges: vec4<f32>) -> bool {
                     return $checks;
                 }
-                fn w5e_image_sample(pixel: vec2<f32>) -> $returnType {
+                fn ${if (selector.lattice) "w5e_lattice_source" else "w5e_image_sample"}(pixel: vec2<f32>) -> ${if (selector.lattice) "vec4<f32>" else returnType} {
                     $body
-                    if (!w5e_finite($localX) || !w5e_finite($localY)) { return $zero; }
+                    if (!w5e_finite($localX) || !w5e_finite($localY)) { return $selectorZero; }
                     let cellLocal = vec2<f32>($localX, $localY);
                     $dispatch
                     discard;
-                    return $zero;
+                    return $selectorZero;
                 }
             """.trimIndent()
         }.orEmpty()
@@ -218,16 +236,18 @@ internal object W5eImageTexelEvaluatorV1 {
         }
         return """
             ${child?.declarationsWgsl.orEmpty()}
-            ${if (selection != null) "struct W5eImageCell { source: vec4<f32>, destination: vec4<f32>, outerEdges: vec4<f32>, bounds: vec4<f32>, }" else ""}
+            ${if (selection != null) "struct W5eImageCell { source: vec4<f32>, destination: vec4<f32>, outerEdges: vec4<f32>, bounds: vec4<f32>, ${if (selection.lattice) "color: vec4<f32>," else ""} }" else ""}
             struct W5eImageBlock {
                 values0: vec4<f32>, values1: vec4<f32>, values2: vec4<f32>,
                 values3: vec4<f32>, values4: vec4<f32>, parameters: vec4<f32>, cubicParameters: vec4<f32>,
                 ${if (selection != null) "cellDirections: vec4<f32>, cells: array<W5eImageCell, ${selection.capacityI32}>," else ""}
+                ${if (atlasBlend != null) "atlasColor: vec4<f32>," else ""}
                 ${if (child != null) "child: W5aMaterialBlock," else ""}
             }
             @group(1) @binding(${layout.uniformBindingU32}) var<uniform> w5eImage: W5eImageBlock;
             @group(1) @binding(${layout.imageTextureBindingU32}) var w5eTexture: texture_2d<f32>;
             ${if (child == null) W5aMaterialSourceStage.SRGB_TO_LINEAR_WGSL else ""}
+            ${atlasBlend?.formulaWgsl.orEmpty()}
             fn w5e_finite(value: f32) -> bool { return (bitcast<u32>(value) & 0x7f800000u) != 0x7f800000u; }
             fn w5e_device_point(pixel: vec2<f32>) -> vec2<f32> { return pixel; }
             $cubicKernelDeclarations
@@ -244,8 +264,7 @@ internal object W5eImageTexelEvaluatorV1 {
             }
             $selectorDeclarations
             fn kanvas_material_source(pixel: vec2<f32>) -> vec4<f32> {
-                ${if (child == null) "return w5e_image_sample(pixel) * w5eImage.parameters.z;" else
-                    "return w5e_child_source(" + (if (child.gradientStopSlab == null) "pixel" else child.coordinateFunctionName + "(pixel)") + ") * w5e_image_sample(pixel);"}
+                $materialSource
             }
         """.trimIndent()
     }

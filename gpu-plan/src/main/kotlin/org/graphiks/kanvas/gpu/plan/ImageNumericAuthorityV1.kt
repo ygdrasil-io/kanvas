@@ -57,6 +57,9 @@ public class ImageNumericAuthorityV1 private constructor(
             execution.paintAlphaF32.toRawBits() == paintAlphaBitsI32 && execution.colorAlpha == graph.colorAlpha &&
             execution.sampling == graph.sampling && execution.tileModes == graph.tileModes &&
             program.selectsCells == (cellSelection != null) &&
+            program.latticeCellKinds == cellSelection?.takeIf { it.lattice }?.cellKindsIdentity &&
+            program.atlasBlendMode == execution.atlasBlend?.mode &&
+            (execution.atlasBlend?.authenticates(execution.upload, execution.colorAlpha, execution.childSourceIdentity) != false) &&
             cellSelection?.samples.orEmpty().all { sample ->
                 val proof = sample.numericAuthority
                 proof.programIdentity == programIdentity && proof.uploadIdentity == uploadIdentity &&
@@ -77,7 +80,7 @@ public class ImageNumericAuthorityV1 private constructor(
         fun seal(program: ImageMaterialProgramV3, upload: ImageUploadPlanV1,
             coordinates: ImageCoordinatePlanV1, deviceBoundsF32: RectF32, paintAlphaF32: Float,
             sampling: ImageSamplingPlanV1, tileModes: ImageTileModePlanV1,
-            cells: List<ImageCellPlanV1.Sampled>? = null): ImageNumericAuthorityV1? {
+            cells: List<ImageCellPlanV1>? = null, solidPaintAlphaF32: Float = 1f): ImageNumericAuthorityV1? {
             if (listOf(deviceBoundsF32.left, deviceBoundsF32.top, deviceBoundsF32.right, deviceBoundsF32.bottom)
                     .any { !it.isFinite() } || !deviceBoundsF32.isSorted()) return null
             if (!paintAlphaF32.isFinite() || paintAlphaF32 !in 0f..1f) return null
@@ -189,7 +192,7 @@ public class ImageNumericAuthorityV1 private constructor(
             val samplingProof = proveSamplingArithmetic(graph, upload, ::evaluate, ::rounded) ?: return null
             if (!finite) return null
             val cellSelection = cells?.let { sourceCells ->
-                if (sourceCells.size > 9) return null
+                if (program.latticeCellKinds == null && sourceCells.size > 9) return null
                 // Containment consumes these shared local scalars, not separately
                 // normalized cell coordinates. Comparison operands are finite;
                 // identical copied endpoints make adjacent < / >= (or > / <=)
@@ -200,12 +203,13 @@ public class ImageNumericAuthorityV1 private constructor(
                 // Each graph covers the FULL enclosing device domain, including the
                 // exterior AA fragments that the outer selector bands extrapolate.
                 // Thus branch uncertainty cannot expose an unproved scalar/index path.
-                val cellSamples = sourceCells.map { cell ->
+                val cellSamples = sourceCells.filterIsInstance<ImageCellPlanV1.Sampled>().map { cell ->
                     val mapping = ImageCoordinatePlanV1.sealInverse(coordinates.copyInverseF32(), cell.copySourceF32(), cell.copyDestinationF32())
                     val proof = seal(program, upload, mapping, deviceBoundsF32, paintAlphaF32, sampling, tileModes) ?: return null
                     ImageCellSelectionPlanV1.Sample(cell, mapping, proof)
                 }
-                ImageCellSelectionPlanV1(cellSamples, coordinates.copyDestinationF32(), localXDomain, localYDomain)
+                ImageCellSelectionPlanV1(cellSamples, coordinates.copyDestinationF32(), localXDomain, localYDomain,
+                    sourceCells, program.latticeCellKinds != null, solidPaintAlphaF32)
             }
             return ImageNumericAuthorityV1(graph, program.structuralId, upload.contentIdentity, coordinates.canonicalIdentity,
                 paintAlphaF32.toRawBits(), samplingProof, deviceBoundsF32, cellSelection)

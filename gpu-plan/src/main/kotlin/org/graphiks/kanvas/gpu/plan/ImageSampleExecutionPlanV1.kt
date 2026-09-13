@@ -88,19 +88,23 @@ public class ImageCoordinatePlanV1 private constructor(inverseF32: Matrix3x3F32,
 public sealed interface ImageMaterialProgramV3 : MaterialProgramPlan {
     override val versionI32: Int get() = 3
     public val selectsCells: Boolean
+    public val latticeCellKinds: String?
+    public val atlasBlendMode: org.graphiks.kanvas.render.ir.BlendMode?
     public data class ColorV3(public val channelOrder: ImageChannelOrderV1, public val alphaType: ImageAlphaType,
         public val transfer: ImageTransferPlanV1, public val gamut: ImageGamutPlanV1,
         public val sampling: ImageSamplingPlanV1, public val tileModes: ImageTileModePlanV1,
-        override val selectsCells: Boolean = false) : ImageMaterialProgramV3 {
-        override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5e-image-color-v3:$channelOrder:$alphaType:$transfer:$gamut:${sampling.topologyId}:${tileModes.topologyId}" +
-            if (selectsCells) ":nine-local-cell-selector-v2" else "")
+        override val selectsCells: Boolean = false, override val latticeCellKinds: String? = null,
+        override val atlasBlendMode: org.graphiks.kanvas.render.ir.BlendMode? = null) : ImageMaterialProgramV3 {
+        override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5e-image-color-v3:$channelOrder:$alphaType:$transfer:$gamut:${sampling.topologyId}:${tileModes.topologyId}${atlasBlendMode?.let { ":atlas-source-blend-v1:$it" }.orEmpty()}" +
+            if (latticeCellKinds != null) ":lattice-cell-selector-v1:$latticeCellKinds" else if (selectsCells) ":nine-local-cell-selector-v2" else "")
         override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.imageColor()
     }
     public class MaskV3(public val child: MaterialProgramPlan, public val alphaType: ImageAlphaType,
         public val sampling: ImageSamplingPlanV1, public val tileModes: ImageTileModePlanV1,
-        override val selectsCells: Boolean = false) : ImageMaterialProgramV3 {
-        override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5e-image-mask-v3:$alphaType:${sampling.topologyId}:${tileModes.topologyId}(${child.structuralId.value})" +
-            if (selectsCells) ":nine-local-cell-selector-v2" else "")
+        override val selectsCells: Boolean = false, override val latticeCellKinds: String? = null,
+        override val atlasBlendMode: org.graphiks.kanvas.render.ir.BlendMode? = null) : ImageMaterialProgramV3 {
+        override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5e-image-mask-v3:$alphaType:${sampling.topologyId}:${tileModes.topologyId}(${child.structuralId.value})${atlasBlendMode?.let { ":atlas-source-blend-v1:$it" }.orEmpty()}" +
+            if (latticeCellKinds != null) ":lattice-cell-selector-v1:$latticeCellKinds" else if (selectsCells) ":nine-local-cell-selector-v2" else "")
         override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.imageMask()
     }
 }
@@ -121,6 +125,7 @@ public class ImageSampleExecutionPlanV1 internal constructor(
     public val totalPessimisticBudgetBytesI64: Long,
     public val sampling: ImageSamplingPlanV1,
     public val tileModes: ImageTileModePlanV1,
+    public val atlasBlend: ImageAtlasBlendNumericAuthorityV1? = null,
 ) {
     public val tileX: ImageTileAxisModePlanV1 get() = tileModes.x
     public val tileY: ImageTileAxisModePlanV1 get() = tileModes.y
@@ -128,11 +133,11 @@ public class ImageSampleExecutionPlanV1 internal constructor(
     // Cells stay inside a single logical ImageDraw; their representation is already math-owned.
     public val cellSelection: ImageCellSelectionPlanV1? get() = numericAuthority.cellSelection
     public fun copySourceCellsF32(): List<RectF32> = cellSelection?.samples?.map { it.cell.copySourceF32() } ?: listOf(coordinates.copySourceF32())
-    public fun copyDestinationCellsF32(): List<RectF32> = cellSelection?.samples?.map { it.cell.copyDestinationF32() } ?: listOf(coordinates.copyDestinationF32())
+    public fun copyDestinationCellsF32(): List<RectF32> = cellSelection?.cells?.map { it.copyDestinationF32() } ?: listOf(coordinates.copyDestinationF32())
     public val canonicalIdentity: String = "image-execution-v1:${upload.contentIdentity}:${coordinates.canonicalIdentity}:$colorAlpha:" +
         "${sampling.bindingIdentity}:${tileModes.topologyId}:${paintAlphaF32.toRawBits()}:" +
         childSourceIdentity.orEmpty() +
-        ":${numericAuthority.canonicalIdentity}:budget=$totalPessimisticBudgetBytesI64"
+        ":${numericAuthority.canonicalIdentity}:budget=$totalPessimisticBudgetBytesI64" + atlasBlend?.let { ":${it.canonicalIdentity}" }.orEmpty()
     init {
         require(paintAlphaF32.isFinite() && paintAlphaF32 in 0f..1f && totalPessimisticBudgetBytesI64 >= upload.byteCountI64 &&
             upload.widthI32 > 0 && upload.heightI32 > 0)

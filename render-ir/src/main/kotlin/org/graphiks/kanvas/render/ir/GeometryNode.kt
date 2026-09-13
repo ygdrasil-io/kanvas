@@ -196,6 +196,11 @@ public sealed interface GeometryNode : CanonicalValue {
         private val storedFlags: List<LatticeCellFlag>? = flags?.let(::immutableList)
         private val storedDestination: RectF32 = destination.copy()
 
+        public val xDivCountI32: Int get() = storedXDivs.size
+        public val yDivCountI32: Int get() = storedYDivs.size
+        public val cellRectCountI32: Int? get() = storedCellRects?.size
+        public val colorCountI32: Int? get() = storedColors?.size
+        public val flagCountI32: Int? get() = storedFlags?.size
         public fun copyXDivs(): IntArray = storedXDivs.copyOf()
         public fun copyYDivs(): IntArray = storedYDivs.copyOf()
         public fun copyCellRects(): List<RectF32>? = storedCellRects?.map(RectF32::copy)?.let(::immutableList)
