@@ -27,6 +27,17 @@ class W5eDecodedImageSurfacePixelTest {
         val image = Image.fromPixels(2, 2, bytes, alphaType = AlphaType.PREMUL)
         val source = RectF32.ofLTRB(-.5f, -.5f, 2.5f, 2.5f)
         for ((sampling, linear) in listOf(SamplingOptions.NEAREST to false, SamplingOptions.LINEAR to true)) {
+            // Exact source centres .5/.5 and 1.5/1.5 are a distinct direct-image
+            // boundary from the fractional/outside matrix below.
+            val centres = Surface(2, 2)
+            centres.canvas { drawImageRect(image, RectF32.ofLTRB(0f, 0f, 2f, 2f), RectF32.ofLTRB(0f, 0f, 2f, 2f), sampling, paint()) }
+            val centreResult = centres.render()
+            for (yI32 in 0 until 2) for (xI32 in 0 until 2) {
+                val expected = W5eDecodedImageCpuOracle.sampledColorPixel(2, 2, bytes, xI32 + .5f, yI32 + .5f, linear,
+                    org.graphiks.kanvas.paint.TileMode.CLAMP, org.graphiks.kanvas.paint.TileMode.CLAMP)
+                require(expected is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { expected.toString() }
+                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, centreResult.pixels.copyOfRange((yI32 * 2 + xI32) * 4, (yI32 * 2 + xI32 + 1) * 4))
+            }
             val surface = Surface(7, 7)
             surface.canvas { drawImageRect(image, source, RectF32.ofLTRB(0f, 0f, 7f, 7f), sampling, paint()) }
             val result = surface.render()

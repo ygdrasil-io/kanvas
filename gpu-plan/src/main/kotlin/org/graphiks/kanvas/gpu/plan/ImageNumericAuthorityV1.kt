@@ -4,6 +4,16 @@ import org.graphiks.math.geometry.RectF32
 import kotlin.math.abs
 import kotlin.math.floor
 
+/** Immutable arithmetic certificate for indices and the four-component linear sum. */
+private class ImageSamplingArithmeticProofV1(
+    private val xPreReductionI32: IntRange,
+    private val yPreReductionI32: IntRange,
+    private val accumulatedComponentF32: ClosedFloatingPointRange<Double>,
+) {
+    val canonicalIdentity: String = "x=${xPreReductionI32.first}:${xPreReductionI32.last}:y=${yPreReductionI32.first}:${yPreReductionI32.last}:" +
+        "acc=${accumulatedComponentF32.start.toRawBits()}:${accumulatedComponentF32.endInclusive.toRawBits()}"
+}
+
 /** Conservative WgslFloatEnvelopeV1 proof; the full device rectangle encloses fragment centres. */
 public class ImageNumericAuthorityV1 private constructor(
     public val graph: ImageNumericOperationGraphV1,
@@ -11,13 +21,15 @@ public class ImageNumericAuthorityV1 private constructor(
     private val uploadIdentity: String,
     private val coordinateIdentity: String,
     private val paintAlphaBitsI32: Int,
+    private val samplingProof: ImageSamplingArithmeticProofV1,
     deviceBoundsF32: RectF32,
 ) {
     private val bounds = deviceBoundsF32.copy()
     public fun copyDeviceBoundsF32(): RectF32 = bounds.copy()
     public val canonicalIdentity: String = "${graph.topologyIdentity}:${programIdentity.value}:$uploadIdentity:$coordinateIdentity:" +
         listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).joinToString(",") { it.toRawBits().toString() } +
-        ":paint=$paintAlphaBitsI32:texel-domain-v1:unorm8:positive-alpha-ge-2^-9:all-intermediates-lt-2^36"
+        ":paint=$paintAlphaBitsI32:texel-domain-v1:unorm8:positive-alpha-ge-2^-9:all-intermediates-lt-2^36:" +
+        "sampling-arithmetic-v1:${samplingProof.canonicalIdentity}"
     public fun authenticates(program: ImageMaterialProgramV3, execution: ImageSampleExecutionPlanV1): Boolean =
         program.structuralId == programIdentity && execution.upload.contentIdentity == uploadIdentity &&
             execution.coordinates.canonicalIdentity == coordinateIdentity && execution.numericAuthority === this &&
@@ -66,6 +78,8 @@ public class ImageNumericAuthorityV1 private constructor(
                     ImageNumericOperationGraphV1.Operation.UNIFORM_F32 -> values[node.uniformIndexI32].toDouble().let {
                         if (abs(it) < java.lang.Float.MIN_NORMAL) minOf(0.0, it)..maxOf(0.0, it) else it..it
                     }
+                    ImageNumericOperationGraphV1.Operation.CONSTANT_HALF_F32 -> 0.5..0.5
+                    ImageNumericOperationGraphV1.Operation.CONSTANT_ONE_F32 -> 1.0..1.0
                     ImageNumericOperationGraphV1.Operation.ADD_F32 -> rounded(args[0].start + args[1].start, args[0].endInclusive + args[1].endInclusive)
                     ImageNumericOperationGraphV1.Operation.SUB_F32 -> rounded(args[0].start - args[1].endInclusive, args[0].endInclusive - args[1].start)
                     ImageNumericOperationGraphV1.Operation.MUL_F32, ImageNumericOperationGraphV1.Operation.DIV_F32 -> {
@@ -80,20 +94,77 @@ public class ImageNumericAuthorityV1 private constructor(
                             rounded(candidates.min(), candidates.max(), division)
                         }
                     }
+                    ImageNumericOperationGraphV1.Operation.FLOOR_F32 -> {
+                        val low = floor(args[0].start)
+                        val high = floor(args[0].endInclusive)
+                        finite = finite && low.isFinite() && high.isFinite() &&
+                            low >= -Float.MAX_VALUE.toDouble() && high <= Float.MAX_VALUE.toDouble()
+                        low..high
+                    }
                 }
             }
             val denominator = evaluate(graph.denominator)
             if (!finite || denominator.start <= 0.0 && denominator.endInclusive >= 0.0) return null
-            val haloF64 = if (sampling == ImageSamplingPlanV1.Linear) .5 else 0.0
-            val samples = listOf(evaluate(graph.sourceX), evaluate(graph.sourceY))
-            // Addressing converts the selected pre-reduction tap base. REPEAT/MIRROR therefore
-            // receive the same finite I32 envelope before floor-mod; never rely on WGSL casts.
-            if (!finite || samples.any {
-                    floor(it.start - haloF64) < Int.MIN_VALUE.toDouble() ||
-                        floor(it.endInclusive - haloF64) > Int.MAX_VALUE.toDouble() - if (sampling == ImageSamplingPlanV1.Linear) 1.0 else 0.0
-                }) return null
+            val samplingProof = proveSamplingArithmetic(graph, upload, ::evaluate, ::rounded) ?: return null
+            if (!finite) return null
             return ImageNumericAuthorityV1(graph, program.structuralId, upload.contentIdentity, coordinates.canonicalIdentity,
-                paintAlphaF32.toRawBits(), deviceBoundsF32)
+                paintAlphaF32.toRawBits(), samplingProof, deviceBoundsF32)
+        }
+
+        /**
+         * Mirrors the WGSL schedule exactly: F32 SUB_F32 for the half-pixel shift and fractions,
+         * four F32 weights, then the left-associated four-term component accumulation.  The I32
+         * intervals are established before Clamp/Repeat/Mirror/Decal; modulo never receives an
+         * unchecked conversion and MIRROR's 2n arithmetic is proven representable.
+         */
+        private fun proveSamplingArithmetic(
+            graph: ImageNumericOperationGraphV1,
+            upload: ImageUploadPlanV1,
+            evaluate: (ImageNumericOperationGraphV1.Node) -> ClosedFloatingPointRange<Double>,
+            rounded: (Double, Double, Boolean) -> ClosedFloatingPointRange<Double>,
+        ): ImageSamplingArithmeticProofV1? {
+            fun i32(range: ClosedFloatingPointRange<Double>, extraHighI32: Int): IntRange? {
+                val low = floor(range.start)
+                val high = floor(range.endInclusive)
+                if (!low.isFinite() || !high.isFinite() || low < Int.MIN_VALUE.toDouble() ||
+                    high > Int.MAX_VALUE.toDouble() - extraHighI32) return null
+                return low.toInt()..high.toInt()
+            }
+            fun plusOne(range: IntRange): IntRange = range.first..Math.addExact(range.last, 1)
+            fun address(range: IntRange, dimensionI32: Int, mode: ImageTileAxisModePlanV1): Boolean {
+                if (dimensionI32 <= 0) return false
+                return when (mode) {
+                    ImageTileAxisModePlanV1.CLAMP, ImageTileAxisModePlanV1.DECAL -> true
+                    ImageTileAxisModePlanV1.REPEAT -> true // i32 % positive n is defined over the complete I32 interval.
+                    ImageTileAxisModePlanV1.MIRROR -> {
+                        // Every intermediate in ((i % 2n) + 2n) % 2n and 2n - 1 - phase fits I32.
+                        dimensionI32 <= Int.MAX_VALUE / 2
+                    }
+                }
+            }
+            val extra = if (graph.sampling == ImageSamplingPlanV1.Linear) 1 else 0
+            val baseX = i32(evaluate(graph.baseXF32), extra) ?: return null
+            val baseY = i32(evaluate(graph.baseYF32), extra) ?: return null
+            val xPre = if (extra == 1) plusOne(baseX) else baseX
+            val yPre = if (extra == 1) plusOne(baseY) else baseY
+            if (!address(xPre, upload.widthI32, graph.tileModes.x) || !address(yPre, upload.heightI32, graph.tileModes.y)) return null
+            if (graph.sampling == ImageSamplingPlanV1.Nearest) return ImageSamplingArithmeticProofV1(xPre, yPre, 0.0..Math.scalb(1.0, 36))
+
+            val weights = listOf(requireNotNull(graph.weight00F32), requireNotNull(graph.weight10F32),
+                requireNotNull(graph.weight01F32), requireNotNull(graph.weight11F32)).map(evaluate)
+            if (weights.any { !it.start.isFinite() || !it.endInclusive.isFinite() }) return null
+            fun products(a: ClosedFloatingPointRange<Double>, b: ClosedFloatingPointRange<Double>): ClosedFloatingPointRange<Double> {
+                val candidates = listOf(a.start, a.endInclusive).flatMap { x -> listOf(b.start, b.endInclusive).map { y -> x * y } }
+                return rounded(candidates.min(), candidates.max(), false)
+            }
+            val texelComponent = 0.0..Math.scalb(1.0, 36)
+            val weighted = weights.map { products(texelComponent, it) }
+            var accumulated = weighted.first()
+            for (term in weighted.drop(1)) accumulated = rounded(accumulated.start + term.start,
+                accumulated.endInclusive + term.endInclusive, false)
+            if (!accumulated.start.isFinite() || !accumulated.endInclusive.isFinite() ||
+                maxOf(abs(accumulated.start), abs(accumulated.endInclusive)) > Float.MAX_VALUE.toDouble()) return null
+            return ImageSamplingArithmeticProofV1(xPre, yPre, accumulated)
         }
 
         /**

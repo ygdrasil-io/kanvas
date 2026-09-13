@@ -16,26 +16,34 @@ internal object W5eImageTexelEvaluatorV1 {
             graph.sampling == execution.sampling && graph.tileModes == execution.tileModes)
         val texelOperations = graph.texelOperations()
         val statements = StringBuilder()
+        val afterValidityStatements = StringBuilder()
         val emitted = mutableMapOf<ImageNumericOperationGraphV1.Node, String>()
-        fun emit(node: ImageNumericOperationGraphV1.Node): String = emitted.getOrPut(node) {
-            val inputs = node.inputs.map(::emit)
+        fun emit(node: ImageNumericOperationGraphV1.Node, afterValidity: Boolean = false): String = emitted.getOrPut(node) {
+            val inputs = node.inputs.map { emit(it, afterValidity) }
             val value = when (node.operation) {
                 ImageNumericOperationGraphV1.Operation.DEVICE_X_F32 -> "pixel.x"
                 ImageNumericOperationGraphV1.Operation.DEVICE_Y_F32 -> "pixel.y"
                 ImageNumericOperationGraphV1.Operation.UNIFORM_F32 -> "w5eImage.values${node.uniformIndexI32 / 4}[${node.uniformIndexI32 % 4}]"
+                ImageNumericOperationGraphV1.Operation.CONSTANT_HALF_F32 -> "0.5"
+                ImageNumericOperationGraphV1.Operation.CONSTANT_ONE_F32 -> "1.0"
                 ImageNumericOperationGraphV1.Operation.ADD_F32 -> "(${inputs[0]} + ${inputs[1]})"
                 ImageNumericOperationGraphV1.Operation.SUB_F32 -> "(${inputs[0]} - ${inputs[1]})"
                 ImageNumericOperationGraphV1.Operation.MUL_F32 -> "(${inputs[0]} * ${inputs[1]})"
                 ImageNumericOperationGraphV1.Operation.DIV_F32 -> "(${inputs[0]} / ${inputs[1]})"
+                ImageNumericOperationGraphV1.Operation.FLOOR_F32 -> "floor(${inputs[0]})"
             }
             val name = "imageValue${emitted.size}"
-            statements.append("let $name = $value;\n")
+            (if (afterValidity) afterValidityStatements else statements).append("let $name = $value;\n")
             name
         }
         val denominator = emit(graph.denominator)
         statements.append("if (!w5e_finite($denominator) || abs($denominator) < 1.17549435e-38f) { return $zero; }\n")
         val x = emit(graph.sourceX)
         val y = emit(graph.sourceY)
+        val tapX = emit(graph.tapXF32)
+        val tapY = emit(graph.tapYF32)
+        val baseX = emit(graph.baseXF32, afterValidity = true)
+        val baseY = emit(graph.baseYF32, afterValidity = true)
         val evaluateEncodedTexel = if (TexelOperation.RETURN_SCALAR_MASK in texelOperations) {
             val mask = if (TexelOperation.ALPHA_OPAQUE in texelOperations) "1.0" else "encoded.r"
             "return $mask;"
@@ -72,29 +80,31 @@ internal object W5eImageTexelEvaluatorV1 {
         val addressY = address("y", "iy", "i32(w5eImage.parameters.y)", execution.tileModes.y)
         val sample = when (execution.sampling) {
             ImageSamplingPlanV1.Nearest -> """
-                let tapX = $x;
-                let tapY = $y;
-                if (!w5e_finite(tapX) || !w5e_finite(tapY) || tapX < -2147483648.0 || tapX >= 2147483648.0 ||
-                    tapY < -2147483648.0 || tapY >= 2147483648.0) { return $zero; }
-                return w5e_texel(i32(floor(tapX)), i32(floor(tapY)));
+                if (!w5e_finite($tapX) || !w5e_finite($tapY) || $tapX < -2147483648.0 || $tapX >= 2147483648.0 ||
+                    $tapY < -2147483648.0 || $tapY >= 2147483648.0) { return $zero; }
+                $afterValidityStatements
+                return w5e_texel(i32($baseX), i32($baseY));
             """.trimIndent()
-            ImageSamplingPlanV1.Linear -> """
-                let tapX = $x - 0.5;
-                let tapY = $y - 0.5;
-                if (!w5e_finite(tapX) || !w5e_finite(tapY) || tapX < -2147483648.0 || tapX >= 2147483647.0 ||
-                    tapY < -2147483648.0 || tapY >= 2147483647.0) { return $zero; }
-                let baseX = i32(floor(tapX));
-                let baseY = i32(floor(tapY));
-                let fractionX = tapX - f32(baseX);
-                let fractionY = tapY - f32(baseY);
-                let tap00 = w5e_texel(baseX, baseY);
-                let tap10 = w5e_texel(baseX + 1, baseY);
-                let tap01 = w5e_texel(baseX, baseY + 1);
-                let tap11 = w5e_texel(baseX + 1, baseY + 1);
-                return tap00 * (1.0 - fractionX) * (1.0 - fractionY) +
-                    tap10 * fractionX * (1.0 - fractionY) + tap01 * (1.0 - fractionX) * fractionY +
-                    tap11 * fractionX * fractionY;
-            """.trimIndent()
+            ImageSamplingPlanV1.Linear -> {
+                val fractionX = emit(requireNotNull(graph.fractionXF32), afterValidity = true)
+                val fractionY = emit(requireNotNull(graph.fractionYF32), afterValidity = true)
+                val weight00 = emit(requireNotNull(graph.weight00F32), afterValidity = true)
+                val weight10 = emit(requireNotNull(graph.weight10F32), afterValidity = true)
+                val weight01 = emit(requireNotNull(graph.weight01F32), afterValidity = true)
+                val weight11 = emit(requireNotNull(graph.weight11F32), afterValidity = true)
+                """
+                    if (!w5e_finite($tapX) || !w5e_finite($tapY) || $tapX < -2147483648.0 || $tapX >= 2147483647.0 ||
+                        $tapY < -2147483648.0 || $tapY >= 2147483647.0) { return $zero; }
+                    $afterValidityStatements
+                    let baseXi32 = i32($baseX);
+                    let baseYi32 = i32($baseY);
+                    let tap00 = w5e_texel(baseXi32, baseYi32);
+                    let tap10 = w5e_texel(baseXi32 + 1, baseYi32);
+                    let tap01 = w5e_texel(baseXi32, baseYi32 + 1);
+                    let tap11 = w5e_texel(baseXi32 + 1, baseYi32 + 1);
+                    return tap00 * $weight00 + tap10 * $weight10 + tap01 * $weight01 + tap11 * $weight11;
+                """.trimIndent()
+            }
         }
         return """
             ${child?.declarationsWgsl.orEmpty()}
