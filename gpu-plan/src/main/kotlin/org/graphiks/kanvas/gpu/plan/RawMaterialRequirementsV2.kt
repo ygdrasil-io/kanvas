@@ -4,13 +4,15 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /** Typed image composition ABI; existing standalone V1/V2 layouts are unchanged. */
-public class ImageSourceLayoutV3 internal constructor(public val hasChildGradientStorage: Boolean) {
+public class ImageSourceLayoutV3 internal constructor(public val hasChildGradientStorage: Boolean,
+    public val selectsCells: Boolean = false) {
     public val uniformBindingU32: UInt = 0u
     public val gradientStorageBindingU32: UInt? = if (hasChildGradientStorage) 1u else null
     public val imageTextureBindingU32: UInt = if (hasChildGradientStorage) 2u else 1u
-    public val imageUniformByteCountI64: Long = 112L
+    public val imageUniformByteCountI64: Long = if (selectsCells) 544L else 112L
     public val structuralIdentity: String = "image-source-layout-v3:uniform0:" +
-        (if (hasChildGradientStorage) "stops1:texture2" else "texture1") + ":cubic-parameters"
+        (if (hasChildGradientStorage) "stops1:texture2" else "texture1") + ":cubic-parameters" +
+        if (selectsCells) ":nine-cell-selector-v1" else ""
 }
 
 /** Handle-free raw V2 binding layout, shared by capability sealing and native packing. */
@@ -75,16 +77,26 @@ public class RawMaterialRequirementsV2 private constructor(
                 require(table.authenticatesImage(root, execution)) { W5eImagePlanDiagnostics.InvalidContract }
                 val child = if (table.entry(root).program is ImageMaterialProgramV3.MaskV3)
                     of(table, MaterialPlanRef(root.indexI32 - 1)) else null
-                val layout = ImageSourceLayoutV3(child?.bindGroupEntryCountI32 == 2)
+                val layout = ImageSourceLayoutV3(child?.bindGroupEntryCountI32 == 2, execution.cellSelection != null)
                 val bytesI64 = Math.addExact(layout.imageUniformByteCountI64, child?.uniformByteCountI64 ?: 0L)
                 require(bytesI64 <= Int.MAX_VALUE) { W5eImagePlanDiagnostics.BindingLimit }
                 val bytes = ByteBuffer.allocate(bytesI64.toInt()).order(ByteOrder.LITTLE_ENDIAN).apply {
                     execution.coordinates.uniformValuesF32().forEach(::putFloat)
                     putFloat(execution.upload.widthI32.toFloat()).putFloat(execution.upload.heightI32.toFloat())
-                    putFloat(execution.paintAlphaF32).putFloat(0f)
+                    putFloat(execution.paintAlphaF32).putFloat(execution.cellSelection?.samples?.size?.toFloat() ?: 0f)
                     val cubic = execution.sampling as? ImageSamplingPlanV1.Cubic
                     putFloat(cubic?.bF32 ?: 0f).putFloat(cubic?.cF32 ?: 0f).putFloat(0f).putFloat(0f)
+                    execution.cellSelection?.let { selection ->
+                        repeat(selection.capacityI32) { indexI32 ->
+                            val sample = selection.samples.getOrNull(indexI32)
+                            if (sample == null) repeat(12) { putFloat(0f) } else {
+                                sample.coordinates.uniformValuesF32().drop(12).forEach(::putFloat)
+                                sample.cell.outerEdges.forEach { putFloat(if (it) 1f else 0f) }
+                            }
+                        }
+                    }
                     child?.copyUniformBytes()?.let(::put)
+                    check(position() == capacity())
                 }.array()
                 return RawMaterialRequirementsV2(1 + (child?.bindingCountI32 ?: 0), bytesI64,
                     child?.hasCoordinatesV2 == true, 1 + (child?.bindGroupEntryCountI32 ?: 1),

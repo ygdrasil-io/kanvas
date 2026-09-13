@@ -71,6 +71,9 @@ public class ImageCoordinatePlanV1 private constructor(inverseF32: Matrix3x3F32,
         fun seal(ctmF32: Matrix3x3F32, sourceF32: RectF32, destinationF32: RectF32): ImageCoordinatePlanV1 {
             val inverse = ctmF32.toMatrix3x3F64().invertToMatrix3x3F32OrNull()
                 ?: throw IllegalArgumentException(W5eImagePlanDiagnostics.NumericDomainUnbounded)
+            return sealInverse(inverse, sourceF32, destinationF32)
+        }
+        fun sealInverse(inverse: Matrix3x3F32, sourceF32: RectF32, destinationF32: RectF32): ImageCoordinatePlanV1 {
             val result = ImageCoordinatePlanV1(inverse, sourceF32, destinationF32)
             require(result.uniformValuesF32().all(Float::isFinite) &&
                 listOf(sourceF32.right - sourceF32.left, sourceF32.bottom - sourceF32.top,
@@ -84,15 +87,20 @@ public class ImageCoordinatePlanV1 private constructor(inverseF32: Matrix3x3F32,
 
 public sealed interface ImageMaterialProgramV3 : MaterialProgramPlan {
     override val versionI32: Int get() = 3
+    public val selectsCells: Boolean
     public data class ColorV3(public val channelOrder: ImageChannelOrderV1, public val alphaType: ImageAlphaType,
         public val transfer: ImageTransferPlanV1, public val gamut: ImageGamutPlanV1,
-        public val sampling: ImageSamplingPlanV1, public val tileModes: ImageTileModePlanV1) : ImageMaterialProgramV3 {
-        override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5e-image-color-v3:$channelOrder:$alphaType:$transfer:$gamut:${sampling.topologyId}:${tileModes.topologyId}")
+        public val sampling: ImageSamplingPlanV1, public val tileModes: ImageTileModePlanV1,
+        override val selectsCells: Boolean = false) : ImageMaterialProgramV3 {
+        override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5e-image-color-v3:$channelOrder:$alphaType:$transfer:$gamut:${sampling.topologyId}:${tileModes.topologyId}" +
+            if (selectsCells) ":nine-cell-selector-v1" else "")
         override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.imageColor()
     }
     public class MaskV3(public val child: MaterialProgramPlan, public val alphaType: ImageAlphaType,
-        public val sampling: ImageSamplingPlanV1, public val tileModes: ImageTileModePlanV1) : ImageMaterialProgramV3 {
-        override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5e-image-mask-v3:$alphaType:${sampling.topologyId}:${tileModes.topologyId}(${child.structuralId.value})")
+        public val sampling: ImageSamplingPlanV1, public val tileModes: ImageTileModePlanV1,
+        override val selectsCells: Boolean = false) : ImageMaterialProgramV3 {
+        override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5e-image-mask-v3:$alphaType:${sampling.topologyId}:${tileModes.topologyId}(${child.structuralId.value})" +
+            if (selectsCells) ":nine-cell-selector-v1" else "")
         override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.imageMask()
     }
 }
@@ -118,8 +126,9 @@ public class ImageSampleExecutionPlanV1 internal constructor(
     public val tileY: ImageTileAxisModePlanV1 get() = tileModes.y
     public val cacheRequest: PlanCacheResourceRequest get() = upload.cacheRequest
     // Cells stay inside a single logical ImageDraw; their representation is already math-owned.
-    public fun copySourceCellsF32(): List<RectF32> = listOf(coordinates.copySourceF32())
-    public fun copyDestinationCellsF32(): List<RectF32> = listOf(coordinates.copyDestinationF32())
+    public val cellSelection: ImageCellSelectionPlanV1? get() = numericAuthority.cellSelection
+    public fun copySourceCellsF32(): List<RectF32> = cellSelection?.samples?.map { it.cell.copySourceF32() } ?: listOf(coordinates.copySourceF32())
+    public fun copyDestinationCellsF32(): List<RectF32> = cellSelection?.samples?.map { it.cell.copyDestinationF32() } ?: listOf(coordinates.copyDestinationF32())
     public val canonicalIdentity: String = "image-execution-v1:${upload.contentIdentity}:${coordinates.canonicalIdentity}:$colorAlpha:" +
         "${sampling.bindingIdentity}:${tileModes.topologyId}:${paintAlphaF32.toRawBits()}:" +
         childSourceIdentity.orEmpty() +

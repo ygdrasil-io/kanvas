@@ -77,6 +77,8 @@ public class ImageNumericOperationGraphV1 private constructor(public val colorAl
     public val denominator: Node
     public val sourceX: Node
     public val sourceY: Node
+    public val unitXF32: Node
+    public val unitYF32: Node
     /** These nodes are emitted verbatim by the sampler; sealing evaluates this same graph. */
     public val tapXF32: Node
     public val tapYF32: Node
@@ -140,15 +142,19 @@ public class ImageNumericOperationGraphV1 private constructor(public val colorAl
             binary(Operation.ADD_F32, binary(Operation.MUL_F32, uniform(indexI32), x),
                 binary(Operation.MUL_F32, uniform(indexI32 + 1), y)), uniform(indexI32 + 2))
         denominator = row(8)
-        fun source(rowI32: Int, axisI32: Int): Node {
+        fun unit(rowI32: Int, axisI32: Int): Node {
             val local = binary(Operation.DIV_F32, row(rowI32), denominator)
             val relative = binary(Operation.SUB_F32, local, uniform(16 + axisI32))
-            val unit = binary(Operation.DIV_F32, relative, uniform(18 + axisI32))
+            return binary(Operation.DIV_F32, relative, uniform(18 + axisI32))
+        }
+        unitXF32 = unit(0, 0)
+        unitYF32 = unit(4, 1)
+        fun source(unit: Node, axisI32: Int): Node {
             return binary(Operation.ADD_F32, uniform(12 + axisI32),
                 binary(Operation.MUL_F32, unit, uniform(14 + axisI32)))
         }
-        sourceX = source(0, 0)
-        sourceY = source(4, 1)
+        sourceX = source(unitXF32, 0)
+        sourceY = source(unitYF32, 1)
         val half = Node(Operation.CONSTANT_HALF_F32)
         val one = Node(Operation.CONSTANT_ONE_F32)
         tapXF32 = if (sampling == ImageSamplingPlanV1.Nearest) sourceX else binary(Operation.SUB_F32, sourceX, half)

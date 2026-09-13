@@ -42,6 +42,7 @@ public class ImageNumericAuthorityV1 private constructor(
     private val paintAlphaBitsI32: Int,
     private val samplingProof: ImageSamplingArithmeticProofV1,
     deviceBoundsF32: RectF32,
+    public val cellSelection: ImageCellSelectionPlanV1?,
 ) {
     private val bounds = deviceBoundsF32.copy()
     public fun copyDeviceBoundsF32(): RectF32 = bounds.copy()
@@ -49,12 +50,20 @@ public class ImageNumericAuthorityV1 private constructor(
         listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).joinToString(",") { it.toRawBits().toString() } +
         ":paint=$paintAlphaBitsI32:texel-domain-v1:unorm8:positive-alpha-ge-2^-9:signed-components-abs-lt-2^36:" +
         "sampling-arithmetic-v1:${samplingProof.canonicalIdentity}" +
-        graph.cubicScheduleIdentity?.let { ":$it" }.orEmpty()
+        graph.cubicScheduleIdentity?.let { ":$it" }.orEmpty() + cellSelection?.let { ":${it.canonicalIdentity}" }.orEmpty()
     public fun authenticates(program: ImageMaterialProgramV3, execution: ImageSampleExecutionPlanV1): Boolean =
         program.structuralId == programIdentity && execution.upload.contentIdentity == uploadIdentity &&
             execution.coordinates.canonicalIdentity == coordinateIdentity && execution.numericAuthority === this &&
             execution.paintAlphaF32.toRawBits() == paintAlphaBitsI32 && execution.colorAlpha == graph.colorAlpha &&
             execution.sampling == graph.sampling && execution.tileModes == graph.tileModes &&
+            program.selectsCells == (cellSelection != null) &&
+            cellSelection?.samples.orEmpty().all { sample ->
+                val proof = sample.numericAuthority
+                proof.programIdentity == programIdentity && proof.uploadIdentity == uploadIdentity &&
+                    proof.coordinateIdentity == sample.coordinates.canonicalIdentity && proof.paintAlphaBitsI32 == paintAlphaBitsI32 &&
+                    proof.graph.colorAlpha == graph.colorAlpha && proof.graph.sampling == graph.sampling &&
+                    proof.graph.tileModes == graph.tileModes && proof.cellSelection == null && proof.bounds == bounds
+            } &&
             execution.upload.widthI32 > 0 && execution.upload.heightI32 > 0 &&
             execution.colorAlpha == when (program) {
                 is ImageMaterialProgramV3.ColorV3 -> ImageColorAlphaPlanV1(program.channelOrder, program.alphaType, program.transfer, program.gamut).takeIf {
@@ -67,7 +76,8 @@ public class ImageNumericAuthorityV1 private constructor(
     internal companion object {
         fun seal(program: ImageMaterialProgramV3, upload: ImageUploadPlanV1,
             coordinates: ImageCoordinatePlanV1, deviceBoundsF32: RectF32, paintAlphaF32: Float,
-            sampling: ImageSamplingPlanV1, tileModes: ImageTileModePlanV1): ImageNumericAuthorityV1? {
+            sampling: ImageSamplingPlanV1, tileModes: ImageTileModePlanV1,
+            cells: List<ImageCellPlanV1.Sampled>? = null): ImageNumericAuthorityV1? {
             if (listOf(deviceBoundsF32.left, deviceBoundsF32.top, deviceBoundsF32.right, deviceBoundsF32.bottom)
                     .any { !it.isFinite() } || !deviceBoundsF32.isSorted()) return null
             if (!paintAlphaF32.isFinite() || paintAlphaF32 !in 0f..1f) return null
@@ -178,8 +188,20 @@ public class ImageNumericAuthorityV1 private constructor(
             if (!finite || denominator.start <= 0.0 && denominator.endInclusive >= 0.0) return null
             val samplingProof = proveSamplingArithmetic(graph, upload, ::evaluate, ::rounded) ?: return null
             if (!finite) return null
+            val cellSelection = cells?.let { sourceCells ->
+                if (sourceCells.size > 9) return null
+                // Each graph covers the FULL enclosing device domain, including the
+                // exterior AA fragments that the outer selector bands extrapolate.
+                // Thus branch uncertainty cannot expose an unproved scalar/index path.
+                val cellSamples = sourceCells.map { cell ->
+                    val mapping = ImageCoordinatePlanV1.sealInverse(coordinates.copyInverseF32(), cell.copySourceF32(), cell.copyDestinationF32())
+                    val proof = seal(program, upload, mapping, deviceBoundsF32, paintAlphaF32, sampling, tileModes) ?: return null
+                    ImageCellSelectionPlanV1.Sample(cell, mapping, proof)
+                }
+                ImageCellSelectionPlanV1(cellSamples)
+            }
             return ImageNumericAuthorityV1(graph, program.structuralId, upload.contentIdentity, coordinates.canonicalIdentity,
-                paintAlphaF32.toRawBits(), samplingProof, deviceBoundsF32)
+                paintAlphaF32.toRawBits(), samplingProof, deviceBoundsF32, cellSelection)
         }
 
         /**

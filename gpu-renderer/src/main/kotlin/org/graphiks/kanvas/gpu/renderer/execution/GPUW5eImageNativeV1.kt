@@ -29,6 +29,15 @@ internal object GPUW5eImageNativeV1 {
             val cubic = image.execution.sampling as? ImageSamplingPlanV1.Cubic
             require(cubic == null || cubic.bF32.isFinite() && cubic.bF32 in 0f..1f &&
                 cubic.cF32.isFinite() && cubic.cF32 in 0f..1f) { W5eImagePlanDiagnostics.CubicParameters }
+            image.execution.cellSelection?.let { selector ->
+                require(image.originalDraw.geometry is org.graphiks.kanvas.render.ir.GeometryNode.ImageNine &&
+                    selector.samples.size <= selector.capacityI32 && selector.capacityI32 == 9 &&
+                    selector.samples.all { sample ->
+                        sample.numericAuthority.graph.sampling == image.execution.sampling &&
+                            sample.numericAuthority.graph.tileModes == ImageTileModePlanV1.ClampClamp &&
+                            sample.coordinates.uniformValuesF32().all(Float::isFinite)
+                    }) { W5eImagePlanDiagnostics.InvalidContract }
+            }
         }
         return expected.imageDraws().isNotEmpty()
     }

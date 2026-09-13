@@ -9,6 +9,11 @@ internal class W5eImagePlanLowerer {
     fun lower(request: GpuPlanLoweringRequest): GpuPlanLoweringResult = try {
         val bridge = requireNotNull(request.graph.w5eImageConstructionOrNull()) { W5eImagePlanDiagnostics.InvalidContract }
         require(request.graph.visualCommandCount == bridge.visualCommandCountI32 && request.graph.materialPlanTableOrNull() === bridge.materialTable)
+        // Nine selects sealed cells inside the original color consumer; no internal edge
+        // acquires W4 coverage, another final blend or another public command authority.
+        require(bridge.imageDraws().all { image ->
+            (image.originalDraw.geometry is GeometryNode.ImageNine) == (image.execution.cellSelection != null)
+        }) { W5eImagePlanDiagnostics.InvalidContract }
         when (val lowered = GpuPlanTaskListLowerer().lower(request.copy(graph = bridge.constructionGraph))) {
             is GpuPlanLoweringResult.Lowered -> {
                 val witness = W5ePreparedFrameWitnessV1(bridge, lowered.taskList)

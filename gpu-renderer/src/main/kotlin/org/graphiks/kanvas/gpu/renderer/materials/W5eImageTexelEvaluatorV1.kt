@@ -7,6 +7,8 @@ import org.graphiks.kanvas.gpu.plan.ImageNumericOperationGraphV1.TexelOperation
 internal object W5eImageTexelEvaluatorV1 {
     fun declarations(execution: ImageSampleExecutionPlanV1, child: W5aMaterialSourceStage?, layout: ImageSourceLayoutV3): String {
         val graph = execution.numericAuthority.graph
+        val selection = execution.cellSelection
+        require(layout.selectsCells == (selection != null))
         val maskSource = execution.colorAlpha.channelOrder == ImageChannelOrderV1.ALPHA
         require(maskSource == (child != null))
         require(layout.hasChildGradientStorage == (child?.gradientStopSlab != null))
@@ -23,6 +25,8 @@ internal object W5eImageTexelEvaluatorV1 {
             ImageNumericOperationGraphV1.Operation.DEVICE_X_F32 -> "pixel.x"
             ImageNumericOperationGraphV1.Operation.DEVICE_Y_F32 -> "pixel.y"
             ImageNumericOperationGraphV1.Operation.UNIFORM_F32 -> when {
+                selection != null && node.uniformIndexI32 in 12..15 -> "cellSource[${node.uniformIndexI32 % 4}]"
+                selection != null && node.uniformIndexI32 in 16..19 -> "cellDestination[${node.uniformIndexI32 % 4}]"
                 node.uniformIndexI32 < 20 -> "w5eImage.values${node.uniformIndexI32 / 4}[${node.uniformIndexI32 % 4}]"
                 node.uniformIndexI32 < 24 -> "w5eImage.parameters[${node.uniformIndexI32 % 4}]"
                 else -> "w5eImage.cubicParameters[${node.uniformIndexI32 % 4}]"
@@ -75,6 +79,47 @@ internal object W5eImageTexelEvaluatorV1 {
                         return $outerResult;
                     }
                     return ${expression(kernel.outsideResult, emptyList())};
+                }
+            """.trimIndent()
+        }.orEmpty()
+        val selectorDeclarations = selection?.let { selector ->
+            require(selector.capacityI32 == 9 && selector.samples.size <= selector.capacityI32 &&
+                selector.lowerInclusive && !selector.upperInclusive && selector.firstHit && selector.discardOnMiss)
+            val body = StringBuilder()
+            val names = mutableMapOf<ImageNumericOperationGraphV1.Node, String>()
+            fun scalar(node: ImageNumericOperationGraphV1.Node): String = names.getOrPut(node) {
+                val args = node.inputs.map(::scalar)
+                val name = "selectorValue${names.size}"
+                body.append("let $name = ${expression(node, args)};\n")
+                name
+            }
+            val selectorDenominator = scalar(graph.denominator)
+            body.append("if (!w5e_finite($selectorDenominator) || abs($selectorDenominator) < 1.17549435e-38f) { return false; }\n")
+            val unitX = scalar(graph.unitXF32)
+            val unitY = scalar(graph.unitYF32)
+            val checks = listOf(unitX, unitY).mapIndexed { axisI32, value ->
+                "(outerEdges[$axisI32] == 1.0 || $value >= ${selector.lowerBoundF32}f) && " +
+                    "(outerEdges[${axisI32 + 2}] == 1.0 || $value < ${selector.upperBoundF32}f)"
+            }.joinToString(" && ")
+            val dispatch = (0 until selector.capacityI32).joinToString("\n") { indexI32 ->
+                """
+                    if (w5eImage.parameters.w > ${indexI32.toFloat()}f) {
+                        let candidate = w5eImage.cells[$indexI32];
+                        if (w5e_cell_contains(pixel, candidate.source, candidate.destination, candidate.outerEdges)) {
+                            return w5e_sample_cell(pixel, candidate.source, candidate.destination);
+                        }
+                    }
+                """.trimIndent()
+            }
+            """
+                fn w5e_cell_contains(pixel: vec2<f32>, cellSource: vec4<f32>, cellDestination: vec4<f32>, outerEdges: vec4<f32>) -> bool {
+                    $body
+                    return w5e_finite($unitX) && w5e_finite($unitY) && $checks;
+                }
+                fn w5e_image_sample(pixel: vec2<f32>) -> $returnType {
+                    $dispatch
+                    discard;
+                    return $zero;
                 }
             """.trimIndent()
         }.orEmpty()
@@ -169,9 +214,11 @@ internal object W5eImageTexelEvaluatorV1 {
         }
         return """
             ${child?.declarationsWgsl.orEmpty()}
+            ${if (selection != null) "struct W5eImageCell { source: vec4<f32>, destination: vec4<f32>, outerEdges: vec4<f32>, }" else ""}
             struct W5eImageBlock {
                 values0: vec4<f32>, values1: vec4<f32>, values2: vec4<f32>,
                 values3: vec4<f32>, values4: vec4<f32>, parameters: vec4<f32>, cubicParameters: vec4<f32>,
+                ${if (selection != null) "cells: array<W5eImageCell, ${selection.capacityI32}>," else ""}
                 ${if (child != null) "child: W5aMaterialBlock," else ""}
             }
             @group(1) @binding(${layout.uniformBindingU32}) var<uniform> w5eImage: W5eImageBlock;
@@ -186,11 +233,12 @@ internal object W5eImageTexelEvaluatorV1 {
                 let encoded: vec4<f32> = textureLoad(w5eTexture, vec2<i32>(ax, ay), 0);
                 $evaluateEncodedTexel
             }
-            fn w5e_image_sample(pixel: vec2<f32>) -> $returnType {
+            fn ${if (selection == null) "w5e_image_sample(pixel: vec2<f32>)" else "w5e_sample_cell(pixel: vec2<f32>, cellSource: vec4<f32>, cellDestination: vec4<f32>)"} -> $returnType {
                 $statements
                 // Validity dominates floor and every signed integer conversion, including dynamic faults.
                 $sample
             }
+            $selectorDeclarations
             fn kanvas_material_source(pixel: vec2<f32>) -> vec4<f32> {
                 ${if (child == null) "return w5e_image_sample(pixel) * w5eImage.parameters.z;" else
                     "return w5e_child_source(" + (if (child.gradientStopSlab == null) "pixel" else child.coordinateFunctionName + "(pixel)") + ") * w5e_image_sample(pixel);"}
