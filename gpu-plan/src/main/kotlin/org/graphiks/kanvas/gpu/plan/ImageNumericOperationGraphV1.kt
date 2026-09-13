@@ -1,27 +1,37 @@
 package org.graphiks.kanvas.gpu.plan
 
-/** Executed scalar schedule for Nearest; texel addressing follows the bounded I32 conversion. */
-public class ImageNumericOperationGraphV1 private constructor(public val colorAlpha: ImageColorAlphaPlanV1) {
+/** Executed scalar schedule and selected tap/address topology. */
+public class ImageNumericOperationGraphV1 private constructor(public val colorAlpha: ImageColorAlphaPlanV1,
+    public val sampling: ImageSamplingPlanV1, public val tileModes: ImageTileModePlanV1) {
     public enum class Operation { DEVICE_X_F32, DEVICE_Y_F32, UNIFORM_F32, ADD_F32, SUB_F32, MUL_F32, DIV_F32 }
     public class Node internal constructor(public val operation: Operation, public val uniformIndexI32: Int = -1,
         inputs: List<Node> = emptyList()) {
         public val inputs: List<Node> = immutableList(inputs)
     }
-    public enum class TexelOperation { PROJECTIVE_VALIDITY_MASK, PIXEL_CENTER_NEAREST, FLOOR_F32,
-        CONVERT_I32, ZERO_TAP_OFFSET_I32, CLAMP_X_I32, CLAMP_Y_I32, LOAD_UNORM8,
+    public enum class TexelOperation { PROJECTIVE_VALIDITY_MASK, PIXEL_CENTER_NEAREST, PIXEL_CENTER_LINEAR,
+        FLOOR_F32, CONVERT_I32, ZERO_TAP_OFFSET_I32, PLUS_ONE_TAP_OFFSET_I32, CLAMP_X_I32, CLAMP_Y_I32,
+        REPEAT_X_I32, REPEAT_Y_I32, MIRROR_X_I32, MIRROR_Y_I32, DECAL_X_I32, DECAL_Y_I32, LOAD_UNORM8,
         SWIZZLE_BGRA, ALPHA_OPAQUE, ALPHA_STORED, ZERO_ALPHA_GUARD,
         UNPREMULTIPLY_SOURCE, SRGB_TO_LINEAR, DISPLAY_P3_TO_LINEAR_SRGB,
         PREMULTIPLY_LINEAR, RETURN_SCALAR_MASK, ACCUMULATE_NEAREST, PAINT_OPACITY }
     public val contractId: String = "WgslFloatEnvelopeV1"
-    public val topologyIdentity: String = "w5e-image-numeric-v1:inverse-project-divide-map-nearest-clamp:$colorAlpha:" +
+    public val topologyIdentity: String = "w5e-image-numeric-v1:inverse-project-divide-map:${sampling.topologyId}:${tileModes.topologyId}:$colorAlpha:" +
         texelOperations().joinToString(",") { it.name }
     public val denominator: Node
     public val sourceX: Node
     public val sourceY: Node
     public fun texelOperations(): List<TexelOperation> = buildList {
-        addAll(listOf(TexelOperation.PROJECTIVE_VALIDITY_MASK, TexelOperation.PIXEL_CENTER_NEAREST,
-            TexelOperation.FLOOR_F32, TexelOperation.CONVERT_I32, TexelOperation.ZERO_TAP_OFFSET_I32,
-            TexelOperation.CLAMP_X_I32, TexelOperation.CLAMP_Y_I32, TexelOperation.LOAD_UNORM8))
+        add(TexelOperation.PROJECTIVE_VALIDITY_MASK)
+        add(if (sampling == ImageSamplingPlanV1.Nearest) TexelOperation.PIXEL_CENTER_NEAREST else TexelOperation.PIXEL_CENTER_LINEAR)
+        addAll(listOf(TexelOperation.FLOOR_F32, TexelOperation.CONVERT_I32, TexelOperation.ZERO_TAP_OFFSET_I32))
+        if (sampling == ImageSamplingPlanV1.Linear) add(TexelOperation.PLUS_ONE_TAP_OFFSET_I32)
+        fun axis(mode: ImageTileAxisModePlanV1, x: Boolean) = when (mode) {
+            ImageTileAxisModePlanV1.CLAMP -> if (x) TexelOperation.CLAMP_X_I32 else TexelOperation.CLAMP_Y_I32
+            ImageTileAxisModePlanV1.REPEAT -> if (x) TexelOperation.REPEAT_X_I32 else TexelOperation.REPEAT_Y_I32
+            ImageTileAxisModePlanV1.MIRROR -> if (x) TexelOperation.MIRROR_X_I32 else TexelOperation.MIRROR_Y_I32
+            ImageTileAxisModePlanV1.DECAL -> if (x) TexelOperation.DECAL_X_I32 else TexelOperation.DECAL_Y_I32
+        }
+        add(axis(tileModes.x, true)); add(axis(tileModes.y, false)); add(TexelOperation.LOAD_UNORM8)
         if (colorAlpha.channelOrder == ImageChannelOrderV1.BGRA) add(TexelOperation.SWIZZLE_BGRA)
         add(if (colorAlpha.alphaType == org.graphiks.kanvas.render.ir.ImageAlphaType.OPAQUE)
             TexelOperation.ALPHA_OPAQUE else TexelOperation.ALPHA_STORED)
@@ -55,5 +65,8 @@ public class ImageNumericOperationGraphV1 private constructor(public val colorAl
         sourceX = source(0, 0)
         sourceY = source(4, 1)
     }
-    internal companion object { fun nearest(colorAlpha: ImageColorAlphaPlanV1): ImageNumericOperationGraphV1 = ImageNumericOperationGraphV1(colorAlpha) }
+    internal companion object {
+        fun of(colorAlpha: ImageColorAlphaPlanV1, sampling: ImageSamplingPlanV1,
+            tileModes: ImageTileModePlanV1): ImageNumericOperationGraphV1 = ImageNumericOperationGraphV1(colorAlpha, sampling, tileModes)
+    }
 }

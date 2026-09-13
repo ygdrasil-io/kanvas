@@ -18,6 +18,15 @@ internal object GPUW5eImageNativeV1 {
         require(witness.bridge === expected && witness.validates(frame)) {
             W5eImagePlanDiagnostics.InvalidContract
         }
+        expected.imageDraws().forEach { image ->
+            // The native path never synthesizes an addressing rule or hardware sampler: its only
+            // image resource is the sealed textureLoad source authenticated by the plan table.
+            require(image.execution.upload.widthI32 > 0 && image.execution.upload.heightI32 > 0 &&
+                image.execution.numericAuthority.graph.sampling == image.execution.sampling &&
+                image.execution.numericAuthority.graph.tileModes == image.execution.tileModes) {
+                W5eImagePlanDiagnostics.InvalidContract
+            }
+        }
         return expected.imageDraws().isNotEmpty()
     }
     fun acquire(cache: GPUW5eDecodedImageSessionCache, request: PlanCacheResourceRequest,

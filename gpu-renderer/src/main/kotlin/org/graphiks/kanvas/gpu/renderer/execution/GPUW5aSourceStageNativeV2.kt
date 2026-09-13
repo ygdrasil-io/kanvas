@@ -333,6 +333,9 @@ internal fun materializeW5aSourcePartitionV2(
                 val key = SourcePipelineKey(base.pipeline, source.stage.structuralId, destination?.sealedW5b?.compositionAbiI32 ?: 2,
                     destinationCopy?.sourceKey, destinationCopy?.logicalBounds)
                 val (pipeline, materialLayout) = pipelines.getOrPut(key) {
+                    require(source.stage.bindingManifest.none { it.resourceKind == "sampler" }) {
+                        "W5e manual texel evaluation must not bind a hardware sampler"
+                    }
                     val template = templates.sourceTemplate(base.pipeline)
                         ?: old.auxiliaryOwnedHandles.asSequence().mapNotNull { it.handle as? GPUW5aGeometryPipelineTemplateProvider }
                             .mapNotNull { it.sourceTemplate(base.pipeline) }.firstOrNull()

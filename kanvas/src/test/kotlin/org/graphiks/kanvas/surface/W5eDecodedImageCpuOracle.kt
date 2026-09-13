@@ -4,10 +4,74 @@ package org.graphiks.kanvas.surface
 
 import org.graphiks.math.geometry.RectF32
 import kotlin.math.floor
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.surface.WgslFloatEnvelopeV1Oracle.Interval as I
 
 /** Independent discrete oracle: image coordinates use pixel centres i + 0.5. */
 internal object W5eDecodedImageCpuOracle {
+    /** Published CPU equations: address every tap before its independent texel conversion. */
+    fun sampledColorPixel(
+        widthI32: Int,
+        heightI32: Int,
+        bytes: ByteArray,
+        sXF32: Float,
+        sYF32: Float,
+        linear: Boolean,
+        tileX: TileMode,
+        tileY: TileMode,
+        paintAlphaF32: Float = 1f,
+    ): WgslFloatEnvelopeV1Oracle.DrawResult {
+        require(widthI32 > 0 && heightI32 > 0)
+        val oracle = WgslFloatEnvelopeV1Oracle
+        fun address(indexI32: Int, sizeI32: Int, mode: TileMode): Int? = when (mode) {
+            TileMode.CLAMP -> indexI32.coerceIn(0, sizeI32 - 1)
+            TileMode.REPEAT -> Math.floorMod(indexI32, sizeI32)
+            TileMode.MIRROR -> {
+                val periodI32 = Math.multiplyExact(sizeI32, 2)
+                val phaseI32 = Math.floorMod(indexI32, periodI32)
+                minOf(phaseI32, periodI32 - 1 - phaseI32)
+            }
+            TileMode.DECAL -> indexI32.takeIf { it in 0 until sizeI32 }
+        }
+        fun texel(xI32: Int, yI32: Int): Array<I> {
+            val offsetI32 = (yI32 * widthI32 + xI32) * 4
+            val raw = List(4) { channelI32 -> oracle.imageUnorm8(bytes[offsetI32 + channelI32].toInt() and 255) }
+            val alpha = raw[3]
+            val straight = raw.take(3).map { oracle.gradientDivide(it, alpha) }
+            val working = straight.map(oracle::imageSrgbToLinear)
+            return Array(4) { channelI32 -> if (channelI32 == 3) alpha else oracle.gradientMultiply(working[channelI32], alpha) }
+        }
+        fun tap(xI32: Int, yI32: Int): Array<I> {
+            val x = address(xI32, widthI32, tileX)
+            val y = address(yI32, heightI32, tileY)
+            return if (x == null || y == null) Array(4) { I.ZERO } else texel(x, y)
+        }
+        val premul = if (!linear) tap(floor(sXF32).toInt(), floor(sYF32).toInt()) else {
+            val uX = sXF32 - .5f
+            val uY = sYF32 - .5f
+            val baseX = floor(uX).toInt()
+            val baseY = floor(uY).toInt()
+            val fractionX = I.input(uX - baseX)
+            val fractionY = I.input(uY - baseY)
+            val oneMinusX = oracle.gradientSubtract(I.ONE, fractionX)
+            val oneMinusY = oracle.gradientSubtract(I.ONE, fractionY)
+            val taps = listOf(
+                Triple(tap(baseX, baseY), oneMinusX, oneMinusY),
+                Triple(tap(baseX + 1, baseY), fractionX, oneMinusY),
+                Triple(tap(baseX, baseY + 1), oneMinusX, fractionY),
+                Triple(tap(baseX + 1, baseY + 1), fractionX, fractionY),
+            )
+            Array(4) { channelI32 -> taps.fold(I.ZERO) { sum, (value, weightX, weightY) ->
+                oracle.gradientAdd(sum, oracle.gradientMultiply(value[channelI32], oracle.gradientMultiply(weightX, weightY)))
+            } }
+        }
+        return oracle.imageSourceAttachment(Array(4) { channelI32 ->
+            oracle.gradientMultiply(premul[channelI32], I.input(paintAlphaF32))
+        })
+    }
+
     fun colorPixel(colorType: org.graphiks.kanvas.image.ColorType, alphaType: org.graphiks.kanvas.image.AlphaType,
         colorSpace: org.graphiks.kanvas.color.ColorSpace, bytes: ByteArray, paintAlphaF32: Float = 1f,
         paintColor: org.graphiks.math.color.ColorARGB = org.graphiks.math.color.ColorARGB.Green): WgslFloatEnvelopeV1Oracle.DrawResult {

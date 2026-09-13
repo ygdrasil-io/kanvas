@@ -22,17 +22,20 @@ public class ImageNumericAuthorityV1 private constructor(
         program.structuralId == programIdentity && execution.upload.contentIdentity == uploadIdentity &&
             execution.coordinates.canonicalIdentity == coordinateIdentity && execution.numericAuthority === this &&
             execution.paintAlphaF32.toRawBits() == paintAlphaBitsI32 && execution.colorAlpha == graph.colorAlpha &&
-            execution.sampling == ImageSamplingPlanV1.Nearest && execution.tileX == ImageTilePlanV1.CLAMP &&
-            execution.tileY == ImageTilePlanV1.CLAMP &&
+            execution.sampling == graph.sampling && execution.tileModes == graph.tileModes &&
+            execution.upload.widthI32 > 0 && execution.upload.heightI32 > 0 &&
             execution.colorAlpha == when (program) {
-                is ImageMaterialProgramV3.ColorV3 -> ImageColorAlphaPlanV1(program.channelOrder, program.alphaType, program.transfer, program.gamut)
+                is ImageMaterialProgramV3.ColorV3 -> ImageColorAlphaPlanV1(program.channelOrder, program.alphaType, program.transfer, program.gamut).takeIf {
+                    program.sampling == execution.sampling && program.tileModes == execution.tileModes }
                 is ImageMaterialProgramV3.MaskV3 -> ImageColorAlphaPlanV1(ImageChannelOrderV1.ALPHA, program.alphaType,
-                    ImageTransferPlanV1.NONE, ImageGamutPlanV1.NONE)
+                    ImageTransferPlanV1.NONE, ImageGamutPlanV1.NONE).takeIf {
+                    program.sampling == execution.sampling && program.tileModes == execution.tileModes }
             }
 
     internal companion object {
         fun seal(program: ImageMaterialProgramV3, upload: ImageUploadPlanV1,
-            coordinates: ImageCoordinatePlanV1, deviceBoundsF32: RectF32, paintAlphaF32: Float): ImageNumericAuthorityV1? {
+            coordinates: ImageCoordinatePlanV1, deviceBoundsF32: RectF32, paintAlphaF32: Float,
+            sampling: ImageSamplingPlanV1, tileModes: ImageTileModePlanV1): ImageNumericAuthorityV1? {
             if (listOf(deviceBoundsF32.left, deviceBoundsF32.top, deviceBoundsF32.right, deviceBoundsF32.bottom)
                     .any { !it.isFinite() } || !deviceBoundsF32.isSorted()) return null
             if (!paintAlphaF32.isFinite() || paintAlphaF32 !in 0f..1f) return null
@@ -42,7 +45,8 @@ public class ImageNumericAuthorityV1 private constructor(
                     ImageTransferPlanV1.NONE, ImageGamutPlanV1.NONE)
             }
             if (!provesFiniteTexelDomain(color, upload)) return null
-            val graph = ImageNumericOperationGraphV1.nearest(color)
+            if (upload.widthI32 <= 0 || upload.heightI32 <= 0) return null
+            val graph = ImageNumericOperationGraphV1.of(color, sampling, tileModes)
             val values = coordinates.uniformValuesF32()
             var finite = true
             fun rounded(lowF64: Double, highF64: Double, division: Boolean = false): ClosedFloatingPointRange<Double> {
@@ -80,8 +84,14 @@ public class ImageNumericAuthorityV1 private constructor(
             }
             val denominator = evaluate(graph.denominator)
             if (!finite || denominator.start <= 0.0 && denominator.endInclusive >= 0.0) return null
+            val haloF64 = if (sampling == ImageSamplingPlanV1.Linear) .5 else 0.0
             val samples = listOf(evaluate(graph.sourceX), evaluate(graph.sourceY))
-            if (!finite || samples.any { floor(it.start) < Int.MIN_VALUE.toDouble() || floor(it.endInclusive) > Int.MAX_VALUE.toDouble() }) return null
+            // Addressing converts the selected pre-reduction tap base. REPEAT/MIRROR therefore
+            // receive the same finite I32 envelope before floor-mod; never rely on WGSL casts.
+            if (!finite || samples.any {
+                    floor(it.start - haloF64) < Int.MIN_VALUE.toDouble() ||
+                        floor(it.endInclusive - haloF64) > Int.MAX_VALUE.toDouble() - if (sampling == ImageSamplingPlanV1.Linear) 1.0 else 0.0
+                }) return null
             return ImageNumericAuthorityV1(graph, program.structuralId, upload.contentIdentity, coordinates.canonicalIdentity,
                 paintAlphaF32.toRawBits(), deviceBoundsF32)
         }

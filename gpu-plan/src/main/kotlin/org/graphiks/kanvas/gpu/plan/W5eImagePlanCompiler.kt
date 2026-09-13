@@ -213,7 +213,7 @@ public class W5eImagePlanCompiler : GpuPlanCompiler {
                 val ref = image.materialAuthority.ref
                 val execution = finalExecutions.getOrPut(ref) { ImageSampleExecutionPlanV1(source.upload,
                     source.coordinates, source.colorAlpha, source.numericAuthority, source.paintAlphaF32,
-                    source.childSourceIdentity, peakI64) }
+                    source.childSourceIdentity, peakI64, source.sampling, source.tileModes) }
                 finalEntries[ref.indexI32] = table.entry(ref).copy(bindings = ImageSampleV3.of(execution))
                 ImageDrawV1(image.commandIndex, image.materialAuthority, execution, image.copyBoundsI32(),
                     image.blend, image.coverage, image.sample, image.originalDraw)
@@ -270,7 +270,7 @@ public class W5eImagePlanCompiler : GpuPlanCompiler {
                 is MaterialNode.WithLocalMatrix -> current.material
                 is MaterialNode.Opacity -> current.material
                 is MaterialNode.ImageSample -> return current.image is ImageResourceSnapshot.Pixels &&
-                    current.sampling == ImageSampling.Nearest && current.tileModeX == TileMode.CLAMP && current.tileModeY == TileMode.CLAMP
+                    current.sampling in setOf(ImageSampling.Nearest, ImageSampling.Linear)
                 else -> return false
             }
         }

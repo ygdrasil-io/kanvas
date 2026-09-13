@@ -13,8 +13,23 @@ import org.graphiks.math.matrix.isFinite
 public enum class ImageChannelOrderV1 { RGBA, BGRA, ALPHA }
 public enum class ImageTransferPlanV1 { SRGB, LINEAR, NONE }
 public enum class ImageGamutPlanV1 { SRGB, DISPLAY_P3, NONE }
-public enum class ImageSamplingPlanV1 { Nearest }
-public enum class ImageTilePlanV1 { CLAMP }
+/** Structural filter selection; a texture upload never carries this semantic. */
+public sealed interface ImageSamplingPlanV1 {
+    public val topologyId: String
+    public data object Nearest : ImageSamplingPlanV1 { override val topologyId: String = "nearest-floor-v1" }
+    public data object Linear : ImageSamplingPlanV1 { override val topologyId: String = "linear-four-tap-v1" }
+}
+
+public enum class ImageTileAxisModePlanV1 { CLAMP, REPEAT, MIRROR, DECAL }
+
+/** Independent image-axis address graph, sealed into program and execution identities. */
+public class ImageTileModePlanV1(public val x: ImageTileAxisModePlanV1, public val y: ImageTileAxisModePlanV1) {
+    public val topologyId: String = "w5e-image-tile-v1:x=${x.name}:y=${y.name}"
+    override fun equals(other: Any?): Boolean = other is ImageTileModePlanV1 && x == other.x && y == other.y
+    override fun hashCode(): Int = 31 * x.hashCode() + y.hashCode()
+    override fun toString(): String = topologyId
+    public companion object { public val ClampClamp: ImageTileModePlanV1 = ImageTileModePlanV1(ImageTileAxisModePlanV1.CLAMP, ImageTileAxisModePlanV1.CLAMP) }
+}
 
 public data class ImageColorAlphaPlanV1(public val channelOrder: ImageChannelOrderV1,
     public val alphaType: ImageAlphaType, public val transfer: ImageTransferPlanV1, public val gamut: ImageGamutPlanV1)
@@ -63,12 +78,14 @@ public class ImageCoordinatePlanV1 private constructor(inverseF32: Matrix3x3F32,
 public sealed interface ImageMaterialProgramV3 : MaterialProgramPlan {
     override val versionI32: Int get() = 3
     public data class ColorV3(public val channelOrder: ImageChannelOrderV1, public val alphaType: ImageAlphaType,
-        public val transfer: ImageTransferPlanV1, public val gamut: ImageGamutPlanV1) : ImageMaterialProgramV3 {
-        override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5e-image-color-v3:$channelOrder:$alphaType:$transfer:$gamut")
+        public val transfer: ImageTransferPlanV1, public val gamut: ImageGamutPlanV1,
+        public val sampling: ImageSamplingPlanV1, public val tileModes: ImageTileModePlanV1) : ImageMaterialProgramV3 {
+        override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5e-image-color-v3:$channelOrder:$alphaType:$transfer:$gamut:${sampling.topologyId}:${tileModes.topologyId}")
         override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.imageColor()
     }
-    public class MaskV3(public val child: MaterialProgramPlan, public val alphaType: ImageAlphaType) : ImageMaterialProgramV3 {
-        override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5e-image-mask-v3:$alphaType(${child.structuralId.value})")
+    public class MaskV3(public val child: MaterialProgramPlan, public val alphaType: ImageAlphaType,
+        public val sampling: ImageSamplingPlanV1, public val tileModes: ImageTileModePlanV1) : ImageMaterialProgramV3 {
+        override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5e-image-mask-v3:$alphaType:${sampling.topologyId}:${tileModes.topologyId}(${child.structuralId.value})")
         override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.imageMask()
     }
 }
@@ -87,19 +104,21 @@ public class ImageSampleExecutionPlanV1 internal constructor(
     public val paintAlphaF32: Float,
     public val childSourceIdentity: String?,
     public val totalPessimisticBudgetBytesI64: Long,
+    public val sampling: ImageSamplingPlanV1,
+    public val tileModes: ImageTileModePlanV1,
 ) {
-    public val sampling: ImageSamplingPlanV1 = ImageSamplingPlanV1.Nearest
-    public val tileX: ImageTilePlanV1 = ImageTilePlanV1.CLAMP
-    public val tileY: ImageTilePlanV1 = ImageTilePlanV1.CLAMP
+    public val tileX: ImageTileAxisModePlanV1 get() = tileModes.x
+    public val tileY: ImageTileAxisModePlanV1 get() = tileModes.y
     public val cacheRequest: PlanCacheResourceRequest get() = upload.cacheRequest
     // Cells stay inside a single logical ImageDraw; their representation is already math-owned.
     public fun copySourceCellsF32(): List<RectF32> = listOf(coordinates.copySourceF32())
     public fun copyDestinationCellsF32(): List<RectF32> = listOf(coordinates.copyDestinationF32())
     public val canonicalIdentity: String = "image-execution-v1:${upload.contentIdentity}:${coordinates.canonicalIdentity}:$colorAlpha:" +
-        "${sampling.name}:${tileX.name}:${tileY.name}:${paintAlphaF32.toRawBits()}:" +
+        "${sampling.topologyId}:${tileModes.topologyId}:${paintAlphaF32.toRawBits()}:" +
         childSourceIdentity.orEmpty() +
         ":${numericAuthority.canonicalIdentity}:budget=$totalPessimisticBudgetBytesI64"
     init {
-        require(paintAlphaF32.isFinite() && paintAlphaF32 in 0f..1f && totalPessimisticBudgetBytesI64 >= upload.byteCountI64)
+        require(paintAlphaF32.isFinite() && paintAlphaF32 in 0f..1f && totalPessimisticBudgetBytesI64 >= upload.byteCountI64 &&
+            upload.widthI32 > 0 && upload.heightI32 > 0)
     }
 }

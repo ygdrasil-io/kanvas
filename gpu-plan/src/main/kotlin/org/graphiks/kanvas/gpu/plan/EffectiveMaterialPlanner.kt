@@ -36,9 +36,13 @@ public object EffectiveMaterialPlanner {
             }
             val sample = source as? MaterialNode.ImageSample
                 ?: throw IllegalArgumentException(W5eImagePlanDiagnostics.UnsupportedSlice)
-            require(sample.sampling == org.graphiks.kanvas.render.ir.ImageSampling.Nearest &&
-                sample.tileModeX == org.graphiks.kanvas.render.ir.TileMode.CLAMP &&
-                sample.tileModeY == org.graphiks.kanvas.render.ir.TileMode.CLAMP) { W5eImagePlanDiagnostics.UnsupportedSlice }
+            val sampling = when (sample.sampling) {
+                org.graphiks.kanvas.render.ir.ImageSampling.Nearest -> ImageSamplingPlanV1.Nearest
+                org.graphiks.kanvas.render.ir.ImageSampling.Linear -> ImageSamplingPlanV1.Linear
+                is org.graphiks.kanvas.render.ir.ImageSampling.Cubic -> throw IllegalArgumentException(W5eImagePlanDiagnostics.UnsupportedSlice)
+            }
+            val tileModes = if (direct) ImageTileModePlanV1.ClampClamp else ImageTileModePlanV1(
+                ImageTileAxisModePlanV1.valueOf(sample.tileModeX.name), ImageTileAxisModePlanV1.valueOf(sample.tileModeY.name))
             val pixels = sample.image as? org.graphiks.kanvas.render.ir.ImageResourceSnapshot.Pixels
                 ?: throw IllegalArgumentException(W5eImagePlanDiagnostics.ExternalResource)
             require(!direct || draw.resource?.canonicalId == pixels.canonicalId && patch?.image?.id?.value == pixels.sourceId) {
@@ -85,18 +89,18 @@ public object EffectiveMaterialPlanner {
                     MaterialBindingPlan.OpacityF32V1.of(opacityF32))
                 Result.Ready(MaterialPlanTable.of(childEntries), MaterialPlanRef(childEntries.lastIndex))
             }
-            val program = if (child == null) ImageMaterialProgramV3.ColorV3(channel, color.alphaType, color.transfer, color.gamut)
-                else ImageMaterialProgramV3.MaskV3(child.table.entry(child.root).program, color.alphaType)
+            val program = if (child == null) ImageMaterialProgramV3.ColorV3(channel, color.alphaType, color.transfer, color.gamut, sampling, tileModes)
+                else ImageMaterialProgramV3.MaskV3(child.table.entry(child.root).program, color.alphaType, sampling, tileModes)
             val upload = ImageUploadPlanV1.seal(pixels)
             val coordinates = if (direct) ImageCoordinatePlanV1.seal(draw.transform, requireNotNull(patch).copySource(), patch.copyDestination())
                 else ImageCoordinatePlanV1.sealShader(draw.transform, matricesF32)
             val paintAlphaF32 = if (child == null) opacityF32 * (draw.paint?.color?.alphaNormalized ?: 1f) else 1f
             val boundsF32 = org.graphiks.math.geometry.RectF32.ofLTRB(deviceBoundsI32.left.toFloat(), deviceBoundsI32.top.toFloat(),
                 deviceBoundsI32.right.toFloat(), deviceBoundsI32.bottom.toFloat())
-            val numeric = ImageNumericAuthorityV1.seal(program, upload, coordinates, boundsF32, paintAlphaF32)
+            val numeric = ImageNumericAuthorityV1.seal(program, upload, coordinates, boundsF32, paintAlphaF32, sampling, tileModes)
                 ?: throw IllegalArgumentException(W5eImagePlanDiagnostics.NumericDomainUnbounded)
             val execution = ImageSampleExecutionPlanV1(upload, coordinates, color, numeric, paintAlphaF32,
-                child?.table?.sourceIdentity(child.root), Math.addExact(upload.byteCountI64, 96L))
+                child?.table?.sourceIdentity(child.root), Math.addExact(upload.byteCountI64, 96L), sampling, tileModes)
             val entries = child?.table?.entries().orEmpty() + MaterialPlanEntry(program, ImageSampleV3.of(execution))
             Result.Ready(MaterialPlanTable.of(entries), MaterialPlanRef(entries.lastIndex))
         } catch (failure: IllegalArgumentException) {

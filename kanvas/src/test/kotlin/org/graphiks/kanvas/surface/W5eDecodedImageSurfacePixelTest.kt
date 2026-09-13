@@ -19,6 +19,30 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 
 class W5eDecodedImageSurfacePixelTest {
+    @Test fun nearestAndLinearUsePixelCenters() {
+        val bytes = byteArrayOf(
+            -1, 0, 0, -1, 0, -1, 0, -1,
+            0, 0, -1, -1, -1, -1, 0, -1,
+        )
+        val image = Image.fromPixels(2, 2, bytes, alphaType = AlphaType.PREMUL)
+        val source = RectF32.ofLTRB(-.5f, -.5f, 2.5f, 2.5f)
+        for ((sampling, linear) in listOf(SamplingOptions.NEAREST to false, SamplingOptions.LINEAR to true)) {
+            val surface = Surface(7, 7)
+            surface.canvas { drawImageRect(image, source, RectF32.ofLTRB(0f, 0f, 7f, 7f), sampling, paint()) }
+            val result = surface.render()
+            for (yI32 in 0 until 7) for (xI32 in 0 until 7) {
+                val sXF32 = source.left + ((xI32 + .5f) / 7f) * (source.right - source.left)
+                val sYF32 = source.top + ((yI32 + .5f) / 7f) * (source.bottom - source.top)
+                val expected = W5eDecodedImageCpuOracle.sampledColorPixel(2, 2, bytes, sXF32, sYF32, linear,
+                    org.graphiks.kanvas.paint.TileMode.CLAMP, org.graphiks.kanvas.paint.TileMode.CLAMP)
+                require(expected is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { expected.toString() }
+                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange((yI32 * 7 + xI32) * 4, (yI32 * 7 + xI32 + 1) * 4))
+            }
+            assertEquals(1, result.stats.opsDispatched)
+            assertEquals(0, result.stats.opsRefused)
+        }
+    }
+
     @Test fun formatsAlphaAndColorSpaceMatchOracle() {
         // Every legal format × alpha × color-space × layout combination is publicly rendered.
         // The two rows exercise nonzero and zero stored alpha, including OPAQUE's ignored alpha.

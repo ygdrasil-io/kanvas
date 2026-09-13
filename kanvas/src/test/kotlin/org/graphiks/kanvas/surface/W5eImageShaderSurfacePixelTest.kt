@@ -14,6 +14,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.render.ir.SceneCaptureLimits
@@ -33,6 +34,46 @@ import kotlin.test.assertEquals
 import org.graphiks.kanvas.surface.WgslFloatEnvelopeV1Oracle.Interval as I
 
 class W5eImageShaderSurfacePixelTest {
+    @Test fun tileModesApplyPerTapOnBothAxes() {
+        val bytes = byteArrayOf(
+            -1, 0, 0, -1, 0, -1, 0, -1,
+            0, 0, -1, -1, -1, -1, 0, -1,
+            0, -1, -1, -1, -1, 0, -1, -1,
+        )
+        val image = Image.fromPixels(2, 3, bytes, alphaType = AlphaType.PREMUL)
+        for (tileX in TileMode.entries) for (tileY in TileMode.entries) {
+            val surface = Surface(6, 7)
+            val shader = Shader.WithLocalMatrix(Shader.Image(image, tileX, tileY, SamplingOptions.LINEAR),
+                Matrix3x3F32.translation(2f, 2f))
+            surface.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 6f, 7f), paint(shader)) }
+            val result = surface.render()
+            for (yI32 in 0 until 7) for (xI32 in 0 until 6) {
+                val expected = W5eDecodedImageCpuOracle.sampledColorPixel(2, 3, bytes, xI32 - 1.5f, yI32 - 1.5f,
+                    linear = true, tileX, tileY)
+                require(expected is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { "$tileX/$tileY: $expected" }
+                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange((yI32 * 6 + xI32) * 4, (yI32 * 6 + xI32 + 1) * 4))
+            }
+            assertEquals(1, result.stats.opsDispatched, "$tileX/$tileY")
+            assertEquals(0, result.stats.opsRefused, "$tileX/$tileY")
+        }
+    }
+
+    @Test fun decalLinearDoesNotRenormalizeWeights() {
+        val bytes = byteArrayOf(-1, 0, 0, -1)
+        val image = Image.fromPixels(1, 1, bytes, alphaType = AlphaType.PREMUL)
+        val surface = Surface(1, 1)
+        val shader = Shader.WithLocalMatrix(Shader.Image(image, TileMode.DECAL, TileMode.CLAMP, SamplingOptions.LINEAR),
+            Matrix3x3F32.translation(.5f, 0f))
+        surface.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), paint(shader)) }
+        val expected = W5eDecodedImageCpuOracle.sampledColorPixel(1, 1, bytes, 0f, .5f, linear = true,
+            TileMode.DECAL, TileMode.CLAMP)
+        require(expected is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { expected.toString() }
+        val result = surface.render()
+        WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels)
+        assertEquals(1, result.stats.opsDispatched)
+        assertEquals(0, result.stats.opsRefused)
+    }
+
     @Test fun imageCaptureByteRefusalRollsBackThenRendersOnTheSameSurface() {
         for (pathI32 in 0..2) {
             val surface = Surface(2, 1, captureLimits = SceneCaptureLimits(maxImageBytesI64 = 8L))
