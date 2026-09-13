@@ -216,7 +216,8 @@ public class GpuPlanTaskListLowerer {
             val color = resolveMaterialColor(graph.materialPlanTable, draw.materialAuthority)
                 ?: return W3BaseTaskListResult.Invalid(invalidDiagnostic("W5 material authority is invalid."))
             packets += packet(draw, color, paintOrder, targetBounds, graph.materialPlanTable,
-                request.w5bPreparedSemantics[draw.commandIndex])
+                request.w5bPreparedSemantics[draw.commandIndex],
+                (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let(request.graph::packedMaterialSourceV4))
         }
         val replay = "w3:${request.graph.id.value}"
         val seal = GPUFrameCapabilitySeal.capture(request.frameId, request.deviceGeneration, request.capabilities)
@@ -394,7 +395,8 @@ public class GpuPlanTaskListLowerer {
     }
 
     internal fun packet(draw: PlanDraw, color: ColorF32, paintOrder: Int, target: GPUPixelBounds, materialPlanTable: MaterialPlanTable?,
-        prepared: org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive?): GPUDrawPacket {
+        prepared: org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive?,
+        packedSourceV4: org.graphiks.kanvas.gpu.plan.RawMaterialRequirementsV2? = null): GPUDrawPacket {
         val bounds = when (draw) { is SolidRectDraw -> draw.copyVisibleBounds(); is W5bPointDraw -> draw.copyBoundsI32(); else -> error("Unknown direct geometry") }
         val scissor = when (draw) { is SolidRectDraw -> draw.copyScissor(); is W5bPointDraw -> draw.copyScissorI32(); else -> error("Unknown direct geometry") }
         require(bounds.roundTripsExactlyThroughF32() && scissor.roundTripsExactlyThroughF32()) {
@@ -419,8 +421,8 @@ public class GpuPlanTaskListLowerer {
                     geometry.strokeStyle, geometry.sourceAuthority), listOf(color.red, color.green, color.blue, color.alpha),
                 target, scissorBounds, clip, execution.canonicalIdentity(), blend.canonicalIdentity(),
                 GPUFrameProvenance.None, GPUCorePrimitiveCoverageMode.FullOrScissor, authentic.analysisRecordId,
-                authentic.analysisCommandFamily, material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex)))
-        } else GPUCorePrimitivePayloadGatherer().gatherSemantic(GPUCorePrimitivePayloadInput(draw.commandIndex, GPUCorePrimitiveSourceFamily.Rect, GPUCorePrimitiveGeometryInput.Rect(rect.left, rect.top, rect.right, rect.bottom), listOf(color.red, color.green, color.blue, color.alpha), target, scissorBounds, clip, execution.canonicalIdentity(), blend.canonicalIdentity(), GPUFrameProvenance.None, GPUCorePrimitiveCoverageMode.FullOrScissor, analysisRecordId, "FillRect", GPUCorePrimitiveRectRouteAuthority.RectAxisAligned, corePrimitiveRectGeometryAuthority(rect, GPUTransformFacts.identity()), material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex)))
+                authentic.analysisCommandFamily, material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex,packedSourceV4)))
+        } else GPUCorePrimitivePayloadGatherer().gatherSemantic(GPUCorePrimitivePayloadInput(draw.commandIndex, GPUCorePrimitiveSourceFamily.Rect, GPUCorePrimitiveGeometryInput.Rect(rect.left, rect.top, rect.right, rect.bottom), listOf(color.red, color.green, color.blue, color.alpha), target, scissorBounds, clip, execution.canonicalIdentity(), blend.canonicalIdentity(), GPUFrameProvenance.None, GPUCorePrimitiveCoverageMode.FullOrScissor, analysisRecordId, "FillRect", GPUCorePrimitiveRectRouteAuthority.RectAxisAligned, corePrimitiveRectGeometryAuthority(rect, GPUTransformFacts.identity()), material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex,packedSourceV4)))
         val structuralKey = corePrimitiveRenderPipelineStructuralKey(
             semantic,
             execution,
@@ -545,6 +547,7 @@ public class GpuPlanTaskListLowerer {
         val table = graph.materialPlanTableOrNull()
         if (draws.any { draw ->
                 when (val authority = draw.materialAuthority) {
+                    is PlanDrawMaterialAuthority.MaterialV4 -> runCatching { graph.packedMaterialSourceV4(authority) }.isFailure
                     is PlanDrawMaterialAuthority.MaterialV3 -> true
                     is PlanDrawMaterialAuthority.LegacyColorV1 -> false
                     is PlanDrawMaterialAuthority.MaterialV2 -> table == null || authority.ref.indexI32 >= table.sizeI32
@@ -578,6 +581,8 @@ public class GpuPlanTaskListLowerer {
         table: MaterialPlanTable?,
         authority: PlanDrawMaterialAuthority,
     ): ColorF32? = when (authority) {
+        is PlanDrawMaterialAuthority.MaterialV4 -> (table?.entry(authority.ref)?.bindings as? org.graphiks.kanvas.gpu.plan.ColorFilterBindingV4)
+            ?.takeIf { it.numericAuthority.outputSourceProof.authenticates(table,authority.ref,authority.coordinates) }?.let { ColorF32.Transparent }
         is PlanDrawMaterialAuthority.MaterialV3 -> null
         is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
         is PlanDrawMaterialAuthority.MaterialV2 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }

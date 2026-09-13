@@ -230,7 +230,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         if (node.origin != DrawOrigin.RECT) {
             return semanticGap("Draw geometry or material is outside W3")
         }
-        if (!w3Blend(node.blend, targetClamp) || node.effects !is EffectStack.Empty || node.resource != null || node.operationBlendMode != null || !w3Paint(node.paint, true)) {
+        if (!w3Blend(node.blend, targetClamp) || node.effects !is EffectStack.Empty && node.paint?.colorFilter == null || node.resource != null || node.operationBlendMode != null || !w3Paint(node.paint, true)) {
             return semanticGap("Draw state is outside W3")
         }
         if (!materialMatchesPaintAuthority(node)) {
@@ -265,6 +265,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
                             blend = planned.blend,
                             coordinates = MaterialCoordinatePlanV1.fromCtm(node.transform),
                             coordinatesV2 = planned.table.coordinatesV2(planned.root),
+                            coordinatesV4 = planned.table.coordinatesV4(planned.root),
                         ),
                     )
                 }
@@ -342,7 +343,8 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
     ) != null
 
     private fun w3Paint(paint: PaintNode?, acceptsMaterialShader: Boolean): Boolean = paint == null || (
-        (paint.shader == null || acceptsMaterialShader) && paint.blender == null && paint.colorFilter == null && paint.maskFilter == null &&
+        (paint.shader == null || acceptsMaterialShader) && paint.blender == null &&
+            (paint.colorFilter == null || paint.colorFilter is org.graphiks.kanvas.render.ir.ColorFilterNode.Matrix) && paint.maskFilter == null &&
             paint.pathEffect == null && paint.imageFilter == null && paint.style == PaintStyleNode.FILL
         )
 

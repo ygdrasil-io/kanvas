@@ -483,6 +483,9 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
         defaultMaterial: Boolean,
         visitPicture: ((org.graphiks.kanvas.picture.Picture) -> Unit)? = null,
     ) {
+        ColorFilterCapturePreflight.validatePaint(paint, limits)?.let {
+            throw CaptureFailure(it.code.value, it.message)
+        }
         val roots = buildList<Any> {
             paint.shader?.let(::add)
             paint.colorFilter?.let(::add)

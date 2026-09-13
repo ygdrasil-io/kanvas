@@ -96,6 +96,7 @@ public sealed interface NumericOperationGraphV1 {
             listOf(Node(Operation.SRGB_TO_LINEAR, listOf(Node(Operation.INPUT_GRADIENT_SRGBA_STRAIGHT))))))
 
         public fun imageColor(): NumericOperationGraphV1 = output(Node(Operation.INPUT_IMAGE_LINEAR_PREMUL))
+        public fun colorSourceV4(): NumericOperationGraphV1 = output(Node(Operation.INPUT_MATERIAL_LINEAR_PREMUL))
         public fun imageMask(): NumericOperationGraphV1 = output(Node(Operation.IMAGE_MASK_MULTIPLY,
             listOf(Node(Operation.INPUT_MATERIAL_LINEAR_PREMUL), Node(Operation.INPUT_IMAGE_MASK_F32))))
 

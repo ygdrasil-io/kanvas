@@ -13,6 +13,17 @@ internal fun DisplayOp.isW5dGradientCandidateV2(allowNonGradient: Boolean = fals
         is DisplayOp.DrawPath -> paint
         else -> return false
     }
+    if (paint.colorFilter != null) {
+        if (this !is DisplayOp.DrawRect || paint.isStroke() ||
+            paint.colorFilter !is org.graphiks.kanvas.paint.ColorFilter.Matrix) return false
+        var source = paint.shader
+        var countI32 = 0
+        while (source is Shader.Opacity) {
+            if (++countI32 > GraphLimits().maxDepth) return allowNonGradient
+            source = source.shader
+        }
+        return allowNonGradient && (source == null || source is Shader.SolidColor)
+    }
     val allowGradient = when (this) {
         is DisplayOp.DrawRect -> !paint.isStroke()
         is DisplayOp.DrawRRect -> !paint.isStroke() && paint.antiAlias

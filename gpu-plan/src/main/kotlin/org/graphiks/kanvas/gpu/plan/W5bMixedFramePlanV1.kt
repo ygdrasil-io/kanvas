@@ -66,12 +66,17 @@ public class W5bMixedFramePlanV1 private constructor(
             var versionI64 = 0L
             val stopBytesI64 = slabs.fold(0L) { totalI64, slab -> Math.addExact(totalI64, slab.byteSizeI64) }
             val sourceRequirements = mutableListOf<RawMaterialRequirementsV2>()
+            val footprintsV4 = mutableListOf<MaterialSourceFootprintV4>()
             val draws = inputs.map { input ->
                 require(input.commandIndexI32 >= 0)
-                val source = RawMaterialRequirementsV2.of(input.sourceTable, input.sourceRef)
-                if (input.blend != BlendPlan.NoOpV1) sourceRequirements += source
-                admit(if (source.hasCoordinatesV2) RefusalReason.CoordinateUniformBudget else RefusalReason.SourceBinding,
-                    input.blend == BlendPlan.NoOpV1 || source.fitsUniformBinding(capabilities))
+                if (input.sourceTable.entry(input.sourceRef).bindings is ColorFilterBindingV4) {
+                    if (input.blend != BlendPlan.NoOpV1) footprintsV4 += RawMaterialRequirementsV2.measureV4(input.sourceTable,input.sourceRef)
+                } else {
+                    val source = RawMaterialRequirementsV2.of(input.sourceTable, input.sourceRef)
+                    if (input.blend != BlendPlan.NoOpV1) sourceRequirements += source
+                    admit(if (source.hasCoordinatesV2) RefusalReason.CoordinateUniformBudget else RefusalReason.SourceBinding,
+                        input.blend == BlendPlan.NoOpV1 || source.fitsUniformBinding(capabilities))
+                }
                 val before = DestinationVersionI64(versionI64)
                 val blend = when (val selected = input.blend) {
                     is BlendPlan.DestinationReadV1 -> selected.copy(
@@ -95,6 +100,9 @@ public class W5bMixedFramePlanV1 private constructor(
                 throw Refusal(if (failure.code == W5dPlanDiagnostics.CoordinateUniformBudget)
                     RefusalReason.CoordinateUniformBudget else RefusalReason.SourceBudget)
             }
+            if (footprintsV4.isNotEmpty()) RawMaterialRequirementsV2.requireFrameBudgetV4(footprintsV4,
+                sourceRequirements.distinctBy { it.canonicalIdentity }.fold(stopBytesI64) { bytes,source ->
+                    Math.addExact(bytes,source.uniformByteCountI64) },budget,capabilities,RefusalReason.SourceBudget.code)
             return W5bMixedFramePlanV1(targetId, capabilities, budget, draws)
         }
 

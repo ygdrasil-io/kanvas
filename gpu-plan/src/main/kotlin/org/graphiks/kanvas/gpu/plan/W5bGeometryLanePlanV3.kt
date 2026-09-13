@@ -3,7 +3,9 @@ package org.graphiks.kanvas.gpu.plan
 import org.graphiks.math.geometry.SizeI32
 
 /** Rebind material coordinates only after W4 has issued the native lane geometry. */
-internal fun PlanDraw.withW5dCoordinates(coordinates: MaterialCoordinatePlanV2): PlanDraw = when (this) {
+internal fun PlanDraw.withW5dCoordinates(coordinates: MaterialCoordinatePlanV2): PlanDraw {
+    require(materialAuthority !is PlanDrawMaterialAuthority.MaterialV4) { W5fPlanDiagnostics.Unpromoted }
+    return when (this) {
     is SolidRectDraw -> SolidRectDraw.ofMaterial(commandIndex, materialAuthority.materialPlanRef(),
         copyVisibleBounds(), copyScissor(), coverage, sample, blend, coordinatesV2 = coordinates)
     is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(commandIndex, materialAuthority.materialPlanRef(),
@@ -17,6 +19,7 @@ internal fun PlanDraw.withW5dCoordinates(coordinates: MaterialCoordinatePlanV2):
     is GeneralPathDraw -> GeneralPathDraw.ofMaterial(commandIndex, materialAuthority.materialPlanRef(),
         copyPathGeometry(), strategy, copyScissorI32(), coverage, sample, blend, coordinatesV2 = coordinates)
     else -> error(W5dPlanDiagnostics.CoordinatePlanSchema)
+}
 }
 
 /** One authentic geometry lane inside an ordered W5b color envelope. */
@@ -46,6 +49,8 @@ public class W5bGeometryLanePlanV3 internal constructor(
 
 /** One compiler-owned destination timeline; each lane keeps its original geometry reservations. */
 internal fun issueW5bNativeComposite(graphs: List<RenderGraph>): RenderGraph {
+    require(graphs.none { graph -> graph.materialPlanTableOrNull()?.entries()?.any {
+        it.bindings is ColorFilterBindingV4 } == true }) { W5fPlanDiagnostics.Unpromoted }
     require(graphs.size in 2..W5aCompositePlanCompiler.MAX_LANES_I32)
     val first = graphs.first()
     val admitted = setOf(W3SolidRectPlanCompiler.CAPABILITY_ID, W3SolidRectPlanCompiler.W5A_CAPABILITY_ID,
@@ -151,7 +156,8 @@ internal fun validateW5bGeometryPasses(passes: List<PlanPass>, resources: Map<Pl
         else -> emptyList()
     } }
     require(colors.size == visualCommandCountI32 && colors.zipWithNext().all { (a, b) -> a.commandIndex < b.commandIndex })
-    require(colors.all { it.sample == SamplePlan.SingleSample && (it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1 || it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2) && it.blend != BlendPlan.NoOpV1 })
+    require(colors.all { it.sample == SamplePlan.SingleSample && (it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1 || it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2 ||
+        (it is SolidRectDraw || it is AnalyticRectDraw) && it.materialAuthority is PlanDrawMaterialAuthority.MaterialV4) && it.blend != BlendPlan.NoOpV1 })
     fun data(value: PlanDrawDataResources) {
         for ((id, role, usage) in listOf(Triple(value.vertex, PlanResourceRole.VertexData, PlanResourceUsage.Vertex),
             Triple(value.index, PlanResourceRole.IndexData, PlanResourceUsage.Index),

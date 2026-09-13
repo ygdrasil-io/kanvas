@@ -228,6 +228,8 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
     /** Binding/coordinate/stop content identity independent of slab-range rebasing. */
     public fun sourceIdentity(root: MaterialPlanRef): String {
         val source = entry(root)
+        if (source.program is ColorFilteredProgramV4) return ColorSourceProofV1.filteredIdentity(
+            sourceIdentity(MaterialPlanRef(root.indexI32 - 1)), (source.bindings as ColorFilterBindingV4).execution)
         return source.interningKey() + if (source.program is MaterialProgramPlan.OpacityV1 || source.program is ImageMaterialProgramV3.MaskV3)
             ":child:" + sourceIdentity(MaterialPlanRef(root.indexI32 - 1)) else ""
     }
@@ -252,6 +254,7 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
         var leaf = child
         while (entry(leaf).bindings is MaterialBindingPlan.OpacityF32V1) leaf = MaterialPlanRef(leaf.indexI32 - 1)
         return when (val binding = entry(leaf).bindings) {
+            is ColorFilterBindingV4 -> error(W5fPlanDiagnostics.Unpromoted)
             is MaterialBindingPlan.GradientV2 -> PlanDrawMaterialAuthority.MaterialV2(child, binding.numericAuthority.coordinates)
             is MaterialBindingPlan.GradientV1 -> PlanDrawMaterialAuthority.MaterialV1(child, binding.numericAuthority.coordinates)
             else -> PlanDrawMaterialAuthority.MaterialV1(child)
@@ -268,6 +271,12 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
             }
             entries.forEachIndexed { index, entry ->
                 when (val program = entry.program) {
+                    is ColorFilteredProgramV4 -> require(entry.bindings is ColorFilterBindingV4 && index > 0 &&
+                        entries[index-1].program.structuralId == program.child.structuralId &&
+                        program.filterStructureIdentity == entry.bindings.execution.structuralIdentity &&
+                        entry.bindings.numericAuthority.authenticates(entry.bindings.execution,entry.bindings.sourceProof)) {
+                        W5fPlanDiagnostics.Schema
+                    }
                     is ImageMaterialProgramV3.ColorV3 -> require(entry.bindings is ImageSampleV3 &&
                         entry.bindings.execution.numericAuthority.authenticates(program, entry.bindings.execution)) {
                         W5eImagePlanDiagnostics.InvalidContract
@@ -327,7 +336,7 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
                 })
             }
             val slab = stops.takeIf { it.isNotEmpty() }?.let(GradientStopSlabPlanV1::of)
-            val table = MaterialPlanTable(rewritten.mapIndexed { indexI32, entry ->
+            val rebasedEntries = rewritten.mapIndexed { indexI32, entry ->
                 val binding = entry.bindings
                 val sealed = when (binding) {
                     is MaterialBindingPlan.GradientV2 -> {
@@ -345,8 +354,30 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
                     else -> entry
                 }
                 sealed.copy(stopSlab = slab)
-            })
+            }.toMutableList()
+            // Interning can select another immutable owner with equal bytes. Reissue the
+            // certificate from the actual selected prefix rather than retaining that owner.
+            rebasedEntries.indices.forEach { indexI32 ->
+                val entry = rebasedEntries[indexI32]
+                val binding = entry.bindings as? ColorFilterBindingV4 ?: return@forEach
+                val prefix = MaterialPlanTable(rebasedEntries.subList(0,indexI32))
+                val child = MaterialPlanRef(indexI32-1)
+                if (!binding.sourceProof.authenticates(prefix,child,binding.sourceProof.coordinates)) {
+                    val source = (ColorSourceProofCompilerV1.seal(prefix,child,binding.sourceProof.coordinates,
+                        binding.sourceProof.deviceBoundsF32) as? ColorSourceProofResultV1.Ready)?.source
+                        ?: error(W5fPlanDiagnostics.Schema)
+                    val numeric = ColorNumericAuthorityV1.seal(binding.execution,source) ?: error(W5fPlanDiagnostics.NumericDomainUnbounded)
+                    rebasedEntries[indexI32] = entry.copy(bindings = ColorFilterBindingV4.seal(binding.execution,source,numeric))
+                }
+            }
+            val table = MaterialPlanTable(rebasedEntries)
             table.entries().forEachIndexed { indexI32, entry ->
+                (entry.bindings as? ColorFilterBindingV4)?.let {
+                    require(it.sourceProof.authenticates(table,MaterialPlanRef(indexI32-1),it.sourceProof.coordinates) &&
+                        it.numericAuthority.outputSourceProof.authenticates(table,MaterialPlanRef(indexI32),it.sourceProof.coordinates)) {
+                        W5fPlanDiagnostics.Schema
+                    }
+                }
                 (entry.bindings as? ImageSampleV3)?.let {
                     require(table.authenticatesImage(MaterialPlanRef(indexI32), it.execution)) {
                         W5eImagePlanDiagnostics.InvalidContract
@@ -371,14 +402,16 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
                 val source = table.entries()
                 val laneRemap = mutableListOf<MaterialPlanRef>()
                 source.forEachIndexed { localIndex, entry ->
-                    val childRef = if (entry.program is MaterialProgramPlan.OpacityV1 || entry.program is ImageMaterialProgramV3.MaskV3) laneRemap[localIndex - 1] else null
+                    val childRef = if (entry.program is MaterialProgramPlan.OpacityV1 || entry.program is ImageMaterialProgramV3.MaskV3 ||
+                        entry.program is ColorFilteredProgramV4) laneRemap[localIndex - 1] else null
                     val key = ChainKey(entry.interningKey(), childRef)
                     val index = indexByKey.getOrPut(key) {
                         var first = localIndex
                         if (childRef != null && childRef.indexI32 != entries.lastIndex) {
                             // V1 evaluates child at ref - 1. Reuse an existing whole chain, or append
                             // an exact contiguous copy; never append a parent after an unrelated child.
-                            while (source[first].program is MaterialProgramPlan.OpacityV1 || source[first].program is ImageMaterialProgramV3.MaskV3) first--
+                            while (source[first].program is MaterialProgramPlan.OpacityV1 || source[first].program is ImageMaterialProgramV3.MaskV3 ||
+                                source[first].program is ColorFilteredProgramV4) first--
                         }
                         require(localIndex - first + 1 <= MAX_ENTRIES_I32 - entries.size) {
                             "A material table must contain at most $MAX_ENTRIES_I32 entries"
@@ -411,18 +444,20 @@ public class MaterialPlanTableInterning internal constructor(
 private fun MaterialPlanEntry.copyForInterning(): MaterialPlanEntry = MaterialPlanEntry(
     program,
     when (val binding = bindings) {
+        is ColorFilterBindingV4 -> binding
         is ImageSampleV3 -> ImageSampleV3.of(binding.execution)
         MaterialBindingPlan.EmptyV1 -> MaterialBindingPlan.EmptyV1
         is MaterialBindingPlan.GradientV1 -> binding.rebind(binding.stopRange)
         is MaterialBindingPlan.GradientV2 -> binding.rebind(binding.stopRange)
-        is MaterialBindingPlan.SolidRgbaF32V1 -> MaterialBindingPlan.SolidRgbaF32V1.of(binding.copyRgbaF32())
-        is MaterialBindingPlan.OpacityF32V1 -> MaterialBindingPlan.OpacityF32V1.of(binding.alphaF32)
+        is MaterialBindingPlan.SolidRgbaF32V1 -> binding
+        is MaterialBindingPlan.OpacityF32V1 -> binding
     }, stopSlab,
 )
 
 private fun MaterialPlanEntry.interningKey(): String = buildString {
     append(program.structuralId.value).append('|')
     when (val binding = bindings) {
+        is ColorFilterBindingV4 -> append(binding.canonicalIdentity)
         is ImageSampleV3 -> append(binding.execution.canonicalIdentity)
         MaterialBindingPlan.EmptyV1 -> append("empty")
         is MaterialBindingPlan.GradientV2 -> {
@@ -449,6 +484,7 @@ private fun MaterialPlanEntry.interningKey(): String = buildString {
 
 /** Closed draw authority: W5 material references cannot coexist with legacy colours. */
 public sealed interface PlanDrawMaterialAuthority {
+    public data class MaterialV4(public val ref: MaterialPlanRef, public val coordinates: SourceCoordinatesV4) : PlanDrawMaterialAuthority
     public data class MaterialV3(public val ref: MaterialPlanRef,
         public val imageCoordinates: ImageCoordinatePlanV1) : PlanDrawMaterialAuthority
     public data class MaterialV2(public val ref: MaterialPlanRef,
@@ -468,10 +504,24 @@ public sealed interface PlanDrawMaterialAuthority {
 
 /** Reference extraction preserves the closed, versioned coordinate owner. */
 public fun PlanDrawMaterialAuthority.materialPlanRef(): MaterialPlanRef = when (this) {
+    is PlanDrawMaterialAuthority.MaterialV4 -> ref
     is PlanDrawMaterialAuthority.MaterialV3 -> ref
     is PlanDrawMaterialAuthority.MaterialV1 -> ref
     is PlanDrawMaterialAuthority.MaterialV2 -> ref
     is PlanDrawMaterialAuthority.LegacyColorV1 -> error("Legacy colors have no material reference")
+}
+
+public sealed interface SourceCoordinatesV4 {
+    public data object None : SourceCoordinatesV4
+    public data class V1(public val plan: MaterialCoordinatePlanV1) : SourceCoordinatesV4
+    public data class V2(public val plan: MaterialCoordinatePlanV2) : SourceCoordinatesV4
+    public data class V3(public val plan: ImageCoordinatePlanV1) : SourceCoordinatesV4
+}
+internal fun SourceCoordinatesV4.identityV4(): String = when(this) {
+    SourceCoordinatesV4.None -> "none-v4"
+    is SourceCoordinatesV4.V1 -> plan.canonicalIdentity
+    is SourceCoordinatesV4.V2 -> plan.canonicalIdentity
+    is SourceCoordinatesV4.V3 -> plan.canonicalIdentity
 }
 
 internal fun MaterialPlanTable.coordinatesV2(root: MaterialPlanRef): MaterialCoordinatePlanV2? {
@@ -479,3 +529,5 @@ internal fun MaterialPlanTable.coordinatesV2(root: MaterialPlanRef): MaterialCoo
     while (entry(MaterialPlanRef(indexI32)).bindings is MaterialBindingPlan.OpacityF32V1) indexI32--
     return (entry(MaterialPlanRef(indexI32)).bindings as? MaterialBindingPlan.GradientV2)?.numericAuthority?.coordinates
 }
+internal fun MaterialPlanTable.coordinatesV4(root: MaterialPlanRef): SourceCoordinatesV4? =
+    (entry(root).bindings as? ColorFilterBindingV4)?.numericAuthority?.outputSourceProof?.coordinates

@@ -112,6 +112,11 @@ private class W4dGeneralGraphDigestWriter {
             i32("$prefix.program.version", entry.program.versionI32)
             text("$prefix.program.id", entry.program.structuralId.value)
             when (val binding = entry.bindings) {
+                is ColorFilterBindingV4 -> {
+                    text("$prefix.binding",binding.canonicalIdentity)
+                    text("$prefix.source-proof",binding.numericAuthority.outputSourceProof.canonicalIdentity)
+                    text("$prefix.coordinates",binding.sourceProof.coordinates.identityV4())
+                }
                 is ImageSampleV3 -> error(W5eImagePlanDiagnostics.InvalidContract)
                 is MaterialBindingPlan.GradientV2 -> {
                     text("$prefix.binding", "gradient-v2")
@@ -323,6 +328,7 @@ private class W4dGeneralGraphDigestWriter {
         i32("$prefix.command-index", draw.commandIndex)
         if (materialV2) {
             when (val authority = draw.materialAuthority) {
+                is PlanDrawMaterialAuthority.MaterialV4 -> error(W5fPlanDiagnostics.Unpromoted)
                 is PlanDrawMaterialAuthority.MaterialV3 -> error(W5eImagePlanDiagnostics.InvalidContract)
                 is PlanDrawMaterialAuthority.MaterialV2 -> {
                     text("$prefix.material-authority", "material-v2")

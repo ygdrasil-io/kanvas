@@ -11,23 +11,20 @@ internal class W5aMaterialPlanLowerer {
         table: MaterialPlanTable?,
         authority: org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority,
         commandIdI32: Int,
+        packedSourceV4: org.graphiks.kanvas.gpu.plan.RawMaterialRequirementsV2? = null,
     ): org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload? {
-        if (authority is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV2) {
-            val owner = org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2.issue(
-                requireNotNull(table), mapOf(commandIdI32 to authority.ref),
-                coordinatesV2ByCommandIdI32 = mapOf(commandIdI32 to authority.coordinates),
-            ) ?: error("Invalid W5d source authority")
-            return org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.SolidColor(
-                requireNotNull(owner.materializeSource(commandIdI32, authority.ref)),
-            )
+        val ref = when(authority) {
+            is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV1 -> authority.ref
+            is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV2 -> authority.ref
+            is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV4 -> authority.ref
+            else -> return null
         }
-        if (authority !is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV1) return null
         val owner = org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2.issue(
-            requireNotNull(table), mapOf(commandIdI32 to authority.ref),
-            coordinatesByCommandIdI32 = authority.coordinates?.let { mapOf(commandIdI32 to it) }.orEmpty(),
+            requireNotNull(table), mapOf(commandIdI32 to ref), mapOf(commandIdI32 to authority),
+            packedV4ByCommandIdI32 = packedSourceV4?.let { mapOf(commandIdI32 to it) }.orEmpty(),
         ) ?: error("Invalid W5a source authority")
         return org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.SolidColor(
-            requireNotNull(owner.materializeSource(commandIdI32, authority.ref)),
+            requireNotNull(owner.materializeSource(commandIdI32, ref)),
         )
     }
     fun lower(table: MaterialPlanTable, root: MaterialPlanRef): ColorF32? {

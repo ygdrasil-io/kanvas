@@ -57,6 +57,7 @@ internal class W5bAnalyticRRectGraphLowerer {
         require(memory.diagnostic == null && memory.peakFrameTransientBytes + memory.targetResidentBytes == graph.peakFrameLocalBytes)
         val table = requireNotNull(graph.materialPlanTableOrNull())
         val built = draws.mapIndexed { index, draw ->
+            require(draw.materialAuthority !is PlanDrawMaterialAuthority.MaterialV4) { W5fPlanDiagnostics.Unpromoted }
             W4bAnalyticRRectGraphLowerer().packet(draw,
                 requireNotNull(W5aMaterialPlanLowerer().lower(table,
                     draw.materialAuthority.materialPlanRef())), index, bounds, table, w5b = true)

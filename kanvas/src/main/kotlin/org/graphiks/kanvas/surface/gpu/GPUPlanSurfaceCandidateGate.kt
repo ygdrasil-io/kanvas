@@ -30,7 +30,8 @@ internal object GPUPlanSurfaceCandidateGate {
                     operation.paint.let { it == null || it.blender == null &&
                         it.colorFilter == null && it.maskFilter == null && it.imageFilter == null &&
                         it.pathEffect == null && it.style == org.graphiks.kanvas.paint.PaintStyle.FILL }
-                is DisplayOp.DrawRect -> operation.isW5eShaderOperation() || operation.paint.shader?.imageLeafW5e() == null
+                is DisplayOp.DrawRect -> operation.paint.colorFilter == null &&
+                    (operation.isW5eShaderOperation() || operation.paint.shader?.imageLeafW5e() == null)
                 is DisplayOp.DrawImageLattice -> operation.image.pixels != null &&
                     operation.image.colorType in setOf(org.graphiks.kanvas.image.ColorType.RGBA_8888,
                         org.graphiks.kanvas.image.ColorType.BGRA_8888, org.graphiks.kanvas.image.ColorType.SRGBA_8888,
@@ -87,6 +88,11 @@ internal object GPUPlanSurfaceCandidateGate {
     }
     fun accepts(operations: List<DisplayOp>, config: RenderConfig): Boolean =
         config.gpuColorFormat == GPUColorFormat.RGBA8_UNORM_SRGB &&
+            // Task1 V4 is a single Rect family. Composite lane planning cannot pack
+            // before the future whole-frame construction-metadata permit exists.
+            (!operations.any { it is DisplayOp.DrawRect && it.paint.colorFilter != null } ||
+                operations.all { it is DisplayOp.DrawRect || it is DisplayOp.DrawColor ||
+                    it is DisplayOp.SetTransform || it is DisplayOp.SetClip || it is DisplayOp.Annotation }) &&
             (ownsW5eImages(operations) || operations.all { operation ->
                 if ((operation is DisplayOp.DrawRect || operation is DisplayOp.DrawRRect ||
                         operation is DisplayOp.DrawPath) &&

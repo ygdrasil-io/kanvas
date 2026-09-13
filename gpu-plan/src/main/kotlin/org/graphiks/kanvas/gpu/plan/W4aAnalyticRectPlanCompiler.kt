@@ -81,7 +81,8 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
             val scissor = if (sealed.clip == null) targetRaster else intersect(targetRaster, sealed.clip)
                 ?: return resourceLimit(W4aPlanDiagnostics.SizeOverflow, "Selected draw became empty during planning")
             AnalyticRectDraw.ofMaterial(sealed.commandIndex, sealed.material, sealed.deviceBounds, raster, scissor, sealed.blend,
-                sealed.coordinates, selected.materialPlanTable?.coordinatesV2(sealed.material))
+                sealed.coordinates, selected.materialPlanTable?.coordinatesV2(sealed.material),
+                selected.materialPlanTable?.coordinatesV4(sealed.material))
         }
         val footprint = when (val memory = AnalyticRectPlanBudget.calculate(extent, plannedDraws.size, capabilities, budget)) {
             is AnalyticRectPlanBudgetResult.WithinBudget -> memory.footprint
@@ -178,7 +179,7 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
     ): DrawRecognition {
         val geometry = node.geometry as? GeometryNode.Rect ?: return DrawRecognition.Gap("Draw geometry is outside W4a")
         if (node.origin != DrawOrigin.RECT) return DrawRecognition.Gap("Draw origin is outside W4a")
-        if (!w4aPaint(node.paint, true) || !w4aBlend(node.blend) || node.effects !is EffectStack.Empty || node.resource != null || node.operationBlendMode != null) {
+        if (!w4aPaint(node.paint, true) || !w4aBlend(node.blend) || node.effects !is EffectStack.Empty && node.paint?.colorFilter == null || node.resource != null || node.operationBlendMode != null) {
             return DrawRecognition.Gap("Draw state is outside W4a")
         }
         if (!materialMatchesPaintAuthority(node)) return DrawRecognition.Gap("Draw material disagrees with paint authority")
@@ -288,7 +289,8 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
     private fun finite(matrix: Matrix3x3F32): Boolean = listOf(matrix.sx, matrix.kx, matrix.tx, matrix.ky, matrix.sy, matrix.ty, matrix.persp0, matrix.persp1, matrix.persp2).all(Float::isFinite)
     private fun w4aBlend(blend: BlendNode): Boolean = when (blend) { BlendNode.SrcOver -> true; is BlendNode.Mode -> true; is BlendNode.Paint -> blend.blender == null; is BlendNode.Custom -> false }
     private fun w4aPaint(paint: PaintNode?, acceptsMaterialShader: Boolean): Boolean = paint == null || (
-        (paint.shader == null || acceptsMaterialShader) && paint.blender == null && paint.colorFilter == null &&
+        (paint.shader == null || acceptsMaterialShader) && paint.blender == null &&
+            (paint.colorFilter == null || paint.colorFilter is org.graphiks.kanvas.render.ir.ColorFilterNode.Matrix) &&
             paint.maskFilter == null && paint.pathEffect == null && paint.imageFilter == null &&
             paint.style == PaintStyleNode.FILL
         )

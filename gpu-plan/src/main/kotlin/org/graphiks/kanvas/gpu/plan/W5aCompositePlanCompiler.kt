@@ -42,6 +42,10 @@ public class W5aCompositePlanCompiler internal constructor(private val imageEntr
             commands.any { it !is SceneCommand.Draw && it !is SceneCommand.Annotation &&
                 it !is SceneCommand.SetTransform && it !is SceneCommand.SetClip }
         ) return GpuPlanSelection.NotCandidate(listOf(diagnostic("Scene is outside the native mixed Rect/RRect/Path capability")))
+        // Refuse before selecting/planning any lane: Task1 has no whole-frame V4
+        // construction-metadata permit. Ordinary V1–V3 composite issuance is unchanged.
+        if (draws.any { (it.value as SceneCommand.Draw).node.paint?.colorFilter != null })
+            return GpuPlanSelection.NotCandidate(listOf(diagnostic(W5fPlanDiagnostics.Unpromoted)))
         val runs = mutableListOf<MutableList<IndexedValue<SceneCommand>>>()
         draws.forEach { draw ->
             if (runs.lastOrNull()?.lastOrNull()?.let { kind(it) } != kind(draw)) runs += mutableListOf<IndexedValue<SceneCommand>>()
@@ -145,6 +149,8 @@ public class W5aCompositePlanV1 private constructor(
 
     internal companion object {
         fun issue(graphs: List<RenderGraph>): W5aCompositePlanV1 {
+            require(graphs.none { graph -> graph.materialPlanTableOrNull()?.entries()?.any {
+                it.bindings is ColorFilterBindingV4 } == true }) { W5fPlanDiagnostics.Unpromoted }
             require(graphs.size in 2..W5aCompositePlanCompiler.MAX_LANES_I32)
             val first = graphs.first()
             require(graphs.all { it.capabilityId in setOf(W3SolidRectPlanCompiler.W5A_CAPABILITY_ID,

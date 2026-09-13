@@ -49,6 +49,26 @@ public class RawMaterialRequirementsV2 private constructor(
     public class Refusal internal constructor(public val code: String) : IllegalArgumentException(code)
 
     public companion object {
+        internal fun measureV4(table: MaterialPlanTable, root: MaterialPlanRef): MaterialSourceFootprintV4 {
+            val binding = table.entry(root).bindings as? ColorFilterBindingV4
+                ?: throw Refusal(W5fPlanDiagnostics.Schema)
+            return MaterialSourceFootprintV4(table,root,binding).also { require(it.authenticates()) { W5fPlanDiagnostics.Schema } }
+        }
+        internal fun requireFrameBudgetV4(sources: List<MaterialSourceFootprintV4>, nonUniformBytesI64: Long,
+            budget: PlanBudget, capabilities: PlanCapabilitySnapshot, legacyCode: String): MaterialSourcePackingPermitV4 =
+            MaterialSourcePackingPermitV4.issue(sources,nonUniformBytesI64,budget,capabilities,legacyCode)
+        internal fun packV4(footprint: MaterialSourceFootprintV4, permit: MaterialSourcePackingPermitV4): RawMaterialRequirementsV2 {
+            require(permit.permits(footprint)) { W5fPlanDiagnostics.Schema }
+            val binding = footprint.binding
+            val bytes = ByteBuffer.allocate(footprint.uniformByteCountI64.toInt()).order(ByteOrder.LITTLE_ENDIAN)
+            // Source word gaps are declared zero padding. Only this budget-permitted phase copies values.
+            for (wordI64 in 0 until binding.sourceProof.uniformWordCountI64)
+                bytes.putFloat(binding.sourceProof.wordValuesF32[wordI64] ?: 0f)
+            bytes.put(binding.execution.copyDynamicBytes())
+            check(bytes.position() == bytes.capacity())
+            return RawMaterialRequirementsV2(1,footprint.uniformByteCountI64,false,1,
+                footprint.table.entry(footprint.root).program.structuralId.value,bytes.array(),footprint.canonicalIdentity)
+        }
         public const val BINDING_STRIDE_BYTES_I64: Long = 16L
 
         /** Geometry, target/readback, snapshots and stops enter exactly once from their owners. */
@@ -75,6 +95,13 @@ public class RawMaterialRequirementsV2 private constructor(
 
         public fun of(table: MaterialPlanTable, root: MaterialPlanRef): RawMaterialRequirementsV2 {
             require(root.indexI32 in 0 until table.sizeI32)
+            var v4CheckI32 = root.indexI32
+            while (true) {
+                val candidate = table.entry(MaterialPlanRef(v4CheckI32)).bindings
+                require(candidate !is ColorFilterBindingV4) { W5fPlanDiagnostics.Schema }
+                if (candidate !is MaterialBindingPlan.OpacityF32V1 || v4CheckI32 == 0) break
+                v4CheckI32--
+            }
             val image = table.entry(root).bindings as? ImageSampleV3
             if (image != null) {
                 val execution = image.execution
@@ -184,6 +211,7 @@ public class RawMaterialRequirementsV2 private constructor(
             val uniforms = ByteBuffer.allocate(bytesI32).order(ByteOrder.LITTLE_ENDIAN)
             for (indexI32 in leafI32..root.indexI32) {
                 when (val binding = table.entry(MaterialPlanRef(indexI32)).bindings) {
+                    is ColorFilterBindingV4 -> error(W5fPlanDiagnostics.Schema)
                     is ImageSampleV3 -> error(W5eImagePlanDiagnostics.InvalidContract)
                     is MaterialBindingPlan.GradientV1 -> binding.copyUniformValuesF32().forEach(uniforms::putFloat)
                     is MaterialBindingPlan.GradientV2 -> binding.copyUniformValuesF32().forEach(uniforms::putFloat)

@@ -161,10 +161,21 @@ internal object WgslFloatEnvelopeV1Oracle {
         coverageF32: Float = 1f,
         scalarMask: Boolean = false,
         gradientSource: (() -> Array<Interval>)? = null,
-    ): DrawResult {
+    ): DrawResult = colorThenBlend(
+        gradientSource?.invoke() ?: evaluateMaterialSource(table, root, destination.linearPremul, Interval.ONE),
+        destination, mode, coverageF32, scalarMask,
+    )
+
+    /** Public-value oracle seam: no production program or binding participates in evaluation. */
+    fun colorThenBlend(src: Array<Interval>, destination: AttachmentState, mode: BlendMode,
+        coverageF32: Float = 1f, scalarMask: Boolean = false): DrawResult {
+        if (mode == BlendMode.SRC && coverageF32 == 1f && !scalarMask) return imageSourceAttachment(src)
+        if (mode == BlendMode.SRC_OVER) {
+            val values = Array(4) { blendAndCoverage(src[it], src[3], destination.linearPremul[it], Interval.input(coverageF32)) }
+            return imageSourceAttachment(values)
+        }
         val values = try {
             val dst = destination.linearPremul
-            val src = gradientSource?.invoke() ?: evaluateMaterialSource(table, root, dst, Interval.ONE)
             // Historical W4e Rect AA producer writes an exactly half-covered edge into
             // linear RGBA8. INTERSECT then stores that sampled coverage in the accumulator.
             // Both conversions and the final texture decode belong to the independent bound.

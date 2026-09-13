@@ -11,6 +11,16 @@ internal class W5aPacketMaterialSourceV2 private constructor(
     val canonicalIdentity: String = "${if (stage.imageV3 == null) "w5a-source-v2" else "w5e-source-v3"}:$commandIdI32:${stage.canonicalIdentity}"
 
     companion object {
+        fun issue(table: MaterialPlanTable, authority: org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority,
+            commandIdI32: Int, packedSourceV4: org.graphiks.kanvas.gpu.plan.RawMaterialRequirementsV2? = null): W5aPacketMaterialSourceV2 =
+            when (authority) {
+                is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV1 -> issue(table,authority.ref,commandIdI32,authority.coordinates)
+                is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV2 -> issue(table,authority.ref,commandIdI32,authority.coordinates)
+                is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV4 -> W5aPacketMaterialSourceV2(commandIdI32,
+                    requireNotNull(W5aMaterialSourceStage.colorV4(table,authority,requireNotNull(packedSourceV4))) {
+                        org.graphiks.kanvas.gpu.plan.W5fPlanDiagnostics.Schema })
+                else -> error("Unsupported material source authority")
+            }
         fun issueImageV3(table: MaterialPlanTable, root: MaterialPlanRef, commandIdI32: Int): W5aPacketMaterialSourceV2 =
             W5aPacketMaterialSourceV2(commandIdI32, W5aMaterialSourceStage.imageV3(table, root))
         fun issue(table: MaterialPlanTable, ref: MaterialPlanRef, commandIdI32: Int,

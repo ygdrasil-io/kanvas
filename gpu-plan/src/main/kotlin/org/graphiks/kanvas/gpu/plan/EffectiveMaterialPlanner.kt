@@ -158,7 +158,21 @@ public object EffectiveMaterialPlanner {
             public val table: MaterialPlanTable,
             public val root: MaterialPlanRef,
             public val blend: BlendPlan = BlendPlan.LegacySrcOverV1,
-        ) : Result
+        ) : Result {
+            /** Exact source/coordinate family, issued here rather than guessed by consumers. */
+            public val materialAuthority: PlanDrawMaterialAuthority by lazy {
+                var leaf = root
+                while (table.entry(leaf).bindings is MaterialBindingPlan.OpacityF32V1)
+                    leaf = MaterialPlanRef(leaf.indexI32 - 1)
+                when (val binding = table.entry(leaf).bindings) {
+                    is ColorFilterBindingV4 -> PlanDrawMaterialAuthority.MaterialV4(root,binding.numericAuthority.outputSourceProof.coordinates)
+                    is ImageSampleV3 -> PlanDrawMaterialAuthority.MaterialV3(root,binding.execution.coordinates)
+                    is MaterialBindingPlan.GradientV2 -> PlanDrawMaterialAuthority.MaterialV2(root,binding.numericAuthority.coordinates)
+                    is MaterialBindingPlan.GradientV1 -> PlanDrawMaterialAuthority.MaterialV1(root,binding.numericAuthority.coordinates)
+                    else -> PlanDrawMaterialAuthority.MaterialV1(root)
+                }
+            }
+        }
         public data class Refused(public val diagnosticCode: String) : Result
     }
 
@@ -226,6 +240,44 @@ public object EffectiveMaterialPlanner {
         coverage: CoveragePlan = CoveragePlan.FullOrScissor, sample: SamplePlan = SamplePlan.SingleSample,
         elideNoOp: Boolean = true,
         gradientDeviceBoundsI32: org.graphiks.math.geometry.RectI32? = null, imageMaskChild: Boolean = false): Normalization {
+        val filter = draw.paint?.colorFilter
+        if (filter != null) {
+            val mirror = draw.effects as? EffectStack.Entries
+            if (mirror == null || mirror.effectCount != 1 || mirror.effectAt(0).canonicalId != filter.canonicalId)
+                return Normalization.Refused(W5fPlanDiagnostics.Schema)
+            if (draw.origin != org.graphiks.kanvas.render.ir.DrawOrigin.RECT ||
+                draw.geometry !is org.graphiks.kanvas.render.ir.GeometryNode.Rect || imageMaskChild)
+                return Normalization.Refused(W5fPlanDiagnostics.Unpromoted)
+            val execution = when (val result = ColorFilterPlanCompilerV1.compile(filter)) {
+                is ColorFilterCompileResultV1.Ready -> result.execution
+                is ColorFilterCompileResultV1.Refused -> return Normalization.Refused(result.diagnosticCode)
+            }
+            // Consume the authenticated duplicate only in the construction projection.
+            // The original DrawNode remains the caller's semantic authority.
+            val projected = draw.copy(paint = requireNotNull(draw.paint).copy(colorFilter = null), effects = EffectStack.Empty)
+            val source = when (val normalized = normalize(projected,targetClamp,allowDestinationCandidate,coverage,sample,
+                elideNoOp,gradientDeviceBoundsI32,imageMaskChild)) {
+                is Normalization.Source -> normalized
+                else -> return normalized
+            }
+            val localBounds = (draw.geometry as org.graphiks.kanvas.render.ir.GeometryNode.Rect).copyBounds()
+            val corners = listOf(org.graphiks.math.geometry.Point2F32(localBounds.left,localBounds.top),
+                org.graphiks.math.geometry.Point2F32(localBounds.right,localBounds.top),
+                org.graphiks.math.geometry.Point2F32(localBounds.left,localBounds.bottom),
+                org.graphiks.math.geometry.Point2F32(localBounds.right,localBounds.bottom)).map(draw.transform::transform)
+            val bounds = org.graphiks.math.geometry.RectF32.ofLTRB(kotlin.math.floor(corners.minOf { it.x }),
+                kotlin.math.floor(corners.minOf { it.y }),kotlin.math.ceil(corners.maxOf { it.x }),kotlin.math.ceil(corners.maxOf { it.y }))
+            val proof = when (val result = ColorSourceProofCompilerV1.seal(source.table,source.root,SourceCoordinatesV4.None,bounds)) {
+                is ColorSourceProofResultV1.Ready -> result.source
+                is ColorSourceProofResultV1.Refused -> return Normalization.Refused(result.diagnosticCode)
+            }
+            val numeric = ColorNumericAuthorityV1.seal(execution,proof)
+                ?: return Normalization.Refused(W5fPlanDiagnostics.NumericDomainUnbounded)
+            val entries = source.table.entries() + MaterialPlanEntry(
+                ColorFilteredProgramV4(source.table.entry(source.root).program,execution.structuralIdentity),
+                ColorFilterBindingV4.seal(execution,proof,numeric))
+            return Normalization.Source(MaterialPlanTable.of(entries),MaterialPlanRef(entries.lastIndex),source.blend)
+        }
         val blend = FinalBlendPlanner.plan(draw.blend, coverage, sample, targetClamp,
             if (coverage == CoveragePlan.AnalyticScalarAA) BlendCoverageApplicationV1.SourceMultiplication
             else BlendCoverageApplicationV1.DestinationInterpolation)

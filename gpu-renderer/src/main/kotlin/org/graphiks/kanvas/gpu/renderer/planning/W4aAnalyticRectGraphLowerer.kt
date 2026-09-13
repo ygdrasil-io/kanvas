@@ -149,7 +149,8 @@ internal class W4aAnalyticRectGraphLowerer {
         val builtPackets = graph.draws.mapIndexed { paintOrder, draw ->
             val color = resolveMaterialColor(graph.materialPlanTable, draw.materialAuthority)
                 ?: return invalid("W5 material authority is invalid.")
-            packet(draw, color, paintOrder, targetBounds, graph.materialPlanTable)
+            packet(draw, color, paintOrder, targetBounds, graph.materialPlanTable,
+                packedSourceV4 = (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let(request.graph::packedMaterialSourceV4))
         }
         val packets = builtPackets.map(W4aBuiltPacket::packet)
         val replay = "w4a:${request.graph.id.value}"
@@ -255,6 +256,7 @@ internal class W4aAnalyticRectGraphLowerer {
         val table = graph.materialPlanTableOrNull()
         if (draws.any { draw ->
                 when (val authority = draw.materialAuthority) {
+                    is PlanDrawMaterialAuthority.MaterialV4 -> runCatching { graph.packedMaterialSourceV4(authority) }.isFailure
                     is PlanDrawMaterialAuthority.LegacyColorV1 -> false
                     is PlanDrawMaterialAuthority.MaterialV3 -> error(org.graphiks.kanvas.gpu.plan.W5eImagePlanDiagnostics.InvalidContract)
                     is PlanDrawMaterialAuthority.MaterialV2 -> table == null || authority.ref.indexI32 >= table.sizeI32
@@ -459,6 +461,7 @@ internal class W4aAnalyticRectGraphLowerer {
         target: GPUPixelBounds,
         materialPlanTable: MaterialPlanTable?,
         w5b: Boolean = false,
+        packedSourceV4: org.graphiks.kanvas.gpu.plan.RawMaterialRequirementsV2? = null,
     ): W4aBuiltPacket {
         val lane = if (w5b) "w5b.w4a" else "w4a"
         val device = draw.copyDeviceBounds()
@@ -496,7 +499,7 @@ internal class W4aAnalyticRectGraphLowerer {
                     deviceRect.bottom,
                 ),
                 premultipliedRgba = listOf(color.red, color.green, color.blue, color.alpha),
-                material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex),
+                material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex,packedSourceV4),
                 targetBounds = target,
                 scissorBounds = plannedScissor,
                 clipCoveragePlan = plannedClip,
@@ -644,6 +647,8 @@ internal class W4aAnalyticRectGraphLowerer {
         table: MaterialPlanTable?,
         authority: PlanDrawMaterialAuthority,
     ): ColorF32? = when (authority) {
+        is PlanDrawMaterialAuthority.MaterialV4 -> (table?.entry(authority.ref)?.bindings as? org.graphiks.kanvas.gpu.plan.ColorFilterBindingV4)
+            ?.takeIf { it.numericAuthority.outputSourceProof.authenticates(table,authority.ref,authority.coordinates) }?.let { ColorF32.Transparent }
         is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
         is PlanDrawMaterialAuthority.MaterialV3 -> error(org.graphiks.kanvas.gpu.plan.W5eImagePlanDiagnostics.InvalidContract)
         is PlanDrawMaterialAuthority.MaterialV2 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }

@@ -73,7 +73,9 @@ internal object W5bDestinationGraphSealer {
         val peakI64 = Math.addExact(geometryResources.fold(0L) { total, resource -> Math.addExact(total, resource.byteSize) },
             Math.addExact(Math.addExact(Math.addExact(targetBytesI64, snapshotBytesI64), stagingBytesI64),
             clip?.resources()?.fold(0L) { total, resource -> Math.addExact(total, resource.byteSize) } ?: 0L))
-        val sourceRequirements = draws.map { draw ->
+        val footprintsV4 = draws.filter { it.materialAuthority is PlanDrawMaterialAuthority.MaterialV4 }.map {
+            RawMaterialRequirementsV2.measureV4(requireNotNull(material),it.materialAuthority.materialPlanRef()) }
+        val sourceRequirements = draws.filterNot { it.materialAuthority is PlanDrawMaterialAuthority.MaterialV4 }.map { draw ->
             RawMaterialRequirementsV2.of(requireNotNull(material), draw.materialAuthority.materialPlanRef()).also { source ->
                 require(source.fitsUniformBinding(capabilities)) {
                     if (draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV2) W5dPlanDiagnostics.CoordinateUniformBudget
@@ -84,6 +86,9 @@ internal object W5bDestinationGraphSealer {
         RawMaterialRequirementsV2.requireFrameBudget(sourceRequirements,
             Math.addExact(peakI64, material?.gradientStopSlab?.byteSizeI64 ?: 0L), budget,
             "resource-limit.w5b.destination-budget")
+        if (footprintsV4.isNotEmpty()) RawMaterialRequirementsV2.requireFrameBudgetV4(footprintsV4,
+            sourceRequirements.distinctBy { it.canonicalIdentity }.fold(Math.addExact(peakI64,material?.gradientStopSlab?.byteSizeI64 ?: 0L)) {
+                bytes,source -> Math.addExact(bytes,source.uniformByteCountI64) },budget,capabilities,"resource-limit.w5b.destination-budget")
         val target = PlanResource.of(PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D,
             format, extent, targetBytesI64, setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource),
             PlanResourceLifetime.FrameLocal, 0, passCountI32)
@@ -138,11 +143,13 @@ internal object W5bDestinationGraphSealer {
                 render(when (draw) {
                     is SolidRectDraw -> SolidRectDraw.ofMaterial(draw.commandIndex,
                         draw.materialAuthority.materialPlanRef(),
-                        draw.copyVisibleBounds(), draw.copyScissor(), draw.coverage, draw.sample, sealed, draw.materialCoordinates, draw.materialCoordinatesV2)
+                        draw.copyVisibleBounds(), draw.copyScissor(), draw.coverage, draw.sample, sealed, draw.materialCoordinates, draw.materialCoordinatesV2,
+                        (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates)
                     is W5bPointDraw -> draw.withBlend(sealed)
                     is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(draw.commandIndex,
                         draw.materialAuthority.materialPlanRef(),
-                        draw.copyDeviceBounds(), draw.copyRasterBounds(), draw.copyScissor(), sealed, draw.materialCoordinates, draw.materialCoordinatesV2)
+                        draw.copyDeviceBounds(), draw.copyRasterBounds(), draw.copyScissor(), sealed, draw.materialCoordinates, draw.materialCoordinatesV2,
+                        (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates)
                     is AnalyticRRectDraw -> AnalyticRRectDraw.ofMaterial(draw.commandIndex,
                         draw.materialAuthority.materialPlanRef(), draw.origin,
                         draw.copyDeviceShape(), draw.copyRasterBounds(), draw.copyScissor(), sealed, draw.materialCoordinates, draw.materialCoordinatesV2)

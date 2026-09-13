@@ -44,6 +44,24 @@ internal class W5aMaterialSourceStage private constructor(
     val uniformByteCountI64: Long get() = ownedUniformBytes.size.toLong()
     val canonicalIdentity: String = requirements.canonicalIdentity
     companion object {
+        fun colorV4(table: MaterialPlanTable, authority: org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV4,
+            requirements: RawMaterialRequirementsV2): W5aMaterialSourceStage? {
+            val binding = table.entry(authority.ref).bindings as? org.graphiks.kanvas.gpu.plan.ColorFilterBindingV4 ?: return null
+            val proof = binding.numericAuthority.outputSourceProof
+            if (!proof.authenticates(table,authority.ref,authority.coordinates) ||
+                requirements.structuralId != table.entry(authority.ref).program.structuralId.value ||
+                !requirements.canonicalIdentity.endsWith("material-source-footprint-v4:${proof.canonicalIdentity}")) return null
+            val wordsI64 = requirements.uniformByteCountI64 / 16L
+            if (requirements.uniformByteCountI64 % 16L != 0L || wordsI64 !in 1L..Int.MAX_VALUE.toLong()) return null
+            val code = W5fColorOperationEmitterV1.emit(proof.copyOperationGraph(),"vec4<f32>(0.0)",0L)
+            return W5aMaterialSourceStage(requirements,"""
+                struct W5fMaterialBlock { words: array<vec4<f32>, ${wordsI64}>, }
+                @group(1) @binding(0) var<uniform> w5fMaterial: W5fMaterialBlock;
+                fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {
+                    $code
+                }
+            """.trimIndent(),1,false,null)
+        }
         fun imageV3(table: MaterialPlanTable, root: MaterialPlanRef): W5aMaterialSourceStage {
             val execution = (table.entry(root).bindings as org.graphiks.kanvas.gpu.plan.ImageSampleV3).execution
             require(table.authenticatesImage(root, execution)) { org.graphiks.kanvas.gpu.plan.W5eImagePlanDiagnostics.InvalidContract }
@@ -91,6 +109,7 @@ internal class W5aMaterialSourceStage private constructor(
                 val (source, binding) = pair
                 val input = "${layout.uniformExpression}.binding$bindingIndexI32"
                 when (binding) {
+                    is org.graphiks.kanvas.gpu.plan.ColorFilterBindingV4 -> return null
                     is org.graphiks.kanvas.gpu.plan.ImageSampleV3 -> return null
                     is MaterialBindingPlan.GradientV2 -> return null
                     is MaterialBindingPlan.GradientV1 -> {

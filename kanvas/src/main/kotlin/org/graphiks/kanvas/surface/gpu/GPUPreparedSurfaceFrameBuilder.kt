@@ -483,17 +483,18 @@ internal object GPUPreparedSurfaceFrameBuilder {
                         }
                         if (refs.isEmpty()) null else requireNotNull(
                             org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2.issue(
-                                materials.table, refs, refs.keys.associateWith { commandId ->
+                                materials.table, refs, authoritiesByCommandIdI32 = refs.mapValues { (commandId, ref) ->
+                                    when (val authority = corePlansByCommandId.getValue(commandId).materialAuthority) {
+                                        is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV1 -> authority.copy(ref = ref)
+                                        is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV2 -> authority.copy(ref = ref)
+                                        else -> error(org.graphiks.kanvas.gpu.plan.W5fPlanDiagnostics.Unpromoted)
+                                    }
+                                }, sourcePlansByCommandIdI32 = refs.keys.associateWith { commandId ->
                                     corePlansByCommandId.getValue(commandId).let { it.table to it.root }
                                 },
                                 finalBlendsByCommandIdI32 = refs.keys.associateWith { commandId ->
                                     corePlansByCommandId.getValue(commandId).blend
                                 },
-                                coordinatesV2ByCommandIdI32 = refs.keys.mapNotNull { commandId ->
-                                    corePlansByCommandId.getValue(commandId).table.entries().mapNotNull {
-                                        (it.bindings as? org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.GradientV2)?.numericAuthority?.coordinates
-                                    }.singleOrNull()?.let { commandId to it }
-                                }.toMap(),
                             ),
                         ) { "invalid.material.w5a_core_authority" }
                     },

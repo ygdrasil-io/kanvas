@@ -30,6 +30,9 @@ public object PaintSceneAdapter {
             throw CaptureFailure("picture-filter-requires-context", "Picture image filters require scene capture context")
         },
     ): PaintNode {
+        ColorFilterCapturePreflight.validatePaint(paint, limits)?.let {
+            throw CaptureFailure(it.code.value, it.message)
+        }
         val gradientStops = GradientStopCaptureBudget(limits.maxGradientStopsI32)
         paint.shader?.let { preflightShader(it, limits, gradientStops) }
         (paint.maskFilter as? MaskFilter.Shader)?.shader?.let { preflightShader(it, limits, gradientStops) }
