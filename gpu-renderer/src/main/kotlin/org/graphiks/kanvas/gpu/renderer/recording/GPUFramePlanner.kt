@@ -121,6 +121,8 @@ object GPUFramePlanner {
             dependencies = taskList.dependencies,
             phaseOrder = taskList.phaseOrder,
             elidedNoOpDraws = orderedTasks.elidedNoOpDraws(),
+            w5eConstructionV1 = taskList.w5eConstructionV1,
+            w5ePreparedFrameV1 = taskList.w5ePreparedFrameV1,
         )
     }
 
@@ -1346,6 +1348,8 @@ object GPUFramePlanner {
             phaseOrder = phaseOrder,
             elidedNoOpDraws = tasks.elidedNoOpDraws(),
             atomicallyRefused = true,
+            w5eConstructionV1 = w5eConstructionV1,
+            w5ePreparedFrameV1 = w5ePreparedFrameV1,
         )
 
     private fun List<GPUTask>.elidedNoOpDraws(): List<GPUFrameElidedNoOpDraw> =

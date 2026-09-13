@@ -694,6 +694,8 @@ private fun splitWgpu4kSurfaceRoute(
             phaseOrder = framePlan.phaseOrder,
             elidedNoOpDraws = framePlan.elidedNoOpDraws,
             atomicallyRefused = framePlan.atomicallyRefused,
+            w5eConstructionV1 = framePlan.w5eConstructionV1,
+            w5ePreparedFrameV1 = framePlan.w5ePreparedFrameV1,
         ),
         reusableEncoderPlan = wgpu4kReusableEncoderPlanWithoutSurface(encoderPlan),
         surfaceScope = scope,

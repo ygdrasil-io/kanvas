@@ -8,6 +8,102 @@ import org.graphiks.math.color.ColorF32
 
 /** Normalizes admitted W5 sources once, before a graph is published Ready. */
 public object EffectiveMaterialPlanner {
+    /** Original IMAGE/Rect/Path source authority, independent of its W4 construction projection. */
+    internal fun planW5eImageSource(draw: DrawNode, deviceBoundsI32: org.graphiks.math.geometry.RectI32): Result {
+        return try {
+            val direct = draw.origin == org.graphiks.kanvas.render.ir.DrawOrigin.IMAGE
+            val patch = draw.geometry as? org.graphiks.kanvas.render.ir.GeometryNode.ImagePatch
+            require(if (direct) patch != null else draw.origin == org.graphiks.kanvas.render.ir.DrawOrigin.RECT &&
+                draw.geometry is org.graphiks.kanvas.render.ir.GeometryNode.Rect ||
+                draw.origin == org.graphiks.kanvas.render.ir.DrawOrigin.PATH && draw.geometry is org.graphiks.kanvas.render.ir.GeometryNode.Path) {
+                W5eImagePlanDiagnostics.UnsupportedSlice
+            }
+            require(draw.paint?.style?.let { it == org.graphiks.kanvas.render.ir.PaintStyleNode.FILL } != false &&
+                draw.effects is EffectStack.Empty && draw.operationBlendMode == null) { W5eImagePlanDiagnostics.UnsupportedSlice }
+            var source = draw.material
+            val matricesF32 = mutableListOf<org.graphiks.math.matrix.Matrix3x3F32>()
+            var opacityF32 = 1f
+            var countI32 = 0
+            while (source is MaterialNode.WithLocalMatrix || source is MaterialNode.Opacity) {
+                require(++countI32 <= 64) { W5eImagePlanDiagnostics.UnsupportedSlice }
+                when (val node = source) {
+                    is MaterialNode.WithLocalMatrix -> { matricesF32 += node.matrix.copy(); source = node.material }
+                    is MaterialNode.Opacity -> {
+                        require(node.alpha.isFinite() && node.alpha in 0f..1f) { W5aPlanDiagnostics.InvalidOpacity }
+                        opacityF32 *= node.alpha; source = node.material
+                    }
+                }
+            }
+            val sample = source as? MaterialNode.ImageSample
+                ?: throw IllegalArgumentException(W5eImagePlanDiagnostics.UnsupportedSlice)
+            require(sample.sampling == org.graphiks.kanvas.render.ir.ImageSampling.Nearest &&
+                sample.tileModeX == org.graphiks.kanvas.render.ir.TileMode.CLAMP &&
+                sample.tileModeY == org.graphiks.kanvas.render.ir.TileMode.CLAMP) { W5eImagePlanDiagnostics.UnsupportedSlice }
+            val pixels = sample.image as? org.graphiks.kanvas.render.ir.ImageResourceSnapshot.Pixels
+                ?: throw IllegalArgumentException(W5eImagePlanDiagnostics.ExternalResource)
+            require(!direct || draw.resource?.canonicalId == pixels.canonicalId && patch?.image?.id?.value == pixels.sourceId) {
+                W5eImagePlanDiagnostics.InvalidContract
+            }
+            require(direct || draw.resource == null && draw.paint?.shader?.canonicalId == draw.material.canonicalId) {
+                W5eImagePlanDiagnostics.InvalidContract
+            }
+            val channel = when (pixels.pixelFormat) {
+                org.graphiks.kanvas.render.ir.ImagePixelFormat.RGBA_8888,
+                org.graphiks.kanvas.render.ir.ImagePixelFormat.SRGBA_8888 -> ImageChannelOrderV1.RGBA
+                org.graphiks.kanvas.render.ir.ImagePixelFormat.BGRA_8888 -> ImageChannelOrderV1.BGRA
+                org.graphiks.kanvas.render.ir.ImagePixelFormat.ALPHA_8 -> ImageChannelOrderV1.ALPHA
+                else -> throw IllegalArgumentException(W5eImagePlanDiagnostics.Format)
+            }
+            val color = if (channel == ImageChannelOrderV1.ALPHA)
+                ImageColorAlphaPlanV1(channel, pixels.alphaType, ImageTransferPlanV1.NONE, ImageGamutPlanV1.NONE)
+            else {
+                require(pixels.pixelFormat != org.graphiks.kanvas.render.ir.ImagePixelFormat.SRGBA_8888 ||
+                    pixels.colorSpace == org.graphiks.kanvas.color.ColorSpace.SRGB) { W5eImagePlanDiagnostics.ColorSpace }
+                when (pixels.colorSpace) {
+                    org.graphiks.kanvas.color.ColorSpace.SRGB -> ImageColorAlphaPlanV1(channel, pixels.alphaType, ImageTransferPlanV1.SRGB, ImageGamutPlanV1.SRGB)
+                    org.graphiks.kanvas.color.ColorSpace.DISPLAY_P3 -> ImageColorAlphaPlanV1(channel, pixels.alphaType, ImageTransferPlanV1.SRGB, ImageGamutPlanV1.DISPLAY_P3)
+                    org.graphiks.kanvas.color.ColorSpace.LINEAR_SRGB -> ImageColorAlphaPlanV1(channel, pixels.alphaType, ImageTransferPlanV1.LINEAR, ImageGamutPlanV1.SRGB)
+                    else -> throw IllegalArgumentException(W5eImagePlanDiagnostics.ColorSpace)
+                }
+            }
+            val baseChild = if (channel != ImageChannelOrderV1.ALPHA) null else if (direct) {
+                when (val planned = planImageMaskSource(draw, deviceBoundsI32)) {
+                    is Result.Ready -> planned
+                    is Result.Refused -> throw IllegalArgumentException(planned.diagnosticCode)
+                }
+            } else {
+                // An A8 paint shader masks the paint's solid color. The image root is never its own child.
+                val colorF32 = requireNotNull(draw.paint).color.let {
+                    ColorF32.of(it.redNormalized, it.greenNormalized, it.blueNormalized, it.alphaNormalized)
+                }
+                Result.Ready(MaterialPlanTable.of(listOf(MaterialPlanEntry(MaterialProgramPlan.SolidLinearPremulV1,
+                    MaterialBindingPlan.SolidRgbaF32V1.of(colorF32)))), MaterialPlanRef(0))
+            }
+            val child = if (baseChild == null || opacityF32 == 1f) baseChild else {
+                val childEntries = baseChild.table.entries() + MaterialPlanEntry(
+                    MaterialProgramPlan.OpacityV1(baseChild.table.entry(baseChild.root).program),
+                    MaterialBindingPlan.OpacityF32V1.of(opacityF32))
+                Result.Ready(MaterialPlanTable.of(childEntries), MaterialPlanRef(childEntries.lastIndex))
+            }
+            val program = if (child == null) ImageMaterialProgramV3.ColorV3(channel, color.alphaType, color.transfer, color.gamut)
+                else ImageMaterialProgramV3.MaskV3(child.table.entry(child.root).program, color.alphaType)
+            val upload = ImageUploadPlanV1.seal(pixels)
+            val coordinates = if (direct) ImageCoordinatePlanV1.seal(draw.transform, requireNotNull(patch).copySource(), patch.copyDestination())
+                else ImageCoordinatePlanV1.sealShader(draw.transform, matricesF32)
+            val paintAlphaF32 = if (child == null) opacityF32 * (draw.paint?.color?.alphaNormalized ?: 1f) else 1f
+            val boundsF32 = org.graphiks.math.geometry.RectF32.ofLTRB(deviceBoundsI32.left.toFloat(), deviceBoundsI32.top.toFloat(),
+                deviceBoundsI32.right.toFloat(), deviceBoundsI32.bottom.toFloat())
+            val numeric = ImageNumericAuthorityV1.seal(program, upload, coordinates, boundsF32, paintAlphaF32)
+                ?: throw IllegalArgumentException(W5eImagePlanDiagnostics.NumericDomainUnbounded)
+            val execution = ImageSampleExecutionPlanV1(upload, coordinates, color, numeric, paintAlphaF32,
+                child?.table?.sourceIdentity(child.root), Math.addExact(upload.byteCountI64, 96L))
+            val entries = child?.table?.entries().orEmpty() + MaterialPlanEntry(program, ImageSampleV3.of(execution))
+            Result.Ready(MaterialPlanTable.of(entries), MaterialPlanRef(entries.lastIndex))
+        } catch (failure: IllegalArgumentException) {
+            Result.Refused(failure.message?.takeIf { it.startsWith("unsupported.") || it.startsWith("resource.") || it.startsWith("invalid.") }
+                ?: W5eImagePlanDiagnostics.InvalidContract)
+        }
+    }
     public sealed interface Result {
         public data class Ready(
             public val table: MaterialPlanTable,

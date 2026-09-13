@@ -5,6 +5,10 @@ import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.matrix.toMatrix3x3F64
 import org.graphiks.math.matrix.invertToMatrix3x3F32OrNull
+import org.graphiks.math.matrix.composeInOrderF64
+import org.graphiks.math.matrix.invertFiniteOrNull
+import org.graphiks.math.matrix.toFiniteMatrix3x3F32OrNull
+import org.graphiks.math.matrix.isFinite
 
 public enum class ImageChannelOrderV1 { RGBA, BGRA, ALPHA }
 public enum class ImageTransferPlanV1 { SRGB, LINEAR, NONE }
@@ -29,6 +33,19 @@ public class ImageCoordinatePlanV1 private constructor(inverseF32: Matrix3x3F32,
         source.left, source.top, source.right - source.left, source.bottom - source.top,
         destination.left, destination.top, destination.right - destination.left, destination.bottom - destination.top)
     internal companion object {
+        fun sealShader(ctmF32: Matrix3x3F32, localMatricesF32: List<Matrix3x3F32>): ImageCoordinatePlanV1 {
+            require(localMatricesF32.all { it.toMatrix3x3F64().isFinite() }) {
+                "unsupported.material.image.local-matrix-non-finite"
+            }
+            val combinedF64 = composeInOrderF64(listOf(ctmF32) + localMatricesF32)
+            val inverseF64 = combinedF64.invertFiniteOrNull()
+                ?: throw IllegalArgumentException("unsupported.material.image.local-matrix-singular")
+            val inverseF32 = inverseF64.toFiniteMatrix3x3F32OrNull()
+                ?: throw IllegalArgumentException("unsupported.material.image.local-matrix-unrepresentable")
+            // Shader coordinates are already image coordinates; the cell projection is identity.
+            return ImageCoordinatePlanV1(inverseF32, RectF32.ofLTRB(0f, 0f, 1f, 1f), RectF32.ofLTRB(0f, 0f, 1f, 1f))
+        }
+
         fun seal(ctmF32: Matrix3x3F32, sourceF32: RectF32, destinationF32: RectF32): ImageCoordinatePlanV1 {
             val inverse = ctmF32.toMatrix3x3F64().invertToMatrix3x3F32OrNull()
                 ?: throw IllegalArgumentException(W5eImagePlanDiagnostics.NumericDomainUnbounded)

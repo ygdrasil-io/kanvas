@@ -154,7 +154,7 @@ internal class W5bMixedPreparedFrameWitnessV1 private constructor(
         return GPUFramePlan(actual.frameId, actual.capabilitySeal, actual.recordingSeals,
             actual.steps.filterNot { it is GPUFrameStep.CopyDestinationStep && it.sourceTaskIds.any(coreCopyTasks::contains) }, actual.memoryBudget, actual.diagnostics,
             actual.dependencies.filterNot { it.fromTaskId in coreCopyTasks || it.toTaskId in coreCopyTasks },
-            actual.phaseOrder, actual.elidedNoOpDraws, actual.atomicallyRefused)
+            actual.phaseOrder, actual.elidedNoOpDraws, actual.atomicallyRefused, actual.w5eConstructionV1, actual.w5ePreparedFrameV1)
     }
     fun copyStepIndex(actual: GPUFramePlan, copy: GPUFrameStep.CopyDestinationStep): Int {
         require(validates(actual) && coreCopies.any { it === copy })
