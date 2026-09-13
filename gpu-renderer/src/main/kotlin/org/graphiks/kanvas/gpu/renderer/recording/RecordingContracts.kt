@@ -1137,6 +1137,8 @@ class GPUTaskList(
     memoryBudget: GPUFrameMemoryBudgetPlan,
     diagnostics: List<GPUDiagnostic> = emptyList(),
     compositeCommands: List<GPUPassCommand> = emptyList(),
+    val w5eConstructionV1: org.graphiks.kanvas.gpu.plan.W5eImageConstructionPlanV1? = null,
+    val w5ePreparedFrameV1: org.graphiks.kanvas.gpu.renderer.passes.W5ePreparedFrameWitnessV1? = null,
 ) {
     val recordingSeals: List<GPURecordingSeal> = immutableList(recordingSeals)
     val tasks: List<GPUTask> = immutableList(tasks)
@@ -1182,8 +1184,17 @@ class GPUTaskList(
                 memoryBudget = memoryBudget,
                 diagnostics = diagnostics,
                 compositeCommands = compositeCommands + commands,
+                w5eConstructionV1 = w5eConstructionV1,
+                w5ePreparedFrameV1 = w5ePreparedFrameV1,
             )
         }
+
+    internal fun withW5eConstructionV1(proof: org.graphiks.kanvas.gpu.plan.W5eImageConstructionPlanV1,
+        witness: org.graphiks.kanvas.gpu.renderer.passes.W5ePreparedFrameWitnessV1): GPUTaskList {
+        require(w5eConstructionV1 == null && w5ePreparedFrameV1 == null && witness.bridge === proof)
+        return GPUTaskList(frameId, capabilitySeal, recordingSeals, expectedReplayKeyHash, tasks, dependencies,
+            phaseOrder, memoryBudget, diagnostics, compositeCommands, proof, witness)
+    }
 
     /** Returns stable task and dependency lines for tests and evidence bundles. */
     fun dumpLines(): List<String> =

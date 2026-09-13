@@ -424,6 +424,13 @@ class GPUDrawPacket(
     internal var corePrimitivePreparedAuthority: GPUCorePrimitivePreparedPacketAuthority? = null
         private set
 
+    internal var w5eImageFrameWitnessV1: W5ePreparedFrameWitnessV1? = null
+        private set
+    internal fun attachW5eImageFrameWitnessV1(witness: W5ePreparedFrameWitnessV1) {
+        check(w5eImageFrameWitnessV1 == null && witness.owns(this))
+        w5eImageFrameWitnessV1 = witness
+    }
+
     internal var w5aSourceStageV2: org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2? =
         ((semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive)
             ?.material as? org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.SolidColor)

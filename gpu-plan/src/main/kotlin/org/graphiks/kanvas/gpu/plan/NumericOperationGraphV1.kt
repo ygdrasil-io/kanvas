@@ -27,6 +27,9 @@ public sealed interface NumericOperationGraphV1 {
         INPUT_SOLID_SRGBA_STRAIGHT(ValueType.SrgbaStraightF32),
         INPUT_GRADIENT_SRGBA_STRAIGHT(ValueType.SrgbaStraightF32),
         INPUT_MATERIAL_LINEAR_PREMUL(ValueType.LinearPremulRgbaF32),
+        INPUT_IMAGE_LINEAR_PREMUL(ValueType.LinearPremulRgbaF32),
+        INPUT_IMAGE_MASK_F32(ValueType.CoverageF32),
+        IMAGE_MASK_MULTIPLY(ValueType.LinearPremulRgbaF32, ValueType.LinearPremulRgbaF32, ValueType.CoverageF32),
         INPUT_DESTINATION_LINEAR_PREMUL(ValueType.LinearPremulRgbaF32),
         INPUT_COVERAGE_F32(ValueType.CoverageF32),
         CONSTANT_TRANSPARENT(ValueType.LinearPremulRgbaF32),
@@ -91,6 +94,10 @@ public sealed interface NumericOperationGraphV1 {
 
         public fun gradient(): NumericOperationGraphV1 = output(Node(Operation.PREMULTIPLY,
             listOf(Node(Operation.SRGB_TO_LINEAR, listOf(Node(Operation.INPUT_GRADIENT_SRGBA_STRAIGHT))))))
+
+        public fun imageColor(): NumericOperationGraphV1 = output(Node(Operation.INPUT_IMAGE_LINEAR_PREMUL))
+        public fun imageMask(): NumericOperationGraphV1 = output(Node(Operation.IMAGE_MASK_MULTIPLY,
+            listOf(Node(Operation.INPUT_MATERIAL_LINEAR_PREMUL), Node(Operation.INPUT_IMAGE_MASK_F32))))
 
         /** Full source-to-attachment graph for an opacity wrapper. */
         public fun opacity(): NumericOperationGraphV1 = output(

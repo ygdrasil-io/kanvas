@@ -10,6 +10,7 @@ public fun RenderGraph.hasW5aMaterialPathContract(): Boolean {
     val paths = passes().filterIsInstance<PlanPass.PathRenderPass>()
     return paths.isNotEmpty() && paths.all { pass ->
         val ref = when (val authority = pass.draw.materialAuthority) {
+            is PlanDrawMaterialAuthority.MaterialV3 -> return@all false
             is PlanDrawMaterialAuthority.MaterialV1 -> authority.ref
             is PlanDrawMaterialAuthority.MaterialV2 -> authority.ref
             is PlanDrawMaterialAuthority.LegacyColorV1 -> return@all false

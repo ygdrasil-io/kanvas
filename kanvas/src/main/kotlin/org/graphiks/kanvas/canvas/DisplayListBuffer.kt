@@ -27,15 +27,22 @@ internal class SnapshotDisplayListBuffer(
 ) : SnapshotOwningDisplayListBuffer {
     private val recorded = mutableListOf<DisplayOp>()
     private val gradientStops = RecordingGradientStopBudget(captureLimits.maxGradientStopsI32)
-    private val appendContext = GeometrySnapshotContext(gradientStops)
+    private val imageBytes = RecordingImageByteBudget(captureLimits.maxImageBytesI64)
+    private val appendContext = GeometrySnapshotContext(gradientStops, imageBytes)
 
     override fun append(op: DisplayOp) {
-        gradientStops.append { appendContext.append(op) { recorded += it } }
+        gradientStops.append { imageBytes.append { appendContext.append(op) { recorded += it } } }
     }
 
-    override fun ops(): List<DisplayOp> = recorded.snapshotGeometry()
+    override fun ops(): List<DisplayOp> {
+        imageBytes.preflightRetainedBytes()
+        return recorded.snapshotGeometry()
+    }
 
-    override fun sealedOps(): List<DisplayOp> = Collections.unmodifiableList(recorded.toList())
+    override fun sealedOps(): List<DisplayOp> {
+        imageBytes.preflightRetainedBytes()
+        return Collections.unmodifiableList(recorded.toList())
+    }
 }
 
 /** Internal consumers may read owned snapshots without copying their payloads. */
@@ -48,13 +55,17 @@ internal class GeometrySnapshotDisplayListBuffer(
     private val delegate: DisplayListBuffer,
 ) : DisplayListBuffer {
     private val gradientStops = RecordingGradientStopBudget(SceneCaptureLimits.DEFAULT.maxGradientStopsI32)
-    private val appendContext = GeometrySnapshotContext(gradientStops)
+    private val imageBytes = RecordingImageByteBudget(SceneCaptureLimits.DEFAULT.maxImageBytesI64)
+    private val appendContext = GeometrySnapshotContext(gradientStops, imageBytes)
 
     override fun append(op: DisplayOp) {
-        gradientStops.append { appendContext.append(op, delegate::append) }
+        gradientStops.append { imageBytes.append { appendContext.append(op, delegate::append) } }
     }
 
-    override fun ops(): List<DisplayOp> = delegate.ops().snapshotGeometry()
+    override fun ops(): List<DisplayOp> {
+        imageBytes.preflightRetainedBytes()
+        return delegate.ops().snapshotGeometry()
+    }
 }
 
 /** A pending operation consumes budget only after its complete append succeeds. */
@@ -90,4 +101,45 @@ internal class RecordingGradientStopBudget(private val maxGradientStopsI32: Int)
             pendingStopsI64 = 0L
         }
     }
+}
+
+/** Retained public pixel bytes are budgeted before every defensive snapshot copy. */
+internal class RecordingImageByteBudget(private val maxImageBytesI64: Long) {
+    private var committedBytesI64 = 0L
+    private var pendingBytesI64 = 0L
+
+    fun reserveImageBytes(requestedBytesI64: Long) {
+        val totalBytesI64 = try {
+            Math.addExact(Math.addExact(committedBytesI64, pendingBytesI64), requestedBytesI64)
+        } catch (_: ArithmeticException) {
+            throw imageLimitFailure(Long.MAX_VALUE)
+        }
+        if (totalBytesI64 > maxImageBytesI64) throw imageLimitFailure(totalBytesI64)
+        pendingBytesI64 = Math.addExact(pendingBytesI64, requestedBytesI64)
+    }
+
+    fun append(block: () -> Unit) {
+        try {
+            block()
+            committedBytesI64 = Math.addExact(committedBytesI64, pendingBytesI64)
+        } finally {
+            pendingBytesI64 = 0L
+        }
+    }
+
+    fun preflightRetainedBytes() {
+        if (committedBytesI64 > maxImageBytesI64) throw imageLimitFailure(committedBytesI64)
+    }
+
+    private fun imageLimitFailure(requestedBytesI64: Long): SceneRecordingLimitException =
+        SceneRecordingLimitException(
+            diagnostic = RenderDiagnostic(
+                RenderDiagnosticCode("scene-recording-image-bytes-exceeded"),
+                RenderDiagnosticDomain.SCENE,
+                RenderDiagnosticSeverity.ERROR,
+                "Recording requests $requestedBytesI64 image bytes, exceeding limit $maxImageBytesI64",
+            ),
+            limitI32 = Int.MAX_VALUE,
+            requestedI64 = requestedBytesI64,
+        )
 }

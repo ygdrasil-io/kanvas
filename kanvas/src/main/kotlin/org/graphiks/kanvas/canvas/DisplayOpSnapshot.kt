@@ -41,10 +41,13 @@ internal fun List<DisplayOp>.snapshotGeometry(): List<DisplayOp> {
 /** Snapshot state that must be shared for one append or complete operation copy. */
 internal class GeometrySnapshotContext(
     private val gradientStops: RecordingGradientStopBudget? = null,
+    private val imageBytes: RecordingImageByteBudget? = null,
 ) {
     private val textBlobs = IdentityHashMap<TextBlob, TextBlob>()
     private var pendingTextBlobs: IdentityHashMap<TextBlob, TextBlob>? = null
     private val images = IdentityHashMap<Image, Image>()
+    private val acceptedImages = mutableListOf<Image>()
+    private var pendingImages: MutableList<Image>? = null
     private val shaders = IdentityHashMap<Shader, Shader>()
     private val colorFilters = IdentityHashMap<ColorFilter, ColorFilter>()
     private val maskFilters = IdentityHashMap<MaskFilter, MaskFilter>()
@@ -55,19 +58,27 @@ internal class GeometrySnapshotContext(
     private val mergeInputs = IdentityHashMap<ImageFilter.Merge, MutableList<ImageFilter>>()
 
     fun snapshot(operation: DisplayOp): DisplayOp {
-        clearOperationCaches()
-        return operation.snapshotGeometry(this)
+        pendingImages = mutableListOf()
+        return try {
+            operation.snapshotGeometry(this).also { acceptPendingImages() }
+        } finally {
+            pendingImages = null
+            clearOperationCaches()
+        }
     }
 
     /** Keep cross-operation aliases only when the destination accepts the snapshot. */
     fun append(operation: DisplayOp, appendSnapshot: (DisplayOp) -> Unit) {
         val pending = IdentityHashMap<TextBlob, TextBlob>()
         pendingTextBlobs = pending
+        pendingImages = mutableListOf()
         try {
-            appendSnapshot(snapshot(operation))
+            appendSnapshot(operation.snapshotGeometry(this))
             textBlobs.putAll(pending)
+            acceptPendingImages()
         } finally {
             pendingTextBlobs = null
+            pendingImages = null
             clearOperationCaches()
         }
     }
@@ -93,9 +104,18 @@ internal class GeometrySnapshotContext(
         }
     }
 
-    fun snapshot(image: Image): Image = images[image] ?: image.copy(
-        pixels = image.pixels?.copyOf(),
-    ).also { images[image] = it }
+    fun snapshot(image: Image): Image = images[image] ?: findMatchingImage(image) ?: run {
+        imageBytes?.reserveImageBytes(image.pixels?.size?.toLong() ?: 0L)
+        image.copy(pixels = image.pixels?.copyOf()).also { pendingImages?.add(it) }
+    }.also { images[image] = it }
+
+    private fun findMatchingImage(image: Image): Image? =
+        pendingImages.orEmpty().firstOrNull { it.matchesCapturedImage(image) }
+            ?: acceptedImages.firstOrNull { it.matchesCapturedImage(image) }
+
+    private fun acceptPendingImages() {
+        acceptedImages += pendingImages.orEmpty()
+    }
 
     fun snapshot(filter: MaskFilter): MaskFilter = maskFilters[filter] ?: when (filter) {
         is MaskFilter.Shader -> filter.copy(shader = snapshot(filter.shader))
@@ -270,6 +290,15 @@ internal class GeometrySnapshotContext(
         return imageFilters.getValue(filter)
     }
 }
+
+/** Compares public image state with an owned immutable snapshot without retaining the producer. */
+private fun Image.matchesCapturedImage(source: Image): Boolean =
+    width == source.width && height == source.height && colorType == source.colorType &&
+        sourceId == source.sourceId && colorSpace == source.colorSpace && alphaType == source.alphaType &&
+        rowBytesI32 == source.rowBytesI32 && premultiplication == source.premultiplication && when {
+            pixels == null || source.pixels == null -> pixels == null && source.pixels == null
+            else -> pixels.contentEquals(source.pixels)
+        }
 
 private fun shaderChildren(value: Shader): List<Shader> = when (value) {
     is Shader.Blend -> listOf(value.dst, value.src)

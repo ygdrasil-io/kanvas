@@ -269,6 +269,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
     private val corePrimitiveLimits: GPULimits? = null,
     private val preparedSurfaceMixedMaterializer: GPUPreparedNativeFramePayloadMaterializer? = null,
     private val onDestinationSnapshotCreated: () -> Unit = {},
+    private val decodedImageCache: GPUW5eDecodedImageSessionCache? = null,
 ) : GPUPreparedNativeFramePayloadMaterializer, AutoCloseable {
     private val preparedSurfaceMixedAvailable =
         preparedSurfaceMixedMaterializer?.capabilities?.contains(
@@ -292,9 +293,17 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
         resources: GPUPreparedResourceSet,
         generationSeal: GPUPreparedGenerationSeal,
     ): GPUPreparedNativeFramePayloadMaterialization {
+        try {
+            if (GPUW5eImageNativeV1.validate(framePlan)) require(corePrimitiveLimits != null && decodedImageCache != null) {
+                "W5e source partition requires the observed limits and session-owned decoded cache"
+            }
+        } catch (failure: Throwable) {
+            return GPUPreparedNativeFramePayloadMaterialization.Refused(
+                "failed.native-w5e.image-contract", "W5e physical frame proof rejected: ${failure.message.orEmpty()}")
+        }
         val geometry = materializeGeometry(framePlan, encoderPlan, resources, generationSeal)
         val limits = corePrimitiveLimits ?: return geometry
-        return materializeW5aSourcePartitionV2(device, queue, limits, framePlan, geometry, corePrimitiveCache)
+        return materializeW5aSourcePartitionV2(device, queue, limits, framePlan, geometry, corePrimitiveCache, decodedImageCache)
     }
 
     private fun materializeGeometry(
@@ -685,6 +694,8 @@ private fun splitWgpu4kSurfaceRoute(
             phaseOrder = framePlan.phaseOrder,
             elidedNoOpDraws = framePlan.elidedNoOpDraws,
             atomicallyRefused = framePlan.atomicallyRefused,
+            w5eConstructionV1 = framePlan.w5eConstructionV1,
+            w5ePreparedFrameV1 = framePlan.w5ePreparedFrameV1,
         ),
         reusableEncoderPlan = wgpu4kReusableEncoderPlanWithoutSurface(encoderPlan),
         surfaceScope = scope,

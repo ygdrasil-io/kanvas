@@ -20,8 +20,9 @@ public object ResourceSceneAdapter {
                 pixelFormat = format,
                 alphaType = alpha,
                 colorSpace = image.colorSpace,
-                rowBytes = Math.multiplyExact(image.width, format.bytesPerPixel),
+                rowBytes = image.rowBytesI32,
                 pixels = pixels,
+                premultiplication = image.premultiplication,
             )
         }
     }
@@ -35,5 +36,9 @@ public object ResourceSceneAdapter {
         pixels = (resource as? ImageResourceSnapshot.Pixels)?.copyPixels(),
         colorSpace = resource.colorSpace,
         alphaType = AlphaType.valueOf(resource.alphaType.name),
+        rowBytesI32 = (resource as? ImageResourceSnapshot.Pixels)?.rowBytes
+            ?: org.graphiks.kanvas.image.logicalRowBytesI32(resource.width, ColorType.valueOf(resource.pixelFormat.name)),
+        premultiplication = (resource as? ImageResourceSnapshot.Pixels)?.premultiplication
+            ?: ImagePremultiplicationV1.SOURCE_SPACE,
     )
 }

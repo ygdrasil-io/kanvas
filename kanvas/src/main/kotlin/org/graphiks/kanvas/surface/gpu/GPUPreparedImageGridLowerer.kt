@@ -13,7 +13,6 @@ import org.graphiks.kanvas.paint.Blender
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.SamplingOptions
-import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.types.LatticeFlags
@@ -39,6 +38,7 @@ internal sealed interface GPUPreparedImageGridLowering {
     ) : GPUPreparedImageGridLowering
 }
 
+/** Legacy Nine/Lattice compatibility before whole-frame admission, not W5e decomposition. */
 internal object GPUPreparedImageGridLowerer {
     private const val MAX_LATTICE_CELL_COUNT = 4096L
 
@@ -102,9 +102,10 @@ internal object GPUPreparedImageGridLowerer {
                 image = operation.image,
                 src = cell.src,
                 dst = cell.dst,
-                paint = resolvedPaint.withImageSampling(operation.image, SamplingOptions.LINEAR),
+                paint = resolvedPaint.withImageSourcePaint(),
                 transform = operation.transform,
                 clip = operation.clip,
+                sampling = SamplingOptions.LINEAR,
             )
             when (
                 val lowered = GPUPreparedDrawImageLowerer.lower(
@@ -263,9 +264,10 @@ internal object GPUPreparedImageGridLowerer {
             image = operation.image,
             src = cell.src,
             dst = cell.dst,
-            paint = resolvedPaint.withImageSampling(operation.image, operation.sampling),
+            paint = resolvedPaint.withImageSourcePaint(),
             transform = operation.transform,
             clip = operation.clip,
+            sampling = operation.sampling,
         )
         return when (
             val lowered = GPUPreparedDrawImageLowerer.lower(
@@ -524,12 +526,11 @@ internal object GPUPreparedImageGridLowerer {
         return copy(normalized = identified)
     }
 
-    private fun Paint?.withImageSampling(
-        image: org.graphiks.kanvas.image.Image,
-        sampling: SamplingOptions,
-    ): Paint {
+    private fun Paint?.withImageSourcePaint(): Paint {
         val base = this ?: Paint.fill(ColorARGB.White)
-        return base.copy(shader = Shader.Image(image, sampling = sampling))
+        // Legacy grid cells already ignored the caller shader; retain their
+        // paint colour/alpha without manufacturing a sampler-transport shader.
+        return base.copy(shader = null)
     }
 
     private fun List<Int>.isStrictlyIncreasingInside(limit: Int): Boolean {

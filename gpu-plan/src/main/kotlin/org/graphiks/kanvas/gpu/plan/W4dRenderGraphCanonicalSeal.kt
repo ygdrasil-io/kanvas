@@ -114,6 +114,7 @@ private class W4dGraphDigestWriter {
             i32("$prefix.program.version", entry.program.versionI32)
             text("$prefix.program.id", entry.program.structuralId.value)
             when (val binding = entry.bindings) {
+                is ImageSampleV3 -> error(W5eImagePlanDiagnostics.InvalidContract)
                 is MaterialBindingPlan.GradientV2 -> error(W5dPlanDiagnostics.CoordinatePlanSchema)
                 is MaterialBindingPlan.GradientV1 -> {
                     text("$prefix.binding", binding.toString())
@@ -140,6 +141,7 @@ private class W4dGraphDigestWriter {
         i32("$prefix.ordinal", resource.ordinal)
         text("$prefix.kind", resource.kind.name)
         when (val format = resource.format) {
+            is PlanTextureFormat.ImageV1 -> error("W4d resources cannot contain a W5e cache request")
             null -> text("$prefix.format.kind", "none")
             is PlanTextureFormat.Color -> {
                 text("$prefix.format.kind", "color")
@@ -247,6 +249,7 @@ private class W4dGraphDigestWriter {
         i32("$prefix.command-index", pathDraw.commandIndex)
         if (materialV2) {
             when (val authority = pathDraw.materialAuthority) {
+                is PlanDrawMaterialAuthority.MaterialV3 -> error(W5eImagePlanDiagnostics.InvalidContract)
                 is PlanDrawMaterialAuthority.MaterialV2 -> error(W5dPlanDiagnostics.CoordinatePlanSchema)
                 is PlanDrawMaterialAuthority.MaterialV1 -> {
                     text("$prefix.material-authority", "material-v1")
@@ -370,6 +373,10 @@ private class W4dGraphDigestWriter {
 
     private fun textureFormat(prefix: String, format: PlanTextureFormat) {
         when (format) {
+            is PlanTextureFormat.ImageV1 -> {
+                text("$prefix.kind", "image-v1")
+                text("$prefix.value", format.value.name)
+            }
             is PlanTextureFormat.Color -> {
                 text("$prefix.kind", "color")
                 text("$prefix.value", format.value.name)

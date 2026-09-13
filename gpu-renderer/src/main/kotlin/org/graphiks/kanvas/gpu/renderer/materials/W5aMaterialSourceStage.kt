@@ -12,6 +12,13 @@ import org.graphiks.kanvas.gpu.plan.GradientStopSlabPlanV1
 import org.graphiks.kanvas.gpu.plan.GradientNumericOperationGraphV1
 import org.graphiks.kanvas.gpu.plan.GradientNumericDomainProofV1
 
+/** Typed placement of the sole admitted child fragment; standalone V1/V2 ABI stays exact. */
+internal enum class W5aSourceEmissionLayoutV1(val uniformExpression: String, val sourceFunction: String,
+    val declaresUniform: Boolean) {
+    Standalone("w5aMaterial", "kanvas_material_source", true),
+    ImageChild("w5eImage.child", "w5e_child_source", false),
+}
+
 /**
  * Renderer-only lowering of the sealed numeric DAG. No source color is evaluated on the host.
  * The remaining DAG is authenticated to the sRGB, single-sample, premultiplied SRC_OVER
@@ -24,17 +31,37 @@ internal class W5aMaterialSourceStage private constructor(
     val provenOpaque: Boolean,
     val gradientStopSlab: GradientStopSlabPlanV1?,
     val coordinateFunctionName: String = "w5c_local_point",
+    val imageV3: org.graphiks.kanvas.gpu.plan.ImageSampleExecutionPlanV1? = null,
 ) {
     data class Binding(val bindingI32: Int, val resourceKind: String)
+    val imageLayoutV3 = requirements.imageLayoutV3
     val bindingManifest: List<Binding> = listOf(Binding(0, "uniformBuffer")) +
-        if (gradientStopSlab == null) emptyList() else listOf(Binding(1, "storageBuffer"))
+        (if (gradientStopSlab == null) emptyList() else listOf(Binding(imageLayoutV3?.gradientStorageBindingU32?.toInt() ?: 1, "storageBuffer"))) +
+        (imageLayoutV3?.let { listOf(Binding(it.imageTextureBindingU32.toInt(), "sampledTexture")) } ?: emptyList())
     val structuralId: String = requirements.structuralId
     private val ownedUniformBytes = requirements.copyUniformBytes()
     val uniformBytes: ByteArray get() = ownedUniformBytes.copyOf()
     val uniformByteCountI64: Long get() = ownedUniformBytes.size.toLong()
     val canonicalIdentity: String = requirements.canonicalIdentity
     companion object {
-        fun lower(table: MaterialPlanTable, root: MaterialPlanRef, coordinates: MaterialCoordinatePlanV1? = null): W5aMaterialSourceStage? {
+        fun imageV3(table: MaterialPlanTable, root: MaterialPlanRef): W5aMaterialSourceStage {
+            val execution = (table.entry(root).bindings as org.graphiks.kanvas.gpu.plan.ImageSampleV3).execution
+            require(table.authenticatesImage(root, execution)) { org.graphiks.kanvas.gpu.plan.W5eImagePlanDiagnostics.InvalidContract }
+            val child = when (val authority = table.imageChildAuthority(root)) {
+                is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV1 ->
+                    requireNotNull(lower(table, authority.ref, authority.coordinates, W5aSourceEmissionLayoutV1.ImageChild))
+                is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV2 ->
+                    requireNotNull(lower(table, authority.ref, authority.coordinates, W5aSourceEmissionLayoutV1.ImageChild))
+                null -> null
+                else -> error("Unsupported image child authority")
+            }
+            val requirements = RawMaterialRequirementsV2.of(table, root)
+            return W5aMaterialSourceStage(requirements, W5eImageTexelEvaluatorV1.declarations(execution, child,
+                requireNotNull(requirements.imageLayoutV3)),
+                requirements.bindingCountI32, false, child?.gradientStopSlab, "w5e_device_point", execution)
+        }
+        fun lower(table: MaterialPlanTable, root: MaterialPlanRef, coordinates: MaterialCoordinatePlanV1? = null,
+            layout: W5aSourceEmissionLayoutV1 = W5aSourceEmissionLayoutV1.Standalone): W5aMaterialSourceStage? {
             if (root.indexI32 !in 0 until table.sizeI32) return null
             val chain = mutableListOf<Pair<NumericOperationGraphV1.Node, MaterialBindingPlan>>()
             var ref = root
@@ -62,8 +89,9 @@ internal class W5aMaterialSourceStage private constructor(
             var nextValueI32 = 0
             for ((bindingIndexI32, pair) in chain.asReversed().withIndex()) {
                 val (source, binding) = pair
-                val input = "w5aMaterial.binding$bindingIndexI32"
+                val input = "${layout.uniformExpression}.binding$bindingIndexI32"
                 when (binding) {
+                    is org.graphiks.kanvas.gpu.plan.ImageSampleV3 -> return null
                     is MaterialBindingPlan.GradientV2 -> return null
                     is MaterialBindingPlan.GradientV1 -> {
                         opaque = opaque && binding !is MaterialBindingPlan.ConicalGradientV1 &&
@@ -112,12 +140,12 @@ internal class W5aMaterialSourceStage private constructor(
                             "    conicalFlags0: vec4<u32>,\n    conicalFlags1: vec4<u32>,\n" else "") +
                     "    inverseRow0: vec4<f32>,\n    inverseRow1: vec4<f32>,\n    inverseRow2: vec4<f32>,"}
                 }
-                @group(1) @binding(0) var<uniform> w5aMaterial: W5aMaterialBlock;
+                ${if (layout.declaresUniform) "@group(1) @binding(0) var<uniform> w5aMaterial: W5aMaterialBlock;" else ""}
 
                 $SRGB_TO_LINEAR_WGSL
-                ${gradientGraph?.let(::gradientDeclarationsWgsl).orEmpty()}
+                ${gradientGraph?.let { gradientDeclarationsWgsl(it, layout = layout) }.orEmpty()}
 
-                fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {
+                fn ${layout.sourceFunction}(localPosition: vec2<f32>) -> vec4<f32> {
                 $statements
                     return $child;
                 }
@@ -129,7 +157,8 @@ internal class W5aMaterialSourceStage private constructor(
 
         /** V2 is verified directly; the V1 overload never receives a V2 numeric authority. */
         fun lower(table: MaterialPlanTable, root: MaterialPlanRef,
-            coordinates: org.graphiks.kanvas.gpu.plan.MaterialCoordinatePlanV2): W5aMaterialSourceStage? {
+            coordinates: org.graphiks.kanvas.gpu.plan.MaterialCoordinatePlanV2,
+            layout: W5aSourceEmissionLayoutV1 = W5aSourceEmissionLayoutV1.Standalone): W5aMaterialSourceStage? {
             if (root.indexI32 !in 0 until table.sizeI32) return null
             val opacities = mutableListOf<MaterialBindingPlan.OpacityF32V1>()
             var ref = root
@@ -153,15 +182,15 @@ internal class W5aMaterialSourceStage private constructor(
                 when (operations[indexI32]) {
                     is MaterialCoordinateOperationV2.ClampRectF32 -> {
                         coordinateFields.append("    coordinate${indexI32}Clamp: vec4<f32>,\n")
-                        coordinateStatements.append("    state.pointF32 = clamp(state.pointF32, w5aMaterial.coordinate${indexI32}Clamp.xy, w5aMaterial.coordinate${indexI32}Clamp.zw);\n")
+                        coordinateStatements.append("    state.pointF32 = clamp(state.pointF32, ${layout.uniformExpression}.coordinate${indexI32}Clamp.xy, ${layout.uniformExpression}.coordinate${indexI32}Clamp.zw);\n")
                     }
                     is MaterialCoordinateOperationV2.InverseMatrixF32 -> {
                         repeat(3) { rowI32 ->
                             coordinateFields.append("    coordinate${indexI32}Row$rowI32: vec4<f32>,\n")
-                            coordinateStatements.append("    let h${indexI32}Row$rowI32 = (w5aMaterial.coordinate${indexI32}Row$rowI32.x * state.pointF32.x + w5aMaterial.coordinate${indexI32}Row$rowI32.y * state.pointF32.y) + w5aMaterial.coordinate${indexI32}Row$rowI32.z;\n")
+                            coordinateStatements.append("    let h${indexI32}Row$rowI32 = (${layout.uniformExpression}.coordinate${indexI32}Row$rowI32.x * state.pointF32.x + ${layout.uniformExpression}.coordinate${indexI32}Row$rowI32.y * state.pointF32.y) + ${layout.uniformExpression}.coordinate${indexI32}Row$rowI32.z;\n")
                         }
                         coordinateStatements.append("""
-                            if (w5aMaterial.coordinate${indexI32}Row2.w == 1.0) {
+                            if (${layout.uniformExpression}.coordinate${indexI32}Row2.w == 1.0) {
                                 let affinePointF32 = vec2<f32>(h${indexI32}Row0, h${indexI32}Row1);
                                 state.valid = state.valid && all((bitcast<vec2<u32>>(affinePointF32) & vec2<u32>(0x7f800000u)) != vec2<u32>(0x7f800000u));
                                 state.pointF32 = select(vec2<f32>(0.0), affinePointF32, state.valid);
@@ -180,7 +209,7 @@ internal class W5aMaterialSourceStage private constructor(
                 "    let linear = w5a_srgb_to_linear(straight);\n" +
                 "    let value0 = vec4<f32>(linear.rgb * linear.a, linear.a);\n")
             for (indexI32 in opacities.indices) {
-                statements.append("    let value${indexI32 + 1} = value$indexI32 * w5aMaterial.binding${indexI32 + 1}.x;\n")
+                statements.append("    let value${indexI32 + 1} = value$indexI32 * ${layout.uniformExpression}.binding${indexI32 + 1}.x;\n")
             }
             val declarations = """
                 struct W5aMaterialBlock {
@@ -197,16 +226,16 @@ internal class W5aMaterialSourceStage private constructor(
                     ${if (program.consumesDegenerateAverage) "degenerateAverageSrgbaF32: vec4<f32>," else ""}
                     $coordinateFields
                 }
-                @group(1) @binding(0) var<uniform> w5aMaterial: W5aMaterialBlock;
+                ${if (layout.declaresUniform) "@group(1) @binding(0) var<uniform> w5aMaterial: W5aMaterialBlock;" else ""}
                 $SRGB_TO_LINEAR_WGSL
-                ${gradientDeclarationsWgsl(numeric.graph, numeric.tileGraph, program.consumesDegenerateAverage)}
+                ${gradientDeclarationsWgsl(numeric.graph, numeric.tileGraph, program.consumesDegenerateAverage, layout)}
                 $W5D_SAFE_DIVIDE_WGSL
                 struct W5dLocalPointV2 { pointF32: vec2<f32>, valid: bool, }
                 fn w5d_local_point(pixel: vec2<f32>) -> W5dLocalPointV2 {
                     $coordinateStatements
                     return state;
                 }
-                fn kanvas_material_source(localPoint: W5dLocalPointV2) -> vec4<f32> {
+                fn ${layout.sourceFunction}(localPoint: W5dLocalPointV2) -> vec4<f32> {
                     if (!localPoint.valid) { return vec4<f32>(0.0); }
                     let localPosition = localPoint.pointF32;
                     $statements
@@ -300,7 +329,7 @@ internal class W5aMaterialSourceStage private constructor(
         /** Lowers every executed gradient node, including the explicit bounded search body. */
         private fun gradientDeclarationsWgsl(graph: GradientNumericOperationGraphV1,
             tileGraph: org.graphiks.kanvas.gpu.plan.GradientTileOperationGraphV2? = null,
-            consumesDegenerateAverage: Boolean = false): String {
+            consumesDegenerateAverage: Boolean = false, layout: W5aSourceEmissionLayoutV1 = W5aSourceEmissionLayoutV1.Standalone): String {
             require(graph.contractId == "WgslFloatEnvelopeV1" && graph.domainProof == GradientNumericDomainProofV1.ProvenFinite)
             val code = StringBuilder()
             val emitted = mutableMapOf<GradientNumericOperationGraphV1.Node, String>()
@@ -318,19 +347,19 @@ internal class W5aMaterialSourceStage private constructor(
                     GradientNumericOperationGraphV1.Operation.INPUT_LOCAL_POINT_F32 ->
                         if (node.input == GradientNumericOperationGraphV1.Input.X) "localPosition.x" else "localPosition.y"
                     GradientNumericOperationGraphV1.Operation.INPUT_UNIFORM_F32 -> when (node.input) {
-                        GradientNumericOperationGraphV1.Input.START_X -> "w5aMaterial.binding0.x"
-                        GradientNumericOperationGraphV1.Input.START_Y -> "w5aMaterial.binding0.y"
-                        GradientNumericOperationGraphV1.Input.END_X -> "w5aMaterial.binding0.z"
-                        GradientNumericOperationGraphV1.Input.END_Y -> "w5aMaterial.binding0.w"
-                        GradientNumericOperationGraphV1.Input.LINEAR_DX -> "w5aMaterial.linearParameters0.x"
-                        GradientNumericOperationGraphV1.Input.LINEAR_DY -> "w5aMaterial.linearParameters0.y"
-                        GradientNumericOperationGraphV1.Input.LINEAR_LEN2 -> "w5aMaterial.linearParameters1.x"
-                        GradientNumericOperationGraphV1.Input.CENTER_X -> "w5aMaterial.binding0.x"
-                        GradientNumericOperationGraphV1.Input.CENTER_Y -> "w5aMaterial.binding0.y"
-                        GradientNumericOperationGraphV1.Input.RADIUS -> "w5aMaterial.binding0.z"
-                        GradientNumericOperationGraphV1.Input.START_DEGREES -> "w5aMaterial.binding0.z"
-                        GradientNumericOperationGraphV1.Input.END_DEGREES -> "w5aMaterial.binding0.w"
-                        GradientNumericOperationGraphV1.Input.SPAN_DEGREES -> "w5aMaterial.sweepParameters.x"
+                        GradientNumericOperationGraphV1.Input.START_X -> "${layout.uniformExpression}.binding0.x"
+                        GradientNumericOperationGraphV1.Input.START_Y -> "${layout.uniformExpression}.binding0.y"
+                        GradientNumericOperationGraphV1.Input.END_X -> "${layout.uniformExpression}.binding0.z"
+                        GradientNumericOperationGraphV1.Input.END_Y -> "${layout.uniformExpression}.binding0.w"
+                        GradientNumericOperationGraphV1.Input.LINEAR_DX -> "${layout.uniformExpression}.linearParameters0.x"
+                        GradientNumericOperationGraphV1.Input.LINEAR_DY -> "${layout.uniformExpression}.linearParameters0.y"
+                        GradientNumericOperationGraphV1.Input.LINEAR_LEN2 -> "${layout.uniformExpression}.linearParameters1.x"
+                        GradientNumericOperationGraphV1.Input.CENTER_X -> "${layout.uniformExpression}.binding0.x"
+                        GradientNumericOperationGraphV1.Input.CENTER_Y -> "${layout.uniformExpression}.binding0.y"
+                        GradientNumericOperationGraphV1.Input.RADIUS -> "${layout.uniformExpression}.binding0.z"
+                        GradientNumericOperationGraphV1.Input.START_DEGREES -> "${layout.uniformExpression}.binding0.z"
+                        GradientNumericOperationGraphV1.Input.END_DEGREES -> "${layout.uniformExpression}.binding0.w"
+                        GradientNumericOperationGraphV1.Input.SPAN_DEGREES -> "${layout.uniformExpression}.sweepParameters.x"
                         GradientNumericOperationGraphV1.Input.MIN_NORMAL -> "1.17549435e-38f"
                         GradientNumericOperationGraphV1.Input.TWO_PI -> "6.2831855f"
                         GradientNumericOperationGraphV1.Input.QUARTER -> "0.25"
@@ -341,26 +370,26 @@ internal class W5aMaterialSourceStage private constructor(
                         GradientNumericOperationGraphV1.Input.ONE -> "1.0"
                         GradientNumericOperationGraphV1.Input.TWO -> "2.0"
                         GradientNumericOperationGraphV1.Input.FOUR -> "4.0"
-                        GradientNumericOperationGraphV1.Input.CONICAL_DX -> "w5aMaterial.conicalParameters0.x"
-                        GradientNumericOperationGraphV1.Input.CONICAL_DY -> "w5aMaterial.conicalParameters0.y"
-                        GradientNumericOperationGraphV1.Input.CONICAL_START_RADIUS -> "w5aMaterial.conicalParameters0.z"
-                        GradientNumericOperationGraphV1.Input.CONICAL_END_RADIUS -> "w5aMaterial.conicalParameters0.w"
-                        GradientNumericOperationGraphV1.Input.CONICAL_DR -> "w5aMaterial.conicalParameters1.x"
-                        GradientNumericOperationGraphV1.Input.CONICAL_A -> "w5aMaterial.conicalParameters2.w"
+                        GradientNumericOperationGraphV1.Input.CONICAL_DX -> "${layout.uniformExpression}.conicalParameters0.x"
+                        GradientNumericOperationGraphV1.Input.CONICAL_DY -> "${layout.uniformExpression}.conicalParameters0.y"
+                        GradientNumericOperationGraphV1.Input.CONICAL_START_RADIUS -> "${layout.uniformExpression}.conicalParameters0.z"
+                        GradientNumericOperationGraphV1.Input.CONICAL_END_RADIUS -> "${layout.uniformExpression}.conicalParameters0.w"
+                        GradientNumericOperationGraphV1.Input.CONICAL_DR -> "${layout.uniformExpression}.conicalParameters1.x"
+                        GradientNumericOperationGraphV1.Input.CONICAL_A -> "${layout.uniformExpression}.conicalParameters2.w"
                         else -> error("Unsupported sealed scalar input")
                     }
                     GradientNumericOperationGraphV1.Operation.INPUT_UNIFORM_FLAG -> when (node.input) {
-                        GradientNumericOperationGraphV1.Input.DEGENERATE -> "(w5aMaterial.gradientFlags.x != 0u)"
-                        GradientNumericOperationGraphV1.Input.LEADING_SEGMENT -> "(w5aMaterial.gradientFlags.z != 0u)"
-                        GradientNumericOperationGraphV1.Input.CONICAL_FULLY_DEGENERATE -> "(w5aMaterial.conicalFlags1.z == 0u)"
-                        GradientNumericOperationGraphV1.Input.CONICAL_CONCENTRIC -> "(w5aMaterial.conicalFlags1.z == 1u)"
-                        GradientNumericOperationGraphV1.Input.CONICAL_LINEAR_EQUATION -> "(w5aMaterial.conicalFlags1.z == 2u)"
-                        GradientNumericOperationGraphV1.Input.CONICAL_QUADRATIC -> "(w5aMaterial.conicalFlags1.z == 3u)"
-                        GradientNumericOperationGraphV1.Input.CONICAL_SHARED_RADIUS_ABOVE_EPSILON -> "(w5aMaterial.conicalFlags1.y != 0u)"
+                        GradientNumericOperationGraphV1.Input.DEGENERATE -> "(${layout.uniformExpression}.gradientFlags.x != 0u)"
+                        GradientNumericOperationGraphV1.Input.LEADING_SEGMENT -> "(${layout.uniformExpression}.gradientFlags.z != 0u)"
+                        GradientNumericOperationGraphV1.Input.CONICAL_FULLY_DEGENERATE -> "(${layout.uniformExpression}.conicalFlags1.z == 0u)"
+                        GradientNumericOperationGraphV1.Input.CONICAL_CONCENTRIC -> "(${layout.uniformExpression}.conicalFlags1.z == 1u)"
+                        GradientNumericOperationGraphV1.Input.CONICAL_LINEAR_EQUATION -> "(${layout.uniformExpression}.conicalFlags1.z == 2u)"
+                        GradientNumericOperationGraphV1.Input.CONICAL_QUADRATIC -> "(${layout.uniformExpression}.conicalFlags1.z == 3u)"
+                        GradientNumericOperationGraphV1.Input.CONICAL_SHARED_RADIUS_ABOVE_EPSILON -> "(${layout.uniformExpression}.conicalFlags1.y != 0u)"
                         else -> error("Unsupported sealed flag input")
                     }
                     GradientNumericOperationGraphV1.Operation.INPUT_STOP_RANGE_U32 -> when (node.input) {
-                        GradientNumericOperationGraphV1.Input.STOPS -> "w5aMaterial.gradientHeader.xy"
+                        GradientNumericOperationGraphV1.Input.STOPS -> "${layout.uniformExpression}.gradientHeader.xy"
                         GradientNumericOperationGraphV1.Input.PROBE -> "gradientProbe"
                         GradientNumericOperationGraphV1.Input.ZERO -> "0u"
                         else -> error("Unsupported sealed index input")
@@ -414,9 +443,9 @@ internal class W5aMaterialSourceStage private constructor(
             val coordinatesV1Wgsl = if (tileGraph != null) "" else """
                 fn w5c_local_point(pixel: vec2<f32>) -> vec2<f32> {
                     let p = vec3<f32>(pixel, 1.0);
-                    let x = (w5aMaterial.inverseRow0.x * p.x + w5aMaterial.inverseRow0.y * p.y) + w5aMaterial.inverseRow0.z;
-                    let y = (w5aMaterial.inverseRow1.x * p.x + w5aMaterial.inverseRow1.y * p.y) + w5aMaterial.inverseRow1.z;
-                    let w = (w5aMaterial.inverseRow2.x * p.x + w5aMaterial.inverseRow2.y * p.y) + w5aMaterial.inverseRow2.z;
+                    let x = (${layout.uniformExpression}.inverseRow0.x * p.x + ${layout.uniformExpression}.inverseRow0.y * p.y) + ${layout.uniformExpression}.inverseRow0.z;
+                    let y = (${layout.uniformExpression}.inverseRow1.x * p.x + ${layout.uniformExpression}.inverseRow1.y * p.y) + ${layout.uniformExpression}.inverseRow1.z;
+                    let w = (${layout.uniformExpression}.inverseRow2.x * p.x + ${layout.uniformExpression}.inverseRow2.y * p.y) + ${layout.uniformExpression}.inverseRow2.z;
                     if (w == 1.0) { return vec2<f32>(x, y); }
                     return vec2<f32>(x, y) / w;
                 }
@@ -433,9 +462,9 @@ internal class W5aMaterialSourceStage private constructor(
                 }
                 fn w5c_gradient(localPosition: vec2<f32>) -> vec4<f32> {
                     ${when {
-                        consumesDegenerateAverage -> "if (w5aMaterial.gradientFlags.x != 0u) { return w5aMaterial.degenerateAverageSrgbaF32; }"
+                        consumesDegenerateAverage -> "if (${layout.uniformExpression}.gradientFlags.x != 0u) { return ${layout.uniformExpression}.degenerateAverageSrgbaF32; }"
                         tileGraph?.effectiveMode == org.graphiks.kanvas.gpu.plan.GradientTileModeV2.DECAL ->
-                            "if (w5aMaterial.gradientFlags.x != 0u) { return vec4<f32>(0.0); }"
+                            "if (${layout.uniformExpression}.gradientFlags.x != 0u) { return vec4<f32>(0.0); }"
                         else -> ""
                     }}
                     $code

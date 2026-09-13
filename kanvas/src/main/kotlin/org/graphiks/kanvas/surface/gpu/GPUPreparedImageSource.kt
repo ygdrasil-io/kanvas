@@ -13,8 +13,15 @@ import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.color.ColorSpace
 
+/**
+ * Legacy semantic compatibility for whole frames rejected before W5e admission.
+ * This factory is not W5e's source authority or a transport for its sealed plans.
+ */
 internal object GPUPreparedSurfaceImageSource {
     fun prepare(image: Image): GPUPreparedImageArtifactResult {
+        if (image.premultiplication != org.graphiks.kanvas.render.ir.ImagePremultiplicationV1.SOURCE_SPACE)
+            return GPUPreparedImageArtifactResult.Refused("unsupported.image.prepared.premultiplication",
+                mapOf("boundary" to "legacy-pre-admission", "premultiplication" to image.premultiplication.name))
         val format = when (image.colorType) {
             ColorType.RGBA_8888 -> GPUPreparedImageSourceFormat.Rgba8
             ColorType.BGRA_8888 -> GPUPreparedImageSourceFormat.Bgra8
@@ -25,7 +32,7 @@ internal object GPUPreparedSurfaceImageSource {
             ColorType.GRAY_8 -> GPUPreparedImageSourceFormat.Gray8
             else -> GPUPreparedImageSourceFormat.Unsupported
         }
-        val sourceRowBytes = image.width.toLong() * image.colorType.bytesPerPixel
+        val sourceRowBytes = image.rowBytesI32.toLong()
         return GPUPreparedImageArtifactFactory.prepare(
             GPUPreparedImageSourceInput(
                 GPUPreparedImageSourceClass.DecodedCpu, image.sourceId, image.width, image.height, format,

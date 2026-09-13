@@ -3,6 +3,22 @@ package org.graphiks.kanvas.gpu.plan
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
+/** Typed image composition ABI; existing standalone V1/V2 layouts are unchanged. */
+public class ImageSourceLayoutV3 internal constructor(public val hasChildGradientStorage: Boolean,
+    public val selectsCells: Boolean = false, public val latticeSelector: Boolean = false,
+    public val cellCapacityI32: Int = 9, public val hasAtlasColor: Boolean = false) {
+    public val uniformBindingU32: UInt = 0u
+    public val gradientStorageBindingU32: UInt? = if (hasChildGradientStorage) 1u else null
+    public val imageTextureBindingU32: UInt = if (hasChildGradientStorage) 2u else 1u
+    public val imageUniformByteCountI64: Long = Math.addExact(if (latticeSelector)
+        Math.addExact(128L, Math.multiplyExact(cellCapacityI32.toLong(), 80L)) else if (selectsCells) 704L else 112L,
+        if (hasAtlasColor) 16L else 0L)
+    public val structuralIdentity: String = "image-source-layout-v3:uniform0:" +
+        (if (hasChildGradientStorage) "stops1:texture2" else "texture1") + ":cubic-parameters" +
+        (if (latticeSelector) ":lattice-cell-selector-v1:$cellCapacityI32" else if (selectsCells) ":nine-local-cell-selector-v2" else "") +
+        (if (hasAtlasColor) ":atlas-entry-color-v1" else "")
+}
+
 /** Handle-free raw V2 binding layout, shared by capability sealing and native packing. */
 public class RawMaterialRequirementsV2 private constructor(
     public val bindingCountI32: Int,
@@ -12,6 +28,8 @@ public class RawMaterialRequirementsV2 private constructor(
     public val structuralId: String,
     private val uniformBytes: ByteArray,
     slabIdentity: String,
+    private val imageSource: Boolean = false,
+    public val imageLayoutV3: ImageSourceLayoutV3? = null,
 ) {
     /** The materializer consumes this same immutable packing and allocation identity. */
     public fun copyUniformBytes(): ByteArray = uniformBytes.copyOf()
@@ -23,7 +41,7 @@ public class RawMaterialRequirementsV2 private constructor(
             uniformByteCountI64 % BINDING_STRIDE_BYTES_I64 == 0L &&
             capabilities.maxUniformBufferBindingSizeBytesI64?.let { uniformByteCountI64 <= it } == true &&
             uniformByteCountI64 <= capabilities.maxBufferSizeBytes &&
-            (!hasCoordinatesV2 || capabilities.minUniformBufferOffsetAlignment.let { it > 0 && it and (it - 1) == 0 } &&
+            (!(hasCoordinatesV2 || imageSource) || capabilities.minUniformBufferOffsetAlignment.let { it > 0 && it and (it - 1) == 0 } &&
                 capabilities.maxBindingsPerBindGroupI32?.let { it >= bindGroupEntryCountI32 } == true &&
                 capabilities.maxUniformBuffersPerShaderStageI32?.let { it >= 2 } == true &&
                 capabilities.maxBindGroupsI32?.let { it >= 2 } == true)
@@ -57,6 +75,50 @@ public class RawMaterialRequirementsV2 private constructor(
 
         public fun of(table: MaterialPlanTable, root: MaterialPlanRef): RawMaterialRequirementsV2 {
             require(root.indexI32 in 0 until table.sizeI32)
+            val image = table.entry(root).bindings as? ImageSampleV3
+            if (image != null) {
+                val execution = image.execution
+                require(table.authenticatesImage(root, execution)) { W5eImagePlanDiagnostics.InvalidContract }
+                val child = if (table.entry(root).program is ImageMaterialProgramV3.MaskV3)
+                    of(table, MaterialPlanRef(root.indexI32 - 1)) else null
+                val layout = ImageSourceLayoutV3(child?.bindGroupEntryCountI32 == 2, execution.cellSelection != null,
+                    execution.cellSelection?.lattice == true, execution.cellSelection?.capacityI32 ?: 9, execution.atlasBlend != null)
+                val bytesI64 = Math.addExact(layout.imageUniformByteCountI64, child?.uniformByteCountI64 ?: 0L)
+                require(bytesI64 <= Int.MAX_VALUE) { W5eImagePlanDiagnostics.BindingLimit }
+                val bytes = ByteBuffer.allocate(bytesI64.toInt()).order(ByteOrder.LITTLE_ENDIAN).apply {
+                    execution.coordinates.uniformValuesF32().forEach(::putFloat)
+                    putFloat(execution.upload.widthI32.toFloat()).putFloat(execution.upload.heightI32.toFloat())
+                    putFloat(execution.paintAlphaF32).putFloat(execution.cellSelection?.cells?.size?.toFloat() ?: 0f)
+                    val cubic = execution.sampling as? ImageSamplingPlanV1.Cubic
+                    putFloat(cubic?.bF32 ?: 0f).putFloat(cubic?.cF32 ?: 0f).putFloat(0f).putFloat(0f)
+                    execution.cellSelection?.let { selection ->
+                        selection.copyDirectionUniformValuesF32().forEach(::putFloat)
+                        repeat(selection.capacityI32) { indexI32 ->
+                            val cell = selection.cells.getOrNull(indexI32)
+                            val sample = selection.samples.firstOrNull { it.cell === cell }
+                            if (cell == null) repeat(16) { putFloat(0f) } else {
+                                if (sample == null) repeat(8) { putFloat(0f) }
+                                else sample.coordinates.uniformValuesF32().drop(12).forEach(::putFloat)
+                                cell.outerEdges.forEach { putFloat(if (it) 1f else 0f) }
+                                val bounds = cell.copyDestinationF32()
+                                listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).forEach(::putFloat)
+                            }
+                            if (selection.lattice) {
+                                val color = (cell as? ImageCellPlanV1.SolidV1)?.color
+                                listOf(color?.redNormalized ?: 0f, color?.greenNormalized ?: 0f,
+                                    color?.blueNormalized ?: 0f, color?.alphaNormalized ?: 0f).forEach(::putFloat)
+                            }
+                        }
+                    }
+                    execution.atlasBlend?.copyColorUniformF32()?.forEach(::putFloat)
+                    child?.copyUniformBytes()?.let(::put)
+                    check(position() == capacity())
+                }.array()
+                return RawMaterialRequirementsV2(1 + (child?.bindingCountI32 ?: 0), bytesI64,
+                    child?.hasCoordinatesV2 == true, 1 + (child?.bindGroupEntryCountI32 ?: 1),
+                    table.entry(root).program.structuralId.value + ":" + layout.structuralIdentity + ":" + child?.structuralId.orEmpty(),
+                    bytes, execution.canonicalIdentity + (child?.canonicalIdentity ?: ""), imageSource = true, imageLayoutV3 = layout)
+            }
             var indexI32 = root.indexI32
             var countI32 = 1
             while (table.entry(MaterialPlanRef(indexI32)).bindings is MaterialBindingPlan.OpacityF32V1) {
@@ -122,6 +184,7 @@ public class RawMaterialRequirementsV2 private constructor(
             val uniforms = ByteBuffer.allocate(bytesI32).order(ByteOrder.LITTLE_ENDIAN)
             for (indexI32 in leafI32..root.indexI32) {
                 when (val binding = table.entry(MaterialPlanRef(indexI32)).bindings) {
+                    is ImageSampleV3 -> error(W5eImagePlanDiagnostics.InvalidContract)
                     is MaterialBindingPlan.GradientV1 -> binding.copyUniformValuesF32().forEach(uniforms::putFloat)
                     is MaterialBindingPlan.GradientV2 -> binding.copyUniformValuesF32().forEach(uniforms::putFloat)
                     MaterialBindingPlan.EmptyV1 -> repeat(4) { uniforms.putFloat(0f) }

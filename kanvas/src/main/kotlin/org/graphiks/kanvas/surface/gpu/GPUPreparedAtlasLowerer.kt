@@ -16,7 +16,6 @@ import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Blender
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.SamplingOptions
-import org.graphiks.kanvas.paint.Shader
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
@@ -34,11 +33,12 @@ internal sealed interface GPUPreparedAtlasLowering {
 }
 
 /**
- * Transactional affine atlas expansion.
+ * Legacy transactional affine atlas expansion for unadmitted whole frames.
  *
  * The complete logical atlas is validated before one artifact is prepared or one command is
  * exposed. Sprites then reuse the regular prepared-image lowerer with the exact composed affine
  * transform, so four-corner position/UV correspondence remains authoritative.
+ * W5e owns a distinct sealed family plan; it never reaches this compatibility path.
  */
 internal object GPUPreparedAtlasLowerer {
     fun lower(
@@ -61,7 +61,7 @@ internal object GPUPreparedAtlasLowerer {
                 reason = "unsupported_source_blend",
                 extraFacts = mapOf("blendMode" to operation.blendMode.name),
             )
-        val paint = when (val resolved = operation.paint.resolvedAtlasPaint(operation.atlas)) {
+        val paint = when (val resolved = operation.paint.resolvedAtlasPaint()) {
             is ResolvedAtlasPaint.Ready -> resolved.paint
             is ResolvedAtlasPaint.Refused -> return resolved.refusal
         }
@@ -105,6 +105,7 @@ internal object GPUPreparedAtlasLowerer {
                 paint = paint,
                 transform = operation.transform * operation.transforms[index],
                 clip = operation.clip,
+                sampling = SamplingOptions.LINEAR,
             )
             when (
                 val lowered = GPUPreparedDrawImageLowerer.lower(
@@ -270,9 +271,7 @@ internal object GPUPreparedAtlasLowerer {
         }
     }
 
-    private fun Paint?.resolvedAtlasPaint(
-        atlas: org.graphiks.kanvas.image.Image,
-    ): ResolvedAtlasPaint {
+    private fun Paint?.resolvedAtlasPaint(): ResolvedAtlasPaint {
         val base = this ?: Paint()
         base.unsupportedPreparedImagePaintEffectOrNull()?.let { paintField ->
             return ResolvedAtlasPaint.Refused(
@@ -312,7 +311,7 @@ internal object GPUPreparedAtlasLowerer {
             base.copy(
                 blendMode = destinationBlend,
                 blender = null,
-                shader = Shader.Image(atlas, sampling = SamplingOptions.LINEAR),
+                shader = null,
             ),
         )
     }

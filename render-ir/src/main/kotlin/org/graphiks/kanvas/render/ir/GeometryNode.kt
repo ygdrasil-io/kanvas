@@ -128,20 +128,54 @@ public sealed interface GeometryNode : CanonicalValue {
         public val image: ResourceReference,
         source: RectF32,
         destination: RectF32,
+        public val sampling: ImageSampling,
     ) : GeometryNode {
         private val storedSource: RectF32 = source.copy()
         private val storedDestination: RectF32 = destination.copy()
         public fun copySource(): RectF32 = storedSource.copy()
         public fun copyDestination(): RectF32 = storedDestination.copy()
         override val canonicalId: CanonicalId = canonicalId(
-            "geometry-image-patch-v1",
+            "geometry-image-patch-v2",
             image.canonicalId.value,
             rectId("source", storedSource).value,
             rectId("destination", storedDestination).value,
+            sampling.canonicalId.value,
         )
         public companion object {
-            public fun of(image: ResourceReference, source: RectF32, destination: RectF32): ImagePatch =
-                ImagePatch(image, source, destination)
+            public fun of(
+                image: ResourceReference,
+                source: RectF32,
+                destination: RectF32,
+                sampling: ImageSampling = ImageSampling.Nearest,
+            ): ImagePatch = ImagePatch(image, source, destination, sampling)
+        }
+    }
+
+    public class ImageNine private constructor(
+        public val image: ResourceReference,
+        center: RectF32,
+        destination: RectF32,
+        public val sampling: ImageSampling,
+    ) : GeometryNode {
+        private val storedCenter: RectF32 = center.copy()
+        private val storedDestination: RectF32 = destination.copy()
+        public fun copyCenter(): RectF32 = storedCenter.copy()
+        public fun copyDestination(): RectF32 = storedDestination.copy()
+        override val canonicalId: CanonicalId = canonicalId(
+            "geometry-image-nine-v1",
+            image.canonicalId.value,
+            rectId("center", storedCenter).value,
+            rectId("destination", storedDestination).value,
+            sampling.canonicalId.value,
+        )
+
+        public companion object {
+            public fun of(
+                image: ResourceReference,
+                center: RectF32,
+                destination: RectF32,
+                sampling: ImageSampling = ImageSampling.Nearest,
+            ): ImageNine = ImageNine(image, center, destination, sampling)
         }
     }
 
@@ -162,6 +196,11 @@ public sealed interface GeometryNode : CanonicalValue {
         private val storedFlags: List<LatticeCellFlag>? = flags?.let(::immutableList)
         private val storedDestination: RectF32 = destination.copy()
 
+        public val xDivCountI32: Int get() = storedXDivs.size
+        public val yDivCountI32: Int get() = storedYDivs.size
+        public val cellRectCountI32: Int? get() = storedCellRects?.size
+        public val colorCountI32: Int? get() = storedColors?.size
+        public val flagCountI32: Int? get() = storedFlags?.size
         public fun copyXDivs(): IntArray = storedXDivs.copyOf()
         public fun copyYDivs(): IntArray = storedYDivs.copyOf()
         public fun copyCellRects(): List<RectF32>? = storedCellRects?.map(RectF32::copy)?.let(::immutableList)
@@ -383,6 +422,8 @@ public sealed interface ImageSampling : CanonicalValue {
     }
 
     public data class Cubic(public val b: Float, public val c: Float) : ImageSampling {
+        // Raw bits are scene facts.  W5e owns their finite/range refusal so an invalid
+        // Cubic cannot be redirected into a legacy image path before native work.
         override val canonicalId: CanonicalId = canonicalId("image-sampling-cubic-v1", b.canonicalBits(), c.canonicalBits())
     }
 }

@@ -8,6 +8,151 @@ import org.graphiks.math.color.ColorF32
 
 /** Normalizes admitted W5 sources once, before a graph is published Ready. */
 public object EffectiveMaterialPlanner {
+    /** Original IMAGE/Rect/Path source authority, independent of its W4 construction projection. */
+    internal fun planW5eImageSource(draw: DrawNode, deviceBoundsI32: org.graphiks.math.geometry.RectI32,
+        maxCellsI64: Long = 9L, constructionEntry: ImageConstructionEntryV1? = null): Result {
+        return try {
+            val direct = draw.origin in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.IMAGE, org.graphiks.kanvas.render.ir.DrawOrigin.IMAGE_NINE,
+                org.graphiks.kanvas.render.ir.DrawOrigin.IMAGE_LATTICE, org.graphiks.kanvas.render.ir.DrawOrigin.ATLAS)
+            val patch = draw.geometry as? org.graphiks.kanvas.render.ir.GeometryNode.ImagePatch
+            val nine = draw.geometry as? org.graphiks.kanvas.render.ir.GeometryNode.ImageNine
+            val lattice = draw.geometry as? org.graphiks.kanvas.render.ir.GeometryNode.ImageLattice
+            val atlas = draw.geometry as? org.graphiks.kanvas.render.ir.GeometryNode.Atlas
+            require(constructionEntry == null || constructionEntry.originalDraw === draw) { W5eImagePlanDiagnostics.InvalidContract }
+            val physicalCell = constructionEntry?.cell
+            val atlasColor = constructionEntry?.atlasEntryColor
+            val atlasMode = atlasColor?.let { requireNotNull(draw.operationBlendMode) }
+            require(if (direct) patch != null && draw.origin == org.graphiks.kanvas.render.ir.DrawOrigin.IMAGE ||
+                nine != null && draw.origin == org.graphiks.kanvas.render.ir.DrawOrigin.IMAGE_NINE ||
+                lattice != null && draw.origin == org.graphiks.kanvas.render.ir.DrawOrigin.IMAGE_LATTICE ||
+                atlas != null && draw.origin == org.graphiks.kanvas.render.ir.DrawOrigin.ATLAS
+                else draw.origin == org.graphiks.kanvas.render.ir.DrawOrigin.RECT &&
+                draw.geometry is org.graphiks.kanvas.render.ir.GeometryNode.Rect ||
+                draw.origin == org.graphiks.kanvas.render.ir.DrawOrigin.PATH && draw.geometry is org.graphiks.kanvas.render.ir.GeometryNode.Path) {
+                W5eImagePlanDiagnostics.UnsupportedSlice
+            }
+            require(draw.paint?.style?.let { it == org.graphiks.kanvas.render.ir.PaintStyleNode.FILL } != false &&
+                draw.effects is EffectStack.Empty && (draw.operationBlendMode == null || atlas != null)) { W5eImagePlanDiagnostics.UnsupportedSlice }
+            var source = draw.material
+            val matricesF32 = mutableListOf<org.graphiks.math.matrix.Matrix3x3F32>()
+            var opacityF32 = 1f
+            var countI32 = 0
+            while (source is MaterialNode.WithLocalMatrix || source is MaterialNode.Opacity) {
+                require(++countI32 <= 64) { W5eImagePlanDiagnostics.UnsupportedSlice }
+                when (val node = source) {
+                    is MaterialNode.WithLocalMatrix -> { matricesF32 += node.matrix.copy(); source = node.material }
+                    is MaterialNode.Opacity -> {
+                        require(node.alpha.isFinite() && node.alpha in 0f..1f) { W5aPlanDiagnostics.InvalidOpacity }
+                        opacityF32 *= node.alpha; source = node.material
+                    }
+                }
+            }
+            val sample = source as? MaterialNode.ImageSample
+                ?: throw IllegalArgumentException(W5eImagePlanDiagnostics.UnsupportedSlice)
+            require(atlas == null || sample.sampling == org.graphiks.kanvas.render.ir.ImageSampling.Nearest) { W5eImagePlanDiagnostics.UnsupportedSlice }
+            require(nine == null || nine.sampling == org.graphiks.kanvas.render.ir.ImageSampling.Nearest &&
+                sample.sampling == org.graphiks.kanvas.render.ir.ImageSampling.Nearest) { W5eImagePlanDiagnostics.UnsupportedSlice }
+            val sampling = when (val requestedSampling = sample.sampling) {
+                org.graphiks.kanvas.render.ir.ImageSampling.Nearest -> ImageSamplingPlanV1.Nearest
+                org.graphiks.kanvas.render.ir.ImageSampling.Linear -> ImageSamplingPlanV1.Linear
+                is org.graphiks.kanvas.render.ir.ImageSampling.Cubic -> ImageSamplingPlanV1.Cubic(requestedSampling.b.toRawBits(), requestedSampling.c.toRawBits())
+            }
+            if (sampling is ImageSamplingPlanV1.Cubic && (!sampling.bF32.isFinite() || sampling.bF32 !in 0f..1f ||
+                    !sampling.cF32.isFinite() || sampling.cF32 !in 0f..1f))
+                throw IllegalArgumentException(W5eImagePlanDiagnostics.CubicParameters)
+            val tileModes = if (direct) ImageTileModePlanV1.ClampClamp else ImageTileModePlanV1(
+                ImageTileAxisModePlanV1.valueOf(sample.tileModeX.name), ImageTileAxisModePlanV1.valueOf(sample.tileModeY.name))
+            val pixels = sample.image as? org.graphiks.kanvas.render.ir.ImageResourceSnapshot.Pixels
+                ?: throw IllegalArgumentException(W5eImagePlanDiagnostics.ExternalResource)
+            require(!direct || draw.resource?.canonicalId == pixels.canonicalId && (patch?.image ?: nine?.image ?: lattice?.image ?: atlas?.image)?.id?.value == pixels.sourceId) {
+                W5eImagePlanDiagnostics.InvalidContract
+            }
+            require(direct || draw.resource == null && draw.paint?.shader?.canonicalId == draw.material.canonicalId) {
+                W5eImagePlanDiagnostics.InvalidContract
+            }
+            val channel = when (pixels.pixelFormat) {
+                org.graphiks.kanvas.render.ir.ImagePixelFormat.RGBA_8888,
+                org.graphiks.kanvas.render.ir.ImagePixelFormat.SRGBA_8888 -> ImageChannelOrderV1.RGBA
+                org.graphiks.kanvas.render.ir.ImagePixelFormat.BGRA_8888 -> ImageChannelOrderV1.BGRA
+                org.graphiks.kanvas.render.ir.ImagePixelFormat.ALPHA_8 -> ImageChannelOrderV1.ALPHA
+                else -> throw IllegalArgumentException(W5eImagePlanDiagnostics.Format)
+            }
+            val sourceColor = if (channel == ImageChannelOrderV1.ALPHA)
+                ImageColorAlphaPlanV1(channel, pixels.alphaType, ImageTransferPlanV1.NONE, ImageGamutPlanV1.NONE)
+            else {
+                require(pixels.pixelFormat != org.graphiks.kanvas.render.ir.ImagePixelFormat.SRGBA_8888 ||
+                    pixels.colorSpace == org.graphiks.kanvas.color.ColorSpace.SRGB) { W5eImagePlanDiagnostics.ColorSpace }
+                when (pixels.colorSpace) {
+                    org.graphiks.kanvas.color.ColorSpace.SRGB -> ImageColorAlphaPlanV1(channel, pixels.alphaType, ImageTransferPlanV1.SRGB, ImageGamutPlanV1.SRGB)
+                    org.graphiks.kanvas.color.ColorSpace.DISPLAY_P3 -> ImageColorAlphaPlanV1(channel, pixels.alphaType, ImageTransferPlanV1.SRGB, ImageGamutPlanV1.DISPLAY_P3)
+                    org.graphiks.kanvas.color.ColorSpace.LINEAR_SRGB -> ImageColorAlphaPlanV1(channel, pixels.alphaType, ImageTransferPlanV1.LINEAR, ImageGamutPlanV1.SRGB)
+                    else -> throw IllegalArgumentException(W5eImagePlanDiagnostics.ColorSpace)
+                }
+            }
+            val color = sourceColor.copy(premultiplication = pixels.premultiplication)
+            val baseChild = if (channel != ImageChannelOrderV1.ALPHA) null else if (direct) {
+                val childDraw = draw.copy(
+                    transform = if (atlas != null) requireNotNull(constructionEntry).copyTransformF32() else draw.transform,
+                    paint = if (atlasColor == null) draw.paint else draw.paint?.let { it.copy(color = it.color.withAlpha(255)) })
+                when (val planned = planImageMaskSource(childDraw, deviceBoundsI32)) {
+                    is Result.Ready -> planned
+                    is Result.Refused -> throw IllegalArgumentException(planned.diagnosticCode)
+                }
+            } else {
+                // An A8 paint shader masks the paint's solid color. The image root is never its own child.
+                val colorF32 = requireNotNull(draw.paint).color.let {
+                    ColorF32.of(it.redNormalized, it.greenNormalized, it.blueNormalized, it.alphaNormalized)
+                }
+                Result.Ready(MaterialPlanTable.of(listOf(MaterialPlanEntry(MaterialProgramPlan.SolidLinearPremulV1,
+                    MaterialBindingPlan.SolidRgbaF32V1.of(colorF32)))), MaterialPlanRef(0))
+            }
+            val child = if (baseChild == null || opacityF32 == 1f || atlasColor != null) baseChild else {
+                val childEntries = baseChild.table.entries() + MaterialPlanEntry(
+                    MaterialProgramPlan.OpacityV1(baseChild.table.entry(baseChild.root).program),
+                    MaterialBindingPlan.OpacityF32V1.of(opacityF32))
+                Result.Ready(MaterialPlanTable.of(childEntries), MaterialPlanRef(childEntries.lastIndex))
+            }
+            val latticeCells = (if (physicalCell is ImageCellPlanV1.SolidV1) listOf(
+                ImageCellPlanV1.SolidV1(physicalCell.copyDestinationF32(), physicalCell.color, List(4) { true }))
+                else if (physicalCell != null) null else lattice?.let { ImageCellDecomposerV1.lattice(pixels.width, pixels.height, it, maxCellsI64) })
+                ?.filter { it.copyDestinationF32().let { bounds -> bounds.left != bounds.right && bounds.top != bounds.bottom } }
+            val latticeKinds = latticeCells?.joinToString("") { when (it) {
+                is ImageCellPlanV1.Sampled -> "s"
+                is ImageCellPlanV1.SolidV1 -> "c"
+                is ImageCellPlanV1.OmittedV1 -> "o"
+            } }
+            val program = if (child == null) ImageMaterialProgramV3.ColorV3(channel, color.alphaType, color.transfer, color.gamut, sampling, tileModes, nine != null || latticeCells != null, latticeKinds, atlasMode, color.premultiplication)
+                else ImageMaterialProgramV3.MaskV3(child.table.entry(child.root).program, color.alphaType, sampling, tileModes, nine != null || latticeCells != null, latticeKinds, atlasMode)
+            val upload = ImageUploadPlanV1.seal(pixels)
+            val cells = latticeCells ?: nine?.let { ImageCellDecomposerV1.nine(upload.widthI32, upload.heightI32, it.copyCenter(), it.copyDestination()) }
+            val coordinates = if (physicalCell != null) ImageCoordinatePlanV1.seal(requireNotNull(constructionEntry).copyTransformF32(),
+                (physicalCell as? ImageCellPlanV1.Sampled)?.copySourceF32() ?:
+                    org.graphiks.math.geometry.RectF32.ofLTRB(0f, 0f, upload.widthI32.toFloat(), upload.heightI32.toFloat()), physicalCell.copyDestinationF32())
+                else if (nine != null || lattice != null) ImageCoordinatePlanV1.seal(draw.transform,
+                org.graphiks.math.geometry.RectF32.ofLTRB(0f, 0f, upload.widthI32.toFloat(), upload.heightI32.toFloat()), nine?.copyDestination() ?: requireNotNull(lattice).copyDestination())
+                else if (direct) ImageCoordinatePlanV1.seal(draw.transform, requireNotNull(patch).copySource(), patch.copyDestination())
+                else ImageCoordinatePlanV1.sealShader(draw.transform, matricesF32)
+            val paintAlphaF32 = if (child == null || atlasColor != null) opacityF32 * (draw.paint?.color?.alphaNormalized ?: 1f) else 1f
+            val boundsF32 = org.graphiks.math.geometry.RectF32.ofLTRB(deviceBoundsI32.left.toFloat(), deviceBoundsI32.top.toFloat(),
+                deviceBoundsI32.right.toFloat(), deviceBoundsI32.bottom.toFloat())
+            val numeric = ImageNumericAuthorityV1.seal(program, upload, coordinates, boundsF32, paintAlphaF32, sampling, tileModes, cells,
+                opacityF32 * (draw.paint?.color?.alphaNormalized ?: 1f))
+                ?: throw IllegalArgumentException(W5eImagePlanDiagnostics.NumericDomainUnbounded)
+            val childIdentity = child?.table?.sourceIdentity(child.root)
+            val atlasBlend = atlasColor?.let { ImageAtlasBlendNumericAuthorityV1.seal(requireNotNull(atlasMode), it,
+                upload, color, child != null, childIdentity,
+                if (child != null && draw.paint?.shader == null) draw.paint?.color?.withAlpha(255) else null)
+                ?: throw IllegalArgumentException(W5eImagePlanDiagnostics.NumericDomainUnbounded) }
+            val execution = ImageSampleExecutionPlanV1(upload, coordinates, color, numeric, paintAlphaF32,
+                childIdentity, Math.addExact(upload.byteCountI64,
+                    ImageSourceLayoutV3(false, cells != null, latticeCells != null, maxOf(1, cells?.size ?: 9), atlasBlend != null).imageUniformByteCountI64), sampling, tileModes, atlasBlend)
+            val entries = child?.table?.entries().orEmpty() + MaterialPlanEntry(program, ImageSampleV3.of(execution))
+            Result.Ready(MaterialPlanTable.of(entries), MaterialPlanRef(entries.lastIndex))
+        } catch (failure: IllegalArgumentException) {
+            Result.Refused(failure.message?.takeIf { it.startsWith("unsupported.") || it.startsWith("resource.") || it.startsWith("invalid.") }
+                ?: W5eImagePlanDiagnostics.InvalidContract)
+        }
+    }
     public sealed interface Result {
         public data class Ready(
             public val table: MaterialPlanTable,
@@ -62,10 +207,25 @@ public object EffectiveMaterialPlanner {
         is Normalization.Source -> Result.Ready(source.table, source.root, source.blend)
     }
 
+    /** Paint child of an A8 image: original geometry/CTM remain the coordinate authority. */
+    internal fun planImageMaskSource(draw: DrawNode, deviceBoundsI32: org.graphiks.math.geometry.RectI32): Result {
+        require(draw.origin == org.graphiks.kanvas.render.ir.DrawOrigin.IMAGE &&
+            draw.geometry is org.graphiks.kanvas.render.ir.GeometryNode.ImagePatch ||
+            draw.origin == org.graphiks.kanvas.render.ir.DrawOrigin.IMAGE_NINE && draw.geometry is org.graphiks.kanvas.render.ir.GeometryNode.ImageNine ||
+            draw.origin == org.graphiks.kanvas.render.ir.DrawOrigin.IMAGE_LATTICE && draw.geometry is org.graphiks.kanvas.render.ir.GeometryNode.ImageLattice ||
+            draw.origin == org.graphiks.kanvas.render.ir.DrawOrigin.ATLAS && draw.geometry is org.graphiks.kanvas.render.ir.GeometryNode.Atlas)
+        return when (val result = normalize(draw, PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1(),
+            allowDestinationCandidate = true, elideNoOp = false, gradientDeviceBoundsI32 = deviceBoundsI32, imageMaskChild = true)) {
+            is Normalization.Source -> Result.Ready(result.table, result.root, result.blend)
+            is Normalization.Refused -> Result.Refused(result.diagnosticCode)
+            Normalization.NoOp -> error("Image child cannot elide its source")
+        }
+    }
+
     internal fun normalize(draw: DrawNode, targetClamp: BlendTargetClampV1, allowDestinationCandidate: Boolean = false,
         coverage: CoveragePlan = CoveragePlan.FullOrScissor, sample: SamplePlan = SamplePlan.SingleSample,
         elideNoOp: Boolean = true,
-        gradientDeviceBoundsI32: org.graphiks.math.geometry.RectI32? = null): Normalization {
+        gradientDeviceBoundsI32: org.graphiks.math.geometry.RectI32? = null, imageMaskChild: Boolean = false): Normalization {
         val blend = FinalBlendPlanner.plan(draw.blend, coverage, sample, targetClamp,
             if (coverage == CoveragePlan.AnalyticScalarAA) BlendCoverageApplicationV1.SourceMultiplication
             else BlendCoverageApplicationV1.DestinationInterpolation)
@@ -74,10 +234,12 @@ public object EffectiveMaterialPlanner {
             return Normalization.Refused("unsupported.w5b.destination-read.task-2")
         }
         if (allowDestinationCandidate && elideNoOp && blend == BlendPlan.NoOpV1) return Normalization.NoOp
-        if (draw.effects !is EffectStack.Empty || draw.resource != null || draw.operationBlendMode != null) {
+        if (draw.effects !is EffectStack.Empty || draw.resource != null && !imageMaskChild || draw.operationBlendMode != null && !imageMaskChild) {
             return Normalization.Refused(W5aPlanDiagnostics.UnsupportedDrawState)
         }
-        val addressing = GradientAddressingCaptureV2.capture(draw.material)
+        val sourceMaterial = if (imageMaskChild) draw.paint?.shader ?: draw.paint?.let { MaterialNode.Solid(it.color) }
+            ?: MaterialNode.Solid(org.graphiks.math.color.ColorARGB.Black) else draw.material
+        val addressing = GradientAddressingCaptureV2.capture(sourceMaterial)
         if (addressing is GradientAddressingCaptureV2.Ready &&
             (addressing.coordinateNodes.isNotEmpty() || when (val leaf = addressing.leaf) {
                 is MaterialNode.LinearGradient -> leaf.tileMode
@@ -88,8 +250,8 @@ public object EffectiveMaterialPlanner {
             }?.let {
                 it != org.graphiks.kanvas.render.ir.TileMode.CLAMP
             } == true))
-            return normalizeW5d(draw, blend, addressing, gradientDeviceBoundsI32)
-        var material = draw.material
+            return normalizeW5d(draw, blend, addressing, gradientDeviceBoundsI32, imageMaskChild)
+        var material = sourceMaterial
         val opacityInnerToOuter = mutableListOf<Float>()
         var visited = 0
         while (material is MaterialNode.Opacity) {
@@ -141,7 +303,7 @@ public object EffectiveMaterialPlanner {
                 if (tileMode != org.graphiks.kanvas.render.ir.TileMode.CLAMP ||
                     interpolation != org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB ||
                     draw.origin !in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.RECT,
-                        org.graphiks.kanvas.render.ir.DrawOrigin.RRECT, org.graphiks.kanvas.render.ir.DrawOrigin.PATH))
+                        org.graphiks.kanvas.render.ir.DrawOrigin.RRECT, org.graphiks.kanvas.render.ir.DrawOrigin.PATH) && !imageMaskChild)
                     return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
                 when (val stops = normalizeGradientStopsV1(linear?.stops() ?: radial?.stops() ?: sweep?.stops()
                     ?: requireNotNull(conical).stops(), preserveValidityMask = conical != null)) {
@@ -156,6 +318,14 @@ public object EffectiveMaterialPlanner {
                             is org.graphiks.kanvas.render.ir.GeometryNode.Rect -> geometry.copyBounds()
                             is org.graphiks.kanvas.render.ir.GeometryNode.RRect -> geometry.copyShape().rect
                             is org.graphiks.kanvas.render.ir.GeometryNode.Path -> null
+                            is org.graphiks.kanvas.render.ir.GeometryNode.ImagePatch -> if (imageMaskChild) geometry.copyDestination()
+                                else return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
+                            is org.graphiks.kanvas.render.ir.GeometryNode.ImageNine -> if (imageMaskChild) geometry.copyDestination()
+                                else return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
+                            is org.graphiks.kanvas.render.ir.GeometryNode.ImageLattice -> if (imageMaskChild) geometry.copyDestination()
+                                else return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
+                            is org.graphiks.kanvas.render.ir.GeometryNode.Atlas -> if (imageMaskChild) null
+                                else return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
                             else -> return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
                         }
                         if (bounds == null && (gradientDeviceBoundsI32 == null || gradientDeviceBoundsI32.isEmpty))
@@ -256,7 +426,7 @@ public object EffectiveMaterialPlanner {
     }
 
     private fun normalizeW5d(draw: DrawNode, blend: BlendPlan, capture: GradientAddressingCaptureV2.Ready,
-        gradientDeviceBoundsI32: org.graphiks.math.geometry.RectI32?): Normalization {
+        gradientDeviceBoundsI32: org.graphiks.math.geometry.RectI32?, imageMaskChild: Boolean = false): Normalization {
         val linear = capture.leaf as? MaterialNode.LinearGradient
         val radial = capture.leaf as? MaterialNode.RadialGradient
         val sweep = capture.leaf as? MaterialNode.SweepGradient
@@ -265,7 +435,7 @@ public object EffectiveMaterialPlanner {
             ?: conical?.interpolation ?: return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
         if (interpolation != org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB ||
             draw.origin !in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.RECT,
-                org.graphiks.kanvas.render.ir.DrawOrigin.RRECT, org.graphiks.kanvas.render.ir.DrawOrigin.PATH))
+                org.graphiks.kanvas.render.ir.DrawOrigin.RRECT, org.graphiks.kanvas.render.ir.DrawOrigin.PATH) && !imageMaskChild)
             return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
         val family = when {
             linear != null -> GradientFamilyV2.LINEAR
@@ -334,6 +504,14 @@ public object EffectiveMaterialPlanner {
             is org.graphiks.kanvas.render.ir.GeometryNode.Rect -> geometry.copyBounds()
             is org.graphiks.kanvas.render.ir.GeometryNode.RRect -> geometry.copyShape().rect
             is org.graphiks.kanvas.render.ir.GeometryNode.Path -> null
+            is org.graphiks.kanvas.render.ir.GeometryNode.ImagePatch -> if (imageMaskChild) geometry.copyDestination()
+                else return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
+            is org.graphiks.kanvas.render.ir.GeometryNode.ImageNine -> if (imageMaskChild) geometry.copyDestination()
+                else return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
+            is org.graphiks.kanvas.render.ir.GeometryNode.ImageLattice -> if (imageMaskChild) geometry.copyDestination()
+                else return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
+            is org.graphiks.kanvas.render.ir.GeometryNode.Atlas -> if (imageMaskChild) null
+                else return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
             else -> return Normalization.Refused(W5aPlanDiagnostics.UnsupportedMaterial)
         }
         val deviceCorners = bounds?.let { listOf(org.graphiks.math.geometry.Point2F32(bounds.left, bounds.top),

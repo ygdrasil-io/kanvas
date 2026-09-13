@@ -204,6 +204,8 @@ public class PlanCapabilitySnapshot private constructor(
             require(maxDynamicUniformBuffersPerPipelineLayout >= 0) { "Maximum dynamic uniform buffers must be non-negative" }
             supportedTextureSampleSupports.forEach { support ->
                 when (val format = support.format) {
+                    is PlanTextureFormat.ImageV1 -> require(support.sampleCountI32 == 1 &&
+                        support.usages() == setOf(PlanResourceUsage.Sampled, PlanResourceUsage.CopyDestination))
                     is PlanTextureFormat.Color -> require(format.value in supportedFormats) {
                         "Texture sample support declares an unsupported color format"
                     }
@@ -215,6 +217,7 @@ public class PlanCapabilitySnapshot private constructor(
             }
             supportedTextureResolveSupports.forEach { support ->
                 when (val format = support.format) {
+                    is PlanTextureFormat.ImageV1 -> error("Decoded image resolve support is impossible")
                     is PlanTextureFormat.Color -> require(format.value in supportedFormats) {
                         "Texture resolve support declares an unsupported color format"
                     }

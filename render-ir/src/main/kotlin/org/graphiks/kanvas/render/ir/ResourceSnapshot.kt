@@ -26,6 +26,7 @@ public class ImmutableBytes private constructor(bytes: ByteArray) : CanonicalVal
     private val values: ByteArray = bytes.copyOf()
 
     internal val size: Int get() = values.size
+    internal fun hasContent(values: ByteArray): Boolean = this.values.contentEquals(values)
     public fun copyToByteArray(): ByteArray = values.copyOf()
     override val canonicalId: CanonicalId = canonicalSequenceId("immutable-bytes-v1", values.map(Byte::toString))
     override fun equals(other: Any?): Boolean = other is ImmutableBytes && values.contentEquals(other.values)
@@ -95,6 +96,9 @@ public enum class ImagePixelFormat(public val bytesPerPixel: Int) {
 /** Alpha interpretation carried with a backend-neutral image resource. */
 public enum class ImageAlphaType { OPAQUE, PREMUL, UNPREMUL, UNKNOWN }
 
+/** Where premultiplication occurs relative to the RGB transfer function. */
+public enum class ImagePremultiplicationV1 { SOURCE_SPACE, TRANSFER_ENCODED_LINEAR_PREMUL }
+
 /** An immutable image resource. Pixel-backed and external resources are intentionally distinct. */
 public sealed interface ImageResourceSnapshot : ResourceSnapshot {
     public val sourceId: String
@@ -114,6 +118,7 @@ public sealed interface ImageResourceSnapshot : ResourceSnapshot {
         override val colorSpace: ColorSpace,
         public val rowBytes: Int,
         pixels: ByteArray,
+        public val premultiplication: ImagePremultiplicationV1 = ImagePremultiplicationV1.SOURCE_SPACE,
     ) : ImageResourceSnapshot {
         private val storedPixels: ImmutableBytes = ImmutableBytes.copyOf(pixels)
 
@@ -123,6 +128,11 @@ public sealed interface ImageResourceSnapshot : ResourceSnapshot {
             require(pixelFormat != ImagePixelFormat.UNKNOWN) { "Owned pixels require a concrete pixel format" }
             require(alphaType != ImageAlphaType.UNKNOWN) { "Owned pixels require a concrete alpha type" }
             require(colorSpace.name.isNotBlank()) { "Owned pixels require a nonblank color-space identity" }
+            require(premultiplication == ImagePremultiplicationV1.SOURCE_SPACE ||
+                alphaType == ImageAlphaType.PREMUL && pixelFormat in setOf(
+                    ImagePixelFormat.RGBA_8888, ImagePixelFormat.BGRA_8888, ImagePixelFormat.SRGBA_8888)) {
+                "invalid.material.image.premultiplication"
+            }
             require(rowBytes >= minimumRowBytes(width, pixelFormat)) { "rowBytes is smaller than one image row" }
             val requiredBytes = checkedPixelByteCount(rowBytes, height)
             require(storedPixels.size.toLong() >= requiredBytes) {
@@ -131,7 +141,9 @@ public sealed interface ImageResourceSnapshot : ResourceSnapshot {
         }
 
         public fun copyPixels(): ByteArray = storedPixels.copyToByteArray()
-        override val canonicalId: CanonicalId = canonicalId(
+        /** Compares caller bytes without exposing this snapshot's owned storage. */
+        public fun hasPixels(pixels: ByteArray): Boolean = storedPixels.hasContent(pixels)
+        private val sourceSpaceCanonicalId: CanonicalId = canonicalId(
             "image-resource-pixels-v1",
             sourceId,
             width.toString(),
@@ -142,10 +154,13 @@ public sealed interface ImageResourceSnapshot : ResourceSnapshot {
             rowBytes.toString(),
             storedPixels.canonicalId.value,
         )
+        override val canonicalId: CanonicalId = if (premultiplication == ImagePremultiplicationV1.SOURCE_SPACE)
+            sourceSpaceCanonicalId else canonicalId("image-resource-premultiplication-v1",
+                sourceSpaceCanonicalId.value, premultiplication.name)
         override fun equals(other: Any?): Boolean = other is Pixels &&
             sourceId == other.sourceId && width == other.width && height == other.height &&
             pixelFormat == other.pixelFormat && alphaType == other.alphaType && colorSpace == other.colorSpace &&
-            rowBytes == other.rowBytes && storedPixels == other.storedPixels
+            rowBytes == other.rowBytes && storedPixels == other.storedPixels && premultiplication == other.premultiplication
         override fun hashCode(): Int = canonicalId.hashCode()
     }
 
@@ -177,7 +192,8 @@ public sealed interface ImageResourceSnapshot : ResourceSnapshot {
             colorSpace: ColorSpace,
             rowBytes: Int,
             pixels: ByteArray,
-        ): Pixels = Pixels(sourceId, width, height, pixelFormat, alphaType, colorSpace, rowBytes, pixels)
+            premultiplication: ImagePremultiplicationV1 = ImagePremultiplicationV1.SOURCE_SPACE,
+        ): Pixels = Pixels(sourceId, width, height, pixelFormat, alphaType, colorSpace, rowBytes, pixels, premultiplication)
     }
 }
 
@@ -551,11 +567,15 @@ internal fun matrixCanonicalId(tag: String, value: Matrix3x3F32): CanonicalId = 
 
 private fun minimumRowBytes(width: Int, format: ImagePixelFormat): Int {
     require(width > 0) { "Image width must be positive" }
-    return try {
-        Math.multiplyExact(width, format.bytesPerPixel)
+    val rowBytesI64 = try {
+        Math.multiplyExact(width.toLong(), format.bytesPerPixel.toLong())
     } catch (error: ArithmeticException) {
         throw IllegalArgumentException("Image row byte count overflows Int", error)
     }
+    if (rowBytesI64 !in 0L..Int.MAX_VALUE.toLong()) {
+        throw IllegalArgumentException("Image row byte count overflows Int")
+    }
+    return rowBytesI64.toInt()
 }
 
 private fun checkedPixelByteCount(rowBytes: Int, height: Int): Long = try {

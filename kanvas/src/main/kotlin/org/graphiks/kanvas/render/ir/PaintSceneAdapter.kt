@@ -155,7 +155,7 @@ public object PaintSceneAdapter {
             } }),
         )
 
-    /** Preserve coordinate values for typed validation of every admitted W5d leaf. */
+    /** Preserve coordinate values for typed validation of admitted gradient and image leaves. */
     private fun Shader.preservesW5dMatrices(): Boolean {
         var source = this
         while (true) when (val node = source) {
@@ -166,6 +166,9 @@ public object PaintSceneAdapter {
             is Shader.RadialGradient -> return node.interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB
             is Shader.SweepGradient -> return node.interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB
             is Shader.ConicalGradient -> return node.interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB
+            is Shader.Image -> return node.sampling == SamplingOptions.NEAREST &&
+                node.tileModeX == org.graphiks.kanvas.paint.TileMode.CLAMP &&
+                node.tileModeY == org.graphiks.kanvas.paint.TileMode.CLAMP
             else -> return false
         }
     }
@@ -368,7 +371,7 @@ public object PaintSceneAdapter {
     private fun SamplingOptions.toImageSampling(): ImageSampling = when (this) {
         SamplingOptions.NEAREST -> ImageSampling.Nearest
         SamplingOptions.LINEAR -> ImageSampling.Linear
-        is SamplingOptions.Cubic -> ImageSampling.Cubic(B.checked("sampling.b"), C.checked("sampling.c"))
+        is SamplingOptions.Cubic -> ImageSampling.Cubic(B, C)
     }
     private fun ImageSampling.toSampling(): SamplingOptions = when (this) {
         ImageSampling.Nearest -> SamplingOptions.NEAREST

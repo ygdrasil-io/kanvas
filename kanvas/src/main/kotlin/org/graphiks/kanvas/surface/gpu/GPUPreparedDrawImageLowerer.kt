@@ -77,6 +77,7 @@ internal sealed interface GPUPreparedDrawImageLowering {
         GPUPreparedDrawImageLowering
 }
 
+/** Legacy semantic lowering only for unadmitted whole frames; owned W5e never calls this. */
 internal object GPUPreparedDrawImageLowerer {
     fun lower(
         operation: DisplayOp.DrawImage,
@@ -149,7 +150,7 @@ internal object GPUPreparedDrawImageLowerer {
                 ),
             )
         }
-        val requestedSampling = requestedImageShader?.sampling
+        val requestedSampling = operation.sampling
         val routeCapability = config.preparedImageRoute.toGpuRouteCapability()
         val boundedW28 = routeCapability == GPUPreparedImageRouteCapability.BoundedNearest1To1
         val sampling = when (requestedSampling) {
@@ -160,7 +161,6 @@ internal object GPUPreparedDrawImageLowerer {
                     mapOf("sourceId" to image.sourceId, "sampling" to "linear", "supportedSampling" to "nearest"),
                 )
             } else GPUPreparedImageSampling.Linear
-            null -> GPUPreparedImageSampling.Nearest
             is SamplingOptions.Cubic -> return GPUPreparedDrawImageLowering.Refused(
                 GPUPreparedImageRefusalCodes.SAMPLING_CUBIC,
                 mapOf("sourceId" to image.sourceId),
@@ -492,6 +492,7 @@ internal object GPUPreparedDrawImageLowerer {
                 paint = operation.paint.copy(shader = imageShader),
                 transform = operation.transform,
                 clip = operation.clip,
+                sampling = imageShader.sampling,
             ),
             commandId = commandId,
             paintOrder = paintOrder,

@@ -112,6 +112,7 @@ private class W4dGeneralGraphDigestWriter {
             i32("$prefix.program.version", entry.program.versionI32)
             text("$prefix.program.id", entry.program.structuralId.value)
             when (val binding = entry.bindings) {
+                is ImageSampleV3 -> error(W5eImagePlanDiagnostics.InvalidContract)
                 is MaterialBindingPlan.GradientV2 -> {
                     text("$prefix.binding", "gradient-v2")
                     text("$prefix.numeric-authority", binding.numericAuthority.canonicalIdentity)
@@ -322,6 +323,7 @@ private class W4dGeneralGraphDigestWriter {
         i32("$prefix.command-index", draw.commandIndex)
         if (materialV2) {
             when (val authority = draw.materialAuthority) {
+                is PlanDrawMaterialAuthority.MaterialV3 -> error(W5eImagePlanDiagnostics.InvalidContract)
                 is PlanDrawMaterialAuthority.MaterialV2 -> {
                     text("$prefix.material-authority", "material-v2")
                     i32("$prefix.material-ref", authority.ref.indexI32)
@@ -477,6 +479,10 @@ private class W4dGeneralGraphDigestWriter {
     }
     private fun textureFormat(prefix: String, format: PlanTextureFormat) {
         when (format) {
+            is PlanTextureFormat.ImageV1 -> {
+                text("$prefix.kind", "image-v1")
+                text("$prefix.value", format.value.name)
+            }
             is PlanTextureFormat.Color -> {
                 text("$prefix.kind", "color")
                 text("$prefix.value", format.value.name)

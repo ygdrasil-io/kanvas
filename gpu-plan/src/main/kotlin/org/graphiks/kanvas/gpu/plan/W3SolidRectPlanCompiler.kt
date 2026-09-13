@@ -37,7 +37,16 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
     override fun select(
         scene: SceneSnapshot,
         target: RenderTargetDescriptor,
-    ): GpuPlanSelection {
+    ): GpuPlanSelection = selectValidated(scene, target, false)
+
+    /** Internal construction seam after W5e has retained and authenticated every
+     * original semantic NoOp. Ordinary W3 admission still requires its own draw. */
+    internal fun selectEmptyW5eConstruction(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
+        require(scene.all { it is SceneCommand.Annotation || it is SceneCommand.SetTransform || it is SceneCommand.SetClip })
+        return selectValidated(scene, target, true)
+    }
+
+    private fun selectValidated(scene: SceneSnapshot, target: RenderTargetDescriptor, allowMetadataOnly: Boolean): GpuPlanSelection {
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) {
             return invalidSelection(diag(W3PlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "Scene and target descriptors disagree"))
         }
@@ -45,7 +54,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
             return notCandidate(diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W3 accepts at most 512 total commands"))
         }
         val targetClamp = FORMAT.blendTargetClampV1()
-        when (val recognition = recognize(scene, targetClamp)) {
+        when (val recognition = recognize(scene, targetClamp, allowMetadataOnly)) {
             is Recognition.MaterialRefused -> return if (target.colorSpace == ColorSpace.SRGB) {
                 GpuPlanSelection.MaterialOnlyRefusal(W5A_CAPABILITY_ID, scene.canonicalId, target, recognition.refusals)
             } else notCandidate(diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.TARGET, "W3 supports only sRGB targets"))
@@ -149,7 +158,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         }
     }
 
-    private fun recognize(scene: SceneSnapshot, targetClamp: BlendTargetClampV1): Recognition {
+    private fun recognize(scene: SceneSnapshot, targetClamp: BlendTargetClampV1, allowMetadataOnly: Boolean = false): Recognition {
         if (scene.colorSpace != ColorSpace.SRGB) return Recognition.Gap(
             diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W3 supports only sRGB scenes"),
         )
@@ -198,7 +207,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
             )
             return Recognition.MaterialRefused(materialRefusals)
         }
-        return if (draws.isEmpty() && elidedNoOpsI32 == 0) Recognition.Gap(
+        return if (draws.isEmpty() && elidedNoOpsI32 == 0 && !allowMetadataOnly) Recognition.Gap(
             diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W3 requires at least one visible draw"),
         ) else if (materialEntries.isNotEmpty() && draws.any { it.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1 }) {
             Recognition.Gap(diag(W3PlanDiagnostics.CommandNotMigrated, RenderDiagnosticDomain.SCENE, "W5a graphs cannot mix legacy colours and material references"))

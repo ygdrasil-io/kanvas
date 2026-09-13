@@ -4,7 +4,10 @@ import org.graphiks.kanvas.render.ir.*
 import org.graphiks.math.geometry.RectF32
 
 /** A separate capability: ordered native lanes, one material table and one target lifetime. */
-public class W5aCompositePlanCompiler : GpuPlanCompiler {
+public class W5aCompositePlanCompiler internal constructor(private val imageEntries: Map<Int, ImageConstructionEntryV1>) : GpuPlanCompiler {
+    public constructor() : this(emptyMap())
+    private enum class LaneKind { Rect, RRect, PathFill, PathStroke, Image }
+    private data class LaneClassification(val kind: LaneKind, val geometryKindI32: Int)
     private class Lane(val compiler: GpuPlanCompiler, val candidate: GpuPlanCandidate)
     private class Candidate(
         val owner: W5aCompositePlanCompiler,
@@ -18,20 +21,30 @@ public class W5aCompositePlanCompiler : GpuPlanCompiler {
             return GpuPlanSelection.InvalidScene(listOf(diagnostic("Composite scene metadata is invalid")))
         val commands = scene.toList()
         val draws = commands.withIndex().filter { it.value is SceneCommand.Draw }
-        fun kind(command: SceneCommand): Int? = when ((command as? SceneCommand.Draw)?.node?.geometry) {
+        fun geometryKind(command: SceneCommand): Int? = when ((command as? SceneCommand.Draw)?.node?.geometry) {
             is GeometryNode.Rect -> 0
             is GeometryNode.RRect -> 1
             is GeometryNode.Path -> if (command.node.paint?.style == PaintStyleNode.FILL) 2 else 3
             else -> null
         }
-        if (draws.isEmpty() || draws.any { kind(it.value) == null } ||
-            draws.map { kind(it.value) }.distinct().size < 2 ||
+        // Image is a distinct logical lane; its compiler-issued construction retains
+        // the native Rect/Path topology. Source authority is sealed by the W5e bridge.
+        fun kind(draw: IndexedValue<SceneCommand>): LaneClassification? = geometryKind(draw.value)?.let {
+            LaneClassification(if (draw.index in imageEntries) LaneKind.Image else when (it) {
+                0 -> LaneKind.Rect
+                1 -> LaneKind.RRect
+                2 -> LaneKind.PathFill
+                else -> LaneKind.PathStroke
+            }, it)
+        }
+        if (draws.isEmpty() || draws.any { kind(it) == null } ||
+            draws.map { kind(it) }.distinct().size < 2 ||
             commands.any { it !is SceneCommand.Draw && it !is SceneCommand.Annotation &&
                 it !is SceneCommand.SetTransform && it !is SceneCommand.SetClip }
         ) return GpuPlanSelection.NotCandidate(listOf(diagnostic("Scene is outside the native mixed Rect/RRect/Path capability")))
         val runs = mutableListOf<MutableList<IndexedValue<SceneCommand>>>()
         draws.forEach { draw ->
-            if (runs.lastOrNull()?.lastOrNull()?.let { kind(it.value) } != kind(draw.value)) runs += mutableListOf<IndexedValue<SceneCommand>>()
+            if (runs.lastOrNull()?.lastOrNull()?.let { kind(it) } != kind(draw)) runs += mutableListOf<IndexedValue<SceneCommand>>()
             runs.last() += draw
         }
         if (runs.size > MAX_LANES_I32) return GpuPlanSelection.ResourceLimitExceeded(listOf(
@@ -51,23 +64,23 @@ public class W5aCompositePlanCompiler : GpuPlanCompiler {
                     SceneCommand.Annotation.of(RectF32(0f, 0f, 0f, 0f), "w5a.omitted-draw", index.toString())
                 else command
             })
-            var compiler: GpuPlanCompiler = when (kind(run.first().value)) {
+            var compiler: GpuPlanCompiler = when (geometryKind(run.first().value)) {
                 0 -> W3SolidRectPlanCompiler()
                 1 -> W4bAnalyticRRectPlanCompiler()
                 2 -> W4cPathFillPlanCompiler()
                 else -> W4dPathStrokePlanCompiler()
             }
             var selection = compiler.select(laneScene, target)
-            if (selection is GpuPlanSelection.NotCandidate && kind(run.first().value) == 0) {
+            if (selection is GpuPlanSelection.NotCandidate && geometryKind(run.first().value) == 0) {
                 compiler = W4aAnalyticRectPlanCompiler()
                 selection = compiler.select(laneScene, target)
             }
-            if (selection is GpuPlanSelection.NotCandidate && kind(run.first().value) in setOf(2, 3) &&
-                draws.any { when (val blend = (it.value as SceneCommand.Draw).node.blend) {
+            if (selection is GpuPlanSelection.NotCandidate && geometryKind(run.first().value) in setOf(2, 3) &&
+                (run.any { it.index in imageEntries } || draws.any { when (val blend = (it.value as SceneCommand.Draw).node.blend) {
                     is BlendNode.Mode -> blend.mode != BlendMode.SRC_OVER
                     is BlendNode.Paint -> blend.blender == null && blend.mode != BlendMode.SRC_OVER
                     else -> false
-                } }) {
+                } })) {
                 compiler = W4dGeneralPathPlanCompiler()
                 selection = compiler.select(laneScene, target)
             }

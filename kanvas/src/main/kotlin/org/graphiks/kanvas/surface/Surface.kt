@@ -105,17 +105,30 @@ class Surface(
         val sw = subset.width().toInt().coerceAtMost(result.width - sx)
         val sh = subset.height().toInt().coerceAtMost(result.height - sy)
         if (sw <= 0 || sh <= 0) return null
-        val pixels = ByteArray(sw * sh * 4)
+        val rowBytesI64 = Math.multiplyExact(sw.toLong(), 4L)
+        val sizeI64 = Math.multiplyExact(rowBytesI64, sh.toLong())
+        val sourceStrideI64 = Math.multiplyExact(result.width.toLong(), 4L)
+        val sourceStartI64 = Math.addExact(Math.multiplyExact(sy.toLong(), sourceStrideI64), Math.multiplyExact(sx.toLong(), 4L))
+        val sourceEndI64 = Math.addExact(Math.addExact(sourceStartI64,
+            Math.multiplyExact(sh.toLong() - 1L, sourceStrideI64)), rowBytesI64)
+        require(sizeI64 in 0L..Int.MAX_VALUE.toLong() && sourceEndI64 <= result.pixels.size.toLong()) {
+            "image.snapshot-layout-overflow"
+        }
+        val sourcePixels = result.pixels.toByteArray()
+        val pixels = ByteArray(sizeI64.toInt())
         for (row in 0 until sh) {
-            val srcOff = ((sy + row) * result.width + sx) * 4
-            val dstOff = row * sw * 4
-            result.pixels.toByteArray().copyInto(pixels, dstOff, srcOff, srcOff + sw * 4)
+            val srcOffI64 = Math.addExact(sourceStartI64, Math.multiplyExact(row.toLong(), sourceStrideI64))
+            val dstOffI64 = Math.multiplyExact(row.toLong(), rowBytesI64)
+            sourcePixels.copyInto(pixels, Math.toIntExact(dstOffI64), Math.toIntExact(srcOffI64),
+                Math.toIntExact(Math.addExact(srcOffI64, rowBytesI64)))
         }
         val colorType = when (result.format) {
             PixelFormat.RGBA8 -> ColorType.RGBA_8888
             PixelFormat.BGRA8 -> ColorType.BGRA_8888
         }
-        return Image(sw, sh, colorType, "surface-snapshot-subset", pixels, alphaType = AlphaType.PREMUL)
+        return Image(sw, sh, colorType, "surface-snapshot-subset", pixels, colorSpace = result.colorSpace,
+            alphaType = AlphaType.PREMUL,
+            premultiplication = org.graphiks.kanvas.render.ir.ImagePremultiplicationV1.TRANSFER_ENCODED_LINEAR_PREMUL)
     }
 
     /**

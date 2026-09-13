@@ -115,6 +115,8 @@ public class GpuPlanTaskListLowerer {
         if (request.graph.verifyW5bGeometryCompilerWitness() && request.graph.visualCommandCount == 0)
             return lowerW3(request, current)
         return when (request.graph.capabilityId) {
+            org.graphiks.kanvas.gpu.plan.W5eImagePlanCompiler.CAPABILITY_ID -> W5eImagePlanLowerer().lower(request)
+            org.graphiks.kanvas.gpu.plan.W5eImagePlanCompiler.CONSTRUCTION_CAPABILITY_ID -> lowerW3(request, current)
             W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID -> W5bAnalyticRRectGraphLowerer().lower(request)
             org.graphiks.kanvas.gpu.plan.W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID,
             W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID,
@@ -472,9 +474,9 @@ public class GpuPlanTaskListLowerer {
     private fun validateW3Graph(graph: RenderGraph): W3Graph? {
         val geometryClearOnly = graph.verifyW5bGeometryCompilerWitness() && graph.visualCommandCount == 0 &&
             graph.materialPlanTableOrNull() == null && graph.w5bGeometryLanes().isEmpty() && graph.passes().size == 2
-        if ((!geometryClearOnly && graph.capabilityId !in setOf(W3SolidRectPlanCompiler.CAPABILITY_ID, W3SolidRectPlanCompiler.W5A_CAPABILITY_ID, W5bCorePrimitiveGraph.CAPABILITY_ID)) || graph.colorFormat != PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) return null
+        if ((!geometryClearOnly && graph.capabilityId !in setOf(W3SolidRectPlanCompiler.CAPABILITY_ID, W3SolidRectPlanCompiler.W5A_CAPABILITY_ID, W5bCorePrimitiveGraph.CAPABILITY_ID, org.graphiks.kanvas.gpu.plan.W5eImagePlanCompiler.CONSTRUCTION_CAPABILITY_ID)) || graph.colorFormat != PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) return null
         val resources = graph.resources().filter { it.role != PlanResourceRole.GradientStopData }
-        if (graph.capabilityId == W5bCorePrimitiveGraph.CAPABILITY_ID) {
+        if (graph.capabilityId == W5bCorePrimitiveGraph.CAPABILITY_ID || graph.capabilityId == org.graphiks.kanvas.gpu.plan.W5eImagePlanCompiler.CONSTRUCTION_CAPABILITY_ID) {
             val target = resources.singleOrNull { it.role == PlanResourceRole.LogicalTarget } ?: return null
             val staging = resources.singleOrNull { it.role == PlanResourceRole.ReadbackStaging } ?: return null
             val renders = graph.passes().filterIsInstance<PlanPass.RenderPass>()
@@ -543,6 +545,7 @@ public class GpuPlanTaskListLowerer {
         val table = graph.materialPlanTableOrNull()
         if (draws.any { draw ->
                 when (val authority = draw.materialAuthority) {
+                    is PlanDrawMaterialAuthority.MaterialV3 -> true
                     is PlanDrawMaterialAuthority.LegacyColorV1 -> false
                     is PlanDrawMaterialAuthority.MaterialV2 -> table == null || authority.ref.indexI32 >= table.sizeI32
                     is PlanDrawMaterialAuthority.MaterialV1 -> table == null || authority.ref.indexI32 >= table.sizeI32
@@ -575,6 +578,7 @@ public class GpuPlanTaskListLowerer {
         table: MaterialPlanTable?,
         authority: PlanDrawMaterialAuthority,
     ): ColorF32? = when (authority) {
+        is PlanDrawMaterialAuthority.MaterialV3 -> null
         is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
         is PlanDrawMaterialAuthority.MaterialV2 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }
         is PlanDrawMaterialAuthority.MaterialV1 -> W5aMaterialPlanLowerer().lower(requireNotNull(table), authority.ref)

@@ -4,6 +4,7 @@ import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.kanvas.render.ir.ImagePremultiplicationV1
 
 data class Image(
     val width: Int,
@@ -13,7 +14,17 @@ data class Image(
     val pixels: ByteArray? = null,
     val colorSpace: ColorSpace = ColorSpace.SRGB,
     val alphaType: AlphaType = colorType.defaultAlphaType(),
+    val rowBytesI32: Int = logicalRowBytesI32(width, colorType),
+    val premultiplication: ImagePremultiplicationV1 = ImagePremultiplicationV1.SOURCE_SPACE,
 ) {
+    init {
+        require(rowBytesI32 >= logicalRowBytesI32(width, colorType)) { "image.row-bytes-too-small" }
+        require(premultiplication == ImagePremultiplicationV1.SOURCE_SPACE ||
+            pixels != null && alphaType == AlphaType.PREMUL && colorType in setOf(
+                ColorType.RGBA_8888, ColorType.BGRA_8888, ColorType.SRGBA_8888)) {
+            "invalid.material.image.premultiplication"
+        }
+    }
     companion object {
         fun decode(bytes: ByteArray, mimeType: String? = null): Image {
             when (val result = ImageDecoderRegistry.decode(bytes, mimeType)) {
@@ -32,7 +43,10 @@ data class Image(
             colorType: ColorType = ColorType.RGBA_8888,
             sourceId: String = "pixels",
             alphaType: AlphaType = colorType.defaultAlphaType(),
-        ): Image = Image(width, height, colorType, sourceId, pixels, alphaType = alphaType)
+            colorSpace: ColorSpace = ColorSpace.SRGB,
+            rowBytesI32: Int = logicalRowBytesI32(width, colorType),
+            premultiplication: ImagePremultiplicationV1 = ImagePremultiplicationV1.SOURCE_SPACE,
+        ): Image = Image(width, height, colorType, sourceId, pixels, colorSpace, alphaType, rowBytesI32, premultiplication)
 
         fun placeholder(width: Int, height: Int): Image =
             Image(width, height, ColorType.RGBA_8888, "placeholder:${width}x${height}")
@@ -51,14 +65,14 @@ data class Image(
      * `SkImage::reinterpretColorSpace`).
      */
     fun reinterpretColorSpace(newColorSpace: ColorSpace): Image =
-        Image(width, height, colorType, sourceId, pixels, newColorSpace, alphaType)
+        Image(width, height, colorType, sourceId, pixels, newColorSpace, alphaType, rowBytesI32, premultiplication)
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is Image) return false
         return width == other.width && height == other.height &&
             colorType == other.colorType && colorSpace == other.colorSpace && alphaType == other.alphaType &&
-            sourceId == other.sourceId
+            rowBytesI32 == other.rowBytesI32 && sourceId == other.sourceId && premultiplication == other.premultiplication
     }
 
     override fun hashCode(): Int {
@@ -67,9 +81,23 @@ data class Image(
         result = 31 * result + colorType.hashCode()
         result = 31 * result + colorSpace.hashCode()
         result = 31 * result + alphaType.hashCode()
+        result = 31 * result + rowBytesI32
         result = 31 * result + sourceId.hashCode()
+        result = 31 * result + premultiplication.hashCode()
         return result
     }
+}
+
+public fun logicalRowBytesI32(width: Int, colorType: ColorType): Int {
+    val rowBytesI64 = try {
+        Math.multiplyExact(width.toLong(), colorType.bytesPerPixel.toLong())
+    } catch (_: ArithmeticException) {
+        throw IllegalArgumentException("image.row-bytes-overflow")
+    }
+    if (rowBytesI64 !in 0L..Int.MAX_VALUE.toLong()) {
+        throw IllegalArgumentException("image.row-bytes-overflow")
+    }
+    return rowBytesI64.toInt()
 }
 
 private fun detectFormatFromMagicBytes(bytes: ByteArray): String? {

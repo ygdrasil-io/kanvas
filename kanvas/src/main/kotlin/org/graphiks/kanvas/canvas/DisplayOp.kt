@@ -88,6 +88,7 @@ sealed interface DisplayOp {
     data class DrawImage(
         val image: Image, val src: RectF32, val dst: RectF32,
         val paint: Paint?, val transform: Matrix3x3F32, val clip: ClipStack,
+        val sampling: SamplingOptions = SamplingOptions.NEAREST,
     ) : DisplayOp
 
     /** Draw a text blob at the given position. */

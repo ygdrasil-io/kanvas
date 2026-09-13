@@ -118,6 +118,14 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
             ) == true &&
             1 in maskSamples
     val sampleSupports = buildSet {
+        if (supportedTextureUsage?.supports(GPUTextureUsage.TextureBinding or GPUTextureUsage.CopyDst) == true) {
+            listOf(GPUTextureFormat.RGBA8Unorm to org.graphiks.kanvas.gpu.plan.ImagePhysicalFormatV1.RGBA8_UNORM,
+                GPUTextureFormat.R8Unorm to org.graphiks.kanvas.gpu.plan.ImagePhysicalFormatV1.R8_UNORM)
+                .filter { it.first in supportedTextureFormats }.forEach { (_, format) ->
+                    add(PlanTextureSampleSupport.of(PlanTextureFormat.ImageV1(format), 1,
+                        setOf(PlanResourceUsage.Sampled, PlanResourceUsage.CopyDestination)))
+                }
+        }
         if (oneSampleColorUsages.isNotEmpty()) {
             add(
                 PlanTextureSampleSupport.of(

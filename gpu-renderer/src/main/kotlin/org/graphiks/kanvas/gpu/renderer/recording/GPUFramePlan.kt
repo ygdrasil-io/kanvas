@@ -662,6 +662,8 @@ class GPUFramePlan(
     phaseOrder: List<GPUTaskPhase> = GPUTaskPhase.entries,
     elidedNoOpDraws: List<GPUFrameElidedNoOpDraw> = emptyList(),
     val atomicallyRefused: Boolean = false,
+    val w5eConstructionV1: org.graphiks.kanvas.gpu.plan.W5eImageConstructionPlanV1? = null,
+    val w5ePreparedFrameV1: org.graphiks.kanvas.gpu.renderer.passes.W5ePreparedFrameWitnessV1? = null,
 ) {
     val recordingSeals: List<GPURecordingSeal> = immutableList(recordingSeals)
     val steps: List<GPUFrameStep> = immutableList(steps)
@@ -811,6 +813,9 @@ private fun GPUFramePlan.canonicalPreimageHash(): String =
         long("frameId", frameId.value)
         capabilitySeal("capabilitySeal", capabilitySeal)
         bool("atomicallyRefused", atomicallyRefused)
+        w5eConstructionV1?.let { string("w5eConstructionV1", it.canonicalIdentity) }
+        // Source-plan identity only: the witness's expected frame hash is never recursively hashed.
+        w5ePreparedFrameV1?.let { string("w5ePreparedFrameV1", it.canonicalIdentity) }
         list("recordingSeals", recordingSeals) { seal ->
             tag("GPURecordingSeal")
             string("recordingId", seal.recordingId.value)
@@ -1530,6 +1535,7 @@ private fun CanonicalHashSink.packet(value: GPUDrawPacket) {
     tag("GPUDrawPacket")
     string("packetId", value.packetId.value)
     nullableString("w5aSourceStageV2", value.w5aSourceStageV2?.canonicalIdentity)
+    value.w5eImageFrameWitnessV1?.let { string("w5eImageSourceV3", it.canonicalIdentity) }
     int("commandIdValue", value.commandIdValue)
     string("analysisRecordId", value.analysisRecordId)
     string("passId", value.passId)
@@ -2376,6 +2382,7 @@ private fun GPUDrawPacket.stableDump(): String =
         "uniform=${uniformSlot?.let { "${it.slotId.value},${it.fingerprint.value},${it.byteOffset}" } ?: "none"}|" +
         "resource=${resourceSlot?.let { "${it.slotId.value},${it.fingerprint.value},${it.bindingIndex}" } ?: "none"}|" +
         "semantic=${semanticPayload?.stableDump() ?: "none"}|" +
+                (w5eImageFrameWitnessV1?.let { "imageV3=${it.canonicalIdentity}|" } ?: "") +
         "vertex=$vertexSourceLabel|scissor=${scissorBoundsHash ?: "none"}|" +
         "clipExecution=${clipExecutionPlan?.canonicalIdentity() ?: "none"}|" +
         "clipProducer=${clipProducerAuthority?.selectorIdentity ?: "none"}|target=$targetStateHash|" +
