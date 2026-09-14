@@ -334,6 +334,26 @@ internal object ColorRoundedGraphProofV1 {
                     else left.upperF64 > right.lowerF64
                 if (taken && !yesPossible || !taken && !noPossible) return emptyList()
                 facts += ColorBranchFactV1(predicate,taken,left,right)
+                if (equal && yesPossible && noPossible) {
+                    val component = when {
+                        a is ColorOperationGraphV1.Scalar.BranchComponent && a !in current -> a
+                        b is ColorOperationGraphV1.Scalar.BranchComponent && b !in current -> b
+                        else -> null
+                    }
+                    if (component != null) {
+                        // Keep the original reachable arms distinct when their hull
+                        // would invent a third comparison outcome. The same scalar
+                        // identity records the evaluated arm, not an assumed alpha gap.
+                        fun armContexts(yes: Boolean): List<Map<ColorOperationGraphV1.Scalar,ColorBoundsV1>> =
+                            contexts(component.branch.predicate,yes,current).flatMap { branchContext ->
+                                val arm = (if (yes) component.branch.yes else component.branch.no)[component.channelI32]
+                                val bound = evaluate(arm,branchContext)
+                                val selected = java.util.IdentityHashMap(branchContext).apply { put(component,bound) }
+                                contexts(predicate,taken,selected)
+                            }
+                        return armContexts(true)+armContexts(false)
+                    }
+                }
                 if (equal && !taken && a is ColorOperationGraphV1.Scalar.ImageEncodedComponent && right == exact(0f)) {
                     // This gap is derived from the reachable captured UNORM codes,
                     // never assigned to a weighted sampled alpha or a filter output.
