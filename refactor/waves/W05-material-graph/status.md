@@ -1,6 +1,6 @@
 # État W05 — material graph, gradients, images et color filters
 
-## W5f — Task1 close, Task2 livrée en confirmation formelle
+## W5f — Task1–2 closes, suite séquentielle Task3
 
 Le [plan W5f](../../plans/2026-09-14-w5f-color-filters-implementation-plan.md)
 prépare huit livraisons séquentielles sur `codex/w5f-color-filters`, à partir de
@@ -66,7 +66,10 @@ finales. Sol valide ces joints R11/R13 et le témoin R12, qualité Approved, san
 Critical/Important. Son verdict spec initial Not compliant vise uniquement neuf
 fichiers `Modify` sans hunk; R14 les réconcilie comme audits/réutilisations de leurs
 contrats vérifiés, sans retirer d'exigence ou modifier du code. Le finding original
-et les limites d'inspection demeurent; la confirmation ciblée est encore attendue.
+et les limites d'inspection demeurent. La réconciliation documentaire séparée
+`02c63c14defb9645fb2bc736d1c2a363ddfa39ad` reçoit l'unique confirmation ciblée:
+ADDRESSED, spec Compliant, qualité Approved, sans nouveau défaut. Task2 est close
+dans son périmètre; les obligations R11/R12/R13 sont livrées et vérifiées.
 
 Les six XML frais UTC `01:11:35.169Z`–`01:12:03.894Z` comptent27 méthodes passées:
 dix nouveaux Ordering, six Matrix conservés et onze anciens cas W5a/b/c/d affectés.
@@ -79,8 +82,9 @@ Compilation séparée cinq modules exit0/914ms, contrôle root frais au même co
 exit0/1s (5executed/33up-to-date): pas de forced-clean compilation ni contournement.
 Les anciennes topologies prepared/W4e et toute l'arithmétique oracle partagée ne
 sont pas exhaustivement revalidées par cette review. Filtres RRect/stroke et autres
-sources/effets non promus restent fermés. Task2 attend sa confirmation formelle;
-les tâches3–8 et la review globale W5f restent ouvertes. Aucun push/PR W5f/merge.
+sources/effets non promus restent fermés. Task3 Table/Lighting/transfers/Blend est
+la suite séquentielle avec Astra. Les tâches3–8 et la review globale W5f restent
+ouvertes. Aucun push/PR W5f/merge.
 
 ## W5e — tranche fonctionnelle close, intégration réservée
 

@@ -45,7 +45,7 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 - [Plan W5a — Solid/Opacity](plans/2026-09-09-w5a-solid-opacity-implementation-plan.md)
 - [Plan W5b — final blends communs](plans/2026-09-10-w5b-final-blends-implementation-plan.md)
 - [Plan W5e — images décodées, neuf tâches séquentielles](plans/2026-09-12-w5e-decoded-images-implementation-plan.md)
-- [Plan W5f — color filters et interpolation, huit tâches séquentielles](plans/2026-09-14-w5f-color-filters-implementation-plan.md) — Task1 close; Task2 Compose/Lerp/Path/composites livrée, qualité Sol Approved, confirmation formelle R14 encore attendue. 27 assertions passent, commande Gradle1/native133; cinq modules compilent. Tâches3–8 et gates/review globale W5f non closes.
+- [Plan W5f — color filters et interpolation, huit tâches séquentielles](plans/2026-09-14-w5f-color-filters-implementation-plan.md) — Task1–2 et reviews Sol closes; Compose/Lerp/Path/composites et réconciliation formelle R14 validés. 27 assertions passent, commande Gradle1/native133; cinq modules compilent. Task3 est la suite séquentielle; tâches3–8 et gates/review globale W5f non closes.
 
 ### État et rapports finaux
 
