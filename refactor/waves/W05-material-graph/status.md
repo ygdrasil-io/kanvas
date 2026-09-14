@@ -1,6 +1,27 @@
 # État W05 — material graph, gradients, images et color filters
 
-## W5f — Task1–5 closes sur leurs tranches bornées, Task6 suivante
+## W5f — Task1–6 closes sur leurs tranches bornées, Task7 suivante
+
+Dernier checkpoint Task6 : implémentation provisoire `da32e38010f29ea1c3622427e5869d200cfe4e05`
+depuis BASE `b0ffdf2c51dc6d608af23416e7b6d6d4c95ca88e`,14fichiers modifiés,
+aucun créé. ROOT vérifie427assertions publiques fraîches,0failure/error/skip :
+interpolation280 (98ajouts Task6+182Task5),filters44,ordering10,images W5e68,
+anciens W5a–d25. Cinq compiles séparées réussissent en incrémental, targets
+UP-TO-DATE; pas un clean rebuild. Sources45 identiques avant/après ces gates,
+staging et commit; manifest6a6bc7a0…16316/diff8b70958f…ac1f9 vérifiés.
+Review Sol/high indépendante spec+quality Approved, zéro Critical/Important,
+sur le seul paquet exact
+BASE→HEAD113666B/SHA7b594ead…9d8fa2. Task6 est close sur sa tranche bornée.
+Les quatorze Modify/R34–35 et les six Audit R36 sont vérifiés; corrections107
+Add conditionné et111 partage SRGB des deux ordres approuvées. Minor cast
+redondant ColorSourceProofV1:303 suivi pour nettoyage ultérieur vérifié; aucun
+source fix/rerun/re-review pour ce polish sur les sources gelées.
+Les cinq commandes de tests sont FAILED1/native133/executors113–117, malgré
+les assertions passantes. Suite combinée93/5refus staging et antériorité non
+prouvée restent OPEN. Warnings hérités et nouveau NoCastNeeded non supprimés;
+aucun contournement natif/cache/lifecycle/budget/harnais. Les historiques ci-dessous
+décrivent leurs checkpoints datés; celui-ci prévaut. Tâches7–8/review globale/PR
+stackée Draft encore ouvertes, pas de claim ISO global.
 
 Point d'architecture R26 fixé : une définition interne immuable du gradient
 préparé, créée après l'inventaire final vérifié, sert de propriétaire commun à la
@@ -16,7 +37,86 @@ composites passent à leurs checkpoints. La suite combinée327tests a322PASS et
 Atan2 durci;329assertions vérifiées par groupes et cinq compiles réussies.
 Commit2e7867b livré, review Sol indépendante spec+quality Approved, zéro
 Critical/Important; warnings hérités suivis, aucune correction de code requise.
-Task6 HSL/OKLCH/working-space suivante; tâches6–8 et review globale encore ouvertes;
+Task6 HSL/OKLCH/working-space en cours avec Astra/high depuis BASEb0ffdf2c5.
+R34 approuve avant édition trois raccords réels : capture du domaine outermost
+dans MaterialSourceConstructionV4, préparation après inventaire vérifié dans
+FrameSourceLayoutV4 et graphe polaire/Sin-Cos dans ColorSourceProofV1.
+Même provider, mêmes preuves/bindings/slab/permit.
+R35 ajoute précisément GradientPlanV1, validation interne des tuples/recipes
+HSL/OKLCH. SRGB sélectionné par wrapper conserve son tuple et sa recipe null
+historiques; pas de relaxation du constructeur/ABI public ni second slab.
+Coût : risque de divergence domain/recipe/gray original ou preuve/WGSL.
+Les40 témoins publics bornés, anciens
+gates et review Sol restent à livrer. Tâches6–8 et review globale encore ouvertes;
+
+Premier RED Task6 vérifié : XML UTC08:09:47.491Z,60tests/40échecs/0error/skip;
+les40cellules HSL/OKLCH family×lane atteignent `unsupported.material.filter.slice`
+après attentes/contre-exemples bornés et disjoints,20contrôles SRGB PASS.
+Log8bea3964…30373 FAILED46s/Gradle1/executor103native133,55tasks7exec48UP;
+sources45identiques avant/après, manifestb6708459…24bd0, diffbdde8937…7860f.
+La première invocation arrêtée au lock du cache avant Gradle/XML périmé est
+exclue. Production non modifiée à ce gate; hue/wrapper supplémentaires puis
+implémentation et preuves positives/fresh Sol restent ouvertes.
+
+R36 : six Audit/reuse Task6 précisément vérifiés (ColorNumericAuthority,
+MaterialSourceFootprint, GradientAddressingCapture snapshots, MaterialPlan,
+colorV4 stage, candidate gate délégué). Ils consomment déjà les vrais owners et
+graphes, sans gate LINEAR/OKLAB indépendant. Aucun hunk artificiel; tous les
+autres Modify initiaux/R34–35 et toutes les preuves publiques restent requis.
+
+RED supplémentaire corrigé : XMLUTC08:13:54.038Z38tests38refus d'admission,
+0error/skip,14hue/gray+20outer-wrapper families+4filter/coords. ROOT vérifie
+tous les messages16Rect-slice/2Path-slice/20w5a.kind et les sources avant/après
+identiques. Log1e1dcafc…4ab5c FAILED15s/Gradle1/assertions, sans native133
+rapporté; ancien gate37RED+1oracle trop large exclu du compte38genuineRED.
+No-clamp t1/no-matrix t.25/no-opacity1 bornés/disjoints; égalité±180 exacte HSL,
+OKLCH mêmes couleurs décrites crossing, pas un faux tie. Graphe/proof/emitter et
+production en cours après ces RED, aucun claim d'admission positive/clôture.
+
+Premier gate production106 : XMLUTC08:19:14.241Z78tests/69PASS/9refus
+`unsupported.material.filter.numeric-domain-unbounded`,0error/skip. Les neuf
+cas sont5HSL Linear family×lane,3seam/ties etworking HSL Linear; obligation
+réelle du même graphe/proof à corriger, pas une fixture à remplacer ni une
+tolérance à élargir. Log1d74fd30…8ef5a FAILED59s/Gradle1/executor106native133;
+sources avant/après identiques cf1959e9…0335a/diff98152c3d…35a2a.
+Compile initiale SUCCESS8s/38tasks10exec28UP séparée; cinq compiles finales,
+anciens gates complets/rapport/commit/Sol et clôture encore ouverts.
+
+Cause107 : Addflatten ré-expandait une valeur HSL RGB déjà matérialisée/comparée
+et perdait la borne de branche EOTF avant Pow. ROOT vérifie les vrais raccords
+predicate/let et la correction ciblée `n !in conditions`, sans changer le domaine
+builtin ni supprimer les marges arrondi/FMA/réassociation/FTZ.
+Confirmation108 XMLUTC08:21:38.669Z58tests0failure/error/skip PASS; neuf refus
+précédents levés sur ces témoins. Loge8a5677a…0a628 FAILED39s/Gradle1/native133,
+sources45/diff avant-après identiques ec5c1070…8682e/e5295037…e3a76.
+Le même interpréteur est partagé : classe interpolation entière, filters/order,
+anciens publics affectés, cinq compiles finales et fresh Sol restent obligatoires.
+
+Supplement109 :18assertions0failure/error/skip PASS (polar filtered-H,
+working-space sur Solid et mélange SRGB/HSL/OKLCH), commande native133 FAILED.
+Le risque de partage SRGB est ensuite réellement reproduit :111XMLUTC08:29:18.455Z
+deux ordres legacy-first/working-first,2tests2refus `invalid.material.filter.schema`.
+Inventaire Pending/Legacy distinct mais mêmes tuples SRGB/null recipe fusionnés
+par la table finale. Correction dans le même FrameSourceLayout autorisé R34–35 :
+égalité physique exacte symétrique avant préparation, sans perdre les identités
+raw/captured source/proof ni contourner la bijection finale. Deux RED archivés,
+Green/fresh classes complètes/compiles/report/commit/Sol encore ouverts.
+
+Confirmation112 XMLUTC08:30:07.344Z3tests0failure/error/skip PASS, deux ordres
+SRGB et mélange distinct des domaines. ROOT vérifie l'égalité symétrique exacte
+SRGB/null/count/position+deuxRGBA, sans conversion/array ni relaxation des autres
+domaines. Coût : comparaison O(nombre de stops), bornée par les limites existantes.
+Log53c47a45…78684 FAILED9s/native133, sources/diff avant-après identiques.
+Sources gelées après nettoyage local sans effet; groupes finaux complets puis
+cinq compiles/rapport/commit/Sol à livrer avant clôture Task6.
+
+Classe interpolation finale113 : XMLUTC08:30:49.557Z280tests0failure/error/skip
+PASS,98ajouts Task6+182publics Task5 conservés. ROOT archive/log/cmp45sources et
+diff vérifiés; manifest6a6bc7a0…16316/diff8b70958f…ac1f9. Commande FAILED2m36
+Gradle1/executor113native13355tasks8exec47UP. Filters44/order10/images68/old25
+et cinq compiles standalone enchaînent sur ces mêmes sources gelées; rapport,
+commit provisoire/fresh Sol et clôture encore à fournir. Suite combinée93 reste
+FAILED avec ses cinq refus staging, sans preuve d'antériorité ni workaround.
 natif133 et limite d'exécution combinée restent distincts des preuves de rendu.
 
 RED filtres/wrappers vérifié (UTC05:02:28.704Z) : 28 cas
