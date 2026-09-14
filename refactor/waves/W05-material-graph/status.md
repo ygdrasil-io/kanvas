@@ -1,6 +1,6 @@
 # État W05 — material graph, gradients, images et color filters
 
-## W5f — plan relu et corrigé, prêt à exécuter
+## W5f — Task1 Matrix close, exécution séquentielle en cours
 
 Le [plan W5f](../../plans/2026-09-14-w5f-color-filters-implementation-plan.md)
 prépare huit livraisons séquentielles sur `codex/w5f-color-filters`, à partir de
@@ -13,12 +13,41 @@ certificat source authentifié/corrélé, achromatisme polaire exact, préflight
 premier snapshot, inventaire complet des readers V4 et matrice publique attribuée.
 La confirmation ciblée a marqué quatre ADDRESSED et la couverture PARTIAL pour
 une seule dépendance future; son ajustement local prescrit est appliqué, sans
-nouvelle décision produit ni boucle de review. Le plan est prêt pour l'exécution
-séquentielle SDD déjà choisie. Aucun code de production ou test W5f n'est implémenté;
-aucun nouveau résultat de test, verdict d'intégration ou PR W5f n'est revendiqué.
+nouvelle décision produit ni boucle de review. L'exécution séquentielle SDD a
+démarré sur le worktree isolé existant. Astra a livré Task1 Matrix/Solid/Opacity
+Rect dans `efe36e95eb73a5cd2e43fabb35375b01d31b4629`, après de vrais RED publics.
+Sol approuve sa conformité et sa qualité, sans Critical/Important. La correction
+documentaire du certificat numérique `b535d3f554163ed9f013070b17d446ebc5e9122e`
+est confirmée ADDRESSED par l'unique re-review ciblée, sans nouvelle régression;
+Task1 est close dans son périmètre. Le témoin Paint alpha non unitaire distinguant l'ordre
+alpha/filtre est attribué à Task2, déjà prévue. Les warnings préexistants restent
+visibles, sans suppression. Cette approbation n'étend pas les preuves aux sources
+gradient/image ou aux composites des tâches suivantes. Aucune gate complète,
+intégration ou PR W5f n'est close.
 Font, codecs externes et tests d'infrastructure restent exclus; les réserves W5e
 ci-dessous sont conservées. La future PR W5f sera stackée sur W5e #2399, sans
 modifier la PR parente.
+
+### Preuves Task1 — 14 septembre 2026
+
+Le run forcé final compte huit méthodes publiques passées, sans skip, failure ou
+error d'assertion: six Matrix et deux cas W5a Solid/Opacity exacts. Les XML portent
+les timestamps UTC du 13 septembre `23:56:09.529Z` et `23:56:07.771Z` respectivement.
+Les nouveaux témoins exigent Render/Readback avant comparaison et couvrent
+translation normalisée, mélange/clamp, alpha0/1/nonunit, mutation conservée,
+répétition, couverture Rect fractionnaire et destination-read DIFFERENCE.
+**Gradle exit1 / worker8 exit133 / BUILD FAILED**: ce n'est pas une commande verte.
+La compilation standalone forcée de color-management, render-ir, gpu-plan,
+gpu-renderer et kanvas réussit séparément, exit0. Le contrôle indépendant frais
+après correction documentaire réussit aussi, exit0, en1s (6 tâches exécutées,
+32 up-to-date). Aucun contournement du teardown.
+
+Task1 restreint temporairement V4 aux frames de la seule famille Rect, y compris
+leurs draws ordonnés et destination-read. Task2 doit supprimer cette restriction
+en séparant la construction immuable non publiée des lanes de leur `Ready` final:
+interning/proofs finaux, inventaire réel commun, permit frame/device, puis packing
+et publication. Un packing local suivi d'un budget composite tardif ne clôt pas
+ce gap; il ne peut pas être différé à la clôture W5f. ABI V1/V2/V3 inchangées.
 
 ## W5e — tranche fonctionnelle close, intégration réservée
 
