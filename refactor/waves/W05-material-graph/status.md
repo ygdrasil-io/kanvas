@@ -1,5 +1,26 @@
 # État W05 — material graph, gradients, images et color filters
 
+## W5g — prochain lot lancé, plan Blend-first validé par Astra
+
+Branche `codex/w5g-composed-procedural-materials` créée depuis le HEAD final W5f
+`55e4992d5aeb34412189d3bb52bcf2784468318c`, dans le worktree isolé existant.
+Le [plan W5g](../../plans/2026-09-14-w5g-composed-procedural-materials-implementation-plan.md)
+prévoit trois livraisons séquentielles : Blend ordonné et sous-graphes partagés
+sur Rect/Path fill ; NoiseV1 avec tiles SizeI32 et compatibilité Picture ;
+convergence des frames mixtes et budgets/refus/récupération publics.
+La relecture indépendante Astra et sa confirmation ciblée sont terminées :
+3/3 Important corrigés, zéro Critical/Important restant. Le démarrage de la
+tranche Blend est validé ; Sol reste réservé aux reviews. Aucun code ni test
+W5g exécuté à ce checkpoint documentaire.
+
+Blend peut être livré indépendamment. La représentation numérique sûre des
+255 octaves et périodes de stitching doit être dérivée et revue avant les
+modifications Noise. Les anciens payloads noise Picture8/9/10 et le témoin
+public causal du budget storage restent des obligations, pas des écarts
+acceptés automatiquement. Aucune clôture W5g, preuve native GREEN ou ISO
+globale revendiquée. Font/codec/GM/harnais natif restent hors périmètre ;
+la PR W5f #2400 et ses réserves ci-dessous sont inchangées.
+
 ## W5f — clôture fonctionnelle et review globale approuvées ; PR Draft #2400 publiée
 
 Verdict final autoritaire : ONEreviewglobaleSol sur7a06459dde8fb3ba0a4c8287a8405bc1994ce883→f743a222ab3709444944f0e3831e2e0d44b14add, conformité COMPLIANT/qualité APPROVED,0Critical/0Important/2Minorhérités,0nouveau finding actionnable. ROOT lit FULL233lignes SHA73fbb802179101b740c54584d4f282878d9ceaeef13167eddda1c0b0cd745d8a, reviewerFULLpackage19816lignes/21commits etR1–50/joins/ledger/argv/fiveFULLcompilelogs. Aucun fixwave ni re-review supplémentaire : source85d8c2d16 inchangée et vérifiée. Huit tâches fonctionnelles closes, Task8Steps1–7cochées. [PR W5f #2400](https://github.com/ygdrasil-io/kanvas/pull/2400) OPEN/Draft empilée sur `codex/w5e-decoded-images` / W5e #2399 ; push normal effectué, parent inchangé, aucun merge. Les50arbitrages/coûts sont conservés dans le plan. Seul le dossier SDD ignoré de ce plan est déplacé vers l'archive récupérable `/private/tmp/kanvas-w5f-sdd-archive.6jBLhi/2026-09-14-w5f-color-filters-implementation-plan` ; identité et hashes du ledger/rapport inchangés, siblings/worktree/preuves natives préservés.
