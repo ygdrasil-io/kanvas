@@ -8,6 +8,46 @@ import org.graphiks.kanvas.gpu.plan.GradientNumericOperationGraphV1.Operation as
 import org.graphiks.kanvas.gpu.plan.GradientNumericOperationGraphV1.Input as I
 
 internal object ColorSourceProofCompilerV1 {
+    internal class ComposedGraph(val evaluation: MaterialEvaluationDagV5,val graph: ColorOperationGraphV1,
+        val words: Map<Long,Int>,val tables: Map<Long,org.graphiks.kanvas.render.ir.ImmutableUBytes>)
+    internal fun graphForComposed(metadata: MaterialSourceConstructionV4.ComposedMetadata): ComposedGraph {
+        val words = linkedMapOf<Long,Int>()
+        val tables = linkedMapOf<Long,org.graphiks.kanvas.render.ir.ImmutableUBytes>()
+        val graphs = mutableListOf<ColorOperationGraphV1>()
+        val entries = mutableListOf<MaterialEvaluationDagV5.Entry>()
+        metadata.nodes.forEach { node ->
+            val offset = node.offsetBytesI32.toLong()/4L
+            fun child(index: Int = 0) = graphs[node.children[index].indexI32]
+            val graph = when(val original = node.original) {
+                org.graphiks.kanvas.render.ir.MaterialNode.Transparent -> ColorOperationGraphV1(List(4) { ColorOperationGraphV1.constant(0f) })
+                is org.graphiks.kanvas.render.ir.MaterialNode.Solid -> {
+                    val color = original.color
+                    listOf(color.redNormalized,color.greenNormalized,color.blueNormalized,color.alphaNormalized)
+                        .forEachIndexed { channel,value -> words[offset+channel] = value.toRawBits() }
+                    val alpha = ColorOperationGraphV1.Scalar.DynamicF32(offset+3)
+                    ColorOperationGraphV1(List(4) { if(it == 3) alpha else ColorOperationGraphV1.Scalar.Multiply(
+                        ColorOperationGraphV1.eotf(ColorOperationGraphV1.Scalar.DynamicF32(offset+it)),alpha) })
+                }
+                is org.graphiks.kanvas.render.ir.MaterialNode.Opacity -> {
+                    words[offset] = original.alpha.toRawBits()
+                    ColorOperationGraphV1(child().outputs.map { ColorOperationGraphV1.Scalar.Multiply(it,ColorOperationGraphV1.Scalar.DynamicF32(offset)) })
+                }
+                is org.graphiks.kanvas.render.ir.MaterialNode.WithColorFilter -> {
+                    val filter = requireNotNull(node.filter)
+                    filter.forEachWord { index,value -> words[Math.addExact(offset,index)] = value }
+                    filter.forEachTable { index,value -> tables[Math.addExact(offset,index)] = value }
+                    filter.copyOperationGraph().bindInput(child(),offset)
+                }
+                is org.graphiks.kanvas.render.ir.MaterialNode.WithWorkingColorSpace -> child()
+                is org.graphiks.kanvas.render.ir.MaterialNode.Blend -> BlendFormulaProgramV1.colorOperations(original.mode.name.lowercase(),child(1).outputs,child(0).outputs)
+                else -> error(W5gPlanDiagnostics.Unpromoted)
+            }
+            graphs += graph
+            entries += MaterialEvaluationDagV5.Entry(node.ownerNodeIndexI32,node.children,SourceCoordinatesV4.None,
+                ComposedMaterialProgramV5(MaterialProgramPlanId("composed-evaluation-v5:${node.topologyIdentity}:${graph.canonicalIdentity}"),graph))
+        }
+        return ComposedGraph(MaterialEvaluationDagV5.of(entries),graphs.last(),words,tables)
+    }
     private fun graphForImage(execution: ImageSampleExecutionPlanV1,child: ColorSourceProofV1?): ColorOperationGraphV1 {
         return graphForCapturedImage(execution.numericAuthority,execution.upload,child,execution.atlasBlend?.copyOperationGraph())
     }

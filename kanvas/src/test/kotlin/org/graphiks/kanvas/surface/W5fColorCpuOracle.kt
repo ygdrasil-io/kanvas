@@ -73,6 +73,7 @@ internal object W5fColorCpuOracle {
         is Shader.Opacity -> shaderSource(shader.shader,point,working).map { mul(it,Interval.input(shader.alphaF32)) }.toTypedArray()
         is Shader.WithColorFilter -> applyFilter(shaderSource(shader.shader,point,working),shader.filter)
         is Shader.WithWorkingColorSpace -> shaderSource(shader.shader,point,working ?: shader.interpolation)
+        is Shader.Blend -> blend(shaderSource(shader.src,point,working),shaderSource(shader.dst,point,working),shader.mode)
         is Shader.LinearGradient -> {
             require(shader.stops.size == 2 && shader.stops[0].position == 0f && shader.stops[1].position == 1f)
             val dx = sub(Interval.input(shader.end.x),Interval.input(shader.start.x))
@@ -357,13 +358,8 @@ internal object W5fColorCpuOracle {
 
     fun expectedShaderTree(shader: Shader, paintAlphaF32: Float = 1f, external: ColorFilter? = null,
         destination: ColorARGB = ColorARGB.Transparent, finalBlend: BlendMode = BlendMode.SRC): WgslFloatEnvelopeV1Oracle.DrawResult {
-        fun evaluate(node: Shader): Array<Interval> = when (node) {
-            is Shader.SolidColor -> source(node.color)
-            is Shader.Opacity -> evaluate(node.shader).map { mul(it,Interval.input(node.alphaF32)) }.toTypedArray()
-            is Shader.WithColorFilter -> applyFilter(evaluate(node.shader),node.filter)
-            else -> error("Shader is outside the independent ordered-source equations")
-        }
-        var value = evaluate(shader).map { mul(it,Interval.input(paintAlphaF32)) }.toTypedArray()
+        var value = shaderSource(shader,org.graphiks.math.geometry.Point2F32(.5f,.5f))
+            .map { mul(it,Interval.input(paintAlphaF32)) }.toTypedArray()
         if (external != null) value = applyFilter(value,external)
         return finish(value,destination,finalBlend,1f)
     }

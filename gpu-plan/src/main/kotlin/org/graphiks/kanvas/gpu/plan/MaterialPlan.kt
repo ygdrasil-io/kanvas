@@ -204,6 +204,10 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
         requireNotNull(storedProofsV4[root.indexI32]) { W5fPlanDiagnostics.Schema }.also {
             require(it.authenticates(this, root, it.coordinates)) { W5fPlanDiagnostics.Schema }
         }
+    public fun colorSourceProofV5(root: MaterialPlanRef): ColorSourceProofV1 =
+        (entry(root).bindings as? ComposedMaterialBindingV5)?.sourceProof?.also {
+            require(it.authenticates(this,root,SourceCoordinatesV4.None)) { W5gPlanDiagnostics.Schema }
+        } ?: throw IllegalArgumentException(W5gPlanDiagnostics.Schema)
     /** Issue from the actual selected table; callers supply no graph, range or certificate. */
     internal fun sealColorSourceV4(root: MaterialPlanRef,coordinates: SourceCoordinatesV4,
         bounds: org.graphiks.math.geometry.RectF32): MaterialPlanTable {
@@ -263,6 +267,7 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
     /** Binding/coordinate/stop content identity independent of slab-range rebasing. */
     public fun sourceIdentity(root: MaterialPlanRef): String {
         val source = entry(root)
+        if (source.bindings is ComposedMaterialBindingV5) return source.bindings.definition.capturedIdentity
         if (source.bindings is GradientInterpolationBindingV4) return source.bindings.definition.definitionIdentity
         if (source.program is ColorFilteredProgramV4) return ColorSourceProofV1.filteredIdentity(
             sourceIdentity(MaterialPlanRef(root.indexI32 - 1)), (source.bindings as ColorFilterBindingV4).execution)
@@ -321,6 +326,8 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
                 require(legacyRange == null || entry.stopSlab?.rangeHasDomain(legacyRange,
                     org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB) == true) { W5fPlanDiagnostics.Schema }
                 when (val program = entry.program) {
+                    is ComposedMaterialProgramV5 -> require(entry.bindings is ComposedMaterialBindingV5 &&
+                        entry.bindings.authenticates(program)) { W5gPlanDiagnostics.Schema }
                     is GradientInterpolationProgramV4 -> require(entry.bindings is GradientInterpolationBindingV4 &&
                         entry.bindings.authenticates(program,entry.stopSlab)) { W5fPlanDiagnostics.Schema }
                     is ColorFilteredProgramV4 -> require(entry.bindings is ColorFilterBindingV4 && index > 0 &&
@@ -452,7 +459,8 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
             val proofs = linkedMapOf<Int, ColorSourceProofV1>()
             table.entries().forEachIndexed { indexI32, entry ->
                 val filter = entry.bindings as? ColorFilterBindingV4
-                if (entry.bindings is GradientInterpolationBindingV4) proofs[indexI32] = entry.bindings.sourceProof
+                if (entry.bindings is ComposedMaterialBindingV5) proofs[indexI32] = entry.bindings.sourceProof
+                else if (entry.bindings is GradientInterpolationBindingV4) proofs[indexI32] = entry.bindings.sourceProof
                 else if (filter != null) proofs[indexI32] = filter.numericAuthority.outputSourceProof
                 else if (entry.bindings is MaterialBindingPlan.OpacityF32V1 && indexI32 - 1 in proofs) {
                     val child = requireNotNull(proofs[indexI32 - 1])
@@ -555,6 +563,7 @@ public class MaterialPlanTableInterning internal constructor(
 private fun MaterialPlanEntry.copyForInterning(): MaterialPlanEntry = MaterialPlanEntry(
     program,
     when (val binding = bindings) {
+        is ComposedMaterialBindingV5 -> binding
         is GradientInterpolationBindingV4 -> binding
         is ColorFilterBindingV4 -> binding
         is ImageSampleV3 -> ImageSampleV3.of(binding.execution)
@@ -569,6 +578,7 @@ private fun MaterialPlanEntry.copyForInterning(): MaterialPlanEntry = MaterialPl
 private fun MaterialPlanEntry.interningKey(): String = buildString {
     append(program.structuralId.value).append('|')
     when (val binding = bindings) {
+        is ComposedMaterialBindingV5 -> append(binding.definition.capturedIdentity)
         is GradientInterpolationBindingV4 -> append(binding.canonicalIdentity)
         is ColorFilterBindingV4 -> append(binding.canonicalIdentity)
         is ImageSampleV3 -> append(binding.execution.canonicalIdentity)
@@ -597,6 +607,7 @@ private fun MaterialPlanEntry.interningKey(): String = buildString {
 
 /** Closed draw authority: W5 material references cannot coexist with legacy colours. */
 public sealed interface PlanDrawMaterialAuthority {
+    public data class MaterialV5(public val ref: MaterialPlanRef) : PlanDrawMaterialAuthority
     public data class MaterialV4(public val ref: MaterialPlanRef, public val coordinates: SourceCoordinatesV4) : PlanDrawMaterialAuthority
     public data class MaterialV3(public val ref: MaterialPlanRef,
         public val imageCoordinates: ImageCoordinatePlanV1) : PlanDrawMaterialAuthority
@@ -617,11 +628,19 @@ public sealed interface PlanDrawMaterialAuthority {
 
 /** Reference extraction preserves the closed, versioned coordinate owner. */
 public fun PlanDrawMaterialAuthority.materialPlanRef(): MaterialPlanRef = when (this) {
+    is PlanDrawMaterialAuthority.MaterialV5 -> ref
     is PlanDrawMaterialAuthority.MaterialV4 -> ref
     is PlanDrawMaterialAuthority.MaterialV3 -> ref
     is PlanDrawMaterialAuthority.MaterialV1 -> ref
     is PlanDrawMaterialAuthority.MaterialV2 -> ref
     is PlanDrawMaterialAuthority.LegacyColorV1 -> error("Legacy colors have no material reference")
+}
+
+/** Coordinate contract for the existing graph-backed source families only. */
+public fun PlanDrawMaterialAuthority.colorSourceCoordinatesV4(): SourceCoordinatesV4? = when(this) {
+    is PlanDrawMaterialAuthority.MaterialV5 -> SourceCoordinatesV4.None
+    is PlanDrawMaterialAuthority.MaterialV4 -> coordinates
+    else -> null
 }
 
 public sealed interface SourceCoordinatesV4 {

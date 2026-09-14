@@ -202,6 +202,7 @@ public object EffectiveMaterialPlanner {
                 while (table.entry(leaf).bindings is MaterialBindingPlan.OpacityF32V1)
                     leaf = MaterialPlanRef(leaf.indexI32 - 1)
                 when (val binding = table.entry(leaf).bindings) {
+                    is ComposedMaterialBindingV5 -> PlanDrawMaterialAuthority.MaterialV5(root)
                     is GradientInterpolationBindingV4 -> PlanDrawMaterialAuthority.MaterialV4(root,binding.sourceProof.coordinates)
                     is ColorFilterBindingV4 -> PlanDrawMaterialAuthority.MaterialV4(root,binding.numericAuthority.outputSourceProof.coordinates)
                     is ImageSampleV3 -> PlanDrawMaterialAuthority.MaterialV3(root,binding.execution.coordinates)
@@ -264,6 +265,17 @@ public object EffectiveMaterialPlanner {
         val domain = if (leafDomain == null) null else workingDomain ?: leafDomain
         val actualBounds = org.graphiks.math.geometry.RectF32.ofLTRB(bounds.left.toFloat(),bounds.top.toFloat(),
             bounds.right.toFloat(),bounds.bottom.toFloat())
+        if (MaterialSourceConstructionV4.containsComposed(draw.material)) {
+            val blend = FinalBlendPlanner.plan(draw.blend,coverage,sample,targetClamp,
+                if (coverage == CoveragePlan.AnalyticScalarAA) BlendCoverageApplicationV1.SourceMultiplication
+                else BlendCoverageApplicationV1.DestinationInterpolation)
+                ?: return SourceNormalizationV4.Refused(W5aPlanDiagnostics.UnsupportedDrawState)
+            return when(val captured = MaterialSourceConstructionV4.capture(draw,SourceCoordinatesV4.None,actualBounds,blend,imageMaskChild)) {
+                is SourceConstructionResultV4.Built -> if (blend == BlendPlan.NoOpV1 && !imageMaskChild)
+                    SourceNormalizationV4.NoOp else SourceNormalizationV4.Source(captured.value)
+                is SourceConstructionResultV4.Refused -> SourceNormalizationV4.Refused(captured.diagnosticCode)
+            }
+        }
         if (domain == null || domain == org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB && workingDomain == null && !imageMaskChild) {
             return when (val original = normalize(draw,targetClamp,true,coverage,sample,elideNoOp=!imageMaskChild,
                 gradientDeviceBoundsI32=legacyGradientBoundsI32,imageMaskChild=imageMaskChild)) {

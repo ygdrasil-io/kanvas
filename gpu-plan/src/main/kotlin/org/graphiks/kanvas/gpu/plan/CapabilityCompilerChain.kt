@@ -19,6 +19,18 @@ public class CapabilityCompilerChain private constructor(
             ))
         }
 
+        // Structural ownership only: no native capability or geometry promotion
+        // is asserted for the pending composed H origins.
+        scene.forEach { command ->
+            val draw = (command as? org.graphiks.kanvas.render.ir.SceneCommand.Draw)?.node ?: return@forEach
+            if (MaterialSourceConstructionV4.containsComposed(draw.material) &&
+                (draw.origin !in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.RECT,org.graphiks.kanvas.render.ir.DrawOrigin.PATH) ||
+                    draw.paint?.style != org.graphiks.kanvas.render.ir.PaintStyleNode.FILL ||
+                    draw.resource != null || draw.operationBlendMode != null))
+                return GpuPlanSelection.InvalidScene(listOf(diagnostic(W5gPlanDiagnostics.Unpromoted,
+                    "This composed source origin is outside the uniform-only Rect/Path fill slice.")))
+        }
+
         val gaps = mutableListOf<RenderDiagnostic>()
         compilers.forEachIndexed { index, compiler ->
             when (val selection = compiler.select(scene, target)) {

@@ -21,18 +21,19 @@ public class ColorSourceProofV1 private constructor(
     public val gradientStopSlab: GradientStopSlabPlanV1? = null,
     internal val preparedDefinition: PreparedSourceDefinitionV4? = null,
     internal val imageChildSource: ColorSourceProofV1? = null,
+    internal val composedDefinition: PreparedComposedSourceV5? = null,
 ) {
     public val imageExecution: ImageSampleExecutionPlanV1? = parentSource?.imageExecution ?:
         bindingOwners.filterIsInstance<ImageSampleV3>().singleOrNull()?.execution
     public val imageLayout: ImageSourceLayoutV3? = imageExecution?.let { image -> ImageSourceLayoutV3(
         imageChildSource?.gradientStopSlab != null || parentSource?.imageLayout?.hasChildGradientStorage == true,
         image.cellSelection != null,image.cellSelection?.lattice == true,image.cellSelection?.capacityI32 ?: 9,image.atlasBlend != null) }
-    internal val uniformWordCountI64: Long = if (parentSource == null) bindingOwners.fold(
+    internal val uniformWordCountI64: Long = composedDefinition?.layout?.uniformBytesI64?.div(4L) ?: if (parentSource == null) bindingOwners.fold(
         if (bindingOwners.isEmpty()) preparedDefinition?.uniformWordCountI64 ?: 0L else imageChildSource?.uniformWordCountI64 ?: 0L) { size, binding ->
         Math.addExact(size, binding.colorUniformWordCountV4())
     } else
         Math.addExact(parentSource.uniformWordCountI64, requireNotNull(filterExecution).dynamicByteCountI64 / 4L)
-    internal val sourceUniformWordCountI64: Long = if (parentSource != null) parentSource.sourceUniformWordCountI64
+    internal val sourceUniformWordCountI64: Long = composedDefinition?.layout?.uniformBytesI64?.div(4L) ?: if (parentSource != null) parentSource.sourceUniformWordCountI64
         else bindingOwners.filterNot { it is ColorFilterBindingV4 }.fold(
             if (bindingOwners.isEmpty()) preparedDefinition?.uniformWordCountI64 ?: 0L else imageChildSource?.sourceUniformWordCountI64 ?: 0L) { size,binding ->
             Math.addExact(size,binding.colorUniformWordCountV4())
@@ -40,6 +41,12 @@ public class ColorSourceProofV1 private constructor(
     public fun copyOperationGraph(): ColorOperationGraphV1 = graph
     public fun authenticates(table: MaterialPlanTable, root: MaterialPlanRef, coordinates: SourceCoordinatesV4): Boolean {
         if (this.coordinates != coordinates || table.sourceIdentity(root) != sourceIdentity) return false
+        composedDefinition?.let { definition ->
+            val entry = table.entry(root)
+            val binding = entry.bindings as? ComposedMaterialBindingV5 ?: return false
+            return coordinates == SourceCoordinatesV4.None && binding.definition === definition && binding.sourceProof === this &&
+                entry.program is ComposedMaterialProgramV5 && binding.authenticates(entry.program)
+        }
         if (parentSource != null) {
             val binding = table.entry(root).bindings as? ColorFilterBindingV4 ?: return false
             return binding.execution === filterExecution && binding.numericAuthority.outputSourceProof === this &&
@@ -59,6 +66,16 @@ public class ColorSourceProofV1 private constructor(
         }
     }
     internal companion object {
+        fun issueComposed(definition: PreparedComposedSourceV5): ColorSourceProofV1? {
+            val graph = definition.operationGraph
+            val facts = ColorRoundedGraphProofV1.prove(graph,definition.numericWordsF32Bits,definition.tableRecords,
+                definition.deviceBoundsF32) ?: return null
+            val identity = "composed-source-proof-v5:${definition.capturedIdentity}:${definition.layout.composedBindingLayoutHash}:" +
+                "${graph.canonicalIdentity}:${definition.numericWordsF32Bits}:${definition.tableRecords.mapValues { it.value.canonicalId.value }}"
+            return ColorSourceProofV1(identity,definition.capturedIdentity,SourceCoordinatesV4.None,graph,emptyList(),
+                definition.numericWordsF32Bits,definition.tableRecords,immutableList(facts),definition.deviceBoundsF32,
+                composedDefinition=definition)
+        }
         fun filteredIdentity(source: String, execution: ColorFilterExecutionPlanV1): String =
             "color-filter-source-v4:$source:${execution.canonicalIdentity}"
         fun compose(source: ColorSourceProofV1, execution: ColorFilterExecutionPlanV1): ColorSourceProofV1? {

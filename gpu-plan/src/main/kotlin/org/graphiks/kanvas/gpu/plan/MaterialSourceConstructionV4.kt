@@ -128,15 +128,17 @@ internal class MaterialSourceConstructionV4 private constructor(
     val resolvedSource: EffectiveMaterialPlanner.Result.Ready?,
     val gradient: GradientMetadata?,
     val image: ImageMetadata? = null,
+    val composed: ComposedMetadata? = null,
 ) {
     private val bounds = bounds.copy()
     val deviceBoundsF32: RectF32 get() = bounds.copy()
     val pending: Boolean get() = resolvedSource == null
     val hasGradientStorage: Boolean get() = image?.child?.hasGradientStorage ?: gradient?.stops?.countI32?.let { it > 0 }
         ?: (resolvedSource?.table?.gradientStopSlab != null)
-    val wrappers: List<SourceUnaryMetadataV4> get() = image?.wrappers ?: requireNotNull(gradient).wrappers
+    val wrappers: List<SourceUnaryMetadataV4> get() = if (composed != null) emptyList() else image?.wrappers ?: requireNotNull(gradient).wrappers
 
     fun uniformBytesI64(sourceOnly: Boolean = false): Long {
+        composed?.let { return it.layout.uniformBytesI64 }
         resolvedSource?.let { resolved ->
             if (resolved.materialAuthority is PlanDrawMaterialAuthority.MaterialV4) {
                 val footprint = RawMaterialRequirementsV2.measureV4(resolved.table,resolved.root)
@@ -234,7 +236,96 @@ internal class MaterialSourceConstructionV4 private constructor(
         val rangeIdentity: String = "stop-domain-v4:$interpolation:$recipeIdentity:${stops.sequenceIdentity}"
     }
 
+    internal class ComposedMetadata(nodes: List<Node>, val layout: ComposedBindingLayoutV1) {
+        val nodes: List<Node> = immutableList(nodes)
+        class Node(val ownerNodeIndexI32: Int, val original: MaterialNode, children: List<MaterialEvaluationRefV5>,
+            val offsetBytesI32: Int, val filter: ColorFilterExecutionPlanV1?) {
+            val children: List<MaterialEvaluationRefV5> = immutableList(children)
+            val topologyIdentity: String = when (original) {
+                MaterialNode.Transparent -> "transparent"
+                is MaterialNode.Solid -> "solid"
+                is MaterialNode.Opacity -> "opacity"
+                is MaterialNode.Blend -> "blend:${original.mode}"
+                is MaterialNode.WithColorFilter -> "filter:${requireNotNull(filter).structuralIdentity}"
+                is MaterialNode.WithWorkingColorSpace -> "working:${original.interpolation}"
+                else -> error(W5gPlanDiagnostics.Unpromoted)
+            }
+        }
+    }
+
     companion object {
+        fun containsComposed(root: MaterialNode): Boolean = when (root) {
+            is MaterialNode.Blend -> true
+            is MaterialNode.Opacity -> containsComposed(root.material)
+            is MaterialNode.WithColorFilter -> containsComposed(root.material)
+            is MaterialNode.WithWorkingColorSpace -> containsComposed(root.material)
+            is MaterialNode.WithLocalMatrix -> containsComposed(root.material)
+            is MaterialNode.CoordClamp -> containsComposed(root.material)
+            else -> false
+        }
+        private fun captureComposed(draw: DrawNode,bounds: RectF32,blend: BlendPlan): MaterialSourceConstructionV4 {
+            require(draw.origin in setOf(DrawOrigin.RECT,DrawOrigin.PATH) && draw.paint?.style == PaintStyleNode.FILL &&
+                draw.resource == null && draw.operationBlendMode == null) { W5gPlanDiagnostics.Unpromoted }
+            require(colorFilterEffectsMatchPaint(draw)) { W5gPlanDiagnostics.Schema }
+            val nodes = mutableListOf<ComposedMetadata.Node>()
+            val mappings = mutableListOf<ComposedBindingLayoutV1.UniformMapping>()
+            val completed = java.util.IdentityHashMap<MaterialNode,MaterialEvaluationRefV5>()
+            val active = java.util.IdentityHashMap<MaterialNode,Unit>()
+            var owners = 0
+            var cursor = 0L
+            var occurrences = 0
+            val limits = org.graphiks.kanvas.render.ir.GraphLimits()
+            // Validate original occurrences separately from immutable metadata reuse
+            // and from the two synthesized paint nodes, which are not public input.
+            fun validate(node: MaterialNode,depth: Int) {
+                require(depth <= limits.maxDepth && ++occurrences <= limits.maxNodes && active.put(node,Unit) == null) { W5gPlanDiagnostics.Schema }
+                when (node) {
+                    is MaterialNode.Blend -> { validate(node.dst,depth+1); validate(node.src,depth+1) }
+                    is MaterialNode.Opacity -> validate(node.material,depth+1)
+                    is MaterialNode.WithColorFilter -> validate(node.material,depth+1)
+                    is MaterialNode.WithWorkingColorSpace -> validate(node.material,depth+1)
+                    else -> Unit
+                }
+                active.remove(node)
+            }
+            validate(draw.material,1)
+            fun visit(node: MaterialNode): MaterialEvaluationRefV5 {
+                require(active.put(node,Unit) == null) { W5gPlanDiagnostics.Schema }
+                completed[node]?.let { active.remove(node); return it }
+                val owner = owners++
+                val filter = (node as? MaterialNode.WithColorFilter)?.let { compileFilter(it.filter) }
+                val bytes = when(node) {
+                    MaterialNode.Transparent, is MaterialNode.Solid, is MaterialNode.Opacity -> 16L
+                    is MaterialNode.WithColorFilter -> requireNotNull(filter).dynamicByteCountI64
+                    is MaterialNode.Blend, is MaterialNode.WithWorkingColorSpace -> 0L
+                    else -> throw IllegalArgumentException(W5gPlanDiagnostics.Unpromoted)
+                }
+                if (node is MaterialNode.Opacity) require(node.alpha.isFinite() && node.alpha in 0f..1f) { W5aPlanDiagnostics.InvalidOpacity }
+                val offset = Math.toIntExact(cursor)
+                cursor = Math.addExact(cursor,bytes)
+                require(cursor <= Int.MAX_VALUE.toLong() && cursor <= UInt.MAX_VALUE.toLong()) { W5gPlanDiagnostics.Uniform }
+                if (bytes > 0) mappings += ComposedBindingLayoutV1.UniformMapping(owner,0,offset,Math.toIntExact(bytes),16)
+                val children = when(node) {
+                    is MaterialNode.Blend -> listOf(visit(node.dst),visit(node.src))
+                    is MaterialNode.Opacity -> listOf(visit(node.material))
+                    is MaterialNode.WithColorFilter -> listOf(visit(node.material))
+                    is MaterialNode.WithWorkingColorSpace -> listOf(visit(node.material))
+                    else -> emptyList()
+                }
+                nodes += ComposedMetadata.Node(owner,node,children,offset,filter)
+                active.remove(node)
+                return MaterialEvaluationRefV5(nodes.lastIndex).also { completed[node] = it }
+            }
+            val alpha = draw.paint?.takeIf { it.shader != null }?.color?.alphaNormalized ?: 1f
+            var root: MaterialNode = MaterialNode.Opacity(draw.material,alpha)
+            draw.paint?.colorFilter?.let { root = MaterialNode.WithColorFilter(root,it) }
+            // Prefix owner assignment includes the actual outer paint operations;
+            // postorder evaluation refs remain explicit and independently checked.
+            visit(root)
+            val metadata = ComposedMetadata(nodes,ComposedBindingLayoutV1(mappings,cursor))
+            return MaterialSourceConstructionV4(draw.material,draw.paint,SourceCoordinatesV4.None,bounds,blend,
+                "captured-composed-v5:${java.util.UUID.randomUUID()}",null,null,composed=metadata)
+        }
         fun captureImage(metadata: ImageMetadata,bounds: RectF32,blend: BlendPlan): MaterialSourceConstructionV4 {
             val identity = buildString {
                 append("captured-image-source-v4:").append(metadata.upload.contentIdentity)
@@ -257,6 +348,7 @@ internal class MaterialSourceConstructionV4 private constructor(
 
         fun retain(draw: DrawNode, resolved: EffectiveMaterialPlanner.Result.Ready, bounds: RectF32): MaterialSourceConstructionV4 =
             MaterialSourceConstructionV4(draw.material, draw.paint, when (val authority = resolved.materialAuthority) {
+                is PlanDrawMaterialAuthority.MaterialV5 -> SourceCoordinatesV4.None
                 is PlanDrawMaterialAuthority.MaterialV4 -> authority.coordinates
                 is PlanDrawMaterialAuthority.MaterialV3 -> SourceCoordinatesV4.V3(authority.imageCoordinates)
                 is PlanDrawMaterialAuthority.MaterialV2 -> SourceCoordinatesV4.V2(authority.coordinates)
@@ -269,6 +361,10 @@ internal class MaterialSourceConstructionV4 private constructor(
         fun capture(draw: DrawNode, coordinates: SourceCoordinatesV4, bounds: RectF32,
             blend: BlendPlan,imageMaskChild: Boolean = false): SourceConstructionResultV4<MaterialSourceConstructionV4> = try {
             require(bounds.isFinite() && bounds.isSorted()) { W5fPlanDiagnostics.Schema }
+            if (containsComposed(draw.material)) {
+                require(!imageMaskChild) { W5gPlanDiagnostics.Unpromoted }
+                SourceConstructionResultV4.Built(captureComposed(draw,bounds,blend))
+            } else {
             require(imageMaskChild || draw.origin in setOf(DrawOrigin.RECT, DrawOrigin.RRECT, DrawOrigin.PATH) &&
                 draw.resource == null && draw.operationBlendMode == null) { W5fPlanDiagnostics.Unpromoted }
             require(colorFilterEffectsMatchPaint(draw)) { W5fPlanDiagnostics.Schema }
@@ -369,6 +465,7 @@ internal class MaterialSourceConstructionV4 private constructor(
                 "${bounds.right.toRawBits()}:${bounds.bottom.toRawBits()}:$blend:${metadata.rangeIdentity}"
             SourceConstructionResultV4.Built(MaterialSourceConstructionV4(original, draw.paint,
                 coordinates, bounds, blend, identity, null, metadata))
+            }
         } catch (failure: IllegalArgumentException) {
             sourceConstructionRefusalV4(failure.message ?: W5fPlanDiagnostics.Schema)
         } catch (failure: IllegalStateException) {

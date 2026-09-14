@@ -205,6 +205,7 @@ public class GeneralPathDraw private constructor(
             coordinates: MaterialCoordinatePlanV1? = null,
             coordinatesV2: MaterialCoordinatePlanV2? = null,
             coordinatesV4: SourceCoordinatesV4? = null,
+            composedV5: Boolean = false,
         ): GeneralPathDraw {
             require(commandIndexI32 >= 0) { "Command index must not be negative" }
             require(!scissorI32.isEmpty) { "General path scissor must be non-empty" }
@@ -214,7 +215,7 @@ public class GeneralPathDraw private constructor(
             ) { "General path draws require an explicit hard or four-sample AA contract" }
             requirePathRenderGeometryForStrategy(geometry, strategy)
             return GeneralPathDraw(
-                commandIndexI32, coordinatesV4?.let { PlanDrawMaterialAuthority.MaterialV4(material, it) }
+                commandIndexI32, if (composedV5) PlanDrawMaterialAuthority.MaterialV5(material) else coordinatesV4?.let { PlanDrawMaterialAuthority.MaterialV4(material, it) }
                     ?: coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
                     ?: PlanDrawMaterialAuthority.MaterialV1(material, coordinates), geometry, strategy, scissorI32, coverage, sample, blend,
             )
@@ -253,6 +254,7 @@ public fun GeneralPathDraw.withBlend(blend: BlendPlan): GeneralPathDraw = Genera
     commandIndex, materialAuthority.materialPlanRef(), copyPathGeometry(), strategy,
     copyScissorI32(), coverage, sample, blend, materialCoordinates, materialCoordinatesV2,
     (materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
+    materialAuthority is PlanDrawMaterialAuthority.MaterialV5,
 )
 
 /** A W4d.2 direct path draw whose final coverage is constrained by a W4e clip plan. */
@@ -393,10 +395,11 @@ public class SolidRectDraw private constructor(
             coordinates: MaterialCoordinatePlanV1? = null,
             coordinatesV2: MaterialCoordinatePlanV2? = null,
             coordinatesV4: SourceCoordinatesV4? = null,
+            composedV5: Boolean = false,
         ): SolidRectDraw {
             require(commandIndexI32 >= 0) { "Command index must be non-negative" }
             require(!visibleBounds.isEmpty && !scissor.isEmpty) { "Draw rectangles must be non-empty" }
-            return SolidRectDraw(commandIndexI32, coordinatesV4?.let { PlanDrawMaterialAuthority.MaterialV4(material,it) }
+            return SolidRectDraw(commandIndexI32, if (composedV5) PlanDrawMaterialAuthority.MaterialV5(material) else coordinatesV4?.let { PlanDrawMaterialAuthority.MaterialV4(material,it) }
                 ?: coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
                 ?: PlanDrawMaterialAuthority.MaterialV1(material, coordinates), visibleBounds, scissor, coverage, sample, blend)
         }
@@ -407,6 +410,7 @@ public class SolidRectDraw private constructor(
 public fun SolidRectDraw.withMaterialRef(material: MaterialPlanRef): SolidRectDraw = SolidRectDraw.ofMaterial(
     commandIndex, material, copyVisibleBounds(), copyScissor(), coverage, sample, blend, materialCoordinates, materialCoordinatesV2,
     (materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
+    materialAuthority is PlanDrawMaterialAuthority.MaterialV5,
 )
 
 public class AnalyticRectDraw private constructor(
@@ -465,6 +469,7 @@ public class AnalyticRectDraw private constructor(
             coordinates: MaterialCoordinatePlanV1? = null,
             coordinatesV2: MaterialCoordinatePlanV2? = null,
             coordinatesV4: SourceCoordinatesV4? = null,
+            composedV5: Boolean = false,
         ): AnalyticRectDraw {
             require(commandIndexI32 >= 0) { "Command index must not be negative" }
             require(!deviceBounds.isEmpty && !rasterBounds.isEmpty && !scissor.isEmpty) {
@@ -472,7 +477,7 @@ public class AnalyticRectDraw private constructor(
             }
             return AnalyticRectDraw(
                 commandIndexI32,
-                coordinatesV4?.let { PlanDrawMaterialAuthority.MaterialV4(material,it) }
+                if (composedV5) PlanDrawMaterialAuthority.MaterialV5(material) else coordinatesV4?.let { PlanDrawMaterialAuthority.MaterialV4(material,it) }
                     ?: coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
                     ?: PlanDrawMaterialAuthority.MaterialV1(material, coordinates),
                 deviceBounds,
@@ -487,6 +492,7 @@ public class AnalyticRectDraw private constructor(
 public fun AnalyticRectDraw.withMaterialRef(material: MaterialPlanRef): AnalyticRectDraw = AnalyticRectDraw.ofMaterial(
     commandIndex, material, copyDeviceBounds(), copyRasterBounds(), copyScissor(), blend, materialCoordinates, materialCoordinatesV2,
     (materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
+    materialAuthority is PlanDrawMaterialAuthority.MaterialV5,
 )
 
 public class AnalyticRRectDraw private constructor(
@@ -662,8 +668,9 @@ public class PathFillDraw private constructor(
             coordinates: MaterialCoordinatePlanV1? = null,
             coordinatesV2: MaterialCoordinatePlanV2? = null,
             coordinatesV4: SourceCoordinatesV4? = null,
+            composedV5: Boolean = false,
         ): PathFillDraw = ofAuthority(
-            commandIndexI32, coordinatesV4?.let { PlanDrawMaterialAuthority.MaterialV4(material, it) }
+            commandIndexI32, if (composedV5) PlanDrawMaterialAuthority.MaterialV5(material) else coordinatesV4?.let { PlanDrawMaterialAuthority.MaterialV4(material, it) }
                 ?: coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
                 ?: PlanDrawMaterialAuthority.MaterialV1(material, coordinates), geometryF32, strategy, scissorI32, blend,
         )
@@ -691,6 +698,7 @@ public class PathFillDraw private constructor(
 public fun PathFillDraw.withMaterialRef(material: MaterialPlanRef): PathFillDraw = PathFillDraw.ofMaterial(
     commandIndex, material, copyGeometryF32(), strategy, copyScissorI32(), blend,
     materialCoordinates, materialCoordinatesV2, (materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
+    materialAuthority is PlanDrawMaterialAuthority.MaterialV5,
 )
 
 /** A sealed W4d stroke draw whose immutable geometry authority remains owned by `:math`. */

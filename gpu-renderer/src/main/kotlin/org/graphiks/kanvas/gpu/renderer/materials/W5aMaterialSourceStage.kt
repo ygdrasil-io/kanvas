@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.materials
 
 import org.graphiks.kanvas.gpu.plan.MaterialBindingPlan
+import org.graphiks.kanvas.gpu.plan.materialPlanRef
+import org.graphiks.kanvas.gpu.plan.colorSourceCoordinatesV4
 import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
 import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.gpu.plan.RawMaterialRequirementsV2
@@ -44,11 +46,13 @@ internal class W5aMaterialSourceStage private constructor(
     val uniformByteCountI64: Long get() = ownedUniformBytes.size.toLong()
     val canonicalIdentity: String = requirements.canonicalIdentity
     companion object {
-        fun colorV4(table: MaterialPlanTable, authority: org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV4,
+        fun colorV4(table: MaterialPlanTable, authority: org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority,
             requirements: RawMaterialRequirementsV2): W5aMaterialSourceStage? {
-            val proof = table.colorSourceProofV4(authority.ref)
-            if (!proof.authenticates(table,authority.ref,authority.coordinates) ||
-                requirements.structuralId != table.entry(authority.ref).program.structuralId.value ||
+            val ref = authority.materialPlanRef()
+            val coordinates = authority.colorSourceCoordinatesV4() ?: return null
+            val proof = table.colorSourceProofV4(ref)
+            if (!proof.authenticates(table,ref,coordinates) ||
+                requirements.structuralId != table.entry(ref).program.structuralId.value ||
                 !requirements.canonicalIdentity.endsWith("material-source-footprint-v4:${proof.canonicalIdentity}")) return null
             val wordsI64 = requirements.uniformByteCountI64 / 16L
             if (requirements.uniformByteCountI64 % 16L != 0L || wordsI64 !in 1L..Int.MAX_VALUE.toLong()) return null
@@ -126,6 +130,7 @@ internal class W5aMaterialSourceStage private constructor(
                 val (source, binding) = pair
                 val input = "${layout.uniformExpression}.binding$bindingIndexI32"
                 when (binding) {
+                    is org.graphiks.kanvas.gpu.plan.ComposedMaterialBindingV5 -> return null
                     is org.graphiks.kanvas.gpu.plan.ColorFilterBindingV4 -> return null
                     is org.graphiks.kanvas.gpu.plan.GradientInterpolationBindingV4 -> return null
                     is org.graphiks.kanvas.gpu.plan.ImageSampleV3 -> return null

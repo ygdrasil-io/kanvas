@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.planning
 
+import org.graphiks.kanvas.gpu.plan.colorSourceCoordinatesV4
+
 import org.graphiks.kanvas.gpu.plan.materialPlanRef
 
 import org.graphiks.kanvas.gpu.plan.*
@@ -59,7 +61,7 @@ internal class W5bAnalyticRectGraphLowerer {
         require(memory.diagnostic == null && memory.peakFrameTransientBytes + memory.targetResidentBytes == graph.peakFrameLocalBytes)
         val table = requireNotNull(graph.materialPlanTableOrNull())
         val built = draws.mapIndexed { index, draw ->
-            val v4 = draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4
+            val v4 = draw.materialAuthority.takeIf { it.colorSourceCoordinatesV4() != null }
             W4aAnalyticRectGraphLowerer().packet(draw,
                 if (v4 != null) org.graphiks.math.color.ColorF32.Transparent else requireNotNull(W5aMaterialPlanLowerer().lower(table,
                     draw.materialAuthority.materialPlanRef())), index, bounds, table, w5b = true,

@@ -12,6 +12,11 @@ internal fun RenderGraphConstruction.hasW5aMaterialPathContract(): Boolean {
     val paths = passes().filterIsInstance<PlanPass.PathRenderPass>()
     return paths.isNotEmpty() && paths.all { pass ->
         val ref = when (val authority = pass.draw.materialAuthority) {
+            is PlanDrawMaterialAuthority.MaterialV5 -> {
+                if (pass.draw !is GeneralPathDraw || pass.draw.copyPathGeometry() !is PathDrawGeometry.Fill ||
+                    !table.colorSourceProofV5(authority.ref).authenticates(table,authority.ref,SourceCoordinatesV4.None)) return@all false
+                authority.ref
+            }
             is PlanDrawMaterialAuthority.MaterialV4 -> {
                 if (pass.draw !is GeneralPathDraw || !(pass.draw.copyPathGeometry() is PathDrawGeometry.Fill ||
                     pass.draw.copyPathGeometry() is PathDrawGeometry.Stroke && table.isUnfilteredGradientV4(authority.ref))) return@all false
@@ -50,6 +55,10 @@ internal fun RenderGraphConstruction.hasW5aPathDrawMaterialContract(): Boolean {
     } }
     return draws.isNotEmpty() && draws.all { draw ->
         val ref = when (val authority = draw.materialAuthority) {
+            is PlanDrawMaterialAuthority.MaterialV5 -> {
+                if (draw !is PathFillDraw || !table.colorSourceProofV5(authority.ref).authenticates(table,authority.ref,SourceCoordinatesV4.None)) return@all false
+                authority.ref
+            }
             is PlanDrawMaterialAuthority.MaterialV1 -> authority.ref
             is PlanDrawMaterialAuthority.MaterialV4 -> {
                 if (draw !is PathFillDraw || !table.colorSourceProofV4(authority.ref).authenticates(table,authority.ref,authority.coordinates))

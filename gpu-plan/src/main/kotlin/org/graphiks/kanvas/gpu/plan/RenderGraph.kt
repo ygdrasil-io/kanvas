@@ -35,10 +35,11 @@ public class RenderGraph private constructor(
     private val storedDependencies = immutableList(dependencies)
     private val storedW5bGeometryLanes = immutableList(w5bGeometryLanes)
     private val storedPackedSourcesV4 = java.util.Collections.unmodifiableMap(LinkedHashMap(packedSourcesV4))
-    public fun packedMaterialSourceV4(authority: PlanDrawMaterialAuthority.MaterialV4): RawMaterialRequirementsV2 {
+    public fun packedMaterialSourceV4(authority: PlanDrawMaterialAuthority): RawMaterialRequirementsV2 {
         val table = requireNotNull(materialPlanTable) { W5fPlanDiagnostics.Schema }
-        val footprint = RawMaterialRequirementsV2.measureV4(table,authority.ref)
-        require(footprint.proof.authenticates(table,authority.ref,authority.coordinates)) {
+        val ref = authority.materialPlanRef()
+        val footprint = RawMaterialRequirementsV2.measureV4(table,ref)
+        require(footprint.proof.authenticates(table,ref,requireNotNull(authority.colorSourceCoordinatesV4()))) {
             W5fPlanDiagnostics.Schema
         }
         return requireNotNull(storedPackedSourcesV4[footprint.canonicalIdentity]) { W5fPlanDiagnostics.Schema }
@@ -137,7 +138,7 @@ public class RenderGraph private constructor(
                             it is GeneralPathDraw && it.copyPathGeometry() is PathDrawGeometry.Fill ||
                             (it is AnalyticRRectDraw || it is PathStrokeDraw || it is GeneralPathDraw) &&
                                 table?.isUnfilteredGradientV4(it.materialAuthority.materialPlanRef()) == true) &&
-                            it.materialAuthority is PlanDrawMaterialAuthority.MaterialV4 ||
+                            it.materialAuthority.colorSourceCoordinatesV4() != null ||
                         (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw ||
                             it is PathFillDraw || it is PathStrokeDraw || it is GeneralPathDraw) && it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2)
             })
@@ -263,7 +264,7 @@ public class RenderGraph private constructor(
                 } && resources.none { it.role == PlanResourceRole.GradientStopData }) {
                 stopSlab.requireStorageCapabilities(capabilities)
                 val sourceRequirements = visualDraws(passes).filter {
-                    it.materialAuthority !is PlanDrawMaterialAuthority.MaterialV4
+                    it.materialAuthority.colorSourceCoordinatesV4() == null
                 }.map { draw ->
                     val authority = draw.materialAuthority
                     val source = RawMaterialRequirementsV2.of(materialPlanTable, authority.materialPlanRef())

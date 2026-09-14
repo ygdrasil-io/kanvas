@@ -82,7 +82,12 @@ internal class FrameSourceLayoutV4 private constructor(
         fun bind(source: MaterialSourceConstructionV4): EffectiveMaterialPlanner.Result.Ready =
             boundSources.getOrPut(source) {
                 source.resolvedSource ?: run {
-                var table = if (source.image != null) {
+                var table = if (source.composed != null) {
+                    val definition = PreparedComposedSourceV5.prepare(this,source)
+                    val proof = ColorSourceProofV1.issueComposed(definition)
+                        ?: throw IllegalArgumentException(W5gPlanDiagnostics.NumericDomainUnbounded)
+                    MaterialPlanTable.of(listOf(MaterialPlanEntry(definition.program,ComposedMaterialBindingV5(definition,proof))))
+                } else if (source.image != null) {
                     val resolved = source.image.bind(source.image.child?.let(::bind),
                         Math.addExact(Math.addExact(nonUniformBytesI64,stopBytesI64),uniformBytesI64))
                     boundImages[source] = (resolved.table.entry(resolved.root).bindings as ImageSampleV3).execution
@@ -120,7 +125,12 @@ internal class FrameSourceLayoutV4 private constructor(
             values.mapIndexed { index,value ->
                 val planned = entries[row][index]
                 val source = planned.source
-                val descriptor = if (!source.pending) value.internerDescriptorV4() else {
+                val descriptor = if (!source.pending) value.internerDescriptorV4() else if (source.composed != null) {
+                    val binding = value.bindings as? ComposedMaterialBindingV5
+                    require(binding != null && binding.definition.captured === source && binding.definition.frameOwner === this &&
+                        planned.wrapperOrdinalI32 == -1) { W5gPlanDiagnostics.Schema }
+                    planned.descriptor
+                } else {
                     val unary = when (val wrapper = source.wrappers.getOrNull(planned.wrapperOrdinalI32)) {
                         null -> {
                             require(planned.wrapperOrdinalI32 == -1) { W5fPlanDiagnostics.Schema }
@@ -175,7 +185,9 @@ internal class FrameSourceLayoutV4 private constructor(
                 require(footprint.proof.authenticates(table,root,source.coordinates)) { W5fPlanDiagnostics.Schema }
                 actualV4[footprint.canonicalIdentity] = footprint
                 if (source.pending) {
-                    if (source.image != null) require(footprint.proof.imageExecution === boundImages[source]) {
+                    if (source.composed != null) require(footprint.proof.composedDefinition?.captured === source &&
+                        footprint.proof.composedDefinition.frameOwner === this) { W5gPlanDiagnostics.Schema }
+                    else if (source.image != null) require(footprint.proof.imageExecution === boundImages[source]) {
                         W5fPlanDiagnostics.Schema
                     } else {
                         var leafIndex = root.indexI32
@@ -219,7 +231,7 @@ internal class FrameSourceLayoutV4 private constructor(
     }
 
     private fun constructBound(table: MaterialPlanTable,roots: List<MaterialPlanRef>): RenderGraphConstruction {
-        val passes = remapSourcePassesV4(lane.passes()) { symbolic -> roots[symbolic.indexI32] }
+        val passes = remapSourcePassesV4(lane.passes(),composed={ table.entry(it).bindings is ComposedMaterialBindingV5 }) { symbolic -> roots[symbolic.indexI32] }
         var constructed = RenderGraph.construct(lane.id,lane.capabilityId,lane.targetExtent,lane.colorFormat,
             lane.capabilities,lane.budget,lane.visualCommandCount,lane.resources(),passes,lane.dependencies(),
             lane.peakFrameLocalBytesI64,table)
@@ -245,7 +257,7 @@ internal class FrameSourceLayoutV4 private constructor(
         table: MaterialPlanTable,roots: List<MaterialPlanRef>): RenderGraphConstruction {
         var geometry = RenderGraph.construct(source.id,source.capabilityId,source.targetExtent,
             source.colorFormat,source.capabilities,source.budget,source.visualCommandCount,
-            source.resources(),remapSourcePassesV4(source.passes()) { roots[offset+it.indexI32] },
+            source.resources(),remapSourcePassesV4(source.passes(),composed={ table.entry(it).bindings is ComposedMaterialBindingV5 }) { roots[offset+it.indexI32] },
             source.dependencies(),source.peakFrameLocalBytesI64,table)
         if (source.capabilityId == W4dGeneralPathPlanCompiler.W5A_HARD_CAPABILITY_ID)
             geometry = RenderGraph.issueW4dGeneralCompilerWitness(geometry)
@@ -508,8 +520,8 @@ internal class FrameSourceLayoutV4 private constructor(
             pending.forEach { source ->
                 val bytes = source.uniformBytesI64()
                 requireColorUniformBindingV4(bytes,caps,(if (source.hasGradientStorage) 2 else 1) + (if (source.image != null) 1 else 0),
-                    W5dPlanDiagnostics.CoordinateUniformBudget)
-                add(source.uniformBytesI64(true),W5dPlanDiagnostics.CoordinateUniformBudget)
+                    if (source.composed != null) W5gPlanDiagnostics.Binding else W5dPlanDiagnostics.CoordinateUniformBudget)
+                add(source.uniformBytesI64(true),if (source.composed != null) W5gPlanDiagnostics.Uniform else W5dPlanDiagnostics.CoordinateUniformBudget)
             }
             val stopBytes = Math.multiplyExact(stopCountI64,32L)
             if (stopBytes > 0L) requireGradientStorageCapabilitiesV4(stopBytes,caps)
