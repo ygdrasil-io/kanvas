@@ -1,8 +1,14 @@
 # W5g Composed and Procedural Materials Implementation Plan
 
-## Current launch checkpoint — Blend-first plan accepted
+## Current execution checkpoint — Task1 scalar accepted; Task2 gradients next
 
-The requested fresh sole Astra plan review and its scoped amendment confirmation are complete. ROOT read the FULL report/addendum and verified actual source joins: original3/3Important ADDRESSED,0outstandingCritical/Important/0newMinor. Task1 is executable and its plan-review launch gate is OPEN. The8preflight decisions/costs below remain binding. No W5g source/test/native result exists at this documentation checkpoint; Noise255/oldarchive/publicstorage evidence gates remain OPEN, no W5g closure or merge readiness.
+Task1 uniform-only ordered Blend is functionally accepted after its sole Sol task review and SAME-seat scoped fix round1 re-review: Spec Compliance COMPLIANT, Task quality APPROVED,0Critical/0Important/0new actionable Minor. I2's all29/all12 witness gap and ROOT-confirmed C1's historical invalid-gradient diagnostic masking are ADDRESSED. The unsupported alpha127-and255 matrix claim was withdrawn by the reviewer; alpha127/255 is a normalized rational.
+
+Task1 production commits are `a9e167e3832bedf5e0453dfd3dbcfde23af83010` and bounded fix `bb0bffaa9906b20f1cb886de12c43908db19da89`, from recorded BASE `0b533d31e8f730c2837d585cf04660147de5e882`. ROOT FULL-read reports/review and independently verified all42committed code blobs equal the frozen tested source. The fix changes exactly2files182+/11−, no native/image/Picture/oracle change. Final amended-source covering has98PASS (Surface95+Picture3),0failure/error/skip, fresh XML17:46:01.074Z–17:54:11.598Z. The genuine initial scalar RED and genuine C1RED, all failed fixture/search epochs and historical six-class covering206registered/205PASS/1unchangedW5aAA4skip remain recorded, not relabeled final.
+
+Command remains BUILD FAILED8m14s/Gradle1/native executor195exit133. Repeated exit133 is observed; cause and causal identity with earlier executors remain unknown. No native GREEN/Ready-to-merge/ISO claim. The native-cause investigation remains an explicit outside-slice gap, not silently closed by disclosure. Compressed ComposedMaterialPlanV5 formatting remains a nonblocking readability observation for an in-scope later edit/whole-branch triage.
+
+Next is Task2's SAME V5 DAG extension to contextual gradients/shared stops, with one fresh adapted Astra implementer and one serialized Gradle writer. Full Blend closes only after Tasks2–3 acceptance; Noise255/archive/storage and wholeW5g gates remain OPEN. Parent W5f#2400 is unchanged, no W5g push/PR yet.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` to implement this plan task-by-task with the session's adapted Astra implementers and Sol review-only allocation. Steps use checkbox (`- [ ]`) syntax for tracking. ROOT first reads this entire plan and the approved spec, performs the self-review, and obtains the requested fresh Astra plan review. This document does not authorize implementation before that gate.
 
@@ -28,7 +34,7 @@ The requested fresh sole Astra plan review and its scoped amendment confirmation
 - Geometry and transformation values remain in `:math:geometry`/`:math:matrix` using I32/I64/F32/F64 names. `SizeI32` already exists in `math/geometry/src/commonMain/kotlin/org/graphiks/math/geometry/SizeF32.kt`; reuse it.
 - No runtime-effect admission (W5h), spatial filters/layers/backdrop (W6), external image decoding/encoding, font/glyph generation, GM, dashboard, renders, references, scores, baselines, `jpg-color-cube`, global suites or native harness/security changes. No reset/purge/teardown/budget workaround.
 - Serialize all Gradle executions. Shell commands use `rtk` or `rtk proxy` and the explicit workdir `/Users/chaos/.codex/worktrees/cbf6/kanvas`. No implementation task may run an unrelated broad suite.
-- Three sequential meaningful deliveries below; setup, contracts and tests travel in their owning vertical delivery. Task reviews are bounded. End with ONE whole-branch Sol review, at most ONE complete Astra fix wave and ONE scoped Sol re-review, then ONE Draft PR. Do not repeat the historical review/test loop.
+- Five sequential meaningful implementation tasks below; Tasks1–3 collectively deliver the COMPLETE Blend family, Task4 Noise and Task5 convergence. Setup/contracts/tests travel with each functional slice. This execution-size refinement retains the original three family deliveries and ALL requirements. Task reviews are bounded. End with ONE whole-branch Sol review, at most ONE complete Astra fix wave and ONE scoped Sol re-review, then ONE Draft PR. Do not repeat the historical review/test loop.
 - Durable progress is limited to this plan, `refactor/waves/W05-material-graph/status.md` and `refactor/README.md`, owned by ROOT. This planning worker owns only this document. No packet/ledger/artifact proliferation in this planning turn.
 
 ## Concrete design decisions and one numerical decision gate
@@ -36,9 +42,9 @@ The requested fresh sole Astra plan review and its scoped amendment confirmation
 1. **Explicit V5 composition in the existing hierarchy.** Add `ComposedMaterialProgramV5 : MaterialProgramPlan`, `ComposedMaterialBindingV5 : MaterialBindingPlan`, and `PlanDrawMaterialAuthority.MaterialV5`. Preserve V1–V4 historical layouts. A V5 root owns an ordered DAG of references to existing leaf/wrapper execution recipes; child topology is explicit, never `root.indexI32 - 1`. This is an extension of the common material contract, not a second material system.
 2. **Sharing separates values from evaluation context.** Snapshot identity sharing survives public Shader → immutable MaterialNode. The same immutable payload can share one physical range; two evaluations with different accumulated local matrices, clamps or working domains remain different evaluation nodes. Canonical equality alone cannot certify that two captured objects have the same immutable owner. Program identity contains topology/order, operators, domains and binding types; values, seed, frequency, octave count, table bytes, colors and resource IDs remain dynamic.
 3. **Keep capture limit semantics.** Memoize completed captures but still charge the existing occurrence traversal and check active-path cycles/depth before memo lookup returns a node. Do not switch to unique-node graph limits. Resource tables and actual evaluation DAG accounting are separately deduplicated only where their owner/context identities permit it.
-4. **Nullable historical constructors.** Use the new five-argument `SizeI32?` constructor, a deprecated five-argument `SizeF32?` constructor, and a third five-argument `Nothing?` constructor delegating literal null explicitly to `SizeI32?`. ROOT's local Kotlin probe verified positional/named null, typed nullable old/new sizes, and old nullable-null variables. A trailing default Unit overload was disproved and is not the design. Task2 still compiles the real four declarations (Shader and MaterialNode, both noise kinds). Preserve historical named arguments. Generated `copy(tileSize=SizeF32)` is a source migration to the new typed property, not silently promised binary compatibility.
+4. **Nullable historical constructors.** Use the new five-argument `SizeI32?` constructor, a deprecated five-argument `SizeF32?` constructor, and a third five-argument `Nothing?` constructor delegating literal null explicitly to `SizeI32?`. ROOT's local Kotlin probe verified positional/named null, typed nullable old/new sizes, and old nullable-null variables. A trailing default Unit overload was disproved and is not the design. Task4 still compiles the real four declarations (Shader and MaterialNode, both noise kinds). Preserve historical named arguments. Generated `copy(tileSize=SizeF32)` is a source migration to the new typed property, not silently promised binary compatibility.
 5. **Archive versioning is intrinsic.** Picture11/schema5 writes noise tile axes as I32 and new noise canonical domains. Read supported old Picture8/9/10 and schema versions with their actual old F32 layout, validating before explicit conversion. Do not reinterpret old bits or drop Picture10 from the accepted-version branch. Other geometry `SizeF32` fields keep their wire type.
-6. **Noise numerical gate, before Task2 production edits.** The approved recurrence is F32 `q=(P+.5)*frequency`, doubling q and halving amplitude, with integer stitching periods doubled each octave. A naive 255-iteration F32/I32 implementation overflows for admitted finite inputs. This plan does not invent an unreviewed multiword ABI or claim a future certificate. Task2 must first present a derivation for a safe phase representation and/or a true integral-zero tail that preserves the approved operations and their allowed rounding. Charge all requested octaves even if a proven tail contributes exactly zero. If the derivation needs a new numerical policy, ROOT exposes that precise decision before implementing it. An honest `numeric-domain-unbounded` refusal does not close that valid domain or the W5g family. Blend delivery can proceed after plan review independently of that decision; W5g closure cannot.
+6. **Noise numerical gate, before Task4 production edits.** The approved recurrence is F32 `q=(P+.5)*frequency`, doubling q and halving amplitude, with integer stitching periods doubled each octave. A naive255-iteration F32/I32 implementation overflows for admitted finite inputs. This plan does not invent an unreviewed multiword ABI or claim a future certificate. Task4 must present a safe-phase/true-integral-zero-tail derivation preserving approved operations/rounding. Charge all requested octaves even with a proven zero tail. A new numerical policy requires ROOT's precise exposed decision; numeric-domain-unbounded refusal never closes that valid domain or family. Blend Tasks1–3 remain independently executable; W5g closure cannot bypass this gate.
 
 The last item is an actual unresolved implementation-design obligation, not a scope waiver. Mandatory 255-octave and positive-tile public witnesses below remain required. This document is complete as the Blend-first execution plan and as the explicit contract/gate for the remaining Noise delivery; it is not evidence that the unresolved representation already exists.
 
@@ -59,7 +65,7 @@ TEST = kanvas/src/test/kotlin/org/graphiks/kanvas/
 | `API/canvas/DisplayOpSnapshot.kt` | Its Shader snapshot already uses `IdentityHashMap` and preserves shared captured children. Noise leaves are already immutable and reused; do not add artificial leaf copies. Its first-owner preflight must acquire complete noise scalar validation. |
 | `API/render/ir/PaintSceneAdapter.kt` | Current recursive `Shader.toMaterial` loses sharing; Blend calls both children with `preserveW5dMatrices=false`. Replace this capture traversal with bounded ordered memoization, carrying the real capture context and preserving matrix semantics across Blend. |
 | `API/render/ir/ColorFilterCapturePreflight.kt` | Current occurrence traversal has active-path detection but no completed memo. Preserve charging/refusal priority while avoiding duplicate retained snapshots. |
-| `IR/MaterialNode.kt`, `IR/SceneArchiveCodec.kt` | Existing Blend and noise semantic nodes; current noise `SizeF32?`, current schema4. Change the noise value and canonical/wire domains only in Task2. |
+| `IR/MaterialNode.kt`, `IR/SceneArchiveCodec.kt` | Existing Blend and noise semantic nodes; current noise `SizeF32?`, current schema4. Change the noise value and canonical/wire domains only in Task4. |
 | `PLAN/MaterialSourceConstructionV4.kt` | Pending original metadata has no table/proof/tuple; current gradient wrappers and image child are unary. Extend this owner to composed metadata instead of preparing child tables early. |
 | `PLAN/FrameSourceLayoutV4.kt` | `standalone`, `ordinaryComposite`, `nativeComposite`, checked inventory and prepare/bind are the actual full-frame gate. Add child DAG inventory before any new stop/noise preparation or packing. |
 | `PLAN/MaterialPlan.kt` | Current opacity/filter/image child access and V4 interner use adjacent refs. Add explicit V5 traversal/authentication/remapping without changing historical adjacency contracts. |
@@ -71,11 +77,11 @@ TEST = kanvas/src/test/kotlin/org/graphiks/kanvas/
 | `GPU/execution/GPUW5aSourceStageNativeV2.kt`, `GPU/materials/W5aFrameMaterialBudgetV2.kt` | Actual native source owner and combined memory inventory currently retain one image lease/request and select a single storage/texture binding. Extend these same owners with the final ordered typed V5 resource mapping; no second materializer or lifecycle redesign. |
 | `API/surface/gpu/GPUPlanSurfaceCandidateGate.kt`, `W5dGradientCandidateV2.kt` | Existing single admission gate and unary candidate reader. Extend bounded recognition with explicit family/geometry facts, including recognized-invalid input ownership. |
 
-Before editing a reader, inspect its whole function and its callers. In particular, a sealed-interface compiler error is not authority to promote an H lane. The exact reader audit list is in Task1; it is finite and based on current references, not a future wildcard permission.
+Before editing a reader, inspect its whole function and callers. A sealed-interface compiler error is not H promotion authority. The shared Blend reader list below is finite; each current task's subset is classified before edits, never a wildcard future permission.
 
-## Task 1: Ordered shared Blend sources on Rect and Path fill
+## Shared Blend authority and complete-family acceptance contract
 
-**Outcome:** A complete public vertical slice for all 29 existing child blend modes, noncommutative children, shared immutable payloads, local coordinates, existing gradient/image/filter combinations, capture/replay, and checked resources. It is independently acceptable before Noise.
+**Outcome across Tasks1–3:** A complete public Blend delivery for all29 child modes, noncommutative children, shared immutable payloads, local coordinates, existing gradient/image/filter combinations, capture/replay and checked resources. The original monolithic implementation handoff obtained genuine RED but no production; ROOT split its50+-owner unit into three functional slices (R11). This shared contract is not a claim that Task1 alone implements every resource family. Blend is CLOSED only after all three slices and their reviews; the numerical Noise gate remains independent.
 
 **Files — Create:**
 
@@ -88,6 +94,7 @@ Before editing a reader, inspect its whole function and its callers. In particul
 
 - `API/render/ir/PaintSceneAdapter.kt`, `API/render/ir/ColorFilterCapturePreflight.kt`: preserve ordered shared capture and context without relaxing first-owner limits.
 - `PLAN/MaterialPlan.kt`, `MaterialSourceConstructionV4.kt`, `FrameSourceLayoutV4.kt`, `MaterialSourceFootprintV4.kt`, `RawMaterialRequirementsV2.kt`, `EffectiveMaterialPlanner.kt`, `ColorOperationGraphV1.kt`, `ColorSourceProofCompilerV1.kt`, `ColorSourceProofV1.kt`: exact shared source inventory, graph, proof, physical layout and V5 publication.
+- `PLAN/ImageNumericOperationGraphV1.kt`: ONLY Task3's TexelRead constructor/identity/rebase, SampledRegion bind/rebase and narrowly necessary sampledTexelGraph logical-resource transport; preserve exact legacy upload-bound paths and numerical sampler/decoder/kernel equations (R10).
 - `PLAN/CapabilityCompilerChain.kt`, `SourceDeferredRenderConstructionV4.kt`, `RenderGraph.kt`, `RenderGraphConstruction.kt`, `PlanPasses.kt`, `W5aMaterialGraphContract.kt`, `W5bDestinationGraph.kt`, `W5bGeometryLanePlanV3.kt`, `W4dRenderGraphCanonicalSeal.kt`, `W4dGeneralRenderGraphCanonicalSeal.kt`: transport/authenticate new authority through existing frames/seals.
 - `API/surface/gpu/GPUPlanSurfaceCandidateGate.kt`, `W5dGradientCandidateV2.kt`: exact Rect/Path-fill admission and owned refusal.
 - `GPU/materials/W5aMaterialSourceStage.kt`, `W5aPacketMaterialSourceV2.kt`, `W5fColorOperationEmitterV1.kt`, `GPU/planning/W5aMaterialPlanLowerer.kt`, `W4aAnalyticRectGraphLowerer.kt`, `W4cPathFillGraphLowerer.kt`, `W4dGeneralPathGraphLowerer.kt`, `W5bAnalyticRectGraphLowerer.kt`, `W5bNativeGeometryGraphLowerer.kt`, `GpuPlanTaskListLowerer.kt`, `GPU/passes/W5aMaterialPlanAuthorityV2.kt`, `GPUPlanW4dGeneralPreparedAuthority.kt`: common V5 lowering, actual bindings and witness custody on existing eligible geometry.
@@ -97,7 +104,7 @@ Before editing a reader, inspect its whole function and its callers. In particul
 **Files — Audit/reuse, no write unless a concrete missed V5 transport is identified to ROOT:**
 
 - `API/canvas/DisplayOpSnapshot.kt`, `API/render/ir/SceneDisplayOpAdapter.kt`, `API/picture/Picture.kt`, `IR/MaterialNode.kt`, `IR/SceneArchiveCodec.kt`: existing immutable Blend round-trip and snapshots. No version bump solely for Blend.
-- `PLAN/BlendFormulaProgramV1.kt`, `BlendFormulaOperationGraphV1.kt`, `ColorFilterExecutionPlanV1.kt`, `ColorNumericAuthorityV1.kt`, `GradientInterpolationPlanV4.kt`, `ImageNumericOperationGraphV1.kt`, `ImageNumericAuthorityV1.kt`, `ImageAtlasBlendNumericAuthorityV1.kt`: reuse actual equations/leaves; no duplicated numerical authority.
+- `PLAN/BlendFormulaProgramV1.kt`, `BlendFormulaOperationGraphV1.kt`, `ColorFilterExecutionPlanV1.kt`, `ColorNumericAuthorityV1.kt`, `GradientInterpolationPlanV4.kt`, `ImageNumericAuthorityV1.kt`, `ImageAtlasBlendNumericAuthorityV1.kt`: reuse actual equations/leaves; no duplicated numerical authority. ImageNumericOperationGraphV1 numerical regions remain read-only; its explicitly classified Task3 transport regions are the sole exception.
 - `PLAN/W4bAnalyticRRectPlanCompiler.kt`, `W4dPathStrokePlanCompiler.kt`, `W4eNativePayloadPlan.kt`, `W5eImagePlanCompiler.kt`; `GPU/planning/W4bAnalyticRRectGraphLowerer.kt`, `W4dPathStrokeGraphLowerer.kt`, `W5bAnalyticRRectGraphLowerer.kt`; `GPU/execution/GPUW5eImageNativeV1.kt`, `GPU/passes/W5ePreparedFrameWitnessV1.kt`: exhaustive recognition must preserve historical support and explicit H refusal; no automatic composed-source promotion.
 - `TEST/surface/W5fSurfacePixelFixtures.kt`, `WgslFloatEnvelopeV1Oracle.kt`, `W5dGradientAddressingSurfacePixelTest.kt`, `W5eImageShaderSurfacePixelTest.kt`: public native assertion/oracle/fixture patterns, not production-derived expected values.
 
@@ -140,6 +147,42 @@ internal class PreparedComposedSourceV5 private constructor(
 `ComposedBindingLayoutV1` is added under existing `MaterialBindingPlan`, as specified in global §12's common layout contract; only built-in slots are delivered here, no runtime schema. It records ordered owner/local→physical offsets, total aligned uniform bytes and typed resources. Immutable constructors validate references and ownership before publication. Definition/proof issuance remains module-controlled. These signatures describe the new contract; implementations must supply all existing `MaterialProgramPlan` members, including version5 and the actual shared numeric graph bridge.
 
 The program retains code-shaped topology/operators, coordinate-operation shape and binding types only. The contextual `MaterialEvaluationDagV5` and all coordinate/value/resource owners stay in `PreparedComposedSourceV5`/bindings and are authenticated by the value-dependent proof; never cache this dynamic DAG in a shared program. Fixed logical resource minima and dynamic complete physical slab sizes are distinct.
+
+### Task1 built-in composed layout and diagnostic contract
+
+The §12 common layout below is binding for built-in V5 sources, not runtime-effect admission. Define the layout under the EXISTING `MaterialBindingPlan`; keep all native handles/leases outside it and authenticate dynamic resource ownership separately. The logical schema remains the versioned existing leaf/wrapper `MaterialProgramPlan`.
+
+For the complete ordered material DAG, prefix traversal assigns `ownerNodeIndexI32` on first visit; a later reference to the SAME captured shared node reuses that owner and logical ranges. Evaluation-context refs remain separate. The material group is1, uniform binding0. For each logical node block, `baseOffsetBytesI32=alignUp(cursor,16)`; physical field offset is base+local. Uniform mapping rows contain EXACTLY `ownerNodeIndexI32: Int`, `localOffsetBytesI32: Int`, `physicalOffsetBytesI32: Int`, `sizeBytesI32: Int`, `alignmentBytesI32: Int`. The total uniform size is aligned16 and stored/checked in I64 before narrowing. Never retain an unvalidated mutable list.
+
+Resource rows retain `ownerNodeIndexI32: Int`, `logicalSlotI32: Int`, `groupI32: Int`, `bindingI32: Int`, `visibilityFlagsU32: UInt`, `kindTagU32: UInt`. Binding assignment starts at1 in declared prefix order. Each row has exactly ONE present typed layout option:
+- buffer: `bufferTypeTagU32: UInt`, `minBindingSizeBytesI64: Long`, `hasDynamicOffset: Boolean=false`;
+- texture: `textureViewDimensionTagU32: UInt`, `textureSampleTypeTagU32: UInt`, `multisampled: Boolean=false`;
+- sampler option is ABSENT for all W5g built-ins; no hardware sampler/runtime slot/array is admitted.
+
+The two other layout options are absent, not sentinel values. Fixed published tags are resource kind STORAGE_BUFFER=1/SAMPLED_TEXTURE=2, visibility FRAGMENT=0x2, buffer UNIFORM=1/STORAGE_READ_ONLY=2, dimension D2=1 and sample type FLOAT_FILTERABLE=1. Stop/noise storage is read-only; decoded image sampling uses explicit textureLoad taps. Slot logical minimum and complete dynamic slab/allocation byte size are separate authenticated facts; check the COMPLETE latter against actual capabilities/budgets before preparation. No default physical capability is invented.
+
+The `composedBindingLayoutHash` preimage uses domain `kanvas-material-binding-layout-v1` then00, in EXACT order:
+1. groupI32=1,bindingI32=0,visibilityFlagsU32=0x2,bufferTypeTagU32=1,minBindingSizeBytesI64=aligned uniform size,hasDynamicOffset=false,then that total sizeI64;
+2. the ordered uniform mappings, each owner's index/local offset/physical offset/size/alignment;
+3. the ordered physical resources, each owner/logicalSlot/group/binding/visibility/kind then exactly one present buffer/texture layout option above, others absent.
+
+Use approved `CanonicalHashBytesV1` encoding: integers little-endian I/U32/64, bool/option tags00/01, lists countU32, domain ASCII terminated00, UTF8 strings lengthU32. Every count/length/sum is checkedI64 and representableU32 before hash/allocation; enums use published tags, never ordinal/name/native values. SHA256 lowercase enters assembled program identity only for the actual structural layout. Never include colors/stops/pixels/seed/ranges/value ownership or other dynamic data when binding ABI is identical. WGSL reflection/stage/native mapping must agree with the same sealed rows; immutable resource-owner/range/frame proof remains separate from this hash. No runtime ABI catalog/hash registration is introduced.
+
+Task1's new diagnostic names/strings are EXACTLY:
+
+```kotlin
+public object W5gPlanDiagnostics {
+    public const val Schema: String = "invalid.material.composed.schema"
+    public const val NumericDomainUnbounded: String = "unsupported.material.composed.numeric-domain-unbounded"
+    public const val Binding: String = "resource-limit.w5g.composed-binding"
+    public const val Uniform: String = "budget.w5g.composed-uniform"
+    public const val Storage: String = "budget.material.composed.storage"
+    public const val Unpromoted: String = "unsupported.material.composed.slice"
+}
+```
+
+Schema owns invalid composed topology/child refs/owner/layout authentication; NumericDomainUnbounded owns a useful unprovable COMPOSED output; Binding owns unavailable/exceeded physical resource/binding facts; Uniform and Storage distinguish composed uniform versus shared storage footprint overruns; Unpromoted owns composed H geometry or an explicitly pending child family. Preserve FIRST preexisting filter/gradient/image/opacity/capture diagnostics for invalid leaves and old admitted cases. Forward codes through the EXISTING typed boundary, no new exception/fallback. No new numeric byte budget/default/ceiling in Tasks1–3: use snapshotted PlanBudget.maxFrameLocalBytes, real physical limits, GraphLimits and checkedI64. Noise diagnostics/work limit are Task4-only.
+
 
 - [ ] **Step 1 — Write RED public children/order/capture witnesses.** Join the existing test-only independent equations into ONE point-aware public-Shader interpreter. Preserve existing `expectedShaderTree` callers by appending defaulted arguments; replace its disconnected local solid-only `evaluate` with delegation to `shaderSource`. The concrete callable contract is:
 
@@ -224,7 +267,7 @@ Proofs retain the exact child graph/condition facts, immutable dynamic owner, co
 
 Picture test code follows the existing public sequence `PictureRecorder.beginRecording(rect)` → draw → `finishRecordingAsPicture()` → mutate → `Picture.fromByteArray(picture.toByteArray())` → `replay.playback(surfaceCanvas)` → repeated native pixel assertion. Use a single shared mutable Matrix/filter in both branches and prove expected differs from mutated/reversed outputs before recording. No serialization shape/identity assertions.
 
-- [ ] **Step 5 — Verify the full Task1 class pair and affected historical public classes, inspect transport/ownership, commit the coherent slice.**
+- [ ] **Step 5 — At Task3 acceptance, verify the complete composed class pair and affected historical public classes, transport and ownership.**
 
 ```text
 rtk proxy ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.W5gComposedMaterialSurfacePixelTest --tests org.graphiks.kanvas.picture.W5gComposedMaterialPictureTest --tests org.graphiks.kanvas.surface.W5fFilterOrderingSurfacePixelTest --tests org.graphiks.kanvas.surface.W5fGradientInterpolationSurfacePixelTest --tests org.graphiks.kanvas.surface.W5eImageShaderSurfacePixelTest
@@ -232,11 +275,69 @@ rtk git diff --check
 rtk git commit -m 'feat(material): execute ordered shared blend sources'
 ```
 
-Before the commit, stage only the actual Task1-owned changed paths individually after ROOT verifies their classification. Do not stage the workspace or ROOT docs. Preserve command exit and XML result separately. Sol receives the complete slice including capture, proof, physical binding and H-lane joins; a Critical/Important finding blocks Task1 acceptance.
+For every slice commit, stage only its actual classified paths after ROOT confirms. Never stage workspace/ROOTdocs. Preserve command exit/XML separately. Each Sol review covers that slice's capture/proof/physical/H joins; Critical/Important blocks its acceptance. This full-family checkpoint is reached only after Task3.
 
-## Task 2: NoiseV1, integral tile API and public archive compatibility
+## Task 1: Uniform-only ordered Blend, capture and replay
 
-**Outcome:** Both noise families on Rect and Path fill through Task1's existing composed source authority, with seeded tables, stitching, 0..255 octave contract, constructor/wire compatibility, finite proof and work-budget refusal/recovery. Begins only after the numerical decision gate above is resolved to a concrete reviewed derivation.
+**Outcome:** Independently complete public Rect/direct-Path/stencil-Path Blend for SolidColor, Opacity and the twelve existing non-runtime WithColorFilter kinds, all29 child modes, immutable shared subtrees, external paint filter/alpha/final blend, limits and capture/replay. No gradient/image/coordinate-dependent child is claimed promoted by this slice. Existing ordinary W5a–f cases remain unchanged; pending composed gradient/image and H geometry receive owned composed.slice refusal, never fallback. Full Blend-family closure waits for Tasks2–3.
+
+**Create:** `PLAN/ComposedMaterialPlanV5.kt`, `PLAN/W5gPlanDiagnostics.kt`, `TEST/surface/W5gComposedMaterialSurfacePixelTest.kt`, `TEST/picture/W5gComposedMaterialPictureTest.kt`.
+
+**Modify:** Shared contract's API capture/preflight/gate, PLAN material/source/layout/footprint/requirements/operation/proof and exact existing sealed transport readers, GPU common source stage/emitter/packet/lowerers/authority, and `TEST/surface/W5fColorCpuOracle.kt`. Only the uniform-only V5 path is implemented here. Native multi-image/storage owners and ImageNumericOperationGraphV1 remain read-only until Tasks2–3; no new materializer/texture/slab is needed for this slice. A sealed-reader hunk preserves H and historical branches; it is not promotion authority. Report exact actual changed readers before staging.
+
+**Interfaces/implementation boundary:** Use the V5 contracts and exact built-in layout/diagnostics above. The root V5 entry owns the explicit ordered scalar evaluation DAG and its prepared immutable bindings; do not append unary children and infer root-1. The program owns only DynamicF32/code-shaped operators/refs, no source value owners. Its binding/proof owns original capture, final frame definition/layout/uniform mappings and contextual DAG (SourceCoordinatesV4.None for these coordinate-independent leaves). Extend FrameSourceLayoutV4 metadata inventory/prepare/bind and ColorSourceProofV1 authentication together for THIS scalar DAG. Issue full-frame checked preparation/packing permits before new uniform preparation; preserve historical linear owners. Existing native uniform binding0/source completion owner can transport the resulting stage unchanged. Gradient/image proof constructors/leases/resources are neither reused inside this program nor migrated in this slice.
+
+- [x] **Step1 — Preserve verified genuine RED and complete independent scalar witnesses.** The retained initial public test and W5f oracle delegate already produce bounded/disjoint child-order expectations before Surface; actual RED at2026-09-14T16:10:26.396Z is1failure0error/skip/Gradle1, owned unsupported.material.w5a.kind, no production/native pixels. Do not rerun solely to recreate this evidence. Extend the ONE existing independent shaderSource for scalar ordered Blend/unary filter equations; preserve old callers. Device/canvas defaulted parameters may be declared now, but coordinate-dependent interpretation is Task2, never an unverified pretransformed sample.
+
+```kotlin
+val dst = Shader.Opacity(Shader.SolidColor(ColorARGB.Blue),.5f)
+val src = Shader.Opacity(Shader.SolidColor(ColorARGB.Red),.25f)
+val shader = Shader.Blend(BlendMode.SRC_OVER,dst,src)
+val wanted = W5fColorCpuOracle.expectedShaderTree(shader,finalBlend=BlendMode.SRC)
+W5fSurfacePixelFixtures.requireBounded(wanted)
+```
+
+Complete all BlendMode.entries, alpha0/.25/.5/1, noncommutative order, shared diamond and restoring-filter placement from the shared fixture table. Each useful expected set is singleton/two-adjacent and counterfactuals disjoint BEFORE Surface/recorder. Use all twelve existing filter fixture recipes (not runtime), paint alpha127/255 and final SRC_OVER/SRC_IN/DIFFERENCE on Blue. For each promoted family use actual direct AND stencil fill fixtures from existing public W5f patterns, not two identical triangle routes mislabeled.
+
+- [x] **Step2 — Implement the metadata-only scalar DAG→final uniform layout→same graph/proof→Ready/native slice.** Preserve prefix dst/src owner assignment, occurrence GraphLimits, completed capture memo/context facts, immutable sibling metadata and original capture identity. Exact uniform/schema/binding/numeric diagnostics come from the contract above. No value-dependent program key, retained color/upload owner, second source compiler or per-child paint alpha. Only bounded scalar leaf/filter recipes are admitted; structurally recognized pending resources/H are terminally owned.
+- [x] **Step3 — Complete public retained replay/mutation and refusal recovery.** Same shared mutable Matrix/table/filter in both branches, derive original/mutated/reversed bounded outputs before capture, then Surface/Picture original+decoded replay twice. Keep existing Picture10/schema4; Blend needs no wire change. Deep/shared occurrence graphs must reject at exact existing first-capture typed boundary, then valid append/render on SAME recorder/Surface. Name pending gradient/image and H geometry controls separately; don't remove any later positive requirement.
+- [x] **Step4 — Run only the two new classes plus affected scalar/filter history on final source.**
+
+```text
+rtk proxy ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.W5gComposedMaterialSurfacePixelTest --tests org.graphiks.kanvas.picture.W5gComposedMaterialPictureTest --tests org.graphiks.kanvas.surface.W5fFilterOrderingSurfacePixelTest --tests org.graphiks.kanvas.surface.W5fColorFilterSurfacePixelTest --tests org.graphiks.kanvas.surface.W5bBlendSurfacePixelTest --tests org.graphiks.kanvas.surface.W5aMaterialSurfacePixelTest
+rtk git diff --check
+rtk git commit -m 'feat(material): execute uniform-only ordered blend DAGs'
+```
+
+Stage only actual classified task paths after ROOT confirms; preserve assertion XML/native command distinction and full report/source epoch. ONE Sol spec+quality review closes this scalar slice only. No full Blend/W5g closure.
+
+## Task 2: Contextual gradient children and shared stop resources
+
+**Outcome:** Extend Task1's SAME V5 DAG to all four existing gradient families, stop sequences including>16, five working domains, local matrices/CoordClamp and shared leaf payloads evaluated in different branch contexts, on Rect/direct/stencil Path fill. Existing ordinary gradient RRect/stroke lanes stay admitted; composed H lanes remain refused.
+
+**Modify:** Task1 common scalar owners/transport/oracle/classes plus existing gradient-source metadata/layout/footprint/proof/stage readers in the shared contract. `GPU/materials/W5aFrameMaterialBudgetV2.kt` and `GPU/execution/GPUW5aSourceStageNativeV2.kt` may change ONLY for exact declared shared-stop inventory/binding and actual coordinate-input consumption; no image/logical-texel migration or Noise. Reuse existing gradient numeric/interpolation authorities. No extra production file without exact ROOT classification.
+
+**Interfaces:** Task1's program/binding/proof/layout remain. Complete common expectedShaderTree(devicePointF32,canvasMatrixF32) and private interval coordinate/gradient-stop interpreter specified above. Pending local segments clone per child; independently compose/invert/project once in F64 at clamp/end, preserving actual normalized F32 map rounding and outermost branch working precedence. Shared physical stops do not imply shared evaluated samples.
+
+- [ ] **Step1 — Write genuine RED gradient/context expectations before production.** Use shared two-stop Black/White alpha128,x=.5..1.5,local translations±.25, plus>16-stop existing W5c recipe; all four family fixtures and five domains use independently bounded/disjoint outputs. Force different branch sample/context/order, mutation/Picture original+decoded retention and old uncomposed controls. Wider fixtures stay unresolved, not empirical tolerance.
+- [ ] **Step2 — Inventory ALL child stops/context uniform rows before preparation; bind final shared slab ranges and issue the SAME contextual graph/proof.** Physical range sharing needs immutable owner/value proof; evaluation refs include normalized coordinate operation/domain context. Neither old offsets nor adjacent-ref inference may survive rebasing into V5. Keep program topology/code-shaped and actual coordinate inputs.
+- [ ] **Step3 — Complete shared-contract gradient/domain/clamp/mutation/limits public cells and run both W5g classes plus W5fGradientInterpolationSurfacePixelTest,W5dGradientAddressingSurfacePixelTest,W5cGradientSurfacePixelTest.** Retain every Task1 scalar case; freeze final source, full command/XML/native report, provisional coherent commit and ONE Sol review. This does not close image-child Blend.
+
+## Task 3: Image children and complete mixed Blend resources
+
+**Outcome:** Two decoded image children and mixed image/gradient/filter/shared DAGs on Rect/direct/stencil Path fill, nearest/linear/cubic/manual taps, immutable pixels/matrices and Picture retention. After this review Tasks1–3 collectively satisfy the full shared Blend acceptance contract. No external codec/A8-origin promotion.
+
+**Modify:** Task1–2 common owners/oracle/classes, exact native source+combined memory owners, and ONLY the classified ImageNumericOperationGraphV1 transport regions above. Reuse image sampler/decoder/authority/cache/lease equations and existing device-generation/completion owners.
+
+**Interfaces:** TexelRead V5 logical resource refs retain ownerNodeIndex/logicalSlot/code-shaped type facts, never ImageUploadPlanV1/pixel/value owner in shared program. Legacy upload-bound paths stay exact. Binding-owned PreparedComposedSource/frame mapping resolves original immutable request/upload,dynamic dimensions,final physical slot and frame/generation for BOTH proof and WGSL emission of the SAME logical operation graph. Omitting contentIdentity alone is not payload removal. Same ordered typed rows pass layout→manifest→reflection→native bind entries→retained request/lease/slab custody and complete aggregate inventory.
+
+- [ ] **Step1 — Write independently bounded RED two-image/mixed expectations.** Use the shared two2×1 image fixture bytes, reversed pixels/order, nearest then existing bounded linear/cubic/tile/domain samples, sibling local contexts and mixed gradient child. Common shaderSource calls independent sampledImage with interval coordinates, not image-origin paint/mask equations. Expected/mutated/swapped outputs precede Surface/Picture.
+- [ ] **Step2 — Implement logical image-read transport/proof resolver plus final typed resource inventory/native mapping together.** Validate every image slot against exact immutable cache request/lease/generation and storage slot against complete slab/range; no single texture/storage selector or hidden sampler. Admit/copy/pack only after all later siblings/frame lanes pass the existing checked permit. Preserve V3 pre-inventory debt without new unauthorized copy.
+- [ ] **Step3 — Complete original shared-contract image/filter/working/capture/limits/H cells; run both W5g classes plus W5eImageShaderSurfacePixelTest,W5fImageFilterSurfacePixelTest,W5fGradientInterpolationSurfacePixelTest.** Retain all scalar/gradient cases; full epoch/native report, provisional coherent commit and ONE Sol spec+quality review. ROOT may then close the Blend family, not Noise or allW5g.
+
+## Task 4: NoiseV1, integral tile API and public archive compatibility
+
+**Outcome:** Both noise families on Rect and Path fill through Tasks1–3's existing composed source authority, with seeded tables, stitching,0..255 octave contract, constructor/wire compatibility, finite proof and work-budget refusal/recovery. Begins after Task3 acceptance and the numerical decision gate is resolved to a concrete reviewed derivation.
 
 **Files — Create:**
 
@@ -369,19 +470,19 @@ For positive axes adjust frequency exactly as global §11.2: zero base stays zer
 | Constructors | named/positional literal null, `SizeF32?=null`, `SizeF32?=SizeF32(8f,4f)`, `SizeI32?`, both families, public render and Picture playback; source compilation itself checks overload resolution without an ABI/private test. |
 | Archives | frozen genuine old Picture8/9/10 noise payloads with absent/zero/integral tile; each new11 round-trip; malformed old fractional/nonfinite/out-of-range F32 tile rejected. Retain existing old8/9 image fixtures unchanged. |
 
-Historical noise fixtures must be generated by the actual parent public Picture writer before Task2 changes, stored as fixed test-resource bytes with parent commit/version recorded. Use `TEST` resource root `kanvas/src/test/resources/picture/` and filenames `format-10-noise-integral.base64`, `format-10-noise-absent.base64`; older8/9 noise data must come from their actual old writer or independently documented public wire fixture, not by changing a version byte on v11. If genuine older noise payloads cannot be produced in scope, record that exact compatibility evidence gap; do not claim coverage from unrelated image fixtures.
+Historical noise fixtures must come from the actual parent public Picture writer before Task4 changes, with fixed bytes/provenance. Use kanvas/src/test/resources/picture/format-10-noise-integral.base64 and format-10-noise-absent.base64; older8/9 require actual old writer/documented public wire fixture, never v11 version-byte substitution. Missing genuine payloads remain an exact compatibility gap, not coverage from unrelated image fixtures.
 
 - [ ] **Step 6 — Run the two complete public noise classes and Task1's two classes, then commit.** Preserve source epoch, actual XML names/byte bounds and command exit separately. Compile modified math modules on JVM/JS only if new public math functions were actually necessary; merely reusing SizeI32 does not justify new math infrastructure tests. Use a coherent commit message `feat(material): add NoiseV1 and integral tile compatibility` after the reviewed source passes its targeted functional assertions.
 
-## Task 3: Mixed-frame work/storage refusal and retained recovery
+## Task 5: Mixed-frame work/storage refusal and retained recovery
 
 **Outcome:** Publicly validate the whole-frame sharing/work/ownership contract after both families exist, preserving old sources in the same frame. This is a behavioral integration delivery, not a scaffolding or bookkeeping task.
 
 **Files — Create:** `TEST/surface/W5gConvergenceSurfacePixelTest.kt`.
 
-**Files — Audit/reuse:** Task1–2 production owners, existing public W5a–f classes and native readback helpers. A causal production defect is fixed only in its already-classified owner; identify an extra owner to ROOT before expanding the file set. No pool/budget/native workaround.
+**Files — Audit/reuse:** Task1–4 production owners, existing public W5a–f classes and native readback helpers. A causal production defect is fixed only in its already-classified owner; identify an extra owner to ROOT before expanding the file set. No pool/budget/native workaround.
 
-**Interfaces consumed:** Public `RenderConfig(maxNoiseOctaveEvaluationsI64=...)`, `Surface(width,height,config)`, `canvas { ... }`, `render()`, Shader Blend/Noise constructors, Picture capture/replay; independent Task1/2 oracle functions. No new production API.
+**Interfaces consumed:** Public `RenderConfig(maxNoiseOctaveEvaluationsI64=...)`, `Surface(width,height,config)`, `canvas { ... }`, `render()`, Shader Blend/Noise constructors, Picture capture/replay; the common Blend Shader interpreter completed by Tasks1–3 and Task4's independent Noise oracle. No new production API.
 
 - [ ] **Step 1 — Write public work-budget boundary and same-runtime recovery.** The calculation is exact: 1×1, one same-context noise evaluation, 2 octaves ×4 channels =8. A second distinct-coordinate evaluation costs another8; same bytes do not waive it. An alternating Rect/Path frame has two draws and costs16 even when their seed/table is shared.
 
@@ -442,12 +543,21 @@ The SDD preflight checks each self-row and every pair that shares a file or inte
 
 | Review relation | Required coupling check |
 | --- | --- |
-| Task1 → Task1 | Capture owner/context → explicit child graph → proof → physical bindings → native Rect/Path witnesses, including all 29 modes. |
-| Task2 → Task2 | Public tile/schema compatibility → pinned table → reviewed loop → software-work limit → both public noise families. |
-| Task3 → Task3 | Independent full paint-order oracle → causal public budget window → precise refusal → native recovery; no hidden runtime reset. |
-| Task1 → Task2 | Shared PLAN/GPU/API owners are sequentially edited; Noise extends the V5 graph/resource inventory without replacing Blend topology, physical mapping, numerical graph or provenance. |
-| Task1 → Task3 | Composed oracle/interner/budget contracts and Task1 class pair run unchanged in the mixed covering; no integration-only fallback. |
-| Task2 → Task3 | Dynamic seed/slab ranges/work count and public budget configuration agree; contextual evaluation counting differs correctly from shared bytes. Noise oracle and both Task2 classes retain full255/stitch obligations. |
+| Task1 → Task1 | Scalar capture/DAG/final uniform graph+proof →29modes/public Rect/direct+stencil/replay; no claimed resource promotion. |
+| Task2 → Task2 | Independent normalized segment/gradient oracle →context DAG/final shared stops→same proof/emitter/public families/domains. |
+| Task3 → Task3 | Logical image reads→binding-owned original upload/frame map→typed inventory/native custody→two-image/mixed public pixels. |
+| Task4 → Task4 | Tile/archive→pinned table→reviewed255loop→software work policy→both Noise public families. |
+| Task5 → Task5 | Independent whole-frame oracle→causal complete-inventory budgets/refusal→native recovery, no reset. |
+| Task1 → Task2 | Same capture/material/source/layout/proof/stage/oracle/classes; gradients extend scalar DAG, no replacement/historical regression. |
+| Task1 → Task3 | Same root program/binding/graph/typed layout/oracle/classes; image resources preserve scalar operator/alpha/filter order. |
+| Task1 → Task4 | Same V5 shape/proof/permit; Noise adds leaf graph/work facts, no new material system. |
+| Task1 → Task5 | Scalar cases/owner contracts preserved in final mixed covering. |
+| Task2 → Task3 | Same branch coordinates/shared stops/proof/native resource rows/oracle; image sampling uses same interval contexts, not image-origin equations. |
+| Task2 → Task4 | Same normalized coordinates/stop storage/stage mapping; Noise slab coexists, no single-storage alias. |
+| Task2 → Task5 | Gradient/domain/mutation/native cases retained in mixed frames. |
+| Task3 → Task4 | Same logical physical-resource/authenticity/native inventory; Noise extends typed mapping without payload-retaining program. |
+| Task3 → Task5 | Image/gradient mixed bindings/leases/native custody and public classes retained. |
+| Task4 → Task5 | Dynamic seed/slab/work config agree; sharing bytes differs from contextual/draw work; full255/stitch/archive gates retained. |
 
 Each relation is an independent review obligation. ROOT's preflight records the actual file/interface joins before dispatch; it does not require another tracked document.
 
@@ -458,11 +568,11 @@ Each relation is an independent review obligation. ROOT's preflight records the 
 - [ ] Compatibility: nullable bridge is real; old F32 malformed values cannot saturate or be bit-reinterpreted; Picture10 support is retained alongside8/9; SizeI32 is reused.
 - [ ] Matrix: Blend, Perlin, Fractal each have Rect AND Path fill plus alpha/mutation/nontrivial final blend. H lanes are named; old promoted source lanes are not unintentionally rejected/promoted.
 - [ ] Exact file map: every new symbol is defined in this plan; any further consumer identified by implementation is classified before edit. Source review, never an infrastructure test, verifies architectural uniqueness.
-- [ ] Closure: W5f historical native failure/warnings/numerical limits remain accurately inherited; three tasks and one bounded final review/fix cycle do not promise native/global ISO or W5h/W6 work.
+- [ ] Closure: W5f historical native failure/warnings/numerical limits remain accurately inherited; five implementation tasks grouped into three family deliveries and one bounded final review/fix cycle do not promise native/global ISO or W5h/W6 work.
 
 ## ROOT preflight and plan-review decisions
 
-Fresh sole Astra plan review initially found0Critical/3Important/0newMinor: native transport/inventory owners missing; common composed CPU-oracle interface incomplete; table-budget control confounded by uniform-source identity. ROOT fully read the report, verified each actual join, and applied the bounded documentation amendments above. The SAME reviewer's scoped confirmation closes all3Important and the introduced coordinate wording correction (R8),0outstandingCritical/Important/0newMinor. Task1 launch is accepted; no production/test edit or W5g Gradle run yet. The6self/pair rows are independently recorded in the plan-specific ignored ledger; no sibling/old W5f scope is current progress.
+Fresh Astra review/scoped confirmation closes the original3Important and coordinate correctionR8. The monolithic worker subsequently returned genuine scalar RED plus a FULL131-line size escalation, no production. R9–11 settle missing exact layout/diagnostics, payload-free logical image transport and functional execution decomposition. Same-seat refinement confirmation reads the complete585-line refined plan and permits scalar1 resumption:0Critical/0Important/1nonblocking numbering Minor, corrected in the two live references above. The15self/pair rows are recorded in the own ignored ledger; no old/sibling scope is current progress. R1–8 use the original numbering: oldBlend1 is nowTasks1–3,oldNoise2 now4,oldConvergence3 now5; their requirements/costs remain, not waived.
 
 | Ruling | Decision and reason | Cost if wrong / required safeguard |
 | --- | --- | --- |
@@ -474,5 +584,10 @@ Fresh sole Astra plan review initially found0Critical/3Important/0newMinor: nati
 | R6 | Add exact existing native source binding and aggregate-memory owners to Task1/2; same typed resource rows and dynamic DAG/binding owners through native reflection/bindings/lease/slab custody. Actual code has singular resource assumptions. | Missing/aliased/unaccounted resource or unsafe lifetime; SAME materializer/completion/rollback owner, historical layouts/H retained, no pool/dispatcher/harness/lifecycle redesign. |
 | R7 | Both Task3 controls retain64 distinct source uniforms through the same per-draw Matrix discriminator; freeze complete non-table inventory before table-only274176-byte delta/budget. Actual canonical dedup confounds seed-only controls. | False causal refusal or hidden residency costs; both complete inventories, independent output and positive/refusal/recovery, no tuned budget or static-only pass. |
 | R8 | Preserve existing local-coordinate normalization boundaries in the independent oracle: compose each uninterrupted branch-local segment in F64, invert/project once before clamp/end; clone pending segments across Blend. Actual MaterialCoordinatePlanV2 does not map a separate F32 inverse per edge. | Wrong rounding/transform oracle could mask or falsely report a coordinate defect; independent equations and normalized F32 map envelopes, no production helper imports or new flush at Blend. |
+| R9 | Copy exact built-in §12 layout rows/tags/hash encoding and six composed diagnostic strings into the brief; reuse current budgets, no runtime admission. Worker identified missing supplied contracts before production. | Guessed ABI/diagnostic owner or key fork; same sealed rows through proof/emission/reflection/native, old first-leaf diagnostics retained. |
+| R10 | Classify only ImageNumericOperationGraphV1 logical-read transport regions for Task3; code-shaped V5 refs resolve through binding/frame-owned exact image proof/emission. Actual TexelRead retains upload payload after rebase. | Value-retaining program, sampled wrong owner/slot or decoder divergence; no key-only workaround, exact legacy sampler paths and same graph/owner mapping. |
+| R11 | Split too-large monolithic Blend unit into scalar1,contextual-gradient2,image3; Noise4 and convergence5 follow. Retain all29/full-family/native/shared-budget obligations and ONE final stacked PR. | Partial slice mislabeled family closure or extra integration rework; owned pending-family refusal, each complete public slice+Sol review, full Blend closure only after3, wholeW5g only after5/gates. |
+| R12 | Classify ONLY W4eNativePayloadPlan.collectPathPayload.materialColor's exhaustive MaterialV5→W5g Unpromoted branch, before edit, after ROOT full local-function/caller inspection and concrete compiler error. | Unintended W4e admission or old diagnostic loss; rejection-only hunk, preserve all historical branches, public/H controls and Sol review, no flattened material/native payload policy change. |
+| R13 | Classify five exact exhaustive H readers: GPUPreparedMaterialProgram.hasNonFiniteW5aBindings, prepared Text/Vertices tableSnapshotIdentity, W4b RRect validate/resolve and W4d stroke resolve; V5 rejection only, after focused ROOT function/caller checks. | H leak/common-stage refusal or old gradient/token regression; retain all old branches especially strokeV4/V2, no flattening/resource/lifecycle change, functional/history/H gates and Sol review. |
 
-Planning status: documentation only. ROOT owns plan acceptance and execution. Noise255 safe-phase derivation remains genuinely unresolved; accepted software-work policy/nullable bridge and bounded plan amendments do not claim that the Noise representation or required evidence already exists.
+Execution status: scalar Task1 functionally accepted after sole Sol review and SAME-seat scoped fix1 verification,0Critical/Important. Its final98public assertions pass on exact committed source; command FAILED/native195exit133 of unknown cause remains distinct. Task2 contextual gradients is next, Tasks3–5/fullBlend/fullW5g and Noise255/archive/storage gates remain open. ROOT owns durable progress; no parent mutation, nativeGREEN or ISO claim.

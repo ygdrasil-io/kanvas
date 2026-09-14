@@ -1,25 +1,35 @@
 # État W05 — material graph, gradients, images et color filters
 
-## W5g — prochain lot lancé, plan Blend-first validé par Astra
+## W5g — tranche scalaire acceptée ; gradients contextuels suivants
 
-Branche `codex/w5g-composed-procedural-materials` créée depuis le HEAD final W5f
+Branche `codex/w5g-composed-procedural-materials` depuis W5f final
 `55e4992d5aeb34412189d3bb52bcf2784468318c`, dans le worktree isolé existant.
 Le [plan W5g](../../plans/2026-09-14-w5g-composed-procedural-materials-implementation-plan.md)
-prévoit trois livraisons séquentielles : Blend ordonné et sous-graphes partagés
-sur Rect/Path fill ; NoiseV1 avec tiles SizeI32 et compatibilité Picture ;
-convergence des frames mixtes et budgets/refus/récupération publics.
-La relecture indépendante Astra et sa confirmation ciblée sont terminées :
-3/3 Important corrigés, zéro Critical/Important restant. Le démarrage de la
-tranche Blend est validé ; Sol reste réservé aux reviews. Aucun code ni test
-W5g exécuté à ce checkpoint documentaire.
+conserve cinq tâches séquentielles : Blend scalaire, gradients contextuels,
+enfants image/Blend complet, NoiseV1 SizeI32/compatibilité Picture,
+puis convergence et budgets/refus/récupération publics.
 
-Blend peut être livré indépendamment. La représentation numérique sûre des
-255 octaves et périodes de stitching doit être dérivée et revue avant les
-modifications Noise. Les anciens payloads noise Picture8/9/10 et le témoin
-public causal du budget storage restent des obligations, pas des écarts
-acceptés automatiquement. Aucune clôture W5g, preuve native GREEN ou ISO
-globale revendiquée. Font/codec/GM/harnais natif restent hors périmètre ;
-la PR W5f #2400 et ses réserves ci-dessous sont inchangées.
+Task1 scalaire acceptée : review Sol et re-review ciblée du même siège
+COMPLIANT/APPROVED,0Critical/Important/0nouveau Minor actionnable. I2
+(discriminants all29/all12) et C1 (diagnostics historiques des gradients invalides)
+sont ADDRESSED. Alpha127-and255 a été retiré par le reviewer : fraction
+normalisée, pas deux valeurs imposées.
+Commits `a9e167e38` puis `bb0bffaa9906b20f1cb886de12c43908db19da89` ;
+correctif de2fichiers182+/11−,42blobs committés égaux au code figé testé.
+Couvrant final amendé98PASS (Surface95+Picture3),0failure/error/skip,
+XML17:46:01.074Z–17:54:11.598Z, FULL rapports/console/XML/review vérifiés ROOT.
+Vrais RED initial et C1, échecs intermédiaires et couvrant historique six classes
+205PASS/1skipAA4 restent conservés, pas requalifiés en finale.
+
+Commande toujours FAILED8m14s/Gradle1/native195exit133 ; cause et identité
+causale avec les autres executors inconnues. Cette investigation reste un gap
+hors tranche, aucune clôture native GREEN/Ready-to-merge/ISO. Lisibilité compacte
+du fichier V5 : observation nonbloquante à reprendre dans un edit ciblé/review globale.
+Task2 gradients contextuels est suivante avec un nouveau Astra adapté ; Sol
+review-only, un seul Gradle. Blend complet attend1–3, W5g attend1–5 et les gates.
+Représentation sûre255/stitching, véritables archives noise Picture8/9/10 et
+témoin public causal storage restent à prouver. Font/codec/GM/harnais exclus.
+PR W5f#2400 inchangée ; aucun push/PR W5g encore.
 
 ## W5f — clôture fonctionnelle et review globale approuvées ; PR Draft #2400 publiée
 
