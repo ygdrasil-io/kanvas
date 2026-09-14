@@ -18,9 +18,9 @@ internal object W5fColorOperationEmitterV1 {
                     is ColorOperationGraphV1.Predicate.LessEqual -> "(${arg(p.a)} <= ${arg(p.b)})"
                 }
                 code.append("var $name: f32;\nif ($condition) {\n")
-                val yes = expression(node.yes,code,LinkedHashMap(cache))
+                val yes = expression(node.yes,code,java.util.IdentityHashMap(cache))
                 code.append("$name = $yes;\n} else {\n")
-                val no = expression(node.no,code,LinkedHashMap(cache))
+                val no = expression(node.no,code,java.util.IdentityHashMap(cache))
                 code.append("$name = $no;\n}\n")
                 cache[node] = name
                 return name
@@ -46,7 +46,7 @@ internal object W5fColorOperationEmitterV1 {
             return name
         }
         val code = StringBuilder()
-        val cache = mutableMapOf<ColorOperationGraphV1.Scalar,String>()
+        val cache = java.util.IdentityHashMap<ColorOperationGraphV1.Scalar,String>()
         val result = graph.outputs.map { expression(it,code,cache) }
         return code.append("return vec4<f32>(${result.joinToString(", ")});\n").toString()
     }

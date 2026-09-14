@@ -540,7 +540,11 @@ internal class W4dGeneralNativeMaterializationSnapshot private constructor(
                         PathRenderPhase.HardEdgeBinaryColorCover,
                     )) {
                         when (val authority = pass.draw.materialAuthority) {
-                            is PlanDrawMaterialAuthority.MaterialV4 -> error(org.graphiks.kanvas.gpu.plan.W5fPlanDiagnostics.Unpromoted)
+                            is PlanDrawMaterialAuthority.MaterialV4 -> {
+                                graph.packedMaterialSourceV4(authority)
+                                W5aMaterialPlanLowerer().lower(graph.materialPlanTableOrNull() ?: return null,authority.ref)
+                                    ?: return null
+                            }
                             is PlanDrawMaterialAuthority.MaterialV3 -> error(org.graphiks.kanvas.gpu.plan.W5eImagePlanDiagnostics.InvalidContract)
                             is PlanDrawMaterialAuthority.MaterialV2 ->
                                 W5aMaterialPlanLowerer().lower(graph.materialPlanTableOrNull() ?: return null, authority.ref)

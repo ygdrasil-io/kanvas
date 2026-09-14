@@ -4,6 +4,14 @@ import java.security.MessageDigest
 
 /** Retains the verified General native byte/geometry source; only final color passes are reissued. */
 internal fun issueW5bGeneralPathGraph(source: RenderGraph, blendsByCommandI32: Map<Int, BlendPlan>): RenderGraph {
+    require(source.verifyW4dGeneralCompilerWitness())
+    require(source.materialPlanTableOrNull()?.entries()?.none { it.bindings is ColorFilterBindingV4 } != false) {
+        W5fPlanDiagnostics.Unpromoted
+    }
+    return issueW5bGeneralPathGraph(source.canonicalConstruction().withWitness(general = true),blendsByCommandI32).publish()
+}
+
+internal fun issueW5bGeneralPathGraph(source: RenderGraphConstruction, blendsByCommandI32: Map<Int, BlendPlan>): RenderGraphConstruction {
     require(source.capabilityId == W4dGeneralPathPlanCompiler.W5A_HARD_CAPABILITY_ID &&
         source.verifyW4dGeneralCompilerWitness())
     val pathPasses = source.passes().filterIsInstance<PlanPass.PathRenderPass>()
@@ -18,13 +26,13 @@ internal fun issueW5bGeneralPathGraph(source: RenderGraph, blendsByCommandI32: M
     val data = pathPasses.first().drawDataResources
     val depth = geometryResources.singleOrNull { it.role == PlanResourceRole.DepthStencil }?.id
     val readback = source.passes().last() as PlanPass.ReadbackPass
-    val graph = W5bDestinationGraphSealer.seal(generalFinalBlendPlanId(source.id, colors),
+    val graph = W5bDestinationGraphSealer.construct(generalFinalBlendPlanId(source.id, colors),
         W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID, source.targetExtent, source.capabilities, source.budget,
         colors, source.materialPlanTableOrNull(), source.resources().single { it.role == PlanResourceRole.LogicalTarget }.byteSize,
         source.resources().single { it.role == PlanResourceRole.ReadbackStaging }.byteSize, readback.bytesPerRow,
         geometryResources, data, depthStencilByCommandI32 = colors.filter { it.strategy == PathFillStrategy.StencilCover }
             .associate { it.commandIndex to requireNotNull(depth) })
-    return RenderGraph.issueW5bGeometry(graph, listOf(W5bGeometryLanePlanV3(source, colors.map { it.commandIndex }, data, depth)))
+    return RenderGraph.issueW5bGeometry(graph, listOf(GeometryLaneConstruction(source, colors.map { it.commandIndex }, data, depth)))
 }
 
 /** Source geometry identity plus every final-blend fact not assigned by the destination sealer. */

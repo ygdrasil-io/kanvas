@@ -37,6 +37,10 @@ internal object ColorFilterCapturePreflight {
                 if (!value.matrix[indexI32].isFinite())
                     return diagnostic("non-finite-value", "color-filter.matrix must be finite")
             }
+            if (value is ColorFilter.Lerp) {
+                if (!value.t.isFinite()) return diagnostic("non-finite-value", "color-filter.lerp must be finite")
+                if (value.t !in 0f..1f) return diagnostic("invalid.material.filter.lerp", "color-filter.lerp must be in [0,1]")
+            }
             stack.addLast(Frame(children(value).iterator(), frame.depthI32 + 1, value))
         }
         return null

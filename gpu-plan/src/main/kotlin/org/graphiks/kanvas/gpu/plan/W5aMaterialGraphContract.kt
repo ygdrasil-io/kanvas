@@ -5,12 +5,18 @@ package org.graphiks.kanvas.gpu.plan
  * their table-free [PlanDrawMaterialAuthority.LegacyColorV1] representation.
  */
 @JvmSynthetic
-public fun RenderGraph.hasW5aMaterialPathContract(): Boolean {
+public fun RenderGraph.hasW5aMaterialPathContract(): Boolean = canonicalConstruction().hasW5aMaterialPathContract()
+
+internal fun RenderGraphConstruction.hasW5aMaterialPathContract(): Boolean {
     val table = materialPlanTableOrNull() ?: return false
     val paths = passes().filterIsInstance<PlanPass.PathRenderPass>()
     return paths.isNotEmpty() && paths.all { pass ->
         val ref = when (val authority = pass.draw.materialAuthority) {
-            is PlanDrawMaterialAuthority.MaterialV4 -> return@all false
+            is PlanDrawMaterialAuthority.MaterialV4 -> {
+                if (pass.draw !is GeneralPathDraw || pass.draw.copyPathGeometry() !is PathDrawGeometry.Fill) return@all false
+                if (!table.colorSourceProofV4(authority.ref).authenticates(table,authority.ref,authority.coordinates)) return@all false
+                authority.ref
+            }
             is PlanDrawMaterialAuthority.MaterialV3 -> return@all false
             is PlanDrawMaterialAuthority.MaterialV1 -> authority.ref
             is PlanDrawMaterialAuthority.MaterialV2 -> authority.ref
@@ -21,7 +27,9 @@ public fun RenderGraph.hasW5aMaterialPathContract(): Boolean {
 }
 
 @JvmSynthetic
-public fun RenderGraph.hasLegacyPathColorContract(): Boolean =
+public fun RenderGraph.hasLegacyPathColorContract(): Boolean = canonicalConstruction().hasLegacyPathColorContract()
+
+internal fun RenderGraphConstruction.hasLegacyPathColorContract(): Boolean =
     materialPlanTableOrNull() == null &&
         passes().filterIsInstance<PlanPass.PathRenderPass>().all { pass ->
             pass.draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1
@@ -29,7 +37,9 @@ public fun RenderGraph.hasLegacyPathColorContract(): Boolean =
 
 /** Versioned material contract for the historical W4c/W4d pass families. */
 @JvmSynthetic
-public fun RenderGraph.hasW5aPathDrawMaterialContract(): Boolean {
+public fun RenderGraph.hasW5aPathDrawMaterialContract(): Boolean = canonicalConstruction().hasW5aPathDrawMaterialContract()
+
+internal fun RenderGraphConstruction.hasW5aPathDrawMaterialContract(): Boolean {
     val table = materialPlanTableOrNull() ?: return false
     val draws = passes().flatMap { pass -> when (pass) {
         is PlanPass.RenderPass -> pass.draws().filterIsInstance<PathDraw>()
@@ -38,14 +48,23 @@ public fun RenderGraph.hasW5aPathDrawMaterialContract(): Boolean {
         else -> emptyList()
     } }
     return draws.isNotEmpty() && draws.all { draw ->
-        val authority = draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV1
-            ?: return@all false
-        runCatching { table.entry(authority.ref) }.isSuccess
+        val ref = when (val authority = draw.materialAuthority) {
+            is PlanDrawMaterialAuthority.MaterialV1 -> authority.ref
+            is PlanDrawMaterialAuthority.MaterialV4 -> {
+                if (draw !is PathFillDraw || !table.colorSourceProofV4(authority.ref).authenticates(table,authority.ref,authority.coordinates))
+                    return@all false
+                authority.ref
+            }
+            else -> return@all false
+        }
+        runCatching { table.entry(ref) }.isSuccess
     }
 }
 
 @JvmSynthetic
-public fun RenderGraph.hasLegacyPathDrawColorContract(): Boolean =
+public fun RenderGraph.hasLegacyPathDrawColorContract(): Boolean = canonicalConstruction().hasLegacyPathDrawColorContract()
+
+internal fun RenderGraphConstruction.hasLegacyPathDrawColorContract(): Boolean =
     materialPlanTableOrNull() == null &&
         passes().flatMap { pass -> when (pass) {
             is PlanPass.RenderPass -> pass.draws().filterIsInstance<PathDraw>()
@@ -56,6 +75,8 @@ public fun RenderGraph.hasLegacyPathDrawColorContract(): Boolean =
 
 /** Exact W5a material capability discriminator for W4dGeneral and W4e path payloads. */
 @JvmSynthetic
-public fun RenderGraph.hasW5aMaterialPathCapabilityV2(): Boolean =
+public fun RenderGraph.hasW5aMaterialPathCapabilityV2(): Boolean = canonicalConstruction().hasW5aMaterialPathCapabilityV2()
+
+internal fun RenderGraphConstruction.hasW5aMaterialPathCapabilityV2(): Boolean =
     W4dGeneralPathPlanCompiler.isW5aMaterialCapabilityId(capabilityId) ||
         W4eClipPlanCompiler.isW5aMaterialCapabilityId(capabilityId)

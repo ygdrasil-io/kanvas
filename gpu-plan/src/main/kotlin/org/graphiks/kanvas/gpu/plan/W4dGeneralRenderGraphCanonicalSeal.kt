@@ -8,7 +8,9 @@ import org.graphiks.math.geometry.RectI32
 
 /** Canonical, raw-bit-stable snapshot used only by the opaque W4d.2 compiler witness. */
 @JvmSynthetic
-internal fun canonicalW4dGeneralGraphDigest(graph: RenderGraph): ByteArray {
+internal fun canonicalW4dGeneralGraphDigest(graph: RenderGraph): ByteArray = canonicalW4dGeneralGraphDigest(graph.canonicalConstruction())
+
+internal fun canonicalW4dGeneralGraphDigest(graph: RenderGraphConstruction): ByteArray {
     val materialV2 = W4dGeneralPathPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)
     return canonicalGraphDigest(
         graph,
@@ -26,7 +28,7 @@ internal fun canonicalW4dGeneralGraphDigest(graph: RenderGraph): ByteArray {
 internal fun canonicalW4eGraphDigest(graph: RenderGraph): ByteArray {
     val materialV2 = W4eClipPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)
     return canonicalGraphDigest(
-        graph,
+        graph.canonicalConstruction(),
         if (materialV2) {
             "w4e-complex-clip-render-graph-witness-w5a-material-v2"
         } else {
@@ -36,7 +38,7 @@ internal fun canonicalW4eGraphDigest(graph: RenderGraph): ByteArray {
     )
 }
 
-private fun canonicalGraphDigest(graph: RenderGraph, schema: String, materialV2: Boolean): ByteArray {
+private fun canonicalGraphDigest(graph: RenderGraphConstruction, schema: String, materialV2: Boolean): ByteArray {
     val writer = W4dGeneralGraphDigestWriter()
     writer.text("schema", schema)
     writer.text("plan.id", graph.id.value)
@@ -328,7 +330,12 @@ private class W4dGeneralGraphDigestWriter {
         i32("$prefix.command-index", draw.commandIndex)
         if (materialV2) {
             when (val authority = draw.materialAuthority) {
-                is PlanDrawMaterialAuthority.MaterialV4 -> error(W5fPlanDiagnostics.Unpromoted)
+                is PlanDrawMaterialAuthority.MaterialV4 -> {
+                    require(draw.copyPathGeometry() is PathDrawGeometry.Fill) { W5fPlanDiagnostics.Unpromoted }
+                    text("$prefix.material-authority", "material-v4")
+                    i32("$prefix.material-ref", authority.ref.indexI32)
+                    text("$prefix.material-coordinates", authority.coordinates.identityV4())
+                }
                 is PlanDrawMaterialAuthority.MaterialV3 -> error(W5eImagePlanDiagnostics.InvalidContract)
                 is PlanDrawMaterialAuthority.MaterialV2 -> {
                     text("$prefix.material-authority", "material-v2")

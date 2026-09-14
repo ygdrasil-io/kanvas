@@ -79,7 +79,9 @@ internal class W5bNativeGeometryGraphLowerer {
                         GPUColorFormat.RGBA8UnormSrgb, source, finalBlend = sealedColors.getValue(pass.draw.commandIndex).blend,
                         w5bMaterial = if (pass.phase == PathRenderPhase.SingleSampleStencilProducer) null else
                             W5aMaterialPlanLowerer().material(table, sealedColors.getValue(pass.draw.commandIndex).materialAuthority,
-                                pass.draw.commandIndex)) }
+                                pass.draw.commandIndex,
+                                (sealedColors.getValue(pass.draw.commandIndex).materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)
+                                    ?.let(graph::packedMaterialSourceV4))) }
                     val bindings = W5bGeneralResourceBindingsV3.issue(graph, lane, target, staging)
                     val native = requireNotNull(authority.bindNativeMaterializationFrame(identity, seal.sealHash,
                         request.deviceGeneration, sourcePasses.zip(built).associate { (pass, packet) -> pass.id.value to packet.structuralPipelineKey },
@@ -96,7 +98,8 @@ internal class W5bNativeGeometryGraphLowerer {
                     val builder = GpuPlanTaskListLowerer()
                     val built = draws.mapIndexed { index, draw -> builder.packet(draw,
                         requireNotNull(W5aMaterialPlanLowerer().lower(table,
-                            draw.materialAuthority.materialPlanRef())), index, bounds, table, null) }
+                            draw.materialAuthority.materialPlanRef())), index, bounds, table, null,
+                        (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let(graph::packedMaterialSourceV4)) }
                     val scratch = (builder.sealW3Scratch(request, target, staging, bounds, seal.sealHash, built) as
                         GpuPlanTaskListLowerer.W3SessionScratchSealResult.Sealed).scratch
                     require(listOf(resource(data.vertex).byteSize, resource(data.index).byteSize, resource(data.uniform).byteSize) ==
@@ -113,7 +116,7 @@ internal class W5bNativeGeometryGraphLowerer {
                         else -> false
                     } }
                     val builder = W4cPathFillGraphLowerer()
-                    val built = passes.map { builder.w5bPacket(it, paths, table, bounds) }
+                    val built = passes.map { builder.w5bPacket(it, paths, table, bounds, graph) }
                     val footprint = (PathFillPlanBudget.calculate(graph.targetExtent, paths.map { it.copyGeometryF32() },
                         graph.capabilities, graph.budget, usesW5aMaterialContract = true) as PathFillPlanBudgetResult.WithinBudget).footprint
                     require(listOf(resource(data.vertex).byteSize, resource(data.index).byteSize, resource(data.uniform).byteSize) ==
@@ -177,7 +180,8 @@ internal class W5bNativeGeometryGraphLowerer {
                         indexResource.byteSize == footprint.indexCapacityBytes && uniformResource.byteSize == footprint.uniformCapacityBytes)
                     val built = analytic.mapIndexed { index, draw -> W4aAnalyticRectGraphLowerer().packet(draw,
                         requireNotNull(W5aMaterialPlanLowerer().lower(table,
-                            draw.materialAuthority.materialPlanRef())), index, bounds, table, w5b = true) }
+                            draw.materialAuthority.materialPlanRef())), index, bounds, table, w5b = true,
+                        packedSourceV4 = (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let(graph::packedMaterialSourceV4)) }
                     val lanePackets = built.map { it.packet }
                     val semantics = lanePackets.map { it.semanticPayload as GPUDrawSemanticPayload.CorePrimitive }
                     val semanticAuthorities = semantics.map(GPUCorePrimitivePreparedSemanticAuthority::capture)

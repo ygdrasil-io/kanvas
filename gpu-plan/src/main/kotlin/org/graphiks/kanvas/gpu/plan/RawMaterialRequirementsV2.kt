@@ -50,21 +50,18 @@ public class RawMaterialRequirementsV2 private constructor(
 
     public companion object {
         internal fun measureV4(table: MaterialPlanTable, root: MaterialPlanRef): MaterialSourceFootprintV4 {
-            val binding = table.entry(root).bindings as? ColorFilterBindingV4
-                ?: throw Refusal(W5fPlanDiagnostics.Schema)
-            return MaterialSourceFootprintV4(table,root,binding).also { require(it.authenticates()) { W5fPlanDiagnostics.Schema } }
+            return MaterialSourceFootprintV4(table,root,table.colorSourceProofV4(root)).also {
+                require(it.authenticates()) { W5fPlanDiagnostics.Schema } }
         }
         internal fun requireFrameBudgetV4(sources: List<MaterialSourceFootprintV4>, nonUniformBytesI64: Long,
             budget: PlanBudget, capabilities: PlanCapabilitySnapshot, legacyCode: String): MaterialSourcePackingPermitV4 =
             MaterialSourcePackingPermitV4.issue(sources,nonUniformBytesI64,budget,capabilities,legacyCode)
         internal fun packV4(footprint: MaterialSourceFootprintV4, permit: MaterialSourcePackingPermitV4): RawMaterialRequirementsV2 {
             require(permit.permits(footprint)) { W5fPlanDiagnostics.Schema }
-            val binding = footprint.binding
             val bytes = ByteBuffer.allocate(footprint.uniformByteCountI64.toInt()).order(ByteOrder.LITTLE_ENDIAN)
             // Source word gaps are declared zero padding. Only this budget-permitted phase copies values.
-            for (wordI64 in 0 until binding.sourceProof.uniformWordCountI64)
-                bytes.putFloat(binding.sourceProof.wordValuesF32[wordI64] ?: 0f)
-            bytes.put(binding.execution.copyDynamicBytes())
+            for (wordI64 in 0 until footprint.proof.uniformWordCountI64)
+                bytes.putFloat(footprint.proof.wordValuesF32[wordI64] ?: 0f)
             check(bytes.position() == bytes.capacity())
             return RawMaterialRequirementsV2(1,footprint.uniformByteCountI64,false,1,
                 footprint.table.entry(footprint.root).program.structuralId.value,bytes.array(),footprint.canonicalIdentity)

@@ -293,13 +293,16 @@ public class W4dPathStrokePlanCompiler internal constructor(
         }
     }
 
-    override fun plan(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): RenderPlanResult<RenderGraph> {
+    override fun plan(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): RenderPlanResult<RenderGraph> =
+        construct(candidate,capabilities,budget).publishConstructionResult()
+
+    internal fun construct(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): RenderPlanResult<RenderGraphConstruction> {
         val selected = candidate as? Candidate ?: return invalidCandidate()
         if (selected.owner !== this) return invalidCandidate()
         val extent = SizeI32(selected.target.extent.width, selected.target.extent.height)
         if (extent.width > capabilities.maxTextureDimension2D || extent.height > capabilities.maxTextureDimension2D || FORMAT !in capabilities.supportedFormats() || !REQUIRED.all { it in capabilities.supportedOperations() } || capabilities.maxDynamicUniformBuffersPerPipelineLayout < 1 || !validAllocationFacts(capabilities)) return promoted("Required W4d device capability is unavailable")
         if (selected.draws.isEmpty()) return try {
-            RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bGeometryLanePlanV3.clearOnly(
+            RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bGeometryLanePlanV3.constructClearOnly(
                 PlanId(identity(selected, capabilities, budget)), W5B_CAPABILITY_ID, extent, capabilities, budget, null)))
         } catch (_: IllegalArgumentException) { resource("W4d empty frame exceeds its resource contract") }
         val usesStencil = selected.draws.any { it.strategy == PathFillStrategy.StencilCover }
@@ -313,7 +316,7 @@ public class W4dPathStrokePlanCompiler internal constructor(
         return try { graph(selected, capabilities, budget, memory, usesStencil) } catch (_: ArithmeticException) { resource("W4d arithmetic overflowed") } catch (_: IllegalArgumentException) { resource(W4dPlanDiagnostics.PlanIdentityInvalid, "W4d graph invariants failed") }
     }
 
-    private fun graph(selected: Candidate, caps: PlanCapabilitySnapshot, budget: PlanBudget, memory: PathFillMemoryFootprint, usesStencil: Boolean): RenderPlanResult<RenderGraph> {
+    private fun graph(selected: Candidate, caps: PlanCapabilitySnapshot, budget: PlanBudget, memory: PathFillMemoryFootprint, usesStencil: Boolean): RenderPlanResult<RenderGraphConstruction> {
         val colorPasses = selected.draws.sumOf { if (it.strategy == PathFillStrategy.DirectTriangle) 1 else 2 }
         val passCount = Math.addExact(colorPasses, 1)
         val readbackIndex = colorPasses
@@ -333,7 +336,7 @@ public class W4dPathStrokePlanCompiler internal constructor(
                     requireNotNull(sealed.mode), requireNotNull(sealed.styleF64), sealed.blend, sealed.coordinates) }
                     ?: PathFillDraw.ofMaterial(sealed.commandIndex, sealed.material, sealed.geometry, sealed.strategy, sealed.scissor, sealed.blend, sealed.coordinates)
             }
-            return RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bDestinationGraphSealer.seal(
+            return RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bDestinationGraphSealer.construct(
                 PlanId(identity(selected, caps, budget)), W5B_CAPABILITY_ID, extent, caps, budget, colors,
                 selected.materialPlanTable, memory.targetBytes, memory.readbackBytes, memory.readbackBytesPerRow,
                 listOfNotNull(vertex, index, uniform, depth), data, depthStencilByCommandI32 =
@@ -348,7 +351,7 @@ public class W4dPathStrokePlanCompiler internal constructor(
             clear = false
         }
         passes += PlanPass.ReadbackPass(0, target.id, staging.id, memory.readbackBytesPerRow)
-        val graph = RenderGraph.of(PlanId(identity(selected, caps, budget)), CAPABILITY_ID, extent, FORMAT, caps, budget, selected.draws.size, buildList { add(target); add(staging); add(vertex); add(index); add(uniform); depth?.let(::add) }, passes, passes.zipWithNext().map { PlanPassDependency(it.first.id, it.second.id) }, memory.peakBytes, selected.materialPlanTable)
+        val graph = RenderGraph.construct(PlanId(identity(selected, caps, budget)), CAPABILITY_ID, extent, FORMAT, caps, budget, selected.draws.size, buildList { add(target); add(staging); add(vertex); add(index); add(uniform); depth?.let(::add) }, passes, passes.zipWithNext().map { PlanPassDependency(it.first.id, it.second.id) }, memory.peakBytes, selected.materialPlanTable)
         return RenderPlanResult.Ready(RenderGraph.issueW4dCompilerWitness(graph))
     }
 

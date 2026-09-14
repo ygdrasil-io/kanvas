@@ -63,9 +63,10 @@ public sealed interface MaterialProgramPlan {
 
     /** Child topology is code shape, while alpha remains a dynamic binding value. */
     public class OpacityV1(public val child: MaterialProgramPlan) : MaterialProgramPlan {
-        override val versionI32: Int = 1
+        override val versionI32: Int = if (child.versionI32 == 4) 4 else 1
         override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId("w5a-opacity-v1(${child.structuralId.value})")
-        override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.opacity()
+        override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 =
+            if (versionI32 == 4) NumericOperationGraphV1.colorSourceV4() else NumericOperationGraphV1.opacity()
     }
 }
 
@@ -196,7 +197,13 @@ public sealed interface MaterialBindingPlan {
 public data class MaterialPlanEntry(public val program: MaterialProgramPlan, public val bindings: MaterialBindingPlan,
     public val stopSlab: GradientStopSlabPlanV1? = null)
 
-public class MaterialPlanTable private constructor(entries: List<MaterialPlanEntry>) {
+public class MaterialPlanTable private constructor(entries: List<MaterialPlanEntry>,
+    proofsV4: Map<Int, ColorSourceProofV1> = emptyMap()) {
+    private val storedProofsV4 = java.util.Collections.unmodifiableMap(LinkedHashMap(proofsV4))
+    public fun colorSourceProofV4(root: MaterialPlanRef): ColorSourceProofV1 =
+        requireNotNull(storedProofsV4[root.indexI32]) { W5fPlanDiagnostics.Schema }.also {
+            require(it.authenticates(this, root, it.coordinates)) { W5fPlanDiagnostics.Schema }
+        }
     private data class StoredEntry(val programIndex: Int, val bindings: MaterialBindingPlan)
     private val storedPrograms: List<MaterialProgramPlan>
     private val storedEntries: List<StoredEntry>
@@ -384,7 +391,18 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
                     }
                 }
             }
-            return table
+            val proofs = linkedMapOf<Int, ColorSourceProofV1>()
+            table.entries().forEachIndexed { indexI32, entry ->
+                val filter = entry.bindings as? ColorFilterBindingV4
+                if (filter != null) proofs[indexI32] = filter.numericAuthority.outputSourceProof
+                else if (entry.bindings is MaterialBindingPlan.OpacityF32V1 && indexI32 - 1 in proofs) {
+                    val child = requireNotNull(proofs[indexI32 - 1])
+                    proofs[indexI32] = (ColorSourceProofCompilerV1.seal(table, MaterialPlanRef(indexI32),
+                        child.coordinates, child.deviceBoundsF32) as? ColorSourceProofResultV1.Ready)?.source
+                        ?: error(W5fPlanDiagnostics.NumericDomainUnbounded)
+                }
+            }
+            return if (proofs.isEmpty()) table else MaterialPlanTable(rebasedEntries, proofs)
         }
 
         /**
@@ -529,5 +547,8 @@ internal fun MaterialPlanTable.coordinatesV2(root: MaterialPlanRef): MaterialCoo
     while (entry(MaterialPlanRef(indexI32)).bindings is MaterialBindingPlan.OpacityF32V1) indexI32--
     return (entry(MaterialPlanRef(indexI32)).bindings as? MaterialBindingPlan.GradientV2)?.numericAuthority?.coordinates
 }
-internal fun MaterialPlanTable.coordinatesV4(root: MaterialPlanRef): SourceCoordinatesV4? =
-    (entry(root).bindings as? ColorFilterBindingV4)?.numericAuthority?.outputSourceProof?.coordinates
+internal fun MaterialPlanTable.coordinatesV4(root: MaterialPlanRef): SourceCoordinatesV4? {
+    var leaf = root
+    while (entry(leaf).bindings is MaterialBindingPlan.OpacityF32V1) leaf = MaterialPlanRef(leaf.indexI32-1)
+    return if (entry(leaf).bindings is ColorFilterBindingV4) colorSourceProofV4(root).coordinates else null
+}

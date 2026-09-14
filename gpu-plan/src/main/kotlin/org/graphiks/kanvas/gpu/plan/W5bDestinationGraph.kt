@@ -22,6 +22,26 @@ internal object W5bDestinationGraphSealer {
         depthStencilByCommandI32: Map<Int, PlanResourceId> = emptyMap(),
         w4eSource: RenderGraph? = null,
     ): RenderGraph {
+        return construct(id, capabilityId, extent, capabilities, budget, draws, material, targetBytesI64, stagingBytesI64, rowBytesI64, geometryResources, drawDataResources, drawDataByCommandI32, depthStencilByCommandI32, w4eSource).publish()
+    }
+
+    fun construct(
+        id: PlanId,
+        capabilityId: String,
+        extent: SizeI32,
+        capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+        draws: List<PlanDraw>,
+        material: MaterialPlanTable?,
+        targetBytesI64: Long,
+        stagingBytesI64: Long,
+        rowBytesI64: Long,
+        geometryResources: List<PlanResource> = emptyList(),
+        drawDataResources: PlanDrawDataResources? = null,
+        drawDataByCommandI32: Map<Int, PlanDrawDataResources> = emptyMap(),
+        depthStencilByCommandI32: Map<Int, PlanResourceId> = emptyMap(),
+        w4eSource: RenderGraph? = null,
+    ): RenderGraphConstruction {
         require(w4eSource == null || w4eSource.verifyW4eCompilerWitness() &&
             w4eSource.capabilityId == W4eClipPlanCompiler.W5A_HARD_CAPABILITY_ID && capabilityId == W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID)
         val nativePrefix = w4eSource?.passes()?.filter { it is PlanPass.ClipMaskInitialize || it is PlanPass.ClipMaskProducer || it is PlanPass.ClipMaskFold }.orEmpty()
@@ -73,8 +93,6 @@ internal object W5bDestinationGraphSealer {
         val peakI64 = Math.addExact(geometryResources.fold(0L) { total, resource -> Math.addExact(total, resource.byteSize) },
             Math.addExact(Math.addExact(Math.addExact(targetBytesI64, snapshotBytesI64), stagingBytesI64),
             clip?.resources()?.fold(0L) { total, resource -> Math.addExact(total, resource.byteSize) } ?: 0L))
-        val footprintsV4 = draws.filter { it.materialAuthority is PlanDrawMaterialAuthority.MaterialV4 }.map {
-            RawMaterialRequirementsV2.measureV4(requireNotNull(material),it.materialAuthority.materialPlanRef()) }
         val sourceRequirements = draws.filterNot { it.materialAuthority is PlanDrawMaterialAuthority.MaterialV4 }.map { draw ->
             RawMaterialRequirementsV2.of(requireNotNull(material), draw.materialAuthority.materialPlanRef()).also { source ->
                 require(source.fitsUniformBinding(capabilities)) {
@@ -86,9 +104,6 @@ internal object W5bDestinationGraphSealer {
         RawMaterialRequirementsV2.requireFrameBudget(sourceRequirements,
             Math.addExact(peakI64, material?.gradientStopSlab?.byteSizeI64 ?: 0L), budget,
             "resource-limit.w5b.destination-budget")
-        if (footprintsV4.isNotEmpty()) RawMaterialRequirementsV2.requireFrameBudgetV4(footprintsV4,
-            sourceRequirements.distinctBy { it.canonicalIdentity }.fold(Math.addExact(peakI64,material?.gradientStopSlab?.byteSizeI64 ?: 0L)) {
-                bytes,source -> Math.addExact(bytes,source.uniformByteCountI64) },budget,capabilities,"resource-limit.w5b.destination-budget")
         val target = PlanResource.of(PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D,
             format, extent, targetBytesI64, setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource),
             PlanResourceLifetime.FrameLocal, 0, passCountI32)
@@ -155,7 +170,8 @@ internal object W5bDestinationGraphSealer {
                         draw.copyDeviceShape(), draw.copyRasterBounds(), draw.copyScissor(), sealed, draw.materialCoordinates, draw.materialCoordinatesV2)
                     is PathFillDraw -> PathFillDraw.ofMaterial(draw.commandIndex,
                         draw.materialAuthority.materialPlanRef(),
-                        draw.copyGeometryF32(), draw.strategy, draw.copyScissorI32(), sealed, draw.materialCoordinates, draw.materialCoordinatesV2)
+                        draw.copyGeometryF32(), draw.strategy, draw.copyScissorI32(), sealed, draw.materialCoordinates, draw.materialCoordinatesV2,
+                        (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates)
                     is W5bW4ePathDraw -> draw.withBlend(sealed)
                     is GeneralPathDraw -> draw.withBlend(sealed)
                     is PathStrokeDraw -> PathStrokeDraw.ofMaterial(draw.commandIndex,
@@ -177,7 +193,7 @@ internal object W5bDestinationGraphSealer {
             PlanResource.of(resource.role, resource.ordinal, resource.kind, resource.format, resource.copyExtent(), resource.byteSize,
                 resource.usages(), resource.lifetime, 0, last + 1, resource.sampleCountI32)
         }
-        return RenderGraph.of(id, capabilityId, extent, format.value, capabilities, budget, draws.size,
+        return RenderGraph.construct(id, capabilityId, extent, format.value, capabilities, budget, draws.size,
             listOfNotNull(target, snapshot, staging) + clipResources + geometryResources.map { resource ->
                 val firstUseI32 = if (resource.role == PlanResourceRole.DepthStencil && w4eSource == null)
                     passes.indexOfFirst { it is PlanPass.StencilGeometryProducerV3 && it.depthStencil == resource.id }

@@ -6,6 +6,13 @@ import org.graphiks.kanvas.render.ir.EffectStack
 import org.graphiks.kanvas.render.ir.MaterialNode
 import org.graphiks.math.color.ColorF32
 
+/** The recorded effect entry is an authenticated mirror, not a second filter application. */
+internal fun colorFilterEffectsMatchPaint(draw: DrawNode): Boolean {
+    val filter = draw.paint?.colorFilter ?: return draw.effects is EffectStack.Empty
+    val mirror = draw.effects as? EffectStack.Entries ?: return false
+    return mirror.effectCount == 1 && mirror.effectAt(0).canonicalId == filter.canonicalId
+}
+
 /** Normalizes admitted W5 sources once, before a graph is published Ready. */
 public object EffectiveMaterialPlanner {
     /** Original IMAGE/Rect/Path source authority, independent of its W4 construction projection. */
@@ -236,48 +243,101 @@ public object EffectiveMaterialPlanner {
         }
     }
 
+    private fun normalizeOrderedColor(draw: DrawNode, targetClamp: BlendTargetClampV1,
+        allowDestinationCandidate: Boolean, coverage: CoveragePlan, sample: SamplePlan,
+        elideNoOp: Boolean, deviceBoundsI32: org.graphiks.math.geometry.RectI32?, imageMaskChild: Boolean): Normalization {
+        val filter = draw.paint?.colorFilter
+        if (!colorFilterEffectsMatchPaint(draw)) return Normalization.Refused(
+            if (filter != null) W5fPlanDiagnostics.Schema else W5aPlanDiagnostics.UnsupportedDrawState)
+        if (imageMaskChild || draw.resource != null || draw.operationBlendMode != null ||
+            draw.origin !in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.RECT, org.graphiks.kanvas.render.ir.DrawOrigin.PATH) ||
+            draw.paint?.style != org.graphiks.kanvas.render.ir.PaintStyleNode.FILL)
+            return Normalization.Refused(W5fPlanDiagnostics.Unpromoted)
+        val bounds = when (val geometry = draw.geometry) {
+            is org.graphiks.kanvas.render.ir.GeometryNode.Rect -> {
+                val local = geometry.copyBounds()
+                val corners = listOf(org.graphiks.math.geometry.Point2F32(local.left,local.top),
+                    org.graphiks.math.geometry.Point2F32(local.right,local.top),
+                    org.graphiks.math.geometry.Point2F32(local.left,local.bottom),
+                    org.graphiks.math.geometry.Point2F32(local.right,local.bottom)).map(draw.transform::transform)
+                org.graphiks.math.geometry.RectF32.ofLTRB(kotlin.math.floor(corners.minOf { it.x }),
+                    kotlin.math.floor(corners.minOf { it.y }),kotlin.math.ceil(corners.maxOf { it.x }),kotlin.math.ceil(corners.maxOf { it.y }))
+            }
+            is org.graphiks.kanvas.render.ir.GeometryNode.Path -> deviceBoundsI32?.let {
+                org.graphiks.math.geometry.RectF32.ofLTRB(it.left.toFloat(),it.top.toFloat(),it.right.toFloat(),it.bottom.toFloat())
+            } ?: return Normalization.Refused(W5fPlanDiagnostics.NumericDomainUnbounded)
+            else -> return Normalization.Refused(W5fPlanDiagnostics.Unpromoted)
+        }
+        val blend = FinalBlendPlanner.plan(draw.blend, coverage, sample, targetClamp,
+            if (coverage == CoveragePlan.AnalyticScalarAA) BlendCoverageApplicationV1.SourceMultiplication
+            else BlendCoverageApplicationV1.DestinationInterpolation)
+            ?: return Normalization.Refused(W5aPlanDiagnostics.UnsupportedDrawState)
+        if (blend is BlendPlan.DestinationReadV1 && !allowDestinationCandidate)
+            return Normalization.Refused("unsupported.w5b.destination-read.task-2")
+        if (allowDestinationCandidate && elideNoOp && blend == BlendPlan.NoOpV1) return Normalization.NoOp
+        val wrappers = mutableListOf<MaterialNode>()
+        var leaf = draw.material
+        while (leaf is MaterialNode.Opacity || leaf is MaterialNode.WithColorFilter) {
+            if (wrappers.size >= 64) return Normalization.Refused(W5fPlanDiagnostics.Schema)
+            wrappers += leaf
+            leaf = when (leaf) { is MaterialNode.Opacity -> leaf.material
+                is MaterialNode.WithColorFilter -> leaf.material }
+        }
+        val base = when (leaf) {
+            MaterialNode.Transparent -> MaterialPlanEntry(MaterialProgramPlan.TransparentV1, MaterialBindingPlan.EmptyV1)
+            is MaterialNode.Solid -> MaterialPlanEntry(MaterialProgramPlan.SolidLinearPremulV1,
+                MaterialBindingPlan.SolidRgbaF32V1.of(ColorF32.of(leaf.color.redNormalized,
+                    leaf.color.greenNormalized,leaf.color.blueNormalized,leaf.color.alphaNormalized)))
+            else -> return Normalization.Refused(W5fPlanDiagnostics.Unpromoted)
+        }
+        var table = MaterialPlanTable.of(listOf(base))
+        fun opacity(alphaF32: Float): String? {
+            if (!alphaF32.isFinite() || alphaF32 !in 0f..1f) return W5aPlanDiagnostics.InvalidOpacity
+            if (alphaF32 != 1f) table = MaterialPlanTable.of(table.entries() + MaterialPlanEntry(
+                MaterialProgramPlan.OpacityV1(table.entry(MaterialPlanRef(table.sizeI32-1)).program),
+                MaterialBindingPlan.OpacityF32V1.of(alphaF32)))
+            return null
+        }
+        fun apply(filterNode: org.graphiks.kanvas.render.ir.ColorFilterNode): String? {
+            val execution = when (val result = ColorFilterPlanCompilerV1.compile(filterNode)) {
+                is ColorFilterCompileResultV1.Ready -> result.execution
+                is ColorFilterCompileResultV1.Refused -> return result.diagnosticCode
+            }
+            val root = MaterialPlanRef(table.sizeI32-1)
+            val source = when (val result = ColorSourceProofCompilerV1.seal(table,root,SourceCoordinatesV4.None,bounds)) {
+                is ColorSourceProofResultV1.Ready -> result.source
+                is ColorSourceProofResultV1.Refused -> return result.diagnosticCode
+            }
+            val numeric = ColorNumericAuthorityV1.seal(execution,source) ?: return W5fPlanDiagnostics.NumericDomainUnbounded
+            table = MaterialPlanTable.of(table.entries() + MaterialPlanEntry(
+                ColorFilteredProgramV4(table.entry(root).program,execution.structuralIdentity),
+                ColorFilterBindingV4.seal(execution,source,numeric)))
+            return null
+        }
+        for (wrapper in wrappers.asReversed()) {
+            val refusal = when (wrapper) {
+                is MaterialNode.Opacity -> opacity(wrapper.alpha)
+                is MaterialNode.WithColorFilter -> apply(wrapper.filter)
+                else -> error("Unary wrapper")
+            }
+            if (refusal != null) return Normalization.Refused(refusal)
+        }
+        opacity(draw.paint?.takeIf { it.shader != null }?.color?.alphaNormalized ?: 1f)?.let {
+            return Normalization.Refused(it)
+        }
+        filter?.let { apply(it)?.let { code -> return Normalization.Refused(code) } }
+        return Normalization.Source(table,MaterialPlanRef(table.sizeI32-1),blend)
+    }
+
     internal fun normalize(draw: DrawNode, targetClamp: BlendTargetClampV1, allowDestinationCandidate: Boolean = false,
         coverage: CoveragePlan = CoveragePlan.FullOrScissor, sample: SamplePlan = SamplePlan.SingleSample,
         elideNoOp: Boolean = true,
         gradientDeviceBoundsI32: org.graphiks.math.geometry.RectI32? = null, imageMaskChild: Boolean = false): Normalization {
-        val filter = draw.paint?.colorFilter
-        if (filter != null) {
-            val mirror = draw.effects as? EffectStack.Entries
-            if (mirror == null || mirror.effectCount != 1 || mirror.effectAt(0).canonicalId != filter.canonicalId)
-                return Normalization.Refused(W5fPlanDiagnostics.Schema)
-            if (draw.origin != org.graphiks.kanvas.render.ir.DrawOrigin.RECT ||
-                draw.geometry !is org.graphiks.kanvas.render.ir.GeometryNode.Rect || imageMaskChild)
-                return Normalization.Refused(W5fPlanDiagnostics.Unpromoted)
-            val execution = when (val result = ColorFilterPlanCompilerV1.compile(filter)) {
-                is ColorFilterCompileResultV1.Ready -> result.execution
-                is ColorFilterCompileResultV1.Refused -> return Normalization.Refused(result.diagnosticCode)
-            }
-            // Consume the authenticated duplicate only in the construction projection.
-            // The original DrawNode remains the caller's semantic authority.
-            val projected = draw.copy(paint = requireNotNull(draw.paint).copy(colorFilter = null), effects = EffectStack.Empty)
-            val source = when (val normalized = normalize(projected,targetClamp,allowDestinationCandidate,coverage,sample,
-                elideNoOp,gradientDeviceBoundsI32,imageMaskChild)) {
-                is Normalization.Source -> normalized
-                else -> return normalized
-            }
-            val localBounds = (draw.geometry as org.graphiks.kanvas.render.ir.GeometryNode.Rect).copyBounds()
-            val corners = listOf(org.graphiks.math.geometry.Point2F32(localBounds.left,localBounds.top),
-                org.graphiks.math.geometry.Point2F32(localBounds.right,localBounds.top),
-                org.graphiks.math.geometry.Point2F32(localBounds.left,localBounds.bottom),
-                org.graphiks.math.geometry.Point2F32(localBounds.right,localBounds.bottom)).map(draw.transform::transform)
-            val bounds = org.graphiks.math.geometry.RectF32.ofLTRB(kotlin.math.floor(corners.minOf { it.x }),
-                kotlin.math.floor(corners.minOf { it.y }),kotlin.math.ceil(corners.maxOf { it.x }),kotlin.math.ceil(corners.maxOf { it.y }))
-            val proof = when (val result = ColorSourceProofCompilerV1.seal(source.table,source.root,SourceCoordinatesV4.None,bounds)) {
-                is ColorSourceProofResultV1.Ready -> result.source
-                is ColorSourceProofResultV1.Refused -> return Normalization.Refused(result.diagnosticCode)
-            }
-            val numeric = ColorNumericAuthorityV1.seal(execution,proof)
-                ?: return Normalization.Refused(W5fPlanDiagnostics.NumericDomainUnbounded)
-            val entries = source.table.entries() + MaterialPlanEntry(
-                ColorFilteredProgramV4(source.table.entry(source.root).program,execution.structuralIdentity),
-                ColorFilterBindingV4.seal(execution,proof,numeric))
-            return Normalization.Source(MaterialPlanTable.of(entries),MaterialPlanRef(entries.lastIndex),source.blend)
-        }
+        var filteredMaterial = draw.material
+        while (filteredMaterial is MaterialNode.Opacity) filteredMaterial = filteredMaterial.material
+        if (draw.paint?.colorFilter != null || filteredMaterial is MaterialNode.WithColorFilter)
+            return normalizeOrderedColor(draw, targetClamp, allowDestinationCandidate, coverage, sample,
+                elideNoOp, gradientDeviceBoundsI32, imageMaskChild)
         val blend = FinalBlendPlanner.plan(draw.blend, coverage, sample, targetClamp,
             if (coverage == CoveragePlan.AnalyticScalarAA) BlendCoverageApplicationV1.SourceMultiplication
             else BlendCoverageApplicationV1.DestinationInterpolation)

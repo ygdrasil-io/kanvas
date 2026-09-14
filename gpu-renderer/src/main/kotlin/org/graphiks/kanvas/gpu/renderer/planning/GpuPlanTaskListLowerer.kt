@@ -581,8 +581,8 @@ public class GpuPlanTaskListLowerer {
         table: MaterialPlanTable?,
         authority: PlanDrawMaterialAuthority,
     ): ColorF32? = when (authority) {
-        is PlanDrawMaterialAuthority.MaterialV4 -> (table?.entry(authority.ref)?.bindings as? org.graphiks.kanvas.gpu.plan.ColorFilterBindingV4)
-            ?.takeIf { it.numericAuthority.outputSourceProof.authenticates(table,authority.ref,authority.coordinates) }?.let { ColorF32.Transparent }
+        is PlanDrawMaterialAuthority.MaterialV4 -> table?.colorSourceProofV4(authority.ref)
+            ?.takeIf { it.authenticates(table,authority.ref,authority.coordinates) }?.let { ColorF32.Transparent }
         is PlanDrawMaterialAuthority.MaterialV3 -> null
         is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
         is PlanDrawMaterialAuthority.MaterialV2 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }

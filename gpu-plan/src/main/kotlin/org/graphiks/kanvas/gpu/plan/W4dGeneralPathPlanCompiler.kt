@@ -256,7 +256,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                     prepared.geometry.emittedNonZeroClosedEdgeCountI32 > UByte.MAX_VALUE.toInt()
                 ) return DrawResult.Limit("W4d.2 winding path exceeds the stencil edge limit")
                 val source = when (val planned = EffectiveMaterialPlanner.normalize(
-                    node.copy(effects = EffectStack.Empty), FORMAT.blendTargetClampV1(), true,
+                    if (node.paint?.colorFilter == null) node.copy(effects = EffectStack.Empty) else node,
+                    FORMAT.blendTargetClampV1(), true,
                     gradientDeviceBoundsI32 = scissor)) {
                     is EffectiveMaterialPlanner.Normalization.Refused -> return DrawResult.MaterialRefused(
                         EffectiveMaterialPlanner.Result.Refused(planned.diagnosticCode), prepared.frameWorkUsageI64)
@@ -270,6 +271,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                         material = material,
                         coordinates = MaterialCoordinatePlanV1.fromCtm(node.transform),
                         coordinatesV2 = source.table.coordinatesV2(source.root),
+                        coordinatesV4 = source.table.coordinatesV4(source.root),
                         geometry = prepared.pathGeometry,
                         strategy = strategy(prepared.geometry),
                         scissorI32 = scissor.copy(),
@@ -384,11 +386,14 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         )
     }
 
-    override fun plan(
+    override fun plan(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): RenderPlanResult<RenderGraph> =
+        construct(candidate,capabilities,budget).publishConstructionResult()
+
+    internal fun construct(
         candidate: GpuPlanCandidate,
         capabilities: PlanCapabilitySnapshot,
         budget: PlanBudget,
-    ): RenderPlanResult<RenderGraph> {
+    ): RenderPlanResult<RenderGraphConstruction> {
         val selected = candidate as? Candidate ?: return invalidCandidate()
         if (selected.owner !== this || !selected.hasMatchingFingerprints()) return invalidCandidate()
         val extent = SizeI32(selected.target.extent.width, selected.target.extent.height)
@@ -410,7 +415,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             // Native AA4 topology/resolve remains outside W5; observed texture refusal above is authoritative.
             if (anyAa && successor) return promoted("W5b final blending requires the admitted single-sample W4d.2 topology")
             if (!anyAa && selected.draws.isEmpty()) return RenderPlanResult.Ready(
-                RenderGraph.issueW5bGeometry(W5bGeometryLanePlanV3.clearOnly(
+                RenderGraph.issueW5bGeometry(W5bGeometryLanePlanV3.constructClearOnly(
                     PlanId(identity(selected, capabilities, budget, W5B_HARD_CAPABILITY_ID)), W5B_HARD_CAPABILITY_ID,
                     extent, capabilities, budget, null)))
             if (anyAa) planAa(selected, capabilities, budget, geometry, anyHard, hardStencil)
@@ -511,7 +516,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         budget: PlanBudget,
         geometries: List<org.graphiks.math.geometry.PathFillGeometryF32>,
         usesStencil: Boolean,
-    ): RenderPlanResult<RenderGraph> {
+    ): RenderPlanResult<RenderGraphConstruction> {
         val provisionalMemory = when (val value = PathStrokePlanBudget.calculate(
             SizeI32(selected.target.extent.width, selected.target.extent.height), geometries, capabilities, budget,
         )) {
@@ -543,7 +548,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         geometries: List<org.graphiks.math.geometry.PathFillGeometryF32>,
         anyHard: Boolean,
         hardStencil: Boolean,
-    ): RenderPlanResult<RenderGraph> {
+    ): RenderPlanResult<RenderGraphConstruction> {
         val provisionalMemory = when (val value = PathAaPlanBudget.calculate(
             targetExtent = SizeI32(selected.target.extent.width, selected.target.extent.height),
             geometriesF32 = geometries,
@@ -694,7 +699,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         budget: PlanBudget,
         memory: PathFillMemoryFootprint,
         usesStencil: Boolean,
-    ): RenderGraph {
+    ): RenderGraphConstruction {
         val pathPassCount = selected.draws.sumOf { if (it.strategy == PathFillStrategy.DirectTriangle) 1 else 2 }
         val passCount = Math.addExact(pathPassCount, 1)
         val readbackIndex = pathPassCount
@@ -745,7 +750,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             clear = false
         }
         passes += PlanPass.ReadbackPass(0, target.id, staging.id, memory.readbackBytesPerRow)
-        return RenderGraph.of(
+        return RenderGraph.construct(
             id = PlanId(identity(selected, capabilities, budget, W5A_HARD_CAPABILITY_ID)),
             capabilityId = W5A_HARD_CAPABILITY_ID,
             targetExtent = extent,
@@ -767,7 +772,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         budget: PlanBudget,
         memory: PathAaMemoryFootprint,
         hardStencil: Boolean,
-    ): RenderGraph {
+    ): RenderGraphConstruction {
         val extent = SizeI32(selected.target.extent.width, selected.target.extent.height)
         val logicalId = planResourceId(PlanResourceRole.LogicalTarget, 0)
         val multisampleId = planResourceId(PlanResourceRole.MultisampleColorTarget, 0)
@@ -879,7 +884,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination), 0, passCount)
         val staging = resources.single { it.role == PlanResourceRole.ReadbackStaging }
         passes += PlanPass.ReadbackPass(0, logicalId, staging.id, memory.base.readbackBytesPerRow)
-        return RenderGraph.of(
+        return RenderGraph.construct(
             id = PlanId(identity(selected, capabilities, budget, W5A_AA_CAPABILITY_ID)),
             capabilityId = W5A_AA_CAPABILITY_ID,
             targetExtent = extent,
@@ -897,7 +902,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
 
     private fun generalDraw(sealed: SealedDraw, coverage: CoveragePlan, sample: SamplePlan): GeneralPathDraw =
         GeneralPathDraw.ofMaterial(sealed.commandIndex, sealed.material, sealed.geometry, sealed.strategy, sealed.scissorI32, coverage, sample,
-            coordinates = sealed.coordinates, coordinatesV2 = sealed.coordinatesV2)
+            coordinates = sealed.coordinates, coordinatesV2 = sealed.coordinatesV2, coordinatesV4 = sealed.coordinatesV4)
 
     private fun coreCapabilities(capabilities: PlanCapabilitySnapshot, extent: SizeI32): Boolean =
         extent.width <= capabilities.maxTextureDimension2D && extent.height <= capabilities.maxTextureDimension2D &&
@@ -1063,9 +1068,10 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             value == PathProjectiveInvalidSceneReason.PerspectiveHorizonCrossing
 
     private fun solid(node: DrawNode, paint: PaintNode): Boolean =
-        effectsMatchPaintPathEffect(node.effects, paint.pathEffect) && node.resource == null &&
+        (if (paint.colorFilter == null) effectsMatchPaintPathEffect(node.effects, paint.pathEffect)
+            else paint.style == PaintStyleNode.FILL && paint.pathEffect == null && colorFilterEffectsMatchPaint(node)) && node.resource == null &&
         node.operationBlendMode == null && w4Blend(node.blend) && paint.blender == null &&
-        paint.colorFilter == null && paint.maskFilter == null && paint.imageFilter == null &&
+        paint.maskFilter == null && paint.imageFilter == null &&
          (paint.pathEffect == null || paint.pathEffect is PathEffectNode.Dash) &&
         materialMatchesPaintAuthority(node)
 
@@ -1186,7 +1192,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     }
     private sealed interface DrawResult { data class NoOp(val frameWorkUsageI64: PathStrokeWorkUsageI64) : DrawResult; data class MaterialRefused(val refusal: EffectiveMaterialPlanner.Result.Refused, val frameWorkUsageI64: PathStrokeWorkUsageI64) : DrawResult; data class Ready(val draw: SealedDraw, val frameWorkUsageI64: PathStrokeWorkUsageI64) : DrawResult; data class Empty(val frameWorkUsageI64: PathStrokeWorkUsageI64) : DrawResult; data class Gap(val message: String) : DrawResult; data class Invalid(val message: String) : DrawResult; data class Horizon(val message: String) : DrawResult; data class Limit(val message: String) : DrawResult }
     private sealed interface Prepared { data class Ready(val geometry: org.graphiks.math.geometry.PathFillGeometryF32, val pathGeometry: PathDrawGeometry, val frameWorkUsageI64: PathStrokeWorkUsageI64) : Prepared; data class Empty(val frameWorkUsageI64: PathStrokeWorkUsageI64) : Prepared; data class Invalid(val message: String) : Prepared; data class Horizon(val message: String) : Prepared; data class Limit(val message: String) : Prepared }
-    private data class SealedDraw(val commandIndex: Int, val material: MaterialPlanRef, val geometry: PathDrawGeometry, val strategy: PathFillStrategy, val scissorI32: RectI32, val requestsAntiAlias: Boolean, val blend: BlendPlan, val coordinates: MaterialCoordinatePlanV1?, val coordinatesV2: MaterialCoordinatePlanV2?)
+    private data class SealedDraw(val commandIndex: Int, val material: MaterialPlanRef, val geometry: PathDrawGeometry, val strategy: PathFillStrategy, val scissorI32: RectI32, val requestsAntiAlias: Boolean, val blend: BlendPlan, val coordinates: MaterialCoordinatePlanV1?, val coordinatesV2: MaterialCoordinatePlanV2?, val coordinatesV4: SourceCoordinatesV4?)
     private data class ResourceLife(val ordinal: Int, val first: Int, val last: Int)
     private data class W4dGeneralAaTopology(
         val passCount: Int,

@@ -204,6 +204,7 @@ public class GeneralPathDraw private constructor(
             blend: BlendPlan = BlendPlan.SrcOver,
             coordinates: MaterialCoordinatePlanV1? = null,
             coordinatesV2: MaterialCoordinatePlanV2? = null,
+            coordinatesV4: SourceCoordinatesV4? = null,
         ): GeneralPathDraw {
             require(commandIndexI32 >= 0) { "Command index must not be negative" }
             require(!scissorI32.isEmpty) { "General path scissor must be non-empty" }
@@ -213,7 +214,8 @@ public class GeneralPathDraw private constructor(
             ) { "General path draws require an explicit hard or four-sample AA contract" }
             requirePathRenderGeometryForStrategy(geometry, strategy)
             return GeneralPathDraw(
-                commandIndexI32, coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
+                commandIndexI32, coordinatesV4?.let { PlanDrawMaterialAuthority.MaterialV4(material, it) }
+                    ?: coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
                     ?: PlanDrawMaterialAuthority.MaterialV1(material, coordinates), geometry, strategy, scissorI32, coverage, sample, blend,
             )
         }
@@ -250,6 +252,7 @@ public class GeneralPathDraw private constructor(
 public fun GeneralPathDraw.withBlend(blend: BlendPlan): GeneralPathDraw = GeneralPathDraw.ofMaterial(
     commandIndex, materialAuthority.materialPlanRef(), copyPathGeometry(), strategy,
     copyScissorI32(), coverage, sample, blend, materialCoordinates, materialCoordinatesV2,
+    (materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
 )
 
 /** A W4d.2 direct path draw whose final coverage is constrained by a W4e clip plan. */
@@ -643,8 +646,10 @@ public class PathFillDraw private constructor(
             blend: BlendPlan = BlendPlan.LegacySrcOverV1,
             coordinates: MaterialCoordinatePlanV1? = null,
             coordinatesV2: MaterialCoordinatePlanV2? = null,
+            coordinatesV4: SourceCoordinatesV4? = null,
         ): PathFillDraw = ofAuthority(
-            commandIndexI32, coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
+            commandIndexI32, coordinatesV4?.let { PlanDrawMaterialAuthority.MaterialV4(material, it) }
+                ?: coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
                 ?: PlanDrawMaterialAuthority.MaterialV1(material, coordinates), geometryF32, strategy, scissorI32, blend,
         )
 
@@ -670,7 +675,7 @@ public class PathFillDraw private constructor(
 /** Reissues only the sealed W5 material reference; no Path is reconstructed from another shape. */
 public fun PathFillDraw.withMaterialRef(material: MaterialPlanRef): PathFillDraw = PathFillDraw.ofMaterial(
     commandIndex, material, copyGeometryF32(), strategy, copyScissorI32(), blend,
-    materialCoordinates, materialCoordinatesV2,
+    materialCoordinates, materialCoordinatesV2, (materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
 )
 
 /** A sealed W4d stroke draw whose immutable geometry authority remains owned by `:math`. */

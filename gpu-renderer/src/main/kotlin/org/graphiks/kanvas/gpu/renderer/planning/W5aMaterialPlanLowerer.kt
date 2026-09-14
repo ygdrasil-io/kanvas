@@ -28,6 +28,15 @@ internal class W5aMaterialPlanLowerer {
         )
     }
     fun lower(table: MaterialPlanTable, root: MaterialPlanRef): ColorF32? {
+        var leaf = root
+        while (table.entry(leaf).bindings is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.OpacityF32V1)
+            leaf = MaterialPlanRef(leaf.indexI32-1)
+        if (table.entry(leaf).bindings is org.graphiks.kanvas.gpu.plan.ColorFilterBindingV4) {
+            table.colorSourceProofV4(root)
+            // This is only the historical geometry color slot. material() below
+            // requires the exact packed V4 authority for the color-writing stage.
+            return ColorF32.Transparent
+        }
         if (table.gradientStopSlab != null) {
             var indexI32 = root.indexI32
             while (table.entry(MaterialPlanRef(indexI32)).bindings is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.OpacityF32V1) indexI32--

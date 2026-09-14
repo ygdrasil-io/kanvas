@@ -88,11 +88,6 @@ internal object GPUPlanSurfaceCandidateGate {
     }
     fun accepts(operations: List<DisplayOp>, config: RenderConfig): Boolean =
         config.gpuColorFormat == GPUColorFormat.RGBA8_UNORM_SRGB &&
-            // Task1 V4 is a single Rect family. Composite lane planning cannot pack
-            // before the future whole-frame construction-metadata permit exists.
-            (!operations.any { it is DisplayOp.DrawRect && it.paint.colorFilter != null } ||
-                operations.all { it is DisplayOp.DrawRect || it is DisplayOp.DrawColor ||
-                    it is DisplayOp.SetTransform || it is DisplayOp.SetClip || it is DisplayOp.Annotation }) &&
             (ownsW5eImages(operations) || operations.all { operation ->
                 if ((operation is DisplayOp.DrawRect || operation is DisplayOp.DrawRRect ||
                         operation is DisplayOp.DrawPath) &&

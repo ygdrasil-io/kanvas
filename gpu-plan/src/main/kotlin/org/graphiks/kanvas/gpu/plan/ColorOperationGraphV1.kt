@@ -30,9 +30,35 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
         public data class Equal(public val a: Scalar, public val b: Scalar) : Predicate
         public data class LessEqual(public val a: Scalar, public val b: Scalar) : Predicate
     }
-    public val canonicalIdentity: String by lazy { "color-operation-v1:$contractId:${outputs.joinToString(";")}" }
+    public val canonicalIdentity: String by lazy {
+        val identities = java.util.IdentityHashMap<Scalar, String>()
+        fun identity(node: Scalar): String = identities[node] ?: run {
+            val recipe = when (node) {
+                is Scalar.InputLinearPremul -> "input:${node.channelI32}"
+                is Scalar.DynamicF32 -> "dynamic:${node.wordOffsetU32}"
+                is Scalar.ConstantF32 -> "constant:${node.bitsI32}"
+                is Scalar.Add -> "add:${identity(node.a)}:${identity(node.b)}"
+                is Scalar.Subtract -> "sub:${identity(node.a)}:${identity(node.b)}"
+                is Scalar.Multiply -> "mul:${identity(node.a)}:${identity(node.b)}"
+                is Scalar.Divide -> "div:${identity(node.a)}:${identity(node.b)}"
+                is Scalar.Pow -> "pow:${identity(node.a)}:${identity(node.b)}"
+                is Scalar.Clamp01 -> "clamp:${identity(node.value)}"
+                is Scalar.LazyBranch -> {
+                    val predicate = when (val p = node.predicate) {
+                        is Predicate.Equal -> "eq:${identity(p.a)}:${identity(p.b)}"
+                        is Predicate.LessEqual -> "le:${identity(p.a)}:${identity(p.b)}"
+                    }
+                    "lazy:$predicate:${identity(node.yes)}:${identity(node.no)}"
+                }
+            }
+            java.security.MessageDigest.getInstance("SHA-256").digest(recipe.encodeToByteArray())
+                .joinToString("") { "%02x".format(it) }.also { identities[node] = it }
+        }
+        "color-operation-v1:$contractId:${outputs.joinToString(";", transform = ::identity)}"
+    }
     internal fun bindInput(prefix: ColorOperationGraphV1, filterWordOffsetU32: Long): ColorOperationGraphV1 {
-        fun bind(value: Scalar): Scalar = when (value) {
+        val bound = java.util.IdentityHashMap<Scalar, Scalar>()
+        fun bind(value: Scalar): Scalar = bound[value] ?: when (value) {
             is Scalar.InputLinearPremul -> prefix.outputs[value.channelI32]
             is Scalar.DynamicF32 -> Scalar.DynamicF32(Math.addExact(value.wordOffsetU32, filterWordOffsetU32))
             is Scalar.ConstantF32 -> value
@@ -46,7 +72,7 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
                 is Predicate.Equal -> Predicate.Equal(bind(p.a), bind(p.b))
                 is Predicate.LessEqual -> Predicate.LessEqual(bind(p.a), bind(p.b))
             }, bind(value.yes), bind(value.no))
-        }
+        }.also { bound[value] = it }
         return ColorOperationGraphV1(outputs.map(::bind))
     }
     internal companion object {

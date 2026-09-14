@@ -51,7 +51,10 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
         }
     }
 
-    override fun plan(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): RenderPlanResult<RenderGraph> {
+    override fun plan(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): RenderPlanResult<RenderGraph> =
+        construct(candidate,capabilities,budget).publishConstructionResult()
+
+    internal fun construct(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): RenderPlanResult<RenderGraphConstruction> {
         val selected = candidate as? W4aCandidate ?: return invalidCandidate()
         if (selected.owner !== this || !selected.hasMatchingFingerprints()) return invalidCandidate()
         val target = selected.target
@@ -70,7 +73,7 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
             return promoted(W4aPlanDiagnostics.CapabilityAllocationPolicy, "W4a allocation facts are not power-of-two aligned")
         }
         if (selected.draws.isEmpty()) return try {
-            RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bGeometryLanePlanV3.clearOnly(
+            RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bGeometryLanePlanV3.constructClearOnly(
                 PlanId(planIdentity(selected.sceneCanonicalId, target, capabilities, budget)), W5B_CAPABILITY_ID,
                 extent, capabilities, budget, null)))
         } catch (_: IllegalArgumentException) { resourceLimit(W4aPlanDiagnostics.SizeOverflow, "W4a clear-only frame exceeds its resource contract") }
@@ -108,14 +111,14 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
                 PlanDrawDataResources(vertex.id, index.id, uniform.id))
             val readback = PlanPass.ReadbackPass(0, logicalTarget.id, staging.id, footprint.readbackBytesPerRow)
             if (selected.capabilityId == W5B_CAPABILITY_ID) {
-                return RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bDestinationGraphSealer.seal(
+                return RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bDestinationGraphSealer.construct(
                     PlanId(planIdentity(selected.sceneCanonicalId, target, capabilities, budget)), selected.capabilityId,
                     extent, capabilities, budget, plannedDraws, selected.materialPlanTable,
                     footprint.targetBytes, footprint.readbackBytes, footprint.readbackBytesPerRow,
                     geometryResources = listOf(vertex, index, uniform), drawDataResources = render.drawDataResources,
                 )))
             }
-            RenderPlanResult.Ready(RenderGraph.of(
+            RenderPlanResult.Ready(RenderGraph.construct(
                 id = PlanId(planIdentity(selected.sceneCanonicalId, target, capabilities, budget)),
                 capabilityId = selected.capabilityId,
                 targetExtent = extent,

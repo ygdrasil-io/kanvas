@@ -2,13 +2,13 @@ package org.graphiks.kanvas.gpu.plan
 
 /** Checked metadata and exact recipe owners, never packed arrays. */
 public class MaterialSourceFootprintV4 internal constructor(internal val table: MaterialPlanTable,
-    internal val root: MaterialPlanRef, internal val binding: ColorFilterBindingV4) {
-    public val canonicalIdentity: String = "material-source-footprint-v4:${binding.numericAuthority.outputSourceProof.canonicalIdentity}"
-    public val uniformByteCountI64: Long = Math.multiplyExact(binding.numericAuthority.outputSourceProof.uniformWordCountI64,4L)
-    public val sourceUniformByteCountI64: Long = Math.multiplyExact(binding.sourceProof.uniformWordCountI64,4L)
+    internal val root: MaterialPlanRef, internal val proof: ColorSourceProofV1) {
+    public val canonicalIdentity: String = "material-source-footprint-v4:${proof.canonicalIdentity}"
+    public val uniformByteCountI64: Long = Math.multiplyExact(proof.uniformWordCountI64,4L)
+    public val sourceUniformByteCountI64: Long = proof.bindingOwners.filterNot { it is ColorFilterBindingV4 }.size * 16L
     public val storageByteCountI64: Long = 0L
     public val bindingCountI32: Int = 1
-    internal fun authenticates(): Boolean = binding.numericAuthority.outputSourceProof.authenticates(table,root,binding.sourceProof.coordinates)
+    internal fun authenticates(): Boolean = table.colorSourceProofV4(root) === proof && proof.authenticates(table,root,proof.coordinates)
 }
 
 public class MaterialSourcePackingPermitV4 private constructor(private val footprints: List<MaterialSourceFootprintV4>) {

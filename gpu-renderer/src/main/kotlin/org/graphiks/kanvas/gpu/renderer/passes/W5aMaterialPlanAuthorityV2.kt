@@ -102,7 +102,12 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
         materialWitness.validates() && refsByCommandId[commandIdI32] == ref &&
             ref.indexI32 < table.sizeI32 &&
             table.entry(ref).program.versionI32 in setOf(1,2,4) &&
-            table.entry(ref).bindings.versionI32 == table.entry(ref).program.versionI32
+            (table.entry(ref).bindings.versionI32 == table.entry(ref).program.versionI32 ||
+                table.entry(ref).program.versionI32 == 4 &&
+                table.entry(ref).bindings is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.OpacityF32V1 &&
+                (authoritiesByCommandIdI32[commandIdI32] as? PlanDrawMaterialAuthority.MaterialV4)?.let {
+                    table.colorSourceProofV4(ref).authenticates(table,ref,it.coordinates)
+                } == true)
 
     internal fun materializeSource(commandIdI32: Int, materialRef: MaterialPlanRef): MaterializedSolidV2? {
         if (!validates(commandIdI32, materialRef)) return null

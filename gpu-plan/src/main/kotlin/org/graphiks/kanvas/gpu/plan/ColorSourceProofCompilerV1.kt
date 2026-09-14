@@ -10,16 +10,17 @@ internal object ColorSourceProofCompilerV1 {
             return ColorSourceProofResultV1.Refused(W5fPlanDiagnostics.Unpromoted)
         val owners = mutableListOf<MaterialBindingPlan>()
         var firstI32 = root.indexI32
-        while (table.entry(MaterialPlanRef(firstI32)).bindings is MaterialBindingPlan.OpacityF32V1) {
+        while (table.entry(MaterialPlanRef(firstI32)).bindings.let {
+                it is MaterialBindingPlan.OpacityF32V1 || it is ColorFilterBindingV4 }) {
             if (firstI32 == 0) return ColorSourceProofResultV1.Refused(W5fPlanDiagnostics.Schema)
             firstI32--
         }
         val words = linkedMapOf<Long,Float>()
         var values: List<ColorOperationGraphV1.Scalar>? = null
+        var offsetU32 = 0L
         for (indexI32 in firstI32..root.indexI32) {
             val binding = table.entry(MaterialPlanRef(indexI32)).bindings
             owners += binding
-            val offsetU32 = (indexI32-firstI32)*4L
             values = when (binding) {
                 MaterialBindingPlan.EmptyV1 -> List(4) { ColorOperationGraphV1.constant(0f) }
                 is MaterialBindingPlan.SolidRgbaF32V1 -> {
@@ -36,8 +37,15 @@ internal object ColorSourceProofCompilerV1 {
                     val alpha = ColorOperationGraphV1.Scalar.DynamicF32(offsetU32)
                     requireNotNull(values).map { ColorOperationGraphV1.Scalar.Multiply(it,alpha) }
                 }
+                is ColorFilterBindingV4 -> {
+                    binding.execution.forEachWord { offset, value -> words[Math.addExact(offsetU32, offset)] = value }
+                    binding.execution.copyOperationGraph().bindInput(
+                        ColorOperationGraphV1(requireNotNull(values)), offsetU32).outputs
+                }
                 else -> return ColorSourceProofResultV1.Refused(W5fPlanDiagnostics.Unpromoted)
             }
+            offsetU32 = Math.addExact(offsetU32, if (binding is ColorFilterBindingV4)
+                binding.execution.dynamicByteCountI64 / 4L else 4L)
         }
         val proof = ColorSourceProofV1.issue(table,root,coordinates,deviceBoundsF32,
             ColorOperationGraphV1(requireNotNull(values)),owners,words)

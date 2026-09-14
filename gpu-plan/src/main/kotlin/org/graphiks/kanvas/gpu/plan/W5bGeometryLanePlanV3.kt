@@ -37,20 +37,22 @@ public class W5bGeometryLanePlanV3 internal constructor(
         public const val COMPOSITE_CAPABILITY_ID: String = "w5b-native-geometry-composite-v3"
         internal fun clearOnly(id: PlanId, capabilityId: String, extent: SizeI32,
             capabilities: PlanCapabilitySnapshot, budget: PlanBudget, material: MaterialPlanTable?): RenderGraph {
+            return constructClearOnly(id,capabilityId,extent,capabilities,budget,material).publish()
+        }
+        internal fun constructClearOnly(id: PlanId, capabilityId: String, extent: SizeI32,
+            capabilities: PlanCapabilitySnapshot, budget: PlanBudget, material: MaterialPlanTable?): RenderGraphConstruction {
             val targetBytesI64 = Math.multiplyExact(Math.multiplyExact(extent.width.toLong(), extent.height.toLong()), 4L)
             val widthBytesI64 = Math.multiplyExact(extent.width.toLong(), 4L)
             val alignmentI64 = capabilities.copyBytesPerRowAlignment.toLong()
             val rowBytesI64 = Math.addExact(widthBytesI64, (alignmentI64 - widthBytesI64 % alignmentI64) % alignmentI64)
-            return W5bDestinationGraphSealer.seal(id, capabilityId, extent, capabilities, budget, emptyList(), material,
+            return W5bDestinationGraphSealer.construct(id, capabilityId, extent, capabilities, budget, emptyList(), material,
                 targetBytesI64, Math.multiplyExact(rowBytesI64, extent.height.toLong()), rowBytesI64)
         }
     }
 }
 
 /** One compiler-owned destination timeline; each lane keeps its original geometry reservations. */
-internal fun issueW5bNativeComposite(graphs: List<RenderGraph>): RenderGraph {
-    require(graphs.none { graph -> graph.materialPlanTableOrNull()?.entries()?.any {
-        it.bindings is ColorFilterBindingV4 } == true }) { W5fPlanDiagnostics.Unpromoted }
+internal fun issueW5bNativeComposite(graphs: List<RenderGraphConstruction>): RenderGraphConstruction {
     require(graphs.size in 2..W5aCompositePlanCompiler.MAX_LANES_I32)
     val first = graphs.first()
     val admitted = setOf(W3SolidRectPlanCompiler.CAPABILITY_ID, W3SolidRectPlanCompiler.W5A_CAPABILITY_ID,
@@ -69,11 +71,11 @@ internal fun issueW5bNativeComposite(graphs: List<RenderGraph>): RenderGraph {
     if (activeGraphs.isEmpty()) {
         val identity = java.security.MessageDigest.getInstance("SHA-256").digest(
             graphs.joinToString("|") { it.id.value }.encodeToByteArray()).joinToString("") { "%02x".format(it) }
-        return RenderGraph.issueW5bGeometry(W5bGeometryLanePlanV3.clearOnly(PlanId("w5b.composite.$identity"),
+        return RenderGraph.issueW5bGeometry(W5bGeometryLanePlanV3.constructClearOnly(PlanId("w5b.composite.$identity"),
             W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID, first.targetExtent, first.capabilities, first.budget, null))
     }
     val interned = MaterialPlanTable.intern(activeGraphs.map { requireNotNull(it.materialPlanTableOrNull()) })
-    val lanes = mutableListOf<W5bGeometryLanePlanV3>()
+    val lanes = mutableListOf<GeometryLaneConstruction>()
     val geometryResources = mutableListOf<PlanResource>()
     val colors = mutableListOf<PlanDraw>()
     val dataByCommand = mutableMapOf<Int, PlanDrawDataResources>()
@@ -116,7 +118,8 @@ internal fun issueW5bNativeComposite(graphs: List<RenderGraph>): RenderGraph {
         geometryResources += resources
         val geometrySource = if (graph.capabilityId == W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID)
             graph.w5bGeometryLanes().single().sourceGraph else graph
-        lanes += W5bGeometryLanePlanV3(geometrySource, draws.map { it.commandIndex }, data, depth)
+        lanes += GeometryLaneConstruction(geometrySource.rebindMaterials(interned.table) { interned.remap(ordinal,it) },
+            draws.map { it.commandIndex }, data, depth)
         draws.forEach { draw ->
             val ref = interned.remap(ordinal, draw.materialAuthority.materialPlanRef())
             colors += when (draw) {
@@ -127,7 +130,8 @@ internal fun issueW5bNativeComposite(graphs: List<RenderGraph>): RenderGraph {
                 is PathStrokeDraw -> draw.withMaterialRef(ref)
                 is GeneralPathDraw -> GeneralPathDraw.ofMaterial(draw.commandIndex, ref, draw.copyPathGeometry(),
                     draw.strategy, draw.copyScissorI32(), draw.coverage, draw.sample, draw.blend,
-                    draw.materialCoordinates, draw.materialCoordinatesV2)
+                    draw.materialCoordinates, draw.materialCoordinatesV2,
+                    (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates)
                 else -> error("Unsupported native W5b composite geometry")
             }
             dataByCommand[draw.commandIndex] = data
@@ -138,7 +142,7 @@ internal fun issueW5bNativeComposite(graphs: List<RenderGraph>): RenderGraph {
     require(colors.zipWithNext().all { (a, b) -> a.commandIndex < b.commandIndex })
     val identity = java.security.MessageDigest.getInstance("SHA-256").digest(
         graphs.joinToString("|") { it.id.value }.encodeToByteArray()).joinToString("") { "%02x".format(it) }
-    val graph = W5bDestinationGraphSealer.seal(PlanId("w5b.composite.$identity"),
+    val graph = W5bDestinationGraphSealer.construct(PlanId("w5b.composite.$identity"),
         W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID, first.targetExtent, first.capabilities, first.budget,
         colors, interned.table, first.resources().single { it.role == PlanResourceRole.LogicalTarget }.byteSize,
         first.resources().single { it.role == PlanResourceRole.ReadbackStaging }.byteSize,
@@ -157,7 +161,9 @@ internal fun validateW5bGeometryPasses(passes: List<PlanPass>, resources: Map<Pl
     } }
     require(colors.size == visualCommandCountI32 && colors.zipWithNext().all { (a, b) -> a.commandIndex < b.commandIndex })
     require(colors.all { it.sample == SamplePlan.SingleSample && (it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1 || it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2 ||
-        (it is SolidRectDraw || it is AnalyticRectDraw) && it.materialAuthority is PlanDrawMaterialAuthority.MaterialV4) && it.blend != BlendPlan.NoOpV1 })
+        (it is SolidRectDraw || it is AnalyticRectDraw || it is PathFillDraw ||
+            it is GeneralPathDraw && it.copyPathGeometry() is PathDrawGeometry.Fill) &&
+            it.materialAuthority is PlanDrawMaterialAuthority.MaterialV4) && it.blend != BlendPlan.NoOpV1 })
     fun data(value: PlanDrawDataResources) {
         for ((id, role, usage) in listOf(Triple(value.vertex, PlanResourceRole.VertexData, PlanResourceUsage.Vertex),
             Triple(value.index, PlanResourceRole.IndexData, PlanResourceUsage.Index),

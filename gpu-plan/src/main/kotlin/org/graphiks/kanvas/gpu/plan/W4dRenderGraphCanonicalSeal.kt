@@ -9,7 +9,9 @@ import org.graphiks.math.geometry.RectI32
 
 /** Canonical, length-delimited, raw-bit-stable snapshot used only by the opaque W4d witness. */
 @JvmSynthetic
-internal fun canonicalW4dGraphDigest(graph: RenderGraph): ByteArray {
+internal fun canonicalW4dGraphDigest(graph: RenderGraph): ByteArray = canonicalW4dGraphDigest(graph.canonicalConstruction())
+
+internal fun canonicalW4dGraphDigest(graph: RenderGraphConstruction): ByteArray {
     val materialV2 = W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)
     val writer = W4dGraphDigestWriter()
     writer.text("schema", if (materialV2) "w4d-render-graph-witness-w5a-material-v2" else "w4d-render-graph-witness-v1")

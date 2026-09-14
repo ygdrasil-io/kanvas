@@ -221,6 +221,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
                         transform = node.transform.copy(),
                         material = appendMaterialPlan(materialEntries, source.table, source.root),
                         coordinates = MaterialCoordinatePlanV1.fromCtm(node.transform),
+                        coordinatesV4 = source.table.coordinatesV4(source.root),
                         geometryF32 = geometryF32,
                         strategy = strategy,
                         scissorI32 = scissor.copy(),
@@ -235,7 +236,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
 
     private fun supportsSolidFill(node: DrawNode): Boolean {
         if (
-            node.effects !is EffectStack.Empty ||
+            !colorFilterEffectsMatchPaint(node) ||
             node.resource != null ||
             node.operationBlendMode != null ||
             !w4cBlend(node.blend)
@@ -245,7 +246,6 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
         val paint = node.paint ?: return false
         return finite(paint) &&
             paint.blender == null &&
-            paint.colorFilter == null &&
             paint.maskFilter == null &&
             paint.pathEffect == null &&
             paint.imageFilter == null &&
@@ -379,11 +379,14 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
         capabilities.bufferAllocationPolicy.uniformFloorBytes,
     ).all { it > 0L && it and (it - 1L) == 0L }
 
-    override fun plan(
+    override fun plan(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): RenderPlanResult<RenderGraph> =
+        construct(candidate,capabilities,budget).publishConstructionResult()
+
+    internal fun construct(
         candidate: GpuPlanCandidate,
         capabilities: PlanCapabilitySnapshot,
         budget: PlanBudget,
-    ): RenderPlanResult<RenderGraph> {
+    ): RenderPlanResult<RenderGraphConstruction> {
         val selected = candidate as? W4cCandidate ?: return invalidCandidate()
         if (selected.owner !== this || !selected.hasMatchingFingerprints()) return invalidCandidate()
 
@@ -421,7 +424,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
             )
         }
         if (selected.draws.isEmpty()) return try {
-            RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bGeometryLanePlanV3.clearOnly(
+            RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bGeometryLanePlanV3.constructClearOnly(
                 PlanId(planIdentity(selected.sceneCanonicalId, target, capabilities, budget)), W5B_CAPABILITY_ID,
                 extent, capabilities, budget, selected.materialPlanTable)))
         } catch (failure: IllegalArgumentException) {
@@ -552,8 +555,9 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
             val drawData = PlanDrawDataResources(vertex.id, index.id, uniform.id)
             if (selected.capabilityId == W5B_CAPABILITY_ID) {
                 val draws = selected.draws.map { draw -> PathFillDraw.ofMaterial(draw.commandIndex, draw.material,
-                    draw.geometryF32, draw.strategy, draw.scissorI32, draw.blend, draw.coordinates) }
-                return RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bDestinationGraphSealer.seal(
+                    draw.geometryF32, draw.strategy, draw.scissorI32, draw.blend, draw.coordinates,
+                    coordinatesV4 = draw.coordinatesV4) }
+                return RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bDestinationGraphSealer.construct(
                     PlanId(planIdentity(selected.sceneCanonicalId, target, capabilities, budget)), W5B_CAPABILITY_ID,
                     extent, capabilities, budget, draws, selected.materialPlanTable, footprint.targetBytes,
                     footprint.readbackBytes, footprint.readbackBytesPerRow,
@@ -574,6 +578,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
                     strategy = sealed.strategy,
                     scissorI32 = sealed.scissorI32,
                     coordinates = sealed.coordinates,
+                    coordinatesV4 = sealed.coordinatesV4,
                 )
                 val load = if (firstColorAttachment) {
                     AttachmentLoadPlan.ClearTransparent
@@ -634,7 +639,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
                 PlanPassDependency(before.id, after.id)
             }
             RenderPlanResult.Ready(
-                RenderGraph.of(
+                RenderGraph.construct(
                     id = PlanId(planIdentity(selected.sceneCanonicalId, target, capabilities, budget)),
                     capabilityId = CAPABILITY_ID,
                     targetExtent = extent,
@@ -789,6 +794,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
         val transform: Matrix3x3F32,
         val material: MaterialPlanRef,
         val coordinates: MaterialCoordinatePlanV1?,
+        val coordinatesV4: SourceCoordinatesV4?,
         val geometryF32: PathFillGeometryF32,
         val strategy: PathFillStrategy,
         val scissorI32: RectI32,

@@ -42,10 +42,6 @@ public class W5aCompositePlanCompiler internal constructor(private val imageEntr
             commands.any { it !is SceneCommand.Draw && it !is SceneCommand.Annotation &&
                 it !is SceneCommand.SetTransform && it !is SceneCommand.SetClip }
         ) return GpuPlanSelection.NotCandidate(listOf(diagnostic("Scene is outside the native mixed Rect/RRect/Path capability")))
-        // Refuse before selecting/planning any lane: Task1 has no whole-frame V4
-        // construction-metadata permit. Ordinary V1–V3 composite issuance is unchanged.
-        if (draws.any { (it.value as SceneCommand.Draw).node.paint?.colorFilter != null })
-            return GpuPlanSelection.NotCandidate(listOf(diagnostic(W5fPlanDiagnostics.Unpromoted)))
         val runs = mutableListOf<MutableList<IndexedValue<SceneCommand>>>()
         draws.forEach { draw ->
             if (runs.lastOrNull()?.lastOrNull()?.let { kind(it) } != kind(draw)) runs += mutableListOf<IndexedValue<SceneCommand>>()
@@ -103,18 +99,18 @@ public class W5aCompositePlanCompiler internal constructor(private val imageEntr
     override fun plan(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): RenderPlanResult<RenderGraph> {
         val selected = candidate as? Candidate
         if (selected == null || selected.owner !== this) return RenderPlanResult.InvalidScene(listOf(diagnostic("Foreign composite candidate")))
-        val graphs = mutableListOf<RenderGraph>()
-        for (lane in selected.lanes) when (val result = lane.compiler.plan(lane.candidate, capabilities, budget)) {
+        val graphs = mutableListOf<RenderGraphConstruction>()
+        for (lane in selected.lanes) when (val result = lane.compiler.constructLane(lane.candidate, capabilities, budget)) {
             is RenderPlanResult.Ready -> graphs += result.plan
-            else -> return result
+            else -> return result.publishConstructionResult()
         }
         return try {
             if (graphs.any { graph -> graph.verifyW5bGeometryCompilerWitness() || graph.capabilityId == W4dGeneralPathPlanCompiler.W5A_HARD_CAPABILITY_ID || graph.passes().any {
                 it is PlanPass.TextureCopy || it is PlanPass.RenderPass && it.draws().any { draw ->
                     draw.blend != BlendPlan.LegacySrcOverV1 && (draw.blend as? BlendPlan.FixedFunctionV1)?.mode != BlendMode.SRC_OVER
                 }
-            } }) RenderPlanResult.Ready(issueW5bNativeComposite(graphs))
-            else RenderPlanResult.Ready(RenderGraph.issueW5aComposite(W5aCompositePlanV1.issue(graphs)))
+            } }) RenderPlanResult.Ready(issueW5bNativeComposite(graphs).publish())
+            else RenderPlanResult.Ready(W5aCompositePlanV1.construct(graphs).publish())
         } catch (failure: RawMaterialRequirementsV2.Refusal) {
             RenderPlanResult.ResourceLimitExceeded(listOf(RenderDiagnostic(RenderDiagnosticCode(failure.code),
                 RenderDiagnosticDomain.RESOURCE, RenderDiagnosticSeverity.ERROR, "Composite material frame exceeds its aggregate memory budget")))
@@ -148,9 +144,9 @@ public class W5aCompositePlanV1 private constructor(
     public fun rectScratchBytesI64(laneOrdinalI32: Int): List<Long> = storedRectScratchBytes[laneOrdinalI32]
 
     internal companion object {
-        fun issue(graphs: List<RenderGraph>): W5aCompositePlanV1 {
-            require(graphs.none { graph -> graph.materialPlanTableOrNull()?.entries()?.any {
-                it.bindings is ColorFilterBindingV4 } == true }) { W5fPlanDiagnostics.Unpromoted }
+        fun fromPublished(lanes: List<RenderGraph>, table: MaterialPlanTable, peakI64: Long,
+            scratch: List<List<Long>>): W5aCompositePlanV1 = W5aCompositePlanV1(lanes,table,peakI64,scratch)
+        fun construct(graphs: List<RenderGraphConstruction>): W5aCompositeConstruction {
             require(graphs.size in 2..W5aCompositePlanCompiler.MAX_LANES_I32)
             val first = graphs.first()
             require(graphs.all { it.capabilityId in setOf(W3SolidRectPlanCompiler.W5A_CAPABILITY_ID,
@@ -160,31 +156,7 @@ public class W5aCompositePlanV1 private constructor(
                 it.budget == first.budget && it.colorFormat == first.colorFormat })
             val interned = MaterialPlanTable.intern(graphs.map { requireNotNull(it.materialPlanTableOrNull()) })
             val remapped = graphs.mapIndexed { lane, graph ->
-                val copied = mutableMapOf<PlanDraw, PlanDraw>()
-                fun draw(draw: PlanDraw): PlanDraw = copied.getOrPut(draw) {
-                    val ref = interned.remap(lane, draw.materialAuthority.materialPlanRef())
-                    when (draw) {
-                        is SolidRectDraw -> draw.withMaterialRef(ref)
-                        is AnalyticRRectDraw -> draw.withMaterialRef(ref)
-                        is PathFillDraw -> draw.withMaterialRef(ref)
-                        is PathStrokeDraw -> draw.withMaterialRef(ref)
-                        else -> error("Unrecognized native composite draw")
-                    }
-                }
-                val passes = graph.passes().map { pass -> when (pass) {
-                    is PlanPass.RenderPass -> PlanPass.RenderPass(pass.ordinal, pass.target, pass.draws().map(::draw), pass.load, pass.store, pass.drawDataResources)
-                    is PlanPass.StencilProducer -> PlanPass.StencilProducer(pass.ordinal, pass.target, pass.depthStencil, draw(pass.draw) as PathDraw, pass.drawDataResources, pass.atomicGroup, pass.load, pass.store, pass.depthStencilAccess, pass.depthStencilLoadStore)
-                    is PlanPass.StencilCover -> PlanPass.StencilCover(pass.ordinal, pass.target, pass.depthStencil, draw(pass.draw) as PathDraw, pass.drawDataResources, pass.atomicGroup, pass.load, pass.store, pass.depthStencilAccess, pass.depthStencilLoadStore)
-                    is PlanPass.ReadbackPass -> pass
-                    else -> error("Unrecognized native composite pass")
-                } }
-                val remapped = RenderGraph.of(graph.id, graph.capabilityId, graph.targetExtent, graph.colorFormat, graph.capabilities,
-                    graph.budget, graph.visualCommandCount, graph.resources(), passes, graph.dependencies(),
-                    graph.peakFrameLocalBytes, interned.table)
-                if (graph.capabilityId == W4dPathStrokePlanCompiler.CAPABILITY_ID) {
-                    require(graph.verifyW4dCompilerWitness())
-                    RenderGraph.issueW4dCompilerWitness(remapped)
-                } else remapped
+                graph.rebindMaterials(interned.table) { interned.remap(lane,it) }
             }
             val commandOrder = remapped.flatMap { graph -> graph.passes().flatMap { pass -> when (pass) {
                 is PlanPass.RenderPass -> pass.draws().map { it.commandIndex }
@@ -218,15 +190,31 @@ public class W5aCompositePlanV1 private constructor(
                     it.role != PlanResourceRole.ReadbackStaging && it.role != PlanResourceRole.GradientStopData }
                     .fold(bytes) { bytesI64, resource -> Math.addExact(bytesI64, resource.byteSize) }
             }
-            val sources = remapped.flatMap { graph -> graph.passes().flatMap { pass -> when (pass) {
-                is PlanPass.RenderPass -> pass.draws()
-                is PlanPass.StencilCover -> listOf(pass.draw)
-                else -> emptyList()
-            } } }.map { RawMaterialRequirementsV2.of(interned.table, it.materialAuthority.materialPlanRef()) }
-            RawMaterialRequirementsV2.requireFrameBudget(sources, peak, first.budget, "w5a.composite.unsupported")
             // Kept non-uniform for the native lowerer's independent lifetime check;
             // material uniforms are admitted above and owned by its existing stages.
-            return W5aCompositePlanV1(remapped, interned.table, peak, rectScratch)
+            return W5aCompositeConstruction(remapped, interned.table, peak, rectScratch)
         }
     }
+}
+
+internal class W5aCompositeConstruction(lanes: List<RenderGraphConstruction>, val table: MaterialPlanTable,
+    val peakI64: Long, scratch: List<List<Long>>) {
+    private val lanes = immutableList(lanes)
+    private val scratch = immutableList(scratch.map(::immutableList))
+    fun publish(): RenderGraph {
+        val packed = packConstructedFrame(lanes,table,peakI64)
+        val published = lanes.map { RenderGraph.publishConstruction(it,packed) }
+        return RenderGraph.issueW5aComposite(W5aCompositePlanV1.fromPublished(published,table,peakI64,scratch))
+    }
+}
+
+private fun GpuPlanCompiler.constructLane(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot,
+    budget: PlanBudget): RenderPlanResult<RenderGraphConstruction> = when (this) {
+    is W3SolidRectPlanCompiler -> construct(candidate,capabilities,budget)
+    is W4aAnalyticRectPlanCompiler -> construct(candidate,capabilities,budget)
+    is W4bAnalyticRRectPlanCompiler -> construct(candidate,capabilities,budget)
+    is W4cPathFillPlanCompiler -> construct(candidate,capabilities,budget)
+    is W4dPathStrokePlanCompiler -> construct(candidate,capabilities,budget)
+    is W4dGeneralPathPlanCompiler -> construct(candidate,capabilities,budget)
+    else -> error("Composite lane has no compiler-owned construction entry point")
 }

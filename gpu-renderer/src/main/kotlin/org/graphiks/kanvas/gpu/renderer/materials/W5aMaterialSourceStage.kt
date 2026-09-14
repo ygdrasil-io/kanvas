@@ -46,8 +46,7 @@ internal class W5aMaterialSourceStage private constructor(
     companion object {
         fun colorV4(table: MaterialPlanTable, authority: org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV4,
             requirements: RawMaterialRequirementsV2): W5aMaterialSourceStage? {
-            val binding = table.entry(authority.ref).bindings as? org.graphiks.kanvas.gpu.plan.ColorFilterBindingV4 ?: return null
-            val proof = binding.numericAuthority.outputSourceProof
+            val proof = table.colorSourceProofV4(authority.ref)
             if (!proof.authenticates(table,authority.ref,authority.coordinates) ||
                 requirements.structuralId != table.entry(authority.ref).program.structuralId.value ||
                 !requirements.canonicalIdentity.endsWith("material-source-footprint-v4:${proof.canonicalIdentity}")) return null

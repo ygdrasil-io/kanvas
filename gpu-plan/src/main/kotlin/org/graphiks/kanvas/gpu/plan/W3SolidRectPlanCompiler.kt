@@ -68,11 +68,14 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         }
     }
 
-    override fun plan(
+    override fun plan(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): RenderPlanResult<RenderGraph> =
+        construct(candidate,capabilities,budget).publishConstructionResult()
+
+    internal fun construct(
         candidate: GpuPlanCandidate,
         capabilities: PlanCapabilitySnapshot,
         budget: PlanBudget,
-    ): RenderPlanResult<RenderGraph> {
+    ): RenderPlanResult<RenderGraphConstruction> {
         val selected = candidate as? W3Candidate
             ?: return invalidCandidate()
         if (selected.owner !== this || !selected.hasMatchingFingerprints()) {
@@ -113,7 +116,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
 
         return try {
             if (selected.draws.any { it.blend is BlendPlan.DestinationReadV1 }) {
-                return RenderPlanResult.Ready(W5bDestinationGraphSealer.seal(
+                return RenderPlanResult.Ready(W5bDestinationGraphSealer.construct(
                     PlanId(planIdentity(selected.sceneCanonicalId, target, capabilities, budget, selected.capabilityId)),
                     selected.capabilityId, targetExtent, capabilities, budget, selected.draws,
                     requireNotNull(selected.materialPlanTable), targetBytes, stagingBytes, withinBudget.readbackBytesPerRow,
@@ -133,7 +136,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
             )
             val readback = PlanPass.ReadbackPass(0, logicalTarget.id, staging.id, withinBudget.readbackBytesPerRow)
             RenderPlanResult.Ready(
-                RenderGraph.of(
+                RenderGraph.construct(
                     id = PlanId(planIdentity(selected.sceneCanonicalId, target, capabilities, budget, selected.capabilityId)),
                     capabilityId = selected.capabilityId,
                     targetExtent = targetExtent,
@@ -344,7 +347,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
 
     private fun w3Paint(paint: PaintNode?, acceptsMaterialShader: Boolean): Boolean = paint == null || (
         (paint.shader == null || acceptsMaterialShader) && paint.blender == null &&
-            (paint.colorFilter == null || paint.colorFilter is org.graphiks.kanvas.render.ir.ColorFilterNode.Matrix) && paint.maskFilter == null &&
+            paint.maskFilter == null &&
             paint.pathEffect == null && paint.imageFilter == null && paint.style == PaintStyleNode.FILL
         )
 
