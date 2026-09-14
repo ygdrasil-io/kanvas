@@ -40,6 +40,17 @@ public class ColorSourceProofV1 private constructor(
         }
     public fun copyOperationGraph(): ColorOperationGraphV1 = graph
     public val composedBindingLayout: ComposedBindingLayoutV1? get() = composedDefinition?.layout
+    public val composedImageResources: List<ComposedImageResourceV5> get() =
+        composedDefinition?.imageReferences?.map { it.binding }.orEmpty()
+    public fun resolveComposedImage(read: ImageNumericOperationGraphV1.TexelRead): ComposedImageResourceV5 =
+        requireNotNull(composedDefinition) { W5gPlanDiagnostics.Schema }.resolveImage(read)
+    public fun authenticatesComposedImage(resource: ComposedBindingLayoutV1.Resource,upload: ImageUploadPlanV1): Boolean =
+        composedDefinition?.let { definition ->
+            val references=definition.imageReferences.filter { it.binding.resource === resource }
+            resource.kindTagU32 == 2u && definition.layout.resources.any { it === resource } && references.isNotEmpty() &&
+                references.all { it.binding.upload === upload && it.binding.prepared.owner === definition.frameOwner &&
+                    it.binding.prepared.imageUpload(it.binding.metadata.description) === upload }
+        } == true
     public fun authenticatesComposedStorage(resource: ComposedBindingLayoutV1.Resource,
         slab: GradientStopSlabPlanV1): Boolean = composedDefinition?.let { definition ->
         definition.slab === slab && definition.layout.resources.any { it === resource } &&
@@ -80,7 +91,7 @@ public class ColorSourceProofV1 private constructor(
         fun issueComposed(definition: PreparedComposedSourceV5): ColorSourceProofV1? {
             val graph = definition.operationGraph
             val facts = ColorRoundedGraphProofV1.prove(graph,definition.numericWordsF32Bits,definition.tableRecords,
-                definition.deviceBoundsF32,definition.integerWordsU32,definition.slab) ?: return null
+                definition.deviceBoundsF32,definition.integerWordsU32,definition.slab,definition) ?: return null
             val identity = "composed-source-proof-v5:${definition.capturedIdentity}:${definition.layout.composedBindingLayoutHash}:" +
                 "${graph.canonicalIdentity}:${definition.numericWordsF32Bits}:${definition.integerWordsU32}:" +
                 "${definition.slab?.canonicalIdentity}:${definition.tableRecords.mapValues { it.value.canonicalId.value }}"
@@ -192,7 +203,12 @@ internal object ColorRoundedGraphProofV1 {
     }
     fun prove(graph: ColorOperationGraphV1, words: Map<Long, Int>, tables: Map<Long,ImmutableUBytes>,
         deviceBoundsF32: RectF32? = null, integers: Map<Long,UInt> = emptyMap(),
-        stopSlab: GradientStopSlabPlanV1? = null): List<ColorBranchFactV1>? = try {
+        stopSlab: GradientStopSlabPlanV1? = null,
+        composed: PreparedComposedSourceV5? = null): List<ColorBranchFactV1>? = try {
+        fun imageUpload(read: ImageNumericOperationGraphV1.TexelRead): ImageUploadPlanV1 = when(val resource=read.resource) {
+            is ImageNumericOperationGraphV1.TexelResource.Legacy -> resource.upload
+            is ImageNumericOperationGraphV1.TexelResource.Logical -> requireNotNull(composed).resolveImage(read).upload
+        }
         // Numeric slots and packed-byte spans are disjoint. A finite-looking U32
         // Table word must never gain permission to be interpreted as a coefficient.
         tables.forEach { (offset, table) ->
@@ -214,7 +230,8 @@ internal object ColorRoundedGraphProofV1 {
             fun value(n: ColorOperationGraphV1.Scalar) = evaluate(n, conditions)
             fun imageIndex(read: ImageNumericOperationGraphV1.TexelRead,x: Boolean): IntRange {
                 val base = value(if (x) read.baseX else read.baseY)
-                val dimension = if (x) read.upload.widthI32 else read.upload.heightI32
+                val upload=imageUpload(read)
+                val dimension = if (x) upload.widthI32 else upload.heightI32
                 require(value(if (x) read.width else read.height) == exact(dimension.toFloat()))
                 require(base.lowerF64 == kotlin.math.floor(base.lowerF64) && base.upperF64 == kotlin.math.floor(base.upperF64))
                 val offset = if (x) read.offsetXI32 else read.offsetYI32
@@ -241,18 +258,19 @@ internal object ColorRoundedGraphProofV1 {
                 return low..high
             }
             fun imageValues(read: ImageNumericOperationGraphV1.TexelRead,channelI32: Int): List<ColorBoundsV1> {
-                val xs = imageAddressRange(imageIndex(read,true),read.upload.widthI32,read.graph.tileModes.x)
-                val ys = imageAddressRange(imageIndex(read,false),read.upload.heightI32,read.graph.tileModes.y)
+                val upload=imageUpload(read)
+                val xs = imageAddressRange(imageIndex(read,true),upload.widthI32,read.tileModes.x)
+                val ys = imageAddressRange(imageIndex(read,false),upload.heightI32,read.tileModes.y)
                 val selected = linkedSetOf<Int>()
                 val constraints = conditions.entries.filter { (key,_) ->
                     key is ColorOperationGraphV1.Scalar.ImageEncodedComponent && key.read === read }
                 fun unorm(code: Int): ColorBoundsV1 = if (code == 0 || code == 255) exact(if (code == 0) 0f else 1f)
                     else rounded(Math.nextDown(code.toDouble()/255.0),Math.nextUp(code.toDouble()/255.0))
                 for (yI32 in ys) for (xI32 in xs) {
-                    val offsetI64 = Math.addExact(Math.multiplyExact(yI32.toLong(),read.upload.logicalRowBytesI64),
-                        Math.multiplyExact(xI32.toLong(),read.upload.logicalFormat.bytesPerPixel.toLong()))
-                    fun code(channel: Int): Int = if (read.upload.physicalFormat == ImagePhysicalFormatV1.R8_UNORM && channel != 0)
-                        if (channel == 3) 255 else 0 else read.upload.logicalByteU8(Math.addExact(offsetI64,channel.toLong()))
+                    val offsetI64 = Math.addExact(Math.multiplyExact(yI32.toLong(),upload.logicalRowBytesI64),
+                        Math.multiplyExact(xI32.toLong(),upload.logicalFormat.bytesPerPixel.toLong()))
+                    fun code(channel: Int): Int = if (upload.physicalFormat == ImagePhysicalFormatV1.R8_UNORM && channel != 0)
+                        if (channel == 3) 255 else 0 else upload.logicalByteU8(Math.addExact(offsetI64,channel.toLong()))
                     if (constraints.all { (key,bounds) ->
                         val actual = unorm(code((key as ColorOperationGraphV1.Scalar.ImageEncodedComponent).channelI32))
                         actual.lowerF64 <= bounds.upperF64 && bounds.lowerF64 <= actual.upperF64 }) selected += code(channelI32)
@@ -339,7 +357,7 @@ internal object ColorRoundedGraphProofV1 {
                     // First validate every actual emitted operation. A relational
                     // enclosure cannot rescue an undefined kernel, read or divide.
                     val ordinary = value(region.outputs[node.channelI32])
-                    val mask = ImageNumericOperationGraphV1.TexelOperation.RETURN_SCALAR_MASK in region.graph.texelOperations()
+                    val mask = region.colorAlpha.channelOrder == ImageChannelOrderV1.ALPHA
                     if (node.channelI32 != 3 && !mask) ordinary else {
                         fun magnitude(bounds: ColorBoundsV1) = maxOf(kotlin.math.abs(bounds.lowerF64),kotlin.math.abs(bounds.upperF64))
                         fun product(a: ColorBoundsV1,b: ColorBoundsV1): ColorBoundsV1 {
@@ -348,7 +366,7 @@ internal object ColorRoundedGraphProofV1 {
                             return ColorBoundsV1(Math.nextDown(corners.min()),Math.nextUp(corners.max()))
                         }
                         fun axis(weights: List<ColorOperationGraphV1.Scalar>,distances: List<ColorOperationGraphV1.Scalar>): Pair<ColorBoundsV1,Double> {
-                            val linear = region.graph.sampling == ImageSamplingPlanV1.Linear
+                            val linear = region.isLinear
                             require(weights.size == if (linear) 2 else 4)
                             require(distances.size == if (linear) 1 else 4)
                             distances.forEachIndexed { index,distance ->
@@ -421,8 +439,9 @@ internal object ColorRoundedGraphProofV1 {
                         return if (range.last < 0 || range.first >= dimension) exact(0f)
                         else if (range.first >= 0 && range.last < dimension) exact(1f) else ColorBoundsV1(0.0,1.0)
                     }
-                    val a = within(x,node.read.upload.widthI32,node.read.graph.tileModes.x)
-                    val b = within(y,node.read.upload.heightI32,node.read.graph.tileModes.y)
+                    val upload=imageUpload(node.read)
+                    val a = within(x,upload.widthI32,node.read.tileModes.x)
+                    val b = within(y,upload.heightI32,node.read.tileModes.y)
                     ColorBoundsV1(a.lowerF64*b.lowerF64,a.upperF64*b.upperF64)
                 }
                 is ColorOperationGraphV1.Scalar.ImageIntegerOffset -> {

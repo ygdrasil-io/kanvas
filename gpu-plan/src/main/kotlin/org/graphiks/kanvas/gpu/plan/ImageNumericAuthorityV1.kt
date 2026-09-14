@@ -341,7 +341,7 @@ public class ImageNumericAuthorityV1 private constructor(
          * W5a/W5d child has its own finite source proof. These coarse bounds prove finiteness,
          * not final bytes.
          */
-        private fun provesFiniteTexelDomain(color: ImageColorAlphaPlanV1, upload: ImageUploadPlanV1): Boolean {
+        internal fun provesFiniteTexelDomain(color: ImageColorAlphaPlanV1, upload: ImageUploadPlanV1): Boolean {
             if (color.alphaType !in setOf(org.graphiks.kanvas.render.ir.ImageAlphaType.OPAQUE,
                     org.graphiks.kanvas.render.ir.ImageAlphaType.PREMUL, org.graphiks.kanvas.render.ir.ImageAlphaType.UNPREMUL)) return false
             return when (color.channelOrder) {

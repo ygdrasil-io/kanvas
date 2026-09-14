@@ -44,6 +44,9 @@ internal interface GPUW5aGeometryPipelineTemplateProvider {
 }
 
 /** Exact V2 source partition; historical geometry operands/commands keep their original ABI. */
+internal class GPUW5gImageLeaseV5(val image: org.graphiks.kanvas.gpu.plan.ComposedImageResourceV5,
+    val lease: GPUW5eDecodedImageSessionCache.Lease)
+
 internal class GPUW5aNativeSourceBindingV2(
     val drawOrdinalI32: Int,
     val source: W5aPacketMaterialSourceV2,
@@ -54,7 +57,9 @@ internal class GPUW5aNativeSourceBindingV2(
     val destinationGroupV3: GPUPreparedNativeBindGroupOperand? = null,
     val coverageGroupV4: GPUPreparedNativeBindGroupOperand? = null,
     val imageLeaseV3: GPUW5eDecodedImageSessionCache.Lease? = null,
+    composedImagesV5: List<GPUW5gImageLeaseV5> = emptyList(),
 ) {
+    val composedImagesV5: List<GPUW5gImageLeaseV5> = java.util.Collections.unmodifiableList(ArrayList(composedImagesV5))
     init {
         require(drawOrdinalI32 >= 0 && byteCapacityI64 == source.stage.uniformByteCountI64)
         require(pipeline.deviceGeneration == bindGroup.deviceGeneration)
@@ -102,6 +107,12 @@ internal fun validatesW5aSourcePartitionV2(framePlan: GPUFramePlan, payload: GPU
                     (binding.imageLeaseV3 == null || source.second.stage.imageV3?.let {
                         binding.imageLeaseV3.matches(it.cacheRequest, payload.identity.deviceGeneration.value)
                     } == true) &&
+                    binding.composedImagesV5.map { it.image.resource } == source.second.stage.composedLayout?.resources.orEmpty().filter { it.texture != null } &&
+                    binding.composedImagesV5.all { image ->
+                        source.second.stage.composedProof?.authenticatesComposedImage(image.image.resource,image.image.upload) == true &&
+                            image.lease.matches(image.image.upload.cacheRequest,payload.identity.deviceGeneration.value) &&
+                            owners.any { it.owns(image.lease) }
+                    } &&
                     binding.pipeline.deviceGeneration == payload.identity.deviceGeneration &&
                     binding.bindGroup.deviceGeneration == payload.identity.deviceGeneration &&
                     owners.any { it.owns(binding.buffer) && it.owns(binding.pipeline.pipeline) && it.owns(binding.bindGroup.bindGroup) &&
@@ -250,6 +261,10 @@ private fun composeSource(template: GPUW5aGeometryPipelineTemplate, source: W5aP
                         layout.members.map { member -> member.offset } == listOf(0,16) &&
                         layout.members.all { member -> member.size == 16 && member.alignment == 16 }
                 }
+            } ?: true) && (expected.composedResource?.texture?.let { texture ->
+                texture.textureViewDimensionTagU32 == 1u && texture.textureSampleTypeTagU32 == 1u && !texture.multisampled &&
+                    it.resourceKind == "sampledTexture" && it.sampleType == "float" && it.viewDimension == "2d" &&
+                    it.access == "read" && it.storageFormat == null
             } ?: true) } } &&
         composed.bindings.size == original.bindings.size + manifest.size + (if (destination == null) 0 else if (destination.sealedW5b?.compositionAbiI32 == 4) 3 else 2) && material != null &&
         material.binding == 0 && material.resourceKind == "uniformBuffer" &&
@@ -285,7 +300,7 @@ internal fun materializeW5aSourcePartitionV2(
         renders.values.flatMap { it.drawPackets }.mapNotNull { it.materialSourcePartitionV3()?.stage }
             .filter { it.composedLayout != null && it.gradientStopSlab != null }.forEach { stage ->
                 require(stage.gradientStopSlab === stopSlabs.first()) { "V5 must retain the exact shared frame slab owner" }
-                stage.bindingManifest.mapNotNull { it.composedResource }.forEach {
+                stage.bindingManifest.mapNotNull { it.composedResource }.filter { it.buffer != null }.forEach {
                     require(requireNotNull(stage.composedProof).authenticatesComposedStorage(it,stopSlabs.first()))
                 }
             }
@@ -301,6 +316,7 @@ internal fun materializeW5aSourcePartitionV2(
         val buffers = mutableMapOf<String, GPUBuffer>()
         val groups = mutableMapOf<Pair<String, GPUBindGroupLayout>, GPUPreparedNativeBindGroupOperand>()
         val imageLeases = mutableMapOf<String, GPUW5eDecodedImageSessionCache.Lease>()
+        val composedImageLeases=java.util.IdentityHashMap<org.graphiks.kanvas.gpu.plan.PlanCacheResourceRequest,GPUW5eDecodedImageSessionCache.Lease>()
         val destinationSnapshot = old.auxiliaryOwnedHandles.mapNotNull { it.handle as? GPUW5bDestinationSnapshotNativeV3 }.singleOrNull()
         val coverage = old.auxiliaryOwnedHandles.mapNotNull { it.handle as? GPUW5bCoverageNativeV4 }.singleOrNull()
         require(coverage == null || coverage.witness.validates(framePlan))
@@ -411,6 +427,17 @@ internal fun materializeW5aSourcePartitionV2(
                         owned.own(GPUW5eImageNativeV1.acquire(requireNotNull(imageCache), execution.cacheRequest, generation.value))
                     }
                 }
+                val composedImages=source.stage.composedLayout?.resources.orEmpty().filter { it.texture != null }.map { resource ->
+                    val proof=requireNotNull(source.stage.composedProof)
+                    val image=proof.composedImageResources.first { it.resource === resource }
+                    require(proof.authenticatesComposedImage(resource,image.upload))
+                    val request=image.upload.cacheRequest
+                    val lease=composedImageLeases.getOrPut(request) {
+                        owned.own(GPUW5eImageNativeV1.acquire(requireNotNull(imageCache),request,generation.value))
+                    }
+                    require(lease.matches(request,generation.value))
+                    GPUW5gImageLeaseV5(image,lease)
+                }
                 val group = groups.getOrPut(source.stage.canonicalIdentity to materialLayout) {
                     val entries = mutableListOf(BindGroupEntry(binding = 0u,
                         resource = BufferBinding(buffer = buffer, offset = 0uL, size = bytes.size.toULong())))
@@ -425,11 +452,18 @@ internal fun materializeW5aSourcePartitionV2(
                     }
                     imageLease?.let { entries += GPUW5eImageNativeV1.binding(it,
                         source.stage.bindingManifest.single { it.resourceKind == "sampledTexture" }.bindingI32.toUInt()) }
+                    composedImages.forEach { image ->
+                        entries += GPUW5eImageNativeV1.binding(image.lease,image.image.resource.bindingI32.toUInt())
+                    }
+                    if(source.stage.composedLayout != null) {
+                        entries.sortBy { it.binding }
+                        require(entries.map { it.binding.toInt() } == source.stage.bindingManifest.map { it.bindingI32 })
+                    }
                     GPUPreparedNativeBindGroupOperand(owned.own(device.createBindGroup(BindGroupDescriptor(
                         label = "Kanvas.w5a.source-group1-v2", layout = materialLayout, entries = entries))), generation)
                 }
                 bindings += GPUW5aNativeSourceBindingV2(ordinalI32, source, pipeline, group, buffer, bytes.size.toLong(),
-                    destinationGroup.takeIf { destination != null }, coverageGroup.takeIf { scalar }, imageLease)
+                    destinationGroup.takeIf { destination != null }, coverageGroup.takeIf { scalar }, imageLease,composedImages)
             }
               GPUPreparedNativeScopeOperand.Render(operand.sourceStepIndex, operand.pass, operand.commands,
                   operand.semanticPayloads, operand.operandLayout, operand.operationKind, operand.passSegment, bindings,

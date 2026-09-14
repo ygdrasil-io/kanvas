@@ -98,7 +98,9 @@ public class ImageNumericOperationGraphV1 private constructor(public val colorAl
     public val cubicScheduleIdentity: String?
     /** Actual separable sampler region; no independent bounds or replacement evaluator. */
     public class SampledRegion private constructor(
-        public val graph: ImageNumericOperationGraphV1,
+        public val topologyIdentity: String,
+        public val colorAlpha: ImageColorAlphaPlanV1,
+        public val isLinear: Boolean,
         taps: List<TexelRead>, outputs: List<ColorOperationGraphV1.Scalar>,
         weightsX: List<ColorOperationGraphV1.Scalar>, weightsY: List<ColorOperationGraphV1.Scalar>,
         distancesX: List<ColorOperationGraphV1.Scalar>, distancesY: List<ColorOperationGraphV1.Scalar>,
@@ -110,7 +112,7 @@ public class ImageNumericOperationGraphV1 private constructor(public val colorAl
         public val distancesX: List<ColorOperationGraphV1.Scalar> = immutableList(distancesX)
         public val distancesY: List<ColorOperationGraphV1.Scalar> = immutableList(distancesY)
         internal fun rebase(bind: (ColorOperationGraphV1.Scalar) -> ColorOperationGraphV1.Scalar,
-            read: (TexelRead) -> TexelRead): SampledRegion = SampledRegion(graph,taps.map(read),outputs.map(bind),
+            read: (TexelRead) -> TexelRead): SampledRegion = SampledRegion(topologyIdentity,colorAlpha,isLinear,taps.map(read),outputs.map(bind),
                 weightsX.map(bind),weightsY.map(bind),distancesX.map(bind),distancesY.map(bind))
         internal companion object {
             fun bind(graph: ImageNumericOperationGraphV1,taps: List<TexelRead>,outputs: List<ColorOperationGraphV1.Scalar>,
@@ -123,15 +125,26 @@ public class ImageNumericOperationGraphV1 private constructor(public val colorAl
                 val y = (0 until size).map { weights[it*size].inputs[1] }
                 fun distances(axis: List<Node>,fraction: Node?): List<ColorOperationGraphV1.Scalar> =
                     if (fraction != null) listOf(scalar(fraction)) else axis.map { scalar(it.inputs.single()) }
-                return SampledRegion(graph,taps,outputs,x.map(scalar),y.map(scalar),
+                return SampledRegion(graph.topologyIdentity,graph.colorAlpha,graph.sampling == ImageSamplingPlanV1.Linear,
+                    taps,outputs,x.map(scalar),y.map(scalar),
                     distances(x,graph.fractionXF32),distances(y,graph.fractionYF32))
             }
         }
     }
-    /** Addressed raw operands retain the exact original sampler and captured upload. */
-    public class TexelRead internal constructor(
-        public val graph: ImageNumericOperationGraphV1,
-        public val upload: ImageUploadPlanV1,
+    /** Legacy reads retain the upload; V5 reads retain only a declared logical resource. */
+    public sealed interface TexelResource {
+        public class Legacy internal constructor(public val upload: ImageUploadPlanV1) : TexelResource
+        public class Logical internal constructor(public val ownerNodeIndexI32: Int,
+            public val logicalSlotI32: Int) : TexelResource {
+            init { require(ownerNodeIndexI32 >= 0 && logicalSlotI32 >= 0) { W5gPlanDiagnostics.Schema } }
+        }
+    }
+    public class TexelRead private constructor(
+        public val topologyIdentity: String,
+        public val colorAlpha: ImageColorAlphaPlanV1,
+        public val tileModes: ImageTileModePlanV1,
+        private val decoder: ColorOperationGraphV1,
+        public val resource: TexelResource,
         public val baseX: ColorOperationGraphV1.Scalar,
         public val baseY: ColorOperationGraphV1.Scalar,
         public val offsetXI32: Int,
@@ -139,17 +152,26 @@ public class ImageNumericOperationGraphV1 private constructor(public val colorAl
         public val width: ColorOperationGraphV1.Scalar,
         public val height: ColorOperationGraphV1.Scalar,
     ) {
+        internal constructor(graph: ImageNumericOperationGraphV1,upload: ImageUploadPlanV1,
+            baseX: ColorOperationGraphV1.Scalar,baseY: ColorOperationGraphV1.Scalar,
+            offsetXI32: Int,offsetYI32: Int,width: ColorOperationGraphV1.Scalar,height: ColorOperationGraphV1.Scalar) :
+            this(graph.topologyIdentity,graph.colorAlpha,graph.tileModes,graph.decodedTexelGraph(),TexelResource.Legacy(upload),
+                baseX,baseY,offsetXI32,offsetYI32,width,height)
         init { require(offsetXI32 in -1..2 && offsetYI32 in -1..2) }
-        public val identity: String = "image-raw-tap:${graph.topologyIdentity}:${upload.contentIdentity}:$offsetXI32:$offsetYI32"
+        public val identity: String = "image-raw-tap:$topologyIdentity:${when(resource) {
+            is TexelResource.Legacy -> resource.upload.contentIdentity
+            is TexelResource.Logical -> "logical:${resource.ownerNodeIndexI32}:${resource.logicalSlotI32}"
+        }}:$offsetXI32:$offsetYI32"
         internal fun rebase(x: ColorOperationGraphV1.Scalar,y: ColorOperationGraphV1.Scalar,
-            width: ColorOperationGraphV1.Scalar,height: ColorOperationGraphV1.Scalar): TexelRead =
-            TexelRead(graph,upload,x,y,offsetXI32,offsetYI32,width,height)
+            width: ColorOperationGraphV1.Scalar,height: ColorOperationGraphV1.Scalar,
+            resource: TexelResource = this.resource): TexelRead =
+            TexelRead(topologyIdentity,colorAlpha,tileModes,decoder,resource,x,y,offsetXI32,offsetYI32,width,height)
         public val encoded: List<ColorOperationGraphV1.Scalar> = immutableList(List(4) {
             ColorOperationGraphV1.Scalar.ImageEncodedComponent(this,it) })
         public val decoded: List<ColorOperationGraphV1.Scalar> = run {
             val zero = ColorOperationGraphV1.constant(0f)
-            val body = graph.decodedTexelGraph(encoded).outputs
-            if (graph.tileModes.x != ImageTileAxisModePlanV1.DECAL && graph.tileModes.y != ImageTileAxisModePlanV1.DECAL) body
+            val body = decoder.bindInput(ColorOperationGraphV1(List(4) { zero }),0L,imageEncodedInputs=encoded).outputs
+            if (tileModes.x != ImageTileAxisModePlanV1.DECAL && tileModes.y != ImageTileAxisModePlanV1.DECAL) body
             else {
                 val branch = ColorOperationGraphV1.BranchVector(ColorOperationGraphV1.Predicate.Equal(
                     ColorOperationGraphV1.Scalar.ImageTexelValid(this),ColorOperationGraphV1.constant(1f)),body,List(4) { zero })

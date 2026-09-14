@@ -237,11 +237,18 @@ internal class MaterialSourceConstructionV4 private constructor(
         val rangeIdentity: String = "stop-domain-v4:$interpolation:$recipeIdentity:${stops.sequenceIdentity}"
     }
 
+    internal class ImageChildMetadata(val original: MaterialNode.ImageSample,
+        val description: EffectiveMaterialPlanner.ImageSampleDescription,val coordinates: MaterialCoordinatePlanV2) {
+        val headerBytesI64: Long = ImageSourceLayoutV3(false,false,false,9,false).imageUniformByteCountI64
+        val uniformBytesI64: Long = Math.addExact(headerBytesI64,coordinates.uniformByteSizeI64)
+    }
+
     internal class ComposedMetadata(nodes: List<Node>, val layout: ComposedBindingLayoutV1) {
         val nodes: List<Node> = immutableList(nodes)
         class Node(val ownerNodeIndexI32: Int, val original: MaterialNode, children: List<MaterialEvaluationRefV5>,
             val offsetBytesI32: Int, val filter: ColorFilterExecutionPlanV1?,
-            val gradientSource: MaterialSourceConstructionV4? = null) {
+            val gradientSource: MaterialSourceConstructionV4? = null,
+            val imageSource: ImageChildMetadata? = null) {
             val children: List<MaterialEvaluationRefV5> = immutableList(children)
             val topologyIdentity: String = when (original) {
                 MaterialNode.Transparent -> "transparent"
@@ -252,6 +259,9 @@ internal class MaterialSourceConstructionV4 private constructor(
                 is MaterialNode.WithWorkingColorSpace -> "working:${original.interpolation}"
                 is MaterialNode.WithLocalMatrix -> "local-matrix"
                 is MaterialNode.CoordClamp -> "coord-clamp"
+                is MaterialNode.ImageSample -> requireNotNull(imageSource).let {
+                    "image:${it.description.color}:${it.description.sampling.topologyId}:${it.description.tileModes.topologyId}:${it.coordinates.topologyIdentity}"
+                }
                 is MaterialNode.LinearGradient,is MaterialNode.RadialGradient,is MaterialNode.SweepGradient,
                 is MaterialNode.ConicalGradient -> requireNotNull(gradientSource).let {
                     "gradient:${it.gradient!!.family}:${it.gradient.interpolation}:${it.gradient.tile.contractId}:" +
@@ -282,7 +292,8 @@ internal class MaterialSourceConstructionV4 private constructor(
             data class Context(val coordinateNodes: List<MaterialNode>,val domain: ColorInterpolation?)
             data class Field(val owner: Int,val ordinal: Int,val bytes: Long)
             data class Draft(val owner: Int,val original: MaterialNode,val children: List<MaterialEvaluationRefV5>,
-                val field: Field?,val filter: ColorFilterExecutionPlanV1?,val gradient: MaterialSourceConstructionV4?)
+                val field: Field?,val filter: ColorFilterExecutionPlanV1?,val gradient: MaterialSourceConstructionV4?,
+                val image: ImageChildMetadata?)
             val completed = java.util.IdentityHashMap<MaterialNode,MutableMap<Context,MaterialEvaluationRefV5>>()
             val ownerIndices = java.util.IdentityHashMap<MaterialNode,Int>()
             val scalarFields = java.util.IdentityHashMap<MaterialNode,Field>()
@@ -348,6 +359,20 @@ internal class MaterialSourceConstructionV4 private constructor(
                     is MaterialNode.ConicalGradient -> { validatePendingGradient(node); gradientSource(node,context) }
                     else -> null
                 }
+                val image = (node as? MaterialNode.ImageSample)?.let { sample ->
+                    val description=EffectiveMaterialPlanner.describeImageSample(sample,false)
+                    description.validateUploadMetadata()
+                    val coordinates=when(val built=MaterialCoordinatePlanV2.fromCtmAndNodes(draw.transform,
+                        context.coordinateNodes.map { when(it) {
+                            is MaterialNode.WithLocalMatrix -> CoordinateNodeV2.LocalMatrix(it.matrix)
+                            is MaterialNode.CoordClamp -> CoordinateNodeV2.CoordClamp(it.copySubset())
+                            else -> error(W5gPlanDiagnostics.Schema)
+                        } })) {
+                        is MaterialCoordinatePlanV2.Build.Ready -> built.coordinates
+                        is MaterialCoordinatePlanV2.Build.Refused -> throw IllegalArgumentException(built.code)
+                    }
+                    ImageChildMetadata(sample,description,coordinates)
+                }
                 val bytes = when(node) {
                     MaterialNode.Transparent, is MaterialNode.Solid, is MaterialNode.Opacity -> 16L
                     is MaterialNode.WithColorFilter -> requireNotNull(filter).dynamicByteCountI64
@@ -355,13 +380,14 @@ internal class MaterialSourceConstructionV4 private constructor(
                     is MaterialNode.WithLocalMatrix,is MaterialNode.CoordClamp -> 0L
                     is MaterialNode.LinearGradient,is MaterialNode.RadialGradient,is MaterialNode.SweepGradient,
                     is MaterialNode.ConicalGradient -> requireNotNull(gradient).uniformBytesI64()
+                    is MaterialNode.ImageSample -> requireNotNull(image).uniformBytesI64
                     else -> {
                         validatePendingGradient(node)
                         throw IllegalArgumentException(W5gPlanDiagnostics.Unpromoted)
                     }
                 }
                 if (node is MaterialNode.Opacity) require(node.alpha.isFinite() && node.alpha in 0f..1f) { W5aPlanDiagnostics.InvalidOpacity }
-                val field = if(bytes == 0L) null else if(gradient != null) Field(owner,fields.size,bytes).also { fields += it }
+                val field = if(bytes == 0L) null else if(gradient != null || image != null) Field(owner,fields.size,bytes).also { fields += it }
                     else scalarFields.getOrPut(node) { Field(owner,fields.size,bytes).also { fields += it } }
                 val children = when(node) {
                     is MaterialNode.Blend -> listOf(visit(node.dst,context),visit(node.src,context))
@@ -375,7 +401,7 @@ internal class MaterialSourceConstructionV4 private constructor(
                         context.copy(coordinateNodes=context.coordinateNodes+node)))
                     else -> emptyList()
                 }
-                drafts += Draft(owner,node,children,field,filter,gradient)
+                drafts += Draft(owner,node,children,field,filter,gradient,image)
                 active.remove(node)
                 return MaterialEvaluationRefV5(drafts.lastIndex).also { completed.getOrPut(node) { mutableMapOf() }[context] = it }
             }
@@ -397,10 +423,14 @@ internal class MaterialSourceConstructionV4 private constructor(
                 }
             }
             drafts.forEach { nodes += ComposedMetadata.Node(it.owner,it.original,it.children,
-                it.field?.let(offsets::getValue) ?: 0,it.filter,it.gradient) }
+                it.field?.let(offsets::getValue) ?: 0,it.filter,it.gradient,it.image) }
             val firstGradientOwner=nodes.filter { it.gradientSource?.hasGradientStorage == true }.minOfOrNull { it.ownerNodeIndexI32 }
-            val resources=firstGradientOwner?.let { listOf(ComposedBindingLayoutV1.Resource(it,0,1,1,2u,1u,
-                buffer=ComposedBindingLayoutV1.Buffer(2u,32L))) }.orEmpty()
+            val resourceOwners=nodes.filter { it.imageSource != null }.map { it.ownerNodeIndexI32 }.distinct() + listOfNotNull(firstGradientOwner)
+            val resources=resourceOwners.sorted().mapIndexed { index,owner ->
+                if(owner == firstGradientOwner) ComposedBindingLayoutV1.Resource(owner,0,1,index+1,2u,1u,
+                    buffer=ComposedBindingLayoutV1.Buffer(2u,32L))
+                else ComposedBindingLayoutV1.Resource(owner,0,1,index+1,2u,2u,texture=ComposedBindingLayoutV1.Texture(1u,1u))
+            }
             val metadata = ComposedMetadata(nodes,ComposedBindingLayoutV1(mappings,cursor,resources))
             return MaterialSourceConstructionV4(draw.material,draw.paint,SourceCoordinatesV4.None,bounds,blend,
                 "captured-composed-v5:${java.util.UUID.randomUUID()}",null,null,composed=metadata)

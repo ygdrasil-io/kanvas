@@ -170,6 +170,10 @@ internal object W5fColorCpuOracle {
                 bound(py,shader.subset.top,shader.subset.bottom),working,emptyList())
         }
         is Shader.Blend -> blend(shaderSource(shader.src,x,y,working,pending),shaderSource(shader.dst,x,y,working,pending),shader.mode)
+        is Shader.Image -> {
+            val (px,py)=mapSegment(x,y,pending)
+            sampledImage(shader.image,shader.sampling,px,py,shader.tileModeX,shader.tileModeY)
+        }
         is Shader.LinearGradient -> {
             val (px,py)=mapSegment(x,y,pending)
             val dxF32=shader.end.x-shader.start.x; val dyF32=shader.end.y-shader.start.y
@@ -355,6 +359,11 @@ internal object W5fColorCpuOracle {
 
     private fun sampledImage(image: org.graphiks.kanvas.image.Image,sampling: org.graphiks.kanvas.paint.SamplingOptions,
         pointF32: org.graphiks.math.geometry.Point2F32,tileX: org.graphiks.kanvas.paint.TileMode,
+        tileY: org.graphiks.kanvas.paint.TileMode): Array<Interval> =
+        sampledImage(image,sampling,Interval.input(pointF32.x),Interval.input(pointF32.y),tileX,tileY)
+
+    private fun sampledImage(image: org.graphiks.kanvas.image.Image,sampling: org.graphiks.kanvas.paint.SamplingOptions,
+        sourceX: Interval,sourceY: Interval,tileX: org.graphiks.kanvas.paint.TileMode,
         tileY: org.graphiks.kanvas.paint.TileMode): Array<Interval> {
         val bytes = requireNotNull(image.pixels)
         val mask = image.colorType == org.graphiks.kanvas.image.ColorType.ALPHA_8
@@ -385,16 +394,18 @@ internal object W5fColorCpuOracle {
             Array(4) { if(it==3) alpha else if(attachment) linear[it] else mul(linear[it],alpha) }
         }
         }
-        if (sampling == org.graphiks.kanvas.paint.SamplingOptions.NEAREST)
-            return texel(kotlin.math.floor(pointF32.x).toInt(),kotlin.math.floor(pointF32.y).toInt())
-        val x = sub(Interval.input(pointF32.x),Interval.input(.5f))
-        val y = sub(Interval.input(pointF32.y),Interval.input(.5f))
         fun bases(value: Interval): IntRange {
             val first = value.lower.setScale(0,RoundingMode.FLOOR).intValueExact()
             val last = value.upper.setScale(0,RoundingMode.FLOOR).intValueExact()
             require(last.toLong()-first.toLong() <= 1L)
             return first..last
         }
+        if (sampling == org.graphiks.kanvas.paint.SamplingOptions.NEAREST) {
+            val alternatives=bases(sourceY).flatMap { y -> bases(sourceX).map { x -> texel(x,y) } }
+            return Array(4) { channel -> hull(*alternatives.map { it[channel] }.toTypedArray()) }
+        }
+        val x = sub(sourceX,Interval.input(.5f))
+        val y = sub(sourceY,Interval.input(.5f))
         fun cell(value: Interval,base: Int) = Interval(maxOf(value.lower,BigDecimal(base)),
             minOf(value.upper,BigDecimal(base.toLong()+1)))
         val alternatives = mutableListOf<Array<Interval>>()

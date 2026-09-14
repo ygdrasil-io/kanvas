@@ -28,22 +28,31 @@ internal fun GPUFramePlan.w5aMaterialAllocationsV2(): List<GPUFrameMemoryAllocat
             )
         } }
 
-private fun GPUFramePlan.w5eImageAllocationsV3(limits: GPULimits): List<GPUFrameMemoryAllocation> =
-    steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+private fun GPUFramePlan.w5eImageAllocationsV3(limits: GPULimits): List<GPUFrameMemoryAllocation> {
+    val stages=steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+        .mapNotNull { it.materialSourcePartitionV3()?.stage }
+    val legacy=steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
         .mapNotNull { it.materialSourcePartitionV3()?.stage?.imageV3?.cacheRequest }
-        .distinctBy { it.canonicalPhysicalIdentity }.flatMap { request ->
+        .distinctBy { it.canonicalPhysicalIdentity }
+    val seen=java.util.IdentityHashMap<org.graphiks.kanvas.gpu.plan.PlanCacheResourceRequest,Unit>()
+    val composed=stages.flatMap { stage -> stage.composedProof?.composedImageResources.orEmpty().map { image ->
+        require(requireNotNull(stage.composedProof).authenticatesComposedImage(image.resource,image.upload))
+        image.upload.cacheRequest
+    } }.filter { seen.put(it,Unit) == null }
+    return (legacy.map { it to "w5e" } + composed.mapIndexed { index,request -> request to "w5g.$index" }).flatMap { (request,prefix) ->
             val alignmentI64 = lcmW5eAlignmentI64(256L, limits.copyBytesPerRowAlignment)
             val logicalRowI64 = Math.multiplyExact(request.widthI32.toLong(), request.format.bytesPerPixelI32.toLong())
             val rowI64 = Math.addExact(logicalRowI64, (alignmentI64 - logicalRowI64 % alignmentI64) % alignmentI64)
             listOf(
-                GPUFrameMemoryAllocation("w5e.image-v3.${request.canonicalPhysicalIdentity}", GPUFrameMemoryCategory.ReusableScratch,
+                GPUFrameMemoryAllocation("$prefix.image-v3.${request.canonicalPhysicalIdentity}", GPUFrameMemoryCategory.ReusableScratch,
                     request.byteSizeI64, GPUFrameMemoryResourceKind.Texture2D, GPUPixelBounds(0, 0, request.widthI32, request.heightI32),
                     0, steps.size.coerceAtLeast(1)),
-                GPUFrameMemoryAllocation("w5e.upload-v3.${request.canonicalPhysicalIdentity}", GPUFrameMemoryCategory.ReusableScratch,
+                GPUFrameMemoryAllocation("$prefix.upload-v3.${request.canonicalPhysicalIdentity}", GPUFrameMemoryCategory.ReusableScratch,
                     Math.multiplyExact(rowI64, request.heightI32.toLong()), GPUFrameMemoryResourceKind.Buffer, null,
                     0, steps.size.coerceAtLeast(1)),
             )
         }
+}
 
 internal fun GPUFramePlan.w5aCombinedMemoryBudgetV2(limits: GPULimits): GPUFrameMemoryBudgetPlan =
     GPUFrameMemoryBudgetPlanner.plan(GPUFrameMemoryBudgetRequest(
@@ -70,7 +79,7 @@ private fun GPUFramePlan.w5gDeclaredStopAllocationsV5(): List<GPUFrameMemoryAllo
     return slabs.mapNotNull { slab ->
         stages.forEach { stage ->
             require(stage.gradientStopSlab === slab)
-            requireNotNull(stage.composedLayout).resources.forEach { resource ->
+            requireNotNull(stage.composedLayout).resources.filter { it.buffer != null }.forEach { resource ->
                 require(requireNotNull(stage.composedProof).authenticatesComposedStorage(resource,slab))
             }
         }

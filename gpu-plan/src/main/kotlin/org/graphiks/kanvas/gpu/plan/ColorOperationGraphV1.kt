@@ -212,7 +212,7 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
                 is Scalar.Sin -> "sin:${identity(node.value)}"
                 is Scalar.Cos -> "cos:${identity(node.value)}"
                 is Scalar.ImageEncodedInput -> "image-encoded-input:${node.channelI32}"
-                is Scalar.ImageSampleComponent -> "image-sampled-region:${node.region.graph.topologyIdentity}:" +
+                is Scalar.ImageSampleComponent -> "image-sampled-region:${node.region.topologyIdentity}:" +
                     (node.region.outputs+node.region.weightsX+node.region.weightsY+node.region.distancesX+node.region.distancesY)
                         .joinToString(",",transform=::identity)+":${node.channelI32}"
                 is Scalar.ImageEncodedComponent -> "image-encoded-component:${node.read.identity}:" +
@@ -238,7 +238,10 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
         }
         "color-operation-v1:$contractId:${outputs.joinToString(";", transform = ::identity)}"
     }
-    internal fun bindInput(prefix: ColorOperationGraphV1, filterWordOffsetU32: Long): ColorOperationGraphV1 {
+    internal fun bindInput(prefix: ColorOperationGraphV1, filterWordOffsetU32: Long,
+        imageEncodedInputs: List<Scalar>? = null,
+        imageResource: ImageNumericOperationGraphV1.TexelResource.Logical? = null,
+        deviceCoordinates: List<Scalar>? = null): ColorOperationGraphV1 {
         val bound = java.util.IdentityHashMap<Scalar, Scalar>()
         val selections = java.util.IdentityHashMap<GradientStopSelection, GradientStopSelection>()
         val vectors = java.util.IdentityHashMap<BranchVector,BranchVector>()
@@ -256,18 +259,18 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
             }
             return bound[value] ?: when (value) {
             is Scalar.InputLinearPremul -> prefix.outputs[value.channelI32]
-            is Scalar.ImageEncodedInput -> value
+            is Scalar.ImageEncodedInput -> imageEncodedInputs?.get(value.channelI32) ?: value
             is Scalar.ImageSampleComponent -> Scalar.ImageSampleComponent(imageRegions.getOrPut(value.region) {
                 value.region.rebase(::bind) { read -> imageReads.getOrPut(read) {
-                    read.rebase(bind(read.baseX),bind(read.baseY),bind(read.width),bind(read.height)) } }
+                    read.rebase(bind(read.baseX),bind(read.baseY),bind(read.width),bind(read.height),imageResource ?: read.resource) } }
             },value.channelI32)
             is Scalar.ImageEncodedComponent -> Scalar.ImageEncodedComponent(imageReads.getOrPut(value.read) {
-                value.read.rebase(bind(value.read.baseX),bind(value.read.baseY),bind(value.read.width),bind(value.read.height)) },value.channelI32)
+                value.read.rebase(bind(value.read.baseX),bind(value.read.baseY),bind(value.read.width),bind(value.read.height),imageResource ?: value.read.resource) },value.channelI32)
             is Scalar.ImageTexelValid -> Scalar.ImageTexelValid(imageReads.getOrPut(value.read) {
-                value.read.rebase(bind(value.read.baseX),bind(value.read.baseY),bind(value.read.width),bind(value.read.height)) })
+                value.read.rebase(bind(value.read.baseX),bind(value.read.baseY),bind(value.read.width),bind(value.read.height),imageResource ?: value.read.resource) })
             is Scalar.ImageIntegerOffset -> Scalar.ImageIntegerOffset(bind(value.base),value.offsetI32)
             Scalar.DiscardF32 -> value
-            is Scalar.DevicePositionF32 -> value
+            is Scalar.DevicePositionF32 -> deviceCoordinates?.get(value.channelI32) ?: value
             is Scalar.DynamicF32 -> Scalar.DynamicF32(Math.addExact(value.wordOffsetU32, filterWordOffsetU32))
             is Scalar.ConstantF32 -> value
             is Scalar.Add -> Scalar.Add(bind(value.a), bind(value.b))

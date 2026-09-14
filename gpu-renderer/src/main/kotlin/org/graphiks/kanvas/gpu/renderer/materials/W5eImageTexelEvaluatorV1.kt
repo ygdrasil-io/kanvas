@@ -6,7 +6,7 @@ import org.graphiks.kanvas.gpu.plan.ImageNumericOperationGraphV1.TexelOperation
 /** Sole W5e sampling/color emitter. Task 3 extends this graph consumer, not a parallel sampler. */
 internal object W5eImageTexelEvaluatorV1 {
     /** Same checked integer address schedule for original and filtered image consumers. */
-    fun addressDeclarations(graph: ImageNumericOperationGraphV1): String {
+    fun addressDeclarations(graph: ImageNumericOperationGraphV1, functionName: String = "w5e_address_texel"): String {
         fun axis(name: String, index: String, dimension: String, mode: ImageTileAxisModePlanV1): String = when (mode) {
             ImageTileAxisModePlanV1.CLAMP -> "let a$name = clamp($index, 0, $dimension - 1);"
             ImageTileAxisModePlanV1.REPEAT -> "let a$name = (($index % $dimension) + $dimension) % $dimension;"
@@ -15,7 +15,7 @@ internal object W5eImageTexelEvaluatorV1 {
             ImageTileAxisModePlanV1.DECAL -> "if ($index < 0 || $index >= $dimension) { return vec3<i32>(0); }\nlet a$name = $index;"
         }
         return """
-            fn w5e_address_texel(ix: i32, iy: i32, width: i32, height: i32) -> vec3<i32> {
+            fn $functionName(ix: i32, iy: i32, width: i32, height: i32) -> vec3<i32> {
                 ${axis("x","ix","width",graph.tileModes.x)}
                 ${axis("y","iy","height",graph.tileModes.y)}
                 return vec3<i32>(ax, ay, 1);

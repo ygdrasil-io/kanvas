@@ -42,9 +42,18 @@ internal class W5aMaterialSourceStage private constructor(
     val composedLayout = composedProof?.composedBindingLayout
     val imageLayoutV3 = requirements.imageLayoutV3
     val bindingManifest: List<Binding> = listOf(Binding(0, "uniformBuffer")) + (composedLayout?.resources?.map {
-        require(it.kindTagU32 == 1u && gradientStopSlab != null &&
-            requireNotNull(composedProof).authenticatesComposedStorage(it,gradientStopSlab))
-        Binding(it.bindingI32,"storageBuffer",it)
+        when(it.kindTagU32) {
+            1u -> {
+                require(gradientStopSlab != null && requireNotNull(composedProof).authenticatesComposedStorage(it,gradientStopSlab))
+                Binding(it.bindingI32,"storageBuffer",it)
+            }
+            2u -> {
+                val image=requireNotNull(composedProof).composedImageResources.first { image -> image.resource === it }
+                require(composedProof.authenticatesComposedImage(it,image.upload))
+                Binding(it.bindingI32,"sampledTexture",it)
+            }
+            else -> error("Invalid composed resource")
+        }
     } ?: (
         (if (gradientStopSlab == null) emptyList() else listOf(Binding(imageLayoutV3?.gradientStorageBindingU32?.toInt() ?: 1, "storageBuffer"))) +
         (imageLayoutV3?.let { listOf(Binding(it.imageTextureBindingU32.toInt(), "sampledTexture")) } ?: emptyList())))
@@ -64,7 +73,7 @@ internal class W5aMaterialSourceStage private constructor(
                 !requirements.canonicalIdentity.endsWith("material-source-footprint-v4:${proof.canonicalIdentity}")) return null
             val wordsI64 = requirements.uniformByteCountI64 / 16L
             if (requirements.uniformByteCountI64 % 16L != 0L || wordsI64 !in 1L..Int.MAX_VALUE.toLong()) return null
-            val code = W5fColorOperationEmitterV1.emit(proof.copyOperationGraph(),"vec4<f32>(0.0)",0L)
+            val code = W5fColorOperationEmitterV1.emit(proof.copyOperationGraph(),"vec4<f32>(0.0)",0L,composedProof=proof)
             val slab = proof.gradientStopSlab
             if (slab != null && slab !== table.gradientStopSlab) return null
             val image = proof.imageExecution
@@ -73,17 +82,29 @@ internal class W5aMaterialSourceStage private constructor(
                 requirements.imageLayoutV3?.structuralIdentity != imageLayout?.structuralIdentity) return null
             val stopDeclaration = if (slab == null) "" else """
                 struct GradientStopV1 { positionAndReserved: vec4<f32>, straightColor: vec4<f32>, }
-                @group(1) @binding(${proof.composedBindingLayout?.resources?.single()?.bindingI32 ?: imageLayout?.gradientStorageBindingU32 ?: 1u}) var<storage, read> w5cStops: array<GradientStopV1>;
+                @group(1) @binding(${proof.composedBindingLayout?.resources?.single { it.buffer != null }?.bindingI32 ?: imageLayout?.gradientStorageBindingU32 ?: 1u}) var<storage, read> w5cStops: array<GradientStopV1>;
             """.trimIndent()
             val imageDeclaration = if (image == null) "" else """
                 @group(1) @binding(${requireNotNull(imageLayout).imageTextureBindingU32}) var w5eTexture: texture_2d<f32>;
                 ${W5eImageTexelEvaluatorV1.addressDeclarations(image.numericAuthority.graph)}
             """.trimIndent()
+            val composedTextures=proof.composedBindingLayout?.resources.orEmpty().filter { it.texture != null }.joinToString("\n") { row ->
+                "@group(1) @binding(${row.bindingI32}) var w5gTexture${row.bindingI32}: texture_2d<f32>;"
+            }
+            val composedAddresses=proof.composedImageResources.distinctBy {
+                "${it.resource.bindingI32}:${it.graph.tileModes.topologyId}"
+            }.joinToString("\n") {
+                require(proof.authenticatesComposedImage(it.resource,it.upload))
+                W5eImageTexelEvaluatorV1.addressDeclarations(it.graph,
+                    "w5g_address_texel_${it.resource.bindingI32}_${it.graph.tileModes.x.name.lowercase()}_${it.graph.tileModes.y.name.lowercase()}")
+            }
             return W5aMaterialSourceStage(requirements,"""
                 struct W5fMaterialBlock { words: array<vec4<u32>, ${wordsI64}>, }
                 @group(1) @binding(0) var<uniform> w5fMaterial: W5fMaterialBlock;
                 $stopDeclaration
                 $imageDeclaration
+                $composedTextures
+                $composedAddresses
                 $W5D_SAFE_DIVIDE_WGSL
                 fn w5f_device_point(pixel: vec2<f32>) -> vec2<f32> { return pixel; }
                 fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {

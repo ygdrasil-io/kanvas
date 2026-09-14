@@ -5,7 +5,8 @@ import org.graphiks.kanvas.gpu.plan.ColorOperationGraphV1
 /** Syntax lowering only. Every executed operation and branch comes from the sealed graph. */
 internal object W5fColorOperationEmitterV1 {
     fun emit(graph: ColorOperationGraphV1, inputRgbaExpression: String, uniformWordOffsetU32: Long,
-        imageEncodedRgbaExpression: String? = null, resultChannelI32: Int? = null): String {
+        imageEncodedRgbaExpression: String? = null, resultChannelI32: Int? = null,
+        composedProof: org.graphiks.kanvas.gpu.plan.ColorSourceProofV1? = null): String {
         require(graph.contractId == "WgslFloatEnvelopeV1" && uniformWordOffsetU32 in 0L..UInt.MAX_VALUE.toLong())
         require(resultChannelI32 == null || resultChannelI32 in 0..3)
         var nextI32 = 0
@@ -24,7 +25,12 @@ internal object W5fColorOperationEmitterV1 {
                     val x = arg(read.baseX); val y = arg(read.baseY)
                     val width = arg(read.width); val height = arg(read.height)
                     val address = "imageAddress${nextI32++}"
-                    code.append("let $address = w5e_address_texel(i32($x) + ${read.offsetXI32}i, i32($y) + ${read.offsetYI32}i, i32($width), i32($height));\n")
+                    val functionName=when(read.resource) {
+                        is org.graphiks.kanvas.gpu.plan.ImageNumericOperationGraphV1.TexelResource.Legacy -> "w5e_address_texel"
+                        is org.graphiks.kanvas.gpu.plan.ImageNumericOperationGraphV1.TexelResource.Logical ->
+                            "w5g_address_texel_${requireNotNull(composedProof).resolveComposedImage(read).resource.bindingI32}_${read.tileModes.x.name.lowercase()}_${read.tileModes.y.name.lowercase()}"
+                    }
+                    code.append("let $address = $functionName(i32($x) + ${read.offsetXI32}i, i32($y) + ${read.offsetYI32}i, i32($width), i32($height));\n")
                     cache[read] = address
                     address
                 }
@@ -76,7 +82,12 @@ internal object W5fColorOperationEmitterV1 {
                     val encoded = cache[node.read.encoded] ?: run {
                         val address = imageAddress(node.read)
                         val texel = "imageEncoded${nextI32++}"
-                        code.append("let $texel: vec4<f32> = textureLoad(w5eTexture, $address.xy, 0);\n")
+                        val textureName=when(node.read.resource) {
+                            is org.graphiks.kanvas.gpu.plan.ImageNumericOperationGraphV1.TexelResource.Legacy -> "w5eTexture"
+                            is org.graphiks.kanvas.gpu.plan.ImageNumericOperationGraphV1.TexelResource.Logical ->
+                                "w5gTexture${requireNotNull(composedProof).resolveComposedImage(node.read).resource.bindingI32}"
+                        }
+                        code.append("let $texel: vec4<f32> = textureLoad($textureName, $address.xy, 0);\n")
                         cache[node.read.encoded] = texel
                         texel
                     }

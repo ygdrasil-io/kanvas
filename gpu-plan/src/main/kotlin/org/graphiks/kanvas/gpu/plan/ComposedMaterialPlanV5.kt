@@ -76,9 +76,13 @@ public class ComposedBindingLayoutV1 internal constructor(
         require(end == uniformBytesI64) { W5gPlanDiagnostics.Schema }
         this.resources.forEachIndexed { index,row ->
             require(row.ownerNodeIndexI32 >= 0 && row.logicalSlotI32 >= 0 && row.groupI32 == 1 &&
-                row.bindingI32 == index+1 && row.visibilityFlagsU32 == 2u && row.kindTagU32 == 1u &&
-                row.texture == null && row.buffer?.let { it.bufferTypeTagU32 == 2u &&
-                    it.minBindingSizeBytesI64 == 32L && !it.hasDynamicOffset } == true) { W5gPlanDiagnostics.Schema }
+                row.bindingI32 == index+1 && row.visibilityFlagsU32 == 2u && when(row.kindTagU32) {
+                    1u -> row.texture == null && row.buffer?.let { it.bufferTypeTagU32 == 2u &&
+                        it.minBindingSizeBytesI64 == 32L && !it.hasDynamicOffset } == true
+                    2u -> row.buffer == null && row.texture?.let { it.textureViewDimensionTagU32 == 1u &&
+                        it.textureSampleTypeTagU32 == 1u && !it.multisampled } == true
+                    else -> false
+                }) { W5gPlanDiagnostics.Schema }
         }
         val hash = java.security.MessageDigest.getInstance("SHA-256")
         fun i32(value: Int) { repeat(4) { hash.update((value ushr (it*8)).toByte()) } }
@@ -92,9 +96,11 @@ public class ComposedBindingLayoutV1 internal constructor(
         this.resources.forEach { row ->
             i32(row.ownerNodeIndexI32); i32(row.logicalSlotI32); i32(row.groupI32); i32(row.bindingI32)
             i32(row.visibilityFlagsU32.toInt()); i32(row.kindTagU32.toInt())
-            hash.update(1.toByte()); i32(requireNotNull(row.buffer).bufferTypeTagU32.toInt())
-            i64(row.buffer.minBindingSizeBytesI64); hash.update(0.toByte())
-            hash.update(0.toByte()); hash.update(0.toByte()) // texture/sampler options absent
+            hash.update(if(row.buffer == null) 0.toByte() else 1.toByte())
+            row.buffer?.let { i32(it.bufferTypeTagU32.toInt()); i64(it.minBindingSizeBytesI64); hash.update(0.toByte()) }
+            hash.update(if(row.texture == null) 0.toByte() else 1.toByte())
+            row.texture?.let { i32(it.textureViewDimensionTagU32.toInt()); i32(it.textureSampleTypeTagU32.toInt()); hash.update(0.toByte()) }
+            hash.update(0.toByte()) // sampler option absent
         }
         composedBindingLayoutHash = hash.digest().joinToString("") { "%02x".format(it) }
     }
@@ -116,6 +122,25 @@ internal class MaterialEvaluationDagV5 private constructor(entries: List<Entry>,
     companion object { fun of(entries: List<Entry>): MaterialEvaluationDagV5 = MaterialEvaluationDagV5(entries,MaterialEvaluationRefV5(entries.lastIndex)) }
 }
 
+/** Binding-owned original image execution and its exact declared resource row. */
+public class ComposedImageResourceV5 internal constructor(
+    public val resource: ComposedBindingLayoutV1.Resource,
+    internal val metadata: MaterialSourceConstructionV4.ImageChildMetadata,
+    internal val prepared: FrameSourceLayoutV4.PreparedStops,
+) {
+    public val upload: ImageUploadPlanV1 = prepared.imageUpload(metadata.description)
+    public val graph: ImageNumericOperationGraphV1 = ImageNumericOperationGraphV1.of(metadata.description.color,
+        metadata.description.sampling,metadata.description.tileModes)
+    internal val projection: ImageCoordinatePlanV1 = ImageCoordinatePlanV1.sealShader(org.graphiks.math.matrix.Matrix3x3F32(),emptyList())
+    init {
+        require(resource.kindTagU32 == 2u && resource.texture != null && resource.buffer == null &&
+            upload.widthI32 > 0 && upload.heightI32 > 0 &&
+            upload.widthI32.toFloat().toDouble() == upload.widthI32.toDouble() &&
+            upload.heightI32.toFloat().toDouble() == upload.heightI32.toDouble()) { W5gPlanDiagnostics.Schema }
+        require(ImageNumericAuthorityV1.provesFiniteTexelDomain(graph.colorAlpha,upload)) { W5eImagePlanDiagnostics.NumericDomainUnbounded }
+    }
+}
+
 /** Issued only after the existing complete frame inventory; retains all value ownership. */
 internal class PreparedComposedSourceV5 private constructor(
     val captured: MaterialSourceConstructionV4,
@@ -128,6 +153,7 @@ internal class PreparedComposedSourceV5 private constructor(
     integers: Map<Long,UInt>,
     val slab: GradientStopSlabPlanV1?,
     references: List<GradientReference>,
+    images: List<ImageReference> = emptyList(),
 ) {
     class GradientReference(
         val evaluationRef: MaterialEvaluationRefV5,
@@ -137,6 +163,26 @@ internal class PreparedComposedSourceV5 private constructor(
         val rangeWordOffsetI64: Long,
     )
     val gradientReferences: List<GradientReference> = immutableList(references)
+    class ImageReference(val evaluationRef: MaterialEvaluationRefV5,val ownerNodeIndexI32: Int,
+        val binding: ComposedImageResourceV5,val wordOffsetI64: Long)
+    val imageReferences: List<ImageReference> = immutableList(images)
+    fun resolveImage(read: ImageNumericOperationGraphV1.TexelRead): ComposedImageResourceV5 {
+        val logical=read.resource as? ImageNumericOperationGraphV1.TexelResource.Logical
+            ?: error(W5gPlanDiagnostics.Schema)
+        val width=(read.width as? ColorOperationGraphV1.Scalar.DynamicF32)?.wordOffsetU32
+        val height=(read.height as? ColorOperationGraphV1.Scalar.DynamicF32)?.wordOffsetU32
+        val reference=imageReferences.single { it.ownerNodeIndexI32 == logical.ownerNodeIndexI32 &&
+            it.binding.resource.logicalSlotI32 == logical.logicalSlotI32 &&
+            width == it.wordOffsetI64+20L && height == it.wordOffsetI64+21L }
+        val image=reference.binding
+        require(layout.resources.any { it === reference.binding.resource } && frameOwner.owns(captured) &&
+            image.prepared.owner === frameOwner && image.prepared.imageUpload(image.metadata.description) === image.upload &&
+            read.topologyIdentity == image.graph.topologyIdentity &&
+            read.colorAlpha == image.graph.colorAlpha && read.tileModes == image.graph.tileModes &&
+            numericWordsF32Bits[width] == image.upload.widthI32.toFloat().toRawBits() &&
+            numericWordsF32Bits[height] == image.upload.heightI32.toFloat().toRawBits()) { W5gPlanDiagnostics.Schema }
+        return reference.binding
+    }
     val numericWordsF32Bits: Map<Long,Int> = java.util.Collections.unmodifiableMap(LinkedHashMap(words))
     val integerWordsU32: Map<Long,UInt> = java.util.Collections.unmodifiableMap(LinkedHashMap(integers))
     val tableRecords: Map<Long,ImmutableUBytes> = java.util.Collections.unmodifiableMap(LinkedHashMap(tables))
@@ -153,13 +199,15 @@ internal class PreparedComposedSourceV5 private constructor(
             evaluation.entries.size == metadata.nodes.size && evaluation.entries.indices.all { index ->
                 val entry = evaluation.entries[index]; val original = metadata.nodes[index]
                 entry.ownerNodeIndexI32 == original.ownerNodeIndexI32 && entry.children == original.children &&
-                    entry.coordinates == (original.gradientSource?.coordinates ?: SourceCoordinatesV4.None)
+                    entry.coordinates == (original.gradientSource?.coordinates ?:
+                        original.imageSource?.coordinates?.let(SourceCoordinatesV4::V2) ?: SourceCoordinatesV4.None)
             }) { W5gPlanDiagnostics.Schema }
-        require((slab == null) == layout.resources.isEmpty() &&
+        val storage=layout.resources.singleOrNull { it.buffer != null }
+        require((slab == null) == (storage == null) &&
             gradientReferences.map { it.evaluationRef.indexI32 } == metadata.nodes.indices.filter {
                 metadata.nodes[it].gradientSource?.hasGradientStorage == true
             }) { W5gPlanDiagnostics.Schema }
-        if (gradientReferences.isNotEmpty()) require(layout.resources.single().let { resource ->
+        if (gradientReferences.isNotEmpty()) require(requireNotNull(storage).let { resource ->
             resource.ownerNodeIndexI32 == gradientReferences.minOf { it.ownerNodeIndexI32 } && resource.logicalSlotI32 == 0
         }) { W5gPlanDiagnostics.Schema }
         gradientReferences.forEach { reference ->
@@ -167,10 +215,26 @@ internal class PreparedComposedSourceV5 private constructor(
             val definition=reference.definition
             require(node.ownerNodeIndexI32 == reference.ownerNodeIndexI32 && definition.captured === node.gradientSource &&
                 definition.metadata.leaf === node.original && definition.frameOwner === frameOwner && definition.slab === slab &&
-                reference.resource === layout.resources.single() && definition.range == frameOwner.range(definition.captured) &&
+                reference.resource === storage && definition.range == frameOwner.range(definition.captured) &&
                 reference.rangeWordOffsetI64 == node.offsetBytesI32.toLong()/4L &&
                 integerWordsU32[reference.rangeWordOffsetI64] == definition.range.baseIndexU32 &&
                 integerWordsU32[reference.rangeWordOffsetI64+1L] == definition.range.countU32) { W5gPlanDiagnostics.Schema }
+        }
+        require(imageReferences.map { it.evaluationRef.indexI32 } == metadata.nodes.indices.filter {
+            metadata.nodes[it].imageSource != null
+        } && layout.resources.filter { it.texture != null }.all { resource -> imageReferences.any { it.binding.resource === resource } }) { W5gPlanDiagnostics.Schema }
+        imageReferences.forEach { reference ->
+            val node=metadata.nodes[reference.evaluationRef.indexI32]
+            val image=reference.binding
+            require(node.imageSource === image.metadata && image.metadata.original === node.original &&
+                reference.ownerNodeIndexI32 == node.ownerNodeIndexI32 && image.resource.ownerNodeIndexI32 == node.ownerNodeIndexI32 &&
+                reference.wordOffsetI64 == node.offsetBytesI32.toLong()/4L && image.prepared.owner === frameOwner &&
+                image.upload === image.prepared.imageUpload(image.metadata.description)) { W5gPlanDiagnostics.Schema }
+            var offset=reference.wordOffsetI64
+            RawMaterialRequirementsV2.forEachImageHeaderWord(image.projection,image.upload,1f,image.graph.sampling,null,null) {
+                require(numericWordsF32Bits[offset++] == it) { W5gPlanDiagnostics.Schema }
+            }
+            require(offset == reference.wordOffsetI64+image.metadata.headerBytesI64/4L) { W5gPlanDiagnostics.Schema }
         }
     }
     companion object {
@@ -181,12 +245,17 @@ internal class PreparedComposedSourceV5 private constructor(
             val definitions=java.util.IdentityHashMap<MaterialSourceConstructionV4,PreparedSourceDefinitionV4>()
             val references=metadata.nodes.mapIndexedNotNull { index,node -> node.gradientSource?.takeIf { it.hasGradientStorage }?.let { child ->
                 val definition=definitions.getOrPut(child) { PreparedSourceDefinitionV4.fromPrepared(frame,child,prepared) }
-                GradientReference(MaterialEvaluationRefV5(index),node.ownerNodeIndexI32,metadata.layout.resources.single(),
+                GradientReference(MaterialEvaluationRefV5(index),node.ownerNodeIndexI32,metadata.layout.resources.single { it.buffer != null },
                     definition,node.offsetBytesI32.toLong()/4L)
             } }
-            val built = ColorSourceProofCompilerV1.graphForComposed(metadata,definitions)
+            val images=metadata.nodes.mapIndexedNotNull { index,node -> node.imageSource?.let { image ->
+                ImageReference(MaterialEvaluationRefV5(index),node.ownerNodeIndexI32,
+                    ComposedImageResourceV5(metadata.layout.resources.single { it.texture != null && it.ownerNodeIndexI32 == node.ownerNodeIndexI32 },
+                        image,prepared),node.offsetBytesI32.toLong()/4L)
+            } }
+            val built = ColorSourceProofCompilerV1.graphForComposed(metadata,definitions,images)
             return PreparedComposedSourceV5(source,source.canonicalIdentity,frame,built.evaluation,metadata.layout,built.graph,
-                built.words,built.tables,built.integers,prepared.slab.takeIf { references.isNotEmpty() },references)
+                built.words,built.tables,built.integers,prepared.slab.takeIf { references.isNotEmpty() },references,images)
         }
     }
 }

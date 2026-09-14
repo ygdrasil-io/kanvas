@@ -2,6 +2,7 @@
 package org.graphiks.kanvas.picture
 
 import org.graphiks.kanvas.paint.*
+import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.surface.*
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.color.ColorMatrixF32
@@ -15,6 +16,39 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertEquals
 
 class W5gComposedMaterialPictureTest {
+    @Test fun twoImagePixelsAndFilterStayCapturedThroughOriginalAndDecodedPictures() {
+        val first=byteArrayOf(-1,0,0,-1,0,0,-1,-128)
+        val second=byteArrayOf(0,0,-1,-128,-1,0,0,-1)
+        val matrix=ColorMatrixF32.ofIdentity().apply { setScale(.5f,1f,1f,1f) }
+        fun tree(a: ByteArray,b: ByteArray,filter: ColorFilter,reversed: Boolean=false): Shader {
+            val dst=Shader.WithColorFilter(Shader.Image(Image.fromPixels(2,1,a)),filter)
+            val src=Shader.Image(Image.fromPixels(2,1,b))
+            return if(reversed) Shader.Blend(BlendMode.SRC_OVER,src,dst) else Shader.Blend(BlendMode.SRC_OVER,dst,src)
+        }
+        val filter=ColorFilter.Matrix(matrix)
+        val shader=tree(first,second,filter)
+        val expected=W5fColorCpuOracle.expectedShaderTree(shader)
+        val changed=byteArrayOf(0,-1,0,-1,0,-1,0,-1)
+        val changedFilter=ColorFilter.Matrix(ColorMatrixF32.ofIdentity().apply { setScale(.125f,1f,1f,1f) })
+        disjoint(expected,W5fColorCpuOracle.expectedShaderTree(tree(first,second,filter,true)))
+        disjoint(expected,W5fColorCpuOracle.expectedShaderTree(tree(changed,changed,filter)))
+        disjoint(expected,W5fColorCpuOracle.expectedShaderTree(tree(first,second,changedFilter)))
+        val paint=Paint(shader=shader,blendMode=BlendMode.SRC,antiAlias=false)
+        val surface=Surface(1,1)
+        surface.canvas { drawRect(rect(),paint) }
+        val recorder=PictureRecorder()
+        recorder.beginRecording(rect()).drawRect(rect(),paint)
+        val picture=recorder.finishRecordingAsPicture()
+        changed.copyInto(first); changed.copyInto(second); matrix.setScale(.125f,1f,1f,1f)
+        repeat(2) { W5fSurfacePixelFixtures.assertNativePixels(surface.render(),listOf(expected)) }
+        val decoded=assertNotNull(Picture.fromByteArray(picture.toByteArray()))
+        for(replay in listOf(picture,decoded)) {
+            val target=Surface(1,1)
+            target.canvas { replay.playback(this) }
+            repeat(2) { W5fSurfacePixelFixtures.assertNativePixels(target.render(),listOf(expected)) }
+        }
+    }
+
     @Test fun sharedGradientStopsLocalMatrixAndFilterRemainCapturedOnBothPicturePaths() {
         val stops=mutableListOf(GradientStop(0f,ColorARGB.Black.withAlpha(128)),GradientStop(1f,ColorARGB.White.withAlpha(128)))
         val local=Matrix3x3F32(tx=-.25f)
