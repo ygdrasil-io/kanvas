@@ -47,9 +47,48 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 - [Plan W5e — images décodées, neuf tâches séquentielles](plans/2026-09-12-w5e-decoded-images-implementation-plan.md)
 - [Plan W5f — color filters et interpolation, huit tâches séquentielles](plans/2026-09-14-w5f-color-filters-implementation-plan.md) — Task1–8 closes sur leurs tranches fonctionnelles bornées. Task8 corrigée en 85d8c2d16 : les cinq Important sont traités, l'unique re-review Sol approuve conformité et qualité sans nouveau finding. Le lot final forcé06 compte exactement690 méthodes publiques fraîches :688PASS,0failure/error,2skipsAA4 connus ; les six contrôles de budget passent après l'historique W5a–e/couleur. Commande FAILED15m03s/Gradle1/native174exit133, pas de GREEN natif. Cinq compilations séparées incrémentales exit0 (targets UP-TO-DATE, pas clean) ; ROOT vérifie les1225 sources réelles index/commit et leur identité avec le code testé. Copies image originales prébudget, coûtsproof/quarantaine et321warningsKotlin/8JVM restent suivis. Les essais antérieurs échoués ne sont pas effacés ni déclarés antérieurs sans preuve. Admission générale filteredW4e complexclip/inverse, cache-hit/handles et close/rollback target-level ne sont pas prouvés par les pixels. Review globale Sol approuvée sur7a06459dd→f743a222a : conformité COMPLIANT/qualité APPROVED,0Critical/0Important/2Minor hérités déjà suivis,0nouveau finding actionnable. Aucun fixwave supplémentaire ; Ready to merge:NO. [PR W5f #2400](https://github.com/ygdrasil-io/kanvas/pull/2400) publiée en Draft, empilée sur W5e #2399 ; suivi et archivage récupérable des seules notes SDD W5f terminés ; domaines restreints explicites dans le status, pas de claim ISO global.
 
-- [Plan W5g — Blend partagé, NoiseV1 et convergence](plans/2026-09-14-w5g-composed-procedural-materials-implementation-plan.md) — Tasks1–2 acceptées après leurs reviews Sol COMPLIANT/APPROVED,0Critical/Important. Task1 I2/C1 traités en `bb0bffaa9`, alpha127-and255 retiré ;98PASS/0failure/error/skip final amendé, commande FAILED8m14s/native195exit133 UNKNOWN. Task2 gradients contextuels en `3fbafaf99` :17blobs committés égaux au code figé, couvrant UNIQUE cinq classes463méthodes/462PASS/1skipAA4 authentique/0failure-error. ROOT vérifie FULL6599lignes de rapport,48lignes de review et cinqXML réels ; review indépendante Sol0nouveau Minor/aucun correctif demandé. Commande FAILED25m38s/Gradle1/native209exit133,causeUNKNOWN ; compiles finales UP, compilation incrémentale exécutée en16. Vrais RED et échecs intermédiaires conservés. Prochaine tranche : images/Blend complet3, puis Noise4/convergence5. Blend complet seulement après1–3 ; Noise255, archives8/9/10 et storage causal restent ouverts. Pas de nativeGREEN/Ready-to-merge/ISO. Future Draft empilée sur W5f#2400, parent inchangé ; aucun push/PR W5g encore.
+- [Plan W5g — Blend partagé, NoiseV1 et convergence](plans/2026-09-14-w5g-composed-procedural-materials-implementation-plan.md) — Tasks1–3 / Blend borné acceptés, reviews Sol COMPLIANT/APPROVED,0Critical/Important/0nouveau Minor. Scalar98PASS puis gradients462PASS/1AA4skip ; images/fix `48b0bb4f4` final5=529PASS0failure/error/skip, mêmes529cas et18blobs testés/committés vérifiés ROOT. Commandes respectivement FAILED/native195,209,224exit133,causeUNKNOWN, jamais nativeGREEN. Suite entière : Noise4 dérivation255/archives8/9/10/storage, convergence5/final19/cinq compiles/review globale puis ONE Draft empilée sur W5f#2400 inchangée. Domaines conservateurs, vrais RED/échecs/coûts sont conservés au plan/status. Aucun push/PR W5g encore, pas Ready-to-merge/ISO.
 
 ### État et rapports finaux
+
+W5g continue entièrement : Task3 images/Blend sur Astra/high, puis Noise4,
+convergence5, review globale Sol et une Draft empilée sur W5f#2400 inchangée.
+Task3 acceptée : commitfix48b0bb4f4 vérifié, re-review ciblée même Sol
+COMPLIANT/APPROVED, I1 ADDRESSED,0Critical/Important/0nouveau Minor.
+La perte des alternatives alpha0/1 est identifiée dans les conditions de preuve.
+R27 autorise leur conservation uniquement, sans changer arithmetic ni fixture.
+Coût : contextes supplémentaires et risque de corrélation ; positif original,
+final5 figé et re-review même Sol obligatoires avant acceptation/Noise.
+Le positif original passe désormais (Epoch16), Rect/direct/stencil twice,
+fixture inchangée ; commande FAILED/native223exit133 UNKNOWN. Final5 amendé17 :
+529uniques529PASS0failure/error/skip, mêmes529cas,5XML réels et18SHA testés/
+committés vérifiés ROOT. FAILED18m8s/native224exit133 UNKNOWN ; acceptance
+Task3/Blend borné close après ce verdict ; Noise4 dérivation255 puis
+implémentation, convergence5 et gates finales s'enchaînent sans pause utilisateur.
+Tasks1–2 restent acceptées. Nearest/linear, frame mixte, domaines image et
+rétention Picture passent sur les epochs ciblés ; SRC_IN/DIFFERENCE discriminent
+les cinq ordres. R25 retire seulement le cross-product exhaustif ajouté ROOT :
+SRC_OVER conserve un vrai positif et un contre-exemple borné, sans réduire le
+contrat validé ni effacer les échecs facultatifs R22/R23.
+
+Epoch12 :4PASS/0failure-error-skip pour les16topologies cubic et le budget
+agrégé512/3MB corrigé. Commande FAILED32s/native219exit133 UNKNOWN.
+R20 conserve le refus cubic à alpha variable/recovery ; DECAL positif est
+intérieur opaque,16taps réels, pas une admission générale aux bords transparents.
+R21 compte source +snapshot final +coverage effectivement lié avant préparation,
+avec un diagnostic Binding V5 distinct de la base legacy.
+Réservation pessimiste par capture immuable distincte, cache content-addressed
+inchangé : des contenus égaux peuvent réserver plus que leur résidence minimale.
+Historique Epoch14 : même contexte V5 invalide sans filter passe3routes twice,
+avec restoring filter refuse NumericDomainUnbounded ; transparence encore OPEN.
+2tests/1PASS/1FAIL, FAILED8s/native221exit133 UNKNOWN, preuve réelle vérifiée ROOT.
+Historique final5 Epoch15 :529méthodes uniques/528PASS/1FAIL/0ERROR/0SKIP,
+FAILED17m47/Gradle1/native222exit133 causeUNKNOWN. Le défaut projectif reste OPEN.
+ROOT a vérifié le rapport intégral5190EOF,5XML réels/SHA et18SHA source identiques
+avant/après ; commit provisoire18paths autorisé pour la review Sol Task3 (R26),
+sans acceptation Blend ni lancement Noise avant résolution des assertions requises.
+Coûts/limites/échecs conservés au plan/status ; Noise255/archives/storage causal
+et gates finales obligatoires, aucun nativeGREEN, ISO, push/PR W5g ou clôture globale.
 
 - [Baseline de vérité W00](waves/W00-truth-baseline/status.md) — gate stricte
   non atteinte en raison de la quarantaine temporaire `jpg-color-cube`.

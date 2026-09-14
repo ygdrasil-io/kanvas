@@ -1,6 +1,129 @@
 # État W05 — material graph, gradients, images et color filters
 
-## W5g — tranches scalaire et gradients acceptées ; enfants image suivants
+## W5g — Tasks1–3 / Blend borné acceptés ; Noise puis convergence en cours
+
+Task3 acceptée ROOT après review initiale puis re-review ciblée même Sol : I1 ADDRESSED, COMPLIANT/APPROVED,0Critical/Important/0nouveau Minor. Review actualisée intégralement lue et contrôlée techniquement MAIN. Source48b0bb4f4681d240ea87ac54b81696d8b08065e2,parentb5af : même Astra correction1,20ajouts dans prove.contexts uniquement (R27),fixture/arithmetic/guards inchangés,18blobs committés identiques aux sources testées. Tasks1–3 livrent Blend dans les domaines bornés divulgués, pas cubic général/H/ISO. Suite automatique : Noise4 dérivation255 avant production, puis convergence5/gates/review globale/ONE Draft sur W5f#2400 inchangée.
+
+Epoch16 amendé : positif original1PASS0F/E/S, CTM/no-filter/restoration complète Rect/direct/stencil twice. Rapport FULL5504EOF/XML réel/SHA4af6451d… vérifiés ROOT ; seulproof60619cda… change,17autres sources/fixture inchangés. Commande FAILED13s/Gradle1/native223exit133 UNKNOWN, pas native-processGREEN. Final5 original ONCE autorisé sur code figé après custody18 pré-run ; postcustody/commitfix/re-review même Sol restent obligatoires. Pas d'acceptation Blend ou lancement Noise anticipé.
+
+Epoch17 final5 amendé vérifié ROOT :529méthodes uniques529PASS0failure/error/skip, mêmes529classname/name sans omission/ajout. Rapport FULL7557EOF et5XML réels FULL EOF/bytes/SHA vérifiés ;18SHA pré/post/current/committed identiques, seulproof60619cda… change,fixtureb0cdaf31 inchangée. Commande FAILED18m8s/Gradle1/native224exit133 causeUNKNOWN,55tasks6EXEC49UP, pas nativeGREEN ni compiles séparées. Même Sol clôt I1,0breakage confirmé ; acceptance Task3/Blend borné close, Noise/convergence/review globale restent leurs gates propres. Coûts/limites/échecs historiques conservés.
+
+R27 — Authorize ONLY existing ColorSourceProofV1.kt ColorRoundedGraphProofV1.prove.contexts comparison handling to preserve reachable original BranchComponent arm facts. MAIN FULL-read correction trace5264–5285EOF and independently checked complete original contexts/evaluators, matrix straightInput, coordinate compiler, binding words and public fixture: unchanged FTZ Min/Max keeps both projective-valid arms; opaque sample alpha1 versus transparent alpha0 is hulled to[0,1], and downstream alpha==0/1 guards lose that disjunction, reaching an impossible Divide with a zero-containing denominator. Enumerate original predicate reachable yes/no contexts for an unconditioned compared BranchComponent, evaluate the same corresponding arm under each and retain its bound keyed by SAME scalar identity before reapplying the original comparison; avoid re-expansion of already conditioned identities and validate original predicate operands/reachable operations. All numerical evaluators/guards, Min/Max FTZ, ProjectiveValid/Divide, sampler/decoder/coordinate graph, scalar identity and emitted WGSL remain unchanged. No alpha gap/epsilon/finite box/authority downgrade or fixture modification. Cost if wrong: extra context branching can grow proof cost or lose correlation/validate an unreachable operation incorrectly; unchanged required public method must pass all3routes twice, all529 original methods/refusals retained in frozen final5, exact fix SHA/commit custody and SAME Sol scoped I1+fix-introduced-breakage review mandatory. SAME Astra fixround1, FIX_BASE b5af755e1e1b1be2cc31435faeaa7589eb32c610; no new owner/helper/reviewer, Noise before acceptance or native workaround.
+
+Historique Task3 Epoch15 : covering final5,529méthodes uniques/528PASS/1FAIL/0ERROR/0SKIP.
+Surface125=124P/1F,Picture5P,Image27P,ImageFilter92P,Interpolation280P.
+Le positif projectif invalide avec restoring filter reste OPEN ; même contexte
+sans filter et CTM-once passent. Partition de couverture requise R25 validée.
+Commande FAILED17m47/Gradle1/native222exit133 causeUNKNOWN, pas de build propre.
+ROOT a lu rapport intégral5190EOF et5XML réels/SHA, copies du rapport exactes.
+Les18SHA source sont identiques avant/après/ROOT, dans45owners classifiés ;
+HEAD343/index vide/diffcheck0,3docs ROOT exclus. Commit provisoire18paths autorisé
+pour l'unique review Sol, jamais acceptation Task3/Blend ou lancement Noise.
+
+R26 borne l'investigation projective : après l'unique isolation publique, si cause
+non établie, source cohérente figée/custody ROOT et covering5 exécuté avec l'échec
+explicitement OPEN, commit provisoire puis unique review Sol Task3 prévue.
+Coût : audit peut refuser le lot ; il remplace les essais/probes aveugles, pas la gate.
+Correctifs même Astra1–3/re-review même Sol ; aucune acceptation Blend/Noise anticipée.
+
+R25 corrige une surcontrainte ajoutée ROOT : le contrat validé requiert cinq
+ordres discriminés et trois final modes, pas chaque ordre×chaque mode.
+Les cinq restent testés sous SRC_IN/DIFFERENCE ; SRC_OVER garde un vrai positif
+restoration/paint/external avec contre-exemple borné/disjoint, opacity0/.5 et3routes twice.
+Coût : moins de combinaisons redondantes, explicitement déclaré ; échecs facultatifs
+SRC_OVER/0/2 conservés, aucune tolérance/skip ni modification numérique.
+Ordre du même sourcegraph audité Sol, covering5 et19 toujours obligatoires.
+
+Epoch12 :4PASS0F/E/S,16topologies cubic (9bords fixed+7intérieurDECAL),
+refus alpha variable/recovery et budget agrégé512/3MB Binding passent.
+FAILED32s/native219133UNKNOWN ; ROOT fullrapport2584–2790/XML/SHA réels vérifiés.
+R24 autorise une isolation publique sur le même contexte V5 swap/clamp zéro,
+sans puis avec restoring filter, attentes Transparent correspondantes bornées
+avant capture. Coût : un epoch causal borné ; cas original et obligation transparent
+conservés, pas de troisième contexte aveugle, probe privé ou fix numérique.
+
+Epoch11 confirme un vrai RED budget : une512image passe3MB, deux refusées avec
+ancien FrameBudget au lieu du Binding V5. R21 corrigé par le même agent.
+R22 alpha seul ne suffit pas au témoin SRC_OVER/0/2 ; R23 modifie uniquement
+les canaux non discriminants de projection (red0/blue1), green nonconstant gardé.
+Motif : précision fixed-function du mauvais ordre nonopaque + transfer requiert
+un pixel entièrement borné. Hypothèse vérifiée par preuve indépendante avant capture,
+un epoch ciblé ; coût : couverture couleurs non discriminantes plus étroite,
+anciens contrôles conservés. Aucun ordre supprimé, tolérance/fix numérique ou boucle ouverte.
+Projetif zéro reste sous diagnostic, pas de troisième fixture aveugle.
+5tests2PASS3FAIL0E/S, FAILED1m35/native218133UNKNOWN ; ROOT fullrapport/XML/SHA11 vérifiés.
+
+Précision R20 DECAL : positif cubic intérieur opaque4×4, coordonnées(2,2),
+16taps réels et alternative nearest disjointe.16paires tile topology conservées,
+nearest/linear et historique V3 testent les frontières. Limite suivie : pas de
+claim cubic V5 général aux bords transparents/alpha variable ; refus/recovery conservé.
+
+R22 autorise seulement un témoin external-alpha nonopaque SRC_OVER, après trois
+échecs de preflight documentés, pour distinguer les cinq ordres sans élargir les
+octets admissibles. Tous les cas opacity0/.5, paint127, Blue et3routes twice restent.
+Coût : choix de projection supplémentaire, preuve indépendante bornée/disjointe
+avant capture et audit Sol ; un epoch ciblé, pas de boucle ouverte ni de fix numérique.
+Epoch9 SRC_IN/DIFFERENCE passent, SRC_OVER/0/2 échoue avant Surface ;3tests2PASS1F,
+0E/S, FAILED1m7/native216133UNKNOWN. ROOT rapport1134–2057 et XML9/SHA complet vérifiés.
+
+R20 conserve les équations/preuves existantes : témoin cubic positif à alpha
+constant, cas original à alpha variable conservé comme refus numérique explicite
+avec recovery public répété. Coût : admission cubic plus étroite documentée,
+pas de claim all-cubic/ISO ; DECAL positif et domaines/final blends restent requis.
+Epoch5 nearest/linear16tiles, frame mixte et capture pixels/filter/Picture passent ;
+epoch6 cubic fixe1PASS sur3routes twice. Commandes FAILED39s/native212133 et
+FAILED5s/native213133 UNKNOWN. ROOT lit rapports/XML complets pendant qu'actuels ;
+SHA réel vérifié en5, pas de SHA réel figé en6 avant remplacement par epochs suivantes.
+La recherche de projection est relancée : pas de causalité strictement isolée affirmée.
+R21 compte toutes les textures simultanées du draw V5 : rows source plus snapshot
+final effectif et coverage seulement si réellement lié par ABI4. Inventaire par
+occurrence authentique avant préparation ; pas d'union de frame ou de cap inventé.
+Ajout physique V5 texture/staging → Binding, base/diagnostics V3 inchangés d'abord,
+uniform/shared storage gardent leurs codes. Coût : risque sous-comptage/ABI erroné
+ou régression legacy ; contrôle budget/refus/recovery public et audit Sol requis.
+Ces décisions sont ajoutées au même brief avant modifications ;45chemins inchangés.
+
+L'utilisateur demande de traiter TOUT W5g sans s'arrêter au prochain lot.
+Task3 images/Blend complet RUNNING sur le nouvel Astra/high adapté
+`/root/w5g_image_impl`, BASE accepté `343519021388bddba8b18c461ddb3ffe0b7702b0`.
+Brief propriétaire complet et interfaces V5/gradients/frame acceptées lus ROOT ;
+Vrai RED public à deux images confirmé ROOT : FULL261lignes de rapport et XML réel
+20:13:18.777Z/SHA9181c44c…,1failure/0error-skip,composed.slice au render Rect,
+après quatre contre-exemples bornés/disjoints. Deux SHA tests pre/post/current
+identiques ; production BASE343 inchangée et index vide avant autorisation.
+Commande BUILDFAILED3s/Gradle1, natif non atteint/pas de133 dans ce RED.
+Échecs de permission/cache et sérialisation conservés, pas requalifiés RED.
+L'implémentation Task3 est désormais autorisée dans ses43chemins classifiés.
+R17 ajoute uniquement la paramétrisation du nom de fonction dans
+W5eImageTexelEvaluatorV1.addressDeclarations, ancien nom par défaut exact.
+Les topologies tile des frères passent par des symboles de slots authentifiés ;
+équations/guards inchangés.44chemins finis, pas de rewrite du constructeur
+ImageNumeric : proposition plus large retirée avant edit, R10 garde les seuls
+faits structurels dans TexelRead/SampledRegion sans retenir graph/Cubic/pixels.
+R18 autorise l'extraction partagée des métadonnées décodées dans le planner
+existant : V5 conserve les Pixels immuables d'origine et les dimensions/formats
+vérifiés, puis seal/upload seulement après le permit checked de toute la frame.
+Ancienne voie V3 au même ordre avec sa dette conservée ; aucun nouveau owner,
+copie prébudget, policy ou allégement des seals d'inventaire/ownership autorisé.
+R19 fixe le raccord CoordClamp : expressions de coordonnées existantes factorisées,
+même sampler logique et preuve V5 complète sur les vraies bounds de frame.
+Validité cumulative/reset conservés ; pas de certificat V3/domaine identité fabriqué.
+45eowner ImageNumericAuthorityV1 uniquement visibilité du prédicat texel fini,
+corps/ancien seal/arithmetic read-only. Aucune nouvelle policy numérique.
+R18 distingue le cache natif content-addressed inchangé de l'identité des captures :
+réservation V5 pessimiste par Pixels immuable authentique avant préparation,
+sans supprimer des frères/coûts après seal par égalité de contenu.
+Ancien dedup V3 intact. Limite explicite : des captures distinctes de même contenu
+peuvent être refusées plus tôt qu'avec un budget physique canonique minimal.
+Epoch3 compile seule exit0. Premier positif natif en4 : deux images1PASS,
+Rect/direct/stencil Path Render/Readback répétés2,0failure-error-skip.
+ROOT lit FULL436–657 et XML réel20:33:04.660Z/SHAee7968f3… complet.
+Commande FAILED15s/Gradle1/native211exit133,causeUNKNOWN ; positif NONFINAL,
+cas mixtes/Picture/tiles/domaines/budget/historique/custody et review restent ouverts.
+Puis Noise4 et convergence5
+s'enchaînent après leurs gates, avant une review globale Sol et une Draft empilée.
+Pas de nouvelle boucle de plan ni de répétition des tranches déjà acceptées.
+Les gates255/archives/storage restent obligatoires, pas encore satisfaits.
 
 Task2 acceptée : commit `3fbafaf99647d3586a8b38ebbce32f3446952fc6`,
 17chemins classifiés1024+/93−. Couvrant UNIQUE cinq classes463méthodes réelles,
