@@ -247,17 +247,24 @@ WithColorFilter(Shader.Opacity(child,a),F) = F(a * child)
 ### Task 3: Deliver Table, Lighting, transfer and Blend filters
 
 **Files:**
-- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/ColorFilterPlanCompilerV1.kt`, `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/ColorOperationGraphV1.kt`, `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/ColorNumericAuthorityV1.kt`, `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/RawMaterialRequirementsV2.kt`, `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W5fPlanDiagnostics.kt`
+- Modify under R16: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/ColorFilterExecutionPlanV1.kt`, `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/ColorSourceProofV1.kt`, `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/ColorSourceProofCompilerV1.kt`, `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/W5aMaterialSourceStage.kt`, actual typed raw-word view of the same owner, no speculative64word Table packing before permit; Raw.packV4 uses putInt/WGSLU32 with numericF32slot authentication and unchanged bytes/layout/oneallocation.
+- Modify under R15: `render-ir/src/main/kotlin/org/graphiks/kanvas/render/ir/ResourceSnapshot.kt`, only actual Table metadata readonly `ImmutableUBytes.sizeI32/get(indexI32):UByte` before copies and indexed proof/packing; preserve private backing/copies/canonical/equality/schema, no accessor/private tests or unrelated APIs.
+- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/ColorFilterPlanCompilerV1.kt`, `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/ColorOperationGraphV1.kt`, `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/RawMaterialRequirementsV2.kt`, `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W5fPlanDiagnostics.kt`
 - Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/BlendFormulaProgramV1.kt`, `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/BlendFormulaOperationGraphV1.kt` only for necessary typed access to the EXISTING exact formulas
 - Audit/reuse existing under R9: `color-management/src/main/kotlin/org/graphiks/kanvas/color/ColorInterpolationProgramV1.kt`, already delivered/reviewed in Task1 for EOTF/OETF. Reuse those actual recipes; extend this same provider in place only for an actually missing required conversion, never recreate or duplicate it. This inherited-file audit does not require an artificial hunk.
 - Audit/reuse existing under R9: `gpu-plan/build.gradle.kts`, whose `implementation(project(":color-management"))` was already delivered/reviewed in Task1. Preserve the one-way dependency; do not expose color-management recipe types in public gpu-plan signatures. `color-management` already depends on `:math:color` and needs no build change or reverse dependency. No new dependency hunk is required for this retained contract.
-- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/render/ir/ColorFilterCapturePreflight.kt`, `kanvas/src/main/kotlin/org/graphiks/kanvas/canvas/DisplayOpSnapshot.kt`, `kanvas/src/main/kotlin/org/graphiks/kanvas/render/ir/DisplayOpSceneAdapter.kt`, `kanvas/src/main/kotlin/org/graphiks/kanvas/render/ir/PaintSceneAdapter.kt`
+- Modify under R18: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/W5dGradientCandidateV2.kt`, extend only the existing root-paint filter reader for actual Task3 Table/Lighting/Blend/transfers, retaining the same Rect/Path-fill/Solid guards and single candidate authority; no new gradient/image/stroke promotion or parallel gate.
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/render/ir/ColorFilterCapturePreflight.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/W5fColorOperationEmitterV1.kt`
 - Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5fColorCpuOracle.kt`, `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5fColorFilterSurfacePixelTest.kt`
+- Audit/reuse unchanged under R17: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/ColorNumericAuthorityV1.kt`, actual existing seal/capture hook; no artificial hunk required, all exact ownership/first-preflight/immutable ordered capture obligations retained.
+- Audit/reuse unchanged under R17: `kanvas/src/main/kotlin/org/graphiks/kanvas/canvas/DisplayOpSnapshot.kt`, actual existing seal/capture hook; no artificial hunk required, all exact ownership/first-preflight/immutable ordered capture obligations retained.
+- Audit/reuse unchanged under R17: `kanvas/src/main/kotlin/org/graphiks/kanvas/render/ir/DisplayOpSceneAdapter.kt`, actual existing seal/capture hook; no artificial hunk required, all exact ownership/first-preflight/immutable ordered capture obligations retained.
+- Audit/reuse unchanged under R17: `kanvas/src/main/kotlin/org/graphiks/kanvas/render/ir/PaintSceneAdapter.kt`, actual existing seal/capture hook; no artificial hunk required, all exact ownership/first-preflight/immutable ordered capture obligations retained.
 
 **Interfaces:** Consumes shared color graph/recipes and `BlendFormulaProgramV1`. Produces filter opcodes Table/Lighting/SRGBToLinear/LinearToSRGB/Blend. `ColorInterpolationProgramV1` in color-management publishes immutable handle-free conversion recipes and constants keyed by semantic conversion identity; gpu-plan instantiates them into ColorOperationGraphV1 without reverse dependencies or duplicated shader conversion formulas. Its `RecipeKind` values are `EOTF`, `OETF`, `RGB_TO_HSL`, `HSL_TO_RGB`, `LINEAR_RGB_TO_OKLAB`, `OKLAB_TO_LINEAR_RGB`, `OKLAB_TO_OKLCH`, `OKLCH_TO_OKLAB`; `recipe(kind:RecipeKind):Recipe` returns an immutable ordered scalar-operation recipe with `identity:String` and exact F32 constant bits. This enum deliberately does not import render-ir's `ColorInterpolation`; the gpu-plan adapter maps that enum to recipes. Recipes are reusable semantic definitions, not a second bound/native material graph. Required additional code: `invalid.material.filter.table`.
 
-- [ ] **Step 1: Add public tables0/255/interior, nonidentity/inverse table, transfer breakpoint neighborhoods, Lighting nontrivial mul/add with ignored parameter alpha, and Blend all29 public modes.** For each kind include alpha0/nonunit, clamp-needed input and noncommutative composition with Matrix. Table255/0 alone is insufficient for index rounding. Derive expected Table indices under intervals before rendering; ambiguous multiple nonadjacent results do not close the mandatory case.
+- [x] **Step 1: Add public tables0/255/interior, nonidentity/inverse table, transfer breakpoint neighborhoods, Lighting nontrivial mul/add with ignored parameter alpha, and Blend all29 public modes.** For each kind include alpha0/nonunit, clamp-needed input and noncommutative composition with Matrix. Table255/0 alone is insufficient for index rounding. Derive expected Table indices under intervals before rendering; ambiguous multiple nonadjacent results do not close the mandatory case.
 
 ```kotlin
 val inverted = UByteArray(256) { indexI32 -> (255-indexI32).toUByte() }
@@ -266,8 +273,8 @@ val filter = ColorFilter.Compose(table,ColorFilter.LinearToSRGB)
 // Public payloads of255/257 entries must refuse precisely, not truncate or normalize.
 ```
 
-- [ ] **Step 2: Run the new exact Table/Lighting/transfer/Blend methods on unchanged production, inspect genuine RED.** Blend formulas themselves already exist; a new mode fixture that PASSes is not an invented arithmetic defect.
-- [ ] **Step 3: Emit the following exact graph and seal every dynamic payload/index/domain.** Table record is64 little-endian U32 words; index∈[0,255] checked before fetch; extract `(word >> ((index&3)*8))&255`. Do not bind a LUT texture. Transfer recipes are EOTF/OETF global §11.1, operating on numerical straight RGB without target retagging. Lighting ignores mul/add alpha. Blend calls the exact shared29 formula authority with `dst=input,src=toLinearPremul(color)`; no new mode formulas/native semantic choice.
+- [x] **Step 2: Run the new exact Table/Lighting/transfer/Blend methods on unchanged production, inspect genuine RED.** Blend formulas themselves already exist; a new mode fixture that PASSes is not an invented arithmetic defect.
+- [x] **Step 3: Emit the following exact graph and seal every dynamic payload/index/domain.** Table record is64 little-endian U32 words; index∈[0,255] checked before fetch; extract `(word >> ((index&3)*8))&255`. Do not bind a LUT texture. Transfer recipes are EOTF/OETF global §11.1, operating on numerical straight RGB without target retagging. Lighting ignores mul/add alpha. Blend calls the exact shared29 formula authority with `dst=input,src=toLinearPremul(color)`; no new mode formulas/native semantic choice.
 
 Before any recording/IR copy, `ColorFilterCapturePreflight` checks `table.size==256`, otherwise `invalid.material.filter.table`; do not call `copyOf` or `ImmutableUBytes.copyOf` first. The raw V4 measurement/permit validates Table's actual appended allocation before64-word packing. Table's proof keeps the discrete admissible integer set from rounded scalar evaluation, checks every reachable index, fetches the corresponding bound byte and propagates the union. It must not claim `round`, F32→U32 or a table selection is continuous/exact around a half-integer.
 
@@ -280,8 +287,8 @@ LinearToSRGB(x) = P(OETF(U(x).rgb),x.a)
 ```
 
 Use genuine alpha guards and operation-specific domains, including signed intermediate data where the requested conversion supports it. The pinned pow/log2/exp2/division bounds are not exact identities. Entirely unbounded mandatory domains require reformulation, not nominal unsupported-mode closure.
-- [ ] **Step 4: Fresh full filter/order gates plus affected W5b blend and W5e source/format gates.** Public mutations of Table after capture cannot change retained frames. Review packed Table bounds and shader/proof correspondence statically, never assert private bytes.
-- [ ] **Step 5: Commit `feat(gpu): add W5f table transfer and blend filters` after Sol review.**
+- [x] **Step 4: Fresh full filter/order gates plus affected W5b blend and W5e source/format gates.** Public mutations of Table after capture cannot change retained frames. Review packed Table bounds and shader/proof correspondence statically, never assert private bytes.
+- [x] **Step 5: Commit provisional `feat(gpu): add W5f table transfer and blend filters` under R2, then close after Sol review and separate reviewed fixes.** Implementation d1851aed, I1/R19 fix d5e7a300, sole scoped Sol Approved; no external publication or native GREEN.
 
 ### Task 4: Deliver HSLAMatrix, HighContrast, Luma and Overdraw
 
@@ -552,7 +559,7 @@ Planning verdict: ready after full Astra review, targeted confirmation and its v
 | --- | --- | --- |
 | 1 | Matrix/Solid/Opacity Rect, sealed V4 source/filter/bindings and exact packed handoff | CLOSED within this slice; Sol spec compliant / quality Approved, scoped numeric-documentation fix ADDRESSED |
 | 2 | Compose/Lerp/order, Path/General and construction-first composite publication | CLOSED231eae9809f7c535eaf75ec84153215a4f0f24c9; Sol Approved/no Critical/Important; sole scoped R14 reconciliation02c63c14d ADDRESSED/spec Compliant/quality Approved |
-| 3 | Table/Lighting/transfers/all29 Blend filters | Next sequential Astra task; actual Task2 source/permit contracts retained |
+| 3 | Table/Lighting/transfers/all29 Blend filters | CLOSED within assigned bounded Rect/Path-fill slice. Initial Sol Needs fixes (sole I1) preserved; Astra R19 fix d5e7a30011cf36311a778fe7cbd6e460acb168d4, sole scoped Sol I1 ADDRESSED/spec+quality Approved/no new defects. Fresh64assertionsPASS but Gradle1/native133,5module standalone compile0; wider domains remain OPEN |
 | 4 | HSLA/HighContrast/Luma/Overdraw | Pending |
 | 5 | LINEAR/OKLAB gradient interpolation | Pending |
 | 6 | HSL/OKLCH/working-space precedence | Pending |
@@ -565,7 +572,63 @@ Task2 actual implementation231eae9809f7c535eaf75ec84153215a4f0f24c9 consumes unp
 
 ### Chronological controller rulings and costs
 
-These are binding execution adjudications, not additional product scope. The table is current through R14; later rulings must be appended, never silently replace earlier decisions. Outstanding Task2 requirements are not closed by recording them here.
+Task3 provisional delivery d1851aed60ebdaca8bf2f279c9fe6c2454073596 (17paths,
+687+/86−) has a full final report and exact single-commit Sol review package.
+Fresh affected public gate64assertionsPASS in9classes,0failure/error/skip:
+Filter39 including29individually named Blend modes, Ordering10, oldW5a/b/c/d11,
+affectedW5e4. UTC02:27:53.354Z–02:31:02.004Z. Command FAILED Gradle1/executor43
+native133/3m37, separateprocessXML1failure, not a public assertion failure.
+Standalone5module compile0/853ms; controller standalone0/805ms, all requested
+targetsUP-TO-DATE, not forcedclean. No source changes after gates; full report
+manifest/chronology/hash/footer read by controller. Full Sol review read and retained
+verbatim: specification/quality Needs fixes, sole Important I1 unsupported exactzero
+bare Sqrt certificate and matching oracle shortcut; no current pixel failure asserted.
+Controller independently verified the actual code/pinned WGSL and assigned Astra
+fix round1 under R19. Sole scoped Sol now marks I1 ADDRESSED/spec+quality Approved;
+original Needs fixes remains historical. Task3 is CLOSED within its assigned slice.
+Tasks4–8/globalreview/stackedDraftPR
+remain pending. Existing warnings and bounded-domain limits are retained.
+
+Task3 I1 fix round1 delivered d5e7a30011cf36311a778fe7cbd6e460acb168d4 from exact
+BASEd1851aed60ebdaca8bf2f279c9fe6c2454073596:3paths32+/32−, actual common V4
+equality-zero LazyBranch and removal of bare-Sqrt/raw-oracle exactzero assumptions.
+All public fixture data and old V1–3 formulas/parser/evaluator/ABI/ownership unchanged.
+Raw historical oracle domains are stricter, not comprehensively approved. Chronology:
+first raw-oracle28/29 plus SOFT_LIGHT unbounded BEFORE Surface (notproductionRED),
+then genuine public28/29 plus SOFT_LIGHT numeric-domain-unbounded while AST still
+unguarded, then actual guard and unchanged fresh64PASS/0failure/error/skip in9classes
+UTC02:53:13.150Z–02:56:24.857Z. SeparatecommandFAILED Gradle1/executor46native133/
+3m38, processXML1failure distinct; standalone5compile0/815ms, rootfresh0/764ms,
+all5TARGETUPTODATE/notforcedclean. Fullfinalfixreport/footer read to EOF;
+committed/pre/postgate/staged diff hash09ab40efae1d70725541861dd4018fd927c575eaace280ffafdd63f7419a32d9
+matches, no source changes after launch, emptyindex/only3rootdocsdirty. Exact scoped
+Sol package1commit15507bytes, I1/newbreakage scoped review Approved/no new actionable
+Critical/Important/Minor; original I1 ADDRESSED. Task3 CLOSED on assigned bounded
+Table/Lighting/transfers/29Blend Rect/Path-fill, not allRGBA/ISO. Task4 is next.
+Original fullreview Needs fixes stays historical, no replacement by assertion count.
+
+Task3 discovered numerical gap (OPEN, not a closed positive): SOFT_LIGHT
+zero straight channel with nonunit alpha permits a negative subnormal division
+enclosure; the existing eager select also evaluates sqrt(cb), outside its domain.
+The portable proof legitimately refuses that plausible public source. A positive
+channel fixture can close its assigned bounded witness, not all zero/nonunit RGBA.
+No shader clamp, invented alpha floor, changed formula or nominal certificate.
+Track for later Skia integration/GM impact; Sol verifies actual diagnosis/limits,
+not a comprehensive historical audit. Pinned [WGSL2026-08-31](https://www.w3.org/TR/2026/CRD-WGSL-20260831/)
+§§15.7.4.1/17.5.58. No global ISO or general-domain completion follows.
+
+Other narrowed evidence remains explicit: pure inverse Table outputalpha0
+followed by a SafeU consumer can cross the portable divisor domain; standalone
+inverse plus positive-alpha-endpoint Compose witnesses do not close that variant.
+HUE inputalpha0 with positive opaque-green filter source failed the independent
+oracle BEFORE Surface, so production refusal is NOT demonstrated. Only that true
+inputalpha0 witness uses the actual sourcealpha0 lazy guard; alpha1/nonunit/order/
+destination cells retain nonzero filter source. Dodge/Burn discontinuity fixtures
+were moved away after retaining BOTH reachable equality outcomes. These are
+bounded positive cells, not allRGBA/sourcealpha/discontinuity coverage. Sol verified
+actual guards and required kind/mode witnesses, with bare-sqrt I1 still open.
+
+These are binding execution adjudications, not additional product scope. The table is current through R19; later rulings must be appended, never silently replace earlier decisions. Recording a ruling does not close outstanding task requirements.
 
 | Ruling | Decision / disposition | Cost if wrong |
 | --- | --- | --- |
@@ -583,3 +646,8 @@ These are binding execution adjudications, not additional product scope. The tab
 | R12 | Scoped Task1 Sol Approved/no Critical/Important. Fix numeric-certificate documentation now, with sole scoped confirmation (ADDRESSED/Approved); assign nonunit Paint-alpha restoration witness to2; retain old warnings explicitly. | Misleading proof documentation hides future errors; deferred order evidence must close in2; warnings keep output non-pristine. Task1 does not validate later source/composite proofs or unchanged oracle arithmetic. |
 | R13 | Authorize necessary internal immutable graph-construction extraction and construct/compiler/sealer/validator/witness signatures for R11. Preserve public wrappers, one genuine validator, old rules/refusals/ABI and final-table reissued certificates; no RenderGraph flag or partial Ready. | Larger mechanical extraction can regress old validation/ownership. Per-file reasons, focused old public gates and Sol review must verify compatibility; new geometry/ABI/ownership strategy needs explicit ruling. |
 | R14 | Reconcile only nine Task2 Modify-without-hunk paths as audit/reuse after Sol's targeted existing-contract/new-consumer checks. Retain every functional obligation, original formal finding and verification limits; no production/test changes or artificial hunks. Sole scoped confirmation is required before Task2 closure. | A hidden historical contract deficiency can remain; exact join checks/public27PASS do not comprehensively validate all prepared/W4e topologies or shared oracle arithmetic. Any actual missing functionality still requires a fix, with no new promotion/API/lifecycle scope. |
+| R15 | Actual Task3 Table consumer may add only readonly public ImmutableUBytes.sizeI32/indexed get for256metadata before copies and byte proof/packing. Preserve private storage/copies/canonical/equality/schema, standard bounds; public invalid-length/recovery/mutation pixels only, no accessor/private tests or other payload APIs. | Additive public API must remain stable; no backing-array exposure, private diagnostic, normalisation, new geometry/ownership/ABI strategy or unchecked Table index is authorised. |
+| R16 | Same immutable execution/source-proof/frame owner may use internal raw Intbits, putInt Raw.pack and V4U32shader loads; F32bitcasts only authenticated numeric slots. Preserve physicalbytes/layout/oneallocation/permit/V1–3; before permit retain descriptors/originalTablebytes, not a packed64word Map/List/array. Proof checks every discrete index/byte/layout owner; Tablewordpacking only after permit. | Wrong dtype/slot/layout/identity corrupts bytes/proofs/cache. Retained public regressions/Tablepatterns/index bounds/budget control and Sol must verify; no private ABI tests, new owner/API/backing/native workaround without concrete ruling. |
+| R17 | Audit/reuse only four Task3 existing seal/snapshot/scene-capture hooks after targeted join checks; retain exact ownership/first preflight/immutable ordered capture. New Table length validation stays central and direct-IR compiler/proof extends genuinely. No artificial hunks, repeated validators, private tests or blanket exception. | Hidden historical contract deficiency remains possible; targeted joins do not verify all old capture/routes. Actual public malformed/mutation/retained native gates and Sol must verify each obligation, without new API/ABI/ownership/geometry/lifecycle scope. |
+| R18 | Include actual Task3 W5dGradientCandidateV2 existing-reader extension for Table/Lighting/Blend/transfers with unchanged Rect/Path-fill/Solid guards and single admission authority. The two Blend bridge/parser files were already explicitly listed; controller's contrary inventory statement was corrected, not a new exemption. | A forgotten reader can send valid or invalid payloads to legacy, while broad guards accidentally promote other lanes. Public actual native/refusal cells and Sol must verify; no parallel gate, new source domain, formula set or ABI change. |
+| R19 | Task3 review I1 accepted after actual-code/pinned-profile verification: remove unsupported bare Sqrt exactzero in proof/oracle. Authorise real equality-zero LazyBranch in the common authoritative V4 adaptation of the already selected shared sqrt builtin, consumed by proof/emission/canonical topology; zero returns actual constant, nonzero branch uses bare sqrt only under positive-normal inherited-domain proof. Independent SoftLight oracle models that guarded algorithm without production imports. Legacy V1–3 shared formulas/parser, ABI/ownership/provider/source-family guards unchanged; no emitter-only guard, epsilon/clamp or exact-zero proof exemption. | Graph/certificate identity must include the real guard; mistaken conditioning can mask negative/subnormal or zero-to-positive domain uncertainty, or still eagerly execute unbounded sqrt. Preserve the OPEN SOFT_LIGHT nonunit-zerochannel/Table SafeU/HUE/Dodge-Burn limits; actual zero/alpha0/nonunit/order/destination/retained public gates and scoped Sol must verify, not private/source tests. Affected historical oracle consumers get named bounded checks only. Delivered d5e7a300 and sole scoped Sol I1 ADDRESSED/spec+quality Approved/no new defects; R19 closed for this fix, wider domains and bounded historical-audit limits remain OPEN. |

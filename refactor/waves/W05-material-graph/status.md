@@ -1,6 +1,6 @@
 # État W05 — material graph, gradients, images et color filters
 
-## W5f — Task1–2 closes, suite séquentielle Task3
+## W5f — Task1–3 closes, prochaine Task4
 
 Le [plan W5f](../../plans/2026-09-14-w5f-color-filters-implementation-plan.md)
 prépare huit livraisons séquentielles sur `codex/w5f-color-filters`, à partir de
@@ -83,8 +83,77 @@ exit0/1s (5executed/33up-to-date): pas de forced-clean compilation ni contournem
 Les anciennes topologies prepared/W4e et toute l'arithmétique oracle partagée ne
 sont pas exhaustivement revalidées par cette review. Filtres RRect/stroke et autres
 sources/effets non promus restent fermés. Task3 Table/Lighting/transfers/Blend est
-la suite séquentielle avec Astra. Les tâches3–8 et la review globale W5f restent
-ouvertes. Aucun push/PR W5f/merge.
+livrée provisoirement par Astra depuis
+`5350f70b8c974e38838e6f882240a8aec76c61ff` au commit
+`d1851aed60ebdaca8bf2f279c9fe6c2454073596`. La review indépendante Sol conclut
+specification/quality **Needs fixes**, un seul Important I1 : le node `Sqrt(0)`
+est certifié exact sans garantie d'accuracy portable WGSL; l'oracle partage ce
+raccourci. Pas d'échec pixel actuel affirmé. Le controller a vérifié le finding;
+Astra a livré le correctif round1 `d5e7a30011cf36311a778fe7cbd6e460acb168d4`;
+la re-review Sol ciblée marque I1 ADDRESSED, specification/quality Approved,
+sans nouveau Critical/Important/Minor actionable. La review initiale reste historique.
+Task3 est close sur sa tranche bornée Rect/Path-fill, pas sur tous les RGBA.
+Les tâches4–8 et la review globale W5f restent ouvertes. Aucun push/PR W5f/merge.
+
+Livraison initiale Task3 :64 assertions publiques PASS dans neuf classes, sans failure/error/skip,
+UTC02:27:53.354Z–02:31:02.004Z :39filters (dont29Blend individuellement nommés),
+10Ordering,11anciensW5a/b/c/d et4W5e formats/Atlas/ImageShader. Les témoins
+Rect/Path direct/stencil incluent alpha0/1/nonunitaire, mutation, permutation du
+filtre avec Matrix, indices Table arrondis et DIFFERENCE sur destination colorée
+translucide; Sol confirme ces témoins et les joins d'ownership, sans fermer I1.
+**Commande FAILED Gradle1 / executor43 exit133 /3m37**, XMLprocess1failure distinct.
+Compilation séparée cinq modules exit0/853ms; controller exit0/805ms, targets
+UP-TO-DATE, pas de forcedclean. Diff exact17fichiers687+/86−; sources inchangées
+après les gates, index vide et seuls les trois docs controller modifiés.
+L'implémentation globale W5f et sa review ne sont pas closes.
+
+Gap numérique découvert pendant Task3, encore ouvert : avec SOFT_LIGHT et un
+canal straight nul à alpha non unitaire, la division WGSL autorise une borne
+subnormale négative; le `select` existant évalue aussi `sqrt(cb)`, hors domaine.
+Le refus de la preuve portable est donc légitime. La fixture à canal positif
+peut fournir un témoin borné requis, mais ne ferme pas ce domaine public plausible.
+Pas de clamp shader, plancher alpha ou modification de formule pour masquer
+le gap. À reprendre si les GMs/tests d'intégration Skia rencontrent ce cas;
+aucune prétention de couverture de tous les RGBA ou d'ISO. Le profil reste celui
+de la [spécification WGSL épinglée](https://www.w3.org/TR/2026/CRD-WGSL-20260831/),
+§§15.7.4.1/17.5.58. Sol confirme le diagnostic et ses limites, sans audit historique
+exhaustif. R19 autorise une vraie garde lazy égalité-zéro dans le graph V4 commun
+de l'adaptation du sqrt partagé, consommée par preuve et emission; le sqrt nu et
+l'oracle ne peuvent plus supposer zéro exact. Pas de changement des formules
+legacy, d'epsilon/clamp, de guard shader isolée ni de nouveau domaine promu.
+Coût : la topologie/certificat doit réellement changer; une garde mal conditionnée
+pourrait masquer le gap négatif/subnormal ou laisser s'exécuter le sqrt non borné.
+Témoins SoftLight zero/alpha0 et nonunitaire, régressions publiques affectées et
+re-review Sol le vérifient pour I1. R19 est livré par Astra et approuvé par Sol,
+avec les limites de domaine et d'audit historique conservées.
+
+Correctif I1/R19 : diff séparé exact3fichiers32+/32− depuis d1851aed vers d5e7a300,
+garde égalité-zéro réelle dans le graph V4 commun, pas dans le seul shader.
+Le sqrt nu exige désormais son domaine positif normal/reciprocal borné; l'oracle
+raw refuse zéro/zéro-croisement, seul filterBlend modélise indépendamment la garde
+réellement émise. Formules/parser/évaluateur V1–3, ABI/ownership, toutes fixtures
+publiques inchangés. Coût : comparaison/branche et nouvelle identité structurelle
+du graph; domaine oracle historique plus strict, pas d'approbation legacy globale.
+Avant garde : oracle SOFT_LIGHT non borné AVANT Surface (28/29), puis vrai RED
+public `numeric-domain-unbounded` (28/29); ne pas confondre les deux.
+Après garde :64 assertions fraîches PASS/0failure/error/skip UTC02:53:13.150Z–
+02:56:24.857Z, dont39filters/29Blend et10Ordering, mêmes témoins alpha0/1/nonunitaire,
+mutation/ordre/destination/Rect/direct/stencil. **Commande FAILED Gradle1 /
+executor46 native133 /3m38**, XMLprocess1failure distinct. Cinq compilations
+autonomes exit0/815ms; controller exit0/764ms, targetsUP-TO-DATE/pas de forcedclean.
+Hash source avant/après gate/staging/commit identique, index vide, seulement3docs
+controller dirty; aucun changement source après lancement. Sol ciblée Approved,
+I1 corrigé, aucun nouveau défaut actionable. Task3 close sur sa tranche; aucun gap
+numérique plus large implicitement résolu. Prochaine Task4 : HSLA/HighContrast/Luma/Overdraw.
+
+Réserves de fixtures à conserver : Table inverse donnant alpha0 avant un SafeU
+peut franchir le domaine portable du diviseur; inverse standalone et compositions
+à endpoint alpha positif ne ferment pas cette variante. HUE entrée alpha0 avec
+source filter verte opaque est non borné dans l'oracle AVANT Surface, pas un refus
+production démontré. Son seul témoin entrée alpha0 utilise la véritable garde
+sourcealpha0; les cas alpha1/nonunitaire/ordre/destination gardent la source non nulle.
+Les discontinuités Dodge/Burn abandonnées restent non vérifiées, même après
+correction de l'oracle conservant les deux branches atteignables. Pas de tousRGBA/ISO.
 
 ## W5e — tranche fonctionnelle close, intégration réservée
 
