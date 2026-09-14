@@ -31,7 +31,7 @@ public class GradientStopPlanV1 private constructor(public val positionF32: Floa
         /** Called only by checked-frame stop preparation; no public signed-tuple constructor. */
         fun prepared(positionF32: Float, original: ColorF32, domain: ColorInterpolation,
             tuple: ColorF32, recipeIdentity: String): GradientStopPlanV1 {
-            require(domain == ColorInterpolation.LINEAR || domain == ColorInterpolation.OKLAB) { W5fPlanDiagnostics.Schema }
+            require(domain != ColorInterpolation.SRGB) { W5fPlanDiagnostics.Schema }
             require(tuple.alpha.toRawBits() == original.alpha.toRawBits()) { W5fPlanDiagnostics.Schema }
             return GradientStopPlanV1(positionF32, original, domain, tuple, recipeIdentity)
         }
@@ -70,13 +70,16 @@ public class GradientStopSlabPlanV1 private constructor(stops: List<GradientStop
             require(stops.all { stop ->
                 when (stop.domain) {
                     ColorInterpolation.SRGB -> stop.preparedTupleF32 == stop.straightSrgbF32 && stop.preparationRecipeIdentity == null
-                    ColorInterpolation.LINEAR, ColorInterpolation.OKLAB -> stop.preparedTupleF32.let { tuple ->
+                    ColorInterpolation.LINEAR, ColorInterpolation.OKLAB, ColorInterpolation.HSL, ColorInterpolation.OKLCH -> stop.preparedTupleF32.let { tuple ->
                         listOf(tuple.red, tuple.green, tuple.blue, tuple.alpha).all(Float::isFinite) &&
                             tuple.alpha.toRawBits() == stop.straightSrgbF32.alpha.toRawBits() &&
-                            stop.preparationRecipeIdentity == if (stop.domain == ColorInterpolation.OKLAB)
-                                ColorInterpolationProgramV1.OKLAB_RECIPE_VERSION else "linear-srgb-eotf-ordered-f32-v1"
+                            stop.preparationRecipeIdentity == when (stop.domain) {
+                                ColorInterpolation.OKLAB -> ColorInterpolationProgramV1.OKLAB_RECIPE_VERSION
+                                ColorInterpolation.HSL -> ColorInterpolationProgramV1.recipe(ColorInterpolationProgramV1.RecipeKind.SRGB_TO_HSL_STOP).identity
+                                ColorInterpolation.OKLCH -> ColorInterpolationProgramV1.recipe(ColorInterpolationProgramV1.RecipeKind.SRGB_TO_OKLCH_STOP).identity
+                                else -> "linear-srgb-eotf-ordered-f32-v1"
+                            }
                     }
-                    else -> false
                 }
             })
             return GradientStopSlabPlanV1(stops)

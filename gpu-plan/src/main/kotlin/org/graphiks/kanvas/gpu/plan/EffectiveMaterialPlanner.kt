@@ -208,9 +208,14 @@ public object EffectiveMaterialPlanner {
         var leaf = draw.material
         var filtered = draw.paint?.colorFilter != null
         var depth = 0
+        var workingDomain: org.graphiks.kanvas.render.ir.ColorInterpolation? = null
         while (true) {
             if (++depth > 64) return SourceNormalizationV4.Refused(W5fPlanDiagnostics.Schema)
             leaf = when (val node = leaf) {
+                is MaterialNode.WithWorkingColorSpace -> {
+                    if (workingDomain == null) workingDomain = node.interpolation
+                    node.material
+                }
                 is MaterialNode.Opacity -> node.material
                 is MaterialNode.WithColorFilter -> { filtered = true; node.material }
                 is MaterialNode.WithLocalMatrix -> { coordinateNodes += CoordinateNodeV2.LocalMatrix(node.matrix); node.material }
@@ -218,16 +223,17 @@ public object EffectiveMaterialPlanner {
                 else -> break
             }
         }
-        val domain = when (val source = leaf) {
+        val leafDomain = when (val source = leaf) {
             is MaterialNode.LinearGradient -> source.interpolation
             is MaterialNode.RadialGradient -> source.interpolation
             is MaterialNode.SweepGradient -> source.interpolation
             is MaterialNode.ConicalGradient -> source.interpolation
             else -> null
         }
+        val domain = if (leafDomain == null) null else workingDomain ?: leafDomain
         val actualBounds = org.graphiks.math.geometry.RectF32.ofLTRB(bounds.left.toFloat(),bounds.top.toFloat(),
             bounds.right.toFloat(),bounds.bottom.toFloat())
-        if (domain == null || domain == org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB) {
+        if (domain == null || domain == org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB && workingDomain == null) {
             return when (val original = normalize(draw,targetClamp,true,coverage,sample,gradientDeviceBoundsI32=legacyGradientBoundsI32)) {
                 Normalization.NoOp -> SourceNormalizationV4.NoOp
                 is Normalization.Refused -> SourceNormalizationV4.Refused(original.diagnosticCode)
@@ -383,11 +389,12 @@ public object EffectiveMaterialPlanner {
         if (allowDestinationCandidate && elideNoOp && blend == BlendPlan.NoOpV1) return Normalization.NoOp
         val wrappers = mutableListOf<MaterialNode>()
         var leaf = draw.material
-        while (leaf is MaterialNode.Opacity || leaf is MaterialNode.WithColorFilter) {
+        while (leaf is MaterialNode.Opacity || leaf is MaterialNode.WithColorFilter || leaf is MaterialNode.WithWorkingColorSpace) {
             if (wrappers.size >= 64) return Normalization.Refused(W5fPlanDiagnostics.Schema)
             wrappers += leaf
             leaf = when (leaf) { is MaterialNode.Opacity -> leaf.material
-                is MaterialNode.WithColorFilter -> leaf.material }
+                is MaterialNode.WithColorFilter -> leaf.material
+                is MaterialNode.WithWorkingColorSpace -> leaf.material }
         }
         val base = when (leaf) {
             MaterialNode.Transparent -> MaterialPlanEntry(MaterialProgramPlan.TransparentV1, MaterialBindingPlan.EmptyV1)
@@ -424,6 +431,7 @@ public object EffectiveMaterialPlanner {
             val refusal = when (wrapper) {
                 is MaterialNode.Opacity -> opacity(wrapper.alpha)
                 is MaterialNode.WithColorFilter -> apply(wrapper.filter)
+                is MaterialNode.WithWorkingColorSpace -> null
                 else -> error("Unary wrapper")
             }
             if (refusal != null) return Normalization.Refused(refusal)
@@ -440,7 +448,14 @@ public object EffectiveMaterialPlanner {
         elideNoOp: Boolean = true,
         gradientDeviceBoundsI32: org.graphiks.math.geometry.RectI32? = null, imageMaskChild: Boolean = false): Normalization {
         var filteredMaterial = draw.material
-        while (filteredMaterial is MaterialNode.Opacity) filteredMaterial = filteredMaterial.material
+        var filteredDepthI32 = 0
+        while (filteredMaterial is MaterialNode.Opacity || filteredMaterial is MaterialNode.WithWorkingColorSpace) {
+            if (++filteredDepthI32 > 64) return Normalization.Refused(W5fPlanDiagnostics.Schema)
+            filteredMaterial = when (filteredMaterial) {
+                is MaterialNode.Opacity -> filteredMaterial.material
+                is MaterialNode.WithWorkingColorSpace -> filteredMaterial.material
+            }
+        }
         if (draw.paint?.colorFilter != null || filteredMaterial is MaterialNode.WithColorFilter)
             return normalizeOrderedColor(draw, targetClamp, allowDestinationCandidate, coverage, sample,
                 elideNoOp, gradientDeviceBoundsI32, imageMaskChild)
@@ -472,8 +487,11 @@ public object EffectiveMaterialPlanner {
         var material = sourceMaterial
         val opacityInnerToOuter = mutableListOf<Float>()
         var visited = 0
-        while (material is MaterialNode.Opacity) {
-            if (++visited > 64 || !material.alpha.isFinite() || material.alpha !in 0f..1f) {
+        while (material is MaterialNode.Opacity || material is MaterialNode.WithWorkingColorSpace) {
+            if (++visited > 64) return Normalization.Refused(W5fPlanDiagnostics.Schema)
+            if (material is MaterialNode.WithWorkingColorSpace) { material = material.material; continue }
+            material as MaterialNode.Opacity
+            if (!material.alpha.isFinite() || material.alpha !in 0f..1f) {
                 return Normalization.Refused(W5aPlanDiagnostics.InvalidOpacity)
             }
             opacityInnerToOuter += material.alpha

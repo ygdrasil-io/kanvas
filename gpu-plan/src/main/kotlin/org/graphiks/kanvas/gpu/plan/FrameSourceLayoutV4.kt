@@ -205,13 +205,39 @@ internal class FrameSourceLayoutV4 private constructor(
         class Legacy(stops: List<GradientStopPlanV1>) : RangeValues {
             val stops = immutableList(stops)
             override val countI32: Int get() = stops.size
-            override fun same(other: RangeValues): Boolean = other is Legacy && stops == other.stops
+            override fun same(other: RangeValues): Boolean = when (other) {
+                is Legacy -> stops == other.stops
+                is Pending -> other.sameLegacy(this)
+            }
         }
         class Pending(val metadata: MaterialSourceConstructionV4.GradientMetadata) : RangeValues {
             override val countI32: Int get() = metadata.stops.countI32
-            override fun same(other: RangeValues): Boolean = other is Pending &&
-                metadata.interpolation == other.metadata.interpolation && metadata.recipeIdentity == other.metadata.recipeIdentity &&
-                metadata.stops.sameSequence(other.metadata.stops)
+            override fun same(other: RangeValues): Boolean = when (other) {
+                is Pending -> metadata.interpolation == other.metadata.interpolation &&
+                    metadata.recipeIdentity == other.metadata.recipeIdentity && metadata.stops.sameSequence(other.metadata.stops)
+                is Legacy -> sameLegacy(other)
+            }
+
+            // A selected SRGB wrapper uses the historical no-conversion tuple.
+            // Match that SAME eventual range before budgeting, in either first-use
+            // order; no prepared tuple is allocated during this metadata scan.
+            fun sameLegacy(other: Legacy): Boolean {
+                if (metadata.interpolation != ColorInterpolation.SRGB || metadata.recipeIdentity != null ||
+                    countI32 != other.countI32) return false
+                val pending = metadata.stops.values().iterator()
+                return other.stops.all { legacy ->
+                    val stop = pending.next()
+                    val color = stop.color
+                    fun sameColor(value: ColorF32): Boolean =
+                        value.red.toRawBits() == color.redNormalized.toRawBits() &&
+                        value.green.toRawBits() == color.greenNormalized.toRawBits() &&
+                        value.blue.toRawBits() == color.blueNormalized.toRawBits() &&
+                        value.alpha.toRawBits() == color.alphaNormalized.toRawBits()
+                    legacy.domain == ColorInterpolation.SRGB && legacy.preparationRecipeIdentity == null &&
+                        legacy.positionF32.toRawBits() == stop.positionF32.toRawBits() &&
+                        sameColor(legacy.straightSrgbF32) && sameColor(legacy.preparedTupleF32)
+                } && !pending.hasNext()
+            }
         }
     }
     private class RangeAllocation(val range: GradientStopRangeV1,val values: RangeValues)
@@ -228,14 +254,26 @@ internal class FrameSourceLayoutV4 private constructor(
                         is RangeValues.Pending -> for (stop in source.metadata.stops.values()) {
                             val c = stop.color
                             val original = ColorF32.of(c.redNormalized,c.greenNormalized,c.blueNormalized,c.alphaNormalized)
-                            val linear = listOf(original.red,original.green,original.blue).map {
-                                ColorInterpolationProgramV1.evaluateHostF32(ColorInterpolationProgramV1.RecipeKind.EOTF,listOf(it)).single()
+                            val rgb = listOf(original.red,original.green,original.blue)
+                            val domain = source.metadata.interpolation
+                            if (domain == ColorInterpolation.SRGB) {
+                                values += GradientStopPlanV1(stop.positionF32,original)
+                                continue
                             }
-                            val prepared = if (source.metadata.interpolation == ColorInterpolation.OKLAB)
-                                ColorInterpolationProgramV1.evaluateHostF32(ColorInterpolationProgramV1.RecipeKind.LINEAR_RGB_TO_OKLAB,linear)
-                            else linear
+                            val prepared = if (domain == ColorInterpolation.HSL || domain == ColorInterpolation.OKLCH)
+                                ColorInterpolationProgramV1.evaluateHostF32(if (domain == ColorInterpolation.HSL)
+                                    ColorInterpolationProgramV1.RecipeKind.SRGB_TO_HSL_STOP else ColorInterpolationProgramV1.RecipeKind.SRGB_TO_OKLCH_STOP,
+                                    rgb,stop.color)
+                            else {
+                                val linear = rgb.map {
+                                    ColorInterpolationProgramV1.evaluateHostF32(ColorInterpolationProgramV1.RecipeKind.EOTF,listOf(it)).single()
+                                }
+                                if (domain == ColorInterpolation.OKLAB)
+                                    ColorInterpolationProgramV1.evaluateHostF32(ColorInterpolationProgramV1.RecipeKind.LINEAR_RGB_TO_OKLAB,linear)
+                                else linear
+                            }
                             values += GradientStopPlanV1.prepared(stop.positionF32,original,source.metadata.interpolation,
-                                ColorF32.of(prepared[0],prepared[1],prepared[2],original.alpha),source.metadata.recipeIdentity)
+                                ColorF32.of(prepared[0],prepared[1],prepared[2],original.alpha),requireNotNull(source.metadata.recipeIdentity))
                         }
                     }
                     require(values.size.toLong() == allocation.range.baseIndexU32.toLong()+allocation.range.countU32.toLong()) {

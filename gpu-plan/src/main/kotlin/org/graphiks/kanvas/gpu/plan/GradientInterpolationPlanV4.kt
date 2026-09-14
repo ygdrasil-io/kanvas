@@ -6,10 +6,9 @@ import org.graphiks.kanvas.render.ir.ColorInterpolation
 /** Code shape only: the addressing program is not an evaluated sRGB child. */
 public class GradientInterpolationProgramV4(public val addressing: GradientAddressingProgramV2,
     public val domain: ColorInterpolation) : MaterialProgramPlan {
-    init { require(domain == ColorInterpolation.LINEAR || domain == ColorInterpolation.OKLAB) }
     override val versionI32: Int = 4
     override val structuralId: MaterialProgramPlanId = MaterialProgramPlanId(
-        "gradient-interpolation-v4:$domain:oklab-srgb-2021-v1:${addressing.structuralId.value}")
+        "gradient-interpolation-v4:$domain:oklab-srgb-2021-v1:polar-achromatic-original-srgb-v1:shortest-positive-tie-v1:${addressing.structuralId.value}")
     override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.colorSourceV4()
 }
 

@@ -77,6 +77,9 @@ internal object W5fColorOperationEmitterV1 {
                 is ColorOperationGraphV1.Scalar.Abs -> "abs(${arg(node.value)})"
                 is ColorOperationGraphV1.Scalar.Sqrt -> "sqrt(${arg(node.value)})"
                 is ColorOperationGraphV1.Scalar.Atan2 -> "atan2(${arg(node.y)}, ${arg(node.x)})"
+                is ColorOperationGraphV1.Scalar.Sin -> "sin(${arg(node.value)})"
+                is ColorOperationGraphV1.Scalar.Cos -> "cos(${arg(node.value)})"
+                is ColorOperationGraphV1.Scalar.StopInterpolationInput -> error("Unbound selected-stop interpolation operand")
                 is ColorOperationGraphV1.Scalar.GradientStopComponent -> {
                     val selected = node.selection
                     val vector = cache[selected] ?: run {
@@ -106,7 +109,14 @@ internal object W5fColorOperationEmitterV1 {
                         code.append("} else if ($parameter == ${prefix}Left.positionAndReserved.x || all(${prefix}Left.straightColor == ${prefix}Right.straightColor)) {\n")
                         code.append("$prefix = ${prefix}Left.straightColor;\n} else {\n")
                         code.append("let ${prefix}Weight = clamp(($parameter - ${prefix}Left.positionAndReserved.x) / (${prefix}Right.positionAndReserved.x - ${prefix}Left.positionAndReserved.x), 0.0, 1.0);\n")
-                        code.append("$prefix = (1.0 - ${prefix}Weight) * ${prefix}Left.straightColor + ${prefix}Weight * ${prefix}Right.straightColor;\n}\n")
+                        val interpolationCache = java.util.IdentityHashMap(cache)
+                        selected.interpolationInputs.forEachIndexed { index,input -> interpolationCache[input] = when {
+                            index < 4 -> "${prefix}Left.straightColor[${index}u]"
+                            index < 8 -> "${prefix}Right.straightColor[${index-4}u]"
+                            else -> "${prefix}Weight"
+                        } }
+                        val interpolated = selected.interpolationGraph.outputs.map { expression(it,code,interpolationCache) }
+                        code.append("$prefix = vec4<f32>(${interpolated.joinToString(", ")});\n}\n")
                         cache[selected] = prefix
                         prefix
                     }

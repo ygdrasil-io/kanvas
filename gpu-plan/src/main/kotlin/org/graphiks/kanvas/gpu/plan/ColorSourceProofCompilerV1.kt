@@ -156,9 +156,17 @@ internal object ColorSourceProofCompilerV1 {
         if (definition.addressing.effectiveTileMode == GradientTileModeV2.DECAL) {
             straight = vectorBranch(P.UniformU32Equal(2L,1u),List(4) { zero },straight)
         }
-        val linear = if (definition.domain == org.graphiks.kanvas.render.ir.ColorInterpolation.OKLAB)
-            ColorOperationGraphV1.conversion(straight.take(3),org.graphiks.kanvas.color.ColorInterpolationProgramV1.RecipeKind.OKLAB_TO_LINEAR_RGB)
-        else straight.take(3)
+        val linear = when (definition.domain) {
+            org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB -> straight.take(3).map(ColorOperationGraphV1::eotf)
+            org.graphiks.kanvas.render.ir.ColorInterpolation.LINEAR -> straight.take(3)
+            org.graphiks.kanvas.render.ir.ColorInterpolation.HSL -> ColorOperationGraphV1.conversion(straight.take(3),
+                org.graphiks.kanvas.color.ColorInterpolationProgramV1.RecipeKind.HSL_TO_RGB).map(ColorOperationGraphV1::eotf)
+            org.graphiks.kanvas.render.ir.ColorInterpolation.OKLAB -> ColorOperationGraphV1.conversion(straight.take(3),
+                org.graphiks.kanvas.color.ColorInterpolationProgramV1.RecipeKind.OKLAB_TO_LINEAR_RGB)
+            org.graphiks.kanvas.render.ir.ColorInterpolation.OKLCH -> ColorOperationGraphV1.conversion(
+                ColorOperationGraphV1.conversion(straight.take(3),org.graphiks.kanvas.color.ColorInterpolationProgramV1.RecipeKind.OKLCH_TO_OKLAB),
+                org.graphiks.kanvas.color.ColorInterpolationProgramV1.RecipeKind.OKLAB_TO_LINEAR_RGB)
+        }
         val output = List(4) { if (it == 3) straight[3] else S.Multiply(linear[it],straight[3]) }
         return ColorOperationGraphV1(vectorBranch(valid,output,List(4) { zero }))
     }

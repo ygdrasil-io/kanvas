@@ -235,6 +235,7 @@ internal object ColorRoundedGraphProofV1 {
             }
             val result = when (node) {
                 is ColorOperationGraphV1.Scalar.InputLinearPremul -> error("Unbound source input")
+                is ColorOperationGraphV1.Scalar.StopInterpolationInput -> error("Unbound selected-stop interpolation operand")
                 is ColorOperationGraphV1.Scalar.DevicePositionF32 -> {
                     val bounds = requireNotNull(deviceBoundsF32)
                     require(bounds.isFinite() && bounds.isSorted())
@@ -297,6 +298,19 @@ internal object ColorRoundedGraphProofV1 {
                     rounded(Math.nextDown(if (crossesCut) -Math.PI else corners.min()),
                         Math.nextUp(if (crossesCut) Math.PI else corners.max()),4096.0)
                 }
+                is ColorOperationGraphV1.Scalar.Sin, is ColorOperationGraphV1.Scalar.Cos -> {
+                    val cosine = node is ColorOperationGraphV1.Scalar.Cos
+                    val argument = value(if (cosine) (node as ColorOperationGraphV1.Scalar.Cos).value else (node as ColorOperationGraphV1.Scalar.Sin).value)
+                    require(argument.lowerF64 >= -Math.PI && argument.upperF64 <= Math.PI)
+                    val f: (Double)->Double = if (cosine) StrictMath::cos else StrictMath::sin
+                    val extremes = mutableListOf(f(argument.lowerF64),f(argument.upperF64))
+                    for (k in -2..2) {
+                        val critical = if (cosine) k*Math.PI else Math.PI/2+k*Math.PI
+                        if (critical in argument.lowerF64..argument.upperF64) extremes += if (k%2 == 0) 1.0 else -1.0
+                    }
+                    val error = Math.scalb(1.0,-11)+4*Math.ulp(1.0)
+                    ColorBoundsV1(Math.nextDown(extremes.min()-error),Math.nextUp(extremes.max()+error))
+                }
                 is ColorOperationGraphV1.Scalar.GradientStopComponent -> {
                     val selected = node.selection
                     val numerator = value(selected.numerator)
@@ -331,17 +345,15 @@ internal object ColorRoundedGraphProofV1 {
                             val a = channels(left); val b = channels(right)
                             val low = ColorOperationGraphV1.constant(left.positionF32)
                             val high = ColorOperationGraphV1.constant(right.positionF32)
-                            val one = ColorOperationGraphV1.constant(1f)
                             val weight = ColorOperationGraphV1.Scalar.Clamp01(ColorOperationGraphV1.Scalar.Divide(
                                 ColorOperationGraphV1.Scalar.Subtract(selected.parameter,low),
                                 ColorOperationGraphV1.Scalar.Subtract(high,low)))
-                            val inverse = ColorOperationGraphV1.Scalar.Subtract(one,weight)
+                            val interpolated = selected.interpolate(a,b,weight)
                             List(4) { channel ->
                                 if (left.preparedTupleF32 == right.preparedTupleF32) a[channel]
                                 else ColorOperationGraphV1.Scalar.LazyBranch(ColorOperationGraphV1.Predicate.LessEqual(high,low),b[channel],
                                     ColorOperationGraphV1.Scalar.LazyBranch(ColorOperationGraphV1.Predicate.Equal(selected.parameter,low),a[channel],
-                                        ColorOperationGraphV1.Scalar.Add(ColorOperationGraphV1.Scalar.Multiply(inverse,a[channel]),
-                                            ColorOperationGraphV1.Scalar.Multiply(weight,b[channel]))))
+                                        interpolated[channel]))
                             }
                         }
                         evaluate(outputs[node.channelI32],conditions)
@@ -487,7 +499,15 @@ internal object ColorRoundedGraphProofV1 {
                         rounded(Math.nextDown(endpoints.min()-error),Math.nextUp(endpoints.max()+error))
                     } else {
                     val terms = mutableListOf<ColorOperationGraphV1.Scalar>()
-                    fun flatten(n: ColorOperationGraphV1.Scalar) { if (n is ColorOperationGraphV1.Scalar.Add) { flatten(n.a); flatten(n.b) } else terms += n }
+                    fun flatten(n: ColorOperationGraphV1.Scalar) {
+                        // A compared, materialized F32 value is shared with its
+                        // selected branch. Reassociation inside that value was
+                        // already enclosed before the predicate; expanding it
+                        // again here would discard the actual branch constraint.
+                        if (n is ColorOperationGraphV1.Scalar.Add && n !in conditions) {
+                            flatten(n.a); flatten(n.b)
+                        } else terms += n
+                    }
                     flatten(node)
                     // Sum absolute bounds encloses every ordered/reassociated tree and FMA.
                     // Preserve exact representable sums where all operands are points.

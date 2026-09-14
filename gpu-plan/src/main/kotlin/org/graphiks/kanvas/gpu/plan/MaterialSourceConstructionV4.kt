@@ -144,8 +144,13 @@ internal class MaterialSourceConstructionV4 private constructor(
         wrappers: List<SourceUnaryMetadataV4>,
     ) {
         val wrappers: List<SourceUnaryMetadataV4> = immutableList(wrappers)
-        val recipeIdentity: String = if (interpolation == ColorInterpolation.OKLAB)
-            ColorInterpolationProgramV1.OKLAB_RECIPE_VERSION else "linear-srgb-eotf-ordered-f32-v1"
+        val recipeIdentity: String? = when (interpolation) {
+            ColorInterpolation.SRGB -> null
+            ColorInterpolation.LINEAR -> "linear-srgb-eotf-ordered-f32-v1"
+            ColorInterpolation.OKLAB -> ColorInterpolationProgramV1.OKLAB_RECIPE_VERSION
+            ColorInterpolation.HSL -> ColorInterpolationProgramV1.recipe(ColorInterpolationProgramV1.RecipeKind.SRGB_TO_HSL_STOP).identity
+            ColorInterpolation.OKLCH -> ColorInterpolationProgramV1.recipe(ColorInterpolationProgramV1.RecipeKind.SRGB_TO_OKLCH_STOP).identity
+        }
         val rangeIdentity: String = "stop-domain-v4:$interpolation:$recipeIdentity:${stops.sequenceIdentity}"
     }
 
@@ -171,9 +176,14 @@ internal class MaterialSourceConstructionV4 private constructor(
             val coordinateNodes = mutableListOf<CoordinateNodeV2>()
             var leaf = draw.material
             var depth = 0
+            var selectedDomain: ColorInterpolation? = null
             while (true) {
                 require(++depth <= 64) { W5fPlanDiagnostics.Schema }
                 when (val node = leaf) {
+                    is MaterialNode.WithWorkingColorSpace -> {
+                        if (selectedDomain == null) selectedDomain = node.interpolation
+                        leaf = node.material
+                    }
                     is MaterialNode.Opacity -> {
                         require(node.alpha.isFinite() && node.alpha in 0f..1f) { W5aPlanDiagnostics.InvalidOpacity }
                         if (node.alpha != 1f) wrappers += SourceUnaryMetadataV4.Opacity(node.alpha)
@@ -191,7 +201,7 @@ internal class MaterialSourceConstructionV4 private constructor(
                     else -> break
                 }
             }
-            val interpolation: ColorInterpolation
+            var interpolation: ColorInterpolation
             val family: GradientFamilyV2
             val requested: GradientTileModeV2
             val stops: List<GradientStop>
@@ -227,7 +237,7 @@ internal class MaterialSourceConstructionV4 private constructor(
                 }
                 else -> error(W5fPlanDiagnostics.Unpromoted)
             }
-            require(interpolation == ColorInterpolation.LINEAR || interpolation == ColorInterpolation.OKLAB) { W5fPlanDiagnostics.Unpromoted }
+            interpolation = selectedDomain ?: interpolation
             val scalars = when (degeneracy) {
                 is LinearGradientDegeneracyV1 -> degeneracy.copyScalarsF32()
                 is RadialGradientDegeneracyV1 -> listOf(degeneracy.radialRadiusF32)

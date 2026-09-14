@@ -56,6 +56,160 @@ class W5fGradientInterpolationSurfacePixelTest {
         @JvmStatic fun filteredClosedLanes(): List<Arguments> = listOf(ColorSpaceInterpolation.LINEAR,
             ColorSpaceInterpolation.OKLAB).flatMap { domain -> listOf(Lane.RRect,Lane.Stroke).flatMap { lane ->
             FilterKind.entries.flatMap { filter -> listOf(false,true).map { Arguments.of(domain,lane,filter,it) } } } }
+        @JvmStatic fun polarRectPath(): List<Arguments> = listOf(ColorSpaceInterpolation.HSL,
+            ColorSpaceInterpolation.OKLCH).flatMap { domain -> listOf(Lane.Rect,Lane.DirectFill).map { Arguments.of(domain,it) } }
+        @JvmStatic fun workingFamilies(): List<Arguments> = ColorSpaceInterpolation.entries.flatMap { domain ->
+            Family.entries.map { family -> Arguments.of(domain,family) } }
+        @JvmStatic fun polarCases(): List<Arguments> = listOf(ColorSpaceInterpolation.HSL,
+            ColorSpaceInterpolation.OKLCH).flatMap { domain -> listOf("seam","positiveTie","negativeTie","leftGray","rightGray","whiteChromatic","twoGrays").map { Arguments.of(domain,it) } }
+        @JvmStatic fun polarClosedLanes(): List<Arguments> = listOf(ColorSpaceInterpolation.HSL,
+            ColorSpaceInterpolation.OKLCH).flatMap { domain -> listOf(Lane.RRect,Lane.Stroke).flatMap { lane ->
+            FilterKind.entries.flatMap { filter -> listOf(false,true).map { Arguments.of(domain,lane,filter,it) } } } }
+    }
+
+    @ParameterizedTest(name = "{0} polar filtered H {1} {2} internal={3}")
+    @MethodSource("polarClosedLanes")
+    fun polarFilteredRrectAndStrokeRemainClosed(domain: ColorSpaceInterpolation,lane: Lane,kind: FilterKind,internal: Boolean) =
+        filteredRrectAndStrokeRemainClosedWithHealthyControl(domain,lane,kind,internal)
+
+    @Test fun workingSpaceOnSolidPreservesOrderedColorWithoutConversion() {
+        val color = ColorARGB.of(128,160,96,64)
+        val filter = ColorFilter.Matrix(ColorMatrixF32.ofIdentity().apply { setScale(.5f,.75f,1f,1f) })
+        val direct = Shader.WithColorFilter(Shader.Opacity(Shader.SolidColor(color),.5f),filter)
+        val wanted = W5fColorCpuOracle.expectedShaderTree(direct)
+        disjoint(wanted,W5fColorCpuOracle.expectedShaderTree(Shader.Opacity(Shader.SolidColor(color),.5f)))
+        disjoint(wanted,W5fColorCpuOracle.expectedShaderTree(Shader.WithColorFilter(Shader.SolidColor(color),filter)))
+        val sources = listOf(direct) + ColorSpaceInterpolation.entries.map { domain ->
+            Shader.WithWorkingColorSpace(Shader.WithColorFilter(Shader.Opacity(
+                Shader.WithWorkingColorSpace(Shader.SolidColor(color),ColorSpaceInterpolation.OKLAB),.5f),filter),domain)
+        }
+        val surfaces = sources.map { source -> Surface(1,1).also { surface -> surface.canvas {
+            drawLane(Lane.Rect,Paint(shader=source,blendMode=BlendMode.SRC,antiAlias=false))
+        } } }
+        repeat(2) { surfaces.forEach { W5fSurfacePixelFixtures.assertNativePixels(it.render(),listOf(wanted)) } }
+    }
+
+    @Test fun mixedHistoricalAndWorkingSrgbLegacyFirst() = mixedHistoricalAndWorkingSrgb(false)
+    @Test fun mixedHistoricalAndWorkingSrgbWorkingFirst() = mixedHistoricalAndWorkingSrgb(true)
+
+    private fun mixedHistoricalAndWorkingSrgb(reversed: Boolean) {
+        val left = ColorARGB.of(128,160,96,96); val right = ColorARGB.of(128,96,160,96)
+        val expected = W5fColorCpuOracle.expectedGradientPixel(ColorSpaceInterpolation.SRGB,left,right,
+            parameter(Family.Linear),finalBlend=BlendMode.SRC)
+        disjoint(expected,W5fColorCpuOracle.expectedGradientPixel(ColorSpaceInterpolation.SRGB,
+            ColorARGB.Blue,ColorARGB.Blue,parameter(Family.Linear),finalBlend=BlendMode.SRC))
+        val surfaces = listOf(reversed).map { reversed ->
+            val stops = mutableListOf(GradientStop(0f,left),GradientStop(1f,right))
+            Surface(2,1).also { surface ->
+                surface.canvas { repeat(2) { index ->
+                    val x = index.toFloat()
+                    val leaf = Shader.LinearGradient(Point2F32(x,0f),Point2F32(x+1f,0f),stops)
+                    val source = if ((index == 0) == reversed)
+                        Shader.WithWorkingColorSpace(leaf,ColorSpaceInterpolation.SRGB) else leaf
+                    drawRect(RectF32.ofLTRB(x,0f,x+1f,1f),Paint(shader=source,blendMode=BlendMode.SRC,antiAlias=false))
+                } }
+                stops[0] = GradientStop(0f,ColorARGB.Blue); stops[1] = GradientStop(1f,ColorARGB.Blue)
+            }
+        }
+        repeat(2) { surfaces.forEach { W5fSurfacePixelFixtures.assertNativePixels(it.render(),List(2) { expected }) } }
+    }
+
+    @Test fun mixedWorkingDomainsKeepOriginalAndPreparedRangesDistinct() {
+        val left = ColorARGB.of(128,160,96,96); val right = ColorARGB.of(128,96,160,96)
+        val domains = listOf(ColorSpaceInterpolation.SRGB,ColorSpaceInterpolation.HSL,ColorSpaceInterpolation.OKLCH)
+        val expected = domains.map { W5fColorCpuOracle.expectedGradientPixel(it,left,right,
+            parameter(Family.Linear),finalBlend=BlendMode.SRC) }
+        expected.indices.forEach { a -> (a+1 until expected.size).forEach { b -> disjoint(expected[a],expected[b]) } }
+        expected.forEach { disjoint(it,W5fColorCpuOracle.expectedGradientPixel(ColorSpaceInterpolation.SRGB,
+            ColorARGB.Blue,ColorARGB.Blue,parameter(Family.Linear),finalBlend=BlendMode.SRC)) }
+        val stops = mutableListOf(GradientStop(0f,left),GradientStop(1f,right))
+        val surface = Surface(3,1)
+        surface.canvas { domains.forEachIndexed { index,domain ->
+            val x = index.toFloat()
+            val leaf = Shader.LinearGradient(Point2F32(x,0f),Point2F32(x+1f,0f),stops,
+                interpolation=ColorSpaceInterpolation.OKLAB)
+            drawRect(RectF32.ofLTRB(x,0f,x+1f,1f),Paint(shader=Shader.WithWorkingColorSpace(leaf,domain),
+                blendMode=BlendMode.SRC,antiAlias=false))
+        } }
+        stops[0] = GradientStop(0f,ColorARGB.Blue); stops[1] = GradientStop(1f,ColorARGB.Blue)
+        repeat(2) { W5fSurfacePixelFixtures.assertNativePixels(surface.render(),expected) }
+    }
+
+    @ParameterizedTest(name = "{0} hue {1}")
+    @MethodSource("polarCases")
+    fun polarHueSeamTieAndOriginalAchromaticStops(domain: ColorSpaceInterpolation,case: String) {
+        val red = ColorARGB.of(128,180,60,60); val cyan = ColorARGB.of(128,60,180,180)
+        val gray = ColorARGB.of(128,96,96,96); val white = ColorARGB.of(128,255,255,255)
+        val pair = when (case) {
+            // These encoded inputs have exactly HSL350° and10° before F32 rounding.
+            "seam" -> ColorARGB.of(128,180,60,80) to ColorARGB.of(128,180,80,60)
+            "positiveTie" -> red to cyan
+            "negativeTie" -> cyan to red
+            "leftGray" -> gray to red
+            "rightGray" -> red to gray
+            "whiteChromatic" -> white to red
+            else -> gray to ColorARGB.of(128,192,192,192)
+        }
+        val t = parameter(Family.Linear)
+        val expected = W5fColorCpuOracle.expectedGradientPixel(domain,pair.first,pair.second,t,finalBlend=BlendMode.SRC)
+        W5fSurfacePixelFixtures.requireBounded(expected)
+        val stops = mutableListOf(GradientStop(0f,pair.first),GradientStop(1f,pair.second))
+        val surface = Surface(1,1)
+        surface.canvas { drawLane(Lane.Rect,Paint(shader=shader(Family.Linear,stops,domain),blendMode=BlendMode.SRC,antiAlias=false)) }
+        stops[0] = GradientStop(0f,ColorARGB.Blue); stops[1] = GradientStop(1f,ColorARGB.Blue)
+        repeat(2) { W5fSurfacePixelFixtures.assertNativePixels(surface.render(),listOf(expected)) }
+    }
+
+    @ParameterizedTest(name = "working {0} {1}")
+    @MethodSource("workingFamilies")
+    fun workingSpaceOutermostOverridesLeafAndInnerWrapper(domain: ColorSpaceInterpolation,family: Family) {
+        val achromatic = domain == ColorSpaceInterpolation.LINEAR || domain == ColorSpaceInterpolation.OKLAB
+        val left = if (achromatic) ColorARGB.of(128,0,0,0) else ColorARGB.of(128,160,96,96)
+        val right = if (achromatic) ColorARGB.of(128,255,255,255) else ColorARGB.of(128,96,160,96)
+        val other = if (domain == ColorSpaceInterpolation.SRGB) ColorSpaceInterpolation.OKLCH else ColorSpaceInterpolation.SRGB
+        val expected = W5fColorCpuOracle.expectedGradientPixel(domain,left,right,parameter(family),finalBlend=BlendMode.SRC)
+        val alternate = W5fColorCpuOracle.expectedGradientPixel(other,left,right,parameter(family),finalBlend=BlendMode.SRC)
+        disjoint(expected,alternate)
+        val stops = mutableListOf(GradientStop(0f,left),GradientStop(1f,right))
+        val wrapped = Shader.WithWorkingColorSpace(Shader.WithWorkingColorSpace(shader(family,stops,other),other),domain)
+        val reversed = Shader.WithWorkingColorSpace(Shader.WithWorkingColorSpace(shader(family,stops,domain),domain),other)
+        val sources = listOf(wrapped,shader(family,stops,domain),reversed)
+        val surfaces = sources.map { source -> Surface(1,1).also { surface -> surface.canvas {
+            drawLane(Lane.Rect,Paint(shader=source,blendMode=BlendMode.SRC,antiAlias=false))
+        } } }
+        stops[0] = GradientStop(0f,ColorARGB.Blue); stops[1] = GradientStop(1f,ColorARGB.Blue)
+        repeat(2) { surfaces.forEachIndexed { i,surface ->
+            W5fSurfacePixelFixtures.assertNativePixels(surface.render(),listOf(if (i == 2) alternate else expected))
+        } }
+    }
+
+    @ParameterizedTest(name = "{0} working/filter/coordinates {1}")
+    @MethodSource("polarRectPath")
+    fun workingSpacePreservesOrderedFilterOpacityAndLocalMatrix(domain: ColorSpaceInterpolation,lane: Lane) {
+        val left = ColorARGB.of(128,160,96,96); val right = ColorARGB.of(128,96,160,96)
+        val matrix = ColorFilter.Matrix(ColorMatrixF32.ofIdentity().apply { setScale(.5f,.75f,1f,1f) })
+        val translated = WgslFloatEnvelopeV1Oracle.gradientAdd(Interval.input(.25f),Interval.input(.5f))
+        val t = WgslFloatEnvelopeV1Oracle.gradientDivide(translated,Interval.ONE)
+        fun expected(space: ColorSpaceInterpolation=domain,at: Interval=t,filter: ColorFilter?=matrix,opacity: Float=.5f) =
+            W5fColorCpuOracle.expectedGradientPixel(space,left,right,at,external=filter,finalBlend=BlendMode.SRC,shaderOpacityF32=opacity)
+        val wanted = expected()
+        disjoint(wanted,expected(ColorSpaceInterpolation.SRGB))
+        disjoint(wanted,expected(at=parameter(Family.Linear)))
+        disjoint(wanted,expected(at=Interval.ONE)) // omitted clamp
+        disjoint(wanted,expected(at=Interval.input(.25f))) // omitted local matrix
+        disjoint(wanted,expected(opacity=1f))
+        disjoint(wanted,expected(filter=null))
+        val stops = mutableListOf(GradientStop(0f,left),GradientStop(1f,right))
+        fun coordinates(source: Shader) = Shader.Opacity(Shader.CoordClamp(Shader.WithLocalMatrix(source,
+            Matrix3x3F32.translation(-.5f,0f)),RectF32.ofLTRB(0f,0f,.25f,1f)),.5f)
+        val direct = Shader.WithColorFilter(coordinates(shader(Family.Linear,stops,domain)),matrix)
+        val wrapped = Shader.WithWorkingColorSpace(Shader.WithColorFilter(coordinates(
+            Shader.WithWorkingColorSpace(shader(Family.Linear,stops,ColorSpaceInterpolation.SRGB),ColorSpaceInterpolation.SRGB)),matrix),domain)
+        val surfaces = listOf(direct,wrapped).map { source -> Surface(1,1).also { surface -> surface.canvas {
+            drawLane(lane,Paint(shader=source,blendMode=BlendMode.SRC,antiAlias=false))
+        } } }
+        stops[0] = GradientStop(0f,ColorARGB.Blue)
+        repeat(2) { surfaces.forEach { W5fSurfacePixelFixtures.assertNativePixels(it.render(),listOf(wanted)) } }
     }
 
     @ParameterizedTest(name = "{0} sweep cardinal guards and atan2 domain")
@@ -430,6 +584,16 @@ class W5fGradientInterpolationSurfacePixelTest {
     fun oklabFamiliesLanesAlphaMutationAndFinalBlend(family: Family,lane: Lane) =
         familyLane(ColorSpaceInterpolation.OKLAB,family,lane)
 
+    @ParameterizedTest(name = "HSL {0} {1}")
+    @MethodSource("familyLanes")
+    fun hslFamiliesLanesAlphaMutationAndFinalBlend(family: Family,lane: Lane) =
+        familyLane(ColorSpaceInterpolation.HSL,family,lane)
+
+    @ParameterizedTest(name = "OKLCH {0} {1}")
+    @MethodSource("familyLanes")
+    fun oklchFamiliesLanesAlphaMutationAndFinalBlend(family: Family,lane: Lane) =
+        familyLane(ColorSpaceInterpolation.OKLCH,family,lane)
+
     @ParameterizedTest(name = "SRGB control {0} {1}")
     @MethodSource("familyLanes")
     fun srgbFamiliesLanesRemainPromoted(family: Family,lane: Lane) =
@@ -502,8 +666,9 @@ class W5fGradientInterpolationSurfacePixelTest {
     @Test fun generalAffineSrgbStrokeMatchingControl() = familyLane(ColorSpaceInterpolation.SRGB,Family.Linear,Lane.Stroke,generalPath=true)
 
     private fun familyLane(domain: ColorSpaceInterpolation,family: Family,lane: Lane,analyticRect: Boolean = false,generalPath: Boolean = false) {
-        val left = ColorARGB.of(128,if (domain == ColorSpaceInterpolation.OKLAB) 255 else 0,0,0)
-        val right = ColorARGB.of(128,if (domain == ColorSpaceInterpolation.OKLAB) 0 else 255,255,
+        val polar = domain == ColorSpaceInterpolation.HSL || domain == ColorSpaceInterpolation.OKLCH
+        val left = if (polar) ColorARGB.of(128,160,96,96) else ColorARGB.of(128,if (domain == ColorSpaceInterpolation.OKLAB) 255 else 0,0,0)
+        val right = if (polar) ColorARGB.of(128,96,160,96) else ColorARGB.of(128,if (domain == ColorSpaceInterpolation.OKLAB) 0 else 255,255,
             if (domain == ColorSpaceInterpolation.OKLAB) 0 else 255)
         val changed = ColorARGB.of(128,255,255,255)
         val destination = ColorARGB.of(127,72,0,0)

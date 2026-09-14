@@ -3,7 +3,7 @@ package org.graphiks.kanvas.color
 /** Backend-neutral scalar conversion recipes. Branches are lazy and constants retain F32 bits. */
 public object ColorInterpolationProgramV1 {
     public enum class RecipeKind { EOTF, OETF, RGB_TO_HSL, HSL_TO_RGB, LINEAR_RGB_TO_OKLAB,
-        OKLAB_TO_LINEAR_RGB, OKLAB_TO_OKLCH, OKLCH_TO_OKLAB }
+        OKLAB_TO_LINEAR_RGB, OKLAB_TO_OKLCH, OKLCH_TO_OKLAB, SRGB_TO_HSL_STOP, SRGB_TO_OKLCH_STOP }
     public sealed interface Scalar {
         public data object Input : Scalar
         public data class Component(public val indexI32: Int) : Scalar {
@@ -17,6 +17,12 @@ public object ColorInterpolationProgramV1 {
         public data class Pow(public val a: Scalar, public val b: Scalar) : Scalar
         /** Signed real cube root is a Host-only stop-preparation operation. */
         public data class SignedCbrt(public val value: Scalar) : Scalar
+        public data class Sqrt(public val value: Scalar) : Scalar
+        public data class Atan2(public val y: Scalar, public val x: Scalar) : Scalar
+        public data class Sin(public val value: Scalar) : Scalar
+        public data class Cos(public val value: Scalar) : Scalar
+        /** Host-only semantic branch on original encoded bytes, before conversion. */
+        public data class IfOriginalEncodedGray(public val yes: Scalar, public val no: Scalar) : Scalar
         public data class Min(public val a: Scalar, public val b: Scalar) : Scalar
         public data class Max(public val a: Scalar, public val b: Scalar) : Scalar
         public data class Abs(public val value: Scalar) : Scalar
@@ -35,8 +41,7 @@ public object ColorInterpolationProgramV1 {
         public val outputs: List<Scalar> = java.util.Collections.unmodifiableList(ArrayList(outputs))
     }
     private fun constant(valueF32: Float): Scalar = Scalar.Constant(valueF32.toRawBits())
-    private fun transfer(kind: RecipeKind): Recipe {
-        val x = Scalar.Input
+    private fun transfer(kind: RecipeKind, x: Scalar = Scalar.Input): Recipe {
         val zero = constant(0f)
         val one = constant(1f)
         val curve = if (kind == RecipeKind.EOTF) Scalar.IfLessEqual(x, constant(0.04045f),
@@ -97,8 +102,8 @@ public object ColorInterpolationProgramV1 {
         products.drop(1).fold(products.first() as Scalar) { sum, product -> Scalar.Add(sum, product) }
     }
 
-    private fun linearRgbToOklab(): Recipe {
-        val lms = matrixRows(List(3) { Scalar.Component(it) }, listOf(
+    private fun linearRgbToOklab(inputs: List<Scalar> = List(3) { Scalar.Component(it) }): Recipe {
+        val lms = matrixRows(inputs, listOf(
             listOf(.4122214708f, .5363325363f, .0514459929f),
             listOf(.2119034982f, .6806995451f, .1073969566f),
             listOf(.0883024619f, .2817188376f, .6299787005f),
@@ -130,9 +135,53 @@ public object ColorInterpolationProgramV1 {
     private val rgbLab = linearRgbToOklab()
     private val labRgb = oklabToLinearRgb()
 
+    public const val POLAR_ACHROMATIC_RECIPE_VERSION: String = "polar-achromatic-original-srgb-v1"
+
+    private fun oklabToOklch(lab: List<Scalar> = List(3) { Scalar.Component(it) }): Recipe {
+        val sum = Scalar.Add(Scalar.Multiply(lab[1],lab[1]),Scalar.Multiply(lab[2],lab[2]))
+        val c = Scalar.IfEqual(sum,constant(0f),constant(0f),Scalar.Sqrt(sum))
+        val h = Scalar.IfEqual(c,constant(0f),constant(0f),
+            modulo(Scalar.Divide(Scalar.Atan2(lab[2],lab[1]),constant(6.2831855f)),1f))
+        return Recipe("$OKLAB_RECIPE_VERSION:oklab-to-oklch:host-c0-lazy-atan2-turns-v1",lab[0],listOf(lab[0],c,h))
+    }
+
+    private fun oklchToOklab(): Recipe {
+        val l = Scalar.Component(0); val c = Scalar.Component(1)
+        val h = modulo(Scalar.Component(2),1f)
+        // Reflect each quadrant into [0,1/4] turns BEFORE sin/cos. Even with
+        // F32 rounding these arguments remain strictly inside [-pi,pi].
+        val reduced = Scalar.IfLessEqual(h,constant(.25f),h,
+            Scalar.IfLessEqual(h,constant(.5f),Scalar.Subtract(constant(.5f),h),
+                Scalar.IfLessEqual(h,constant(.75f),Scalar.Subtract(h,constant(.5f)),Scalar.Subtract(constant(1f),h))))
+        val angle = Scalar.Multiply(reduced,constant(6.2831855f))
+        val cos = Scalar.Cos(angle); val sin = Scalar.Sin(angle)
+        val x = Scalar.IfLessEqual(h,constant(.25f),cos,Scalar.IfLessEqual(h,constant(.75f),Scalar.Subtract(constant(0f),cos),cos))
+        val y = Scalar.IfLessEqual(h,constant(.5f),sin,Scalar.Subtract(constant(0f),sin))
+        val a = Scalar.IfEqual(c,constant(0f),constant(0f),Scalar.Multiply(c,x))
+        val b = Scalar.IfEqual(c,constant(0f),constant(0f),Scalar.Multiply(c,y))
+        return Recipe("$OKLAB_RECIPE_VERSION:oklch-to-oklab:quarter-turn-sin-cos-c0-lazy-v1",l,listOf(l,a,b))
+    }
+
+    private fun polarStop(hsl: Boolean): Recipe {
+        val converted = if (hsl) rgbHsl.outputs else {
+            val lab = linearRgbToOklab(List(3) { transfer(RecipeKind.EOTF,Scalar.Component(it)).root }).outputs
+            oklabToOklch(lab).outputs
+        }
+        val gray = if (hsl) listOf(constant(0f),constant(0f),Scalar.Component(0))
+            else listOf(converted[0],constant(0f),constant(0f))
+        val outputs = List(3) { Scalar.IfOriginalEncodedGray(gray[it],converted[it]) }
+        return Recipe("$POLAR_ACHROMATIC_RECIPE_VERSION:${if (hsl) "HSL" else "OKLCH"}:$OKLAB_RECIPE_VERSION",outputs[0],outputs)
+    }
+    private val labLch = oklabToOklch()
+    private val lchLab = oklchToOklab()
+    private val hslStop = polarStop(true)
+    private val lchStop = polarStop(false)
+
     /** Interprets the very same recipe; every arithmetic node rounds to F32, with no FMA. */
-    public fun evaluateHostF32(kind: RecipeKind, inputsF32: List<Float>): List<Float> {
+    public fun evaluateHostF32(kind: RecipeKind, inputsF32: List<Float>,
+        originalEncoded: org.graphiks.math.color.ColorARGB? = null): List<Float> {
         require(inputsF32.isNotEmpty() && inputsF32.all(Float::isFinite))
+        originalEncoded?.let { require(inputsF32 == listOf(it.redNormalized,it.greenNormalized,it.blueNormalized)) }
         val cache = java.util.IdentityHashMap<Scalar, Float>()
         fun evaluate(node: Scalar): Float = cache[node] ?: when (node) {
             Scalar.Input -> inputsF32.single()
@@ -144,6 +193,12 @@ public object ColorInterpolationProgramV1 {
             is Scalar.Divide -> evaluate(node.a) / evaluate(node.b)
             is Scalar.Pow -> StrictMath.pow(evaluate(node.a).toDouble(), evaluate(node.b).toDouble()).toFloat()
             is Scalar.SignedCbrt -> StrictMath.cbrt(evaluate(node.value).toDouble()).toFloat()
+            is Scalar.Sqrt -> StrictMath.sqrt(evaluate(node.value).toDouble()).toFloat()
+            is Scalar.Atan2 -> StrictMath.atan2(evaluate(node.y).toDouble(),evaluate(node.x).toDouble()).toFloat()
+            is Scalar.Sin -> StrictMath.sin(evaluate(node.value).toDouble()).toFloat()
+            is Scalar.Cos -> StrictMath.cos(evaluate(node.value).toDouble()).toFloat()
+            is Scalar.IfOriginalEncodedGray -> requireNotNull(originalEncoded).let { original ->
+                evaluate(if (original.red == original.green && original.green == original.blue) node.yes else node.no) }
             is Scalar.Min -> minOf(evaluate(node.a), evaluate(node.b))
             is Scalar.Max -> maxOf(evaluate(node.a), evaluate(node.b))
             is Scalar.Abs -> kotlin.math.abs(evaluate(node.value))
@@ -166,6 +221,9 @@ public object ColorInterpolationProgramV1 {
         RecipeKind.HSL_TO_RGB -> hslRgb
         RecipeKind.LINEAR_RGB_TO_OKLAB -> rgbLab
         RecipeKind.OKLAB_TO_LINEAR_RGB -> labRgb
-        else -> throw UnsupportedOperationException("Conversion recipe ${kind.name} has not been promoted")
+        RecipeKind.OKLAB_TO_OKLCH -> labLch
+        RecipeKind.OKLCH_TO_OKLAB -> lchLab
+        RecipeKind.SRGB_TO_HSL_STOP -> hslStop
+        RecipeKind.SRGB_TO_OKLCH_STOP -> lchStop
     }
 }

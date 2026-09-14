@@ -39,6 +39,12 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
         public data class Abs(public val value: Scalar) : Scalar
         public data class Sqrt(public val value: Scalar) : Scalar
         public data class Atan2(public val y: Scalar, public val x: Scalar) : Scalar
+        public data class Sin(public val value: Scalar) : Scalar
+        public data class Cos(public val value: Scalar) : Scalar
+        /** A lexical operand of the selected-stop interpolation region, never a uniform. */
+        public class StopInterpolationInput internal constructor(public val slotI32: Int) : Scalar {
+            init { require(slotI32 in 0..8) }
+        }
         /** Checked shared-range search followed by the straight-domain interpolation recipe. */
         public data class GradientStopComponent(public val selection: GradientStopSelection,
             public val channelI32: Int) : Scalar {
@@ -66,9 +72,33 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
         public val firstOnly: Boolean = false,
     ) {
         public val countBoundU32: UInt = 65_538u
-        init { require(rangeWordOffsetU32 in 0L..UInt.MAX_VALUE.toLong()-1L)
-            require(domain == org.graphiks.kanvas.render.ir.ColorInterpolation.LINEAR ||
-                domain == org.graphiks.kanvas.render.ir.ColorInterpolation.OKLAB) }
+        init { require(rangeWordOffsetU32 in 0L..UInt.MAX_VALUE.toLong()-1L) }
+        public val interpolationInputs: List<Scalar.StopInterpolationInput> = immutableList(List(9) { Scalar.StopInterpolationInput(it) })
+        public val interpolationGraph: ColorOperationGraphV1 = ColorOperationGraphV1(interpolate(
+            interpolationInputs.take(4),interpolationInputs.drop(4).take(4),interpolationInputs[8]))
+
+        /** The sole rounded interpolation schedule, instantiated by proof and emitter. */
+        public fun interpolate(left: List<Scalar>,right: List<Scalar>,weight: Scalar): List<Scalar> {
+            require(left.size == 4 && right.size == 4)
+            val inverse = Scalar.Subtract(constant(1f),weight)
+            val channels = List(4) { Scalar.Add(Scalar.Multiply(inverse,left[it]),Scalar.Multiply(weight,right[it])) as Scalar }.toMutableList()
+            if (domain == org.graphiks.kanvas.render.ir.ColorInterpolation.HSL ||
+                domain == org.graphiks.kanvas.render.ir.ColorInterpolation.OKLCH) {
+                val hue = if (domain == org.graphiks.kanvas.render.ir.ColorInterpolation.HSL) 0 else 2
+                val zero = constant(0f)
+                val h0 = Scalar.LazyBranch(Predicate.Equal(left[1],zero),right[hue],left[hue])
+                val h1 = Scalar.LazyBranch(Predicate.Equal(right[1],zero),h0,right[hue])
+                val delta = Scalar.Subtract(h1,h0)
+                // Endpoints are normalized turns. This is the equivalent shortest
+                // difference without the lossy +1.5 translation at an exact tie.
+                val shortest = Scalar.LazyBranch(Predicate.LessEqual(delta,constant(-.5f)),
+                    Scalar.Add(delta,constant(1f)),Scalar.LazyBranch(Predicate.LessEqual(delta,constant(.5f)),
+                        delta,Scalar.Subtract(delta,constant(1f))))
+                channels[hue] = Scalar.Add(h0,Scalar.Multiply(weight,shortest))
+                // The inverse recipe wraps the hue; no S/L/C or RGB clamp occurs here.
+            }
+            return channels
+        }
     }
     public class BranchVector internal constructor(public val predicate: Predicate,yes: List<Scalar>,no: List<Scalar>) {
         public val yes: List<Scalar> = immutableList(yes)
@@ -117,9 +147,12 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
                 is Scalar.Abs -> "abs:${identity(node.value)}"
                 is Scalar.Sqrt -> "sqrt:${identity(node.value)}"
                 is Scalar.Atan2 -> "atan2:${identity(node.y)}:${identity(node.x)}"
+                is Scalar.Sin -> "sin:${identity(node.value)}"
+                is Scalar.Cos -> "cos:${identity(node.value)}"
+                is Scalar.StopInterpolationInput -> "stop-interpolation-input:${node.slotI32}"
                 is Scalar.GradientStopComponent -> node.selection.let { selected ->
                     "gradient-upper-bound-65538-scaled-le-interpolate-v4:${selected.domain}:${selected.rangeWordOffsetU32}:first=${selected.firstOnly}:" +
-                        "${identity(selected.numerator)}:${identity(selected.scale)}:${identity(selected.parameter)}:${node.channelI32}" }
+                        "${identity(selected.numerator)}:${identity(selected.scale)}:${identity(selected.parameter)}:${selected.interpolationGraph.canonicalIdentity}:${node.channelI32}" }
                 is Scalar.BranchComponent -> "vector-lazy:${predicate(node.branch.predicate)}:" +
                     "${node.branch.yes.joinToString(",",transform=::identity)}:${node.branch.no.joinToString(",",transform=::identity)}:${node.channelI32}"
                 is Scalar.Floor -> "floor:${identity(node.value)}"
@@ -165,6 +198,9 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
             is Scalar.Abs -> Scalar.Abs(bind(value.value))
             is Scalar.Sqrt -> Scalar.Sqrt(bind(value.value))
             is Scalar.Atan2 -> Scalar.Atan2(bind(value.y),bind(value.x))
+            is Scalar.Sin -> Scalar.Sin(bind(value.value))
+            is Scalar.Cos -> Scalar.Cos(bind(value.value))
+            is Scalar.StopInterpolationInput -> value
             is Scalar.GradientStopComponent -> Scalar.GradientStopComponent(selections.getOrPut(value.selection) {
                 GradientStopSelection(bind(value.selection.numerator),bind(value.selection.scale),bind(value.selection.parameter),
                     Math.addExact(value.selection.rangeWordOffsetU32,filterWordOffsetU32),value.selection.domain,value.selection.firstOnly)
@@ -198,6 +234,12 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
                 is ColorInterpolationProgramV1.Scalar.Divide -> Scalar.Divide(adapt(value.a), adapt(value.b))
                 is ColorInterpolationProgramV1.Scalar.Pow -> Scalar.Pow(adapt(value.a), adapt(value.b))
                 is ColorInterpolationProgramV1.Scalar.SignedCbrt -> error("Signed cube root is Host-only stop preparation")
+                is ColorInterpolationProgramV1.Scalar.IfOriginalEncodedGray -> error("Original encoded gray is Host-only stop preparation")
+                is ColorInterpolationProgramV1.Scalar.Sqrt -> adapt(value.value).let { operand ->
+                    Scalar.LazyBranch(Predicate.Equal(operand,constant(0f)),constant(0f),Scalar.Sqrt(operand)) }
+                is ColorInterpolationProgramV1.Scalar.Atan2 -> Scalar.Atan2(adapt(value.y),adapt(value.x))
+                is ColorInterpolationProgramV1.Scalar.Sin -> Scalar.Sin(adapt(value.value))
+                is ColorInterpolationProgramV1.Scalar.Cos -> Scalar.Cos(adapt(value.value))
                 is ColorInterpolationProgramV1.Scalar.Min -> Scalar.Min(adapt(value.a),adapt(value.b))
                 is ColorInterpolationProgramV1.Scalar.Max -> Scalar.Max(adapt(value.a),adapt(value.b))
                 is ColorInterpolationProgramV1.Scalar.Abs -> Scalar.Abs(adapt(value.value))

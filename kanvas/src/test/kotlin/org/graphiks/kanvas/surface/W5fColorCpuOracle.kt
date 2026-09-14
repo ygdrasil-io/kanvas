@@ -30,11 +30,31 @@ internal object W5fColorCpuOracle {
         val interpolated = Array(4) { c -> hull(add(mul(inverse,a[c]),mul(t,b[c])),
             WgslFloatEnvelopeV1Oracle.gradientFma(inverse,a[c],mul(t,b[c])),
             WgslFloatEnvelopeV1Oracle.gradientFma(t,b[c],mul(inverse,a[c]))) }
+        if (domain == ColorSpaceInterpolation.HSL || domain == ColorSpaceInterpolation.OKLCH) {
+            val hue = if (domain == ColorSpaceInterpolation.HSL) 0 else 2
+            val h0 = if (point(a[1],0)) b[hue] else a[hue]
+            val h1 = if (point(b[1],0)) h0 else b[hue]
+            val difference = sub(h1,h0)
+            val half = BigDecimal("0.5")
+            val deltas = mutableListOf<Interval>()
+            if (difference.lower <= -half) deltas += add(Interval(difference.lower,minOf(difference.upper,-half)),Interval.ONE)
+            if (difference.upper > half) deltas += sub(Interval(maxOf(difference.lower,half),difference.upper),Interval.ONE)
+            if (difference.upper > -half && difference.lower <= half)
+                deltas += Interval(maxOf(difference.lower,-half),minOf(difference.upper,half))
+            interpolated[hue] = deltas.map { d -> hull(add(h0,mul(t,d)),
+                WgslFloatEnvelopeV1Oracle.gradientFma(t,d,h0)) }.reduce { x,y -> hull(x,y) }
+        }
         val linear = when (domain) {
             ColorSpaceInterpolation.SRGB -> Array(3) { WgslFloatEnvelopeV1Oracle.imageSrgbToLinear(interpolated[it]) }
             ColorSpaceInterpolation.LINEAR -> interpolated.copyOfRange(0,3)
-            ColorSpaceInterpolation.OKLAB -> {
-                val lms = matrixRows(interpolated,floatArrayOf(
+            ColorSpaceInterpolation.HSL -> hslToRgb(interpolated).map {
+                WgslFloatEnvelopeV1Oracle.imageSrgbToLinear(it) }.toTypedArray()
+            ColorSpaceInterpolation.OKLAB, ColorSpaceInterpolation.OKLCH -> {
+                val lab = if (domain == ColorSpaceInterpolation.OKLAB) interpolated else {
+                    val pair = polarUnit(interpolated[2])
+                    arrayOf(interpolated[0],mul(interpolated[1],pair[0]),mul(interpolated[1],pair[1]),interpolated[3])
+                }
+                val lms = matrixRows(lab,floatArrayOf(
                     1f,.3963377774f,.2158037573f,0f,0f,
                     1f,-.1055613458f,-.0638541728f,0f,0f,
                     1f,-.0894841775f,-1.2914855480f,0f,0f,
@@ -46,7 +66,6 @@ internal object W5fColorCpuOracle {
                     -.0041960863f,-.7034186147f,1.7076147010f,0f,0f,
                     0f,0f,0f,0f,0f)).copyOfRange(0,3)
             }
-            else -> error("Interpolation domain has no independent equation in Task5")
         }
         var result = Array(4) { if (it == 3) interpolated[3] else mul(linear[it],interpolated[3]) }
         if (shaderOpacityF32 != 1f) result = result.map { mul(it,Interval.input(shaderOpacityF32)) }.toTypedArray()
@@ -80,12 +99,26 @@ internal object W5fColorCpuOracle {
             return transcendental(Interval.input((v+.055f)/1.055f)) { StrictMath.pow(it,2.4f.toDouble()) }
         }
         val rgb = floatArrayOf(color.red/255f,color.green/255f,color.blue/255f)
+        if (domain == ColorSpaceInterpolation.HSL) {
+            // All elementary JVM F32 operations have one specified rounded result.
+            val high = rgb.max(); val low = rgb.min(); val delta = high-low
+            val light = (high+low)/2f
+            val gray = color.red == color.green && color.green == color.blue
+            val saturation = if (gray) 0f else delta/(1f-kotlin.math.abs(2f*light-1f))
+            val rawHue = if (gray) 0f else (when (high) {
+                rgb[0] -> (rgb[1]-rgb[2])/delta
+                rgb[1] -> (rgb[2]-rgb[0])/delta+2f
+                else -> (rgb[0]-rgb[1])/delta+4f
+            })/6f
+            return arrayOf(Interval.input(rawHue-StrictMath.floor(rawHue.toDouble()).toFloat()),
+                Interval.input(saturation),Interval.input(if (gray) rgb[0] else light),Interval.input(color.alpha/255f))
+        }
         val channels = if (domain == ColorSpaceInterpolation.SRGB) Array(3) { Interval.input(rgb[it]) }
             else Array(3) { hostEotf(rgb[it]) }
         fun row(values: Array<Interval>,r: Float,g: Float,b: Float) = hostAdd(
             hostAdd(hostMul(Interval.input(r),values[0]),hostMul(Interval.input(g),values[1])),
             hostMul(Interval.input(b),values[2]))
-        val prepared = if (domain != ColorSpaceInterpolation.OKLAB) channels else {
+        val prepared = if (domain != ColorSpaceInterpolation.OKLAB && domain != ColorSpaceInterpolation.OKLCH) channels else {
             val lms = arrayOf(row(channels,.4122214708f,.5363325363f,.0514459929f),
                 row(channels,.2119034982f,.6806995451f,.1073969566f),
                 row(channels,.0883024619f,.2817188376f,.6299787005f))
@@ -94,7 +127,56 @@ internal object W5fColorCpuOracle {
                 row(roots,1.9779984951f,-2.4285922050f,.4505937099f),
                 row(roots,.0259040371f,.7827717662f,-.8086757660f))
         }
+        if (domain == ColorSpaceInterpolation.OKLCH) {
+            if (color.red == color.green && color.green == color.blue)
+                return arrayOf(prepared[0],Interval.ZERO,Interval.ZERO,Interval.input(color.alpha/255f))
+            val chroma = transcendental(hostAdd(hostMul(prepared[1],prepared[1]),hostMul(prepared[2],prepared[2])),StrictMath::sqrt)
+            val angles = listOf(prepared[2].lower,prepared[2].upper).flatMap { y ->
+                listOf(prepared[1].lower,prepared[1].upper).map { x -> StrictMath.atan2(y.toDouble(),x.toDouble()) } }
+            val lo = angles.min(); val hi = angles.max()
+            require(hi-lo < Math.PI) { "Host atan2 branch-cut fixture must be split" }
+            val angle = roundedHost(BigDecimal(Math.nextDown(lo-2*Math.ulp(lo))),BigDecimal(Math.nextUp(hi+2*Math.ulp(hi))))
+            val divisor = BigDecimal(6.2831855f.toDouble())
+            val turns = roundedHost(angle.lower.divide(divisor,80,RoundingMode.FLOOR),angle.upper.divide(divisor,80,RoundingMode.CEILING))
+            val floor = StrictMath.floor(turns.lower.toDouble()).toFloat()
+            require(StrictMath.floor(turns.upper.toDouble()).toFloat() == floor)
+            val hue = roundedHost(turns.lower-BigDecimal(floor.toDouble()),turns.upper-BigDecimal(floor.toDouble()))
+            return arrayOf(prepared[0],chroma,hue,Interval.input(color.alpha/255f))
+        }
         return Array(4) { if (it == 3) Interval.input(color.alpha/255f) else prepared[it] }
+    }
+
+    /** Independent quarter-turn reduction; genuine WGSL sin/cos error is absolute 2^-11. */
+    private fun polarUnit(hue: Interval): Array<Interval> {
+        val alternatives = mutableListOf<Array<Interval>>()
+        for (wrapped in modulo(hue,1)) {
+            for (sector in 0..3) {
+                val low = BigDecimal(sector).divide(BigDecimal(4))
+                val high = BigDecimal(sector+1).divide(BigDecimal(4))
+                if (wrapped.upper < low || wrapped.lower > high) continue
+                val h = Interval(maxOf(low,wrapped.lower),minOf(high,wrapped.upper))
+                val reduced = when (sector) {
+                    0 -> h
+                    1 -> sub(Interval.input(.5f),h)
+                    2 -> sub(h,Interval.input(.5f))
+                    else -> sub(Interval.ONE,h)
+                }
+                val radians = mul(reduced,Interval.input(6.2831855f))
+                fun trig(cosine: Boolean): Interval {
+                    require(radians.lower.toDouble() >= -Math.PI && radians.upper.toDouble() <= Math.PI)
+                    val function: (Double)->Double = if (cosine) StrictMath::cos else StrictMath::sin
+                    val values = listOf(function(radians.lower.toDouble()),function(radians.upper.toDouble()))
+                    val error = Math.scalb(1.0,-11)+4*Math.ulp(1.0)
+                    // Include an interior extremum when the rounded quarter turn crosses pi/2.
+                    val max = if (!cosine && radians.lower.toDouble() <= Math.PI/2 && radians.upper.toDouble() >= Math.PI/2) 1.0 else values.max()
+                    return Interval(BigDecimal(Math.nextDown(values.min()-error)),BigDecimal(Math.nextUp(max+error)))
+                }
+                val cosine = trig(true); val sine = trig(false)
+                alternatives += arrayOf(if (sector == 1 || sector == 2) mul(Interval.input(-1f),cosine) else cosine,
+                    if (sector >= 2) mul(Interval.input(-1f),sine) else sine)
+            }
+        }
+        return Array(2) { c -> alternatives.map { it[c] }.reduce { a,b -> hull(a,b) } }
     }
 
     fun expectedShaderTree(shader: Shader, paintAlphaF32: Float = 1f, external: ColorFilter? = null,
