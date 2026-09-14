@@ -1,6 +1,17 @@
 # État W05 — material graph, gradients, images et color filters
 
-## W5g — tranche scalaire acceptée ; gradients contextuels suivants
+## W5g — tranches scalaire et gradients acceptées ; enfants image suivants
+
+Task2 acceptée : commit `3fbafaf99647d3586a8b38ebbce32f3446952fc6`,
+17chemins classifiés1024+/93−. Couvrant UNIQUE cinq classes463méthodes réelles,
+462PASS/1skipAA4 W5d authentique/0failure-error ; cinq XML complets et tous les
+blobs committés vérifiés ROOT égaux aux sources figées pre/post/current.
+Commande FAILED25m38s/Gradle1/native209exit133,causeUNKNOWN ; compilation
+incrémentale exécutée en16, finale17 UP. L'unique review Task2 Sol fresh conclut
+COMPLIANT/APPROVED,0Critical/0Important/0nouveau Minor, aucun correctif demandé.
+ROOT lit FULL6599lignes de rapport,48lignes de review et les cinq vrais XML.
+Blend complet attend Task3, W5g attend1–5 et ses gates ; aucune clôture nativeGREEN.
+Font/codec/GM/harnais restent exclus.
 
 Branche `codex/w5g-composed-procedural-materials` depuis W5f final
 `55e4992d5aeb34412189d3bb52bcf2784468318c`, dans le worktree isolé existant.
@@ -25,8 +36,26 @@ Commande toujours FAILED8m14s/Gradle1/native195exit133 ; cause et identité
 causale avec les autres executors inconnues. Cette investigation reste un gap
 hors tranche, aucune clôture native GREEN/Ready-to-merge/ISO. Lisibilité compacte
 du fichier V5 : observation nonbloquante à reprendre dans un edit ciblé/review globale.
-Task2 gradients contextuels est suivante avec un nouveau Astra adapté ; Sol
-review-only, un seul Gradle. Blend complet attend1–3, W5g attend1–5 et les gates.
+Task2 livrée depuis BASE `0ebe1b655` avec le nouveau Astra/high adapté ; témoin
+public RED confirmé avant production :1failure/0error-skip,composed.slice,
+XML18:10:32.012Z et code testés vérifiés ; BUILDFAILED4s/Gradle1.
+Final17 : W5gSurface111+Picture4+W5fGradient280+W5d41(40PASS/1AA4skip)+W5c27,
+XML frais19:12:41.615Z–19:29:16.624Z,17blobs pre/post/current/commit identiques.
+Toutes les familles/cinq domaines, contextes partagés/ordre,17stops,
+local/clamp/CTM une fois/projective, dégénérescences/tiles/conical/singleton,
+wrappers/paint127/filter externe une fois/blend final trois modes, frame mixte
+ordinary Rect/composed direct+stencil et limites/H/diagnostics restent PASS.
+Mutation sur les SAME stops et ColorMatrixF32/filter publics partagés (R15),
+avec changed-stops-only/filter-only disjoints avant capture, Surface retenue et
+Picture original/décodé répétés2. Matrix3x3F32 reste immuable.
+94anciens noms Surface et3Picture conservés ; le refus d'un gradient valide
+devient un contrôle positif, le refus pending-image garde son diagnostic exact.
+R14–16 sont reviewés : inventaire complet, ranges authentifiés, un seul slab,
+facturation complète une fois et lecteurs W3/composite historiques inchangés.
+Les échecs intermédiaires/build/fixtures/oracle/ABI/allocation et positifs nonfinals
+restent distincts du final17, tous lus FULL ; native202–209exit133 UNKNOWN,
+pas de tolérance élargie ni de cause antérieure prétendue. Sol review-only,
+un seul Gradle, aucun fix de production/test ROOT ni nouvelle autorité numérique.
 Représentation sûre255/stitching, véritables archives noise Picture8/9/10 et
 témoin public causal storage restent à prouver. Font/codec/GM/harnais exclus.
 PR W5f#2400 inchangée ; aucun push/PR W5g encore.
