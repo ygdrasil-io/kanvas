@@ -292,7 +292,8 @@ internal object WgslFloatEnvelopeV1Oracle {
     }
 
     /** W3C blend equations, evaluated only by the independent directed arithmetic above. */
-    private fun artisticSeparable(s: Interval, d: Interval, mode: BlendMode): Interval {
+    private fun artisticSeparable(s: Interval, d: Interval, mode: BlendMode,
+        squareRoot: (Interval) -> Interval = ::gradientSqrt): Interval {
         val two = Interval.input(2f)
         fun minimum(a: Interval, b: Interval) = Interval(minOf(a.lower, b.lower), minOf(a.upper, b.upper))
         fun maximum(a: Interval, b: Interval) = Interval(maxOf(a.lower, b.lower), maxOf(a.upper, b.upper))
@@ -325,21 +326,15 @@ internal object WgslFloatEnvelopeV1Oracle {
             }
             BlendMode.HARD_LIGHT -> hardLight(s, d)
             BlendMode.SOFT_LIGHT -> {
-                // Both WGSL select operands execute, including sqrt(cb), even
-                // when the source selects the low polynomial branch.
-                gradientSqrt(d)
+                // Both select operands execute, including the selected square-
+                // root algorithm, even when the source selects the low branch.
+                squareRoot(d)
                 branch(s, HALF,
                 { source -> d - (Interval.ONE - two * source) * d * (Interval.ONE - d) },
                 { source ->
                     val curve = branch(d, BigDecimal("0.25"),
                         { ((Interval.input(16f) * it - Interval.input(12f)) * it + Interval.input(4f)) * it },
-                        { value ->
-                            // WGSL 15.7.4.1: sqrt inherits 1/inverseSqrt(x); inverseSqrt
-                            // admits 2 ULP, and the outer division retains its own 2.5 ULP.
-                            val exactInverse = Interval(downDivide(BigDecimal.ONE, value.upper.sqrt(MC_UP)),
-                                upDivide(BigDecimal.ONE, value.lower.sqrt(MC_DOWN)))
-                            wgslDivide(Interval.ONE, f32Envelope(expandUlps(exactInverse, BigDecimal("2"))))
-                        })
+                        squareRoot)
                     d + (two * source - Interval.ONE) * (curve - d)
                 })
             }
@@ -669,7 +664,12 @@ internal object WgslFloatEnvelopeV1Oracle {
                 } }
                 val s = straight(src); val d = straight(dst)
                 val color = if (mode in NON_SEPARABLE_MODES) artisticNonSeparable(s,d,mode)
-                    else Array(3) { artisticSeparable(s[it],d[it],mode) }
+                    else Array(3) { artisticSeparable(s[it],d[it],mode) { value ->
+                        // Task3's actual V4 algorithm branches before sqrt at
+                        // exact zero. Nonpoint zero-crossing intervals still go
+                        // through the raw domain check; no positive floor.
+                        if (value.isExactly(Interval.ZERO)) Interval.ZERO else gradientSqrt(value)
+                    } }
                 Array(4) { if (it == 3) sourceOver(src[3],dst[3],invS) else {
                     val left = src[it] * invD; val right = dst[it] * invS
                     val product = hull((src[3] * dst[3]) * color[it],src[3] * (dst[3] * color[it]))
@@ -708,17 +708,12 @@ internal object WgslFloatEnvelopeV1Oracle {
     fun gradientFloor(value: Interval): Interval = f32Envelope(Interval(
         value.lower.setScale(0, java.math.RoundingMode.FLOOR), value.upper.setScale(0, java.math.RoundingMode.FLOOR)))
     fun gradientSqrt(value: Interval): Interval {
-        require(value.lower.signum() >= 0)
-        if (value.upper.signum() == 0) return Interval.ZERO
+        require(value.lower >= F32_MIN_NORMAL) { "Bare sqrt has no bounded inherited accuracy at zero/subnormal input" }
         // WGSL sqrt inherits 1/inverseSqrt: retain inverseSqrt's 2 ULP
         // and division's 2.5 ULP, plus permitted F32 rounding and flushing.
-        fun positive(input: Interval): Interval {
-            val inverse = Interval(downDivide(BigDecimal.ONE, input.upper.sqrt(MC_UP)),
-                upDivide(BigDecimal.ONE, input.lower.sqrt(MC_DOWN)))
-            return wgslDivide(Interval.ONE, f32Envelope(expandUlps(inverse, BigDecimal("2"))))
-        }
-        return if (value.lower.signum() > 0) positive(value) else
-            Interval(BigDecimal.ZERO, positive(Interval(value.upper, value.upper)).upper)
+        val inverse = Interval(downDivide(BigDecimal.ONE, value.upper.sqrt(MC_UP)),
+            upDivide(BigDecimal.ONE, value.lower.sqrt(MC_DOWN)))
+        return wgslDivide(Interval.ONE, f32Envelope(expandUlps(inverse, BigDecimal("2"))))
     }
     fun gradientFma(a: Interval, b: Interval, c: Interval): Interval = fma(a, b, c)
     fun gradientHull(vararg values: Interval): Interval = hull(*values)

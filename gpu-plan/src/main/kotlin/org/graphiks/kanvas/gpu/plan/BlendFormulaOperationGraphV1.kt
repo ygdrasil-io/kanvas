@@ -68,7 +68,14 @@ internal class BlendFormulaOperationGraphV1 private constructor(
                 "min" -> ColorOperationGraphV1.Scalar.Min(number(arg(0,c)),number(arg(1,c)))
                 "max" -> ColorOperationGraphV1.Scalar.Max(number(arg(0,c)),number(arg(1,c)))
                 "abs" -> ColorOperationGraphV1.Scalar.Abs(number(arg(0,c)))
-                "sqrt" -> ColorOperationGraphV1.Scalar.Sqrt(number(arg(0,c)))
+                "sqrt" -> number(arg(0,c)).let { operand ->
+                    // V4's common graph avoids bare sqrt at exact zero, where
+                    // its inherited reciprocal/inverseSqrt accuracy is unbounded.
+                    // Proof and emission consume this same real lazy branch.
+                    val zero = ColorOperationGraphV1.constant(0f)
+                    ColorOperationGraphV1.Scalar.LazyBranch(ColorOperationGraphV1.Predicate.Equal(operand,zero),
+                        zero,ColorOperationGraphV1.Scalar.Sqrt(operand))
+                }
                 "select" -> ColorOperationGraphV1.Scalar.EagerSelect(condition(arg(2,c)),number(arg(1,c)),number(arg(0,c)))
                 else -> error("Unsupported typed blend builtin $name")
             }) }

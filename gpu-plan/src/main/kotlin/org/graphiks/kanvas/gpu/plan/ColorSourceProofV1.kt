@@ -188,16 +188,14 @@ internal object ColorRoundedGraphProofV1 {
                     ColorBoundsV1(if (it.lowerF64 <= 0.0 && it.upperF64 >= 0.0) 0.0 else minOf(kotlin.math.abs(it.lowerF64),kotlin.math.abs(it.upperF64)),
                         maxOf(kotlin.math.abs(it.lowerF64),kotlin.math.abs(it.upperF64))) }
                 is ColorOperationGraphV1.Scalar.Sqrt -> value(node.value).let {
-                    require(it.lowerF64 >= 0.0)
-                    if (it == exact(0f)) exact(0f) else {
-                        require(it.lowerF64 >= normalF64)
-                        // sqrt inherits reciprocal(inverseSqrt): retain inverseSqrt's
-                        // 2 ULP plus F32 rounding, then the normal-divisor 2.5 ULP
-                        // plus final rounding. Do not mark sqrt as exact.
-                        val inverse = rounded(1.0/StrictMath.sqrt(it.upperF64),1.0/StrictMath.sqrt(it.lowerF64),3.0)
-                        require(inverse.lowerF64 >= normalF64 && inverse.upperF64 <= largestDivisorF64)
-                        rounded(Math.nextDown(1.0/inverse.upperF64),Math.nextUp(1.0/inverse.lowerF64),3.5)
-                    } }
+                    require(it.lowerF64 >= normalF64)
+                    // Bare sqrt inherits reciprocal(inverseSqrt), whose finite
+                    // accuracy domain excludes zero. A real graph branch must
+                    // avoid this operation if an exact zero is to stay admitted.
+                    val inverse = rounded(1.0/StrictMath.sqrt(it.upperF64),1.0/StrictMath.sqrt(it.lowerF64),3.0)
+                    require(inverse.lowerF64 >= normalF64 && inverse.upperF64 <= largestDivisorF64)
+                    rounded(Math.nextDown(1.0/inverse.upperF64),Math.nextUp(1.0/inverse.lowerF64),3.5)
+                }
                 is ColorOperationGraphV1.Scalar.EagerSelect -> {
                     val yes = value(node.yes); val no = value(node.no)
                     predicateOperands(node.predicate)
