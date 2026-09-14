@@ -1,6 +1,6 @@
 # État W05 — material graph, gradients, images et color filters
 
-## W5f — Task1 Matrix close, exécution séquentielle en cours
+## W5f — Task1 close, Task2 livrée en confirmation formelle
 
 Le [plan W5f](../../plans/2026-09-14-w5f-color-filters-implementation-plan.md)
 prépare huit livraisons séquentielles sur `codex/w5f-color-filters`, à partir de
@@ -20,7 +20,7 @@ Sol approuve sa conformité et sa qualité, sans Critical/Important. La correcti
 documentaire du certificat numérique `b535d3f554163ed9f013070b17d446ebc5e9122e`
 est confirmée ADDRESSED par l'unique re-review ciblée, sans nouvelle régression;
 Task1 est close dans son périmètre. Le témoin Paint alpha non unitaire distinguant l'ordre
-alpha/filtre est attribué à Task2, déjà prévue. Les warnings préexistants restent
+alpha/filtre est désormais livré par Task2 et vérifié par Sol. Les warnings préexistants restent
 visibles, sans suppression. Cette approbation n'étend pas les preuves aux sources
 gradient/image ou aux composites des tâches suivantes. Aucune gate complète,
 intégration ou PR W5f n'est close.
@@ -42,12 +42,45 @@ gpu-renderer et kanvas réussit séparément, exit0. Le contrôle indépendant f
 après correction documentaire réussit aussi, exit0, en1s (6 tâches exécutées,
 32 up-to-date). Aucun contournement du teardown.
 
-Task1 restreint temporairement V4 aux frames de la seule famille Rect, y compris
-leurs draws ordonnés et destination-read. Task2 doit supprimer cette restriction
+À sa livraison, Task1 limitait temporairement V4 aux frames de la seule famille Rect,
+y compris leurs draws ordonnés et destination-read. Task2 supprime cette restriction
 en séparant la construction immuable non publiée des lanes de leur `Ready` final:
 interning/proofs finaux, inventaire réel commun, permit frame/device, puis packing
 et publication. Un packing local suivi d'un budget composite tardif ne clôt pas
 ce gap; il ne peut pas être différé à la clôture W5f. ABI V1/V2/V3 inchangées.
+
+### Livraison Task2 — 14 septembre 2026
+
+Astra livre `231eae9809f7c535eaf75ec84153215a4f0f24c9`, depuis
+`3dce607442c7851d980109973ac09cd675d95090`, après baseline et RED publics véritables:
+Compose/Lerp et ordre interne/externe/Paint alpha, transport Rect/Path direct-stencil/
+General/destination-read. Les sources d'alpha zéro suivies d'un filtre restaurant
+l'alpha ne sont plus éliminées. Les certificats complets traversent les enfants
+Compose/Lerp et l'émission utilise ce même graphe arrondi.
+
+Pour les composites ordinary/native, la construction immutable non publiée est
+séparée du `Ready` final. L'interning et les proofs finales, l'inventaire réel unique
+target/geometry/stops/scratch et le permit frame/device précèdent le packing V4.
+Le même propriétaire opaque transmet les payloads réellement lus par les graphs
+finales. Sol valide ces joints R11/R13 et le témoin R12, qualité Approved, sans
+Critical/Important. Son verdict spec initial Not compliant vise uniquement neuf
+fichiers `Modify` sans hunk; R14 les réconcilie comme audits/réutilisations de leurs
+contrats vérifiés, sans retirer d'exigence ou modifier du code. Le finding original
+et les limites d'inspection demeurent; la confirmation ciblée est encore attendue.
+
+Les six XML frais UTC `01:11:35.169Z`–`01:12:03.894Z` comptent27 méthodes passées:
+dix nouveaux Ordering, six Matrix conservés et onze anciens cas W5a/b/c/d affectés.
+Aucun skip, failure ou error d'assertion. Les témoins nouveaux exigent une attente
+indépendante bornée avant Surface et Render/Readback, avec mutation/order/alpha,
+DIFFERENCE pour chaque Matrix/Compose/Lerp Rect/Path, General direct/stencil et
+contrôle/refus budget causal à géométrie/target/draw count identiques.
+**Gradle exit1 / executor27 exit133 / BUILD FAILED37s**: commande non verte.
+Compilation séparée cinq modules exit0/914ms, contrôle root frais au même commit
+exit0/1s (5executed/33up-to-date): pas de forced-clean compilation ni contournement.
+Les anciennes topologies prepared/W4e et toute l'arithmétique oracle partagée ne
+sont pas exhaustivement revalidées par cette review. Filtres RRect/stroke et autres
+sources/effets non promus restent fermés. Task2 attend sa confirmation formelle;
+les tâches3–8 et la review globale W5f restent ouvertes. Aucun push/PR W5f/merge.
 
 ## W5e — tranche fonctionnelle close, intégration réservée
 
