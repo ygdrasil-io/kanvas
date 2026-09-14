@@ -473,7 +473,13 @@ public class W5eImagePlanCompiler : GpuPlanCompiler {
             (node.coverage == CoverageRequest.ANTIALIASED || aligned) &&
             node.clip !is ClipStackNode.Operations && (node.clip as? ClipStackNode.DeviceRect)?.antiAlias != true
         val geometry = if (rectLane) GeometryNode.Rect.of(bounds) else GeometryNode.Path(PathBuilder().addRect(bounds).build())
+        // An omitted image Paint has the same hard-edge construction as the
+        // neutral paint synthesized above. Keep DEFAULT on the original image
+        // draw; only its physical construction must name the existing coverage.
+        val coverage = if (node.paint == null && node.coverage == CoverageRequest.DEFAULT)
+            CoverageRequest.HARD_EDGE else node.coverage
         return node.copy(geometry = geometry, origin = if (rectLane) DrawOrigin.RECT else DrawOrigin.PATH,
+            coverage = coverage,
             resource = null, material = neutral, paint = paint, operationBlendMode = null,effects=EffectStack.Empty)
     }
     private fun isImageSource(node: DrawNode): Boolean {
