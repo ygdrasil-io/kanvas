@@ -120,7 +120,7 @@ import org.graphiks.math.color.ColorF32
 /** Lowers only the authenticated W4d path-draw graph; it never re-enters Scene IR or legacy tessellation. */
 internal class W4dPathStrokeGraphLowerer {
     internal fun w5bPacket(pass: PlanPass, draws: List<PathDraw>, table: MaterialPlanTable,
-        bounds: GPUPixelBounds): W4dBuiltPass {
+        bounds: GPUPixelBounds,graph: RenderGraph): W4dBuiltPass {
         val command = when (pass) {
             is PlanPass.RenderPass -> pass.draws().single().commandIndex
             is PlanPass.StencilGeometryProducerV3 -> pass.commandIndexI32
@@ -136,7 +136,7 @@ internal class W4dPathStrokeGraphLowerer {
                 GPUDrawPacketRole.PathStencilCover else GPUDrawPacketRole.Shading,
             if (draw.strategy == PathFillStrategy.StencilCover) GPUCorePrimitiveCoverageMode.Stencil1x else GPUCorePrimitiveCoverageMode.FullOrScissor,
             if (producer) GPUClipCoveragePlan.NoClip else clip.coverage,
-            if (producer) GPUClipExecutionPlan.NoClip else clip.execution, table, bounds)
+            if (producer) GPUClipExecutionPlan.NoClip else clip.execution, table, bounds,graph)
     }
 
     fun lower(request: GpuPlanLoweringRequest): GpuPlanLoweringResult = try {
@@ -673,6 +673,7 @@ internal class W4dPathStrokeGraphLowerer {
         clipExecution: GPUClipExecutionPlan,
         materialPlanTable: MaterialPlanTable?,
         targetBounds: GPUPixelBounds,
+        graph: RenderGraph? = null,
     ): W4dBuiltPass {
         val geometry = draw.copyFillGeometryF32()
         val scissor = draw.copyScissorI32()
@@ -700,7 +701,9 @@ internal class W4dPathStrokeGraphLowerer {
                 geometry = geometryInput(geometry, plannedScissor, draw.strategy),
                 premultipliedRgba = listOf(color.red, color.green, color.blue, color.alpha),
                 material = if (role == GPUDrawPacketRole.PathStencilProducer) null else
-                    W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex),
+                    W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex,
+                        (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let {
+                            requireNotNull(graph).packedMaterialSourceV4(it) }),
                 targetBounds = targetBounds,
                 scissorBounds = plannedScissor,
                 clipCoveragePlan = clipCoverage,
@@ -1089,7 +1092,7 @@ internal class W4dPathStrokeGraphLowerer {
         table: MaterialPlanTable?,
         authority: PlanDrawMaterialAuthority,
     ): ColorF32? = when (authority) {
-        is PlanDrawMaterialAuthority.MaterialV4 -> error(org.graphiks.kanvas.gpu.plan.W5fPlanDiagnostics.Unpromoted)
+        is PlanDrawMaterialAuthority.MaterialV4 -> table?.let { W5aMaterialPlanLowerer().lower(it,authority.ref) }
         is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
         is PlanDrawMaterialAuthority.MaterialV3 -> error(org.graphiks.kanvas.gpu.plan.W5eImagePlanDiagnostics.InvalidContract)
         is PlanDrawMaterialAuthority.MaterialV2 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }

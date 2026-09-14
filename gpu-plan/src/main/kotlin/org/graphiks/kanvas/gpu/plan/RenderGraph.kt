@@ -114,7 +114,7 @@ public class RenderGraph private constructor(
 
         internal fun issueW5bGeometry(graph: RenderGraphConstruction,
             lanes: List<GeometryLaneConstruction> = emptyList()): RenderGraphConstruction {
-            validateGeometryConstructionDraws(graph.passes())
+            validateGeometryConstructionDraws(graph.passes(),graph.materialPlanTableOrNull())
             require(graph.capabilityId in setOf(W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID,
                 W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID,W4cPathFillPlanCompiler.W5B_CAPABILITY_ID,
                 W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID,W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID,
@@ -129,12 +129,14 @@ public class RenderGraph private constructor(
                     graph.resources().singleOrNull { it.role == PlanResourceRole.DepthStencil }?.id))
             } else lanes)
         }
-        private fun validateGeometryConstructionDraws(passes: List<PlanPass>) {
+        private fun validateGeometryConstructionDraws(passes: List<PlanPass>,table: MaterialPlanTable?) {
             require(passes.filterIsInstance<PlanPass.RenderPass>().flatMap { it.draws() }.all {
                 (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw || it is PathStrokeDraw || it is GeneralPathDraw || it is W5bW4ePathDraw) &&
                     (it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1 ||
                         (it is SolidRectDraw || it is AnalyticRectDraw || it is PathFillDraw ||
-                            it is GeneralPathDraw && it.copyPathGeometry() is PathDrawGeometry.Fill) &&
+                            it is GeneralPathDraw && it.copyPathGeometry() is PathDrawGeometry.Fill ||
+                            (it is AnalyticRRectDraw || it is PathStrokeDraw || it is GeneralPathDraw) &&
+                                table?.isUnfilteredGradientV4(it.materialAuthority.materialPlanRef()) == true) &&
                             it.materialAuthority is PlanDrawMaterialAuthority.MaterialV4 ||
                         (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw ||
                             it is PathFillDraw || it is PathStrokeDraw || it is GeneralPathDraw) && it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2)
@@ -161,7 +163,7 @@ public class RenderGraph private constructor(
                 W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID, W4cPathFillPlanCompiler.W5B_CAPABILITY_ID,
                 W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID,
                 W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID))
-            validateGeometryConstructionDraws(graph.passes())
+            validateGeometryConstructionDraws(graph.passes(),graph.materialPlanTableOrNull())
             return RenderGraph(graph.id, graph.capabilityId, graph.targetExtent, graph.colorFormat, graph.capabilities,
                 graph.budget, graph.visualCommandCount, graph.resources(), graph.passes(), graph.dependencies(),
                 graph.peakFrameLocalBytes, null, null, null, null, graph.materialPlanTable, w5bGeometryIssued = true,
@@ -250,7 +252,9 @@ public class RenderGraph private constructor(
                     }
                 }
             }
-            if (stopSlab != null && resources.none { it.role == PlanResourceRole.GradientStopData }) {
+            if (stopSlab != null && visualDraws(passes).any {
+                    materialPlanTable.sourceUsesGradientStopSlab(it.materialAuthority.materialPlanRef())
+                } && resources.none { it.role == PlanResourceRole.GradientStopData }) {
                 stopSlab.requireStorageCapabilities(capabilities)
                 val sourceRequirements = visualDraws(passes).filter {
                     it.materialAuthority !is PlanDrawMaterialAuthority.MaterialV4
@@ -270,6 +274,19 @@ public class RenderGraph private constructor(
                 return construct(id, capabilityId, targetExtent, colorFormat, capabilities, budget, visualCommandCount,
                     resources + stopResource, passes, dependencies, peakI64, materialPlanTable, w5bW4eSource)
             }
+            validateConstructionTopology(capabilityId, targetExtent, colorFormat, capabilities, budget,
+                visualCommandCount, resources, passes, dependencies, peakFrameLocalBytes, w5bW4eSource)
+            return RenderGraphConstruction(id, capabilityId, targetExtent, colorFormat, capabilities, budget, visualCommandCount,
+                resources, passes, dependencies, peakFrameLocalBytes, materialPlanTable)
+        }
+
+        /** Same topology/resource/geometry validation before and after final source binding. */
+        internal fun validateConstructionTopology(
+            capabilityId: String, targetExtent: SizeI32, colorFormat: PlanLogicalColorFormat,
+            capabilities: PlanCapabilitySnapshot, budget: PlanBudget, visualCommandCount: Int,
+            resources: List<PlanResource>, passes: List<PlanPass>, dependencies: List<PlanPassDependency>,
+            peakFrameLocalBytes: Long, w5bW4eSource: RenderGraph? = null,
+        ) {
             require(w5bW4eSource == null || capabilityId == W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID &&
                 w5bW4eSource.verifyW4eCompilerWitness() && w5bW4eSource.capabilityId == W4eClipPlanCompiler.W5A_HARD_CAPABILITY_ID)
             require(capabilityId != W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID || visualCommandCount == 0 || w5bW4eSource != null)
@@ -382,8 +399,6 @@ public class RenderGraph private constructor(
             val calculatedPeak = peak(resources, passes.size)
             require(calculatedPeak == peakFrameLocalBytes) { "Peak memory does not match resource lifetimes" }
             require(calculatedPeak <= budget.maxFrameLocalBytes) { "Peak memory exceeds budget" }
-            return RenderGraphConstruction(id, capabilityId, targetExtent, colorFormat, capabilities, budget, visualCommandCount,
-                resources, passes, dependencies, peakFrameLocalBytes, materialPlanTable)
         }
 
         /** Trust-boundary factory available only to the W4d compiler after public validation. */
@@ -2034,7 +2049,7 @@ public class RenderGraph private constructor(
             }
         }
 
-        private fun visualDraws(passes: List<PlanPass>): List<PlanDraw> = buildList {
+        internal fun visualDraws(passes: List<PlanPass>): List<PlanDraw> = buildList {
             passes.forEachIndexed { index, pass ->
                 when (pass) {
                     is PlanPass.RenderPass -> addAll(pass.draws())
@@ -2091,7 +2106,7 @@ public class RenderGraph private constructor(
             require(staging.byteSize == expectedStagingBytes) { "Readback staging size does not match layout" }
         }
 
-        private fun peak(resources: List<PlanResource>, passCount: Int): Long = (0 until passCount).maxOfOrNull { index ->
+        internal fun peak(resources: List<PlanResource>, passCount: Int): Long = (0 until passCount).maxOfOrNull { index ->
             resources.filter { it.firstPassIndex <= index && index < it.lastPassIndexExclusive }
                 .fold(0L) { total, resource -> Math.addExact(total, resource.byteSize) }
         } ?: 0L

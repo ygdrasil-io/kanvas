@@ -14,25 +14,60 @@ internal fun issueW5bGeneralPathGraph(source: RenderGraph, blendsByCommandI32: M
 internal fun issueW5bGeneralPathGraph(source: RenderGraphConstruction, blendsByCommandI32: Map<Int, BlendPlan>): RenderGraphConstruction {
     require(source.capabilityId == W4dGeneralPathPlanCompiler.W5A_HARD_CAPABILITY_ID &&
         source.verifyW4dGeneralCompilerWitness())
-    val pathPasses = source.passes().filterIsInstance<PlanPass.PathRenderPass>()
+    val layout = generalColorInputsV4(source.passes(), source.resources(), blendsByCommandI32)
+    val colors = layout.colors
+    val graph = W5bDestinationGraphSealer.construct(generalFinalBlendPlanId(source.id, colors),
+        W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID, source.targetExtent, source.capabilities, source.budget,
+        colors, source.materialPlanTableOrNull(), layout.targetBytesI64, layout.stagingBytesI64, layout.rowBytesI64,
+        layout.geometryResources, layout.data, depthStencilByCommandI32 = layout.depthByCommand)
+    return RenderGraph.issueW5bGeometry(graph, listOf(GeometryLaneConstruction(source,
+        colors.map { it.commandIndex }, layout.data, layout.depth)))
+}
+
+/** Same General colour-envelope recipe, retaining its distinct geometry source until binding. */
+internal fun describeW5bGeneralPathSourcesV4(source: SourceDeferredRenderConstructionV4,
+    blendsByCommandI32: Map<Int, BlendPlan>): SourceConstructionResultV4<SourceDeferredRenderConstructionV4> {
+    require(source.capabilityId == W4dGeneralPathPlanCompiler.W5A_HARD_CAPABILITY_ID &&
+        source.topology == DeferredLaneTopologyV4.Ordinary)
+    val layout = generalColorInputsV4(source.passes(), source.resources(), blendsByCommandI32)
+    val envelope = W5bDestinationGraphSealer.describeSources(W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID,
+        source.targetExtent, source.capabilities, source.budget, layout.colors, layout.targetBytesI64,
+        layout.stagingBytesI64, layout.rowBytesI64, layout.geometryResources, layout.data,
+        depthStencilByCommandI32 = layout.depthByCommand)
+    return SourceDeferredRenderConstructionV4.of(generalFinalBlendPlanId(source.id, layout.colors),
+        W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID, source.targetExtent, envelope.format,
+        source.capabilities, source.budget, layout.colors.size, envelope.resources, envelope.passes,
+        envelope.dependencies, source.sourceTable(), DeferredLaneTopologyV4.GeneralGeometryAndColor,
+        source, layout.colors.map { it.commandIndex }, layout.colors.associate { it.commandIndex to layout.data },
+        layout.depthByCommand)
+}
+
+private class GeneralColorInputsV4(colors: List<GeneralPathDraw>, geometryResources: List<PlanResource>,
+    val data: PlanDrawDataResources, val depth: PlanResourceId?, val targetBytesI64: Long,
+    val stagingBytesI64: Long, val rowBytesI64: Long) {
+    val colors = immutableList(colors)
+    val geometryResources = immutableList(geometryResources)
+    val depthByCommand = java.util.Collections.unmodifiableMap(colors.filter { it.strategy == PathFillStrategy.StencilCover }
+        .associate { it.commandIndex to requireNotNull(depth) })
+}
+
+private fun generalColorInputsV4(passes: List<PlanPass>, resources: List<PlanResource>,
+    blendsByCommandI32: Map<Int, BlendPlan>): GeneralColorInputsV4 {
+    val pathPasses = passes.filterIsInstance<PlanPass.PathRenderPass>()
     require(pathPasses.all { it.draw is GeneralPathDraw && it.draw.sample == SamplePlan.SingleSample &&
         it.phase in setOf(PathRenderPhase.SingleSampleDirectColor, PathRenderPhase.SingleSampleStencilProducer,
             PathRenderPhase.SingleSampleStencilColorCover) })
     val colors = pathPasses.filter { it.phase != PathRenderPhase.SingleSampleStencilProducer }
         .map { (it.draw as GeneralPathDraw).withBlend(requireNotNull(blendsByCommandI32[it.draw.commandIndex])) }
     require(colors.map { it.commandIndex }.toSet() == blendsByCommandI32.keys)
-    val geometryResources = source.resources().filter { it.role in setOf(
+    val geometryResources = resources.filter { it.role in setOf(
         PlanResourceRole.VertexData, PlanResourceRole.IndexData, PlanResourceRole.UniformData, PlanResourceRole.DepthStencil) }
     val data = pathPasses.first().drawDataResources
     val depth = geometryResources.singleOrNull { it.role == PlanResourceRole.DepthStencil }?.id
-    val readback = source.passes().last() as PlanPass.ReadbackPass
-    val graph = W5bDestinationGraphSealer.construct(generalFinalBlendPlanId(source.id, colors),
-        W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID, source.targetExtent, source.capabilities, source.budget,
-        colors, source.materialPlanTableOrNull(), source.resources().single { it.role == PlanResourceRole.LogicalTarget }.byteSize,
-        source.resources().single { it.role == PlanResourceRole.ReadbackStaging }.byteSize, readback.bytesPerRow,
-        geometryResources, data, depthStencilByCommandI32 = colors.filter { it.strategy == PathFillStrategy.StencilCover }
-            .associate { it.commandIndex to requireNotNull(depth) })
-    return RenderGraph.issueW5bGeometry(graph, listOf(GeometryLaneConstruction(source, colors.map { it.commandIndex }, data, depth)))
+    val readback = passes.last() as PlanPass.ReadbackPass
+    return GeneralColorInputsV4(colors, geometryResources, data, depth,
+        resources.single { it.role == PlanResourceRole.LogicalTarget }.byteSize,
+        resources.single { it.role == PlanResourceRole.ReadbackStaging }.byteSize, readback.bytesPerRow)
 }
 
 /** Source geometry identity plus every final-blend fact not assigned by the destination sealer. */

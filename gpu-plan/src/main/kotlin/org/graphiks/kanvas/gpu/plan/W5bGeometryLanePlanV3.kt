@@ -41,11 +41,21 @@ public class W5bGeometryLanePlanV3 internal constructor(
         }
         internal fun constructClearOnly(id: PlanId, capabilityId: String, extent: SizeI32,
             capabilities: PlanCapabilitySnapshot, budget: PlanBudget, material: MaterialPlanTable?): RenderGraphConstruction {
+            val topology = describeClearOnly(capabilityId,extent,capabilities,budget)
+            // The historical empty-draw sealer discards material and charges only
+            // the clear target/readback. Keep that exact budget and null table.
+            RawMaterialRequirementsV2.requireFrameBudget(emptyList(),topology.peakI64,budget,
+                "resource-limit.w5b.destination-budget")
+            return RenderGraph.construct(id,capabilityId,extent,topology.format,capabilities,budget,0,
+                topology.resources,topology.passes,topology.dependencies,topology.peakI64,null)
+        }
+        internal fun describeClearOnly(capabilityId: String,extent: SizeI32,
+            capabilities: PlanCapabilitySnapshot,budget: PlanBudget): W5bDestinationGraphSealer.DestinationTopologyV4 {
             val targetBytesI64 = Math.multiplyExact(Math.multiplyExact(extent.width.toLong(), extent.height.toLong()), 4L)
             val widthBytesI64 = Math.multiplyExact(extent.width.toLong(), 4L)
             val alignmentI64 = capabilities.copyBytesPerRowAlignment.toLong()
             val rowBytesI64 = Math.addExact(widthBytesI64, (alignmentI64 - widthBytesI64 % alignmentI64) % alignmentI64)
-            return W5bDestinationGraphSealer.construct(id, capabilityId, extent, capabilities, budget, emptyList(), material,
+            return W5bDestinationGraphSealer.describeSources(capabilityId, extent, capabilities, budget, emptyList(),
                 targetBytesI64, Math.multiplyExact(rowBytesI64, extent.height.toLong()), rowBytesI64)
         }
     }
@@ -75,34 +85,75 @@ internal fun issueW5bNativeComposite(graphs: List<RenderGraphConstruction>): Ren
             W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID, first.targetExtent, first.capabilities, first.budget, null))
     }
     val interned = MaterialPlanTable.intern(activeGraphs.map { requireNotNull(it.materialPlanTableOrNull()) })
-    val lanes = mutableListOf<GeometryLaneConstruction>()
+    val layout = nativeCompositeGeometryLayoutV4(activeGraphs.mapIndexed { ordinal,graph ->
+        NativeGeometryInputV4(graph.capabilityId,graph.resources(),
+            remapSourcePassesV4(graph.passes()) { interned.remap(ordinal,it) })
+    },first.capabilities)
+    val lanes = layout.lanes.map { lane ->
+        val graph = activeGraphs[lane.ordinalI32]
+        val source = if (graph.capabilityId == W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID)
+            graph.w5bGeometryLanes().single().sourceGraph else graph
+        GeometryLaneConstruction(source.rebindMaterials(interned.table) { interned.remap(lane.ordinalI32,it) },
+            lane.commandsI32,lane.data,lane.depth)
+    }
+    val identity = java.security.MessageDigest.getInstance("SHA-256").digest(
+        graphs.joinToString("|") { it.id.value }.encodeToByteArray()).joinToString("") { "%02x".format(it) }
+    val graph = W5bDestinationGraphSealer.construct(PlanId("w5b.composite.$identity"),
+        W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID, first.targetExtent, first.capabilities, first.budget,
+        layout.colors, interned.table, first.resources().single { it.role == PlanResourceRole.LogicalTarget }.byteSize,
+        first.resources().single { it.role == PlanResourceRole.ReadbackStaging }.byteSize,
+        (first.passes().last() as PlanPass.ReadbackPass).bytesPerRow, layout.geometryResources,
+        drawDataByCommandI32 = layout.dataByCommand, depthStencilByCommandI32 = layout.depthByCommand)
+    return RenderGraph.issueW5bGeometry(graph, lanes)
+}
+
+/** Same native topology recipe for already-bound and captured sources; no source issuance. */
+internal class NativeGeometryInputV4(val capabilityId: String,resources: List<PlanResource>,passes: List<PlanPass>) {
+    val resources = immutableList(resources)
+    val passes = immutableList(passes)
+}
+internal class NativeGeometryLaneMetadataV4(val ordinalI32: Int,commandsI32: List<Int>,
+    val data: PlanDrawDataResources,val depth: PlanResourceId?) {
+    val commandsI32 = immutableList(commandsI32)
+}
+internal class NativeCompositeGeometryLayoutV4(lanes: List<NativeGeometryLaneMetadataV4>,resources: List<PlanResource>,
+    colors: List<PlanDraw>,data: Map<Int,PlanDrawDataResources>,depth: Map<Int,PlanResourceId>) {
+    val lanes = immutableList(lanes)
+    val geometryResources = immutableList(resources)
+    val colors = immutableList(colors)
+    val dataByCommand = java.util.Collections.unmodifiableMap(LinkedHashMap(data))
+    val depthByCommand = java.util.Collections.unmodifiableMap(LinkedHashMap(depth))
+}
+internal fun nativeCompositeGeometryLayoutV4(inputs: List<NativeGeometryInputV4>,
+    capabilities: PlanCapabilitySnapshot): NativeCompositeGeometryLayoutV4 {
+    val lanes = mutableListOf<NativeGeometryLaneMetadataV4>()
     val geometryResources = mutableListOf<PlanResource>()
     val colors = mutableListOf<PlanDraw>()
     val dataByCommand = mutableMapOf<Int, PlanDrawDataResources>()
     val depthByCommand = mutableMapOf<Int, PlanResourceId>()
-    activeGraphs.forEachIndexed { ordinal, graph ->
-        val draws = graph.passes().flatMap { pass -> when (pass) {
+    inputs.forEachIndexed { ordinal, graph ->
+        val draws = graph.passes.flatMap { pass -> when (pass) {
             is PlanPass.RenderPass -> pass.draws()
             is PlanPass.StencilCover -> listOf(pass.draw)
             is PlanPass.PathRenderPass -> if (pass.phase == PathRenderPhase.SingleSampleStencilProducer) emptyList() else listOf(pass.draw as GeneralPathDraw)
             else -> emptyList()
         } }
         if (draws.isEmpty()) return@forEachIndexed
-        val resources = graph.resources().filter { it.role in setOf(PlanResourceRole.VertexData,
+        val resources = graph.resources.filter { it.role in setOf(PlanResourceRole.VertexData,
             PlanResourceRole.IndexData, PlanResourceRole.UniformData, PlanResourceRole.DepthStencil) }.map { resource ->
             PlanResource.of(resource.role, ordinal, resource.kind, resource.format, resource.copyExtent(), resource.byteSize,
                 resource.usages(), resource.lifetime, 0, 1, resource.sampleCountI32)
         }.toMutableList()
         if (graph.capabilityId == W3SolidRectPlanCompiler.W5A_CAPABILITY_ID) {
             require(resources.isEmpty())
-            val alignmentI64 = graph.capabilities.minUniformBufferOffsetAlignment.toLong()
+            val alignmentI64 = capabilities.minUniformBufferOffsetAlignment.toLong()
             val strideI64 = Math.addExact(32L, (alignmentI64 - 32L % alignmentI64) % alignmentI64)
             listOf(Triple(PlanResourceRole.VertexData, PlanScratchBufferKind.Vertex, 32L),
                 Triple(PlanResourceRole.IndexData, PlanScratchBufferKind.Index, 24L),
                 Triple(PlanResourceRole.UniformData, PlanScratchBufferKind.Uniform, strideI64)).forEach { (role, kind, perDraw) ->
-                val bytesI64 = requireNotNull(graph.capabilities.bufferAllocationPolicy.reserve(kind,
+                val bytesI64 = requireNotNull(capabilities.bufferAllocationPolicy.reserve(kind,
                     Math.multiplyExact(draws.size.toLong(), perDraw)))
-                require(bytesI64 <= graph.capabilities.maxBufferSizeBytes)
+                require(bytesI64 <= capabilities.maxBufferSizeBytes)
                 val usage = when (role) {
                     PlanResourceRole.VertexData -> PlanResourceUsage.Vertex
                     PlanResourceRole.IndexData -> PlanResourceUsage.Index
@@ -116,39 +167,18 @@ internal fun issueW5bNativeComposite(graphs: List<RenderGraphConstruction>): Ren
             resources.single { it.role == PlanResourceRole.IndexData }.id, resources.single { it.role == PlanResourceRole.UniformData }.id)
         val depth = resources.singleOrNull { it.role == PlanResourceRole.DepthStencil }?.id
         geometryResources += resources
-        val geometrySource = if (graph.capabilityId == W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID)
-            graph.w5bGeometryLanes().single().sourceGraph else graph
-        lanes += GeometryLaneConstruction(geometrySource.rebindMaterials(interned.table) { interned.remap(ordinal,it) },
-            draws.map { it.commandIndex }, data, depth)
+        lanes += NativeGeometryLaneMetadataV4(ordinal,draws.map { it.commandIndex },data,depth)
         draws.forEach { draw ->
-            val ref = interned.remap(ordinal, draw.materialAuthority.materialPlanRef())
-            colors += when (draw) {
-                is SolidRectDraw -> draw.withMaterialRef(ref)
-                is AnalyticRectDraw -> draw.withMaterialRef(ref)
-                is AnalyticRRectDraw -> draw.withMaterialRef(ref)
-                is PathFillDraw -> draw.withMaterialRef(ref)
-                is PathStrokeDraw -> draw.withMaterialRef(ref)
-                is GeneralPathDraw -> GeneralPathDraw.ofMaterial(draw.commandIndex, ref, draw.copyPathGeometry(),
-                    draw.strategy, draw.copyScissorI32(), draw.coverage, draw.sample, draw.blend,
-                    draw.materialCoordinates, draw.materialCoordinatesV2,
-                    (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates)
-                else -> error("Unsupported native W5b composite geometry")
-            }
+            require(draw is SolidRectDraw || draw is AnalyticRectDraw || draw is AnalyticRRectDraw ||
+                draw is PathFillDraw || draw is PathStrokeDraw || draw is GeneralPathDraw)
+            colors += draw
             dataByCommand[draw.commandIndex] = data
             if (draw is PathDraw && draw.strategy == PathFillStrategy.StencilCover)
                 depthByCommand[draw.commandIndex] = requireNotNull(depth)
         }
     }
     require(colors.zipWithNext().all { (a, b) -> a.commandIndex < b.commandIndex })
-    val identity = java.security.MessageDigest.getInstance("SHA-256").digest(
-        graphs.joinToString("|") { it.id.value }.encodeToByteArray()).joinToString("") { "%02x".format(it) }
-    val graph = W5bDestinationGraphSealer.construct(PlanId("w5b.composite.$identity"),
-        W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID, first.targetExtent, first.capabilities, first.budget,
-        colors, interned.table, first.resources().single { it.role == PlanResourceRole.LogicalTarget }.byteSize,
-        first.resources().single { it.role == PlanResourceRole.ReadbackStaging }.byteSize,
-        (first.passes().last() as PlanPass.ReadbackPass).bytesPerRow, geometryResources,
-        drawDataByCommandI32 = dataByCommand, depthStencilByCommandI32 = depthByCommand)
-    return RenderGraph.issueW5bGeometry(graph, lanes)
+    return NativeCompositeGeometryLayoutV4(lanes,geometryResources,colors,dataByCommand,depthByCommand)
 }
 
 /** Exact color/geometry split for the successor; historical W4 path validation stays closed. */
@@ -161,8 +191,8 @@ internal fun validateW5bGeometryPasses(passes: List<PlanPass>, resources: Map<Pl
     } }
     require(colors.size == visualCommandCountI32 && colors.zipWithNext().all { (a, b) -> a.commandIndex < b.commandIndex })
     require(colors.all { it.sample == SamplePlan.SingleSample && (it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1 || it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2 ||
-        (it is SolidRectDraw || it is AnalyticRectDraw || it is PathFillDraw ||
-            it is GeneralPathDraw && it.copyPathGeometry() is PathDrawGeometry.Fill) &&
+        (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw ||
+            it is PathStrokeDraw || it is GeneralPathDraw) &&
             it.materialAuthority is PlanDrawMaterialAuthority.MaterialV4) && it.blend != BlendPlan.NoOpV1 })
     fun data(value: PlanDrawDataResources) {
         for ((id, role, usage) in listOf(Triple(value.vertex, PlanResourceRole.VertexData, PlanResourceUsage.Vertex),

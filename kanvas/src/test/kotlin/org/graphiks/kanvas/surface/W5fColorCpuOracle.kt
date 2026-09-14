@@ -4,6 +4,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
+import org.graphiks.kanvas.paint.ColorSpaceInterpolation
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.kanvas.surface.WgslFloatEnvelopeV1Oracle.Interval
@@ -11,6 +12,91 @@ import org.graphiks.kanvas.surface.WgslFloatEnvelopeV1Oracle.Interval
 /** Independent published equations, with directed arithmetic supplied by the test envelope. */
 @OptIn(ExperimentalUnsignedTypes::class)
 internal object W5fColorCpuOracle {
+    /** Independent host preparation followed by the rounded fragment schedule. */
+    fun expectedGradientPixel(domain: ColorSpaceInterpolation, left: ColorARGB, right: ColorARGB,
+        tF32: Float, external: ColorFilter? = null, destination: ColorARGB = ColorARGB.Transparent,
+        finalBlend: BlendMode = BlendMode.SRC_OVER, coverageF32: Float = 1f): WgslFloatEnvelopeV1Oracle.DrawResult =
+        expectedGradientPixel(domain,left,right,Interval.input(tF32),external,destination,finalBlend,coverageF32)
+
+    fun expectedGradientPixel(domain: ColorSpaceInterpolation, left: ColorARGB, right: ColorARGB,
+        parameter: Interval, external: ColorFilter? = null, destination: ColorARGB = ColorARGB.Transparent,
+        finalBlend: BlendMode = BlendMode.SRC_OVER, coverageF32: Float = 1f,
+        destinationBlend: BlendMode = BlendMode.SRC_OVER, shaderOpacityF32: Float = 1f,
+        paintAlphaF32: Float = 1f): WgslFloatEnvelopeV1Oracle.DrawResult {
+        val a = preparedStop(left,domain)
+        val b = preparedStop(right,domain)
+        val t = clamp(parameter)
+        val inverse = sub(Interval.ONE,t)
+        val interpolated = Array(4) { c -> hull(add(mul(inverse,a[c]),mul(t,b[c])),
+            WgslFloatEnvelopeV1Oracle.gradientFma(inverse,a[c],mul(t,b[c])),
+            WgslFloatEnvelopeV1Oracle.gradientFma(t,b[c],mul(inverse,a[c]))) }
+        val linear = when (domain) {
+            ColorSpaceInterpolation.SRGB -> Array(3) { WgslFloatEnvelopeV1Oracle.imageSrgbToLinear(interpolated[it]) }
+            ColorSpaceInterpolation.LINEAR -> interpolated.copyOfRange(0,3)
+            ColorSpaceInterpolation.OKLAB -> {
+                val lms = matrixRows(interpolated,floatArrayOf(
+                    1f,.3963377774f,.2158037573f,0f,0f,
+                    1f,-.1055613458f,-.0638541728f,0f,0f,
+                    1f,-.0894841775f,-1.2914855480f,0f,0f,
+                    0f,0f,0f,0f,0f))
+                val cubes = Array(4) { if (it == 3) Interval.ZERO else mul(mul(lms[it],lms[it]),lms[it]) }
+                matrixRows(cubes,floatArrayOf(
+                    4.0767416621f,-3.3077115913f,.2309699292f,0f,0f,
+                    -1.2684380046f,2.6097574011f,-.3413193965f,0f,0f,
+                    -.0041960863f,-.7034186147f,1.7076147010f,0f,0f,
+                    0f,0f,0f,0f,0f)).copyOfRange(0,3)
+            }
+            else -> error("Interpolation domain has no independent equation in Task5")
+        }
+        var result = Array(4) { if (it == 3) interpolated[3] else mul(linear[it],interpolated[3]) }
+        if (shaderOpacityF32 != 1f) result = result.map { mul(it,Interval.input(shaderOpacityF32)) }.toTypedArray()
+        if (paintAlphaF32 != 1f) result = result.map { mul(it,Interval.input(paintAlphaF32)) }.toTypedArray()
+        if (external != null) result = applyFilter(result,external)
+        return finish(result,destination,finalBlend,coverageF32,destinationBlend)
+    }
+
+    private fun preparedStop(color: ColorARGB, domain: ColorSpaceInterpolation): Array<Interval> {
+        // JVM float arithmetic rounds each product/add before the next. The
+        // transcendental reference has a two-F64-ULP enclosure: one for the
+        // reference's specified error and one for any conforming host result.
+        fun roundedHost(low: BigDecimal, high: BigDecimal) = Interval(
+            BigDecimal(low.toFloat().toDouble()),BigDecimal(high.toFloat().toDouble()))
+        fun hostAdd(a: Interval,b: Interval) = roundedHost(a.lower+b.lower,a.upper+b.upper)
+        fun hostMul(a: Interval,b: Interval): Interval {
+            val products = listOf(a.lower*b.lower,a.lower*b.upper,a.upper*b.lower,a.upper*b.upper)
+            return roundedHost(products.min(),products.max())
+        }
+        fun transcendental(a: Interval, operation: (Double)->Double): Interval {
+            fun bound(v: BigDecimal, upper: Boolean): BigDecimal {
+                val computed = operation(v.toDouble())
+                val error = 2.0*Math.ulp(computed)
+                return BigDecimal(if (upper) Math.nextUp(computed+error) else Math.nextDown(computed-error))
+            }
+            return roundedHost(bound(a.lower,false),bound(a.upper,true))
+        }
+        fun hostEotf(v: Float): Interval {
+            if (v == 0f || v == 1f) return Interval.input(v)
+            if (v <= .04045f) return Interval.input(v/12.92f)
+            return transcendental(Interval.input((v+.055f)/1.055f)) { StrictMath.pow(it,2.4f.toDouble()) }
+        }
+        val rgb = floatArrayOf(color.red/255f,color.green/255f,color.blue/255f)
+        val channels = if (domain == ColorSpaceInterpolation.SRGB) Array(3) { Interval.input(rgb[it]) }
+            else Array(3) { hostEotf(rgb[it]) }
+        fun row(values: Array<Interval>,r: Float,g: Float,b: Float) = hostAdd(
+            hostAdd(hostMul(Interval.input(r),values[0]),hostMul(Interval.input(g),values[1])),
+            hostMul(Interval.input(b),values[2]))
+        val prepared = if (domain != ColorSpaceInterpolation.OKLAB) channels else {
+            val lms = arrayOf(row(channels,.4122214708f,.5363325363f,.0514459929f),
+                row(channels,.2119034982f,.6806995451f,.1073969566f),
+                row(channels,.0883024619f,.2817188376f,.6299787005f))
+            val roots = Array(3) { transcendental(lms[it],StrictMath::cbrt) }
+            arrayOf(row(roots,.2104542553f,.7936177850f,-.0040720468f),
+                row(roots,1.9779984951f,-2.4285922050f,.4505937099f),
+                row(roots,.0259040371f,.7827717662f,-.8086757660f))
+        }
+        return Array(4) { if (it == 3) Interval.input(color.alpha/255f) else prepared[it] }
+    }
+
     fun expectedShaderTree(shader: Shader, paintAlphaF32: Float = 1f, external: ColorFilter? = null,
         destination: ColorARGB = ColorARGB.Transparent, finalBlend: BlendMode = BlendMode.SRC): WgslFloatEnvelopeV1Oracle.DrawResult {
         fun evaluate(node: Shader): Array<Interval> = when (node) {

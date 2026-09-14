@@ -165,10 +165,8 @@ public object PaintSceneAdapter {
             is Shader.Opacity -> source = node.shader
             is Shader.WithLocalMatrix -> source = node.shader
             is Shader.CoordClamp -> source = node.shader
-            is Shader.LinearGradient -> return node.interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB
-            is Shader.RadialGradient -> return node.interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB
-            is Shader.SweepGradient -> return node.interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB
-            is Shader.ConicalGradient -> return node.interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB
+            is Shader.WithColorFilter -> source = node.shader
+            is Shader.LinearGradient, is Shader.RadialGradient, is Shader.SweepGradient, is Shader.ConicalGradient -> return true
             is Shader.Image -> return node.sampling == SamplingOptions.NEAREST &&
                 node.tileModeX == org.graphiks.kanvas.paint.TileMode.CLAMP &&
                 node.tileModeY == org.graphiks.kanvas.paint.TileMode.CLAMP

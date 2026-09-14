@@ -53,13 +53,22 @@ internal class W5aMaterialSourceStage private constructor(
             val wordsI64 = requirements.uniformByteCountI64 / 16L
             if (requirements.uniformByteCountI64 % 16L != 0L || wordsI64 !in 1L..Int.MAX_VALUE.toLong()) return null
             val code = W5fColorOperationEmitterV1.emit(proof.copyOperationGraph(),"vec4<f32>(0.0)",0L)
+            val slab = proof.gradientStopSlab
+            if (slab != null && slab !== table.gradientStopSlab) return null
+            val stopDeclaration = if (slab == null) "" else """
+                struct GradientStopV1 { positionAndReserved: vec4<f32>, straightColor: vec4<f32>, }
+                @group(1) @binding(1) var<storage, read> w5cStops: array<GradientStopV1>;
+            """.trimIndent()
             return W5aMaterialSourceStage(requirements,"""
                 struct W5fMaterialBlock { words: array<vec4<u32>, ${wordsI64}>, }
                 @group(1) @binding(0) var<uniform> w5fMaterial: W5fMaterialBlock;
+                $stopDeclaration
+                $W5D_SAFE_DIVIDE_WGSL
+                fn w5f_device_point(pixel: vec2<f32>) -> vec2<f32> { return pixel; }
                 fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {
                     $code
                 }
-            """.trimIndent(),1,false,null)
+            """.trimIndent(),1,false,slab,"w5f_device_point")
         }
         fun imageV3(table: MaterialPlanTable, root: MaterialPlanRef): W5aMaterialSourceStage {
             val execution = (table.entry(root).bindings as org.graphiks.kanvas.gpu.plan.ImageSampleV3).execution
@@ -109,6 +118,7 @@ internal class W5aMaterialSourceStage private constructor(
                 val input = "${layout.uniformExpression}.binding$bindingIndexI32"
                 when (binding) {
                     is org.graphiks.kanvas.gpu.plan.ColorFilterBindingV4 -> return null
+                    is org.graphiks.kanvas.gpu.plan.GradientInterpolationBindingV4 -> return null
                     is org.graphiks.kanvas.gpu.plan.ImageSampleV3 -> return null
                     is MaterialBindingPlan.GradientV2 -> return null
                     is MaterialBindingPlan.GradientV1 -> {

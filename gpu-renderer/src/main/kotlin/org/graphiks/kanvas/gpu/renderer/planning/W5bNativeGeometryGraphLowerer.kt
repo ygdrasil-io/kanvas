@@ -97,7 +97,8 @@ internal class W5bNativeGeometryGraphLowerer {
                     require(draws.all { it is SolidRectDraw })
                     val builder = GpuPlanTaskListLowerer()
                     val built = draws.mapIndexed { index, draw -> builder.packet(draw,
-                        requireNotNull(W5aMaterialPlanLowerer().lower(table,
+                        if (draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV4) org.graphiks.math.color.ColorF32.Transparent
+                        else requireNotNull(W5aMaterialPlanLowerer().lower(table,
                             draw.materialAuthority.materialPlanRef())), index, bounds, table, null,
                         (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let(graph::packedMaterialSourceV4)) }
                     val scratch = (builder.sealW3Scratch(request, target, staging, bounds, seal.sealHash, built) as
@@ -145,7 +146,7 @@ internal class W5bNativeGeometryGraphLowerer {
                         else -> false
                     } }
                     val builder = W4dPathStrokeGraphLowerer()
-                    val built = passes.map { builder.w5bPacket(it, paths, table, bounds) }
+                    val built = passes.map { builder.w5bPacket(it, paths, table, bounds,graph) }
                     val footprint = (PathStrokePlanBudget.calculate(graph.targetExtent, paths.map { when (val geometry = it.copyPathGeometry()) {
                         is PathDrawGeometry.Fill -> geometry.valueF32
                         is PathDrawGeometry.Stroke -> geometry.valueF32.copyFillGeometryF32()
@@ -179,7 +180,8 @@ internal class W5bNativeGeometryGraphLowerer {
                     require(vertexResource.byteSize == footprint.vertexCapacityBytes &&
                         indexResource.byteSize == footprint.indexCapacityBytes && uniformResource.byteSize == footprint.uniformCapacityBytes)
                     val built = analytic.mapIndexed { index, draw -> W4aAnalyticRectGraphLowerer().packet(draw,
-                        requireNotNull(W5aMaterialPlanLowerer().lower(table,
+                        if (draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV4) org.graphiks.math.color.ColorF32.Transparent
+                        else requireNotNull(W5aMaterialPlanLowerer().lower(table,
                             draw.materialAuthority.materialPlanRef())), index, bounds, table, w5b = true,
                         packedSourceV4 = (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let(graph::packedMaterialSourceV4)) }
                     val lanePackets = built.map { it.packet }
@@ -221,8 +223,10 @@ internal class W5bNativeGeometryGraphLowerer {
                     require(vertexResource.byteSize == footprint.vertexCapacityBytes &&
                         indexResource.byteSize == footprint.indexCapacityBytes && uniformResource.byteSize == footprint.uniformCapacityBytes)
                     val built = analytic.mapIndexed { index, draw -> W4bAnalyticRRectGraphLowerer().packet(draw,
-                        requireNotNull(W5aMaterialPlanLowerer().lower(table,
-                            draw.materialAuthority.materialPlanRef())), index, bounds, table, w5b = true) }
+                        if (draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV4) org.graphiks.math.color.ColorF32.Transparent
+                        else requireNotNull(W5aMaterialPlanLowerer().lower(table,
+                            draw.materialAuthority.materialPlanRef())), index, bounds, table, w5b = true,
+                        packedSourceV4=(draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let(graph::packedMaterialSourceV4)) }
                     val lanePackets = built.map { it.packet }
                     val semantics = lanePackets.map { it.semanticPayload as GPUDrawSemanticPayload.CorePrimitive }
                     val semanticAuthorities = semantics.map(GPUCorePrimitivePreparedSemanticAuthority::capture)

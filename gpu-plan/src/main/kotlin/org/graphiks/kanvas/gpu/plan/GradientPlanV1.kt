@@ -1,10 +1,42 @@
 package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.kanvas.render.ir.GradientStop
+import org.graphiks.kanvas.render.ir.ColorInterpolation
+import org.graphiks.kanvas.color.ColorInterpolationProgramV1
 import org.graphiks.math.color.ColorF32
 import org.graphiks.math.geometry.Point2F32
 
-public data class GradientStopPlanV1(public val positionF32: Float, public val straightSrgbF32: ColorF32)
+public class GradientStopPlanV1 private constructor(public val positionF32: Float, public val straightSrgbF32: ColorF32,
+    public val domain: ColorInterpolation, public val preparedTupleF32: ColorF32,
+    public val preparationRecipeIdentity: String?) {
+    /** Historical public constructor remains straight-sRGB only. */
+    public constructor(positionF32: Float, straightSrgbF32: ColorF32) :
+        this(positionF32, straightSrgbF32, ColorInterpolation.SRGB, straightSrgbF32, null)
+    public operator fun component1(): Float = positionF32
+    public operator fun component2(): ColorF32 = straightSrgbF32
+    public fun copy(positionF32: Float = this.positionF32, straightSrgbF32: ColorF32 = this.straightSrgbF32): GradientStopPlanV1 {
+        require(domain == ColorInterpolation.SRGB || straightSrgbF32 == this.straightSrgbF32) { W5fPlanDiagnostics.Schema }
+        return if (domain == ColorInterpolation.SRGB) GradientStopPlanV1(positionF32, straightSrgbF32)
+        else GradientStopPlanV1(positionF32, straightSrgbF32, domain, preparedTupleF32, preparationRecipeIdentity)
+    }
+    override fun equals(other: Any?): Boolean = other is GradientStopPlanV1 &&
+        positionF32.toRawBits() == other.positionF32.toRawBits() && straightSrgbF32 == other.straightSrgbF32 &&
+        domain == other.domain && preparedTupleF32 == other.preparedTupleF32 && preparationRecipeIdentity == other.preparationRecipeIdentity
+    override fun hashCode(): Int = if (domain == ColorInterpolation.SRGB)
+        31 * positionF32.hashCode() + straightSrgbF32.hashCode()
+    else listOf(positionF32.toRawBits(), straightSrgbF32, domain, preparedTupleF32, preparationRecipeIdentity).hashCode()
+    override fun toString(): String = "GradientStopPlanV1(positionF32=$positionF32, straightSrgbF32=$straightSrgbF32)" +
+        if (domain == ColorInterpolation.SRGB) "" else ":$domain:$preparationRecipeIdentity:$preparedTupleF32"
+    internal companion object {
+        /** Called only by checked-frame stop preparation; no public signed-tuple constructor. */
+        fun prepared(positionF32: Float, original: ColorF32, domain: ColorInterpolation,
+            tuple: ColorF32, recipeIdentity: String): GradientStopPlanV1 {
+            require(domain == ColorInterpolation.LINEAR || domain == ColorInterpolation.OKLAB) { W5fPlanDiagnostics.Schema }
+            require(tuple.alpha.toRawBits() == original.alpha.toRawBits()) { W5fPlanDiagnostics.Schema }
+            return GradientStopPlanV1(positionF32, original, domain, tuple, recipeIdentity)
+        }
+    }
+}
 public data class GradientStopRangeV1(public val baseIndexU32: UInt, public val countU32: UInt) {
     init { require(countU32 in 2u..65_538u && baseIndexU32.toLong() + countU32.toLong() <= UInt.MAX_VALUE.toLong()) }
 }
@@ -13,10 +45,21 @@ public data class GradientStopRangeV1(public val baseIndexU32: UInt, public val 
 public class GradientStopSlabPlanV1 private constructor(stops: List<GradientStopPlanV1>) {
     private val storedStops = immutableList(stops)
     public fun copyStops(): List<GradientStopPlanV1> = storedStops.toList()
+    internal fun rangeHasDomain(range: GradientStopRangeV1, domain: ColorInterpolation): Boolean {
+        val first = range.baseIndexU32.toLong()
+        val last = first + range.countU32.toLong()
+        return last <= storedStops.size.toLong() && (first.toInt() until last.toInt()).all {
+            storedStops[it].domain == domain
+        }
+    }
     public val byteSizeI64: Long = Math.multiplyExact(storedStops.size.toLong(), 32L)
     public val canonicalIdentity: String = storedStops.joinToString(";") { stop ->
         val color = stop.straightSrgbF32
-        listOf(stop.positionF32, color.red, color.green, color.blue, color.alpha).joinToString(",") { it.toBits().toString() }
+        val original = listOf(stop.positionF32, color.red, color.green, color.blue, color.alpha)
+            .joinToString(",") { it.toBits().toString() }
+        if (stop.domain == ColorInterpolation.SRGB) original else original + ":${stop.domain}:${stop.preparationRecipeIdentity}:" +
+            stop.preparedTupleF32.let { listOf(it.red, it.green, it.blue, it.alpha) }
+                .joinToString(",") { it.toRawBits().toString() }
     }
     public companion object {
         public fun of(stops: List<GradientStopPlanV1>): GradientStopSlabPlanV1 {
@@ -24,6 +67,18 @@ public class GradientStopSlabPlanV1 private constructor(stops: List<GradientStop
             require(stops.all { stop -> stop.positionF32.isFinite() && stop.positionF32 in 0f..1f &&
                 stop.straightSrgbF32.let { color -> listOf(color.red, color.green, color.blue, color.alpha)
                     .all { it.isFinite() && it in 0f..1f } } })
+            require(stops.all { stop ->
+                when (stop.domain) {
+                    ColorInterpolation.SRGB -> stop.preparedTupleF32 == stop.straightSrgbF32 && stop.preparationRecipeIdentity == null
+                    ColorInterpolation.LINEAR, ColorInterpolation.OKLAB -> stop.preparedTupleF32.let { tuple ->
+                        listOf(tuple.red, tuple.green, tuple.blue, tuple.alpha).all(Float::isFinite) &&
+                            tuple.alpha.toRawBits() == stop.straightSrgbF32.alpha.toRawBits() &&
+                            stop.preparationRecipeIdentity == if (stop.domain == ColorInterpolation.OKLAB)
+                                ColorInterpolationProgramV1.OKLAB_RECIPE_VERSION else "linear-srgb-eotf-ordered-f32-v1"
+                    }
+                    else -> false
+                }
+            })
             return GradientStopSlabPlanV1(stops)
         }
     }
@@ -236,6 +291,11 @@ public class GradientNumericAuthorityV1 private constructor(
 }
 
 internal fun GradientStopSlabPlanV1.requireStorageCapabilities(capabilities: PlanCapabilitySnapshot) {
+    requireGradientStorageCapabilitiesV4(byteSizeI64,capabilities)
+}
+
+internal fun requireGradientStorageCapabilitiesV4(byteSizeI64: Long, capabilities: PlanCapabilitySnapshot) {
+    require(byteSizeI64 >= 0L && byteSizeI64 % 32L == 0L) { W5cPlanDiagnostics.StopBudget }
     require(capabilities.supportedOperations().containsAll(setOf(PlanOperationCapability.StorageBuffer,
         PlanOperationCapability.CopyUpload)) && capabilities.maxStorageBuffersPerShaderStageI32?.let { it >= 1 } == true &&
         capabilities.maxBindingsPerBindGroupI32?.let { it >= 2 } == true &&

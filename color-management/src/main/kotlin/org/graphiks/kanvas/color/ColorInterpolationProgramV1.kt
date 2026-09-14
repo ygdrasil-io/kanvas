@@ -15,6 +15,8 @@ public object ColorInterpolationProgramV1 {
         public data class Multiply(public val a: Scalar, public val b: Scalar) : Scalar
         public data class Divide(public val a: Scalar, public val b: Scalar) : Scalar
         public data class Pow(public val a: Scalar, public val b: Scalar) : Scalar
+        /** Signed real cube root is a Host-only stop-preparation operation. */
+        public data class SignedCbrt(public val value: Scalar) : Scalar
         public data class Min(public val a: Scalar, public val b: Scalar) : Scalar
         public data class Max(public val a: Scalar, public val b: Scalar) : Scalar
         public data class Abs(public val value: Scalar) : Scalar
@@ -86,11 +88,84 @@ public object ColorInterpolationProgramV1 {
     }
     private val rgbHsl = rgbToHsl()
     private val hslRgb = hslToRgb()
+
+    /** Author's 2021-01-25 sRGB matrices, each decimal captured once as F32 bits. */
+    public const val OKLAB_RECIPE_VERSION: String = "oklab-srgb-2021-v1"
+
+    private fun matrixRows(inputs: List<Scalar>, rows: List<List<Float>>): List<Scalar> = rows.map { row ->
+        val products = row.mapIndexed { i, coefficient -> Scalar.Multiply(constant(coefficient), inputs[i]) }
+        products.drop(1).fold(products.first() as Scalar) { sum, product -> Scalar.Add(sum, product) }
+    }
+
+    private fun linearRgbToOklab(): Recipe {
+        val lms = matrixRows(List(3) { Scalar.Component(it) }, listOf(
+            listOf(.4122214708f, .5363325363f, .0514459929f),
+            listOf(.2119034982f, .6806995451f, .1073969566f),
+            listOf(.0883024619f, .2817188376f, .6299787005f),
+        )).map(Scalar::SignedCbrt)
+        val lab = matrixRows(lms, listOf(
+            listOf(.2104542553f, .7936177850f, -.0040720468f),
+            listOf(1.9779984951f, -2.4285922050f, .4505937099f),
+            listOf(.0259040371f, .7827717662f, -.8086757660f),
+        ))
+        return Recipe("$OKLAB_RECIPE_VERSION:linear-rgb-to-oklab:host-signed-cbrt-ordered-f32", lab[0], lab)
+    }
+
+    private fun oklabToLinearRgb(): Recipe {
+        val lmsRoots = matrixRows(List(3) { Scalar.Component(it) }, listOf(
+            listOf(1f, .3963377774f, .2158037573f),
+            listOf(1f, -.1055613458f, -.0638541728f),
+            listOf(1f, -.0894841775f, -1.2914855480f),
+        ))
+        // Real signed cube: no pow(abs(x),3), no sign reconstruction and no intermediate clamp.
+        val lms = lmsRoots.map { Scalar.Multiply(Scalar.Multiply(it, it), it) }
+        val rgb = matrixRows(lms, listOf(
+            listOf(4.0767416621f, -3.3077115913f, .2309699292f),
+            listOf(-1.2684380046f, 2.6097574011f, -.3413193965f),
+            listOf(-.0041960863f, -.7034186147f, 1.7076147010f),
+        ))
+        return Recipe("$OKLAB_RECIPE_VERSION:oklab-to-linear-rgb:two-multiply-signed-cube", rgb[0], rgb)
+    }
+
+    private val rgbLab = linearRgbToOklab()
+    private val labRgb = oklabToLinearRgb()
+
+    /** Interprets the very same recipe; every arithmetic node rounds to F32, with no FMA. */
+    public fun evaluateHostF32(kind: RecipeKind, inputsF32: List<Float>): List<Float> {
+        require(inputsF32.isNotEmpty() && inputsF32.all(Float::isFinite))
+        val cache = java.util.IdentityHashMap<Scalar, Float>()
+        fun evaluate(node: Scalar): Float = cache[node] ?: when (node) {
+            Scalar.Input -> inputsF32.single()
+            is Scalar.Component -> inputsF32[node.indexI32]
+            is Scalar.Constant -> Float.fromBits(node.bitsI32)
+            is Scalar.Add -> evaluate(node.a) + evaluate(node.b)
+            is Scalar.Subtract -> evaluate(node.a) - evaluate(node.b)
+            is Scalar.Multiply -> evaluate(node.a) * evaluate(node.b)
+            is Scalar.Divide -> evaluate(node.a) / evaluate(node.b)
+            is Scalar.Pow -> StrictMath.pow(evaluate(node.a).toDouble(), evaluate(node.b).toDouble()).toFloat()
+            is Scalar.SignedCbrt -> StrictMath.cbrt(evaluate(node.value).toDouble()).toFloat()
+            is Scalar.Min -> minOf(evaluate(node.a), evaluate(node.b))
+            is Scalar.Max -> maxOf(evaluate(node.a), evaluate(node.b))
+            is Scalar.Abs -> kotlin.math.abs(evaluate(node.value))
+            is Scalar.Floor -> StrictMath.floor(evaluate(node.value).toDouble()).toFloat()
+            is Scalar.IntegerModulo -> {
+                val value = evaluate(node.value)
+                require(value.isFinite() && value.toDouble() in Int.MIN_VALUE.toDouble()..Int.MAX_VALUE.toDouble())
+                Math.floorMod(value.toInt(), node.modulusI32).toFloat()
+            }
+            is Scalar.IfEqual -> if (evaluate(node.a) == evaluate(node.b)) evaluate(node.yes) else evaluate(node.no)
+            is Scalar.IfLessEqual -> if (evaluate(node.a) <= evaluate(node.b)) evaluate(node.yes) else evaluate(node.no)
+        }.also { value -> require(value.isFinite()); cache[node] = value }
+        return recipe(kind).outputs.map(::evaluate)
+    }
+
     public fun recipe(kind: RecipeKind): Recipe = when (kind) {
         RecipeKind.EOTF -> eotf
         RecipeKind.OETF -> oetf
         RecipeKind.RGB_TO_HSL -> rgbHsl
         RecipeKind.HSL_TO_RGB -> hslRgb
+        RecipeKind.LINEAR_RGB_TO_OKLAB -> rgbLab
+        RecipeKind.OKLAB_TO_LINEAR_RGB -> labRgb
         else -> throw UnsupportedOperationException("Conversion recipe ${kind.name} has not been promoted")
     }
 }

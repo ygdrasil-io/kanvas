@@ -62,7 +62,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
         return when (val recognition = recognize(scene)) {
             is Recognition.MaterialRefused -> GpuPlanSelection.MaterialOnlyRefusal(CAPABILITY_ID, scene.canonicalId, target, recognition.refusals)
             is Recognition.Accepted -> GpuPlanSelection.Candidate(
-                W4cCandidate(this, scene.canonicalId, target, recognition.draws, recognition.materialPlanTable, recognition.capabilityId),
+                W4cCandidate(this, scene.canonicalId, target, recognition.draws, recognition.materialPlanTable, recognition.capabilityId,recognition.sourceTable),
             )
             is Recognition.Gap -> notCandidate(recognition.message)
             is Recognition.Invalid -> invalidSelection(recognition.message)
@@ -75,6 +75,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
         val targetBounds = RectI32(0, 0, scene.extent.width, scene.extent.height)
         val draws = mutableListOf<SealedDraw>()
         val materialEntries = mutableListOf<MaterialPlanEntry>()
+        val sources = mutableListOf<MaterialSourceConstructionV4>()
         val materialRefusals = mutableListOf<EffectiveMaterialPlanner.Result.Refused>()
         var frameAttemptedEdgesBeforeI32 = 0
         var elidedNoOpsI32 = 0
@@ -91,6 +92,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
                             targetBounds = targetBounds,
                             frameAttemptedEdgesBeforeI32 = frameAttemptedEdgesBeforeI32,
                             materialEntries = materialEntries,
+                            sources = sources,
                         )
                     ) {
                         is DrawRecognition.NoOp -> {
@@ -126,8 +128,11 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
         return if (draws.isEmpty() && elidedNoOpsI32 == 0) {
             Recognition.Gap("W4c requires at least one visual path draw")
         } else {
-            Recognition.Accepted(draws, materialEntries.takeIf { it.isNotEmpty() }?.let(MaterialPlanTable::of),
-                if (elidedNoOpsI32 > 0 || materialEntries.any { it.stopSlab != null } || draws.any { it.blend != BlendPlan.LegacySrcOverV1 }) W5B_CAPABILITY_ID else CAPABILITY_ID)
+            val pending = sources.any { it.pending }
+            Recognition.Accepted(if (pending) draws.mapIndexed { ordinal,draw -> draw.copy(material=MaterialPlanRef(ordinal)) } else draws,
+                materialEntries.takeIf { it.isNotEmpty() && !pending }?.let(MaterialPlanTable::of),
+                if (elidedNoOpsI32 > 0 || pending || materialEntries.any { it.stopSlab != null } || draws.any { it.blend != BlendPlan.LegacySrcOverV1 }) W5B_CAPABILITY_ID else CAPABILITY_ID,
+                (MaterialSourceConstructionTableV4.of(sources) as SourceConstructionResultV4.Built).value)
         }
     }
 
@@ -137,6 +142,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
         targetBounds: RectI32,
         frameAttemptedEdgesBeforeI32: Int,
         materialEntries: MutableList<MaterialPlanEntry>,
+        sources: MutableList<MaterialSourceConstructionV4>,
     ): DrawRecognition {
         val geometry = node.geometry as? GeometryNode.Path
             ?: return DrawRecognition.Gap("Draw geometry is outside W4c")
@@ -207,21 +213,24 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
                 } catch (_: ArithmeticException) {
                     return DrawRecognition.ResourceLimit("Frame attempted-edge count overflowed")
                 }
-                val source = when (val planned = EffectiveMaterialPlanner.normalize(node, FORMAT.blendTargetClampV1(), true,
-                    gradientDeviceBoundsI32 = scissor)) {
-                    EffectiveMaterialPlanner.Normalization.NoOp -> return DrawRecognition.NoOp(attemptedAfter)
-                    is EffectiveMaterialPlanner.Normalization.Refused -> return DrawRecognition.MaterialRefused(
+                val source = when (val planned = EffectiveMaterialPlanner.normalizeSourcesV4(node, FORMAT.blendTargetClampV1(), scissor)) {
+                    EffectiveMaterialPlanner.SourceNormalizationV4.NoOp -> return DrawRecognition.NoOp(attemptedAfter)
+                    is EffectiveMaterialPlanner.SourceNormalizationV4.Refused -> return DrawRecognition.MaterialRefused(
                         EffectiveMaterialPlanner.Result.Refused(planned.diagnosticCode), attemptedAfter)
-                    is EffectiveMaterialPlanner.Normalization.Source -> planned
+                    is EffectiveMaterialPlanner.SourceNormalizationV4.Source -> planned.captured
                 }
+                sources += source
+                val resolved = source.resolvedSource
                 DrawRecognition.Accepted(
                     SealedDraw(
                         commandIndex = commandIndex,
                         pathF32 = pathSnapshot,
                         transform = node.transform.copy(),
-                        material = appendMaterialPlan(materialEntries, source.table, source.root),
+                        material = if (resolved == null) MaterialPlanRef(sources.lastIndex)
+                            else appendMaterialPlan(materialEntries,resolved.table,resolved.root),
                         coordinates = MaterialCoordinatePlanV1.fromCtm(node.transform),
-                        coordinatesV4 = source.table.coordinatesV4(source.root),
+                        coordinatesV2 = resolved?.table?.coordinatesV2(resolved.root),
+                        coordinatesV4 = if (source.pending) source.coordinates else resolved?.table?.coordinatesV4(resolved.root),
                         geometryF32 = geometryF32,
                         strategy = strategy,
                         scissorI32 = scissor.copy(),
@@ -380,13 +389,66 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
     ).all { it > 0L && it and (it - 1L) == 0L }
 
     override fun plan(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): RenderPlanResult<RenderGraph> =
-        construct(candidate,capabilities,budget).publishConstructionResult()
+        if (hasPendingSources(candidate)) constructSources(candidate,capabilities,budget).prepareAndPublishSourcesV4()
+        else construct(candidate,capabilities,budget).publishConstructionResult()
+
+    internal fun hasPendingSources(candidate: GpuPlanCandidate): Boolean =
+        (candidate as? W4cCandidate)?.sourceTable?.sources()?.any { it.pending } == true
 
     internal fun construct(
         candidate: GpuPlanCandidate,
         capabilities: PlanCapabilitySnapshot,
         budget: PlanBudget,
-    ): RenderPlanResult<RenderGraphConstruction> {
+    ): RenderPlanResult<RenderGraphConstruction> = constructChecked(candidate,capabilities,budget,
+        clear = { selected,extent -> RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bGeometryLanePlanV3.constructClearOnly(
+            PlanId(planIdentity(selected.sceneCanonicalId,selected.target,capabilities,budget)),W5B_CAPABILITY_ID,
+            extent,capabilities,budget,selected.materialPlanTable))) },
+        destination = { selected,extent,draws,resources,data,depth,memory ->
+            require(!hasPendingSources(selected)) { W5fPlanDiagnostics.Schema }
+            RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bDestinationGraphSealer.construct(
+                PlanId(planIdentity(selected.sceneCanonicalId,selected.target,capabilities,budget)),W5B_CAPABILITY_ID,
+                extent,capabilities,budget,draws,selected.materialPlanTable,memory.targetBytes,memory.readbackBytes,
+                memory.readbackBytesPerRow,resources,drawDataResources=data,depthStencilByCommandI32=depth)))
+        }) { selected,extent,topology ->
+            require(!hasPendingSources(selected)) { W5fPlanDiagnostics.Schema }
+            RenderPlanResult.Ready(RenderGraph.construct(PlanId(planIdentity(selected.sceneCanonicalId,selected.target,capabilities,budget)),
+                CAPABILITY_ID,extent,FORMAT,capabilities,budget,selected.draws.size,topology.resources,topology.passes,
+                topology.dependencies,topology.peakI64,selected.materialPlanTable))
+        }
+
+    internal fun constructSources(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget): RenderPlanResult<SourceDeferredRenderConstructionV4> = constructChecked(candidate,capabilities,budget,
+        clear = { selected,extent -> SourceDeferredRenderConstructionV4.clearOnly(
+            PlanId(planIdentity(selected.sceneCanonicalId,selected.target,capabilities,budget)),W5B_CAPABILITY_ID,
+            extent,capabilities,budget) },
+        destination = { selected,extent,draws,resources,data,depth,memory ->
+            val symbolic = draws.mapIndexed { ordinal,draw -> draw.withMaterialRef(MaterialPlanRef(ordinal)) }
+            deferred(selected,extent,capabilities,budget,W5bDestinationGraphSealer.describeSources(W5B_CAPABILITY_ID,
+                extent,capabilities,budget,symbolic,memory.targetBytes,memory.readbackBytes,memory.readbackBytesPerRow,
+                resources,drawDataResources=data,depthStencilByCommandI32=depth))
+        }) { selected,extent,topology ->
+            val roots = selected.draws.map { it.material }
+            deferred(selected,extent,capabilities,budget,W5bDestinationGraphSealer.DestinationTopologyV4(topology.format,
+                topology.resources,remapSourcePassesV4(topology.passes) { ref ->
+                    MaterialPlanRef(roots.indexOf(ref).also { require(it >= 0) }) },topology.dependencies,topology.peakI64))
+        }
+
+    private fun deferred(selected: W4cCandidate,extent: SizeI32,capabilities: PlanCapabilitySnapshot,budget: PlanBudget,
+        topology: W5bDestinationGraphSealer.DestinationTopologyV4): RenderPlanResult<SourceDeferredRenderConstructionV4> =
+        when (val result = SourceDeferredRenderConstructionV4.of(
+            PlanId(planIdentity(selected.sceneCanonicalId,selected.target,capabilities,budget)),selected.capabilityId,
+            extent,topology.format,capabilities,budget,selected.draws.size,topology.resources,topology.passes,topology.dependencies,
+            selected.sourceTable,if (selected.capabilityId == W5B_CAPABILITY_ID) DeferredLaneTopologyV4.GeometryBridge
+                else DeferredLaneTopologyV4.Ordinary,null,emptyList(),emptyMap(),emptyMap())) {
+            is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(result.value)
+            is SourceConstructionResultV4.Refused -> result.failure
+        }
+
+    private fun <T: Any> constructChecked(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,budget: PlanBudget,
+        clear: (W4cCandidate,SizeI32)->RenderPlanResult<T>,
+        destination: (W4cCandidate,SizeI32,List<PathFillDraw>,List<PlanResource>,PlanDrawDataResources,
+            Map<Int,PlanResourceId>,PathFillMemoryFootprint)->RenderPlanResult<T>,
+        ordinary: (W4cCandidate,SizeI32,W5bDestinationGraphSealer.DestinationTopologyV4)->RenderPlanResult<T>): RenderPlanResult<T> {
         val selected = candidate as? W4cCandidate ?: return invalidCandidate()
         if (selected.owner !== this || !selected.hasMatchingFingerprints()) return invalidCandidate()
 
@@ -424,9 +486,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
             )
         }
         if (selected.draws.isEmpty()) return try {
-            RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bGeometryLanePlanV3.constructClearOnly(
-                PlanId(planIdentity(selected.sceneCanonicalId, target, capabilities, budget)), W5B_CAPABILITY_ID,
-                extent, capabilities, budget, selected.materialPlanTable)))
+            clear(selected,extent)
         } catch (failure: IllegalArgumentException) {
             resourceLimit(W4cPlanDiagnostics.PlanIdentityInvalid, failure.message ?: "Invalid W5b clear-only path frame")
         }
@@ -556,14 +616,10 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
             if (selected.capabilityId == W5B_CAPABILITY_ID) {
                 val draws = selected.draws.map { draw -> PathFillDraw.ofMaterial(draw.commandIndex, draw.material,
                     draw.geometryF32, draw.strategy, draw.scissorI32, draw.blend, draw.coordinates,
+                    coordinatesV2 = draw.coordinatesV2,
                     coordinatesV4 = draw.coordinatesV4) }
-                return RenderPlanResult.Ready(RenderGraph.issueW5bGeometry(W5bDestinationGraphSealer.construct(
-                    PlanId(planIdentity(selected.sceneCanonicalId, target, capabilities, budget)), W5B_CAPABILITY_ID,
-                    extent, capabilities, budget, draws, selected.materialPlanTable, footprint.targetBytes,
-                    footprint.readbackBytes, footprint.readbackBytesPerRow,
-                    geometryResources = listOfNotNull(vertex, index, uniform, depthStencil), drawDataResources = drawData,
-                    depthStencilByCommandI32 = draws.mapNotNull { draw -> depthStencil?.id?.let { draw.commandIndex to it } }.toMap(),
-                )))
+                return destination(selected,extent,draws,listOfNotNull(vertex,index,uniform,depthStencil),drawData,
+                    draws.mapNotNull { draw -> depthStencil?.id?.let { draw.commandIndex to it } }.toMap(),footprint)
             }
             val passes = mutableListOf<PlanPass>()
             var renderOrdinal = 0
@@ -578,6 +634,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
                     strategy = sealed.strategy,
                     scissorI32 = sealed.scissorI32,
                     coordinates = sealed.coordinates,
+                    coordinatesV2 = sealed.coordinatesV2,
                     coordinatesV4 = sealed.coordinatesV4,
                 )
                 val load = if (firstColorAttachment) {
@@ -638,29 +695,8 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
             val dependencies = passes.zipWithNext().map { (before, after) ->
                 PlanPassDependency(before.id, after.id)
             }
-            RenderPlanResult.Ready(
-                RenderGraph.construct(
-                    id = PlanId(planIdentity(selected.sceneCanonicalId, target, capabilities, budget)),
-                    capabilityId = CAPABILITY_ID,
-                    targetExtent = extent,
-                    colorFormat = FORMAT,
-                    capabilities = capabilities,
-                    budget = budget,
-                    visualCommandCount = selected.draws.size,
-                    resources = buildList {
-                        add(logicalTarget)
-                        add(staging)
-                        add(vertex)
-                        add(index)
-                        add(uniform)
-                        depthStencil?.let(::add)
-                    },
-                    passes = passes,
-                    dependencies = dependencies,
-                    peakFrameLocalBytes = footprint.peakBytes,
-                    materialPlanTable = selected.materialPlanTable,
-                ),
-            )
+            ordinary(selected,extent,W5bDestinationGraphSealer.DestinationTopologyV4(FORMAT,
+                listOfNotNull(logicalTarget,staging,vertex,index,uniform,depthStencil),passes,dependencies,footprint.peakBytes))
         } catch (_: IllegalArgumentException) {
             resourceLimit(
                 W4cPlanDiagnostics.PlanIdentityInvalid,
@@ -763,7 +799,8 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
 
     private sealed interface Recognition {
         data class MaterialRefused(val refusals: List<EffectiveMaterialPlanner.Result.Refused>) : Recognition
-        data class Accepted(val draws: List<SealedDraw>, val materialPlanTable: MaterialPlanTable?, val capabilityId: String) : Recognition
+        data class Accepted(val draws: List<SealedDraw>, val materialPlanTable: MaterialPlanTable?, val capabilityId: String,
+            val sourceTable: MaterialSourceConstructionTableV4) : Recognition
         data class Gap(val message: String) : Recognition
         data class Invalid(val message: String) : Recognition
         data class ResourceLimit(val message: String) : Recognition
@@ -794,6 +831,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
         val transform: Matrix3x3F32,
         val material: MaterialPlanRef,
         val coordinates: MaterialCoordinatePlanV1?,
+        val coordinatesV2: MaterialCoordinatePlanV2?,
         val coordinatesV4: SourceCoordinatesV4?,
         val geometryF32: PathFillGeometryF32,
         val strategy: PathFillStrategy,
@@ -808,6 +846,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
         draws: List<SealedDraw>,
         val materialPlanTable: MaterialPlanTable?,
         override val capabilityId: String,
+        val sourceTable: MaterialSourceConstructionTableV4,
     ) : GpuPlanCandidate {
 
         val draws: List<SealedDraw> = Collections.unmodifiableList(

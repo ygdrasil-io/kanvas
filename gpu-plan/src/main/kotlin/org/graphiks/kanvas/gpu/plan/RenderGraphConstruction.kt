@@ -42,36 +42,7 @@ internal class RenderGraphConstruction internal constructor(
     fun dependencies(): List<PlanPassDependency> = dependencyValues
 
     fun rebindMaterials(table: MaterialPlanTable, remap: (MaterialPlanRef) -> MaterialPlanRef): RenderGraphConstruction {
-        val copied = java.util.IdentityHashMap<PlanDraw, PlanDraw>()
-        fun draw(source: PlanDraw): PlanDraw = copied.getOrPut(source) {
-            val ref = remap(source.materialAuthority.materialPlanRef())
-            when (source) {
-                is SolidRectDraw -> source.withMaterialRef(ref)
-                is AnalyticRectDraw -> source.withMaterialRef(ref)
-                is AnalyticRRectDraw -> source.withMaterialRef(ref)
-                is PathFillDraw -> source.withMaterialRef(ref)
-                is PathStrokeDraw -> source.withMaterialRef(ref)
-                is GeneralPathDraw -> GeneralPathDraw.ofMaterial(source.commandIndex,ref,source.copyPathGeometry(),
-                    source.strategy,source.copyScissorI32(),source.coverage,source.sample,source.blend,
-                    source.materialCoordinates,source.materialCoordinatesV2,
-                    (source.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates)
-                else -> error("Unsupported composite construction draw")
-            }
-        }
-        val passes = passes().map { pass -> when (pass) {
-            is PlanPass.RenderPass -> PlanPass.RenderPass(pass.ordinal,pass.target,pass.draws().map(::draw),
-                pass.load,pass.store,pass.drawDataResources,pass.destinationVersionAfter)
-            is PlanPass.StencilProducer -> PlanPass.StencilProducer(pass.ordinal,pass.target,pass.depthStencil,
-                draw(pass.draw) as PathDraw,pass.drawDataResources,pass.atomicGroup,pass.load,pass.store,
-                pass.depthStencilAccess,pass.depthStencilLoadStore)
-            is PlanPass.StencilCover -> PlanPass.StencilCover(pass.ordinal,pass.target,pass.depthStencil,
-                draw(pass.draw) as PathDraw,pass.drawDataResources,pass.atomicGroup,pass.load,pass.store,
-                pass.depthStencilAccess,pass.depthStencilLoadStore,pass.destinationVersionAfter)
-            is PlanPass.PathRenderPass -> PlanPass.PathRenderPass(pass.ordinal,pass.target,draw(pass.draw) as PathRenderDraw,
-                pass.phase,pass.drawDataResources,pass.atomicGroup,pass.depthStencil,pass.load,pass.store,
-                pass.depthStencilAccess,pass.depthStencilLoadStore,pass.resolveTarget)
-            else -> pass
-        } }
+        val passes = remapSourcePassesV4(passes(),remap)
         val oldStopsI64 = resources().filter { it.role == PlanResourceRole.GradientStopData }.sumOf { it.byteSize }
         val rebound = RenderGraph.construct(id,capabilityId,targetExtent,colorFormat,capabilities,budget,visualCommandCount,
             resources().filterNot { it.role == PlanResourceRole.GradientStopData },passes,dependencies(),
@@ -102,6 +73,41 @@ internal class RenderGraphConstruction internal constructor(
         return RenderGraph.publishConstruction(this,
             packConstructedFrame(listOf(this),materialTable,Math.addExact(peakFrameLocalBytes,rectScratchI64)))
     }
+}
+
+/** Same immutable draw/resource-map rebind for resolved and source-deferred construction. */
+internal fun remapSourcePassesV4(sourcePasses: List<PlanPass>,
+    remap: (MaterialPlanRef) -> MaterialPlanRef): List<PlanPass> {
+        val copied = java.util.IdentityHashMap<PlanDraw, PlanDraw>()
+        fun draw(source: PlanDraw): PlanDraw = copied.getOrPut(source) {
+            val ref = remap(source.materialAuthority.materialPlanRef())
+            when (source) {
+                is SolidRectDraw -> source.withMaterialRef(ref)
+                is AnalyticRectDraw -> source.withMaterialRef(ref)
+                is AnalyticRRectDraw -> source.withMaterialRef(ref)
+                is PathFillDraw -> source.withMaterialRef(ref)
+                is PathStrokeDraw -> source.withMaterialRef(ref)
+                is GeneralPathDraw -> GeneralPathDraw.ofMaterial(source.commandIndex,ref,source.copyPathGeometry(),
+                    source.strategy,source.copyScissorI32(),source.coverage,source.sample,source.blend,
+                    source.materialCoordinates,source.materialCoordinatesV2,
+                    (source.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates)
+                else -> error("Unsupported composite construction draw")
+            }
+        }
+        return sourcePasses.map { pass -> when (pass) {
+            is PlanPass.RenderPass -> PlanPass.RenderPass(pass.ordinal,pass.target,pass.draws().map(::draw),
+                pass.load,pass.store,pass.drawDataResources,pass.destinationVersionAfter)
+            is PlanPass.StencilProducer -> PlanPass.StencilProducer(pass.ordinal,pass.target,pass.depthStencil,
+                draw(pass.draw) as PathDraw,pass.drawDataResources,pass.atomicGroup,pass.load,pass.store,
+                pass.depthStencilAccess,pass.depthStencilLoadStore)
+            is PlanPass.StencilCover -> PlanPass.StencilCover(pass.ordinal,pass.target,pass.depthStencil,
+                draw(pass.draw) as PathDraw,pass.drawDataResources,pass.atomicGroup,pass.load,pass.store,
+                pass.depthStencilAccess,pass.depthStencilLoadStore,pass.destinationVersionAfter)
+            is PlanPass.PathRenderPass -> PlanPass.PathRenderPass(pass.ordinal,pass.target,draw(pass.draw) as PathRenderDraw,
+                pass.phase,pass.drawDataResources,pass.atomicGroup,pass.depthStencil,pass.load,pass.store,
+                pass.depthStencilAccess,pass.depthStencilLoadStore,pass.resolveTarget)
+            else -> pass
+        } }
 }
 
 
@@ -139,7 +145,9 @@ internal class PackedFrameSourcesV4 private constructor(private val table: Mater
             val footprints = draws.mapNotNull { draw ->
                 (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let { authority ->
                     require(draw is SolidRectDraw || draw is AnalyticRectDraw || draw is PathFillDraw ||
-                        draw is GeneralPathDraw && draw.copyPathGeometry() is PathDrawGeometry.Fill) { W5fPlanDiagnostics.Unpromoted }
+                        draw is GeneralPathDraw && draw.copyPathGeometry() is PathDrawGeometry.Fill ||
+                        (draw is AnalyticRRectDraw || draw is PathStrokeDraw || draw is GeneralPathDraw) &&
+                            table?.isUnfilteredGradientV4(authority.ref) == true) { W5fPlanDiagnostics.Unpromoted }
                     RawMaterialRequirementsV2.measureV4(requireNotNull(table),authority.ref).also {
                         require(it.proof.authenticates(table,authority.ref,authority.coordinates)) { W5fPlanDiagnostics.Schema }
                     }

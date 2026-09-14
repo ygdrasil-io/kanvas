@@ -31,7 +31,8 @@ internal class W5aMaterialPlanLowerer {
         var leaf = root
         while (table.entry(leaf).bindings is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.OpacityF32V1)
             leaf = MaterialPlanRef(leaf.indexI32-1)
-        if (table.entry(leaf).bindings is org.graphiks.kanvas.gpu.plan.ColorFilterBindingV4) {
+        if (table.entry(leaf).bindings is org.graphiks.kanvas.gpu.plan.ColorFilterBindingV4 ||
+            table.entry(leaf).bindings is org.graphiks.kanvas.gpu.plan.GradientInterpolationBindingV4) {
             table.colorSourceProofV4(root)
             // This is only the historical geometry color slot. material() below
             // requires the exact packed V4 authority for the color-writing stage.

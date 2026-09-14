@@ -1131,6 +1131,7 @@ private fun MaterialPlanTable.hasNonFiniteW5aBindings(root: MaterialPlanRef): Bo
         val entry = runCatching { entry(MaterialPlanRef(index)) }.getOrNull() ?: return false
         when (val bindings = entry.bindings) {
             is org.graphiks.kanvas.gpu.plan.ColorFilterBindingV4 -> error(org.graphiks.kanvas.gpu.plan.W5fPlanDiagnostics.Unpromoted)
+            is org.graphiks.kanvas.gpu.plan.GradientInterpolationBindingV4 -> error(org.graphiks.kanvas.gpu.plan.W5fPlanDiagnostics.Unpromoted)
             is org.graphiks.kanvas.gpu.plan.ImageSampleV3 -> error("W5e requires its V3 image source authority")
             is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.GradientV2 -> return false
             is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.GradientV1 -> return false

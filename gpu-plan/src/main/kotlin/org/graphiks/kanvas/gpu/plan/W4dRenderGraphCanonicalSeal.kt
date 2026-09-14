@@ -116,6 +116,12 @@ private class W4dGraphDigestWriter {
             i32("$prefix.program.version", entry.program.versionI32)
             text("$prefix.program.id", entry.program.structuralId.value)
             when (val binding = entry.bindings) {
+                is GradientInterpolationBindingV4 -> {
+                    text("$prefix.binding",binding.canonicalIdentity)
+                    text("$prefix.source-proof",binding.sourceProof.canonicalIdentity)
+                    text("$prefix.coordinates",binding.sourceProof.coordinates.identityV4())
+                    text("$prefix.stop-slab",requireNotNull(table.gradientStopSlab).canonicalIdentity)
+                }
                 is ColorFilterBindingV4 -> {
                     text("$prefix.binding",binding.canonicalIdentity)
                     text("$prefix.source-proof",binding.numericAuthority.outputSourceProof.canonicalIdentity)

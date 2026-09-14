@@ -11,6 +11,10 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
         public data class InputLinearPremul(public val channelI32: Int) : Scalar {
             init { require(channelI32 in 0..3) }
         }
+        /** Actual fragment position; its enclosure is supplied by the authenticated draw bounds. */
+        public data class DevicePositionF32(public val channelI32: Int) : Scalar {
+            init { require(channelI32 in 0..1) }
+        }
         /** Word index relative to this graph's record; source prefix slots are absolute. */
         public data class DynamicF32(public val wordOffsetU32: Long) : Scalar {
             init { require(wordOffsetU32 in 0L..UInt.MAX_VALUE.toLong()) }
@@ -22,6 +26,8 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
         public data class Subtract(public val a: Scalar, public val b: Scalar) : Scalar
         public data class Multiply(public val a: Scalar, public val b: Scalar) : Scalar
         public data class Divide(public val a: Scalar, public val b: Scalar) : Scalar
+        /** Existing binary-parts / fraction-divide / frexp / ldexp coordinate schedule. */
+        public class ProjectiveDivide(public val a: Scalar,public val b: Scalar) : Scalar
         public data class Pow(public val a: Scalar, public val b: Scalar) : Scalar
         public data class Clamp01(public val value: Scalar) : Scalar
         /** round(scaled) is checked in [0,255] and selects a byte from a typed Table record. */
@@ -32,6 +38,16 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
         public data class Max(public val a: Scalar, public val b: Scalar) : Scalar
         public data class Abs(public val value: Scalar) : Scalar
         public data class Sqrt(public val value: Scalar) : Scalar
+        public data class Atan2(public val y: Scalar, public val x: Scalar) : Scalar
+        /** Checked shared-range search followed by the straight-domain interpolation recipe. */
+        public data class GradientStopComponent(public val selection: GradientStopSelection,
+            public val channelI32: Int) : Scalar {
+            init { require(channelI32 in 0..3) }
+        }
+        /** One vector-valued control-flow region, shared by all four channel readers. */
+        public data class BranchComponent(public val branch: BranchVector,public val channelI32: Int) : Scalar {
+            init { require(channelI32 in 0..3) }
+        }
         public data class Floor(public val value: Scalar) : Scalar
         public data class Round(public val value: Scalar) : Scalar
         public data class IntegerModulo(public val value: Floor, public val modulusI32: Int) : Scalar {
@@ -41,29 +57,58 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
         public data class EagerSelect(public val predicate: Predicate, public val yes: Scalar, public val no: Scalar) : Scalar
         public data class LazyBranch(public val predicate: Predicate, public val yes: Scalar, public val no: Scalar) : Scalar
     }
+    public class GradientStopSelection internal constructor(
+        public val numerator: Scalar,
+        public val scale: Scalar,
+        public val parameter: Scalar,
+        public val rangeWordOffsetU32: Long,
+        public val domain: org.graphiks.kanvas.render.ir.ColorInterpolation,
+        public val firstOnly: Boolean = false,
+    ) {
+        public val countBoundU32: UInt = 65_538u
+        init { require(rangeWordOffsetU32 in 0L..UInt.MAX_VALUE.toLong()-1L)
+            require(domain == org.graphiks.kanvas.render.ir.ColorInterpolation.LINEAR ||
+                domain == org.graphiks.kanvas.render.ir.ColorInterpolation.OKLAB) }
+    }
+    public class BranchVector internal constructor(public val predicate: Predicate,yes: List<Scalar>,no: List<Scalar>) {
+        public val yes: List<Scalar> = immutableList(yes)
+        public val no: List<Scalar> = immutableList(no)
+        init { require(yes.size == 4 && no.size == 4) }
+    }
     public sealed interface Predicate {
+        /** A typed integer flag is never interpreted through DynamicF32. */
+        public data class UniformU32Equal(public val wordOffsetU32: Long, public val expectedU32: UInt) : Predicate {
+            init { require(wordOffsetU32 in 0L..UInt.MAX_VALUE.toLong()) }
+        }
         public data class Equal(public val a: Scalar, public val b: Scalar) : Predicate
         public data class LessEqual(public val a: Scalar, public val b: Scalar) : Predicate
         public data class Not(public val value: Predicate) : Predicate
         public data class And(public val a: Predicate, public val b: Predicate) : Predicate
+        public data class Finite(public val value: Scalar) : Predicate
+        public data class ProjectiveValid(public val division: Scalar.ProjectiveDivide) : Predicate
     }
     public val canonicalIdentity: String by lazy {
         val identities = java.util.IdentityHashMap<Scalar, String>()
         fun identity(node: Scalar): String = identities[node] ?: run {
             fun predicate(p: Predicate): String = when (p) {
+                is Predicate.UniformU32Equal -> "u32-eq:${p.wordOffsetU32}:${p.expectedU32}"
                 is Predicate.Equal -> "eq:${identity(p.a)}:${identity(p.b)}"
                 is Predicate.LessEqual -> "le:${identity(p.a)}:${identity(p.b)}"
                 is Predicate.Not -> "not:${predicate(p.value)}"
                 is Predicate.And -> "and:${predicate(p.a)}:${predicate(p.b)}"
+                is Predicate.Finite -> "finite:${identity(p.value)}"
+                is Predicate.ProjectiveValid -> "projective-valid:${identity(p.division)}"
             }
             val recipe = when (node) {
                 is Scalar.InputLinearPremul -> "input:${node.channelI32}"
+                is Scalar.DevicePositionF32 -> "device-position:${node.channelI32}"
                 is Scalar.DynamicF32 -> "dynamic:${node.wordOffsetU32}"
                 is Scalar.ConstantF32 -> "constant:${node.bitsI32}"
                 is Scalar.Add -> "add:${identity(node.a)}:${identity(node.b)}"
                 is Scalar.Subtract -> "sub:${identity(node.a)}:${identity(node.b)}"
                 is Scalar.Multiply -> "mul:${identity(node.a)}:${identity(node.b)}"
                 is Scalar.Divide -> "div:${identity(node.a)}:${identity(node.b)}"
+                is Scalar.ProjectiveDivide -> "w5d-binary-parts-fraction-div-frexp-ldexp-v1:${identity(node.a)}:${identity(node.b)}"
                 is Scalar.Pow -> "pow:${identity(node.a)}:${identity(node.b)}"
                 is Scalar.Clamp01 -> "clamp:${identity(node.value)}"
                 is Scalar.TableByte -> "table-byte-round-v1:${node.tableWordOffsetU32}:${identity(node.scaled)}"
@@ -71,6 +116,12 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
                 is Scalar.Max -> "max:${identity(node.a)}:${identity(node.b)}"
                 is Scalar.Abs -> "abs:${identity(node.value)}"
                 is Scalar.Sqrt -> "sqrt:${identity(node.value)}"
+                is Scalar.Atan2 -> "atan2:${identity(node.y)}:${identity(node.x)}"
+                is Scalar.GradientStopComponent -> node.selection.let { selected ->
+                    "gradient-upper-bound-65538-scaled-le-interpolate-v4:${selected.domain}:${selected.rangeWordOffsetU32}:first=${selected.firstOnly}:" +
+                        "${identity(selected.numerator)}:${identity(selected.scale)}:${identity(selected.parameter)}:${node.channelI32}" }
+                is Scalar.BranchComponent -> "vector-lazy:${predicate(node.branch.predicate)}:" +
+                    "${node.branch.yes.joinToString(",",transform=::identity)}:${node.branch.no.joinToString(",",transform=::identity)}:${node.channelI32}"
                 is Scalar.Floor -> "floor:${identity(node.value)}"
                 is Scalar.Round -> "round:${identity(node.value)}"
                 is Scalar.IntegerModulo -> "integer-modulo:${node.modulusI32}:${identity(node.value)}"
@@ -84,21 +135,28 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
     }
     internal fun bindInput(prefix: ColorOperationGraphV1, filterWordOffsetU32: Long): ColorOperationGraphV1 {
         val bound = java.util.IdentityHashMap<Scalar, Scalar>()
+        val selections = java.util.IdentityHashMap<GradientStopSelection, GradientStopSelection>()
+        val vectors = java.util.IdentityHashMap<BranchVector,BranchVector>()
         fun bind(value: Scalar): Scalar {
             fun predicate(p: Predicate): Predicate = when (p) {
+                is Predicate.UniformU32Equal -> Predicate.UniformU32Equal(Math.addExact(p.wordOffsetU32,filterWordOffsetU32),p.expectedU32)
                 is Predicate.Equal -> Predicate.Equal(bind(p.a),bind(p.b))
                 is Predicate.LessEqual -> Predicate.LessEqual(bind(p.a),bind(p.b))
                 is Predicate.Not -> Predicate.Not(predicate(p.value))
                 is Predicate.And -> Predicate.And(predicate(p.a),predicate(p.b))
+                is Predicate.Finite -> Predicate.Finite(bind(p.value))
+                is Predicate.ProjectiveValid -> Predicate.ProjectiveValid(bind(p.division) as Scalar.ProjectiveDivide)
             }
             return bound[value] ?: when (value) {
             is Scalar.InputLinearPremul -> prefix.outputs[value.channelI32]
+            is Scalar.DevicePositionF32 -> value
             is Scalar.DynamicF32 -> Scalar.DynamicF32(Math.addExact(value.wordOffsetU32, filterWordOffsetU32))
             is Scalar.ConstantF32 -> value
             is Scalar.Add -> Scalar.Add(bind(value.a), bind(value.b))
             is Scalar.Subtract -> Scalar.Subtract(bind(value.a), bind(value.b))
             is Scalar.Multiply -> Scalar.Multiply(bind(value.a), bind(value.b))
             is Scalar.Divide -> Scalar.Divide(bind(value.a), bind(value.b))
+            is Scalar.ProjectiveDivide -> Scalar.ProjectiveDivide(bind(value.a),bind(value.b))
             is Scalar.Pow -> Scalar.Pow(bind(value.a), bind(value.b))
             is Scalar.Clamp01 -> Scalar.Clamp01(bind(value.value))
             is Scalar.TableByte -> Scalar.TableByte(bind(value.scaled),Math.addExact(value.tableWordOffsetU32,filterWordOffsetU32))
@@ -106,6 +164,14 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
             is Scalar.Max -> Scalar.Max(bind(value.a),bind(value.b))
             is Scalar.Abs -> Scalar.Abs(bind(value.value))
             is Scalar.Sqrt -> Scalar.Sqrt(bind(value.value))
+            is Scalar.Atan2 -> Scalar.Atan2(bind(value.y),bind(value.x))
+            is Scalar.GradientStopComponent -> Scalar.GradientStopComponent(selections.getOrPut(value.selection) {
+                GradientStopSelection(bind(value.selection.numerator),bind(value.selection.scale),bind(value.selection.parameter),
+                    Math.addExact(value.selection.rangeWordOffsetU32,filterWordOffsetU32),value.selection.domain,value.selection.firstOnly)
+            },value.channelI32)
+            is Scalar.BranchComponent -> Scalar.BranchComponent(vectors.getOrPut(value.branch) {
+                BranchVector(predicate(value.branch.predicate),value.branch.yes.map(::bind),value.branch.no.map(::bind))
+            },value.channelI32)
             is Scalar.Floor -> Scalar.Floor(bind(value.value))
             is Scalar.Round -> Scalar.Round(bind(value.value))
             is Scalar.IntegerModulo -> Scalar.IntegerModulo(bind(value.value) as Scalar.Floor,value.modulusI32)
@@ -120,7 +186,7 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
         fun eotf(input: Scalar): Scalar = conversion(input,ColorInterpolationProgramV1.RecipeKind.EOTF)
         private fun conversion(input: Scalar, kind: ColorInterpolationProgramV1.RecipeKind): Scalar =
             conversion(listOf(input),kind).first()
-        private fun conversion(inputs: List<Scalar>, kind: ColorInterpolationProgramV1.RecipeKind): List<Scalar> {
+        internal fun conversion(inputs: List<Scalar>, kind: ColorInterpolationProgramV1.RecipeKind): List<Scalar> {
             val cache = java.util.IdentityHashMap<ColorInterpolationProgramV1.Scalar,Scalar>()
             fun adapt(value: ColorInterpolationProgramV1.Scalar): Scalar = cache[value] ?: when (value) {
                 ColorInterpolationProgramV1.Scalar.Input -> inputs.single()
@@ -131,6 +197,7 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
                 is ColorInterpolationProgramV1.Scalar.Multiply -> Scalar.Multiply(adapt(value.a), adapt(value.b))
                 is ColorInterpolationProgramV1.Scalar.Divide -> Scalar.Divide(adapt(value.a), adapt(value.b))
                 is ColorInterpolationProgramV1.Scalar.Pow -> Scalar.Pow(adapt(value.a), adapt(value.b))
+                is ColorInterpolationProgramV1.Scalar.SignedCbrt -> error("Signed cube root is Host-only stop preparation")
                 is ColorInterpolationProgramV1.Scalar.Min -> Scalar.Min(adapt(value.a),adapt(value.b))
                 is ColorInterpolationProgramV1.Scalar.Max -> Scalar.Max(adapt(value.a),adapt(value.b))
                 is ColorInterpolationProgramV1.Scalar.Abs -> Scalar.Abs(adapt(value.value))

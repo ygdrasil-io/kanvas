@@ -39,7 +39,7 @@ internal fun canonicalW4eGraphDigest(graph: RenderGraph): ByteArray {
 }
 
 private fun canonicalGraphDigest(graph: RenderGraphConstruction, schema: String, materialV2: Boolean): ByteArray {
-    val writer = W4dGeneralGraphDigestWriter()
+    val writer = W4dGeneralGraphDigestWriter(graph.materialPlanTableOrNull())
     writer.text("schema", schema)
     writer.text("plan.id", graph.id.value)
     writer.text("plan.capability-id", graph.capabilityId)
@@ -61,7 +61,7 @@ private fun canonicalGraphDigest(graph: RenderGraphConstruction, schema: String,
     return writer.finish()
 }
 
-private class W4dGeneralGraphDigestWriter {
+private class W4dGeneralGraphDigestWriter(private val table: MaterialPlanTable?) {
     private val digest = MessageDigest.getInstance("SHA-256")
 
     fun finish(): ByteArray = digest.digest()
@@ -114,6 +114,12 @@ private class W4dGeneralGraphDigestWriter {
             i32("$prefix.program.version", entry.program.versionI32)
             text("$prefix.program.id", entry.program.structuralId.value)
             when (val binding = entry.bindings) {
+                is GradientInterpolationBindingV4 -> {
+                    text("$prefix.binding",binding.canonicalIdentity)
+                    text("$prefix.source-proof",binding.sourceProof.canonicalIdentity)
+                    text("$prefix.coordinates",binding.sourceProof.coordinates.identityV4())
+                    text("$prefix.stop-slab",requireNotNull(table.gradientStopSlab).canonicalIdentity)
+                }
                 is ColorFilterBindingV4 -> {
                     text("$prefix.binding",binding.canonicalIdentity)
                     text("$prefix.source-proof",binding.numericAuthority.outputSourceProof.canonicalIdentity)
@@ -331,7 +337,10 @@ private class W4dGeneralGraphDigestWriter {
         if (materialV2) {
             when (val authority = draw.materialAuthority) {
                 is PlanDrawMaterialAuthority.MaterialV4 -> {
-                    require(draw.copyPathGeometry() is PathDrawGeometry.Fill) { W5fPlanDiagnostics.Unpromoted }
+                    require(draw.copyPathGeometry() is PathDrawGeometry.Fill ||
+                        draw.copyPathGeometry() is PathDrawGeometry.Stroke && table?.isUnfilteredGradientV4(authority.ref) == true) {
+                        W5fPlanDiagnostics.Unpromoted
+                    }
                     text("$prefix.material-authority", "material-v4")
                     i32("$prefix.material-ref", authority.ref.indexI32)
                     text("$prefix.material-coordinates", authority.coordinates.identityV4())

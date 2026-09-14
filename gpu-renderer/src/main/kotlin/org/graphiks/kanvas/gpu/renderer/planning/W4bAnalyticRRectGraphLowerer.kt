@@ -503,6 +503,7 @@ internal class W4bAnalyticRRectGraphLowerer {
         target: GPUPixelBounds,
         materialPlanTable: MaterialPlanTable?,
         w5b: Boolean = false,
+        packedSourceV4: org.graphiks.kanvas.gpu.plan.RawMaterialRequirementsV2? = null,
     ): W4bBuiltPacket {
         val lane = if (w5b) "w5b.w4b" else "w4b"
         val shape = draw.copyDeviceShape()
@@ -544,7 +545,7 @@ internal class W4bAnalyticRRectGraphLowerer {
                 sourceFamily = GPUCorePrimitiveSourceFamily.RRect,
                 geometry = plannedAuthority.geometryInput,
                 premultipliedRgba = listOf(color.red, color.green, color.blue, color.alpha),
-                material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex),
+                material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex,packedSourceV4),
                 targetBounds = target,
                 scissorBounds = plannedScissor,
                 clipCoveragePlan = plannedClip,

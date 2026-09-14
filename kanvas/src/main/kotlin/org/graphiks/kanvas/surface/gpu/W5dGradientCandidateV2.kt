@@ -33,17 +33,20 @@ internal fun DisplayOp.isW5dGradientCandidateV2(allowNonGradient: Boolean = fals
             if (++countI32 > GraphLimits().maxDepth) return allowNonGradient
             source = when (source) { is Shader.Opacity -> source.shader; is Shader.WithColorFilter -> source.shader }
         }
-        return source == null || source is Shader.SolidColor
+        return source == null || source is Shader.SolidColor ||
+            source.isW5dGradientCandidateV2(true,false,true)
     }
     val allowGradient = when (this) {
         is DisplayOp.DrawRect -> !paint.isStroke()
         is DisplayOp.DrawRRect -> !paint.isStroke() && paint.antiAlias
         is DisplayOp.DrawPath -> true
     }
-    return paint.shader?.isW5dGradientCandidateV2(allowGradient, allowNonGradient) ?: allowNonGradient
+    return paint.shader?.isW5dGradientCandidateV2(allowGradient,allowNonGradient,
+        (this is DisplayOp.DrawRect || this is DisplayOp.DrawPath) && !paint.isStroke()) ?: allowNonGradient
 }
 
-private fun Shader.isW5dGradientCandidateV2(allowGradient: Boolean, allowNonGradient: Boolean): Boolean {
+private fun Shader.isW5dGradientCandidateV2(allowGradient: Boolean,allowNonGradient: Boolean,
+    allowFilteredGradient: Boolean): Boolean {
     var source = this
     var localCountI32 = 0
     val limits = GraphLimits()
@@ -61,10 +64,8 @@ private fun Shader.isW5dGradientCandidateV2(allowGradient: Boolean, allowNonGrad
                 localCountI32++
                 source = node.shader
             }
-            is Shader.LinearGradient -> return allowGradient && node.interpolation == ColorSpaceInterpolation.SRGB
-            is Shader.RadialGradient -> return allowGradient && node.interpolation == ColorSpaceInterpolation.SRGB
-            is Shader.SweepGradient -> return allowGradient && node.interpolation == ColorSpaceInterpolation.SRGB
-            is Shader.ConicalGradient -> return allowGradient && node.interpolation == ColorSpaceInterpolation.SRGB
+            is Shader.LinearGradient, is Shader.RadialGradient, is Shader.SweepGradient, is Shader.ConicalGradient ->
+                return allowGradient && (!filtered || allowFilteredGradient)
             is Shader.CoordClamp -> {
                 if (!allowGradient) return false
                 localCountI32++

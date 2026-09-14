@@ -72,6 +72,7 @@ public class GPUPreparedVerticesMaterialPlanProvenance internal constructor(
     private fun tableSnapshotIdentity(): String = table.entries().joinToString("|") { entry ->
         val binding = when (val value = entry.bindings) {
             is org.graphiks.kanvas.gpu.plan.ColorFilterBindingV4 -> error(org.graphiks.kanvas.gpu.plan.W5fPlanDiagnostics.Unpromoted)
+            is org.graphiks.kanvas.gpu.plan.GradientInterpolationBindingV4 -> error(org.graphiks.kanvas.gpu.plan.W5fPlanDiagnostics.Unpromoted)
             is org.graphiks.kanvas.gpu.plan.ImageSampleV3 -> error("W5e images do not admit Vertices")
             is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.SolidRgbaF32V1 ->
                 value.copyRgbaF32().let { color ->

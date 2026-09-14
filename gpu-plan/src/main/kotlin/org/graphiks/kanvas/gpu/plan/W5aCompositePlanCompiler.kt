@@ -99,6 +99,29 @@ public class W5aCompositePlanCompiler internal constructor(private val imageEntr
     override fun plan(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): RenderPlanResult<RenderGraph> {
         val selected = candidate as? Candidate
         if (selected == null || selected.owner !== this) return RenderPlanResult.InvalidScene(listOf(diagnostic("Foreign composite candidate")))
+        if (selected.lanes.any { it.compiler.hasPendingSourcesV4(it.candidate) }) {
+            val sources = mutableListOf<SourceDeferredRenderConstructionV4>()
+            for (lane in selected.lanes) when (val result = lane.compiler.constructSourceLaneV4(lane.candidate,capabilities,budget)) {
+                is RenderPlanResult.Ready -> sources += result.plan
+                else -> return result.prepareAndPublishSourcesV4()
+            }
+            // Same compiler-owned topology decision, before source proofs or witnesses exist.
+            val native = sources.any { graph -> graph.topology != DeferredLaneTopologyV4.Ordinary ||
+                graph.capabilityId == W4dGeneralPathPlanCompiler.W5A_HARD_CAPABILITY_ID || graph.passes().any {
+                    it is PlanPass.TextureCopy || it is PlanPass.RenderPass && it.draws().any { draw ->
+                        draw.blend != BlendPlan.LegacySrcOverV1 && (draw.blend as? BlendPlan.FixedFunctionV1)?.mode != BlendMode.SRC_OVER
+                    }
+                } }
+            return when (val layout = if (native) FrameSourceLayoutV4.nativeComposite(sources)
+                else FrameSourceLayoutV4.ordinaryComposite(sources)) {
+                is SourceConstructionResultV4.Refused -> layout.failure
+                is SourceConstructionResultV4.Built -> if (!native) layout.value.prepareAndPublishOrdinary()
+                else when (val constructed = layout.value.prepareAndConstruct()) {
+                    is SourceConstructionResultV4.Refused -> constructed.failure
+                    is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(constructed.value).publishConstructionResult()
+                }
+            }
+        }
         val graphs = mutableListOf<RenderGraphConstruction>()
         for (lane in selected.lanes) when (val result = lane.compiler.constructLane(lane.candidate, capabilities, budget)) {
             is RenderPlanResult.Ready -> graphs += result.plan
@@ -129,6 +152,27 @@ public class W5aCompositePlanCompiler internal constructor(private val imageEntr
             RenderDiagnosticSeverity.ERROR, message,
         )
     }
+}
+
+private fun GpuPlanCompiler.hasPendingSourcesV4(candidate: GpuPlanCandidate): Boolean = when (this) {
+    is W3SolidRectPlanCompiler -> hasPendingSources(candidate)
+    is W4aAnalyticRectPlanCompiler -> hasPendingSources(candidate)
+    is W4bAnalyticRRectPlanCompiler -> hasPendingSources(candidate)
+    is W4cPathFillPlanCompiler -> hasPendingSources(candidate)
+    is W4dPathStrokePlanCompiler -> hasPendingSources(candidate)
+    is W4dGeneralPathPlanCompiler -> hasPendingSources(candidate)
+    else -> false
+}
+
+private fun GpuPlanCompiler.constructSourceLaneV4(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,
+    budget: PlanBudget): RenderPlanResult<SourceDeferredRenderConstructionV4> = when (this) {
+    is W3SolidRectPlanCompiler -> constructSources(candidate,capabilities,budget)
+    is W4aAnalyticRectPlanCompiler -> constructSources(candidate,capabilities,budget)
+    is W4bAnalyticRRectPlanCompiler -> constructSources(candidate,capabilities,budget)
+    is W4cPathFillPlanCompiler -> constructSources(candidate,capabilities,budget)
+    is W4dPathStrokePlanCompiler -> constructSources(candidate,capabilities,budget)
+    is W4dGeneralPathPlanCompiler -> constructSources(candidate,capabilities,budget)
+    else -> sourceConstructionRefusalV4(W5fPlanDiagnostics.Unpromoted).failure
 }
 
 /** Compiler-issued immutable composition. Each lane retains the exact standalone topology. */
@@ -164,19 +208,36 @@ public class W5aCompositePlanV1 private constructor(
                 else -> emptyList()
             } } }
             require(commandOrder.zipWithNext().all { (a, b) -> a < b })
-            val shared = first.resources().filter { it.role == PlanResourceRole.LogicalTarget || it.role == PlanResourceRole.ReadbackStaging }
+            val layout = ordinaryCompositeSourceLayoutV4(graphs.map {
+                NativeGeometryInputV4(it.capabilityId,it.resources(),it.passes()) },first.capabilities)
+            val peak = Math.addExact(layout.nonUniformWithoutStopsI64,interned.table.gradientStopSlab?.byteSizeI64 ?: 0L)
+            return W5aCompositeConstruction(remapped, interned.table, peak, layout.rectScratch)
+        }
+    }
+}
+
+/** Exact historical ordinary inventory, before stop ranges or source payloads exist. */
+internal class OrdinaryCompositeSourceLayoutV4(val nonUniformWithoutStopsI64: Long,scratch: List<List<Long>>) {
+    val rectScratch = immutableList(scratch.map(::immutableList))
+}
+
+internal fun ordinaryCompositeSourceLayoutV4(graphs: List<NativeGeometryInputV4>,
+    capabilities: PlanCapabilitySnapshot): OrdinaryCompositeSourceLayoutV4 {
+            require(graphs.size in 2..W5aCompositePlanCompiler.MAX_LANES_I32)
+            val first = graphs.first()
+            val shared = first.resources.filter { it.role == PlanResourceRole.LogicalTarget || it.role == PlanResourceRole.ReadbackStaging }
                 .fold(0L) { bytesI64, resource -> Math.addExact(bytesI64, resource.byteSize) }
             val rectScratch = graphs.map { graph ->
                 if (graph.capabilityId != W3SolidRectPlanCompiler.W5A_CAPABILITY_ID) emptyList() else {
-                    val count = graph.visualCommandCount.toLong()
-                    val alignment = graph.capabilities.minUniformBufferOffsetAlignment
+                    val count = RenderGraph.visualDraws(graph.passes).size.toLong()
+                    val alignment = capabilities.minUniformBufferOffsetAlignment
                     require(alignment > 0)
                     val stride = Math.addExact(32L, (alignment - 32L % alignment) % alignment)
                     listOf(PlanScratchBufferKind.Vertex to Math.multiplyExact(count, 32L),
                         PlanScratchBufferKind.Index to Math.multiplyExact(count, 24L),
                         PlanScratchBufferKind.Uniform to Math.multiplyExact(count, stride)).map { (kind, useful) ->
-                        requireNotNull(graph.capabilities.bufferAllocationPolicy.reserve(kind, useful)).also {
-                            require(it <= graph.capabilities.maxBufferSizeBytes)
+                        requireNotNull(capabilities.bufferAllocationPolicy.reserve(kind, useful)).also {
+                            require(it <= capabilities.maxBufferSizeBytes)
                         }
                     }
                 }
@@ -184,17 +245,14 @@ public class W5aCompositePlanV1 private constructor(
             val rectBytes = rectScratch.flatten().fold(0L, Math::addExact)
             // Final physical inventory: target/readback once, geometry per lane,
             // the interned stop slab once, and Raw allocations unique by value.
-            val stopBytesI64 = interned.table.gradientStopSlab?.byteSizeI64 ?: 0L
-            val peak = graphs.fold(Math.addExact(Math.addExact(shared, rectBytes), stopBytesI64)) { bytes, graph ->
-                graph.resources().filter { it.role != PlanResourceRole.LogicalTarget &&
+            val peak = graphs.fold(Math.addExact(shared, rectBytes)) { bytes, graph ->
+                graph.resources.filter { it.role != PlanResourceRole.LogicalTarget &&
                     it.role != PlanResourceRole.ReadbackStaging && it.role != PlanResourceRole.GradientStopData }
                     .fold(bytes) { bytesI64, resource -> Math.addExact(bytesI64, resource.byteSize) }
             }
             // Kept non-uniform for the native lowerer's independent lifetime check;
             // material uniforms are admitted above and owned by its existing stages.
-            return W5aCompositeConstruction(remapped, interned.table, peak, rectScratch)
-        }
-    }
+            return OrdinaryCompositeSourceLayoutV4(peak,rectScratch)
 }
 
 internal class W5aCompositeConstruction(lanes: List<RenderGraphConstruction>, val table: MaterialPlanTable,

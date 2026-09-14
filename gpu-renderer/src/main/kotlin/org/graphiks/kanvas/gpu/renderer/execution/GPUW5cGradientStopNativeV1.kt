@@ -12,7 +12,9 @@ internal fun materializeGradientStopsV1(device: GPUDevice, queue: GPUQueue, slab
     slab.copyStops().forEach { stop ->
         bytes.putFloat(stop.positionF32)
         repeat(3) { bytes.putFloat(0f) }
-        val color = stop.straightSrgbF32
+        // The sealed slab authenticates the range domain; reserved physical words stay zero.
+        // SRGB's prepared tuple is exactly its historical straight-sRGB value.
+        val color = stop.preparedTupleF32
         listOf(color.red, color.green, color.blue, color.alpha).forEach(bytes::putFloat)
     }
     return owned.own(device.createBuffer(BufferDescriptor(label = "Kanvas.w5c.frame-stops-v1",
