@@ -1,6 +1,159 @@
 # État W05 — material graph, gradients, images et color filters
 
-## W5f — Task1–6 closes sur leurs tranches bornées, Task7 suivante
+## W5f — Task1–7 closes sur leurs tranches bornées, Task8 suivante
+
+Task7 CLOSED surla trancheimage/A8/Atlas, commitccf2c9f83e1c479f25e854fee15f25c2ff76090a : uniqueSol conformité+qualitéApproved,0Critical/Important/Minor. ROOT vérifie rapportcomplet/sourcehashchain et519méthodespubliques0F/E/S; cinq compilationsséparées0/incrémentales/UP-TO-DATE. Sixcommandes155–160 FAILEDGradle1/native133, pasGREENglobal. Lesdouzefiltres/29modesBlend et5domainesA8 avecorigines/formats/samplers/order/captures/mixte sontbornés; vraisREDLattice/A8Atlas/refusnullable corrigés. R40copiesoriginalesprébudget etcoûtsproof restentdettes, combined93staging/nonantériorité et136helperSHAgap conservés. Observationreview horsgate : admissiongénéralefilteredW4e complexclip/inverse nonvérifiée, niconfirméebugimage nipromotionrevendiquée; transmiseTask8/reviewglobale. Task8convergence/Picture/budgets/fullforced14classes puisreviewglobale/PRDraftrestentouverts. Lesparagraphesci-dessousconserventl'historiqued'essais, pasétatcourant.
+
+Task7 commitprovisoireccf2c9f créé,30sources2023+/232−; rapportfinal etchaînecode testé/index/commit vérifiésROOT. ReviewSolunique conformité+qualité en cours : créationdenouvelagent refuséelimite, siègeSolterminé réutilisé commeprévu, sans contournement ni doublon. AucunGradleactif; Task8attend verdicts/clôture.519méthodespubliques passent,6commandesFAILEDnative133,5compilesincrémentales0; dettesouvertes inchangées.
+
+Epoch corrigé final Task7 vérifié par ROOT :519méthodes publiques positives,0failure/error/skip (92image+280interpolation+44filtres+10ordering+68W5e+25old); les sixcommandes155–160 restent FAILEDGradle1/native133. Cinq compilations séparéesSUCCESS0, targetsUP-TO-DATE, pasclean. Toutesles onze capturespré/post sont identiques03b925…/e473f1…; warnings et coûts conservés. Rapportfinal/commitprovisoire/reviewSol puisTask8 restent nécessaires, aucune clôtureglobale ni dette effacée.
+
+Gates corrigés156–158 :280interpolation/44filtres/10ordering passent,0failure/error/skip, XMLfrais vérifiés par ROOT sur SAMEepoch03b925…/e473f1… pré/postcmp0. Commandes FAILED2m31/3m28/24s, Gradle1/native133;426méthodes publiques positives avecimage92, pas de résultat natif global positif. W5e/old/cinqcompiles/rapport/commit/reviewSol puisTask8 restent à fermer.
+
+Gate image corrigé155 :92méthodes publiques passent,0failure/error/skip, XML11:31:42.186Z. Commande FAILED2m31s/Gradle1/native155133, exit1; assertions positives distinctes du résultat commande. ROOT vérifie epoch03b925…/e473f1… identique154. Fichier command.txt vide conservé (%q auxiliaire avantGradle), dispatch réel lu et non reconstruit. Autres gates corrigés/cinq compiles/commit/reviewSol puisTask8 restent ouverts; ancien518NONFINAL, dettes inchangées.
+
+**RefusnullableAtlas RED153→GREEN154 public confirmé :** mauvais diagnosticinvalid.material.image.contract au lieu deNumericDomainUnbounded, XML15311:30:27.843Z1failure0error/skip; même test15411:30:57.066Z1PASS0F/E/S, diagnostic exact+contrôleRGBAReadbackrepeat2. ROOT lit vrai testpublic ethunk commun;153→154 change UNIQUEMENTMaterialSourceConstructionV4 déjàR37Modify. CommandesFAILED5s/6s/native133réel,55tasks7/8exec; correctedfrozenmanifest `03b925683728b8d5547e1f889ca08579ffbfbc7f2e1ff5f5867054a98afdc931`/binarydiff `e473f17170b70080f27fbea4400aed8b578cbd549e5c2d975b2ac262b0b7f459` cmp0. Nouveau lot sixgroupes/cinqcompiles en cours. Ancien epoch906554 complet518assertions0F/E/S et5compiles0UP-TO-DATE ROOT vérifiés mais NONFINAL, touslogs/timings/coûts conservés auplan. Erreur auxiliaireformatter%q avantGradle gardée, wrapper%s corrigé sansmodifier source ni runtime; dispatch/status/XML/hash réels à vérifier. Pas clôtureTask7/commit/Sol/Task8/nativeGREEN, dettes inchangées.
+
+**Epoch NONFINAL906554 —280interpolation/44filters positifs :** ROOT vérifie280actualcases0F/E/S XML11:19:28.158Z et44actualcases0F/E/S XML11:22:08.125Z, testexecuted/XMLfresh/pré-posthashesidentiquesE924/906554/b3f2. Commandes148FAILED2m38/149FAILED3m44 toutesdeuxnative133,55tasks6exec49UP; failureXML synthétique de chacune séparée conservée. Durées/logs exacts dans le plan, pas hypothèse de performance/rootcause. RefusnullableAtlas à vérifier avec ancien publicP3SoftLight+externalMatrix, RED→fixcommun→GREEN avant nouveauxgates finaux. Ces324assertions ne sont PAS validation de l'epoch corrigé à venir; Task7/gates/compiles/commit/Sol/Task8 restent ouverts.
+
+**Epoch de gates à reprendre après correction réelle :** auto-review repère dansImageMetadata.bind déjàR37Modify un refus nullableAtlasV4 non explicitement commun aux deuxbranches if/else; nullV4seal pourrait produireInvalidContract au lieu deNumericDomainUnbounded. ROOT lit173–224 avantacceptation; finding statique, PAS nouveau RED assertion observé ni test source/private. Worker termine commandes intactes, corrige ce résultat/refus commun sansmodifier seal/authenticité/calcul puis relance gates/cinqcompiles sur epoch corrigé. Les91PASS147 etbinary906554 sont conservés comme preuve NONFINALE, pas requalifiés finalTask7. Pas de nouveau consumer/ruling/plan; rapport/epoch/commit/Sol/Task8 restent ouverts.
+
+**Premier gate final Task7 —91images filtrées positives :** classeW5fImageFilterSurfacePixelTestCOMPLETE, XML11:16:57.458Z91PASS0failure/error/skip147.181s,91noms ROOT vérifiés, exécution test réelle entre11:16:55Z–11:19:25Z. CommandeFAILED2m29/Gradle1/executor147native133,55tasks6exec49UP; failureXML synthétiqueGradle séparée conservée, pas incluse dans91assertions publiques. Manifest final `e9240be6370c4efa9299df05ab2d38d50ce8b26da9870a01cf69ba76d71270ba`, inventairepaths `b3f2f8617b4d4255138c8c3cdc867082f80958667f1568e47091307f8ac8e192`, binarydiff `9065549b961d028fa33751c7c551b3b21698f099bc19d990a183917eadfef7b3` identique146, cmp0. Interpolation/filters/order/W5e/old/cinqcompiles/rapport/commit/reviewSol toujours ouverts; sourcefrozen, pas clôtureTask7/nativeGREEN ni agrégat93 clos.
+
+**Checkpoint146 — frame mixte rebasée positive :**1méthodePASS0failure/error/skip, XML11:15:09.363Z ROOT vérifié; six valeurs Rect/Path/Image/A8/RGBAAtlas/A8AtlasHSL, répétés puisSurface saine même runtime. CommandeFAILED6s/native133,55tasks7exec48UP; manifest `029d49a60519b126adf89e377b4730791ef441266a114cf3e434806c9af0d3fe`/binarydiff `9065549b961d028fa33751c7c551b3b21698f099bc19d990a183917eadfef7b3` cmp0. Sources figées; six groupes publics complets/affectés puis cinq compiles séparées en cours. Wrapper final contexte complet des cinq modules +Task5; diff complet de production exclut les trois docs ROOT. Pas de forced-rerun explicite Task7 : fraîcheur XML/commandes/exec/UP-TO-DATE à vérifier réellement, contrairement agrégat14classes Task8 forcé. Task7/sourceepoch/commit/Sol/Task8 etdettes non clos.
+
+**Checkpoint145 — A8Atlas7/7 ciblé positif :** orderedAtlas capture, finalHUEtransparent et5domaines A8Atlas passent, XML11:14:03.065Z0failure/error/skip ROOT vérifié. Essai144 conservé :2PASS5vraisrefus schema invalid.material.filter.schema, XML11:11:58.254Z, commandeFAILED11s/native133.145 corrige uniquement ImageAtlasBlendNumericAuthority déjàModify, relocation/authenticité mêmescaptured/frameOwner/definitionIdentity vers vrai slab final plutôt que pointer pré-rebase; pas de nouveau consumer. Commande145FAILED13s/native133,55tasks8exec47UP, log `27d2b48a5d1f288340b98a17d84b00875e7398039dcd1563d4887114f1d68152`; manifest `e3ec935feca2db5f60d0588c3d2dc197f7c8b6760388e0a43848d48365d585b6`/binarydiff `edaefc00b0606a81869fe5ffee7269c072be6d139d4202a8e6a959fdc50468da` cmp0. Compile intermédiaire6s/exit0,37tasks7exec30UP vérifiée; pas cinqcompiles finales. Selfreview rebase mixte/fullgates/epoch/finalreport/commit/Sol/Task8 ouverts, pas clôtureTask7/nativeGREEN.
+
+**Checkpoint143 — cinq refus A8Atlas réels :**7méthodes2PASS5failure0error/skip, XML11:00:19.648Z ROOT vérifié. Captures d'entrées Atlas etfinalHUE transparent passent;5domaines A8Atlas avecenfantgradient filtré refusent numeric-domain-unbounded malgré attentes bornées. Worker raccorde les consumers déjàModify à SAME graphe masque/enfant/Atlas réel au lieu de l'ancien domaine±Float.MAX, sans nouveau owner/authority/plan ni préparation/packing/Ready avantinventaire final. CommandeFAILED9s/native133,55tasks7exec48UP; manifest `59d5ffd34d4999c26a172709808ed90adcd933c8a4b88be831f2b9468c86dd88`/binarydiff `90bae9a209c93e57e180527af3b988fa6e1710a5c33b327851049a0b9318d43a` cmp0. Correctif/gates complets/compiles/epoch/commit/Sol/Task8 ouverts.
+
+**Correctif ciblé142 :** LatticeFIXED_COLOR etTableHalf/Lerp passent2/2,0failure/error/skip, XML10:58:34.265Z ROOT vérifié. Diff141→142 change uniquement EffectiveMaterialPlanner déjàModify ettestpublic : headeralpha1 du RGBA différé laisse le wrapperpaintopacity appliquer l'alpha une seule fois; A8 garde l'alpha header d'origine. Pas de nouveau consumer/ruling. FixtureTable Paint128 bornée sans règle numérique modifiée, essai141 conservé. CommandeFAILED8s/native133,55tasks9exec46UP; manifest `8344ce0012e2a508a05a82c5cdc87bd5c45daa4453e18918b0e7c7af310dcfbf`/binarydiff `7edefddb543e49be2a9233d0349fc95d8ce09daf2cf35582207e7932c7d1e6be` cmp0. BugLattice RED141→GREEN142 ciblé fermé; Task7/gates complets/compiles/epoch/commit/Sol/Task8 non clos.
+
+**Checkpoint141 —15/17 positifs, un défaut réel :** XML10:56:10.562Z17méthodes15PASS2failure0error/skip, ROOT vérifié. LatticeFIXED_COLOR donne channel0 observed144 au lieu de[160,161] avec attente bornée avantSurface : vrai RED pixels. L'autre échec TableHalf/Lerp reste oracle-only3codes; pas un défaut production démontré. AtlasHUE, A8/origines/domaines, trois color spaces dontP3, attachment translucide typée, capturesPicture etframe mixte passent. CommandeFAILED22s/native133,55tasks7exec48UP; hashes/diff pré-post identiques détaillés dans le plan. Correction Lattice scoped/fixtureTable puis gates/compiles/epoch/commit/Sol restent requis; pas de clôtureTask7/nativeGREEN.
+
+**Checkpoint140 — matrice44/44 positive :** douze filtres, vingt-neuf modesBlend et troisAtlasSRC_OVER/SRC_IN/SCREEN passent, XML10:49:53.354Z,0failure/error/skip, tous les noms et hashes ROOT vérifiés. Fixtures finalSRC_IN destination-read bornées; essais138/139 restent invalides et conservés. CommandeFAILED2m13s/Gradle1/native133,55tasks7exec48UP, log `a9b8c0bcebb2a268021742869f04a6e9f96756d252953b14716ca81f4309740b`; manifest `cfb015aa18fe23f98a414400b0850dac420f0a908350170ffecfcbf91f792647`/binarydiff `e5d3540f8dd0ce0dbc013989c947e532e94bce3786c9cd00f036eb5629c87aa7` pré/post identiques. Pas une commande verte ni clôture Task7 : typedattachments/mixed/retained/gates finaux/cinq compiles standalone/epoch/commit/reviewSol puisTask8 ouverts; dettes/warnings inchangés.
+
+**Essai139 :**44méthodes2PASS42échecs oracle-only3codes avant Surface,0error/skip, XML10:47:05.244Z, ROOT vérifié. Les2AtlasSRC_OVER/SCREEN passent; variantePLUS invalide ailleurs, pas un RED production. CommandeFAILED34s/native133, hashes/log/pré-post identiques détaillés dans le plan. Essai140 utilise finalSRC_IN réel avec alpha destination stockée et mêmes discriminateurs; aucun résultat140 ni clôture acquis.
+
+**Matrice renforcée138 :** ROOT vérifie44méthodes15PASS29échecs oracle-only avant Surface,0error/skip, XML10:43:27.157Z. Principalement round-trip destinationDIFFERENCE3/4codes, Table Compose division-crossing-zero, Lighting3codes etAtlasSRC_IN3codes; aucun RED production revendiqué. CommandeFAILED1m43s/Gradle1/native133,55tasks10exec45UP; manifest `787617c55db5504cfe6895a8cdb6d40ac9f371abad9a1ca6e835a3812052a32f`/binarydiff `b33b206b31a551771626b7be709d941bfe7d2a5c0288f16986e711a3de1b62d2` pré/post identiques. Ajustement139 de valeurs de fixtures en cours avec mêmes exigences alpha/order/mutation/destination, sans tolérance élargie; aucun résultat139 ni clôture revendiqué. Log/hash exact dans le plan, essais conservés.
+
+**Checkpoint Task7 — R41 validé sur le lot ciblé, pas encore de clôture :** ROOT vérifie136XML10:39:46.860Z : vrai RED HUE avec nouvel oracle cible borné avant Surface contre ancien helper;2Atlas passent, SRC_IN échoue encore dans l'oracle. Le manifest136 n'inclut pas le helper inchangé : absence de SHA autonome pré/post explicitement conservée, malgré diff BASE exhaustif sans hunk du helper; aucune preuve reconstruite.137XML10:40:36.809Z33méthodes32PASS1failure0error/skip : HUE ciblé +29modes rawalpha0/128/255 +AtlasSRC_OVER/SCREEN passent, SRC_IN reste oracle-only3codes. Guard production vérifié : src.a==0 d'abord, puis tuple dst.a/r/g/b entièrement nul; pas alpha seul. Manifest137 `595e648f06f9b00e8a3ebc94c9bb556496082eaa97c8a26342c16a81cb71ef6f`/binarydiff `b6633e35f1d38d24f204c3ac3d48c8f6bb61cefdc106b26ecc444d2473224439`, cmp0, helper SHA `b3e6c8b4756845b6fb7d42a1872a4328edaf3e0500e24e4c7af433092132e001`. Commandes136FAILED11s/native133 et137FAILED30s/native133; assertions positives ne rendent pas les commandes vertes.134/135 sont3échecs oracle-only avant Surface chacun, FAILED2s/3s SANSnative133, essais conservés. Matrice renforcée/typedattachment/mixed/retained/cinq compiles finales/epoch/commit/Sol/Task8 restent ouverts; detteR40/combined93/warnings non clos. Détails hashes/logs de134–137 dans le plan durable.
+
+**Checkpoints Task7 — sampler et captures :** ROOT vérifie132Nearest/Linear/Cubic3PASS0failure/error/skip, XML10:32:07.405Z, commande entièreFAILED7s/native133 ; compilation intermédiaire6s/exit0,37tasks7exec30UP. Même manifest `6a8c875879a63e29e8e5430d9d5bbc77ac1be85d9a34795a87939d3ade6a0bc9` et binarydiff `2bc4cc4dcca38be16d7479738583293c978ce3873b235b975b70d586e96e3f75`, cmp0.133XML10:35:15.396Z16methods/13PASS/3Atlas oracle-onlyUnbounded :9formats sur2rowsstride+3capturesPictureMatrix/Table/HSLA+1ordre/clamp passent, maisSRC_OVER/SRC_IN/SCREEN dépassent2codes dans l'oracle avantSurface. Essais invalides conservés, pas des REDs production ni une closure ; commandeFAILED12s/native133, manifest `857b592b7005fbe60c0ccde4401b179c7f765fbccf558bdcc05b022e7b41d597`/binarydiff `7b8765eb84b530ff7d2471b80c87a598175c5d5c87f2218d5c412e4fbf11ca49`, cmp0. VarianteBlack134 en cours pour garder discriminateur alpha finalblend, sans tolérance modifiée ; pas de résultat134/colored-destination acquis. HUE R41/finalmatrix/gates/5compiles/commit/Sol/Task8 ouverts ; warning NoCastNeeded déplacé471, natif133/combined93/detteR40 non clos.
+
+**R41 approuvé avant edit — guard partagé de destination entièrement transparente :** un seul nouveau Modify `gpu-plan/BlendFormulaProgramV1.kt`. Après le guard ORIGINAL src.a==0, tester dst.a/r/g/b==0 avec Equal/And existants, puis retourner src. Les autres schedules/divisions/SetSat/ClipColor et la priorité alpha source0 restent inchangés ; pas de nouvelle formule, révision, schema ou API. La branche est un changement réel du calcul arrondi, justifié par les [équations de compositing publiées](https://www.w3.org/TR/compositing-1/#blending), pas par une division supposée exacte. [WGSL](https://www.w3.org/TR/WGSL/#floating-point-accuracy) donne2.5ULP pour division normale ;3.5dans la proof est la borne arrondie conservatrice complète. Coûts/risques : branche commune à15modes advanced, prédicats/proof/canonical/transport shader et anciennes classifications publiques ; vérifier vrais tests Image/Atlas/finalblend, alpha0/128/255, destinations non-nulles, all12/all29, A8/sampling/mutation/mixed/old,5compiles/epoch/Sol. Oracle131 invalide retiré ; nouveau RED indépendant borné avant modification helper obligatoire.12extrasModify R37+R39+R41/R38fourAudit ; autres exigences retenues, pas de boucleplan ni nativefix.
+
+**Checkpoint Task7 — essai131 INVALIDE, qualification corrigée :** XML13129Blend/28PASS/1HUE numeric-domain-unbounded0error/skip réellement observé, mais son oracle temporaire supposait injustement la division0 exacte. Raccourci retiré ;131 N'EST PAS un RED conforme au contrat bounded-beforeSurface, ni un positif. Diagnostic/log/XML/hashes conservés :UTC10:23:09.411Z,FAILED16s/Gradle1/native133,log `f9474379e843f587b79092fbe685b11623258ca8dd16037b1e7c4aecd923b4db`, manifest `a0c81b468cd1d546c3b5f80404efc451e687dfc7bce8ee473c805acdfd328f17`, binarydiff `3bdf38bb54807f64dfa70a41ebd014406b576fd6db9072550bec0df068bf58f1`, pré/post cmp0.130HUE demeure oracle-unbounded sur ancien helper ;130Linear/Cubic étaient de vrais REDs bornés. R41 exige nouvel oracle indépendant du schedule approuvé, vrai RED avant guard production puis GREEN, sans affaiblir les erreurs.
+
+**Checkpoint Task7 — alpha/formats/A8 :** ROOT vérifie XML10:14:56.001Z,58tests/55PASS/3failures/0error/skip et les consommateurs publics alpha0/128/255. Douze filtres,28modes Blend,9formats/alpha avec padding et5domaines A8 passent. HUE échoue dans l'oracle avant Surface (`Division crossing zero…`), pas un RED production ; Linear/Cubic sont deux vrais refus `numeric-domain-unbounded` malgré oracle borné. Correction en cours de la corrélation phase/poids/taps réelle avec erreurs F32/FMA/reassociation/FTZ, sous R37, sans alpha-floor/sampler fork/tolérance élargie. Run130 WHOLEcommandFAILED27s/Gradle1/executor130native13355tasks7exec48UP ; log `aadc021c4e1ba82eaf1e1083e9ee47033c91761f58ba03716ab8587fe0dd1574`, manifest pré/post `8a78e0b8edba30e81cfb9527bacec8fa1b5ad87ff9e22af8fab9a36784c6b35b` et binarydiff `58d99e0e4cbbab15fe3c97806b8d826f1ba438284adeaf44161bf17703635b62`, cmp0. Trois cas ouverts et reste de la matrice/finalgates/review pending ; native133/combined93/detteR40 ne sont pas clos.
+
+**Checkpoint Task7 — douze filtres et vingt-neuf modes passent sur les fixtures courantes :** ROOT vérifie les41noms réels, XMLUTC10:08:27.974Z0failure/error/skip et le test public lu jusqu'à EOF (oracle borné avant Surface, draw/render public, diagnostic natif via helper, repeat2). Les fixtures utilisent actuellement alpha image255/Paint127 : l'alpha source0/non-unitaire reste à couvrir. Run129 WHOLEcommandFAILED14s/Gradle1/executor129native13355tasks6exec49UP ; log `80ab50c0f8762b2083481e0b81256e80eb0d5aea4d6e0bf1911a0feff71b026b`, manifests `3e8451fadeffcd11c9491106d841d6d67dde8c04cd9200faa274ce267d48f96d` et binarydiff `8cc96b1c9b86245cb9446e1fcb6e04af86e43493b17849f034dc5c81c775de3a` pré/post cmp0, même epoch que128, pas final. Ordre/capture/formats/sampling/cinq domaines A8/frames mixtes et gates finaux restent en cours ; pas de clôture globale ou commande native verte.
+
+**Checkpoint Task7 — huit origines image filtrées passent :** ROOT vérifie XMLUTC10:07:38.724Z,8PASS/0failure/error/skip pour Matrix sur Image/Nine/Lattice/Atlas/Rect/DirectPath/StencilPath/A8. Run128 WHOLEcommand FAILED7s/Gradle1/executor128native133,55tasks8exec47UP ; log `fae1a3cf8ad714ab13386db950dc685b8ae852e43959f84f5b06f4d4655bdad7`, manifests pré/post `3e8451fadeffcd11c9491106d841d6d67dde8c04cd9200faa274ce267d48f96d`, binarydiff complet `8cc96b1c9b86245cb9446e1fcb6e04af86e43493b17849f034dc5c81c775de3a`, cmp0. L'essai127 précédait cette correction :8échecs réels de shader `Cannot index into non-aggregate type: Opaque`, XML10:06:13.831Z/log `62ce9648312ce178934a1be1e0a6efafe2b476475de3edfd0cefc341febf19c3` ; correction de la déclaration textureLoad explicitement conservée, pas masquée par native133. Compile connecté intermédiaire `:kanvas:compileKotlin`10s/exit0,38tasks8exec30UP/log `f9da1f42c212d6192eeeb0b358ca0c0207cfbdd91db094e4cb70d5eb2fba32e1`. Le worker rapporte raccord inventaire/proof/permit unique avant publication ; audit indépendant réservé à Sol. Douze filtres/vingt-neuf modes/cinq domaines A8 et le reste de la matrice sont encore à valider ; ces8positifs ne clôturent pas Task7. Dettes historiqueR40/native133/combined93 ouvertes.
+
+**Checkpoint Task7 — métadonnées différées compilées, pas encore de nouvelle admission :** `:gpu-plan:compileKotlin` intermédiaire SUCCESSFUL5s/exit0, 27tasks6executed21UP-TO-DATE. ROOT vérifie logSHA `bbc3888b681867042e8227fde7d4383ccbc6f1ad65f1519b13e84a457a4d6835`, manifests pré/post identiques `4bda750cd2723c955ec237da82079170c6cf759d74fa7e7939c3478285af2ad3` et binarydiff complet identique `73987abf3d0e6fa3c6a2f94581a5f9b8b2b195e54ef5c78edb73b0d7e86615a4`. Le worker rapporte sélection/composition authentifiées et métadonnées upload/A8/wrappers non publiées ; liaison à l'inventaire final V4 encore en cours. Pas de preuve fonctionnelle nouvelle, de cinq compiles finals ni de clôture. Dette de copies historique R40 et validations publiques/review restent ouvertes.
+
+Task7 lancée avec Astra/high depuis BASE95fe5f6c1f56734338e22bbd272912bd39eba162,
+commit documentaire ROOT de clôture Task6, arbre/index propres avant dispatch.
+Filtres des images décodées/A8/Nine/Lattice/Atlas et ImageShader Rect/Path;
+réutilisation du sampler, décodage V3, coords et leases existants. Worker seul
+propriétaire Gradle; ROOT seul propriétaire des trois documents de suivi.
+Preuves publiques, graphe réel de sampling/alpha/order, inventaire final/permit,
+commit provisoire puis review Sol sont encore à fournir. Aucun codec externe,
+cycle de vie natif/harnais ni géométrie/GM modifié dans ce périmètre.
+
+R37 approuvé après vérification ROOT des vrais raccords, avant édition : dix
+consumers existants supplémentaires pour graphe réel des texels/taps/poids,
+construction différée image/A8 et inventaire final partagé, compiler topology,
+packing/transport du owner final. Lecture interne indexée des octets immuables,
+sans recopier l'upload; seule matrice P3 historique déplacée vers la recipe commune.
+Pas de nouveau sampler, décodeur, gamut, cache ou lease. R38 classe quatre chemins
+en Audit/reuse exact : compose numeric, helper public borné/RenderReadback,
+registry existant excluant les images, lowerer table/cell/witness délégué.
+Coûts : divergence byte/tap/poids/proof/child/coords ou inventaire/bijection,
+préparation/publication prématurée, second owner/permit; tous les autres Modify,
+12filters/29Blend/5A8domains/order/mutation/mixed/anciens publics/cinq compiles,
+source epoch et review Sol restent requis. Aucun hunk artificiel/waiver futur.
+
+Premier seed RED image119 ROOT vérifié : XMLUTC09:01:28.252Z8tests8échecs,
+0error/skip, attentes bornées avant Surface. Cinq refus image.native_binding,
+deux mapping.color_filter Rect/directPath; le refus source_unimplemented du
+stencil nécessite un contrôle équivalent non filtré avant attribution causale.
+Pas huit RED arithmétiques ni matrice obligatoire complète. Sources/diff identiques
+avant/après manifest234632c7…fd119c/diffc217a0cf…d3a22f; log7e821eef…423016
+FAILED5s/native133/55tasks7exec48UP. Baseline publique7PASS0failure/error/skip
+UTC08:59:52–58, commande118native133 FAILED9s, distincte de la validité de rendu.
+Production pas modifiée à ce gate; tests supplémentaires puis implémentation
+des vrais sources/proofs encore ouverts, aucun claim d'admission positive.
+
+Contrôle stencil120 : XMLUTC09:09:26.738Z1assertion0failure/error/skip PASS,
+même géométrie sans filtre, Render/Readback public. Huit refus initiaux maintenant
+causaux; pas la matrice obligatoire complète. Loge49105a0…8aa57 FAILED4s/native133,
+sources avant/après identiques; nouveau test capturé par son hash de manifest,
+pas encore inclus dans le rawdiff des fichiers tracked.
+R39 ajoute exactement CapabilityCompilerChain : source-construction interne via
+le même owner/index/selectedCompiler privé, sans recopier selection ni publier
+Ready avant inventaire final. Onze extraModify réels au total; coût candidate/
+diagnostic/source provenance à vérifier sur anciens/mixed/gates complets et Sol.
+
+Premier incrément121 : décodage original porté par ImageNumericOperationGraph
+et l'emitter scalaire commun, input lexical UNORM distinct, matrice P3 historique
+au provider existant. Admission gate/compiler des filtres image pas encore déplacée.
+ROOT vérifie les14publics W5eDecoded +contrôle stencil1, tous0failure/error/skip,
+XMLUTC09:13:31.149Z/09:13:56.974Z. Commande FAILED36s/native133/55tasks15exec40UP,
+log89506f8c…33c86a, sources/diff avant-après identiques2c974890…f9bce/a355adf1…ea8503.
+Pas15positifs image filtrée ni clôture Task7; taps/poids réels et inventaire final
+image/A8 puis matrice12/29/5domains/order/mutation/mixed restent à livrer.
+
+RED kinds/Blend122 : XMLUTC09:15:13.604Z41tests41échecs0error/skip; ROOT
+vérifie38refus image.native_binding (12kind+26Blend), trois essais oracle avant
+Surface : singularités COLOR_DODGE/BURN et précision bare-sqrt à zéro SOFT_LIGHT.
+Ces trois essais ne sont pas des RED production ni des positifs complets;
+mêmes modes obligatoires/alpha0–1–nonunit/order/mutation encore requis.
+Logd5e65571…0def0b FAILED7s/native133/55tasks7exec48UP; manifest270c54fd…47aed,
+diff complet e7ee2400…9d1304 avant/après identiques. Git add -N normal approuvé
+inclut désormais le nouveau test dans ce diff, sans modification de harnais.
+Fixtures bornées à établir sans skip/tolérance/floor/règle builtin inventée;
+aucune admission positive filtres image ni clôture à ce checkpoint.
+
+RED Blend corrigé123 : XMLUTC09:17:35.006Z29tests29refus image.native_binding,
+0error/skip, attentes nonunit bornées avant Surface pour tous29modes, mêmes
+COLOR_DODGE/BURN/SOFT_LIGHT. ROOT vérifie toutes les29exceptions, hashes et
+avant/après : manifest989591e3…946d4/diffcomplet f4c29202…b33b8f.
+Logcad68de3…220a54 FAILED6s/native133/55tasks7exec48UP; incrément decoder121
+inchangé, pas encore d'admission filtres image. Ne clôt pas alpha0/1/order/
+mutation/finalblendpositif; essais122 non bornés et leurs coûts restent suivis.
+
+Checkpoint graphe sampling : SAME coordonnées/taps/poids Linear/Cubic et decoder,
+TexelRead(upload,index,component) authentifiable, lecteur d'octets immuables et
+seuls gaps UNORM bruts nonzero, pas de plancher d'alpha pondéré. Compile intermédiaire
+renderer SUCCESSFUL5s, gpu-plan/renderer exécutés; pas les cinq gates finales.
+Filter binding/sommes pondérées corrélées/owner final image/A8 et transport pas
+encore connectés; aucun changement gate ni positif public de clôture revendiqué.
+Rapport ignoré en cours avec essais/coûts/limites; sourceproof/emission à juger sur
+le commit final par Sol. ROOT vérifie log65119ef3…336dd et avant/après sources,
+ne déduit pas une preuve fonctionnelle complète de cette compile.
+
+Prefix proof image maintenant représenté avec enfant A8/word rebase, cellules
+first-hit/discard et formule Atlas originale. Compile intermédiaire SUCCESSFUL11s,
+37tasks7exec30UP/logb7d586eb…63d5c6. ROOT vérifie124 six publics retenus0failure/
+error/skip : Decoded2 et ImageShader4, XMLUTC09:34:14.777Z/09:34:29.188Z.
+Commande FAILED2m6/native133/55tasks10exec45UP/logd01692b1…cd4c, mêmes sources
+pré/post compile+test manifestc3f42d46…fec71/diff1d9518ab…77c51.
+Encore aucune admission filtre image; le prochain raccord est classifier image
+existant→metadata privée→inventaire FrameLayout vérifié→construction réelle.
+Warnings cast391/else ImageNumeric270 et renderer hérités suivis sans suppression;
+pas de claim douze filtres/all29/all5A8/mixed positifs ni clôture native/Task7.
+
+R40 confirme le reuse du seal upload V3 original une seule fois pour obtenir
+l'identité exacte des lignes logiques/du cacheRequest, pas le canonicalId IR qui
+inclut sourceId/padding/alpha/colorspace. La copie historique de capture/tight-row
+reste AVANT l'inventaire final et demeure une dette explicite de prévalidation;
+pas de claim « toutes copies image après budget ». Aucun nouveau lecteur/hash IR
+ou décodeur/cache/lease/key/layout. Cet upload immuable retenu sert à l'inventaire
+source/filter/child/stops/staging final; préparation des gradients et NOUVEAU
+packing V4 restent après vérification/inventaire/bijection/permit, avant Ready/
+handles. Coûts mémoire/CPU/copies historiques et risques de conflation des identités
+encore OPEN, à refléter dans la PR; toute preuve fonctionnelle Task7 reste requise.
 
 Dernier checkpoint Task6 : implémentation provisoire `da32e38010f29ea1c3622427e5869d200cfe4e05`
 depuis BASE `b0ffdf2c51dc6d608af23416e7b6d6d4c95ca88e`,14fichiers modifiés,
@@ -37,7 +190,8 @@ composites passent à leurs checkpoints. La suite combinée327tests a322PASS et
 Atan2 durci;329assertions vérifiées par groupes et cinq compiles réussies.
 Commit2e7867b livré, review Sol indépendante spec+quality Approved, zéro
 Critical/Important; warnings hérités suivis, aucune correction de code requise.
-Task6 HSL/OKLCH/working-space en cours avec Astra/high depuis BASEb0ffdf2c5.
+Task6 HSL/OKLCH/working-space close avec Astra/high depuis BASEb0ffdf2c5,
+implémentation da32e3801 et review Sol Approved. Task7 image/A8/Atlas en cours.
 R34 approuve avant édition trois raccords réels : capture du domaine outermost
 dans MaterialSourceConstructionV4, préparation après inventaire vérifié dans
 FrameSourceLayoutV4 et graphe polaire/Sin-Cos dans ColorSourceProofV1.
@@ -46,8 +200,8 @@ R35 ajoute précisément GradientPlanV1, validation interne des tuples/recipes
 HSL/OKLCH. SRGB sélectionné par wrapper conserve son tuple et sa recipe null
 historiques; pas de relaxation du constructeur/ABI public ni second slab.
 Coût : risque de divergence domain/recipe/gray original ou preuve/WGSL.
-Les40 témoins publics bornés, anciens
-gates et review Sol restent à livrer. Tâches6–8 et review globale encore ouvertes;
+Les40 témoins publics bornés et les anciens gates passent parmi427assertions
+vérifiées, review Sol approuvée. Tâches7–8 et review globale encore ouvertes;
 
 Premier RED Task6 vérifié : XML UTC08:09:47.491Z,60tests/40échecs/0error/skip;
 les40cellules HSL/OKLCH family×lane atteignent `unsupported.material.filter.slice`
