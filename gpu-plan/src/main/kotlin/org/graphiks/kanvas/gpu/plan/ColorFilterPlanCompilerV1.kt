@@ -26,6 +26,9 @@ public object ColorFilterPlanCompilerV1 {
                             return ColorFilterCompileResultV1.Refused(W5fPlanDiagnostics.Matrix)
                     }
                     is ColorFilterNode.Compose -> Unit
+                    is ColorFilterNode.Table -> if (node.table.sizeI32 != 256)
+                        return ColorFilterCompileResultV1.Refused(W5fPlanDiagnostics.Table)
+                    is ColorFilterNode.Lighting, is ColorFilterNode.Blend, ColorFilterNode.SRGBToLinear, ColorFilterNode.LinearToSRGB -> Unit
                     is ColorFilterNode.Lerp -> if (!node.t.isFinite() || node.t !in 0f..1f)
                         return ColorFilterCompileResultV1.Refused(W5fPlanDiagnostics.Lerp)
                     else -> return ColorFilterCompileResultV1.Refused(W5fPlanDiagnostics.Unpromoted)
@@ -48,6 +51,10 @@ public object ColorFilterPlanCompilerV1 {
         // copy records or substitute child operation graphs (including direct IR calls).
         postOrder.forEach { node -> compiled[node] = when (node) {
                 is ColorFilterNode.Matrix -> ColorFilterExecutionPlanV1.matrix(node)
+                is ColorFilterNode.Table -> ColorFilterExecutionPlanV1.table(node)
+                is ColorFilterNode.Lighting -> ColorFilterExecutionPlanV1.lighting(node)
+                is ColorFilterNode.Blend -> ColorFilterExecutionPlanV1.blend(node)
+                ColorFilterNode.SRGBToLinear, ColorFilterNode.LinearToSRGB -> ColorFilterExecutionPlanV1.transfer(node)
                 is ColorFilterNode.Compose -> ColorFilterExecutionPlanV1.compose(node,
                     requireNotNull(compiled[node.outer]), requireNotNull(compiled[node.inner]))
                 is ColorFilterNode.Lerp -> ColorFilterExecutionPlanV1.lerp(node,

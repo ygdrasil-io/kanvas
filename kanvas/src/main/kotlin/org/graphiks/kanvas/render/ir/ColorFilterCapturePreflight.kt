@@ -9,6 +9,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 
 /** Metadata only. Even runtime/merge child collections are traversed without copying. */
+@OptIn(ExperimentalUnsignedTypes::class)
 internal object ColorFilterCapturePreflight {
     fun validatePaint(paint: Paint, limits: SceneCaptureLimits): RenderDiagnostic? {
         data class Frame(val children: Iterator<Any>, val depthI32: Int, val parent: Any?)
@@ -41,6 +42,8 @@ internal object ColorFilterCapturePreflight {
                 if (!value.t.isFinite()) return diagnostic("non-finite-value", "color-filter.lerp must be finite")
                 if (value.t !in 0f..1f) return diagnostic("invalid.material.filter.lerp", "color-filter.lerp must be in [0,1]")
             }
+            if (value is ColorFilter.Table && value.table.size != 256)
+                return diagnostic("invalid.material.filter.table", "color-filter.table must have exactly 256 entries")
             stack.addLast(Frame(children(value).iterator(), frame.depthI32 + 1, value))
         }
         return null

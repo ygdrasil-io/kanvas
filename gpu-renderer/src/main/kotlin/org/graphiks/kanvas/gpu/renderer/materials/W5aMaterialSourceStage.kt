@@ -54,7 +54,7 @@ internal class W5aMaterialSourceStage private constructor(
             if (requirements.uniformByteCountI64 % 16L != 0L || wordsI64 !in 1L..Int.MAX_VALUE.toLong()) return null
             val code = W5fColorOperationEmitterV1.emit(proof.copyOperationGraph(),"vec4<f32>(0.0)",0L)
             return W5aMaterialSourceStage(requirements,"""
-                struct W5fMaterialBlock { words: array<vec4<f32>, ${wordsI64}>, }
+                struct W5fMaterialBlock { words: array<vec4<u32>, ${wordsI64}>, }
                 @group(1) @binding(0) var<uniform> w5fMaterial: W5fMaterialBlock;
                 fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {
                     $code

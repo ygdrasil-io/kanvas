@@ -60,8 +60,14 @@ public class RawMaterialRequirementsV2 private constructor(
             require(permit.permits(footprint)) { W5fPlanDiagnostics.Schema }
             val bytes = ByteBuffer.allocate(footprint.uniformByteCountI64.toInt()).order(ByteOrder.LITTLE_ENDIAN)
             // Source word gaps are declared zero padding. Only this budget-permitted phase copies values.
-            for (wordI64 in 0 until footprint.proof.uniformWordCountI64)
-                bytes.putFloat(footprint.proof.wordValuesF32[wordI64] ?: 0f)
+            for (wordI64 in 0 until footprint.proof.uniformWordCountI64) {
+                val table = footprint.proof.tableRecords.entries.singleOrNull { wordI64 >= it.key && wordI64 < it.key+64L }
+                val bitsI32 = if (table == null) footprint.proof.numericWordBits[wordI64] ?: 0 else {
+                    val firstByteI32 = Math.toIntExact((wordI64-table.key)*4L)
+                    (0..3).fold(0) { bits, byteI32 -> bits or (table.value[firstByteI32+byteI32].toInt() shl (byteI32*8)) }
+                }
+                bytes.putInt(bitsI32)
+            }
             check(bytes.position() == bytes.capacity())
             return RawMaterialRequirementsV2(1,footprint.uniformByteCountI64,false,1,
                 footprint.table.entry(footprint.root).program.structuralId.value,bytes.array(),footprint.canonicalIdentity)

@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.kanvas.render.ir.ImmutableUBytes
 
 /** Authenticated expressions, bindings and selected-branch facts; no caller-supplied component box. */
 public class ColorSourceProofV1 private constructor(
@@ -9,7 +10,8 @@ public class ColorSourceProofV1 private constructor(
     public val coordinates: SourceCoordinatesV4,
     private val graph: ColorOperationGraphV1,
     internal val bindingOwners: List<MaterialBindingPlan>,
-    internal val wordValuesF32: Map<Long, Float>,
+    internal val numericWordBits: Map<Long, Int>,
+    internal val tableRecords: Map<Long, ImmutableUBytes>,
     internal val conditionedFacts: List<ColorBranchFactV1>,
     internal val deviceBoundsF32: RectF32,
     private val parentSource: ColorSourceProofV1? = null,
@@ -38,14 +40,16 @@ public class ColorSourceProofV1 private constructor(
             "color-filter-source-v4:$source:${execution.canonicalIdentity}"
         fun compose(source: ColorSourceProofV1, execution: ColorFilterExecutionPlanV1): ColorSourceProofV1? {
             val graph = execution.copyOperationGraph().bindInput(source.graph, source.uniformWordCountI64)
-            val words = LinkedHashMap(source.wordValuesF32)
+            val words = LinkedHashMap(source.numericWordBits)
+            val tables = LinkedHashMap(source.tableRecords)
             execution.forEachWord { offset, value -> words[Math.addExact(source.uniformWordCountI64, offset)] = value }
+            execution.forEachTable { offset, table -> tables[Math.addExact(source.uniformWordCountI64,offset)] = table }
             // Compose transports the complete inner output certificate, not its
             // component box, into the outer filter's original lazy alpha guards.
             val composeOutputs = execution.composeChildren?.let { (outer,inner) ->
                 val innerOutput = ColorNumericAuthorityV1.seal(inner,source)?.outputSourceProof ?: return null
                 val outerOutput = ColorNumericAuthorityV1.seal(outer,innerOutput)?.outputSourceProof ?: return null
-                require(outerOutput.graph.canonicalIdentity == graph.canonicalIdentity && outerOutput.wordValuesF32 == words)
+                require(outerOutput.graph.canonicalIdentity == graph.canonicalIdentity && outerOutput.numericWordBits == words && outerOutput.tableRecords == tables)
                 listOf(innerOutput,outerOutput)
             }
             // Both Lerp functions receive this exact original source owner. Their
@@ -55,23 +59,23 @@ public class ColorSourceProofV1 private constructor(
                 listOf(ColorNumericAuthorityV1.seal(dst,source)?.outputSourceProof ?: return null,
                     ColorNumericAuthorityV1.seal(src,source)?.outputSourceProof ?: return null)
             }
-            val proof = composeOutputs?.last()?.conditionedFacts ?: ColorRoundedGraphProofV1.prove(graph, words) ?: return null
+            val proof = composeOutputs?.last()?.conditionedFacts ?: ColorRoundedGraphProofV1.prove(graph, words, tables) ?: return null
             val certifiedGraph = composeOutputs?.last()?.graph ?: graph
             val identity = "color-composed-proof-v1:${source.canonicalIdentity}:${execution.canonicalIdentity}:${graph.canonicalIdentity}:${proof.map { Triple(it.taken,it.left,it.right) }}"
             return ColorSourceProofV1(identity, filteredIdentity(source.sourceIdentity,execution), source.coordinates,
-                certifiedGraph, source.bindingOwners, java.util.Collections.unmodifiableMap(words), immutableList(proof),
+                certifiedGraph, source.bindingOwners, java.util.Collections.unmodifiableMap(words), java.util.Collections.unmodifiableMap(tables), immutableList(proof),
                 source.deviceBoundsF32, source, execution,immutableList(composeOutputs ?: lerpOutputs ?: emptyList()))
         }
         fun issue(table: MaterialPlanTable, root: MaterialPlanRef, coordinates: SourceCoordinatesV4,
             boundsF32: RectF32, graph: ColorOperationGraphV1, owners: List<MaterialBindingPlan>,
-            words: Map<Long, Float>): ColorSourceProofV1? {
-            val proof = ColorRoundedGraphProofV1.prove(graph, words) ?: return null
+            words: Map<Long, Int>, tables: Map<Long,ImmutableUBytes>): ColorSourceProofV1? {
+            val proof = ColorRoundedGraphProofV1.prove(graph, words, tables) ?: return null
             val source = table.sourceIdentity(root)
             val identity = "color-source-proof-v1:$source:${coordinates.identityV4()}:" +
                 listOf(boundsF32.left, boundsF32.top, boundsF32.right, boundsF32.bottom).joinToString { it.toRawBits().toString() } +
-                ":${graph.canonicalIdentity}:${words.entries.joinToString { "${it.key}=${it.value.toRawBits()}" }}:${proof.map { Triple(it.taken,it.left,it.right) }}"
+                ":${graph.canonicalIdentity}:${words.entries.joinToString { "${it.key}=${it.value}" }}:${tables.entries.joinToString { "${it.key}=${it.value.canonicalId.value}" }}:${proof.map { Triple(it.taken,it.left,it.right) }}"
             return ColorSourceProofV1(identity, source, coordinates, graph, immutableList(owners),
-                java.util.Collections.unmodifiableMap(LinkedHashMap(words)), immutableList(proof), boundsF32.copy())
+                java.util.Collections.unmodifiableMap(LinkedHashMap(words)),java.util.Collections.unmodifiableMap(LinkedHashMap(tables)), immutableList(proof), boundsF32.copy())
         }
     }
 }
@@ -90,6 +94,7 @@ internal data class ColorBranchFactV1(val predicate: ColorOperationGraphV1.Predi
 /** Finite operation enclosure under the pinned F32 envelope, including FTZ and reassociation. */
 internal object ColorRoundedGraphProofV1 {
     private val normalF64 = java.lang.Float.MIN_NORMAL.toDouble()
+    private val largestDivisorF64 = Math.scalb(1.0,126)
     // A full binary32 ULP relative bound (2^-23), deliberately covering either
     // directed rounding choice. gamma(n) bounds any tree of n rounded operations.
     private fun gamma(operationCountI32: Int): Double {
@@ -110,7 +115,14 @@ internal object ColorRoundedGraphProofV1 {
         return ColorBoundsV1(if (low < normalF64 && high > -normalF64) minOf(0.0, low) else low,
             if (low < normalF64 && high > -normalF64) maxOf(0.0, high) else high)
     }
-    fun prove(graph: ColorOperationGraphV1, words: Map<Long, Float>): List<ColorBranchFactV1>? = try {
+    fun prove(graph: ColorOperationGraphV1, words: Map<Long, Int>, tables: Map<Long,ImmutableUBytes>): List<ColorBranchFactV1>? = try {
+        // Numeric slots and packed-byte spans are disjoint. A finite-looking U32
+        // Table word must never gain permission to be interpreted as a coefficient.
+        tables.forEach { (offset, table) ->
+            require(table.sizeI32 == 256 && offset >= 0L && offset % 4L == 0L && offset <= UInt.MAX_VALUE.toLong()-63L)
+            require((offset..offset+63L).none(words::containsKey))
+            require(tables.keys.none { it != offset && it < offset+64L && offset < it+64L })
+        }
         val facts = mutableListOf<ColorBranchFactV1>()
         val cache = java.util.IdentityHashMap<ColorOperationGraphV1.Scalar,
             java.util.IdentityHashMap<Map<ColorOperationGraphV1.Scalar, ColorBoundsV1>, ColorBoundsV1>>()
@@ -119,60 +131,120 @@ internal object ColorRoundedGraphProofV1 {
             conditions[node]?.let { return it }
             cache[node]?.get(conditions)?.let { return it }
             fun value(n: ColorOperationGraphV1.Scalar) = evaluate(n, conditions)
+            // The emitter materializes comparison operands before composing &&.
+            // Validate all operands in the incoming context, not only a context
+            // conditioned on an earlier conjunct being true.
+            fun predicateOperands(predicate: ColorOperationGraphV1.Predicate) {
+                when (predicate) {
+                    is ColorOperationGraphV1.Predicate.Equal -> { value(predicate.a); value(predicate.b) }
+                    is ColorOperationGraphV1.Predicate.LessEqual -> { value(predicate.a); value(predicate.b) }
+                    is ColorOperationGraphV1.Predicate.Not -> predicateOperands(predicate.value)
+                    is ColorOperationGraphV1.Predicate.And -> { predicateOperands(predicate.a); predicateOperands(predicate.b) }
+                }
+            }
+            fun contexts(predicate: ColorOperationGraphV1.Predicate, taken: Boolean,
+                current: Map<ColorOperationGraphV1.Scalar,ColorBoundsV1>): List<Map<ColorOperationGraphV1.Scalar,ColorBoundsV1>> {
+                if (predicate is ColorOperationGraphV1.Predicate.Not) return contexts(predicate.value,!taken,current)
+                if (predicate is ColorOperationGraphV1.Predicate.And) return if (taken)
+                    contexts(predicate.a,true,current).flatMap { contexts(predicate.b,true,it) }
+                    else contexts(predicate.a,false,current)+contexts(predicate.a,true,current).flatMap { contexts(predicate.b,false,it) }
+                val a = when (predicate) { is ColorOperationGraphV1.Predicate.Equal -> predicate.a; is ColorOperationGraphV1.Predicate.LessEqual -> predicate.a }
+                val b = when (predicate) { is ColorOperationGraphV1.Predicate.Equal -> predicate.b; is ColorOperationGraphV1.Predicate.LessEqual -> predicate.b }
+                val left = evaluate(a,current); val right = evaluate(b,current)
+                val equal = predicate is ColorOperationGraphV1.Predicate.Equal
+                val yesPossible = if (equal) left.lowerF64 <= right.upperF64 && right.lowerF64 <= left.upperF64 else left.lowerF64 <= right.upperF64
+                val noPossible = if (a === b) false else if (equal) left.lowerF64 != left.upperF64 || right.lowerF64 != right.upperF64 || left != right
+                    else left.upperF64 > right.lowerF64
+                if (taken && !yesPossible || !taken && !noPossible) return emptyList()
+                facts += ColorBranchFactV1(predicate,taken,left,right)
+                val bounds = if (taken && equal) ColorBoundsV1(maxOf(left.lowerF64,right.lowerF64),minOf(left.upperF64,right.upperF64))
+                    else if (!equal) if (taken) ColorBoundsV1(left.lowerF64,minOf(left.upperF64,right.upperF64))
+                        else ColorBoundsV1(maxOf(left.lowerF64,right.lowerF64),left.upperF64) else null
+                return listOf(if (bounds == null) current else java.util.IdentityHashMap(current).apply { put(a,bounds) })
+            }
             val result = when (node) {
                 is ColorOperationGraphV1.Scalar.InputLinearPremul -> error("Unbound source input")
-                is ColorOperationGraphV1.Scalar.DynamicF32 -> exact(requireNotNull(words[node.wordOffsetU32]))
+                is ColorOperationGraphV1.Scalar.DynamicF32 -> exact(Float.fromBits(requireNotNull(words[node.wordOffsetU32])))
                 is ColorOperationGraphV1.Scalar.ConstantF32 -> exact(Float.fromBits(node.bitsI32))
                 is ColorOperationGraphV1.Scalar.Clamp01 -> value(node.value).let {
                     ColorBoundsV1(it.lowerF64.coerceIn(0.0,1.0), it.upperF64.coerceIn(0.0,1.0)) }
+                is ColorOperationGraphV1.Scalar.TableByte -> {
+                    val scaled = value(node.scaled)
+                    val firstI32 = kotlin.math.ceil(scaled.lowerF64-0.5).toInt()
+                    val lastI32 = kotlin.math.floor(scaled.upperF64+0.5).toInt()
+                    require(firstI32 in 0..255 && lastI32 in firstI32..255)
+                    val table = requireNotNull(tables[node.tableWordOffsetU32])
+                    val reachableBytes = (firstI32..lastI32).map { table[it].toInt() }
+                    ColorBoundsV1(reachableBytes.min().toDouble(),reachableBytes.max().toDouble())
+                }
+                is ColorOperationGraphV1.Scalar.Min -> { val a = value(node.a); val b = value(node.b)
+                    // WGSL permits either input when both are subnormal.
+                    if (a.lowerF64 < normalF64 && a.upperF64 > -normalF64 && b.lowerF64 < normalF64 && b.upperF64 > -normalF64) hull(a,b)
+                    else ColorBoundsV1(minOf(a.lowerF64,b.lowerF64),minOf(a.upperF64,b.upperF64)) }
+                is ColorOperationGraphV1.Scalar.Max -> { val a = value(node.a); val b = value(node.b)
+                    if (a.lowerF64 < normalF64 && a.upperF64 > -normalF64 && b.lowerF64 < normalF64 && b.upperF64 > -normalF64) hull(a,b)
+                    else ColorBoundsV1(maxOf(a.lowerF64,b.lowerF64),maxOf(a.upperF64,b.upperF64)) }
+                is ColorOperationGraphV1.Scalar.Abs -> value(node.value).let {
+                    ColorBoundsV1(if (it.lowerF64 <= 0.0 && it.upperF64 >= 0.0) 0.0 else minOf(kotlin.math.abs(it.lowerF64),kotlin.math.abs(it.upperF64)),
+                        maxOf(kotlin.math.abs(it.lowerF64),kotlin.math.abs(it.upperF64))) }
+                is ColorOperationGraphV1.Scalar.Sqrt -> value(node.value).let {
+                    require(it.lowerF64 >= 0.0)
+                    if (it == exact(0f)) exact(0f) else {
+                        require(it.lowerF64 >= normalF64)
+                        // sqrt inherits reciprocal(inverseSqrt): retain inverseSqrt's
+                        // 2 ULP plus F32 rounding, then the normal-divisor 2.5 ULP
+                        // plus final rounding. Do not mark sqrt as exact.
+                        val inverse = rounded(1.0/StrictMath.sqrt(it.upperF64),1.0/StrictMath.sqrt(it.lowerF64),3.0)
+                        require(inverse.lowerF64 >= normalF64 && inverse.upperF64 <= largestDivisorF64)
+                        rounded(Math.nextDown(1.0/inverse.upperF64),Math.nextUp(1.0/inverse.lowerF64),3.5)
+                    } }
+                is ColorOperationGraphV1.Scalar.EagerSelect -> {
+                    val yes = value(node.yes); val no = value(node.no)
+                    predicateOperands(node.predicate)
+                    val canYes = contexts(node.predicate,true,conditions).isNotEmpty()
+                    val canNo = contexts(node.predicate,false,conditions).isNotEmpty()
+                    when { !canYes -> no; !canNo -> yes; else -> hull(yes,no) }
+                }
                 is ColorOperationGraphV1.Scalar.LazyBranch -> {
-                    val a = when (val p = node.predicate) { is ColorOperationGraphV1.Predicate.Equal -> p.a; is ColorOperationGraphV1.Predicate.LessEqual -> p.a }
-                    val b = when (val p = node.predicate) { is ColorOperationGraphV1.Predicate.Equal -> p.b; is ColorOperationGraphV1.Predicate.LessEqual -> p.b }
-                    val left = value(a); val right = value(b)
-                    val equal = node.predicate is ColorOperationGraphV1.Predicate.Equal
-                    val yesPossible = if (equal) left.lowerF64 <= right.upperF64 && right.lowerF64 <= left.upperF64 else left.lowerF64 <= right.upperF64
-                    val noPossible = if (equal) left.lowerF64 != left.upperF64 || right.lowerF64 != right.upperF64 || left != right else left.upperF64 > right.lowerF64
-                    fun branch(taken: Boolean): ColorBoundsV1 {
-                        facts += ColorBranchFactV1(node.predicate, taken, left, right)
-                        val bounds = if (taken && equal) ColorBoundsV1(maxOf(left.lowerF64,right.lowerF64),minOf(left.upperF64,right.upperF64))
-                        else if (!equal) if (taken) ColorBoundsV1(left.lowerF64,minOf(left.upperF64,right.upperF64))
-                            else ColorBoundsV1(maxOf(left.lowerF64,right.lowerF64),left.upperF64) else null
-                        val restricted = if (bounds == null) conditions else java.util.IdentityHashMap(conditions).apply { put(a,bounds) }
-                        return evaluate(if (taken) node.yes else node.no, restricted)
-                    }
-                    when { !yesPossible -> branch(false); !noPossible -> branch(true); else -> hull(branch(true),branch(false)) }
+                    predicateOperands(node.predicate)
+                    val alternatives = contexts(node.predicate,true,conditions).map { evaluate(node.yes,it) }+
+                        contexts(node.predicate,false,conditions).map { evaluate(node.no,it) }
+                    alternatives.reduce(::hull)
                 }
                 is ColorOperationGraphV1.Scalar.Pow -> {
                     val base = value(node.a); val exponent = value(node.b)
-                    // pow inherits log2, rounded multiply and exp2. Throughout the
-                    // guard's base range [2^-126,1.001], real log2 lies [-126,.002].
-                    // Its largest binary32 ULP is 2^-17: the outside-[.5,2] 3ULP
-                    // error plus one rounding ULP is <=4*2^-17=2^-15. This also
-                    // covers the alternative absolute2^-21 error on [.5,2].
-                    // The exact exponent is 2.4F32=2.400000095367431640625<2.401.
-                    // Multiplication adds at most 2^-15 (one ULP at magnitude303):
-                    // t is in (-303,.005), since (.002+2^-15)*2.401+2^-15<.005.
-                    // exp2's (3+2*abs(t))ULP error, plus one rounding ULP, is
-                    // <=610*2^-23 globally here; 2^.005+610*2^-23<1.004<2.
-                    // The lower bound uses the actual sealed EOTF graph, not just
-                    // that broad guard: its selected power branch has x>.04045F32,
-                    // so rounded (x+.055F32)/1.055F32>.09 and t>-9. Thus even
-                    // 2^-9-610*2^-23>0; no exp2 underflow is reachable. Flushing
-                    // a tiny log2/multiply result to zero remains in these bounds.
-                    // [0,2] is therefore safe for EOTF, not a generic pow certificate.
-                    require(base.lowerF64 >= normalF64 && base.upperF64 <= 1.001 && exponent == exact(2.4f))
-                    ColorBoundsV1(0.0,2.0)
+                    require(base.lowerF64 >= normalF64 && exponent.lowerF64 == exponent.upperF64 &&
+                        exponent.lowerF64 > 0.0 && exponent.upperF64 <= 4.0)
+                    // Pinned WGSL pow inherits log2 -> rounded multiply -> exp2.
+                    // StrictMath's <=1 Double ULP approximation is included before
+                    // adding the much larger F32 built-in accuracy envelopes.
+                    val logLow = StrictMath.log(base.lowerF64)/StrictMath.log(2.0)
+                    val logHigh = StrictMath.log(base.upperF64)/StrictMath.log(2.0)
+                    val logError = maxOf(Math.scalb(1.0,-21),4.0*maxOf(
+                        Math.ulp(logLow.toFloat()).toDouble(),Math.ulp(logHigh.toFloat()).toDouble()))
+                    val log = ColorBoundsV1(Math.nextDown(logLow-logError),Math.nextUp(logHigh+logError))
+                    val product = rounded(Math.nextDown(log.lowerF64*exponent.lowerF64),
+                        Math.nextUp(log.upperF64*exponent.upperF64))
+                    val low = StrictMath.pow(2.0,product.lowerF64)
+                    val high = StrictMath.pow(2.0,product.upperF64)
+                    val accuracy = 4.0+2.0*maxOf(kotlin.math.abs(product.lowerF64),kotlin.math.abs(product.upperF64))
+                    rounded(Math.nextDown(low),Math.nextUp(high),accuracy)
                 }
                 is ColorOperationGraphV1.Scalar.Divide -> {
                     val a = value(node.a); val b = value(node.b)
                     require(b.lowerF64 >= normalF64 || b.upperF64 <= -normalF64)
+                    require(maxOf(kotlin.math.abs(b.lowerF64),kotlin.math.abs(b.upperF64)) <= largestDivisorF64)
                     val corners = listOf(a.lowerF64 / b.lowerF64, a.lowerF64 / b.upperF64,
                         a.upperF64 / b.lowerF64, a.upperF64 / b.upperF64)
                     rounded(corners.min(),corners.max(), 3.5)
                 }
                 is ColorOperationGraphV1.Scalar.Subtract -> {
                     val a = value(node.a); val b = value(node.b)
-                    rounded(Math.nextDown(a.lowerF64-b.upperF64),Math.nextUp(a.upperF64-b.lowerF64))
+                    // Equal point operands subtract to the exactly representable
+                    // zero in every rounding mode. Preserve that operation result
+                    // before outward Double rounding, e.g. SRC_OUT at dst alpha1.
+                    if (a.lowerF64 == a.upperF64 && a == b) exact(0f)
+                    else rounded(Math.nextDown(a.lowerF64-b.upperF64),Math.nextUp(a.upperF64-b.lowerF64))
                 }
                 is ColorOperationGraphV1.Scalar.Add -> {
                     val terms = mutableListOf<ColorOperationGraphV1.Scalar>()
@@ -189,7 +261,14 @@ internal object ColorRoundedGraphProofV1 {
                     // per addition, subsequently amplified by the remaining tree.
                     val error = Math.nextUp(magnitude * growth + terms.size * normalF64 * (1.0 + growth))
                     require(Math.nextUp(magnitude + error) < Float.MAX_VALUE.toDouble())
-                    if (values.all { it.lowerF64 == it.upperF64 } && values.all { it.lowerF64 == 0.0 } ) exact(0f)
+                    // Adding exact zeros cannot change a normal representable point,
+                    // whichever sum tree/FMA is selected. Upstream products must
+                    // already have proved point values; ranges never enter this rule.
+                    val nonzero = values.filter { it.lowerF64 != 0.0 || it.upperF64 != 0.0 }
+                    if (nonzero.isEmpty()) exact(0f)
+                    else if (nonzero.size == 1 && nonzero.single().lowerF64 == nonzero.single().upperF64 &&
+                        kotlin.math.abs(nonzero.single().lowerF64) >= normalF64 &&
+                        nonzero.single().lowerF64.toFloat().toDouble() == nonzero.single().lowerF64) nonzero.single()
                     else rounded(Math.nextDown(low-error),Math.nextUp(high+error))
                 }
                 is ColorOperationGraphV1.Scalar.Multiply -> {

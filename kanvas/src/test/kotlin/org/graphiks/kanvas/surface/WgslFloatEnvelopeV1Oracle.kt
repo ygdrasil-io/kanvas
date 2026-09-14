@@ -305,23 +305,30 @@ internal object WgslFloatEnvelopeV1Oracle {
             { two * it * backdrop }, { Interval.ONE - two * (Interval.ONE - it) * (Interval.ONE - backdrop) })
         return when (mode) {
             BlendMode.MULTIPLY -> s * d
+            BlendMode.SCREEN -> s + d - s * d
             BlendMode.OVERLAY -> hardLight(d, s)
             BlendMode.DARKEN -> minimum(s, d)
             BlendMode.LIGHTEN -> maximum(s, d)
             BlendMode.COLOR_DODGE -> when {
                 d.isExactly(Interval.ZERO) -> Interval.ZERO
-                s.isExactly(Interval.ONE) -> Interval.ONE
+                s.isExactly(Interval.ONE) -> if (d.lower.signum() <= 0 && d.upper.signum() >= 0)
+                    hull(Interval.ZERO,Interval.ONE) else Interval.ONE
                 s.upper < BigDecimal.ONE -> minimum(Interval.ONE, wgslDivide(d, Interval.ONE - s))
                 else -> error("Color dodge source crosses its singularity")
             }
             BlendMode.COLOR_BURN -> when {
                 d.isExactly(Interval.ONE) -> Interval.ONE
-                s.isExactly(Interval.ZERO) -> Interval.ZERO
+                s.isExactly(Interval.ZERO) -> if (d.lower <= BigDecimal.ONE && d.upper >= BigDecimal.ONE)
+                    hull(Interval.ZERO,Interval.ONE) else Interval.ZERO
                 s.lower > BigDecimal.ZERO -> Interval.ONE - minimum(Interval.ONE, wgslDivide(Interval.ONE - d, s))
                 else -> error("Color burn source crosses its singularity")
             }
             BlendMode.HARD_LIGHT -> hardLight(s, d)
-            BlendMode.SOFT_LIGHT -> branch(s, HALF,
+            BlendMode.SOFT_LIGHT -> {
+                // Both WGSL select operands execute, including sqrt(cb), even
+                // when the source selects the low polynomial branch.
+                gradientSqrt(d)
+                branch(s, HALF,
                 { source -> d - (Interval.ONE - two * source) * d * (Interval.ONE - d) },
                 { source ->
                     val curve = branch(d, BigDecimal("0.25"),
@@ -335,6 +342,7 @@ internal object WgslFloatEnvelopeV1Oracle {
                         })
                     d + (two * source - Interval.ONE) * (curve - d)
                 })
+            }
             BlendMode.DIFFERENCE -> (d - s).let {
                 Interval(if (it.lower.signum() <= 0 && it.upper.signum() >= 0) BigDecimal.ZERO else minOf(it.lower.abs(), it.upper.abs()),
                     maxOf(it.lower.abs(), it.upper.abs()))
@@ -623,6 +631,55 @@ internal object WgslFloatEnvelopeV1Oracle {
     fun imageUnorm8(codeI32: Int): Interval = f32Envelope(Interval(
         downDivide(BigDecimal(codeI32), UNORM_MAX), upDivide(BigDecimal(codeI32), UNORM_MAX)))
     fun imageSrgbToLinear(value: Interval): Interval = toLinear(value)
+    /** Numerical OETF executed by a filter; this is not fixed-function attachment encoding. */
+    fun filterLinearToSrgb(value: Interval): Interval {
+        if (value.isExactly(Interval.ZERO) || value.isExactly(Interval.ONE)) return value
+        return piecewiseTransfer(value, decimal(0.0031308f),
+            { x -> Interval.point(x) * Interval.input(12.92f) },
+            { x -> Interval.input(1.055f) * wgslPow(Interval.point(x), Interval.input(1f / 2.4f)) - Interval.input(0.055f) })
+    }
+
+    /** Pure published blend equations on independently derived linear premultiplied inputs. */
+    fun filterBlend(src: Array<Interval>, dst: Array<Interval>, mode: BlendMode): Array<Interval> {
+        fun sumProducts(a: Interval, b: Interval, c: Interval, d: Interval) =
+            hull(a * b + c * d, fma(a,b,c*d), fma(c,d,a*b))
+        val invS = Interval.ONE - src[3]
+        val invD = Interval.ONE - dst[3]
+        return when (mode) {
+            BlendMode.CLEAR -> Array(4) { Interval.ZERO }
+            BlendMode.SRC -> src.copyOf()
+            BlendMode.DST -> dst.copyOf()
+            BlendMode.SRC_OVER -> Array(4) { sourceOver(src[it],dst[it],invS) }
+            BlendMode.DST_OVER -> Array(4) { sourceOver(dst[it],src[it],invD) }
+            BlendMode.SRC_IN -> Array(4) { src[it] * dst[3] }
+            BlendMode.DST_IN -> Array(4) { dst[it] * src[3] }
+            BlendMode.SRC_OUT -> Array(4) { src[it] * invD }
+            BlendMode.DST_OUT -> Array(4) { dst[it] * invS }
+            BlendMode.SRC_ATOP -> Array(4) { sumProducts(src[it],dst[3],dst[it],invS) }
+            BlendMode.DST_ATOP -> Array(4) { sumProducts(dst[it],src[3],src[it],invD) }
+            BlendMode.XOR -> Array(4) { sumProducts(src[it],invD,dst[it],invS) }
+            BlendMode.PLUS -> Array(4) { (src[it] + dst[it]).clamp01() }
+            BlendMode.MODULATE -> Array(4) { src[it] * dst[it] }
+            else -> {
+                if (src[3].isExactly(Interval.ZERO)) return dst.copyOf()
+                fun straight(value: Array<Interval>) = Array(3) { when {
+                    value[3].isExactly(Interval.ZERO) -> Interval.ZERO
+                    value[3].isExactly(Interval.ONE) -> value[it]
+                    else -> wgslDivide(value[it],value[3])
+                } }
+                val s = straight(src); val d = straight(dst)
+                val color = if (mode in NON_SEPARABLE_MODES) artisticNonSeparable(s,d,mode)
+                    else Array(3) { artisticSeparable(s[it],d[it],mode) }
+                Array(4) { if (it == 3) sourceOver(src[3],dst[3],invS) else {
+                    val left = src[it] * invD; val right = dst[it] * invS
+                    val product = hull((src[3] * dst[3]) * color[it],src[3] * (dst[3] * color[it]))
+                    hull((left+right)+product,left+(right+product),(left+product)+right,
+                        fma(src[it],invD,right+product),fma(dst[it],invS,left+product),
+                        fma(src[3]*dst[3],color[it],left+right),fma(src[3],dst[3]*color[it],left+right))
+                } }
+            }
+        }
+    }
     fun imageSourceAttachment(source: Array<Interval>): DrawResult {
         val codes = source.mapIndexed { channelI32, value ->
             if (channelI32 < 3) codesForSrgbAttachment(attachmentEncode(value.clamp01())) else codesFor(value)

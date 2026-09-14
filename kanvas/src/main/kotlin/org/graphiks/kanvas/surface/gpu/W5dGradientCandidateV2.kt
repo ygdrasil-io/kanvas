@@ -17,7 +17,12 @@ internal fun DisplayOp.isW5dGradientCandidateV2(allowNonGradient: Boolean = fals
         if (this !is DisplayOp.DrawRect && this !is DisplayOp.DrawPath || paint.isStroke() ||
             paint.colorFilter !is org.graphiks.kanvas.paint.ColorFilter.Matrix &&
             paint.colorFilter !is org.graphiks.kanvas.paint.ColorFilter.Compose &&
-            paint.colorFilter !is org.graphiks.kanvas.paint.ColorFilter.Lerp) return false
+            paint.colorFilter !is org.graphiks.kanvas.paint.ColorFilter.Lerp &&
+            paint.colorFilter !is org.graphiks.kanvas.paint.ColorFilter.Table &&
+            paint.colorFilter !is org.graphiks.kanvas.paint.ColorFilter.Lighting &&
+            paint.colorFilter !is org.graphiks.kanvas.paint.ColorFilter.Blend &&
+            paint.colorFilter != org.graphiks.kanvas.paint.ColorFilter.SRGBToLinear &&
+            paint.colorFilter != org.graphiks.kanvas.paint.ColorFilter.LinearToSRGB) return false
         var source = paint.shader
         var countI32 = 0
         while (source is Shader.Opacity || source is Shader.WithColorFilter) {

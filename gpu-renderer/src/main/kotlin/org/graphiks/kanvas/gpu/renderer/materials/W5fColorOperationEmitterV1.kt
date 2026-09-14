@@ -12,11 +12,14 @@ internal object W5fColorOperationEmitterV1 {
             cache[node]?.let { return it }
             val name = "colorValue${nextI32++}"
             fun arg(value: ColorOperationGraphV1.Scalar) = expression(value,code,cache)
+            fun predicate(p: ColorOperationGraphV1.Predicate): String = when (p) {
+                is ColorOperationGraphV1.Predicate.Equal -> "(${arg(p.a)} == ${arg(p.b)})"
+                is ColorOperationGraphV1.Predicate.LessEqual -> "(${arg(p.a)} <= ${arg(p.b)})"
+                is ColorOperationGraphV1.Predicate.Not -> "(!${predicate(p.value)})"
+                is ColorOperationGraphV1.Predicate.And -> "(${predicate(p.a)} && ${predicate(p.b)})"
+            }
             if (node is ColorOperationGraphV1.Scalar.LazyBranch) {
-                val condition = when (val p = node.predicate) {
-                    is ColorOperationGraphV1.Predicate.Equal -> "(${arg(p.a)} == ${arg(p.b)})"
-                    is ColorOperationGraphV1.Predicate.LessEqual -> "(${arg(p.a)} <= ${arg(p.b)})"
-                }
+                val condition = predicate(node.predicate)
                 code.append("var $name: f32;\nif ($condition) {\n")
                 val yes = expression(node.yes,code,java.util.IdentityHashMap(cache))
                 code.append("$name = $yes;\n} else {\n")
@@ -30,7 +33,7 @@ internal object W5fColorOperationEmitterV1 {
                 is ColorOperationGraphV1.Scalar.DynamicF32 -> {
                     val word = Math.addExact(node.wordOffsetU32,uniformWordOffsetU32)
                     require(word in 0L..UInt.MAX_VALUE.toLong())
-                    "w5fMaterial.words[${word/4}u][${word%4}u]"
+                    "bitcast<f32>(w5fMaterial.words[${word/4}u][${word%4}u])"
                 }
                 is ColorOperationGraphV1.Scalar.ConstantF32 -> "bitcast<f32>(${node.bitsI32.toUInt()}u)"
                 is ColorOperationGraphV1.Scalar.Add -> "(${arg(node.a)} + ${arg(node.b)})"
@@ -39,6 +42,19 @@ internal object W5fColorOperationEmitterV1 {
                 is ColorOperationGraphV1.Scalar.Divide -> "(${arg(node.a)} / ${arg(node.b)})"
                 is ColorOperationGraphV1.Scalar.Pow -> "pow(${arg(node.a)}, ${arg(node.b)})"
                 is ColorOperationGraphV1.Scalar.Clamp01 -> "clamp(${arg(node.value)}, 0.0, 1.0)"
+                is ColorOperationGraphV1.Scalar.Min -> "min(${arg(node.a)}, ${arg(node.b)})"
+                is ColorOperationGraphV1.Scalar.Max -> "max(${arg(node.a)}, ${arg(node.b)})"
+                is ColorOperationGraphV1.Scalar.Abs -> "abs(${arg(node.value)})"
+                is ColorOperationGraphV1.Scalar.Sqrt -> "sqrt(${arg(node.value)})"
+                is ColorOperationGraphV1.Scalar.EagerSelect -> "select(${arg(node.no)}, ${arg(node.yes)}, ${predicate(node.predicate)})"
+                is ColorOperationGraphV1.Scalar.TableByte -> {
+                    val word = Math.addExact(node.tableWordOffsetU32,uniformWordOffsetU32)
+                    require(word in 0L..UInt.MAX_VALUE.toLong()-63L)
+                    val index = "tableIndex${nextI32++}"
+                    code.append("let $index = u32(round(${arg(node.scaled)}));\n")
+                    val address = "(${word}u + ($index >> 2u))"
+                    "f32((w5fMaterial.words[$address / 4u][$address % 4u] >> (($index & 3u) * 8u)) & 255u)"
+                }
                 is ColorOperationGraphV1.Scalar.LazyBranch -> error("Lazy branches are lowered as control flow")
             }
             code.append("let $name = $text;\n")
