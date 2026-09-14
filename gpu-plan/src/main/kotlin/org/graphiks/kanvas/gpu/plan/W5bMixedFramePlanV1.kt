@@ -68,10 +68,14 @@ public class W5bMixedFramePlanV1 private constructor(
             val sourceRequirements = mutableListOf<RawMaterialRequirementsV2>()
             val draws = inputs.map { input ->
                 require(input.commandIndexI32 >= 0)
-                val source = RawMaterialRequirementsV2.of(input.sourceTable, input.sourceRef)
-                if (input.blend != BlendPlan.NoOpV1) sourceRequirements += source
-                admit(if (source.hasCoordinatesV2) RefusalReason.CoordinateUniformBudget else RefusalReason.SourceBinding,
-                    input.blend == BlendPlan.NoOpV1 || source.fitsUniformBinding(capabilities))
+                if (input.sourceTable.coordinatesV4(input.sourceRef) != null) {
+                    if (input.blend != BlendPlan.NoOpV1) RawMaterialRequirementsV2.measureV4(input.sourceTable,input.sourceRef)
+                } else {
+                    val source = RawMaterialRequirementsV2.of(input.sourceTable, input.sourceRef)
+                    if (input.blend != BlendPlan.NoOpV1) sourceRequirements += source
+                    admit(if (source.hasCoordinatesV2) RefusalReason.CoordinateUniformBudget else RefusalReason.SourceBinding,
+                        input.blend == BlendPlan.NoOpV1 || source.fitsUniformBinding(capabilities))
+                }
                 val before = DestinationVersionI64(versionI64)
                 val blend = when (val selected = input.blend) {
                     is BlendPlan.DestinationReadV1 -> selected.copy(
@@ -95,6 +99,8 @@ public class W5bMixedFramePlanV1 private constructor(
                 throw Refusal(if (failure.code == W5dPlanDiagnostics.CoordinateUniformBudget)
                     RefusalReason.CoordinateUniformBudget else RefusalReason.SourceBudget)
             }
+            // V4 is measured here; its final graph construction owns the actual
+            // whole-frame inventory and the sole packing permit.
             return W5bMixedFramePlanV1(targetId, capabilities, budget, draws)
         }
 

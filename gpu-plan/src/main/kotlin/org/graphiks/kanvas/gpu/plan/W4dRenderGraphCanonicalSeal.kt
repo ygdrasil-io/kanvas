@@ -9,7 +9,9 @@ import org.graphiks.math.geometry.RectI32
 
 /** Canonical, length-delimited, raw-bit-stable snapshot used only by the opaque W4d witness. */
 @JvmSynthetic
-internal fun canonicalW4dGraphDigest(graph: RenderGraph): ByteArray {
+internal fun canonicalW4dGraphDigest(graph: RenderGraph): ByteArray = canonicalW4dGraphDigest(graph.canonicalConstruction())
+
+internal fun canonicalW4dGraphDigest(graph: RenderGraphConstruction): ByteArray {
     val materialV2 = W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)
     val writer = W4dGraphDigestWriter()
     writer.text("schema", if (materialV2) "w4d-render-graph-witness-w5a-material-v2" else "w4d-render-graph-witness-v1")
@@ -114,6 +116,17 @@ private class W4dGraphDigestWriter {
             i32("$prefix.program.version", entry.program.versionI32)
             text("$prefix.program.id", entry.program.structuralId.value)
             when (val binding = entry.bindings) {
+                is GradientInterpolationBindingV4 -> {
+                    text("$prefix.binding",binding.canonicalIdentity)
+                    text("$prefix.source-proof",binding.sourceProof.canonicalIdentity)
+                    text("$prefix.coordinates",binding.sourceProof.coordinates.identityV4())
+                    text("$prefix.stop-slab",requireNotNull(table.gradientStopSlab).canonicalIdentity)
+                }
+                is ColorFilterBindingV4 -> {
+                    text("$prefix.binding",binding.canonicalIdentity)
+                    text("$prefix.source-proof",binding.numericAuthority.outputSourceProof.canonicalIdentity)
+                    text("$prefix.coordinates",binding.sourceProof.coordinates.identityV4())
+                }
                 is ImageSampleV3 -> error(W5eImagePlanDiagnostics.InvalidContract)
                 is MaterialBindingPlan.GradientV2 -> error(W5dPlanDiagnostics.CoordinatePlanSchema)
                 is MaterialBindingPlan.GradientV1 -> {
@@ -249,6 +262,7 @@ private class W4dGraphDigestWriter {
         i32("$prefix.command-index", pathDraw.commandIndex)
         if (materialV2) {
             when (val authority = pathDraw.materialAuthority) {
+                is PlanDrawMaterialAuthority.MaterialV4 -> error(W5fPlanDiagnostics.Unpromoted)
                 is PlanDrawMaterialAuthority.MaterialV3 -> error(W5eImagePlanDiagnostics.InvalidContract)
                 is PlanDrawMaterialAuthority.MaterialV2 -> error(W5dPlanDiagnostics.CoordinatePlanSchema)
                 is PlanDrawMaterialAuthority.MaterialV1 -> {

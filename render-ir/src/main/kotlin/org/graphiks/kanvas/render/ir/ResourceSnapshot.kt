@@ -41,6 +41,8 @@ public class ImmutableFloats private constructor(values: FloatArray) : Canonical
     private val storedValues: FloatArray = values.copyOf()
 
     internal val size: Int get() = storedValues.size
+    public val sizeI32: Int get() = storedValues.size
+    public operator fun get(indexI32: Int): Float = storedValues[indexI32]
     public fun copyToFloatArray(): FloatArray = storedValues.copyOf()
     override val canonicalId: CanonicalId = canonicalSequenceId(
         "immutable-floats-v1",
@@ -58,6 +60,8 @@ public class ImmutableFloats private constructor(values: FloatArray) : Canonical
 public class ImmutableUBytes private constructor(values: UByteArray) : CanonicalValue {
     private val storedValues: UByteArray = values.copyOf()
 
+    public val sizeI32: Int get() = storedValues.size
+    public operator fun get(indexI32: Int): UByte = storedValues[indexI32]
     public fun copyToUByteArray(): UByteArray = storedValues.copyOf()
     override val canonicalId: CanonicalId = canonicalSequenceId(
         "immutable-ubytes-v1",

@@ -5,6 +5,23 @@ import org.graphiks.kanvas.gpu.plan.ImageNumericOperationGraphV1.TexelOperation
 
 /** Sole W5e sampling/color emitter. Task 3 extends this graph consumer, not a parallel sampler. */
 internal object W5eImageTexelEvaluatorV1 {
+    /** Same checked integer address schedule for original and filtered image consumers. */
+    fun addressDeclarations(graph: ImageNumericOperationGraphV1): String {
+        fun axis(name: String, index: String, dimension: String, mode: ImageTileAxisModePlanV1): String = when (mode) {
+            ImageTileAxisModePlanV1.CLAMP -> "let a$name = clamp($index, 0, $dimension - 1);"
+            ImageTileAxisModePlanV1.REPEAT -> "let a$name = (($index % $dimension) + $dimension) % $dimension;"
+            ImageTileAxisModePlanV1.MIRROR -> "let p$name = (($index % ($dimension * 2)) + ($dimension * 2)) % ($dimension * 2);\n" +
+                "let a$name = min(p$name, ($dimension * 2) - 1 - p$name);"
+            ImageTileAxisModePlanV1.DECAL -> "if ($index < 0 || $index >= $dimension) { return vec3<i32>(0); }\nlet a$name = $index;"
+        }
+        return """
+            fn w5e_address_texel(ix: i32, iy: i32, width: i32, height: i32) -> vec3<i32> {
+                ${axis("x","ix","width",graph.tileModes.x)}
+                ${axis("y","iy","height",graph.tileModes.y)}
+                return vec3<i32>(ax, ay, 1);
+            }
+        """.trimIndent()
+    }
     fun declarations(execution: ImageSampleExecutionPlanV1, child: W5aMaterialSourceStage?, layout: ImageSourceLayoutV3): String {
         val graph = execution.numericAuthority.graph
         val selection = execution.cellSelection
@@ -153,41 +170,9 @@ internal object W5eImageTexelEvaluatorV1 {
         val tapY = emit(graph.tapYF32)
         val baseX = emit(graph.baseXF32, afterValidity = true)
         val baseY = emit(graph.baseYF32, afterValidity = true)
-        val evaluateEncodedTexel = if (TexelOperation.RETURN_SCALAR_MASK in texelOperations) {
-            val mask = if (TexelOperation.ALPHA_OPAQUE in texelOperations) "1.0" else "encoded.r"
-            "return $mask;"
-        } else {
-            val rgb = if (TexelOperation.SWIZZLE_BGRA in texelOperations) "vec3<f32>(encoded.b, encoded.g, encoded.r)" else "encoded.rgb"
-            val alpha = if (TexelOperation.ALPHA_OPAQUE in texelOperations) "1.0" else "encoded.a"
-            val straight = if (TexelOperation.UNIT_ALPHA_GUARDED_UNPREMULTIPLY_SOURCE in texelOperations)
-                "var straightRgb = $rgb;\nif (sourceAlpha != 1.0) { straightRgb = $rgb / sourceAlpha; }"
-            else "let straightRgb = $rgb;"
-            val transfer = if (TexelOperation.SRGB_TO_LINEAR in texelOperations)
-                "let linearRgb = w5a_srgb_to_linear(vec4<f32>(straightRgb, sourceAlpha)).rgb;" else "let linearRgb = straightRgb;"
-            val gamut = if (TexelOperation.DISPLAY_P3_TO_LINEAR_SRGB in texelOperations)
-                "let workingRgb = vec3<f32>(1.2247455 * linearRgb.r - 0.2249044 * linearRgb.g, " +
-                    "-0.0420581 * linearRgb.r + 1.0420810 * linearRgb.g, " +
-                    "-0.0196423 * linearRgb.r - 0.0786549 * linearRgb.g + 1.0985372 * linearRgb.b);"
-            else "let workingRgb = linearRgb;"
-            val outputRgb = if (TexelOperation.PREMULTIPLY_LINEAR in texelOperations) "workingRgb * sourceAlpha" else "workingRgb"
-            """
-                let sourceAlpha = $alpha;
-                if (sourceAlpha == 0.0) { return vec4<f32>(0.0); }
-                $straight
-                $transfer
-                $gamut
-                return vec4<f32>($outputRgb, sourceAlpha);
-            """.trimIndent()
-        }
-        fun address(axis: String, index: String, dimension: String, mode: ImageTileAxisModePlanV1): String = when (mode) {
-            ImageTileAxisModePlanV1.CLAMP -> "let a$axis = clamp($index, 0, $dimension - 1);"
-            ImageTileAxisModePlanV1.REPEAT -> "let a$axis = (($index % $dimension) + $dimension) % $dimension;"
-            ImageTileAxisModePlanV1.MIRROR -> "let p$axis = (($index % ($dimension * 2)) + ($dimension * 2)) % ($dimension * 2);\n" +
-                "let a$axis = min(p$axis, ($dimension * 2) - 1 - p$axis);"
-            ImageTileAxisModePlanV1.DECAL -> "if ($index < 0 || $index >= $dimension) { return $zero; }\nlet a$axis = $index;"
-        }
-        val addressX = address("x", "ix", "i32(w5eImage.parameters.x)", execution.tileModes.x)
-        val addressY = address("y", "iy", "i32(w5eImage.parameters.y)", execution.tileModes.y)
+        val evaluateEncodedTexel = W5fColorOperationEmitterV1.emit(graph.decodedTexelGraph(),
+            "vec4<f32>(0.0)",0L,imageEncodedRgbaExpression="encoded",
+            resultChannelI32=if (TexelOperation.RETURN_SCALAR_MASK in texelOperations) 0 else null)
         val sample = when (execution.sampling) {
             ImageSamplingPlanV1.Nearest -> """
                 if (!w5e_finite($tapX) || !w5e_finite($tapY) || $tapX < -2147483648.0 || $tapX >= 2147483648.0 ||
@@ -252,10 +237,11 @@ internal object W5eImageTexelEvaluatorV1 {
             fn w5e_finite(value: f32) -> bool { return (bitcast<u32>(value) & 0x7f800000u) != 0x7f800000u; }
             fn w5e_device_point(pixel: vec2<f32>) -> vec2<f32> { return pixel; }
             $cubicKernelDeclarations
+            ${addressDeclarations(graph)}
             fn w5e_texel(ix: i32, iy: i32) -> $returnType {
-                $addressX
-                $addressY
-                let encoded: vec4<f32> = textureLoad(w5eTexture, vec2<i32>(ax, ay), 0);
+                let addressed = w5e_address_texel(ix, iy, i32(w5eImage.parameters.x), i32(w5eImage.parameters.y));
+                if (addressed.z == 0) { return $zero; }
+                let encoded: vec4<f32> = textureLoad(w5eTexture, addressed.xy, 0);
                 $evaluateEncodedTexel
             }
             fn ${if (selection == null) "w5e_image_sample(pixel: vec2<f32>)" else "w5e_sample_cell(pixel: vec2<f32>, cellSource: vec4<f32>, cellDestination: vec4<f32>)"} -> $returnType {

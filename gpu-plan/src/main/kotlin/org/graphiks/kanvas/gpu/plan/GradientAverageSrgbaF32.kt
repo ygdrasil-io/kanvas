@@ -11,7 +11,19 @@ public data class GradientAverageSrgbaF32(
 )
 
 internal fun GradientStopSlabPlanV1.exactAverageSrgbaF32(): GradientAverageSrgbaF32 {
+    return exactAverageSrgbaF32(copyStops())
+}
+
+/** Integrates original straight-sRGB values, never the domain-prepared storage tuple. */
+internal fun GradientStopSlabPlanV1.exactAverageSrgbaF32(range: GradientStopRangeV1): GradientAverageSrgbaF32 {
     val stops = copyStops()
+    val first = range.baseIndexU32.toLong()
+    val last = Math.addExact(first,range.countU32.toLong())
+    require(first >= 0L && last <= stops.size.toLong()) { W5fPlanDiagnostics.Schema }
+    return exactAverageSrgbaF32(stops.subList(first.toInt(),last.toInt()))
+}
+
+private fun exactAverageSrgbaF32(stops: List<GradientStopPlanV1>): GradientAverageSrgbaF32 {
     require(stops.first().positionF32 == 0f && stops.last().positionF32 == 1f)
     val channelsF32 = (0..3).map { channelI32 ->
         val accumulator = ExactBinaryTrapezoids()

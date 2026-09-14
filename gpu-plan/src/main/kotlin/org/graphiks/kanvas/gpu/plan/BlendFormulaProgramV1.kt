@@ -3,6 +3,11 @@ package org.graphiks.kanvas.gpu.plan
 /** Shared, handle-free authority for the existing rounded premultiplied blend schedules. */
 public object BlendFormulaProgramV1 {
     public const val REVISION_I32: Int = 1
+    internal fun colorOperations(modeLabel: String, src: List<ColorOperationGraphV1.Scalar>,
+        dst: List<ColorOperationGraphV1.Scalar>): ColorOperationGraphV1 {
+        val source = requireNotNull(selectedBlendFunctionWgsl(modeLabel))
+        return requireNotNull(BlendFormulaOperationGraphV1.read(source)).colorOperations("kanvasBlendPremul",src,dst)
+    }
     /** Source and final blend may coexist in one shader; only helper identifiers differ. */
     public fun selectedAtlasSourceWgsl(modeLabel: String): String? =
         selectedBlendFunctionWgsl(modeLabel, "w5e_atlas_blend")?.replace("kanvas", "w5eAtlas")
@@ -124,6 +129,7 @@ public object BlendFormulaProgramV1 {
         }
         fn kanvasBlendAdvancedPremul(src: vec4f, dst: vec4f, blendMode: u32) -> vec4f {
             if (src.a == 0.0) { return dst; }
+            if (dst.a == 0.0 && dst.r == 0.0 && dst.g == 0.0 && dst.b == 0.0) { return src; }
             let srcColor = kanvasUnpremul(src);
             let dstColor = kanvasUnpremul(dst);
             let blended = kanvasBlendAdvancedColor(srcColor, dstColor, blendMode);

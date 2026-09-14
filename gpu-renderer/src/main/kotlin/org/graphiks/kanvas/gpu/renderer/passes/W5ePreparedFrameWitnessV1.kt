@@ -24,13 +24,17 @@ public class W5ePreparedFrameWitnessV1 internal constructor(internal val bridge:
     private val sources: Map<GPUDrawPacketID, W5aPacketMaterialSourceV2> = consumers.associate { packet ->
         val image = expectedByCommandI32[packet.commandIdValue]
         val source = if (image != null) {
-            require(bridge.materialTable.authenticatesImage(image.materialAuthority.ref, image.execution)) { W5eImagePlanDiagnostics.InvalidContract }
-            W5aPacketMaterialSourceV2.issueImageV3(bridge.materialTable, image.materialAuthority.ref, image.commandIndex)
+            require(image.authenticates(bridge.materialTable)) { W5eImagePlanDiagnostics.InvalidContract }
+            W5aPacketMaterialSourceV2.issueImage(bridge.materialTable,image.materialAuthority,image.execution,
+                image.commandIndex,(image.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let {
+                    bridge.constructionGraph.packedMaterialSourceV4(it) })
         } else when (val authority = ordinaryByCommandI32.getValue(packet.commandIdValue)) {
             is PlanDrawMaterialAuthority.MaterialV1 -> W5aPacketMaterialSourceV2.issue(bridge.materialTable,
                 authority.ref, packet.commandIdValue, authority.coordinates)
             is PlanDrawMaterialAuthority.MaterialV2 -> W5aPacketMaterialSourceV2.issue(bridge.materialTable,
                 authority.ref, packet.commandIdValue, authority.coordinates)
+            is PlanDrawMaterialAuthority.MaterialV4 -> W5aPacketMaterialSourceV2.issue(bridge.materialTable,authority,
+                packet.commandIdValue,bridge.constructionGraph.packedMaterialSourceV4(authority))
             else -> error(W5eImagePlanDiagnostics.InvalidContract)
         }
         packet.packetId to source

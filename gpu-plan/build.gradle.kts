@@ -5,6 +5,7 @@ plugins {
 
 dependencies {
     api(project(":render-ir"))
+    implementation(project(":color-management"))
     implementation(kotlin("stdlib"))
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")

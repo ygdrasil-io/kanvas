@@ -15,19 +15,92 @@ import kotlin.math.sqrt
 public class ImageAtlasBlendNumericAuthorityV1 private constructor(
     public val mode: BlendMode, public val color: ColorARGB,
     public val uploadIdentity: String, private val colorAlpha: ImageColorAlphaPlanV1,
-    public val maskChild: Boolean, private val finiteOperationCountI64: Long,
-    private val maximumMagnitudeF64: Double, private val childSourceIdentity: String?,
+    public val maskChild: Boolean, private val finiteOperationCountI64: Long?,
+    private val maximumMagnitudeF64: Double?, private val childSourceIdentity: String?,
     private val operationGraph: BlendFormulaOperationGraphV1,
+    private val sourceDerivation: SourceDerivation? = null,
 ) {
     public val formulaWgsl: String = operationGraph.sourceWgsl
     public val canonicalIdentity: String = "atlas-source-blend-graph-v1:${BlendFormulaProgramV1.REVISION_I32}:$mode:${color.value}:" +
-        "$uploadIdentity:$colorAlpha:decode=${colorAlpha.unpremultiplyOperation}:mask=$maskChild:child=$childSourceIdentity:ops=$finiteOperationCountI64:max=${maximumMagnitudeF64.toRawBits()}:$formulaWgsl"
+        "$uploadIdentity:$colorAlpha:decode=${colorAlpha.unpremultiplyOperation}:mask=$maskChild:child=$childSourceIdentity:" +
+        (sourceDerivation?.let { "actual-source-v4:${it.identity}" } ?:
+            "ops=${requireNotNull(finiteOperationCountI64)}:max=${requireNotNull(maximumMagnitudeF64).toRawBits()}") + ":$formulaWgsl"
     public fun copyColorUniformF32(): List<Float> = listOf(color.redNormalized, color.greenNormalized, color.blueNormalized, color.alphaNormalized)
-    public fun authenticates(upload: ImageUploadPlanV1, colorAlpha: ImageColorAlphaPlanV1, childSourceIdentity: String?): Boolean =
+    internal fun colorOperations(source: List<ColorOperationGraphV1.Scalar>,
+        destination: List<ColorOperationGraphV1.Scalar>): ColorOperationGraphV1 =
+        operationGraph.colorOperations("w5e_atlas_blend",source,destination)
+    internal fun copyOperationGraph(): BlendFormulaOperationGraphV1 = operationGraph
+    public fun authenticates(upload: ImageUploadPlanV1, colorAlpha: ImageColorAlphaPlanV1, childSourceIdentity: String?,
+        numeric: ImageNumericAuthorityV1? = null): Boolean =
         upload.contentIdentity == uploadIdentity && colorAlpha == this.colorAlpha && this.childSourceIdentity == childSourceIdentity &&
+            (sourceDerivation == null || sourceDerivation.numeric === numeric) &&
             formulaWgsl == BlendFormulaProgramV1.selectedAtlasSourceWgsl(mode.name.lowercase())
 
+    internal fun authenticatesSourceGraph(graph: ColorOperationGraphV1,child: ColorSourceProofV1?,
+        words: Map<Long,Int>,integers: Map<Long,UInt>,tables: Map<Long,org.graphiks.kanvas.render.ir.ImmutableUBytes>): Boolean {
+        val actual = sourceDerivation ?: return true
+        if (actual.graph.canonicalIdentity != graph.canonicalIdentity || actual.words != words || actual.tables != tables ||
+            actual.child?.sourceIdentity != child?.sourceIdentity) return false
+        fun definition(proof: ColorSourceProofV1?): PreparedSourceDefinitionV4? = proof?.preparedDefinition ?:
+            proof?.bindingOwners?.filterIsInstance<GradientInterpolationBindingV4>()?.singleOrNull()?.definition
+        val before = definition(actual.child)
+        val after = definition(child)
+        if (before == null || after == null) return before == null && after == null && actual.integers == integers &&
+            actual.child?.gradientStopSlab === child?.gradientStopSlab
+        // MaterialPlanTable.of uses the original checked rebase. Authenticate its
+        // same captured/frame owner and complete selected-stop identity, then
+        // transport only the actual base word to the final physical slab.
+        if (before.captured !== after.captured || before.frameOwner !== after.frameOwner ||
+            before.definitionIdentity != after.definitionIdentity || before.range.countU32 != after.range.countU32 ||
+            actual.child?.gradientStopSlab !== before.slab || child?.gradientStopSlab !== after.slab) return false
+        val headerWords = ImageSourceLayoutV3(true,actual.numeric.cellSelection != null,
+            actual.numeric.cellSelection?.lattice == true,actual.numeric.cellSelection?.capacityI32 ?: 9,true)
+            .imageUniformByteCountI64/4L
+        if (actual.integers[headerWords] != before.range.baseIndexU32 || integers[headerWords] != after.range.baseIndexU32)
+            return false
+        return actual.integers.toMutableMap().also { it[headerWords] = after.range.baseIndexU32 } == integers
+    }
+
+    /** Retains the actual sampled-mask/child/Atlas graph proved before authority issuance. */
+    private class SourceDerivation(val numeric: ImageNumericAuthorityV1,val child: ColorSourceProofV1?,
+        val graph: ColorOperationGraphV1,words: Map<Long,Int>,integers: Map<Long,UInt>,
+        tables: Map<Long,org.graphiks.kanvas.render.ir.ImmutableUBytes>,facts: List<ColorBranchFactV1>) {
+        val words = java.util.Collections.unmodifiableMap(LinkedHashMap(words))
+        val integers = java.util.Collections.unmodifiableMap(LinkedHashMap(integers))
+        val tables = java.util.Collections.unmodifiableMap(LinkedHashMap(tables))
+        private val facts = immutableList(facts)
+        val identity: String = "${numeric.canonicalIdentity}:${child?.canonicalIdentity}:${graph.canonicalIdentity}:" +
+            "${this.words}:${this.integers}:${this.tables.mapValues { it.value.canonicalId.value }}:" +
+            this.facts.map { Triple(it.taken,it.left,it.right) }
+    }
+
     internal companion object {
+        fun sealForSource(mode: BlendMode,color: ColorARGB,upload: ImageUploadPlanV1,
+            coordinates: ImageCoordinatePlanV1,numeric: ImageNumericAuthorityV1,paintAlphaF32: Float,
+            child: ColorSourceProofV1?): ImageAtlasBlendNumericAuthorityV1? = try {
+            val schedule = BlendFormulaOperationGraphV1.read(requireNotNull(
+                BlendFormulaProgramV1.selectedAtlasSourceWgsl(mode.name.lowercase()))) ?: throw Unbounded()
+            val graph = ColorSourceProofCompilerV1.graphForCapturedImage(numeric,upload,child,schedule)
+            val words = linkedMapOf<Long,Int>()
+            val integers = linkedMapOf<Long,UInt>()
+            val tables = linkedMapOf<Long,org.graphiks.kanvas.render.ir.ImmutableUBytes>()
+            var headerWordI64 = 0L
+            RawMaterialRequirementsV2.forEachImageHeaderWord(coordinates,upload,paintAlphaF32,numeric.graph.sampling,
+                numeric.cellSelection,color) { words[headerWordI64++] = it }
+            val layout = ImageSourceLayoutV3(child?.gradientStopSlab != null,numeric.cellSelection != null,
+                numeric.cellSelection?.lattice == true,numeric.cellSelection?.capacityI32 ?: 9,true)
+            require(headerWordI64 == layout.imageUniformByteCountI64/4L)
+            child?.let {
+                it.numericWordBits.forEach { (word,bits) -> words[Math.addExact(headerWordI64,word)] = bits }
+                it.integerWordValuesU32.forEach { (word,bits) -> integers[Math.addExact(headerWordI64,word)] = bits }
+                it.tableRecords.forEach { (word,table) -> tables[Math.addExact(headerWordI64,word)] = table }
+            }
+            val facts = ColorRoundedGraphProofV1.prove(graph,words,tables,numeric.copyDeviceBoundsF32(),
+                integers,child?.gradientStopSlab) ?: throw Unbounded()
+            ImageAtlasBlendNumericAuthorityV1(mode,color,upload.contentIdentity,numeric.graph.colorAlpha,child != null,
+                null,null,child?.sourceIdentity,schedule,SourceDerivation(numeric,child,graph,words,integers,tables,facts))
+        } catch (_: Unbounded) { null } catch (_: IllegalArgumentException) { null }
+
         fun seal(mode: BlendMode, color: ColorARGB, upload: ImageUploadPlanV1,
             colorAlpha: ImageColorAlphaPlanV1, maskChild: Boolean, childSourceIdentity: String?,
             maskColor: ColorARGB?): ImageAtlasBlendNumericAuthorityV1? = try {

@@ -36,19 +36,165 @@ public class RawMaterialRequirementsV2 private constructor(
     public val canonicalIdentity: String = structuralId + ":raw-v2:" + uniformBytes.joinToString(",") + slabIdentity
     /** Native buffers bind at offset zero; alignment never adds a dynamic stride. */
     public fun fitsUniformBinding(capabilities: PlanCapabilitySnapshot): Boolean =
-        uniformByteCountI64 in 1L..Int.MAX_VALUE.toLong() &&
-            uniformByteCountI64 <= UInt.MAX_VALUE.toLong() &&
-            uniformByteCountI64 % BINDING_STRIDE_BYTES_I64 == 0L &&
-            capabilities.maxUniformBufferBindingSizeBytesI64?.let { uniformByteCountI64 <= it } == true &&
-            uniformByteCountI64 <= capabilities.maxBufferSizeBytes &&
-            (!(hasCoordinatesV2 || imageSource) || capabilities.minUniformBufferOffsetAlignment.let { it > 0 && it and (it - 1) == 0 } &&
-                capabilities.maxBindingsPerBindGroupI32?.let { it >= bindGroupEntryCountI32 } == true &&
-                capabilities.maxUniformBuffersPerShaderStageI32?.let { it >= 2 } == true &&
-                capabilities.maxBindGroupsI32?.let { it >= 2 } == true)
+        fitsLegacyUniformBinding(uniformByteCountI64, hasCoordinatesV2, imageSource, bindGroupEntryCountI32, capabilities)
 
     public class Refusal internal constructor(public val code: String) : IllegalArgumentException(code)
 
+    /** The old ABI's repeatable word recipe; measuring it never allocates a payload. */
+    internal class LegacyLayout private constructor(
+        val bindingCountI32: Int,
+        val uniformByteCountI64: Long,
+        val hasCoordinatesV2: Boolean,
+        val bindGroupEntryCountI32: Int,
+        val structuralId: String,
+        val slabIdentity: String,
+        private val table: MaterialPlanTable,
+        private val root: MaterialPlanRef,
+        private val leafI32: Int,
+        private val child: LegacyLayout?,
+        val imageLayoutV3: ImageSourceLayoutV3?,
+    ) {
+        fun forEachWord(consume: (Int) -> Unit) = forEachRelocatedWord(emptyMap(),consume)
+
+        internal fun forEachRelocatedWord(ranges: Map<MaterialBindingPlan,GradientStopRangeV1>, consume: (Int) -> Unit) {
+            val sink = RawWordSink(consume)
+            val image = table.entry(root).bindings as? ImageSampleV3
+            if (image == null) writeUniformWords(table, root, leafI32, sink,ranges)
+            else writeImageUniformWords(image.execution, child, sink,ranges)
+            check(sink.wordCountI64 * 4L == uniformByteCountI64)
+        }
+
+        /** An exact historical identity expression with one frame-scoped slab variable.
+         * This is metadata only: it has no pack operation and issues no Raw authority. */
+        fun relocated(ranges: Map<MaterialBindingPlan,GradientStopRangeV1>, sharedSlabOwner: Any): RelocatedLegacyLayout {
+            val captured = java.util.Collections.unmodifiableMap(java.util.IdentityHashMap(ranges))
+            fun identity(layout: LegacyLayout): LegacyPhysicalIdentity {
+                val image = layout.table.entry(layout.root).bindings as? ImageSampleV3
+                val leaf = layout.table.entry(MaterialPlanRef(layout.leafI32)).bindings
+                val gradient = leaf is MaterialBindingPlan.GradientV1 || leaf is MaterialBindingPlan.GradientV2
+                if (gradient) require(leaf in captured) { W5fPlanDiagnostics.Schema }
+                val words = buildString {
+                    var first = true
+                    layout.forEachRelocatedWord(captured) { word -> repeat(4) { byte ->
+                        if (!first) append(',')
+                        first = false
+                        append((word ushr (byte*8)).toByte())
+                    } }
+                }
+                val suffix = when {
+                    image != null -> LegacyPhysicalSuffix.Image(image.execution.canonicalIdentity,layout.child?.let(::identity))
+                    gradient -> LegacyPhysicalSuffix.SharedSlab(sharedSlabOwner)
+                    else -> LegacyPhysicalSuffix.Empty
+                }
+                return LegacyPhysicalIdentity(layout.structuralId,words,suffix)
+            }
+            return RelocatedLegacyLayout(this,identity(this))
+        }
+
+        // Preserve byte-for-byte the historical signed Byte.joinToString identity, including
+        // its field delimiters. Neither original IR nor device bounds are a substitute.
+        val canonicalIdentity: String by lazy {
+            buildString {
+                append(structuralId).append(":raw-v2:")
+                var first = true
+                forEachWord { word ->
+                    repeat(4) { byte ->
+                        if (!first) append(',')
+                        first = false
+                        append((word ushr (byte * 8)).toByte())
+                    }
+                }
+                append(slabIdentity)
+            }
+        }
+
+        fun fitsUniformBinding(capabilities: PlanCapabilitySnapshot): Boolean = fitsLegacyUniformBinding(
+            uniformByteCountI64, hasCoordinatesV2, imageLayoutV3 != null, bindGroupEntryCountI32, capabilities)
+
+        fun pack(): RawMaterialRequirementsV2 {
+            val bytes = ByteBuffer.allocate(Math.toIntExact(uniformByteCountI64)).order(ByteOrder.LITTLE_ENDIAN)
+            forEachWord(bytes::putInt)
+            check(bytes.position() == bytes.capacity())
+            return RawMaterialRequirementsV2(bindingCountI32, uniformByteCountI64, hasCoordinatesV2,
+                bindGroupEntryCountI32, structuralId, bytes.array(), slabIdentity,
+                imageLayoutV3 != null, imageLayoutV3).also { check(it.canonicalIdentity == canonicalIdentity) }
+        }
+
+        companion object {
+            fun of(table: MaterialPlanTable, root: MaterialPlanRef): LegacyLayout = measureLegacy(table, root)
+
+            internal fun create(bindingCountI32: Int, bytesI64: Long, hasCoordinatesV2: Boolean,
+                entryCountI32: Int, structuralId: String, slabIdentity: String, table: MaterialPlanTable,
+                root: MaterialPlanRef, leafI32: Int, child: LegacyLayout? = null,
+                imageLayout: ImageSourceLayoutV3? = null): LegacyLayout = LegacyLayout(bindingCountI32,
+                bytesI64, hasCoordinatesV2, entryCountI32, structuralId, slabIdentity, table, root,
+                leafI32, child, imageLayout)
+        }
+    }
+
+    internal class RelocatedLegacyLayout internal constructor(val original: LegacyLayout,
+        private val identity: LegacyPhysicalIdentity) {
+        val uniformByteCountI64: Long get() = original.uniformByteCountI64
+        val hasCoordinatesV2: Boolean get() = original.hasCoordinatesV2
+        fun sameAllocation(other: RelocatedLegacyLayout): Boolean = identity == other.identity
+        fun authenticatesFinal(actual: LegacyLayout, slab: GradientStopSlabPlanV1?): Boolean =
+            actual.uniformByteCountI64 == uniformByteCountI64 && actual.structuralId == original.structuralId &&
+                actual.canonicalIdentity == identity.resolve(slab?.canonicalIdentity)
+        override fun hashCode(): Int = identity.hashCode()
+    }
+    internal data class LegacyPhysicalIdentity(val structure: String, val signedBytes: String, val suffix: LegacyPhysicalSuffix) {
+        fun resolve(slabIdentity: String?): String = structure + ":raw-v2:" + signedBytes + suffix.resolve(slabIdentity)
+    }
+    internal sealed interface LegacyPhysicalSuffix {
+        fun resolve(slabIdentity: String?): String
+        data object Empty : LegacyPhysicalSuffix { override fun resolve(slabIdentity: String?): String = "" }
+        class SharedSlab(private val frameOwner: Any) : LegacyPhysicalSuffix {
+            override fun equals(other: Any?): Boolean = other is SharedSlab && frameOwner === other.frameOwner
+            override fun hashCode(): Int = System.identityHashCode(frameOwner)
+            override fun resolve(slabIdentity: String?): String = requireNotNull(slabIdentity) { W5fPlanDiagnostics.Schema }
+        }
+        data class Image(val executionIdentity: String,val child: LegacyPhysicalIdentity?) : LegacyPhysicalSuffix {
+            override fun resolve(slabIdentity: String?): String = executionIdentity + (child?.resolve(slabIdentity) ?: "")
+        }
+    }
+
+    private class RawWordSink(private val consume: (Int) -> Unit) {
+        var wordCountI64: Long = 0L
+            private set
+        fun putInt(value: Int): RawWordSink {
+            consume(value)
+            wordCountI64 = Math.addExact(wordCountI64, 1L)
+            return this
+        }
+        fun putFloat(value: Float): RawWordSink = putInt(value.toRawBits())
+    }
+
     public companion object {
+        internal fun measureV4(table: MaterialPlanTable, root: MaterialPlanRef): MaterialSourceFootprintV4 {
+            return MaterialSourceFootprintV4(table,root,table.colorSourceProofV4(root)).also {
+                require(it.authenticates()) { W5fPlanDiagnostics.Schema } }
+        }
+        internal fun requireFrameBudgetV4(sources: List<MaterialSourceFootprintV4>, nonUniformBytesI64: Long,
+            budget: PlanBudget, capabilities: PlanCapabilitySnapshot, legacyCode: String): MaterialSourcePackingPermitV4 =
+            MaterialSourcePackingPermitV4.issue(sources,nonUniformBytesI64,budget,capabilities,legacyCode)
+        internal fun packV4(footprint: MaterialSourceFootprintV4, permit: MaterialSourcePackingPermitV4): RawMaterialRequirementsV2 {
+            require(permit.permits(footprint)) { W5fPlanDiagnostics.Schema }
+            val bytes = ByteBuffer.allocate(footprint.uniformByteCountI64.toInt()).order(ByteOrder.LITTLE_ENDIAN)
+            // Source word gaps are declared zero padding. Only this budget-permitted phase copies values.
+            for (wordI64 in 0 until footprint.proof.uniformWordCountI64) {
+                val table = footprint.proof.tableRecords.entries.singleOrNull { wordI64 >= it.key && wordI64 < it.key+64L }
+                val bitsI32 = if (table == null) footprint.proof.integerWordValuesU32[wordI64]?.toInt()
+                    ?: footprint.proof.numericWordBits[wordI64] ?: 0 else {
+                    val firstByteI32 = Math.toIntExact((wordI64-table.key)*4L)
+                    (0..3).fold(0) { bits, byteI32 -> bits or (table.value[firstByteI32+byteI32].toInt() shl (byteI32*8)) }
+                }
+                bytes.putInt(bitsI32)
+            }
+            check(bytes.position() == bytes.capacity())
+            return RawMaterialRequirementsV2(1,footprint.uniformByteCountI64,false,footprint.bindingCountI32,
+                footprint.table.entry(footprint.root).program.structuralId.value,bytes.array(),footprint.canonicalIdentity,
+                footprint.proof.imageExecution != null,footprint.proof.imageLayout)
+        }
         public const val BINDING_STRIDE_BYTES_I64: Long = 16L
 
         /** Geometry, target/readback, snapshots and stops enter exactly once from their owners. */
@@ -73,51 +219,32 @@ public class RawMaterialRequirementsV2 private constructor(
             checkedTotalI64(baseI64, unique.filter { it.hasCoordinatesV2 }, W5dPlanDiagnostics.CoordinateUniformBudget)
         }
 
-        public fun of(table: MaterialPlanTable, root: MaterialPlanRef): RawMaterialRequirementsV2 {
+        public fun of(table: MaterialPlanTable, root: MaterialPlanRef): RawMaterialRequirementsV2 =
+            measureLegacy(table, root).pack()
+
+        internal fun measureLegacy(table: MaterialPlanTable, root: MaterialPlanRef): LegacyLayout {
             require(root.indexI32 in 0 until table.sizeI32)
+            var v4CheckI32 = root.indexI32
+            while (true) {
+                val candidate = table.entry(MaterialPlanRef(v4CheckI32)).bindings
+                require(candidate !is ColorFilterBindingV4) { W5fPlanDiagnostics.Schema }
+                if (candidate !is MaterialBindingPlan.OpacityF32V1 || v4CheckI32 == 0) break
+                v4CheckI32--
+            }
             val image = table.entry(root).bindings as? ImageSampleV3
             if (image != null) {
                 val execution = image.execution
                 require(table.authenticatesImage(root, execution)) { W5eImagePlanDiagnostics.InvalidContract }
                 val child = if (table.entry(root).program is ImageMaterialProgramV3.MaskV3)
-                    of(table, MaterialPlanRef(root.indexI32 - 1)) else null
+                    measureLegacy(table, MaterialPlanRef(root.indexI32 - 1)) else null
                 val layout = ImageSourceLayoutV3(child?.bindGroupEntryCountI32 == 2, execution.cellSelection != null,
                     execution.cellSelection?.lattice == true, execution.cellSelection?.capacityI32 ?: 9, execution.atlasBlend != null)
                 val bytesI64 = Math.addExact(layout.imageUniformByteCountI64, child?.uniformByteCountI64 ?: 0L)
                 require(bytesI64 <= Int.MAX_VALUE) { W5eImagePlanDiagnostics.BindingLimit }
-                val bytes = ByteBuffer.allocate(bytesI64.toInt()).order(ByteOrder.LITTLE_ENDIAN).apply {
-                    execution.coordinates.uniformValuesF32().forEach(::putFloat)
-                    putFloat(execution.upload.widthI32.toFloat()).putFloat(execution.upload.heightI32.toFloat())
-                    putFloat(execution.paintAlphaF32).putFloat(execution.cellSelection?.cells?.size?.toFloat() ?: 0f)
-                    val cubic = execution.sampling as? ImageSamplingPlanV1.Cubic
-                    putFloat(cubic?.bF32 ?: 0f).putFloat(cubic?.cF32 ?: 0f).putFloat(0f).putFloat(0f)
-                    execution.cellSelection?.let { selection ->
-                        selection.copyDirectionUniformValuesF32().forEach(::putFloat)
-                        repeat(selection.capacityI32) { indexI32 ->
-                            val cell = selection.cells.getOrNull(indexI32)
-                            val sample = selection.samples.firstOrNull { it.cell === cell }
-                            if (cell == null) repeat(16) { putFloat(0f) } else {
-                                if (sample == null) repeat(8) { putFloat(0f) }
-                                else sample.coordinates.uniformValuesF32().drop(12).forEach(::putFloat)
-                                cell.outerEdges.forEach { putFloat(if (it) 1f else 0f) }
-                                val bounds = cell.copyDestinationF32()
-                                listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).forEach(::putFloat)
-                            }
-                            if (selection.lattice) {
-                                val color = (cell as? ImageCellPlanV1.SolidV1)?.color
-                                listOf(color?.redNormalized ?: 0f, color?.greenNormalized ?: 0f,
-                                    color?.blueNormalized ?: 0f, color?.alphaNormalized ?: 0f).forEach(::putFloat)
-                            }
-                        }
-                    }
-                    execution.atlasBlend?.copyColorUniformF32()?.forEach(::putFloat)
-                    child?.copyUniformBytes()?.let(::put)
-                    check(position() == capacity())
-                }.array()
-                return RawMaterialRequirementsV2(1 + (child?.bindingCountI32 ?: 0), bytesI64,
+                return LegacyLayout.create(1 + (child?.bindingCountI32 ?: 0), bytesI64,
                     child?.hasCoordinatesV2 == true, 1 + (child?.bindGroupEntryCountI32 ?: 1),
                     table.entry(root).program.structuralId.value + ":" + layout.structuralIdentity + ":" + child?.structuralId.orEmpty(),
-                    bytes, execution.canonicalIdentity + (child?.canonicalIdentity ?: ""), imageSource = true, imageLayoutV3 = layout)
+                    execution.canonicalIdentity + (child?.canonicalIdentity ?: ""), table, root, root.indexI32, child, layout)
             }
             var indexI32 = root.indexI32
             var countI32 = 1
@@ -172,18 +299,20 @@ public class RawMaterialRequirementsV2 private constructor(
                 if (binding is MaterialBindingPlan.GradientV2) W5dPlanDiagnostics.CoordinateUniformBudget
                 else "resource-limit.w5b.source-binding"
             }
-            return RawMaterialRequirementsV2(countI32, bytesI64, binding is MaterialBindingPlan.GradientV2,
+            return LegacyLayout.create(countI32, bytesI64, binding is MaterialBindingPlan.GradientV2,
                 if (gradient || binding is MaterialBindingPlan.GradientV2) 2 else 1,
                 table.entry(root).program.structuralId.value + ":srgb-endpoints-v1",
-                packUniformBytes(table, root, indexI32, bytesI64.toInt()),
-                if (gradient || binding is MaterialBindingPlan.GradientV2) requireNotNull(table.gradientStopSlab).canonicalIdentity else "")
+                if (gradient || binding is MaterialBindingPlan.GradientV2) requireNotNull(table.gradientStopSlab).canonicalIdentity else "",
+                table, root, indexI32)
         }
 
         /** Raw uniform ABI only; stop-buffer storage and native ownership remain W5c. */
-        private fun packUniformBytes(table: MaterialPlanTable, root: MaterialPlanRef, leafI32: Int, bytesI32: Int): ByteArray {
-            val uniforms = ByteBuffer.allocate(bytesI32).order(ByteOrder.LITTLE_ENDIAN)
+        private fun writeUniformWords(table: MaterialPlanTable, root: MaterialPlanRef, leafI32: Int, uniforms: RawWordSink,
+            ranges: Map<MaterialBindingPlan,GradientStopRangeV1> = emptyMap()) {
             for (indexI32 in leafI32..root.indexI32) {
                 when (val binding = table.entry(MaterialPlanRef(indexI32)).bindings) {
+                    is GradientInterpolationBindingV4 -> error(W5fPlanDiagnostics.Schema)
+                    is ColorFilterBindingV4 -> error(W5fPlanDiagnostics.Schema)
                     is ImageSampleV3 -> error(W5eImagePlanDiagnostics.InvalidContract)
                     is MaterialBindingPlan.GradientV1 -> binding.copyUniformValuesF32().forEach(uniforms::putFloat)
                     is MaterialBindingPlan.GradientV2 -> binding.copyUniformValuesF32().forEach(uniforms::putFloat)
@@ -198,7 +327,7 @@ public class RawMaterialRequirementsV2 private constructor(
                 }
             }
             val binding = table.entry(MaterialPlanRef(leafI32)).bindings
-            val range = when (binding) {
+            val range = ranges[binding] ?: when (binding) {
                 is MaterialBindingPlan.GradientV1 -> binding.stopRange
                 is MaterialBindingPlan.GradientV2 -> binding.stopRange
                 else -> null
@@ -266,8 +395,64 @@ public class RawMaterialRequirementsV2 private constructor(
                     }
                 }
             }
-            check(uniforms.position() == uniforms.capacity())
-            return uniforms.array()
         }
+
+        internal fun forEachImageHeaderWord(execution: ImageSampleExecutionPlanV1, consume: (Int)->Unit) =
+            writeImageHeaderWords(execution,RawWordSink(consume))
+        internal fun forEachImageHeaderWord(coordinates: ImageCoordinatePlanV1,upload: ImageUploadPlanV1,
+            paintAlphaF32: Float,sampling: ImageSamplingPlanV1,selection: ImageCellSelectionPlanV1?,
+            atlasColor: org.graphiks.math.color.ColorARGB?,consume: (Int)->Unit) =
+            writeImageHeaderWords(coordinates,upload,paintAlphaF32,sampling,selection,atlasColor,RawWordSink(consume))
+
+        private fun writeImageUniformWords(execution: ImageSampleExecutionPlanV1, child: LegacyLayout?,
+            uniforms: RawWordSink, ranges: Map<MaterialBindingPlan,GradientStopRangeV1> = emptyMap()) {
+            writeImageHeaderWords(execution,uniforms)
+            child?.forEachRelocatedWord(ranges,uniforms::putInt)
+        }
+
+        private fun writeImageHeaderWords(execution: ImageSampleExecutionPlanV1, uniforms: RawWordSink) =
+            writeImageHeaderWords(execution.coordinates,execution.upload,execution.paintAlphaF32,execution.sampling,
+                execution.cellSelection,execution.atlasBlend?.color,uniforms)
+        private fun writeImageHeaderWords(coordinates: ImageCoordinatePlanV1,upload: ImageUploadPlanV1,
+            paintAlphaF32: Float,sampling: ImageSamplingPlanV1,selection: ImageCellSelectionPlanV1?,
+            atlasColor: org.graphiks.math.color.ColorARGB?,uniforms: RawWordSink) = with(uniforms) {
+            coordinates.uniformValuesF32().forEach(::putFloat)
+            putFloat(upload.widthI32.toFloat()).putFloat(upload.heightI32.toFloat())
+            putFloat(paintAlphaF32).putFloat(selection?.cells?.size?.toFloat() ?: 0f)
+            val cubic = sampling as? ImageSamplingPlanV1.Cubic
+            putFloat(cubic?.bF32 ?: 0f).putFloat(cubic?.cF32 ?: 0f).putFloat(0f).putFloat(0f)
+            selection?.let { selection ->
+                selection.copyDirectionUniformValuesF32().forEach(::putFloat)
+                repeat(selection.capacityI32) { indexI32 ->
+                    val cell = selection.cells.getOrNull(indexI32)
+                    val sample = selection.samples.firstOrNull { it.cell === cell }
+                    if (cell == null) repeat(16) { putFloat(0f) } else {
+                        if (sample == null) repeat(8) { putFloat(0f) }
+                        else sample.coordinates.uniformValuesF32().drop(12).forEach(::putFloat)
+                        cell.outerEdges.forEach { putFloat(if (it) 1f else 0f) }
+                        val bounds = cell.copyDestinationF32()
+                        listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).forEach(::putFloat)
+                    }
+                    if (selection.lattice) {
+                        val color = (cell as? ImageCellPlanV1.SolidV1)?.color
+                        listOf(color?.redNormalized ?: 0f, color?.greenNormalized ?: 0f,
+                            color?.blueNormalized ?: 0f, color?.alphaNormalized ?: 0f).forEach(::putFloat)
+                    }
+                }
+            }
+            atlasColor?.let { listOf(it.redNormalized,it.greenNormalized,it.blueNormalized,it.alphaNormalized).forEach(::putFloat) }
+        }
+
+        private fun fitsLegacyUniformBinding(bytesI64: Long, hasCoordinatesV2: Boolean, imageSource: Boolean,
+            entryCountI32: Int, capabilities: PlanCapabilitySnapshot): Boolean =
+            bytesI64 in 1L..Int.MAX_VALUE.toLong() && bytesI64 <= UInt.MAX_VALUE.toLong() &&
+                bytesI64 % BINDING_STRIDE_BYTES_I64 == 0L &&
+                capabilities.maxUniformBufferBindingSizeBytesI64?.let { bytesI64 <= it } == true &&
+                bytesI64 <= capabilities.maxBufferSizeBytes &&
+                (!(hasCoordinatesV2 || imageSource) || capabilities.minUniformBufferOffsetAlignment.let {
+                    it > 0 && it and (it - 1) == 0 } &&
+                    capabilities.maxBindingsPerBindGroupI32?.let { it >= entryCountI32 } == true &&
+                    capabilities.maxUniformBuffersPerShaderStageI32?.let { it >= 2 } == true &&
+                    capabilities.maxBindGroupsI32?.let { it >= 2 } == true)
     }
 }

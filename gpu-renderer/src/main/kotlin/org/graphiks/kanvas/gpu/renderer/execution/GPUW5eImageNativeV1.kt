@@ -19,6 +19,10 @@ internal object GPUW5eImageNativeV1 {
             W5eImagePlanDiagnostics.InvalidContract
         }
         expected.imageDraws().forEach { image ->
+            require(image.authenticates(expected.materialTable)) { W5eImagePlanDiagnostics.InvalidContract }
+            (image.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let {
+                expected.constructionGraph.packedMaterialSourceV4(it)
+            }
             // The native path never synthesizes an addressing rule or hardware sampler: its only
             // image resource is the sealed textureLoad source authenticated by the plan table.
             require(image.execution.upload.widthI32 > 0 && image.execution.upload.heightI32 > 0 &&
@@ -30,7 +34,7 @@ internal object GPUW5eImageNativeV1 {
             require(image.execution.atlasBlend?.let { blend ->
                 image.originalDraw.geometry is org.graphiks.kanvas.render.ir.GeometryNode.Atlas &&
                     blend.color == image.constructionEntry.atlasEntryColor && blend.mode == image.originalDraw.operationBlendMode &&
-                    blend.authenticates(image.execution.upload, image.execution.colorAlpha, image.execution.childSourceIdentity)
+                    blend.authenticates(image.execution.upload, image.execution.colorAlpha, image.execution.childSourceIdentity,image.execution.numericAuthority)
             } != false) { W5eImagePlanDiagnostics.InvalidContract }
             require(cubic == null || cubic.bF32.isFinite() && cubic.bF32 in 0f..1f &&
                 cubic.cF32.isFinite() && cubic.cF32 in 0f..1f) { W5eImagePlanDiagnostics.CubicParameters }

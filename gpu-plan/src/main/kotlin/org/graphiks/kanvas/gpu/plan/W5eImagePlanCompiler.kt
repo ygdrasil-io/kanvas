@@ -11,7 +11,7 @@ import org.graphiks.math.geometry.RectI32
 /** One original image source command; native decomposition never creates a logical draw. */
 public class ImageDrawV1 internal constructor(
     override val commandIndex: Int,
-    override val materialAuthority: PlanDrawMaterialAuthority.MaterialV3,
+    override val materialAuthority: PlanDrawMaterialAuthority,
     public val execution: ImageSampleExecutionPlanV1,
     boundsI32: RectI32,
     override val blend: BlendPlan,
@@ -22,7 +22,16 @@ public class ImageDrawV1 internal constructor(
 ) : PlanDraw {
     private val bounds = boundsI32.copy()
     public fun copyBoundsI32(): RectI32 = bounds.copy()
-    override val color: ColorF32 get() = error("ImageDrawV1 has only V3 material authority")
+    override val color: ColorF32 get() = error("ImageDrawV1 has only issued image source authority")
+    public fun authenticates(table: MaterialPlanTable): Boolean = when (val authority = materialAuthority) {
+        is PlanDrawMaterialAuthority.MaterialV3 -> table.authenticatesImage(authority.ref,execution) &&
+            authority.imageCoordinates === execution.coordinates
+        is PlanDrawMaterialAuthority.MaterialV4 -> table.colorSourceProofV4(authority.ref).let { proof ->
+            proof.authenticates(table,authority.ref,authority.coordinates) && proof.imageExecution === execution &&
+                (authority.coordinates as? SourceCoordinatesV4.V3)?.plan === execution.coordinates
+        }
+        else -> false
+    }
 }
 
 public enum class ImageNoOpReasonV1 { DestinationBlend, EmptyNineDestination, EmptyFamilyContributions }
@@ -55,7 +64,9 @@ public class W5eImageConstructionPlanV1 internal constructor(
         it.value.w5eNoOpReason() ?: ImageNoOpReasonV1.EmptyFamilyContributions }
     public val canonicalIdentity: String = "w5e-construction-v3:${originalSceneCanonicalId.value}:$visualCommandCountI32:" + constructionGraph.id.value + ":" +
         families.joinToString(";") { it.canonicalIdentity } + ":" + originalIndices.entries.joinToString(";") { "${it.key}:${it.value}" } + ":" +
-        draws.joinToString(";") { "${it.commandIndex}:${it.originalDraw.canonicalId.value}:${it.execution.canonicalIdentity}" } +
+        draws.joinToString(";") { "${it.commandIndex}:${it.originalDraw.canonicalId.value}:${it.execution.canonicalIdentity}" +
+            if (it.materialAuthority is PlanDrawMaterialAuthority.MaterialV4)
+                ":color-v4:${materialTable.sourceIdentity(it.materialAuthority.materialPlanRef())}" else "" } +
         ordinarySources.entries.joinToString(";") { "ordinary:${it.key}:${materialTable.sourceIdentity(it.value.materialPlanRef())}" } +
         noOpDraws.entries.joinToString(";") { "noop:${it.key}:${it.value.canonicalId.value}:${it.value.w5eNoOpReason()}" }
     init {
@@ -69,8 +80,7 @@ public class W5eImageConstructionPlanV1 internal constructor(
                     image.execution.atlasBlend?.color == image.constructionEntry.atlasEntryColor &&
                     image.execution.atlasBlend?.mode == image.constructionEntry.atlasEntryColor?.let { image.originalDraw.operationBlendMode } &&
                     families.single { it.commandIndex == image.constructionEntry.originalCommandIndexI32 }.entries.any { it === image.constructionEntry } &&
-                    materialTable.authenticatesImage(image.materialAuthority.ref, image.execution) &&
-                    image.materialAuthority.imageCoordinates === image.execution.coordinates
+                    image.authenticates(materialTable)
             }) { W5eImagePlanDiagnostics.InvalidContract }
         require(peakBytesI64 <= constructionGraph.budget.maxFrameLocalBytes)
         val originalTable = constructionGraph.materialPlanTableOrNull()
@@ -96,6 +106,7 @@ public class W5eImageConstructionPlanV1 internal constructor(
                 when (original) {
                     is PlanDrawMaterialAuthority.MaterialV1 -> projected is PlanDrawMaterialAuthority.MaterialV1 && original.coordinates === projected.coordinates
                     is PlanDrawMaterialAuthority.MaterialV2 -> projected is PlanDrawMaterialAuthority.MaterialV2 && original.coordinates === projected.coordinates
+                    is PlanDrawMaterialAuthority.MaterialV4 -> projected is PlanDrawMaterialAuthority.MaterialV4 && original.coordinates === projected.coordinates
                     else -> false
                 }) { W5eImagePlanDiagnostics.InvalidContract }
         }
@@ -258,6 +269,10 @@ public class W5eImagePlanCompiler : GpuPlanCompiler {
             }
             val projected = SceneSnapshot.of(selected.scene.extent, selected.scene.colorSpace, projectedCommands)
             val metadataOnly = projected.none { it is SceneCommand.Draw }
+            val deferredColor = !metadataOnly && selected.scene.any { command ->
+                (command as? SceneCommand.Draw)?.node?.let { node -> node.paint?.colorFilter != null ||
+                    hasDeferredColor(node.material) || node.paint?.shader?.let(::hasDeferredColor) == true } == true
+            }
             val emptyCompiler = W3SolidRectPlanCompiler()
             val compiler: GpuPlanCompiler = if (metadataOnly) emptyCompiler else CapabilityCompilerChain.of(listOf(
                 W5aCompositePlanCompiler(constructionEntries), W3SolidRectPlanCompiler(), W4aAnalyticRectPlanCompiler(),
@@ -282,6 +297,51 @@ public class W5eImagePlanCompiler : GpuPlanCompiler {
                     is GpuPlanSelection.InvalidScene -> RenderPlanResult.InvalidScene(selection.diagnostics())
                     is GpuPlanSelection.ResourceLimitExceeded -> RenderPlanResult.ResourceLimitExceeded(selection.diagnostics())
                     else -> RenderPlanResult.GapOnPromotedScope(listOf(diagnostic(W5eImagePlanDiagnostics.UnsupportedSlice)))
+                }
+            }
+            if (deferredColor) {
+                val chain = requireNotNull(compiler as? CapabilityCompilerChain) { W5fPlanDiagnostics.Schema }
+                val layout = when (val result = chain.constructSourceLayout(selection.candidate,capabilities,budget) { lane ->
+                    lane.overlayImageSources { geometryDraw ->
+                        sourceNodes[geometryDraw.commandIndex]?.let { original ->
+                            val bounds = geometryDraw.w5eDeviceBoundsI32()
+                            val metadata = when (val captured = EffectiveMaterialPlanner.describeW5eImageSource(original,bounds,
+                                maxLatticeCellsI64,constructionEntries.getValue(geometryDraw.commandIndex),true)) {
+                                is SourceConstructionResultV4.Built -> captured.value
+                                is SourceConstructionResultV4.Refused -> throw IllegalArgumentException(captured.diagnosticCode)
+                            }
+                            val textureCount = 1 + (if (geometryDraw.blend is BlendPlan.DestinationReadV1) 1 else 0) +
+                                geometryDraw.w5eGeometryTextureCountI32()
+                            require(capabilities.maxSampledTexturesPerShaderStageI32?.let { it >= textureCount } == true) {
+                                W5eImagePlanDiagnostics.BindingLimit
+                            }
+                            MaterialSourceConstructionV4.captureImage(metadata,RectF32.ofLTRB(bounds.left.toFloat(),bounds.top.toFloat(),
+                                bounds.right.toFloat(),bounds.bottom.toFloat()),geometryDraw.blend)
+                        }
+                    }
+                }) {
+                    is RenderPlanResult.Ready -> result.plan
+                    is RenderPlanResult.GapNotMigrated -> return result
+                    is RenderPlanResult.GapOnPromotedScope -> return result
+                    is RenderPlanResult.InvalidScene -> return result
+                    is RenderPlanResult.ResourceLimitExceeded -> return result
+                }
+                return when (val bound = layout.prepareImageFrame { construction,table,peak ->
+                    val geometry = construction.w5eColorDraws().associateBy { it.commandIndex }
+                    val images = sourceNodes.map { (command,original) ->
+                        val draw = requireNotNull(geometry[command]) { W5eImagePlanDiagnostics.InvalidContract }
+                        val authority = draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4
+                            ?: error(W5fPlanDiagnostics.Schema)
+                        val execution = requireNotNull(table.colorSourceProofV4(authority.ref).imageExecution) { W5fPlanDiagnostics.Schema }
+                        ImageDrawV1(command,authority,execution,draw.w5eDeviceBoundsI32(),draw.blend,draw.coverage,
+                            draw.sample,original,constructionEntries.getValue(command))
+                    }
+                    val ordinary = geometry.filterKeys { it !in sourceNodes }.mapValues { it.value.materialAuthority }
+                    RenderGraph.issueW5e(W5eImageConstructionPlanV1(construction,table,images,ordinary,noOpDraws,peak,
+                        families,originalIndices,selected.scene.count { it is SceneCommand.Draw },selected.scene.canonicalId))
+                }) {
+                    is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(bound.value)
+                    is SourceConstructionResultV4.Refused -> bound.failure
                 }
             }
             val construction = when (val result = compiler.plan(selection.candidate, capabilities, budget)) {
@@ -323,7 +383,7 @@ public class W5eImagePlanCompiler : GpuPlanCompiler {
             val interned = MaterialPlanTable.intern(listOf(if (entries.isEmpty()) emptyTable else MaterialPlanTable.of(entries), geometryTable))
             val table = interned.table
             val remappedImages = images.map { image ->
-                val ref = interned.remap(0, image.materialAuthority.ref)
+                val ref = interned.remap(0, image.materialAuthority.materialPlanRef())
                 val execution = (table.entry(ref).bindings as ImageSampleV3).execution
                 ImageDrawV1(image.commandIndex, PlanDrawMaterialAuthority.MaterialV3(ref, execution.coordinates), execution,
                     image.copyBoundsI32(), image.blend, image.coverage, image.sample, image.originalDraw, image.constructionEntry)
@@ -344,7 +404,7 @@ public class W5eImagePlanCompiler : GpuPlanCompiler {
                 require(stagingI64 <= minOf(capabilities.maxBufferSizeBytes, Int.MAX_VALUE.toLong())) { W5eImagePlanDiagnostics.Capability }
                 extraBytesI64 = Math.addExact(extraBytesI64, Math.addExact(upload.byteCountI64, stagingI64))
             }
-            val imageRequirements = remappedImages.map { RawMaterialRequirementsV2.of(table, it.materialAuthority.ref) }
+            val imageRequirements = remappedImages.map { RawMaterialRequirementsV2.of(table, it.materialAuthority.materialPlanRef()) }
             val ordinaryRequirements = ordinarySources.values.map { RawMaterialRequirementsV2.of(table, it.materialPlanRef()) }
             for (source in (imageRequirements + ordinaryRequirements).distinctBy { it.canonicalIdentity }) {
                 require(source.fitsUniformBinding(capabilities)) { W5eImagePlanDiagnostics.BindingLimit }
@@ -365,7 +425,7 @@ public class W5eImagePlanCompiler : GpuPlanCompiler {
             val finalExecutions = mutableMapOf<MaterialPlanRef, ImageSampleExecutionPlanV1>()
             val finalImages = remappedImages.map { image ->
                 val source = image.execution
-                val ref = image.materialAuthority.ref
+                val ref = image.materialAuthority.materialPlanRef()
                 val execution = finalExecutions.getOrPut(ref) { ImageSampleExecutionPlanV1(source.upload,
                     source.coordinates, source.colorAlpha, source.numericAuthority, source.paintAlphaF32,
                     source.childSourceIdentity, peakI64, source.sampling, source.tileModes, source.atlasBlend) }
@@ -390,10 +450,11 @@ public class W5eImagePlanCompiler : GpuPlanCompiler {
         physicalTransform: org.graphiks.math.matrix.Matrix3x3F32 = node.transform): DrawNode {
         val node = node.copy(transform = physicalTransform)
         val neutral = MaterialNode.Transparent
-        val paint = node.paint?.copy(color = ColorARGB.Transparent, shader = neutral) ?: PaintNode(
+        val paint = node.paint?.copy(color = ColorARGB.Transparent, shader = neutral,colorFilter=null) ?: PaintNode(
             ColorARGB.Transparent, neutral, BlendMode.SRC_OVER, null, null, null, null, null,
             PaintStyleNode.FILL, 0f, StrokeCapNode.BUTT, StrokeJoinNode.MITER, 4f, node.coverage == CoverageRequest.ANTIALIASED)
-        if (node.origin != DrawOrigin.IMAGE && node.origin != DrawOrigin.IMAGE_NINE && node.origin != DrawOrigin.IMAGE_LATTICE && node.origin != DrawOrigin.ATLAS) return node.copy(material = neutral, paint = paint)
+        if (node.origin != DrawOrigin.IMAGE && node.origin != DrawOrigin.IMAGE_NINE && node.origin != DrawOrigin.IMAGE_LATTICE && node.origin != DrawOrigin.ATLAS)
+            return node.copy(material = neutral, paint = paint,effects=EffectStack.Empty)
         val destination = physicalDestination ?: when (val source = node.geometry) {
             is GeometryNode.ImagePatch -> source.copyDestination()
             is GeometryNode.ImageNine -> source.copyDestination()
@@ -412,8 +473,14 @@ public class W5eImagePlanCompiler : GpuPlanCompiler {
             (node.coverage == CoverageRequest.ANTIALIASED || aligned) &&
             node.clip !is ClipStackNode.Operations && (node.clip as? ClipStackNode.DeviceRect)?.antiAlias != true
         val geometry = if (rectLane) GeometryNode.Rect.of(bounds) else GeometryNode.Path(PathBuilder().addRect(bounds).build())
+        // An omitted image Paint has the same hard-edge construction as the
+        // neutral paint synthesized above. Keep DEFAULT on the original image
+        // draw; only its physical construction must name the existing coverage.
+        val coverage = if (node.paint == null && node.coverage == CoverageRequest.DEFAULT)
+            CoverageRequest.HARD_EDGE else node.coverage
         return node.copy(geometry = geometry, origin = if (rectLane) DrawOrigin.RECT else DrawOrigin.PATH,
-            resource = null, material = neutral, paint = paint, operationBlendMode = null)
+            coverage = coverage,
+            resource = null, material = neutral, paint = paint, operationBlendMode = null,effects=EffectStack.Empty)
     }
     private fun isImageSource(node: DrawNode): Boolean {
         var source = node.material
@@ -421,6 +488,8 @@ public class W5eImagePlanCompiler : GpuPlanCompiler {
             source = when (val current = source) {
                 is MaterialNode.WithLocalMatrix -> current.material
                 is MaterialNode.Opacity -> current.material
+                is MaterialNode.WithColorFilter -> current.material
+                is MaterialNode.WithWorkingColorSpace -> current.material
                 else -> return current is MaterialNode.ImageSample
             }
         }
@@ -436,24 +505,32 @@ public class W5eImagePlanCompiler : GpuPlanCompiler {
         if (!direct && !(node.origin == DrawOrigin.RECT && node.geometry is GeometryNode.Rect ||
                 node.origin == DrawOrigin.PATH && node.geometry is GeometryNode.Path)) return false
         val paint = node.paint
-        if (paint != null && (paint.style != PaintStyleNode.FILL || paint.blender != null || paint.colorFilter != null ||
+        if (paint != null && (paint.style != PaintStyleNode.FILL || paint.blender != null ||
                 paint.maskFilter != null || paint.imageFilter != null || paint.pathEffect != null) ||
-            node.effects !is EffectStack.Empty || node.operationBlendMode != null && node.origin != DrawOrigin.ATLAS) return false
+            !colorFilterEffectsMatchPaint(node) || node.operationBlendMode != null && node.origin != DrawOrigin.ATLAS) return false
         var source = node.material
         repeat(65) {
             source = when (val current = source) {
                 is MaterialNode.WithLocalMatrix -> current.material
                 is MaterialNode.Opacity -> current.material
+                is MaterialNode.WithColorFilter -> current.material
+                is MaterialNode.WithWorkingColorSpace -> current.material
                 is MaterialNode.ImageSample -> return current.image is ImageResourceSnapshot.Pixels
                 else -> return false
             }
         }
         return false
     }
-    private fun lcmI64(leftI64: Long, rightI64: Long): Long {
-        var aI64 = leftI64; var bI64 = rightI64
-        while (bI64 != 0L) { val restI64 = aI64 % bI64; aI64 = bI64; bI64 = restI64 }
-        return Math.multiplyExact(leftI64 / aI64, rightI64)
+    private fun hasDeferredColor(material: MaterialNode): Boolean = when (material) {
+        is MaterialNode.WithColorFilter,is MaterialNode.WithWorkingColorSpace -> true
+        is MaterialNode.Opacity -> hasDeferredColor(material.material)
+        is MaterialNode.WithLocalMatrix -> hasDeferredColor(material.material)
+        is MaterialNode.CoordClamp -> hasDeferredColor(material.material)
+        is MaterialNode.LinearGradient -> material.interpolation != ColorInterpolation.SRGB
+        is MaterialNode.RadialGradient -> material.interpolation != ColorInterpolation.SRGB
+        is MaterialNode.SweepGradient -> material.interpolation != ColorInterpolation.SRGB
+        is MaterialNode.ConicalGradient -> material.interpolation != ColorInterpolation.SRGB
+        else -> false
     }
     private fun gap(code: String): GpuPlanSelection.NotCandidate = GpuPlanSelection.NotCandidate(listOf(diagnostic(code)))
     private fun diagnostic(code: String): RenderDiagnostic = RenderDiagnostic(RenderDiagnosticCode(code),
@@ -463,6 +540,13 @@ public class W5eImagePlanCompiler : GpuPlanCompiler {
         public const val CAPABILITY_ID: String = "w5e-decoded-nearest-image-v1"
         public const val CONSTRUCTION_CAPABILITY_ID: String = "w5e-rect-construction-v1"
     }
+}
+
+/** Original image upload row-alignment arithmetic, shared with the final metadata inventory. */
+internal fun lcmI64(leftI64: Long, rightI64: Long): Long {
+    var aI64 = leftI64; var bI64 = rightI64
+    while (bI64 != 0L) { val restI64 = aI64 % bI64; aI64 = bI64; bI64 = restI64 }
+    return Math.multiplyExact(leftI64 / aI64, rightI64)
 }
 
 internal fun RenderGraph.w5eColorDraws(): List<PlanDraw> =

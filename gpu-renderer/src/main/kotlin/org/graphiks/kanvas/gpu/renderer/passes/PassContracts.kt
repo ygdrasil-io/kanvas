@@ -439,11 +439,8 @@ class GPUDrawPacket(
                     role == GPUDrawPacketRole.PathStencilCover
             }?.let { witness ->
                 require(witness.validates(commandIdValue))
-                witness.coordinatesV2?.let { coordinatesV2 ->
-                    org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2.issue(
-                        witness.sourcePlanTable, witness.ref, commandIdValue, coordinatesV2)
-                } ?: org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2.issue(
-                    witness.sourcePlanTable, witness.ref, commandIdValue, witness.coordinates)
+                org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2.issue(
+                    witness.sourcePlanTable, witness.materialAuthority, commandIdValue, witness.packedSourceV4)
             }
         private set
 

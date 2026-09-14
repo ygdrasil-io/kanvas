@@ -17,6 +17,11 @@ public class ImageUploadPlanV1 private constructor(
     private val bytes = bytes.copyOf()
     public val byteCountI64: Long = this.bytes.size.toLong()
     public fun copyLogicalBytes(): ByteArray = bytes.copyOf()
+    /** Indexed read of the already captured logical rows, without another payload copy. */
+    internal fun logicalByteU8(indexI64: Long): Int {
+        require(indexI64 in 0L until byteCountI64) { W5eImagePlanDiagnostics.Payload }
+        return bytes[Math.toIntExact(indexI64)].toInt() and 255
+    }
     public val contentIdentity: String = run {
         val digest = MessageDigest.getInstance("SHA-256")
         digest.update("w5e-upload-v1:$widthI32:$heightI32:$logicalRowBytesI64:${logicalFormat.name}:${physicalFormat.name}:".encodeToByteArray())

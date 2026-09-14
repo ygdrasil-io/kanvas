@@ -115,7 +115,7 @@ import org.graphiks.math.geometry.PathFillGeometryF32
 /** Lowers only the authenticated W4c path-fill graph; it never re-enters Scene IR or legacy tessellation. */
 internal class W4cPathFillGraphLowerer {
     internal fun w5bPacket(pass: PlanPass, draws: List<PathFillDraw>, table: MaterialPlanTable,
-        bounds: GPUPixelBounds): W4cBuiltPass {
+        bounds: GPUPixelBounds, graph: RenderGraph): W4cBuiltPass {
         val command = when (pass) {
             is PlanPass.RenderPass -> pass.draws().single().commandIndex
             is PlanPass.StencilGeometryProducerV3 -> pass.commandIndexI32
@@ -131,7 +131,7 @@ internal class W4cPathFillGraphLowerer {
                 GPUDrawPacketRole.PathStencilCover else GPUDrawPacketRole.Shading,
             if (draw.strategy == PathFillStrategy.StencilCover) GPUCorePrimitiveCoverageMode.Stencil1x else GPUCorePrimitiveCoverageMode.FullOrScissor,
             if (producer) GPUClipCoveragePlan.NoClip else clip.coverage,
-            if (producer) GPUClipExecutionPlan.NoClip else clip.execution, table, bounds)
+            if (producer) GPUClipExecutionPlan.NoClip else clip.execution, table, bounds, graph)
     }
 
     fun lower(request: GpuPlanLoweringRequest): GpuPlanLoweringResult = try {
@@ -196,7 +196,7 @@ internal class W4cPathFillGraphLowerer {
         ) ?: return invalid("The W4c graph memory facts cannot be represented by the renderer.")
 
         val builtPasses = graph.renderPasses.map { pass ->
-            builtPass(pass, graph.visualDraws, graph.materialPlanTable, targetBounds)
+            builtPass(pass, graph.visualDraws, graph.materialPlanTable, targetBounds, request.graph)
         }
         val capabilitySeal = GPUFrameCapabilitySeal.capture(request.frameId, request.deviceGeneration, request.capabilities)
         val scratch = sealScratch(
@@ -302,9 +302,16 @@ internal class W4cPathFillGraphLowerer {
         if (W4cPathFillPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId)) {
             val table = materialPlanTable ?: return null
             if (visual.any { visualDraw ->
-                    val authority = visualDraw.draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV1
-                        ?: return@any true
-                    runCatching { W5aMaterialPlanLowerer().lower(table, authority.ref) }.getOrNull() == null
+                    val authority = visualDraw.draw.materialAuthority
+                    val ref = when (authority) {
+                        is PlanDrawMaterialAuthority.MaterialV1 -> authority.ref
+                        is PlanDrawMaterialAuthority.MaterialV4 -> {
+                            graph.packedMaterialSourceV4(authority)
+                            authority.ref
+                        }
+                        else -> return@any true
+                    }
+                    runCatching { W5aMaterialPlanLowerer().lower(table, ref) }.getOrNull() == null
                 }
             ) return null
         } else if (materialPlanTable != null ||
@@ -579,6 +586,7 @@ internal class W4cPathFillGraphLowerer {
         visualDraws: List<W4cVisualDraw>,
         materialPlanTable: MaterialPlanTable?,
         targetBounds: GPUPixelBounds,
+        graph: RenderGraph,
     ): W4cBuiltPass = when (pass) {
         is PlanPass.RenderPass -> {
             val draw = pass.draws().singleOrNull() as? PathFillDraw
@@ -594,6 +602,7 @@ internal class W4cPathFillGraphLowerer {
                 clipExecution = clip.execution,
                 materialPlanTable = materialPlanTable,
                 targetBounds = targetBounds,
+                graph = graph,
             )
         }
         is PlanPass.StencilProducer -> {
@@ -609,6 +618,7 @@ internal class W4cPathFillGraphLowerer {
                 clipExecution = GPUClipExecutionPlan.NoClip,
                 materialPlanTable = materialPlanTable,
                 targetBounds = targetBounds,
+                graph = graph,
             )
         }
         is PlanPass.StencilCover -> {
@@ -625,6 +635,7 @@ internal class W4cPathFillGraphLowerer {
                 clipExecution = clip.execution,
                 materialPlanTable = materialPlanTable,
                 targetBounds = targetBounds,
+                graph = graph,
             )
         }
         else -> error("Validated W4c graph contains an unsupported pass")
@@ -645,6 +656,7 @@ internal class W4cPathFillGraphLowerer {
         clipExecution: GPUClipExecutionPlan,
         materialPlanTable: MaterialPlanTable?,
         targetBounds: GPUPixelBounds,
+        graph: RenderGraph,
     ): W4cBuiltPass {
         val geometry = draw.copyGeometryF32()
         val scissor = draw.copyScissorI32()
@@ -673,7 +685,8 @@ internal class W4cPathFillGraphLowerer {
                 geometry = geometryInput(geometry, plannedScissor, draw.strategy),
                 premultipliedRgba = listOf(color.red, color.green, color.blue, color.alpha),
                 material = if (role == GPUDrawPacketRole.PathStencilProducer) null else
-                    W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex),
+                    W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex,
+                        (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let(graph::packedMaterialSourceV4)),
                 targetBounds = targetBounds,
                 scissorBounds = plannedScissor,
                 clipCoveragePlan = clipCoverage,
@@ -1054,6 +1067,7 @@ internal class W4cPathFillGraphLowerer {
         table: MaterialPlanTable?,
         authority: PlanDrawMaterialAuthority,
     ): ColorF32? = when (authority) {
+        is PlanDrawMaterialAuthority.MaterialV4 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }
         is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
         is PlanDrawMaterialAuthority.MaterialV3 -> error(org.graphiks.kanvas.gpu.plan.W5eImagePlanDiagnostics.InvalidContract)
         is PlanDrawMaterialAuthority.MaterialV2 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }

@@ -28,7 +28,7 @@ internal class SnapshotDisplayListBuffer(
     private val recorded = mutableListOf<DisplayOp>()
     private val gradientStops = RecordingGradientStopBudget(captureLimits.maxGradientStopsI32)
     private val imageBytes = RecordingImageByteBudget(captureLimits.maxImageBytesI64)
-    private val appendContext = GeometrySnapshotContext(gradientStops, imageBytes)
+    private val appendContext = GeometrySnapshotContext(gradientStops, imageBytes, captureLimits)
 
     override fun append(op: DisplayOp) {
         gradientStops.append { imageBytes.append { appendContext.append(op) { recorded += it } } }

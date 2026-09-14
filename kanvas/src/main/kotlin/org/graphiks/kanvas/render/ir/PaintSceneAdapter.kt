@@ -30,6 +30,9 @@ public object PaintSceneAdapter {
             throw CaptureFailure("picture-filter-requires-context", "Picture image filters require scene capture context")
         },
     ): PaintNode {
+        ColorFilterCapturePreflight.validatePaint(paint, limits)?.let {
+            throw CaptureFailure(it.code.value, it.message)
+        }
         val gradientStops = GradientStopCaptureBudget(limits.maxGradientStopsI32)
         paint.shader?.let { preflightShader(it, limits, gradientStops) }
         (paint.maskFilter as? MaskFilter.Shader)?.shader?.let { preflightShader(it, limits, gradientStops) }
@@ -162,10 +165,9 @@ public object PaintSceneAdapter {
             is Shader.Opacity -> source = node.shader
             is Shader.WithLocalMatrix -> source = node.shader
             is Shader.CoordClamp -> source = node.shader
-            is Shader.LinearGradient -> return node.interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB
-            is Shader.RadialGradient -> return node.interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB
-            is Shader.SweepGradient -> return node.interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB
-            is Shader.ConicalGradient -> return node.interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB
+            is Shader.WithColorFilter -> source = node.shader
+            is Shader.WithWorkingColorSpace -> source = node.shader
+            is Shader.LinearGradient, is Shader.RadialGradient, is Shader.SweepGradient, is Shader.ConicalGradient -> return true
             is Shader.Image -> return node.sampling == SamplingOptions.NEAREST &&
                 node.tileModeX == org.graphiks.kanvas.paint.TileMode.CLAMP &&
                 node.tileModeY == org.graphiks.kanvas.paint.TileMode.CLAMP
@@ -185,10 +187,10 @@ public object PaintSceneAdapter {
         is Shader.Blend -> MaterialNode.Blend(BlendMode.valueOf(mode.name), dst.toMaterial(captureImage, false), src.toMaterial(captureImage, false))
         is Shader.WithLocalMatrix -> MaterialNode.WithLocalMatrix(shader.toMaterial(captureImage, preserveW5dMatrices),
             if (preserveW5dMatrices) matrix.copy() else matrix.checked("shader.local-matrix"))
-        is Shader.WithColorFilter -> MaterialNode.WithColorFilter(shader.toMaterial(captureImage, false), filter.toNode(captureImage))
+        is Shader.WithColorFilter -> MaterialNode.WithColorFilter(shader.toMaterial(captureImage, preserveW5dMatrices), filter.toNode(captureImage))
         is Shader.PerlinNoise -> MaterialNode.PerlinNoise(baseX.checked("shader.base-x"), baseY.checked("shader.base-y"), numOctaves, seed, tileSize?.checked("shader.tile-size"))
         is Shader.FractalNoise -> MaterialNode.FractalNoise(baseX.checked("shader.base-x"), baseY.checked("shader.base-y"), numOctaves, seed, tileSize?.checked("shader.tile-size"))
-        is Shader.WithWorkingColorSpace -> MaterialNode.WithWorkingColorSpace(shader.toMaterial(captureImage, false), ColorInterpolation.valueOf(interpolation.name))
+        is Shader.WithWorkingColorSpace -> MaterialNode.WithWorkingColorSpace(shader.toMaterial(captureImage, preserveW5dMatrices), ColorInterpolation.valueOf(interpolation.name))
         is Shader.CoordClamp -> MaterialNode.CoordClamp(shader.toMaterial(captureImage, preserveW5dMatrices),
             if (preserveW5dMatrices) subset.copy() else subset.checked("shader.subset"))
         is Shader.RuntimeEffect -> MaterialNode.RuntimeEffect.of(

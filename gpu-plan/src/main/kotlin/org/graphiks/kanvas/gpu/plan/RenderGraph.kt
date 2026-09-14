@@ -25,6 +25,7 @@ public class RenderGraph private constructor(
     private val w5bGeometryIssued: Boolean = false,
     w5bGeometryLanes: List<W5bGeometryLanePlanV3> = emptyList(),
     private val w5eImageConstruction: W5eImageConstructionPlanV1? = null,
+    packedSourcesV4: Map<String, RawMaterialRequirementsV2> = emptyMap(),
 ) {
     private val storedTargetExtent: SizeI32 = targetExtent.copy()
     public val targetExtent: SizeI32
@@ -33,6 +34,15 @@ public class RenderGraph private constructor(
     private val storedPasses = immutableList(passes)
     private val storedDependencies = immutableList(dependencies)
     private val storedW5bGeometryLanes = immutableList(w5bGeometryLanes)
+    private val storedPackedSourcesV4 = java.util.Collections.unmodifiableMap(LinkedHashMap(packedSourcesV4))
+    public fun packedMaterialSourceV4(authority: PlanDrawMaterialAuthority.MaterialV4): RawMaterialRequirementsV2 {
+        val table = requireNotNull(materialPlanTable) { W5fPlanDiagnostics.Schema }
+        val footprint = RawMaterialRequirementsV2.measureV4(table,authority.ref)
+        require(footprint.proof.authenticates(table,authority.ref,authority.coordinates)) {
+            W5fPlanDiagnostics.Schema
+        }
+        return requireNotNull(storedPackedSourcesV4[footprint.canonicalIdentity]) { W5fPlanDiagnostics.Schema }
+    }
 
     public fun resources(): List<PlanResource> = storedResources
     public fun passes(): List<PlanPass> = storedPasses
@@ -66,8 +76,80 @@ public class RenderGraph private constructor(
     public fun w4eNativePayloadOrNull(): W4eNativePayloadPlan? = w4eNativePayloadPlan
 
     public companion object {
+        internal fun publishConstruction(construction: RenderGraphConstruction,
+            packed: PackedFrameSourcesV4): RenderGraph {
+            var graph = RenderGraph(
+            construction.id, construction.capabilityId, construction.targetExtent, construction.colorFormat,
+            construction.capabilities, construction.budget, construction.visualCommandCount,
+            construction.resources(), construction.passes(), construction.dependencies(), construction.peakFrameLocalBytes,
+            null, null, null, null, construction.materialTable, packedSourcesV4 = packed.forConstruction(construction))
+            if (construction.w4dIssued) graph = issueW4dCompilerWitness(graph)
+            if (construction.generalIssued) graph = issueW4dGeneralCompilerWitness(graph)
+            if (construction.geometryIssued) graph = issueW5bGeometry(graph, construction.w5bGeometryLanes().map {
+                W5bGeometryLanePlanV3(publishConstruction(it.sourceGraph, packed),it.commandIndicesI32(),
+                    it.drawDataResources,it.depthStencil)
+            })
+            return graph
+        }
+
+        internal fun issueW4dCompilerWitness(graph: RenderGraphConstruction): RenderGraphConstruction {
+            require(W4dPathStrokePlanCompiler.isHistoricalCapabilityId(graph.capabilityId) ||
+                W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId))
+            require(if (W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId))
+                graph.hasW5aPathDrawMaterialContract() else graph.hasLegacyPathDrawColorContract())
+            require(!graph.w4dIssued)
+            canonicalW4dGraphDigest(graph)
+            return graph.withWitness(w4d = true)
+        }
+
+        internal fun issueW4dGeneralCompilerWitness(graph: RenderGraphConstruction): RenderGraphConstruction {
+            require(W4dGeneralPathPlanCompiler.isLegacyCapabilityId(graph.capabilityId) ||
+                W4dGeneralPathPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId))
+            require(if (W4dGeneralPathPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId))
+                graph.hasW5aMaterialPathContract() else graph.hasLegacyPathColorContract())
+            require(!graph.generalIssued)
+            canonicalW4dGeneralGraphDigest(graph)
+            return graph.withWitness(general = true)
+        }
+
+        internal fun issueW5bGeometry(graph: RenderGraphConstruction,
+            lanes: List<GeometryLaneConstruction> = emptyList()): RenderGraphConstruction {
+            validateGeometryConstructionDraws(graph.passes(),graph.materialPlanTableOrNull())
+            require(graph.capabilityId in setOf(W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID,
+                W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID,W4cPathFillPlanCompiler.W5B_CAPABILITY_ID,
+                W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID,W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID,
+                W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID))
+            return graph.withWitness(geometry = true, newLanes = if (lanes.isEmpty() && graph.capabilityId in setOf(
+                W4cPathFillPlanCompiler.W5B_CAPABILITY_ID,W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID) && graph.visualCommandCount > 0) {
+                val colors = visualDraws(graph.passes())
+                listOf(GeometryLaneConstruction(graph,colors.map { it.commandIndex },
+                    PlanDrawDataResources(graph.resources().single { it.role == PlanResourceRole.VertexData }.id,
+                        graph.resources().single { it.role == PlanResourceRole.IndexData }.id,
+                        graph.resources().single { it.role == PlanResourceRole.UniformData }.id),
+                    graph.resources().singleOrNull { it.role == PlanResourceRole.DepthStencil }?.id))
+            } else lanes)
+        }
+        private fun validateGeometryConstructionDraws(passes: List<PlanPass>,table: MaterialPlanTable?) {
+            require(passes.filterIsInstance<PlanPass.RenderPass>().flatMap { it.draws() }.all {
+                (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw || it is PathStrokeDraw || it is GeneralPathDraw || it is W5bW4ePathDraw) &&
+                    (it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1 ||
+                        (it is SolidRectDraw || it is AnalyticRectDraw || it is PathFillDraw ||
+                            it is GeneralPathDraw && it.copyPathGeometry() is PathDrawGeometry.Fill ||
+                            (it is AnalyticRRectDraw || it is PathStrokeDraw || it is GeneralPathDraw) &&
+                                table?.isUnfilteredGradientV4(it.materialAuthority.materialPlanRef()) == true) &&
+                            it.materialAuthority is PlanDrawMaterialAuthority.MaterialV4 ||
+                        (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw ||
+                            it is PathFillDraw || it is PathStrokeDraw || it is GeneralPathDraw) && it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2)
+            })
+        }
         internal fun issueW5e(bridge: W5eImageConstructionPlanV1): RenderGraph {
             val geometry = bridge.constructionGraph
+            (bridge.imageDraws().map { it.materialAuthority } + bridge.ordinarySources().values).forEach { authority ->
+                if (authority is PlanDrawMaterialAuthority.MaterialV4) {
+                    require(geometry.materialPlanTableOrNull() === bridge.materialTable) { W5fPlanDiagnostics.Schema }
+                    geometry.packedMaterialSourceV4(authority)
+                }
+            }
             val cachedImages = bridge.imageDraws().map { it.execution.cacheRequest }
                 .distinctBy { it.canonicalPhysicalIdentity }.mapIndexed { ordinalI32, request ->
                     PlanResource.of(PlanResourceRole.DecodedImageV1, ordinalI32, request.kind,
@@ -79,19 +161,15 @@ public class RenderGraph private constructor(
             return RenderGraph(PlanId(bridge.canonicalIdentity), W5eImagePlanCompiler.CAPABILITY_ID,
                 geometry.targetExtent, geometry.colorFormat, geometry.capabilities, geometry.budget, bridge.visualCommandCountI32,
                 cachedImages, emptyList(), emptyList(), bridge.peakBytesI64,
-                null, null, null, null, bridge.materialTable, w5eImageConstruction = bridge)
+                null, null, null, null, bridge.materialTable, w5eImageConstruction = bridge,
+                packedSourcesV4=geometry.storedPackedSourcesV4)
         }
         internal fun issueW5bGeometry(graph: RenderGraph, lanes: List<W5bGeometryLanePlanV3> = emptyList()): RenderGraph {
             require(graph.capabilityId in setOf(W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID,
                 W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID, W4cPathFillPlanCompiler.W5B_CAPABILITY_ID,
                 W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID,
                 W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID))
-            require(graph.passes().filterIsInstance<PlanPass.RenderPass>().flatMap { it.draws() }.all {
-                (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw || it is PathStrokeDraw || it is GeneralPathDraw || it is W5bW4ePathDraw) &&
-                    (it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1 ||
-                        (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw ||
-                            it is PathFillDraw || it is PathStrokeDraw || it is GeneralPathDraw) && it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2)
-            })
+            validateGeometryConstructionDraws(graph.passes(),graph.materialPlanTableOrNull())
             return RenderGraph(graph.id, graph.capabilityId, graph.targetExtent, graph.colorFormat, graph.capabilities,
                 graph.budget, graph.visualCommandCount, graph.resources(), graph.passes(), graph.dependencies(),
                 graph.peakFrameLocalBytes, null, null, null, null, graph.materialPlanTable, w5bGeometryIssued = true,
@@ -102,7 +180,7 @@ public class RenderGraph private constructor(
                             graph.resources().single { it.role == PlanResourceRole.IndexData }.id,
                             graph.resources().single { it.role == PlanResourceRole.UniformData }.id),
                         graph.resources().singleOrNull { it.role == PlanResourceRole.DepthStencil }?.id))
-                } else lanes)
+                } else lanes, packedSourcesV4 = graph.storedPackedSourcesV4)
         }
         /** Only the composite compiler can issue this distinct, lane-owned graph representation. */
         internal fun issueW5aComposite(composite: W5aCompositePlanV1): RenderGraph {
@@ -115,7 +193,8 @@ public class RenderGraph private constructor(
             return RenderGraph(PlanId("w5a.composite.$identity"), W5aCompositePlanCompiler.CAPABILITY_ID,
                 first.targetExtent, first.colorFormat, first.capabilities, first.budget,
                 lanes.sumOf { it.visualCommandCount }, emptyList(), emptyList(), emptyList(),
-                composite.peakFrameLocalBytesI64, null, null, null, null, composite.materialTable, composite)
+                composite.peakFrameLocalBytesI64, null, null, null, null, composite.materialTable, composite,
+                packedSourcesV4 = lanes.flatMap { it.storedPackedSourcesV4.entries }.associate { it.key to it.value })
         }
 
         public fun of(
@@ -133,6 +212,24 @@ public class RenderGraph private constructor(
             materialPlanTable: MaterialPlanTable? = null,
             w5bW4eSource: RenderGraph? = null,
         ): RenderGraph {
+            return construct(id, capabilityId, targetExtent, colorFormat, capabilities, budget, visualCommandCount, resources, passes, dependencies, peakFrameLocalBytes, materialPlanTable, w5bW4eSource).publish()
+        }
+
+        internal fun construct(
+            id: PlanId,
+            capabilityId: String,
+            targetExtent: SizeI32,
+            colorFormat: PlanLogicalColorFormat,
+            capabilities: PlanCapabilitySnapshot,
+            budget: PlanBudget,
+            visualCommandCount: Int,
+            resources: List<PlanResource>,
+            passes: List<PlanPass>,
+            dependencies: List<PlanPassDependency>,
+            peakFrameLocalBytes: Long,
+            materialPlanTable: MaterialPlanTable? = null,
+            w5bW4eSource: RenderGraph? = null,
+        ): RenderGraphConstruction {
             val stopSlab = materialPlanTable?.gradientStopSlab
             if (stopSlab != null) {
                 visualDraws(passes).forEach { draw ->
@@ -161,9 +258,13 @@ public class RenderGraph private constructor(
                     }
                 }
             }
-            if (stopSlab != null && resources.none { it.role == PlanResourceRole.GradientStopData }) {
+            if (stopSlab != null && visualDraws(passes).any {
+                    materialPlanTable.sourceUsesGradientStopSlab(it.materialAuthority.materialPlanRef())
+                } && resources.none { it.role == PlanResourceRole.GradientStopData }) {
                 stopSlab.requireStorageCapabilities(capabilities)
-                val sourceRequirements = visualDraws(passes).map { draw ->
+                val sourceRequirements = visualDraws(passes).filter {
+                    it.materialAuthority !is PlanDrawMaterialAuthority.MaterialV4
+                }.map { draw ->
                     val authority = draw.materialAuthority
                     val source = RawMaterialRequirementsV2.of(materialPlanTable, authority.materialPlanRef())
                     require(source.fitsUniformBinding(capabilities)) {
@@ -176,9 +277,22 @@ public class RenderGraph private constructor(
                 val stopResource = PlanResource.of(PlanResourceRole.GradientStopData, 0, PlanResourceKind.Buffer,
                     null, null, stopSlab.byteSizeI64, setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination),
                     PlanResourceLifetime.FrameLocal, 0, passes.size)
-                return of(id, capabilityId, targetExtent, colorFormat, capabilities, budget, visualCommandCount,
+                return construct(id, capabilityId, targetExtent, colorFormat, capabilities, budget, visualCommandCount,
                     resources + stopResource, passes, dependencies, peakI64, materialPlanTable, w5bW4eSource)
             }
+            validateConstructionTopology(capabilityId, targetExtent, colorFormat, capabilities, budget,
+                visualCommandCount, resources, passes, dependencies, peakFrameLocalBytes, w5bW4eSource)
+            return RenderGraphConstruction(id, capabilityId, targetExtent, colorFormat, capabilities, budget, visualCommandCount,
+                resources, passes, dependencies, peakFrameLocalBytes, materialPlanTable)
+        }
+
+        /** Same topology/resource/geometry validation before and after final source binding. */
+        internal fun validateConstructionTopology(
+            capabilityId: String, targetExtent: SizeI32, colorFormat: PlanLogicalColorFormat,
+            capabilities: PlanCapabilitySnapshot, budget: PlanBudget, visualCommandCount: Int,
+            resources: List<PlanResource>, passes: List<PlanPass>, dependencies: List<PlanPassDependency>,
+            peakFrameLocalBytes: Long, w5bW4eSource: RenderGraph? = null,
+        ) {
             require(w5bW4eSource == null || capabilityId == W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID &&
                 w5bW4eSource.verifyW4eCompilerWitness() && w5bW4eSource.capabilityId == W4eClipPlanCompiler.W5A_HARD_CAPABILITY_ID)
             require(capabilityId != W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID || visualCommandCount == 0 || w5bW4eSource != null)
@@ -291,13 +405,12 @@ public class RenderGraph private constructor(
             val calculatedPeak = peak(resources, passes.size)
             require(calculatedPeak == peakFrameLocalBytes) { "Peak memory does not match resource lifetimes" }
             require(calculatedPeak <= budget.maxFrameLocalBytes) { "Peak memory exceeds budget" }
-            return RenderGraph(id, capabilityId, targetExtent, colorFormat, capabilities, budget, visualCommandCount,
-                resources, passes, dependencies, peakFrameLocalBytes, null, null, null, null, materialPlanTable)
         }
 
         /** Trust-boundary factory available only to the W4d compiler after public validation. */
         @JvmSynthetic
         internal fun issueW4dCompilerWitness(graph: RenderGraph): RenderGraph {
+            require(graph.storedPackedSourcesV4.isEmpty()) { W5fPlanDiagnostics.Unpromoted }
             require(
                 W4dPathStrokePlanCompiler.isHistoricalCapabilityId(graph.capabilityId) ||
                     W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId),
@@ -366,6 +479,7 @@ public class RenderGraph private constructor(
                 null,
                 null,
                 graph.materialPlanTable,
+                packedSourcesV4 = graph.storedPackedSourcesV4,
             )
         }
 
@@ -375,6 +489,7 @@ public class RenderGraph private constructor(
             graph: RenderGraph,
             nativePayload: W4eNativePayloadPlan,
         ): RenderGraph {
+            require(graph.storedPackedSourcesV4.isEmpty()) { W5fPlanDiagnostics.Unpromoted }
             require(
                 W4eClipPlanCompiler.isLegacyCapabilityId(graph.capabilityId) ||
                     W4eClipPlanCompiler.isW5aMaterialCapabilityId(graph.capabilityId),
@@ -1940,7 +2055,7 @@ public class RenderGraph private constructor(
             }
         }
 
-        private fun visualDraws(passes: List<PlanPass>): List<PlanDraw> = buildList {
+        internal fun visualDraws(passes: List<PlanPass>): List<PlanDraw> = buildList {
             passes.forEachIndexed { index, pass ->
                 when (pass) {
                     is PlanPass.RenderPass -> addAll(pass.draws())
@@ -1997,7 +2112,7 @@ public class RenderGraph private constructor(
             require(staging.byteSize == expectedStagingBytes) { "Readback staging size does not match layout" }
         }
 
-        private fun peak(resources: List<PlanResource>, passCount: Int): Long = (0 until passCount).maxOfOrNull { index ->
+        internal fun peak(resources: List<PlanResource>, passCount: Int): Long = (0 until passCount).maxOfOrNull { index ->
             resources.filter { it.firstPassIndex <= index && index < it.lastPassIndexExclusive }
                 .fold(0L) { total, resource -> Math.addExact(total, resource.byteSize) }
         } ?: 0L

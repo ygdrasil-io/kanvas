@@ -104,9 +104,27 @@ interface GPUFrameResourcePreflightProvider : GPUResourceProvider {
 
     fun prepareFrameResource(input: GPUFrameResourcePreparationInput): GPUFrameResourcePreparationDecision
 
+    fun submitFrameScratch(
+        ownerScope: String,
+        deviceGeneration: GPUDeviceGenerationID,
+    ): GPUFrameScratchSubmissionResult = GPUFrameScratchSubmissionResult.Refused(
+        physicalPoolDiagnostic(
+            "unsupported.scratch_texture.frame_submission_unconfigured",
+            "Frame scratch submission requires its owning acquisition journal.",
+            emptyMap(),
+        ),
+    )
+
     fun rollbackFrameResourcesBeforeSubmit(
         ownerScope: String,
     ): GPUPhysicalPoolMaintenanceDecision<GPUPhysicalPoolRollbackSummary>
+}
+
+sealed interface GPUFrameScratchSubmissionResult {
+    data object NoScratch : GPUFrameScratchSubmissionResult
+    data class Submitted(val submissionId: GPUResourceSubmissionID) : GPUFrameScratchSubmissionResult
+    data class Refused(val diagnostic: org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic) :
+        GPUFrameScratchSubmissionResult
 }
 
 /** Provider-issued journal namespace unique across all preflighters sharing that provider. */
@@ -182,6 +200,7 @@ class GPUConcreteResourceProvider(
     private val readbackStagingPool = GPUReadbackStagingPool(physicalPoolBudgetLedger)
     private val pendingPhysicalReservations = mutableListOf<GPUProviderPhysicalReservation>()
     private var framePreparationOrdinal: Long = 0
+    private val framePreparationGenerations = mutableMapOf<String, GPUDeviceGenerationID>()
     internal val pendingPhysicalReservationCount: Int
         @Synchronized get() = pendingPhysicalReservations.size
     private val nullBufferKeys = linkedSetOf<String>()
@@ -235,7 +254,46 @@ class GPUConcreteResourceProvider(
         framePreparationOrdinal = ordinal
         return GPUFrameResourcePreparationSession(
             "frame-preflight:$frameId:device:${deviceGeneration.value}:attempt:$ordinal",
-        )
+        ).also { framePreparationGenerations[it.ownerScope] = deviceGeneration }
+    }
+
+    @Synchronized
+    override fun submitFrameScratch(
+        ownerScope: String,
+        deviceGeneration: GPUDeviceGenerationID,
+    ): GPUFrameScratchSubmissionResult {
+        if (framePreparationGenerations[ownerScope] != deviceGeneration) {
+            return GPUFrameScratchSubmissionResult.Refused(
+                physicalPoolDiagnostic(
+                    "unsupported.scratch_texture.frame_submission_owner",
+                    "Frame scratch submission does not identify an open preparation owner and generation.",
+                    emptyMap(),
+                ),
+            )
+        }
+        val scratch = pendingPhysicalReservations.filterIsInstance<GPUProviderPhysicalReservation.Scratch>()
+            .filter { it.ownerScope == ownerScope }
+        if (scratch.any { it.lease.deviceGeneration != deviceGeneration }) {
+            return GPUFrameScratchSubmissionResult.Refused(
+                physicalPoolDiagnostic(
+                    "unsupported.scratch_texture.submission_generation_mismatch",
+                    "Frame scratch journal contains a different device generation.",
+                    emptyMap(),
+                ),
+            )
+        }
+        if (scratch.isEmpty()) {
+            framePreparationGenerations.remove(ownerScope)
+            return GPUFrameScratchSubmissionResult.NoScratch
+        }
+        // The existing checked ledger token identifies this exact acquisition, not a frame ID.
+        val submissionId = GPUResourceSubmissionID(scratch.first().lease.acquisitionToken)
+        return when (val result = markScratchSubmitted(ownerScope, submissionId, deviceGeneration)) {
+            is GPUScratchLifecycleResult.Accepted -> {
+                GPUFrameScratchSubmissionResult.Submitted(submissionId)
+            }
+            is GPUScratchLifecycleResult.Refused -> GPUFrameScratchSubmissionResult.Refused(result.diagnostic)
+        }
     }
 
     @Synchronized
@@ -246,6 +304,7 @@ class GPUConcreteResourceProvider(
     ): GPUScratchLifecycleResult =
         scratchTexturePool.markSubmitted(reservationScope, submissionId, deviceGeneration).also { result ->
             if (result is GPUScratchLifecycleResult.Accepted) {
+                framePreparationGenerations.remove(reservationScope)
                 pendingPhysicalReservations.removeAll { pending ->
                     pending is GPUProviderPhysicalReservation.Scratch &&
                         pending.lease.reservationScope == reservationScope &&
@@ -573,6 +632,7 @@ class GPUConcreteResourceProvider(
             }
             pendingPhysicalReservations.remove(reservation)
         }
+        framePreparationGenerations.remove(ownerScope)
         return GPUPhysicalPoolMaintenanceDecision.Applied(
             GPUPhysicalPoolRollbackSummary(
                 scratch = GPUScratchRollbackResult(scratchReleasedIds.toList(), scratchReleasedRefs.toList()),
@@ -595,6 +655,9 @@ class GPUConcreteResourceProvider(
         )
         pendingPhysicalReservations.removeAll { reservation ->
             reservation.deviceGeneration.value < currentGeneration.value
+        }
+        framePreparationGenerations.entries.removeAll { (_, generation) ->
+            generation.value < currentGeneration.value
         }
         return GPUPhysicalPoolMaintenanceDecision.Applied(
             GPUPhysicalPoolInvalidationSummary(

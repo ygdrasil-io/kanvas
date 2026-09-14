@@ -161,10 +161,21 @@ internal object WgslFloatEnvelopeV1Oracle {
         coverageF32: Float = 1f,
         scalarMask: Boolean = false,
         gradientSource: (() -> Array<Interval>)? = null,
-    ): DrawResult {
+    ): DrawResult = colorThenBlend(
+        gradientSource?.invoke() ?: evaluateMaterialSource(table, root, destination.linearPremul, Interval.ONE),
+        destination, mode, coverageF32, scalarMask,
+    )
+
+    /** Public-value oracle seam: no production program or binding participates in evaluation. */
+    fun colorThenBlend(src: Array<Interval>, destination: AttachmentState, mode: BlendMode,
+        coverageF32: Float = 1f, scalarMask: Boolean = false): DrawResult {
+        if (mode == BlendMode.SRC && coverageF32 == 1f && !scalarMask) return imageSourceAttachment(src)
+        if (mode == BlendMode.SRC_OVER) {
+            val values = Array(4) { blendAndCoverage(src[it], src[3], destination.linearPremul[it], Interval.input(coverageF32)) }
+            return imageSourceAttachment(values)
+        }
         val values = try {
             val dst = destination.linearPremul
-            val src = gradientSource?.invoke() ?: evaluateMaterialSource(table, root, dst, Interval.ONE)
             // Historical W4e Rect AA producer writes an exactly half-covered edge into
             // linear RGBA8. INTERSECT then stores that sampled coverage in the accumulator.
             // Both conversions and the final texture decode belong to the independent bound.
@@ -281,7 +292,8 @@ internal object WgslFloatEnvelopeV1Oracle {
     }
 
     /** W3C blend equations, evaluated only by the independent directed arithmetic above. */
-    private fun artisticSeparable(s: Interval, d: Interval, mode: BlendMode): Interval {
+    private fun artisticSeparable(s: Interval, d: Interval, mode: BlendMode,
+        squareRoot: (Interval) -> Interval = ::gradientSqrt): Interval {
         val two = Interval.input(2f)
         fun minimum(a: Interval, b: Interval) = Interval(minOf(a.lower, b.lower), minOf(a.upper, b.upper))
         fun maximum(a: Interval, b: Interval) = Interval(maxOf(a.lower, b.lower), maxOf(a.upper, b.upper))
@@ -294,36 +306,38 @@ internal object WgslFloatEnvelopeV1Oracle {
             { two * it * backdrop }, { Interval.ONE - two * (Interval.ONE - it) * (Interval.ONE - backdrop) })
         return when (mode) {
             BlendMode.MULTIPLY -> s * d
+            BlendMode.SCREEN -> s + d - s * d
             BlendMode.OVERLAY -> hardLight(d, s)
             BlendMode.DARKEN -> minimum(s, d)
             BlendMode.LIGHTEN -> maximum(s, d)
             BlendMode.COLOR_DODGE -> when {
                 d.isExactly(Interval.ZERO) -> Interval.ZERO
-                s.isExactly(Interval.ONE) -> Interval.ONE
+                s.isExactly(Interval.ONE) -> if (d.lower.signum() <= 0 && d.upper.signum() >= 0)
+                    hull(Interval.ZERO,Interval.ONE) else Interval.ONE
                 s.upper < BigDecimal.ONE -> minimum(Interval.ONE, wgslDivide(d, Interval.ONE - s))
                 else -> error("Color dodge source crosses its singularity")
             }
             BlendMode.COLOR_BURN -> when {
                 d.isExactly(Interval.ONE) -> Interval.ONE
-                s.isExactly(Interval.ZERO) -> Interval.ZERO
+                s.isExactly(Interval.ZERO) -> if (d.lower <= BigDecimal.ONE && d.upper >= BigDecimal.ONE)
+                    hull(Interval.ZERO,Interval.ONE) else Interval.ZERO
                 s.lower > BigDecimal.ZERO -> Interval.ONE - minimum(Interval.ONE, wgslDivide(Interval.ONE - d, s))
                 else -> error("Color burn source crosses its singularity")
             }
             BlendMode.HARD_LIGHT -> hardLight(s, d)
-            BlendMode.SOFT_LIGHT -> branch(s, HALF,
+            BlendMode.SOFT_LIGHT -> {
+                // Both select operands execute, including the selected square-
+                // root algorithm, even when the source selects the low branch.
+                squareRoot(d)
+                branch(s, HALF,
                 { source -> d - (Interval.ONE - two * source) * d * (Interval.ONE - d) },
                 { source ->
                     val curve = branch(d, BigDecimal("0.25"),
                         { ((Interval.input(16f) * it - Interval.input(12f)) * it + Interval.input(4f)) * it },
-                        { value ->
-                            // WGSL 15.7.4.1: sqrt inherits 1/inverseSqrt(x); inverseSqrt
-                            // admits 2 ULP, and the outer division retains its own 2.5 ULP.
-                            val exactInverse = Interval(downDivide(BigDecimal.ONE, value.upper.sqrt(MC_UP)),
-                                upDivide(BigDecimal.ONE, value.lower.sqrt(MC_DOWN)))
-                            wgslDivide(Interval.ONE, f32Envelope(expandUlps(exactInverse, BigDecimal("2"))))
-                        })
+                        squareRoot)
                     d + (two * source - Interval.ONE) * (curve - d)
                 })
+            }
             BlendMode.DIFFERENCE -> (d - s).let {
                 Interval(if (it.lower.signum() <= 0 && it.upper.signum() >= 0) BigDecimal.ZERO else minOf(it.lower.abs(), it.upper.abs()),
                     maxOf(it.lower.abs(), it.upper.abs()))
@@ -612,6 +626,60 @@ internal object WgslFloatEnvelopeV1Oracle {
     fun imageUnorm8(codeI32: Int): Interval = f32Envelope(Interval(
         downDivide(BigDecimal(codeI32), UNORM_MAX), upDivide(BigDecimal(codeI32), UNORM_MAX)))
     fun imageSrgbToLinear(value: Interval): Interval = toLinear(value)
+    /** Numerical OETF executed by a filter; this is not fixed-function attachment encoding. */
+    fun filterLinearToSrgb(value: Interval): Interval {
+        if (value.isExactly(Interval.ZERO) || value.isExactly(Interval.ONE)) return value
+        return piecewiseTransfer(value, decimal(0.0031308f),
+            { x -> Interval.point(x) * Interval.input(12.92f) },
+            { x -> Interval.input(1.055f) * wgslPow(Interval.point(x), Interval.input(1f / 2.4f)) - Interval.input(0.055f) })
+    }
+
+    /** Pure published blend equations on independently derived linear premultiplied inputs. */
+    fun filterBlend(src: Array<Interval>, dst: Array<Interval>, mode: BlendMode): Array<Interval> {
+        fun sumProducts(a: Interval, b: Interval, c: Interval, d: Interval) =
+            hull(a * b + c * d, fma(a,b,c*d), fma(c,d,a*b))
+        val invS = Interval.ONE - src[3]
+        val invD = Interval.ONE - dst[3]
+        return when (mode) {
+            BlendMode.CLEAR -> Array(4) { Interval.ZERO }
+            BlendMode.SRC -> src.copyOf()
+            BlendMode.DST -> dst.copyOf()
+            BlendMode.SRC_OVER -> Array(4) { sourceOver(src[it],dst[it],invS) }
+            BlendMode.DST_OVER -> Array(4) { sourceOver(dst[it],src[it],invD) }
+            BlendMode.SRC_IN -> Array(4) { src[it] * dst[3] }
+            BlendMode.DST_IN -> Array(4) { dst[it] * src[3] }
+            BlendMode.SRC_OUT -> Array(4) { src[it] * invD }
+            BlendMode.DST_OUT -> Array(4) { dst[it] * invS }
+            BlendMode.SRC_ATOP -> Array(4) { sumProducts(src[it],dst[3],dst[it],invS) }
+            BlendMode.DST_ATOP -> Array(4) { sumProducts(dst[it],src[3],src[it],invD) }
+            BlendMode.XOR -> Array(4) { sumProducts(src[it],invD,dst[it],invS) }
+            BlendMode.PLUS -> Array(4) { (src[it] + dst[it]).clamp01() }
+            BlendMode.MODULATE -> Array(4) { src[it] * dst[it] }
+            else -> {
+                if (src[3].isExactly(Interval.ZERO)) return dst.copyOf()
+                fun straight(value: Array<Interval>) = Array(3) { when {
+                    value[3].isExactly(Interval.ZERO) -> Interval.ZERO
+                    value[3].isExactly(Interval.ONE) -> value[it]
+                    else -> wgslDivide(value[it],value[3])
+                } }
+                val s = straight(src); val d = straight(dst)
+                val color = if (mode in NON_SEPARABLE_MODES) artisticNonSeparable(s,d,mode)
+                    else Array(3) { artisticSeparable(s[it],d[it],mode) { value ->
+                        // Task3's actual V4 algorithm branches before sqrt at
+                        // exact zero. Nonpoint zero-crossing intervals still go
+                        // through the raw domain check; no positive floor.
+                        if (value.isExactly(Interval.ZERO)) Interval.ZERO else gradientSqrt(value)
+                    } }
+                Array(4) { if (it == 3) sourceOver(src[3],dst[3],invS) else {
+                    val left = src[it] * invD; val right = dst[it] * invS
+                    val product = hull((src[3] * dst[3]) * color[it],src[3] * (dst[3] * color[it]))
+                    hull((left+right)+product,left+(right+product),(left+product)+right,
+                        fma(src[it],invD,right+product),fma(dst[it],invS,left+product),
+                        fma(src[3]*dst[3],color[it],left+right),fma(src[3],dst[3]*color[it],left+right))
+                } }
+            }
+        }
+    }
     fun imageSourceAttachment(source: Array<Interval>): DrawResult {
         val codes = source.mapIndexed { channelI32, value ->
             if (channelI32 < 3) codesForSrgbAttachment(attachmentEncode(value.clamp01())) else codesFor(value)
@@ -640,17 +708,12 @@ internal object WgslFloatEnvelopeV1Oracle {
     fun gradientFloor(value: Interval): Interval = f32Envelope(Interval(
         value.lower.setScale(0, java.math.RoundingMode.FLOOR), value.upper.setScale(0, java.math.RoundingMode.FLOOR)))
     fun gradientSqrt(value: Interval): Interval {
-        require(value.lower.signum() >= 0)
-        if (value.upper.signum() == 0) return Interval.ZERO
+        require(value.lower >= F32_MIN_NORMAL) { "Bare sqrt has no bounded inherited accuracy at zero/subnormal input" }
         // WGSL sqrt inherits 1/inverseSqrt: retain inverseSqrt's 2 ULP
         // and division's 2.5 ULP, plus permitted F32 rounding and flushing.
-        fun positive(input: Interval): Interval {
-            val inverse = Interval(downDivide(BigDecimal.ONE, input.upper.sqrt(MC_UP)),
-                upDivide(BigDecimal.ONE, input.lower.sqrt(MC_DOWN)))
-            return wgslDivide(Interval.ONE, f32Envelope(expandUlps(inverse, BigDecimal("2"))))
-        }
-        return if (value.lower.signum() > 0) positive(value) else
-            Interval(BigDecimal.ZERO, positive(Interval(value.upper, value.upper)).upper)
+        val inverse = Interval(downDivide(BigDecimal.ONE, value.upper.sqrt(MC_UP)),
+            upDivide(BigDecimal.ONE, value.lower.sqrt(MC_DOWN)))
+        return wgslDivide(Interval.ONE, f32Envelope(expandUlps(inverse, BigDecimal("2"))))
     }
     fun gradientFma(a: Interval, b: Interval, c: Interval): Interval = fma(a, b, c)
     fun gradientHull(vararg values: Interval): Interval = hull(*values)

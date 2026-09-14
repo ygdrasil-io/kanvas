@@ -42,6 +42,7 @@ internal fun List<DisplayOp>.snapshotGeometry(): List<DisplayOp> {
 internal class GeometrySnapshotContext(
     private val gradientStops: RecordingGradientStopBudget? = null,
     private val imageBytes: RecordingImageByteBudget? = null,
+    private val captureLimits: org.graphiks.kanvas.render.ir.SceneCaptureLimits = org.graphiks.kanvas.render.ir.SceneCaptureLimits.DEFAULT,
 ) {
     private val textBlobs = IdentityHashMap<TextBlob, TextBlob>()
     private var pendingTextBlobs: IdentityHashMap<TextBlob, TextBlob>? = null
@@ -58,6 +59,7 @@ internal class GeometrySnapshotContext(
     private val mergeInputs = IdentityHashMap<ImageFilter.Merge, MutableList<ImageFilter>>()
 
     fun snapshot(operation: DisplayOp): DisplayOp {
+        preflightPaints(operation)
         pendingImages = mutableListOf()
         return try {
             operation.snapshotGeometry(this).also { acceptPendingImages() }
@@ -69,6 +71,7 @@ internal class GeometrySnapshotContext(
 
     /** Keep cross-operation aliases only when the destination accepts the snapshot. */
     fun append(operation: DisplayOp, appendSnapshot: (DisplayOp) -> Unit) {
+        preflightPaints(operation)
         val pending = IdentityHashMap<TextBlob, TextBlob>()
         pendingTextBlobs = pending
         pendingImages = mutableListOf()
@@ -93,6 +96,41 @@ internal class GeometrySnapshotContext(
         colorRuntimeChildren.clear()
         imageRuntimeChildren.clear()
         mergeInputs.clear()
+    }
+
+    private fun preflightPaints(operation: DisplayOp) {
+        val paint = when (operation) {
+            is DisplayOp.DrawRect -> operation.paint
+            is DisplayOp.DrawRRect -> operation.paint
+            is DisplayOp.DrawDRRect -> operation.paint
+            is DisplayOp.DrawPath -> operation.paint
+            is DisplayOp.DrawImage -> operation.paint
+            is DisplayOp.DrawImageNine -> operation.paint
+            is DisplayOp.DrawImageLattice -> operation.paint
+            is DisplayOp.DrawAtlas -> operation.paint
+            is DisplayOp.DrawPicture -> operation.paint
+            is DisplayOp.DrawPoint -> operation.paint
+            is DisplayOp.DrawPoints -> operation.paint
+            is DisplayOp.DrawText -> operation.paint
+            is DisplayOp.DrawVertices -> operation.paint
+            is DisplayOp.DrawMesh -> operation.paint
+            is DisplayOp.BeginLayer -> operation.rec.paint
+            else -> null
+        }
+        fun validate(value: Paint) {
+            org.graphiks.kanvas.render.ir.ColorFilterCapturePreflight.validatePaint(value, captureLimits)?.let {
+                throw SceneRecordingValidationException(it)
+            }
+        }
+        paint?.let(::validate)
+        if (operation is DisplayOp.BeginLayer) operation.rec.backdrop?.let { validate(Paint(imageFilter = it)) }
+        if (operation is DisplayOp.DrawMesh) operation.mesh.program?.children?.entries?.forEach { entry ->
+            when (val child = entry.child) {
+                is org.graphiks.kanvas.paint.ShaderChild -> validate(Paint(shader = child.shader))
+                is org.graphiks.kanvas.paint.ColorFilterChild -> validate(Paint(colorFilter = child.filter))
+                is org.graphiks.kanvas.paint.BlenderChild -> validate(Paint(blender = child.blender))
+            }
+        }
     }
 
     fun snapshot(blob: TextBlob): TextBlob {

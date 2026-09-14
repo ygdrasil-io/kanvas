@@ -20,6 +20,116 @@ internal class BlendFormulaOperationGraphV1 private constructor(
     }
     data class Function(val arguments: List<String>, val body: List<Statement>)
 
+    private sealed interface ColorValue {
+        data class Number(val scalar: ColorOperationGraphV1.Scalar) : ColorValue
+        data class Condition(val predicate: ColorOperationGraphV1.Predicate) : ColorValue
+    }
+
+    /** Translate this same parsed formula authority into the color graph. No formula
+     * is selected or rewritten by the renderer; if/select retain lazy/eager semantics. */
+    fun colorOperations(entry: String, src: List<ColorOperationGraphV1.Scalar>,
+        dst: List<ColorOperationGraphV1.Scalar>): ColorOperationGraphV1 {
+        fun number(value: ColorValue) = (value as ColorValue.Number).scalar
+        fun condition(value: ColorValue) = (value as ColorValue.Condition).predicate
+        var visitsI32 = 0
+        fun tick() { require(++visitsI32 <= 100_000) }
+        fun binary(op: String, a: ColorValue, b: ColorValue): ColorValue {
+            if (op == "&&") return ColorValue.Condition(ColorOperationGraphV1.Predicate.And(condition(a),condition(b)))
+            val left = number(a); val right = number(b)
+            return when (op) {
+                "+" -> ColorValue.Number(ColorOperationGraphV1.Scalar.Add(left,right))
+                "-" -> ColorValue.Number(ColorOperationGraphV1.Scalar.Subtract(left,right))
+                "*" -> ColorValue.Number(ColorOperationGraphV1.Scalar.Multiply(left,right))
+                "/" -> ColorValue.Number(ColorOperationGraphV1.Scalar.Divide(left,right))
+                "==" -> ColorValue.Condition(ColorOperationGraphV1.Predicate.Equal(left,right))
+                "!=" -> ColorValue.Condition(ColorOperationGraphV1.Predicate.Not(ColorOperationGraphV1.Predicate.Equal(left,right)))
+                "<=" -> ColorValue.Condition(ColorOperationGraphV1.Predicate.LessEqual(left,right))
+                ">" -> ColorValue.Condition(ColorOperationGraphV1.Predicate.Not(ColorOperationGraphV1.Predicate.LessEqual(left,right)))
+                "<" -> ColorValue.Condition(ColorOperationGraphV1.Predicate.Not(ColorOperationGraphV1.Predicate.LessEqual(right,left)))
+                ">=" -> ColorValue.Condition(ColorOperationGraphV1.Predicate.LessEqual(right,left))
+                else -> error("Unsupported typed blend binary $op")
+            }
+        }
+        fun builtin(name: String, args: List<List<ColorValue>>): List<ColorValue> {
+            if (name == "vec3f" || name == "vec4f") {
+                val width = if (name == "vec3f") 3 else 4
+                val flattened = args.flatten()
+                return if (flattened.size == 1) List(width) { flattened.single() } else flattened.also { require(it.size == width) }
+            }
+            val width = args.maxOf { it.size }
+            require(args.all { it.size == 1 || it.size == width })
+            fun arg(i: Int, c: Int) = args[i][if (args[i].size == 1) 0 else c]
+            if (name == "dot") {
+                val products = List(width) { ColorOperationGraphV1.Scalar.Multiply(number(arg(0,it)),number(arg(1,it))) }
+                return listOf(ColorValue.Number(products.drop(1).fold(products.first() as ColorOperationGraphV1.Scalar) {
+                    sum, product -> ColorOperationGraphV1.Scalar.Add(sum,product) }))
+            }
+            return List(width) { c -> ColorValue.Number(when (name) {
+                "min" -> ColorOperationGraphV1.Scalar.Min(number(arg(0,c)),number(arg(1,c)))
+                "max" -> ColorOperationGraphV1.Scalar.Max(number(arg(0,c)),number(arg(1,c)))
+                "abs" -> ColorOperationGraphV1.Scalar.Abs(number(arg(0,c)))
+                "sqrt" -> number(arg(0,c)).let { operand ->
+                    // V4's common graph avoids bare sqrt at exact zero, where
+                    // its inherited reciprocal/inverseSqrt accuracy is unbounded.
+                    // Proof and emission consume this same real lazy branch.
+                    val zero = ColorOperationGraphV1.constant(0f)
+                    ColorOperationGraphV1.Scalar.LazyBranch(ColorOperationGraphV1.Predicate.Equal(operand,zero),
+                        zero,ColorOperationGraphV1.Scalar.Sqrt(operand))
+                }
+                "select" -> ColorOperationGraphV1.Scalar.EagerSelect(condition(arg(2,c)),number(arg(1,c)),number(arg(0,c)))
+                else -> error("Unsupported typed blend builtin $name")
+            }) }
+        }
+        lateinit var call: (String,List<List<ColorValue>>,Int) -> List<ColorValue>
+        fun expression(node: Expression, values: Map<String,List<ColorValue>>, depthI32: Int): List<ColorValue> {
+            tick()
+            return when (node) {
+                is Expression.Literal -> listOf(ColorValue.Number(ColorOperationGraphV1.constant(node.valueF32)))
+                is Expression.Name -> requireNotNull(values[node.name])
+                is Expression.Member -> expression(node.value,values,depthI32).let { vector -> node.components.map { vector["rgba".indexOf(it)] } }
+                is Expression.Binary -> {
+                    val a = expression(node.left,values,depthI32); val b = expression(node.right,values,depthI32)
+                    val width = maxOf(a.size,b.size)
+                    require(a.size == 1 || a.size == width); require(b.size == 1 || b.size == width)
+                    List(width) { binary(node.operation,a[if (a.size == 1) 0 else it],b[if (b.size == 1) 0 else it]) }
+                }
+                is Expression.Call -> {
+                    val args = node.arguments.map { expression(it,values,depthI32) }
+                    if (node.name in functions) call(node.name,args,depthI32+1) else builtin(node.name,args)
+                }
+            }
+        }
+        fun statements(body: List<Statement>, values: MutableMap<String,List<ColorValue>>, depthI32: Int): List<ColorValue> {
+            body.forEachIndexed { index, statement ->
+                tick()
+                when (statement) {
+                    is Statement.Bind -> values[statement.name] = expression(statement.value,values,depthI32)
+                    is Statement.Return -> return expression(statement.value,values,depthI32)
+                    is Statement.Branch -> {
+                        val predicate = condition(expression(statement.condition,values,depthI32).single())
+                        val remainder = body.drop(index+1)
+                        val yes = statements(statement.body+remainder,values.toMutableMap(),depthI32)
+                        val no = statements(remainder,values.toMutableMap(),depthI32)
+                        require(yes.size == no.size)
+                        return yes.indices.map { ColorValue.Number(ColorOperationGraphV1.Scalar.LazyBranch(predicate,number(yes[it]),number(no[it]))) }
+                    }
+                    is Statement.Switch -> {
+                        val selector = number(expression(statement.selector,values,depthI32).single()) as ColorOperationGraphV1.Scalar.ConstantF32
+                        return statements((statement.cases[Float.fromBits(selector.bitsI32)] ?: statement.otherwise)+body.drop(index+1),values,depthI32)
+                    }
+                }
+            }
+            error("Blend function has no return")
+        }
+        call = { name, args, depth ->
+            require(depth <= 32)
+            val function = requireNotNull(functions[name])
+            require(function.arguments.size == args.size)
+            statements(function.body,function.arguments.zip(args).toMap().toMutableMap(),depth)
+        }
+        return ColorOperationGraphV1(call(entry,listOf(src.map(ColorValue::Number),dst.map(ColorValue::Number)),0).map(::number))
+    }
+
     /** Vector/scalar operations and comparisons are supplied by the numeric envelope. */
     interface Arithmetic<T> {
         fun literal(valueF32: Float): T

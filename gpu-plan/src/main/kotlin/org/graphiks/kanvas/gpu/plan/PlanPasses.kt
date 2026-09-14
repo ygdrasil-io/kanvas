@@ -204,6 +204,7 @@ public class GeneralPathDraw private constructor(
             blend: BlendPlan = BlendPlan.SrcOver,
             coordinates: MaterialCoordinatePlanV1? = null,
             coordinatesV2: MaterialCoordinatePlanV2? = null,
+            coordinatesV4: SourceCoordinatesV4? = null,
         ): GeneralPathDraw {
             require(commandIndexI32 >= 0) { "Command index must not be negative" }
             require(!scissorI32.isEmpty) { "General path scissor must be non-empty" }
@@ -213,7 +214,8 @@ public class GeneralPathDraw private constructor(
             ) { "General path draws require an explicit hard or four-sample AA contract" }
             requirePathRenderGeometryForStrategy(geometry, strategy)
             return GeneralPathDraw(
-                commandIndexI32, coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
+                commandIndexI32, coordinatesV4?.let { PlanDrawMaterialAuthority.MaterialV4(material, it) }
+                    ?: coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
                     ?: PlanDrawMaterialAuthority.MaterialV1(material, coordinates), geometry, strategy, scissorI32, coverage, sample, blend,
             )
         }
@@ -250,6 +252,7 @@ public class GeneralPathDraw private constructor(
 public fun GeneralPathDraw.withBlend(blend: BlendPlan): GeneralPathDraw = GeneralPathDraw.ofMaterial(
     commandIndex, materialAuthority.materialPlanRef(), copyPathGeometry(), strategy,
     copyScissorI32(), coverage, sample, blend, materialCoordinates, materialCoordinatesV2,
+    (materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
 )
 
 /** A W4d.2 direct path draw whose final coverage is constrained by a W4e clip plan. */
@@ -389,10 +392,12 @@ public class SolidRectDraw private constructor(
             blend: BlendPlan = BlendPlan.SrcOver,
             coordinates: MaterialCoordinatePlanV1? = null,
             coordinatesV2: MaterialCoordinatePlanV2? = null,
+            coordinatesV4: SourceCoordinatesV4? = null,
         ): SolidRectDraw {
             require(commandIndexI32 >= 0) { "Command index must be non-negative" }
             require(!visibleBounds.isEmpty && !scissor.isEmpty) { "Draw rectangles must be non-empty" }
-            return SolidRectDraw(commandIndexI32, coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
+            return SolidRectDraw(commandIndexI32, coordinatesV4?.let { PlanDrawMaterialAuthority.MaterialV4(material,it) }
+                ?: coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
                 ?: PlanDrawMaterialAuthority.MaterialV1(material, coordinates), visibleBounds, scissor, coverage, sample, blend)
         }
     }
@@ -401,6 +406,7 @@ public class SolidRectDraw private constructor(
 /** Reissues only the sealed W5 material reference; geometry and raster facts are copied verbatim. */
 public fun SolidRectDraw.withMaterialRef(material: MaterialPlanRef): SolidRectDraw = SolidRectDraw.ofMaterial(
     commandIndex, material, copyVisibleBounds(), copyScissor(), coverage, sample, blend, materialCoordinates, materialCoordinatesV2,
+    (materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
 )
 
 public class AnalyticRectDraw private constructor(
@@ -458,6 +464,7 @@ public class AnalyticRectDraw private constructor(
             blend: BlendPlan = BlendPlan.LegacySrcOverV1,
             coordinates: MaterialCoordinatePlanV1? = null,
             coordinatesV2: MaterialCoordinatePlanV2? = null,
+            coordinatesV4: SourceCoordinatesV4? = null,
         ): AnalyticRectDraw {
             require(commandIndexI32 >= 0) { "Command index must not be negative" }
             require(!deviceBounds.isEmpty && !rasterBounds.isEmpty && !scissor.isEmpty) {
@@ -465,7 +472,8 @@ public class AnalyticRectDraw private constructor(
             }
             return AnalyticRectDraw(
                 commandIndexI32,
-                coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
+                coordinatesV4?.let { PlanDrawMaterialAuthority.MaterialV4(material,it) }
+                    ?: coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
                     ?: PlanDrawMaterialAuthority.MaterialV1(material, coordinates),
                 deviceBounds,
                 rasterBounds,
@@ -478,6 +486,7 @@ public class AnalyticRectDraw private constructor(
 
 public fun AnalyticRectDraw.withMaterialRef(material: MaterialPlanRef): AnalyticRectDraw = AnalyticRectDraw.ofMaterial(
     commandIndex, material, copyDeviceBounds(), copyRasterBounds(), copyScissor(), blend, materialCoordinates, materialCoordinatesV2,
+    (materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
 )
 
 public class AnalyticRRectDraw private constructor(
@@ -553,13 +562,7 @@ public class AnalyticRRectDraw private constructor(
             coordinates: MaterialCoordinatePlanV1? = null,
             coordinatesV2: MaterialCoordinatePlanV2? = null,
         ): AnalyticRRectDraw {
-            require(commandIndexI32 >= 0) { "Command index must not be negative" }
-            require(origin == DrawOrigin.RECT || origin == DrawOrigin.RRECT) {
-                "Analytic rrect draws require RECT or RRECT origin"
-            }
-            require(!deviceShape.rect.isEmpty && !rasterBounds.isEmpty && !scissor.isEmpty) {
-                "Draw rectangles must be non-empty"
-            }
+            validateMaterialGeometry(commandIndexI32, origin, deviceShape, rasterBounds, scissor)
             return AnalyticRRectDraw(
                 commandIndexI32,
                 coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
@@ -571,14 +574,35 @@ public class AnalyticRRectDraw private constructor(
                 blend,
             )
         }
+
+        internal fun ofMaterialV4(commandIndexI32: Int, material: MaterialPlanRef, origin: DrawOrigin,
+            deviceShape: RRectF32, rasterBounds: RectI32, scissor: RectI32, blend: BlendPlan,
+            coordinates: SourceCoordinatesV4): AnalyticRRectDraw {
+            validateMaterialGeometry(commandIndexI32, origin, deviceShape, rasterBounds, scissor)
+            return AnalyticRRectDraw(commandIndexI32, PlanDrawMaterialAuthority.MaterialV4(material, coordinates),
+                origin, deviceShape, rasterBounds, scissor, blend)
+        }
+
+        private fun validateMaterialGeometry(commandIndexI32: Int, origin: DrawOrigin,
+            deviceShape: RRectF32, rasterBounds: RectI32, scissor: RectI32) {
+            require(commandIndexI32 >= 0) { "Command index must not be negative" }
+            require(origin == DrawOrigin.RECT || origin == DrawOrigin.RRECT) {
+                "Analytic rrect draws require RECT or RRECT origin"
+            }
+            require(!deviceShape.rect.isEmpty && !rasterBounds.isEmpty && !scissor.isEmpty) {
+                "Draw rectangles must be non-empty"
+            }
+        }
     }
 }
 
 /** Reissues only the sealed W5 material reference; analytic RRect geometry remains native. */
-public fun AnalyticRRectDraw.withMaterialRef(material: MaterialPlanRef): AnalyticRRectDraw = AnalyticRRectDraw.ofMaterial(
-    commandIndex, material, origin, copyDeviceShape(), copyRasterBounds(), copyScissor(), blend,
-    materialCoordinates, materialCoordinatesV2,
-)
+public fun AnalyticRRectDraw.withMaterialRef(material: MaterialPlanRef): AnalyticRRectDraw =
+    (materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let {
+        AnalyticRRectDraw.ofMaterialV4(commandIndex, material, origin, copyDeviceShape(), copyRasterBounds(),
+            copyScissor(), blend, it.coordinates)
+    } ?: AnalyticRRectDraw.ofMaterial(commandIndex, material, origin, copyDeviceShape(), copyRasterBounds(),
+        copyScissor(), blend, materialCoordinates, materialCoordinatesV2)
 
 /** A sealed W4c path-fill draw whose geometry authority remains owned by `:math`. */
 public class PathFillDraw private constructor(
@@ -637,8 +661,10 @@ public class PathFillDraw private constructor(
             blend: BlendPlan = BlendPlan.LegacySrcOverV1,
             coordinates: MaterialCoordinatePlanV1? = null,
             coordinatesV2: MaterialCoordinatePlanV2? = null,
+            coordinatesV4: SourceCoordinatesV4? = null,
         ): PathFillDraw = ofAuthority(
-            commandIndexI32, coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
+            commandIndexI32, coordinatesV4?.let { PlanDrawMaterialAuthority.MaterialV4(material, it) }
+                ?: coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
                 ?: PlanDrawMaterialAuthority.MaterialV1(material, coordinates), geometryF32, strategy, scissorI32, blend,
         )
 
@@ -664,7 +690,7 @@ public class PathFillDraw private constructor(
 /** Reissues only the sealed W5 material reference; no Path is reconstructed from another shape. */
 public fun PathFillDraw.withMaterialRef(material: MaterialPlanRef): PathFillDraw = PathFillDraw.ofMaterial(
     commandIndex, material, copyGeometryF32(), strategy, copyScissorI32(), blend,
-    materialCoordinates, materialCoordinatesV2,
+    materialCoordinates, materialCoordinatesV2, (materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
 )
 
 /** A sealed W4d stroke draw whose immutable geometry authority remains owned by `:math`. */
@@ -724,21 +750,35 @@ public class PathStrokeDraw private constructor(
             coordinates: MaterialCoordinatePlanV1? = null,
             coordinatesV2: MaterialCoordinatePlanV2? = null,
         ): PathStrokeDraw {
-            require(commandIndexI32 >= 0) { "Command index must not be negative" }
-            require(!scissorI32.isEmpty) { "Path stroke scissor must be non-empty" }
-            pathFillStrategy(geometryF32.copyFillGeometryF32())
+            validateMaterialGeometry(commandIndexI32, geometryF32, scissorI32)
             return PathStrokeDraw(
                 commandIndexI32, coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
                     ?: PlanDrawMaterialAuthority.MaterialV1(material, coordinates), geometryF32, mode, styleF64, scissorI32, blend,
             )
         }
+
+        internal fun ofMaterialV4(commandIndexI32: Int, material: MaterialPlanRef,
+            geometryF32: PathStrokeGeometryF32, scissorI32: RectI32, mode: PathStrokeDrawMode,
+            styleF64: PathStrokeStyleF64, blend: BlendPlan, coordinates: SourceCoordinatesV4): PathStrokeDraw {
+            validateMaterialGeometry(commandIndexI32, geometryF32, scissorI32)
+            return PathStrokeDraw(commandIndexI32, PlanDrawMaterialAuthority.MaterialV4(material, coordinates),
+                geometryF32, mode, styleF64, scissorI32, blend)
+        }
+
+        private fun validateMaterialGeometry(commandIndexI32: Int, geometryF32: PathStrokeGeometryF32, scissorI32: RectI32) {
+            require(commandIndexI32 >= 0) { "Command index must not be negative" }
+            require(!scissorI32.isEmpty) { "Path stroke scissor must be non-empty" }
+            pathFillStrategy(geometryF32.copyFillGeometryF32())
+        }
     }
 }
 
-public fun PathStrokeDraw.withMaterialRef(material: MaterialPlanRef): PathStrokeDraw = PathStrokeDraw.ofMaterial(
-    commandIndex, material, copyGeometryF32(), copyScissorI32(), mode, styleF64, blend,
-    materialCoordinates, materialCoordinatesV2,
-)
+public fun PathStrokeDraw.withMaterialRef(material: MaterialPlanRef): PathStrokeDraw =
+    (materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let {
+        PathStrokeDraw.ofMaterialV4(commandIndex, material, copyGeometryF32(), copyScissorI32(), mode,
+            styleF64, blend, it.coordinates)
+    } ?: PathStrokeDraw.ofMaterial(commandIndex, material, copyGeometryF32(), copyScissorI32(), mode,
+        styleF64, blend, materialCoordinates, materialCoordinatesV2)
 
 private fun pathFillStrategy(geometryF32: PathFillGeometryF32): PathFillStrategy = when {
     geometryF32.copyDirectTriangleF32OrNull() != null && geometryF32.copyStencilEdgeFanF32OrNull() == null ->

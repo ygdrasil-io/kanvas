@@ -839,9 +839,15 @@ class W5dGradientAddressingSurfacePixelTest {
         var shader: Shader = linearGradient()
         repeat(50_000) { shader = if (it % 2 == 0) Shader.WithLocalMatrix(shader, Matrix3x3F32())
             else Shader.CoordClamp(shader, bounds) }
-        val failure = assertThrows<IllegalStateException> { renderPixel(shader) }
-        assertEquals("graph-depth-limit", failure.message.orEmpty().substringBefore(':'))
-        assertContentEquals(W5dGradientAddressingCpuOracle.redPixel(), renderPixel(linearGradient()))
+        val expected = W5aSolidOpacityCpuOracle.draw(ColorARGB.Red, 1f)
+        W5fSurfacePixelFixtures.requireBounded(expected)
+        val surface = Surface(1, 1)
+        val failure = assertThrows<org.graphiks.kanvas.canvas.SceneRecordingValidationException> {
+            surface.canvas { drawRect(bounds, Paint(shader = shader, antiAlias = false)) }
+        }
+        assertEquals("graph-depth-limit", failure.diagnostic.code.value)
+        surface.canvas { drawRect(bounds, Paint(shader = linearGradient(), antiAlias = false)) }
+        repeat(2) { W5fSurfacePixelFixtures.assertNativePixels(surface.render(), listOf(expected)) }
     }
 
     @Test
@@ -869,11 +875,16 @@ class W5dGradientAddressingSurfacePixelTest {
 
     @Test
     fun unsupportedWrapperRemainsPreAdmission() {
+        val expected = W5aSolidOpacityCpuOracle.draw(ColorARGB.Red, 1f)
+        W5fSurfacePixelFixtures.requireBounded(expected)
         val surface = Surface(13, 1)
         val leaf = linearGradient().copy(stops = listOf(GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue)))
         surface.canvas { drawRect(bounds, Paint(shader = Shader.WithColorFilter(leaf, ColorFilter.HighContrast), antiAlias = false)) }
         val failure = assertThrows<IllegalStateException> { surface.render() }
-        assertEquals("unsupported.material.w5a.kind", failure.message.orEmpty().substringBefore(':'))
+        assertEquals("unsupported.material.filter.slice", failure.message.orEmpty().substringBefore(':'))
+        val recovery = Surface(1, 1)
+        recovery.canvas { drawRect(bounds, Paint(shader = linearGradient(), antiAlias = false)) }
+        repeat(2) { W5fSurfacePixelFixtures.assertNativePixels(recovery.render(), listOf(expected)) }
     }
 
     @Test

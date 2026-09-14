@@ -55,9 +55,17 @@ internal object W5cGradientCpuOracle {
         endF32, stops.toList(), conicalRadiiF32 = startRadiusF32 to endRadiusF32)
 
     private sealed interface Value {
-        fun scalar(): Interval = (this as Scalar).value
-        fun color(): Array<Interval> = (this as Color).value
+        fun scalar(): Interval {
+            require(this !is Unbounded) { (this as Unbounded).reason }
+            return (this as Scalar).value
+        }
+        fun color(): Array<Interval> {
+            require(this !is Unbounded) { (this as Unbounded).reason }
+            return (this as Color).value
+        }
     }
+    /** No finite, infinity or NaN alternative is excluded from an unproved intermediate. */
+    private data class Unbounded(val reason: String) : Value
     private data class Scalar(val value: Interval) : Value
     private data class Color(val value: Array<Interval>) : Value
     private data class Flag(val values: Set<Boolean>) : Value
@@ -86,17 +94,38 @@ internal object W5cGradientCpuOracle {
             high.position == low.position || high.position - low.position >= java.lang.Float.MIN_NORMAL
         }
         fun evaluate(node: GradientNumericOperationGraphV1.Node): Value = values.getOrPut(node) {
+            try {
+                evaluateOperation(node)
+            } catch (failure: IllegalArgumentException) {
+                Unbounded(failure.message ?: "No finite operation-domain proof")
+            }
+        }
+
+        private fun evaluateOperation(node: GradientNumericOperationGraphV1.Node): Value {
             if (node.operation == Operation.VALIDITY_MASK) {
-                val valid = (evaluate(node.inputs[1]) as Flag).values
-                if (valid == setOf(false)) return@getOrPut Color(Array(4) { Interval.ZERO })
+                val validity = evaluate(node.inputs[1])
+                if (validity is Unbounded) return validity
+                val valid = (validity as Flag).values
+                if (valid == setOf(false)) return Color(Array(4) { Interval.ZERO })
                 val color = evaluate(node.inputs[0]).color()
-                return@getOrPut Color(if (false in valid) Array(4) {
+                return Color(if (false in valid) Array(4) {
                     WgslFloatEnvelopeV1Oracle.gradientHull(color[it], Interval.ZERO) } else color)
             }
+            // SELECT/AND/OR operands really execute eagerly. An unproved value
+            // remains explicit, but cannot influence a result selected without it.
             val args = node.inputs.map(::evaluate)
+            if (node.operation == Operation.SELECT) {
+                val flags = (args[2] as? Flag)?.values
+                if (flags?.size == 1) return args[if (flags.single()) 1 else 0]
+            }
+            if (node.operation == Operation.AND_FLAG && args.any { it == Flag(setOf(false)) })
+                return Flag(setOf(false))
+            if (node.operation == Operation.OR_FLAG && args.any { it == Flag(setOf(true)) })
+                return Flag(setOf(true))
+            args.filterIsInstance<Unbounded>().firstOrNull()?.let { return it }
             val oracle = WgslFloatEnvelopeV1Oracle
             fun scalarF32(valueF32: Float) = Scalar(Interval.input(valueF32))
-            when (node.operation) {
+            return when (node.operation) {
                 Operation.INPUT_LOCAL_POINT_F32 -> scalarF32(if (node.input == Input.X) pointF32.x else pointF32.y)
                 Operation.INPUT_UNIFORM_F32 -> scalarF32(when (node.input) {
                     Input.START_X -> startF32.x; Input.START_Y -> startF32.y
