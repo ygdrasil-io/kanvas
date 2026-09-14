@@ -124,11 +124,22 @@ internal object ColorRoundedGraphProofV1 {
                 }
                 is ColorOperationGraphV1.Scalar.Pow -> {
                     val base = value(node.a); val exponent = value(node.b)
-                    // pow inherits log2, rounded multiply and exp2. For the EOTF domain
-                    // base in [2^-126,1.001], exponent exactly2.4, log2 lies [-126,.002].
-                    // Its max3ULP / 2^-21 absolute error and every multiplication rounding
-                    // keep exp2's input below .005; exp2's F32 envelope is strictly <2.
-                    // Underflow and permitted flushing are included by the lower endpoint0.
+                    // pow inherits log2, rounded multiply and exp2. Throughout the
+                    // guard's base range [2^-126,1.001], real log2 lies [-126,.002].
+                    // Its largest binary32 ULP is 2^-17: the outside-[.5,2] 3ULP
+                    // error plus one rounding ULP is <=4*2^-17=2^-15. This also
+                    // covers the alternative absolute2^-21 error on [.5,2].
+                    // The exact exponent is 2.4F32=2.400000095367431640625<2.401.
+                    // Multiplication adds at most 2^-15 (one ULP at magnitude303):
+                    // t is in (-303,.005), since (.002+2^-15)*2.401+2^-15<.005.
+                    // exp2's (3+2*abs(t))ULP error, plus one rounding ULP, is
+                    // <=610*2^-23 globally here; 2^.005+610*2^-23<1.004<2.
+                    // The lower bound uses the actual sealed EOTF graph, not just
+                    // that broad guard: its selected power branch has x>.04045F32,
+                    // so rounded (x+.055F32)/1.055F32>.09 and t>-9. Thus even
+                    // 2^-9-610*2^-23>0; no exp2 underflow is reachable. Flushing
+                    // a tiny log2/multiply result to zero remains in these bounds.
+                    // [0,2] is therefore safe for EOTF, not a generic pow certificate.
                     require(base.lowerF64 >= normalF64 && base.upperF64 <= 1.001 && exponent == exact(2.4f))
                     ColorBoundsV1(0.0,2.0)
                 }
