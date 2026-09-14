@@ -40,6 +40,40 @@ internal object W5fColorCpuOracle {
 
     private fun applyFilter(input: Array<Interval>, filter: ColorFilter): Array<Interval> = when (filter) {
         is ColorFilter.Matrix -> matrix(input, filter)
+        is ColorFilter.HSLAMatrix -> {
+            val u = unpremultiply(input)
+            // Retain the disjoint hue intervals through the matrix and inverse;
+            // h≈0 and h≈1 must not become a spurious full-circle hue box.
+            val alternatives = rgbToHsl(u).map { hsl ->
+                val transformed = matrixRows(arrayOf(hsl[0],hsl[1],hsl[2],u[3]),filter.values)
+                val rgb = hslToRgb(transformed)
+                premultiply(Array(4) { clamp(if (it == 3) transformed[3] else rgb[it]) })
+            }
+            Array(4) { c -> hull(*alternatives.map { it[c] }.toTypedArray()) }
+        }
+        ColorFilter.HighContrast -> {
+            val u = unpremultiply(input)
+            premultiply(Array(4) { if (it == 3) u[3] else {
+                val centered = sub(u[it],Interval.input(.5f))
+                clamp(hull(add(Interval.input(.5f),mul(Interval.input(3f),centered)),
+                    WgslFloatEnvelopeV1Oracle.gradientFma(Interval.input(3f),centered,Interval.input(.5f))))
+            } })
+        }
+        ColorFilter.Luma -> {
+            val u = unpremultiply(input)
+            val luma = matrixRows(u,floatArrayOf(.2126f,.7152f,.0722f,0f,0f,
+                0f,0f,0f,0f,0f, 0f,0f,0f,0f,0f, 0f,0f,0f,0f,0f))[0]
+            arrayOf(Interval.ZERO,Interval.ZERO,Interval.ZERO,mul(u[3],luma))
+        }
+        ColorFilter.Overdraw -> {
+            val scaled = mul(clamp(input[3]),Interval.input(255f))
+            val first = scaled.lower.subtract(BigDecimal("0.5")).setScale(0,RoundingMode.CEILING).toInt().coerceIn(0,5)
+            val last = scaled.upper.add(BigDecimal("0.5")).setScale(0,RoundingMode.FLOOR).toInt().coerceIn(0,5)
+            val palette = listOf(ColorARGB.of(128,255,0,0),ColorARGB.of(128,0,255,0),ColorARGB.of(128,0,0,255),
+                ColorARGB.of(128,255,255,0),ColorARGB.of(128,0,255,255),ColorARGB.of(128,255,0,255))
+            val choices = (first..last).map { source(palette[it]) }
+            Array(4) { c -> hull(*choices.map { it[c] }.toTypedArray()) }
+        }
         is ColorFilter.Table -> {
             require(filter.table.size == 256)
             val straight = unpremultiply(input)
@@ -109,8 +143,11 @@ internal object W5fColorCpuOracle {
             alpha.lower.compareTo(BigDecimal.ONE) == 0 && alpha.upper.compareTo(BigDecimal.ONE) == 0 -> input[it]
             else -> WgslFloatEnvelopeV1Oracle.gradientDivide(input[it], alpha)
         } }
-        val transformed = Array(4) { row ->
-            val left = Array(5) { Interval.input(filter.matrix[row * 5 + it]) }
+        val transformed = matrixRows(straight,filter.matrix.toFloatArray()).map(::clamp).toTypedArray()
+        return premultiply(transformed)
+    }
+    private fun matrixRows(straight: Array<Interval>, coefficients: FloatArray): Array<Interval> = Array(4) { row ->
+            val left = Array(5) { Interval.input(coefficients[row * 5 + it]) }
             val right = Array(5) { if (it == 4) Interval.ONE else straight[it] }
             // Enumerate every sum tree and every permitted product/add fusion.
             // The literal expression's intermediate `let`s are not rounding barriers.
@@ -131,10 +168,73 @@ internal object W5fColorCpuOracle {
                     WgslFloatEnvelopeV1Oracle.gradientHull(*alternatives.toTypedArray())
                 }
             }
-            sum(31).let { Interval(it.lower.coerceIn(BigDecimal.ZERO, BigDecimal.ONE),
-                it.upper.coerceIn(BigDecimal.ZERO, BigDecimal.ONE)) }
+            sum(31)
         }
-        return Array(4) { if (it == 3) transformed[3] else mul(transformed[it], transformed[3]) }
+    private fun add(a: Interval,b: Interval) = WgslFloatEnvelopeV1Oracle.gradientAdd(a,b)
+    private fun sub(a: Interval,b: Interval) = WgslFloatEnvelopeV1Oracle.gradientSubtract(a,b)
+    private fun div(a: Interval,b: Interval) = WgslFloatEnvelopeV1Oracle.gradientDivide(a,b)
+    private fun hull(vararg a: Interval) = WgslFloatEnvelopeV1Oracle.gradientHull(*a)
+    private fun abs(a: Interval) = Interval(if (a.lower.signum() <= 0 && a.upper.signum() >= 0) BigDecimal.ZERO
+        else minOf(a.lower.abs(),a.upper.abs()),maxOf(a.lower.abs(),a.upper.abs()))
+    private fun point(a: Interval, value: Int) = a.lower.compareTo(BigDecimal(value)) == 0 && a.upper.compareTo(BigDecimal(value)) == 0
+    private fun floors(a: Interval): IntRange {
+        val normal = BigDecimal(java.lang.Float.MIN_NORMAL.toDouble())
+        val upper = if (a.lower < normal && a.upper > normal.negate()) maxOf(a.upper,BigDecimal.ZERO) else a.upper
+        return a.lower.setScale(0,RoundingMode.FLOOR).intValueExact()..upper.setScale(0,RoundingMode.FLOOR).intValueExact()
+    }
+    private fun minmax(a: Interval,b: Interval,minimum: Boolean): Interval {
+        val normal = BigDecimal(java.lang.Float.MIN_NORMAL.toDouble())
+        if (a.lower < normal && a.upper > normal.negate() && b.lower < normal && b.upper > normal.negate()) return hull(a,b)
+        return if (minimum) Interval(minOf(a.lower,b.lower),minOf(a.upper,b.upper))
+            else Interval(maxOf(a.lower,b.lower),maxOf(a.upper,b.upper))
+    }
+    private fun modulo(a: Interval, modulus: Int): List<Interval> {
+        val m = Interval.input(modulus.toFloat())
+        require(modulus == 1 || modulus == 2)
+        val quotient = if (modulus == 1) a else mul(a,Interval.input(.5f))
+        val range = floors(quotient)
+        val first = range.first; val last = range.last
+        require(last-first <= 8) { "Hue interval spans too many modulo branches" }
+        return (first..last).map { sub(a,mul(Interval.input(it.toFloat()),m)) }
+    }
+    private fun rgbToHsl(u: Array<Interval>): List<Array<Interval>> {
+        val max = minmax(u[0],minmax(u[1],u[2],false),false)
+        val min = minmax(u[0],minmax(u[1],u[2],true),true)
+        val delta = sub(max,min)
+        val light = div(add(max,min),Interval.input(2f))
+        if (point(delta,0)) return listOf(arrayOf(Interval.ZERO,Interval.ZERO,light))
+        require(delta.lower.signum() > 0) { "RGB delta crosses zero" }
+        val saturation = div(delta,sub(Interval.ONE,abs(sub(mul(Interval.input(2f),light),Interval.ONE))))
+        val hues = mutableListOf<Interval>()
+        for (c in 0..2) if (u[c].upper >= max.lower) {
+            val numerator = sub(u[(c+1)%3],u[(c+2)%3])
+            val raw = div(add(div(numerator,delta),Interval.input((2*c).toFloat())),Interval.input(6f))
+            hues += modulo(raw,1)
+        }
+        return hues.map { arrayOf(it,saturation,light) }
+    }
+    private fun hslToRgb(hsla: Array<Interval>): Array<Interval> {
+        val chroma = mul(sub(Interval.ONE,abs(sub(mul(Interval.input(2f),hsla[2]),Interval.ONE))),hsla[1])
+        val m = sub(hsla[2],div(chroma,Interval.input(2f)))
+        val choices = mutableListOf<Array<Interval>>()
+        for (h in modulo(hsla[0],1)) {
+            val sixH = mul(Interval.input(6f),h)
+            for (mod2 in modulo(sixH,2)) {
+                val x = mul(chroma,sub(Interval.ONE,abs(sub(mod2,Interval.ONE))))
+                val sectors = floors(sixH)
+                val first = sectors.first; val last = sectors.last
+                require(last-first <= 8)
+                for (sector in first..last) {
+                    val values = when (Math.floorMod(sector,6)) {
+                        0 -> arrayOf(chroma,x,Interval.ZERO); 1 -> arrayOf(x,chroma,Interval.ZERO)
+                        2 -> arrayOf(Interval.ZERO,chroma,x); 3 -> arrayOf(Interval.ZERO,x,chroma)
+                        4 -> arrayOf(x,Interval.ZERO,chroma); else -> arrayOf(chroma,Interval.ZERO,x)
+                    }
+                    choices += Array(3) { add(values[it],m) }
+                }
+            }
+        }
+        return Array(3) { c -> hull(*choices.map { it[c] }.toTypedArray()) }
     }
     private fun mul(a: Interval, b: Interval) = WgslFloatEnvelopeV1Oracle.gradientMultiply(a, b)
     private fun clamp(value: Interval) = Interval(value.lower.coerceIn(BigDecimal.ZERO,BigDecimal.ONE),

@@ -196,6 +196,30 @@ internal object ColorRoundedGraphProofV1 {
                     require(inverse.lowerF64 >= normalF64 && inverse.upperF64 <= largestDivisorF64)
                     rounded(Math.nextDown(1.0/inverse.upperF64),Math.nextUp(1.0/inverse.lowerF64),3.5)
                 }
+                is ColorOperationGraphV1.Scalar.Floor -> value(node.value).let {
+                    // Every reachable integer is exactly representable in this
+                    // bounded domain; floor is exact under the pinned profile.
+                    require(it.lowerF64 >= -16777216.0 && it.upperF64 <= 16777216.0)
+                    // A negative subnormal operand may be flushed to zero.
+                    ColorBoundsV1(kotlin.math.floor(it.lowerF64),kotlin.math.floor(
+                        if (it.upperF64 > -normalF64 && it.lowerF64 < normalF64) maxOf(0.0,it.upperF64) else it.upperF64))
+                }
+                is ColorOperationGraphV1.Scalar.Round -> value(node.value).let {
+                    require(it.lowerF64 >= -16777215.0 && it.upperF64 <= 16777215.0)
+                    // Include either permitted direction at every halfway tie.
+                    ColorBoundsV1(kotlin.math.ceil(it.lowerF64-0.5),kotlin.math.floor(it.upperF64+0.5))
+                }
+                is ColorOperationGraphV1.Scalar.IntegerModulo -> value(node.value).let {
+                    // The typed Floor operand is integral. Validate conversion
+                    // BEFORE i32; the normalized remainder and its f32 result
+                    // are exact, with no floating quotient near sector seams.
+                    require(it.lowerF64 >= -16777216.0 && it.upperF64 <= 16777216.0 &&
+                        it.lowerF64 == kotlin.math.floor(it.lowerF64) && it.upperF64 == kotlin.math.floor(it.upperF64))
+                    val first = it.lowerF64.toInt(); val last = it.upperF64.toInt(); val modulus = node.modulusI32
+                    if (Math.floorDiv(first,modulus) == Math.floorDiv(last,modulus))
+                        ColorBoundsV1(Math.floorMod(first,modulus).toDouble(),Math.floorMod(last,modulus).toDouble())
+                    else ColorBoundsV1(0.0,(modulus-1).toDouble())
+                }
                 is ColorOperationGraphV1.Scalar.EagerSelect -> {
                     val yes = value(node.yes); val no = value(node.no)
                     predicateOperands(node.predicate)

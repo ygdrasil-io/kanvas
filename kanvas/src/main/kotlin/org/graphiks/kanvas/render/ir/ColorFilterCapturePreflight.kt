@@ -44,6 +44,12 @@ internal object ColorFilterCapturePreflight {
             }
             if (value is ColorFilter.Table && value.table.size != 256)
                 return diagnostic("invalid.material.filter.table", "color-filter.table must have exactly 256 entries")
+            if (value is ColorFilter.HSLAMatrix) {
+                if (value.values.size != 20)
+                    return diagnostic("invalid.material.filter.hsla", "color-filter.hsla must have exactly 20 coefficients")
+                if (value.values.any { !it.isFinite() })
+                    return diagnostic("non-finite-value", "color-filter.hsla must be finite")
+            }
             stack.addLast(Frame(children(value).iterator(), frame.depthI32 + 1, value))
         }
         return null

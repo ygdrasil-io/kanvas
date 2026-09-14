@@ -11,11 +11,104 @@ import org.graphiks.kanvas.geometry.Path
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
+import org.junit.jupiter.params.provider.ValueSource
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalUnsignedTypes::class)
 class W5fColorFilterSurfacePixelTest {
+    private fun hslaValues() = floatArrayOf(1f,0f,0f,0f,.25f, 0f,.5f,0f,0f,0f,
+        0f,0f,1f,0f,0f, 0f,0f,0f,.5f,0f)
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = ["HSLA","HighContrast","Luma","Overdraw"])
+    fun presetsRectPathAlphaMutationAndFinalBlend(name: String) {
+        val filter = when (name) {
+            "HSLA" -> ColorFilter.HSLAMatrix(hslaValues())
+            "HighContrast" -> ColorFilter.HighContrast
+            "Luma" -> ColorFilter.Luma
+            else -> ColorFilter.Overdraw
+        }
+        for (lane in 0..2) renderFilter(filter,lane,ColorARGB.of(255,0,255,0))
+        exerciseKind(filter)
+        if (name == "HSLA") hslaBranchesAndPayloadMutation()
+        if (name == "Overdraw") overdrawPaletteAndAlphaMutation()
+    }
+    private fun hslaBranchesAndPayloadMutation() {
+        // Max R/G/B, max ties, delta0, wrap on either side and all six sectors.
+        // S and L are deliberately not clamped before conversion.
+        for (lane in 0..2) for (color in listOf(ColorARGB.Black,ColorARGB.White,
+            ColorARGB.of(255,255,0,0),ColorARGB.of(255,0,255,0),ColorARGB.of(255,0,0,255),
+            ColorARGB.of(255,255,255,0),ColorARGB.of(255,0,255,255),ColorARGB.of(255,255,0,255))) {
+            renderFilter(ColorFilter.HSLAMatrix(hslaValues()),lane,color)
+        }
+        for (lane in 0..2) for (h in listOf(-1f,0f,1f,-.875f,.125f,.29166666f,.45833334f,.625f,.7916667f,.9583333f,1.125f)) {
+            val values = floatArrayOf(0f,0f,0f,0f,h, 0f,0f,0f,0f,1.5f,
+                0f,0f,0f,0f,.375f, 0f,0f,0f,0f,.25f)
+            renderFilter(ColorFilter.HSLAMatrix(values),lane,ColorARGB.of(255,0,255,0))
+        }
+        for (lane in 0..2) {
+            val values = floatArrayOf(0f,0f,0f,0f,.125f, 0f,0f,0f,0f,1.5f,
+                0f,0f,0f,0f,1.25f, 0f,0f,0f,0f,.25f)
+            val unclamped = ColorFilter.HSLAMatrix(values)
+            val premature = ColorFilter.HSLAMatrix(values.copyOf().apply { this[9] = 1f; this[14] = 1f })
+            disjoint(W5fColorCpuOracle.expectedPaintSource(ColorARGB.Black,unclamped,finalBlend = BlendMode.SRC),
+                W5fColorCpuOracle.expectedPaintSource(ColorARGB.Black,premature,finalBlend = BlendMode.SRC))
+            renderFilter(unclamped,lane)
+        }
+        for (lane in 0..2) for (alpha in listOf(0f,1f,.25f)) {
+            val values = hslaValues().apply { this[9] = .5f; this[14] = .25f; this[19] = .25f }
+            val filter = ColorFilter.HSLAMatrix(values)
+            val changed = ColorFilter.HSLAMatrix(values.copyOf().apply { this[14] = -.5f })
+            fun expected(f: ColorFilter) = W5fColorCpuOracle.expectedShaderSource(ColorARGB.of(255,0,255,0),alpha,1f,null,f,finalBlend = BlendMode.SRC)
+            val expected = expected(filter)
+            disjoint(expected,expected(changed))
+            val surface = Surface(1,1)
+            surface.canvas {
+                val paint = Paint(shader = Shader.Opacity(Shader.SolidColor(ColorARGB.of(255,0,255,0)),alpha),
+                    colorFilter = filter,blendMode = BlendMode.SRC,antiAlias = false)
+                if (lane == 0) drawRect(RectF32.ofLTRB(0f,0f,1f,1f),paint) else drawPath(path(lane),paint)
+            }
+            values[14] = -.5f
+            repeat(2) { W5fSurfacePixelFixtures.assertNativePixels(surface.render(),listOf(expected)) }
+        }
+    }
+    private fun overdrawPaletteAndAlphaMutation() {
+        for (lane in 0..2) for (index in 0..5) for (color in listOf(ColorARGB.Black,ColorARGB.White)) {
+            renderFilter(ColorFilter.Overdraw,lane,ColorARGB.of(index,color.red,color.green,color.blue))
+        }
+        for (lane in 0..2) {
+            val matrix = constantInput(.25f,.5f,.75f,1f/255f)
+            val filter = ColorFilter.Compose(ColorFilter.Overdraw,ColorFilter.Matrix(matrix))
+            val mutated = ColorFilter.Compose(ColorFilter.Overdraw,ColorFilter.Matrix(constantInput(.25f,.5f,.75f,2f/255f)))
+            val expected = W5fColorCpuOracle.expectedPaintSource(ColorARGB.Black,filter,finalBlend = BlendMode.SRC)
+            disjoint(expected,W5fColorCpuOracle.expectedPaintSource(ColorARGB.Black,mutated,finalBlend = BlendMode.SRC))
+            val surface = Surface(1,1)
+            surface.canvas {
+                val paint = Paint(color = ColorARGB.Black,colorFilter = filter,blendMode = BlendMode.SRC,antiAlias = false)
+                if (lane == 0) drawRect(RectF32.ofLTRB(0f,0f,1f,1f),paint) else drawPath(path(lane),paint)
+            }
+            matrix.setRowMajor(constantInput(.25f,.5f,.75f,2f/255f).toFloatArray())
+            repeat(2) { W5fSurfacePixelFixtures.assertNativePixels(surface.render(),listOf(expected)) }
+        }
+    }
+    @Test fun hslaInvalidMetadataRefusesBeforeCaptureAndRecovers() {
+        val healthy = ColorFilter.Matrix(ColorMatrixF32.ofIdentity())
+        val expected = W5fColorCpuOracle.expectedPaintSource(ColorARGB.Black,healthy,finalBlend = BlendMode.SRC)
+        W5fSurfacePixelFixtures.requireBounded(expected)
+        val surface = Surface(1,1)
+        for ((values,code) in listOf(FloatArray(19) to "invalid.material.filter.hsla",
+            FloatArray(21) { Float.NaN } to "invalid.material.filter.hsla",
+            hslaValues().apply { this[4] = Float.NaN } to "non-finite-value",
+            hslaValues().apply { this[4] = Float.POSITIVE_INFINITY } to "non-finite-value")) {
+            val error = assertFailsWith<IllegalArgumentException> { surface.canvas {
+                drawRect(RectF32.ofLTRB(0f,0f,1f,1f),Paint(colorFilter = ColorFilter.HSLAMatrix(values),antiAlias = false))
+            } }
+            assertTrue(error.message.orEmpty().contains(code),error.message)
+            surface.canvas { drawRect(RectF32.ofLTRB(0f,0f,1f,1f),Paint(color = ColorARGB.Black,
+                colorFilter = healthy,blendMode = BlendMode.SRC,antiAlias = false)) }
+            W5fSurfacePixelFixtures.assertNativePixels(surface.render(),listOf(expected))
+        }
+    }
     @Test fun tableRectPathAlphaMutationAndFinalBlend() {
         primitiveRectPath(ColorFilter.Table(UByteArray(256) { (255-it).toUByte() }))
         exerciseKind(ColorFilter.Table(UByteArray(256) { (255-it).toUByte() }.apply { this[255] = 64u }))

@@ -40,6 +40,10 @@ public class ColorFilterExecutionPlanV1 private constructor(
             override val wordsI32 = 20
             override fun value(indexI32: Int): Float = captured.values[indexI32]
         }
+        class Hsla(val captured: ColorFilterNode.HSLAMatrix) : Numeric {
+            override val wordsI32 = 20
+            override fun value(indexI32: Int): Float = captured.values[indexI32]
+        }
         class Lerp(val tF32: Float) : Numeric {
             override val wordsI32 = 4
             override fun value(indexI32: Int): Float = if (indexI32 == 0) tF32 else 0f
@@ -63,6 +67,22 @@ public class ColorFilterExecutionPlanV1 private constructor(
         }
     }
     internal companion object {
+        fun hsla(filter: ColorFilterNode.HSLAMatrix): ColorFilterExecutionPlanV1 {
+            require(filter.values.sizeI32 == 20 && (0 until 20).all { filter.values[it].isFinite() })
+            val graph = ColorOperationGraphV1.hsla()
+            val structure = "hsla20-v1:${graph.canonicalIdentity}"
+            return ColorFilterExecutionPlanV1(structure,"$structure:${filter.canonicalId.value}",listOf(Record.Hsla(filter)),graph)
+        }
+        fun preset(filter: ColorFilterNode): ColorFilterExecutionPlanV1 {
+            val graph = when (filter) {
+                ColorFilterNode.HighContrast -> ColorOperationGraphV1.highContrast()
+                ColorFilterNode.Luma -> ColorOperationGraphV1.luma()
+                ColorFilterNode.Overdraw -> ColorOperationGraphV1.overdraw()
+                else -> error("Not a parameterless preset")
+            }
+            val structure = "preset-v1:${filter.canonicalId.value}:${graph.canonicalIdentity}"
+            return ColorFilterExecutionPlanV1(structure,structure,emptyList(),graph)
+        }
         fun blend(filter: ColorFilterNode.Blend): ColorFilterExecutionPlanV1 {
             val alpha = ColorOperationGraphV1.Scalar.DynamicF32(3L)
             val src = List(4) { if (it == 3) alpha else ColorOperationGraphV1.Scalar.Multiply(

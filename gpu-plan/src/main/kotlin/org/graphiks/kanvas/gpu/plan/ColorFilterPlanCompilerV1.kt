@@ -26,6 +26,11 @@ public object ColorFilterPlanCompilerV1 {
                             return ColorFilterCompileResultV1.Refused(W5fPlanDiagnostics.Matrix)
                     }
                     is ColorFilterNode.Compose -> Unit
+                    is ColorFilterNode.HSLAMatrix -> {
+                        if (node.values.sizeI32 != 20 || (0 until 20).any { !node.values[it].isFinite() })
+                            return ColorFilterCompileResultV1.Refused(W5fPlanDiagnostics.Hsla)
+                    }
+                    ColorFilterNode.HighContrast, ColorFilterNode.Luma, ColorFilterNode.Overdraw -> Unit
                     is ColorFilterNode.Table -> if (node.table.sizeI32 != 256)
                         return ColorFilterCompileResultV1.Refused(W5fPlanDiagnostics.Table)
                     is ColorFilterNode.Lighting, is ColorFilterNode.Blend, ColorFilterNode.SRGBToLinear, ColorFilterNode.LinearToSRGB -> Unit
@@ -51,6 +56,8 @@ public object ColorFilterPlanCompilerV1 {
         // copy records or substitute child operation graphs (including direct IR calls).
         postOrder.forEach { node -> compiled[node] = when (node) {
                 is ColorFilterNode.Matrix -> ColorFilterExecutionPlanV1.matrix(node)
+                is ColorFilterNode.HSLAMatrix -> ColorFilterExecutionPlanV1.hsla(node)
+                ColorFilterNode.HighContrast, ColorFilterNode.Luma, ColorFilterNode.Overdraw -> ColorFilterExecutionPlanV1.preset(node)
                 is ColorFilterNode.Table -> ColorFilterExecutionPlanV1.table(node)
                 is ColorFilterNode.Lighting -> ColorFilterExecutionPlanV1.lighting(node)
                 is ColorFilterNode.Blend -> ColorFilterExecutionPlanV1.blend(node)

@@ -46,6 +46,10 @@ internal object W5fColorOperationEmitterV1 {
                 is ColorOperationGraphV1.Scalar.Max -> "max(${arg(node.a)}, ${arg(node.b)})"
                 is ColorOperationGraphV1.Scalar.Abs -> "abs(${arg(node.value)})"
                 is ColorOperationGraphV1.Scalar.Sqrt -> "sqrt(${arg(node.value)})"
+                is ColorOperationGraphV1.Scalar.Floor -> "floor(${arg(node.value)})"
+                is ColorOperationGraphV1.Scalar.Round -> "round(${arg(node.value)})"
+                is ColorOperationGraphV1.Scalar.IntegerModulo ->
+                    "f32(((i32(${arg(node.value)}) % ${node.modulusI32}i) + ${node.modulusI32}i) % ${node.modulusI32}i)"
                 is ColorOperationGraphV1.Scalar.EagerSelect -> "select(${arg(node.no)}, ${arg(node.yes)}, ${predicate(node.predicate)})"
                 is ColorOperationGraphV1.Scalar.TableByte -> {
                     val word = Math.addExact(node.tableWordOffsetU32,uniformWordOffsetU32)

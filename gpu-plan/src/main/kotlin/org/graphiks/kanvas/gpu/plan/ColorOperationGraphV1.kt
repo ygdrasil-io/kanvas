@@ -32,6 +32,11 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
         public data class Max(public val a: Scalar, public val b: Scalar) : Scalar
         public data class Abs(public val value: Scalar) : Scalar
         public data class Sqrt(public val value: Scalar) : Scalar
+        public data class Floor(public val value: Scalar) : Scalar
+        public data class Round(public val value: Scalar) : Scalar
+        public data class IntegerModulo(public val value: Floor, public val modulusI32: Int) : Scalar {
+            init { require(modulusI32 in 1..16777216) }
+        }
         /** Both alternatives execute, exactly as WGSL select requires. */
         public data class EagerSelect(public val predicate: Predicate, public val yes: Scalar, public val no: Scalar) : Scalar
         public data class LazyBranch(public val predicate: Predicate, public val yes: Scalar, public val no: Scalar) : Scalar
@@ -66,6 +71,9 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
                 is Scalar.Max -> "max:${identity(node.a)}:${identity(node.b)}"
                 is Scalar.Abs -> "abs:${identity(node.value)}"
                 is Scalar.Sqrt -> "sqrt:${identity(node.value)}"
+                is Scalar.Floor -> "floor:${identity(node.value)}"
+                is Scalar.Round -> "round:${identity(node.value)}"
+                is Scalar.IntegerModulo -> "integer-modulo:${node.modulusI32}:${identity(node.value)}"
                 is Scalar.EagerSelect -> "select:${predicate(node.predicate)}:${identity(node.yes)}:${identity(node.no)}"
                 is Scalar.LazyBranch -> "lazy:${predicate(node.predicate)}:${identity(node.yes)}:${identity(node.no)}"
             }
@@ -98,6 +106,9 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
             is Scalar.Max -> Scalar.Max(bind(value.a),bind(value.b))
             is Scalar.Abs -> Scalar.Abs(bind(value.value))
             is Scalar.Sqrt -> Scalar.Sqrt(bind(value.value))
+            is Scalar.Floor -> Scalar.Floor(bind(value.value))
+            is Scalar.Round -> Scalar.Round(bind(value.value))
+            is Scalar.IntegerModulo -> Scalar.IntegerModulo(bind(value.value) as Scalar.Floor,value.modulusI32)
             is Scalar.EagerSelect -> Scalar.EagerSelect(predicate(value.predicate),bind(value.yes),bind(value.no))
             is Scalar.LazyBranch -> Scalar.LazyBranch(predicate(value.predicate),bind(value.yes),bind(value.no))
         }.also { bound[value] = it }
@@ -107,19 +118,28 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
     internal companion object {
         fun constant(valueF32: Float): Scalar = Scalar.ConstantF32(valueF32.toRawBits())
         fun eotf(input: Scalar): Scalar = conversion(input,ColorInterpolationProgramV1.RecipeKind.EOTF)
-        private fun conversion(input: Scalar, kind: ColorInterpolationProgramV1.RecipeKind): Scalar {
-            fun adapt(value: ColorInterpolationProgramV1.Scalar): Scalar = when (value) {
-                ColorInterpolationProgramV1.Scalar.Input -> input
+        private fun conversion(input: Scalar, kind: ColorInterpolationProgramV1.RecipeKind): Scalar =
+            conversion(listOf(input),kind).first()
+        private fun conversion(inputs: List<Scalar>, kind: ColorInterpolationProgramV1.RecipeKind): List<Scalar> {
+            val cache = java.util.IdentityHashMap<ColorInterpolationProgramV1.Scalar,Scalar>()
+            fun adapt(value: ColorInterpolationProgramV1.Scalar): Scalar = cache[value] ?: when (value) {
+                ColorInterpolationProgramV1.Scalar.Input -> inputs.single()
+                is ColorInterpolationProgramV1.Scalar.Component -> inputs[value.indexI32]
                 is ColorInterpolationProgramV1.Scalar.Constant -> Scalar.ConstantF32(value.bitsI32)
                 is ColorInterpolationProgramV1.Scalar.Add -> Scalar.Add(adapt(value.a), adapt(value.b))
                 is ColorInterpolationProgramV1.Scalar.Subtract -> Scalar.Subtract(adapt(value.a), adapt(value.b))
                 is ColorInterpolationProgramV1.Scalar.Multiply -> Scalar.Multiply(adapt(value.a), adapt(value.b))
                 is ColorInterpolationProgramV1.Scalar.Divide -> Scalar.Divide(adapt(value.a), adapt(value.b))
                 is ColorInterpolationProgramV1.Scalar.Pow -> Scalar.Pow(adapt(value.a), adapt(value.b))
+                is ColorInterpolationProgramV1.Scalar.Min -> Scalar.Min(adapt(value.a),adapt(value.b))
+                is ColorInterpolationProgramV1.Scalar.Max -> Scalar.Max(adapt(value.a),adapt(value.b))
+                is ColorInterpolationProgramV1.Scalar.Abs -> Scalar.Abs(adapt(value.value))
+                is ColorInterpolationProgramV1.Scalar.Floor -> Scalar.Floor(adapt(value.value))
+                is ColorInterpolationProgramV1.Scalar.IntegerModulo -> Scalar.IntegerModulo(adapt(value.value) as Scalar.Floor,value.modulusI32)
                 is ColorInterpolationProgramV1.Scalar.IfEqual -> Scalar.LazyBranch(Predicate.Equal(adapt(value.a), adapt(value.b)), adapt(value.yes), adapt(value.no))
                 is ColorInterpolationProgramV1.Scalar.IfLessEqual -> Scalar.LazyBranch(Predicate.LessEqual(adapt(value.a), adapt(value.b)), adapt(value.yes), adapt(value.no))
-            }
-            return adapt(ColorInterpolationProgramV1.recipe(kind).root)
+            }.also { cache[value] = it }
+            return ColorInterpolationProgramV1.recipe(kind).outputs.map(::adapt)
         }
         private fun straightInput(): List<Scalar> {
             val input = List(4) { Scalar.InputLinearPremul(it) }
@@ -140,6 +160,37 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
             val input = straightInput()
             return premultiply(List(4) { if (it == 3) input[3] else conversion(input[it],
                 if (decode) ColorInterpolationProgramV1.RecipeKind.EOTF else ColorInterpolationProgramV1.RecipeKind.OETF) })
+        }
+        fun hsla(): ColorOperationGraphV1 {
+            val straight = straightInput()
+            val input = conversion(straight.take(3),ColorInterpolationProgramV1.RecipeKind.RGB_TO_HSL)+straight[3]
+            val rows = List(4) { row ->
+                val products = List(4) { Scalar.Multiply(Scalar.DynamicF32(row*5L+it),input[it]) }
+                Scalar.Add(products.drop(1).fold(products.first() as Scalar) { sum,product -> Scalar.Add(sum,product) },
+                    Scalar.DynamicF32(row*5L+4L))
+            }
+            val rgb = conversion(rows.take(3),ColorInterpolationProgramV1.RecipeKind.HSL_TO_RGB)
+            return premultiply(List(4) { Scalar.Clamp01(if (it == 3) rows[3] else rgb[it]) })
+        }
+        fun highContrast(): ColorOperationGraphV1 {
+            val input = straightInput()
+            return premultiply(List(4) { if (it == 3) input[3] else Scalar.Clamp01(Scalar.Add(constant(.5f),
+                Scalar.Multiply(constant(3f),Scalar.Subtract(input[it],constant(.5f))))) })
+        }
+        fun luma(): ColorOperationGraphV1 {
+            val input = straightInput()
+            val coefficients = listOf(.2126f,.7152f,.0722f)
+            val products = List(3) { Scalar.Multiply(input[it],constant(coefficients[it])) }
+            val dot = Scalar.Add(Scalar.Add(products[0],products[1]),products[2])
+            return ColorOperationGraphV1(listOf(constant(0f),constant(0f),constant(0f),Scalar.Multiply(input[3],dot)))
+        }
+        fun overdraw(): ColorOperationGraphV1 {
+            val index = Scalar.Min(Scalar.Round(Scalar.Multiply(Scalar.Clamp01(Scalar.InputLinearPremul(3)),constant(255f))),constant(5f))
+            val palette = listOf(listOf(1f,0f,0f),listOf(0f,1f,0f),listOf(0f,0f,1f),
+                listOf(1f,1f,0f),listOf(0f,1f,1f),listOf(1f,0f,1f))
+            return premultiply(List(4) { channel -> if (channel == 3) constant(128f/255f) else
+                (4 downTo 0).fold(constant(palette[5][channel])) { rest,i -> Scalar.LazyBranch(
+                    Predicate.Equal(index,constant(i.toFloat())),constant(palette[i][channel]),rest) } })
         }
         fun matrix(): ColorOperationGraphV1 {
             val input = List(4) { Scalar.InputLinearPremul(it) }

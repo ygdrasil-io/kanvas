@@ -22,7 +22,11 @@ internal fun DisplayOp.isW5dGradientCandidateV2(allowNonGradient: Boolean = fals
             paint.colorFilter !is org.graphiks.kanvas.paint.ColorFilter.Lighting &&
             paint.colorFilter !is org.graphiks.kanvas.paint.ColorFilter.Blend &&
             paint.colorFilter != org.graphiks.kanvas.paint.ColorFilter.SRGBToLinear &&
-            paint.colorFilter != org.graphiks.kanvas.paint.ColorFilter.LinearToSRGB) return false
+            paint.colorFilter != org.graphiks.kanvas.paint.ColorFilter.LinearToSRGB &&
+            paint.colorFilter !is org.graphiks.kanvas.paint.ColorFilter.HSLAMatrix &&
+            paint.colorFilter != org.graphiks.kanvas.paint.ColorFilter.HighContrast &&
+            paint.colorFilter != org.graphiks.kanvas.paint.ColorFilter.Luma &&
+            paint.colorFilter != org.graphiks.kanvas.paint.ColorFilter.Overdraw) return false
         var source = paint.shader
         var countI32 = 0
         while (source is Shader.Opacity || source is Shader.WithColorFilter) {
