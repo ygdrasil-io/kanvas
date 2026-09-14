@@ -39,13 +39,24 @@ public class ColorSourceProofV1 private constructor(
             Math.addExact(size,binding.colorUniformWordCountV4())
         }
     public fun copyOperationGraph(): ColorOperationGraphV1 = graph
+    public val composedBindingLayout: ComposedBindingLayoutV1? get() = composedDefinition?.layout
+    public fun authenticatesComposedStorage(resource: ComposedBindingLayoutV1.Resource,
+        slab: GradientStopSlabPlanV1): Boolean = composedDefinition?.let { definition ->
+        definition.slab === slab && definition.layout.resources.any { it === resource } &&
+            definition.gradientReferences.isNotEmpty() && definition.gradientReferences.all {
+                it.resource === resource && it.definition.slab === slab && it.definition.frameOwner === definition.frameOwner &&
+                    definition.frameOwner.owns(it.definition.captured) &&
+                    definition.frameOwner.range(it.definition.captured) == it.definition.range
+            }
+    } == true
     public fun authenticates(table: MaterialPlanTable, root: MaterialPlanRef, coordinates: SourceCoordinatesV4): Boolean {
         if (this.coordinates != coordinates || table.sourceIdentity(root) != sourceIdentity) return false
         composedDefinition?.let { definition ->
             val entry = table.entry(root)
             val binding = entry.bindings as? ComposedMaterialBindingV5 ?: return false
             return coordinates == SourceCoordinatesV4.None && binding.definition === definition && binding.sourceProof === this &&
-                entry.program is ComposedMaterialProgramV5 && binding.authenticates(entry.program)
+                entry.program is ComposedMaterialProgramV5 && binding.authenticates(entry.program) &&
+                gradientStopSlab === definition.slab && (definition.slab == null || table.gradientStopSlab === definition.slab)
         }
         if (parentSource != null) {
             val binding = table.entry(root).bindings as? ColorFilterBindingV4 ?: return false
@@ -69,12 +80,13 @@ public class ColorSourceProofV1 private constructor(
         fun issueComposed(definition: PreparedComposedSourceV5): ColorSourceProofV1? {
             val graph = definition.operationGraph
             val facts = ColorRoundedGraphProofV1.prove(graph,definition.numericWordsF32Bits,definition.tableRecords,
-                definition.deviceBoundsF32) ?: return null
+                definition.deviceBoundsF32,definition.integerWordsU32,definition.slab) ?: return null
             val identity = "composed-source-proof-v5:${definition.capturedIdentity}:${definition.layout.composedBindingLayoutHash}:" +
-                "${graph.canonicalIdentity}:${definition.numericWordsF32Bits}:${definition.tableRecords.mapValues { it.value.canonicalId.value }}"
+                "${graph.canonicalIdentity}:${definition.numericWordsF32Bits}:${definition.integerWordsU32}:" +
+                "${definition.slab?.canonicalIdentity}:${definition.tableRecords.mapValues { it.value.canonicalId.value }}"
             return ColorSourceProofV1(identity,definition.capturedIdentity,SourceCoordinatesV4.None,graph,emptyList(),
                 definition.numericWordsF32Bits,definition.tableRecords,immutableList(facts),definition.deviceBoundsF32,
-                composedDefinition=definition)
+                integerWordValuesU32=definition.integerWordsU32,gradientStopSlab=definition.slab,composedDefinition=definition)
         }
         fun filteredIdentity(source: String, execution: ColorFilterExecutionPlanV1): String =
             "color-filter-source-v4:$source:${execution.canonicalIdentity}"

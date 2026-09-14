@@ -9,9 +9,11 @@ import org.graphiks.kanvas.gpu.plan.GradientNumericOperationGraphV1.Input as I
 
 internal object ColorSourceProofCompilerV1 {
     internal class ComposedGraph(val evaluation: MaterialEvaluationDagV5,val graph: ColorOperationGraphV1,
-        val words: Map<Long,Int>,val tables: Map<Long,org.graphiks.kanvas.render.ir.ImmutableUBytes>)
-    internal fun graphForComposed(metadata: MaterialSourceConstructionV4.ComposedMetadata): ComposedGraph {
+        val words: Map<Long,Int>,val tables: Map<Long,org.graphiks.kanvas.render.ir.ImmutableUBytes>,val integers: Map<Long,UInt>)
+    internal fun graphForComposed(metadata: MaterialSourceConstructionV4.ComposedMetadata,
+        gradients: Map<MaterialSourceConstructionV4,PreparedSourceDefinitionV4>): ComposedGraph {
         val words = linkedMapOf<Long,Int>()
+        val integers = linkedMapOf<Long,UInt>()
         val tables = linkedMapOf<Long,org.graphiks.kanvas.render.ir.ImmutableUBytes>()
         val graphs = mutableListOf<ColorOperationGraphV1>()
         val entries = mutableListOf<MaterialEvaluationDagV5.Entry>()
@@ -38,15 +40,36 @@ internal object ColorSourceProofCompilerV1 {
                     filter.forEachTable { index,value -> tables[Math.addExact(offset,index)] = value }
                     filter.copyOperationGraph().bindInput(child(),offset)
                 }
-                is org.graphiks.kanvas.render.ir.MaterialNode.WithWorkingColorSpace -> child()
+                is org.graphiks.kanvas.render.ir.MaterialNode.WithWorkingColorSpace,
+                is org.graphiks.kanvas.render.ir.MaterialNode.WithLocalMatrix,
+                is org.graphiks.kanvas.render.ir.MaterialNode.CoordClamp -> child()
                 is org.graphiks.kanvas.render.ir.MaterialNode.Blend -> BlendFormulaProgramV1.colorOperations(original.mode.name.lowercase(),child(1).outputs,child(0).outputs)
+                is org.graphiks.kanvas.render.ir.MaterialNode.LinearGradient,
+                is org.graphiks.kanvas.render.ir.MaterialNode.RadialGradient,
+                is org.graphiks.kanvas.render.ir.MaterialNode.SweepGradient,
+                is org.graphiks.kanvas.render.ir.MaterialNode.ConicalGradient -> {
+                    val source=requireNotNull(node.gradientSource)
+                    val solid=source.gradient?.stops?.solidColor
+                    if(solid != null) {
+                        listOf(solid.redNormalized,solid.greenNormalized,solid.blueNormalized,solid.alphaNormalized)
+                            .forEachIndexed { channel,value -> words[offset+channel]=value.toRawBits() }
+                        val alpha=S.DynamicF32(offset+3L)
+                        ColorOperationGraphV1(List(4) { if(it == 3) alpha else
+                            S.Multiply(ColorOperationGraphV1.eotf(S.DynamicF32(offset+it)),alpha) })
+                    } else {
+                        val definition=gradients.getValue(source)
+                        definition.numericWordsF32Bits.forEach { (key,value) -> words[Math.addExact(offset,key)]=value }
+                        definition.integerWordsU32.forEach { (key,value) -> integers[Math.addExact(offset,key)]=value }
+                        graphForPrepared(definition).bindInput(ColorOperationGraphV1(List(4) { ColorOperationGraphV1.constant(0f) }),offset)
+                    }
+                }
                 else -> error(W5gPlanDiagnostics.Unpromoted)
             }
             graphs += graph
-            entries += MaterialEvaluationDagV5.Entry(node.ownerNodeIndexI32,node.children,SourceCoordinatesV4.None,
+            entries += MaterialEvaluationDagV5.Entry(node.ownerNodeIndexI32,node.children,node.gradientSource?.coordinates ?: SourceCoordinatesV4.None,
                 ComposedMaterialProgramV5(MaterialProgramPlanId("composed-evaluation-v5:${node.topologyIdentity}:${graph.canonicalIdentity}"),graph))
         }
-        return ComposedGraph(MaterialEvaluationDagV5.of(entries),graphs.last(),words,tables)
+        return ComposedGraph(MaterialEvaluationDagV5.of(entries),graphs.last(),words,tables,integers)
     }
     private fun graphForImage(execution: ImageSampleExecutionPlanV1,child: ColorSourceProofV1?): ColorOperationGraphV1 {
         return graphForCapturedImage(execution.numericAuthority,execution.upload,child,execution.atlasBlend?.copyOperationGraph())

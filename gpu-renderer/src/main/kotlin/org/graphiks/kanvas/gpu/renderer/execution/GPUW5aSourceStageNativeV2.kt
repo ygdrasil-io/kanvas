@@ -172,7 +172,7 @@ private fun composeSource(template: GPUW5aGeometryPipelineTemplate, source: W5aP
         "consumer.premul_rgba", "consumer.color")
     require(slots.any(geometry::contains)) { "W5a source requires an authenticated color-writing geometry shader" }
     require(!geometry.contains("@group(1)")) { "W5a source group is already occupied" }
-    val requiresCoordinates = source.stage.gradientStopSlab != null || source.stage.imageV3 != null
+    val requiresCoordinates = source.stage.consumesDevicePositionF32
     require(!requiresCoordinates || template.materialCoordinateSlot != null)
     val sourceExpression = if (requiresCoordinates) "kanvas_material_source(${source.stage.coordinateFunctionName}(${requireNotNull(template.materialCoordinateSlot).devicePointWgsl}))"
         else "kanvas_material_source(vec2<f32>(0.0))"
@@ -239,7 +239,18 @@ private fun composeSource(template: GPUW5aGeometryPipelineTemplate, source: W5aP
         original.bindings.all { it.group == 0 } &&
         composed.bindings.filter { it.group == 0 } == original.bindings &&
         composed.bindings.filter { it.group == 1 }.size == manifest.size &&
-        manifest.all { expected -> composed.bindings.any { it.group == 1 && it.binding == expected.bindingI32 && it.resourceKind == expected.resourceKind } } &&
+        manifest.all { expected -> composed.bindings.any { it.group == 1 && it.binding == expected.bindingI32 &&
+            it.resourceKind == expected.resourceKind && (expected.composedResource?.buffer?.let { buffer ->
+                // Runtime-array binding size is unavailable in this parser's
+                // report; its reflected element layout supplies the declared
+                // minimum. The complete dynamic slab is authenticated separately.
+                it.access == "read" && composed.layouts.any { layout ->
+                    layout.structName == "GradientStopV1" && layout.addressSpace == "storage" &&
+                        layout.size.toLong() == buffer.minBindingSizeBytesI64 && layout.alignment == 16 &&
+                        layout.members.map { member -> member.offset } == listOf(0,16) &&
+                        layout.members.all { member -> member.size == 16 && member.alignment == 16 }
+                }
+            } ?: true) } } &&
         composed.bindings.size == original.bindings.size + manifest.size + (if (destination == null) 0 else if (destination.sealedW5b?.compositionAbiI32 == 4) 3 else 2) && material != null &&
         material.binding == 0 && material.resourceKind == "uniformBuffer" &&
         material.minBindingSize?.toLong() == source.stage.uniformByteCountI64) {
@@ -271,6 +282,13 @@ internal fun materializeW5aSourcePartitionV2(
         val stopSlabs = renders.values.flatMap { it.drawPackets }.mapNotNull { it.materialSourcePartitionV3()?.stage?.gradientStopSlab }
             .distinctBy { it.canonicalIdentity }
         require(stopSlabs.size <= 1) { "W5c requires one sealed frame stop slab" }
+        renders.values.flatMap { it.drawPackets }.mapNotNull { it.materialSourcePartitionV3()?.stage }
+            .filter { it.composedLayout != null && it.gradientStopSlab != null }.forEach { stage ->
+                require(stage.gradientStopSlab === stopSlabs.first()) { "V5 must retain the exact shared frame slab owner" }
+                stage.bindingManifest.mapNotNull { it.composedResource }.forEach {
+                    require(requireNotNull(stage.composedProof).authenticatesComposedStorage(it,stopSlabs.first()))
+                }
+            }
         val stopBuffer = stopSlabs.singleOrNull()?.let { materializeGradientStopsV1(device, queue, it, owned) }
         data class SourcePipelineKey(
             val geometryPipeline: GPURenderPipeline,
@@ -351,7 +369,8 @@ internal fun materializeW5aSourcePartitionV2(
                                         visibility = GPUShaderStage.Fragment, texture = TextureBindingLayout(sampleType = GPUTextureSampleType.Float))
                                     "storageBuffer" -> BindGroupLayoutEntry(binding = binding.bindingI32.toUInt(), visibility = GPUShaderStage.Fragment,
                                         buffer = BufferBindingLayout(type = GPUBufferBindingType.ReadOnlyStorage,
-                                            hasDynamicOffset = false, minBindingSize = 32uL))
+                                            hasDynamicOffset = false,
+                                            minBindingSize = binding.composedResource?.buffer?.minBindingSizeBytesI64?.toULong() ?: 32uL))
                                     else -> error("Invalid source manifest resource")
                                 }
                             },
@@ -395,9 +414,15 @@ internal fun materializeW5aSourcePartitionV2(
                 val group = groups.getOrPut(source.stage.canonicalIdentity to materialLayout) {
                     val entries = mutableListOf(BindGroupEntry(binding = 0u,
                         resource = BufferBinding(buffer = buffer, offset = 0uL, size = bytes.size.toULong())))
-                    source.stage.gradientStopSlab?.let { slab -> entries += BindGroupEntry(
-                        binding = source.stage.bindingManifest.single { it.resourceKind == "storageBuffer" }.bindingI32.toUInt(),
-                        resource = BufferBinding(buffer = requireNotNull(stopBuffer), offset = 0uL, size = slab.byteSizeI64.toULong())) }
+                    source.stage.gradientStopSlab?.let { slab ->
+                        val bindings=if(source.stage.composedLayout != null) source.stage.bindingManifest.filter { it.resourceKind == "storageBuffer" }
+                            else listOf(source.stage.bindingManifest.single { it.resourceKind == "storageBuffer" })
+                        bindings.forEach { binding ->
+                            binding.composedResource?.let { require(requireNotNull(source.stage.composedProof).authenticatesComposedStorage(it,slab)) }
+                            entries += BindGroupEntry(binding = binding.bindingI32.toUInt(),
+                                resource = BufferBinding(buffer = requireNotNull(stopBuffer), offset = 0uL, size = slab.byteSizeI64.toULong()))
+                        }
+                    }
                     imageLease?.let { entries += GPUW5eImageNativeV1.binding(it,
                         source.stage.bindingManifest.single { it.resourceKind == "sampledTexture" }.bindingI32.toUInt()) }
                     GPUPreparedNativeBindGroupOperand(owned.own(device.createBindGroup(BindGroupDescriptor(

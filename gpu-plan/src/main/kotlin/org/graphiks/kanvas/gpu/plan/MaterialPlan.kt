@@ -228,6 +228,7 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
         while (true) {
             val source = entry(ref)
             when (source.bindings) {
+                is ComposedMaterialBindingV5 -> return source.bindings.definition.slab != null
                 is MaterialBindingPlan.GradientV1,is MaterialBindingPlan.GradientV2,is GradientInterpolationBindingV4 -> return true
                 is MaterialBindingPlan.OpacityF32V1,is ColorFilterBindingV4 -> {
                     require(ref.indexI32 > 0) { W5fPlanDiagnostics.Schema }
@@ -371,7 +372,10 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
                     }
                 }
             }
-            val stops = mutableListOf<GradientStopPlanV1>()
+            val composedDefinitions=entries.mapNotNull { (it.bindings as? ComposedMaterialBindingV5)?.definition }
+            val finalComposedSlab=composedDefinitions.firstNotNullOfOrNull { it.slab }
+            require(composedDefinitions.all { it.slab == null || it.slab === finalComposedSlab }) { W5gPlanDiagnostics.Schema }
+            val stops = finalComposedSlab?.copyStops()?.toMutableList() ?: mutableListOf<GradientStopPlanV1>()
             val ranges = linkedMapOf<List<GradientStopPlanV1>, GradientStopRangeV1>()
             val rewritten = entries.map { entry ->
                 val binding = entry.bindings
@@ -387,6 +391,15 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
                 require(lastI64 <= slabStops.size.toLong())
                 val sequence = slabStops.subList(firstI64.toInt(), lastI64.toInt()).toList()
                 val range = ranges.getOrPut(sequence) {
+                    if(finalComposedSlab != null) {
+                        // The V5 frame already owns the complete shared inventory.
+                        // Existing ordinary entries may rebind only to a certified
+                        // equal range; they cannot rebuild or shorten that slab.
+                        val base=(0..stops.size-sequence.size).firstOrNull { first ->
+                            stops.subList(first,first+sequence.size) == sequence
+                        } ?: error(W5gPlanDiagnostics.Schema)
+                        return@getOrPut GradientStopRangeV1(base.toUInt(),sequence.size.toUInt())
+                    }
                     require((stops.size.toLong() + sequence.size) * 32L <= Int.MAX_VALUE)
                     GradientStopRangeV1(stops.size.toUInt(), sequence.size.toUInt()).also { stops += sequence }
                 }
@@ -396,7 +409,7 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
                     is GradientInterpolationBindingV4 -> binding
                 })
             }
-            val slab = stops.takeIf { it.isNotEmpty() }?.let(GradientStopSlabPlanV1::of)
+            val slab = finalComposedSlab ?: stops.takeIf { it.isNotEmpty() }?.let(GradientStopSlabPlanV1::of)
             val rebasedEntries = rewritten.mapIndexed { indexI32, entry ->
                 val binding = entry.bindings
                 val sealed = when (binding) {

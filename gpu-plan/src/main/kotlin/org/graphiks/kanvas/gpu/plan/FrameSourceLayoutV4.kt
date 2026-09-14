@@ -32,7 +32,9 @@ internal class FrameSourceLayoutV4 private constructor(
     private val legacyRanges = java.util.Collections.unmodifiableMap(java.util.IdentityHashMap(legacyRanges))
     private val legacyAllocations = immutableList(legacyAllocations)
     private val imageUploads = immutableList(imageUploads)
-    fun owns(source: MaterialSourceConstructionV4): Boolean = entries.any { row -> row.any { it.source === source } }
+    fun owns(source: MaterialSourceConstructionV4): Boolean = entries.any { row -> row.any {
+        it.source === source || it.source.composed?.nodes?.any { node -> node.gradientSource === source } == true
+    } }
     fun range(source: MaterialSourceConstructionV4): GradientStopRangeV1 =
         requireNotNull(pendingRanges[source]) { W5fPlanDiagnostics.Schema }
 
@@ -83,10 +85,10 @@ internal class FrameSourceLayoutV4 private constructor(
             boundSources.getOrPut(source) {
                 source.resolvedSource ?: run {
                 var table = if (source.composed != null) {
-                    val definition = PreparedComposedSourceV5.prepare(this,source)
+                    val definition = PreparedComposedSourceV5.prepare(this,source,prepared)
                     val proof = ColorSourceProofV1.issueComposed(definition)
                         ?: throw IllegalArgumentException(W5gPlanDiagnostics.NumericDomainUnbounded)
-                    MaterialPlanTable.of(listOf(MaterialPlanEntry(definition.program,ComposedMaterialBindingV5(definition,proof))))
+                    MaterialPlanTable.of(listOf(MaterialPlanEntry(definition.program,ComposedMaterialBindingV5(definition,proof),definition.slab)))
                 } else if (source.image != null) {
                     val resolved = source.image.bind(source.image.child?.let(::bind),
                         Math.addExact(Math.addExact(nonUniformBytesI64,stopBytesI64),uniformBytesI64))
@@ -281,10 +283,11 @@ internal class FrameSourceLayoutV4 private constructor(
                 is Pending -> other.sameLegacy(this)
             }
         }
-        class Pending(val metadata: MaterialSourceConstructionV4.GradientMetadata) : RangeValues {
+        class Pending(val metadata: MaterialSourceConstructionV4.GradientMetadata,
+            val composedOwner: org.graphiks.kanvas.render.ir.MaterialNode? = null) : RangeValues {
             override val countI32: Int get() = metadata.stops.countI32
             override fun same(other: RangeValues): Boolean = when (other) {
-                is Pending -> metadata.interpolation == other.metadata.interpolation &&
+                is Pending -> composedOwner === other.composedOwner && metadata.interpolation == other.metadata.interpolation &&
                     metadata.recipeIdentity == other.metadata.recipeIdentity && metadata.stops.sameSequence(other.metadata.stops)
                 is Legacy -> sameLegacy(other)
             }
@@ -293,6 +296,7 @@ internal class FrameSourceLayoutV4 private constructor(
             // Match that SAME eventual range before budgeting, in either first-use
             // order; no prepared tuple is allocated during this metadata scan.
             fun sameLegacy(other: Legacy): Boolean {
+                if(composedOwner != null) return false
                 if (metadata.interpolation != ColorInterpolation.SRGB || metadata.recipeIdentity != null ||
                     countI32 != other.countI32) return false
                 val pending = metadata.stops.values().iterator()
@@ -442,9 +446,17 @@ internal class FrameSourceLayoutV4 private constructor(
             val interner = MaterialTableInterningRecipeV4.of(rows.map { row -> row.map { it.descriptor } })
             val finalEntries = interner.bind(rows) { it.descriptor }
             val allocations = mutableListOf<RangeAllocation>()
+            val composedOwners=java.util.IdentityHashMap<MaterialSourceConstructionV4,org.graphiks.kanvas.render.ir.MaterialNode>()
+            val composedEntries=sources.flatMap { source -> source.composed?.nodes.orEmpty().mapNotNull { node ->
+                node.gradientSource?.let { child ->
+                    composedOwners[child]=node.original
+                    SourceEntry(child,null,-1,MaterialInternerDescriptorV4("composed-stop-context:${child.canonicalIdentity}",false))
+                }
+            } }
             fun values(entry: SourceEntry): RangeValues? {
                 if (entry.oldEntry == null) return if (entry.wrapperOrdinalI32 == -1 &&
-                    entry.source.gradient?.stops?.countI32?.let { it > 0 } == true) RangeValues.Pending(requireNotNull(entry.source.gradient)) else null
+                    entry.source.gradient?.stops?.countI32?.let { it > 0 } == true)
+                    RangeValues.Pending(requireNotNull(entry.source.gradient),composedOwners[entry.source]) else null
                 val range = when (val binding = entry.oldEntry.bindings) {
                     is MaterialBindingPlan.GradientV1 -> binding.stopRange
                     is MaterialBindingPlan.GradientV2 -> binding.stopRange
@@ -457,7 +469,7 @@ internal class FrameSourceLayoutV4 private constructor(
                     (range.baseIndexU32.toLong()+range.countU32.toLong()).toInt()))
             }
             var stopCountI64 = 0L
-            for (entry in finalEntries) values(entry)?.let { current ->
+            for (entry in finalEntries+composedEntries) values(entry)?.let { current ->
                 if (allocations.none { it.values.same(current) }) {
                     val next = Math.addExact(stopCountI64,current.countI32.toLong())
                     require(next <= UInt.MAX_VALUE.toLong() && Math.multiplyExact(next,32L) <= Int.MAX_VALUE.toLong()) {
@@ -469,7 +481,7 @@ internal class FrameSourceLayoutV4 private constructor(
             }
             val pendingRanges = java.util.IdentityHashMap<MaterialSourceConstructionV4,GradientStopRangeV1>()
             val legacyRanges = java.util.IdentityHashMap<MaterialBindingPlan,GradientStopRangeV1>()
-            rows.flatten().forEach { entry -> values(entry)?.let { current ->
+            (rows.flatten()+composedEntries).forEach { entry -> values(entry)?.let { current ->
                 val range = allocations.single { it.values.same(current) }.range
                 if (entry.oldEntry == null) pendingRanges[entry.source] = range
                 else legacyRanges[entry.oldEntry.bindings] = range
@@ -524,8 +536,20 @@ internal class FrameSourceLayoutV4 private constructor(
                 add(source.uniformBytesI64(true),if (source.composed != null) W5gPlanDiagnostics.Uniform else W5dPlanDiagnostics.CoordinateUniformBudget)
             }
             val stopBytes = Math.multiplyExact(stopCountI64,32L)
-            if (stopBytes > 0L) requireGradientStorageCapabilitiesV4(stopBytes,caps)
-            add(stopBytes,W5cPlanDiagnostics.StopBudget)
+            val ordinaryStopBytes=allocations.filter { (it.values as? RangeValues.Pending)?.composedOwner == null }
+                .fold(0L) { bytes,allocation -> Math.addExact(bytes,Math.multiplyExact(allocation.values.countI32.toLong(),32L)) }
+            if(ordinaryStopBytes > 0L) requireGradientStorageCapabilitiesV4(ordinaryStopBytes,caps)
+            if (stopBytes > ordinaryStopBytes) try {
+                requireGradientStorageCapabilitiesV4(stopBytes,caps)
+            } catch(failure: IllegalArgumentException) {
+                throw IllegalArgumentException(when(failure.message) {
+                    W5cPlanDiagnostics.StorageUnavailable -> W5gPlanDiagnostics.Binding
+                    W5cPlanDiagnostics.StopBudget -> W5gPlanDiagnostics.Storage
+                    else -> failure.message
+                })
+            }
+            add(ordinaryStopBytes,W5cPlanDiagnostics.StopBudget)
+            add(stopBytes-ordinaryStopBytes,W5gPlanDiagnostics.Storage)
             retainedV4.forEach { add(it.uniformByteCountI64-it.sourceUniformByteCountI64,W5fPlanDiagnostics.FilterUniform) }
             pending.forEach { add(it.uniformBytesI64()-it.uniformBytesI64(true),W5fPlanDiagnostics.FilterUniform) }
             SourceConstructionResultV4.Built(FrameSourceLayoutV4(lane,interner,sources,rows,allocations,pendingRanges,legacyRanges,

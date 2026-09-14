@@ -7,16 +7,19 @@ import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.GradientStop
+import org.graphiks.kanvas.paint.ColorSpaceInterpolation
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.types.Vertices
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.color.ColorMatrixF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.EnumSource
@@ -26,6 +29,217 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class W5gComposedMaterialSurfacePixelTest {
+    @Test fun mixedOrdinaryAndComposedGradientLanesKeepTheirFinalFrameRanges() {
+        val shared=Shader.LinearGradient(Point2F32(0f,0f),Point2F32(1f,0f),
+            listOf(GradientStop(0f,ColorARGB.Black.withAlpha(128)),GradientStop(1f,ColorARGB.White.withAlpha(128))))
+        val low=Shader.CoordClamp(shared,RectF32.ofLTRB(.25f,.5f,.25f,.5f))
+        val high=Shader.CoordClamp(shared,RectF32.ofLTRB(.75f,.5f,.75f,.5f))
+        val composed=Shader.Blend(BlendMode.SRC_OVER,low,high)
+        val linear=Shader.WithWorkingColorSpace(composed,ColorSpaceInterpolation.LINEAR)
+        val expected=listOf(low,composed,linear).map { W5fColorCpuOracle.expectedShaderTree(it) }
+        expected.forEach(W5fSurfacePixelFixtures::requireBounded)
+        disjoint(expected[1],expected[2])
+        val surface=Surface(3,1)
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(0f,0f,1f,1f),Paint(shader=low,blendMode=BlendMode.SRC,antiAlias=false))
+            for(lane in 1..2) {
+                save(); clipRect(RectF32.ofLTRB(lane.toFloat(),0f,lane+1f,1f),antiAlias=false); translate(lane.toFloat(),0f)
+                drawPath(path(lane),Paint(shader=if(lane == 1) composed else linear,blendMode=BlendMode.SRC,antiAlias=false))
+                restore()
+            }
+        }
+        repeat(2) { W5fSurfacePixelFixtures.assertNativePixels(surface.render(),expected) }
+    }
+
+    @Test fun projectiveBranchUsesBoundedNormalizedDivision() {
+        val stops=listOf(GradientStop(0f,ColorARGB.Red.withAlpha(128)),GradientStop(.55f,ColorARGB.Red.withAlpha(128)),
+            GradientStop(.6f,ColorARGB.Blue.withAlpha(128)),GradientStop(1f,ColorARGB.Blue.withAlpha(128)))
+        val shared=Shader.LinearGradient(Point2F32(0f,0f),Point2F32(1f,0f),stops)
+        val src=Shader.Opacity(shared,.25f)
+        val shader=Shader.Blend(BlendMode.SRC_OVER,Shader.WithLocalMatrix(shared,Matrix3x3F32(persp0=.5f)),src)
+        val expected=W5fColorCpuOracle.expectedShaderTree(shader)
+        disjoint(expected,W5fColorCpuOracle.expectedShaderTree(Shader.Blend(BlendMode.SRC_OVER,shared,src)))
+        render(shader,expected)
+    }
+
+    @Test fun canvasCoordinatesAreConsumedOnceBeforeBranchLocalSegments() {
+        val shared=Shader.LinearGradient(Point2F32(0f,0f),Point2F32(1f,0f),
+            listOf(GradientStop(0f,ColorARGB.Black.withAlpha(128)),GradientStop(1f,ColorARGB.White.withAlpha(128))))
+        val shader=Shader.Blend(BlendMode.SRC_OVER,Shader.WithLocalMatrix(shared,Matrix3x3F32(tx=.125f)),
+            Shader.WithLocalMatrix(shared,Matrix3x3F32(tx=-.25f)))
+        val canvasMatrix=Matrix3x3F32(sx=2f,sy=2f)
+        val expected=W5fColorCpuOracle.expectedShaderTree(shader,canvasMatrixF32=canvasMatrix)
+        disjoint(expected,W5fColorCpuOracle.expectedShaderTree(shader))
+        disjoint(expected,W5fColorCpuOracle.expectedShaderTree(shader,canvasMatrixF32=Matrix3x3F32(sx=4f,sy=4f)))
+        render(shader,expected,canvasMatrix=canvasMatrix)
+    }
+
+    @ParameterizedTest(name = "composed degeneracy and tile family {0}")
+    @ValueSource(ints = [0,1,2,3])
+    fun degenerateGradientChildrenKeepOriginalTileSemantics(family: Int) {
+        val stops=listOf(GradientStop(0f,ColorARGB.Red.withAlpha(128)),GradientStop(1f,ColorARGB.Blue.withAlpha(128)))
+        for(tile in TileMode.entries) {
+            val leaf: Shader=when(family) {
+                0 -> Shader.LinearGradient(Point2F32(0f,0f),Point2F32(0f,0f),stops,tile)
+                1 -> Shader.RadialGradient(Point2F32(0f,0f),0f,stops,tile)
+                2 -> Shader.SweepGradient(Point2F32(-.5f,.5f),90f,90f,stops,tile)
+                else -> Shader.ConicalGradient(Point2F32(.5f,.5f),2f,Point2F32(.5f,.5f),2f,stops,tile)
+            }
+            val shader=Shader.Blend(BlendMode.SRC_OVER,Shader.SolidColor(ColorARGB.Black.withAlpha(64)),
+                Shader.CoordClamp(leaf,RectF32.ofLTRB(.5f,.5f,.5f,.5f)))
+            val expected=W5fColorCpuOracle.expectedShaderTree(shader)
+            disjoint(expected,W5fColorCpuOracle.expectedShaderTree(Shader.Blend(BlendMode.SRC_OVER,
+                Shader.SolidColor(ColorARGB.Black.withAlpha(64)),Shader.SolidColor(ColorARGB.Green))))
+            render(shader,expected,label="degenerate family=$family tile=$tile")
+        }
+    }
+
+    @Test fun conicalEquationBranchesAndSingleStopChildrenRemainUseful() {
+        val stops=listOf(GradientStop(0f,ColorARGB.Red.withAlpha(128)),GradientStop(1f,ColorARGB.Blue.withAlpha(128)))
+        // Constant spans close independently while exercising quadratic, linear,
+        // concentric and invalid-root selection, including a single stop's mask.
+        val leaves=listOf(
+            Shader.ConicalGradient(Point2F32(0f,.5f),1f,Point2F32(1f,.5f),1f,stops),
+            Shader.ConicalGradient(Point2F32(0f,.5f),0f,Point2F32(1f,.5f),1f,stops),
+            Shader.ConicalGradient(Point2F32(.5f,.5f),0f,Point2F32(.5f,.5f),1f,listOf(stops.first())),
+        ) + (0..2).map { gradient(it,listOf(stops.first()),ColorSpaceInterpolation.OKLAB) }
+        for((index,leaf) in leaves.withIndex()) {
+            val shader=Shader.Blend(BlendMode.SRC_OVER,Shader.SolidColor(ColorARGB.Black.withAlpha(64)),
+                Shader.CoordClamp(leaf,RectF32.ofLTRB(.5f,.5f,.5f,.5f)))
+            val expected=W5fColorCpuOracle.expectedShaderTree(shader)
+            disjoint(expected,W5fColorCpuOracle.expectedShaderTree(Shader.SolidColor(ColorARGB.Green)))
+            render(shader,expected,label="conical/single-stop cell=$index")
+        }
+    }
+
+    private fun gradient(family: Int,stops: List<GradientStop>,domain: ColorSpaceInterpolation): Shader = when(family) {
+        0 -> Shader.LinearGradient(Point2F32(0f,0f),Point2F32(1f,0f),stops,interpolation=domain)
+        1 -> Shader.RadialGradient(Point2F32(-.5f,.5f),2f,stops,interpolation=domain)
+        2 -> Shader.SweepGradient(Point2F32(-.5f,-.5f),-135f,225f,stops,interpolation=domain)
+        else -> Shader.ConicalGradient(Point2F32(-.5f,.5f),0f,Point2F32(-.5f,.5f),2f,stops,interpolation=domain)
+    }
+
+    @ParameterizedTest(name = "contextual gradient family {0} all working domains")
+    @ValueSource(ints = [0,1,2,3])
+    fun everyGradientFamilyKeepsBranchWorkingPrecedence(family: Int) {
+        for(domain in ColorSpaceInterpolation.entries) {
+            val achromatic=domain in setOf(ColorSpaceInterpolation.LINEAR,ColorSpaceInterpolation.OKLAB) ||
+                (family in setOf(0,2) && domain == ColorSpaceInterpolation.SRGB) ||
+                (family == 2 && domain == ColorSpaceInterpolation.OKLCH)
+            val stops=listOf(GradientStop(0f,if(achromatic) ColorARGB.Black.withAlpha(128) else ColorARGB.of(128,160,96,96)),
+                GradientStop(1f,if(achromatic) ColorARGB.White.withAlpha(128) else ColorARGB.of(128,96,160,96)))
+            val other=if(domain == ColorSpaceInterpolation.SRGB) ColorSpaceInterpolation.OKLCH else ColorSpaceInterpolation.SRGB
+            val shared=gradient(family,stops,other)
+            val dst=Shader.WithWorkingColorSpace(Shader.WithWorkingColorSpace(shared,other),domain)
+            // Avoid coincident straight colors (linear .5 versus sRGB .75)
+            // and give Sweep a cardinal, independently exact source direction.
+            val sourceContext=if(family == 2) Shader.CoordClamp(shared,RectF32.ofLTRB(-1.5f,-.5f,-1.5f,-.5f))
+                else Shader.WithLocalMatrix(shared,Matrix3x3F32(tx=if(family == 0) .25f else -.25f))
+            val src=Shader.Opacity(Shader.WithWorkingColorSpace(sourceContext,other),.25f)
+            val shader=Shader.Blend(BlendMode.SRC_OVER,dst,src)
+            val wrongDomain=Shader.Blend(BlendMode.SRC_OVER,Shader.WithWorkingColorSpace(dst,other),src)
+            val reversed=Shader.Blend(BlendMode.SRC_OVER,src,dst)
+            for(wrong in listOf(wrongDomain,reversed)) {
+                val direct=W5fColorCpuOracle.expectedShaderTree(shader)
+                val alternate=W5fColorCpuOracle.expectedShaderTree(wrong)
+                if(direct is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded && alternate is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded &&
+                    direct.channels.indices.any { direct.channels[it].intersect(alternate.channels[it]).isEmpty() }) {
+                    disjoint(direct,alternate)
+                    render(shader,direct)
+                    continue
+                }
+                val (projection,expected)=requireNotNull(discriminatingProjection(shader,listOf(wrong))) {
+                    "No independently bounded domain/order witness family=$family domain=$domain"
+                }
+                render(shader,expected,projection,127,BlendMode.SRC_OVER,ColorARGB.Blue)
+            }
+        }
+    }
+
+    @Test fun seventeenStopChildPreservesHardStopAndSharedContexts() {
+        val stops=List(17) { index -> GradientStop(if(index == 8 || index == 9) .5f else index/16f,
+            if(index <= 8) ColorARGB.Red.withAlpha(128) else ColorARGB.Blue.withAlpha(128)) }
+        val shared=Shader.LinearGradient(Point2F32(0f,0f),Point2F32(1f,0f),stops)
+        val dst=Shader.CoordClamp(shared,RectF32.ofLTRB(.25f,.5f,.25f,.5f))
+        val src=Shader.CoordClamp(shared,RectF32.ofLTRB(.5f,.5f,.5f,.5f))
+        val shader=Shader.Blend(BlendMode.SRC_OVER,dst,src)
+        val expected=W5fColorCpuOracle.expectedShaderTree(shader)
+        disjoint(expected,W5fColorCpuOracle.expectedShaderTree(Shader.Blend(BlendMode.SRC_OVER,src,dst)))
+        disjoint(expected,W5fColorCpuOracle.expectedShaderTree(Shader.Blend(BlendMode.SRC_OVER,dst,dst)))
+        render(shader,expected)
+    }
+
+    @Test fun sharedGradientKeepsBranchLocalSamplesAndOrder() {
+        val shared = Shader.LinearGradient(Point2F32(.5f,0f),Point2F32(1.5f,0f),
+            listOf(GradientStop(0f,ColorARGB.Black.withAlpha(128)),GradientStop(1f,ColorARGB.White.withAlpha(128))))
+        val dst = Shader.WithLocalMatrix(shared,Matrix3x3F32(tx=.25f))
+        val src = Shader.WithLocalMatrix(shared,Matrix3x3F32(tx=-.25f))
+        fun tree(d: Shader,s: Shader) = Shader.WithLocalMatrix(Shader.Blend(BlendMode.SRC_OVER,d,s),Matrix3x3F32(tx=-.5f))
+        val shader=tree(dst,src)
+        val expected=W5fColorCpuOracle.expectedShaderTree(shader)
+        disjoint(expected,W5fColorCpuOracle.expectedShaderTree(tree(src,dst)))
+        disjoint(expected,W5fColorCpuOracle.expectedShaderTree(tree(dst,dst)))
+        disjoint(expected,W5fColorCpuOracle.expectedShaderTree(tree(src,src)))
+        render(shader,expected)
+    }
+
+    @Test fun gradientLocalSegmentsAndClampKeepTheirOriginalOrder() {
+        val shared=Shader.LinearGradient(Point2F32(0f,0f),Point2F32(1f,0f),
+            listOf(GradientStop(0f,ColorARGB.Black.withAlpha(128)),GradientStop(1f,ColorARGB.White.withAlpha(128))))
+        val dst=Shader.WithLocalMatrix(shared,Matrix3x3F32(tx=.25f))
+        val src=Shader.WithLocalMatrix(shared,Matrix3x3F32(tx=-.25f))
+        val blend=Shader.Blend(BlendMode.SRC_OVER,dst,src)
+        val rotation=Matrix3x3F32(sx=0f,kx=-1f,ky=1f,sy=0f)
+        val translation=Matrix3x3F32(tx=-.5f)
+        val ordered=Shader.WithLocalMatrix(Shader.WithLocalMatrix(blend,translation),rotation)
+        val reversed=Shader.WithLocalMatrix(Shader.WithLocalMatrix(blend,rotation),translation)
+        val expected=W5fColorCpuOracle.expectedShaderTree(ordered)
+        disjoint(expected,W5fColorCpuOracle.expectedShaderTree(reversed))
+        render(ordered,expected)
+        val subset=RectF32.ofLTRB(.25f,.5f,.25f,.5f)
+        val clampFirst=Shader.CoordClamp(Shader.WithLocalMatrix(shared,translation),subset)
+        val transformFirst=Shader.WithLocalMatrix(Shader.CoordClamp(shared,subset),translation)
+        val shader=Shader.Blend(BlendMode.SRC_OVER,clampFirst,Shader.Opacity(src,.5f))
+        val wanted=W5fColorCpuOracle.expectedShaderTree(shader)
+        disjoint(wanted,W5fColorCpuOracle.expectedShaderTree(Shader.Blend(BlendMode.SRC_OVER,transformFirst,Shader.Opacity(src,.5f))))
+        render(shader,wanted)
+    }
+
+    @Test fun gradientWrappersPaintAndExternalFilterPrecedeFinalBlendOnce() {
+        val shared=Shader.LinearGradient(Point2F32(0f,0f),Point2F32(1f,0f),
+            listOf(GradientStop(0f,ColorARGB.Black.withAlpha(128)),GradientStop(1f,ColorARGB.White.withAlpha(128))))
+        val restoring=ColorFilter.Matrix(ColorMatrixF32.ofIdentity().apply { postTranslate(.125f,0f,0f,.25f) })
+        val dst=Shader.WithColorFilter(Shader.Opacity(Shader.WithLocalMatrix(shared,Matrix3x3F32(tx=.25f)),.5f),restoring)
+        val src=Shader.WithLocalMatrix(shared,Matrix3x3F32(tx=-.25f))
+        val shader=Shader.Blend(BlendMode.SRC_OVER,dst,src)
+        val eachAlpha=Shader.Blend(BlendMode.SRC_OVER,Shader.Opacity(dst,127f/255f),Shader.Opacity(src,127f/255f))
+        for(mode in listOf(BlendMode.SRC_OVER,BlendMode.SRC_IN,BlendMode.DIFFERENCE)) {
+            // Separate observations: do not combine a double-filter mutation and
+            // per-child paint alpha into one artificial counterfactual.
+            for(duplicateFilter in listOf(true,false)) {
+                var witness: Pair<ColorFilter,WgslFloatEnvelopeV1Oracle.DrawResult>? = null
+                search@ for(scale in listOf(.0625f,.125f,.25f)) for(channel in 0..3)
+                    for(bias in listOf(.125f,.25f,.375f,.5f,.625f,.75f)) {
+                        val values=floatArrayOf(0f,0f,0f,0f,.125f,0f,0f,0f,0f,bias,
+                            0f,0f,0f,0f,0f,0f,0f,0f,0f,1f)
+                        values[5+channel]=scale
+                        val projection=ColorFilter.Matrix(ColorMatrixF32.of(values))
+                        val wanted=W5fColorCpuOracle.expectedShaderTree(shader,127f/255f,projection,ColorARGB.Blue,mode)
+                            as? WgslFloatEnvelopeV1Oracle.DrawResult.Bounded ?: continue
+                        val wrong=if(duplicateFilter) W5fColorCpuOracle.expectedShaderTree(shader,127f/255f,
+                            ColorFilter.Compose(projection,projection),ColorARGB.Blue,mode)
+                        else W5fColorCpuOracle.expectedShaderTree(eachAlpha,external=projection,destination=ColorARGB.Blue,finalBlend=mode)
+                        if(wrong is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded && wanted.channels.indices.any {
+                            wanted.channels[it].intersect(wrong.channels[it]).isEmpty() }) {
+                            disjoint(wanted,wrong); witness=projection to wanted; break@search
+                        }
+                    }
+                val (projection,expected)=requireNotNull(witness) { "No bounded $mode gradient filter/alpha witness: $duplicateFilter" }
+                render(shader,expected,projection,127,mode,ColorARGB.Blue)
+            }
+        }
+    }
+
     @ParameterizedTest(name = "invalid gradient {0} retains its own prefix diagnostic")
     @ValueSource(ints = [0,1,2])
     fun invalidGradientLeafKeepsHistoricalDiagnostic(kind: Int) {
@@ -47,9 +261,8 @@ class W5gComposedMaterialSurfacePixelTest {
             val failure = assertFailsWith<IllegalStateException> { surface.render() }
             assertEquals(code,failure.message.orEmpty().substringBefore(':'),failure.message)
         }
-        // A later invalid sibling must not override an earlier valid but
-        // unpromoted gradient's owned refusal.
-        val pending = Shader.LinearGradient(Point2F32(0f,0f),Point2F32(1f,0f),stops)
+        // An image child remains pending and retains declared first-owner priority.
+        val pending = Shader.Image(Image.fromPixels(1,1,byteArrayOf(-1,0,0,-1)))
         val earlier = Surface(1,1)
         earlier.canvas { drawRect(RectF32.ofLTRB(0f,0f,1f,1f),Paint(shader=
             Shader.Blend(BlendMode.SRC_OVER,pending,invalid),antiAlias=false)) }
@@ -66,11 +279,14 @@ class W5gComposedMaterialSurfacePixelTest {
         render(shader,expected,finalBlend=BlendMode.DST,background=ColorARGB.Blue)
     }
 
-    @Test fun pendingGradientAndImageChildrenAreOwnedRefusals() {
+    @Test fun admittedGradientAndPendingImageChildrenKeepTheirOwnedResults() {
         val gradient = Shader.LinearGradient(Point2F32(0f,0f),Point2F32(1f,0f),
             listOf(GradientStop(0f,ColorARGB.Red),GradientStop(1f,ColorARGB.Blue)))
         val image = Shader.Image(Image.fromPixels(1,1,byteArrayOf(-1,0,0,-1)))
-        for (pending in listOf(gradient,image)) {
+        val admitted=Shader.Blend(BlendMode.SRC_OVER,Shader.SolidColor(ColorARGB.Red),gradient)
+        val expected=W5fColorCpuOracle.expectedShaderTree(admitted)
+        render(admitted,expected)
+        for (pending in listOf(image)) {
             val surface = Surface(1,1)
             surface.canvas { drawRect(RectF32.ofLTRB(0f,0f,1f,1f),Paint(shader=
                 Shader.Blend(BlendMode.SRC_OVER,Shader.SolidColor(ColorARGB.Red),pending),antiAlias=false)) }
@@ -197,17 +413,19 @@ class W5gComposedMaterialSurfacePixelTest {
 
     private fun render(shader: Shader,expected: WgslFloatEnvelopeV1Oracle.DrawResult,
         external: ColorFilter? = null,paintAlpha: Int = 255,finalBlend: BlendMode = BlendMode.SRC,
-        background: ColorARGB = ColorARGB.Transparent) {
+        background: ColorARGB = ColorARGB.Transparent,canvasMatrix: Matrix3x3F32 = Matrix3x3F32(),label: String = "") {
         W5fSurfacePixelFixtures.requireBounded(expected)
         for (lane in 0..2) {
             val surface = Surface(1,1)
             surface.canvas {
                 drawRect(RectF32.ofLTRB(0f,0f,1f,1f),Paint(color=background,blendMode=BlendMode.SRC,antiAlias=false))
+                concat(canvasMatrix)
                 val paint = Paint(color=ColorARGB.of(paintAlpha,255,255,255),shader=shader,
                     colorFilter=external,blendMode=finalBlend,antiAlias=false)
                 if (lane == 0) drawRect(RectF32.ofLTRB(0f,0f,1f,1f),paint) else drawPath(path(lane),paint)
             }
-            repeat(2) { W5fSurfacePixelFixtures.assertNativePixels(surface.render(),listOf(expected)) }
+            repeat(2) { try { W5fSurfacePixelFixtures.assertNativePixels(surface.render(),listOf(expected)) }
+                catch(failure: Exception) { throw AssertionError("Public render lane=$lane final=$finalBlend $label",failure) } }
         }
     }
 

@@ -6,6 +6,8 @@ import org.graphiks.kanvas.surface.*
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.color.ColorMatrixF32
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Test
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -13,6 +15,47 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertEquals
 
 class W5gComposedMaterialPictureTest {
+    @Test fun sharedGradientStopsLocalMatrixAndFilterRemainCapturedOnBothPicturePaths() {
+        val stops=mutableListOf(GradientStop(0f,ColorARGB.Black.withAlpha(128)),GradientStop(1f,ColorARGB.White.withAlpha(128)))
+        val local=Matrix3x3F32(tx=-.25f)
+        val matrix=ColorMatrixF32.ofIdentity().apply { setScale(.75f,1f,1f,1f) }
+        val filter=ColorFilter.Matrix(matrix)
+        fun tree(stops: List<GradientStop>,local: Matrix3x3F32,filter: ColorFilter,reversed: Boolean=false): Shader {
+            val leaf=Shader.LinearGradient(Point2F32(0f,0f),Point2F32(1f,0f),stops)
+            val shared=Shader.WithColorFilter(Shader.WithLocalMatrix(leaf,local),filter)
+            val dst=Shader.Opacity(shared,.5f)
+            val src=Shader.WithLocalMatrix(shared,Matrix3x3F32(tx=.5f))
+            return if(reversed) Shader.Blend(BlendMode.SRC_OVER,src,dst) else Shader.Blend(BlendMode.SRC_OVER,dst,src)
+        }
+        val shader=tree(stops,local,filter)
+        val expected=W5fColorCpuOracle.expectedShaderTree(shader)
+        disjoint(expected,W5fColorCpuOracle.expectedShaderTree(tree(stops,local,filter,true)))
+        disjoint(expected,W5fColorCpuOracle.expectedShaderTree(tree(
+            listOf(GradientStop(0f,ColorARGB.Blue),GradientStop(1f,ColorARGB.Blue)),local,filter)))
+        disjoint(expected,W5fColorCpuOracle.expectedShaderTree(tree(stops,local,
+            ColorFilter.Matrix(ColorMatrixF32.ofIdentity().apply { setScale(.25f,1f,1f,1f) }))))
+        disjoint(expected,W5fColorCpuOracle.expectedShaderTree(tree(
+            listOf(GradientStop(0f,ColorARGB.Blue),GradientStop(1f,ColorARGB.Blue)),local,
+            ColorFilter.Matrix(ColorMatrixF32.ofIdentity().apply { setScale(.25f,1f,1f,1f) }))))
+        val paint=Paint(shader=shader,blendMode=BlendMode.SRC,antiAlias=false)
+        val surface=Surface(1,1)
+        surface.canvas { drawRect(rect(),paint) }
+        val recorder=PictureRecorder()
+        recorder.beginRecording(rect()).drawRect(rect(),paint)
+        val picture=recorder.finishRecordingAsPicture()
+        stops[0]=GradientStop(0f,ColorARGB.Blue); stops[1]=GradientStop(1f,ColorARGB.Blue)
+        // Shader-local Matrix3x3F32 is immutable; the shared ColorMatrixF32
+        // filter payload and original stop list are the mutable public inputs.
+        matrix.setScale(.25f,1f,1f,1f)
+        repeat(2) { W5fSurfacePixelFixtures.assertNativePixels(surface.render(),listOf(expected)) }
+        val decoded=assertNotNull(Picture.fromByteArray(picture.toByteArray()))
+        for(replay in listOf(picture,decoded)) {
+            val target=Surface(1,1)
+            target.canvas { replay.playback(this) }
+            repeat(2) { W5fSurfacePixelFixtures.assertNativePixels(target.render(),listOf(expected)) }
+        }
+    }
+
     @Test fun largestSharedOccurrenceTreeRetainsThePublicLimit() {
         val leaf = Shader.SolidColor(ColorARGB.Red)
         fun tree(depth: Int): Shader = if (depth == 0) leaf

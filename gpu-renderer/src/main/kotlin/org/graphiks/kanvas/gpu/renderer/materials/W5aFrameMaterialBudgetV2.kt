@@ -48,16 +48,94 @@ private fun GPUFramePlan.w5eImageAllocationsV3(limits: GPULimits): List<GPUFrame
 internal fun GPUFramePlan.w5aCombinedMemoryBudgetV2(limits: GPULimits): GPUFrameMemoryBudgetPlan =
     GPUFrameMemoryBudgetPlanner.plan(GPUFrameMemoryBudgetRequest(
         allocations = memoryBudget.allocations + w5aMaterialAllocationsV2() + w5eImageAllocationsV3(limits) +
-            w5eChildStopAllocationsV3(),
+            w5eChildStopAllocationsV3() + w5gDeclaredStopAllocationsV5(),
         configuredAggregateBudgetBytes = memoryBudget.configuredAggregateBudgetBytes,
         deviceLimits = limits,
     ))
+
+/** Marks an existing graph-owned allocation, without charging that slab twice. */
+internal fun org.graphiks.kanvas.gpu.plan.RenderGraph.composedStopAllocationLabelV5(sessionIdentity: String): String? {
+    val table=materialPlanTableOrNull() ?: return null
+    if(table.entries().none { it.bindings is org.graphiks.kanvas.gpu.plan.ComposedMaterialBindingV5 }) return null
+    return table.gradientStopSlab?.let { "$sessionIdentity.gradient-stops" }
+}
+
+private fun GPUFramePlan.w5gDeclaredStopAllocationsV5(): List<GPUFrameMemoryAllocation> {
+    val renders=steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+    val packets=renders.flatMap { it.drawPackets }
+    val stages=packets.mapNotNull { it.materialSourcePartitionV3()?.stage }
+        .filter { it.composedLayout != null && it.gradientStopSlab != null }
+    val slabs=stages.map { requireNotNull(it.gradientStopSlab) }.distinct()
+    require(slabs.size <= 1)
+    return slabs.mapNotNull { slab ->
+        stages.forEach { stage ->
+            require(stage.gradientStopSlab === slab)
+            requireNotNull(stage.composedLayout).resources.forEach { resource ->
+                require(requireNotNull(stage.composedProof).authenticatesComposedStorage(resource,slab))
+            }
+        }
+        // Every consumer, including an ordinary gradient sibling, retains this
+        // exact frame-local object. Value equality is not an ownership proof.
+        val consumers=packets.filter { it.materialSourcePartitionV3()?.stage?.gradientStopSlab != null }
+        require(consumers.all { it.materialSourcePartitionV3()?.stage?.gradientStopSlab === slab })
+        val composite=consumers.mapNotNull { it.w5aCompositeFrameAuthority }.distinct().singleOrNull()
+        val expected=if(composite != null) {
+            require(composite.validates(this,renders) && consumers.all { composite.owns(it) && it.w5aCompositeFrameAuthority === composite })
+            GPUFrameMemoryAllocation("${composite.sessionIdentity}.gradient-stops",GPUFrameMemoryCategory.ReusableScratch,
+                slab.byteSizeI64,GPUFrameMemoryResourceKind.Buffer,null,0,steps.size)
+        } else {
+            val witness=consumers.mapNotNull { it.w5bFinalFrameWitnessV3 }.distinct().singleOrNull()
+            if(witness != null) {
+                require(witness.validates(this) && consumers.all { it.w5bFinalFrameWitnessV3 === witness })
+                require(witness.graph.materialPlanTableOrNull()?.gradientStopSlab === slab)
+                val scratch=witness.scratch
+                require(scratch.deviceGeneration == capabilitySeal.deviceGeneration.value)
+                val session="w3.session.${scratch.deviceGeneration}.${scratch.targetBounds.width}x${scratch.targetBounds.height}.rgba8unorm-srgb"
+                if(witness.graph.capabilityId in setOf(org.graphiks.kanvas.gpu.plan.W5bCorePrimitiveGraph.CAPABILITY_ID,
+                    org.graphiks.kanvas.gpu.plan.W3SolidRectPlanCompiler.CAPABILITY_ID,
+                    org.graphiks.kanvas.gpu.plan.W3SolidRectPlanCompiler.W5A_CAPABILITY_ID)) {
+                    // GpuPlanTaskListLowerer retains the exact W3 allocation
+                    // envelope for destination-aware core Rects as well.
+                    GPUFrameMemoryAllocation("$session.gradient-stops",GPUFrameMemoryCategory.ReusableScratch,
+                        slab.byteSizeI64,GPUFrameMemoryResourceKind.Buffer,null)
+                } else {
+                    val resource=witness.graph.resources().single { it.role == org.graphiks.kanvas.gpu.plan.PlanResourceRole.GradientStopData }
+                    require(resource.byteSize == slab.byteSizeI64 && resource.kind == org.graphiks.kanvas.gpu.plan.PlanResourceKind.Buffer)
+                    GPUFrameMemoryAllocation("$session.gradient-stops",GPUFrameMemoryCategory.ReusableScratch,resource.byteSize,
+                        GPUFrameMemoryResourceKind.Buffer,resource.copyExtent()?.let { GPUPixelBounds(0,0,it.width,it.height) },
+                        resource.firstPassIndex,resource.lastPassIndexExclusive)
+                }
+            } else {
+                val scratch=consumers.map { requireNotNull(it.corePrimitivePreparedAuthority?.w3SessionScratch) }.distinct().single()
+                val allPackets=renders.flatMap { it.drawPackets }.filter { it.corePrimitivePreparedAuthority?.w3SessionScratch === scratch }
+                val readback=steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>().single()
+                require(renders.all { it.target == scratch.target })
+                require(scratch.matches(scratch.planId,capabilitySeal.sealHash,capabilitySeal.deviceGeneration.value,
+                    readback.source,readback.staging,scratch.targetBounds,allPackets))
+                val target=steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>().flatMap { it.requests }
+                    .single { it.resource == scratch.target }
+                require((target.descriptor as GPUFrameTextureDescriptor).logicalBounds == scratch.targetBounds)
+                val session="w3.session.${scratch.deviceGeneration}.${scratch.targetBounds.width}x${scratch.targetBounds.height}.rgba8unorm-srgb"
+                GPUFrameMemoryAllocation("$session.gradient-stops",GPUFrameMemoryCategory.ReusableScratch,
+                    slab.byteSizeI64,GPUFrameMemoryResourceKind.Buffer,null)
+            }
+        }
+        // Current admitted gradient lanes declare the allocation in their sealed
+        // construction graph. Do not silently invent a missing declaration.
+        require(memoryBudget.allocations.count { it.label == expected.label } == 1 && expected in memoryBudget.allocations)
+        null
+    }
+}
 
 /** The W5e construction graph is neutral; its image children's shared slab is owned here. */
 private fun GPUFramePlan.w5eChildStopAllocationsV3(): List<GPUFrameMemoryAllocation> =
     steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
         .mapNotNull { it.materialSourcePartitionV3()?.stage?.takeIf { stage -> stage.imageV3 != null }?.gradientStopSlab }
-        .distinctBy { it.canonicalIdentity }.map { slab ->
+        .distinctBy { it.canonicalIdentity }.filterNot { slab ->
+            steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }.any {
+                it.materialSourcePartitionV3()?.stage?.let { stage -> stage.composedLayout != null && stage.gradientStopSlab === slab } == true
+            }
+        }.map { slab ->
             GPUFrameMemoryAllocation("w5e.child-stops-v3.${slab.canonicalIdentity}", GPUFrameMemoryCategory.ReusableScratch,
                 slab.byteSizeI64, GPUFrameMemoryResourceKind.Buffer, null, 0, steps.size.coerceAtLeast(1))
         }

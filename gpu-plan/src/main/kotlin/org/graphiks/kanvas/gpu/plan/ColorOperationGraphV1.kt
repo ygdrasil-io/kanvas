@@ -6,6 +6,50 @@ import org.graphiks.kanvas.color.ColorInterpolationProgramV1
 public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
     public val outputs: List<Scalar> = immutableList(outputs)
     public val contractId: String = "WgslFloatEnvelopeV1"
+    /** Whether the executed expression grammar has a fragment-position input. */
+    public val consumesDevicePositionF32: Boolean by lazy {
+        val visited=java.util.IdentityHashMap<Scalar,Boolean>()
+        lateinit var scalar: (Scalar)->Boolean
+        fun predicate(value: Predicate): Boolean = when(value) {
+            is Predicate.UniformU32Equal -> false
+            is Predicate.Equal -> scalar(value.a) || scalar(value.b)
+            is Predicate.LessEqual -> scalar(value.a) || scalar(value.b)
+            is Predicate.Not -> predicate(value.value)
+            is Predicate.And -> predicate(value.a) || predicate(value.b)
+            is Predicate.Finite -> scalar(value.value)
+            is Predicate.ProjectiveValid -> scalar(value.division)
+        }
+        scalar = { node -> visited.getOrPut(node) { when(node) {
+            is Scalar.DevicePositionF32 -> true
+            is Scalar.InputLinearPremul,is Scalar.ImageEncodedInput,is Scalar.DynamicF32,is Scalar.ConstantF32,
+            is Scalar.StopInterpolationInput,Scalar.DiscardF32 -> false
+            is Scalar.ImageEncodedComponent,is Scalar.ImageTexelValid,is Scalar.ImageSampleComponent -> true
+            is Scalar.ImageIntegerOffset -> scalar(node.base)
+            is Scalar.Add -> scalar(node.a) || scalar(node.b)
+            is Scalar.Subtract -> scalar(node.a) || scalar(node.b)
+            is Scalar.Multiply -> scalar(node.a) || scalar(node.b)
+            is Scalar.Divide -> scalar(node.a) || scalar(node.b)
+            is Scalar.ProjectiveDivide -> scalar(node.a) || scalar(node.b)
+            is Scalar.Pow -> scalar(node.a) || scalar(node.b)
+            is Scalar.Min -> scalar(node.a) || scalar(node.b)
+            is Scalar.Max -> scalar(node.a) || scalar(node.b)
+            is Scalar.Atan2 -> scalar(node.y) || scalar(node.x)
+            is Scalar.Clamp01 -> scalar(node.value)
+            is Scalar.Abs -> scalar(node.value)
+            is Scalar.Sqrt -> scalar(node.value)
+            is Scalar.Sin -> scalar(node.value)
+            is Scalar.Cos -> scalar(node.value)
+            is Scalar.Floor -> scalar(node.value)
+            is Scalar.Round -> scalar(node.value)
+            is Scalar.IntegerModulo -> scalar(node.value)
+            is Scalar.TableByte -> scalar(node.scaled)
+            is Scalar.GradientStopComponent -> scalar(node.selection.numerator) || scalar(node.selection.scale) || scalar(node.selection.parameter)
+            is Scalar.BranchComponent -> predicate(node.branch.predicate) || node.branch.yes.any(scalar) || node.branch.no.any(scalar)
+            is Scalar.EagerSelect -> predicate(node.predicate) || scalar(node.yes) || scalar(node.no)
+            is Scalar.LazyBranch -> predicate(node.predicate) || scalar(node.yes) || scalar(node.no)
+        } } }
+        outputs.any(scalar)
+    }
     init { require(outputs.size == 4) }
     public sealed interface Scalar {
         public data class InputLinearPremul(public val channelI32: Int) : Scalar {

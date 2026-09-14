@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.planning
 
+import org.graphiks.kanvas.gpu.renderer.materials.composedStopAllocationLabelV5
+
 import org.graphiks.kanvas.gpu.plan.colorSourceCoordinatesV4
 
 import org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan
@@ -445,6 +447,7 @@ public class GpuPlanTaskListLowerer {
                     PlanResourceRole.LogicalTarget -> "$identity.target"
                     PlanResourceRole.DestinationSnapshot -> "$identity.snapshot"
                     PlanResourceRole.ReadbackStaging -> "$identity.staging"
+                    PlanResourceRole.GradientStopData -> graph.composedStopAllocationLabelV5(identity) ?: "w4e.${resource.id.value}"
                     else -> "w4e.${resource.id.value}"
                 }, when (resource.role) {
                     PlanResourceRole.LogicalTarget -> GPUFrameMemoryCategory.CanonicalTarget

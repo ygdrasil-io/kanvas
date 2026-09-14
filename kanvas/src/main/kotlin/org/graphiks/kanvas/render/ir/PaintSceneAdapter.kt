@@ -167,6 +167,7 @@ public object PaintSceneAdapter {
             is Shader.CoordClamp -> source = node.shader
             is Shader.WithColorFilter -> source = node.shader
             is Shader.WithWorkingColorSpace -> source = node.shader
+            is Shader.Blend -> return node.dst.preservesW5dMatrices() || node.src.preservesW5dMatrices()
             is Shader.LinearGradient, is Shader.RadialGradient, is Shader.SweepGradient, is Shader.ConicalGradient -> return true
             is Shader.Image -> return node.sampling == SamplingOptions.NEAREST &&
                 node.tileModeX == org.graphiks.kanvas.paint.TileMode.CLAMP &&

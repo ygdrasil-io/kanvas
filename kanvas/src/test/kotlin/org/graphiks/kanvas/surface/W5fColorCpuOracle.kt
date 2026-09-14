@@ -6,7 +6,11 @@ import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.ColorSpaceInterpolation
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.GradientStop
+import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.kanvas.surface.WgslFloatEnvelopeV1Oracle.Interval
 
 /** Independent published equations, with directed arithmetic supplied by the test envelope. */
@@ -67,24 +71,286 @@ internal object W5fColorCpuOracle {
         else -> sample
     }
 
-    private fun shaderSource(shader: Shader,point: org.graphiks.math.geometry.Point2F32,
-        working: ColorSpaceInterpolation? = null): Array<Interval> = when (shader) {
-        is Shader.SolidColor -> source(shader.color)
-        is Shader.Opacity -> shaderSource(shader.shader,point,working).map { mul(it,Interval.input(shader.alphaF32)) }.toTypedArray()
-        is Shader.WithColorFilter -> applyFilter(shaderSource(shader.shader,point,working),shader.filter)
-        is Shader.WithWorkingColorSpace -> shaderSource(shader.shader,point,working ?: shader.interpolation)
-        is Shader.Blend -> blend(shaderSource(shader.src,point,working),shaderSource(shader.dst,point,working),shader.mode)
-        is Shader.LinearGradient -> {
-            require(shader.stops.size == 2 && shader.stops[0].position == 0f && shader.stops[1].position == 1f)
-            val dx = sub(Interval.input(shader.end.x),Interval.input(shader.start.x))
-            val dy = sub(Interval.input(shader.end.y),Interval.input(shader.start.y))
-            val x = sub(Interval.input(point.x),Interval.input(shader.start.x))
-            val y = sub(Interval.input(point.y),Interval.input(shader.start.y))
-            val parameter = div(add(mul(x,dx),mul(y,dy)),add(mul(dx,dx),mul(dy,dy)))
-            require(shader.tileMode == org.graphiks.kanvas.paint.TileMode.CLAMP)
-            gradientSource(working ?: shader.interpolation,shader.stops[0].color,shader.stops[1].color,parameter)
+    private fun shaderSource(shader: Shader,point: Point2F32,
+        working: ColorSpaceInterpolation? = null): Array<Interval> =
+        shaderSource(shader,Interval.input(point.x),Interval.input(point.y),working,emptyList())
+
+    // Snapshot coefficients at each edge. Uninterrupted outer-to-inner segments
+    // compose in F64 and project their inverse only once, at clamp or leaf.
+    private fun matrixValues(matrix: Matrix3x3F32): List<Double> = listOf(matrix.sx,matrix.kx,matrix.tx,
+        matrix.ky,matrix.sy,matrix.ty,matrix.persp0,matrix.persp1,matrix.persp2).map { it.toDouble() }
+
+    private fun inverseSegment(segment: List<List<Double>>): List<Float> {
+        var product = listOf(1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0)
+        segment.forEach { right ->
+            require(right.all { it.isFinite() })
+            val left = product
+            product = List(9) { index ->
+                val row = index/3*3; val col = index%3
+                (left[row]*right[col]+left[row+1]*right[col+3])+left[row+2]*right[col+6]
+            }
+            require(product.all { it.isFinite() })
         }
-        else -> error("Independent A8 child fixture requires a supported public solid/linear-gradient wrapper tree")
+        val (a,b,c) = product
+        val d=product[3]; val e=product[4]; val f=product[5]
+        val g=product[6]; val h=product[7]; val i=product[8]
+        val ca=e*i-f*h; val cb=f*g-d*i; val cc=d*h-e*g
+        val determinant=a*ca+b*cb+c*cc
+        require(determinant.isFinite() && determinant != 0.0)
+        return listOf(ca,c*h-b*i,b*f-c*e,cb,a*i-c*g,c*d-a*f,cc,b*g-a*h,a*e-b*d).map {
+            val projected=(it/determinant).toFloat()
+            require(projected.isFinite())
+            if(projected == 0f) 0f else projected
+        }
+    }
+
+    private fun mapSegment(x: Interval,y: Interval,segment: List<List<Double>>): Pair<Interval,Interval> {
+        if(segment.isEmpty()) return x to y
+        val inverse=inverseSegment(segment)
+        fun row(offset: Int): Interval = matrixRows(arrayOf(x,y,Interval.ZERO,Interval.ZERO),
+            floatArrayOf(inverse[offset],inverse[offset+1],0f,0f,inverse[offset+2],
+                0f,0f,0f,0f,0f,0f,0f,0f,0f,0f,0f,0f,0f,0f,0f))[0]
+        val hx=row(0); val hy=row(3)
+        if(inverse[6] == 0f && inverse[7] == 0f && inverse[8] == 1f) return hx to hy
+        val hw=row(6)
+        return projectiveDivide(hx,hw) to projectiveDivide(hy,hw)
+    }
+
+    private fun projectiveDivide(numerator: Interval,denominator: Interval): Interval {
+        // Independent binary-parts schedule: exact exponent extraction/scaling,
+        // only the normalized fraction division incurs the published DIV error.
+        // A zero/FTZ denominator or an overflow-validity alternative cannot be
+        // collapsed into a fabricated finite point; that fixture stays unbounded.
+        val normal=BigDecimal(java.lang.Float.MIN_NORMAL.toDouble())
+        require(denominator.lower >= normal || denominator.upper <= -normal) { "Unbounded coordinate validity predicate" }
+        if(point(numerator,0)) return Interval.ZERO
+        fun power(exponent: Int) = BigDecimal(Math.scalb(1.0,exponent))
+        fun parts(value: Interval): List<Pair<Interval,Int>> = buildList {
+            for(sign in listOf(-1,1)) for(exponent in -148..128) {
+                val low=power(exponent-1); val high=power(exponent)
+                val start=maxOf(value.lower,if(sign > 0) low else -high)
+                val end=minOf(value.upper,if(sign > 0) high else -low)
+                if(start <= end) add(Interval(start.divide(high),end.divide(high)) to exponent)
+            }
+        }
+        val alternatives=mutableListOf<Interval>()
+        if(numerator.lower < normal && numerator.upper > -normal) alternatives += Interval.ZERO
+        for((a,ae) in parts(numerator)) for((b,be) in parts(denominator)) {
+            val fraction=div(a,b)
+            val factor=power(ae-be)
+            val low=fraction.lower*factor; val high=fraction.upper*factor
+            val maximum=BigDecimal(Float.MAX_VALUE.toDouble())
+            require(low >= -maximum && high <= maximum) { "Unbounded projective overflow predicate" }
+            // ldexp is exact for a representable normal result. Outward endpoint
+            // projection plus optional FTZ includes all representable results.
+            var lower=low.toFloat(); var upper=high.toFloat()
+            if(BigDecimal(lower.toDouble()) > low) lower=Math.nextDown(lower)
+            if(BigDecimal(upper.toDouble()) < high) upper=Math.nextUp(upper)
+            var result=Interval(BigDecimal(lower.toDouble()),BigDecimal(upper.toDouble()))
+            if(low < normal && high > -normal) result=hull(result,Interval.ZERO)
+            alternatives += result
+        }
+        require(alternatives.isNotEmpty()) { "Unbounded projective inputs" }
+        return hull(*alternatives.toTypedArray())
+    }
+
+    private fun shaderSource(shader: Shader,x: Interval,y: Interval,
+        working: ColorSpaceInterpolation?,pending: List<List<Double>>): Array<Interval> = when (shader) {
+        is Shader.SolidColor -> source(shader.color)
+        is Shader.Opacity -> shaderSource(shader.shader,x,y,working,pending).map { mul(it,Interval.input(shader.alphaF32)) }.toTypedArray()
+        is Shader.WithColorFilter -> applyFilter(shaderSource(shader.shader,x,y,working,pending),shader.filter)
+        is Shader.WithWorkingColorSpace -> shaderSource(shader.shader,x,y,working ?: shader.interpolation,pending)
+        is Shader.WithLocalMatrix -> shaderSource(shader.shader,x,y,working,pending+listOf(matrixValues(shader.matrix)))
+        is Shader.CoordClamp -> {
+            val (px,py)=mapSegment(x,y,pending)
+            fun bound(value: Interval,low: Float,high: Float) = Interval(
+                value.lower.coerceIn(BigDecimal(low.toDouble()),BigDecimal(high.toDouble())),
+                value.upper.coerceIn(BigDecimal(low.toDouble()),BigDecimal(high.toDouble())))
+            shaderSource(shader.shader,bound(px,shader.subset.left,shader.subset.right),
+                bound(py,shader.subset.top,shader.subset.bottom),working,emptyList())
+        }
+        is Shader.Blend -> blend(shaderSource(shader.src,x,y,working,pending),shaderSource(shader.dst,x,y,working,pending),shader.mode)
+        is Shader.LinearGradient -> {
+            val (px,py)=mapSegment(x,y,pending)
+            val dxF32=shader.end.x-shader.start.x; val dyF32=shader.end.y-shader.start.y
+            val lengthF32=dxF32*dxF32+dyF32*dyF32
+            val dx = Interval.input(dxF32); val dy = Interval.input(dyF32)
+            val qx = sub(px,Interval.input(shader.start.x))
+            val qy = sub(py,Interval.input(shader.start.y))
+            val degenerate=kotlin.math.sqrt(lengthF32) <= .000030517578125f
+            gradientStops(working ?: shader.interpolation,shader.stops,
+                if(degenerate) Interval.ONE else dot(qx,qy,dx,dy),
+                if(degenerate) Interval.ONE else Interval.input(lengthF32),shader.tileMode,degenerate)
+        }
+        is Shader.RadialGradient -> {
+            val (px,py)=mapSegment(x,y,pending)
+            val degenerate=shader.radius <= .000030517578125f
+            val distance=distance(sub(px,Interval.input(shader.center.x)),sub(py,Interval.input(shader.center.y)))
+            gradientStops(working ?: shader.interpolation,shader.stops,if(degenerate) Interval.ONE else distance,
+                if(degenerate) Interval.ONE else Interval.input(shader.radius),shader.tileMode,degenerate)
+        }
+        is Shader.SweepGradient -> {
+            val (px,py)=mapSegment(x,y,pending)
+            val dx=canonicalNormal(sub(px,Interval.input(shader.center.x)))
+            val dy=canonicalNormal(sub(py,Interval.input(shader.center.y)))
+            val turns=when {
+                point(dy,0) && dx.lower.signum() >= 0 -> Interval.ZERO
+                point(dy,0) && dx.upper.signum() < 0 -> Interval.input(.5f)
+                point(dx,0) && dy.lower.signum() > 0 -> Interval.input(.25f)
+                point(dx,0) && dy.upper.signum() < 0 -> Interval.input(.75f)
+                else -> {
+                    val angle=WgslFloatEnvelopeV1Oracle.gradientAtan2(dy,dx,4096.0)
+                    val raw=div(angle,Interval.input(6.2831855f))
+                    sub(raw,WgslFloatEnvelopeV1Oracle.gradientFloor(raw))
+                }
+            }
+            val span=shader.endAngle-shader.startAngle
+            require(span >= 0f)
+            val degenerate=span <= .000030517578125f
+            val degrees=mul(turns,Interval.input(360f))
+            val numerator=if(!degenerate) sub(degrees,Interval.input(shader.startAngle))
+                else if(shader.endAngle <= .000030517578125f) Interval.ONE
+                else when {
+                    degrees.upper < BigDecimal(shader.endAngle.toDouble()) -> Interval.input(-1f)
+                    degrees.lower >= BigDecimal(shader.endAngle.toDouble()) -> Interval.ONE
+                    else -> hull(Interval.input(-1f),Interval.ONE)
+                }
+            gradientStops(working ?: shader.interpolation,shader.stops,
+                numerator,if(degenerate) Interval.ONE else Interval.input(span),
+                if(shader.startAngle <= 0f && shader.endAngle >= 360f) TileMode.CLAMP else shader.tileMode,degenerate)
+        }
+        is Shader.ConicalGradient -> {
+            val (px,py)=mapSegment(x,y,pending)
+            val dx=shader.end.x-shader.start.x; val dy=shader.end.y-shader.start.y
+            val dr=shader.endRadius-shader.startRadius; val dd=dx*dx+dy*dy; val a=dd-dr*dr
+            val concentric=kotlin.math.sqrt(dd) <= .000030517578125f
+            val fully=concentric && kotlin.math.abs(dr) <= .000030517578125f
+            val qx=sub(px,Interval.input(shader.start.x)); val qy=sub(py,Interval.input(shader.start.y))
+            val r0=Interval.input(shader.startRadius); val delta=Interval.input(dr)
+            val distance=distance(qx,qy)
+            val stops=if(shader.stops.size == 1) listOf(shader.stops.single().copy(position=0f),
+                shader.stops.single().copy(position=1f)) else shader.stops
+            if(fully) {
+                val parameter=if(shader.endRadius <= .000030517578125f) Interval.ONE else when {
+                    distance.upper < BigDecimal(shader.endRadius.toDouble()) -> Interval.input(-1f)
+                    distance.lower >= BigDecimal(shader.endRadius.toDouble()) -> Interval.ONE
+                    else -> hull(Interval.input(-1f),Interval.ONE)
+                }
+                gradientStops(working ?: shader.interpolation,stops,parameter,Interval.ONE,shader.tileMode,true)
+            } else {
+                val candidates=if(concentric) listOf(div(sub(distance,r0),delta)) else {
+                    val b=mul(Interval.input(-2f),add(dot(qx,qy,Interval.input(dx),Interval.input(dy)),mul(r0,delta)))
+                    val c=sub(dot(qx,qy,qx,qy),mul(r0,r0))
+                    if(kotlin.math.abs(a) <= .000030517578125f*maxOf(1f,dd,dr*dr)) {
+                        val normal=canonicalNormal(b)
+                        if(point(normal,0)) emptyList() else {
+                            require(normal.lower.signum()*normal.upper.signum() > 0) { "Unbounded conical B predicate" }
+                            listOf(div(sub(Interval.ZERO,c),normal))
+                        }
+                    } else {
+                        val discriminant=sub(mul(b,b),mul(mul(Interval.input(4f),Interval.input(a)),c))
+                        if(discriminant.upper.signum() < 0) emptyList() else {
+                            require(discriminant.lower.signum() >= 0) { "Unbounded conical discriminant predicate" }
+                            val root=WgslFloatEnvelopeV1Oracle.gradientSqrt(discriminant)
+                            val denominator=mul(Interval.input(2f),Interval.input(a))
+                            listOf(div(sub(sub(Interval.ZERO,b),root),denominator),div(add(sub(Interval.ZERO,b),root),denominator))
+                        }
+                    }
+                }
+                val valid=candidates.map(::canonicalNormal).filter { root ->
+                    val radius=hull(add(mul(root,delta),r0),WgslFloatEnvelopeV1Oracle.gradientFma(root,delta,r0))
+                    require(radius.lower.signum() > 0 || radius.upper.signum() <= 0) { "Unbounded conical radius predicate" }
+                    radius.lower.signum() > 0
+                }
+                if(valid.isEmpty()) Array(4) { Interval.ZERO } else {
+                    val root=valid.reduce { left,right -> minmax(left,right,false) }
+                    gradientStops(working ?: shader.interpolation,stops,root,Interval.ONE,shader.tileMode)
+                }
+            }
+        }
+        else -> error("Independent source fixture requires an admitted scalar/gradient wrapper tree")
+    }
+
+    private fun canonicalNormal(value: Interval): Interval {
+        val normal=BigDecimal(java.lang.Float.MIN_NORMAL.toDouble())
+        if(value.lower > -normal && value.upper < normal) return Interval.ZERO
+        return if(value.lower < normal && value.upper > -normal) hull(value,Interval.ZERO) else value
+    }
+
+    private fun dot(x: Interval,y: Interval,a: Interval,b: Interval): Interval = hull(
+        add(mul(x,a),mul(y,b)),WgslFloatEnvelopeV1Oracle.gradientFma(x,a,mul(y,b)),
+        WgslFloatEnvelopeV1Oracle.gradientFma(y,b,mul(x,a)))
+
+    private fun distance(x: Interval,y: Interval): Interval = when {
+        point(x,0) -> abs(y)
+        point(y,0) -> abs(x)
+        else -> WgslFloatEnvelopeV1Oracle.gradientSqrt(minmax(dot(x,y,x,y),Interval.ZERO,false))
+    }
+
+    private fun gradientStops(domain: ColorSpaceInterpolation,input: List<GradientStop>,
+        numerator: Interval,scale: Interval,tile: TileMode,degenerate: Boolean = false): Array<Interval> {
+        require(input.isNotEmpty() && input.all { it.position.isFinite() })
+        if(input.size == 1) return source(input.single().color)
+        if(degenerate && tile == TileMode.DECAL) return Array(4) { Interval.ZERO }
+        val monotone=mutableListOf<GradientStop>()
+        input.forEach { stop -> monotone += stop.copy(position=stop.position.coerceIn(monotone.lastOrNull()?.position ?: 0f,1f)) }
+        if(monotone.first().position > 0f) monotone.add(0,monotone.first().copy(position=0f))
+        if(monotone.last().position < 1f) monotone += monotone.last().copy(position=1f)
+        // Interior runs retain their first/last values; periodic exterior runs
+        // discard the inaccessible side, independently of physical slab layout.
+        val stops=monotone.groupBy { it.position }.flatMap { (position,run) -> when {
+            run.size == 1 -> run
+            tile != TileMode.CLAMP && position == 0f -> listOf(run.last())
+            tile != TileMode.CLAMP && position == 1f -> listOf(run.first())
+            else -> listOf(run.first(),run.last())
+        } }
+        if(degenerate && tile in setOf(TileMode.REPEAT,TileMode.MIRROR)) {
+            // Exact decimal arithmetic over binary F32 inputs, one final F32
+            // conversion: integrate ORIGINAL straight-sRGB, never prepared tuples.
+            val average=Array(4) { channel ->
+                fun component(color: ColorARGB): BigDecimal = BigDecimal(when(channel) {
+                    0 -> color.redNormalized; 1 -> color.greenNormalized
+                    2 -> color.blueNormalized; else -> color.alphaNormalized
+                }.toDouble())
+                val integral=stops.zipWithNext().fold(BigDecimal.ZERO) { sum,(left,right) ->
+                    sum+((BigDecimal(right.position.toDouble())-BigDecimal(left.position.toDouble()))*
+                        (component(left.color)+component(right.color))).divide(BigDecimal(2))
+                }
+                Interval.input(integral.toFloat())
+            }
+            return Array(4) { if(it == 3) average[3] else mul(WgslFloatEnvelopeV1Oracle.imageSrgbToLinear(average[it]),average[3]) }
+        }
+        val raw=div(numerator,scale)
+        val t=when(tile) {
+            TileMode.CLAMP,TileMode.DECAL -> clamp(raw)
+            TileMode.REPEAT -> sub(raw,WgslFloatEnvelopeV1Oracle.gradientFloor(raw))
+            TileMode.MIRROR -> {
+                val q=sub(raw,mul(Interval.input(2f),WgslFloatEnvelopeV1Oracle.gradientFloor(mul(raw,Interval.input(.5f)))))
+                sub(Interval.ONE,abs(sub(q,Interval.ONE)))
+            }
+        }
+        val alternatives=mutableListOf<Array<Interval>>()
+        if(tile == TileMode.DECAL && (raw.lower.signum() < 0 || raw.upper > BigDecimal.ONE))
+            alternatives += Array(4) { Interval.ZERO }
+        if(tile == TileMode.DECAL && (raw.upper.signum() < 0 || raw.lower > BigDecimal.ONE)) return alternatives.single()
+        val searched=if(tile == TileMode.CLAMP) numerator else t
+        val searchScale=if(tile == TileMode.CLAMP) scale else Interval.ONE
+        if(searched.lower.signum() < 0) alternatives += gradientSource(domain,stops.first().color,stops.first().color,Interval.ZERO)
+        // Enumerate every possible upper-bound choice with independent rounded
+        // scaled comparisons; equal positions skip to the last stop in the run.
+        for(index in 1 until stops.size) {
+            val left=stops[index-1]; val right=stops[index]
+            if(left.position == right.position) continue
+            val lo=mul(Interval.input(left.position),searchScale)
+            val hi=mul(Interval.input(right.position),searchScale)
+            if(searched.upper < lo.lower || searched.lower >= hi.upper) continue
+            val ratio=div(sub(t,Interval.input(left.position)),sub(Interval.input(right.position),Interval.input(left.position)))
+            alternatives += gradientSource(domain,left.color,right.color,ratio)
+        }
+        val last=mul(Interval.input(stops.last().position),searchScale)
+        if(searched.upper >= last.lower) alternatives += gradientSource(domain,stops.last().color,stops.last().color,Interval.ONE)
+        require(alternatives.isNotEmpty()) { "No bounded gradient segment" }
+        return Array(4) { channel -> hull(*alternatives.map { it[channel] }.toTypedArray()) }
     }
 
     private fun sampledImage(image: org.graphiks.kanvas.image.Image,sampling: org.graphiks.kanvas.paint.SamplingOptions,
@@ -357,11 +623,16 @@ internal object W5fColorCpuOracle {
     }
 
     fun expectedShaderTree(shader: Shader, paintAlphaF32: Float = 1f, external: ColorFilter? = null,
-        destination: ColorARGB = ColorARGB.Transparent, finalBlend: BlendMode = BlendMode.SRC): WgslFloatEnvelopeV1Oracle.DrawResult {
-        var value = shaderSource(shader,org.graphiks.math.geometry.Point2F32(.5f,.5f))
+        destination: ColorARGB = ColorARGB.Transparent, finalBlend: BlendMode = BlendMode.SRC,
+        devicePointF32: Point2F32 = Point2F32(.5f,.5f),
+        canvasMatrixF32: Matrix3x3F32 = Matrix3x3F32()): WgslFloatEnvelopeV1Oracle.DrawResult = try {
+        val (x,y)=mapSegment(Interval.input(devicePointF32.x),Interval.input(devicePointF32.y),listOf(matrixValues(canvasMatrixF32)))
+        var value = shaderSource(shader,x,y,null,emptyList())
             .map { mul(it,Interval.input(paintAlphaF32)) }.toTypedArray()
         if (external != null) value = applyFilter(value,external)
-        return finish(value,destination,finalBlend,1f)
+        finish(value,destination,finalBlend,1f)
+    } catch(failure: IllegalArgumentException) {
+        WgslFloatEnvelopeV1Oracle.DrawResult.FixtureUnbounded(failure.message ?: "Unbounded independent source fixture")
     }
     fun expectedPaintSource(color: ColorARGB, filter: ColorFilter,
         destination: ColorARGB = ColorARGB.Transparent, finalBlend: BlendMode = BlendMode.SRC_OVER,

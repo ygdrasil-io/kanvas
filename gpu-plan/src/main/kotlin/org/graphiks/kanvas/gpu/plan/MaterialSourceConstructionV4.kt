@@ -133,7 +133,8 @@ internal class MaterialSourceConstructionV4 private constructor(
     private val bounds = bounds.copy()
     val deviceBoundsF32: RectF32 get() = bounds.copy()
     val pending: Boolean get() = resolvedSource == null
-    val hasGradientStorage: Boolean get() = image?.child?.hasGradientStorage ?: gradient?.stops?.countI32?.let { it > 0 }
+    val hasGradientStorage: Boolean get() = composed?.nodes?.any { it.gradientSource?.hasGradientStorage == true }
+        ?: image?.child?.hasGradientStorage ?: gradient?.stops?.countI32?.let { it > 0 }
         ?: (resolvedSource?.table?.gradientStopSlab != null)
     val wrappers: List<SourceUnaryMetadataV4> get() = if (composed != null) emptyList() else image?.wrappers ?: requireNotNull(gradient).wrappers
 
@@ -239,7 +240,8 @@ internal class MaterialSourceConstructionV4 private constructor(
     internal class ComposedMetadata(nodes: List<Node>, val layout: ComposedBindingLayoutV1) {
         val nodes: List<Node> = immutableList(nodes)
         class Node(val ownerNodeIndexI32: Int, val original: MaterialNode, children: List<MaterialEvaluationRefV5>,
-            val offsetBytesI32: Int, val filter: ColorFilterExecutionPlanV1?) {
+            val offsetBytesI32: Int, val filter: ColorFilterExecutionPlanV1?,
+            val gradientSource: MaterialSourceConstructionV4? = null) {
             val children: List<MaterialEvaluationRefV5> = immutableList(children)
             val topologyIdentity: String = when (original) {
                 MaterialNode.Transparent -> "transparent"
@@ -248,6 +250,14 @@ internal class MaterialSourceConstructionV4 private constructor(
                 is MaterialNode.Blend -> "blend:${original.mode}"
                 is MaterialNode.WithColorFilter -> "filter:${requireNotNull(filter).structuralIdentity}"
                 is MaterialNode.WithWorkingColorSpace -> "working:${original.interpolation}"
+                is MaterialNode.WithLocalMatrix -> "local-matrix"
+                is MaterialNode.CoordClamp -> "coord-clamp"
+                is MaterialNode.LinearGradient,is MaterialNode.RadialGradient,is MaterialNode.SweepGradient,
+                is MaterialNode.ConicalGradient -> requireNotNull(gradientSource).let {
+                    "gradient:${it.gradient!!.family}:${it.gradient.interpolation}:${it.gradient.tile.contractId}:" +
+                        "${it.gradient.tile.requestedMode}:${it.gradient.tile.effectiveMode}:${it.coordinates.let { c ->
+                            (c as? SourceCoordinatesV4.V2)?.plan?.topologyIdentity ?: "none" }}"
+                }
                 else -> error(W5gPlanDiagnostics.Unpromoted)
             }
         }
@@ -269,7 +279,15 @@ internal class MaterialSourceConstructionV4 private constructor(
             require(colorFilterEffectsMatchPaint(draw)) { W5gPlanDiagnostics.Schema }
             val nodes = mutableListOf<ComposedMetadata.Node>()
             val mappings = mutableListOf<ComposedBindingLayoutV1.UniformMapping>()
-            val completed = java.util.IdentityHashMap<MaterialNode,MaterialEvaluationRefV5>()
+            data class Context(val coordinateNodes: List<MaterialNode>,val domain: ColorInterpolation?)
+            data class Field(val owner: Int,val ordinal: Int,val bytes: Long)
+            data class Draft(val owner: Int,val original: MaterialNode,val children: List<MaterialEvaluationRefV5>,
+                val field: Field?,val filter: ColorFilterExecutionPlanV1?,val gradient: MaterialSourceConstructionV4?)
+            val completed = java.util.IdentityHashMap<MaterialNode,MutableMap<Context,MaterialEvaluationRefV5>>()
+            val ownerIndices = java.util.IdentityHashMap<MaterialNode,Int>()
+            val scalarFields = java.util.IdentityHashMap<MaterialNode,Field>()
+            val fields = mutableListOf<Field>()
+            val drafts = mutableListOf<Draft>()
             val active = java.util.IdentityHashMap<MaterialNode,Unit>()
             var owners = 0
             var cursor = 0L
@@ -284,48 +302,106 @@ internal class MaterialSourceConstructionV4 private constructor(
                     is MaterialNode.Opacity -> validate(node.material,depth+1)
                     is MaterialNode.WithColorFilter -> validate(node.material,depth+1)
                     is MaterialNode.WithWorkingColorSpace -> validate(node.material,depth+1)
+                    is MaterialNode.WithLocalMatrix -> validate(node.material,depth+1)
+                    is MaterialNode.CoordClamp -> validate(node.material,depth+1)
                     else -> Unit
                 }
                 active.remove(node)
             }
             validate(draw.material,1)
-            fun visit(node: MaterialNode): MaterialEvaluationRefV5 {
+            fun gradientSource(node: MaterialNode,context: Context): MaterialSourceConstructionV4 {
+                val coordinateNodes = context.coordinateNodes.map { when(it) {
+                    is MaterialNode.WithLocalMatrix -> CoordinateNodeV2.LocalMatrix(it.matrix)
+                    is MaterialNode.CoordClamp -> CoordinateNodeV2.CoordClamp(it.copySubset())
+                    else -> error(W5gPlanDiagnostics.Schema)
+                } }
+                val solidStop=when(node) {
+                    is MaterialNode.LinearGradient -> node.stops().size == 1
+                    is MaterialNode.RadialGradient -> node.stops().size == 1
+                    is MaterialNode.SweepGradient -> node.stops().size == 1
+                    else -> false
+                }
+                val coordinates = if(solidStop) SourceCoordinatesV4.None else when(val built=MaterialCoordinatePlanV2.fromCtmAndNodes(draw.transform,coordinateNodes)) {
+                    is MaterialCoordinatePlanV2.Build.Ready -> SourceCoordinatesV4.V2(built.coordinates)
+                    is MaterialCoordinatePlanV2.Build.Refused -> throw IllegalArgumentException(built.code)
+                }
+                var wrapped = context.domain?.let { MaterialNode.WithWorkingColorSpace(node,it) } ?: node
+                context.coordinateNodes.asReversed().forEach { wrapper -> wrapped=when(wrapper) {
+                    is MaterialNode.WithLocalMatrix -> MaterialNode.WithLocalMatrix(wrapped,wrapper.matrix)
+                    is MaterialNode.CoordClamp -> MaterialNode.CoordClamp(wrapped,wrapper.copySubset())
+                    else -> error(W5gPlanDiagnostics.Schema)
+                } }
+                val childDraw = draw.copy(material=wrapped,paint=draw.paint?.copy(shader=wrapped,
+                    color=ColorARGB.White,colorFilter=null),effects=org.graphiks.kanvas.render.ir.EffectStack.Empty)
+                return when(val captured=capture(childDraw,coordinates,bounds,blend)) {
+                    is SourceConstructionResultV4.Built -> captured.value
+                    is SourceConstructionResultV4.Refused -> throw IllegalArgumentException(captured.diagnosticCode)
+                }
+            }
+            fun visit(node: MaterialNode,context: Context): MaterialEvaluationRefV5 {
                 require(active.put(node,Unit) == null) { W5gPlanDiagnostics.Schema }
-                completed[node]?.let { active.remove(node); return it }
-                val owner = owners++
+                completed[node]?.get(context)?.let { active.remove(node); return it }
+                val owner = ownerIndices.getOrPut(node) { owners++ }
                 val filter = (node as? MaterialNode.WithColorFilter)?.let { compileFilter(it.filter) }
+                val gradient = when(node) {
+                    is MaterialNode.LinearGradient,is MaterialNode.RadialGradient,is MaterialNode.SweepGradient,
+                    is MaterialNode.ConicalGradient -> { validatePendingGradient(node); gradientSource(node,context) }
+                    else -> null
+                }
                 val bytes = when(node) {
                     MaterialNode.Transparent, is MaterialNode.Solid, is MaterialNode.Opacity -> 16L
                     is MaterialNode.WithColorFilter -> requireNotNull(filter).dynamicByteCountI64
-                    is MaterialNode.Blend, is MaterialNode.WithWorkingColorSpace -> 0L
+                    is MaterialNode.Blend, is MaterialNode.WithWorkingColorSpace,
+                    is MaterialNode.WithLocalMatrix,is MaterialNode.CoordClamp -> 0L
+                    is MaterialNode.LinearGradient,is MaterialNode.RadialGradient,is MaterialNode.SweepGradient,
+                    is MaterialNode.ConicalGradient -> requireNotNull(gradient).uniformBytesI64()
                     else -> {
                         validatePendingGradient(node)
                         throw IllegalArgumentException(W5gPlanDiagnostics.Unpromoted)
                     }
                 }
                 if (node is MaterialNode.Opacity) require(node.alpha.isFinite() && node.alpha in 0f..1f) { W5aPlanDiagnostics.InvalidOpacity }
-                val offset = Math.toIntExact(cursor)
-                cursor = Math.addExact(cursor,bytes)
-                require(cursor <= Int.MAX_VALUE.toLong() && cursor <= UInt.MAX_VALUE.toLong()) { W5gPlanDiagnostics.Uniform }
-                if (bytes > 0) mappings += ComposedBindingLayoutV1.UniformMapping(owner,0,offset,Math.toIntExact(bytes),16)
+                val field = if(bytes == 0L) null else if(gradient != null) Field(owner,fields.size,bytes).also { fields += it }
+                    else scalarFields.getOrPut(node) { Field(owner,fields.size,bytes).also { fields += it } }
                 val children = when(node) {
-                    is MaterialNode.Blend -> listOf(visit(node.dst),visit(node.src))
-                    is MaterialNode.Opacity -> listOf(visit(node.material))
-                    is MaterialNode.WithColorFilter -> listOf(visit(node.material))
-                    is MaterialNode.WithWorkingColorSpace -> listOf(visit(node.material))
+                    is MaterialNode.Blend -> listOf(visit(node.dst,context),visit(node.src,context))
+                    is MaterialNode.Opacity -> listOf(visit(node.material,context))
+                    is MaterialNode.WithColorFilter -> listOf(visit(node.material,context))
+                    is MaterialNode.WithWorkingColorSpace -> listOf(visit(node.material,
+                        context.copy(domain=context.domain ?: node.interpolation)))
+                    is MaterialNode.WithLocalMatrix -> listOf(visit(node.material,
+                        context.copy(coordinateNodes=context.coordinateNodes+node)))
+                    is MaterialNode.CoordClamp -> listOf(visit(node.material,
+                        context.copy(coordinateNodes=context.coordinateNodes+node)))
                     else -> emptyList()
                 }
-                nodes += ComposedMetadata.Node(owner,node,children,offset,filter)
+                drafts += Draft(owner,node,children,field,filter,gradient)
                 active.remove(node)
-                return MaterialEvaluationRefV5(nodes.lastIndex).also { completed[node] = it }
+                return MaterialEvaluationRefV5(drafts.lastIndex).also { completed.getOrPut(node) { mutableMapOf() }[context] = it }
             }
             val alpha = draw.paint?.takeIf { it.shader != null }?.color?.alphaNormalized ?: 1f
             var root: MaterialNode = MaterialNode.Opacity(draw.material,alpha)
             draw.paint?.colorFilter?.let { root = MaterialNode.WithColorFilter(root,it) }
             // Prefix owner assignment includes the actual outer paint operations;
             // postorder evaluation refs remain explicit and independently checked.
-            visit(root)
-            val metadata = ComposedMetadata(nodes,ComposedBindingLayoutV1(mappings,cursor))
+            visit(root,Context(emptyList(),null))
+            val offsets = mutableMapOf<Field,Int>()
+            for(owner in 0 until owners) {
+                val base=cursor
+                fields.filter { it.owner == owner }.forEach { field ->
+                    offsets[field]=Math.toIntExact(cursor)
+                    mappings += ComposedBindingLayoutV1.UniformMapping(owner,Math.toIntExact(cursor-base),
+                        Math.toIntExact(cursor),Math.toIntExact(field.bytes),16)
+                    cursor=Math.addExact(cursor,field.bytes)
+                    require(cursor <= Int.MAX_VALUE.toLong() && cursor <= UInt.MAX_VALUE.toLong()) { W5gPlanDiagnostics.Uniform }
+                }
+            }
+            drafts.forEach { nodes += ComposedMetadata.Node(it.owner,it.original,it.children,
+                it.field?.let(offsets::getValue) ?: 0,it.filter,it.gradient) }
+            val firstGradientOwner=nodes.filter { it.gradientSource?.hasGradientStorage == true }.minOfOrNull { it.ownerNodeIndexI32 }
+            val resources=firstGradientOwner?.let { listOf(ComposedBindingLayoutV1.Resource(it,0,1,1,2u,1u,
+                buffer=ComposedBindingLayoutV1.Buffer(2u,32L))) }.orEmpty()
+            val metadata = ComposedMetadata(nodes,ComposedBindingLayoutV1(mappings,cursor,resources))
             return MaterialSourceConstructionV4(draw.material,draw.paint,SourceCoordinatesV4.None,bounds,blend,
                 "captured-composed-v5:${java.util.UUID.randomUUID()}",null,null,composed=metadata)
         }
