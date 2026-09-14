@@ -298,7 +298,10 @@ internal class MaterialSourceConstructionV4 private constructor(
                     MaterialNode.Transparent, is MaterialNode.Solid, is MaterialNode.Opacity -> 16L
                     is MaterialNode.WithColorFilter -> requireNotNull(filter).dynamicByteCountI64
                     is MaterialNode.Blend, is MaterialNode.WithWorkingColorSpace -> 0L
-                    else -> throw IllegalArgumentException(W5gPlanDiagnostics.Unpromoted)
+                    else -> {
+                        validatePendingGradient(node)
+                        throw IllegalArgumentException(W5gPlanDiagnostics.Unpromoted)
+                    }
                 }
                 if (node is MaterialNode.Opacity) require(node.alpha.isFinite() && node.alpha in 0f..1f) { W5aPlanDiagnostics.InvalidOpacity }
                 val offset = Math.toIntExact(cursor)
@@ -325,6 +328,48 @@ internal class MaterialSourceConstructionV4 private constructor(
             val metadata = ComposedMetadata(nodes,ComposedBindingLayoutV1(mappings,cursor))
             return MaterialSourceConstructionV4(draw.material,draw.paint,SourceCoordinatesV4.None,bounds,blend,
                 "captured-composed-v5:${java.util.UUID.randomUUID()}",null,null,composed=metadata)
+        }
+        /** At this leaf's prefix visit only: validate recorded metadata, never prepare a pending source. */
+        private fun validatePendingGradient(source: MaterialNode) {
+            val stops: List<GradientStop>
+            val requested: GradientTileModeV2
+            val degeneracy: GradientDegeneracyV1
+            when (source) {
+                is MaterialNode.LinearGradient -> {
+                    require(listOf(source.start.x,source.start.y,source.end.x,source.end.y).all(Float::isFinite)) { W5cPlanDiagnostics.NonFinite }
+                    stops = source.stops(); requested = GradientTileModeV2.valueOf(source.tileMode.name)
+                    degeneracy = LinearGradientDegeneracyV1.of(source.start,source.end)
+                }
+                is MaterialNode.RadialGradient -> {
+                    require(listOf(source.center.x,source.center.y,source.radius).all(Float::isFinite)) { W5cPlanDiagnostics.NonFinite }
+                    require(source.radius >= 0f) { W5cPlanDiagnostics.NegativeRadius }
+                    stops = source.stops(); requested = GradientTileModeV2.valueOf(source.tileMode.name)
+                    degeneracy = RadialGradientDegeneracyV1(source.radius,source.radius <= 0.000030517578125f)
+                }
+                is MaterialNode.SweepGradient -> {
+                    require(listOf(source.center.x,source.center.y,source.startAngle,source.endAngle).all(Float::isFinite)) { W5cPlanDiagnostics.NonFinite }
+                    stops = source.stops(); requested = GradientTileModeV2.valueOf(source.tileMode.name)
+                    degeneracy = SweepGradientDegeneracyV1.of(source.startAngle,source.endAngle)
+                    require(!degeneracy.sweepOrderingInvalid) { W5cPlanDiagnostics.SweepOrdering }
+                }
+                is MaterialNode.ConicalGradient -> {
+                    require(listOf(source.start.x,source.start.y,source.end.x,source.end.y,
+                        source.startRadius,source.endRadius).all(Float::isFinite)) { W5cPlanDiagnostics.NonFinite }
+                    require(source.startRadius >= 0f && source.endRadius >= 0f) { W5cPlanDiagnostics.NegativeRadius }
+                    stops = source.stops(); requested = GradientTileModeV2.valueOf(source.tileMode.name)
+                    degeneracy = ConicalGradientDegeneracyV1.of(source.start,source.startRadius,source.end,source.endRadius)
+                }
+                else -> return
+            }
+            val scalars = when (degeneracy) {
+                is LinearGradientDegeneracyV1 -> degeneracy.copyScalarsF32()
+                is RadialGradientDegeneracyV1 -> listOf(degeneracy.radialRadiusF32)
+                is SweepGradientDegeneracyV1 -> listOf(degeneracy.startAngleDegreesF32,degeneracy.endAngleDegreesF32,degeneracy.sweepSpanDegreesF32)
+                is ConicalGradientDegeneracyV1 -> degeneracy.copyScalarsF32()
+            }
+            require(scalars.all(Float::isFinite)) { W5cPlanDiagnostics.NumericDomainUnbounded }
+            val tile = requested.operationGraph((degeneracy as? SweepGradientDegeneracyV1)?.sweepFullCoverage == true)
+            GradientStopCursorV4.of(stops,tile.effectiveMode,source is MaterialNode.ConicalGradient)
         }
         fun captureImage(metadata: ImageMetadata,bounds: RectF32,blend: BlendPlan): MaterialSourceConstructionV4 {
             val identity = buildString {

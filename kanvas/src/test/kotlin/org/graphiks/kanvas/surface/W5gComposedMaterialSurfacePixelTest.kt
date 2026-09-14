@@ -26,6 +26,39 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class W5gComposedMaterialSurfacePixelTest {
+    @ParameterizedTest(name = "invalid gradient {0} retains its own prefix diagnostic")
+    @ValueSource(ints = [0,1,2])
+    fun invalidGradientLeafKeepsHistoricalDiagnostic(kind: Int) {
+        val stops = listOf(GradientStop(0f,ColorARGB.Red),GradientStop(1f,ColorARGB.Blue))
+        val invalid = when (kind) {
+            0 -> Shader.LinearGradient(Point2F32(0f,0f),Point2F32(1f,0f),emptyList())
+            1 -> Shader.RadialGradient(Point2F32(0f,0f),-1f,stops)
+            else -> Shader.ConicalGradient(Point2F32(0f,0f),0f,Point2F32(1f,0f),-1f,stops)
+        }
+        val code = if (kind == 0) "unsupported.material.gradient.empty_stops"
+            else "unsupported.material.gradient.negative_radius"
+        val solid = Shader.SolidColor(ColorARGB.Red)
+        // The old direct source is the control; each composed leaf is first
+        // invalid in declared dst/src order, never hidden by pending admission.
+        for (shader in listOf(invalid,Shader.Blend(BlendMode.SRC_OVER,invalid,solid),
+            Shader.Blend(BlendMode.SRC_OVER,solid,invalid))) {
+            val surface = Surface(1,1)
+            surface.canvas { drawRect(RectF32.ofLTRB(0f,0f,1f,1f),Paint(shader=shader,antiAlias=false)) }
+            val failure = assertFailsWith<IllegalStateException> { surface.render() }
+            assertEquals(code,failure.message.orEmpty().substringBefore(':'),failure.message)
+        }
+        // A later invalid sibling must not override an earlier valid but
+        // unpromoted gradient's owned refusal.
+        val pending = Shader.LinearGradient(Point2F32(0f,0f),Point2F32(1f,0f),stops)
+        val earlier = Surface(1,1)
+        earlier.canvas { drawRect(RectF32.ofLTRB(0f,0f,1f,1f),Paint(shader=
+            Shader.Blend(BlendMode.SRC_OVER,pending,invalid),antiAlias=false)) }
+        val firstFailure = assertFailsWith<IllegalStateException> { earlier.render() }
+        assertEquals("unsupported.material.composed.slice",firstFailure.message.orEmpty().substringBefore(':'),firstFailure.message)
+        val expected = W5fColorCpuOracle.expectedShaderTree(solid)
+        render(Shader.Blend(BlendMode.SRC,Shader.SolidColor(ColorARGB.Blue),solid),expected)
+    }
+
     @Test fun finalDestinationIdentityKeepsItsNoOpSemantics() {
         val shader = Shader.Blend(BlendMode.SRC_OVER,Shader.SolidColor(ColorARGB.Red),Shader.SolidColor(ColorARGB.Blue))
         val expected = W5fColorCpuOracle.expectedShaderTree(Shader.SolidColor(ColorARGB.Blue))
@@ -93,6 +126,75 @@ class W5gComposedMaterialSurfacePixelTest {
             "Counterfactual must be distinct: ${a.channels}/${b.channels}")
     }
 
+    private fun linearColor(r: Float,g: Float,b: Float) = Shader.WithColorFilter(Shader.SolidColor(ColorARGB.Black),
+        ColorFilter.Matrix(ColorMatrixF32.of(floatArrayOf(0f,0f,0f,0f,r,0f,0f,0f,0f,g,
+            0f,0f,0f,0f,b,0f,0f,0f,0f,1f))))
+
+    // A finite independent search for a quantization cell, never device feedback.
+    // Unlike boundedProjection, this can expose alpha in green and must separate
+    // EVERY supplied semantic mutation before any Surface is constructed.
+    private fun discriminatingProjection(shader: Shader,wrong: List<Shader>): Pair<ColorFilter,WgslFloatEnvelopeV1Oracle.DrawResult>? {
+        for (scale in listOf(.0625f,.125f,.25f)) for (channel in 0..3)
+            for (bias in listOf(.125f,.25f,.375f,.5f,.625f,.75f)) {
+            val values = floatArrayOf(0f,0f,0f,0f,.125f,0f,0f,0f,0f,bias,
+                0f,0f,0f,0f,0f,0f,0f,0f,0f,1f)
+            values[5+channel] = scale
+            val projection = ColorFilter.Matrix(ColorMatrixF32.of(values))
+            fun expected(tree: Shader) = W5fColorCpuOracle.expectedShaderTree(tree,127f/255f,
+                projection,ColorARGB.Blue,BlendMode.SRC_OVER)
+            val wanted = expected(shader) as? WgslFloatEnvelopeV1Oracle.DrawResult.Bounded ?: continue
+            val alternatives = wrong.map { expected(it) }
+            if (alternatives.all { other -> other is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded &&
+                wanted.channels.indices.any { wanted.channels[it].intersect(other.channels[it]).isEmpty() } }) {
+                alternatives.forEach { disjoint(wanted,it) }
+                return projection to wanted
+            }
+        }
+        return null
+    }
+
+    @ParameterizedTest(name = "child mode {0} rejects wrong mode, lost alpha and meaningful reversed order")
+    @EnumSource(BlendMode::class)
+    fun eachChildModeHasADisjointSemanticWitness(mode: BlendMode) {
+        val wrongMode = when (mode) {
+            BlendMode.SRC_IN -> BlendMode.SRC_OUT
+            BlendMode.SRC_OUT -> BlendMode.SRC_IN
+            BlendMode.SRC_OVER -> BlendMode.DST_OVER
+            else -> BlendMode.SRC_OVER
+        }
+        val commutative = setOf(BlendMode.CLEAR,BlendMode.PLUS,BlendMode.MODULATE,BlendMode.SCREEN,
+            BlendMode.DARKEN,BlendMode.LIGHTEN,BlendMode.DIFFERENCE,BlendMode.EXCLUSION,BlendMode.MULTIPLY,BlendMode.XOR)
+        // HUE/COLOR must actually change luminosity: near-equal luminances
+        // make their difference from SRC_OVER disappear at byte quantization.
+        val colors = if (mode == BlendMode.HUE || mode == BlendMode.COLOR)
+            listOf(linearColor(.75f,.875f,.625f) to linearColor(.125f,.25f,.375f))
+        else listOf(
+            linearColor(.75f,.25f,.5f) to linearColor(.25f,.5f,.75f),
+            linearColor(.625f,.375f,.875f) to linearColor(.125f,.625f,.375f))
+        for ((dstColor,srcColor) in colors) {
+            val dst = Shader.Opacity(dstColor,.25f)
+            val src = Shader.Opacity(srcColor,.75f)
+            val shader = Shader.Blend(mode,dst,src)
+            // Preserve straight RGB but corrupt the output alpha. PLUS is
+            // already opaque here, so use .5 rather than an equivalent 1.
+            val forcedAlpha = ColorFilter.Matrix(ColorMatrixF32.of(floatArrayOf(
+                1f,0f,0f,0f,0f,0f,1f,0f,0f,0f,0f,0f,1f,0f,0f,
+                0f,0f,0f,0f,if (mode == BlendMode.PLUS) .5f else 1f)))
+            val wrong = listOf(Shader.Blend(wrongMode,dst,src),Shader.WithColorFilter(shader,forcedAlpha)) +
+                if (mode in commutative) emptyList() else listOf(Shader.Blend(mode,src,dst))
+            // Alpha and straight color can require separate output observations
+            // (notably SRC_IN vs SRC_OUT, then SRC_IN vs reversed SRC_IN).
+            val witnesses = wrong.map { discriminatingProjection(shader,listOf(it)) }
+            if (witnesses.any { it == null }) continue
+            witnesses.forEach { witness ->
+                val (projection,expected) = requireNotNull(witness)
+                render(shader,expected,projection,127,BlendMode.SRC_OVER,ColorARGB.Blue)
+            }
+            return
+        }
+        error("No disjoint witness for $mode")
+    }
+
     private fun render(shader: Shader,expected: WgslFloatEnvelopeV1Oracle.DrawResult,
         external: ColorFilter? = null,paintAlpha: Int = 255,finalBlend: BlendMode = BlendMode.SRC,
         background: ColorARGB = ColorARGB.Transparent) {
@@ -143,9 +245,42 @@ class W5gComposedMaterialSurfacePixelTest {
     @ParameterizedTest(name = "composed filter kind {0}")
     @ValueSource(ints = [0,1,2,3,4,5,6,7,8,9,10,11])
     fun allFilterKinds(kind: Int) {
+        val filter = filterRecipe(kind)
+        for (alpha in listOf(0f,.25f,.5f,1f)) {
+            val shader = Shader.Blend(BlendMode.SRC_OVER,
+                Shader.Opacity(Shader.SolidColor(ColorARGB.Blue),.5f),
+                Shader.WithColorFilter(Shader.Opacity(Shader.SolidColor(ColorARGB.Green),alpha),filter))
+            for (mode in listOf(BlendMode.SRC_OVER,BlendMode.SRC_IN,BlendMode.DIFFERENCE)) {
+                val (projection,expected) = boundedProjection(shader,mode)
+                render(shader,expected,projection,paintAlpha=127,finalBlend=mode,background=ColorARGB.Blue)
+            }
+        }
+    }
+
+    @ParameterizedTest(name = "filter kind {0} rejects omission and wrong placement")
+    @ValueSource(ints = [0,1,2,3,4,5,6,7,8,9,10,11])
+    fun eachFilterHasADisjointPlacementWitness(kind: Int) {
+        val filter = filterRecipe(kind)
+        for (alpha in listOf(.5f,.25f,.75f)) {
+            val dst = Shader.Opacity(linearColor(.75f,.25f,.5f),.25f)
+            val src = Shader.Opacity(linearColor(.25f,.5f,.75f),alpha)
+            val shader = Shader.Blend(BlendMode.SRC_OVER,dst,Shader.WithColorFilter(src,filter))
+            val omitted = Shader.Blend(BlendMode.SRC_OVER,dst,src)
+            // Opaque constant Blend filtering commutes with this outer SRC_OVER;
+            // putting it on the wrong child is the meaningful placement error.
+            val misplaced = if (kind == 7) Shader.Blend(BlendMode.SRC_OVER,Shader.WithColorFilter(dst,filter),src)
+                else Shader.WithColorFilter(omitted,filter)
+            val witness = discriminatingProjection(shader,listOf(omitted,misplaced)) ?: continue
+            render(shader,witness.second,witness.first,127,BlendMode.SRC_OVER,ColorARGB.Blue)
+            return
+        }
+        error("No disjoint omission/placement witness for filter $kind")
+    }
+
+    private fun filterRecipe(kind: Int): ColorFilter {
         val matrix = ColorFilter.Matrix(ColorMatrixF32.ofIdentity().apply { setScale(.5f,1f,1f,1f) })
         val translate = ColorFilter.Matrix(ColorMatrixF32.ofIdentity().apply { postTranslate(.125f,0f,0f,.25f) })
-        val filter = when (kind) {
+        return when (kind) {
             0 -> matrix
             1 -> ColorFilter.Compose(matrix,translate)
             2 -> ColorFilter.Lerp(.5f,matrix,translate)
@@ -159,15 +294,6 @@ class W5gComposedMaterialSurfacePixelTest {
             9 -> ColorFilter.HighContrast
             10 -> ColorFilter.Luma
             else -> ColorFilter.Overdraw
-        }
-        for (alpha in listOf(0f,.25f,.5f,1f)) {
-            val shader = Shader.Blend(BlendMode.SRC_OVER,
-                Shader.Opacity(Shader.SolidColor(ColorARGB.Blue),.5f),
-                Shader.WithColorFilter(Shader.Opacity(Shader.SolidColor(ColorARGB.Green),alpha),filter))
-            for (mode in listOf(BlendMode.SRC_OVER,BlendMode.SRC_IN,BlendMode.DIFFERENCE)) {
-                val (projection,expected) = boundedProjection(shader,mode)
-                render(shader,expected,projection,paintAlpha=127,finalBlend=mode,background=ColorARGB.Blue)
-            }
         }
     }
 
