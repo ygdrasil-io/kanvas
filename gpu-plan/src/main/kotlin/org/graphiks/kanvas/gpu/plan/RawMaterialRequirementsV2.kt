@@ -192,7 +192,8 @@ public class RawMaterialRequirementsV2 private constructor(
             }
             check(bytes.position() == bytes.capacity())
             return RawMaterialRequirementsV2(1,footprint.uniformByteCountI64,false,footprint.bindingCountI32,
-                footprint.table.entry(footprint.root).program.structuralId.value,bytes.array(),footprint.canonicalIdentity)
+                footprint.table.entry(footprint.root).program.structuralId.value,bytes.array(),footprint.canonicalIdentity,
+                footprint.proof.imageExecution != null,footprint.proof.imageLayout)
         }
         public const val BINDING_STRIDE_BYTES_I64: Long = 16L
 
@@ -396,14 +397,31 @@ public class RawMaterialRequirementsV2 private constructor(
             }
         }
 
+        internal fun forEachImageHeaderWord(execution: ImageSampleExecutionPlanV1, consume: (Int)->Unit) =
+            writeImageHeaderWords(execution,RawWordSink(consume))
+        internal fun forEachImageHeaderWord(coordinates: ImageCoordinatePlanV1,upload: ImageUploadPlanV1,
+            paintAlphaF32: Float,sampling: ImageSamplingPlanV1,selection: ImageCellSelectionPlanV1?,
+            atlasColor: org.graphiks.math.color.ColorARGB?,consume: (Int)->Unit) =
+            writeImageHeaderWords(coordinates,upload,paintAlphaF32,sampling,selection,atlasColor,RawWordSink(consume))
+
         private fun writeImageUniformWords(execution: ImageSampleExecutionPlanV1, child: LegacyLayout?,
-            uniforms: RawWordSink, ranges: Map<MaterialBindingPlan,GradientStopRangeV1> = emptyMap()) = with(uniforms) {
-            execution.coordinates.uniformValuesF32().forEach(::putFloat)
-            putFloat(execution.upload.widthI32.toFloat()).putFloat(execution.upload.heightI32.toFloat())
-            putFloat(execution.paintAlphaF32).putFloat(execution.cellSelection?.cells?.size?.toFloat() ?: 0f)
-            val cubic = execution.sampling as? ImageSamplingPlanV1.Cubic
+            uniforms: RawWordSink, ranges: Map<MaterialBindingPlan,GradientStopRangeV1> = emptyMap()) {
+            writeImageHeaderWords(execution,uniforms)
+            child?.forEachRelocatedWord(ranges,uniforms::putInt)
+        }
+
+        private fun writeImageHeaderWords(execution: ImageSampleExecutionPlanV1, uniforms: RawWordSink) =
+            writeImageHeaderWords(execution.coordinates,execution.upload,execution.paintAlphaF32,execution.sampling,
+                execution.cellSelection,execution.atlasBlend?.color,uniforms)
+        private fun writeImageHeaderWords(coordinates: ImageCoordinatePlanV1,upload: ImageUploadPlanV1,
+            paintAlphaF32: Float,sampling: ImageSamplingPlanV1,selection: ImageCellSelectionPlanV1?,
+            atlasColor: org.graphiks.math.color.ColorARGB?,uniforms: RawWordSink) = with(uniforms) {
+            coordinates.uniformValuesF32().forEach(::putFloat)
+            putFloat(upload.widthI32.toFloat()).putFloat(upload.heightI32.toFloat())
+            putFloat(paintAlphaF32).putFloat(selection?.cells?.size?.toFloat() ?: 0f)
+            val cubic = sampling as? ImageSamplingPlanV1.Cubic
             putFloat(cubic?.bF32 ?: 0f).putFloat(cubic?.cF32 ?: 0f).putFloat(0f).putFloat(0f)
-            execution.cellSelection?.let { selection ->
+            selection?.let { selection ->
                 selection.copyDirectionUniformValuesF32().forEach(::putFloat)
                 repeat(selection.capacityI32) { indexI32 ->
                     val cell = selection.cells.getOrNull(indexI32)
@@ -422,8 +440,7 @@ public class RawMaterialRequirementsV2 private constructor(
                     }
                 }
             }
-            execution.atlasBlend?.copyColorUniformF32()?.forEach(::putFloat)
-            child?.forEachRelocatedWord(ranges,::putInt)
+            atlasColor?.let { listOf(it.redNormalized,it.greenNormalized,it.blueNormalized,it.alphaNormalized).forEach(::putFloat) }
         }
 
         private fun fitsLegacyUniformBinding(bytesI64: Long, hasCoordinatesV2: Boolean, imageSource: Boolean,

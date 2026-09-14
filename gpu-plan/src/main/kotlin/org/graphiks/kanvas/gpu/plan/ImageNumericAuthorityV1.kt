@@ -46,6 +46,10 @@ public class ImageNumericAuthorityV1 private constructor(
 ) {
     private val bounds = deviceBoundsF32.copy()
     public fun copyDeviceBoundsF32(): RectF32 = bounds.copy()
+    internal fun sampledTexelGraph(upload: ImageUploadPlanV1, cellWordOffsetI64: Long? = null): ColorOperationGraphV1 {
+        require(upload.contentIdentity == uploadIdentity) { W5eImagePlanDiagnostics.InvalidContract }
+        return graph.sampledTexelGraph(upload,cellWordOffsetI64=cellWordOffsetI64)
+    }
     public val canonicalIdentity: String = "${graph.topologyIdentity}:sampling=${graph.sampling.bindingIdentity}:${programIdentity.value}:$uploadIdentity:$coordinateIdentity:" +
         listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).joinToString(",") { it.toRawBits().toString() } +
         ":paint=$paintAlphaBitsI32:texel-domain-v1:unorm8:positive-alpha-ge-2^-9:signed-components-abs-lt-2^36:" +
@@ -59,7 +63,7 @@ public class ImageNumericAuthorityV1 private constructor(
             program.selectsCells == (cellSelection != null) &&
             program.latticeCellKinds == cellSelection?.takeIf { it.lattice }?.cellKindsIdentity &&
             program.atlasBlendMode == execution.atlasBlend?.mode &&
-            (execution.atlasBlend?.authenticates(execution.upload, execution.colorAlpha, execution.childSourceIdentity) != false) &&
+            (execution.atlasBlend?.authenticates(execution.upload, execution.colorAlpha, execution.childSourceIdentity,this) != false) &&
             cellSelection?.samples.orEmpty().all { sample ->
                 val proof = sample.numericAuthority
                 proof.programIdentity == programIdentity && proof.uploadIdentity == uploadIdentity &&

@@ -42,7 +42,7 @@ internal class RenderGraphConstruction internal constructor(
     fun dependencies(): List<PlanPassDependency> = dependencyValues
 
     fun rebindMaterials(table: MaterialPlanTable, remap: (MaterialPlanRef) -> MaterialPlanRef): RenderGraphConstruction {
-        val passes = remapSourcePassesV4(passes(),remap)
+        val passes = remapSourcePassesV4(passes(),remap=remap)
         val oldStopsI64 = resources().filter { it.role == PlanResourceRole.GradientStopData }.sumOf { it.byteSize }
         val rebound = RenderGraph.construct(id,capabilityId,targetExtent,colorFormat,capabilities,budget,visualCommandCount,
             resources().filterNot { it.role == PlanResourceRole.GradientStopData },passes,dependencies(),
@@ -77,10 +77,24 @@ internal class RenderGraphConstruction internal constructor(
 
 /** Same immutable draw/resource-map rebind for resolved and source-deferred construction. */
 internal fun remapSourcePassesV4(sourcePasses: List<PlanPass>,
+    overlayCoordinates: ((PlanDraw)->SourceCoordinatesV4?)? = null,
+    overlayReference: ((PlanDraw)->MaterialPlanRef)? = null,
     remap: (MaterialPlanRef) -> MaterialPlanRef): List<PlanPass> {
         val copied = java.util.IdentityHashMap<PlanDraw, PlanDraw>()
         fun draw(source: PlanDraw): PlanDraw = copied.getOrPut(source) {
-            val ref = remap(source.materialAuthority.materialPlanRef())
+            val ref = overlayReference?.invoke(source) ?: remap(source.materialAuthority.materialPlanRef())
+            val imageCoordinates = overlayCoordinates?.invoke(source)
+            if (imageCoordinates != null) return@getOrPut when (source) {
+                is SolidRectDraw -> SolidRectDraw.ofMaterial(source.commandIndex,ref,source.copyVisibleBounds(),
+                    source.copyScissor(),source.coverage,source.sample,source.blend,coordinatesV4=imageCoordinates)
+                is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(source.commandIndex,ref,source.copyDeviceBounds(),
+                    source.copyRasterBounds(),source.copyScissor(),source.blend,coordinatesV4=imageCoordinates)
+                is PathFillDraw -> PathFillDraw.ofMaterial(source.commandIndex,ref,source.copyGeometryF32(),source.strategy,
+                    source.copyScissorI32(),source.blend,coordinatesV4=imageCoordinates)
+                is GeneralPathDraw -> GeneralPathDraw.ofMaterial(source.commandIndex,ref,source.copyPathGeometry(),
+                    source.strategy,source.copyScissorI32(),source.coverage,source.sample,source.blend,coordinatesV4=imageCoordinates)
+                else -> error(W5fPlanDiagnostics.Unpromoted)
+            }
             when (source) {
                 is SolidRectDraw -> source.withMaterialRef(ref)
                 is AnalyticRectDraw -> source.withMaterialRef(ref)

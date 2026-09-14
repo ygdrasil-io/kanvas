@@ -4,8 +4,10 @@ import org.graphiks.kanvas.gpu.plan.ColorOperationGraphV1
 
 /** Syntax lowering only. Every executed operation and branch comes from the sealed graph. */
 internal object W5fColorOperationEmitterV1 {
-    fun emit(graph: ColorOperationGraphV1, inputRgbaExpression: String, uniformWordOffsetU32: Long): String {
+    fun emit(graph: ColorOperationGraphV1, inputRgbaExpression: String, uniformWordOffsetU32: Long,
+        imageEncodedRgbaExpression: String? = null, resultChannelI32: Int? = null): String {
         require(graph.contractId == "WgslFloatEnvelopeV1" && uniformWordOffsetU32 in 0L..UInt.MAX_VALUE.toLong())
+        require(resultChannelI32 == null || resultChannelI32 in 0..3)
         var nextI32 = 0
         fun word(offset: Long): String {
             val absolute = Math.addExact(offset,uniformWordOffsetU32)
@@ -17,6 +19,15 @@ internal object W5fColorOperationEmitterV1 {
             cache[node]?.let { return it }
             val name = "colorValue${nextI32++}"
             fun arg(value: ColorOperationGraphV1.Scalar) = expression(value,code,cache)
+            fun imageAddress(read: org.graphiks.kanvas.gpu.plan.ImageNumericOperationGraphV1.TexelRead): String =
+                cache[read] ?: run {
+                    val x = arg(read.baseX); val y = arg(read.baseY)
+                    val width = arg(read.width); val height = arg(read.height)
+                    val address = "imageAddress${nextI32++}"
+                    code.append("let $address = w5e_address_texel(i32($x) + ${read.offsetXI32}i, i32($y) + ${read.offsetYI32}i, i32($width), i32($height));\n")
+                    cache[read] = address
+                    address
+                }
             fun predicate(p: ColorOperationGraphV1.Predicate): String = when (p) {
                 is ColorOperationGraphV1.Predicate.UniformU32Equal -> "(${word(p.wordOffsetU32)} == ${p.expectedU32}u)"
                 is ColorOperationGraphV1.Predicate.Equal -> "(${arg(p.a)} == ${arg(p.b)})"
@@ -58,6 +69,22 @@ internal object W5fColorOperationEmitterV1 {
             }
             val text = when (node) {
                 is ColorOperationGraphV1.Scalar.InputLinearPremul -> "($inputRgbaExpression)[${node.channelI32}u]"
+                is ColorOperationGraphV1.Scalar.ImageEncodedInput ->
+                    "(${requireNotNull(imageEncodedRgbaExpression)})[${node.channelI32}u]"
+                is ColorOperationGraphV1.Scalar.ImageTexelValid -> "f32(${imageAddress(node.read)}.z)"
+                is ColorOperationGraphV1.Scalar.ImageEncodedComponent -> {
+                    val encoded = cache[node.read.encoded] ?: run {
+                        val address = imageAddress(node.read)
+                        val texel = "imageEncoded${nextI32++}"
+                        code.append("let $texel: vec4<f32> = textureLoad(w5eTexture, $address.xy, 0);\n")
+                        cache[node.read.encoded] = texel
+                        texel
+                    }
+                    "$encoded[${node.channelI32}u]"
+                }
+                is ColorOperationGraphV1.Scalar.ImageSampleComponent -> arg(node.region.outputs[node.channelI32])
+                is ColorOperationGraphV1.Scalar.ImageIntegerOffset -> "f32(i32(${arg(node.base)}) + ${node.offsetI32}i)"
+                ColorOperationGraphV1.Scalar.DiscardF32 -> { code.append("discard;\n"); "0.0" }
                 is ColorOperationGraphV1.Scalar.DevicePositionF32 -> "localPosition[${node.channelI32}u]"
                 is ColorOperationGraphV1.Scalar.DynamicF32 -> {
                     val word = Math.addExact(node.wordOffsetU32,uniformWordOffsetU32)
@@ -145,6 +172,7 @@ internal object W5fColorOperationEmitterV1 {
         val code = StringBuilder()
         val cache = java.util.IdentityHashMap<Any,String>()
         val result = graph.outputs.map { expression(it,code,cache) }
-        return code.append("return vec4<f32>(${result.joinToString(", ")});\n").toString()
+        val output = resultChannelI32?.let { result[it] } ?: "vec4<f32>(${result.joinToString(", ")})"
+        return code.append("return $output;\n").toString()
     }
 }

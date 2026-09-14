@@ -143,8 +143,13 @@ public class RenderGraph private constructor(
             })
         }
         internal fun issueW5e(bridge: W5eImageConstructionPlanV1): RenderGraph {
-            require(bridge.materialTable.entries().none { it.bindings is ColorFilterBindingV4 }) { W5fPlanDiagnostics.Unpromoted }
             val geometry = bridge.constructionGraph
+            (bridge.imageDraws().map { it.materialAuthority } + bridge.ordinarySources().values).forEach { authority ->
+                if (authority is PlanDrawMaterialAuthority.MaterialV4) {
+                    require(geometry.materialPlanTableOrNull() === bridge.materialTable) { W5fPlanDiagnostics.Schema }
+                    geometry.packedMaterialSourceV4(authority)
+                }
+            }
             val cachedImages = bridge.imageDraws().map { it.execution.cacheRequest }
                 .distinctBy { it.canonicalPhysicalIdentity }.mapIndexed { ordinalI32, request ->
                     PlanResource.of(PlanResourceRole.DecodedImageV1, ordinalI32, request.kind,
@@ -156,7 +161,8 @@ public class RenderGraph private constructor(
             return RenderGraph(PlanId(bridge.canonicalIdentity), W5eImagePlanCompiler.CAPABILITY_ID,
                 geometry.targetExtent, geometry.colorFormat, geometry.capabilities, geometry.budget, bridge.visualCommandCountI32,
                 cachedImages, emptyList(), emptyList(), bridge.peakBytesI64,
-                null, null, null, null, bridge.materialTable, w5eImageConstruction = bridge)
+                null, null, null, null, bridge.materialTable, w5eImageConstruction = bridge,
+                packedSourcesV4=geometry.storedPackedSourcesV4)
         }
         internal fun issueW5bGeometry(graph: RenderGraph, lanes: List<W5bGeometryLanePlanV3> = emptyList()): RenderGraph {
             require(graph.capabilityId in setOf(W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID,

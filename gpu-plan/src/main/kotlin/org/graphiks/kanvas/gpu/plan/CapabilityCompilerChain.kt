@@ -47,6 +47,30 @@ public class CapabilityCompilerChain private constructor(
         return chained.compiler.plan(chained.candidate, capabilities, budget)
     }
 
+    /** Private candidate ownership is checked before the selected compiler exposes metadata. */
+    internal fun constructSourceLayout(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+        overlay: (SourceDeferredRenderConstructionV4)->SourceConstructionResultV4<SourceDeferredRenderConstructionV4>,
+    ): RenderPlanResult<FrameSourceLayoutV4> {
+        val chained = candidate as? ChainCandidate ?: return invalidCandidate()
+        if (chained.owner !== this || compilers.getOrNull(chained.index) !== chained.compiler) return invalidCandidate()
+        if (chained.compiler is W5aCompositePlanCompiler)
+            return chained.compiler.constructSourceLayout(chained.candidate,capabilities,budget,overlay)
+        return when (val result = chained.compiler.constructSourceLaneV4(chained.candidate,capabilities,budget)) {
+            is RenderPlanResult.Ready -> when (val captured = overlay(result.plan)) {
+                is SourceConstructionResultV4.Refused -> captured.failure
+                is SourceConstructionResultV4.Built -> when (val layout = FrameSourceLayoutV4.standalone(captured.value)) {
+                    is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(layout.value)
+                    is SourceConstructionResultV4.Refused -> layout.failure
+                }
+            }
+            is RenderPlanResult.GapNotMigrated -> result
+            is RenderPlanResult.GapOnPromotedScope -> result
+            is RenderPlanResult.InvalidScene -> result
+            is RenderPlanResult.ResourceLimitExceeded -> result
+        }
+    }
+
     private fun invalidCandidate(): RenderPlanResult.InvalidScene = RenderPlanResult.InvalidScene(listOf(
         diagnostic("gpu-plan.selection.invalid-candidate", "Candidate does not belong to this compiler chain."),
     ))

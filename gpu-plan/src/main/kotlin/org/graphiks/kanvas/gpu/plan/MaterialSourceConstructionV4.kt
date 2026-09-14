@@ -127,12 +127,92 @@ internal class MaterialSourceConstructionV4 private constructor(
     val canonicalIdentity: String,
     val resolvedSource: EffectiveMaterialPlanner.Result.Ready?,
     val gradient: GradientMetadata?,
+    val image: ImageMetadata? = null,
 ) {
     private val bounds = bounds.copy()
     val deviceBoundsF32: RectF32 get() = bounds.copy()
     val pending: Boolean get() = resolvedSource == null
-    val hasGradientStorage: Boolean get() = gradient?.stops?.countI32?.let { it > 0 }
+    val hasGradientStorage: Boolean get() = image?.child?.hasGradientStorage ?: gradient?.stops?.countI32?.let { it > 0 }
         ?: (resolvedSource?.table?.gradientStopSlab != null)
+    val wrappers: List<SourceUnaryMetadataV4> get() = image?.wrappers ?: requireNotNull(gradient).wrappers
+
+    fun uniformBytesI64(sourceOnly: Boolean = false): Long {
+        resolvedSource?.let { resolved ->
+            if (resolved.materialAuthority is PlanDrawMaterialAuthority.MaterialV4) {
+                val footprint = RawMaterialRequirementsV2.measureV4(resolved.table,resolved.root)
+                return if (sourceOnly) footprint.sourceUniformByteCountI64 else footprint.uniformByteCountI64
+            }
+            return RawMaterialRequirementsV2.measureLegacy(resolved.table,resolved.root).uniformByteCountI64
+        }
+        val base = image?.let { Math.addExact(it.layout.imageUniformByteCountI64,it.child?.uniformBytesI64(sourceOnly) ?: 0L) }
+            ?: GradientInterpolationUniformLayoutV4.leafByteCountI64(this)
+        return wrappers.fold(base) { bytes,wrapper -> Math.addExact(bytes,when (wrapper) {
+            is SourceUnaryMetadataV4.Opacity -> 16L
+            is SourceUnaryMetadataV4.Filter -> if (sourceOnly) 0L else wrapper.execution.dynamicByteCountI64
+        }) }
+    }
+
+    /** Original V3 classification/capture, retained until the final frame binds its child. */
+    class ImageMetadata internal constructor(
+        val originalDraw: DrawNode,
+        val upload: ImageUploadPlanV1,
+        val coordinates: ImageCoordinatePlanV1,
+        val color: ImageColorAlphaPlanV1,
+        val sampling: ImageSamplingPlanV1,
+        val tileModes: ImageTileModePlanV1,
+        cells: List<ImageCellPlanV1>?,
+        val latticeKinds: String?,
+        val paintAlphaF32: Float,
+        val latticePaintAlphaF32: Float,
+        val atlasColor: ColorARGB?,
+        val atlasMode: org.graphiks.kanvas.render.ir.BlendMode?,
+        val child: MaterialSourceConstructionV4?,
+        val deferredColor: Boolean,
+        wrappers: List<SourceUnaryMetadataV4>,
+        bounds: RectF32,
+    ) {
+        val cells = cells?.let(::immutableList)
+        val wrappers = immutableList(wrappers)
+        private val bounds = bounds.copy()
+        val layout: ImageSourceLayoutV3 get() = ImageSourceLayoutV3(child?.hasGradientStorage == true,
+            cells != null,latticeKinds != null,maxOf(1,cells?.size ?: 9),atlasColor != null)
+
+        fun bind(childSource: EffectiveMaterialPlanner.Result.Ready?,frameBytesI64: Long): EffectiveMaterialPlanner.Result.Ready {
+            require((child == null) == (childSource == null)) { W5eImagePlanDiagnostics.InvalidContract }
+            val program = if (childSource == null) ImageMaterialProgramV3.ColorV3(color.channelOrder,
+                color.alphaType,color.transfer,color.gamut,sampling,tileModes,cells != null,latticeKinds,
+                atlasMode,color.premultiplication)
+            else ImageMaterialProgramV3.MaskV3(childSource.table.entry(childSource.root).program,color.alphaType,
+                sampling,tileModes,cells != null,latticeKinds,atlasMode)
+            val numeric = ImageNumericAuthorityV1.seal(program,upload,coordinates,bounds,paintAlphaF32,
+                sampling,tileModes,cells,latticePaintAlphaF32)
+                ?: throw IllegalArgumentException(W5eImagePlanDiagnostics.NumericDomainUnbounded)
+            val childIdentity = childSource?.table?.sourceIdentity(childSource.root)
+            val atlasBlend = atlasColor?.let { entryColor ->
+                val authority = if (deferredColor) {
+                    val childProof = childSource?.let { source ->
+                        val childCoordinates = when (val authority = source.materialAuthority) {
+                            is PlanDrawMaterialAuthority.MaterialV4 -> authority.coordinates
+                            is PlanDrawMaterialAuthority.MaterialV2 -> SourceCoordinatesV4.V2(authority.coordinates)
+                            is PlanDrawMaterialAuthority.MaterialV1 -> authority.coordinates?.let(SourceCoordinatesV4::V1) ?: SourceCoordinatesV4.None
+                            else -> throw IllegalArgumentException(W5eImagePlanDiagnostics.InvalidContract)
+                        }
+                        (ColorSourceProofCompilerV1.seal(source.table,source.root,childCoordinates,bounds)
+                            as? ColorSourceProofResultV1.Ready)?.source
+                            ?: throw IllegalArgumentException(W5eImagePlanDiagnostics.NumericDomainUnbounded)
+                    }
+                    ImageAtlasBlendNumericAuthorityV1.sealForSource(requireNotNull(atlasMode),entryColor,
+                        upload,coordinates,numeric,paintAlphaF32,childProof)
+                } else ImageAtlasBlendNumericAuthorityV1.seal(requireNotNull(atlasMode),entryColor,
+                    upload,color,childSource != null,childIdentity,
+                    if (childSource != null && originalDraw.paint?.shader == null) originalDraw.paint?.color?.withAlpha(255) else null)
+                authority ?: throw IllegalArgumentException(W5eImagePlanDiagnostics.NumericDomainUnbounded) }
+            val execution = ImageSampleExecutionPlanV1(upload,coordinates,color,numeric,paintAlphaF32,childIdentity,
+                frameBytesI64,sampling,tileModes,atlasBlend)
+            val entries = childSource?.table?.entries().orEmpty() + MaterialPlanEntry(program,ImageSampleV3.of(execution))
+            return EffectiveMaterialPlanner.Result.Ready(MaterialPlanTable.of(entries),MaterialPlanRef(entries.lastIndex))
+        }
+    }
 
     class GradientMetadata internal constructor(
         val leaf: MaterialNode,
@@ -155,6 +235,26 @@ internal class MaterialSourceConstructionV4 private constructor(
     }
 
     companion object {
+        fun captureImage(metadata: ImageMetadata,bounds: RectF32,blend: BlendPlan): MaterialSourceConstructionV4 {
+            val identity = buildString {
+                append("captured-image-source-v4:").append(metadata.upload.contentIdentity)
+                append(':').append(metadata.coordinates.canonicalIdentity).append(':').append(metadata.color)
+                append(':').append(metadata.sampling).append(':').append(metadata.tileModes)
+                append(':').append(metadata.cells?.joinToString { it.canonicalIdentity })
+                append(':').append(metadata.latticeKinds).append(':').append(metadata.paintAlphaF32.toRawBits())
+                append(':').append(metadata.latticePaintAlphaF32.toRawBits()).append(':').append(metadata.atlasColor)
+                append(':').append(metadata.atlasMode).append(':').append(metadata.child?.canonicalIdentity)
+                metadata.wrappers.forEach { append(':').append(when (it) {
+                    is SourceUnaryMetadataV4.Opacity -> "opacity:${it.alphaF32.toRawBits()}"
+                    is SourceUnaryMetadataV4.Filter -> it.execution.canonicalIdentity
+                }) }
+                append(':').append(bounds.left.toRawBits()).append(':').append(bounds.top.toRawBits())
+                append(':').append(bounds.right.toRawBits()).append(':').append(bounds.bottom.toRawBits())
+            }
+            return MaterialSourceConstructionV4(metadata.originalDraw.material,metadata.originalDraw.paint,
+                SourceCoordinatesV4.V3(metadata.coordinates),bounds,blend,identity,null,null,metadata)
+        }
+
         fun retain(draw: DrawNode, resolved: EffectiveMaterialPlanner.Result.Ready, bounds: RectF32): MaterialSourceConstructionV4 =
             MaterialSourceConstructionV4(draw.material, draw.paint, when (val authority = resolved.materialAuthority) {
                 is PlanDrawMaterialAuthority.MaterialV4 -> authority.coordinates
@@ -167,14 +267,15 @@ internal class MaterialSourceConstructionV4 private constructor(
             }, bounds, resolved.blend, resolved.table.sourceIdentity(resolved.root), resolved, null)
 
         fun capture(draw: DrawNode, coordinates: SourceCoordinatesV4, bounds: RectF32,
-            blend: BlendPlan): SourceConstructionResultV4<MaterialSourceConstructionV4> = try {
+            blend: BlendPlan,imageMaskChild: Boolean = false): SourceConstructionResultV4<MaterialSourceConstructionV4> = try {
             require(bounds.isFinite() && bounds.isSorted()) { W5fPlanDiagnostics.Schema }
-            require(draw.origin in setOf(DrawOrigin.RECT, DrawOrigin.RRECT, DrawOrigin.PATH) &&
+            require(imageMaskChild || draw.origin in setOf(DrawOrigin.RECT, DrawOrigin.RRECT, DrawOrigin.PATH) &&
                 draw.resource == null && draw.operationBlendMode == null) { W5fPlanDiagnostics.Unpromoted }
             require(colorFilterEffectsMatchPaint(draw)) { W5fPlanDiagnostics.Schema }
             val wrappers = mutableListOf<SourceUnaryMetadataV4>()
             val coordinateNodes = mutableListOf<CoordinateNodeV2>()
-            var leaf = draw.material
+            val original = if (imageMaskChild) EffectiveMaterialPlanner.imageMaskMaterial(draw) else draw.material
+            var leaf = original
             var depth = 0
             var selectedDomain: ColorInterpolation? = null
             while (true) {
@@ -257,15 +358,16 @@ internal class MaterialSourceConstructionV4 private constructor(
             val orderedWrappers = wrappers.asReversed().toMutableList()
             val paintAlpha = draw.paint?.takeIf { it.shader != null }?.color?.alphaNormalized ?: 1f
             if (paintAlpha != 1f) orderedWrappers += SourceUnaryMetadataV4.Opacity(paintAlpha)
-            draw.paint?.colorFilter?.let { orderedWrappers += SourceUnaryMetadataV4.Filter(compileFilter(it)) }
-            if (orderedWrappers.any { it is SourceUnaryMetadataV4.Filter }) require(
+            if (!imageMaskChild) draw.paint?.colorFilter?.let { orderedWrappers += SourceUnaryMetadataV4.Filter(compileFilter(it)) }
+            if (!imageMaskChild && orderedWrappers.any { it is SourceUnaryMetadataV4.Filter }) require(
                 draw.origin in setOf(DrawOrigin.RECT, DrawOrigin.PATH) && draw.paint?.style == PaintStyleNode.FILL
             ) { W5fPlanDiagnostics.Unpromoted }
             val metadata = GradientMetadata(leaf, interpolation, family, tile, degeneracy, cursor, orderedWrappers)
             val identity = "captured-source-v4:${draw.material.canonicalId.value}:${draw.paint?.canonicalId?.value}:" +
+                (if (imageMaskChild) "child:${original.canonicalId.value}:" else "") +
                 "${coordinates.identityV4()}:${bounds.left.toRawBits()}:${bounds.top.toRawBits()}:" +
                 "${bounds.right.toRawBits()}:${bounds.bottom.toRawBits()}:$blend:${metadata.rangeIdentity}"
-            SourceConstructionResultV4.Built(MaterialSourceConstructionV4(draw.material, draw.paint,
+            SourceConstructionResultV4.Built(MaterialSourceConstructionV4(original, draw.paint,
                 coordinates, bounds, blend, identity, null, metadata))
         } catch (failure: IllegalArgumentException) {
             sourceConstructionRefusalV4(failure.message ?: W5fPlanDiagnostics.Schema)
@@ -273,7 +375,7 @@ internal class MaterialSourceConstructionV4 private constructor(
             sourceConstructionRefusalV4(failure.message ?: W5fPlanDiagnostics.Schema)
         }
 
-        private fun compileFilter(node: org.graphiks.kanvas.render.ir.ColorFilterNode): ColorFilterExecutionPlanV1 =
+        internal fun compileFilter(node: org.graphiks.kanvas.render.ir.ColorFilterNode): ColorFilterExecutionPlanV1 =
             when (val result = ColorFilterPlanCompilerV1.compile(node)) {
                 is ColorFilterCompileResultV1.Ready -> result.execution
                 is ColorFilterCompileResultV1.Refused -> throw IllegalArgumentException(result.diagnosticCode)

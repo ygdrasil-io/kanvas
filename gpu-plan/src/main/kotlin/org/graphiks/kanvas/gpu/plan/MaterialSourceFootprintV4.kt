@@ -7,7 +7,7 @@ public class MaterialSourceFootprintV4 internal constructor(internal val table: 
     public val uniformByteCountI64: Long = Math.multiplyExact(proof.uniformWordCountI64,4L)
     public val sourceUniformByteCountI64: Long = Math.multiplyExact(proof.sourceUniformWordCountI64,4L)
     public val storageByteCountI64: Long = proof.gradientStopSlab?.byteSizeI64 ?: 0L
-    public val bindingCountI32: Int = if (storageByteCountI64 == 0L) 1 else 2
+    public val bindingCountI32: Int = (if (storageByteCountI64 == 0L) 1 else 2) + (if (proof.imageExecution == null) 0 else 1)
     internal fun authenticates(): Boolean = table.colorSourceProofV4(root) === proof && proof.authenticates(table,root,proof.coordinates)
 }
 

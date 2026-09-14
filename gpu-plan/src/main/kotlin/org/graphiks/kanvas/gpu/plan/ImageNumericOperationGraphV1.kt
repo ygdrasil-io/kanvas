@@ -96,6 +96,198 @@ public class ImageNumericOperationGraphV1 private constructor(public val colorAl
     public val cubicWeightsF32: List<Node>
     public val cubicAccumulationF32: Node?
     public val cubicScheduleIdentity: String?
+    /** Actual separable sampler region; no independent bounds or replacement evaluator. */
+    public class SampledRegion private constructor(
+        public val graph: ImageNumericOperationGraphV1,
+        taps: List<TexelRead>, outputs: List<ColorOperationGraphV1.Scalar>,
+        weightsX: List<ColorOperationGraphV1.Scalar>, weightsY: List<ColorOperationGraphV1.Scalar>,
+        distancesX: List<ColorOperationGraphV1.Scalar>, distancesY: List<ColorOperationGraphV1.Scalar>,
+    ) {
+        public val taps: List<TexelRead> = immutableList(taps)
+        public val outputs: List<ColorOperationGraphV1.Scalar> = immutableList(outputs)
+        public val weightsX: List<ColorOperationGraphV1.Scalar> = immutableList(weightsX)
+        public val weightsY: List<ColorOperationGraphV1.Scalar> = immutableList(weightsY)
+        public val distancesX: List<ColorOperationGraphV1.Scalar> = immutableList(distancesX)
+        public val distancesY: List<ColorOperationGraphV1.Scalar> = immutableList(distancesY)
+        internal fun rebase(bind: (ColorOperationGraphV1.Scalar) -> ColorOperationGraphV1.Scalar,
+            read: (TexelRead) -> TexelRead): SampledRegion = SampledRegion(graph,taps.map(read),outputs.map(bind),
+                weightsX.map(bind),weightsY.map(bind),distancesX.map(bind),distancesY.map(bind))
+        internal companion object {
+            fun bind(graph: ImageNumericOperationGraphV1,taps: List<TexelRead>,outputs: List<ColorOperationGraphV1.Scalar>,
+                scalar: (Node) -> ColorOperationGraphV1.Scalar): SampledRegion {
+                val weights = if (graph.sampling == ImageSamplingPlanV1.Linear)
+                    listOf(requireNotNull(graph.weight00F32),requireNotNull(graph.weight10F32),
+                        requireNotNull(graph.weight01F32),requireNotNull(graph.weight11F32)) else graph.cubicWeightsF32
+                val size = if (graph.sampling == ImageSamplingPlanV1.Linear) 2 else 4
+                val x = (0 until size).map { weights[it].inputs[0] }
+                val y = (0 until size).map { weights[it*size].inputs[1] }
+                fun distances(axis: List<Node>,fraction: Node?): List<ColorOperationGraphV1.Scalar> =
+                    if (fraction != null) listOf(scalar(fraction)) else axis.map { scalar(it.inputs.single()) }
+                return SampledRegion(graph,taps,outputs,x.map(scalar),y.map(scalar),
+                    distances(x,graph.fractionXF32),distances(y,graph.fractionYF32))
+            }
+        }
+    }
+    /** Addressed raw operands retain the exact original sampler and captured upload. */
+    public class TexelRead internal constructor(
+        public val graph: ImageNumericOperationGraphV1,
+        public val upload: ImageUploadPlanV1,
+        public val baseX: ColorOperationGraphV1.Scalar,
+        public val baseY: ColorOperationGraphV1.Scalar,
+        public val offsetXI32: Int,
+        public val offsetYI32: Int,
+        public val width: ColorOperationGraphV1.Scalar,
+        public val height: ColorOperationGraphV1.Scalar,
+    ) {
+        init { require(offsetXI32 in -1..2 && offsetYI32 in -1..2) }
+        public val identity: String = "image-raw-tap:${graph.topologyIdentity}:${upload.contentIdentity}:$offsetXI32:$offsetYI32"
+        internal fun rebase(x: ColorOperationGraphV1.Scalar,y: ColorOperationGraphV1.Scalar,
+            width: ColorOperationGraphV1.Scalar,height: ColorOperationGraphV1.Scalar): TexelRead =
+            TexelRead(graph,upload,x,y,offsetXI32,offsetYI32,width,height)
+        public val encoded: List<ColorOperationGraphV1.Scalar> = immutableList(List(4) {
+            ColorOperationGraphV1.Scalar.ImageEncodedComponent(this,it) })
+        public val decoded: List<ColorOperationGraphV1.Scalar> = run {
+            val zero = ColorOperationGraphV1.constant(0f)
+            val body = graph.decodedTexelGraph(encoded).outputs
+            if (graph.tileModes.x != ImageTileAxisModePlanV1.DECAL && graph.tileModes.y != ImageTileAxisModePlanV1.DECAL) body
+            else {
+                val branch = ColorOperationGraphV1.BranchVector(ColorOperationGraphV1.Predicate.Equal(
+                    ColorOperationGraphV1.Scalar.ImageTexelValid(this),ColorOperationGraphV1.constant(1f)),body,List(4) { zero })
+                immutableList(List(4) { ColorOperationGraphV1.Scalar.BranchComponent(branch,it) })
+            }
+        }
+    }
+    /** Original decoder, expressed once for both the texel emitter and source proof. */
+    public fun decodedTexelGraph(encoded: List<ColorOperationGraphV1.Scalar> =
+        List(4) { ColorOperationGraphV1.Scalar.ImageEncodedInput(it) }): ColorOperationGraphV1 {
+        require(encoded.size == 4)
+        val operations = texelOperations()
+        val zero = ColorOperationGraphV1.constant(0f)
+        val one = ColorOperationGraphV1.constant(1f)
+        val mask = TexelOperation.RETURN_SCALAR_MASK in operations
+        val alpha = if (TexelOperation.ALPHA_OPAQUE in operations) one else encoded[if (mask) 0 else 3]
+        if (mask) return ColorOperationGraphV1(List(4) { alpha })
+        val rgb = if (TexelOperation.SWIZZLE_BGRA in operations) listOf(encoded[2],encoded[1],encoded[0]) else encoded.take(3)
+        val straight = rgb.map { value -> if (TexelOperation.UNIT_ALPHA_GUARDED_UNPREMULTIPLY_SOURCE in operations)
+            ColorOperationGraphV1.Scalar.LazyBranch(ColorOperationGraphV1.Predicate.Equal(alpha,one),value,
+                ColorOperationGraphV1.Scalar.Divide(value,alpha)) else value }
+        val linear = if (TexelOperation.SRGB_TO_LINEAR in operations) straight.map(ColorOperationGraphV1::eotf) else straight
+        val working = if (TexelOperation.DISPLAY_P3_TO_LINEAR_SRGB in operations)
+            ColorOperationGraphV1.conversion(linear,
+                org.graphiks.kanvas.color.ColorInterpolationProgramV1.RecipeKind.DISPLAY_P3_TO_LINEAR_SRGB) else linear
+        val output = List(4) { if (it == 3) alpha else if (TexelOperation.PREMULTIPLY_LINEAR in operations)
+            ColorOperationGraphV1.Scalar.Multiply(working[it],alpha) else working[it] }
+        val guarded = ColorOperationGraphV1.BranchVector(ColorOperationGraphV1.Predicate.Equal(alpha,zero),List(4) { zero },output)
+        return ColorOperationGraphV1(List(4) { ColorOperationGraphV1.Scalar.BranchComponent(guarded,it) })
+    }
+
+    private inner class ColorScalarBinding(val uniformWordOffsetI64: Long,val cellWordOffsetI64: Long?) {
+        fun c(value: Float) = ColorOperationGraphV1.constant(value)
+        fun word(index: Int): ColorOperationGraphV1.Scalar = ColorOperationGraphV1.Scalar.DynamicF32(
+            if (cellWordOffsetI64 != null && index in 12..19) Math.addExact(cellWordOffsetI64,(index-12).toLong())
+            else Math.addExact(uniformWordOffsetI64,index.toLong()))
+        val memo = java.util.IdentityHashMap<Node,ColorOperationGraphV1.Scalar>()
+        fun scalar(node: Node, cache: MutableMap<Node,ColorOperationGraphV1.Scalar> = memo): ColorOperationGraphV1.Scalar =
+            cache[node] ?: run {
+                fun a() = scalar(node.inputs[0],cache)
+                fun b() = scalar(node.inputs[1],cache)
+                when (node.operation) {
+                    Operation.DEVICE_X_F32 -> ColorOperationGraphV1.Scalar.DevicePositionF32(0)
+                    Operation.DEVICE_Y_F32 -> ColorOperationGraphV1.Scalar.DevicePositionF32(1)
+                    Operation.UNIFORM_F32 -> word(node.uniformIndexI32)
+                    Operation.CONSTANT_HALF_F32 -> c(.5f)
+                    Operation.CONSTANT_ONE_F32 -> c(1f)
+                    Operation.CONSTANT_F32 -> ColorOperationGraphV1.Scalar.ConstantF32(node.constantBitsI32)
+                    Operation.ADD_F32 -> ColorOperationGraphV1.Scalar.Add(a(),b())
+                    Operation.SUB_F32 -> ColorOperationGraphV1.Scalar.Subtract(a(),b())
+                    Operation.MUL_F32 -> ColorOperationGraphV1.Scalar.Multiply(a(),b())
+                    Operation.DIV_F32 -> ColorOperationGraphV1.Scalar.Divide(a(),b())
+                    Operation.FLOOR_F32 -> ColorOperationGraphV1.Scalar.Floor(a())
+                    Operation.ABS_F32 -> ColorOperationGraphV1.Scalar.Abs(a())
+                    Operation.TAP_INDEX_F32 -> ColorOperationGraphV1.Scalar.ImageIntegerOffset(a(),node.uniformIndexI32)
+                    Operation.CUBIC_KERNEL_F32 -> {
+                        val kernel = requireNotNull(cubicKernel)
+                        val region = java.util.IdentityHashMap(cache)
+                        region[kernel.distance] = a()
+                        val distance = scalar(kernel.absoluteDistance,region)
+                        ColorOperationGraphV1.Scalar.LazyBranch(ColorOperationGraphV1.Predicate.Not(
+                            ColorOperationGraphV1.Predicate.LessEqual(c(kernel.innerLimitF32),distance)),
+                            scalar(kernel.innerResult,region),ColorOperationGraphV1.Scalar.LazyBranch(
+                                ColorOperationGraphV1.Predicate.Not(ColorOperationGraphV1.Predicate.LessEqual(c(kernel.outerLimitF32),distance)),
+                                scalar(kernel.outerResult,region),scalar(kernel.outsideResult,region)))
+                    }
+                    Operation.KERNEL_DISTANCE_F32,Operation.TEXEL_COMPONENT_F32 -> error("Unbound original sampler operand")
+                }
+            }.also { cache[node] = it }
+    }
+
+    internal fun localCoordinateExpressions(): List<ColorOperationGraphV1.Scalar> = ColorScalarBinding(0L,null).let {
+        listOf(it.scalar(localXF32),it.scalar(localYF32),it.scalar(denominator))
+    }
+
+    /** Binds the original coordinate, tap, kernel and decoder nodes to real raw operands. */
+    internal fun sampledTexelGraph(upload: ImageUploadPlanV1, uniformWordOffsetI64: Long = 0L,
+        cellWordOffsetI64: Long? = null): ColorOperationGraphV1 {
+        val binding = ColorScalarBinding(uniformWordOffsetI64,cellWordOffsetI64)
+        val memo = binding.memo
+        fun c(value: Float) = ColorOperationGraphV1.constant(value)
+        fun word(index: Int) = binding.word(index)
+        fun scalar(node: Node,cache: MutableMap<Node,ColorOperationGraphV1.Scalar> = memo) = binding.scalar(node,cache)
+        val x = scalar(baseXF32); val y = scalar(baseYF32)
+        val offsets = when (sampling) {
+            ImageSamplingPlanV1.Nearest -> listOf(0 to 0)
+            ImageSamplingPlanV1.Linear -> listOf(0 to 0,1 to 0,0 to 1,1 to 1)
+            is ImageSamplingPlanV1.Cubic -> (-1..2).flatMap { row -> (-1..2).map { column -> column to row } }
+        }
+        val taps = offsets.map { (column,row) -> TexelRead(this,upload,x,y,column,row,word(20),word(21)) }
+        // All four decoded components and the proof metadata share these exact
+        // materialized weights, not separately rebound copies of the kernel DAG.
+        cubicWeightsF32.forEach { scalar(it) }
+        val output = when (sampling) {
+            ImageSamplingPlanV1.Nearest -> taps.single().decoded
+            ImageSamplingPlanV1.Linear -> {
+                val weights = listOf(weight00F32,weight10F32,weight01F32,weight11F32).map { scalar(requireNotNull(it)) }
+                List(4) { channel ->
+                    val terms = taps.mapIndexed { tap,read -> ColorOperationGraphV1.Scalar.Multiply(read.decoded[channel],weights[tap]) }
+                    terms.drop(1).fold(terms.first() as ColorOperationGraphV1.Scalar) { sum,term -> ColorOperationGraphV1.Scalar.Add(sum,term) }
+                }
+            }
+            is ImageSamplingPlanV1.Cubic -> List(4) { channel ->
+                val region = java.util.IdentityHashMap(memo)
+                fun bindTexels(node: Node) {
+                    if (node.operation == Operation.TEXEL_COMPONENT_F32) region[node] = taps[node.uniformIndexI32].decoded[channel]
+                    else node.inputs.forEach(::bindTexels)
+                }
+                val root = requireNotNull(cubicAccumulationF32)
+                bindTexels(root)
+                scalar(root,region)
+            }
+        }
+        val sampledOutput = if (sampling == ImageSamplingPlanV1.Nearest) output else {
+            val region = SampledRegion.bind(this,taps,output) { scalar(it) }
+            List(4) { ColorOperationGraphV1.Scalar.ImageSampleComponent(region,it) }
+        }
+        val denominator = scalar(denominator)
+        val valid = ColorOperationGraphV1.Predicate.And(ColorOperationGraphV1.Predicate.Finite(denominator),
+            ColorOperationGraphV1.Predicate.LessEqual(c(java.lang.Float.MIN_NORMAL),ColorOperationGraphV1.Scalar.Abs(denominator)))
+        val low = if (sampling is ImageSamplingPlanV1.Cubic) -2147483647f else -2147483648f
+        val high = when (sampling) {
+            ImageSamplingPlanV1.Nearest -> 2147483648f
+            ImageSamplingPlanV1.Linear -> 2147483647f
+            is ImageSamplingPlanV1.Cubic -> 2147483646f
+        }
+        fun validTap(tap: ColorOperationGraphV1.Scalar) = ColorOperationGraphV1.Predicate.And(
+            ColorOperationGraphV1.Predicate.Finite(tap),ColorOperationGraphV1.Predicate.And(
+                ColorOperationGraphV1.Predicate.LessEqual(c(low),tap),
+                ColorOperationGraphV1.Predicate.Not(ColorOperationGraphV1.Predicate.LessEqual(c(high),tap))))
+        val tapGuard = ColorOperationGraphV1.BranchVector(ColorOperationGraphV1.Predicate.And(
+            validTap(scalar(tapXF32)),validTap(scalar(tapYF32))),sampledOutput,List(4) { c(0f) })
+        // Keep the denominator guard outside source-coordinate division and the
+        // tap guard outside every floor/I32 conversion, exactly as the sampler.
+        val guarded = ColorOperationGraphV1.BranchVector(valid,List(4) {
+            ColorOperationGraphV1.Scalar.BranchComponent(tapGuard,it) },List(4) { c(0f) })
+        return ColorOperationGraphV1(List(4) { ColorOperationGraphV1.Scalar.BranchComponent(guarded,it) })
+    }
     public fun texelOperations(): List<TexelOperation> = buildList {
         add(TexelOperation.PROJECTIVE_VALIDITY_MASK)
         add(when (sampling) {

@@ -8,6 +8,68 @@ import org.graphiks.kanvas.gpu.plan.GradientNumericOperationGraphV1.Operation as
 import org.graphiks.kanvas.gpu.plan.GradientNumericOperationGraphV1.Input as I
 
 internal object ColorSourceProofCompilerV1 {
+    private fun graphForImage(execution: ImageSampleExecutionPlanV1,child: ColorSourceProofV1?): ColorOperationGraphV1 {
+        return graphForCapturedImage(execution.numericAuthority,execution.upload,child,execution.atlasBlend?.copyOperationGraph())
+    }
+    internal fun graphForCapturedImage(numeric: ImageNumericAuthorityV1,upload: ImageUploadPlanV1,
+        child: ColorSourceProofV1?,atlas: BlendFormulaOperationGraphV1?): ColorOperationGraphV1 {
+        fun c(value: Float): S = ColorOperationGraphV1.constant(value)
+        fun word(index: Long): S = S.DynamicF32(index)
+        val zero = c(0f); val one = c(1f)
+        fun branch(predicate: P,yes: List<S>,no: List<S>): List<S> =
+            ColorOperationGraphV1.BranchVector(predicate,yes,no).let { region -> List(4) { S.BranchComponent(region,it) } }
+        val layout = ImageSourceLayoutV3(child?.gradientStopSlab != null,numeric.cellSelection != null,
+            numeric.cellSelection?.lattice == true,numeric.cellSelection?.capacityI32 ?: 9,atlas != null)
+        val childValues = child?.copyOperationGraph()?.bindInput(ColorOperationGraphV1(List(4) { zero }),
+            layout.imageUniformByteCountI64/4L)?.outputs
+        require((numeric.graph.colorAlpha.channelOrder == ImageChannelOrderV1.ALPHA) == (childValues != null)) { W5fPlanDiagnostics.Schema }
+        fun source(sampled: List<S>): List<S> = if (childValues == null) {
+            if (atlas == null) sampled.map { S.Multiply(it,word(22L)) } else sampled
+        } else List(4) { S.Multiply(childValues[it],sampled[0]) }
+        val selection = numeric.cellSelection
+        var values = if (selection == null) source(numeric.sampledTexelGraph(upload).outputs) else {
+            val local = numeric.graph.localCoordinateExpressions()
+            fun or(a: P,b: P): P = P.Not(P.And(P.Not(a),P.Not(b)))
+            var selected: List<S> = List(4) { S.DiscardF32 }
+            for (indexI32 in selection.cells.indices.reversed()) {
+                val offsetI64 = 32L+indexI32.toLong()*(if (selection.lattice) 20L else 16L)
+                val cell = selection.cells[indexI32]
+                val output = when (cell) {
+                    is ImageCellPlanV1.Sampled -> {
+                        val sample = selection.samples.single { it.cell === cell }
+                        source(sample.numericAuthority.sampledTexelGraph(upload,offsetI64).outputs)
+                    }
+                    is ImageCellPlanV1.SolidV1 -> {
+                        val alpha = S.Multiply(word(offsetI64+19L),word(30L))
+                        List(4) { if (it == 3) alpha else S.Multiply(ColorOperationGraphV1.eotf(word(offsetI64+16L+it)),alpha) }
+                    }
+                    is ImageCellPlanV1.OmittedV1 -> List(4) { S.DiscardF32 }
+                }
+                fun axis(axisI32: Int): P {
+                    val increasing = P.Equal(word(28L+axisI32),one)
+                    val start = word(offsetI64+12L+axisI32); val end = word(offsetI64+14L+axisI32)
+                    val x = local[axisI32]
+                    val starts = or(P.And(increasing,P.LessEqual(start,x)),P.And(P.Not(increasing),P.LessEqual(x,start)))
+                    val ends = or(P.And(increasing,P.Not(P.LessEqual(end,x))),P.And(P.Not(increasing),P.Not(P.LessEqual(x,end))))
+                    return P.And(or(P.Equal(word(offsetI64+8L+axisI32),one),starts),
+                        or(P.Equal(word(offsetI64+10L+axisI32),one),ends))
+                }
+                val contains = P.And(P.Not(P.LessEqual(word(23L),c(indexI32.toFloat()))),P.And(axis(0),axis(1)))
+                selected = branch(contains,output,selected)
+            }
+            val localValid = P.And(P.Finite(local[0]),P.Finite(local[1]))
+            val denominatorValid = P.And(P.Finite(local[2]),P.LessEqual(c(java.lang.Float.MIN_NORMAL),S.Abs(local[2])))
+            branch(denominatorValid,branch(localValid,selected,List(4) { zero }),List(4) { zero })
+        }
+        atlas?.let { schedule ->
+            require(selection == null) { W5fPlanDiagnostics.Schema }
+            val offsetI64 = layout.imageUniformByteCountI64/4L-4L
+            val alpha = word(offsetI64+3L)
+            val entry = List(4) { if (it == 3) alpha else S.Multiply(ColorOperationGraphV1.eotf(word(offsetI64+it)),alpha) }
+            values = schedule.colorOperations("w5e_atlas_blend",entry,values).outputs.map { S.Multiply(it,word(22L)) }
+        }
+        return ColorOperationGraphV1(values)
+    }
     /** Derives the executed prefix from original typed addressing and actual prepared inputs. */
     internal fun graphForPrepared(definition: PreparedSourceDefinitionV4): ColorOperationGraphV1 {
         fun c(value: Float): S = ColorOperationGraphV1.constant(value)
@@ -187,6 +249,7 @@ internal object ColorSourceProofCompilerV1 {
             firstI32--
         }
         if (table.entry(MaterialPlanRef(firstI32)).bindings !is GradientInterpolationBindingV4 &&
+            table.entry(MaterialPlanRef(firstI32)).bindings !is ImageSampleV3 &&
             coordinates != SourceCoordinatesV4.None) return ColorSourceProofResultV1.Refused(W5fPlanDiagnostics.Unpromoted)
         val words = linkedMapOf<Long,Int>()
         val integers = linkedMapOf<Long,UInt>()
@@ -194,10 +257,43 @@ internal object ColorSourceProofCompilerV1 {
         val tables = linkedMapOf<Long,org.graphiks.kanvas.render.ir.ImmutableUBytes>()
         var values: List<ColorOperationGraphV1.Scalar>? = null
         var offsetU32 = 0L
+        var imageChild: ColorSourceProofV1? = null
         for (indexI32 in firstI32..root.indexI32) {
             val binding = table.entry(MaterialPlanRef(indexI32)).bindings
             owners += binding
             values = when (binding) {
+                is ImageSampleV3 -> {
+                    val execution = binding.execution
+                    if (indexI32 != firstI32 || coordinates != SourceCoordinatesV4.V3(execution.coordinates) ||
+                        execution.numericAuthority.copyDeviceBoundsF32() != deviceBoundsF32 ||
+                        !table.authenticatesImage(MaterialPlanRef(indexI32),execution))
+                        return ColorSourceProofResultV1.Refused(W5fPlanDiagnostics.Schema)
+                    val childAuthority = table.imageChildAuthority(MaterialPlanRef(indexI32))
+                    imageChild = childAuthority?.let { authority ->
+                        val childCoordinates = when (authority) {
+                            is PlanDrawMaterialAuthority.MaterialV4 -> authority.coordinates
+                            is PlanDrawMaterialAuthority.MaterialV2 -> SourceCoordinatesV4.V2(authority.coordinates)
+                            is PlanDrawMaterialAuthority.MaterialV1 -> authority.coordinates?.let(SourceCoordinatesV4::V1) ?: SourceCoordinatesV4.None
+                            else -> return ColorSourceProofResultV1.Refused(W5fPlanDiagnostics.Schema)
+                        }
+                        (seal(table,authority.materialPlanRef(),childCoordinates,deviceBoundsF32) as? ColorSourceProofResultV1.Ready)?.source
+                            ?: return ColorSourceProofResultV1.Refused(W5fPlanDiagnostics.NumericDomainUnbounded)
+                    }
+                    var headerWordI64 = 0L
+                    RawMaterialRequirementsV2.forEachImageHeaderWord(execution) { words[headerWordI64++] = it }
+                    require(headerWordI64 == binding.colorUniformWordCountV4()) { W5fPlanDiagnostics.Schema }
+                    imageChild?.let { child ->
+                        child.numericWordBits.forEach { (word,bits) -> words[Math.addExact(headerWordI64,word)] = bits }
+                        child.integerWordValuesU32.forEach { (word,bits) -> integers[Math.addExact(headerWordI64,word)] = bits }
+                        child.tableRecords.forEach { (word,table) -> tables[Math.addExact(headerWordI64,word)] = table }
+                        stops = child.gradientStopSlab
+                        offsetU32 = Math.addExact(offsetU32,child.uniformWordCountI64)
+                    }
+                    val graph = graphForImage(execution,imageChild)
+                    require(execution.atlasBlend?.authenticatesSourceGraph(graph,imageChild,words,integers,tables) != false) {
+                        W5fPlanDiagnostics.Schema }
+                    graph.outputs
+                }
                 is GradientInterpolationBindingV4 -> {
                     val proof = binding.sourceProof
                     if (indexI32 != firstI32 || !proof.authenticates(table,MaterialPlanRef(indexI32),coordinates) ||
@@ -233,7 +329,7 @@ internal object ColorSourceProofCompilerV1 {
             offsetU32 = Math.addExact(offsetU32,binding.colorUniformWordCountV4())
         }
         val proof = ColorSourceProofV1.issue(table,root,coordinates,deviceBoundsF32,
-            ColorOperationGraphV1(requireNotNull(values)),owners,words,tables,integers,stops)
+            ColorOperationGraphV1(requireNotNull(values)),owners,words,tables,integers,stops,imageChild)
             ?: return ColorSourceProofResultV1.Refused(W5fPlanDiagnostics.NumericDomainUnbounded)
         return ColorSourceProofResultV1.Ready(proof)
     }

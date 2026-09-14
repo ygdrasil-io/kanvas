@@ -55,20 +55,29 @@ internal class W5aMaterialSourceStage private constructor(
             val code = W5fColorOperationEmitterV1.emit(proof.copyOperationGraph(),"vec4<f32>(0.0)",0L)
             val slab = proof.gradientStopSlab
             if (slab != null && slab !== table.gradientStopSlab) return null
+            val image = proof.imageExecution
+            val imageLayout = proof.imageLayout
+            if ((image == null) != (requirements.imageLayoutV3 == null) ||
+                requirements.imageLayoutV3?.structuralIdentity != imageLayout?.structuralIdentity) return null
             val stopDeclaration = if (slab == null) "" else """
                 struct GradientStopV1 { positionAndReserved: vec4<f32>, straightColor: vec4<f32>, }
-                @group(1) @binding(1) var<storage, read> w5cStops: array<GradientStopV1>;
+                @group(1) @binding(${imageLayout?.gradientStorageBindingU32 ?: 1u}) var<storage, read> w5cStops: array<GradientStopV1>;
+            """.trimIndent()
+            val imageDeclaration = if (image == null) "" else """
+                @group(1) @binding(${requireNotNull(imageLayout).imageTextureBindingU32}) var w5eTexture: texture_2d<f32>;
+                ${W5eImageTexelEvaluatorV1.addressDeclarations(image.numericAuthority.graph)}
             """.trimIndent()
             return W5aMaterialSourceStage(requirements,"""
                 struct W5fMaterialBlock { words: array<vec4<u32>, ${wordsI64}>, }
                 @group(1) @binding(0) var<uniform> w5fMaterial: W5fMaterialBlock;
                 $stopDeclaration
+                $imageDeclaration
                 $W5D_SAFE_DIVIDE_WGSL
                 fn w5f_device_point(pixel: vec2<f32>) -> vec2<f32> { return pixel; }
                 fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {
                     $code
                 }
-            """.trimIndent(),1,false,slab,"w5f_device_point")
+            """.trimIndent(),requirements.bindingCountI32,false,slab,"w5f_device_point",image)
         }
         fun imageV3(table: MaterialPlanTable, root: MaterialPlanRef): W5aMaterialSourceStage {
             val execution = (table.entry(root).bindings as org.graphiks.kanvas.gpu.plan.ImageSampleV3).execution

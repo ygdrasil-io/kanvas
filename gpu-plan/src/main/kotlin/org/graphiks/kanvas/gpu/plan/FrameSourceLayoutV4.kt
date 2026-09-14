@@ -8,11 +8,13 @@ import org.graphiks.math.color.ColorF32
 internal class FrameSourceLayoutV4 private constructor(
     val lane: SourceDeferredRenderConstructionV4,
     val interner: MaterialTableInterningRecipeV4,
+    sources: List<MaterialSourceConstructionV4>,
     entries: List<List<SourceEntry>>,
     ranges: List<RangeAllocation>,
     pendingRanges: Map<MaterialSourceConstructionV4,GradientStopRangeV1>,
     legacyRanges: Map<MaterialBindingPlan,GradientStopRangeV1>,
     legacyAllocations: List<RawMaterialRequirementsV2.RelocatedLegacyLayout>,
+    imageUploads: List<ImageUploadPlanV1>,
     val nonUniformBytesI64: Long,
     val stopBytesI64: Long,
     val uniformBytesI64: Long,
@@ -22,15 +24,38 @@ internal class FrameSourceLayoutV4 private constructor(
     private val ordinaryLayout: OrdinaryCompositeSourceLayoutV4? = null,
 ) {
     private val nativeLanes = immutableList(nativeLanes)
+    private val sources = immutableList(sources)
     private val nativeOffsetsI32 = immutableList(nativeOffsetsI32)
     val entries: List<List<SourceEntry>> = immutableList(entries.map(::immutableList))
     private val ranges = immutableList(ranges)
     private val pendingRanges = java.util.Collections.unmodifiableMap(java.util.IdentityHashMap(pendingRanges))
     private val legacyRanges = java.util.Collections.unmodifiableMap(java.util.IdentityHashMap(legacyRanges))
     private val legacyAllocations = immutableList(legacyAllocations)
-    fun owns(source: MaterialSourceConstructionV4): Boolean = entries.any { it.first().source === source }
+    private val imageUploads = immutableList(imageUploads)
+    fun owns(source: MaterialSourceConstructionV4): Boolean = entries.any { row -> row.any { it.source === source } }
     fun range(source: MaterialSourceConstructionV4): GradientStopRangeV1 =
         requireNotNull(pendingRanges[source]) { W5fPlanDiagnostics.Schema }
+
+    fun prepareAndPublish(): org.graphiks.kanvas.render.ir.RenderPlanResult<RenderGraph> =
+        if (ordinaryLayout != null) prepareAndPublishOrdinary()
+        else when (val constructed = prepareAndConstruct()) {
+            is SourceConstructionResultV4.Refused -> constructed.failure
+            is SourceConstructionResultV4.Built ->
+                org.graphiks.kanvas.render.ir.RenderPlanResult.Ready(constructed.value).publishConstructionResult()
+        }
+
+    /** Image and ordinary consumers cross the one real permit before either graph is published. */
+    fun <T> prepareImageFrame(finish: (RenderGraph,MaterialPlanTable,Long)->T): SourceConstructionResultV4<T> =
+        prepareAndFinish { table,roots ->
+            require(imageUploads.isNotEmpty()) { W5fPlanDiagnostics.Schema }
+            val graphs = if (ordinaryLayout == null) listOf(constructBound(table,roots))
+                else nativeLanes.mapIndexed { index,source -> constructLaneBound(source,nativeOffsetsI32[index],table,roots) }
+            val nonUniformAndStops = Math.addExact(nonUniformBytesI64,stopBytesI64)
+            val packed = packConstructedFrame(graphs,table,nonUniformAndStops)
+            val geometry = if (ordinaryLayout == null) RenderGraph.publishConstruction(graphs.single(),packed)
+                else W5aCompositeConstruction(graphs,table,nonUniformAndStops,ordinaryLayout.rectScratch).publish(packed)
+            finish(geometry,table,Math.addExact(nonUniformAndStops,uniformBytesI64))
+        }
 
     /** All pending conversion follows this checked owner; publication still uses the real permit. */
     fun prepareAndConstruct(): SourceConstructionResultV4<RenderGraphConstruction> = prepareAndFinish { table,roots ->
@@ -52,14 +77,23 @@ internal class FrameSourceLayoutV4 private constructor(
 
     private fun <T> prepareAndFinish(finish: (MaterialPlanTable,List<MaterialPlanRef>)->T): SourceConstructionResultV4<T> = try {
         val prepared = PreparedStops.prepare(this)
-        val boundRows = entries.map { row ->
-            val source = row.first().source
-            source.resolvedSource?.table?.entries() ?: run {
-                val definition = PreparedSourceDefinitionV4.fromPrepared(this,source,prepared)
-                val leaf = GradientInterpolationBindingV4.seal(definition)
-                var table = MaterialPlanTable.of(listOf(MaterialPlanEntry(
-                    GradientInterpolationProgramV4(definition.addressing,definition.domain),leaf,definition.slab)))
-                requireNotNull(source.gradient).wrappers.forEach { wrapper ->
+        val boundSources = java.util.IdentityHashMap<MaterialSourceConstructionV4,EffectiveMaterialPlanner.Result.Ready>()
+        val boundImages = java.util.IdentityHashMap<MaterialSourceConstructionV4,ImageSampleExecutionPlanV1>()
+        fun bind(source: MaterialSourceConstructionV4): EffectiveMaterialPlanner.Result.Ready =
+            boundSources.getOrPut(source) {
+                source.resolvedSource ?: run {
+                var table = if (source.image != null) {
+                    val resolved = source.image.bind(source.image.child?.let(::bind),
+                        Math.addExact(Math.addExact(nonUniformBytesI64,stopBytesI64),uniformBytesI64))
+                    boundImages[source] = (resolved.table.entry(resolved.root).bindings as ImageSampleV3).execution
+                    resolved.table.sealColorSourceV4(resolved.root,source.coordinates,source.deviceBoundsF32)
+                } else {
+                    val definition = PreparedSourceDefinitionV4.fromPrepared(this,source,prepared)
+                    val leaf = GradientInterpolationBindingV4.seal(definition)
+                    MaterialPlanTable.of(listOf(MaterialPlanEntry(
+                        GradientInterpolationProgramV4(definition.addressing,definition.domain),leaf,definition.slab)))
+                }
+                source.wrappers.forEach { wrapper ->
                     val child = MaterialPlanRef(table.sizeI32-1)
                     val program = table.entry(child).program
                     val parent = when (wrapper) {
@@ -73,25 +107,36 @@ internal class FrameSourceLayoutV4 private constructor(
                                 ColorFilterBindingV4.seal(wrapper.execution,proof,numeric))
                         }
                     }
-                    table = MaterialPlanTable.of(table.entries()+parent)
+                    table = MaterialPlanTable.of(table.entries()+parent).sealColorSourceV4(
+                        MaterialPlanRef(table.sizeI32),source.coordinates,source.deviceBoundsF32)
                 }
-                table.entries()
+                EffectiveMaterialPlanner.Result.Ready(table,MaterialPlanRef(table.sizeI32-1),source.blend)
+                }
             }
-        }
+        val boundRows = sources.map { bind(it).table.entries() }
         data class BoundEntry(val entry: MaterialPlanEntry,val actualDescriptor: MaterialInternerDescriptorV4)
         val bound = boundRows.mapIndexed { row,values ->
             require(values.size == entries[row].size) { W5fPlanDiagnostics.Schema }
-            val source = entries[row].first().source
-            val leaf = if (source.pending) values.first().bindings as? GradientInterpolationBindingV4 else null
-            if (source.pending) require(leaf != null && leaf.definition.captured === source &&
-                leaf.definition.frameOwner === this && leaf.sourceProof.preparedDefinition === leaf.definition &&
-                leaf.authenticates(values.first().program as GradientInterpolationProgramV4,values.first().stopSlab)) {
-                W5fPlanDiagnostics.Schema
-            }
             values.mapIndexed { index,value ->
+                val planned = entries[row][index]
+                val source = planned.source
                 val descriptor = if (!source.pending) value.internerDescriptorV4() else {
-                    val unary = when (val wrapper = requireNotNull(source.gradient).wrappers.getOrNull(index-1)) {
-                        null -> { require(index == 0 && value.bindings === leaf) { W5fPlanDiagnostics.Schema }; false }
+                    val unary = when (val wrapper = source.wrappers.getOrNull(planned.wrapperOrdinalI32)) {
+                        null -> {
+                            require(planned.wrapperOrdinalI32 == -1) { W5fPlanDiagnostics.Schema }
+                            if (source.image != null) {
+                                require((value.bindings as? ImageSampleV3)?.execution === boundImages[source]) { W5fPlanDiagnostics.Schema }
+                                source.image.child != null
+                            } else {
+                                val leaf = value.bindings as? GradientInterpolationBindingV4
+                                require(leaf != null && leaf.definition.captured === source &&
+                                    leaf.definition.frameOwner === this && leaf.sourceProof.preparedDefinition === leaf.definition &&
+                                    leaf.authenticates(value.program as GradientInterpolationProgramV4,value.stopSlab)) {
+                                    W5fPlanDiagnostics.Schema
+                                }
+                                false
+                            }
+                        }
                         is SourceUnaryMetadataV4.Opacity -> {
                             require(value.program is MaterialProgramPlan.OpacityV1 &&
                                 (value.bindings as? MaterialBindingPlan.OpacityF32V1)?.alphaF32?.toRawBits() == wrapper.alphaF32.toRawBits()) {
@@ -103,7 +148,7 @@ internal class FrameSourceLayoutV4 private constructor(
                                 (value.bindings as? ColorFilterBindingV4)?.execution === wrapper.execution) { W5fPlanDiagnostics.Schema }; true
                         }
                     }
-                    MaterialInternerDescriptorV4("pending-source-entry-v4:${requireNotNull(leaf).definition.allocationIdentity}:$index",unary)
+                    MaterialInternerDescriptorV4("pending-source-entry-v4:${source.canonicalIdentity}:${planned.wrapperOrdinalI32+1}",unary)
                 }
                 BoundEntry(value,descriptor)
             }
@@ -111,29 +156,36 @@ internal class FrameSourceLayoutV4 private constructor(
         // Bind the already-recorded placements/root maps, including copied unary
         // chains. A second structural interning pass cannot drop/add an entry.
         val selected = interner.bind(bound) { it.actualDescriptor }
-        val table = MaterialPlanTable.of(selected.map { it.entry })
+        var table = MaterialPlanTable.of(selected.map { it.entry })
         require(table.sizeI32 == interner.sizeI32 && table.gradientStopSlab?.canonicalIdentity == prepared.slab?.canonicalIdentity &&
             (table.gradientStopSlab?.byteSizeI64 ?: 0L) == stopBytesI64) { W5fPlanDiagnostics.Schema }
         val roots = interner.laneRemaps().mapIndexed { index,refs ->
             refs[entries[index].lastIndex]
         }
+        sources.forEachIndexed { index,source -> if (source.image != null)
+            table = table.sealColorSourceV4(roots[index],source.coordinates,source.deviceBoundsF32)
+        }
         val actualLegacy = mutableListOf<RawMaterialRequirementsV2.LegacyLayout>()
         val actualV4 = linkedMapOf<String,MaterialSourceFootprintV4>()
         val pendingPhysical = linkedMapOf<String,String>()
-        entries.map { it.first().source }.forEachIndexed { index,source ->
+        sources.forEachIndexed { index,source ->
             val root = roots[index]
             if (source.pending || source.resolvedSource?.materialAuthority is PlanDrawMaterialAuthority.MaterialV4) {
                 val footprint = RawMaterialRequirementsV2.measureV4(table,root)
                 require(footprint.proof.authenticates(table,root,source.coordinates)) { W5fPlanDiagnostics.Schema }
                 actualV4[footprint.canonicalIdentity] = footprint
                 if (source.pending) {
-                    var leafIndex = root.indexI32
-                    while (table.entry(MaterialPlanRef(leafIndex)).bindings.let {
-                        it is MaterialBindingPlan.OpacityF32V1 || it is ColorFilterBindingV4 }) leafIndex--
-                    val actualLeaf = table.entry(MaterialPlanRef(leafIndex)).bindings as? GradientInterpolationBindingV4
-                    require(actualLeaf != null && actualLeaf.definition.frameOwner === this &&
-                        actualLeaf.definition.allocationIdentity == source.canonicalIdentity &&
-                        actualLeaf.sourceProof.preparedDefinition === actualLeaf.definition) { W5fPlanDiagnostics.Schema }
+                    if (source.image != null) require(footprint.proof.imageExecution === boundImages[source]) {
+                        W5fPlanDiagnostics.Schema
+                    } else {
+                        var leafIndex = root.indexI32
+                        while (table.entry(MaterialPlanRef(leafIndex)).bindings.let {
+                            it is MaterialBindingPlan.OpacityF32V1 || it is ColorFilterBindingV4 }) leafIndex--
+                        val actualLeaf = table.entry(MaterialPlanRef(leafIndex)).bindings as? GradientInterpolationBindingV4
+                        require(actualLeaf != null && actualLeaf.definition.frameOwner === this &&
+                            actualLeaf.definition.allocationIdentity == source.canonicalIdentity &&
+                            actualLeaf.sourceProof.preparedDefinition === actualLeaf.definition) { W5fPlanDiagnostics.Schema }
+                    }
                     val previous = pendingPhysical.putIfAbsent(source.canonicalIdentity,footprint.canonicalIdentity)
                     require(previous == null || previous == footprint.canonicalIdentity) { W5fPlanDiagnostics.Schema }
                 }
@@ -147,6 +199,13 @@ internal class FrameSourceLayoutV4 private constructor(
             actualLegacy.size == legacyAllocations.size && legacyAllocations.all { planned ->
                 actualLegacy.any { planned.authenticatesFinal(it,table.gradientStopSlab) }
             }) { W5fPlanDiagnostics.Schema }
+        val actualUploads = actualV4.values.mapNotNull { it.proof.imageExecution?.upload }
+            .distinctBy { it.cacheRequest.canonicalPhysicalIdentity }
+        require(actualUploads.size == imageUploads.size && imageUploads.all { planned ->
+            actualUploads.any { actual -> actual.cacheRequest.canonicalPhysicalIdentity == planned.cacheRequest.canonicalPhysicalIdentity &&
+                actual.byteCountI64 == planned.byteCountI64 && actual.logicalRowBytesI64 == planned.logicalRowBytesI64 &&
+                imagePhysicalBytesI64(actual,lane.capabilities) == imagePhysicalBytesI64(planned,lane.capabilities) }
+        }) { W5fPlanDiagnostics.Schema }
         val actualUniformBytes = actualLegacy.fold(0L) { bytes,value -> Math.addExact(bytes,value.uniformByteCountI64) }
         require(actualV4.values.fold(actualUniformBytes) { bytes,value ->
             Math.addExact(bytes,value.uniformByteCountI64) } == uniformBytesI64) { W5fPlanDiagnostics.Schema }
@@ -359,13 +418,13 @@ internal class FrameSourceLayoutV4 private constructor(
             val sources = if (ordinaryLayout == null) lane.sourceTable().sources()
                 else nativeLanes.flatMap { it.sourceTable().sources() }
             require(sources.isNotEmpty() && sources.any { it.pending }) { W5fPlanDiagnostics.Schema }
-            val rows = sources.map { source ->
+            fun row(source: MaterialSourceConstructionV4): List<SourceEntry> =
                 source.resolvedSource?.table?.entries()?.map { SourceEntry(source,it,-1,it.internerDescriptorV4()) }
-                    ?: List(requireNotNull(source.gradient).wrappers.size+1) { index ->
+                    ?: source.image?.child?.let(::row).orEmpty() + List(source.wrappers.size+1) { index ->
                         SourceEntry(source,null,index-1,MaterialInternerDescriptorV4(
-                            "pending-source-entry-v4:${source.canonicalIdentity}:$index",index != 0))
+                            "pending-source-entry-v4:${source.canonicalIdentity}:$index",index != 0 || source.image?.child != null))
                     }
-            }
+            val rows = sources.map(::row)
             // This is the existing structural interner, including contiguous unary
             // copies and the exact2048 entry limit, before any pending conversion.
             val interner = MaterialTableInterningRecipeV4.of(rows.map { row -> row.map { it.descriptor } })
@@ -373,7 +432,7 @@ internal class FrameSourceLayoutV4 private constructor(
             val allocations = mutableListOf<RangeAllocation>()
             fun values(entry: SourceEntry): RangeValues? {
                 if (entry.oldEntry == null) return if (entry.wrapperOrdinalI32 == -1 &&
-                    requireNotNull(entry.source.gradient).stops.countI32 > 0) RangeValues.Pending(entry.source.gradient) else null
+                    entry.source.gradient?.stops?.countI32?.let { it > 0 } == true) RangeValues.Pending(requireNotNull(entry.source.gradient)) else null
                 val range = when (val binding = entry.oldEntry.bindings) {
                     is MaterialBindingPlan.GradientV1 -> binding.stopRange
                     is MaterialBindingPlan.GradientV2 -> binding.stopRange
@@ -417,6 +476,8 @@ internal class FrameSourceLayoutV4 private constructor(
             val pending = sources.filter { it.pending }.distinctBy { it.canonicalIdentity }
             val caps = lane.capabilities
             val budget = lane.budget
+            val imageUploads = sources.mapNotNull { it.image?.upload }
+                .distinctBy { it.cacheRequest.canonicalPhysicalIdentity }
             var nonUniform = ordinaryLayout?.nonUniformWithoutStopsI64 ?: lane.peakFrameLocalBytesI64
             if (ordinaryLayout == null && lane.capabilityId == W3SolidRectPlanCompiler.W5A_CAPABILITY_ID) {
                 val alignment = caps.minUniformBufferOffsetAlignment.toLong()
@@ -430,6 +491,8 @@ internal class FrameSourceLayoutV4 private constructor(
                     nonUniform = Math.addExact(nonUniform,bytes)
                 }
             }
+            imageUploads.forEach { nonUniform = Math.addExact(nonUniform,imagePhysicalBytesI64(it,caps)) }
+            require(nonUniform <= budget.maxFrameLocalBytes) { W5eImagePlanDiagnostics.FrameBudget }
             var total = nonUniform
             fun add(bytes: Long,code: String) {
                 total = Math.addExact(total,bytes)
@@ -443,24 +506,35 @@ internal class FrameSourceLayoutV4 private constructor(
             retainedV4.forEach { requireColorUniformBindingV4(it.uniformByteCountI64,caps)
                 add(it.sourceUniformByteCountI64,"resource-limit.w5b.source-budget") }
             pending.forEach { source ->
-                val bytes = GradientInterpolationUniformLayoutV4.uniformByteCountI64(source)
-                requireColorUniformBindingV4(bytes,caps,if (source.hasGradientStorage) 2 else 1,
+                val bytes = source.uniformBytesI64()
+                requireColorUniformBindingV4(bytes,caps,(if (source.hasGradientStorage) 2 else 1) + (if (source.image != null) 1 else 0),
                     W5dPlanDiagnostics.CoordinateUniformBudget)
-                add(GradientInterpolationUniformLayoutV4.sourceByteCountI64(source),W5dPlanDiagnostics.CoordinateUniformBudget)
+                add(source.uniformBytesI64(true),W5dPlanDiagnostics.CoordinateUniformBudget)
             }
             val stopBytes = Math.multiplyExact(stopCountI64,32L)
             if (stopBytes > 0L) requireGradientStorageCapabilitiesV4(stopBytes,caps)
             add(stopBytes,W5cPlanDiagnostics.StopBudget)
             retainedV4.forEach { add(it.uniformByteCountI64-it.sourceUniformByteCountI64,W5fPlanDiagnostics.FilterUniform) }
-            pending.forEach { add(GradientInterpolationUniformLayoutV4.uniformByteCountI64(it)-
-                GradientInterpolationUniformLayoutV4.sourceByteCountI64(it),W5fPlanDiagnostics.FilterUniform) }
-            SourceConstructionResultV4.Built(FrameSourceLayoutV4(lane,interner,rows,allocations,pendingRanges,legacyRanges,
-                legacy,nonUniform,stopBytes,Math.subtractExact(Math.subtractExact(total,nonUniform),stopBytes),
+            pending.forEach { add(it.uniformBytesI64()-it.uniformBytesI64(true),W5fPlanDiagnostics.FilterUniform) }
+            SourceConstructionResultV4.Built(FrameSourceLayoutV4(lane,interner,sources,rows,allocations,pendingRanges,legacyRanges,
+                legacy,imageUploads,nonUniform,stopBytes,Math.subtractExact(Math.subtractExact(total,nonUniform),stopBytes),
                 nativeLanes,nativeOffsetsI32,nativeGeometry,ordinaryLayout))
         } catch (failure: IllegalArgumentException) {
             sourceConstructionRefusalV4(failure.message ?: W5fPlanDiagnostics.Schema)
         } catch (_: ArithmeticException) {
             sourceConstructionRefusalV4(W5cPlanDiagnostics.StopBudget)
+        }
+
+        private fun imagePhysicalBytesI64(upload: ImageUploadPlanV1,caps: PlanCapabilitySnapshot): Long {
+            require(upload.widthI32 <= caps.maxTextureDimension2D && upload.heightI32 <= caps.maxTextureDimension2D &&
+                caps.supportsTexture(PlanTextureFormat.ImageV1(upload.physicalFormat),1,
+                    setOf(PlanResourceUsage.Sampled,PlanResourceUsage.CopyDestination))) { W5eImagePlanDiagnostics.TextureLimit }
+            val alignment = lcmI64(256L,caps.copyBytesPerRowAlignment.toLong())
+            val row = Math.addExact(upload.logicalRowBytesI64,
+                (alignment-upload.logicalRowBytesI64%alignment)%alignment)
+            val staging = Math.multiplyExact(row,upload.heightI32.toLong())
+            require(staging <= minOf(caps.maxBufferSizeBytes,Int.MAX_VALUE.toLong())) { W5eImagePlanDiagnostics.Capability }
+            return Math.addExact(upload.byteCountI64,staging)
         }
     }
 }

@@ -58,6 +58,36 @@ internal class SourceDeferredRenderConstructionV4 private constructor(
     fun drawDataByCommandI32(): Map<Int, PlanDrawDataResources> = dataValues
     fun depthStencilByCommandI32(): Map<Int, PlanResourceId> = depthValues
 
+    /** Replace only real compiler-issued color-source occurrences, keeping every geometry fact. */
+    fun overlayImageSources(capture: (PlanDraw)->MaterialSourceConstructionV4?): SourceConstructionResultV4<SourceDeferredRenderConstructionV4> { return try {
+        val originalDraws = RenderGraph.visualDraws(passValues)
+        val captured = originalDraws.map { draw -> capture(draw) ?: sourceMetadata.source(draw.materialAuthority.materialPlanRef()) }
+        val byCommand = originalDraws.mapIndexed { index,draw -> draw.commandIndex to MaterialPlanRef(index) }.toMap()
+        require(byCommand.size == originalDraws.size) { W5fPlanDiagnostics.Schema }
+        val sources = when (val result = MaterialSourceConstructionTableV4.of(captured)) {
+            is SourceConstructionResultV4.Built -> result.value
+            is SourceConstructionResultV4.Refused -> return result
+        }
+        fun rebuild(original: SourceDeferredRenderConstructionV4,
+            geometry: SourceDeferredRenderConstructionV4?): SourceConstructionResultV4<SourceDeferredRenderConstructionV4> {
+            // Ref identity can be shared by different original draws. First reindex each
+            // occurrence by command; the checked structural interner runs only afterwards.
+            val passes = remapSourcePassesV4(original.passes(),overlayCoordinates = { draw ->
+                captured[byCommand.getValue(draw.commandIndex).indexI32].takeIf { it.image != null }?.coordinates
+            },remap = { it },overlayReference = { draw -> byCommand.getValue(draw.commandIndex) })
+            return of(original.id,original.capabilityId,original.targetExtent,original.colorFormat,original.capabilities,
+                original.budget,original.visualCommandCount,original.resources(),passes,original.dependencies(),sources,
+                original.topology,geometry,original.geometryCommandsI32(),original.drawDataByCommandI32(),original.depthStencilByCommandI32())
+        }
+        val geometry = geometrySource?.let { original -> when (val result = rebuild(original,null)) {
+            is SourceConstructionResultV4.Built -> result.value
+            is SourceConstructionResultV4.Refused -> return result
+        } }
+        rebuild(this,geometry)
+    } catch (failure: IllegalArgumentException) {
+        sourceConstructionRefusalV4(failure.message ?: W5fPlanDiagnostics.Schema)
+    } }
+
     companion object {
         fun clearOnly(id: PlanId,capabilityId: String,extent: SizeI32,caps: PlanCapabilitySnapshot,
             budget: PlanBudget): RenderPlanResult<SourceDeferredRenderConstructionV4> {

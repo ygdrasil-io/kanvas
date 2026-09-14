@@ -204,6 +204,15 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
         requireNotNull(storedProofsV4[root.indexI32]) { W5fPlanDiagnostics.Schema }.also {
             require(it.authenticates(this, root, it.coordinates)) { W5fPlanDiagnostics.Schema }
         }
+    /** Issue from the actual selected table; callers supply no graph, range or certificate. */
+    internal fun sealColorSourceV4(root: MaterialPlanRef,coordinates: SourceCoordinatesV4,
+        bounds: org.graphiks.math.geometry.RectF32): MaterialPlanTable {
+        val proof = when (val result = ColorSourceProofCompilerV1.seal(this,root,coordinates,bounds)) {
+            is ColorSourceProofResultV1.Ready -> result.source
+            is ColorSourceProofResultV1.Refused -> throw IllegalArgumentException(result.diagnosticCode)
+        }
+        return MaterialPlanTable(entries(),storedProofsV4 + (root.indexI32 to proof))
+    }
     private data class StoredEntry(val programIndex: Int, val bindings: MaterialBindingPlan)
     private val storedPrograms: List<MaterialProgramPlan>
     private val storedEntries: List<StoredEntry>
@@ -287,7 +296,8 @@ public class MaterialPlanTable private constructor(entries: List<MaterialPlanEnt
         var leaf = child
         while (entry(leaf).bindings is MaterialBindingPlan.OpacityF32V1) leaf = MaterialPlanRef(leaf.indexI32 - 1)
         return when (val binding = entry(leaf).bindings) {
-            is ColorFilterBindingV4 -> error(W5fPlanDiagnostics.Unpromoted)
+            is ColorFilterBindingV4 -> PlanDrawMaterialAuthority.MaterialV4(child,binding.numericAuthority.outputSourceProof.coordinates)
+            is GradientInterpolationBindingV4 -> PlanDrawMaterialAuthority.MaterialV4(child,binding.sourceProof.coordinates)
             is MaterialBindingPlan.GradientV2 -> PlanDrawMaterialAuthority.MaterialV2(child, binding.numericAuthority.coordinates)
             is MaterialBindingPlan.GradientV1 -> PlanDrawMaterialAuthority.MaterialV1(child, binding.numericAuthority.coordinates)
             else -> PlanDrawMaterialAuthority.MaterialV1(child)

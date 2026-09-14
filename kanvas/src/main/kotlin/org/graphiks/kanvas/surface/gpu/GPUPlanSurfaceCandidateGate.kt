@@ -19,7 +19,7 @@ internal object GPUPlanSurfaceCandidateGate {
                     (operation.sampling in setOf(org.graphiks.kanvas.paint.SamplingOptions.NEAREST,
                         org.graphiks.kanvas.paint.SamplingOptions.LINEAR) || operation.sampling is org.graphiks.kanvas.paint.SamplingOptions.Cubic) &&
                     operation.paint.let { it == null || it.blender == null &&
-                        it.colorFilter == null && it.maskFilter == null && it.imageFilter == null &&
+                        it.maskFilter == null && it.imageFilter == null &&
                         it.pathEffect == null && it.style == org.graphiks.kanvas.paint.PaintStyle.FILL }
                 is DisplayOp.DrawImageNine -> operation.image.pixels != null &&
                     operation.image.colorType in setOf(org.graphiks.kanvas.image.ColorType.RGBA_8888,
@@ -28,10 +28,9 @@ internal object GPUPlanSurfaceCandidateGate {
                     operation.image.alphaType in setOf(org.graphiks.kanvas.image.AlphaType.OPAQUE,
                         org.graphiks.kanvas.image.AlphaType.PREMUL, org.graphiks.kanvas.image.AlphaType.UNPREMUL) &&
                     operation.paint.let { it == null || it.blender == null &&
-                        it.colorFilter == null && it.maskFilter == null && it.imageFilter == null &&
+                        it.maskFilter == null && it.imageFilter == null &&
                         it.pathEffect == null && it.style == org.graphiks.kanvas.paint.PaintStyle.FILL }
-                is DisplayOp.DrawRect -> operation.paint.colorFilter == null &&
-                    (operation.isW5eShaderOperation() || operation.paint.shader?.imageLeafW5e() == null)
+                is DisplayOp.DrawRect -> operation.isW5eShaderOperation() || operation.paint.shader?.imageLeafW5e() == null
                 is DisplayOp.DrawImageLattice -> operation.image.pixels != null &&
                     operation.image.colorType in setOf(org.graphiks.kanvas.image.ColorType.RGBA_8888,
                         org.graphiks.kanvas.image.ColorType.BGRA_8888, org.graphiks.kanvas.image.ColorType.SRGBA_8888,
@@ -40,7 +39,7 @@ internal object GPUPlanSurfaceCandidateGate {
                         org.graphiks.kanvas.image.AlphaType.PREMUL, org.graphiks.kanvas.image.AlphaType.UNPREMUL) &&
                     (operation.sampling in setOf(org.graphiks.kanvas.paint.SamplingOptions.NEAREST,
                         org.graphiks.kanvas.paint.SamplingOptions.LINEAR) || operation.sampling is org.graphiks.kanvas.paint.SamplingOptions.Cubic) &&
-                    operation.paint.let { it == null || it.blender == null && it.colorFilter == null && it.maskFilter == null &&
+                    operation.paint.let { it == null || it.blender == null && it.maskFilter == null &&
                         it.imageFilter == null && it.pathEffect == null && it.style == org.graphiks.kanvas.paint.PaintStyle.FILL }
                 is DisplayOp.DrawAtlas -> operation.atlas.pixels != null &&
                     operation.atlas.colorType in setOf(org.graphiks.kanvas.image.ColorType.RGBA_8888,
@@ -48,7 +47,7 @@ internal object GPUPlanSurfaceCandidateGate {
                         org.graphiks.kanvas.image.ColorType.ALPHA_8) &&
                     operation.atlas.alphaType in setOf(org.graphiks.kanvas.image.AlphaType.OPAQUE,
                         org.graphiks.kanvas.image.AlphaType.PREMUL, org.graphiks.kanvas.image.AlphaType.UNPREMUL) &&
-                    operation.paint.let { it == null || it.blender == null && it.colorFilter == null && it.maskFilter == null &&
+                    operation.paint.let { it == null || it.blender == null && it.maskFilter == null &&
                         it.imageFilter == null && it.pathEffect == null && it.style == org.graphiks.kanvas.paint.PaintStyle.FILL }
                 is DisplayOp.DrawPath -> operation.sourceOperation == DrawPathSourceOperation.DRAW_PATH.stableName &&
                     (operation.isW5eShaderOperation() || operation.paint.shader?.imageLeafW5e() == null)
@@ -64,7 +63,7 @@ internal object GPUPlanSurfaceCandidateGate {
             is DisplayOp.DrawPath -> if (sourceOperation == DrawPathSourceOperation.DRAW_PATH.stableName) paint else return false
             else -> return false
         }
-        if (paint.style != org.graphiks.kanvas.paint.PaintStyle.FILL || paint.blender != null || paint.colorFilter != null ||
+        if (paint.style != org.graphiks.kanvas.paint.PaintStyle.FILL || paint.blender != null ||
             paint.maskFilter != null || paint.imageFilter != null || paint.pathEffect != null) return false
         val leaf = paint.shader?.imageLeafW5e() ?: return false
         return leaf.image.pixels != null && (leaf.sampling in setOf(org.graphiks.kanvas.paint.SamplingOptions.NEAREST,
@@ -81,6 +80,8 @@ internal object GPUPlanSurfaceCandidateGate {
             source = when (val node = source) {
                 is org.graphiks.kanvas.paint.Shader.WithLocalMatrix -> node.shader
                 is org.graphiks.kanvas.paint.Shader.Opacity -> node.shader
+                is org.graphiks.kanvas.paint.Shader.WithColorFilter -> node.shader
+                is org.graphiks.kanvas.paint.Shader.WithWorkingColorSpace -> node.shader
                 else -> return node as? org.graphiks.kanvas.paint.Shader.Image
             }
         }

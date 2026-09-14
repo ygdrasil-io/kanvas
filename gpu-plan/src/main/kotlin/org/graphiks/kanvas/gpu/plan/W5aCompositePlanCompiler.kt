@@ -100,26 +100,14 @@ public class W5aCompositePlanCompiler internal constructor(private val imageEntr
         val selected = candidate as? Candidate
         if (selected == null || selected.owner !== this) return RenderPlanResult.InvalidScene(listOf(diagnostic("Foreign composite candidate")))
         if (selected.lanes.any { it.compiler.hasPendingSourcesV4(it.candidate) }) {
-            val sources = mutableListOf<SourceDeferredRenderConstructionV4>()
-            for (lane in selected.lanes) when (val result = lane.compiler.constructSourceLaneV4(lane.candidate,capabilities,budget)) {
-                is RenderPlanResult.Ready -> sources += result.plan
-                else -> return result.prepareAndPublishSourcesV4()
-            }
-            // Same compiler-owned topology decision, before source proofs or witnesses exist.
-            val native = sources.any { graph -> graph.topology != DeferredLaneTopologyV4.Ordinary ||
-                graph.capabilityId == W4dGeneralPathPlanCompiler.W5A_HARD_CAPABILITY_ID || graph.passes().any {
-                    it is PlanPass.TextureCopy || it is PlanPass.RenderPass && it.draws().any { draw ->
-                        draw.blend != BlendPlan.LegacySrcOverV1 && (draw.blend as? BlendPlan.FixedFunctionV1)?.mode != BlendMode.SRC_OVER
-                    }
-                } }
-            return when (val layout = if (native) FrameSourceLayoutV4.nativeComposite(sources)
-                else FrameSourceLayoutV4.ordinaryComposite(sources)) {
-                is SourceConstructionResultV4.Refused -> layout.failure
-                is SourceConstructionResultV4.Built -> if (!native) layout.value.prepareAndPublishOrdinary()
-                else when (val constructed = layout.value.prepareAndConstruct()) {
-                    is SourceConstructionResultV4.Refused -> constructed.failure
-                    is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(constructed.value).publishConstructionResult()
-                }
+            return when (val layout = constructSourceLayout(candidate,capabilities,budget) {
+                SourceConstructionResultV4.Built(it)
+            }) {
+                is RenderPlanResult.Ready -> layout.plan.prepareAndPublish()
+                is RenderPlanResult.GapNotMigrated -> layout
+                is RenderPlanResult.GapOnPromotedScope -> layout
+                is RenderPlanResult.InvalidScene -> layout
+                is RenderPlanResult.ResourceLimitExceeded -> layout
             }
         }
         val graphs = mutableListOf<RenderGraphConstruction>()
@@ -144,6 +132,38 @@ public class W5aCompositePlanCompiler internal constructor(private val imageEntr
         }
     }
 
+    /** Same selected lanes and composition decision, still unpublished when sources are overlaid. */
+    internal fun constructSourceLayout(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget,
+        overlay: (SourceDeferredRenderConstructionV4)->SourceConstructionResultV4<SourceDeferredRenderConstructionV4>,
+    ): RenderPlanResult<FrameSourceLayoutV4> {
+        val selected = candidate as? Candidate
+        if (selected == null || selected.owner !== this)
+            return RenderPlanResult.InvalidScene(listOf(diagnostic("Foreign composite candidate")))
+        val sources = mutableListOf<SourceDeferredRenderConstructionV4>()
+        for (lane in selected.lanes) when (val result = lane.compiler.constructSourceLaneV4(lane.candidate,capabilities,budget)) {
+            is RenderPlanResult.Ready -> when (val captured = overlay(result.plan)) {
+                is SourceConstructionResultV4.Built -> sources += captured.value
+                is SourceConstructionResultV4.Refused -> return captured.failure
+            }
+            is RenderPlanResult.GapNotMigrated -> return result
+            is RenderPlanResult.GapOnPromotedScope -> return result
+            is RenderPlanResult.InvalidScene -> return result
+            is RenderPlanResult.ResourceLimitExceeded -> return result
+        }
+        val native = sources.any { graph -> graph.topology != DeferredLaneTopologyV4.Ordinary ||
+            graph.capabilityId == W4dGeneralPathPlanCompiler.W5A_HARD_CAPABILITY_ID || graph.passes().any {
+                it is PlanPass.TextureCopy || it is PlanPass.RenderPass && it.draws().any { draw ->
+                    draw.blend != BlendPlan.LegacySrcOverV1 && (draw.blend as? BlendPlan.FixedFunctionV1)?.mode != BlendMode.SRC_OVER
+                }
+            } }
+        return when (val layout = if (native) FrameSourceLayoutV4.nativeComposite(sources)
+            else FrameSourceLayoutV4.ordinaryComposite(sources)) {
+            is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(layout.value)
+            is SourceConstructionResultV4.Refused -> layout.failure
+        }
+    }
+
     public companion object {
         public const val CAPABILITY_ID: String = "w5a-native-rect-rrect-path-composite-v1"
         public const val MAX_LANES_I32: Int = 512
@@ -164,7 +184,7 @@ private fun GpuPlanCompiler.hasPendingSourcesV4(candidate: GpuPlanCandidate): Bo
     else -> false
 }
 
-private fun GpuPlanCompiler.constructSourceLaneV4(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,
+internal fun GpuPlanCompiler.constructSourceLaneV4(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,
     budget: PlanBudget): RenderPlanResult<SourceDeferredRenderConstructionV4> = when (this) {
     is W3SolidRectPlanCompiler -> constructSources(candidate,capabilities,budget)
     is W4aAnalyticRectPlanCompiler -> constructSources(candidate,capabilities,budget)
@@ -259,8 +279,8 @@ internal class W5aCompositeConstruction(lanes: List<RenderGraphConstruction>, va
     val peakI64: Long, scratch: List<List<Long>>) {
     private val lanes = immutableList(lanes)
     private val scratch = immutableList(scratch.map(::immutableList))
-    fun publish(): RenderGraph {
-        val packed = packConstructedFrame(lanes,table,peakI64)
+    fun publish(): RenderGraph = publish(packConstructedFrame(lanes,table,peakI64))
+    fun publish(packed: PackedFrameSourcesV4): RenderGraph {
         val published = lanes.map { RenderGraph.publishConstruction(it,packed) }
         return RenderGraph.issueW5aComposite(W5aCompositePlanV1.fromPublished(published,table,peakI64,scratch))
     }

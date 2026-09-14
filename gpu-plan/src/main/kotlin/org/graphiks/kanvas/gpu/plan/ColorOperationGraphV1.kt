@@ -11,6 +11,24 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
         public data class InputLinearPremul(public val channelI32: Int) : Scalar {
             init { require(channelI32 in 0..3) }
         }
+        /** Lexical raw UNORM operand of the original decoded-image texel region. */
+        public data class ImageEncodedInput(public val channelI32: Int) : Scalar {
+            init { require(channelI32 in 0..3) }
+        }
+        /** One component of the actual addressed raw upload, shared across the decoder. */
+        public data class ImageEncodedComponent(public val read: ImageNumericOperationGraphV1.TexelRead,
+            public val channelI32: Int) : Scalar {
+            init { require(channelI32 in 0..3) }
+        }
+        public data class ImageTexelValid(public val read: ImageNumericOperationGraphV1.TexelRead) : Scalar
+        public data class ImageSampleComponent(public val region: ImageNumericOperationGraphV1.SampledRegion,
+            public val channelI32: Int) : Scalar { init { require(channelI32 in 0..3) } }
+        /** The sampler's checked I32 tap offset followed by its original F32 conversion. */
+        public data class ImageIntegerOffset(public val base: Scalar,public val offsetI32: Int) : Scalar {
+            init { require(offsetI32 in -1..2) }
+        }
+        /** Original cell-selection miss/omitted contribution terminates the fragment. */
+        public data object DiscardF32 : Scalar
         /** Actual fragment position; its enclosure is supplied by the authenticated draw bounds. */
         public data class DevicePositionF32(public val channelI32: Int) : Scalar {
             init { require(channelI32 in 0..1) }
@@ -149,6 +167,16 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
                 is Scalar.Atan2 -> "atan2:${identity(node.y)}:${identity(node.x)}"
                 is Scalar.Sin -> "sin:${identity(node.value)}"
                 is Scalar.Cos -> "cos:${identity(node.value)}"
+                is Scalar.ImageEncodedInput -> "image-encoded-input:${node.channelI32}"
+                is Scalar.ImageSampleComponent -> "image-sampled-region:${node.region.graph.topologyIdentity}:" +
+                    (node.region.outputs+node.region.weightsX+node.region.weightsY+node.region.distancesX+node.region.distancesY)
+                        .joinToString(",",transform=::identity)+":${node.channelI32}"
+                is Scalar.ImageEncodedComponent -> "image-encoded-component:${node.read.identity}:" +
+                    "${identity(node.read.baseX)}:${identity(node.read.baseY)}:${identity(node.read.width)}:${identity(node.read.height)}:${node.channelI32}"
+                is Scalar.ImageTexelValid -> "image-texel-valid:${node.read.identity}:" +
+                    "${identity(node.read.baseX)}:${identity(node.read.baseY)}:${identity(node.read.width)}:${identity(node.read.height)}"
+                is Scalar.ImageIntegerOffset -> "image-i32-offset-to-f32:${identity(node.base)}:${node.offsetI32}"
+                Scalar.DiscardF32 -> "fragment-discard"
                 is Scalar.StopInterpolationInput -> "stop-interpolation-input:${node.slotI32}"
                 is Scalar.GradientStopComponent -> node.selection.let { selected ->
                     "gradient-upper-bound-65538-scaled-le-interpolate-v4:${selected.domain}:${selected.rangeWordOffsetU32}:first=${selected.firstOnly}:" +
@@ -170,6 +198,8 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
         val bound = java.util.IdentityHashMap<Scalar, Scalar>()
         val selections = java.util.IdentityHashMap<GradientStopSelection, GradientStopSelection>()
         val vectors = java.util.IdentityHashMap<BranchVector,BranchVector>()
+        val imageReads = java.util.IdentityHashMap<ImageNumericOperationGraphV1.TexelRead,ImageNumericOperationGraphV1.TexelRead>()
+        val imageRegions = java.util.IdentityHashMap<ImageNumericOperationGraphV1.SampledRegion,ImageNumericOperationGraphV1.SampledRegion>()
         fun bind(value: Scalar): Scalar {
             fun predicate(p: Predicate): Predicate = when (p) {
                 is Predicate.UniformU32Equal -> Predicate.UniformU32Equal(Math.addExact(p.wordOffsetU32,filterWordOffsetU32),p.expectedU32)
@@ -182,6 +212,17 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
             }
             return bound[value] ?: when (value) {
             is Scalar.InputLinearPremul -> prefix.outputs[value.channelI32]
+            is Scalar.ImageEncodedInput -> value
+            is Scalar.ImageSampleComponent -> Scalar.ImageSampleComponent(imageRegions.getOrPut(value.region) {
+                value.region.rebase(::bind) { read -> imageReads.getOrPut(read) {
+                    read.rebase(bind(read.baseX),bind(read.baseY),bind(read.width),bind(read.height)) } }
+            },value.channelI32)
+            is Scalar.ImageEncodedComponent -> Scalar.ImageEncodedComponent(imageReads.getOrPut(value.read) {
+                value.read.rebase(bind(value.read.baseX),bind(value.read.baseY),bind(value.read.width),bind(value.read.height)) },value.channelI32)
+            is Scalar.ImageTexelValid -> Scalar.ImageTexelValid(imageReads.getOrPut(value.read) {
+                value.read.rebase(bind(value.read.baseX),bind(value.read.baseY),bind(value.read.width),bind(value.read.height)) })
+            is Scalar.ImageIntegerOffset -> Scalar.ImageIntegerOffset(bind(value.base),value.offsetI32)
+            Scalar.DiscardF32 -> value
             is Scalar.DevicePositionF32 -> value
             is Scalar.DynamicF32 -> Scalar.DynamicF32(Math.addExact(value.wordOffsetU32, filterWordOffsetU32))
             is Scalar.ConstantF32 -> value

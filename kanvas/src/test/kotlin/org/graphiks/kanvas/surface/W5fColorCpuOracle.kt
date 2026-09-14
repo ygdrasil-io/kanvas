@@ -12,6 +12,177 @@ import org.graphiks.kanvas.surface.WgslFloatEnvelopeV1Oracle.Interval
 /** Independent published equations, with directed arithmetic supplied by the test envelope. */
 @OptIn(ExperimentalUnsignedTypes::class)
 internal object W5fColorCpuOracle {
+    private val advancedBlends = setOf(BlendMode.MULTIPLY,BlendMode.SCREEN,BlendMode.OVERLAY,
+        BlendMode.DARKEN,BlendMode.LIGHTEN,BlendMode.DIFFERENCE,BlendMode.EXCLUSION,
+        BlendMode.COLOR_DODGE,BlendMode.COLOR_BURN,BlendMode.HARD_LIGHT,BlendMode.SOFT_LIGHT,
+        BlendMode.HUE,BlendMode.SATURATION,BlendMode.COLOR,BlendMode.LUMINOSITY)
+    private fun blend(src: Array<Interval>,dst: Array<Interval>,mode: BlendMode): Array<Interval> {
+        if (mode in advancedBlends) {
+            // R41 target algorithm has actual lazy branches in this priority.
+            // This is not a claim that an executed zero-numerator divide is exact.
+            if (point(src[3],0)) return dst.copyOf()
+            if (dst.all { point(it,0) }) return src.copyOf()
+        }
+        return WgslFloatEnvelopeV1Oracle.filterBlend(src,dst,mode)
+    }
+    enum class ImageOrder { Correct, FilterBeforeMask, FilterBeforeAtlasEntry, FilterBeforeAtlasPaint, FilterTwice }
+
+    /** Independent decoded bytes, discrete addressing, sampled source, and ordered color equations. */
+    fun expectedImagePixel(image: org.graphiks.kanvas.image.Image,
+        sampling: org.graphiks.kanvas.paint.SamplingOptions,
+        sourcePointF32: org.graphiks.math.geometry.Point2F32,
+        paint: org.graphiks.kanvas.paint.Paint, atlasEntryColor: ColorARGB? = null,
+        atlasEntryBlend: BlendMode? = null, destination: ColorARGB = ColorARGB.Transparent,
+        finalBlend: BlendMode = BlendMode.SRC_OVER, coverageF32: Float = 1f,
+        tileX: org.graphiks.kanvas.paint.TileMode = org.graphiks.kanvas.paint.TileMode.CLAMP,
+        tileY: org.graphiks.kanvas.paint.TileMode = org.graphiks.kanvas.paint.TileMode.CLAMP,
+        childPointF32: org.graphiks.math.geometry.Point2F32 = sourcePointF32,
+        order: ImageOrder = ImageOrder.Correct,
+        destinationBlend: BlendMode = BlendMode.SRC_OVER): WgslFloatEnvelopeV1Oracle.DrawResult {
+        val mask = image.colorType == org.graphiks.kanvas.image.ColorType.ALPHA_8
+        val sampled = sampledImage(image,sampling,sourcePointF32,tileX,tileY)
+        fun filter(value: Array<Interval>) = paint.colorFilter?.let { applyFilter(value,it) } ?: value
+        var value = if (mask) {
+            val childPaint = if (atlasEntryColor == null) paint else paint.copy(color=paint.color.withAlpha(255))
+            var child = childPaint.shader?.let { shaderSource(it,childPointF32) } ?: source(childPaint.color)
+            if (childPaint.shader != null) child = child.map { mul(it,Interval.input(childPaint.color.alphaNormalized)) }.toTypedArray()
+            if (order == ImageOrder.FilterBeforeMask) child = filter(child)
+            child.map { mul(it,sampled[0]) }.toTypedArray()
+        } else imageWrappers(paint.shader,sampled)
+        if (order == ImageOrder.FilterBeforeAtlasEntry) value = filter(value)
+        if (atlasEntryColor != null)
+            value = blend(source(atlasEntryColor),value,requireNotNull(atlasEntryBlend))
+        if (order == ImageOrder.FilterBeforeAtlasPaint) value = filter(value)
+        if (!mask || atlasEntryColor != null) value = value.map { mul(it,Interval.input(paint.color.alphaNormalized)) }.toTypedArray()
+        if (order in setOf(ImageOrder.Correct,ImageOrder.FilterTwice)) value = filter(value)
+        if (order == ImageOrder.FilterTwice) value = filter(value)
+        return finish(value,destination,finalBlend,coverageF32,destinationBlend)
+    }
+
+    private fun imageWrappers(shader: Shader?,sample: Array<Interval>): Array<Interval> = when (shader) {
+        is Shader.Opacity -> imageWrappers(shader.shader,sample).map { mul(it,Interval.input(shader.alphaF32)) }.toTypedArray()
+        is Shader.WithColorFilter -> applyFilter(imageWrappers(shader.shader,sample),shader.filter)
+        is Shader.WithWorkingColorSpace -> imageWrappers(shader.shader,sample)
+        is Shader.WithLocalMatrix -> imageWrappers(shader.shader,sample)
+        else -> sample
+    }
+
+    private fun shaderSource(shader: Shader,point: org.graphiks.math.geometry.Point2F32,
+        working: ColorSpaceInterpolation? = null): Array<Interval> = when (shader) {
+        is Shader.SolidColor -> source(shader.color)
+        is Shader.Opacity -> shaderSource(shader.shader,point,working).map { mul(it,Interval.input(shader.alphaF32)) }.toTypedArray()
+        is Shader.WithColorFilter -> applyFilter(shaderSource(shader.shader,point,working),shader.filter)
+        is Shader.WithWorkingColorSpace -> shaderSource(shader.shader,point,working ?: shader.interpolation)
+        is Shader.LinearGradient -> {
+            require(shader.stops.size == 2 && shader.stops[0].position == 0f && shader.stops[1].position == 1f)
+            val dx = sub(Interval.input(shader.end.x),Interval.input(shader.start.x))
+            val dy = sub(Interval.input(shader.end.y),Interval.input(shader.start.y))
+            val x = sub(Interval.input(point.x),Interval.input(shader.start.x))
+            val y = sub(Interval.input(point.y),Interval.input(shader.start.y))
+            val parameter = div(add(mul(x,dx),mul(y,dy)),add(mul(dx,dx),mul(dy,dy)))
+            require(shader.tileMode == org.graphiks.kanvas.paint.TileMode.CLAMP)
+            gradientSource(working ?: shader.interpolation,shader.stops[0].color,shader.stops[1].color,parameter)
+        }
+        else -> error("Independent A8 child fixture requires a supported public solid/linear-gradient wrapper tree")
+    }
+
+    private fun sampledImage(image: org.graphiks.kanvas.image.Image,sampling: org.graphiks.kanvas.paint.SamplingOptions,
+        pointF32: org.graphiks.math.geometry.Point2F32,tileX: org.graphiks.kanvas.paint.TileMode,
+        tileY: org.graphiks.kanvas.paint.TileMode): Array<Interval> {
+        val bytes = requireNotNull(image.pixels)
+        val mask = image.colorType == org.graphiks.kanvas.image.ColorType.ALPHA_8
+        fun address(index: Int,size: Int,tile: org.graphiks.kanvas.paint.TileMode): Int? = when (tile) {
+            org.graphiks.kanvas.paint.TileMode.CLAMP -> index.coerceIn(0,size-1)
+            org.graphiks.kanvas.paint.TileMode.REPEAT -> Math.floorMod(index,size)
+            org.graphiks.kanvas.paint.TileMode.MIRROR -> Math.floorMod(index,Math.multiplyExact(size,2)).let { minOf(it,2*size-1-it) }
+            org.graphiks.kanvas.paint.TileMode.DECAL -> index.takeIf { it in 0 until size }
+        }
+        fun texel(x: Int,y: Int): Array<Interval> {
+        val xI32 = address(x,image.width,tileX) ?: return Array(4) { Interval.ZERO }
+        val yI32 = address(y,image.height,tileY) ?: return Array(4) { Interval.ZERO }
+        val offsetI32 = Math.addExact(Math.multiplyExact(yI32,image.rowBytesI32),Math.multiplyExact(xI32,if(mask) 1 else 4))
+        fun channel(index: Int) = WgslFloatEnvelopeV1Oracle.imageUnorm8(bytes[offsetI32+index].toInt() and 255)
+        val alpha = if (image.alphaType == org.graphiks.kanvas.image.AlphaType.OPAQUE) Interval.ONE
+            else channel(if(mask) 0 else 3)
+        return if (mask) Array(4) { alpha } else if (point(alpha,0)) Array(4) { Interval.ZERO } else {
+            val rgb = if (image.colorType == org.graphiks.kanvas.image.ColorType.BGRA_8888)
+                listOf(channel(2),channel(1),channel(0)) else List(3,::channel)
+            val attachment = image.premultiplication == org.graphiks.kanvas.render.ir.ImagePremultiplicationV1.TRANSFER_ENCODED_LINEAR_PREMUL
+            val straight = rgb.map { if (!attachment && image.alphaType == org.graphiks.kanvas.image.AlphaType.PREMUL && !point(alpha,1)) div(it,alpha) else it }
+            val transferred = straight.map { if (image.colorSpace == org.graphiks.kanvas.color.ColorSpace.LINEAR_SRGB) it
+                else WgslFloatEnvelopeV1Oracle.imageSrgbToLinear(it) }.toTypedArray()
+            val linear = if (image.colorSpace == org.graphiks.kanvas.color.ColorSpace.DISPLAY_P3)
+                matrixRows(transferred+Interval.ZERO,floatArrayOf(1.2247455f,-.2249044f,0f,0f,0f,
+                    -.0420581f,1.0420810f,0f,0f,0f, -.0196423f,-.0786549f,1.0985372f,0f,0f,
+                    0f,0f,0f,1f,0f)) else transferred
+            Array(4) { if(it==3) alpha else if(attachment) linear[it] else mul(linear[it],alpha) }
+        }
+        }
+        if (sampling == org.graphiks.kanvas.paint.SamplingOptions.NEAREST)
+            return texel(kotlin.math.floor(pointF32.x).toInt(),kotlin.math.floor(pointF32.y).toInt())
+        val x = sub(Interval.input(pointF32.x),Interval.input(.5f))
+        val y = sub(Interval.input(pointF32.y),Interval.input(.5f))
+        fun bases(value: Interval): IntRange {
+            val first = value.lower.setScale(0,RoundingMode.FLOOR).intValueExact()
+            val last = value.upper.setScale(0,RoundingMode.FLOOR).intValueExact()
+            require(last.toLong()-first.toLong() <= 1L)
+            return first..last
+        }
+        fun cell(value: Interval,base: Int) = Interval(maxOf(value.lower,BigDecimal(base)),
+            minOf(value.upper,BigDecimal(base.toLong()+1)))
+        val alternatives = mutableListOf<Array<Interval>>()
+        for (baseY in bases(y)) for (baseX in bases(x)) {
+            val px = cell(x,baseX); val py = cell(y,baseY)
+            val cubic = sampling as? org.graphiks.kanvas.paint.SamplingOptions.Cubic
+            val offsets = if (cubic == null) 0..1 else -1..2
+            val fx = sub(px,Interval.input(baseX.toFloat())); val fy = sub(py,Interval.input(baseY.toFloat()))
+            val wx = offsets.map { if (cubic != null) cubicWeight(sub(px,Interval.input((baseX+it).toFloat())),cubic)
+                else if (it == 0) sub(Interval.ONE,fx) else fx }
+            val wy = offsets.map { if (cubic != null) cubicWeight(sub(py,Interval.input((baseY+it).toFloat())),cubic)
+                else if (it == 0) sub(Interval.ONE,fy) else fy }
+            val taps = offsets.flatMap { iy -> offsets.map { ix ->
+                texel(baseX+ix,baseY+iy) to mul(wx[ix-offsets.first],wy[iy-offsets.first])
+            } }
+            alternatives += Array(4) { channel -> roundedSum(taps.map { (rgba,w) -> mul(rgba[channel],w) }) }
+        }
+        return Array(4) { c -> hull(*alternatives.map { it[c] }.toTypedArray()) }
+    }
+
+    /** Directed sum plus gamma(n) covers every F32 sum tree and fused product/sum choice. */
+    private fun roundedSum(terms: List<Interval>): Interval {
+        val low = terms.fold(BigDecimal.ZERO) { sum,it -> sum+it.lower }
+        val high = terms.fold(BigDecimal.ZERO) { sum,it -> sum+it.upper }
+        val magnitude = terms.fold(BigDecimal.ZERO) { sum,it -> sum+maxOf(it.lower.abs(),it.upper.abs()) }
+        val nu = BigDecimal(terms.size).multiply(BigDecimal(Math.scalb(1.0,-23)))
+        val gamma = nu.divide(BigDecimal.ONE-nu,java.math.MathContext(80,RoundingMode.CEILING))
+        val ftz = BigDecimal(java.lang.Float.MIN_NORMAL.toDouble())*BigDecimal(terms.size)*(BigDecimal.ONE+gamma)
+        val error = magnitude*gamma+ftz
+        return Interval(low-error,high+error)
+    }
+
+    private fun cubicWeight(distance: Interval,cubic: org.graphiks.kanvas.paint.SamplingOptions.Cubic): Interval {
+        val x = abs(distance)
+        val b = Interval.input(cubic.B); val c = Interval.input(cubic.C)
+        fun scale(n: Float,value: Interval) = mul(Interval.input(n),value)
+        fun polynomial(v: Interval,outer: Boolean): Interval {
+            val c3 = if (outer) roundedSum(listOf(scale(-1f,b),scale(-6f,c)))
+                else roundedSum(listOf(Interval.input(12f),scale(-9f,b),scale(-6f,c)))
+            val c2 = if (outer) roundedSum(listOf(scale(6f,b),scale(30f,c)))
+                else roundedSum(listOf(Interval.input(-18f),scale(12f,b),scale(6f,c)))
+            val c0 = if (outer) roundedSum(listOf(scale(8f,b),scale(24f,c)))
+                else roundedSum(listOf(Interval.input(6f),scale(-2f,b)))
+            val terms = mutableListOf(mul(mul(mul(c3,v),v),v),mul(mul(c2,v),v),c0)
+            if (outer) terms += mul(roundedSum(listOf(scale(-12f,b),scale(-48f,c))),v)
+            return div(roundedSum(terms),Interval.input(6f))
+        }
+        val values = mutableListOf<Interval>()
+        if (x.lower < BigDecimal.ONE) values += polynomial(Interval(x.lower,minOf(x.upper,BigDecimal.ONE)),false)
+        if (x.upper >= BigDecimal.ONE && x.lower < BigDecimal(2))
+            values += polynomial(Interval(maxOf(x.lower,BigDecimal.ONE),minOf(x.upper,BigDecimal(2))),true)
+        if (x.upper >= BigDecimal(2)) values += Interval.ZERO
+        return hull(*values.toTypedArray())
+    }
+
     /** Independent host preparation followed by the rounded fragment schedule. */
     fun expectedGradientPixel(domain: ColorSpaceInterpolation, left: ColorARGB, right: ColorARGB,
         tF32: Float, external: ColorFilter? = null, destination: ColorARGB = ColorARGB.Transparent,
@@ -23,6 +194,15 @@ internal object W5fColorCpuOracle {
         finalBlend: BlendMode = BlendMode.SRC_OVER, coverageF32: Float = 1f,
         destinationBlend: BlendMode = BlendMode.SRC_OVER, shaderOpacityF32: Float = 1f,
         paintAlphaF32: Float = 1f): WgslFloatEnvelopeV1Oracle.DrawResult {
+        var result = gradientSource(domain,left,right,parameter)
+        if (shaderOpacityF32 != 1f) result = result.map { mul(it,Interval.input(shaderOpacityF32)) }.toTypedArray()
+        if (paintAlphaF32 != 1f) result = result.map { mul(it,Interval.input(paintAlphaF32)) }.toTypedArray()
+        if (external != null) result = applyFilter(result,external)
+        return finish(result,destination,finalBlend,coverageF32,destinationBlend)
+    }
+
+    private fun gradientSource(domain: ColorSpaceInterpolation,left: ColorARGB,right: ColorARGB,
+        parameter: Interval): Array<Interval> {
         val a = preparedStop(left,domain)
         val b = preparedStop(right,domain)
         val t = clamp(parameter)
@@ -67,11 +247,7 @@ internal object W5fColorCpuOracle {
                     0f,0f,0f,0f,0f)).copyOfRange(0,3)
             }
         }
-        var result = Array(4) { if (it == 3) interpolated[3] else mul(linear[it],interpolated[3]) }
-        if (shaderOpacityF32 != 1f) result = result.map { mul(it,Interval.input(shaderOpacityF32)) }.toTypedArray()
-        if (paintAlphaF32 != 1f) result = result.map { mul(it,Interval.input(paintAlphaF32)) }.toTypedArray()
-        if (external != null) result = applyFilter(result,external)
-        return finish(result,destination,finalBlend,coverageF32,destinationBlend)
+        return Array(4) { if (it == 3) interpolated[3] else mul(linear[it],interpolated[3]) }
     }
 
     private fun preparedStop(color: ColorARGB, domain: ColorSpaceInterpolation): Array<Interval> {
@@ -271,7 +447,7 @@ internal object W5fColorCpuOracle {
                 WgslFloatEnvelopeV1Oracle.imageSrgbToLinear(straight[it])
                 else WgslFloatEnvelopeV1Oracle.filterLinearToSrgb(straight[it]) })
         }
-        is ColorFilter.Blend -> WgslFloatEnvelopeV1Oracle.filterBlend(source(filter.color),input,filter.mode)
+        is ColorFilter.Blend -> blend(source(filter.color),input,filter.mode)
         is ColorFilter.Compose -> applyFilter(applyFilter(input, filter.inner), filter.outer)
         is ColorFilter.Lerp -> {
             val dst = applyFilter(input, filter.dst)
@@ -293,6 +469,21 @@ internal object W5fColorCpuOracle {
         else WgslFloatEnvelopeV1Oracle.nextAttachment(WgslFloatEnvelopeV1Oracle.colorThenBlend(
             source(destination), WgslFloatEnvelopeV1Oracle.clearAttachment(), destinationBlend))
             ?: return WgslFloatEnvelopeV1Oracle.DrawResult.FixtureUnbounded("Destination fixture is unbounded")
+        if (mode in advancedBlends && coverageF32 == 1f) {
+            // R41 final destination-read helper has the same real branch order.
+            val selected = if (point(value[3],0)) back.linearPremul else
+                if (back.linearPremul.all { point(it,0) }) value else null
+            if (selected != null) return WgslFloatEnvelopeV1Oracle.colorThenBlend(selected,
+                WgslFloatEnvelopeV1Oracle.clearAttachment(),BlendMode.SRC)
+        }
+        if (mode == BlendMode.SRC_IN && coverageF32 == 1f) {
+            // The original destination-read SRC_IN shader evaluates source*Da.
+            // Keep the actual stored destination-alpha enclosure and every F32
+            // product error; this is neither source SRC nor filter DST.
+            val composed = value.map { mul(it,back.linearPremul[3]) }.toTypedArray()
+            return WgslFloatEnvelopeV1Oracle.colorThenBlend(composed,
+                WgslFloatEnvelopeV1Oracle.clearAttachment(),BlendMode.SRC)
+        }
         return WgslFloatEnvelopeV1Oracle.colorThenBlend(value, back, mode, coverageF32)
     }
 

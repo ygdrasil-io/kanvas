@@ -3,7 +3,8 @@ package org.graphiks.kanvas.color
 /** Backend-neutral scalar conversion recipes. Branches are lazy and constants retain F32 bits. */
 public object ColorInterpolationProgramV1 {
     public enum class RecipeKind { EOTF, OETF, RGB_TO_HSL, HSL_TO_RGB, LINEAR_RGB_TO_OKLAB,
-        OKLAB_TO_LINEAR_RGB, OKLAB_TO_OKLCH, OKLCH_TO_OKLAB, SRGB_TO_HSL_STOP, SRGB_TO_OKLCH_STOP }
+        OKLAB_TO_LINEAR_RGB, OKLAB_TO_OKLCH, OKLCH_TO_OKLAB, SRGB_TO_HSL_STOP, SRGB_TO_OKLCH_STOP,
+        DISPLAY_P3_TO_LINEAR_SRGB }
     public sealed interface Scalar {
         public data object Input : Scalar
         public data class Component(public val indexI32: Int) : Scalar {
@@ -54,6 +55,17 @@ public object ColorInterpolationProgramV1 {
     }
     private val eotf = transfer(RecipeKind.EOTF)
     private val oetf = transfer(RecipeKind.OETF)
+    // The original decoded-image working-space matrix, with its original F32
+    // coefficients and operation order. This is not a new conversion model.
+    private val displayP3ToLinearSrgb: Recipe = run {
+        val r = Scalar.Component(0); val g = Scalar.Component(1); val b = Scalar.Component(2)
+        fun product(coefficient: Float, value: Scalar) = Scalar.Multiply(constant(coefficient), value)
+        val outputs = listOf(
+            Scalar.Subtract(product(1.2247455f,r),product(.2249044f,g)),
+            Scalar.Add(product(-.0420581f,r),product(1.0420810f,g)),
+            Scalar.Add(Scalar.Subtract(product(-.0196423f,r),product(.0786549f,g)),product(1.0985372f,b)))
+        Recipe("color-interpolation-v1:original-image-display-p3-to-linear-srgb-ordered-f32",outputs.first(),outputs)
+    }
     private fun modulo(value: Scalar, modulus: Float): Scalar {
         require(modulus == 1f || modulus == 2f)
         val quotient = if (modulus == 1f) value else Scalar.Multiply(value,constant(.5f))
@@ -225,5 +237,6 @@ public object ColorInterpolationProgramV1 {
         RecipeKind.OKLCH_TO_OKLAB -> lchLab
         RecipeKind.SRGB_TO_HSL_STOP -> hslStop
         RecipeKind.SRGB_TO_OKLCH_STOP -> lchStop
+        RecipeKind.DISPLAY_P3_TO_LINEAR_SRGB -> displayP3ToLinearSrgb
     }
 }
