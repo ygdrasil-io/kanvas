@@ -294,14 +294,20 @@ Use genuine alpha guards and operation-specific domains, including signed interm
 
 **Files:**
 - Modify: `color-management/src/main/kotlin/org/graphiks/kanvas/color/ColorInterpolationProgramV1.kt`
-- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/ColorFilterPlanCompilerV1.kt`, `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/ColorOperationGraphV1.kt`, `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/ColorNumericAuthorityV1.kt`, `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W5fPlanDiagnostics.kt`
+- Modify: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/ColorFilterPlanCompilerV1.kt`, `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/ColorOperationGraphV1.kt`, `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W5fPlanDiagnostics.kt`
+- Modify under R20: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/ColorFilterExecutionPlanV1.kt`, actual immutable HSLA80B/preset records and graph constructors; `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/ColorSourceProofV1.kt`, actual common Floor/Round/HSL conditioned interpreter.
+- Modify under R20: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/W5dGradientCandidateV2.kt`, existing reader gains only four Task4 kinds, unchanged Rect/Path-fill/Solid/nonstroke guards and single authority.
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/W5fColorOperationEmitterV1.kt`
-- Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5fColorCpuOracle.kt`, `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5fColorFilterSurfacePixelTest.kt`, `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5fFilterOrderingSurfacePixelTest.kt`
-- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/render/ir/ColorFilterCapturePreflight.kt`, `kanvas/src/main/kotlin/org/graphiks/kanvas/canvas/DisplayOpSnapshot.kt`, `kanvas/src/main/kotlin/org/graphiks/kanvas/render/ir/PaintSceneAdapter.kt`
+- Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5fColorCpuOracle.kt`, `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5fColorFilterSurfacePixelTest.kt`
+- Audit/reuse unchanged under R21: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W5fFilterOrderingSurfacePixelTest.kt`, retained ten public General/composite/order cases. Actual four new-kind Matrix permutations and disjoint expectations are in the assigned main filter test via `presetsRectPathAlphaMutationAndFinalBlend` → `exerciseKind`; all ten retained cases remain required in the fresh final affected gate.
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/render/ir/ColorFilterCapturePreflight.kt`
+- Audit/reuse unchanged under R20: `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/ColorNumericAuthorityV1.kt`, actual exact execution/source/output seal and binding hook delegates to updated common interpreter; no artificial hunk or duplicate validator.
+- Audit/reuse unchanged under R20: `kanvas/src/main/kotlin/org/graphiks/kanvas/canvas/DisplayOpSnapshot.kt`, actual central preflight before HSLA caller-array copy/immutable preset capture.
+- Audit/reuse unchanged under R20: `kanvas/src/main/kotlin/org/graphiks/kanvas/render/ir/PaintSceneAdapter.kt`, actual first preflight before immutable HSLA/preset IR capture; new metadata remains central/direct-IR compiler, all obligations retained.
 
 **Interfaces:** Produces all remaining existing non-runtime filters, shared normative RGB↔HSL recipes and precise `invalid.material.filter.hsla`. HighContrast stays the public preset grayscale=false/invert=NONE/contrast=.5, not a new configurable API.
 
-- [ ] **Step 1: Public REDs for nonidentity HSLA hue/saturation/alpha transform, grayscale hue-undefined branches, preset HighContrast clipping, Luma alpha and each Overdraw bucket.** Include nonendpoint alpha, alpha0 and ordered Compose with Matrix for each remaining filter. Check Overdraw depends on alpha, not input RGB. HSLA19/21/nonfinite and post-capture mutation use only public APIs.
+- [x] **Step 1: Public REDs for nonidentity HSLA hue/saturation/alpha transform, grayscale hue-undefined branches, preset HighContrast clipping, Luma alpha and each Overdraw bucket.** Include nonendpoint alpha, alpha0 and ordered Compose with Matrix for each remaining filter. Check Overdraw depends on alpha, not input RGB. HSLA19/21/nonfinite and post-capture mutation use only public APIs.
 
 ```kotlin
 val hsla = ColorFilter.HSLAMatrix(floatArrayOf(
@@ -310,12 +316,12 @@ val hsla = ColorFilter.HSLAMatrix(floatArrayOf(
 val composed = ColorFilter.Compose(ColorFilter.Luma,hsla)
 ```
 
-- [ ] **Step 2: Run the exact new methods before production and classify real failures.** HSLA numeric branch ambiguity must be addressed by a discriminating bounded fixture and honest operation proof, not broadening output tolerance.
-- [ ] **Step 3: Add the exact §11.1 recipes, preserving all branch/clamp positions.** HSL max/min/delta tie rule, delta0 guard, hue modulo1, saturation division, sector selection; no S/L clamp before hslToRgb. HighContrast scale3 and final clamp only. Luma gives black RGB with `a * dot(straightRGB,(.2126,.7152,.0722))`. Overdraw palette is exactly ARGB `[80FF0000,8000FF00,800000FF,80FFFF00,8000FFFF,80FF00FF]` and index=min(round(clamp(alpha)*255),5).
+- [x] **Step 2: Run the exact new methods before production and classify real failures.** HSLA numeric branch ambiguity must be addressed by a discriminating bounded fixture and honest operation proof, not broadening output tolerance.
+- [x] **Step 3: Add the exact §11.1 recipes, preserving all branch/clamp positions.** HSL max/min/delta tie rule, delta0 guard, hue modulo1, saturation division, sector selection; no S/L clamp before hslToRgb. HighContrast scale3 and final clamp only. Luma gives black RGB with `a * dot(straightRGB,(.2126,.7152,.0722))`. Overdraw palette is exactly ARGB `[80FF0000,8000FF00,800000FF,80FFFF00,8000FFFF,80FF00FF]` and index=min(round(clamp(alpha)*255),5).
 
 First preflight checks `values.size==20` before scanning/copying HSLA; then every value is finite. Wrong length yields `invalid.material.filter.hsla`; nonfinite retains `non-finite-value`. The conditioned source proof—not a box crossing delta0/denominator0—justifies the true HSL branches. Preserve that output certificate for later filters and final blend.
-- [ ] **Step 4: Run all twelve filter kinds and ordering cases, compile all production modules and request Sol numeric/spec/quality review.** No runtime filter admission. Preserve old ordinary source ABI and rounded blend functions.
-- [ ] **Step 5: Commit `feat(gpu): complete W5f nonspatial color filters`.**
+- [x] **Step 4: Run all twelve filter kinds and ordering cases, compile all production modules and request Sol numeric/spec/quality review.** No runtime filter admission. Preserve old ordinary source ABI and rounded blend functions.
+- [x] **Step 5: Commit `feat(gpu): complete W5f nonspatial color filters`.** Provisional21ba47a2f under R2, then fresh Sol spec+quality Approved/no Critical/Important; inherited warnings explicitly tracked, no fixes required. Task4 closed before external publication.
 
 ### Task 5: Deliver LINEAR and OKLAB interpolation with domain-tagged shared stops
 
@@ -560,7 +566,7 @@ Planning verdict: ready after full Astra review, targeted confirmation and its v
 | 1 | Matrix/Solid/Opacity Rect, sealed V4 source/filter/bindings and exact packed handoff | CLOSED within this slice; Sol spec compliant / quality Approved, scoped numeric-documentation fix ADDRESSED |
 | 2 | Compose/Lerp/order, Path/General and construction-first composite publication | CLOSED231eae9809f7c535eaf75ec84153215a4f0f24c9; Sol Approved/no Critical/Important; sole scoped R14 reconciliation02c63c14d ADDRESSED/spec Compliant/quality Approved |
 | 3 | Table/Lighting/transfers/all29 Blend filters | CLOSED within assigned bounded Rect/Path-fill slice. Initial Sol Needs fixes (sole I1) preserved; Astra R19 fix d5e7a30011cf36311a778fe7cbd6e460acb168d4, sole scoped Sol I1 ADDRESSED/spec+quality Approved/no new defects. Fresh64assertionsPASS but Gradle1/native133,5module standalone compile0; wider domains remain OPEN |
-| 4 | HSLA/HighContrast/Luma/Overdraw | Pending |
+| 4 | HSLA/HighContrast/Luma/Overdraw | CLOSED within assigned bounded Rect/Path-fill slice, exactBASEa2c9964a→HEAD21ba47a2fdf8dc2b25b5bba1e0d58fed37695a9f. Fresh Sol spec+quality Approved/no Critical/Important, inherited warnings tracked. Fresh affected69 assertions PASS0fail/error/skip, command FAILED executor53/native133/4m13; standalone five target compiles UP-TO-DATE/exit0 worker820ms/ROOT740ms. Full report/committedhash verified; wider numeric/global limits OPEN |
 | 5 | LINEAR/OKLAB gradient interpolation | Pending |
 | 6 | HSL/OKLCH/working-space precedence | Pending |
 | 7 | Filters across decoded/A8/Atlas image lanes | Pending |
@@ -628,7 +634,31 @@ were moved away after retaining BOTH reachable equality outcomes. These are
 bounded positive cells, not allRGBA/sourcealpha/discontinuity coverage. Sol verified
 actual guards and required kind/mode witnesses, with bare-sqrt I1 still open.
 
-These are binding execution adjudications, not additional product scope. The table is current through R19; later rulings must be appended, never silently replace earlier decisions. Recording a ruling does not close outstanding task requirements.
+Task4 CLOSED within its assigned bounded slice: exactBASEa2c9964a→HEAD21ba47a2fdf8dc2b25b5bba1e0d58fed37695a9f,
+11Mpaths377+/12−, shared actual RGB↔HSL recipes/Floor/Round/checked IntegerModulo,
+HSLA80B/fixed HighContrast/Luma/Overdraw, first metadata preflight and actual reader.
+Fresh independent Sol spec+quality Approved, no Critical/Important; sole Minor
+preexisting native-access/Unsafe warnings retained for separate toolchain work,
+no suppression/access override or fix loop. Full verdict persisted/read to EOF.
+R20/R21 exact additional consumers/reuse obligations and R22 integer seam proof
+verified, not broad historical approval. Five real public RED before production;
+later four native seam positives BEFORE portable self-review correction retained
+as PASS, not fabricated RED. Final69assertionsPASS0failure/error/skip in9classes
+UTC03:25:37.567Z–03:29:26.028Z. Command FAILED Gradle1/executor53native133/4m13,
+syntheticprocessXML1failure distinct; standalone5compileexit0 worker820ms/ROOT740ms,
+alltargetsUPTODATE/notclean-rebuild. Committed/pre/postgate/stagedbinarydiffhash
+1dcc8a1f87f68e240e5e1566cc2b3507c2fe710fb573434f2f1470542e8335fc matches,
+no sources changed after gates/commit, indexempty/only3rootdocsdirty.
+Each4kind genuine inputalpha0/1/.25/clamp/actual kind-Matrix both order/disjoint
+caller Matrix mutation/repeat2/coloredtranslucentdst DIFFERENCE across Rect/direct/
+stencilPathfill, actual HSLA array mutation/sectors/gray/ties/unclampedS/L,
+all6Overdraw buckets/RGBirrelevance/preceding-alpha mutation, HSLA19/21NaNpriority/
+NaN20Infinity20/SAME Surface recovery verified. Floor operands±2^24 and modulo
+modulus1..2^24 remain conservative, not all finite HSLA/achromatic/nonunit/allRGBA.
+R19/commonzeroGuard/rawsqrt and prior SOFT_LIGHT/Table/HUE/DodgeBurn limits retained.
+Task5 is next; Tasks5–8/fullbranch review/stackedDraftPR pending, no globalISO.
+
+These are binding execution adjudications, not additional product scope. The table is current through R22; later rulings must be appended, never silently replace earlier decisions. Recording a ruling does not close outstanding task requirements.
 
 | Ruling | Decision / disposition | Cost if wrong |
 | --- | --- | --- |
@@ -651,3 +681,6 @@ These are binding execution adjudications, not additional product scope. The tab
 | R17 | Audit/reuse only four Task3 existing seal/snapshot/scene-capture hooks after targeted join checks; retain exact ownership/first preflight/immutable ordered capture. New Table length validation stays central and direct-IR compiler/proof extends genuinely. No artificial hunks, repeated validators, private tests or blanket exception. | Hidden historical contract deficiency remains possible; targeted joins do not verify all old capture/routes. Actual public malformed/mutation/retained native gates and Sol must verify each obligation, without new API/ABI/ownership/geometry/lifecycle scope. |
 | R18 | Include actual Task3 W5dGradientCandidateV2 existing-reader extension for Table/Lighting/Blend/transfers with unchanged Rect/Path-fill/Solid guards and single admission authority. The two Blend bridge/parser files were already explicitly listed; controller's contrary inventory statement was corrected, not a new exemption. | A forgotten reader can send valid or invalid payloads to legacy, while broad guards accidentally promote other lanes. Public actual native/refusal cells and Sol must verify; no parallel gate, new source domain, formula set or ABI change. |
 | R19 | Task3 review I1 accepted after actual-code/pinned-profile verification: remove unsupported bare Sqrt exactzero in proof/oracle. Authorise real equality-zero LazyBranch in the common authoritative V4 adaptation of the already selected shared sqrt builtin, consumed by proof/emission/canonical topology; zero returns actual constant, nonzero branch uses bare sqrt only under positive-normal inherited-domain proof. Independent SoftLight oracle models that guarded algorithm without production imports. Legacy V1–3 shared formulas/parser, ABI/ownership/provider/source-family guards unchanged; no emitter-only guard, epsilon/clamp or exact-zero proof exemption. | Graph/certificate identity must include the real guard; mistaken conditioning can mask negative/subnormal or zero-to-positive domain uncertainty, or still eagerly execute unbounded sqrt. Preserve the OPEN SOFT_LIGHT nonunit-zerochannel/Table SafeU/HUE/Dodge-Burn limits; actual zero/alpha0/nonunit/order/destination/retained public gates and scoped Sol must verify, not private/source tests. Affected historical oracle consumers get named bounded checks only. Delivered d5e7a300 and sole scoped Sol I1 ADDRESSED/spec+quality Approved/no new defects; R19 closed for this fix, wider domains and bounded historical-audit limits remain OPEN. |
+| R20 | Task4 exact additional Modify execution records/common Floor-Round-HSL proof/existing four-kind reader; exact three prescribed seal/snapshot/scene hooks Audit/reuse after actual joins. New HSLA20 metadata-before-finite-scan/copy stays central first preflight and direct-IR compiler. All immutable capture/exact source-execution-output/order obligations retained, no artificial hunks/repeated validator/blanket R14-R17 or broader promotion. | Missing record/opcode/condition/key/rebase can corrupt proof/packing; wide reader can misroute legacy/H lanes. Real common integer/branch domains, whole source-prefix/provenance, typed U32 Table and genuine final-frame permit unchanged; public19/21/nonfinite priority/mutation/alpha/kind order/destination/native lanes plus fresh Sol verify. Hidden historical hook deficiency remains possible; no exhaustive audit/API configuration/ownership/geometry/lifecycle/private tests. Ordering-file disposition remains pending actual tests. |
+| R21 | Task4 exact ordering test path Audit/reuse after ROOT checks four new kinds call `exerciseKind`, actual `Compose(matrix,kind)` and reverse with disjoint bounded expectations, three native lanes, alpha/mutation/repeated render and DIFFERENCE destination witnesses. Ten old General/composite/order cases remain unchanged and freshly required. No artificial hunk or dropped functional obligation. | Relocation could hide Matrix-only permutations or lose General regressions; fresh four-kind cases plus all ten old ordering cases and Sol check actual joins. This is one-path classification, not historical/global test approval. |
+| R22 | Task4 portable self-review correction within prescribed common recipe/graph/proof/emitter: integer sector modulo6 uses actual Floor result and typed checked integer remainder; hue mod1 is x-floor(x), mod2 uses actual multiply .5 before Floor, no approximate Divide→Floor assumption. Same immutable recipe/canonical/rebase identities and unchanged ownership/ABI; no extra file or scope promotion. | Actual integrality and safe F32→I32 range must be proved before conversion; normalized I32 remainder maps exactly back to representable F32. Missing key/rebase/proof or wrong negative remainder breaks seams. Add public hue seam witnesses and rerun all affected gates/Sol. Native tests already passing are not fabricated pixel RED; other division/subnormal domains remain conservative. |

@@ -1,6 +1,6 @@
 # État W05 — material graph, gradients, images et color filters
 
-## W5f — Task1–3 closes, prochaine Task4
+## W5f — Task1–4 closes, Task5 prochaine
 
 Le [plan W5f](../../plans/2026-09-14-w5f-color-filters-implementation-plan.md)
 prépare huit livraisons séquentielles sur `codex/w5f-color-filters`, à partir de
@@ -144,7 +144,66 @@ autonomes exit0/815ms; controller exit0/764ms, targetsUP-TO-DATE/pas de forcedcl
 Hash source avant/après gate/staging/commit identique, index vide, seulement3docs
 controller dirty; aucun changement source après lancement. Sol ciblée Approved,
 I1 corrigé, aucun nouveau défaut actionable. Task3 close sur sa tranche; aucun gap
-numérique plus large implicitement résolu. Prochaine Task4 : HSLA/HighContrast/Luma/Overdraw.
+numérique plus large implicitement résolu. Task4 HSLA/HighContrast/Luma/Overdraw
+en cours avec un nouvel agent Astra/high depuis le BASE propre
+`a2c9964a607f373e2b0111222447a501293f3ece`; pas de décision supplémentaire,
+de validation Task4 ou de nouvelle promotion implicite.
+
+R20 vérifié avant édition : records HSLA80B/presets, interpréteur commun
+Floor/Round/HSL et reader existant des quatre nouveaux kinds sont les trois
+raccords supplémentaires autorisés. Trois hooks seal/snapshot/scene déjà corrects
+sont réutilisés sans hunk artificiel; nouveau contrôle HSLA20 avant scan/copie
+dans le premier préflight central et le compiler IR. Risques records/indices/
+branche/keys/reader retenus, à vérifier par pixels publics et review Sol;
+pas d'exception globale ni d'approbation historique exhaustive. Task4 non close.
+
+Task4 avant production : baseline Matrix6+Ordering10 PASS16, commande FAILED
+executor47 native133 /21s. Cinq nouveaux RED publics UTC03:11:55.753Z,5failures,
+0error/skip : HSLA/HighContrast/Luma/Overdraw attendus bornés avant Surface mais
+preuves Render/Readback absentes, et exception HSLA19 absente. Pas de défaut pixel
+inventé ni d'échec oracle avant Surface. Commande FAILED executor48 native133 /5s.
+Implémentation commune en cours; aucune validation/review Task4 close.
+
+Checkpoint Task4 : cinq méthodes étendues PASS UTC03:17:16.955Z,0failure/error/skip,
+commande FAILED executor50 native133 /36s; ce n'est pas encore le gate final69.
+R21 : seul fichier Ordering réutilisé inchangé après vérification ROOT des vrais
+ordres Matrix avec chacun des quatre nouveaux kinds dans le test principal,
+attendus disjoints et trois lanes natives. Ses dix cas General/composite restent
+obligatoires au gate frais. R22 : risque portable identifié en self-review,
+Divide→Floor ne prouve pas un modulo entier exact aux seams HSL. Correction
+commune autorisée : modulo secteur I32 vérifié, modulo1 x-floor(x), modulo2
+multiply .5 puis Floor; mêmes recipes/keys/rebase/proof/emitter, aucun nouvel
+owner/ABI/périmètre. Vérifier intégralité/range conversion/remainder normalisé,
+seams publics et gates complets/Sol. Pas de faux RED pixel ni de claim native GREEN.
+
+Gate final Task4 vérifié ROOT dans neuf XML : Filter44+Ordering10+
+W5a3/W5b3/W5c1/W5d4+W5eDecoded2/Families1/ImageShader1=69PASS,0failure/error/skip,
+UTC03:25:37.567Z–03:29:26.028Z. Failure synthétique du process séparée,
+executor53 exit133; commande BUILD FAILED4m13,55tasks6executed49up-to-date.
+Compilation séparée BUILD SUCCESSFUL820ms,38tasks5executed33up-to-date,
+les cinq cibles compileKotlin UP-TO-DATE, pas de clean-rebuild. Rapport final lu
+ROOT à EOF et commit provisoire21ba47a2fdf8dc2b25b5bba1e0d58fed37695a9f,
+parentBASEa2c9964a,11paths377+/12−; hash binarydiff identique avant/après gates
+et commit1dcc8a1f87f68e240e5e1566cc2b3507c2fe710fb573434f2f1470542e8335fc.
+Contrôle ROOT compilation séparée exit0/740ms,38tasks5executed33up-to-date,
+toutes cinq cibles UP-TO-DATE. Worker libéré; Sol indépendante spec+quality
+approuve ce seul commit : Task4 close dans sa tranche bornée. Aucun Critical/
+Important; Minor warnings native-access/Unsafe préexistants suivis pour un travail
+toolchain distinct, sans suppression ni access override ni nouvelle boucle de fix.
+Verdict intégral conservé, pas de réaudit historique exhaustif. R20/R21 raccords
+et reuse vérifiés, R22 vrai Floor intégral/range±2^24 avant I32/remainder normalisé/
+F32 exact et mêmes keys/rebase/proof/emitter vérifiés. Nomenclature math inchangée.
+
+Task4 couvre chacun des quatre nouveaux kinds sur Rect/direct/stencilPathfill,
+vrais alpha0/1/.25 avant filtre, source nécessitant clamp, BOTH ordres kind-Matrix
+avec contre-factuels disjoints, mutation caller Matrix/repeat2/destination colorée
+translucide et final DIFFERENCE. HSLA caller-array mutation/six secteurs/max-ties/
+gray delta0/tours hue/unclamped S1.5 L1.25; Overdraw six buckets/RGB noir-blanc
+fourni réellement au filtre/alpha précédant1→2/255 muté; HSLA19/21NaN priorité
+longueur/NaN20Infinity20 et récupération SAME Surface. Attendus bornés avant
+Surface, Render/Readback publics requis. Limites Floor±2^24/modulus1..2^24 et
+diviseurs sous-normaux conservatrices, pas tout HSLA fini/RGBA ni ISO global.
+Task5 LINEAR/OKLAB suivante; Tasks5–8/reviewglobale/PR W5f encore ouvertes.
 
 Réserves de fixtures à conserver : Table inverse donnant alpha0 avant un SafeU
 peut franchir le domaine portable du diviseur; inverse standalone et compositions

@@ -45,7 +45,7 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 - [Plan W5a — Solid/Opacity](plans/2026-09-09-w5a-solid-opacity-implementation-plan.md)
 - [Plan W5b — final blends communs](plans/2026-09-10-w5b-final-blends-implementation-plan.md)
 - [Plan W5e — images décodées, neuf tâches séquentielles](plans/2026-09-12-w5e-decoded-images-implementation-plan.md)
-- [Plan W5f — color filters et interpolation, huit tâches séquentielles](plans/2026-09-14-w5f-color-filters-implementation-plan.md) — Task1–3 closes sur leurs tranches fonctionnelles, reviews Sol et correction I1/R19 approuvées. Task3 Table/Lighting/transferts/29 Blend :64 assertions fraîches passent, commande Gradle1/native133; cinq modules compilent séparément. Domaines numériques restreints explicites dans le status; prochaine Task4 HSLA/HighContrast/Luma/Overdraw. Tâches4–8 et review globale W5f non closes.
+- [Plan W5f — color filters et interpolation, huit tâches séquentielles](plans/2026-09-14-w5f-color-filters-implementation-plan.md) — Task1–4 closes sur leurs tranches fonctionnelles bornées, reviews Sol et correction I1/R19 approuvées. Task4 HSLA/HighContrast/Luma/Overdraw21ba47a2f :69 assertions concernées fraîches passent, commande Gradle1/native133; cinq modules compilent séparément et au contrôle ROOT. Sol spec+quality Approved sans Critical/Important, warnings préexistants suivis. Domaines numériques restreints explicites dans le status; Task5 LINEAR/OKLAB prochaine, tâches5–8 et review globale W5f non closes.
 
 ### État et rapports finaux
 
