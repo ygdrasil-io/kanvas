@@ -257,6 +257,14 @@ class W5cGradientSurfacePixelTest {
     private fun assertConicalLanes(shader: Shader.ConicalGradient, samples: List<Pair<Float, ColorARGB?>>,
         opacityF32: Float = 1f, blend: BlendMode = BlendMode.SRC_OVER) {
         val widthI32 = if (blend == BlendMode.SRC_OVER) 38 else 40
+        val expectedSamples = samples.map { (localXF32, _) ->
+            W5cGradientCpuOracle.conicalClampSrgb(Point2F32(localXF32, 1f), shader.start, shader.startRadius,
+                shader.end, shader.endRadius, shader.stops).thenBlend(
+                W5bBlendCpuOracle.Draw(ColorARGB.White, 1f, BlendMode.SRC_OVER), blend, opacityF32).also {
+                require(it is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { "Conical x=$localXF32: $it" }
+                W5fSurfacePixelFixtures.requireBounded(it)
+            }
+        }
         val surface = Surface(widthI32, 44)
         surface.canvas {
             // Distinct preceding range exercises the common frame slab and rebase.
@@ -276,16 +284,15 @@ class W5cGradientSurfacePixelTest {
                 restore()
             }
         }
-        val pixels = surface.render().pixels
-        repeat(4) { laneI32 -> samples.forEach { (localXF32, color) ->
+        val result = surface.render()
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            result.nativeEvidenceScopeKinds.toString())
+        val pixels = result.pixels
+        repeat(4) { laneI32 -> samples.forEachIndexed { sampleI32, (localXF32, color) ->
             val offsetI32 = ((laneI32 * 10 + 2) * widthI32 + (localXF32 * 2).toInt()) * 4
             if (color != null) assertContentEquals(ubyteArrayOf(color.red.toUByte(), color.green.toUByte(), color.blue.toUByte(), 255u),
                 pixels.copyOfRange(offsetI32, offsetI32 + 4), "Conical lane=$laneI32 x=$localXF32 shader=$shader")
-            val expected = W5cGradientCpuOracle.conicalClampSrgb(Point2F32(localXF32, 1f), shader.start, shader.startRadius,
-                shader.end, shader.endRadius, shader.stops).thenBlend(
-                W5bBlendCpuOracle.Draw(ColorARGB.White, 1f, BlendMode.SRC_OVER), blend, opacityF32)
-            require(expected is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded) { "Conical lane=$laneI32 x=$localXF32: $expected" }
-            WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixels.copyOfRange(offsetI32, offsetI32 + 4))
+            WgslFloatEnvelopeV1Oracle.assertAdmits(expectedSamples[sampleI32], pixels.copyOfRange(offsetI32, offsetI32 + 4))
         } }
         assertContentEquals(ubyteArrayOf(255u, 255u, 255u, 255u), pixels.copyOfRange((44 * widthI32 - 1) * 4, 44 * widthI32 * 4))
     }
@@ -701,12 +708,15 @@ class W5cGradientSurfacePixelTest {
     fun linearRectDeepOpacityReportsDepthLimitWithoutOverflow() {
         var shader: Shader = linearStops(2)
         repeat(50_000) { shader = Shader.Opacity(shader, 1f) }
+        val expected = W5aSolidOpacityCpuOracle.draw(ColorARGB.Red, 1f)
+        W5fSurfacePixelFixtures.requireBounded(expected)
         val surface = Surface(1, 1)
-        surface.canvas { drawRect(rect, Paint(shader = shader, antiAlias = false)) }
-        val captured = assertInstanceOf(SceneCaptureResult.Invalid::class.java, surface.snapshotScene())
-        assertEquals("graph-depth-limit", captured.diagnostics.single().code.value)
-        val failure = assertThrows<IllegalStateException> { surface.render() }
-        assertEquals("graph-depth-limit", failure.message.orEmpty().substringBefore(':'))
+        val failure = assertThrows<org.graphiks.kanvas.canvas.SceneRecordingValidationException> {
+            surface.canvas { drawRect(rect, Paint(shader = shader, antiAlias = false)) }
+        }
+        assertEquals("graph-depth-limit", failure.diagnostic.code.value)
+        surface.canvas { drawRect(rect, Paint(shader = linearStops(2), antiAlias = false)) }
+        repeat(2) { W5fSurfacePixelFixtures.assertNativePixels(surface.render(), listOf(expected)) }
     }
 
     @Test

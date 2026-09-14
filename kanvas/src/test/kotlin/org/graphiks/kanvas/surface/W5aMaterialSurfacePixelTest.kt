@@ -1195,14 +1195,19 @@ class W5aMaterialSurfacePixelTest {
     fun `public rendering rejects a deeply nested captured opacity graph without overflowing`() {
         var shader: Shader = Shader.SolidColor(ColorARGB.Red)
         repeat(10_000) { shader = Shader.Opacity(shader, 0.5f) }
+        val expected = W5aSolidOpacityCpuOracle.draw(ColorARGB.Red, 1f)
+        W5fSurfacePixelFixtures.requireBounded(expected)
         val recorder = PictureRecorder()
         val canvas = recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 4f, 4f))
-        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), Paint(shader = shader))
+        val failure = assertFailsWith<org.graphiks.kanvas.canvas.SceneRecordingValidationException> {
+            canvas.drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), Paint(shader = shader))
+        }
+        assertEquals("graph-depth-limit", failure.diagnostic.code.value)
+        canvas.drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), Paint(color = ColorARGB.Red, antiAlias = false))
         val picture = recorder.finishRecordingAsPicture()
         val surface = Surface(4, 4)
         surface.canvas { picture.playback(this) }
-        val failure = assertFailsWith<IllegalStateException> { surface.render() }
-        assertTrue(failure.message.orEmpty().contains("depth"), failure.message)
+        repeat(2) { W5fSurfacePixelFixtures.assertNativePixels(surface.render(), List(16) { expected }) }
     }
 
     @Test

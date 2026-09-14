@@ -24,6 +24,10 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
 import org.graphiks.kanvas.gpu.renderer.passes.dumpLines
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourcePreflightProvider
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameScratchSubmissionResult
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceSubmissionID
+import org.graphiks.kanvas.gpu.renderer.resources.GPUScratchCompletionFailure
+import org.graphiks.kanvas.gpu.renderer.resources.GPUScratchLifecycleResult
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
@@ -1088,13 +1092,21 @@ class GPUFrameRollback internal constructor(
     private val completionProvider: GPUQueueCompletionProvider? = null,
     completionTicket: GPUQueueCompletionTicket? = null,
 ) {
-    private enum class State { Open, SubmitEntered, RolledBack }
+    private enum class State { Open, SubmitRefused, SubmitEntered, RolledBack }
 
     private var state = State.Open
     private var acquiredSurfaceOutput: GPUAcquiredSurfaceOutput? = acquiredSurfaceOutput
     private var nativePayloadOwnership: GPUPreparedNativeFrameOwnership? = nativePayloadOwnership
     private var completionTicket: GPUQueueCompletionTicket? = completionTicket
     private var result: GPUFrameRollbackResult? = null
+    private var scratchSubmission: GPUResourceSubmissionID? = null
+    private var scratchTicket: GPUQueueCompletionTicket? = null
+    private var scratchTerminal = false
+    private var submissionUncertain = false
+    private var nativeTransferredBeforeRefusal = false
+    private var nativeCompleted = false
+    private var nativeQuarantined = false
+    private val ownershipDiagnostics = mutableListOf<GPUDiagnostic>()
 
     init {
         require(completionTicket == null || completionProvider != null) {
@@ -1152,6 +1164,21 @@ class GPUFrameRollback internal constructor(
             "failed.frame-execution.submit-ownership",
             "Frame rollback ownership is no longer open.",
         )
+        val ticket = completionTicket ?: return GPUPreparedNativeFrameBindingResult.Refused(
+            "failed.frame-execution.submit-ticket",
+            "Frame scratch ownership requires the adopted completion ticket.",
+        )
+        when (val scratch = resourceProvider.submitFrameScratch(ownerScope, ticket.deviceGeneration)) {
+            GPUFrameScratchSubmissionResult.NoScratch -> Unit
+            is GPUFrameScratchSubmissionResult.Submitted -> {
+                scratchSubmission = scratch.submissionId
+                scratchTicket = ticket
+            }
+            is GPUFrameScratchSubmissionResult.Refused -> return GPUPreparedNativeFrameBindingResult.Refused(
+                scratch.diagnostic.code.value,
+                scratch.diagnostic.message,
+            )
+        }
         val ownership = nativePayloadOwnership
         if (ownership != null) {
             val marked = try {
@@ -1159,20 +1186,56 @@ class GPUFrameRollback internal constructor(
             } catch (_: Throwable) {
                 false
             }
-            if (!marked) return GPUPreparedNativeFrameBindingResult.Refused(
-                "failed.native-frame-payload.submit-transition",
-                "Native payload could not enter submitted ownership.",
-            )
+            if (!marked) {
+                // A refused native transition may be uncertain. Never undo a transferred owner.
+                state = State.SubmitRefused
+                nativeTransferredBeforeRefusal = true
+                quarantineNativeAfterSubmit()
+                ownershipDiagnostics += preflightDiagnostic(
+                    "failed.preflight.submit_handoff_quarantined",
+                    "Submit handoff failed; transferred or uncertain owners are retained for quarantine, not rolled back.",
+                    mapOf("ownerScope" to ownerScope, "nativeToken" to ownership.token.value),
+                )
+                return GPUPreparedNativeFrameBindingResult.Refused(
+                    "failed.native-frame-payload.submit-transition",
+                    "Native payload could not enter submitted ownership; uncertain owners were retained. " +
+                        ownershipDiagnostics.joinToString { it.code.value },
+                )
+            }
         }
         state = State.SubmitEntered
         return GPUPreparedNativeFrameBindingResult.Ready
     }
 
     @Synchronized
-    internal fun releaseNativeAfterCompletion(): Boolean = try {
-        nativePayloadOwnership?.releaseAfterCompletion() ?: true
-    } catch (_: Throwable) {
-        false
+    internal fun releaseNativeAfterCompletion(ticket: GPUQueueCompletionTicket): Boolean {
+        if (state != State.SubmitEntered || submissionUncertain || completionTicket !== ticket ||
+            (scratchSubmission != null && scratchTicket !== ticket)
+        ) return false
+        val submission = scratchSubmission
+        if (submission != null && !scratchTerminal) {
+            val completed = try {
+                resourceProvider.acceptScratchCompletion(submission, ticket.deviceGeneration)
+            } catch (_: Throwable) {
+                null
+            }
+            if (completed !is GPUScratchLifecycleResult.Accepted) {
+                ownershipDiagnostics += (completed as? GPUScratchLifecycleResult.Refused)?.diagnostic
+                    ?: preflightDiagnostic(
+                        "failed.scratch_texture.completion",
+                        "Scratch completion failed without a typed result; ownership remains retained.",
+                    )
+                return false
+            }
+            scratchTerminal = true
+        }
+        if (nativeQuarantined) return false
+        if (nativeCompleted) return true
+        return try {
+            (nativePayloadOwnership?.releaseAfterCompletion() ?: true).also { nativeCompleted = it }
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     @Synchronized
@@ -1206,10 +1269,49 @@ class GPUFrameRollback internal constructor(
     }
 
     @Synchronized
-    internal fun quarantineNativeAfterSubmit(): Boolean = try {
-        nativePayloadOwnership?.quarantine() ?: true
-    } catch (_: Throwable) {
-        false
+    internal fun quarantineNativeAfterSubmit(): Boolean {
+        submissionUncertain = true
+        val submission = scratchSubmission
+        var scratchSafe = scratchTerminal || submission == null
+        if (!scratchSafe) {
+            val rejected = try {
+                resourceProvider.rejectScratchCompletion(
+                    requireNotNull(submission),
+                    requireNotNull(scratchTicket).deviceGeneration,
+                    GPUScratchCompletionFailure.Uncertain,
+                )
+            } catch (_: Throwable) {
+                null
+            }
+            scratchSafe = rejected is GPUScratchLifecycleResult.Accepted
+            scratchTerminal = scratchSafe
+            if (!scratchSafe) ownershipDiagnostics += (rejected as? GPUScratchLifecycleResult.Refused)?.diagnostic
+                ?: preflightDiagnostic(
+                    "failed.scratch_texture.quarantine",
+                    "Scratch quarantine failed without a typed result; submission ownership remains retained.",
+                    mapOf("submissionId" to submission.toString()),
+                )
+        }
+        val nativeSafe = nativeCompleted || nativeQuarantined || try {
+            (nativePayloadOwnership?.quarantine() ?: true).also { nativeQuarantined = it }
+        } catch (_: Throwable) {
+            false
+        }
+        if (!nativeSafe) ownershipDiagnostics += preflightDiagnostic(
+            "failed.native-frame-payload.quarantine",
+            "Native quarantine failed; uncertain ownership remains retained.",
+            mapOf("ownerScope" to ownerScope),
+        )
+        return scratchSafe && nativeSafe
+    }
+
+    @Synchronized
+    internal fun withOwnershipDiagnostics(diagnostic: GPUDiagnostic?): GPUDiagnostic? {
+        if (ownershipDiagnostics.isEmpty()) return diagnostic
+        val primary = diagnostic ?: ownershipDiagnostics.first()
+        return primary.copy(facts = primary.facts + ownershipDiagnostics.mapIndexed { index, retained ->
+            "ownershipFailure$index" to "${retained.code.value}: ${retained.message} ${retained.facts}"
+        })
     }
 
     @Synchronized
@@ -1228,7 +1330,7 @@ class GPUFrameRollback internal constructor(
         }
         state = State.RolledBack
         val releases = mutableListOf<String>()
-        val diagnostics = mutableListOf<GPUDiagnostic>()
+        val diagnostics = ownershipDiagnostics.toMutableList()
         acquiredSurfaceOutput?.let { output ->
             try {
                 when (val release = surfaceProvider.release(output)) {
@@ -1270,6 +1372,7 @@ class GPUFrameRollback internal constructor(
             }
         }
         nativePayloadOwnership?.let { ownership ->
+            if (nativeTransferredBeforeRefusal) return@let
             try {
                 if (ownership.rollback()) {
                     releases += "native-payload:${ownership.token.value}"
@@ -1310,6 +1413,8 @@ class GPUFrameRollback internal constructor(
                     mapOf("failureClass" to failure::class.simpleName.orEmpty()),
                 )
         }
+        ownershipDiagnostics.clear()
+        ownershipDiagnostics.addAll(diagnostics)
         return GPUFrameRollbackResult(releases, diagnostics).also { result = it }
     }
 }

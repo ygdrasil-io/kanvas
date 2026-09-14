@@ -496,10 +496,14 @@ internal class GPUFrameExecutor(
             is GPUPreparedNativeFrameBindingResult.Refused -> {
                 val discard = backend.safeDiscard(commandBuffer)
                 preparedFrame.rollbackAfterExecutionClaim()
-                val diagnostic = executionDiagnostic(
-                    submitOwnership.code,
-                    submitOwnership.message,
-                    mapOf("commandBufferDiscard" to discard.dumpLabel()),
+                val diagnostic = requireNotNull(
+                    preparedFrame.rollback.withOwnershipDiagnostics(
+                        executionDiagnostic(
+                            submitOwnership.code,
+                            submitOwnership.message,
+                            mapOf("commandBufferDiscard" to discard.dumpLabel()),
+                        ),
+                    ),
                 )
                 return completedFailure(
                     attemptId,
@@ -519,13 +523,14 @@ internal class GPUFrameExecutor(
                 counter = GPUFrameStructuralCounter.QueueSubmit,
             )
         } catch (failure: Throwable) {
-            val diagnostic = discardSurfaceAfterSubmit() ?: executionDiagnostic(
+            var diagnostic = discardSurfaceAfterSubmit() ?: executionDiagnostic(
                 "failed.frame-execution.submit",
                 "Frame submission failed synchronously.",
                 mapOf("failureClass" to failure::class.simpleName.orEmpty()),
             )
             retentionLedger.quarantine(registration, diagnostic)
             preparedFrame.rollback.quarantineNativeAfterSubmit()
+            diagnostic = requireNotNull(preparedFrame.rollback.withOwnershipDiagnostics(diagnostic))
             runCatching { completion.cancel(ticket) }
             telemetry.record(
                 GPUFrameStructuralPhase.Submitted,
@@ -556,21 +561,24 @@ internal class GPUFrameExecutor(
                     discardSurfaceAfterSubmit()
                     retentionLedger.quarantine(registration, submitted.diagnostic)
                     preparedFrame.rollback.quarantineNativeAfterSubmit()
+                    val diagnostic = requireNotNull(
+                        preparedFrame.rollback.withOwnershipDiagnostics(submitted.diagnostic),
+                    )
                     runCatching { completion.cancel(ticket) }
                     val snapshot = telemetry.seal(
                         GPUFrameStructuralPhase.Submitted,
                         GPUFrameStructuralOutcome.Failed,
-                        submitted.diagnostic.code.value,
+                        diagnostic.code.value,
                     )
                     return GPUFrameExecutionHandle(
                         attemptId,
-                        GPUFrameImmediateState.FailedAfterSubmit(ticket.ticketId, submitted.diagnostic),
+                        GPUFrameImmediateState.FailedAfterSubmit(ticket.ticketId, diagnostic),
                         CompletableFuture.completedFuture(
                             GPUFrameExecutionCompletedResult(
                                 attemptId,
                                 GPUFrameStructuralPhase.Submitted,
                                 GPUFrameStructuralOutcome.Failed,
-                                submitted.diagnostic,
+                                diagnostic,
                                 encodedKinds,
                                 snapshot,
                             ),
@@ -591,10 +599,11 @@ internal class GPUFrameExecutor(
         var postSubmitPresentDiagnostic: GPUDiagnostic? = null
 
         fun finishTerminal(
-            diagnostic: GPUDiagnostic?,
+            initialDiagnostic: GPUDiagnostic?,
             completedReadback: GPUFrameExecutionReadback? = null,
         ) {
             if (!finalized.compareAndSet(false, true)) return
+            val diagnostic = preparedFrame.rollback.withOwnershipDiagnostics(initialDiagnostic)
             val structuralOutcome = if (diagnostic == null) {
                 GPUFrameStructuralOutcome.Succeeded
             } else {
@@ -760,9 +769,7 @@ internal class GPUFrameExecutor(
             if (completionDiagnostic == null) {
                 when (val release = retentionLedger.complete(registration, delivery.outcome)) {
                     GPUFrameRetentionLedgerResult.Applied -> {
-                        if (preparedFrame.hasNativePayload &&
-                            !preparedFrame.rollback.releaseNativeAfterCompletion()
-                        ) {
+                        if (!preparedFrame.rollback.releaseNativeAfterCompletion(ticket)) {
                             completionDiagnostic = executionDiagnostic(
                                 "failed.native-frame-payload.release",
                                 "Completed native frame payload could not be released safely.",
@@ -911,6 +918,7 @@ internal class GPUFrameExecutor(
                     }
                 }
                 runCatching { completion.cancel(ticket) }
+                diagnostic = requireNotNull(preparedFrame.rollback.withOwnershipDiagnostics(diagnostic))
                 telemetry.record(
                     GPUFrameStructuralPhase.Submitted,
                     GPUFrameStructuralEventKind.CompletionArmFailed,
@@ -1031,6 +1039,7 @@ internal class GPUFrameExecutor(
                 }
             }
             runCatching { completion.cancel(ticket) }
+            diagnostic = requireNotNull(preparedFrame.rollback.withOwnershipDiagnostics(diagnostic))
             telemetry.record(
                 GPUFrameStructuralPhase.Submitted,
                 GPUFrameStructuralEventKind.CompletionArmFailed,

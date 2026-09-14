@@ -58,8 +58,9 @@ class W5fConvergenceSurfacePixelTest {
             else -> ColorFilter.HSLAMatrix(FloatArray(20))
         }
         disjoint(wanted, expected(image, paint.copy(colorFilter = changedFilter)))
-        disjoint(wanted, expected(Image.fromPixels(1,1,byteArrayOf(-1,0,0,-1),
-            alphaType = AlphaType.UNPREMUL), paint))
+        val changedImage = Image.fromPixels(1,1,ByteArray(4), alphaType = AlphaType.UNPREMUL)
+        disjoint(wanted, expected(changedImage, paint))
+        disjoint(wanted, expected(changedImage, paint.copy(colorFilter = changedFilter)))
         val surface = Surface(1,1)
         surface.canvas { drawImage(image, rect(), SamplingOptions.NEAREST, paint) }
         val recorder = PictureRecorder()

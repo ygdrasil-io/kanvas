@@ -34,6 +34,10 @@ class W5fPictureFilterInterpolationTest {
             127f/255f,external,background,BlendMode.DIFFERENCE))
         disjoint(wanted, W5fColorCpuOracle.expectedShaderTree(shader,127f/255f,null,background,BlendMode.DIFFERENCE))
         disjoint(wanted, W5fColorCpuOracle.expectedShaderTree(shader,1f,external,background,BlendMode.DIFFERENCE))
+        val zeroFilter = ColorFilter.Matrix(ColorMatrixF32.of(FloatArray(20)))
+        val changedShader = Shader.WithColorFilter(Shader.Opacity(Shader.SolidColor(color), .5f), zeroFilter)
+        disjoint(wanted, W5fColorCpuOracle.expectedShaderTree(changedShader,127f/255f,
+            zeroFilter,background,BlendMode.DIFFERENCE))
         val recorder = PictureRecorder()
         recorder.beginRecording(rect()).apply {
             drawRect(rect(), Paint(color = background, blendMode = BlendMode.SRC, antiAlias = false))
@@ -63,6 +67,11 @@ class W5fPictureFilterInterpolationTest {
         disjoint(wanted, W5fColorCpuOracle.expectedGradientPixel(domain,black,white,0f,filter,finalBlend = BlendMode.SRC))
         disjoint(wanted, W5fColorCpuOracle.expectedGradientPixel(domain,black,white,.25f,
             ColorFilter.Matrix(ColorMatrixF32.ofIdentity()),finalBlend = BlendMode.SRC))
+        val zeroFilter = ColorFilter.Matrix(ColorMatrixF32.of(FloatArray(20)))
+        disjoint(wanted, W5fColorCpuOracle.expectedGradientPixel(domain,black,white,.25f,
+            zeroFilter,finalBlend = BlendMode.SRC))
+        disjoint(wanted, W5fColorCpuOracle.expectedGradientPixel(domain,white,white,.25f,
+            zeroFilter,finalBlend = BlendMode.SRC))
         val alternate = if (domain == ColorSpaceInterpolation.SRGB) ColorSpaceInterpolation.LINEAR else ColorSpaceInterpolation.SRGB
         disjoint(wanted, W5fColorCpuOracle.expectedGradientPixel(alternate,black,white,.25f,
             filter,finalBlend = BlendMode.SRC))
