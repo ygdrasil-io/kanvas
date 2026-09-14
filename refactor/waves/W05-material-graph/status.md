@@ -1,6 +1,352 @@
 # État W05 — material graph, gradients, images et color filters
 
-## W5f — Task1–4 closes, Task5 prochaine
+## W5f — Task1–5 closes sur leurs tranches bornées, Task6 suivante
+
+Point d'architecture R26 fixé : une définition interne immuable du gradient
+préparé, créée après l'inventaire final vérifié, sert de propriétaire commun à la
+preuve numérique et au binding final. Le même compiler émet la preuve; le même
+owner est authentifié par la table et le payload final. L'identité source ne
+dépend pas de sa future preuve; le rebase réémet la preuve sans reconversion.
+Aucune table publique partielle, preuve mutable ni nouvelle autorité. Coût :
+provenance retenue et preuves réémises, à vérifier sur interning/rebase/packing et
+les rendus publics. Task5 est maintenant close sur sa tranche bornée : les témoins ciblés, dont les
+40cellules obligatoires LINEAR/OKLAB, budget B, mixed-range/projectif/H et
+composites passent à leurs checkpoints. La suite combinée327tests a322PASS et
+5refus d'exécution `readback_staging.aggregate_budget_exceeded`, pas un succès.
+Atan2 durci;329assertions vérifiées par groupes et cinq compiles réussies.
+Commit2e7867b livré, review Sol indépendante spec+quality Approved, zéro
+Critical/Important; warnings hérités suivis, aucune correction de code requise.
+Task6 HSL/OKLCH/working-space suivante; tâches6–8 et review globale encore ouvertes;
+natif133 et limite d'exécution combinée restent distincts des preuves de rendu.
+
+RED filtres/wrappers vérifié (UTC05:02:28.704Z) : 28 cas
+échouent réellement à l'admission, 24 `gradient_interpolation` et 4 `opacity_child`,
+sans error/skip. Les attentes et contre-exemples sont bornés/disjoints avant Surface.
+Les quatre anciennes fixtures Table non bornées ne sont pas comptées comme RED
+production; décalage fixe des plateaus, sans relâcher oracle/tolérance. Commande
+FAILED Gradle1/executor63native133/15s (55 tâches, 7 exécutées), log SHA256
+`2dee678cfb926a6894f8a8b6ccb95f04510fea32f6ebce5b2aad526d46c9d257`.
+Graphe/interpréteur commun partiellement écrits, émetteur à raccorder; définition
+préparée/binding/layout final non implémentés à ce checkpoint. Aucun rendu positif
+des nouveaux domaines ni budget B n'est encore démontré.
+
+Graphe/interpréteur/émetteur désormais compilés : gpu-plan et gpu-renderer exécutés,
+SUCCESSFUL4s/37 tâches/7 exécutées, sans admission positive. R27 précise l'égalité
+physique ancienne avant conversion : même recette de mots avec ranges finaux
+relocalisés et un token pour l'unique slab final, puis bijection exacte avec
+l'identité réelle, y compris les enfants image. Aucun packing/conversion précoce
+ni clé approximative; interning, budget et régressions publiques restent à vérifier.
+
+R28 ajoute uniquement le consommateur exact GradientAverageSrgbaF32 : surcharge
+interne par range validé, même intégrale binaire originale straight-SRGB et même
+arrondi final; anciens résultats conservés. Le slab mixte ne doit pas être
+intégré en entier ni dans le domaine Lab/linear préparé. Coût Host de parcours/
+copie/BigInteger retenu; témoins publics dégénérés et review restent requis.
+
+Le layout standalone est maintenant écrit et compile (gpu-plan exécuté,
+SUCCESSFUL1s/27 tâches/6 exécutées), sans binding/W3/Ready final. RED dégénérescence
+vérifié UTC05:18:12.471Z : 24 cas, 8 contrôles SRGB PASS, 16 refus nouveaux domaines
+(12 mapping interpolation, 4 Conical source_unimplemented), 0error/skip. Original
+SRGB-average et moyenne de domaine sont bornés/disjoints avant Surface. Le cas
+actuel mono-source ne prouve pas le range dans un slab mixte; ce témoin reste
+requis. Capture native désormais vérifiée : Gradle1/executor64native133/17s FAILED,
+55 tâches/12 exécutées/43 up-to-date, hash
+`208f038c5a4d714af31fbd607f3b164c4e47ec4723acdd2e65650e05ed8afc93`.
+La définition privée préparée compile séparément (gpu-plan exécuté,976ms,
+27 tâches/6 exécutées), hash
+`d7226cb871f3fa7fff4660239333e882e5f999945173edcaf74875a027acbd8b`.
+L'agent rapporte ensuite le graphe affine/famille complet compilé après erreur
+syntaxique conservée; logs exacts de cette dernière paire à vérifier. Preuve/
+binding/W3/permit/Ready encore à raccorder, safe-divide projectif à compléter.
+Aucune admission positive ni clôture numérique/budget Task5 à ce checkpoint.
+
+R29 classe trois matches renderer rendus non exhaustifs par le nouveau binding
+scellé : refus explicite V4 Unpromoted dans GPUPreparedMaterialProgram et les
+provenances Text/Vertices, comme le refus filter V4 existant. Aucun code font ou
+promotion texte/vertices; lower W5a déjà planifié refuse également cette entrée
+legacy. gpu-plan compile, renderer FAILED5s/37 tâches/7 exécutées : simple erreur
+d'exhaustivité, distincte de native133/RED public. Rendu final encore non validé.
+
+Après les branches R29, gpu-plan et gpu-renderer réellement recompilés :
+SUCCESSFUL42s/37 tâches/7 exécutées/30 up-to-date. L'agent rapporte la chaîne
+définition→issuePrepared→binding privé→table rebasée/proof stockée, raw U32 et
+stop storage colorV4 écrits. Ce n'est qu'une compile, pas une preuve d'admission/
+portabilité. Bijection/construction finale Frame et W3 en raccordement; seed2,
+autres lanes/composites, budget B, gates finales et review restent ouverts.
+
+Binding final Frame désormais compilé (gpu-plan exécuté, SUCCESSFUL1s,
+27 tâches/6 exécutées) : l'agent rapporte préparation→placements/root maps finaux→
+bijection réelle slab/legacy/V4→construction validée. W3 recognition retient les
+captures et anciens Ready; factory target/topology constructSources en cours,
+non compilée. Aucun Ready/rendu public V4 ni seed lancé à ce checkpoint.
+
+Premiers seeds Rect positifs — UTC05:53:55.953Z : LINEAR black/white et OKLAB
+red/green midpoint,2PASS/0failure/error/skip après Render/Readback. Première
+tentative : shader WGSL18 appelle w5c_local_point non déclaré, Gradle1/executor65
+native134/6s FAILED,1skip/second non exécuté; ce n'est pas le teardown133.
+Diagnostic systématique : ancien nom coordinate function sur source V4 dont le
+graphe évalue déjà les coordonnées. Correction dans le stage prévu : identité
+device point explicite, sans double transform ni mutation native/harness.
+Nouvelle commande toujours FAILED Gradle1/executor66native133/7s,55 tâches/
+8 exécutées/47 up-to-date; hash
+`1f5d1f72072fdae1d2c2e33c15aa0b322b1352f5daa55af74348189a977d97d0`.
+Manifest source pre/post identique rapporté, pas encore chaîne hash finale ROOT.
+Seeds SRC bornés seulement : famille/lane DIFFERENCE, wrappers/filters, budget B,
+dégénérescence shared-range, projectif/composites et review finale restent ouverts.
+
+Matrice intermédiaire Rect — UTC05:56:05.510Z :125 cas,69PASS/56fail/0error/skip.
+69 incluent20 contrôles famille SRGB et24 dégénérescences,8tiles,6counts2/16/17,
+2transparent,2Rectwrappers,1mixeddomain,seed2 et4Line/Sweep Rect DIFFERENCE.
+56 restants :42 non raccordés (32famille nonRect,8Pathfilters,2Pathwrappers),
+10 refus numériques (2RadialRect,8Rectfilters),2SELECTConical/schema,2oneStop/null.
+Pas de pixel mismatch dans les failures. FAILED Gradle1/executor67native133/1m1s,
+55 tâches/6 exécutées/49 up-to-date; hash
+`f4eb4f7f6460119e3a27edb182b12de66ed8262b8bef420e71a42d7e35b8d954`.
+Node/domaine/faits de branche exacts requis avant correction numérique; pas de
+nominal box/floor/clamp de complaisance. Garde commune réelle et original-SRGB/
+Conical-validity-before-oneStop demeurent contraignants. All125 non-green;
+autres lanes/composites/budget B/projectif/gates/review toujours ouverts.
+
+Corrections numériques Rect, fixtures/tolérances inchangées — les traces publiques
+UTC06:02:01.468Z (36tests/34fail/0error/skip, archive conservée) localisent deux
+pertes de corrélation dans la preuve, pas un pixel mismatch : carré du même
+scalaire traité comme deux valeurs indépendantes, puis poids complémentaires
+du même `w` traités indépendamment. SAME interpréteur conserve maintenant
+l'identité du facteur carré et le vrai `(1-w)*a+w*b` avec SAME poids clampé et
+constantes préparées. Erreurs gamma/FTZ/FMA/reassociation conservées, ni alpha
+floor, boîte nominale, modification shader de complaisance ou relâchement DIV/
+sqrt positive-normal/garde zéro R19. ROOT vérifie ces deux joins source/WGSL.
+Archive famille UTC06:04:01.305Z :40tests/32fail/0error/skip, les8 cellules Rect
+LINEAR/OKLAB DIFFERENCE passent,32 cellules nonRect restent non raccordées.
+Commande FAILED Gradle1/executor70native133/31s, hash
+`a20470dc2c4262419ec520868ad9ba8c8e1f19d72ec520018b78885ae7a0a363`.
+Archive filtres UTC06:06:06.836Z :16tests/8fail/0error/skip, Matrix/Table Rect8
+passent; Path8 restent non raccordés. Commande FAILED Gradle1/executor71
+native133/11s, hash
+`53c12710958a28637af822fe9ce295896dae1756f0a0d84e9c2e1d23dbc2e930`.
+Traces temporaires retirées selon le worker; retrait à confirmer sur diff final.
+Coût/limite : règles corrélées spécifiques au graphe réel, erreurs conservatives
+maintenues; fresh régressions affectées/review restent obligatoires. Les gates
+ci-dessus ne clôturent ni Task5 ni tous les125 cas; one-stop, autres lanes/
+composites, projectif, B et gates finales restent ouverts.
+
+Gate ciblé après corrections Rect — archive UTC06:09:07.322Z :
+64tests/40fail/0error/skip,24PASS (8familles Rect,8Matrix/Table Rect,
+8counts dont les2one-stop);32familles nonRect et8Path filters non raccordés.
+ROOT confirme header XML, log/hash
+`305e116fced8fab833927c8cee21f3338b80e3e353a139af956b350d4773f156`,
+FAILED Gradle1/executor72native133/43s,55tâches11exécutées44up-to-date.
+Clamp01 et fast paths zéro/un sont les règles héritées inchangées dans le diff
+final actuel; absence de traces temporaires vérifiée dans ColorSourceProof.
+RRect capture/construction deferred en cours, autres obligations/gates ouvertes.
+
+Tentative RRect — compilation FAILED1s puis correction SUCCESS5s,27tâches/
+6exécutées. Archive publique UTC06:20:33.253Z :40tests/32fail/0error/skip,
+8RectPASS,8RRect `w4b.plan.identity_invalid`,24Path/stroke
+`unsupported.material.w5a.kind`. Aucun RRect natif positif à ce gate :
+entrée composite Rect background+RRect AA appelle encore l'ancien construct,
+transport source/inventaire composite commun en cours, sans rescue de fixture.
+Log/hash
+`820ec980ae950a0651e4e8af3b92932c4a9668f46c429112d368145c2409c5b9`,
+FAILED Gradle1/executor73native133/51s,55tâches11exécutées44up-to-date.
+Toutes obligations/gates finales Task5 restent ouvertes.
+
+R30 — consommateur supplémentaire exact classifié avant édition :
+W5bNativeGeometryGraphLowerer, packet joins Rect/AnalyticRect/RRect et Stroke.
+L'ancienne exigence color lower/refus V4 doit céder au packed V4 authentifié
+par le vrai graph; seul l'ancien slot géométrique peut rester Transparent.
+La vraie source color-writing exige le propriétaire packed; pas de fallback,
+nouvelle authority/cache/buffer/lifecycle/native workaround ni filtered H.
+Coût si incorrect : refus/couleurs/provenance des scènes mixtes, à vérifier par
+gates publiques destination/retained/old et Sol. ROOT joins source vérifiés,
+pas encore correctif/compilation/rendu positif.
+
+Jalon réel Rect+RRect Native — archive UTC06:27:41.359Z :
+60tests/24fail/0error/skip,36PASS =20 contrôles SRGB +16 cellules
+LINEAR/OKLAB×quatre familles×Rect/RRect, DIFFERENCE/destination/mutation/repeat.
+Les24 failures restantes sont Path fill/stroke `unsupported.material.w5a.kind`;
+ni identité RRect invalide, ni refus numérique/pixel mismatch à ce gate.
+Log/hash
+`af947a8119389e56e7f0e10e130c7d47fc3afe137372a5804b48205eb93cf711`,
+FAILED Gradle1/executor74native133/47s,55tâches11exécutées44up-to-date.
+Le worker rapporte le vrai passage inventaire Frame→préparation/proof→witness
+géométrique→packed lookup; les pixels ne prouvent pas seuls l'ordre privé/
+bijection/authentification, source review finale obligatoire. W4c direct/stencil,
+Stroke/General/W4a/composites et témoins B/projectif/mixed-range/duplicates/
+gates complètes+five compile+rapport/commit/Sol toujours ouverts.
+
+R31 — W5aMaterialPlanLowerer supplémentaire classifié avant édition après
+ROOT read du fichier complet et W4c resolveMaterialColor/packed lookup :
+la branche neutralisant le seul slot géométrique pour ColorFilterV4 reconnaît
+aussi GradientInterpolationBindingV4 après Opacity, avec source proof retenue.
+Le vrai material() garde l'exigence packed/table/draw owner exact; W4c transporte
+déjà ce packed V4. Aucun Transparent source fallback/évaluation Host, nouveau
+buffer/cache/native lifecycle/filtered H/private test. Coût : refus/ownership
+anciennes et nouvelles sources, à vérifier public direct/stencil/wrappers/retained
+et Sol. Gate Pathfill vérifié ROOT : archive UTC06:31:36.373Z125tests/26fail/
+0error/skip,99PASS dont8 nouveaux Matrix/Table DirectFill;8Stroke kind et
+18unfilteredPath/wrapper schema encore refusés. Commande FAILED Gradle1/
+executor75native133/1m21s,55tâches10exécutées45up-to-date, log/hash
+`3b9218d953276e4b909a0236a76bfaae998f30e19e2dabdec283fa6dd96a01ba`.
+Ce gate ne clôture pas Task5; R31 puis batch Stroke/General/W4a en cours.
+
+TDD W4a/General supplémentaires : après premier setup AA mixte invalide
+(UTC06:38:41.614Z3fail,1contrôle SRGB ancien en échec,2mapping RED;
+native76FAILED13326s), contrôle W4a corrigé UTC06:40:03.279Z3tests2fail,
+SRGBPASS/2nouveaux kind RED; native77FAILED1336s, hash
+`a5efc35c129b0fa086722890cfc84a4868e7c4f22d6ad4d78dc531711ff816b3`.
+General affine UTC06:41:28.210Z6tests4fail,2SRGBPASS/4nouveaux kind RED;
+native78FAILED1338s, hash
+`8b7171262b4d413c802d8c4d2c34dfef41e7bd9810c8c12336d6f40bd6209105`.
+Tous0error/skip, archives et manifests pre/post identiques vérifiés ROOT.
+Oracle coordonnées indépendant/disjoints-before-Surface; le pixel central
+General est un fixed point du quarter-turn : preuve lane/interpolation/dst,
+pas un discriminateur d'omission de coordonnées ni preuve projective.
+40cellules obligatoires inchangées; source/coordonnées/gates restantes ouvertes.
+
+R32 — seul General hasW5aMaterialPathContract de W5aMaterialGraphContract
+supplémentaire classifié avant édition : Fill V4 inchangé, General Stroke V4
+uniquement vraie leaf GradientInterpolationBindingV4 après Opacity +preuve/
+table/coordonnées authentifiées. Canonical writer General déjà assigné utilise
+le même discriminateur et référence table immutable réelle; filtered Stroke H
+reste refusé. Helper historique PathDraw non modifié sans besoin réel séparé.
+Coût witness/seal/provenance/compatibilité Fill/H à vérifier par public General/
+coords/projective/retained/H et Sol; aucun élargissement geometry/AA4/native/
+API/cache/buffer/lifecycle/harness/private tests.
+
+Jalon six lanes — archive UTC06:49:55.659Z134tests/0failure/error/skip,
+40cellules obligatoires LINEAR/OKLAB DIFFERENCE et contrôles SRGB positifs.
+Log/hash
+`3b8f66d926a2d9551b92e36a04ffd3ca2e04e15cbba1b5cc1f5de0239f2947e8`,
+FAILED Gradle1/executor79native133/1m12s,55tâches11exécutées44up-to-date.
+Compile couvrante SUCCESS5s37tâches7exécutées30up-to-date; manifests pre/post
+complets45sources lus et même hash
+`fed5acad947c788b1db218a67664d5ac0a0fa4d5d36ac68945d1be1ea7205664`
+vérifiés ROOT, pas encore chaîne finale gates/staged/committed.
+Task5 reste ouverte : composites clear/ordinary, B public causal, mixed-range
+original-SRGB average/duplicates/changed values, coords non-fixed-point/projectif/H,
+fresh old W5e/affected+five compile/Audit-reuse hooks/rapport complet/commit/Sol.
+
+Supplément UTC06:56:16.436Z24tests16fail/0error/skip :8PASS rapportés
+(4SRGB contrôles +4mixed-range average/duplicate/DECAL),8nouveaux domaines
+mixedRect+lane DST réellement refusés sur callbacks clear-only,8autres failures
+provider test HSL/OKLCH sans oracle supporté, non comptées RED production.
+Correction provider liste explicite SRGB/LINEAR/OKLAB; SAME clear-sizing/budget/
+null-table et deferred-empty factory raccordées aux callbacks prévus sous R24,
+gate ciblée en cours. Log/hash
+`761d7d76d24d19b567cd26f4b317a5fba8fc51ad5de9521987cb6ffd62f96e2e`,
+FAILED Gradle1/executor80native1339s. Préparation après inventaire complet
+inchangée; Task5/B/projectif/H/composites ordinary/gates finales non closes.
+
+Clear-only positif — archive UTC06:58:24.322Z16tests/0failure/error/skip,
+8nouveaux mixed-NoOp +4SRGB +2mixed-range average +2duplicate/DECAL.
+Log/hash
+`2bb3b60bb0fbe6e8e94594f4d69f8d0f9db9d656c05a0c2386e1941b716f0834`,
+FAILED Gradle1/executor81native13313s, manifests pre/post identiques
+`59eeb63960337c8998ef7321eedc1026c81b332a74fa8b6f1645708525452744`.
+ROOT voit le vrai gap projectif : ancien BinaryParts/fractionDivide/frexp/ldexp
+avec validité cumulée/point-zeroing contre Divide ordinaire dans nouveau graphe.
+Correction SAME operation owner/proof/emitter sous paths déjà assignés, vraies
+conditions/certificats/reset/clamp; ni nominal bounds ni division exacte.
+RED public coords non-fixed-point/projectif/w0 requis, B/composite ordinary/
+full gates/rapport/commit/Sol restent ouverts.
+
+Projectif corrigé — archive UTC07:06:37.750Z6tests/0failure/error/skip.
+Le Min/Max conserve les extrema ordinaires et limite la branche both-subnormal
+aux seules intersections subnormales, sans clamp ajouté au shader.
+Log/hash `a89e3828e6b6a20af85fb85b55641c886cacac2fda42886ca3f56a6520d55227`;
+commande FAILED Gradle1/executor85native1337s; manifests identiques
+`ef7aa6c537a558696387bf634c883d8e8e82470ba82f2498324cfe7ab11d3568`.
+La preuve complète du nouveau safeDivide et de sa validité cumulée reste à relire.
+
+Budget fixe B=1600000 — archive UTC07:09:08.696Z6tests/2failures/0error/skip,
+quatre assertions budget positives : shared17 et distinct2 admis, distinct17
+refusé précisément `resource.material.gradient.stop-budget`, récupération
+et retained renders vérifiés aux mêmes limites, contrôles healthy8MiB.
+Les deux autres échecs sont des fixtures ordinary oracle-unbounded avant Surface,
+pas un RED production; correction ciblée du nouveau témoin avant changement.
+Log/hash `591fadb11f91d4464f956b73158921574193d4f4710d3e3e24215b550eb460e7`;
+commande FAILED Gradle1/executor86native13318s; manifests identiques
+`b2943e3c8a5c1439c1ddd38c5d7ca3e637620e2bf154cfaa5ecb95792da6318f`.
+Composites ordinary, refus H, gates finales fraîches, cinq compiles, chaîne de
+hashes finale, rapport complet, commit provisoire et review Sol encore requis.
+
+Composite ordinary — témoin endpoint borné avant Surface : archive89 UTC
+07:12:35.242Z2tests/2failures/0error/skip, vrais refus schema avant changement.
+Après factory commune (compile1s), archive90 UTC07:15:48.659Z2tests/2failures :
+la table partagée injecte `GradientStopData` dans la lane Path solid sans stops.
+Correction du consommateur réel dans RenderGraph/MaterialPlan déjà assignés,
+sans nouveau resource owner; conserver références unary/filter/image-child
+réellement atteintes, un seul slab global et comparaison inventaire avant permit.
+Logs89/90 : `0787a88df194cc0139589d492cfba7ca763368033ac2e8fec95fa131ab186766`
+/ `fe79fa67643ab1e555b6f86ef6882bd11f116180ca2737e21d735cb30c91b985`.
+Commandes FAILED Gradle1/native1334s/6s, distinctes des résultats d'assertions.
+Task5 encore en cours; gates finales et review indépendante non livrées.
+
+R33 — six fichiers initialement Modify passent en Audit/reuse après lecture ROOT
+des raccords réels : snapshots CoordinateNodeV2, templates numeric family,
+General packed source, scratch W4b/W4d pure géométrie, candidate delegate.
+Chemins exacts, hooks et coûts dans le plan durable; aucune exemption globale
+ni hunk artificiel. RenderGraphConstruction est réellement modifié et non exempt.
+Gates finales fraîches et review Sol doivent encore vérifier chaque raccord.
+
+Composite ordinary corrigé — archive91 : deux nouveaux cas UTC07:17:58.281Z
+et ancien Ordering1 UTC07:18:00.207Z, tous0failure/error/skip.
+Refus H/changed — archive92 UTC07:19:26.849Z18tests/0failure/error/skip.
+Logs91/92 : `0fdedd53790b739fd48c5c54050748d44ce74c97b6610869ead98e87d9958b79`
+/ `ee70f7208ac7ca62b8752d237e476a27c8d342e3f19017e2a8e04f5f44a813e8`.
+Commandes FAILED Gradle1/native1338s/9s. Sources désormais figées pour les
+régressions complètes prévues et cinq compiles; rapport/commit/review restent ouverts.
+
+Gate combinée93 — dix archives XML :327tests/5failures/0errors/skips,
+322PASS;4refus sur Gradient180 et1sur Ordering10, tous submit/readback-staging
+aggregate budget, sans mismatch de descriptor. W5a5/W5b3/W5c5/W5d12/
+W5eDecoded14/Families27/Shader27/ColorFilter44 passent.
+Log `d7ae73d1e875123bd32a1fb0ceb33001add214fa18bffba71b619243402852f6`,
+FAILED Gradle1/executor93native1337m57; sources pré/post identiques
+`6ef563c00ec19004e0f2178e0ff2bbf84d16924426ff58d697b1e45ff87fd5fb`.
+Lecture ciblée : le pool additionne les bytes résidents scratch/readback au frame
+budget physique; pool et budget sont inchangés depuis BASE5fa. Cela ne prouve pas
+à lui seul que les cinq échecs précèdent cette workload. Aucune suite GREEN ni
+réussite de commande; préserver la limite combinée, pas de workaround runtime,
+augmentation de B, reset/GC/dispose/cache/native lifecycle/harness.
+Sweep a déjà de vrais guards axes dans son graphe; preuve Atan2 normal/max-|x|
+et témoins publics à durcir, puis gates affectées logiquement groupées à source
+identique et cinq compiles. Rapport final, hashes, commit et review encore ouverts.
+
+Atan2 durci — ROOT relit le vrai graphe Sweep (guards axes avant appel eager)
+et le correctif strict normal(x/y), maxabs(x)≤2^126. Nouveau témoin public :
+cinq cardinaux bornés rendus deux fois, puis x=2^127 refus attendu et récupération.
+Archive95 UTC07:33:58.980Z2tests/2failures (refus manquant), puis archive96
+UTC07:34:42.456Z2tests/0failure/error/skip après correction minimale.
+Logs95/96 : `71c3166686ae50869d3dcf3622b087192fea8f73acf84fad35bf04a64ef37478`
+/ `22d73eada11985f00d3153c1807023fb30523eb38236d6ccff70ad2d6771eedf`.
+Commandes FAILED Gradle1/native1335s/5s; schema/emitter/geometry/budgets inchangés.
+Sources figées pour groupes complets de vérification, cinq compiles et livraison.
+Limite combinée93 conservée, pas de workaround native; Task5 non close.
+
+Task5 CLOSED sur sa tranche fonctionnelle bornée — commit `2e7867bcc2d3ea63ede3f327bcca2472e369edc1`
+sur BASE5fa, tree `5d856da0b43183cf20b176fa0dc2bfc750d0d0b9`.
+ROOT a lu le rapport final complet308lignes/79551B, hash
+`d3f183c9cd37553d5db73b8e71835b2a86e25bf0a7fa55f34b272d5baccaa1e0`.
+45files4001+/647−; sources testées/post-gates/stagées/commit identiques
+`e76688e035c1f565bd40650164ef22ece85fa9cb1ef4193f8425930c7906fe07`;
+21comparaisons de manifests0, même SHA
+`fb02620e45df3fc536554ea758c440990247dfa675bf9b41cef62cec7c84c1b7`.
+
+Archives finales standard98–102 :329tests/0failure/error/skip vérifiés ROOT,
+182interpolation+44filters+10ordering+68W5e+25anciens. Chaque commande FAILED
+Gradle1/native133, durées3m21/23s/2m27/37s/1m34; cinq compiles standalone
+SUCCESS incrémentales/targets UP-TO-DATE,636/602/600/628/624ms.
+Échec combiné93 conservé5refus staging;97launcher spécial path exclu/remplacé102,
+pas de workaround runtime ni augmentation de B. R33 six Audit/reuse exacts,
+tous autres Modify/Create réellement présents; vérification figée avant review.
+La fresh Sol/high spec+quality approuve le diff exact607610B,
+`085e5be115c45779c26f7eb8b706ef7a493e74ca941cba2f26c1448535633fa0`.
+Zéro Critical/Important, sole Minor de warnings hérités; aucun correctif de code
+nécessaire. Le verdict ne prouve pas l'antériorité des cinq refus staging93 :
+limite combinée conservée ouverte et commandes natives toujours FAILED.
+Task6 peut enchaîner; tâches6–8 et review globale restent ouvertes.
 
 Le [plan W5f](../../plans/2026-09-14-w5f-color-filters-implementation-plan.md)
 prépare huit livraisons séquentielles sur `codex/w5f-color-filters`, à partir de
@@ -203,7 +549,158 @@ fourni réellement au filtre/alpha précédant1→2/255 muté; HSLA19/21NaN prio
 longueur/NaN20Infinity20 et récupération SAME Surface. Attendus bornés avant
 Surface, Render/Readback publics requis. Limites Floor±2^24/modulus1..2^24 et
 diviseurs sous-normaux conservatrices, pas tout HSLA fini/RGBA ni ISO global.
-Task5 LINEAR/OKLAB suivante; Tasks5–8/reviewglobale/PR W5f encore ouvertes.
+Task5 LINEAR/OKLAB en cours avec un nouvel Astra/high depuis BASE propre
+5fa8a61712d37442f50471389220a18ff6b7aca5, après clôture documentaire Task4
+exact3docs105+/13− et checks0. Vrai leaf V4, mêmes coordinates/32B stop slab/
+source proof/permit/native owners, nouvelles preuves publiques familiales prévues,
+pas de nouveau choix produit ni de promotion filtre RRect/stroke.
+Worker seul propriétaire Gradle pendant cette tranche; ROOT et reviewer n'en
+lancent pas en parallèle. Tasks5–8/reviewglobale/PR W5f encore ouvertes.
+
+R23 avant édition Task5 : deux raccords supplémentaires concrets autorisés,
+ColorOperationGraphV1 pour le vrai prefix coordinates/stops/selection et
+ColorSourceProofV1 pour la taille source exacte (ancien4words/nonfilter) et le même
+interpréteur arrondi/corrélé. Pas de nouvelle autorité ni boîte SRGB nominale.
+La séquence préparation stops/budget agrégé du frame est en cours de trace :
+normalize produit actuellement une table liée en amont, footprint exige sa preuve,
+et le composite contrôle l'inventaire final seulement à publish. Aucun permis
+factice ni préparation anticipée n'est autorisé; phase minimale à confirmer.
+
+Trace précise : RenderGraphConstruction exige déjà MaterialPlanTable;
+PackedFrameSourcesV4.issue mesure une preuve finale avant son permit, et le
+composite interne/rebase cette table avant de calculer target/geometry/stops/scratch
+réels. Normalize n'a pas capabilities/budget; un simple contrôle stop-count ne
+ferme pas le budget du frame. Raccord ciblé en rédaction, option construction
+metadata-only interne séparée de la table publique, relue une fois par Astra avant
+production. Aucun binding/proof/permit fictif ni deuxième planner autorisé.
+Git status ROOT03:45:21Z confirme seulement les trois docs ROOT modifiés,
+pas d'édition source/test Task5 à ce point; baseline worker seule Gradle.
+
+Premiers tests Task5 (édition test-only, production inchangée) : deux midpoints
+LINEAR/OKLAB RED UTC03:46:33.533Z,2failures0error/skip, attendus et discriminateur
+SRGB bornés avant Surface, puis refus public
+unsupported.material.mapping.gradient_interpolation à Surface.render. Pas de
+pixelMismatch ni oracleUnbounded; commande FAILED executor55native133/4s séparée.
+Baseline17PASS (Matrix6+Ordering10+W5c mixed1), executor54native133/23s.
+Ces deux cas ne ferment pas la matrice familiale; raccord de construction/review
+Astra encore en préparation avant production, ROOT aucun Gradle.
+
+Matrice test-only étendue : XMLUTC04:04:26.996Z62tests,20contrôles SRGB PASS,
+42failures0error/skip (40nouveauxdomaines +2seeds). Quatre familles × Rect/RRect/
+directFill/stencilFill/stroke pour chaque domaine, SRGB avec les mêmes fixtures.
+Refus de matériau pour LINEAR/OKLAB, pas de pixel mismatch ni réparation geometry.
+ROOT lit la classe complète : attendus/domain-discriminator/mutation bornés et
+disjoints avant Surface. Les cellules utilisent encore SRC final; la destination
+colorée est écrasée et ne ferme donc pas le blend dépendant de destination requis.
+Correction complète demandée au même agent, sans retirer ce RED intermédiaire.
+Production inchangée; ROOT vérifie /private/tmp/w5f-task5-red-families.log,
+Gradle1/executor56native133/21s FAILED,55tasks7executed48up-to-date. Hash exact
+27b7c1cea9dd31183496b183b5308976ddf0aaf04fcd8c3542305903f024b80d.
+
+Amendement Task5 révisé lu intégralement par ROOT, puis une relecture indépendante
+Astra/high ciblée lancée. Production toujours en pause; Gradle libéré et inactif.
+Deux décisions internes à vérifier : refs symboliques dans la construction non
+émise et bijection exacte des allocations avant/après préparation. Les factories
+standalone/ordinary/native et six entrées de lanes doivent conserver les mêmes
+calculs géométriques, budgets, refus et validation finale. Le budget public B est
+une donnée de fixture à fixer avec ses contrôles, pas une preuve déjà passée.
+Pas de nouveau choix produit ni de nouvelle boucle de validation globale.
+
+Matrice renforcée test-only XMLUTC04:08:42.404Z60tests/40failures0error/skip :
+20contrôles SRGB avec vrai DIFFERENCE PASS;40LINEAR/OKLAB admission RED.
+ROOT vérifie l'attendu, discriminateurs SRGB/mutationWhite à alpha128 et
+destination-vs-clear bornés/disjoints avant Surface. Background127red72 dessiné
+SRC, puis DIFFERENCE sur chaque cellule; aucun claim de pixels nouveaux PASS.
+Exact log /private/tmp/w5f-task5-red-destination-white-mutation.log/hash
+748e86013d8f8be44824c24556b1aa6c90f1b69bb0c26521473ed654157ca6c4 :
+Gradle1/executor59native133/41s FAILED,55tasks7executed48up-to-date.
+Tentatives de fixture antérieures (worker) UTC04:06:24.367Z et04:07:52.606Z :
+60oracles non bornés avant Surface, pas60RED production; reformulation données
+SRC-background/mutationWhite sans élargir les bornes. Historique conservé.
+
+R24 : Astra ciblé With fixes,0Critical/5Important/1Minor; les deux représentations
+internes sont réalisables. ROOT vérifie les raccords existants et transmet toutes
+les corrections ensemble au même agent, doc-only : factory/lecteurs/candidate
+transport validants; topologie compiler-owned avec source General séparé de son
+enveloppe et sélection native avant witnesses; PlanPasses V4 RRect/stroke et remap
+coordinates; identité physique V1–V3 historique structure+packing+slab sans nouveau
+byte-array; recette exacte d'interner/2048/chaînes contiguës précomptée avant stops.
+Exception explicite pour les autorités anciennes déjà résolues et retenues,
+aucune autorité émise pour pending. Exact3Create+12Modify supplémentaires dans le
+plan durable; autres consommateurs Task5 initiaux inchangés. Production attend
+la lecture complète des contrats corrigés par ROOT, pas une nouvelle review globale.
+Coûts : parcours stops/collisions, metadata interner/topologie retenue, validation
+finale et préparation unique par range; pas de réévaluation des paths. B/public
+positives/numeric closure restent à démontrer; native133 et limites antérieures ouvertes.
+
+ROOT relit intégralement le raccord corrigé I1–I5+Minor (hash
+25d775c87d43ed088bfd3a9c1401f0f404ff801c78a5086e367457eb8a5a68f7),
+vérifie tous les contrats et ferme cette correction de plan. Contrats complets
+intégrés au plan durable existant, exact3Create+12Modify R24 classifiés.
+Reprise séquentielle Task5 autorisée au même agent, avec TDD public/fresh gates/
+five compiles/provisional commit puis Sol spec+quality. Gradle exclusivement
+worker pendant la reprise. Pas de deuxième relecture globale ni d'arbitrage user.
+Aucune production LINEAR/OKLAB positive démontrée à ce point; budget B, numeric
+closure, autres witnesses et Tasks5–8/reviewglobale/PR restent ouverts.
+
+Checkpoint reprise Task5 : worker rapporte l'extraction I4/I5 dans MaterialPlan
+et RawMaterialRequirementsV2, recette interner exacte et parcours raw-word commun
+mesure/identité/packing, également child-image V3. Compilation gpu-plan en cours,
+aucune admission LINEAR/OKLAB nouvelle ni review code acquise. Les gates finaux
+doivent donc inclure les anciens consommateurs publics W5e formats/blends/A8/
+Shader/Nine/Lattice/Atlas pertinents, en plus de la matrice interpolation et des
+filters/order/W5c-d. Aucun travail codec/GM/infrastructure ajouté.
+
+Premier log compile I4/I5 vérifié ROOT : BUILD SUCCESSFUL1s/27tasks6executed
+21up-to-date, gpu-plan compile réellement exécuté, aucune assertion publique.
+Worker ajoute les recipes communes2021/Host F32+StrictMath/cbrt signé/inverse
+cube deux multiplications, adaptateur graph excluant cbrt Host-only; second compile
+SUCCESSFUL1s rapporté. Régression publique en cours : ancien17 +classes W5e
+DecodedImage/ImageShader/ImageFamilies complètes, source figée pendant ce run.
+Pas encore de nouveau domaine admis ni de budget B/proof closure/review code.
+
+Régression extraction85PASS vérifiée ROOT dans six XML,0failure/error/skip,
+UTC04:22:49.410Z–04:25:17.744Z : W5c1/Matrix6/Ordering10 +W5eDecoded14/
+ImageFamilies27/ImageShader27. Exact log/hash
+6e64b4ab48b9d8c7f1e5a577fc1db9536f021dc2190c751628ea4f8e788f8be4 :
+Gradle1/executor60native133/2m54s FAILED,55tasks11executed44up-to-date.
+Worker conserve les quatre hashes source pendant ce run; nouvelle extraction
+captured-source en cours ensuite. Ces85PASS ne sont ni le gate final Task5 ni
+l'admission/preuve/budget des nouveaux domaines.
+
+Checkpoint construction : deux records internes ajoutés (MaterialSourceConstructionV4,
+SourceDeferredRenderConstructionV4) et extraction du même validateur topology/
+resources/lifetimes/geometry RenderGraph, d'après worker. Compile gpu-plan en cours.
+Six candidates pas encore branchées, final-layout owner à faire; aucune nouvelle
+admission LINEAR/OKLAB. Contrats R24 et review finale du code toujours requis,
+pas de nouvelle décision, nouveau fichier hors liste ou obstacle concret signalé.
+
+ROOT vérifie le log deferred-topology : compile FAILED1s, nullable V1 coordinate
+à MaterialSourceConstructionV4.kt155:21. Même agent informé, correction respectant
+l'ancien owner nullable et nouveau compile frais requis; aucun succès de cette
+étape affirmé. Pas de RED fonctionnalité ni d'exit133 pour cette erreur compile.
+
+Compile correction nullable vérifié ROOT SUCCESSFUL4s/27tasks6executed21up-to-date,
+sans !!/owner inventé (None conservé si null). Erreur initiale FAILED1s conservée.
+V4 destination-copy RRect/stroke ensuite modifié, donc prochain compile/gate frais
+nécessaire; aucune nouvelle admission ni closure numérique établie.
+
+R25 : exact Modify GPUW5cGradientStopNativeV1 autorisé après lecture ROOT du
+packer commun position+3zeros+straightSrgb, buffer32B littleendian/offset0/owner
+existant. V4 doit y écrire le tuple préparé authentifié/taggé sans changer bytes
+SRGB, réservés zéro ou single native owner. GradientPlanV1.of actuel impose0..1 :
+son ancien contrat reste strict; aucun clamp Lab ni relâchement global de boîte
+SRGB. Tag/recipe/original+preparedbits/rebase/packing/proof doivent rester liés.
+Coût : mauvais tuple/discriminator invalide l'autorité numérique et les pixels;
+signedLab/mixed-domain et vieux SRGB Native publics +Sol final requis, pas de
+lifecycle/native-ownership/harness/config ou tests privés ajoutés.
+
+Inventory test-only11RED XMLUTC04:44:55.013Z0error/skip vérifié ROOT. Lecture des
+tests1/2/16/17stops/mixed-domain/transparentRGB et contre-factuels bornés/disjoints
+avant Surface. Refus mapping5/stop-count6, pas de pixel mismatch. Exact log/hash
+533307272f53aa48da5619944ca927140096706551c830a91382991e32cb3cf4 :
+Gradle1/executor61native133/9s FAILED,55tasks11executed44up-to-date.
+Ces cas restent RED, autres wrappers/tile/duplicates/filters/budget/gate final ouverts.
 
 Réserves de fixtures à conserver : Table inverse donnant alpha0 avant un SafeU
 peut franchir le domaine portable du diviseur; inverse standalone et compositions
