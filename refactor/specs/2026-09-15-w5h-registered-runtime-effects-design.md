@@ -133,16 +133,22 @@ avant toute construction de plan et ne consulte jamais un registry renderer.
 ### 5.3 `:gpu-renderer`
 
 `:gpu-renderer` porte un manifest enregistré pour le même triplet. Le manifest
-contient le fragment WGSL sans annotation `@group/@binding`, son ABI logique et
-ses besoins physiques.
+contient son ABI logique, son `numericContractId`, l'identité/version de
+l'évaluateur CPU et ses besoins physiques. Le fragment WGSL sans annotation
+`@group/@binding` est généré déterministiquement depuis le
+`NumericOperationGraphV1` scellé dans le `MaterialProgramPlan` ; un fragment
+W5 manuscrit est interdit, même s'il possède la bonne ABI.
 
 Avant toute pipeline native, le renderer :
 
 1. recalcule l'`abiHash` du manifest ;
 2. l'égale byte-exactement au descriptor et à l'entrée sémantique ;
-3. assemble les bindings depuis le layout composé scellé ;
-4. valide parser et reflection du module assemblé contre ce layout ;
-5. matérialise uniquement les ressources déjà planifiées.
+3. égale `numericContractId` et l'identité/version CPU aux valeurs du plan ;
+4. génère le fragment depuis le graphe numérique scellé ;
+5. refuse avant `Ready` tout graphe dont `WgslFloatEnvelopeV1` est `Unbounded` ;
+6. assemble les bindings depuis le layout composé scellé ;
+7. valide parser et reflection du module assemblé contre ce layout ;
+8. matérialise uniquement les ressources déjà planifiées.
 
 ### 5.4 `:kanvas`
 
@@ -175,17 +181,38 @@ Chaque offset est `alignUp(cursor, alignment)` et la taille finale du block est
 alignée à 16 octets. W5h fixe `arrayCountI32=1` et
 `arrayStrideBytesI32=0`. Les arrays sont refusés.
 
-Les ressources logiques conservent leur slot et leurs faits typés, jamais une
-sentinelle. W5h admet seulement les familles exhaustivement autorisées par le
-§12 parent : uniform, storage-read, sampled texture 2D float-filterable et les
-samplers explicitement permis. Les textures storage, comparison samplers,
-binding arrays et autres dimensions/address spaces restent refusés.
+Le `RuntimeUniformBlockV1` est distinct des ressources logiques. Les
+`RuntimeLogicalResourceSlotV1` conservent leur slot et leurs faits typés, jamais
+une sentinelle. Leurs kinds exhaustifs sont `STORAGE_BUFFER`,
+`SAMPLED_TEXTURE` et `SAMPLER`. W5h admet seulement storage-read, texture 2D
+float-filterable et sampler `FILTERING` ou `NON_FILTERING` explicitement
+déclaré. Un sampler caché, une texture storage, un sampler `COMPARISON`, un
+binding array ou toute autre dimension/address space reste refusé.
 
 Le `ComposedBindingLayoutV1` W5g est complété, pas remplacé. Chaque block de
 nœud commence sur une base alignée à 16 octets, tandis que ses champs gardent
 leurs alignements locaux réels de 4, 8 ou 16 octets et leurs trous éventuels.
 Les ressources physiques sont affectées après le block uniforme dans l'ordre
 préfixe des owners.
+
+Le second hash normatif est `composedBindingLayoutHash`. Sa préimage utilise le
+domain tag `kanvas-material-binding-layout-v1`, puis encode exactement :
+
+1. le binding uniforme physique group 1/binding 0, visibility fragment,
+   buffer uniform, taille minimale et taille totale alignée, sans dynamic
+   offset ;
+2. les mappings uniformes ordonnés avec `ownerNodeIndexI32`, offset local,
+   offset physique, taille et alignement ;
+3. les ressources physiques ordonnées avec owner, logical slot, group,
+   binding, visibility, kind et l'unique option de layout correspondant au
+   buffer, à la texture ou au sampler.
+
+Un nœud DAG partagé réutilise le même owner et la même plage ; toute divergence
+est un refus. Le hash SHA-256 lowercase entre dans la program key du module
+assemblé. La reflection doit correspondre byte-exactement au layout dont ce
+hash est issu avant toute création de pipeline. `abiHash` ne remplace jamais
+`composedBindingLayoutHash` : le premier authentifie l'ABI logique locale, le
+second la composition physique de toute la source.
 
 ## 7. Built-in initial
 
@@ -240,8 +267,8 @@ permet donc jamais à une archive ancienne de masquer une version positive.
 
 ## 9. Picture et SceneArchive
 
-Le writer `Picture`/`SceneArchiveCodec` reçoit une nouvelle version de wire et
-encode le descriptor v3 avec :
+Le writer devient Picture v12 / schéma de scène 6 et encode le descriptor v3
+avec :
 
 - `semanticVersionI32` et `abiHash` ;
 - les offsets, tailles, alignements, count et stride des uniforms ;
@@ -249,10 +276,38 @@ encode le descriptor v3 avec :
 - les ressources logiques ;
 - le module legacy uniquement pour un descriptor version zéro.
 
-Les anciennes versions décodent vers `semanticVersionI32=0`. Leur ABI legacy
-est snapshotée de façon déterministe, mais ce hash ne leur confère aucune
-capability. La reconstruction et l'installation legacy restent transactionnelles
-après validation complète de l'archive.
+La matrice de lecture est explicite : les schémas Picture/SceneArchive v8, v9,
+v10 et v11 conservent leur reader historique, puis passent tous par le même
+adaptateur v2 -> v3. Les readers plus anciens de la façade Picture continuent
+d'abord leur migration historique vers cette représentation, sans nouvelle
+branche runtime propre.
+
+L'adaptateur v0 synthétise exactement :
+
+- `semanticVersionI32=0` ;
+- le kind depuis l'ABI legacy, sans le rendre catalogable ;
+- les uniforms dans leur ordre original, avec offset calculé par
+  `alignUp(cursor, alignment(type))`, taille/alignement normatifs,
+  `arrayCountI32=1` et `arrayStrideBytesI32=0` ;
+- `nullable=false` pour chaque child historique ;
+- une liste de ressources logiques vide ;
+- le module, les bindings et tailles déclarées historiques dans la section
+  legacy v0 uniquement.
+
+Le hash v0 est le SHA-256 d'une préimage `CanonicalHashBytesV1` au domain tag
+`kanvas-runtime-effect-legacy-abi-v0`. Elle encode, dans cet ordre, l'ID, le tag
+ABI legacy (`SHADER=1`, `COLOR_FILTER=2`, `IMAGE_FILTER=3`, `BLENDER=4`), la
+liste originale des uniforms (`name`, `bindingI32`, type tag, `sizeI32`), la
+liste originale des children (`name`, type tag), le vertex layout optionnel
+(stride, step mode, puis attributes format/offset/location) et le module
+optionnel (source UTF-8, entrypoint, uniforms et textures dans l'ordre). Ce hash
+sert uniquement à l'identité et à la reconstruction legacy ; ce n'est jamais
+un `abiHash` positif W5.
+
+La reconstruction et l'installation legacy restent transactionnelles après
+validation complète de l'archive, mais sont inertes : aucun lookup renderer,
+aucune résolution par le catalogue et aucune exécution v0 ne sont permis, même
+si l'ID entre en collision avec un built-in positif.
 
 Un descriptor positif avec module WGSL, un descriptor zéro prétendant être une
 entrée cataloguée, une version négative ou un hash malformé est refusé.
@@ -294,6 +349,14 @@ Pour un nœud runtime, le planner :
 Aucun child, upload, buffer, pipeline ou lease ne peut être préparé pendant
 qu'un sibling ou une autre lane de la frame peut encore faire échouer le
 preflight.
+
+Les clés de pipeline, layout, sampler et texture commencent par
+`deviceGeneration`. L'admission budgète de manière pessimiste une miss complète sans
+consulter l'état mutable du cache. Les caches device/session restent bornés en
+entrées et octets, utilisent une éviction LRU uniquement à lease nul et
+retiennent chaque lease jusqu'à la completion de la frame. Une perte device
+invalide toute la génération ; aucune ressource d'une génération antérieure
+n'est réutilisée.
 
 ## 11. Promotion des lanes H
 
@@ -362,6 +425,13 @@ frame. Les opérations utilisent l'arithmétique checked I32/I64. Le layout
 composé, les textures, buffers, samplers, binding counts et évaluations runtime
 participent aux limites existantes avant allocation native.
 
+Le même owner immuable conserve upload, cache request, accounting et lease à
+travers toutes les lanes. Deux owners indépendants restent deux réservations,
+même si leur contenu canonique est égal. Une miss évince d'abord les seules
+entrées sans lease et refuse transactionnellement si les budgets restent
+insuffisants. Les chemins de device loss non injectables demeurent un gap
+d'intégration documenté ; aucun fake device n'est introduit pour les simuler.
+
 ## 13. Stratégie de tests
 
 Le développement suit RED -> GREEN -> refactor pour chaque comportement.
@@ -376,6 +446,13 @@ Elles couvrent :
 - ordre et partage des children, mutation post-capture des uniforms et children ;
 - round-trip Picture nouveau et lecture publique d'archives historiques v0 ;
 - refus v0, identité/version/hash/ABI/child/uniform invalides et récupération ;
+- plafond d'octets uniformes avant copie, profondeur/nombre de nœuds et
+  overflow I32/I64 ;
+- budgets cumulés de frame/device pour uniforms, bindings et ressources, avec
+  refus avant ownership puis récupération ;
+- capability authentique absente lorsqu'un environnement public la fournit ;
+- refus de toute entrée cataloguée dont l'enveloppe numérique ne peut pas être
+  prouvée bornée ;
 - chaque cellule H applicable avec alpha non trivial, mutation post-capture et
   blend final non trivial ;
 - Rect, RRect, Path fill, Path stroke/hairline, Point(s), Text pré-résolu,
@@ -388,6 +465,13 @@ Elles couvrent :
 Les comparaisons sont byte-exactes lorsque l'enveloppe numérique est singleton,
 ou limitées aux deux codes adjacents explicitement produits par l'oracle
 analytique. Aucun seuil de similarité n'est introduit.
+
+Le catalogue livré ne contient que des graphes dont l'enveloppe est bornée. Si
+une limite native ou un graphe de catalogue invalide n'est pas constructible
+depuis l'API publique sans injection interdite, la gate est une validation de
+construction plus une review humaine, et le manque de preuve native est tracé
+comme gap d'intégration. Il n'est jamais remplacé par un mock, une capability
+fabriquée ou un test de structure.
 
 Sont interdits : tests de source shape, private/internal comme preuve,
 reflection de test, call counts, assertion d'identité de cache, mocks/fake
@@ -454,12 +538,18 @@ W5h et W5 sont fermés lorsque :
 6. program structure et valeurs dynamiques restent séparées ;
 7. uniforms, children et ressources respectent les budgets avant copie puis
    avant allocation native ;
-8. les gates publiques ciblées sont vertes sans nouveau failure/error ;
-9. les 45 DrawPoint historiques restent fermés ;
-10. aucun test font, codec externe, GM, dashboard, baseline, score,
+8. les program/layout keys commencent par `deviceGeneration`, l'admission est
+   pessimiste, les leases vivent jusqu'à completion, l'éviction LRU ne touche
+   que les entrées sans lease et un device loss invalide toute la génération ;
+9. le même owner conserve sa ressource et son accounting entre lanes, tandis
+   que deux owners distincts ne sont jamais fusionnés par contenu ;
+10. les gates publiques ciblées sont vertes sans nouveau failure/error ;
+11. les 45 DrawPoint historiques restent fermés ;
+12. aucun test font, codec externe, GM, dashboard, baseline, score,
     `jpg-color-cube` ou global n'est utilisé pour gonfler le résultat ;
-11. le suivi durable est limité à `refactor/README.md`, ce design, le plan et
+13. les chemins de device loss non injectables restent des gaps d'intégration
+    documentés, jamais des preuves fabriquées ;
+14. le suivi durable est limité à `refactor/README.md`, ce design, le plan et
     `refactor/waves/W05-material-graph/status.md` ;
-12. la review Sol finale de la stack ne contient aucun finding Critical ou
+15. la review Sol finale de la stack ne contient aucun finding Critical ou
     Important.
-
