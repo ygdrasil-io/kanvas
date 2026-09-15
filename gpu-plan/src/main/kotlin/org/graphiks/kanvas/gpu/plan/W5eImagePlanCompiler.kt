@@ -107,6 +107,9 @@ public class W5eImageConstructionPlanV1 internal constructor(
                     is PlanDrawMaterialAuthority.MaterialV1 -> projected is PlanDrawMaterialAuthority.MaterialV1 && original.coordinates === projected.coordinates
                     is PlanDrawMaterialAuthority.MaterialV2 -> projected is PlanDrawMaterialAuthority.MaterialV2 && original.coordinates === projected.coordinates
                     is PlanDrawMaterialAuthority.MaterialV4 -> projected is PlanDrawMaterialAuthority.MaterialV4 && original.coordinates === projected.coordinates
+                    is PlanDrawMaterialAuthority.MaterialV5 -> projected is PlanDrawMaterialAuthority.MaterialV5 &&
+                        projected === original && originalTable === materialTable &&
+                        projected.ref == original.ref
                     else -> false
                 }) { W5eImagePlanDiagnostics.InvalidContract }
         }
@@ -522,6 +525,7 @@ public class W5eImagePlanCompiler : GpuPlanCompiler {
         return false
     }
     private fun hasDeferredColor(material: MaterialNode): Boolean = when (material) {
+        is MaterialNode.Blend,is MaterialNode.PerlinNoise,is MaterialNode.FractalNoise -> true
         is MaterialNode.WithColorFilter,is MaterialNode.WithWorkingColorSpace -> true
         is MaterialNode.Opacity -> hasDeferredColor(material.material)
         is MaterialNode.WithLocalMatrix -> hasDeferredColor(material.material)

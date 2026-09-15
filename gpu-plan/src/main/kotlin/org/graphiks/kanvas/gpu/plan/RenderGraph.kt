@@ -146,7 +146,7 @@ public class RenderGraph private constructor(
         internal fun issueW5e(bridge: W5eImageConstructionPlanV1): RenderGraph {
             val geometry = bridge.constructionGraph
             (bridge.imageDraws().map { it.materialAuthority } + bridge.ordinarySources().values).forEach { authority ->
-                if (authority is PlanDrawMaterialAuthority.MaterialV4) {
+                if (authority is PlanDrawMaterialAuthority.MaterialV4 || authority is PlanDrawMaterialAuthority.MaterialV5) {
                     require(geometry.materialPlanTableOrNull() === bridge.materialTable) { W5fPlanDiagnostics.Schema }
                     geometry.packedMaterialSourceV4(authority)
                 }

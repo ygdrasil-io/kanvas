@@ -10,6 +10,16 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.materializeW5aSolid
 import org.graphiks.kanvas.gpu.renderer.planning.W5aMaterialPlanLowerer
 
+private fun MaterialPlanTable.authenticatesDeferredImageV3(authority: PlanDrawMaterialAuthority): Boolean {
+    val color = authority as? PlanDrawMaterialAuthority.MaterialV4 ?: return false
+    val coordinates = color.coordinates as? org.graphiks.kanvas.gpu.plan.SourceCoordinatesV4.V3 ?: return false
+    val entry = entry(color.ref)
+    if (entry.program !is org.graphiks.kanvas.gpu.plan.ImageMaterialProgramV3) return false
+    val image = entry.bindings as? org.graphiks.kanvas.gpu.plan.ImageSampleV3 ?: return false
+    return coordinates.plan === image.execution.coordinates && authenticatesImage(color.ref, image.execution) &&
+        colorSourceProofV4(color.ref).authenticates(this, color.ref, color.coordinates)
+}
+
 /**
  * Versioned W5a material witness.  It is issued only for closed material-table draws and is
  * deliberately absent from the historical W4 capability lanes.
@@ -18,7 +28,7 @@ internal class W5aMaterialPlanVersionWitnessV2 private constructor(
     private val programVersionsI32: List<Int>,
 ) {
     internal fun validates(): Boolean =
-        programVersionsI32.isNotEmpty() && programVersionsI32.all { it == MATERIAL_PLAN_VERSION_I32 || it == 2 || it == 4 || it == 5 }
+        programVersionsI32.isNotEmpty() && programVersionsI32.all { it == MATERIAL_PLAN_VERSION_I32 || it == 2 || it == 3 || it == 4 || it == 5 }
 
     internal companion object {
         const val MATERIAL_PLAN_VERSION_I32: Int = 1
@@ -32,7 +42,9 @@ internal class W5aMaterialPlanVersionWitnessV2 private constructor(
             val versions = try {
                 authorities.map { authority ->
                     val entry = materialTable.entry(authority.materialPlanRef())
-                    if ((entry.program.versionI32 == 4) != (authority is PlanDrawMaterialAuthority.MaterialV4)) return null
+                    val deferredImageV3 = materialTable.authenticatesDeferredImageV3(authority)
+                    if (entry.program.versionI32 == 3 && !deferredImageV3) return null
+                    if ((entry.program.versionI32 == 4 || deferredImageV3) != (authority is PlanDrawMaterialAuthority.MaterialV4)) return null
                     if ((entry.program.versionI32 == 5) != (authority is PlanDrawMaterialAuthority.MaterialV5)) return null
                     entry.program.versionI32
                 }
@@ -103,7 +115,8 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
     private fun validates(commandIdI32: Int, ref: MaterialPlanRef): Boolean =
         materialWitness.validates() && refsByCommandId[commandIdI32] == ref &&
             ref.indexI32 < table.sizeI32 &&
-            table.entry(ref).program.versionI32 in setOf(1,2,4,5) &&
+            (table.entry(ref).program.versionI32 in setOf(1,2,4,5) ||
+                table.authenticatesDeferredImageV3(authoritiesByCommandIdI32.getValue(commandIdI32))) &&
             (table.entry(ref).bindings.versionI32 == table.entry(ref).program.versionI32 ||
                 table.entry(ref).program.versionI32 == 4 &&
                 table.entry(ref).bindings is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.OpacityF32V1 &&
