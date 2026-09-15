@@ -105,8 +105,8 @@ internal class W5aPreparedVerticesMaterialBridge private constructor(
 
         /**
          * A material-only Scene capture cannot reclassify invalid caller geometry, transform, or
-         * clip as a material failure. DrawMesh without a program normalizes its selected blend
-         * into the same DrawVertices paint route used by the lowerer.
+         * clip as a material failure. Raw DrawMesh retains the paint final blend; its distinct
+         * primitive operation and alpha tail are transported by the prepared draw.
          */
         private fun DisplayOp.materialCaptureOperation(): DisplayOp.DrawVertices = when (this) {
             is DisplayOp.DrawVertices -> DisplayOp.DrawVertices(
@@ -117,7 +117,8 @@ internal class W5aPreparedVerticesMaterialBridge private constructor(
             )
             is DisplayOp.DrawMesh -> DisplayOp.DrawVertices(
                 vertices = materialCaptureTriangle(),
-                paint = paint.copy(blendMode = blendMode ?: paint.blendMode),
+                paint = if (blendMode != null && mesh.vertices.colors != null && paint.shader != null)
+                    paint.copy(color = paint.color.withAlpha(255)) else paint,
                 transform = Matrix3x3F32.Identity,
                 clip = ClipStack.WideOpen,
             )

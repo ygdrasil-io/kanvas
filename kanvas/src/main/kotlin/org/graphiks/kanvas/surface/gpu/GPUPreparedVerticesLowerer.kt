@@ -150,9 +150,8 @@ internal object GPUPreparedVerticesLowerer {
             if (listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).any { !it.isFinite() } ||
                 bounds.right < bounds.left || bounds.bottom < bounds.top) return refused(
                 GPUPreparedVerticesRefusalCodes.MeshBounds, operationIndex, "mesh-bounds", "invalid_mesh_bounds")
-            // This is the exact public Canvas.drawMesh normalization, kept as one route.
-            // The paint IS the material source here, so it is snapshotted once and
-            // every fact (blend, alpha) is derived from that snapshot.
+            // Only the raw operation overload reaches DrawMesh without a program. Legacy
+            // Canvas.drawMesh has already normalized to DrawVertices at public capture.
             val paint = (if (geometryOnly) operation.paint else snapshotPaint(operation.paint)) ?: return refused(
                 GPUPreparedVerticesRefusalCodes.Material, operationIndex, "paint-snapshot", "snapshot_exception",
                 mapOf("exception" to "IllegalArgumentException"),
@@ -170,6 +169,7 @@ internal object GPUPreparedVerticesLowerer {
                 provenance = "drawMesh:no-program",
                 meshBounds = bounds,
                 finalBlend = resolvedBlendMode.toGpuBlendFacts(),
+                operationBlendMode = operation.blendMode,
                 materialPlan = materialPlan,
                 geometryOnly = geometryOnly,
             )
@@ -275,6 +275,7 @@ internal object GPUPreparedVerticesLowerer {
         provenance: String,
         meshBounds: org.graphiks.math.geometry.RectF32?,
         finalBlend: GPUBlendFacts,
+        operationBlendMode: org.graphiks.kanvas.paint.BlendMode? = null,
         material: GPUPreparedMaterialProgram? = null,
         materialPlan: GPUPreparedVerticesMaterialPlan? = null,
         geometryOnly: Boolean = false,
@@ -323,7 +324,9 @@ internal object GPUPreparedVerticesLowerer {
                 )
             }
         }
-        val resolvedMaterial = commonProgram ?: material ?: w5aResult?.program ?: when (val compiled = compilePaint(paint, target, capabilities)) {
+        val rawPrimitive = operationBlendMode != null && vertices.colors != null && commonProgram == null
+        val sourcePaint = if (rawPrimitive && paint.shader != null) paint.copy(color = paint.color.withAlpha(255)) else paint
+        val resolvedMaterial = commonProgram ?: material ?: w5aResult?.program ?: when (val compiled = compilePaint(sourcePaint, target, capabilities)) {
             is MaterialResult.Ready -> compiled.material
             is MaterialResult.Refused -> return refused(
                 GPUPreparedVerticesRefusalCodes.Material, operationIndex, "material", compiled.reason, compiled.facts,
@@ -332,7 +335,7 @@ internal object GPUPreparedVerticesLowerer {
         val primitiveBlendPlan = if (vertices.colors != null) {
             val plan = GPUBlendPlanner().plan(
                 GPUBlendSpecializationRequest(
-                    mode = GPUBlendMode.SRC_OVER,
+                    mode = operationBlendMode?.toGpuBlendFacts()?.mode ?: GPUBlendMode.SRC_OVER,
                     coverage = GPUCoverageConsumption.FullOrScissor,
                     sourceAlpha = GPUSourceAlphaClassification.Translucent,
                     target = GPUTargetBlendFacts(
@@ -347,7 +350,9 @@ internal object GPUPreparedVerticesLowerer {
                 GPUPreparedVerticesRefusalCodes.PrimitiveBlender, operationIndex, "primitive-blend",
                 "planner_refused", mapOf("commonDiagnosticCode" to plan.diagnostic.code),
             )
-            GPUPrimitiveBlendPlan(plan)
+            GPUPrimitiveBlendPlan(plan, if (rawPrimitive) {
+                if (paint.shader != null) paint.color.alphaNormalized else 1f
+            } else null)
         } else {
             null
         }

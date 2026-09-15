@@ -1346,7 +1346,9 @@ private fun preparedVerticesDrawUniformBytes(
         for (row in 0..2) {
             buffer.putFloat(values[row * 3 + column])
         }
-        buffer.putInt(0)
+        // The raw-operation ABI names the first matrix padding word as its alpha tail.
+        // All legacy and common-source draw bytes remain unchanged.
+        buffer.putInt(if (column == 0) packet.primitiveBlendPlan?.tailPaintAlphaF32?.toRawBits() ?: 0 else 0)
     }
     buffer.putFloat(packet.targetBounds.width.toFloat())
     buffer.putFloat(packet.targetBounds.height.toFloat())

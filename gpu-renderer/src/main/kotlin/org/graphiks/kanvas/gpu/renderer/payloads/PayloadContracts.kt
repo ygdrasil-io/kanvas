@@ -1813,6 +1813,7 @@ sealed interface GPUDrawSemanticPayload {
         val clipCoverageIdentity = snapshot.clipCoverageIdentity
         val primitiveColorPresent = snapshot.primitiveColorPresent
         val primitiveBlendIdentity = snapshot.primitiveBlendIdentity
+        val primitiveBlendPlan = snapshot.primitiveBlendPlan
         val w5bFinalBlendPlan = snapshot.w5bFinalBlendPlan
         val finalBlendIdentity = snapshot.finalBlendIdentity
         val capabilitySnapshotHash = snapshot.capabilitySnapshotHash

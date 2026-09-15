@@ -541,6 +541,90 @@ class W5hTextVerticesSurfacePixelTest {
         repeat(2) { assertLanePixels("Vertices", surface.render(), wanted) }
     }
 
+    @ParameterizedTest(name = "raw operation fallback: {0}/{1}") @MethodSource("rawOperationFallbackCases")
+    fun rawVerticesOperationBlendSurvivesHistoricalSiblings(sibling: String, finalMode: BlendMode) {
+        val material = Shader.Opacity(Shader.SolidColor(SOURCE), .5f)
+        val wantedSource = vertexSource("Vertices-colored", material)
+        val wantedOracle = W5fColorCpuOracle.capturedShaderTree(wantedSource, PAINT_ALPHA, null, destinationBlend = BlendMode.SRC)
+        val wrongAlpha = W5fColorCpuOracle.capturedShaderTree(vertexSource("Vertices-colored",
+            Shader.Opacity(material, PAINT_ALPHA)), 1f, null, destinationBlend = BlendMode.SRC)
+        val reversed = W5fColorCpuOracle.capturedShaderTree(Shader.Blend(BlendMode.SRC_ATOP, material,
+            Shader.SolidColor(VERTEX_COLOR)), PAINT_ALPHA, null, destinationBlend = BlendMode.SRC)
+        val ignored = W5fColorCpuOracle.capturedShaderTree(Shader.Blend(BlendMode.MODULATE,
+            Shader.SolidColor(VERTEX_COLOR), material), PAINT_ALPHA, null, destinationBlend = BlendMode.SRC)
+        val witness = assertNotNull((listOf(ColorARGB.Transparent) + DESTINATIONS.take(3)).firstNotNullOfOrNull { destination ->
+            val wanted = wantedOracle(destination, finalMode) as? WgslFloatEnvelopeV1Oracle.DrawResult.Bounded
+                ?: return@firstNotNullOfOrNull null
+            val alternatives = listOf(wrongAlpha, reversed, ignored).map { it(destination, finalMode) }
+            if (alternatives.all { other -> other is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded &&
+                    (0..3).any { wanted.channels[it].intersect(other.channels[it]).isEmpty() } }) destination to wanted else null
+        })
+        val colors = MutableList(3) { VERTEX_COLOR }
+        val vertices = Vertices(VertexMode.TRIANGLES,
+            listOf(Point2F32(-1f,-1f), Point2F32(5f,-1f), Point2F32(-1f,5f)), colors = colors, indices = listOf(0,1,2))
+        val paint = Paint(color = ColorARGB.of(149,255,255,255), shader = material,
+            blendMode = finalMode, antiAlias = false)
+        fun Canvas.frame() {
+            when (sibling) {
+                "Clear" -> clear(ColorARGB.Blue)
+                "DrawColor" -> drawColor(ColorARGB.Blue, BlendMode.SRC)
+                "fractional-rect" -> drawRect(RectF32.ofLTRB(-1.5f,-2f,4f,4f),
+                    Paint(color = ColorARGB.Blue, blendMode = BlendMode.SRC, antiAlias = false))
+            }
+            background(witness.first)
+            drawVertices(vertices, BlendMode.SRC_ATOP, paint)
+        }
+        val surface = Surface(1, 1)
+        surface.canvas { frame() }
+        if (sibling != "fractional-rect") {
+            val failure = assertFailsWith<IllegalStateException> { surface.render() }
+            assertEquals("invalid.recording.w5b-mixed-timeline: Required value was null.", failure.message)
+            surface.discardRecordedOperations()
+            surface.canvas {
+                drawRect(RectF32.ofLTRB(-1.5f,-2f,4f,4f),
+                    Paint(color = ColorARGB.Blue, blendMode = BlendMode.SRC, antiAlias = false))
+                background(witness.first)
+                drawVertices(vertices, BlendMode.SRC_ATOP, paint)
+            }
+            colors.replaceAll { ColorARGB.White }
+            repeat(2) { assertLanePixels("raw fallback recovery", surface.render(), witness.second) }
+            return
+        }
+        val recorder = PictureRecorder()
+        recorder.beginRecording(UNIT).frame()
+        val picture = recorder.finishRecordingAsPicture()
+        colors.replaceAll { ColorARGB.White }
+        repeat(2) { assertLanePixels("raw fallback", surface.render(), witness.second) }
+        for (replay in supportedReplays("Vertices-colored", picture)) {
+            val target = Surface(1, 1)
+            target.canvas { replay.playback(this) }
+            repeat(2) { assertLanePixels("raw fallback replay", target.render(), witness.second) }
+        }
+    }
+
+    @ParameterizedTest(name = "zero-consumer Text: {0}") @MethodSource("zeroConsumerTextCases")
+    fun zeroConsumerTextDoesNotPublishMaterial(variant: String) {
+        val runs = if (variant == "empty-blob") emptyList()
+            else listOf(KanvasGlyphRun(emptyList(), emptyList(), fontSize = 48f))
+        val blob = TextBlob(runs, TEXT.typeface, 48f)
+        val fixture = runtimeFixture("child")
+        val paint = Paint(color = ColorARGB.of(149,255,255,255), shader = fixture.shader,
+            blendMode = BlendMode.DIFFERENCE, antiAlias = false)
+        val transparent = W5fColorCpuOracle.expectedShaderTree(Shader.SolidColor(ColorARGB.Transparent))
+        val surface = Surface(1, 1)
+        surface.canvas { background(ColorARGB.Blue) }
+        surface.render()
+        surface.discardRecordedOperations()
+        surface.canvas { drawText(blob, -6f, 18f, paint) }
+        repeat(2) { assertLanePixels("zero-consumer", surface.render(), transparent) }
+        surface.discardRecordedOperations()
+        val wanted = W5fColorCpuOracle.expectedShaderTree(fixture.oracle, PAINT_ALPHA, finalBlend = BlendMode.DIFFERENCE)
+        W5fSurfacePixelFixtures.requireBounded(wanted)
+        surface.canvas { drawText(blob, -6f,18f,paint); drawLane("Text",paint); drawText(blob,-6f,18f,paint) }
+        fixture.mutate()
+        repeat(2) { assertLanePixels("zero-consumer recovery", surface.render(), wanted) }
+    }
+
     companion object {
         private val UNIT = RectF32.ofLTRB(0f, 0f, 1f, 1f)
         private val SOURCE = ColorARGB.of(191, 224, 64, 128)
@@ -589,6 +673,10 @@ class W5hTextVerticesSurfacePixelTest {
         @JvmStatic fun finalBlendTopology() = cases(TEXT_LANES + VERTEX_LANES,
             listOf("dst-background", "dst-only", "difference-first", "dst-then-difference"))
         @JvmStatic fun emptyClipTopology() = cases(TEXT_LANES + VERTEX_LANES, listOf("only", "before", "after"))
+        @JvmStatic fun rawOperationFallbackCases() = listOf("Clear", "DrawColor", "fractional-rect").flatMap { sibling ->
+            FINALS.map { Arguments.of(sibling, it) }
+        }
+        @JvmStatic fun zeroConsumerTextCases() = listOf("empty-blob", "empty-run")
         @JvmStatic fun historicalMixedFrames() = cases(TEXT_LANES + VERTEX_LANES.filterNot { it == "Vertices-colored" },
             listOf("Clear", "DrawColor", "fractional-rect"))
     }

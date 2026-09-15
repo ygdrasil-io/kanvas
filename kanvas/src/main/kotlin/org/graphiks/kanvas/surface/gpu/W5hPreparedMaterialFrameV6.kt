@@ -33,9 +33,8 @@ internal class W5hPreparedMaterialFrameV6 private constructor(
     val text: GPUPreparedTextFrameInventoryPreparation.Ready,
     val vertices: PreparedVerticesFrameInventory,
     val corePlans: Map<Int, EffectiveMaterialPlanner.Result.Ready>,
-    private val elidedCaptures: Map<Int, PreparedSourceCaptureV6>,
+    val elidedOperationIndices: Set<Int>,
 ) {
-    val elidedOperationIndices: Set<Int> get() = elidedCaptures.keys
     companion object {
         fun prepare(request: GPUPreparedSurfaceFrameBuildRequest, generationI32: Int): W5hPreparedMaterialFrameV6? {
             val operations = request.candidate.operations
@@ -92,6 +91,12 @@ internal class W5hPreparedMaterialFrameV6 private constructor(
                 is PreparedTextCoverageInventory -> result
                 is PreparedTextFrameInventoryResult.Refused -> throw IllegalArgumentException(result.code)
             }
+            // Only actual rasterized sub-runs consume a source. Project empty Text together
+            // with its occurrence before capture: it must never acquire a material owner.
+            val consumingTextIndices = admittedCoverage.subRunInstances.mapTo(linkedSetOf()) { it.first }
+            val zeroConsumerTextIndices = textGeometry.filter { it.operationIndex !in consumingTextIndices }
+                .mapTo(linkedSetOf()) { it.operationIndex }
+            val consumingOperations = indexed.filterNot { it.index in zeroConsumerTextIndices }
             val verticesLimits = GPUPreparedVerticesFramePreparer.defaultLimits(request.capabilities)
             val admittedGeometry = when (val result = PreparedVerticesFrameInventoryBuilder.prepareGeometry(verticesGeometry,
                 verticesLimits, request.capabilities)) {
@@ -120,7 +125,7 @@ internal class W5hPreparedMaterialFrameV6 private constructor(
             val heightI32 = request.targetBounds.height
             val domain = RectF32.ofLTRB(0f, 0f, widthI32.toFloat(), heightI32.toFloat())
             val catalog = RuntimeEffectSemanticCatalog.builtinSnapshot()
-            val allCaptures = indexed.associate { (index, operation) ->
+            val allCaptures = consumingOperations.associate { (index, operation) ->
                 val scene = DisplayOpSceneAdapter.capture(listOf(operation), SceneExtent(widthI32, heightI32), ColorSpace.SRGB)
                     as? SceneCaptureResult.Captured ?: error("Closed prepared source capture refused")
                 val draw = requireNotNull(scene.scene.singleOrNull() as? SceneCommand.Draw)
@@ -129,12 +134,13 @@ internal class W5hPreparedMaterialFrameV6 private constructor(
                     BlendTargetClampV1.UnitInterval, catalog)
             }
             val elided = allCaptures.filter { (index, capture) -> capture.blend == BlendPlan.NoOpV1 || index in culledGeometryIndices }
+            val elidedIndices = elided.keys + zeroConsumerTextIndices
             val captures = allCaptures.filterKeys { it !in elided }
-            val survivingText = textGeometry.filterNot { it.operationIndex in elided }
+            val survivingText = textGeometry.filterNot { it.operationIndex in elidedIndices }
             val survivingVertices = verticesGeometry.filterNot { it.operationIndex in elided }
             val coverage = when (val result = PreparedTextFrameInventoryBuilder.prepareGeometry(survivingText,
                 GPUTextArtifactGeneration(generationI32), textLimits,
-                textGeometry.map { it.operationIndex }.filterTo(linkedSetOf()) { it in elided })) {
+                textGeometry.map { it.operationIndex }.filterTo(linkedSetOf()) { it in elidedIndices })) {
                 is PreparedTextCoverageInventory -> result
                 is PreparedTextFrameInventoryResult.Refused -> throw IllegalArgumentException(result.code)
             }
@@ -176,7 +182,7 @@ internal class W5hPreparedMaterialFrameV6 private constructor(
             }
             return W5hPreparedMaterialFrameV6(sourceFrame, textPreparation,
                 verticesBound.withCapturedElisions(elided.filterKeys { index -> verticesGeometry.any { it.operationIndex == index } },
-                    verticesGeometry), core, java.util.Collections.unmodifiableMap(LinkedHashMap(elided)))
+                    verticesGeometry), core, java.util.Collections.unmodifiableSet(LinkedHashSet(elidedIndices)))
         }
     }
 }

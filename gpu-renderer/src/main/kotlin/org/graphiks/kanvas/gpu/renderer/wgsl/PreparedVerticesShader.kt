@@ -11,6 +11,7 @@ import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesLayoutAuthor
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUVertexLayoutPlan
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUVertexMode
+import org.graphiks.kanvas.gpu.renderer.vertices.GPUPrimitiveBlendPlan
 import org.graphiks.kanvas.gpu.renderer.wgsl.WgslBindingReflection
 import org.graphiks.kanvas.gpu.renderer.wgsl.WgslLayoutReflection
 import org.graphiks.kanvas.gpu.renderer.wgsl.WgslReflectionReport
@@ -64,6 +65,7 @@ object PreparedVerticesShaderAssembler {
         materialPlanProvenance: GPUPreparedVerticesMaterialPlanProvenance? = null,
         commandIdValueI32: Int? = null,
         destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead? = null,
+        primitiveBlendPlan: GPUPrimitiveBlendPlan? = null,
     ): GPUPreparedVerticesShaderResult = assembleObserved(
         layout = layout,
         topology = topology,
@@ -72,6 +74,7 @@ object PreparedVerticesShaderAssembler {
         materialPlanProvenance = materialPlanProvenance,
         commandIdValueI32 = commandIdValueI32,
         destinationBlend = destinationBlend,
+        primitiveBlendPlan = primitiveBlendPlan,
         validator = KanvasWGSLValidator(),
         reflectionProvider = KanvasWGSLReflectionProvider(),
     )
@@ -84,6 +87,7 @@ object PreparedVerticesShaderAssembler {
         materialPlanProvenance: GPUPreparedVerticesMaterialPlanProvenance? = null,
         commandIdValueI32: Int? = null,
         destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead? = null,
+        primitiveBlendPlan: GPUPrimitiveBlendPlan? = null,
         validator: WGSLValidator,
         reflectionProvider: WGSLReflectionProvider,
     ): GPUPreparedVerticesShaderResult {
@@ -121,6 +125,12 @@ object PreparedVerticesShaderAssembler {
         require(common == null || common.stage.composedProof?.consumesPrimitiveEncodedInput == hasColor)
         val fragment = if (common == null) material.composableFragment else null
         val geometryDestination = if (common == null) destinationBlend else null
+        val rawPrimitive = primitiveBlendPlan?.takeIf { it.tailPaintAlphaF32 != null }
+        if (rawPrimitive != null && (!hasColor || common != null ||
+                GPUBlendFormulaProgramLibrary.selectedBlendFunctionWgsl(rawPrimitive.plan.mode.gpuLabel) == null)) {
+            return preparedVerticesRefused(GPUPreparedVerticesRefusalCodes.PrimitiveBlender,
+                "Raw primitive blend requires a supported colored legacy source")
+        }
         if (destinationBlend?.let { blend ->
                 blend.sourceCoverageEncoding !=
                     org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding.None ||
@@ -142,6 +152,7 @@ object PreparedVerticesShaderAssembler {
             hasTexCoord,
             fragment,
             geometryDestination,
+            rawPrimitive,
         )
 
         val parsedModule = validator.parse(source)
@@ -175,7 +186,7 @@ object PreparedVerticesShaderAssembler {
         preparedVerticesBindingMismatch(fragment, geometryDestination != null, report.bindings)?.let { message ->
             return preparedVerticesRefused(GPUPreparedVerticesRefusalCodes.Material, message)
         }
-        preparedVerticesLayoutMismatch(fragment, report.layouts)?.let { message ->
+        preparedVerticesLayoutMismatch(fragment, report.layouts, rawPrimitive != null)?.let { message ->
             return preparedVerticesRefused(GPUPreparedVerticesRefusalCodes.Material, message)
         }
 
@@ -222,6 +233,7 @@ object PreparedVerticesShaderAssembler {
             topology = topology,
             material = material,
             destinationBlend = destinationBlend,
+            primitiveBlendPlan = rawPrimitive,
         )
         return GPUPreparedVerticesShaderResult.Ready(
             GPUPreparedVerticesShaderProgram(
@@ -248,10 +260,16 @@ private fun preparedVerticesShaderSource(
     hasTexCoord: Boolean,
     fragment: GPUPreparedMaterialFragment?,
     destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead?,
+    rawPrimitive: GPUPrimitiveBlendPlan?,
 ): String = listOf(
     """
 struct PreparedVerticesDrawUniforms {
-    localToDevice: mat3x3<f32>,
+    ${if (rawPrimitive == null) "localToDevice: mat3x3<f32>," else """
+    localToDevice0: vec3<f32>,
+    tailPaintAlphaF32: f32,
+    localToDevice1: vec3<f32>,
+    localToDevice2: vec3<f32>,
+    """.trimIndent()}
     targetSize: vec2<f32>,
     _padding: vec2<f32>,
 }
@@ -290,7 +308,9 @@ struct PreparedVerticesDrawUniforms {
         append("fn vs_main(input: PreparedVerticesVertexInput) -> PreparedVerticesVertexOutput {\n")
         append(
             "    let transformed = " +
-                "preparedVerticesDraw.localToDevice * vec3<f32>(input.position, 1.0);\n",
+                (if (rawPrimitive == null) "preparedVerticesDraw.localToDevice" else
+                    "mat3x3<f32>(preparedVerticesDraw.localToDevice0, preparedVerticesDraw.localToDevice1, preparedVerticesDraw.localToDevice2)") +
+                " * vec3<f32>(input.position, 1.0);\n",
         )
         append("    let ndc = vec2<f32>(\n")
         append(
@@ -309,7 +329,9 @@ struct PreparedVerticesDrawUniforms {
         append("    return output;\n")
         append("}")
     },
-    fragment?.let { it.declarationsWgsl + "\n\n" + it.evaluationFunctionWgsl }.orEmpty(),
+    fragment?.let { it.declarationsWgsl + "\n\n" + it.evaluationFunctionWgsl }.orEmpty() +
+    rawPrimitive?.let { "\n\n" + requireNotNull(GPUBlendFormulaProgramLibrary.selectedBlendFunctionWgsl(
+        it.plan.mode.gpuLabel, "kanvasPrimitiveBlendPremul")) }.orEmpty(),
     destinationBlend?.let { blend ->
         """
 @group(2) @binding(0) var preparedVerticesDestination: texture_2d<f32>;
@@ -351,7 +373,8 @@ ${requireNotNull(GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(
                     "        input.primitiveColor.a,\n" +
                     "    );\n",
             )
-            append("    let sourcePremul = materialPremul * decodedPrimitive;\n")
+            if (rawPrimitive == null) append("    let sourcePremul = materialPremul * decodedPrimitive;\n")
+            else append("    let sourcePremul = kanvasPrimitiveBlendPremul(materialPremul, decodedPrimitive) * preparedVerticesDraw.tailPaintAlphaF32;\n")
         } else {
             append("    let sourcePremul = materialPremul;\n")
         }
@@ -466,11 +489,16 @@ private fun preparedVerticesBindingMismatch(
 private fun preparedVerticesLayoutMismatch(
     fragment: GPUPreparedMaterialFragment?,
     layouts: List<WgslLayoutReflection>,
+    rawPrimitive: Boolean,
 ): String? {
     val drawLayout = layouts.singleOrNull { it.structName == DRAW_UNIFORMS_STRUCT_NAME }
         ?: return "Prepared vertices draw-uniform layout was not reflected"
-    val expectedMembers = listOf(
-        PreparedLayoutMember("localToDevice", "mat3x3<f32>", 0, 48, 16, 16),
+    val expectedMembers = (if (rawPrimitive) listOf(
+        PreparedLayoutMember("localToDevice0", "vec3<f32>", 0, 12, 16, null),
+        PreparedLayoutMember("tailPaintAlphaF32", "f32", 12, 4, 4, null),
+        PreparedLayoutMember("localToDevice1", "vec3<f32>", 16, 12, 16, null),
+        PreparedLayoutMember("localToDevice2", "vec3<f32>", 32, 12, 16, null),
+    ) else listOf(PreparedLayoutMember("localToDevice", "mat3x3<f32>", 0, 48, 16, 16))) + listOf(
         PreparedLayoutMember("targetSize", "vec2<f32>", 48, 8, 8, null),
         PreparedLayoutMember("_padding", "vec2<f32>", 56, 8, 8, null),
     )
@@ -691,8 +719,10 @@ private fun preparedVerticesPipelineKeyHash(
     topology: GPUVertexMode,
     material: GPUPreparedMaterialProgram,
     destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead?,
+    primitiveBlendPlan: GPUPrimitiveBlendPlan?,
 ): String =
     CanonicalIdentityEncoder("prepared-vertices-pipeline-key-v1")
+        .apply { primitiveBlendPlan?.let { text("rawPrimitiveBlend", it.plan.mode.gpuLabel) } }
         .text("vertexLayoutHash", vertexLayoutHash)
         .text("bindingLayoutHash", bindingLayoutHash)
         .text("reflectedAbiHash", reflectedAbiHash)

@@ -2917,6 +2917,7 @@ internal class GPUPreparedSurfaceNativePreflight(
                     topology = semantic.artifact.topology,
                     material = semantic.material,
                     hasPrimitiveColor = semantic.primitiveColorPresent,
+                    primitiveBlendPlan = semantic.primitiveBlendPlan,
                     materialPlanProvenance = semantic.materialPlanProvenance,
                     commandIdValueI32 = semantic.payloadRef.commandIdValue,
                     destinationBlend = evidence.packet.blendPlan as?
@@ -4033,6 +4034,7 @@ internal class GPUPreparedSurfaceNativePreflight(
                                 topology = semantic.artifact.topology,
                                 material = semantic.material,
                                 hasPrimitiveColor = semantic.primitiveColorPresent,
+                                primitiveBlendPlan = semantic.primitiveBlendPlan,
                                 materialPlanProvenance = semantic.materialPlanProvenance,
                                 commandIdValueI32 = semantic.payloadRef.commandIdValue,
                                 destinationBlend = packet.blendPlan as?
