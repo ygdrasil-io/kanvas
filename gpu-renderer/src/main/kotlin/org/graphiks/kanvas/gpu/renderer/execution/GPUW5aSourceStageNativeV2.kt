@@ -58,6 +58,7 @@ internal class GPUW5aNativeSourceBindingV2(
     val coverageGroupV4: GPUPreparedNativeBindGroupOperand? = null,
     val imageLeaseV3: GPUW5eDecodedImageSessionCache.Lease? = null,
     composedImagesV5: List<GPUW5gImageLeaseV5> = emptyList(),
+    val noiseBufferV1: GPUBuffer? = null,
 ) {
     val composedImagesV5: List<GPUW5gImageLeaseV5> = java.util.Collections.unmodifiableList(ArrayList(composedImagesV5))
     init {
@@ -103,6 +104,8 @@ internal fun validatesW5aSourcePartitionV2(framePlan: GPUFramePlan, payload: GPU
                     (binding.destinationGroupV3 != null) == (destination != null) &&
                     (binding.coverageGroupV4 != null) == (destination?.sealedW5b?.compositionAbiI32 == 4) &&
                     binding.byteCapacityI64 == source.second.stage.uniformByteCountI64 &&
+                    (binding.noiseBufferV1 != null) == (source.second.stage.noiseTableSlab != null) &&
+                    (binding.noiseBufferV1 == null || owners.any { it.owns(binding.noiseBufferV1) }) &&
                     (binding.imageLeaseV3 != null) == (source.second.stage.imageV3 != null) &&
                     (binding.imageLeaseV3 == null || source.second.stage.imageV3?.let {
                         binding.imageLeaseV3.matches(it.cacheRequest, payload.identity.deviceGeneration.value)
@@ -256,9 +259,15 @@ private fun composeSource(template: GPUW5aGeometryPipelineTemplate, source: W5aP
                 // report; its reflected element layout supplies the declared
                 // minimum. The complete dynamic slab is authenticated separately.
                 it.access == "read" && composed.layouts.any { layout ->
-                    layout.structName == "GradientStopV1" && layout.addressSpace == "storage" &&
+                    layout.structName == when(buffer.storageKind) {
+                        org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.GRADIENT_STOPS -> "GradientStopV1"
+                        org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.NOISE_U32 -> "NoiseWordV1"
+                    } && layout.addressSpace == "storage" &&
                         layout.size.toLong() == buffer.minBindingSizeBytesI64 && layout.alignment == 16 &&
-                        layout.members.map { member -> member.offset } == listOf(0,16) &&
+                        layout.members.map { member -> member.offset } == when(buffer.storageKind) {
+                            org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.GRADIENT_STOPS -> listOf(0,16)
+                            org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.NOISE_U32 -> listOf(0)
+                        } &&
                         layout.members.all { member -> member.size == 16 && member.alignment == 16 }
                 }
             } ?: true) && (expected.composedResource?.texture?.let { texture ->
@@ -300,11 +309,29 @@ internal fun materializeW5aSourcePartitionV2(
         renders.values.flatMap { it.drawPackets }.mapNotNull { it.materialSourcePartitionV3()?.stage }
             .filter { it.composedLayout != null && it.gradientStopSlab != null }.forEach { stage ->
                 require(stage.gradientStopSlab === stopSlabs.first()) { "V5 must retain the exact shared frame slab owner" }
-                stage.bindingManifest.mapNotNull { it.composedResource }.filter { it.buffer != null }.forEach {
+                stage.bindingManifest.mapNotNull { it.composedResource }.filter {
+                    it.buffer?.storageKind == org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.GRADIENT_STOPS }.forEach {
                     require(requireNotNull(stage.composedProof).authenticatesComposedStorage(it,stopSlabs.first()))
                 }
             }
         val stopBuffer = stopSlabs.singleOrNull()?.let { materializeGradientStopsV1(device, queue, it, owned) }
+        val noiseStages=renders.values.flatMap { it.drawPackets }.mapNotNull { it.materialSourcePartitionV3()?.stage }
+            .filter { it.noiseTableSlab != null }
+        val noiseSlabs=noiseStages.map { requireNotNull(it.noiseTableSlab) }.distinct()
+        require(noiseSlabs.size <= 1) { "Noise requires one authenticated physical frame slab" }
+        val noiseBuffer=noiseSlabs.singleOrNull()?.let { slab ->
+            noiseStages.forEach { stage ->
+                require(stage.noiseTableSlab === slab)
+                val resource=requireNotNull(stage.composedLayout).resources.single {
+                    it.buffer?.storageKind == org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.NOISE_U32 }
+                require(requireNotNull(stage.composedProof).authenticatesComposedNoise(resource,slab))
+            }
+            val bytes=ByteArray(slab.bytes.sizeI32) { slab.bytes[it].toByte() }
+            owned.own(device.createBuffer(BufferDescriptor(size=bytes.size.toULong(),
+                usage=GPUBufferUsage.Storage or GPUBufferUsage.CopyDst,label="Kanvas.noise-v1.tables"))).also {
+                queue.writeBuffer(it,0uL,ArrayBuffer.of(bytes),0uL,bytes.size.toULong())
+            }
+        }
         data class SourcePipelineKey(
             val geometryPipeline: GPURenderPipeline,
             val sourceStructuralId: String,
@@ -442,13 +469,21 @@ internal fun materializeW5aSourcePartitionV2(
                     val entries = mutableListOf(BindGroupEntry(binding = 0u,
                         resource = BufferBinding(buffer = buffer, offset = 0uL, size = bytes.size.toULong())))
                     source.stage.gradientStopSlab?.let { slab ->
-                        val bindings=if(source.stage.composedLayout != null) source.stage.bindingManifest.filter { it.resourceKind == "storageBuffer" }
+                        val bindings=if(source.stage.composedLayout != null) source.stage.bindingManifest.filter {
+                            it.composedResource?.buffer?.storageKind == org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.GRADIENT_STOPS }
                             else listOf(source.stage.bindingManifest.single { it.resourceKind == "storageBuffer" })
                         bindings.forEach { binding ->
                             binding.composedResource?.let { require(requireNotNull(source.stage.composedProof).authenticatesComposedStorage(it,slab)) }
                             entries += BindGroupEntry(binding = binding.bindingI32.toUInt(),
                                 resource = BufferBinding(buffer = requireNotNull(stopBuffer), offset = 0uL, size = slab.byteSizeI64.toULong()))
                         }
+                    }
+                    source.stage.noiseTableSlab?.let { slab ->
+                        val resource=requireNotNull(source.stage.composedLayout).resources.single {
+                            it.buffer?.storageKind == org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.NOISE_U32 }
+                        require(requireNotNull(source.stage.composedProof).authenticatesComposedNoise(resource,slab))
+                        entries += BindGroupEntry(binding=resource.bindingI32.toUInt(),resource=BufferBinding(
+                            buffer=requireNotNull(noiseBuffer),offset=0uL,size=slab.byteCountI64.toULong()))
                     }
                     imageLease?.let { entries += GPUW5eImageNativeV1.binding(it,
                         source.stage.bindingManifest.single { it.resourceKind == "sampledTexture" }.bindingI32.toUInt()) }
@@ -463,7 +498,8 @@ internal fun materializeW5aSourcePartitionV2(
                         label = "Kanvas.w5a.source-group1-v2", layout = materialLayout, entries = entries))), generation)
                 }
                 bindings += GPUW5aNativeSourceBindingV2(ordinalI32, source, pipeline, group, buffer, bytes.size.toLong(),
-                    destinationGroup.takeIf { destination != null }, coverageGroup.takeIf { scalar }, imageLease,composedImages)
+                    destinationGroup.takeIf { destination != null }, coverageGroup.takeIf { scalar }, imageLease,composedImages,
+                    noiseBuffer.takeIf { source.stage.noiseTableSlab != null })
             }
               GPUPreparedNativeScopeOperand.Render(operand.sourceStepIndex, operand.pass, operand.commands,
                   operand.semanticPayloads, operand.operandLayout, operand.operationKind, operand.passSegment, bindings,

@@ -21,7 +21,9 @@ internal object GPUPlanSurfaceCandidateGate {
         }
         repeat(org.graphiks.kanvas.render.ir.GraphLimits().maxDepth) {
             source = when (val node = source) {
-                is org.graphiks.kanvas.paint.Shader.Blend -> return true
+                is org.graphiks.kanvas.paint.Shader.Blend,
+                is org.graphiks.kanvas.paint.Shader.PerlinNoise,
+                is org.graphiks.kanvas.paint.Shader.FractalNoise -> return true
                 is org.graphiks.kanvas.paint.Shader.Opacity -> node.shader
                 is org.graphiks.kanvas.paint.Shader.WithColorFilter -> node.shader
                 is org.graphiks.kanvas.paint.Shader.WithWorkingColorSpace -> node.shader

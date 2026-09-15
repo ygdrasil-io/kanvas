@@ -17,7 +17,9 @@ internal object GPUPlanRenderContextOwner {
         scene: SceneSnapshot,
         target: RenderTargetDescriptor,
         frameLocalBudgetBytes: Long,
-    ): GpuPlanSurfacePlanResult = executor().plan(scene, target, frameLocalBudgetBytes)
+        materialFrameLimits: org.graphiks.kanvas.gpu.plan.MaterialFrameLimits =
+            org.graphiks.kanvas.gpu.plan.MaterialFrameLimits(),
+    ): GpuPlanSurfacePlanResult = executor().plan(scene, target, frameLocalBudgetBytes, materialFrameLimits)
 
     fun submit(token: GpuPlanSurfaceReadyToken): GpuPlanSurfaceSubmitResult = executor().submit(token)
 

@@ -1947,13 +1947,27 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             .distinctBy { it.canonicalIdentity }
         if (stopSlabs.size > 1) return false
         val stopBytesI64 = stopSlabs.singleOrNull()?.byteSizeI64 ?: 0L
-        if (stopBytesI64 > deviceLimits.maxBufferSize || stagingBytes > Long.MAX_VALUE - stopBytesI64) return false
-        val transientBytesI64 = stagingBytes + stopBytesI64
+        val noiseStages=render.drawPackets.mapNotNull { it.w5aSourceStageV2?.stage }.filter { it.noiseTableSlab != null }
+        val noiseSlabs=noiseStages.map { requireNotNull(it.noiseTableSlab) }.distinct()
+        if(noiseSlabs.size > 1) return false
+        val noiseSlab=noiseSlabs.singleOrNull()
+        if(noiseStages.any { stage ->
+            val resource=stage.composedLayout?.resources?.singleOrNull {
+                it.buffer?.storageKind == org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.NOISE_U32 }
+            resource == null || noiseSlab == null || stage.noiseTableSlab !== noiseSlab ||
+                stage.composedProof?.authenticatesComposedNoise(resource,noiseSlab) != true
+        }) return false
+        val noiseBytesI64=noiseSlab?.byteCountI64 ?: 0L
+        if (stopBytesI64 > deviceLimits.maxBufferSize || noiseBytesI64 > deviceLimits.maxBufferSize ||
+            stopBytesI64 > Long.MAX_VALUE-noiseBytesI64) return false
+        val storageBytesI64=stopBytesI64+noiseBytesI64
+        if(stagingBytes > Long.MAX_VALUE-storageBytesI64) return false
+        val transientBytesI64 = stagingBytes + storageBytesI64
         val totals = request.memoryBudget.categoryTotals
         if (targetBytes <= 0L || stagingBytes <= 0L ||
             totals[GPUFrameMemoryCategory.CanonicalTarget] != targetBytes ||
             totals[GPUFrameMemoryCategory.ReadbackStaging] != stagingBytes ||
-            totals[GPUFrameMemoryCategory.ReusableScratch] != stopBytesI64 ||
+            totals[GPUFrameMemoryCategory.ReusableScratch] != storageBytesI64 ||
             totals.filterKeys { it !in setOf(GPUFrameMemoryCategory.CanonicalTarget,
                 GPUFrameMemoryCategory.ReadbackStaging, GPUFrameMemoryCategory.ReusableScratch) }
                 .values.any { it != 0L } ||
@@ -1979,9 +1993,12 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 GPUFrameMemoryResourceKind.Buffer,
                 null,
             ),
-        ) + if (stopBytesI64 == 0L) emptyList() else listOf(GPUFrameMemoryAllocation(
+        ) + (if (stopBytesI64 == 0L) emptyList() else listOf(GPUFrameMemoryAllocation(
             w3SessionIdentity(request) + ".gradient-stops", GPUFrameMemoryCategory.ReusableScratch,
-            stopBytesI64, GPUFrameMemoryResourceKind.Buffer, null))
+            stopBytesI64, GPUFrameMemoryResourceKind.Buffer, null))) +
+            (if(noiseBytesI64 == 0L) emptyList() else listOf(GPUFrameMemoryAllocation(
+                org.graphiks.kanvas.gpu.renderer.materials.NOISE_TABLE_ALLOCATION_LABEL_V1,
+                GPUFrameMemoryCategory.ReusableScratch,noiseBytesI64,GPUFrameMemoryResourceKind.Buffer,null,0,2)))
         return request.memoryBudget.allocations == expectedAllocations
     }
 

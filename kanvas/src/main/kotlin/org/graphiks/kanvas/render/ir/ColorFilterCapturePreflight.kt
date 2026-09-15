@@ -44,6 +44,23 @@ internal object ColorFilterCapturePreflight {
             }
             if (value is ColorFilter.Table && value.table.size != 256)
                 return diagnostic("invalid.material.filter.table", "color-filter.table must have exactly 256 entries")
+            val noise = when (value) {
+                is Shader.PerlinNoise -> Triple(value.baseX, value.baseY, value.numOctaves)
+                is Shader.FractalNoise -> Triple(value.baseX, value.baseY, value.numOctaves)
+                else -> null
+            }
+            if (noise != null) {
+                if (!noise.first.isFinite() || !noise.second.isFinite() || noise.first < 0f ||
+                    noise.second < 0f || noise.third !in 0..255)
+                    return diagnostic("invalid.material.noise.parameters", "Noise frequencies must be finite and nonnegative; octaves must be in 0..255")
+                val tile = when (value) {
+                    is Shader.PerlinNoise -> value.tileSize
+                    is Shader.FractalNoise -> value.tileSize
+                    else -> null
+                }
+                if (tile != null && (tile.width < 0 || tile.height < 0))
+                    return diagnostic("invalid.material.noise.tile", "Noise tile dimensions must be nonnegative integral I32 values")
+            }
             if (value is ColorFilter.HSLAMatrix) {
                 if (value.values.size != 20)
                     return diagnostic("invalid.material.filter.hsla", "color-filter.hsla must have exactly 20 coefficients")

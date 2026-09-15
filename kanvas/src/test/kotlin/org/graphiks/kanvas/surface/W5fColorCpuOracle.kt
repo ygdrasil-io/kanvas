@@ -174,6 +174,10 @@ internal object W5fColorCpuOracle {
             val (px,py)=mapSegment(x,y,pending)
             sampledImage(shader.image,shader.sampling,px,py,shader.tileModeX,shader.tileModeY)
         }
+        is Shader.PerlinNoise, is Shader.FractalNoise -> {
+            val (px,py)=mapSegment(x,y,pending)
+            W5gNoiseCpuOracle.source(shader,arrayOf(px,py))
+        }
         is Shader.LinearGradient -> {
             val (px,py)=mapSegment(x,y,pending)
             val dxF32=shader.end.x-shader.start.x; val dyF32=shader.end.y-shader.start.y

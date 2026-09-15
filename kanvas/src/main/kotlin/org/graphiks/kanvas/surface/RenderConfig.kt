@@ -27,9 +27,12 @@ data class RenderConfig(
     val preparedImageRoute: PreparedImageRoute = PreparedImageRoute.GENERIC_NATIVE,
     val diagnosticLevel: DiagnosticLevel = DiagnosticLevel.WARN,
     val debugLevel: DebugLevel = DebugLevel.OFF,
+    /** Maximum requested per-channel noise octave evaluations in one frame. */
+    val maxNoiseOctaveEvaluationsI64: Long = 1L shl 30,
 ) {
     init {
         require(frameLocalBudgetBytes > 0L) { "frameLocalBudgetBytes must be positive" }
+        require(maxNoiseOctaveEvaluationsI64 >= 0L) { "maxNoiseOctaveEvaluationsI64 must be nonnegative" }
     }
 
     /**
@@ -94,6 +97,8 @@ data class RenderConfig(
                 debugLevel = p.getProperty("kanvas.render.debugLevel")
                     ?.let { runCatching { DebugLevel.valueOf(it) }.getOrNull() }
                     ?: DEFAULT.debugLevel,
+                maxNoiseOctaveEvaluationsI64 = p.getProperty("kanvas.render.maxNoiseOctaveEvaluationsI64")
+                    ?.toLongOrNull() ?: DEFAULT.maxNoiseOctaveEvaluationsI64,
             )
         }
     }

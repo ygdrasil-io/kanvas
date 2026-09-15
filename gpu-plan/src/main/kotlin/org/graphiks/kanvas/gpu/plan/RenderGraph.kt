@@ -281,6 +281,49 @@ public class RenderGraph private constructor(
                 return construct(id, capabilityId, targetExtent, colorFormat, capabilities, budget, visualCommandCount,
                     resources + stopResource, passes, dependencies, peakI64, materialPlanTable, w5bW4eSource)
             }
+            // The logical inventory and native upload refer to the same issued frame slab.
+            // A role name alone is never authority to add an unreferenced storage buffer.
+            val noiseSlabs = materialPlanTable?.let { table -> visualDraws(passes).mapNotNull { draw ->
+                val coordinates = draw.materialAuthority.colorSourceCoordinatesV4() ?: return@mapNotNull null
+                val root = draw.materialAuthority.materialPlanRef()
+                val proof = table.colorSourceProofV4(root)
+                val slab = proof.noiseTableSlab ?: return@mapNotNull null
+                val definition = requireNotNull(proof.composedDefinition) { W5gPlanDiagnostics.Schema }
+                require(proof.authenticates(table, root, coordinates) &&
+                    slab.owner === definition.frameOwner && definition.frameOwner.owns(definition.captured) &&
+                    slab.owner.lane.targetExtent == targetExtent && slab.owner.lane.capabilities == capabilities &&
+                    slab.owner.lane.budget == budget && slab.byteCountI64 == slab.owner.noiseBytesI64 &&
+                    definition.layout.resources.singleOrNull {
+                        it.buffer?.storageKind == ComposedBindingLayoutV1.StorageKind.NOISE_U32
+                    }?.let { proof.authenticatesComposedNoise(it, slab) } == true) { W5gPlanDiagnostics.Schema }
+                slab
+            } }.orEmpty().distinct()
+            require(noiseSlabs.size <= 1) { W5gPlanDiagnostics.Schema }
+            val noiseResources = resources.filter { it.role == PlanResourceRole.NoiseTableData }
+            val noiseSlab = noiseSlabs.singleOrNull()
+            if (noiseSlab == null) require(noiseResources.isEmpty()) { W5gPlanDiagnostics.Schema }
+            else {
+                val bytes = noiseSlab.byteCountI64
+                require(bytes > 0L && bytes <= capabilities.maxBufferSizeBytes &&
+                    capabilities.maxStorageBufferBindingSizeBytesI64?.let { bytes <= it } == true &&
+                    capabilities.supportedOperations().containsAll(setOf(
+                        PlanOperationCapability.StorageBuffer, PlanOperationCapability.CopyUpload))) { W5gPlanDiagnostics.NoiseStorage }
+                if (noiseResources.isEmpty()) {
+                    val peak = Math.addExact(peakFrameLocalBytes, bytes)
+                    require(peak <= budget.maxFrameLocalBytes) { W5gPlanDiagnostics.NoiseStorage }
+                    val resource = PlanResource.of(PlanResourceRole.NoiseTableData, 0, PlanResourceKind.Buffer,
+                        null, null, bytes, setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination),
+                        PlanResourceLifetime.FrameLocal, 0, passes.size)
+                    return construct(id, capabilityId, targetExtent, colorFormat, capabilities, budget, visualCommandCount,
+                        resources + resource, passes, dependencies, peak, materialPlanTable, w5bW4eSource)
+                }
+                require(noiseResources.size == 1 && noiseResources.single().let {
+                    it.ordinal == 0 && it.kind == PlanResourceKind.Buffer && it.format == null && it.copyExtent() == null &&
+                        it.byteSize == bytes && it.usages() == setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination) &&
+                        it.lifetime == PlanResourceLifetime.FrameLocal && it.firstPassIndex == 0 &&
+                        it.lastPassIndexExclusive == passes.size && it.sampleCountI32 == 1
+                }) { W5gPlanDiagnostics.Schema }
+            }
             validateConstructionTopology(capabilityId, targetExtent, colorFormat, capabilities, budget,
                 visualCommandCount, resources, passes, dependencies, peakFrameLocalBytes, w5bW4eSource)
             return RenderGraphConstruction(id, capabilityId, targetExtent, colorFormat, capabilities, budget, visualCommandCount,
@@ -1230,12 +1273,14 @@ public class RenderGraph private constructor(
                     PlanResourceRole.CoverageMaskScratch,
                     PlanResourceRole.CoverageMaskDepthStencil,
                     PlanResourceRole.GradientStopData,
+                    PlanResourceRole.NoiseTableData,
                 )
             }) { "Single-sample explicit paths may declare only their direct resource inventory" }
             val referencedResourceIds = passes.flatMap(::referencedResources).toSet()
             // The shared material source consumes the sealed stop slab separately from W4
             // geometry references; producer-only passes still carry no material binding.
-            require(resources.all { it.id in referencedResourceIds || it.role == PlanResourceRole.GradientStopData }) {
+            require(resources.all { it.id in referencedResourceIds || it.role == PlanResourceRole.GradientStopData ||
+                it.role == PlanResourceRole.NoiseTableData }) {
                 "Single-sample explicit path resources must be consumed by a pass"
             }
             require(pathPasses.all { (_, pass) -> pass.draw.sample == SamplePlan.SingleSample }) {
@@ -1376,6 +1421,7 @@ public class RenderGraph private constructor(
                 PlanResourceRole.PathHardEdgeMask,
                 PlanResourceRole.PathHardEdgeDepthStencil,
                 PlanResourceRole.GradientStopData,
+                PlanResourceRole.NoiseTableData,
                 PlanResourceRole.CoverageMaskAccumulator,
                 PlanResourceRole.CoverageMaskScratch,
                 PlanResourceRole.CoverageMaskMultisampleScratch,
@@ -1397,6 +1443,7 @@ public class RenderGraph private constructor(
             }
             require(resources.all { resource ->
                 resource.id in referencedResourceIds || resource.role == PlanResourceRole.GradientStopData ||
+                    resource.role == PlanResourceRole.NoiseTableData ||
                     (!hasAaColorPath && resource.role == PlanResourceRole.DepthStencil && resource.sampleCountI32 == 4)
             }) {
                 "AA4 graph resources must be consumed by an explicit pass"

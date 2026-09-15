@@ -198,8 +198,8 @@ public object PaintSceneAdapter {
         is Shader.WithLocalMatrix -> MaterialNode.WithLocalMatrix(child(shader),
             if (preserveW5dMatrices) matrix.copy() else matrix.checked("shader.local-matrix"))
         is Shader.WithColorFilter -> MaterialNode.WithColorFilter(child(shader), filter.toNode(captureImage))
-        is Shader.PerlinNoise -> MaterialNode.PerlinNoise(baseX.checked("shader.base-x"), baseY.checked("shader.base-y"), numOctaves, seed, tileSize?.checked("shader.tile-size"))
-        is Shader.FractalNoise -> MaterialNode.FractalNoise(baseX.checked("shader.base-x"), baseY.checked("shader.base-y"), numOctaves, seed, tileSize?.checked("shader.tile-size"))
+        is Shader.PerlinNoise -> MaterialNode.PerlinNoise(baseX, baseY, numOctaves, seed, tileSize)
+        is Shader.FractalNoise -> MaterialNode.FractalNoise(baseX, baseY, numOctaves, seed, tileSize)
         is Shader.WithWorkingColorSpace -> MaterialNode.WithWorkingColorSpace(child(shader), ColorInterpolation.valueOf(interpolation.name))
         is Shader.CoordClamp -> MaterialNode.CoordClamp(child(shader),
             if (preserveW5dMatrices) subset.copy() else subset.checked("shader.subset"))

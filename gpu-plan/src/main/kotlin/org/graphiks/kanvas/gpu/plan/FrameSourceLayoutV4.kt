@@ -16,6 +16,8 @@ internal class FrameSourceLayoutV4 private constructor(
     legacyAllocations: List<RawMaterialRequirementsV2.RelocatedLegacyLayout>,
     imageUploads: List<ImageUploadPlanV1>,
     imageDescriptions: List<EffectiveMaterialPlanner.ImageSampleDescription>,
+    noiseRanges: List<NoiseTableRangeV1>,
+    val noiseBytesI64: Long,
     val nonUniformBytesI64: Long,
     val stopBytesI64: Long,
     val uniformBytesI64: Long,
@@ -34,6 +36,9 @@ internal class FrameSourceLayoutV4 private constructor(
     private val legacyAllocations = immutableList(legacyAllocations)
     private val imageUploads = immutableList(imageUploads)
     private val imageDescriptions = immutableList(imageDescriptions)
+    val noiseRanges: List<NoiseTableRangeV1> = immutableList(noiseRanges)
+    fun noiseRange(normalizedSeedI32: Int): NoiseTableRangeV1 =
+        noiseRanges.single { it.normalizedSeedI32 == normalizedSeedI32 }
     fun ownsImage(description: EffectiveMaterialPlanner.ImageSampleDescription): Boolean = sources.any { source ->
         source.composed?.nodes?.any { it.imageSource?.description === description } == true
     }
@@ -92,7 +97,8 @@ internal class FrameSourceLayoutV4 private constructor(
                 var table = if (source.composed != null) {
                     val definition = PreparedComposedSourceV5.prepare(this,source,prepared)
                     val proof = ColorSourceProofV1.issueComposed(definition)
-                        ?: throw IllegalArgumentException(W5gPlanDiagnostics.NumericDomainUnbounded)
+                        ?: throw IllegalArgumentException(if (definition.noiseReferences.isNotEmpty())
+                            W5gPlanDiagnostics.NoiseNumericDomainUnbounded else W5gPlanDiagnostics.NumericDomainUnbounded)
                     MaterialPlanTable.of(listOf(MaterialPlanEntry(definition.program,ComposedMaterialBindingV5(definition,proof),definition.slab)))
                 } else if (source.image != null) {
                     val resolved = source.image.bind(source.image.child?.let(::bind),
@@ -343,6 +349,7 @@ internal class FrameSourceLayoutV4 private constructor(
 
     /** Only this factory can create prepared frame data; it accepts no caller tuple. */
     internal class PreparedStops private constructor(val owner: FrameSourceLayoutV4,val slab: GradientStopSlabPlanV1?,
+        val noiseSlab: NoiseTableSlabV1?,
         uploads: Map<org.graphiks.kanvas.render.ir.ImageResourceSnapshot.Pixels,ImageUploadPlanV1>) {
         private val uploads=java.util.Collections.unmodifiableMap(java.util.IdentityHashMap(uploads))
         fun imageUpload(description: EffectiveMaterialPlanner.ImageSampleDescription): ImageUploadPlanV1 {
@@ -395,7 +402,8 @@ internal class FrameSourceLayoutV4 private constructor(
                 owner.imageDescriptions.forEach { description ->
                     require(uploads.put(description.pixels,ImageUploadPlanV1.seal(description.pixels)) == null) { W5gPlanDiagnostics.Schema }
                 }
-                return PreparedStops(owner,values.takeIf { it.isNotEmpty() }?.let(GradientStopSlabPlanV1::of),uploads)
+                return PreparedStops(owner,values.takeIf { it.isNotEmpty() }?.let(GradientStopSlabPlanV1::of),
+                    NoiseTableSlabV1.prepare(owner),uploads)
             }
         }
     }
@@ -544,6 +552,18 @@ internal class FrameSourceLayoutV4 private constructor(
             val seenImages=java.util.IdentityHashMap<org.graphiks.kanvas.render.ir.ImageResourceSnapshot.Pixels,Unit>()
             val imageDescriptions=sources.flatMap { it.composed?.nodes.orEmpty() }.mapNotNull { it.imageSource?.description }
                 .filter { seenImages.put(it.pixels,Unit) == null }
+            // Scalar seed decisions are deduplicated only within this physical frame slab.
+            val noiseSeeds=sources.flatMap { it.composed?.nodes.orEmpty() }
+                .mapNotNull { it.noiseSource?.parameters?.normalizedSeedI32 }.distinct()
+            val noiseBytes=try { Math.multiplyExact(noiseSeeds.size.toLong(),NoiseTableV1.BYTE_COUNT_I32.toLong()) }
+                catch (_: ArithmeticException) { throw IllegalArgumentException(W5gPlanDiagnostics.NoiseStorage) }
+            require(noiseBytes <= Int.MAX_VALUE && noiseBytes <= caps.maxBufferSizeBytes &&
+                (noiseBytes == 0L || caps.maxStorageBufferBindingSizeBytesI64?.let { noiseBytes <= it } == true)) {
+                W5gPlanDiagnostics.NoiseStorage
+            }
+            val noiseRanges=noiseSeeds.mapIndexed { index,seed ->
+                NoiseTableRangeV1(seed,Math.multiplyExact(index.toLong(),NoiseTableV1.WORD_COUNT_I32.toLong()).toUInt())
+            }
             var nonUniform = ordinaryLayout?.nonUniformWithoutStopsI64 ?: lane.peakFrameLocalBytesI64
             if (ordinaryLayout == null && lane.capabilityId == W3SolidRectPlanCompiler.W5A_CAPABILITY_ID) {
                 val alignment = caps.minUniformBufferOffsetAlignment.toLong()
@@ -574,6 +594,7 @@ internal class FrameSourceLayoutV4 private constructor(
                     actualLane.sourceTable().source(draw.materialAuthority.materialPlanRef()) to draw
                 }
             }
+            var noiseWork=0L
             actualSourceDraws.forEach { (source,draw) -> source.composed?.layout?.let { layout ->
                 require(sources.any { it === source }) { W5gPlanDiagnostics.Schema }
                 val destination=draw.blend as? BlendPlan.DestinationReadV1
@@ -587,10 +608,33 @@ internal class FrameSourceLayoutV4 private constructor(
                 if(textures > 0) require(caps.maxSampledTexturesPerShaderStageI32?.let { it >= textures } == true) {
                     W5gPlanDiagnostics.Binding
                 }
+                val noiseNodes=requireNotNull(source.composed).nodes.mapNotNull { it.noiseSource }
+                if (noiseNodes.isNotEmpty()) {
+                    val storageCount=layout.resources.count { it.buffer != null }
+                    require(caps.supportedOperations().containsAll(setOf(PlanOperationCapability.StorageBuffer,
+                        PlanOperationCapability.CopyUpload)) && caps.maxStorageBuffersPerShaderStageI32?.let { it >= storageCount } == true) {
+                        W5gPlanDiagnostics.NoiseStorage
+                    }
+                    try {
+                        val bounds=source.deviceBoundsF32
+                        val width=kotlin.math.ceil((minOf(bounds.right.toDouble(),lane.targetExtent.width.toDouble())-
+                            maxOf(bounds.left.toDouble(),0.0)).coerceAtLeast(0.0))
+                        val height=kotlin.math.ceil((minOf(bounds.bottom.toDouble(),lane.targetExtent.height.toDouble())-
+                            maxOf(bounds.top.toDouble(),0.0)).coerceAtLeast(0.0))
+                        require(width.isFinite() && height.isFinite() && width >= 0.0 && height >= 0.0 &&
+                            width < Long.MAX_VALUE.toDouble() && height < Long.MAX_VALUE.toDouble()) { W5gPlanDiagnostics.NoiseWork }
+                        val area=Math.multiplyExact(width.toLong(),height.toLong())
+                        noiseNodes.forEach { noise -> noiseWork=Math.addExact(noiseWork,
+                            Math.multiplyExact(Math.multiplyExact(area,noise.parameters.octavesI32.toLong()),4L)) }
+                    } catch (_: ArithmeticException) { throw IllegalArgumentException(W5gPlanDiagnostics.NoiseWork) }
+                    require(noiseWork <= budget.materialFrameLimits.maxNoiseOctaveEvaluationsI64) { W5gPlanDiagnostics.NoiseWork }
+                }
             } }
             require(sources.filter { it.composed != null }.all { source -> actualSourceDraws.any { it.first === source } }) {
                 W5gPlanDiagnostics.Schema
             }
+            nonUniform=Math.addExact(nonUniform,noiseBytes)
+            require(nonUniform <= budget.maxFrameLocalBytes) { W5gPlanDiagnostics.NoiseStorage }
             var total = nonUniform
             fun add(bytes: Long,code: String) {
                 total = Math.addExact(total,bytes)
@@ -629,7 +673,7 @@ internal class FrameSourceLayoutV4 private constructor(
             retainedV4.forEach { add(it.uniformByteCountI64-it.sourceUniformByteCountI64,W5fPlanDiagnostics.FilterUniform) }
             pending.forEach { add(it.uniformBytesI64()-it.uniformBytesI64(true),W5fPlanDiagnostics.FilterUniform) }
             SourceConstructionResultV4.Built(FrameSourceLayoutV4(lane,interner,sources,rows,allocations,pendingRanges,legacyRanges,
-                legacy,imageUploads,imageDescriptions,nonUniform,stopBytes,Math.subtractExact(Math.subtractExact(total,nonUniform),stopBytes),
+                legacy,imageUploads,imageDescriptions,noiseRanges,noiseBytes,nonUniform,stopBytes,Math.subtractExact(Math.subtractExact(total,nonUniform),stopBytes),
                 nativeLanes,nativeOffsetsI32,nativeGeometry,ordinaryLayout))
         } catch (failure: IllegalArgumentException) {
             sourceConstructionRefusalV4(failure.message ?: W5fPlanDiagnostics.Schema)

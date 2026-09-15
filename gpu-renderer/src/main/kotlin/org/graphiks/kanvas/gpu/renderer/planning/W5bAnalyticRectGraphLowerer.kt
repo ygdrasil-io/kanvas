@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.planning
 
 import org.graphiks.kanvas.gpu.renderer.materials.composedStopAllocationLabelV5
+import org.graphiks.kanvas.gpu.renderer.materials.noiseAllocationLabelV1
 
 import org.graphiks.kanvas.gpu.plan.colorSourceCoordinatesV4
 
@@ -49,7 +50,9 @@ internal class W5bAnalyticRectGraphLowerer {
             GPUFrameResourceLifetime.FrameLocal, footprint.readbackBytes, "$identity.staging")
         val allocations = graph.resources().map { resource ->
             GPUFrameMemoryAllocation(if(resource.role == PlanResourceRole.GradientStopData)
-                graph.composedStopAllocationLabelV5(request.w5aCompositeSessionIdentity ?: identity) ?: "$identity.${resource.id.value}" else "$identity.${resource.id.value}", when (resource.role) {
+                graph.composedStopAllocationLabelV5(request.w5aCompositeSessionIdentity ?: identity) ?: "$identity.${resource.id.value}"
+                else if(resource.role == PlanResourceRole.NoiseTableData) graph.noiseAllocationLabelV1()
+                else "$identity.${resource.id.value}", when (resource.role) {
                 PlanResourceRole.LogicalTarget -> GPUFrameMemoryCategory.CanonicalTarget
                 PlanResourceRole.ReadbackStaging -> GPUFrameMemoryCategory.ReadbackStaging
                 PlanResourceRole.DestinationSnapshot -> GPUFrameMemoryCategory.DestinationSnapshot

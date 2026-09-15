@@ -20,6 +20,7 @@ public enum class PlanResourceRole {
     DepthStencil,
     DestinationSnapshot,
     DecodedImageV1,
+    NoiseTableData,
 }
 public enum class PlanResourceUsage {
     RenderAttachment,

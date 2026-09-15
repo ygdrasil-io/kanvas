@@ -407,6 +407,8 @@ public class GpuPlanSurfaceExecutor internal constructor(
         scene: SceneSnapshot,
         target: RenderTargetDescriptor,
         frameLocalBudgetBytes: Long,
+        materialFrameLimits: org.graphiks.kanvas.gpu.plan.MaterialFrameLimits =
+            org.graphiks.kanvas.gpu.plan.MaterialFrameLimits(),
     ): GpuPlanSurfacePlanResult {
         val backend = GpuRenderBackend(
             compiler = CapabilityCompilerChain.of(
@@ -422,7 +424,8 @@ public class GpuPlanSurfaceExecutor internal constructor(
                 ),
             ),
             context = context,
-            targetConfig = GpuRenderTargetConfig(target.extent, target.colorSpace, frameLocalBudgetBytes),
+            targetConfig = GpuRenderTargetConfig(target.extent, target.colorSpace, frameLocalBudgetBytes,
+                materialFrameLimits = materialFrameLimits),
         )
         return when (val result = backend.plan(scene, target)) {
             is RenderPlanResult.Ready -> GpuPlanSurfacePlanResult.Ready(ReadyToken(context, backend, result.plan))

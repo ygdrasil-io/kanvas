@@ -40,11 +40,17 @@ internal class W5aMaterialSourceStage private constructor(
     data class Binding(val bindingI32: Int, val resourceKind: String,
         val composedResource: org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.Resource? = null)
     val composedLayout = composedProof?.composedBindingLayout
+    val noiseTableSlab = composedProof?.noiseTableSlab
     val imageLayoutV3 = requirements.imageLayoutV3
     val bindingManifest: List<Binding> = listOf(Binding(0, "uniformBuffer")) + (composedLayout?.resources?.map {
         when(it.kindTagU32) {
             1u -> {
-                require(gradientStopSlab != null && requireNotNull(composedProof).authenticatesComposedStorage(it,gradientStopSlab))
+                when(requireNotNull(it.buffer).storageKind) {
+                    org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.GRADIENT_STOPS ->
+                        require(gradientStopSlab != null && requireNotNull(composedProof).authenticatesComposedStorage(it,gradientStopSlab))
+                    org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.NOISE_U32 ->
+                        require(noiseTableSlab != null && requireNotNull(composedProof).authenticatesComposedNoise(it,noiseTableSlab))
+                }
                 Binding(it.bindingI32,"storageBuffer",it)
             }
             2u -> {
@@ -82,8 +88,15 @@ internal class W5aMaterialSourceStage private constructor(
                 requirements.imageLayoutV3?.structuralIdentity != imageLayout?.structuralIdentity) return null
             val stopDeclaration = if (slab == null) "" else """
                 struct GradientStopV1 { positionAndReserved: vec4<f32>, straightColor: vec4<f32>, }
-                @group(1) @binding(${proof.composedBindingLayout?.resources?.single { it.buffer != null }?.bindingI32 ?: imageLayout?.gradientStorageBindingU32 ?: 1u}) var<storage, read> w5cStops: array<GradientStopV1>;
+                @group(1) @binding(${proof.composedBindingLayout?.resources?.single { it.buffer?.storageKind == org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.GRADIENT_STOPS }?.bindingI32 ?: imageLayout?.gradientStorageBindingU32 ?: 1u}) var<storage, read> w5cStops: array<GradientStopV1>;
             """.trimIndent()
+            val noiseDeclaration=if(proof.noiseTableSlab == null) "" else {
+                val resource=requireNotNull(proof.composedBindingLayout).resources.single {
+                    it.buffer?.storageKind == org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.NOISE_U32 }
+                "struct NoiseWordV1 { words: vec4<u32>, }\n"+
+                    "@group(1) @binding(${resource.bindingI32}) var<storage, read> w5gNoiseWords: array<NoiseWordV1>;\n"+
+                    W5fColorOperationEmitterV1.noiseDeclarations
+            }
             val imageDeclaration = if (image == null) "" else """
                 @group(1) @binding(${requireNotNull(imageLayout).imageTextureBindingU32}) var w5eTexture: texture_2d<f32>;
                 ${W5eImageTexelEvaluatorV1.addressDeclarations(image.numericAuthority.graph)}
@@ -102,6 +115,7 @@ internal class W5aMaterialSourceStage private constructor(
                 struct W5fMaterialBlock { words: array<vec4<u32>, ${wordsI64}>, }
                 @group(1) @binding(0) var<uniform> w5fMaterial: W5fMaterialBlock;
                 $stopDeclaration
+                $noiseDeclaration
                 $imageDeclaration
                 $composedTextures
                 $composedAddresses

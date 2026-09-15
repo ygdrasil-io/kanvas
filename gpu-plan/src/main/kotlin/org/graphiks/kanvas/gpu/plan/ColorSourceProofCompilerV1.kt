@@ -43,7 +43,8 @@ internal object ColorSourceProofCompilerV1 {
         val words: Map<Long,Int>,val tables: Map<Long,org.graphiks.kanvas.render.ir.ImmutableUBytes>,val integers: Map<Long,UInt>)
     internal fun graphForComposed(metadata: MaterialSourceConstructionV4.ComposedMetadata,
         gradients: Map<MaterialSourceConstructionV4,PreparedSourceDefinitionV4>,
-        images: List<PreparedComposedSourceV5.ImageReference>): ComposedGraph {
+        images: List<PreparedComposedSourceV5.ImageReference>,
+        noises: List<PreparedComposedSourceV5.NoiseReference>): ComposedGraph {
         val words = linkedMapOf<Long,Int>()
         val integers = linkedMapOf<Long,UInt>()
         val tables = linkedMapOf<Long,org.graphiks.kanvas.render.ir.ImmutableUBytes>()
@@ -76,6 +77,36 @@ internal object ColorSourceProofCompilerV1 {
                 is org.graphiks.kanvas.render.ir.MaterialNode.WithLocalMatrix,
                 is org.graphiks.kanvas.render.ir.MaterialNode.CoordClamp -> child()
                 is org.graphiks.kanvas.render.ir.MaterialNode.Blend -> BlendFormulaProgramV1.colorOperations(original.mode.name.lowercase(),child(1).outputs,child(0).outputs)
+                is org.graphiks.kanvas.render.ir.MaterialNode.PerlinNoise,
+                is org.graphiks.kanvas.render.ir.MaterialNode.FractalNoise -> {
+                    val reference=noises.single { it.ownerNodeIndexI32 == node.ownerNodeIndexI32 && it.wordOffsetI64 == offset }
+                    val source=reference.metadata
+                    val parameters=source.parameters
+                    words[offset]=parameters.frequencyXF32.toRawBits(); words[offset+1L]=parameters.frequencyYF32.toRawBits()
+                    integers[offset+2L]=parameters.octavesI32.toUInt(); integers[offset+3L]=if(parameters.fractal) 1u else 0u
+                    integers[offset+4L]=reference.range.baseWordU32; integers[offset+5L]=if(parameters.stitched) 1u else 0u
+                    for(axis in 0..1) for(limb in 0..3) {
+                        val period=if(axis == 0) parameters.periodX else parameters.periodY
+                        integers[offset+8L+axis*4L+limb]=period.shiftRight(limb*32).and(java.math.BigInteger("ffffffff",16)).toLong().toUInt()
+                    }
+                    var cursor=offset+NoiseOperationGraphV1.HEADER_BYTES_I64/4L
+                    source.coordinates.copyOperations().forEach { operation ->
+                        val values=when(operation) {
+                            is MaterialCoordinateOperationV2.InverseMatrixF32 -> operation.inverseF32.let { m ->
+                                listOf(m.sx,m.kx,m.tx,0f,m.ky,m.sy,m.ty,0f,m.persp0,m.persp1,m.persp2,
+                                    if(m.persp0 == 0f && m.persp1 == 0f && m.persp2 == 1f) 1f else 0f)
+                            }
+                            is MaterialCoordinateOperationV2.ClampRectF32 -> operation.subsetF32.let { r -> listOf(r.left,r.top,r.right,r.bottom) }
+                        }
+                        values.forEach { words[cursor++]=it.toRawBits() }
+                    }
+                    val context=coordinateExpressions(source.coordinates,offset+NoiseOperationGraphV1.HEADER_BYTES_I64/4L)
+                    require(context.nextWordI64 == cursor && cursor == offset+source.uniformBytesI64/4L) { W5gPlanDiagnostics.Schema }
+                    val region=NoiseOperationGraphV1(node.ownerNodeIndexI32,offset,context.x,context.y)
+                    val zero=ColorOperationGraphV1.constant(0f)
+                    val guarded=ColorOperationGraphV1.BranchVector(context.valid,List(4) { S.NoiseComponent(region,it) },List(4) { zero })
+                    ColorOperationGraphV1(List(4) { S.BranchComponent(guarded,it) })
+                }
                 is org.graphiks.kanvas.render.ir.MaterialNode.ImageSample -> {
                     val reference=images.single { it.ownerNodeIndexI32 == node.ownerNodeIndexI32 && it.wordOffsetI64 == offset }
                     val image=reference.binding
@@ -127,7 +158,8 @@ internal object ColorSourceProofCompilerV1 {
             }
             graphs += graph
             entries += MaterialEvaluationDagV5.Entry(node.ownerNodeIndexI32,node.children,node.gradientSource?.coordinates ?:
-                node.imageSource?.coordinates?.let(SourceCoordinatesV4::V2) ?: SourceCoordinatesV4.None,
+                node.imageSource?.coordinates?.let(SourceCoordinatesV4::V2) ?:
+                node.noiseSource?.coordinates?.let(SourceCoordinatesV4::V2) ?: SourceCoordinatesV4.None,
                 ComposedMaterialProgramV5(MaterialProgramPlanId("composed-evaluation-v5:${node.topologyIdentity}:${graph.canonicalIdentity}"),graph))
         }
         return ComposedGraph(MaterialEvaluationDagV5.of(entries),graphs.last(),words,tables,integers)

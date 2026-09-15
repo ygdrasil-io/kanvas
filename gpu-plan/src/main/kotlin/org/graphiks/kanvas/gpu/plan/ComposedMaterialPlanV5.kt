@@ -36,10 +36,12 @@ public class ComposedBindingLayoutV1 internal constructor(
     public data class UniformMapping(public val ownerNodeIndexI32: Int, public val localOffsetBytesI32: Int,
         public val physicalOffsetBytesI32: Int, public val sizeBytesI32: Int, public val alignmentBytesI32: Int)
     public val uniformMappings: List<UniformMapping> = immutableList(mappings)
+    public enum class StorageKind { GRADIENT_STOPS, NOISE_U32 }
     public data class Buffer(
         public val bufferTypeTagU32: UInt,
         public val minBindingSizeBytesI64: Long,
         public val hasDynamicOffset: Boolean = false,
+        public val storageKind: StorageKind = StorageKind.GRADIENT_STOPS,
     )
     public data class Texture(
         public val textureViewDimensionTagU32: UInt,
@@ -78,7 +80,10 @@ public class ComposedBindingLayoutV1 internal constructor(
             require(row.ownerNodeIndexI32 >= 0 && row.logicalSlotI32 >= 0 && row.groupI32 == 1 &&
                 row.bindingI32 == index+1 && row.visibilityFlagsU32 == 2u && when(row.kindTagU32) {
                     1u -> row.texture == null && row.buffer?.let { it.bufferTypeTagU32 == 2u &&
-                        it.minBindingSizeBytesI64 == 32L && !it.hasDynamicOffset } == true
+                        it.minBindingSizeBytesI64 == when (it.storageKind) {
+                            StorageKind.GRADIENT_STOPS -> 32L
+                            StorageKind.NOISE_U32 -> 16L
+                        } && !it.hasDynamicOffset } == true
                     2u -> row.buffer == null && row.texture?.let { it.textureViewDimensionTagU32 == 1u &&
                         it.textureSampleTypeTagU32 == 1u && !it.multisampled } == true
                     else -> false
@@ -154,7 +159,17 @@ internal class PreparedComposedSourceV5 private constructor(
     val slab: GradientStopSlabPlanV1?,
     references: List<GradientReference>,
     images: List<ImageReference> = emptyList(),
+    val noiseSlab: NoiseTableSlabV1? = null,
+    noises: List<NoiseReference> = emptyList(),
 ) {
+    class NoiseReference(val evaluationRef: MaterialEvaluationRefV5,val ownerNodeIndexI32: Int,
+        val metadata: MaterialSourceConstructionV4.NoiseChildMetadata,
+        val resource: ComposedBindingLayoutV1.Resource,val range: NoiseTableRangeV1,val wordOffsetI64: Long)
+    val noiseReferences: List<NoiseReference> = immutableList(noises)
+    fun resolveNoise(region: NoiseOperationGraphV1): NoiseReference = noiseReferences.single {
+        it.ownerNodeIndexI32 == region.ownerNodeIndexI32 && it.wordOffsetI64 == region.wordOffsetU32
+    }.also { require(noiseSlab?.authenticates(it.range) == true && noiseSlab.owner === frameOwner &&
+        integerWordsU32[it.wordOffsetI64+4L] == it.range.baseWordU32) { W5gPlanDiagnostics.Schema } }
     class GradientReference(
         val evaluationRef: MaterialEvaluationRefV5,
         val ownerNodeIndexI32: Int,
@@ -200,9 +215,24 @@ internal class PreparedComposedSourceV5 private constructor(
                 val entry = evaluation.entries[index]; val original = metadata.nodes[index]
                 entry.ownerNodeIndexI32 == original.ownerNodeIndexI32 && entry.children == original.children &&
                     entry.coordinates == (original.gradientSource?.coordinates ?:
-                        original.imageSource?.coordinates?.let(SourceCoordinatesV4::V2) ?: SourceCoordinatesV4.None)
+                        original.imageSource?.coordinates?.let(SourceCoordinatesV4::V2) ?:
+                        original.noiseSource?.coordinates?.let(SourceCoordinatesV4::V2) ?: SourceCoordinatesV4.None)
             }) { W5gPlanDiagnostics.Schema }
-        val storage=layout.resources.singleOrNull { it.buffer != null }
+        val storage=layout.resources.singleOrNull { it.buffer?.storageKind == ComposedBindingLayoutV1.StorageKind.GRADIENT_STOPS }
+        val noiseStorage=layout.resources.singleOrNull { it.buffer?.storageKind == ComposedBindingLayoutV1.StorageKind.NOISE_U32 }
+        require((noiseSlab == null) == (noiseStorage == null) &&
+            noiseReferences.map { it.evaluationRef.indexI32 } == metadata.nodes.indices.filter { metadata.nodes[it].noiseSource != null }) {
+            W5gPlanDiagnostics.Schema
+        }
+        noiseReferences.forEach { reference ->
+            val node=metadata.nodes[reference.evaluationRef.indexI32]
+            require(node.noiseSource === reference.metadata && node.ownerNodeIndexI32 == reference.ownerNodeIndexI32 &&
+                reference.resource === noiseStorage && reference.wordOffsetI64 == node.offsetBytesI32.toLong()/4L &&
+                noiseSlab?.owner === frameOwner && noiseSlab.authenticates(reference.range) &&
+                reference.range.normalizedSeedI32 == reference.metadata.parameters.normalizedSeedI32 &&
+                integerWordsU32[reference.wordOffsetI64+2L] == reference.metadata.parameters.octavesI32.toUInt() &&
+                integerWordsU32[reference.wordOffsetI64+4L] == reference.range.baseWordU32) { W5gPlanDiagnostics.Schema }
+        }
         require((slab == null) == (storage == null) &&
             gradientReferences.map { it.evaluationRef.indexI32 } == metadata.nodes.indices.filter {
                 metadata.nodes[it].gradientSource?.hasGradientStorage == true
@@ -245,7 +275,8 @@ internal class PreparedComposedSourceV5 private constructor(
             val definitions=java.util.IdentityHashMap<MaterialSourceConstructionV4,PreparedSourceDefinitionV4>()
             val references=metadata.nodes.mapIndexedNotNull { index,node -> node.gradientSource?.takeIf { it.hasGradientStorage }?.let { child ->
                 val definition=definitions.getOrPut(child) { PreparedSourceDefinitionV4.fromPrepared(frame,child,prepared) }
-                GradientReference(MaterialEvaluationRefV5(index),node.ownerNodeIndexI32,metadata.layout.resources.single { it.buffer != null },
+                GradientReference(MaterialEvaluationRefV5(index),node.ownerNodeIndexI32,metadata.layout.resources.single {
+                    it.buffer?.storageKind == ComposedBindingLayoutV1.StorageKind.GRADIENT_STOPS },
                     definition,node.offsetBytesI32.toLong()/4L)
             } }
             val images=metadata.nodes.mapIndexedNotNull { index,node -> node.imageSource?.let { image ->
@@ -253,9 +284,15 @@ internal class PreparedComposedSourceV5 private constructor(
                     ComposedImageResourceV5(metadata.layout.resources.single { it.texture != null && it.ownerNodeIndexI32 == node.ownerNodeIndexI32 },
                         image,prepared),node.offsetBytesI32.toLong()/4L)
             } }
-            val built = ColorSourceProofCompilerV1.graphForComposed(metadata,definitions,images)
+            val noises=metadata.nodes.mapIndexedNotNull { index,node -> node.noiseSource?.let { noise ->
+                NoiseReference(MaterialEvaluationRefV5(index),node.ownerNodeIndexI32,noise,metadata.layout.resources.single {
+                    it.buffer?.storageKind == ComposedBindingLayoutV1.StorageKind.NOISE_U32 },
+                    frame.noiseRange(noise.parameters.normalizedSeedI32),node.offsetBytesI32.toLong()/4L)
+            } }
+            val built = ColorSourceProofCompilerV1.graphForComposed(metadata,definitions,images,noises)
             return PreparedComposedSourceV5(source,source.canonicalIdentity,frame,built.evaluation,metadata.layout,built.graph,
-                built.words,built.tables,built.integers,prepared.slab.takeIf { references.isNotEmpty() },references,images)
+                built.words,built.tables,built.integers,prepared.slab.takeIf { references.isNotEmpty() },references,images,
+                prepared.noiseSlab.takeIf { noises.isNotEmpty() },noises)
         }
     }
 }

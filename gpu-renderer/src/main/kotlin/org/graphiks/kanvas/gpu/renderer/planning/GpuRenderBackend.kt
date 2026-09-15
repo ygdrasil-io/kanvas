@@ -61,6 +61,8 @@ public data class GpuRenderTargetConfig(
     public val frameLocalBudgetBytes: Long,
     public val internalFormat: PlanLogicalColorFormat =
         PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
+    public val materialFrameLimits: org.graphiks.kanvas.gpu.plan.MaterialFrameLimits =
+        org.graphiks.kanvas.gpu.plan.MaterialFrameLimits(),
 ) {
     init {
         require(colorSpace == ColorSpace.SRGB)
@@ -98,7 +100,7 @@ public class GpuRenderBackend(
                 is PlanningCapabilities.Ready -> compiler.plan(
                     selected.candidate,
                     acquisition.snapshot,
-                    PlanBudget(targetConfig.frameLocalBudgetBytes),
+                    PlanBudget(targetConfig.frameLocalBudgetBytes, targetConfig.materialFrameLimits),
                 ).also(::rememberIssuedPlanWhenReady)
                 is PlanningCapabilities.PromotedGap -> acquisition.result
             }
@@ -355,7 +357,7 @@ public class GpuRenderBackend(
             plan.targetExtent.height == targetConfig.extent.height &&
             plan.colorFormat == targetConfig.internalFormat &&
             plan.capabilities == snapshot &&
-            plan.budget == PlanBudget(targetConfig.frameLocalBudgetBytes)
+            plan.budget == PlanBudget(targetConfig.frameLocalBudgetBytes, targetConfig.materialFrameLimits)
 
     @Suppress("UNCHECKED_CAST")
     private fun removeCollectedPlans() {

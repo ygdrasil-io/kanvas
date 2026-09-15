@@ -6,6 +6,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.resources.*
 import org.graphiks.kanvas.gpu.renderer.passes.materialSourcePartitionV3
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.plan.*
 
 /**
  * Versioned material partition alongside the exact historical geometry allocation seal.
@@ -57,7 +58,7 @@ private fun GPUFramePlan.w5eImageAllocationsV3(limits: GPULimits): List<GPUFrame
 internal fun GPUFramePlan.w5aCombinedMemoryBudgetV2(limits: GPULimits): GPUFrameMemoryBudgetPlan =
     GPUFrameMemoryBudgetPlanner.plan(GPUFrameMemoryBudgetRequest(
         allocations = memoryBudget.allocations + w5aMaterialAllocationsV2() + w5eImageAllocationsV3(limits) +
-            w5eChildStopAllocationsV3() + w5gDeclaredStopAllocationsV5(),
+            w5eChildStopAllocationsV3() + w5gDeclaredStopAllocationsV5() + w5gNoiseAllocationsV1(),
         configuredAggregateBudgetBytes = memoryBudget.configuredAggregateBudgetBytes,
         deviceLimits = limits,
     ))
@@ -67,6 +68,58 @@ internal fun org.graphiks.kanvas.gpu.plan.RenderGraph.composedStopAllocationLabe
     val table=materialPlanTableOrNull() ?: return null
     if(table.entries().none { it.bindings is org.graphiks.kanvas.gpu.plan.ComposedMaterialBindingV5 }) return null
     return table.gradientStopSlab?.let { "$sessionIdentity.gradient-stops" }
+}
+
+internal const val NOISE_TABLE_ALLOCATION_LABEL_V1 = "w5g.noise-v1.tables"
+
+/** R33's actual graph row, authenticated against the same issued source proof and slab. */
+internal fun RenderGraph.declaredNoiseSlabV1(): NoiseTableSlabV1? {
+    val rows=resources().filter { it.role == PlanResourceRole.NoiseTableData }
+    if(rows.isEmpty()) return null
+    require(rows.size == 1)
+    val table=requireNotNull(materialPlanTableOrNull())
+    val proofs=table.entries().mapIndexedNotNull { index,entry ->
+        val binding=entry.bindings as? ComposedMaterialBindingV5 ?: return@mapIndexedNotNull null
+        binding.sourceProof.takeIf { it.noiseTableSlab != null }?.also { proof ->
+            require(proof.authenticates(table,MaterialPlanRef(index),SourceCoordinatesV4.None))
+            val resource=requireNotNull(proof.composedBindingLayout).resources.single {
+                it.buffer?.storageKind == ComposedBindingLayoutV1.StorageKind.NOISE_U32 }
+            require(proof.authenticatesComposedNoise(resource,requireNotNull(proof.noiseTableSlab)))
+        }
+    }
+    val slab=proofs.map { requireNotNull(it.noiseTableSlab) }.distinct().single()
+    require(rows.single().let { it.kind == PlanResourceKind.Buffer && it.byteSize == slab.byteCountI64 &&
+        it.format == null && it.copyExtent() == null && it.ordinal == 0 && it.sampleCountI32 == 1 &&
+        it.usages() == setOf(PlanResourceUsage.StorageRead,PlanResourceUsage.CopyDestination) &&
+        it.lifetime == PlanResourceLifetime.FrameLocal && it.firstPassIndex == 0 &&
+        it.lastPassIndexExclusive == passes().size })
+    return slab
+}
+
+internal fun RenderGraph.noiseAllocationLabelV1(): String =
+    requireNotNull(declaredNoiseSlabV1()).let { NOISE_TABLE_ALLOCATION_LABEL_V1 }
+
+private fun GPUFramePlan.w5gNoiseAllocationsV1(): List<GPUFrameMemoryAllocation> {
+    val stages=steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+        .mapNotNull { it.materialSourcePartitionV3()?.stage }.filter { it.noiseTableSlab != null }
+    val slabs=stages.map { requireNotNull(it.noiseTableSlab) }.distinct()
+    require(slabs.size <= 1)
+    slabs.forEach { slab ->
+        stages.forEach { stage ->
+            require(stage.noiseTableSlab === slab)
+            val resource=requireNotNull(stage.composedLayout).resources.single {
+                it.buffer?.storageKind == org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.NOISE_U32 }
+            require(requireNotNull(stage.composedProof).authenticatesComposedNoise(resource,slab))
+        }
+        val allocation=memoryBudget.allocations.single { it.label == NOISE_TABLE_ALLOCATION_LABEL_V1 }
+        val lastConsumer=steps.indexOfLast { step -> step is GPUFrameStep.RenderPassStep && step.drawPackets.any {
+            it.materialSourcePartitionV3()?.stage?.noiseTableSlab === slab } }
+        require(allocation.category == GPUFrameMemoryCategory.ReusableScratch && allocation.bytes == slab.byteCountI64 &&
+            allocation.resourceKind == GPUFrameMemoryResourceKind.Buffer && allocation.extent == null &&
+            allocation.firstPassIndex == 0 && allocation.lastPassIndexExclusive > lastConsumer)
+    }
+    if(slabs.isEmpty()) require(memoryBudget.allocations.none { it.label == NOISE_TABLE_ALLOCATION_LABEL_V1 })
+    return emptyList() // The one authenticated declaration is already in the base memory budget.
 }
 
 private fun GPUFramePlan.w5gDeclaredStopAllocationsV5(): List<GPUFrameMemoryAllocation> {
@@ -79,7 +132,8 @@ private fun GPUFramePlan.w5gDeclaredStopAllocationsV5(): List<GPUFrameMemoryAllo
     return slabs.mapNotNull { slab ->
         stages.forEach { stage ->
             require(stage.gradientStopSlab === slab)
-            requireNotNull(stage.composedLayout).resources.filter { it.buffer != null }.forEach { resource ->
+            requireNotNull(stage.composedLayout).resources.filter {
+                it.buffer?.storageKind == org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.GRADIENT_STOPS }.forEach { resource ->
                 require(requireNotNull(stage.composedProof).authenticatesComposedStorage(resource,slab))
             }
         }

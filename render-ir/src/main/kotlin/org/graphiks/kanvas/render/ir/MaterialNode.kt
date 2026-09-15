@@ -4,6 +4,7 @@ import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.SizeF32
+import org.graphiks.math.geometry.SizeI32
 import org.graphiks.math.matrix.Matrix3x3F32
 
 /** Tile behavior for material sampling and image effects. */
@@ -224,8 +225,14 @@ public sealed interface MaterialNode : CanonicalValue {
         public val baseY: Float,
         public val numOctaves: Int,
         public val seed: Int,
-        public val tileSize: SizeF32?,
+        public val tileSize: SizeI32?,
     ) : MaterialNode {
+        @Deprecated("Use SizeI32 for an integral noise tile")
+        public constructor(baseX: Float, baseY: Float, numOctaves: Int, seed: Int, tileSize: SizeF32?) :
+            this(baseX, baseY, numOctaves, seed, checkedNoiseTileI32(tileSize))
+        public constructor(baseX: Float, baseY: Float, numOctaves: Int, seed: Int, tileSize: Nothing?) :
+            this(baseX, baseY, numOctaves, seed, null as SizeI32?)
+        init { validateNoiseParameters(baseX, baseY, numOctaves, tileSize) }
         override val canonicalId: CanonicalId = noiseId("material-perlin-noise-v1", baseX, baseY, numOctaves, seed, tileSize)
     }
 
@@ -234,8 +241,14 @@ public sealed interface MaterialNode : CanonicalValue {
         public val baseY: Float,
         public val numOctaves: Int,
         public val seed: Int,
-        public val tileSize: SizeF32?,
+        public val tileSize: SizeI32?,
     ) : MaterialNode {
+        @Deprecated("Use SizeI32 for an integral noise tile")
+        public constructor(baseX: Float, baseY: Float, numOctaves: Int, seed: Int, tileSize: SizeF32?) :
+            this(baseX, baseY, numOctaves, seed, checkedNoiseTileI32(tileSize))
+        public constructor(baseX: Float, baseY: Float, numOctaves: Int, seed: Int, tileSize: Nothing?) :
+            this(baseX, baseY, numOctaves, seed, null as SizeI32?)
+        init { validateNoiseParameters(baseX, baseY, numOctaves, tileSize) }
         override val canonicalId: CanonicalId = noiseId("material-fractal-noise-v1", baseX, baseY, numOctaves, seed, tileSize)
     }
 
@@ -387,13 +400,33 @@ private fun rectId(rect: RectF32): CanonicalId = canonicalId(
     "rect", rect.left.canonicalBits(), rect.top.canonicalBits(), rect.right.canonicalBits(), rect.bottom.canonicalBits(),
 )
 
-private fun noiseId(tag: String, baseX: Float, baseY: Float, octaves: Int, seed: Int, tileSize: SizeF32?): CanonicalId = canonicalId(
+/** Shared checked semantic bridge for source compatibility and historical archives. */
+private fun validateNoiseParameters(baseX: Float, baseY: Float, octaves: Int, tile: SizeI32?) {
+    require(baseX.isFinite() && baseY.isFinite() && baseX >= 0f && baseY >= 0f && octaves in 0..255) {
+        "invalid.material.noise.parameters"
+    }
+    require(tile == null || tile.width >= 0 && tile.height >= 0) { "invalid.material.noise.tile" }
+}
+
+/** Shared checked semantic bridge for source compatibility and historical archives. */
+public fun checkedNoiseTileI32(tileSize: SizeF32?): SizeI32? {
+    if (tileSize == null) return null
+    fun axis(value: Float): Int {
+        val exact = value.toDouble()
+        require(value.isFinite() && value >= 0f && exact <= Int.MAX_VALUE.toDouble() &&
+            exact == kotlin.math.floor(exact)) { "invalid.material.noise.tile" }
+        return value.toInt()
+    }
+    return SizeI32(axis(tileSize.width), axis(tileSize.height))
+}
+
+private fun noiseId(tag: String, baseX: Float, baseY: Float, octaves: Int, seed: Int, tileSize: SizeI32?): CanonicalId = canonicalId(
     tag,
     baseX.canonicalBits(),
     baseY.canonicalBits(),
     octaves.toString(),
     seed.toString(),
     if (tileSize == null) "absent" else "present",
-    tileSize?.width?.canonicalBits().orEmpty(),
-    tileSize?.height?.canonicalBits().orEmpty(),
+    tileSize?.width?.toString().orEmpty(),
+    tileSize?.height?.toString().orEmpty(),
 )

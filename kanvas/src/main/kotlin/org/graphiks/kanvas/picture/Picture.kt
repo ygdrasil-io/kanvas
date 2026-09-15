@@ -310,8 +310,8 @@ class Picture internal constructor(
 
 private val MAGIC = byteArrayOf(0x4B, 0x50, 0x49, 0x43)
 private const val FORMAT_VERSION = 10
-private const val STABLE_WIRE_VERSION = 10
-private const val PREVIOUS_STABLE_WIRE_VERSION = 9
+private const val STABLE_WIRE_VERSION = 11
+private const val PREVIOUS_STABLE_WIRE_VERSION = 10
 private const val HISTORICAL_WIRE_VERSION_V8 = 8
 
 // type discriminators
@@ -959,6 +959,7 @@ private fun decodePicture(data: ByteArray, decodedRuntimeEffects: MutableList<Ru
             SceneArchiveDecodeResult.LegacyV8 -> decodeHistoricalPictureV8(data, decodedRuntimeEffects)
             is SceneArchiveDecodeResult.Invalid -> null
         }
+        9,
         PREVIOUS_STABLE_WIRE_VERSION,
         STABLE_WIRE_VERSION,
         -> when (val decoded = SceneArchiveCodec.decodePicture(data)) {

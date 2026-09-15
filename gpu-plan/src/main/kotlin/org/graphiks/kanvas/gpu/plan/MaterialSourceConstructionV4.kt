@@ -243,12 +243,17 @@ internal class MaterialSourceConstructionV4 private constructor(
         val uniformBytesI64: Long = Math.addExact(headerBytesI64,coordinates.uniformByteSizeI64)
     }
 
+    internal class NoiseChildMetadata(val parameters: NoiseParametersV1, val coordinates: MaterialCoordinatePlanV2) {
+        val uniformBytesI64: Long = Math.addExact(NoiseOperationGraphV1.HEADER_BYTES_I64, coordinates.uniformByteSizeI64)
+    }
+
     internal class ComposedMetadata(nodes: List<Node>, val layout: ComposedBindingLayoutV1) {
         val nodes: List<Node> = immutableList(nodes)
         class Node(val ownerNodeIndexI32: Int, val original: MaterialNode, children: List<MaterialEvaluationRefV5>,
             val offsetBytesI32: Int, val filter: ColorFilterExecutionPlanV1?,
             val gradientSource: MaterialSourceConstructionV4? = null,
-            val imageSource: ImageChildMetadata? = null) {
+            val imageSource: ImageChildMetadata? = null,
+            val noiseSource: NoiseChildMetadata? = null) {
             val children: List<MaterialEvaluationRefV5> = immutableList(children)
             val topologyIdentity: String = when (original) {
                 MaterialNode.Transparent -> "transparent"
@@ -262,6 +267,8 @@ internal class MaterialSourceConstructionV4 private constructor(
                 is MaterialNode.ImageSample -> requireNotNull(imageSource).let {
                     "image:${it.description.color}:${it.description.sampling.topologyId}:${it.description.tileModes.topologyId}:${it.coordinates.topologyIdentity}"
                 }
+                is MaterialNode.PerlinNoise, is MaterialNode.FractalNoise ->
+                    "noise-v1:${requireNotNull(noiseSource).coordinates.topologyIdentity}"
                 is MaterialNode.LinearGradient,is MaterialNode.RadialGradient,is MaterialNode.SweepGradient,
                 is MaterialNode.ConicalGradient -> requireNotNull(gradientSource).let {
                     "gradient:${it.gradient!!.family}:${it.gradient.interpolation}:${it.gradient.tile.contractId}:" +
@@ -275,7 +282,7 @@ internal class MaterialSourceConstructionV4 private constructor(
 
     companion object {
         fun containsComposed(root: MaterialNode): Boolean = when (root) {
-            is MaterialNode.Blend -> true
+            is MaterialNode.Blend, is MaterialNode.PerlinNoise, is MaterialNode.FractalNoise -> true
             is MaterialNode.Opacity -> containsComposed(root.material)
             is MaterialNode.WithColorFilter -> containsComposed(root.material)
             is MaterialNode.WithWorkingColorSpace -> containsComposed(root.material)
@@ -284,8 +291,19 @@ internal class MaterialSourceConstructionV4 private constructor(
             else -> false
         }
         private fun captureComposed(draw: DrawNode,bounds: RectF32,blend: BlendPlan): MaterialSourceConstructionV4 {
+            var sliceLeaf = draw.material
+            while (true) sliceLeaf = when (val node = sliceLeaf) {
+                is MaterialNode.Opacity -> node.material
+                is MaterialNode.WithColorFilter -> node.material
+                is MaterialNode.WithWorkingColorSpace -> node.material
+                is MaterialNode.WithLocalMatrix -> node.material
+                is MaterialNode.CoordClamp -> node.material
+                else -> break
+            }
+            val sliceCode = if (sliceLeaf is MaterialNode.PerlinNoise || sliceLeaf is MaterialNode.FractalNoise)
+                W5gPlanDiagnostics.NoiseUnpromoted else W5gPlanDiagnostics.Unpromoted
             require(draw.origin in setOf(DrawOrigin.RECT,DrawOrigin.PATH) && draw.paint?.style == PaintStyleNode.FILL &&
-                draw.resource == null && draw.operationBlendMode == null) { W5gPlanDiagnostics.Unpromoted }
+                draw.resource == null && draw.operationBlendMode == null) { sliceCode }
             require(colorFilterEffectsMatchPaint(draw)) { W5gPlanDiagnostics.Schema }
             val nodes = mutableListOf<ComposedMetadata.Node>()
             val mappings = mutableListOf<ComposedBindingLayoutV1.UniformMapping>()
@@ -293,7 +311,7 @@ internal class MaterialSourceConstructionV4 private constructor(
             data class Field(val owner: Int,val ordinal: Int,val bytes: Long)
             data class Draft(val owner: Int,val original: MaterialNode,val children: List<MaterialEvaluationRefV5>,
                 val field: Field?,val filter: ColorFilterExecutionPlanV1?,val gradient: MaterialSourceConstructionV4?,
-                val image: ImageChildMetadata?)
+                val image: ImageChildMetadata?, val noise: NoiseChildMetadata?)
             val completed = java.util.IdentityHashMap<MaterialNode,MutableMap<Context,MaterialEvaluationRefV5>>()
             val ownerIndices = java.util.IdentityHashMap<MaterialNode,Int>()
             val scalarFields = java.util.IdentityHashMap<MaterialNode,Field>()
@@ -373,6 +391,23 @@ internal class MaterialSourceConstructionV4 private constructor(
                     }
                     ImageChildMetadata(sample,description,coordinates)
                 }
+                val parameters = when (node) {
+                    is MaterialNode.PerlinNoise -> NoiseParametersV1(node.baseX,node.baseY,node.numOctaves,node.seed,node.tileSize,false)
+                    is MaterialNode.FractalNoise -> NoiseParametersV1(node.baseX,node.baseY,node.numOctaves,node.seed,node.tileSize,true)
+                    else -> null
+                }
+                val noise = parameters?.let {
+                    val coordinates = when (val built = MaterialCoordinatePlanV2.fromCtmAndNodes(draw.transform,
+                        context.coordinateNodes.map { wrapper -> when (wrapper) {
+                            is MaterialNode.WithLocalMatrix -> CoordinateNodeV2.LocalMatrix(wrapper.matrix)
+                            is MaterialNode.CoordClamp -> CoordinateNodeV2.CoordClamp(wrapper.copySubset())
+                            else -> error(W5gPlanDiagnostics.Schema)
+                        } })) {
+                        is MaterialCoordinatePlanV2.Build.Ready -> built.coordinates
+                        is MaterialCoordinatePlanV2.Build.Refused -> throw IllegalArgumentException(built.code)
+                    }
+                    NoiseChildMetadata(it,coordinates)
+                }
                 val bytes = when(node) {
                     MaterialNode.Transparent, is MaterialNode.Solid, is MaterialNode.Opacity -> 16L
                     is MaterialNode.WithColorFilter -> requireNotNull(filter).dynamicByteCountI64
@@ -381,13 +416,14 @@ internal class MaterialSourceConstructionV4 private constructor(
                     is MaterialNode.LinearGradient,is MaterialNode.RadialGradient,is MaterialNode.SweepGradient,
                     is MaterialNode.ConicalGradient -> requireNotNull(gradient).uniformBytesI64()
                     is MaterialNode.ImageSample -> requireNotNull(image).uniformBytesI64
+                    is MaterialNode.PerlinNoise, is MaterialNode.FractalNoise -> requireNotNull(noise).uniformBytesI64
                     else -> {
                         validatePendingGradient(node)
                         throw IllegalArgumentException(W5gPlanDiagnostics.Unpromoted)
                     }
                 }
                 if (node is MaterialNode.Opacity) require(node.alpha.isFinite() && node.alpha in 0f..1f) { W5aPlanDiagnostics.InvalidOpacity }
-                val field = if(bytes == 0L) null else if(gradient != null || image != null) Field(owner,fields.size,bytes).also { fields += it }
+                val field = if(bytes == 0L) null else if(gradient != null || image != null || noise != null) Field(owner,fields.size,bytes).also { fields += it }
                     else scalarFields.getOrPut(node) { Field(owner,fields.size,bytes).also { fields += it } }
                 val children = when(node) {
                     is MaterialNode.Blend -> listOf(visit(node.dst,context),visit(node.src,context))
@@ -401,7 +437,7 @@ internal class MaterialSourceConstructionV4 private constructor(
                         context.copy(coordinateNodes=context.coordinateNodes+node)))
                     else -> emptyList()
                 }
-                drafts += Draft(owner,node,children,field,filter,gradient,image)
+                drafts += Draft(owner,node,children,field,filter,gradient,image,noise)
                 active.remove(node)
                 return MaterialEvaluationRefV5(drafts.lastIndex).also { completed.getOrPut(node) { mutableMapOf() }[context] = it }
             }
@@ -423,12 +459,17 @@ internal class MaterialSourceConstructionV4 private constructor(
                 }
             }
             drafts.forEach { nodes += ComposedMetadata.Node(it.owner,it.original,it.children,
-                it.field?.let(offsets::getValue) ?: 0,it.filter,it.gradient,it.image) }
+                it.field?.let(offsets::getValue) ?: 0,it.filter,it.gradient,it.image,it.noise) }
             val firstGradientOwner=nodes.filter { it.gradientSource?.hasGradientStorage == true }.minOfOrNull { it.ownerNodeIndexI32 }
-            val resourceOwners=nodes.filter { it.imageSource != null }.map { it.ownerNodeIndexI32 }.distinct() + listOfNotNull(firstGradientOwner)
+            val firstNoiseOwner=nodes.filter { it.noiseSource != null }
+                .minOfOrNull { it.ownerNodeIndexI32 }
+            val resourceOwners=nodes.filter { it.imageSource != null }.map { it.ownerNodeIndexI32 }.distinct() +
+                listOfNotNull(firstGradientOwner,firstNoiseOwner)
             val resources=resourceOwners.sorted().mapIndexed { index,owner ->
                 if(owner == firstGradientOwner) ComposedBindingLayoutV1.Resource(owner,0,1,index+1,2u,1u,
                     buffer=ComposedBindingLayoutV1.Buffer(2u,32L))
+                else if(owner == firstNoiseOwner) ComposedBindingLayoutV1.Resource(owner,0,1,index+1,2u,1u,
+                    buffer=ComposedBindingLayoutV1.Buffer(2u,16L,storageKind=ComposedBindingLayoutV1.StorageKind.NOISE_U32))
                 else ComposedBindingLayoutV1.Resource(owner,0,1,index+1,2u,2u,texture=ComposedBindingLayoutV1.Texture(1u,1u))
             }
             val metadata = ComposedMetadata(nodes,ComposedBindingLayoutV1(mappings,cursor,resources))

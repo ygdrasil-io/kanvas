@@ -4,6 +4,97 @@ import org.graphiks.kanvas.gpu.plan.ColorOperationGraphV1
 
 /** Syntax lowering only. Every executed operation and branch comes from the sealed graph. */
 internal object W5fColorOperationEmitterV1 {
+    /** Exact finite lattice plumbing; floating operations remain in the common typed graph. */
+    val noiseDeclarations: String = """
+        struct NoiseShiftV1 { value: vec4<u32>, carry: u32, }
+        fn w5gNoiseShift(a: vec4<u32>) -> NoiseShiftV1 {
+            return NoiseShiftV1(vec4<u32>(a.x << 1u, (a.y << 1u) | (a.x >> 31u),
+                (a.z << 1u) | (a.y >> 31u), (a.w << 1u) | (a.z >> 31u)), a.w >> 31u);
+        }
+        fn w5gNoiseLess(a: vec4<u32>, b: vec4<u32>) -> bool {
+            for(var i = 4u; i > 0u; i = i - 1u) {
+                if(a[i-1u] != b[i-1u]) { return a[i-1u] < b[i-1u]; }
+            }
+            return false;
+        }
+        fn w5gNoiseSubtract(a: vec4<u32>, b: vec4<u32>) -> vec4<u32> {
+            var result = vec4<u32>(0u); var borrow = 0u;
+            for(var i = 0u; i < 4u; i = i + 1u) {
+                result[i] = a[i] - b[i] - borrow;
+                borrow = u32(a[i] < b[i] || (borrow != 0u && a[i] == b[i]));
+            }
+            return result;
+        }
+        fn w5gNoiseRemainder(a: vec4<u32>, divisor: vec4<u32>) -> vec4<u32> {
+            var remainder = vec4<u32>(0u);
+            for(var bit = 128u; bit > 0u; bit = bit - 1u) {
+                let shifted = w5gNoiseShift(remainder);
+                remainder = shifted.value;
+                remainder.x = remainder.x | ((a[(bit-1u)/32u] >> ((bit-1u)%32u)) & 1u);
+                // Retain the temporary 129th bit. Modular subtraction then yields the exact <divisor result.
+                if(shifted.carry != 0u || !w5gNoiseLess(remainder, divisor)) {
+                    remainder = w5gNoiseSubtract(remainder, divisor);
+                }
+            }
+            return remainder;
+        }
+        fn w5gNoiseIntegral(q: f32) -> bool {
+            let bits = bitcast<u32>(q) & 0x7fffffffu;
+            if(bits == 0u) { return true; }
+            let exponent = bits >> 23u;
+            if(exponent >= 150u) { return true; }
+            if(exponent < 127u) { return false; }
+            return (bits & ((1u << (150u-exponent))-1u)) == 0u;
+        }
+        fn w5gNoiseMagnitude(q: f32) -> vec4<u32> {
+            let bits = bitcast<u32>(q) & 0x7fffffffu;
+            if(bits == 0u) { return vec4<u32>(0u); }
+            let shift = i32(bits >> 23u)-150i;
+            let significand = (bits & 0x7fffffu) | 0x800000u;
+            var result = vec4<u32>(0u);
+            for(var bit = 0u; bit < 24u; bit = bit + 1u) {
+                let position = i32(bit)+shift;
+                if(position >= 0i && position < 128i && ((significand >> bit) & 1u) != 0u) {
+                    result[u32(position)/32u] = result[u32(position)/32u] | (1u << (u32(position)%32u));
+                }
+            }
+            return result;
+        }
+        fn w5gNoiseAddress(q: f32, corner: u32, period: vec4<u32>) -> u32 {
+            let lattice = floor(q);
+            var magnitude = w5gNoiseMagnitude(lattice);
+            var negative = lattice < 0.0;
+            if(corner != 0u) {
+                if(negative && any(magnitude != vec4<u32>(0u))) {
+                    magnitude = w5gNoiseSubtract(magnitude, vec4<u32>(1u,0u,0u,0u));
+                } else {
+                    negative = false; var carry = 1u;
+                    for(var i = 0u; i < 4u; i = i + 1u) {
+                        let previous = magnitude[i]; magnitude[i] = previous+carry;
+                        carry = u32(carry != 0u && magnitude[i] < previous);
+                    }
+                    if(carry != 0u) { discard; }
+                }
+            }
+            if(any(period != vec4<u32>(0u))) {
+                magnitude = w5gNoiseRemainder(magnitude,period);
+                if(negative && any(magnitude != vec4<u32>(0u))) { magnitude = w5gNoiseSubtract(period,magnitude); }
+                return magnitude.x & 255u;
+            }
+            if(negative) { return (0u-magnitude.x) & 255u; }
+            return magnitude.x & 255u;
+        }
+        fn w5gNoiseByte(base: u32, index: u32) -> u32 {
+            let word = base+index/4u;
+            return (w5gNoiseWords[word/4u].words[word%4u] >> ((index%4u)*8u)) & 255u;
+        }
+        fn w5gNoiseGradient(base: u32, x: u32, y: u32, channel: u32, axis: u32) -> u32 {
+            let permutation = w5gNoiseByte(base,x);
+            let index = (permutation+y) & 255u;
+            let offset = 256u+channel*1024u+index*4u+axis*2u;
+            return w5gNoiseByte(base,offset) | (w5gNoiseByte(base,offset+1u) << 8u);
+        }
+    """.trimIndent()
     fun emit(graph: ColorOperationGraphV1, inputRgbaExpression: String, uniformWordOffsetU32: Long,
         imageEncodedRgbaExpression: String? = null, resultChannelI32: Int? = null,
         composedProof: org.graphiks.kanvas.gpu.plan.ColorSourceProofV1? = null): String {
@@ -48,6 +139,44 @@ internal object W5fColorOperationEmitterV1 {
                 code.append("let $name = w5dSafeDivideF32($a, $b);\n")
                 return "$name.valueF32".also { cache[node] = it }
             }
+            if (node is ColorOperationGraphV1.Scalar.NoiseComponent) {
+                val vector=cache[node.region] ?: run {
+                    val region=node.region
+                    val prefix="noiseRegion${nextI32++}"
+                    val count=word(region.requestedOctavesWordOffsetU32)
+                    code.append("var ${prefix}Result: vec4<f32>;\n")
+                    region.states.forEachIndexed { index,_ -> code.append("var ${prefix}State$index: f32 = ${if(index == 2) "1.0" else "0.0"};\n") }
+                    code.append("if ($count != 0u) {\n")
+                    val initialCache=java.util.IdentityHashMap(cache)
+                    region.initialState.take(2).forEachIndexed { index,value ->
+                        val initial=expression(value,code,initialCache); code.append("${prefix}State$index = $initial;\n") }
+                    for(axis in 0..1) code.append("var ${prefix}Period$axis = vec4<u32>(${(0..3).joinToString(", ") { word(region.wordOffsetU32+8L+axis*4L+it) }});\n")
+                    code.append("for(var ${prefix}Octave = 0u; ${prefix}Octave < $count; ${prefix}Octave = ${prefix}Octave + 1u) {\n")
+                    val bodyCache=java.util.IdentityHashMap(cache)
+                    region.states.forEachIndexed { index,state -> bodyCache[state]="${prefix}State$index" }
+                    bodyCache[region.xPhase]="${prefix}Period0"; bodyCache[region.yPhase]="${prefix}Period1"
+                    val next=region.nextState.drop(2).map { expression(it,code,bodyCache) }
+                    // The unused final q-double is absent; accumulator Adds and amplitude-half are never omitted.
+                    code.append("if (${prefix}Octave + 1u < $count) {\n")
+                    val qCache=java.util.IdentityHashMap(bodyCache)
+                    val q=region.nextState.take(2).map { expression(it,code,qCache) }
+                    q.forEachIndexed { index,value -> code.append("${prefix}State$index = $value;\n") }
+                    code.append("if (!(w5gNoiseIntegral(${prefix}State0) && w5gNoiseIntegral(${prefix}State1))) {\n")
+                    for(axis in 0..1) {
+                        code.append("let ${prefix}Doubled$axis = w5gNoiseShift(${prefix}Period$axis);\n")
+                        code.append("if (${prefix}Doubled$axis.carry != 0u) { discard; }\n${prefix}Period$axis = ${prefix}Doubled$axis.value;\n")
+                    }
+                    code.append("}\n}\n")
+                    next.forEachIndexed { index,value -> code.append("${prefix}State${index+2} = $value;\n") }
+                    code.append("}\n}\n")
+                    val finalCache=java.util.IdentityHashMap(cache)
+                    region.states.forEachIndexed { index,state -> finalCache[state]="${prefix}State$index" }
+                    val output=region.outputs.map { expression(it,code,finalCache) }
+                    code.append("${prefix}Result = vec4<f32>(${output.joinToString(", ")});\n")
+                    "${prefix}Result".also { cache[region]=it }
+                }
+                return "$vector[${node.channelI32}u]".also { cache[node]=it }
+            }
             if (node is ColorOperationGraphV1.Scalar.BranchComponent) {
                 val vector = cache[node.branch] ?: run {
                     val condition = predicate(node.branch.predicate)
@@ -74,6 +203,19 @@ internal object W5fColorOperationEmitterV1 {
                 return name
             }
             val text = when (node) {
+                is ColorOperationGraphV1.Scalar.NoiseComponent -> error("Noise region must be emitted together")
+                is ColorOperationGraphV1.Scalar.NoiseStateF32 -> error("Unbound Noise state")
+                is ColorOperationGraphV1.Scalar.NoiseIntegralF32 -> "f32(w5gNoiseIntegral(${arg(node.x.q)}) && w5gNoiseIntegral(${arg(node.y.q)}))"
+                is ColorOperationGraphV1.Scalar.NoisePhaseComponent -> {
+                    val q=arg(node.phase.q)
+                    if(node.kind == org.graphiks.kanvas.gpu.plan.NoiseOperationGraphV1.PhaseKind.FLOOR) "floor($q)" else "($q - floor($q))"
+                }
+                is ColorOperationGraphV1.Scalar.NoiseGradientU16 -> {
+                    val read=node.read
+                    val x="w5gNoiseAddress(${arg(read.x.phase.q)}, ${read.x.offsetI32}u, ${requireNotNull(cache[read.x.phase])})"
+                    val y="w5gNoiseAddress(${arg(read.y.phase.q)}, ${read.y.offsetI32}u, ${requireNotNull(cache[read.y.phase])})"
+                    "f32(w5gNoiseGradient(${word(read.tableRangeWordOffsetU32)}, $x, $y, ${read.channelI32}u, ${read.axisI32}u))"
+                }
                 is ColorOperationGraphV1.Scalar.InputLinearPremul -> "($inputRgbaExpression)[${node.channelI32}u]"
                 is ColorOperationGraphV1.Scalar.ImageEncodedInput ->
                     "(${requireNotNull(imageEncodedRgbaExpression)})[${node.channelI32}u]"
