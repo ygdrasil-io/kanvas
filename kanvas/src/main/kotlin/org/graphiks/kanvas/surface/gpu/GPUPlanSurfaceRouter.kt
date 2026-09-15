@@ -34,6 +34,8 @@ internal interface GPUPlanSurfacePort {
         scene: SceneSnapshot,
         target: RenderTargetDescriptor,
         frameLocalBudgetBytes: Long,
+        materialFrameLimits: org.graphiks.kanvas.gpu.plan.MaterialFrameLimits =
+            org.graphiks.kanvas.gpu.plan.MaterialFrameLimits(),
     ): GpuPlanSurfacePlanResult
 
     fun submit(token: GpuPlanSurfaceReadyToken): GpuPlanSurfaceSubmitResult
@@ -81,6 +83,7 @@ internal class GPUPlanSurfaceRouter(
                 scene,
                 RenderTargetDescriptor(extent, ColorSpace.SRGB),
                 config.frameLocalBudgetBytes,
+                org.graphiks.kanvas.gpu.plan.MaterialFrameLimits(config.maxNoiseOctaveEvaluationsI64),
             )
         ) {
             // No compiler owns a GapNotMigrated frame. This is the final legacy boundary.
@@ -151,7 +154,8 @@ private class ProductionGPUPlanSurfacePort : GPUPlanSurfacePort {
         scene: SceneSnapshot,
         target: RenderTargetDescriptor,
         frameLocalBudgetBytes: Long,
-    ): GpuPlanSurfacePlanResult = GPUPlanRenderContextOwner.plan(scene, target, frameLocalBudgetBytes)
+        materialFrameLimits: org.graphiks.kanvas.gpu.plan.MaterialFrameLimits,
+    ): GpuPlanSurfacePlanResult = GPUPlanRenderContextOwner.plan(scene, target, frameLocalBudgetBytes, materialFrameLimits)
 
     override fun submit(token: GpuPlanSurfaceReadyToken): GpuPlanSurfaceSubmitResult =
         GPUPlanRenderContextOwner.submit(token)

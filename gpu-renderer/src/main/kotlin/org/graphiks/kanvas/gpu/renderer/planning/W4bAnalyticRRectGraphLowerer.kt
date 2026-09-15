@@ -276,6 +276,7 @@ internal class W4bAnalyticRRectGraphLowerer {
         val table = graph.materialPlanTableOrNull()
         if (draws.any { draw ->
                 when (val authority = draw.materialAuthority) {
+                    is PlanDrawMaterialAuthority.MaterialV5 -> error(org.graphiks.kanvas.gpu.plan.W5gPlanDiagnostics.Unpromoted)
                     is PlanDrawMaterialAuthority.MaterialV4 -> error(org.graphiks.kanvas.gpu.plan.W5fPlanDiagnostics.Unpromoted)
                     is PlanDrawMaterialAuthority.LegacyColorV1 -> false
                     is PlanDrawMaterialAuthority.MaterialV3 -> error(org.graphiks.kanvas.gpu.plan.W5eImagePlanDiagnostics.InvalidContract)
@@ -763,6 +764,7 @@ internal class W4bAnalyticRRectGraphLowerer {
         table: MaterialPlanTable?,
         authority: PlanDrawMaterialAuthority,
     ): ColorF32? = when (authority) {
+        is PlanDrawMaterialAuthority.MaterialV5 -> error(org.graphiks.kanvas.gpu.plan.W5gPlanDiagnostics.Unpromoted)
         is PlanDrawMaterialAuthority.MaterialV4 -> error(org.graphiks.kanvas.gpu.plan.W5fPlanDiagnostics.Unpromoted)
         is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
         is PlanDrawMaterialAuthority.MaterialV3 -> error(org.graphiks.kanvas.gpu.plan.W5eImagePlanDiagnostics.InvalidContract)

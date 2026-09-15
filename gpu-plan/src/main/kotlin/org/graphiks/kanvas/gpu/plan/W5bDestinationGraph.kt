@@ -44,7 +44,7 @@ internal object W5bDestinationGraphSealer {
     ): RenderGraphConstruction {
         val sizing = sizeLayout(capabilityId, extent, capabilities, budget, draws, targetBytesI64, stagingBytesI64, rowBytesI64,
             geometryResources, drawDataResources, drawDataByCommandI32, depthStencilByCommandI32, w4eSource)
-        val sourceRequirements = draws.filterNot { it.materialAuthority is PlanDrawMaterialAuthority.MaterialV4 }.map { draw ->
+        val sourceRequirements = draws.filter { it.materialAuthority.colorSourceCoordinatesV4() == null }.map { draw ->
             RawMaterialRequirementsV2.of(requireNotNull(material), draw.materialAuthority.materialPlanRef()).also { source ->
                 require(source.fitsUniformBinding(capabilities)) {
                     if (draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV2) W5dPlanDiagnostics.CoordinateUniformBudget
@@ -228,12 +228,14 @@ internal object W5bDestinationGraphSealer {
                         is SolidRectDraw -> SolidRectDraw.ofMaterial(draw.commandIndex,
                             draw.materialAuthority.materialPlanRef(),
                             draw.copyVisibleBounds(), draw.copyScissor(), draw.coverage, draw.sample, sealed, draw.materialCoordinates, draw.materialCoordinatesV2,
-                            (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates)
+                            (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
+                            draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV5)
                         is W5bPointDraw -> draw.withBlend(sealed)
                         is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(draw.commandIndex,
                             draw.materialAuthority.materialPlanRef(),
                             draw.copyDeviceBounds(), draw.copyRasterBounds(), draw.copyScissor(), sealed, draw.materialCoordinates, draw.materialCoordinatesV2,
-                            (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates)
+                            (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
+                            draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV5)
                         is AnalyticRRectDraw -> (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let {
                             AnalyticRRectDraw.ofMaterialV4(draw.commandIndex, it.ref, draw.origin,
                                 draw.copyDeviceShape(), draw.copyRasterBounds(), draw.copyScissor(), sealed, it.coordinates)
@@ -243,7 +245,8 @@ internal object W5bDestinationGraphSealer {
                         is PathFillDraw -> PathFillDraw.ofMaterial(draw.commandIndex,
                             draw.materialAuthority.materialPlanRef(),
                             draw.copyGeometryF32(), draw.strategy, draw.copyScissorI32(), sealed, draw.materialCoordinates, draw.materialCoordinatesV2,
-                            (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates)
+                            (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
+                            draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV5)
                         is W5bW4ePathDraw -> draw.withBlend(sealed)
                         is GeneralPathDraw -> draw.withBlend(sealed)
                         is PathStrokeDraw -> (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let {

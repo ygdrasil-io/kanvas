@@ -1,5 +1,10 @@
 package org.graphiks.kanvas.gpu.renderer.planning
 
+import org.graphiks.kanvas.gpu.renderer.materials.composedStopAllocationLabelV5
+import org.graphiks.kanvas.gpu.renderer.materials.noiseAllocationLabelV1
+
+import org.graphiks.kanvas.gpu.plan.colorSourceCoordinatesV4
+
 import org.graphiks.kanvas.gpu.plan.materialPlanRef
 
 import org.graphiks.kanvas.gpu.plan.*
@@ -37,7 +42,10 @@ internal class W5bNativeGeometryGraphLowerer {
             GPUFrameBufferDescriptor(stagingResource.byteSize, graph.capabilities.copyBytesPerRowAlignment.toLong()),
             GPUFrameResourceRole.ReadbackStaging, setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.MapRead),
             GPUFrameResourceLifetime.FrameLocal, stagingResource.byteSize, "$identity.staging")
-        val allocations = graph.resources().map { item -> GPUFrameMemoryAllocation("$identity.${item.id.value}",
+        val allocations = graph.resources().map { item -> GPUFrameMemoryAllocation(
+            if(item.role == PlanResourceRole.GradientStopData) graph.composedStopAllocationLabelV5(request.w5aCompositeSessionIdentity ?: identity) ?: "$identity.${item.id.value}"
+                else if(item.role == PlanResourceRole.NoiseTableData) graph.noiseAllocationLabelV1()
+                else "$identity.${item.id.value}",
             when (item.role) {
                 PlanResourceRole.LogicalTarget -> GPUFrameMemoryCategory.CanonicalTarget
                 PlanResourceRole.ReadbackStaging -> GPUFrameMemoryCategory.ReadbackStaging
@@ -80,7 +88,7 @@ internal class W5bNativeGeometryGraphLowerer {
                         w5bMaterial = if (pass.phase == PathRenderPhase.SingleSampleStencilProducer) null else
                             W5aMaterialPlanLowerer().material(table, sealedColors.getValue(pass.draw.commandIndex).materialAuthority,
                                 pass.draw.commandIndex,
-                                (sealedColors.getValue(pass.draw.commandIndex).materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)
+                                sealedColors.getValue(pass.draw.commandIndex).materialAuthority.takeIf { it.colorSourceCoordinatesV4() != null }
                                     ?.let(graph::packedMaterialSourceV4))) }
                     val bindings = W5bGeneralResourceBindingsV3.issue(graph, lane, target, staging)
                     val native = requireNotNull(authority.bindNativeMaterializationFrame(identity, seal.sealHash,
@@ -97,10 +105,10 @@ internal class W5bNativeGeometryGraphLowerer {
                     require(draws.all { it is SolidRectDraw })
                     val builder = GpuPlanTaskListLowerer()
                     val built = draws.mapIndexed { index, draw -> builder.packet(draw,
-                        if (draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV4) org.graphiks.math.color.ColorF32.Transparent
+                        if (draw.materialAuthority.colorSourceCoordinatesV4() != null) org.graphiks.math.color.ColorF32.Transparent
                         else requireNotNull(W5aMaterialPlanLowerer().lower(table,
                             draw.materialAuthority.materialPlanRef())), index, bounds, table, null,
-                        (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let(graph::packedMaterialSourceV4)) }
+                        draw.materialAuthority.takeIf { it.colorSourceCoordinatesV4() != null }?.let(graph::packedMaterialSourceV4)) }
                     val scratch = (builder.sealW3Scratch(request, target, staging, bounds, seal.sealHash, built) as
                         GpuPlanTaskListLowerer.W3SessionScratchSealResult.Sealed).scratch
                     require(listOf(resource(data.vertex).byteSize, resource(data.index).byteSize, resource(data.uniform).byteSize) ==
@@ -183,7 +191,7 @@ internal class W5bNativeGeometryGraphLowerer {
                         if (draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV4) org.graphiks.math.color.ColorF32.Transparent
                         else requireNotNull(W5aMaterialPlanLowerer().lower(table,
                             draw.materialAuthority.materialPlanRef())), index, bounds, table, w5b = true,
-                        packedSourceV4 = (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let(graph::packedMaterialSourceV4)) }
+                        packedSourceV4 = draw.materialAuthority.takeIf { it.colorSourceCoordinatesV4() != null }?.let(graph::packedMaterialSourceV4)) }
                     val lanePackets = built.map { it.packet }
                     val semantics = lanePackets.map { it.semanticPayload as GPUDrawSemanticPayload.CorePrimitive }
                     val semanticAuthorities = semantics.map(GPUCorePrimitivePreparedSemanticAuthority::capture)

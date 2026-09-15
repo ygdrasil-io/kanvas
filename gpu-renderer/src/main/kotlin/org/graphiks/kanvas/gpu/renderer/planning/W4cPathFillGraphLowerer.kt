@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.planning
 
+import org.graphiks.kanvas.gpu.plan.colorSourceCoordinatesV4
+
 import org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan
 import org.graphiks.kanvas.gpu.plan.AttachmentStorePlan
 import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
@@ -305,6 +307,10 @@ internal class W4cPathFillGraphLowerer {
                     val authority = visualDraw.draw.materialAuthority
                     val ref = when (authority) {
                         is PlanDrawMaterialAuthority.MaterialV1 -> authority.ref
+                        is PlanDrawMaterialAuthority.MaterialV5 -> {
+                            graph.packedMaterialSourceV4(authority)
+                            authority.ref
+                        }
                         is PlanDrawMaterialAuthority.MaterialV4 -> {
                             graph.packedMaterialSourceV4(authority)
                             authority.ref
@@ -686,7 +692,7 @@ internal class W4cPathFillGraphLowerer {
                 premultipliedRgba = listOf(color.red, color.green, color.blue, color.alpha),
                 material = if (role == GPUDrawPacketRole.PathStencilProducer) null else
                     W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex,
-                        (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let(graph::packedMaterialSourceV4)),
+                        draw.materialAuthority.takeIf { it.colorSourceCoordinatesV4() != null }?.let(graph::packedMaterialSourceV4)),
                 targetBounds = targetBounds,
                 scissorBounds = plannedScissor,
                 clipCoveragePlan = clipCoverage,
@@ -1067,6 +1073,7 @@ internal class W4cPathFillGraphLowerer {
         table: MaterialPlanTable?,
         authority: PlanDrawMaterialAuthority,
     ): ColorF32? = when (authority) {
+        is PlanDrawMaterialAuthority.MaterialV5 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }
         is PlanDrawMaterialAuthority.MaterialV4 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }
         is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
         is PlanDrawMaterialAuthority.MaterialV3 -> error(org.graphiks.kanvas.gpu.plan.W5eImagePlanDiagnostics.InvalidContract)

@@ -79,10 +79,22 @@ internal class RenderGraphConstruction internal constructor(
 internal fun remapSourcePassesV4(sourcePasses: List<PlanPass>,
     overlayCoordinates: ((PlanDraw)->SourceCoordinatesV4?)? = null,
     overlayReference: ((PlanDraw)->MaterialPlanRef)? = null,
+    composed: ((MaterialPlanRef)->Boolean)? = null,
     remap: (MaterialPlanRef) -> MaterialPlanRef): List<PlanPass> {
         val copied = java.util.IdentityHashMap<PlanDraw, PlanDraw>()
         fun draw(source: PlanDraw): PlanDraw = copied.getOrPut(source) {
             val ref = overlayReference?.invoke(source) ?: remap(source.materialAuthority.materialPlanRef())
+            if (composed?.invoke(ref) == true) return@getOrPut when (source) {
+                is SolidRectDraw -> SolidRectDraw.ofMaterial(source.commandIndex,ref,source.copyVisibleBounds(),
+                    source.copyScissor(),source.coverage,source.sample,source.blend,composedV5=true)
+                is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(source.commandIndex,ref,source.copyDeviceBounds(),
+                    source.copyRasterBounds(),source.copyScissor(),source.blend,composedV5=true)
+                is PathFillDraw -> PathFillDraw.ofMaterial(source.commandIndex,ref,source.copyGeometryF32(),source.strategy,
+                    source.copyScissorI32(),source.blend,composedV5=true)
+                is GeneralPathDraw -> GeneralPathDraw.ofMaterial(source.commandIndex,ref,source.copyPathGeometry(),
+                    source.strategy,source.copyScissorI32(),source.coverage,source.sample,source.blend,composedV5=true)
+                else -> error(W5gPlanDiagnostics.Unpromoted)
+            }
             val imageCoordinates = overlayCoordinates?.invoke(source)
             if (imageCoordinates != null) return@getOrPut when (source) {
                 is SolidRectDraw -> SolidRectDraw.ofMaterial(source.commandIndex,ref,source.copyVisibleBounds(),
@@ -104,7 +116,8 @@ internal fun remapSourcePassesV4(sourcePasses: List<PlanPass>,
                 is GeneralPathDraw -> GeneralPathDraw.ofMaterial(source.commandIndex,ref,source.copyPathGeometry(),
                     source.strategy,source.copyScissorI32(),source.coverage,source.sample,source.blend,
                     source.materialCoordinates,source.materialCoordinatesV2,
-                    (source.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates)
+                    (source.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
+                    source.materialAuthority is PlanDrawMaterialAuthority.MaterialV5)
                 else -> error("Unsupported composite construction draw")
             }
         }
@@ -139,9 +152,10 @@ internal class PackedFrameSourcesV4 private constructor(private val table: Mater
         }
         val selected = linkedMapOf<String, RawMaterialRequirementsV2>()
         visualSources(graph.passes()).forEach { draw ->
-            (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let { authority ->
-                val footprint = RawMaterialRequirementsV2.measureV4(requireNotNull(table),authority.ref)
-                require(footprint.proof.authenticates(table,authority.ref,authority.coordinates) &&
+            draw.materialAuthority.colorSourceCoordinatesV4()?.let { coordinates ->
+                val ref = draw.materialAuthority.materialPlanRef()
+                val footprint = RawMaterialRequirementsV2.measureV4(requireNotNull(table),ref)
+                require(footprint.proof.authenticates(table,ref,coordinates) &&
                     sources[footprint.canonicalIdentity]?.canonicalIdentity?.endsWith(footprint.canonicalIdentity) == true) {
                     W5fPlanDiagnostics.Schema
                 }
@@ -157,13 +171,14 @@ internal class PackedFrameSourcesV4 private constructor(private val table: Mater
             require(constructions.all { it.materialTable === table && it.capabilities == first.capabilities && it.budget == first.budget })
             val draws = constructions.flatMap { visualSources(it.passes()) }
             val footprints = draws.mapNotNull { draw ->
-                (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let { authority ->
+                draw.materialAuthority.colorSourceCoordinatesV4()?.let { coordinates ->
+                    val ref = draw.materialAuthority.materialPlanRef()
                     require(draw is SolidRectDraw || draw is AnalyticRectDraw || draw is PathFillDraw ||
                         draw is GeneralPathDraw && draw.copyPathGeometry() is PathDrawGeometry.Fill ||
                         (draw is AnalyticRRectDraw || draw is PathStrokeDraw || draw is GeneralPathDraw) &&
-                            table?.isUnfilteredGradientV4(authority.ref) == true) { W5fPlanDiagnostics.Unpromoted }
-                    RawMaterialRequirementsV2.measureV4(requireNotNull(table),authority.ref).also {
-                        require(it.proof.authenticates(table,authority.ref,authority.coordinates)) { W5fPlanDiagnostics.Schema }
+                            table?.isUnfilteredGradientV4(ref) == true) { W5fPlanDiagnostics.Unpromoted }
+                    RawMaterialRequirementsV2.measureV4(requireNotNull(table),ref).also {
+                        require(it.proof.authenticates(table,ref,coordinates)) { W5fPlanDiagnostics.Schema }
                     }
                 }
             }
@@ -171,7 +186,7 @@ internal class PackedFrameSourcesV4 private constructor(private val table: Mater
             // checks. Do not add a new refusal boundary to the V1–V3 public wrapper.
             if (footprints.isEmpty() && constructions.size == 1)
                 return PackedFrameSourcesV4(table,first.capabilities,first.budget,emptyMap())
-            val legacy = draws.filter { it.materialAuthority !is PlanDrawMaterialAuthority.MaterialV4 &&
+            val legacy = draws.filter { it.materialAuthority.colorSourceCoordinatesV4() == null &&
                 it.materialAuthority !is PlanDrawMaterialAuthority.LegacyColorV1 }
                 .map { RawMaterialRequirementsV2.of(requireNotNull(table),it.materialAuthority.materialPlanRef()) }
                 .distinctBy { it.canonicalIdentity }

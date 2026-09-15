@@ -23,13 +23,14 @@ import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.SizeF32
+import org.graphiks.math.geometry.SizeI32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.vector.Vector2F32
 
 /**
  * The owner of the versioned Picture payload.
  *
- * A v8/v9/v10 archive starts with the public `KPIC` magic, its version integer and the
+ * A v8/v9/v10/v11 archive starts with the public `KPIC` magic, its version integer and the
  * cull rectangle.  The following negative marker occupies the old v8
  * `opCount` slot: it can therefore never be mistaken for a valid historical
  * v8 op count.  Historical Task 8 v8 streams deliberately return [LegacyV8]
@@ -37,11 +38,11 @@ import org.graphiks.math.vector.Vector2F32
  */
 public object SceneArchiveCodec {
     private val magic: ByteArray = byteArrayOf(0x4b, 0x50, 0x49, 0x43)
-    private const val pictureVersion: Int = 10
+    private const val pictureVersion: Int = 11
     private const val irMarker: Int = -1_391_019_346
-    private const val schemaVersion: Int = 4
+    private const val schemaVersion: Int = 5
 
-    /** Encodes a deeply immutable Scene IR as the sole v10 Picture writer. */
+    /** Encodes a deeply immutable Scene IR as the sole v11 Picture writer. */
     public fun encodePicture(scene: SceneSnapshot, cullRect: RectF32): ByteArray {
         requireSemanticValidity(scene)
         val writer = ArchiveWriter()
@@ -60,7 +61,7 @@ public object SceneArchiveCodec {
         return try {
             if (!reader.bytesEqual(magic)) return SceneArchiveDecodeResult.Invalid("invalid-magic", "Picture magic is not KPIC")
             val encodedPictureVersion = reader.i32()
-            if (encodedPictureVersion !in setOf(8, 9, pictureVersion)) {
+            if (encodedPictureVersion !in setOf(8, 9, 10, pictureVersion)) {
                 return SceneArchiveDecodeResult.Invalid("unknown-version", "Picture version is not supported")
             }
             val cull = reader.rect()
@@ -76,6 +77,7 @@ public object SceneArchiveCodec {
             val maxSchema = when (encodedPictureVersion) {
                 8 -> 2
                 9 -> 3
+                10 -> 4
                 pictureVersion -> schemaVersion
                 else -> 0
             }
@@ -168,6 +170,7 @@ private class ArchiveWriter {
     fun point(value: Point2F32) { f32(value.x); f32(value.y) }
     fun vector(value: Vector2F32) { f32(value.x); f32(value.y) }
     fun size(value: SizeF32) { f32(value.width); f32(value.height) }
+    fun noiseTile(value: SizeI32) { i32(value.width); i32(value.height) }
     fun rect(value: RectF32) { f32(value.left); f32(value.top); f32(value.right); f32(value.bottom) }
     fun rrect(value: RRectF32) {
         rect(value.rect)
@@ -312,8 +315,8 @@ private class ArchiveWriter {
             is MaterialNode.WithLocalMatrix -> { i32(10); material(value.material); matrix(value.matrix) }
             is MaterialNode.WithColorFilter -> { i32(11); material(value.material); colorFilter(value.filter) }
             is MaterialNode.Opacity -> { i32(12); material(value.material); f32(value.alpha) }
-            is MaterialNode.PerlinNoise -> { i32(13); f32(value.baseX); f32(value.baseY); i32(value.numOctaves); i32(value.seed); optional(value.tileSize, ::size) }
-            is MaterialNode.FractalNoise -> { i32(14); f32(value.baseX); f32(value.baseY); i32(value.numOctaves); i32(value.seed); optional(value.tileSize, ::size) }
+            is MaterialNode.PerlinNoise -> { i32(13); f32(value.baseX); f32(value.baseY); i32(value.numOctaves); i32(value.seed); optional(value.tileSize, ::noiseTile) }
+            is MaterialNode.FractalNoise -> { i32(14); f32(value.baseX); f32(value.baseY); i32(value.numOctaves); i32(value.seed); optional(value.tileSize, ::noiseTile) }
             is MaterialNode.WithWorkingColorSpace -> { i32(15); material(value.material); enum(value.interpolation) }
             is MaterialNode.CoordClamp -> { i32(16); material(value.material); rect(value.copySubset()) }
         }
@@ -457,6 +460,18 @@ private class ArchiveReader(private val data: ByteArray) {
     fun point(): Point2F32 = Point2F32(f32(), f32())
     fun vector(): Vector2F32 = Vector2F32(f32(), f32())
     fun size(): SizeF32 = SizeF32(f32(), f32())
+    fun noiseTile(): SizeI32 = if (sceneArchiveSchemaVersion >= 5) {
+        val result = SizeI32(i32(), i32())
+        if (result.width < 0 || result.height < 0)
+            throw ArchiveFailure("invalid.material.noise.tile", "Noise tile dimensions must be nonnegative integral I32 values")
+        result
+    } else {
+        val legacy = size()
+        try { requireNotNull(checkedNoiseTileI32(legacy)) }
+        catch (_: IllegalArgumentException) {
+            throw ArchiveFailure("invalid.material.noise.tile", "Historical Noise tile is not a nonnegative integral I32 size")
+        }
+    }
     fun rect(): RectF32 = RectF32(f32(), f32(), f32(), f32())
     fun rrect(): RRectF32 = RRectF32(rect(), corner(), corner(), corner(), corner())
     fun corner(): CornerRadiiF32 = CornerRadiiF32(f32(), f32())
@@ -564,7 +579,7 @@ private class ArchiveReader(private val data: ByteArray) {
         6 -> MaterialNode.ConicalGradient.of(point(), f32(), point(), f32(), stops(), enum(), enum()); 7 -> MaterialNode.ImageSample(image(), enum(), enum(), sampling())
         8 -> MaterialNode.Blend(enum(), material(), material()); 9 -> MaterialNode.RuntimeEffect.of(descriptor(), uniforms(), list { RuntimeMaterialChild(text(), material()) })
         10 -> MaterialNode.WithLocalMatrix(material(), matrix()); 11 -> MaterialNode.WithColorFilter(material(), colorFilter()); 12 -> MaterialNode.Opacity(material(), f32())
-        13 -> MaterialNode.PerlinNoise(f32(), f32(), i32(), i32(), optional(::size)); 14 -> MaterialNode.FractalNoise(f32(), f32(), i32(), i32(), optional(::size))
+        13 -> MaterialNode.PerlinNoise(f32(), f32(), i32(), i32(), optional(::noiseTile)); 14 -> MaterialNode.FractalNoise(f32(), f32(), i32(), i32(), optional(::noiseTile))
         15 -> MaterialNode.WithWorkingColorSpace(material(), enum()); 16 -> MaterialNode.CoordClamp(material(), rect()); else -> failTag("material")
     } }
     fun stops(): List<GradientStop> = list { GradientStop(f32(), color()) }
@@ -611,7 +626,7 @@ private class ArchiveReader(private val data: ByteArray) {
                         perspectiveCaptureRefusal = bool(),
                         transformClass = text(),
                     )
-                    2, 3, 4 -> clipTransformV2()
+                    2, 3, 4, 5 -> clipTransformV2()
                     else -> throw ArchiveFailure("unknown-schema", "Scene archive schema is not supported")
                 }
                 ClipEntry(geometry, operation, antiAlias, transform)

@@ -2,7 +2,16 @@ package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.math.geometry.SizeI32
 
-public data class PlanBudget(public val maxFrameLocalBytes: Long) {
+public data class MaterialFrameLimits(
+    public val maxNoiseOctaveEvaluationsI64: Long = 1L shl 30,
+) {
+    init { require(maxNoiseOctaveEvaluationsI64 >= 0L) { "Noise octave evaluation limit must be nonnegative" } }
+}
+
+public data class PlanBudget(
+    public val maxFrameLocalBytes: Long,
+    public val materialFrameLimits: MaterialFrameLimits = MaterialFrameLimits(),
+) {
     init { require(maxFrameLocalBytes > 0) { "Frame-local budget must be positive" } }
 }
 

@@ -5239,11 +5239,29 @@ internal class GPUFramePreflighter(
             .distinctBy { it.canonicalIdentity }
         if (stopSlabs.size > 1) return false
         val stopBytesI64 = stopSlabs.singleOrNull()?.byteSizeI64 ?: 0L
-        if (stopBytesI64 > maxBufferSize || stagingBytes > Long.MAX_VALUE - stopBytesI64) return false
-        val transientBytesI64 = stagingBytes + stopBytesI64
+        val noiseStages=packets.mapNotNull { it.w5aSourceStageV2?.stage }.filter { it.noiseTableSlab != null }
+        val noiseSlabs=noiseStages.map { requireNotNull(it.noiseTableSlab) }.distinct()
+        if(noiseSlabs.size > 1) return false
+        val noiseSlab=noiseSlabs.singleOrNull()
+        if(noiseStages.any { stage ->
+            val resource=stage.composedLayout?.resources?.singleOrNull {
+                it.buffer?.storageKind == org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.NOISE_U32 }
+            resource == null || noiseSlab == null || stage.noiseTableSlab !== noiseSlab ||
+                stage.composedProof?.authenticatesComposedNoise(resource,noiseSlab) != true
+        }) return false
+        val noiseBytesI64=noiseSlab?.byteCountI64 ?: 0L
+        if (stopBytesI64 > maxBufferSize || noiseBytesI64 > maxBufferSize ||
+            noiseBytesI64 > 0L && limits.maxStorageBufferBindingSizeBytesI64?.let { noiseBytesI64 <= it } != true ||
+            stopBytesI64 > Long.MAX_VALUE-noiseBytesI64) return false
+        val storageBytesI64=stopBytesI64+noiseBytesI64
+        if(stagingBytes > Long.MAX_VALUE-storageBytesI64) return false
+        val transientBytesI64 = stagingBytes + storageBytesI64
         val stopAllocations = if (stopBytesI64 == 0L) emptyList() else listOf(GPUFrameMemoryAllocation(
             render.target.value.removeSuffix(".target") + ".gradient-stops", GPUFrameMemoryCategory.ReusableScratch,
             stopBytesI64, GPUFrameMemoryResourceKind.Buffer, null))
+        val noiseAllocations=if(noiseBytesI64 == 0L) emptyList() else listOf(GPUFrameMemoryAllocation(
+            org.graphiks.kanvas.gpu.renderer.materials.NOISE_TABLE_ALLOCATION_LABEL_V1,
+            GPUFrameMemoryCategory.ReusableScratch,noiseBytesI64,GPUFrameMemoryResourceKind.Buffer,null,0,2))
         return framePlan.steps.size == 3 &&
             framePlan.steps[0] is GPUFrameStep.PrepareResourcesStep &&
             framePlan.steps[1] === render && framePlan.steps[2] === readback &&
@@ -5323,7 +5341,7 @@ internal class GPUFramePreflighter(
             staging.lifetime == GPUFrameResourceLifetime.FrameLocal && staging.byteSize == stagingBytes &&
             stagingDescriptor?.byteSize == stagingBytes &&
             stagingDescriptor.alignmentBytes == limits.copyBytesPerRowAlignment &&
-            framePlan.memoryBudget.allocations.size == 2 + stopAllocations.size &&
+            framePlan.memoryBudget.allocations.size == 2 + stopAllocations.size + noiseAllocations.size &&
             framePlan.memoryBudget.allocations.take(2).map { it.category } == listOf(
                 GPUFrameMemoryCategory.CanonicalTarget,
                 GPUFrameMemoryCategory.ReadbackStaging,
@@ -5335,7 +5353,7 @@ internal class GPUFramePreflighter(
             framePlan.memoryBudget.peakFrameTransientBytes == transientBytesI64 &&
             targetBytes <= Long.MAX_VALUE - transientBytesI64 &&
             targetBytes + transientBytesI64 <= framePlan.memoryBudget.configuredAggregateBudgetBytes &&
-            framePlan.memoryBudget.allocations.drop(2) == stopAllocations
+            framePlan.memoryBudget.allocations.drop(2) == stopAllocations + noiseAllocations
     }
 
     /** W4b seals the full ScalarAA RRect envelope before generic native-route classification. */

@@ -127,6 +127,7 @@ internal class SourceDeferredRenderConstructionV4 private constructor(
             allDraws.forEach { draw ->
                 val source = sources.source(draw.materialAuthority.materialPlanRef())
                 val coordinates = when (val authority = draw.materialAuthority) {
+                    is PlanDrawMaterialAuthority.MaterialV5 -> SourceCoordinatesV4.None
                     is PlanDrawMaterialAuthority.MaterialV4 -> authority.coordinates
                     is PlanDrawMaterialAuthority.MaterialV3 -> SourceCoordinatesV4.V3(authority.imageCoordinates)
                     is PlanDrawMaterialAuthority.MaterialV2 -> SourceCoordinatesV4.V2(authority.coordinates)
@@ -134,7 +135,7 @@ internal class SourceDeferredRenderConstructionV4 private constructor(
                     is PlanDrawMaterialAuthority.LegacyColorV1 -> error(W5fPlanDiagnostics.Schema)
                 }
                 require(coordinates == source.coordinates && (!source.pending ||
-                    draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV4)) { W5fPlanDiagnostics.Schema }
+                    draw.materialAuthority.colorSourceCoordinatesV4() != null)) { W5fPlanDiagnostics.Schema }
             }
             val commands = RenderGraph.visualDraws(passes).map { it.commandIndex }
             require(commands.size == visualCommandCount) { W5fPlanDiagnostics.Schema }

@@ -73,8 +73,9 @@ private fun Shader.isW5dGradientCandidateV2(allowGradient: Boolean,allowNonGradi
                 source = node.shader
             }
             is Shader.SolidColor -> return (allowNonGradient || filtered) && localCountI32 == 0
-            is Shader.Blend, is Shader.Image, is Shader.RuntimeEffect,
-            is Shader.PerlinNoise, is Shader.FractalNoise -> return allowNonGradient && localCountI32 == 0
+            is Shader.Blend -> return (allowNonGradient || allowFilteredGradient) && localCountI32 == 0
+            is Shader.PerlinNoise, is Shader.FractalNoise -> return allowNonGradient || allowFilteredGradient
+            is Shader.Image, is Shader.RuntimeEffect -> return allowNonGradient && localCountI32 == 0
         }
     }
 }

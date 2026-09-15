@@ -5,6 +5,8 @@ import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.geometry.Point2F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.SizeF32
+import org.graphiks.math.geometry.SizeI32
+import org.graphiks.kanvas.render.ir.checkedNoiseTileI32
 
 enum class ColorSpaceInterpolation { SRGB, LINEAR, OKLAB, HSL, OKLCH }
 
@@ -61,8 +63,20 @@ sealed interface Shader {
     ) : Shader
     data class WithLocalMatrix(val shader: Shader, val matrix: Matrix3x3F32) : Shader
     data class WithColorFilter(val shader: Shader, val filter: ColorFilter) : Shader
-    data class PerlinNoise(val baseX: Float, val baseY: Float, val numOctaves: Int, val seed: Int, val tileSize: SizeF32?) : Shader
-    data class FractalNoise(val baseX: Float, val baseY: Float, val numOctaves: Int, val seed: Int, val tileSize: SizeF32?) : Shader
+    data class PerlinNoise(val baseX: Float, val baseY: Float, val numOctaves: Int, val seed: Int, val tileSize: SizeI32?) : Shader {
+        @Deprecated("Use SizeI32 for an integral noise tile")
+        constructor(baseX: Float, baseY: Float, numOctaves: Int, seed: Int, tileSize: SizeF32?) :
+            this(baseX, baseY, numOctaves, seed, checkedNoiseTileI32(tileSize))
+        constructor(baseX: Float, baseY: Float, numOctaves: Int, seed: Int, tileSize: Nothing?) :
+            this(baseX, baseY, numOctaves, seed, null as SizeI32?)
+    }
+    data class FractalNoise(val baseX: Float, val baseY: Float, val numOctaves: Int, val seed: Int, val tileSize: SizeI32?) : Shader {
+        @Deprecated("Use SizeI32 for an integral noise tile")
+        constructor(baseX: Float, baseY: Float, numOctaves: Int, seed: Int, tileSize: SizeF32?) :
+            this(baseX, baseY, numOctaves, seed, checkedNoiseTileI32(tileSize))
+        constructor(baseX: Float, baseY: Float, numOctaves: Int, seed: Int, tileSize: Nothing?) :
+            this(baseX, baseY, numOctaves, seed, null as SizeI32?)
+    }
     data class WithWorkingColorSpace(val shader: Shader, val interpolation: ColorSpaceInterpolation) : Shader
     data class CoordClamp(val shader: Shader, val subset: RectF32) : Shader
 }

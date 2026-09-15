@@ -311,6 +311,7 @@ public class RawMaterialRequirementsV2 private constructor(
             ranges: Map<MaterialBindingPlan,GradientStopRangeV1> = emptyMap()) {
             for (indexI32 in leafI32..root.indexI32) {
                 when (val binding = table.entry(MaterialPlanRef(indexI32)).bindings) {
+                    is ComposedMaterialBindingV5 -> error(W5gPlanDiagnostics.Schema)
                     is GradientInterpolationBindingV4 -> error(W5fPlanDiagnostics.Schema)
                     is ColorFilterBindingV4 -> error(W5fPlanDiagnostics.Schema)
                     is ImageSampleV3 -> error(W5eImagePlanDiagnostics.InvalidContract)

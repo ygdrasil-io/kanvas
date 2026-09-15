@@ -280,6 +280,7 @@ class GPUPlanSurfaceRouterTest {
                             scene: SceneSnapshot,
                             target: RenderTargetDescriptor,
                             frameLocalBudgetBytes: Long,
+                            materialFrameLimits: org.graphiks.kanvas.gpu.plan.MaterialFrameLimits,
                         ): GpuPlanSurfacePlanResult = GpuPlanSurfacePlanResult.Terminal(
                             listOf(
                                 RenderDiagnostic(
@@ -336,6 +337,7 @@ class GPUPlanSurfaceRouterTest {
                     scene: SceneSnapshot,
                     target: RenderTargetDescriptor,
                     frameLocalBudgetBytes: Long,
+                    materialFrameLimits: org.graphiks.kanvas.gpu.plan.MaterialFrameLimits,
                 ): GpuPlanSurfacePlanResult = GpuPlanSurfacePlanResult.Ready(readyToken)
 
                 override fun submit(token: GpuPlanSurfaceReadyToken): GpuPlanSurfaceSubmitResult =
@@ -391,6 +393,7 @@ class GPUPlanSurfaceRouterTest {
                     scene: SceneSnapshot,
                     target: RenderTargetDescriptor,
                     frameLocalBudgetBytes: Long,
+                    materialFrameLimits: org.graphiks.kanvas.gpu.plan.MaterialFrameLimits,
                 ): GpuPlanSurfacePlanResult = error("TEXT_EXPANDED_PATH must not reach prepared planning")
 
                 override fun submit(token: GpuPlanSurfaceReadyToken): GpuPlanSurfaceSubmitResult =
@@ -481,6 +484,7 @@ class GPUPlanSurfaceRouterTest {
                     scene: SceneSnapshot,
                     target: RenderTargetDescriptor,
                     frameLocalBudgetBytes: Long,
+                    materialFrameLimits: org.graphiks.kanvas.gpu.plan.MaterialFrameLimits,
                 ): GpuPlanSurfacePlanResult {
                     captured = scene
                     return GpuPlanSurfacePlanResult.Ready(readyToken)
@@ -543,6 +547,7 @@ class GPUPlanSurfaceRouterTest {
                         scene: SceneSnapshot,
                         target: RenderTargetDescriptor,
                         frameLocalBudgetBytes: Long,
+                        materialFrameLimits: org.graphiks.kanvas.gpu.plan.MaterialFrameLimits,
                     ): GpuPlanSurfacePlanResult = GpuPlanSurfacePlanResult.GapNotMigrated(emptyList())
 
                     override fun submit(token: GpuPlanSurfaceReadyToken): GpuPlanSurfaceSubmitResult =
@@ -577,6 +582,7 @@ class GPUPlanSurfaceRouterTest {
                     scene: SceneSnapshot,
                     target: RenderTargetDescriptor,
                     frameLocalBudgetBytes: Long,
+                    materialFrameLimits: org.graphiks.kanvas.gpu.plan.MaterialFrameLimits,
                 ): GpuPlanSurfacePlanResult = error("DrawDRRect must not reach planning")
 
                 override fun submit(token: GpuPlanSurfaceReadyToken): GpuPlanSurfaceSubmitResult =
@@ -696,6 +702,7 @@ class GPUPlanSurfaceRouterTest {
                         scene: SceneSnapshot,
                         target: RenderTargetDescriptor,
                         frameLocalBudgetBytes: Long,
+                        materialFrameLimits: org.graphiks.kanvas.gpu.plan.MaterialFrameLimits,
                     ): GpuPlanSurfacePlanResult = GpuPlanSurfacePlanResult.Ready(readyToken)
 
                     override fun submit(token: GpuPlanSurfaceReadyToken): GpuPlanSurfaceSubmitResult =
@@ -752,7 +759,8 @@ class GPUPlanSurfaceRouterTest {
             scene: SceneSnapshot,
             target: RenderTargetDescriptor,
             frameLocalBudgetBytes: Long,
-        ): GpuPlanSurfacePlanResult = executor.plan(scene, target, frameLocalBudgetBytes)
+            materialFrameLimits: org.graphiks.kanvas.gpu.plan.MaterialFrameLimits,
+        ): GpuPlanSurfacePlanResult = executor.plan(scene, target, frameLocalBudgetBytes, materialFrameLimits)
 
         override fun submit(token: GpuPlanSurfaceReadyToken): GpuPlanSurfaceSubmitResult =
             executor.submit(token)

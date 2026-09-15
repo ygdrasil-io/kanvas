@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.planning
 
+import org.graphiks.kanvas.gpu.plan.colorSourceCoordinatesV4
+
 import kotlin.math.ceil
 import kotlin.math.floor
 import org.graphiks.kanvas.gpu.plan.AnalyticRectMemoryFootprint
@@ -150,7 +152,7 @@ internal class W4aAnalyticRectGraphLowerer {
             val color = resolveMaterialColor(graph.materialPlanTable, draw.materialAuthority)
                 ?: return invalid("W5 material authority is invalid.")
             packet(draw, color, paintOrder, targetBounds, graph.materialPlanTable,
-                packedSourceV4 = (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let(request.graph::packedMaterialSourceV4))
+                packedSourceV4 = draw.materialAuthority.takeIf { it.colorSourceCoordinatesV4() != null }?.let(request.graph::packedMaterialSourceV4))
         }
         val packets = builtPackets.map(W4aBuiltPacket::packet)
         val replay = "w4a:${request.graph.id.value}"
@@ -256,7 +258,7 @@ internal class W4aAnalyticRectGraphLowerer {
         val table = graph.materialPlanTableOrNull()
         if (draws.any { draw ->
                 when (val authority = draw.materialAuthority) {
-                    is PlanDrawMaterialAuthority.MaterialV4 -> runCatching { graph.packedMaterialSourceV4(authority) }.isFailure
+                    is PlanDrawMaterialAuthority.MaterialV4, is PlanDrawMaterialAuthority.MaterialV5 -> runCatching { graph.packedMaterialSourceV4(authority) }.isFailure
                     is PlanDrawMaterialAuthority.LegacyColorV1 -> false
                     is PlanDrawMaterialAuthority.MaterialV3 -> error(org.graphiks.kanvas.gpu.plan.W5eImagePlanDiagnostics.InvalidContract)
                     is PlanDrawMaterialAuthority.MaterialV2 -> table == null || authority.ref.indexI32 >= table.sizeI32
@@ -647,6 +649,8 @@ internal class W4aAnalyticRectGraphLowerer {
         table: MaterialPlanTable?,
         authority: PlanDrawMaterialAuthority,
     ): ColorF32? = when (authority) {
+        is PlanDrawMaterialAuthority.MaterialV5 -> table?.colorSourceProofV5(authority.ref)
+            ?.takeIf { it.authenticates(table,authority.ref,org.graphiks.kanvas.gpu.plan.SourceCoordinatesV4.None) }?.let { ColorF32.Transparent }
         is PlanDrawMaterialAuthority.MaterialV4 -> table?.colorSourceProofV4(authority.ref)
             ?.takeIf { it.authenticates(table,authority.ref,authority.coordinates) }?.let { ColorF32.Transparent }
         is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()

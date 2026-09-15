@@ -191,6 +191,9 @@ internal fun validateW5bGeometryPasses(passes: List<PlanPass>, resources: Map<Pl
     } }
     require(colors.size == visualCommandCountI32 && colors.zipWithNext().all { (a, b) -> a.commandIndex < b.commandIndex })
     require(colors.all { it.sample == SamplePlan.SingleSample && (it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1 || it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2 ||
+        (it is SolidRectDraw || it is AnalyticRectDraw || it is PathFillDraw ||
+            it is GeneralPathDraw && it.copyPathGeometry() is PathDrawGeometry.Fill) &&
+            it.materialAuthority is PlanDrawMaterialAuthority.MaterialV5 ||
         (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw ||
             it is PathStrokeDraw || it is GeneralPathDraw) &&
             it.materialAuthority is PlanDrawMaterialAuthority.MaterialV4) && it.blend != BlendPlan.NoOpV1 })

@@ -8,6 +8,162 @@ import org.graphiks.kanvas.gpu.plan.GradientNumericOperationGraphV1.Operation as
 import org.graphiks.kanvas.gpu.plan.GradientNumericOperationGraphV1.Input as I
 
 internal object ColorSourceProofCompilerV1 {
+
+    private class CoordinateExpressions(val x: S,val y: S,val valid: P,val nextWordI64: Long)
+    private fun coordinateExpressions(coordinates: MaterialCoordinatePlanV2,startWordI64: Long): CoordinateExpressions {
+        val zero=ColorOperationGraphV1.constant(0f); val one=ColorOperationGraphV1.constant(1f)
+        fun word(offset: Long): S = S.DynamicF32(offset)
+        var x: S = S.DevicePositionF32(0); var y: S = S.DevicePositionF32(1)
+        var valid: P = P.Equal(one,one)
+        var offset = startWordI64
+        coordinates.copyOperations().forEach { operation -> when (operation) {
+            is MaterialCoordinateOperationV2.InverseMatrixF32 -> {
+                fun row(start: Long): S = S.Add(S.Add(S.Multiply(word(start),x),S.Multiply(word(start+1L),y)),word(start+2L))
+                val hx = row(offset); val hy = row(offset+4L); val hw = row(offset+8L)
+                val affine = P.Equal(word(offset+11L),one)
+                val px = S.ProjectiveDivide(hx,hw); val py = S.ProjectiveDivide(hy,hw)
+                val affineValid = S.LazyBranch(P.And(P.Finite(hx),P.Finite(hy)),one,zero)
+                val projectiveValid = S.LazyBranch(P.And(P.ProjectiveValid(px),P.ProjectiveValid(py)),one,zero)
+                valid = P.And(valid,P.Equal(S.LazyBranch(affine,affineValid,projectiveValid),one))
+                // Same cumulative validity and point reset as W5dLocalPointV2;
+                // subsequent clamp/matrix operations consume the reset point.
+                x = S.EagerSelect(valid,S.LazyBranch(affine,hx,px),zero)
+                y = S.EagerSelect(valid,S.LazyBranch(affine,hy,py),zero)
+                offset += 12L
+            }
+            is MaterialCoordinateOperationV2.ClampRectF32 -> {
+                x = S.Min(S.Max(x,word(offset)),word(offset+2L))
+                y = S.Min(S.Max(y,word(offset+1L)),word(offset+3L))
+                offset += 4L
+            }
+        } }
+        return CoordinateExpressions(x,y,valid,offset)
+    }
+    internal class ComposedGraph(val evaluation: MaterialEvaluationDagV5,val graph: ColorOperationGraphV1,
+        val words: Map<Long,Int>,val tables: Map<Long,org.graphiks.kanvas.render.ir.ImmutableUBytes>,val integers: Map<Long,UInt>)
+    internal fun graphForComposed(metadata: MaterialSourceConstructionV4.ComposedMetadata,
+        gradients: Map<MaterialSourceConstructionV4,PreparedSourceDefinitionV4>,
+        images: List<PreparedComposedSourceV5.ImageReference>,
+        noises: List<PreparedComposedSourceV5.NoiseReference>): ComposedGraph {
+        val words = linkedMapOf<Long,Int>()
+        val integers = linkedMapOf<Long,UInt>()
+        val tables = linkedMapOf<Long,org.graphiks.kanvas.render.ir.ImmutableUBytes>()
+        val graphs = mutableListOf<ColorOperationGraphV1>()
+        val entries = mutableListOf<MaterialEvaluationDagV5.Entry>()
+        metadata.nodes.forEach { node ->
+            val offset = node.offsetBytesI32.toLong()/4L
+            fun child(index: Int = 0) = graphs[node.children[index].indexI32]
+            val graph = when(val original = node.original) {
+                org.graphiks.kanvas.render.ir.MaterialNode.Transparent -> ColorOperationGraphV1(List(4) { ColorOperationGraphV1.constant(0f) })
+                is org.graphiks.kanvas.render.ir.MaterialNode.Solid -> {
+                    val color = original.color
+                    listOf(color.redNormalized,color.greenNormalized,color.blueNormalized,color.alphaNormalized)
+                        .forEachIndexed { channel,value -> words[offset+channel] = value.toRawBits() }
+                    val alpha = ColorOperationGraphV1.Scalar.DynamicF32(offset+3)
+                    ColorOperationGraphV1(List(4) { if(it == 3) alpha else ColorOperationGraphV1.Scalar.Multiply(
+                        ColorOperationGraphV1.eotf(ColorOperationGraphV1.Scalar.DynamicF32(offset+it)),alpha) })
+                }
+                is org.graphiks.kanvas.render.ir.MaterialNode.Opacity -> {
+                    words[offset] = original.alpha.toRawBits()
+                    ColorOperationGraphV1(child().outputs.map { ColorOperationGraphV1.Scalar.Multiply(it,ColorOperationGraphV1.Scalar.DynamicF32(offset)) })
+                }
+                is org.graphiks.kanvas.render.ir.MaterialNode.WithColorFilter -> {
+                    val filter = requireNotNull(node.filter)
+                    filter.forEachWord { index,value -> words[Math.addExact(offset,index)] = value }
+                    filter.forEachTable { index,value -> tables[Math.addExact(offset,index)] = value }
+                    filter.copyOperationGraph().bindInput(child(),offset)
+                }
+                is org.graphiks.kanvas.render.ir.MaterialNode.WithWorkingColorSpace,
+                is org.graphiks.kanvas.render.ir.MaterialNode.WithLocalMatrix,
+                is org.graphiks.kanvas.render.ir.MaterialNode.CoordClamp -> child()
+                is org.graphiks.kanvas.render.ir.MaterialNode.Blend -> BlendFormulaProgramV1.colorOperations(original.mode.name.lowercase(),child(1).outputs,child(0).outputs)
+                is org.graphiks.kanvas.render.ir.MaterialNode.PerlinNoise,
+                is org.graphiks.kanvas.render.ir.MaterialNode.FractalNoise -> {
+                    val reference=noises.single { it.ownerNodeIndexI32 == node.ownerNodeIndexI32 && it.wordOffsetI64 == offset }
+                    val source=reference.metadata
+                    val parameters=source.parameters
+                    words[offset]=parameters.frequencyXF32.toRawBits(); words[offset+1L]=parameters.frequencyYF32.toRawBits()
+                    integers[offset+2L]=parameters.octavesI32.toUInt(); integers[offset+3L]=if(parameters.fractal) 1u else 0u
+                    integers[offset+4L]=reference.range.baseWordU32; integers[offset+5L]=if(parameters.stitched) 1u else 0u
+                    for(axis in 0..1) for(limb in 0..3) {
+                        val period=if(axis == 0) parameters.periodX else parameters.periodY
+                        integers[offset+8L+axis*4L+limb]=period.shiftRight(limb*32).and(java.math.BigInteger("ffffffff",16)).toLong().toUInt()
+                    }
+                    var cursor=offset+NoiseOperationGraphV1.HEADER_BYTES_I64/4L
+                    source.coordinates.copyOperations().forEach { operation ->
+                        val values=when(operation) {
+                            is MaterialCoordinateOperationV2.InverseMatrixF32 -> operation.inverseF32.let { m ->
+                                listOf(m.sx,m.kx,m.tx,0f,m.ky,m.sy,m.ty,0f,m.persp0,m.persp1,m.persp2,
+                                    if(m.persp0 == 0f && m.persp1 == 0f && m.persp2 == 1f) 1f else 0f)
+                            }
+                            is MaterialCoordinateOperationV2.ClampRectF32 -> operation.subsetF32.let { r -> listOf(r.left,r.top,r.right,r.bottom) }
+                        }
+                        values.forEach { words[cursor++]=it.toRawBits() }
+                    }
+                    val context=coordinateExpressions(source.coordinates,offset+NoiseOperationGraphV1.HEADER_BYTES_I64/4L)
+                    require(context.nextWordI64 == cursor && cursor == offset+source.uniformBytesI64/4L) { W5gPlanDiagnostics.Schema }
+                    val region=NoiseOperationGraphV1(node.ownerNodeIndexI32,offset,context.x,context.y)
+                    val zero=ColorOperationGraphV1.constant(0f)
+                    val guarded=ColorOperationGraphV1.BranchVector(context.valid,List(4) { S.NoiseComponent(region,it) },List(4) { zero })
+                    ColorOperationGraphV1(List(4) { S.BranchComponent(guarded,it) })
+                }
+                is org.graphiks.kanvas.render.ir.MaterialNode.ImageSample -> {
+                    val reference=images.single { it.ownerNodeIndexI32 == node.ownerNodeIndexI32 && it.wordOffsetI64 == offset }
+                    val image=reference.binding
+                    val source=requireNotNull(node.imageSource)
+                    var cursor=offset
+                    RawMaterialRequirementsV2.forEachImageHeaderWord(image.projection,image.upload,1f,image.graph.sampling,null,null) {
+                        words[cursor++]=it
+                    }
+                    require(cursor == offset+source.headerBytesI64/4L) { W5gPlanDiagnostics.Schema }
+                    source.coordinates.copyOperations().forEach { operation ->
+                        val values=when(operation) {
+                            is MaterialCoordinateOperationV2.InverseMatrixF32 -> operation.inverseF32.let { m ->
+                                listOf(m.sx,m.kx,m.tx,0f,m.ky,m.sy,m.ty,0f,m.persp0,m.persp1,m.persp2,
+                                    if(m.persp0 == 0f && m.persp1 == 0f && m.persp2 == 1f) 1f else 0f)
+                            }
+                            is MaterialCoordinateOperationV2.ClampRectF32 -> operation.subsetF32.let { r -> listOf(r.left,r.top,r.right,r.bottom) }
+                        }
+                        values.forEach { words[cursor++]=it.toRawBits() }
+                    }
+                    val context=coordinateExpressions(source.coordinates,offset+source.headerBytesI64/4L)
+                    require(context.nextWordI64 == cursor && cursor == offset+source.uniformBytesI64/4L) { W5gPlanDiagnostics.Schema }
+                    val zero=ColorOperationGraphV1.constant(0f)
+                    val sampled=image.graph.sampledTexelGraph(image.upload).bindInput(ColorOperationGraphV1(List(4) { zero }),offset,
+                        imageResource=ImageNumericOperationGraphV1.TexelResource.Logical(node.ownerNodeIndexI32,image.resource.logicalSlotI32),
+                        deviceCoordinates=listOf(context.x,context.y))
+                    val guarded=ColorOperationGraphV1.BranchVector(context.valid,sampled.outputs,List(4) { zero })
+                    ColorOperationGraphV1(List(4) { S.BranchComponent(guarded,it) })
+                }
+                is org.graphiks.kanvas.render.ir.MaterialNode.LinearGradient,
+                is org.graphiks.kanvas.render.ir.MaterialNode.RadialGradient,
+                is org.graphiks.kanvas.render.ir.MaterialNode.SweepGradient,
+                is org.graphiks.kanvas.render.ir.MaterialNode.ConicalGradient -> {
+                    val source=requireNotNull(node.gradientSource)
+                    val solid=source.gradient?.stops?.solidColor
+                    if(solid != null) {
+                        listOf(solid.redNormalized,solid.greenNormalized,solid.blueNormalized,solid.alphaNormalized)
+                            .forEachIndexed { channel,value -> words[offset+channel]=value.toRawBits() }
+                        val alpha=S.DynamicF32(offset+3L)
+                        ColorOperationGraphV1(List(4) { if(it == 3) alpha else
+                            S.Multiply(ColorOperationGraphV1.eotf(S.DynamicF32(offset+it)),alpha) })
+                    } else {
+                        val definition=gradients.getValue(source)
+                        definition.numericWordsF32Bits.forEach { (key,value) -> words[Math.addExact(offset,key)]=value }
+                        definition.integerWordsU32.forEach { (key,value) -> integers[Math.addExact(offset,key)]=value }
+                        graphForPrepared(definition).bindInput(ColorOperationGraphV1(List(4) { ColorOperationGraphV1.constant(0f) }),offset)
+                    }
+                }
+                else -> error(W5gPlanDiagnostics.Unpromoted)
+            }
+            graphs += graph
+            entries += MaterialEvaluationDagV5.Entry(node.ownerNodeIndexI32,node.children,node.gradientSource?.coordinates ?:
+                node.imageSource?.coordinates?.let(SourceCoordinatesV4::V2) ?:
+                node.noiseSource?.coordinates?.let(SourceCoordinatesV4::V2) ?: SourceCoordinatesV4.None,
+                ComposedMaterialProgramV5(MaterialProgramPlanId("composed-evaluation-v5:${node.topologyIdentity}:${graph.canonicalIdentity}"),graph))
+        }
+        return ComposedGraph(MaterialEvaluationDagV5.of(entries),graphs.last(),words,tables,integers)
+    }
     private fun graphForImage(execution: ImageSampleExecutionPlanV1,child: ColorSourceProofV1?): ColorOperationGraphV1 {
         return graphForCapturedImage(execution.numericAuthority,execution.upload,child,execution.atlasBlend?.copyOperationGraph())
     }
@@ -86,30 +242,9 @@ internal object ColorSourceProofCompilerV1 {
             return ColorOperationGraphV1(List(4) { if (it == 3) alpha else
                 S.Multiply(ColorOperationGraphV1.eotf(word(24L+it)),alpha) })
         }
-        var x: S = S.DevicePositionF32(0); var y: S = S.DevicePositionF32(1)
-        var valid: P = P.Equal(one,one)
-        var offset = GradientInterpolationUniformLayoutV4.HEADER_WORD_COUNT_I32.toLong()
-        definition.coordinates.copyOperations().forEach { operation -> when (operation) {
-            is MaterialCoordinateOperationV2.InverseMatrixF32 -> {
-                fun row(start: Long): S = S.Add(S.Add(S.Multiply(word(start),x),S.Multiply(word(start+1L),y)),word(start+2L))
-                val hx = row(offset); val hy = row(offset+4L); val hw = row(offset+8L)
-                val affine = P.Equal(word(offset+11L),one)
-                val px = S.ProjectiveDivide(hx,hw); val py = S.ProjectiveDivide(hy,hw)
-                val affineValid = S.LazyBranch(P.And(P.Finite(hx),P.Finite(hy)),one,zero)
-                val projectiveValid = S.LazyBranch(P.And(P.ProjectiveValid(px),P.ProjectiveValid(py)),one,zero)
-                valid = P.And(valid,P.Equal(S.LazyBranch(affine,affineValid,projectiveValid),one))
-                // Same cumulative validity and point reset as W5dLocalPointV2;
-                // subsequent clamp/matrix operations consume the reset point.
-                x = S.EagerSelect(valid,S.LazyBranch(affine,hx,px),zero)
-                y = S.EagerSelect(valid,S.LazyBranch(affine,hy,py),zero)
-                offset += 12L
-            }
-            is MaterialCoordinateOperationV2.ClampRectF32 -> {
-                x = S.Min(S.Max(x,word(offset)),word(offset+2L))
-                y = S.Min(S.Max(y,word(offset+1L)),word(offset+3L))
-                offset += 4L
-            }
-        } }
+        val context=coordinateExpressions(definition.coordinates,GradientInterpolationUniformLayoutV4.HEADER_WORD_COUNT_I32.toLong())
+        val x=context.x; val y=context.y; val valid=context.valid
+        val offset=context.nextWordI64
         require(offset == definition.uniformWordCountI64) { W5fPlanDiagnostics.Schema }
         val schema = when (definition.addressing.family) {
             GradientFamilyV2.LINEAR -> GradientNumericOperationGraphV1.linear(definition.metadata.tile)

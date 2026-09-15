@@ -114,6 +114,11 @@ private class W4dGeneralGraphDigestWriter(private val table: MaterialPlanTable?)
             i32("$prefix.program.version", entry.program.versionI32)
             text("$prefix.program.id", entry.program.structuralId.value)
             when (val binding = entry.bindings) {
+                is ComposedMaterialBindingV5 -> {
+                    text("$prefix.binding",binding.definition.capturedIdentity)
+                    text("$prefix.source-proof",binding.sourceProof.canonicalIdentity)
+                    text("$prefix.composed-layout",binding.definition.layout.composedBindingLayoutHash)
+                }
                 is GradientInterpolationBindingV4 -> {
                     text("$prefix.binding",binding.canonicalIdentity)
                     text("$prefix.source-proof",binding.sourceProof.canonicalIdentity)
@@ -336,6 +341,13 @@ private class W4dGeneralGraphDigestWriter(private val table: MaterialPlanTable?)
         i32("$prefix.command-index", draw.commandIndex)
         if (materialV2) {
             when (val authority = draw.materialAuthority) {
+                is PlanDrawMaterialAuthority.MaterialV5 -> {
+                    require(draw.copyPathGeometry() is PathDrawGeometry.Fill) { W5gPlanDiagnostics.Unpromoted }
+                    requireNotNull(table).colorSourceProofV5(authority.ref)
+                    text("$prefix.material-authority","material-v5")
+                    i32("$prefix.material-ref",authority.ref.indexI32)
+                    text("$prefix.material-coordinates","none-v4")
+                }
                 is PlanDrawMaterialAuthority.MaterialV4 -> {
                     require(draw.copyPathGeometry() is PathDrawGeometry.Fill ||
                         draw.copyPathGeometry() is PathDrawGeometry.Stroke && table?.isUnfilteredGradientV4(authority.ref) == true) {

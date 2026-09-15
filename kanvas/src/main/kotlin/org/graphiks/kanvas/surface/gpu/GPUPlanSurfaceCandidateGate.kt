@@ -7,6 +7,33 @@ import org.graphiks.kanvas.surface.RenderConfig
 
 /** Cheap composition admission only: it intentionally has no Scene or backend dependency. */
 internal object GPUPlanSurfaceCandidateGate {
+    /** Recognition routes pending composed geometry to its owned planner refusal. */
+    private fun DisplayOp.hasComposedSource(): Boolean {
+        var source = when (this) {
+            is DisplayOp.DrawRect -> paint.shader
+            is DisplayOp.DrawRRect -> paint.shader
+            is DisplayOp.DrawPath -> paint.shader
+            is DisplayOp.DrawPoint -> paint.shader
+            is DisplayOp.DrawPoints -> paint.shader
+            is DisplayOp.DrawVertices -> paint.shader
+            is DisplayOp.DrawMesh -> paint.shader
+            else -> null
+        }
+        repeat(org.graphiks.kanvas.render.ir.GraphLimits().maxDepth) {
+            source = when (val node = source) {
+                is org.graphiks.kanvas.paint.Shader.Blend,
+                is org.graphiks.kanvas.paint.Shader.PerlinNoise,
+                is org.graphiks.kanvas.paint.Shader.FractalNoise -> return true
+                is org.graphiks.kanvas.paint.Shader.Opacity -> node.shader
+                is org.graphiks.kanvas.paint.Shader.WithColorFilter -> node.shader
+                is org.graphiks.kanvas.paint.Shader.WithWorkingColorSpace -> node.shader
+                is org.graphiks.kanvas.paint.Shader.WithLocalMatrix -> node.shader
+                is org.graphiks.kanvas.paint.Shader.CoordClamp -> node.shader
+                else -> return false
+            }
+        }
+        return false
+    }
     fun ownsW5eImages(operations: List<DisplayOp>): Boolean =
         operations.any { it is DisplayOp.DrawImage || it is DisplayOp.DrawImageNine || it is DisplayOp.DrawImageLattice || it is DisplayOp.DrawAtlas || it.isW5eShaderOperation() } && operations.all { operation ->
             when (operation) {
@@ -90,6 +117,7 @@ internal object GPUPlanSurfaceCandidateGate {
     fun accepts(operations: List<DisplayOp>, config: RenderConfig): Boolean =
         config.gpuColorFormat == GPUColorFormat.RGBA8_UNORM_SRGB &&
             (ownsW5eImages(operations) || operations.all { operation ->
+                if (operation.hasComposedSource()) return@all true
                 if ((operation is DisplayOp.DrawRect || operation is DisplayOp.DrawRRect ||
                         operation is DisplayOp.DrawPath) &&
                     !operation.isW5dGradientCandidateV2(allowNonGradient = true)) return@all false

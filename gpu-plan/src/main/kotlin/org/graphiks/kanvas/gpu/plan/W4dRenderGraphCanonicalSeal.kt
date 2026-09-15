@@ -116,6 +116,11 @@ private class W4dGraphDigestWriter {
             i32("$prefix.program.version", entry.program.versionI32)
             text("$prefix.program.id", entry.program.structuralId.value)
             when (val binding = entry.bindings) {
+                is ComposedMaterialBindingV5 -> {
+                    text("$prefix.binding",binding.definition.capturedIdentity)
+                    text("$prefix.source-proof",binding.sourceProof.canonicalIdentity)
+                    text("$prefix.composed-layout",binding.definition.layout.composedBindingLayoutHash)
+                }
                 is GradientInterpolationBindingV4 -> {
                     text("$prefix.binding",binding.canonicalIdentity)
                     text("$prefix.source-proof",binding.sourceProof.canonicalIdentity)
@@ -262,6 +267,7 @@ private class W4dGraphDigestWriter {
         i32("$prefix.command-index", pathDraw.commandIndex)
         if (materialV2) {
             when (val authority = pathDraw.materialAuthority) {
+                is PlanDrawMaterialAuthority.MaterialV5 -> error(W5gPlanDiagnostics.Unpromoted)
                 is PlanDrawMaterialAuthority.MaterialV4 -> error(W5fPlanDiagnostics.Unpromoted)
                 is PlanDrawMaterialAuthority.MaterialV3 -> error(W5eImagePlanDiagnostics.InvalidContract)
                 is PlanDrawMaterialAuthority.MaterialV2 -> error(W5dPlanDiagnostics.CoordinatePlanSchema)

@@ -4,10 +4,21 @@ import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
 import org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority
 import org.graphiks.kanvas.gpu.plan.materialPlanRef
+import org.graphiks.kanvas.gpu.plan.colorSourceCoordinatesV4
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.materializeW5aSolid
 import org.graphiks.kanvas.gpu.renderer.planning.W5aMaterialPlanLowerer
+
+private fun MaterialPlanTable.authenticatesDeferredImageV3(authority: PlanDrawMaterialAuthority): Boolean {
+    val color = authority as? PlanDrawMaterialAuthority.MaterialV4 ?: return false
+    val coordinates = color.coordinates as? org.graphiks.kanvas.gpu.plan.SourceCoordinatesV4.V3 ?: return false
+    val entry = entry(color.ref)
+    if (entry.program !is org.graphiks.kanvas.gpu.plan.ImageMaterialProgramV3) return false
+    val image = entry.bindings as? org.graphiks.kanvas.gpu.plan.ImageSampleV3 ?: return false
+    return coordinates.plan === image.execution.coordinates && authenticatesImage(color.ref, image.execution) &&
+        colorSourceProofV4(color.ref).authenticates(this, color.ref, color.coordinates)
+}
 
 /**
  * Versioned W5a material witness.  It is issued only for closed material-table draws and is
@@ -17,7 +28,7 @@ internal class W5aMaterialPlanVersionWitnessV2 private constructor(
     private val programVersionsI32: List<Int>,
 ) {
     internal fun validates(): Boolean =
-        programVersionsI32.isNotEmpty() && programVersionsI32.all { it == MATERIAL_PLAN_VERSION_I32 || it == 2 || it == 4 }
+        programVersionsI32.isNotEmpty() && programVersionsI32.all { it == MATERIAL_PLAN_VERSION_I32 || it == 2 || it == 3 || it == 4 || it == 5 }
 
     internal companion object {
         const val MATERIAL_PLAN_VERSION_I32: Int = 1
@@ -31,7 +42,10 @@ internal class W5aMaterialPlanVersionWitnessV2 private constructor(
             val versions = try {
                 authorities.map { authority ->
                     val entry = materialTable.entry(authority.materialPlanRef())
-                    if ((entry.program.versionI32 == 4) != (authority is PlanDrawMaterialAuthority.MaterialV4)) return null
+                    val deferredImageV3 = materialTable.authenticatesDeferredImageV3(authority)
+                    if (entry.program.versionI32 == 3 && !deferredImageV3) return null
+                    if ((entry.program.versionI32 == 4 || deferredImageV3) != (authority is PlanDrawMaterialAuthority.MaterialV4)) return null
+                    if ((entry.program.versionI32 == 5) != (authority is PlanDrawMaterialAuthority.MaterialV5)) return null
                     entry.program.versionI32
                 }
             } catch (_: IllegalArgumentException) {
@@ -101,7 +115,8 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
     private fun validates(commandIdI32: Int, ref: MaterialPlanRef): Boolean =
         materialWitness.validates() && refsByCommandId[commandIdI32] == ref &&
             ref.indexI32 < table.sizeI32 &&
-            table.entry(ref).program.versionI32 in setOf(1,2,4) &&
+            (table.entry(ref).program.versionI32 in setOf(1,2,4,5) ||
+                table.authenticatesDeferredImageV3(authoritiesByCommandIdI32.getValue(commandIdI32))) &&
             (table.entry(ref).bindings.versionI32 == table.entry(ref).program.versionI32 ||
                 table.entry(ref).program.versionI32 == 4 &&
                 table.entry(ref).bindings is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.OpacityF32V1 &&
@@ -112,7 +127,7 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
     internal fun materializeSource(commandIdI32: Int, materialRef: MaterialPlanRef): MaterializedSolidV2? {
         if (!validates(commandIdI32, materialRef)) return null
         val authority = authoritiesByCommandIdI32.getValue(commandIdI32)
-        val color = if (authority is PlanDrawMaterialAuthority.MaterialV4) {
+        val color = if (authority.colorSourceCoordinatesV4() != null) {
             org.graphiks.kanvas.gpu.renderer.materials.W5aMaterialSourceStage.colorV4(table,authority,
                 packedV4ByCommandIdI32[commandIdI32] ?: return null) ?: return null
             org.graphiks.math.color.ColorF32.Transparent
@@ -161,13 +176,15 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
             if (authoritiesByCommandIdI32.keys != refsByCommandId.keys ||
                 authoritiesByCommandIdI32.any { (id,authority) -> authority is PlanDrawMaterialAuthority.LegacyColorV1 ||
                     authority.materialPlanRef() != refsByCommandId[id] }) return null
-            if (packedV4ByCommandIdI32.keys != authoritiesByCommandIdI32.filterValues { it is PlanDrawMaterialAuthority.MaterialV4 }.keys) return null
+            if (packedV4ByCommandIdI32.keys != authoritiesByCommandIdI32.filterValues { it.colorSourceCoordinatesV4() != null }.keys) return null
             if (sourcePlansByCommandIdI32.keys != refsByCommandId.keys) return null
             if (finalBlendsByCommandIdI32.isNotEmpty() && finalBlendsByCommandIdI32.keys != refsByCommandId.keys) return null
             val sourceRefs = linkedMapOf<Int, MaterialPlanRef>()
             refsByCommandId.forEach { (commandIdI32, ref) ->
                 val source = sourcePlansByCommandIdI32.getValue(commandIdI32)
                 fun stage(table: MaterialPlanTable, ref: MaterialPlanRef) = when (val authority = authoritiesByCommandIdI32.getValue(commandIdI32)) {
+                    is PlanDrawMaterialAuthority.MaterialV5 -> org.graphiks.kanvas.gpu.renderer.materials.W5aMaterialSourceStage.colorV4(table,
+                        authority.copy(ref=ref),packedV4ByCommandIdI32.getValue(commandIdI32))
                     is PlanDrawMaterialAuthority.MaterialV1 -> org.graphiks.kanvas.gpu.renderer.materials.W5aMaterialSourceStage.lower(table,ref,authority.coordinates)
                     is PlanDrawMaterialAuthority.MaterialV2 -> org.graphiks.kanvas.gpu.renderer.materials.W5aMaterialSourceStage.lower(table,ref,authority.coordinates)
                     is PlanDrawMaterialAuthority.MaterialV4 -> org.graphiks.kanvas.gpu.renderer.materials.W5aMaterialSourceStage.colorV4(table,

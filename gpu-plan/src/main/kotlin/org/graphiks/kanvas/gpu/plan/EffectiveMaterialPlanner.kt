@@ -15,6 +15,64 @@ internal fun colorFilterEffectsMatchPaint(draw: DrawNode): Boolean {
 
 /** Normalizes admitted W5 sources once, before a graph is published Ready. */
 public object EffectiveMaterialPlanner {
+
+    /** Original immutable sample facts; preparing an upload remains a separate frame operation. */
+    internal class ImageSampleDescription(val pixels: org.graphiks.kanvas.render.ir.ImageResourceSnapshot.Pixels,
+        val sampling: ImageSamplingPlanV1,val tileModes: ImageTileModePlanV1,val color: ImageColorAlphaPlanV1) {
+        val logicalRowBytesI64: Long get() = Math.multiplyExact(pixels.width.toLong(),pixels.pixelFormat.bytesPerPixel.toLong())
+        val byteCountI64: Long get() = Math.multiplyExact(logicalRowBytesI64,pixels.height.toLong())
+        val physicalFormat: ImagePhysicalFormatV1 get() =
+            if(pixels.pixelFormat == org.graphiks.kanvas.render.ir.ImagePixelFormat.ALPHA_8) ImagePhysicalFormatV1.R8_UNORM
+            else ImagePhysicalFormatV1.RGBA8_UNORM
+        fun validateUploadMetadata() {
+            require(pixels.width > 0 && pixels.height > 0) { W5eImagePlanDiagnostics.Dimensions }
+            require(pixels.rowBytes.toLong() >= logicalRowBytesI64) { W5eImagePlanDiagnostics.Stride }
+            require(byteCountI64 <= Int.MAX_VALUE.toLong() &&
+                Math.multiplyExact(pixels.rowBytes.toLong(),pixels.height.toLong()) <= Int.MAX_VALUE.toLong()) {
+                W5eImagePlanDiagnostics.Overflow
+            }
+            // Pixels' authentic immutable constructor already checked payload coverage.
+        }
+    }
+
+    internal fun describeImageSample(sample: MaterialNode.ImageSample,direct: Boolean,
+        verifyPixels: (org.graphiks.kanvas.render.ir.ImageResourceSnapshot.Pixels)->Unit = {}): ImageSampleDescription {
+            val sampling = when (val requestedSampling = sample.sampling) {
+                org.graphiks.kanvas.render.ir.ImageSampling.Nearest -> ImageSamplingPlanV1.Nearest
+                org.graphiks.kanvas.render.ir.ImageSampling.Linear -> ImageSamplingPlanV1.Linear
+                is org.graphiks.kanvas.render.ir.ImageSampling.Cubic -> ImageSamplingPlanV1.Cubic(requestedSampling.b.toRawBits(), requestedSampling.c.toRawBits())
+            }
+            if (sampling is ImageSamplingPlanV1.Cubic && (!sampling.bF32.isFinite() || sampling.bF32 !in 0f..1f ||
+                    !sampling.cF32.isFinite() || sampling.cF32 !in 0f..1f))
+                throw IllegalArgumentException(W5eImagePlanDiagnostics.CubicParameters)
+            val tileModes = if (direct) ImageTileModePlanV1.ClampClamp else ImageTileModePlanV1(
+                ImageTileAxisModePlanV1.valueOf(sample.tileModeX.name), ImageTileAxisModePlanV1.valueOf(sample.tileModeY.name))
+            val pixels = sample.image as? org.graphiks.kanvas.render.ir.ImageResourceSnapshot.Pixels
+                ?: throw IllegalArgumentException(W5eImagePlanDiagnostics.ExternalResource)
+            verifyPixels(pixels)
+            val channel = when (pixels.pixelFormat) {
+                org.graphiks.kanvas.render.ir.ImagePixelFormat.RGBA_8888,
+                org.graphiks.kanvas.render.ir.ImagePixelFormat.SRGBA_8888 -> ImageChannelOrderV1.RGBA
+                org.graphiks.kanvas.render.ir.ImagePixelFormat.BGRA_8888 -> ImageChannelOrderV1.BGRA
+                org.graphiks.kanvas.render.ir.ImagePixelFormat.ALPHA_8 -> ImageChannelOrderV1.ALPHA
+                else -> throw IllegalArgumentException(W5eImagePlanDiagnostics.Format)
+            }
+            val sourceColor = if (channel == ImageChannelOrderV1.ALPHA)
+                ImageColorAlphaPlanV1(channel, pixels.alphaType, ImageTransferPlanV1.NONE, ImageGamutPlanV1.NONE)
+            else {
+                require(pixels.pixelFormat != org.graphiks.kanvas.render.ir.ImagePixelFormat.SRGBA_8888 ||
+                    pixels.colorSpace == org.graphiks.kanvas.color.ColorSpace.SRGB) { W5eImagePlanDiagnostics.ColorSpace }
+                when (pixels.colorSpace) {
+                    org.graphiks.kanvas.color.ColorSpace.SRGB -> ImageColorAlphaPlanV1(channel, pixels.alphaType, ImageTransferPlanV1.SRGB, ImageGamutPlanV1.SRGB)
+                    org.graphiks.kanvas.color.ColorSpace.DISPLAY_P3 -> ImageColorAlphaPlanV1(channel, pixels.alphaType, ImageTransferPlanV1.SRGB, ImageGamutPlanV1.DISPLAY_P3)
+                    org.graphiks.kanvas.color.ColorSpace.LINEAR_SRGB -> ImageColorAlphaPlanV1(channel, pixels.alphaType, ImageTransferPlanV1.LINEAR, ImageGamutPlanV1.SRGB)
+                    else -> throw IllegalArgumentException(W5eImagePlanDiagnostics.ColorSpace)
+                }
+            }
+            val color = sourceColor.copy(premultiplication = pixels.premultiplication)
+
+        return ImageSampleDescription(pixels,sampling,tileModes,color)
+    }
     /** Original IMAGE/Rect/Path source authority, independent of its W4 construction projection. */
     internal fun planW5eImageSource(draw: DrawNode, deviceBoundsI32: org.graphiks.math.geometry.RectI32,
         maxCellsI64: Long = 9L, constructionEntry: ImageConstructionEntryV1? = null): Result {
@@ -83,44 +141,19 @@ public object EffectiveMaterialPlanner {
             require(atlas == null || sample.sampling == org.graphiks.kanvas.render.ir.ImageSampling.Nearest) { W5eImagePlanDiagnostics.UnsupportedSlice }
             require(nine == null || nine.sampling == org.graphiks.kanvas.render.ir.ImageSampling.Nearest &&
                 sample.sampling == org.graphiks.kanvas.render.ir.ImageSampling.Nearest) { W5eImagePlanDiagnostics.UnsupportedSlice }
-            val sampling = when (val requestedSampling = sample.sampling) {
-                org.graphiks.kanvas.render.ir.ImageSampling.Nearest -> ImageSamplingPlanV1.Nearest
-                org.graphiks.kanvas.render.ir.ImageSampling.Linear -> ImageSamplingPlanV1.Linear
-                is org.graphiks.kanvas.render.ir.ImageSampling.Cubic -> ImageSamplingPlanV1.Cubic(requestedSampling.b.toRawBits(), requestedSampling.c.toRawBits())
-            }
-            if (sampling is ImageSamplingPlanV1.Cubic && (!sampling.bF32.isFinite() || sampling.bF32 !in 0f..1f ||
-                    !sampling.cF32.isFinite() || sampling.cF32 !in 0f..1f))
-                throw IllegalArgumentException(W5eImagePlanDiagnostics.CubicParameters)
-            val tileModes = if (direct) ImageTileModePlanV1.ClampClamp else ImageTileModePlanV1(
-                ImageTileAxisModePlanV1.valueOf(sample.tileModeX.name), ImageTileAxisModePlanV1.valueOf(sample.tileModeY.name))
-            val pixels = sample.image as? org.graphiks.kanvas.render.ir.ImageResourceSnapshot.Pixels
-                ?: throw IllegalArgumentException(W5eImagePlanDiagnostics.ExternalResource)
+            val description = describeImageSample(sample,direct) { pixels ->
             require(!direct || draw.resource?.canonicalId == pixels.canonicalId && (patch?.image ?: nine?.image ?: lattice?.image ?: atlas?.image)?.id?.value == pixels.sourceId) {
                 W5eImagePlanDiagnostics.InvalidContract
             }
             require(direct || draw.resource == null && draw.paint?.shader?.canonicalId == draw.material.canonicalId) {
                 W5eImagePlanDiagnostics.InvalidContract
             }
-            val channel = when (pixels.pixelFormat) {
-                org.graphiks.kanvas.render.ir.ImagePixelFormat.RGBA_8888,
-                org.graphiks.kanvas.render.ir.ImagePixelFormat.SRGBA_8888 -> ImageChannelOrderV1.RGBA
-                org.graphiks.kanvas.render.ir.ImagePixelFormat.BGRA_8888 -> ImageChannelOrderV1.BGRA
-                org.graphiks.kanvas.render.ir.ImagePixelFormat.ALPHA_8 -> ImageChannelOrderV1.ALPHA
-                else -> throw IllegalArgumentException(W5eImagePlanDiagnostics.Format)
             }
-            val sourceColor = if (channel == ImageChannelOrderV1.ALPHA)
-                ImageColorAlphaPlanV1(channel, pixels.alphaType, ImageTransferPlanV1.NONE, ImageGamutPlanV1.NONE)
-            else {
-                require(pixels.pixelFormat != org.graphiks.kanvas.render.ir.ImagePixelFormat.SRGBA_8888 ||
-                    pixels.colorSpace == org.graphiks.kanvas.color.ColorSpace.SRGB) { W5eImagePlanDiagnostics.ColorSpace }
-                when (pixels.colorSpace) {
-                    org.graphiks.kanvas.color.ColorSpace.SRGB -> ImageColorAlphaPlanV1(channel, pixels.alphaType, ImageTransferPlanV1.SRGB, ImageGamutPlanV1.SRGB)
-                    org.graphiks.kanvas.color.ColorSpace.DISPLAY_P3 -> ImageColorAlphaPlanV1(channel, pixels.alphaType, ImageTransferPlanV1.SRGB, ImageGamutPlanV1.DISPLAY_P3)
-                    org.graphiks.kanvas.color.ColorSpace.LINEAR_SRGB -> ImageColorAlphaPlanV1(channel, pixels.alphaType, ImageTransferPlanV1.LINEAR, ImageGamutPlanV1.SRGB)
-                    else -> throw IllegalArgumentException(W5eImagePlanDiagnostics.ColorSpace)
-                }
-            }
-            val color = sourceColor.copy(premultiplication = pixels.premultiplication)
+            val pixels = description.pixels
+            val sampling = description.sampling
+            val tileModes = description.tileModes
+            val color = description.color
+            val channel = color.channelOrder
             val boundsF32 = org.graphiks.math.geometry.RectF32.ofLTRB(deviceBoundsI32.left.toFloat(), deviceBoundsI32.top.toFloat(),
                 deviceBoundsI32.right.toFloat(), deviceBoundsI32.bottom.toFloat())
             val baseChild = if (channel != ImageChannelOrderV1.ALPHA) null else if (direct) {
@@ -202,6 +235,7 @@ public object EffectiveMaterialPlanner {
                 while (table.entry(leaf).bindings is MaterialBindingPlan.OpacityF32V1)
                     leaf = MaterialPlanRef(leaf.indexI32 - 1)
                 when (val binding = table.entry(leaf).bindings) {
+                    is ComposedMaterialBindingV5 -> PlanDrawMaterialAuthority.MaterialV5(root)
                     is GradientInterpolationBindingV4 -> PlanDrawMaterialAuthority.MaterialV4(root,binding.sourceProof.coordinates)
                     is ColorFilterBindingV4 -> PlanDrawMaterialAuthority.MaterialV4(root,binding.numericAuthority.outputSourceProof.coordinates)
                     is ImageSampleV3 -> PlanDrawMaterialAuthority.MaterialV3(root,binding.execution.coordinates)
@@ -264,6 +298,17 @@ public object EffectiveMaterialPlanner {
         val domain = if (leafDomain == null) null else workingDomain ?: leafDomain
         val actualBounds = org.graphiks.math.geometry.RectF32.ofLTRB(bounds.left.toFloat(),bounds.top.toFloat(),
             bounds.right.toFloat(),bounds.bottom.toFloat())
+        if (MaterialSourceConstructionV4.containsComposed(draw.material)) {
+            val blend = FinalBlendPlanner.plan(draw.blend,coverage,sample,targetClamp,
+                if (coverage == CoveragePlan.AnalyticScalarAA) BlendCoverageApplicationV1.SourceMultiplication
+                else BlendCoverageApplicationV1.DestinationInterpolation)
+                ?: return SourceNormalizationV4.Refused(W5aPlanDiagnostics.UnsupportedDrawState)
+            return when(val captured = MaterialSourceConstructionV4.capture(draw,SourceCoordinatesV4.None,actualBounds,blend,imageMaskChild)) {
+                is SourceConstructionResultV4.Built -> if (blend == BlendPlan.NoOpV1 && !imageMaskChild)
+                    SourceNormalizationV4.NoOp else SourceNormalizationV4.Source(captured.value)
+                is SourceConstructionResultV4.Refused -> SourceNormalizationV4.Refused(captured.diagnosticCode)
+            }
+        }
         if (domain == null || domain == org.graphiks.kanvas.render.ir.ColorInterpolation.SRGB && workingDomain == null && !imageMaskChild) {
             return when (val original = normalize(draw,targetClamp,true,coverage,sample,elideNoOp=!imageMaskChild,
                 gradientDeviceBoundsI32=legacyGradientBoundsI32,imageMaskChild=imageMaskChild)) {

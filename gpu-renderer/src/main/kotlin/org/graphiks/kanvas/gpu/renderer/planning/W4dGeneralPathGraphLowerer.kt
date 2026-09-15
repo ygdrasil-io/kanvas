@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.planning
 
+import org.graphiks.kanvas.gpu.plan.colorSourceCoordinatesV4
+
 import org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan
 import org.graphiks.kanvas.gpu.plan.BinaryMaskFetchPlan
 import org.graphiks.kanvas.gpu.plan.BinaryMaskedPathDraw
@@ -447,7 +449,7 @@ internal class W4dGeneralPathGraphLowerer {
                 premultipliedRgba = listOf(color.red, color.green, color.blue, color.alpha),
                 material = if (!pass.phase.isColorProducing()) null else
                     w5bMaterial ?: W5aMaterialPlanLowerer().material(graph.materialPlanTableOrNull(), draw.materialAuthority, draw.commandIndex,
-                        (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let(graph::packedMaterialSourceV4)),
+                        draw.materialAuthority.takeIf { it.colorSourceCoordinatesV4() != null }?.let(graph::packedMaterialSourceV4)),
                 targetBounds = bounds,
                 scissorBounds = scissorBounds,
                 clipCoveragePlan = clip.first,
@@ -832,6 +834,7 @@ internal class W4dGeneralPathGraphLowerer {
         table: MaterialPlanTable?,
         authority: PlanDrawMaterialAuthority,
     ): ColorF32? = when (authority) {
+        is PlanDrawMaterialAuthority.MaterialV5 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }
         is PlanDrawMaterialAuthority.MaterialV4 -> table?.let { W5aMaterialPlanLowerer().lower(it, authority.ref) }
         is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
         is PlanDrawMaterialAuthority.MaterialV3 -> error(org.graphiks.kanvas.gpu.plan.W5eImagePlanDiagnostics.InvalidContract)

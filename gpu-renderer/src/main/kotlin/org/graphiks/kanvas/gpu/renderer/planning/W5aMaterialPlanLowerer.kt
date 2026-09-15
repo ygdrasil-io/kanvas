@@ -14,6 +14,7 @@ internal class W5aMaterialPlanLowerer {
         packedSourceV4: org.graphiks.kanvas.gpu.plan.RawMaterialRequirementsV2? = null,
     ): org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload? {
         val ref = when(authority) {
+            is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV5 -> authority.ref
             is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV1 -> authority.ref
             is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV2 -> authority.ref
             is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV4 -> authority.ref
@@ -31,7 +32,8 @@ internal class W5aMaterialPlanLowerer {
         var leaf = root
         while (table.entry(leaf).bindings is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.OpacityF32V1)
             leaf = MaterialPlanRef(leaf.indexI32-1)
-        if (table.entry(leaf).bindings is org.graphiks.kanvas.gpu.plan.ColorFilterBindingV4 ||
+        if (table.entry(leaf).bindings is org.graphiks.kanvas.gpu.plan.ComposedMaterialBindingV5 ||
+            table.entry(leaf).bindings is org.graphiks.kanvas.gpu.plan.ColorFilterBindingV4 ||
             table.entry(leaf).bindings is org.graphiks.kanvas.gpu.plan.GradientInterpolationBindingV4) {
             table.colorSourceProofV4(root)
             // This is only the historical geometry color slot. material() below

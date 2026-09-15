@@ -29,7 +29,8 @@ internal class W5aPacketMaterialSourceV2 private constructor(
             when (authority) {
                 is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV1 -> issue(table,authority.ref,commandIdI32,authority.coordinates)
                 is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV2 -> issue(table,authority.ref,commandIdI32,authority.coordinates)
-                is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV4 -> W5aPacketMaterialSourceV2(commandIdI32,
+                is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV4,
+                is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV5 -> W5aPacketMaterialSourceV2(commandIdI32,
                     requireNotNull(W5aMaterialSourceStage.colorV4(table,authority,requireNotNull(packedSourceV4))) {
                         org.graphiks.kanvas.gpu.plan.W5fPlanDiagnostics.Schema })
                 else -> error("Unsupported material source authority")

@@ -35,6 +35,8 @@ public class W5ePreparedFrameWitnessV1 internal constructor(internal val bridge:
                 authority.ref, packet.commandIdValue, authority.coordinates)
             is PlanDrawMaterialAuthority.MaterialV4 -> W5aPacketMaterialSourceV2.issue(bridge.materialTable,authority,
                 packet.commandIdValue,bridge.constructionGraph.packedMaterialSourceV4(authority))
+            is PlanDrawMaterialAuthority.MaterialV5 -> W5aPacketMaterialSourceV2.issue(bridge.materialTable,authority,
+                packet.commandIdValue,bridge.constructionGraph.packedMaterialSourceV4(authority))
             else -> error(W5eImagePlanDiagnostics.InvalidContract)
         }
         packet.packetId to source

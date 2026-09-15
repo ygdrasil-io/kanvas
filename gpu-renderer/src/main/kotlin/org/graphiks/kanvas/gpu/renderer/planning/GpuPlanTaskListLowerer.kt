@@ -1,5 +1,11 @@
 package org.graphiks.kanvas.gpu.renderer.planning
 
+import org.graphiks.kanvas.gpu.renderer.materials.composedStopAllocationLabelV5
+import org.graphiks.kanvas.gpu.renderer.materials.declaredNoiseSlabV1
+import org.graphiks.kanvas.gpu.renderer.materials.noiseAllocationLabelV1
+
+import org.graphiks.kanvas.gpu.plan.colorSourceCoordinatesV4
+
 import org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan
 import org.graphiks.kanvas.gpu.plan.AttachmentStorePlan
 import org.graphiks.kanvas.gpu.plan.BlendPlan
@@ -217,7 +223,7 @@ public class GpuPlanTaskListLowerer {
                 ?: return W3BaseTaskListResult.Invalid(invalidDiagnostic("W5 material authority is invalid."))
             packets += packet(draw, color, paintOrder, targetBounds, graph.materialPlanTable,
                 request.w5bPreparedSemantics[draw.commandIndex],
-                (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let(request.graph::packedMaterialSourceV4))
+                draw.materialAuthority.takeIf { it.colorSourceCoordinatesV4() != null }?.let(request.graph::packedMaterialSourceV4))
         }
         val replay = "w3:${request.graph.id.value}"
         val seal = GPUFrameCapabilitySeal.capture(request.frameId, request.deviceGeneration, request.capabilities)
@@ -443,6 +449,8 @@ public class GpuPlanTaskListLowerer {
                     PlanResourceRole.LogicalTarget -> "$identity.target"
                     PlanResourceRole.DestinationSnapshot -> "$identity.snapshot"
                     PlanResourceRole.ReadbackStaging -> "$identity.staging"
+                    PlanResourceRole.GradientStopData -> graph.composedStopAllocationLabelV5(identity) ?: "w4e.${resource.id.value}"
+                    PlanResourceRole.NoiseTableData -> graph.noiseAllocationLabelV1()
                     else -> "w4e.${resource.id.value}"
                 }, when (resource.role) {
                     PlanResourceRole.LogicalTarget -> GPUFrameMemoryCategory.CanonicalTarget
@@ -460,7 +468,9 @@ public class GpuPlanTaskListLowerer {
         val snapshot = graph.resources().singleOrNull { it.role == PlanResourceRole.DestinationSnapshot }
         val snapshotBytes = snapshot?.byteSize ?: 0L
         val stopBytesI64 = graph.materialPlanTableOrNull()?.gradientStopSlab?.byteSizeI64 ?: 0L
-        val transientBytesI64 = try { Math.addExact(Math.addExact(shape.staging.byteSize, snapshotBytes), stopBytesI64) } catch (_: ArithmeticException) { return null }
+        val noiseBytesI64 = graph.declaredNoiseSlabV1()?.byteCountI64 ?: 0L
+        val storageBytesI64 = try { Math.addExact(stopBytesI64,noiseBytesI64) } catch (_: ArithmeticException) { return null }
+        val transientBytesI64 = try { Math.addExact(Math.addExact(shape.staging.byteSize, snapshotBytes), storageBytesI64) } catch (_: ArithmeticException) { return null }
         val totalBytesI64 = try { Math.addExact(shape.target.byteSize, transientBytesI64) } catch (_: ArithmeticException) { return null }
         if (totalBytesI64 != graph.peakFrameLocalBytes || graph.peakFrameLocalBytes > graph.budget.maxFrameLocalBytes) return null
         val identity = compositeSessionIdentity ?: "w3.session.${generation.value}.${bounds.width}x${bounds.height}.rgba8unorm-srgb"
@@ -470,14 +480,18 @@ public class GpuPlanTaskListLowerer {
             requireNotNull(snapshot?.copyExtent()).let { GPUPixelBounds(0, 0, it.width, it.height) }))
         val stops = if (stopBytesI64 == 0L) emptyList() else listOf(GPUFrameMemoryAllocation(
             "$identity.gradient-stops", GPUFrameMemoryCategory.ReusableScratch, stopBytesI64, GPUFrameMemoryResourceKind.Buffer, null))
-        return GPUFrameMemoryBudgetPlan(transientBytesI64, shape.target.byteSize, GPUFrameMemoryCategory.entries.associateWith { category -> when (category) { GPUFrameMemoryCategory.CanonicalTarget -> shape.target.byteSize; GPUFrameMemoryCategory.ReadbackStaging -> shape.staging.byteSize; GPUFrameMemoryCategory.DestinationSnapshot -> snapshotBytes; GPUFrameMemoryCategory.ReusableScratch -> stopBytesI64; else -> 0L } }, limits.capabilityFacts("frame-memory-budget"), graph.budget.maxFrameLocalBytes, null, listOf(target, staging) + snapshots + stops)
+        val noise = if(noiseBytesI64 == 0L) emptyList() else listOf(GPUFrameMemoryAllocation(
+            graph.noiseAllocationLabelV1(),GPUFrameMemoryCategory.ReusableScratch,noiseBytesI64,
+            GPUFrameMemoryResourceKind.Buffer,null,0,graph.passes().size))
+        return GPUFrameMemoryBudgetPlan(transientBytesI64, shape.target.byteSize, GPUFrameMemoryCategory.entries.associateWith { category -> when (category) { GPUFrameMemoryCategory.CanonicalTarget -> shape.target.byteSize; GPUFrameMemoryCategory.ReadbackStaging -> shape.staging.byteSize; GPUFrameMemoryCategory.DestinationSnapshot -> snapshotBytes; GPUFrameMemoryCategory.ReusableScratch -> storageBytesI64; else -> 0L } }, limits.capabilityFacts("frame-memory-budget"), graph.budget.maxFrameLocalBytes, null, listOf(target, staging) + snapshots + stops + noise)
     }
 
     private fun validateW3Graph(graph: RenderGraph): W3Graph? {
         val geometryClearOnly = graph.verifyW5bGeometryCompilerWitness() && graph.visualCommandCount == 0 &&
             graph.materialPlanTableOrNull() == null && graph.w5bGeometryLanes().isEmpty() && graph.passes().size == 2
         if ((!geometryClearOnly && graph.capabilityId !in setOf(W3SolidRectPlanCompiler.CAPABILITY_ID, W3SolidRectPlanCompiler.W5A_CAPABILITY_ID, W5bCorePrimitiveGraph.CAPABILITY_ID, org.graphiks.kanvas.gpu.plan.W5eImagePlanCompiler.CONSTRUCTION_CAPABILITY_ID)) || graph.colorFormat != PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) return null
-        val resources = graph.resources().filter { it.role != PlanResourceRole.GradientStopData }
+        val noiseBytesI64 = graph.declaredNoiseSlabV1()?.byteCountI64 ?: 0L
+        val resources = graph.resources().filter { it.role != PlanResourceRole.GradientStopData && it.role != PlanResourceRole.NoiseTableData }
         if (graph.capabilityId == W5bCorePrimitiveGraph.CAPABILITY_ID || graph.capabilityId == org.graphiks.kanvas.gpu.plan.W5eImagePlanCompiler.CONSTRUCTION_CAPABILITY_ID) {
             val target = resources.singleOrNull { it.role == PlanResourceRole.LogicalTarget } ?: return null
             val staging = resources.singleOrNull { it.role == PlanResourceRole.ReadbackStaging } ?: return null
@@ -541,13 +555,13 @@ public class GpuPlanTaskListLowerer {
         val planDraws = render.draws()
         if (planDraws.any { it !is SolidRectDraw }) return null
         val draws = planDraws.filterIsInstance<SolidRectDraw>()
-        if (staging.id != expectedStagingResource.id || staging.ordinal != 0 || staging.kind != PlanResourceKind.Buffer || staging.format != null || staging.copyExtent() != null || staging.byteSize != expectedStaging || staging.usages() != setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead) || staging.lifetime != PlanResourceLifetime.FrameLocal || staging.firstPassIndex != 1 || staging.lastPassIndexExclusive != 2 || render.ordinal != 0 || readback.ordinal != 0 || render.id != expectedRenderId || readback.id != expectedReadbackId || render.target != target.id || readback.source != target.id || readback.staging != staging.id || readback.bytesPerRow != expectedRow || render.load != AttachmentLoadPlan.ClearTransparent || render.store != AttachmentStorePlan.Store || render.drawDataResources != null || graph.dependencies().singleOrNull()?.let { it.before == render.id && it.after == readback.id } != true || graph.visualCommandCount != draws.size || (draws.size !in 1..512 && !(draws.isEmpty() && render.destinationVersionAfter?.valueI64 == 0L && graph.materialPlanTableOrNull() == null)) || graph.peakFrameLocalBytes != expectedTargetBytes + expectedStaging + (graph.materialPlanTableOrNull()?.gradientStopSlab?.byteSizeI64 ?: 0L)) return null
+        if (staging.id != expectedStagingResource.id || staging.ordinal != 0 || staging.kind != PlanResourceKind.Buffer || staging.format != null || staging.copyExtent() != null || staging.byteSize != expectedStaging || staging.usages() != setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead) || staging.lifetime != PlanResourceLifetime.FrameLocal || staging.firstPassIndex != 1 || staging.lastPassIndexExclusive != 2 || render.ordinal != 0 || readback.ordinal != 0 || render.id != expectedRenderId || readback.id != expectedReadbackId || render.target != target.id || readback.source != target.id || readback.staging != staging.id || readback.bytesPerRow != expectedRow || render.load != AttachmentLoadPlan.ClearTransparent || render.store != AttachmentStorePlan.Store || render.drawDataResources != null || graph.dependencies().singleOrNull()?.let { it.before == render.id && it.after == readback.id } != true || graph.visualCommandCount != draws.size || (draws.size !in 1..512 && !(draws.isEmpty() && render.destinationVersionAfter?.valueI64 == 0L && graph.materialPlanTableOrNull() == null)) || graph.peakFrameLocalBytes != expectedTargetBytes + expectedStaging + (graph.materialPlanTableOrNull()?.gradientStopSlab?.byteSizeI64 ?: 0L) + noiseBytesI64) return null
         val targetRect = org.graphiks.math.geometry.RectI32(0, 0, graph.targetExtent.width, graph.targetExtent.height)
         if (draws.any { draw -> draw.coverage != CoveragePlan.FullOrScissor || draw.sample != SamplePlan.SingleSample || draw.copyVisibleBounds().isEmpty || draw.copyScissor().isEmpty || !targetRect.copy().intersect(draw.copyVisibleBounds()) || !draw.copyVisibleBounds().copy().intersect(draw.copyScissor()) || draw.copyScissor() != draw.copyVisibleBounds() }) return null
         val table = graph.materialPlanTableOrNull()
         if (draws.any { draw ->
                 when (val authority = draw.materialAuthority) {
-                    is PlanDrawMaterialAuthority.MaterialV4 -> runCatching { graph.packedMaterialSourceV4(authority) }.isFailure
+                    is PlanDrawMaterialAuthority.MaterialV4, is PlanDrawMaterialAuthority.MaterialV5 -> runCatching { graph.packedMaterialSourceV4(authority) }.isFailure
                     is PlanDrawMaterialAuthority.MaterialV3 -> true
                     is PlanDrawMaterialAuthority.LegacyColorV1 -> false
                     is PlanDrawMaterialAuthority.MaterialV2 -> table == null || authority.ref.indexI32 >= table.sizeI32
@@ -581,6 +595,8 @@ public class GpuPlanTaskListLowerer {
         table: MaterialPlanTable?,
         authority: PlanDrawMaterialAuthority,
     ): ColorF32? = when (authority) {
+        is PlanDrawMaterialAuthority.MaterialV5 -> table?.colorSourceProofV5(authority.ref)
+            ?.takeIf { it.authenticates(table,authority.ref,org.graphiks.kanvas.gpu.plan.SourceCoordinatesV4.None) }?.let { ColorF32.Transparent }
         is PlanDrawMaterialAuthority.MaterialV4 -> table?.colorSourceProofV4(authority.ref)
             ?.takeIf { it.authenticates(table,authority.ref,authority.coordinates) }?.let { ColorF32.Transparent }
         is PlanDrawMaterialAuthority.MaterialV3 -> null

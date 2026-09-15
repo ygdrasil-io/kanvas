@@ -1,5 +1,10 @@
 package org.graphiks.kanvas.gpu.renderer.planning
 
+import org.graphiks.kanvas.gpu.renderer.materials.composedStopAllocationLabelV5
+import org.graphiks.kanvas.gpu.renderer.materials.noiseAllocationLabelV1
+
+import org.graphiks.kanvas.gpu.plan.colorSourceCoordinatesV4
+
 import org.graphiks.kanvas.gpu.plan.materialPlanRef
 
 import org.graphiks.kanvas.gpu.plan.*
@@ -44,7 +49,10 @@ internal class W5bAnalyticRectGraphLowerer {
             GPUFrameResourceRole.ReadbackStaging, setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.MapRead),
             GPUFrameResourceLifetime.FrameLocal, footprint.readbackBytes, "$identity.staging")
         val allocations = graph.resources().map { resource ->
-            GPUFrameMemoryAllocation("$identity.${resource.id.value}", when (resource.role) {
+            GPUFrameMemoryAllocation(if(resource.role == PlanResourceRole.GradientStopData)
+                graph.composedStopAllocationLabelV5(request.w5aCompositeSessionIdentity ?: identity) ?: "$identity.${resource.id.value}"
+                else if(resource.role == PlanResourceRole.NoiseTableData) graph.noiseAllocationLabelV1()
+                else "$identity.${resource.id.value}", when (resource.role) {
                 PlanResourceRole.LogicalTarget -> GPUFrameMemoryCategory.CanonicalTarget
                 PlanResourceRole.ReadbackStaging -> GPUFrameMemoryCategory.ReadbackStaging
                 PlanResourceRole.DestinationSnapshot -> GPUFrameMemoryCategory.DestinationSnapshot
@@ -59,7 +67,7 @@ internal class W5bAnalyticRectGraphLowerer {
         require(memory.diagnostic == null && memory.peakFrameTransientBytes + memory.targetResidentBytes == graph.peakFrameLocalBytes)
         val table = requireNotNull(graph.materialPlanTableOrNull())
         val built = draws.mapIndexed { index, draw ->
-            val v4 = draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4
+            val v4 = draw.materialAuthority.takeIf { it.colorSourceCoordinatesV4() != null }
             W4aAnalyticRectGraphLowerer().packet(draw,
                 if (v4 != null) org.graphiks.math.color.ColorF32.Transparent else requireNotNull(W5aMaterialPlanLowerer().lower(table,
                     draw.materialAuthority.materialPlanRef())), index, bounds, table, w5b = true,

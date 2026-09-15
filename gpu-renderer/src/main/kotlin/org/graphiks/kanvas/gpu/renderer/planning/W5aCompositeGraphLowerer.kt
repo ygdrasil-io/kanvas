@@ -5,6 +5,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.*
 import org.graphiks.kanvas.gpu.renderer.recording.*
 import org.graphiks.kanvas.gpu.renderer.resources.*
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
+import org.graphiks.kanvas.gpu.renderer.materials.declaredNoiseSlabV1
+import org.graphiks.kanvas.gpu.renderer.materials.NOISE_TABLE_ALLOCATION_LABEL_V1
 import org.graphiks.kanvas.render.ir.*
 
 /** Exact native packet partitions, issued only after all constituent lowerers succeeded. */
@@ -102,14 +104,24 @@ internal class W5aCompositeGraphLowerer {
             }
         }
         var stopSlabCounted = false
+        val noiseSlabs=composite.lanes().mapNotNull { it.declaredNoiseSlabV1() }.distinct()
+        require(noiseSlabs.size <= 1)
+        var noiseSlabCounted = false
         val allocations = (rectAllocations + lowered.flatMapIndexed { ordinal, result -> result.taskList.memoryBudget.allocations.mapNotNull { allocation ->
             if (allocation.category == GPUFrameMemoryCategory.CanonicalTarget || allocation.category == GPUFrameMemoryCategory.ReadbackStaging) {
                 allocation.takeIf { ordinal == 0 }
             } else if (allocation.label == "$session.gradient-stops") {
                 require(allocation.bytes == composite.materialTable.gradientStopSlab?.byteSizeI64)
                 if (stopSlabCounted) null else allocation.also { stopSlabCounted = true }
+            } else if (allocation.label == NOISE_TABLE_ALLOCATION_LABEL_V1) {
+                val slab=requireNotNull(composite.lanes()[ordinal].declaredNoiseSlabV1())
+                require(slab === noiseSlabs.single() && allocation.bytes == slab.byteCountI64 &&
+                    allocation.category == GPUFrameMemoryCategory.ReusableScratch &&
+                    allocation.resourceKind == GPUFrameMemoryResourceKind.Buffer && allocation.extent == null)
+                if(noiseSlabCounted) null else allocation.also { noiseSlabCounted = true }
             } else allocation.copy(label = "${allocation.label}.lane.$ordinal")
         } }).map { it.copy(firstPassIndex = 0, lastPassIndexExclusive = tasks.size) }
+        require(noiseSlabCounted == noiseSlabs.isNotEmpty())
         val budget = GPUFrameMemoryBudgetPlanner.plan(GPUFrameMemoryBudgetRequest(allocations,
             minOf(request.currentBudget.maxFrameLocalBytes, request.rendererAggregateMemoryBudgetBytes ?: Long.MAX_VALUE),
             requireNotNull(request.capabilities.limits)))

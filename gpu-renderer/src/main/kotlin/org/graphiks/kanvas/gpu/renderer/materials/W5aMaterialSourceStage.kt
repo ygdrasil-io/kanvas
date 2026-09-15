@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.materials
 
 import org.graphiks.kanvas.gpu.plan.MaterialBindingPlan
+import org.graphiks.kanvas.gpu.plan.materialPlanRef
+import org.graphiks.kanvas.gpu.plan.colorSourceCoordinatesV4
 import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
 import org.graphiks.kanvas.gpu.plan.MaterialPlanTable
 import org.graphiks.kanvas.gpu.plan.RawMaterialRequirementsV2
@@ -32,27 +34,52 @@ internal class W5aMaterialSourceStage private constructor(
     val gradientStopSlab: GradientStopSlabPlanV1?,
     val coordinateFunctionName: String = "w5c_local_point",
     val imageV3: org.graphiks.kanvas.gpu.plan.ImageSampleExecutionPlanV1? = null,
+    val composedProof: org.graphiks.kanvas.gpu.plan.ColorSourceProofV1? = null,
+    val consumesDevicePositionF32: Boolean = gradientStopSlab != null || imageV3 != null,
 ) {
-    data class Binding(val bindingI32: Int, val resourceKind: String)
+    data class Binding(val bindingI32: Int, val resourceKind: String,
+        val composedResource: org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.Resource? = null)
+    val composedLayout = composedProof?.composedBindingLayout
+    val noiseTableSlab = composedProof?.noiseTableSlab
     val imageLayoutV3 = requirements.imageLayoutV3
-    val bindingManifest: List<Binding> = listOf(Binding(0, "uniformBuffer")) +
+    val bindingManifest: List<Binding> = listOf(Binding(0, "uniformBuffer")) + (composedLayout?.resources?.map {
+        when(it.kindTagU32) {
+            1u -> {
+                when(requireNotNull(it.buffer).storageKind) {
+                    org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.GRADIENT_STOPS ->
+                        require(gradientStopSlab != null && requireNotNull(composedProof).authenticatesComposedStorage(it,gradientStopSlab))
+                    org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.NOISE_U32 ->
+                        require(noiseTableSlab != null && requireNotNull(composedProof).authenticatesComposedNoise(it,noiseTableSlab))
+                }
+                Binding(it.bindingI32,"storageBuffer",it)
+            }
+            2u -> {
+                val image=requireNotNull(composedProof).composedImageResources.first { image -> image.resource === it }
+                require(composedProof.authenticatesComposedImage(it,image.upload))
+                Binding(it.bindingI32,"sampledTexture",it)
+            }
+            else -> error("Invalid composed resource")
+        }
+    } ?: (
         (if (gradientStopSlab == null) emptyList() else listOf(Binding(imageLayoutV3?.gradientStorageBindingU32?.toInt() ?: 1, "storageBuffer"))) +
-        (imageLayoutV3?.let { listOf(Binding(it.imageTextureBindingU32.toInt(), "sampledTexture")) } ?: emptyList())
+        (imageLayoutV3?.let { listOf(Binding(it.imageTextureBindingU32.toInt(), "sampledTexture")) } ?: emptyList())))
     val structuralId: String = requirements.structuralId
     private val ownedUniformBytes = requirements.copyUniformBytes()
     val uniformBytes: ByteArray get() = ownedUniformBytes.copyOf()
     val uniformByteCountI64: Long get() = ownedUniformBytes.size.toLong()
     val canonicalIdentity: String = requirements.canonicalIdentity
     companion object {
-        fun colorV4(table: MaterialPlanTable, authority: org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV4,
+        fun colorV4(table: MaterialPlanTable, authority: org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority,
             requirements: RawMaterialRequirementsV2): W5aMaterialSourceStage? {
-            val proof = table.colorSourceProofV4(authority.ref)
-            if (!proof.authenticates(table,authority.ref,authority.coordinates) ||
-                requirements.structuralId != table.entry(authority.ref).program.structuralId.value ||
+            val ref = authority.materialPlanRef()
+            val coordinates = authority.colorSourceCoordinatesV4() ?: return null
+            val proof = table.colorSourceProofV4(ref)
+            if (!proof.authenticates(table,ref,coordinates) ||
+                requirements.structuralId != table.entry(ref).program.structuralId.value ||
                 !requirements.canonicalIdentity.endsWith("material-source-footprint-v4:${proof.canonicalIdentity}")) return null
             val wordsI64 = requirements.uniformByteCountI64 / 16L
             if (requirements.uniformByteCountI64 % 16L != 0L || wordsI64 !in 1L..Int.MAX_VALUE.toLong()) return null
-            val code = W5fColorOperationEmitterV1.emit(proof.copyOperationGraph(),"vec4<f32>(0.0)",0L)
+            val code = W5fColorOperationEmitterV1.emit(proof.copyOperationGraph(),"vec4<f32>(0.0)",0L,composedProof=proof)
             val slab = proof.gradientStopSlab
             if (slab != null && slab !== table.gradientStopSlab) return null
             val image = proof.imageExecution
@@ -61,23 +88,44 @@ internal class W5aMaterialSourceStage private constructor(
                 requirements.imageLayoutV3?.structuralIdentity != imageLayout?.structuralIdentity) return null
             val stopDeclaration = if (slab == null) "" else """
                 struct GradientStopV1 { positionAndReserved: vec4<f32>, straightColor: vec4<f32>, }
-                @group(1) @binding(${imageLayout?.gradientStorageBindingU32 ?: 1u}) var<storage, read> w5cStops: array<GradientStopV1>;
+                @group(1) @binding(${proof.composedBindingLayout?.resources?.single { it.buffer?.storageKind == org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.GRADIENT_STOPS }?.bindingI32 ?: imageLayout?.gradientStorageBindingU32 ?: 1u}) var<storage, read> w5cStops: array<GradientStopV1>;
             """.trimIndent()
+            val noiseDeclaration=if(proof.noiseTableSlab == null) "" else {
+                val resource=requireNotNull(proof.composedBindingLayout).resources.single {
+                    it.buffer?.storageKind == org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.NOISE_U32 }
+                "struct NoiseWordV1 { words: vec4<u32>, }\n"+
+                    "@group(1) @binding(${resource.bindingI32}) var<storage, read> w5gNoiseWords: array<NoiseWordV1>;\n"+
+                    W5fColorOperationEmitterV1.noiseDeclarations
+            }
             val imageDeclaration = if (image == null) "" else """
                 @group(1) @binding(${requireNotNull(imageLayout).imageTextureBindingU32}) var w5eTexture: texture_2d<f32>;
                 ${W5eImageTexelEvaluatorV1.addressDeclarations(image.numericAuthority.graph)}
             """.trimIndent()
+            val composedTextures=proof.composedBindingLayout?.resources.orEmpty().filter { it.texture != null }.joinToString("\n") { row ->
+                "@group(1) @binding(${row.bindingI32}) var w5gTexture${row.bindingI32}: texture_2d<f32>;"
+            }
+            val composedAddresses=proof.composedImageResources.distinctBy {
+                "${it.resource.bindingI32}:${it.graph.tileModes.topologyId}"
+            }.joinToString("\n") {
+                require(proof.authenticatesComposedImage(it.resource,it.upload))
+                W5eImageTexelEvaluatorV1.addressDeclarations(it.graph,
+                    "w5g_address_texel_${it.resource.bindingI32}_${it.graph.tileModes.x.name.lowercase()}_${it.graph.tileModes.y.name.lowercase()}")
+            }
             return W5aMaterialSourceStage(requirements,"""
                 struct W5fMaterialBlock { words: array<vec4<u32>, ${wordsI64}>, }
                 @group(1) @binding(0) var<uniform> w5fMaterial: W5fMaterialBlock;
                 $stopDeclaration
+                $noiseDeclaration
                 $imageDeclaration
+                $composedTextures
+                $composedAddresses
                 $W5D_SAFE_DIVIDE_WGSL
                 fn w5f_device_point(pixel: vec2<f32>) -> vec2<f32> { return pixel; }
                 fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {
                     $code
                 }
-            """.trimIndent(),requirements.bindingCountI32,false,slab,"w5f_device_point",image)
+            """.trimIndent(),requirements.bindingCountI32,false,slab,"w5f_device_point",image,
+                proof.takeIf { it.composedBindingLayout != null },proof.copyOperationGraph().consumesDevicePositionF32)
         }
         fun imageV3(table: MaterialPlanTable, root: MaterialPlanRef): W5aMaterialSourceStage {
             val execution = (table.entry(root).bindings as org.graphiks.kanvas.gpu.plan.ImageSampleV3).execution
@@ -126,6 +174,7 @@ internal class W5aMaterialSourceStage private constructor(
                 val (source, binding) = pair
                 val input = "${layout.uniformExpression}.binding$bindingIndexI32"
                 when (binding) {
+                    is org.graphiks.kanvas.gpu.plan.ComposedMaterialBindingV5 -> return null
                     is org.graphiks.kanvas.gpu.plan.ColorFilterBindingV4 -> return null
                     is org.graphiks.kanvas.gpu.plan.GradientInterpolationBindingV4 -> return null
                     is org.graphiks.kanvas.gpu.plan.ImageSampleV3 -> return null

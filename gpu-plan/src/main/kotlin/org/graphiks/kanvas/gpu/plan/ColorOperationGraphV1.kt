@@ -6,8 +6,71 @@ import org.graphiks.kanvas.color.ColorInterpolationProgramV1
 public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
     public val outputs: List<Scalar> = immutableList(outputs)
     public val contractId: String = "WgslFloatEnvelopeV1"
+    /** Whether the executed expression grammar has a fragment-position input. */
+    public val consumesDevicePositionF32: Boolean by lazy {
+        val visited=java.util.IdentityHashMap<Scalar,Boolean>()
+        lateinit var scalar: (Scalar)->Boolean
+        fun predicate(value: Predicate): Boolean = when(value) {
+            is Predicate.UniformU32Equal -> false
+            is Predicate.Equal -> scalar(value.a) || scalar(value.b)
+            is Predicate.LessEqual -> scalar(value.a) || scalar(value.b)
+            is Predicate.Not -> predicate(value.value)
+            is Predicate.And -> predicate(value.a) || predicate(value.b)
+            is Predicate.Finite -> scalar(value.value)
+            is Predicate.ProjectiveValid -> scalar(value.division)
+        }
+        scalar = { node -> visited.getOrPut(node) { when(node) {
+            is Scalar.DevicePositionF32 -> true
+            is Scalar.InputLinearPremul,is Scalar.ImageEncodedInput,is Scalar.DynamicF32,is Scalar.ConstantF32,
+            is Scalar.StopInterpolationInput,Scalar.DiscardF32 -> false
+            is Scalar.ImageEncodedComponent,is Scalar.ImageTexelValid,is Scalar.ImageSampleComponent -> true
+            is Scalar.NoiseComponent -> scalar(node.region.localX) || scalar(node.region.localY)
+            is Scalar.NoiseStateF32 -> false
+            is Scalar.NoiseIntegralF32 -> scalar(node.x.q) || scalar(node.y.q)
+            is Scalar.NoisePhaseComponent -> scalar(node.phase.q)
+            is Scalar.NoiseGradientU16 -> scalar(node.read.x.phase.q) || scalar(node.read.y.phase.q)
+            is Scalar.ImageIntegerOffset -> scalar(node.base)
+            is Scalar.Add -> scalar(node.a) || scalar(node.b)
+            is Scalar.Subtract -> scalar(node.a) || scalar(node.b)
+            is Scalar.Multiply -> scalar(node.a) || scalar(node.b)
+            is Scalar.Divide -> scalar(node.a) || scalar(node.b)
+            is Scalar.ProjectiveDivide -> scalar(node.a) || scalar(node.b)
+            is Scalar.Pow -> scalar(node.a) || scalar(node.b)
+            is Scalar.Min -> scalar(node.a) || scalar(node.b)
+            is Scalar.Max -> scalar(node.a) || scalar(node.b)
+            is Scalar.Atan2 -> scalar(node.y) || scalar(node.x)
+            is Scalar.Clamp01 -> scalar(node.value)
+            is Scalar.Abs -> scalar(node.value)
+            is Scalar.Sqrt -> scalar(node.value)
+            is Scalar.Sin -> scalar(node.value)
+            is Scalar.Cos -> scalar(node.value)
+            is Scalar.Floor -> scalar(node.value)
+            is Scalar.Round -> scalar(node.value)
+            is Scalar.IntegerModulo -> scalar(node.value)
+            is Scalar.TableByte -> scalar(node.scaled)
+            is Scalar.GradientStopComponent -> scalar(node.selection.numerator) || scalar(node.selection.scale) || scalar(node.selection.parameter)
+            is Scalar.BranchComponent -> predicate(node.branch.predicate) || node.branch.yes.any(scalar) || node.branch.no.any(scalar)
+            is Scalar.EagerSelect -> predicate(node.predicate) || scalar(node.yes) || scalar(node.no)
+            is Scalar.LazyBranch -> predicate(node.predicate) || scalar(node.yes) || scalar(node.no)
+        } } }
+        outputs.any(scalar)
+    }
     init { require(outputs.size == 4) }
     public sealed interface Scalar {
+        /** Lexical loop state, bound only inside its authenticated Noise region. */
+        public class NoiseStateF32 internal constructor(public val slotI32: Int) : Scalar {
+            init { require(slotI32 in 0..6) }
+        }
+        public class NoiseComponent(public val region: NoiseOperationGraphV1, public val channelI32: Int) : Scalar {
+            init { require(channelI32 in 0..3) }
+        }
+        /** Original floor(q) and q-floor(q), with correlated floor/DAZ custody. */
+        public class NoisePhaseComponent(public val phase: NoiseOperationGraphV1.Phase,
+            public val kind: NoiseOperationGraphV1.PhaseKind) : Scalar
+        public class NoiseIntegralF32(public val x: NoiseOperationGraphV1.Phase,
+            public val y: NoiseOperationGraphV1.Phase) : Scalar
+        /** Exact U16 table selection converted to F32, before the shared decoder. */
+        public class NoiseGradientU16(public val read: NoiseOperationGraphV1.GradientRead) : Scalar
         public data class InputLinearPremul(public val channelI32: Int) : Scalar {
             init { require(channelI32 in 0..3) }
         }
@@ -152,6 +215,16 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
                 is Scalar.DevicePositionF32 -> "device-position:${node.channelI32}"
                 is Scalar.DynamicF32 -> "dynamic:${node.wordOffsetU32}"
                 is Scalar.ConstantF32 -> "constant:${node.bitsI32}"
+                is Scalar.NoiseStateF32 -> "noise-state:${node.slotI32}"
+                is Scalar.NoiseComponent -> "noise-v1-u128-phase-loop255:${node.region.wordOffsetU32}:" +
+                    "${node.region.ownerNodeIndexI32}:${identity(node.region.localX)}:${identity(node.region.localY)}:" +
+                    (node.region.initialState + node.region.nextState + node.region.outputs).joinToString(",",transform=::identity) + ":${node.channelI32}"
+                is Scalar.NoisePhaseComponent -> "noise-original-phase:${node.kind}:${identity(node.phase.q)}"
+                is Scalar.NoiseIntegralF32 -> "noise-both-bit-integral:${identity(node.x.q)}:${identity(node.y.q)}"
+                is Scalar.NoiseGradientU16 -> node.read.let { read ->
+                    "noise-u16:${read.ownerNodeIndexI32}:${read.tableRangeWordOffsetU32}:${read.channelI32}:${read.axisI32}:" +
+                        "${identity(read.x.phase.q)}:${read.x.offsetI32}:${read.x.periodWordOffsetU32}:" +
+                        "${identity(read.y.phase.q)}:${read.y.offsetI32}:${read.y.periodWordOffsetU32}" }
                 is Scalar.Add -> "add:${identity(node.a)}:${identity(node.b)}"
                 is Scalar.Subtract -> "sub:${identity(node.a)}:${identity(node.b)}"
                 is Scalar.Multiply -> "mul:${identity(node.a)}:${identity(node.b)}"
@@ -168,7 +241,7 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
                 is Scalar.Sin -> "sin:${identity(node.value)}"
                 is Scalar.Cos -> "cos:${identity(node.value)}"
                 is Scalar.ImageEncodedInput -> "image-encoded-input:${node.channelI32}"
-                is Scalar.ImageSampleComponent -> "image-sampled-region:${node.region.graph.topologyIdentity}:" +
+                is Scalar.ImageSampleComponent -> "image-sampled-region:${node.region.topologyIdentity}:" +
                     (node.region.outputs+node.region.weightsX+node.region.weightsY+node.region.distancesX+node.region.distancesY)
                         .joinToString(",",transform=::identity)+":${node.channelI32}"
                 is Scalar.ImageEncodedComponent -> "image-encoded-component:${node.read.identity}:" +
@@ -194,12 +267,16 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
         }
         "color-operation-v1:$contractId:${outputs.joinToString(";", transform = ::identity)}"
     }
-    internal fun bindInput(prefix: ColorOperationGraphV1, filterWordOffsetU32: Long): ColorOperationGraphV1 {
+    internal fun bindInput(prefix: ColorOperationGraphV1, filterWordOffsetU32: Long,
+        imageEncodedInputs: List<Scalar>? = null,
+        imageResource: ImageNumericOperationGraphV1.TexelResource.Logical? = null,
+        deviceCoordinates: List<Scalar>? = null): ColorOperationGraphV1 {
         val bound = java.util.IdentityHashMap<Scalar, Scalar>()
         val selections = java.util.IdentityHashMap<GradientStopSelection, GradientStopSelection>()
         val vectors = java.util.IdentityHashMap<BranchVector,BranchVector>()
         val imageReads = java.util.IdentityHashMap<ImageNumericOperationGraphV1.TexelRead,ImageNumericOperationGraphV1.TexelRead>()
         val imageRegions = java.util.IdentityHashMap<ImageNumericOperationGraphV1.SampledRegion,ImageNumericOperationGraphV1.SampledRegion>()
+        val noiseRegions = java.util.IdentityHashMap<NoiseOperationGraphV1,NoiseOperationGraphV1>()
         fun bind(value: Scalar): Scalar {
             fun predicate(p: Predicate): Predicate = when (p) {
                 is Predicate.UniformU32Equal -> Predicate.UniformU32Equal(Math.addExact(p.wordOffsetU32,filterWordOffsetU32),p.expectedU32)
@@ -212,18 +289,23 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
             }
             return bound[value] ?: when (value) {
             is Scalar.InputLinearPremul -> prefix.outputs[value.channelI32]
-            is Scalar.ImageEncodedInput -> value
+            is Scalar.ImageEncodedInput -> imageEncodedInputs?.get(value.channelI32) ?: value
             is Scalar.ImageSampleComponent -> Scalar.ImageSampleComponent(imageRegions.getOrPut(value.region) {
                 value.region.rebase(::bind) { read -> imageReads.getOrPut(read) {
-                    read.rebase(bind(read.baseX),bind(read.baseY),bind(read.width),bind(read.height)) } }
+                    read.rebase(bind(read.baseX),bind(read.baseY),bind(read.width),bind(read.height),imageResource ?: read.resource) } }
             },value.channelI32)
             is Scalar.ImageEncodedComponent -> Scalar.ImageEncodedComponent(imageReads.getOrPut(value.read) {
-                value.read.rebase(bind(value.read.baseX),bind(value.read.baseY),bind(value.read.width),bind(value.read.height)) },value.channelI32)
+                value.read.rebase(bind(value.read.baseX),bind(value.read.baseY),bind(value.read.width),bind(value.read.height),imageResource ?: value.read.resource) },value.channelI32)
             is Scalar.ImageTexelValid -> Scalar.ImageTexelValid(imageReads.getOrPut(value.read) {
-                value.read.rebase(bind(value.read.baseX),bind(value.read.baseY),bind(value.read.width),bind(value.read.height)) })
+                value.read.rebase(bind(value.read.baseX),bind(value.read.baseY),bind(value.read.width),bind(value.read.height),imageResource ?: value.read.resource) })
             is Scalar.ImageIntegerOffset -> Scalar.ImageIntegerOffset(bind(value.base),value.offsetI32)
+            is Scalar.NoiseComponent -> Scalar.NoiseComponent(noiseRegions.getOrPut(value.region) {
+                value.region.rebind(filterWordOffsetU32,::bind)
+            },value.channelI32)
+            is Scalar.NoiseStateF32, is Scalar.NoiseIntegralF32, is Scalar.NoisePhaseComponent,
+            is Scalar.NoiseGradientU16 -> error("Noise lexical operand escaped its region")
             Scalar.DiscardF32 -> value
-            is Scalar.DevicePositionF32 -> value
+            is Scalar.DevicePositionF32 -> deviceCoordinates?.get(value.channelI32) ?: value
             is Scalar.DynamicF32 -> Scalar.DynamicF32(Math.addExact(value.wordOffsetU32, filterWordOffsetU32))
             is Scalar.ConstantF32 -> value
             is Scalar.Add -> Scalar.Add(bind(value.a), bind(value.b))

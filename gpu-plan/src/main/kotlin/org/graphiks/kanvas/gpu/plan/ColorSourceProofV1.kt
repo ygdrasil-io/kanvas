@@ -21,25 +21,60 @@ public class ColorSourceProofV1 private constructor(
     public val gradientStopSlab: GradientStopSlabPlanV1? = null,
     internal val preparedDefinition: PreparedSourceDefinitionV4? = null,
     internal val imageChildSource: ColorSourceProofV1? = null,
+    internal val composedDefinition: PreparedComposedSourceV5? = null,
 ) {
     public val imageExecution: ImageSampleExecutionPlanV1? = parentSource?.imageExecution ?:
         bindingOwners.filterIsInstance<ImageSampleV3>().singleOrNull()?.execution
     public val imageLayout: ImageSourceLayoutV3? = imageExecution?.let { image -> ImageSourceLayoutV3(
         imageChildSource?.gradientStopSlab != null || parentSource?.imageLayout?.hasChildGradientStorage == true,
         image.cellSelection != null,image.cellSelection?.lattice == true,image.cellSelection?.capacityI32 ?: 9,image.atlasBlend != null) }
-    internal val uniformWordCountI64: Long = if (parentSource == null) bindingOwners.fold(
+    internal val uniformWordCountI64: Long = composedDefinition?.layout?.uniformBytesI64?.div(4L) ?: if (parentSource == null) bindingOwners.fold(
         if (bindingOwners.isEmpty()) preparedDefinition?.uniformWordCountI64 ?: 0L else imageChildSource?.uniformWordCountI64 ?: 0L) { size, binding ->
         Math.addExact(size, binding.colorUniformWordCountV4())
     } else
         Math.addExact(parentSource.uniformWordCountI64, requireNotNull(filterExecution).dynamicByteCountI64 / 4L)
-    internal val sourceUniformWordCountI64: Long = if (parentSource != null) parentSource.sourceUniformWordCountI64
+    internal val sourceUniformWordCountI64: Long = composedDefinition?.layout?.uniformBytesI64?.div(4L) ?: if (parentSource != null) parentSource.sourceUniformWordCountI64
         else bindingOwners.filterNot { it is ColorFilterBindingV4 }.fold(
             if (bindingOwners.isEmpty()) preparedDefinition?.uniformWordCountI64 ?: 0L else imageChildSource?.sourceUniformWordCountI64 ?: 0L) { size,binding ->
             Math.addExact(size,binding.colorUniformWordCountV4())
         }
     public fun copyOperationGraph(): ColorOperationGraphV1 = graph
+    public val composedBindingLayout: ComposedBindingLayoutV1? get() = composedDefinition?.layout
+    public val composedImageResources: List<ComposedImageResourceV5> get() =
+        composedDefinition?.imageReferences?.map { it.binding }.orEmpty()
+    public val noiseTableSlab: NoiseTableSlabV1? get() = composedDefinition?.noiseSlab
+    public fun authenticatesComposedNoise(resource: ComposedBindingLayoutV1.Resource, slab: NoiseTableSlabV1): Boolean =
+        composedDefinition?.let { definition -> definition.noiseSlab === slab && slab.owner === definition.frameOwner &&
+            resource.buffer?.storageKind == ComposedBindingLayoutV1.StorageKind.NOISE_U32 &&
+            definition.layout.resources.any { it === resource } && definition.noiseReferences.isNotEmpty() &&
+            definition.noiseReferences.all { it.resource === resource && slab.authenticates(it.range) } } == true
+    public fun resolveComposedImage(read: ImageNumericOperationGraphV1.TexelRead): ComposedImageResourceV5 =
+        requireNotNull(composedDefinition) { W5gPlanDiagnostics.Schema }.resolveImage(read)
+    public fun authenticatesComposedImage(resource: ComposedBindingLayoutV1.Resource,upload: ImageUploadPlanV1): Boolean =
+        composedDefinition?.let { definition ->
+            val references=definition.imageReferences.filter { it.binding.resource === resource }
+            resource.kindTagU32 == 2u && definition.layout.resources.any { it === resource } && references.isNotEmpty() &&
+                references.all { it.binding.upload === upload && it.binding.prepared.owner === definition.frameOwner &&
+                    it.binding.prepared.imageUpload(it.binding.metadata.description) === upload }
+        } == true
+    public fun authenticatesComposedStorage(resource: ComposedBindingLayoutV1.Resource,
+        slab: GradientStopSlabPlanV1): Boolean = composedDefinition?.let { definition ->
+        definition.slab === slab && definition.layout.resources.any { it === resource } &&
+            definition.gradientReferences.isNotEmpty() && definition.gradientReferences.all {
+                it.resource === resource && it.definition.slab === slab && it.definition.frameOwner === definition.frameOwner &&
+                    definition.frameOwner.owns(it.definition.captured) &&
+                    definition.frameOwner.range(it.definition.captured) == it.definition.range
+            }
+    } == true
     public fun authenticates(table: MaterialPlanTable, root: MaterialPlanRef, coordinates: SourceCoordinatesV4): Boolean {
         if (this.coordinates != coordinates || table.sourceIdentity(root) != sourceIdentity) return false
+        composedDefinition?.let { definition ->
+            val entry = table.entry(root)
+            val binding = entry.bindings as? ComposedMaterialBindingV5 ?: return false
+            return coordinates == SourceCoordinatesV4.None && binding.definition === definition && binding.sourceProof === this &&
+                entry.program is ComposedMaterialProgramV5 && binding.authenticates(entry.program) &&
+                gradientStopSlab === definition.slab && (definition.slab == null || table.gradientStopSlab === definition.slab)
+        }
         if (parentSource != null) {
             val binding = table.entry(root).bindings as? ColorFilterBindingV4 ?: return false
             return binding.execution === filterExecution && binding.numericAuthority.outputSourceProof === this &&
@@ -59,6 +94,18 @@ public class ColorSourceProofV1 private constructor(
         }
     }
     internal companion object {
+        fun issueComposed(definition: PreparedComposedSourceV5): ColorSourceProofV1? {
+            val graph = definition.operationGraph
+            val facts = ColorRoundedGraphProofV1.prove(graph,definition.numericWordsF32Bits,definition.tableRecords,
+                definition.deviceBoundsF32,definition.integerWordsU32,definition.slab,definition) ?: return null
+            val identity = "composed-source-proof-v5:${definition.capturedIdentity}:${definition.layout.composedBindingLayoutHash}:" +
+                "${graph.canonicalIdentity}:${definition.numericWordsF32Bits}:${definition.integerWordsU32}:" +
+                "${definition.slab?.canonicalIdentity}:${definition.tableRecords.mapValues { it.value.canonicalId.value }}" +
+                (definition.noiseSlab?.let { ":noise:${it.bytes.canonicalId.value}" } ?: "")
+            return ColorSourceProofV1(identity,definition.capturedIdentity,SourceCoordinatesV4.None,graph,emptyList(),
+                definition.numericWordsF32Bits,definition.tableRecords,immutableList(facts),definition.deviceBoundsF32,
+                integerWordValuesU32=definition.integerWordsU32,gradientStopSlab=definition.slab,composedDefinition=definition)
+        }
         fun filteredIdentity(source: String, execution: ColorFilterExecutionPlanV1): String =
             "color-filter-source-v4:$source:${execution.canonicalIdentity}"
         fun compose(source: ColorSourceProofV1, execution: ColorFilterExecutionPlanV1): ColorSourceProofV1? {
@@ -163,7 +210,12 @@ internal object ColorRoundedGraphProofV1 {
     }
     fun prove(graph: ColorOperationGraphV1, words: Map<Long, Int>, tables: Map<Long,ImmutableUBytes>,
         deviceBoundsF32: RectF32? = null, integers: Map<Long,UInt> = emptyMap(),
-        stopSlab: GradientStopSlabPlanV1? = null): List<ColorBranchFactV1>? = try {
+        stopSlab: GradientStopSlabPlanV1? = null,
+        composed: PreparedComposedSourceV5? = null): List<ColorBranchFactV1>? = try {
+        fun imageUpload(read: ImageNumericOperationGraphV1.TexelRead): ImageUploadPlanV1 = when(val resource=read.resource) {
+            is ImageNumericOperationGraphV1.TexelResource.Legacy -> resource.upload
+            is ImageNumericOperationGraphV1.TexelResource.Logical -> requireNotNull(composed).resolveImage(read).upload
+        }
         // Numeric slots and packed-byte spans are disjoint. A finite-looking U32
         // Table word must never gain permission to be interpreted as a coefficient.
         tables.forEach { (offset, table) ->
@@ -176,6 +228,9 @@ internal object ColorRoundedGraphProofV1 {
         val interpolationGraphs = java.util.IdentityHashMap<ColorOperationGraphV1.GradientStopSelection,
             MutableMap<Int,List<ColorOperationGraphV1.Scalar>>>()
         val facts = mutableListOf<ColorBranchFactV1>()
+        var activeNoise: Pair<NoiseOperationGraphV1,Int>? = null
+        val noiseResults=java.util.IdentityHashMap<NoiseOperationGraphV1,
+            java.util.IdentityHashMap<Map<ColorOperationGraphV1.Scalar,ColorBoundsV1>,List<ColorBoundsV1>>>()
         val cache = java.util.IdentityHashMap<ColorOperationGraphV1.Scalar,
             java.util.IdentityHashMap<Map<ColorOperationGraphV1.Scalar, ColorBoundsV1>, ColorBoundsV1>>()
         fun hull(a: ColorBoundsV1, b: ColorBoundsV1) = ColorBoundsV1(minOf(a.lowerF64,b.lowerF64), maxOf(a.upperF64,b.upperF64))
@@ -185,7 +240,8 @@ internal object ColorRoundedGraphProofV1 {
             fun value(n: ColorOperationGraphV1.Scalar) = evaluate(n, conditions)
             fun imageIndex(read: ImageNumericOperationGraphV1.TexelRead,x: Boolean): IntRange {
                 val base = value(if (x) read.baseX else read.baseY)
-                val dimension = if (x) read.upload.widthI32 else read.upload.heightI32
+                val upload=imageUpload(read)
+                val dimension = if (x) upload.widthI32 else upload.heightI32
                 require(value(if (x) read.width else read.height) == exact(dimension.toFloat()))
                 require(base.lowerF64 == kotlin.math.floor(base.lowerF64) && base.upperF64 == kotlin.math.floor(base.upperF64))
                 val offset = if (x) read.offsetXI32 else read.offsetYI32
@@ -212,18 +268,19 @@ internal object ColorRoundedGraphProofV1 {
                 return low..high
             }
             fun imageValues(read: ImageNumericOperationGraphV1.TexelRead,channelI32: Int): List<ColorBoundsV1> {
-                val xs = imageAddressRange(imageIndex(read,true),read.upload.widthI32,read.graph.tileModes.x)
-                val ys = imageAddressRange(imageIndex(read,false),read.upload.heightI32,read.graph.tileModes.y)
+                val upload=imageUpload(read)
+                val xs = imageAddressRange(imageIndex(read,true),upload.widthI32,read.tileModes.x)
+                val ys = imageAddressRange(imageIndex(read,false),upload.heightI32,read.tileModes.y)
                 val selected = linkedSetOf<Int>()
                 val constraints = conditions.entries.filter { (key,_) ->
                     key is ColorOperationGraphV1.Scalar.ImageEncodedComponent && key.read === read }
                 fun unorm(code: Int): ColorBoundsV1 = if (code == 0 || code == 255) exact(if (code == 0) 0f else 1f)
                     else rounded(Math.nextDown(code.toDouble()/255.0),Math.nextUp(code.toDouble()/255.0))
                 for (yI32 in ys) for (xI32 in xs) {
-                    val offsetI64 = Math.addExact(Math.multiplyExact(yI32.toLong(),read.upload.logicalRowBytesI64),
-                        Math.multiplyExact(xI32.toLong(),read.upload.logicalFormat.bytesPerPixel.toLong()))
-                    fun code(channel: Int): Int = if (read.upload.physicalFormat == ImagePhysicalFormatV1.R8_UNORM && channel != 0)
-                        if (channel == 3) 255 else 0 else read.upload.logicalByteU8(Math.addExact(offsetI64,channel.toLong()))
+                    val offsetI64 = Math.addExact(Math.multiplyExact(yI32.toLong(),upload.logicalRowBytesI64),
+                        Math.multiplyExact(xI32.toLong(),upload.logicalFormat.bytesPerPixel.toLong()))
+                    fun code(channel: Int): Int = if (upload.physicalFormat == ImagePhysicalFormatV1.R8_UNORM && channel != 0)
+                        if (channel == 3) 255 else 0 else upload.logicalByteU8(Math.addExact(offsetI64,channel.toLong()))
                     if (constraints.all { (key,bounds) ->
                         val actual = unorm(code((key as ColorOperationGraphV1.Scalar.ImageEncodedComponent).channelI32))
                         actual.lowerF64 <= bounds.upperF64 && bounds.lowerF64 <= actual.upperF64 }) selected += code(channelI32)
@@ -287,6 +344,26 @@ internal object ColorRoundedGraphProofV1 {
                     else left.upperF64 > right.lowerF64
                 if (taken && !yesPossible || !taken && !noPossible) return emptyList()
                 facts += ColorBranchFactV1(predicate,taken,left,right)
+                if (equal && yesPossible && noPossible) {
+                    val component = when {
+                        a is ColorOperationGraphV1.Scalar.BranchComponent && a !in current -> a
+                        b is ColorOperationGraphV1.Scalar.BranchComponent && b !in current -> b
+                        else -> null
+                    }
+                    if (component != null) {
+                        // Keep the original reachable arms distinct when their hull
+                        // would invent a third comparison outcome. The same scalar
+                        // identity records the evaluated arm, not an assumed alpha gap.
+                        fun armContexts(yes: Boolean): List<Map<ColorOperationGraphV1.Scalar,ColorBoundsV1>> =
+                            contexts(component.branch.predicate,yes,current).flatMap { branchContext ->
+                                val arm = (if (yes) component.branch.yes else component.branch.no)[component.channelI32]
+                                val bound = evaluate(arm,branchContext)
+                                val selected = java.util.IdentityHashMap(branchContext).apply { put(component,bound) }
+                                contexts(predicate,taken,selected)
+                            }
+                        return armContexts(true)+armContexts(false)
+                    }
+                }
                 if (equal && !taken && a is ColorOperationGraphV1.Scalar.ImageEncodedComponent && right == exact(0f)) {
                     // This gap is derived from the reachable captured UNORM codes,
                     // never assigned to a weighted sampled alpha or a filter output.
@@ -301,6 +378,206 @@ internal object ColorRoundedGraphProofV1 {
                 return listOf(if (bounds == null) current else java.util.IdentityHashMap(current).apply { put(a,bounds) })
             }
             val result = when (node) {
+                is ColorOperationGraphV1.Scalar.NoiseStateF32 -> error("Unbound Noise state")
+                is ColorOperationGraphV1.Scalar.NoiseComponent -> {
+                    noiseResults.getOrPut(node.region) { java.util.IdentityHashMap() }.getOrPut(conditions) {
+                        val region=node.region
+                        val reference=requireNotNull(composed).resolveNoise(region)
+                        val parameters=reference.metadata.parameters
+                        require(integers[region.requestedOctavesWordOffsetU32] == parameters.octavesI32.toUInt())
+                        // Zero octaves execute only finalization; unused coordinates do not enter q0.
+                        var state=if(parameters.octavesI32 == 0) List(7) { exact(if(it == 2) 1f else 0f) }
+                            else region.initialState.map(::value)
+                        val previousNoise=activeNoise
+                        var integralEndpointCertified=false
+                        try {
+                            repeat(parameters.octavesI32) { octave ->
+                                activeNoise=region to octave
+                                var selected=java.util.IdentityHashMap(conditions)
+                                region.states.forEachIndexed { index,operand -> selected[operand]=state[index] }
+                                // The frequency quantum is a proof witness, never an octave limit.
+                                // Every F32 rounding and DAZ/FTZ outcome has integral q after K doublings.
+                                if(octave >= parameters.integralPhaseBoundI32) selected[region.integral]=exact(1f)
+                                val integral=evaluate(region.integral,selected)
+                                if(integral == exact(1f)) selected=java.util.IdentityHashMap(selected).apply { put(region.integral,integral) }
+                                if(integral == exact(1f) && !integralEndpointCertified) {
+                                    // Certify the dead branch using the SAME original floor/fraction,
+                                    // decode, four dots and x-then-y lerps. Every captured U16 is included;
+                                    // no actual lattice address or doubled period is needed once BOTH
+                                    // original fractions are zero. This is R28's explicit dead-q abstraction.
+                                    val endpoint=java.util.IdentityHashMap(selected)
+                                    region.originalFractions.forEach { fraction ->
+                                        evaluate(fraction.phase.floor,selected)
+                                        endpoint[fraction]=exact(0f)
+                                    }
+                                    val bytes=requireNotNull(composed.noiseSlab).bytes
+                                    region.originalGradientReads.forEach { gradient ->
+                                        val read=gradient.read
+                                        require(read.ownerNodeIndexI32 == reference.ownerNodeIndexI32 &&
+                                            read.tableRangeWordOffsetU32 == reference.wordOffsetI64+4L &&
+                                            composed.noiseSlab.authenticates(reference.range))
+                                        val base=Math.toIntExact(reference.range.baseWordU32.toLong()*4L)+
+                                            256+read.channelI32*1024+read.axisI32*2
+                                        val codes=(0..255).map { index -> val at=base+index*4
+                                            bytes[at].toInt() or (bytes[at+1].toInt() shl 8) }
+                                        endpoint[gradient]=ColorBoundsV1(codes.min().toDouble(),codes.max().toDouble())
+                                    }
+                                    require(region.originalSamples.all { evaluate(it,endpoint) == exact(0f) })
+                                    integralEndpointCertified=true
+                                }
+                                if(integral != exact(1f)) {
+                                    require(parameters.periodX.shiftLeft(octave).bitLength() <= 128 &&
+                                        parameters.periodY.shiftLeft(octave).bitLength() <= 128)
+                                    // Correlated facts about original scalar nodes, never a Noise-color box.
+                                    // Directed Double operations enclose endpoint algebra before F32 error.
+                                    fun point(x: Double)=ColorBoundsV1(x,x)
+                                    fun add(a: ColorBoundsV1,b: ColorBoundsV1)=ColorBoundsV1(
+                                        Math.nextDown(a.lowerF64+b.lowerF64),Math.nextUp(a.upperF64+b.upperF64))
+                                    fun subtract(a: ColorBoundsV1,b: ColorBoundsV1)=ColorBoundsV1(
+                                        Math.nextDown(a.lowerF64-b.upperF64),Math.nextUp(a.upperF64-b.lowerF64))
+                                    fun multiply(a: ColorBoundsV1,b: ColorBoundsV1): ColorBoundsV1 {
+                                        val products=listOf(a.lowerF64*b.lowerF64,a.lowerF64*b.upperF64,
+                                            a.upperF64*b.lowerF64,a.upperF64*b.upperF64)
+                                        return ColorBoundsV1(Math.nextDown(products.min()),Math.nextUp(products.max()))
+                                    }
+                                    fun plusUp(a: Double,b: Double)=Math.nextUp(a+b)
+                                    fun timesUp(a: Double,b: Double)=Math.nextUp(a*b)
+                                    fun magnitude(a: ColorBoundsV1)=maxOf(kotlin.math.abs(a.lowerF64),kotlin.math.abs(a.upperF64))
+                                    fun intersect(operand: ColorOperationGraphV1.Scalar,ordinary: ColorBoundsV1,
+                                        real: ColorBoundsV1,error: Double) {
+                                        require(error.isFinite() && error >= 0.0 &&
+                                            plusUp(magnitude(real),error) < Float.MAX_VALUE.toDouble())
+                                        val low=maxOf(ordinary.lowerF64,Math.nextDown(real.lowerF64-error))
+                                        val high=minOf(ordinary.upperF64,Math.nextUp(real.upperF64+error))
+                                        require(low <= high)
+                                        // Never mutate a context already used as an identity-cache key.
+                                        selected=java.util.IdentityHashMap(selected).apply { put(operand,ColorBoundsV1(low,high)) }
+                                    }
+                                    region.originalSmooths.forEach { smooth ->
+                                        val square=smooth.a as ColorOperationGraphV1.Scalar.Multiply
+                                        val difference=smooth.b as ColorOperationGraphV1.Scalar.Subtract
+                                        val twice=difference.b as ColorOperationGraphV1.Scalar.Multiply
+                                        val fraction=square.a
+                                        require(square.b === fraction && twice.b === fraction &&
+                                            region.originalFractions.any { it === fraction } &&
+                                            (difference.a as ColorOperationGraphV1.Scalar.ConstantF32).bitsI32 == 3f.toRawBits() &&
+                                            (twice.a as ColorOperationGraphV1.Scalar.ConstantF32).bitsI32 == 2f.toRawBits())
+                                        val ordinary=evaluate(smooth,selected)
+                                        val f=evaluate(fraction,selected)
+                                        require(f.lowerF64 >= -normalF64 && f.upperF64 <= 1.0)
+                                        val endpoints=buildList { add(f.lowerF64); add(f.upperF64)
+                                            if(f.lowerF64 <= 0.0 && f.upperF64 >= 0.0) add(0.0) }
+                                        val real=endpoints.map { endpoint -> val x=point(endpoint)
+                                            multiply(multiply(x,x),subtract(point(3.0),multiply(point(2.0),x))) }.reduce(::hull)
+                                        val growth=gamma(4)
+                                        val error=plusUp(timesUp(5.0,growth),timesUp(8.0*normalF64,plusUp(1.0,growth)))
+                                        intersect(smooth,ordinary,real,error)
+                                    }
+                                    region.originalLerps.forEach { lerp ->
+                                        val product=lerp.b as ColorOperationGraphV1.Scalar.Multiply
+                                        val difference=product.a as ColorOperationGraphV1.Scalar.Subtract
+                                        require(difference.b === lerp.a && region.originalSmooths.any { it === product.b })
+                                        val ordinary=evaluate(lerp,selected)
+                                        val a=evaluate(lerp.a,selected); val b=evaluate(difference.a,selected)
+                                        val t=evaluate(product.b,selected)
+                                        val ab=plusUp(magnitude(a),magnitude(b)); val weight=magnitude(t)
+                                        val magnitude=plusUp(magnitude(a),timesUp(ab,weight))
+                                        val amplification=timesUp(maxOf(1.0,ab),maxOf(1.0,weight))
+                                        val growth=gamma(3)
+                                        val error=plusUp(timesUp(magnitude,growth),
+                                            timesUp(timesUp(9.0*normalF64,amplification),plusUp(1.0,growth)))
+                                        require(plusUp(magnitude,error) < Float.MAX_VALUE.toDouble())
+                                        val endpoints=mutableListOf<ColorBoundsV1>()
+                                        for(x in listOf(a.lowerF64,a.upperF64)) for(y in listOf(b.lowerF64,b.upperF64))
+                                            for(w in listOf(t.lowerF64,t.upperF64))
+                                                endpoints += add(point(x),multiply(subtract(point(y),point(x)),point(w)))
+                                        intersect(lerp,ordinary,endpoints.reduce(::hull),error)
+                                    }
+                                }
+                                state=region.nextState.mapIndexed { index,expression ->
+                                    // Only q-next is dead after the final requested octave. All sum Adds and halves remain.
+                                    if(index < 2 && octave == parameters.octavesI32-1) state[index]
+                                    else evaluate(expression,selected)
+                                }
+                            }
+                            val selected=java.util.IdentityHashMap(conditions)
+                            region.states.forEachIndexed { index,operand -> selected[operand]=state[index] }
+                            region.outputs.map { evaluate(it,selected) }
+                        } finally { activeNoise=previousNoise }
+                    }[node.channelI32]
+                }
+                is ColorOperationGraphV1.Scalar.NoiseIntegralF32 -> {
+                    val x=value(node.x.q); val y=value(node.y.q)
+                    fun integral(a: ColorBoundsV1): Boolean =
+                        a.lowerF64 >= 8388608.0 || a.upperF64 <= -8388608.0 ||
+                            a.lowerF64 == a.upperF64 && a.lowerF64 == kotlin.math.floor(a.lowerF64)
+                    if(integral(x) && integral(y)) exact(1f) else ColorBoundsV1(0.0,1.0)
+                }
+                is ColorOperationGraphV1.Scalar.NoisePhaseComponent -> {
+                    val q=value(node.phase.q)
+                    require(q.lowerF64.isFinite() && q.upperF64.isFinite() &&
+                        q.lowerF64 >= -Float.MAX_VALUE.toDouble() && q.upperF64 <= Float.MAX_VALUE.toDouble())
+                    if(node.kind == NoiseOperationGraphV1.PhaseKind.FLOOR)
+                        ColorBoundsV1(kotlin.math.floor(q.lowerF64),kotlin.math.floor(
+                            if(q.upperF64 > -normalF64 && q.lowerF64 < normalF64) maxOf(0.0,q.upperF64) else q.upperF64))
+                    else {
+                        // The SAME original operands certify subtraction's correlation, not independent q/floor boxes.
+                        // Retained negative subnormal q after a DAZ floor input permits a negative-tiny fraction.
+                        // For finite F32 |q|>=2^23 floor(q)=q exactly; all other retained fractions are in [0,1].
+                        val originalFloor=node.phase.floor
+                        val floor=value(originalFloor)
+                        if(q.lowerF64 >= 8388608.0 || q.upperF64 <= -8388608.0) exact(0f)
+                        else if(floor.lowerF64 == floor.upperF64) {
+                            val subtract=value(ColorOperationGraphV1.Scalar.Subtract(node.phase.q,originalFloor))
+                            ColorBoundsV1(maxOf(-normalF64,subtract.lowerF64),minOf(1.0,subtract.upperF64))
+                        } else ColorBoundsV1(-normalF64,1.0)
+                    }
+                }
+                is ColorOperationGraphV1.Scalar.NoiseGradientU16 -> {
+                    val (region,octave)=requireNotNull(activeNoise)
+                    val reference=requireNotNull(composed).resolveNoise(region)
+                    val read=node.read
+                    require(read.ownerNodeIndexI32 == reference.ownerNodeIndexI32 &&
+                        read.tableRangeWordOffsetU32 == reference.wordOffsetI64+4L)
+                    val addresses=listOf(read.x,read.y).mapIndexed { axis,corner ->
+                        val q=value(corner.phase.q)
+                        require(q.lowerF64.isFinite() && q.upperF64.isFinite() &&
+                            q.lowerF64 >= -Float.MAX_VALUE.toDouble() && q.upperF64 <= Float.MAX_VALUE.toDouble())
+                        // F32 finite magnitude plus an exact corner increment is strictly below 2^128.
+                        require(java.math.BigDecimal(maxOf(kotlin.math.abs(q.lowerF64),kotlin.math.abs(q.upperF64)))
+                            .toBigInteger().add(java.math.BigInteger.ONE).bitLength() <= 128)
+                        val period=(if(axis == 0) reference.metadata.parameters.periodX else reference.metadata.parameters.periodY)
+                            .shiftLeft(octave)
+                        require(period.bitLength() <= 128)
+                        val floor=value(corner.phase.floor)
+                        // Explicit FLOOR, not BigDecimal.toBigInteger's negative truncation.
+                        fun integerFloor(bound: Double)=java.math.BigDecimal(bound)
+                            .setScale(0,java.math.RoundingMode.FLOOR).toBigIntegerExact()
+                        val offset=java.math.BigInteger.valueOf(corner.offsetI32.toLong())
+                        val low=integerFloor(floor.lowerF64).add(offset)
+                        val high=integerFloor(floor.upperF64).add(offset)
+                        val span=high.subtract(low)
+                        require(span.signum() >= 0)
+                        if(span > java.math.BigInteger.valueOf(255L)) (0..255).toSet()
+                        else (0..span.toInt()).map { delta ->
+                            val lattice=low.add(java.math.BigInteger.valueOf(delta.toLong()))
+                            val wrapped=if(period.signum() == 0) lattice else lattice.mod(period)
+                            wrapped.and(java.math.BigInteger.valueOf(255L)).toInt()
+                        }.toSet()
+                    }
+                    val bytes=requireNotNull(composed.noiseSlab).bytes
+                    require(composed.noiseSlab.authenticates(reference.range))
+                    val tableBase=Math.toIntExact(reference.range.baseWordU32.toLong()*4L)
+                    // A complete y residue set gives all indices for every x.
+                    // Otherwise retain the exact union without boxing 65,536 pairs.
+                    val indices=BooleanArray(256) { addresses[1].size == 256 }
+                    if(addresses[1].size != 256) addresses[0].forEach { x -> addresses[1].forEach { y ->
+                        indices[(bytes[tableBase+x].toInt()+y) and 255]=true } }
+                    val base=tableBase+256+read.channelI32*1024+read.axisI32*2
+                    val values=(0..255).filter { indices[it] }.map { index -> val at=base+index*4
+                        bytes[at].toInt() or (bytes[at+1].toInt() shl 8) }
+                    ColorBoundsV1(values.min().toDouble(),values.max().toDouble())
+                }
                 is ColorOperationGraphV1.Scalar.InputLinearPremul -> error("Unbound source input")
                 is ColorOperationGraphV1.Scalar.ImageEncodedInput -> error("Unbound decoded-image texel operand")
                 ColorOperationGraphV1.Scalar.DiscardF32 -> exact(0f)
@@ -310,7 +587,7 @@ internal object ColorRoundedGraphProofV1 {
                     // First validate every actual emitted operation. A relational
                     // enclosure cannot rescue an undefined kernel, read or divide.
                     val ordinary = value(region.outputs[node.channelI32])
-                    val mask = ImageNumericOperationGraphV1.TexelOperation.RETURN_SCALAR_MASK in region.graph.texelOperations()
+                    val mask = region.colorAlpha.channelOrder == ImageChannelOrderV1.ALPHA
                     if (node.channelI32 != 3 && !mask) ordinary else {
                         fun magnitude(bounds: ColorBoundsV1) = maxOf(kotlin.math.abs(bounds.lowerF64),kotlin.math.abs(bounds.upperF64))
                         fun product(a: ColorBoundsV1,b: ColorBoundsV1): ColorBoundsV1 {
@@ -319,7 +596,7 @@ internal object ColorRoundedGraphProofV1 {
                             return ColorBoundsV1(Math.nextDown(corners.min()),Math.nextUp(corners.max()))
                         }
                         fun axis(weights: List<ColorOperationGraphV1.Scalar>,distances: List<ColorOperationGraphV1.Scalar>): Pair<ColorBoundsV1,Double> {
-                            val linear = region.graph.sampling == ImageSamplingPlanV1.Linear
+                            val linear = region.isLinear
                             require(weights.size == if (linear) 2 else 4)
                             require(distances.size == if (linear) 1 else 4)
                             distances.forEachIndexed { index,distance ->
@@ -392,8 +669,9 @@ internal object ColorRoundedGraphProofV1 {
                         return if (range.last < 0 || range.first >= dimension) exact(0f)
                         else if (range.first >= 0 && range.last < dimension) exact(1f) else ColorBoundsV1(0.0,1.0)
                     }
-                    val a = within(x,node.read.upload.widthI32,node.read.graph.tileModes.x)
-                    val b = within(y,node.read.upload.heightI32,node.read.graph.tileModes.y)
+                    val upload=imageUpload(node.read)
+                    val a = within(x,upload.widthI32,node.read.tileModes.x)
+                    val b = within(y,upload.heightI32,node.read.tileModes.y)
                     ColorBoundsV1(a.lowerF64*b.lowerF64,a.upperF64*b.upperF64)
                 }
                 is ColorOperationGraphV1.Scalar.ImageIntegerOffset -> {
