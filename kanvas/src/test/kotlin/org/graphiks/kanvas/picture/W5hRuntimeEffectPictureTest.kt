@@ -63,22 +63,27 @@ class W5hRuntimeEffectPictureTest {
         assertContentEquals(replayBytes[0], assertNotNull(Picture.fromByteArray(replayBytes[0])).toByteArray())
     }
 
-    @Test fun historicalV11DecodesAsDeterministicDetachedV0() {
-        val fixture = Base64.getDecoder().decode(requireNotNull(javaClass.getResourceAsStream(
-            "/picture/format-11-runtime-effect-v0.base64")).bufferedReader().use { it.readText().trim() })
+    @Suppress("DEPRECATION")
+    @Test fun historicalV11InstallsV0OnlyAfterCompleteValidation() {
+        val fixture = historicalFixture()
         assertEquals("a05c5ca6b35c6897c2ee3b64c73a122c090b4b5d7151bdf21e34390b1bb835d5",
             java.security.MessageDigest.getInstance("SHA-256").digest(fixture).joinToString("") { "%02x".format(it) })
+        val positive = assertNotNull(RuntimeEffect.registered(ID, 1))
+        assertNull(RuntimeEffect.registered("compiled-d949d49d"))
+        // Reject after a complete descriptor before any valid archive can install it.
+        assertNull(Picture.fromByteArray(fixture.copyOf(fixture.size - 1)))
+        assertNull(RuntimeEffect.registered("compiled-d949d49d"))
         val first = assertNotNull(Picture.fromByteArray(fixture))
-        val second = assertNotNull(Picture.fromByteArray(fixture))
         val value = runtime(first)
         assertEquals("compiled-d949d49d", value.effect.id)
         assertEquals(0, value.effect.semanticVersionI32)
         assertEquals(UniformValue.F1(.5f), value.uniforms.entries["alpha"])
         assertEquals(listOf("child"), value.children.keys.toList())
         assertNull(RuntimeEffect.registered(value.effect.id, 1))
-        @Suppress("DEPRECATION")
         val installed = RuntimeEffect.registered(value.effect.id)
-        assertNull(installed, "Archive decoding must not install a legacy renderer-visible descriptor")
+        assertSame(value.effect, installed, "A valid archive installs its reconstructed v0 in the deprecated API map")
+        assertEquals(positive.abiHash, assertNotNull(RuntimeEffect.registered(ID, 1)).abiHash)
+        val second = assertNotNull(Picture.fromByteArray(fixture))
         val bytes = first.toByteArray()
         // Literal SHA-256 from the normative v0 preimage, independently calculated
         // from the original writer's declarations and WGSL, not an IR hash helper.
@@ -91,9 +96,34 @@ class W5hRuntimeEffectPictureTest {
             bytes.copyOfRange(hashOffset + 4, hashOffset + 68).decodeToString())
         assertContentEquals(bytes, second.toByteArray())
         assertContentEquals(bytes, assertNotNull(Picture.fromByteArray(bytes)).toByteArray())
-        // Truncation after a complete descriptor must not publish partial archive state.
-        assertNull(Picture.fromByteArray(fixture.copyOf(fixture.size - 1)))
-        assertNotNull(Picture.fromByteArray(fixture))
+    }
+
+    @Suppress("DEPRECATION")
+    @Test fun incompatibleSceneArchiveRuntimeIdsRollBackTogether() {
+        val firstId = "round1-first-0000"
+        val collisionId = "round1-conflict-0"
+        val fixture = HistoricalRuntimeWire(historicalFixture())
+        val firstDraw = fixture.draw(firstId)
+        val originalDraw = fixture.draw(collisionId)
+        val conflictingDraw = fixture.draw(collisionId, changeModule = true)
+        assertNull(RuntimeEffect.registered(firstId))
+        assertNull(RuntimeEffect.registered(collisionId))
+        val conflicting = fixture.archive(firstDraw, originalDraw, conflictingDraw)
+        assertNull(Picture.fromByteArray(conflicting))
+        assertNull(RuntimeEffect.registered(firstId), "Earlier valid entries must not leak from a rejected archive")
+        assertNull(RuntimeEffect.registered(collisionId))
+        val valid = assertNotNull(Picture.fromByteArray(fixture.archive(firstDraw, originalDraw)))
+        val effects = mutableListOf<RuntimeEffect>()
+        valid.forEachOp { op -> if (op is DisplayOp.DrawRect) effects += assertIs<Shader.RuntimeEffect>(op.paint.shader).effect }
+        assertEquals(listOf(firstId, collisionId), effects.map { it.id })
+        effects.forEach { effect ->
+            assertSame(effect, RuntimeEffect.registered(effect.id))
+            assertNull(RuntimeEffect.registered(effect.id, 1))
+        }
+        // A collision with an already installed entry also leaves the whole archive unchanged.
+        assertNull(Picture.fromByteArray(conflicting))
+        effects.forEach { assertSame(it, RuntimeEffect.registered(it.id)) }
+        assertNotNull(RuntimeEffect.registered(ID, 1))
     }
 
     @Test fun decodeRejectsUnknownRuntimeTriplet() {
@@ -150,6 +180,56 @@ class W5hRuntimeEffectPictureTest {
         val shaders = mutableListOf<Shader.RuntimeEffect>()
         picture.forEachOp { op -> if (op is DisplayOp.DrawRect) shaders += assertIs<Shader.RuntimeEffect>(op.paint.shader) }
         return shaders.single()
+    }
+
+    private fun historicalFixture(): ByteArray = Base64.getDecoder().decode(requireNotNull(javaClass.getResourceAsStream(
+        "/picture/format-11-runtime-effect-v0.base64")).bufferedReader().use { it.readText().trim() })
+
+    /** Reads the genuine v11 header and slices its existing Draw command for malformed duplicate-ID cases. */
+    private class HistoricalRuntimeWire(private val bytes: ByteArray) {
+        private val buffer = ByteBuffer.wrap(bytes)
+        private val commandCountOffset: Int
+        private val drawOffset: Int
+        init {
+            assertEquals(11, buffer.getInt(4))
+            assertEquals(5, buffer.getInt(28))
+            var cursor = 40 // KPIC header, extent; then three color-space strings.
+            repeat(3) { cursor += 4 + buffer.getInt(cursor) }
+            commandCountOffset = cursor
+            assertEquals(2, buffer.getInt(cursor)); cursor += 4
+            assertEquals(5, buffer.getInt(cursor)); cursor += 4 // SetClip
+            assertEquals(2, buffer.getInt(cursor)); cursor += 4 + 16 + 1 // DeviceRect, rectangle, AA
+            drawOffset = cursor
+            assertEquals(1, buffer.getInt(cursor)) // Draw
+        }
+        fun draw(id: String, changeModule: Boolean = false): ByteArray {
+            var draw = bytes.copyOfRange(drawOffset, bytes.size)
+            fun replaceText(old: String, replacement: String) {
+                val encoded = old.encodeToByteArray()
+                val positions = draw.indices.filter { offset -> offset + 4 + encoded.size <= draw.size &&
+                    ByteBuffer.wrap(draw).getInt(offset) == encoded.size &&
+                    draw.copyOfRange(offset + 4, offset + 4 + encoded.size).contentEquals(encoded) }
+                assertTrue(positions.isNotEmpty())
+                positions.asReversed().forEach { offset ->
+                    val value = replacement.encodeToByteArray()
+                    draw = draw.copyOfRange(0, offset) + ByteBuffer.allocate(4).putInt(value.size).array() + value +
+                        draw.copyOfRange(offset + 4 + encoded.size, draw.size)
+                }
+            }
+            replaceText("compiled-d949d49d", id)
+            if (changeModule) {
+                val marker = "struct Params".encodeToByteArray()
+                val offset = draw.indices.first { index -> index + marker.size <= draw.size &&
+                    draw.copyOfRange(index, index + marker.size).contentEquals(marker) }
+                val size = ByteBuffer.wrap(draw).getInt(offset - 4)
+                val source = draw.copyOfRange(offset, offset + size).decodeToString()
+                replaceText(source, source.replace("params.alpha;", "params.alpha * 0.5;"))
+            }
+            return draw
+        }
+        fun archive(vararg draws: ByteArray): ByteArray =
+            bytes.copyOfRange(0, drawOffset).also { ByteBuffer.wrap(it).putInt(commandCountOffset, draws.size + 1) } +
+                draws.fold(byteArrayOf()) { result, draw -> result + draw }
     }
 
     /** Small parser for the documented v3 descriptor embedded in public writer bytes. */
