@@ -17,6 +17,32 @@ import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.render.ir.RuntimeSamplerTypeV1
 import org.graphiks.kanvas.render.ir.SceneCaptureLimits
 import org.graphiks.kanvas.render.ir.GraphLimits
+import org.graphiks.kanvas.render.ir.MaterialNode
+import org.graphiks.kanvas.render.ir.SceneSnapshot
+import org.graphiks.kanvas.render.ir.SceneExtent
+import org.graphiks.kanvas.render.ir.SceneCommand
+import org.graphiks.kanvas.render.ir.DrawNode
+import org.graphiks.kanvas.render.ir.GeometryNode
+import org.graphiks.kanvas.render.ir.CoverageRequest
+import org.graphiks.kanvas.render.ir.ClipStackNode
+import org.graphiks.kanvas.render.ir.BlendNode
+import org.graphiks.kanvas.render.ir.EffectStack
+import org.graphiks.kanvas.render.ir.PaintSceneAdapter
+import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
+import org.graphiks.kanvas.render.ir.RuntimeEffectDescriptor
+import org.graphiks.kanvas.render.ir.RuntimeEffectId
+import org.graphiks.kanvas.render.ir.RuntimeEffectAbi
+import org.graphiks.kanvas.render.ir.RuntimeUniformBlockV1
+import org.graphiks.kanvas.render.ir.RuntimeUniformSlotV2
+import org.graphiks.kanvas.render.ir.RuntimeUniformType
+import org.graphiks.kanvas.render.ir.RuntimeUniformValue
+import org.graphiks.kanvas.render.ir.RuntimeChildSlotV2
+import org.graphiks.kanvas.render.ir.RuntimeChildType
+import org.graphiks.kanvas.render.ir.RuntimeMaterialChild
+import org.graphiks.kanvas.gpu.renderer.planning.GpuRenderContext
+import org.graphiks.kanvas.gpu.renderer.planning.GpuPlanSurfacePlanResult
+import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.Test
@@ -192,6 +218,40 @@ class W5hRuntimeEffectSurfacePixelTest {
             surface.discardRecordedOperations()
             surface.canvas { draw(this, effect(.5f), 0) }
             assertPixel(surface.render(), expected(.5))
+        }
+    }
+
+    @ParameterizedTest(name = "{0} budget precedes unregistered semantics")
+    @CsvSource("depth", "nodes", "uniform-bytes")
+    fun planningRejectsOversizedRuntimeSubtreeBeforeUnregisteredSemantics(limit: String) {
+        var child: MaterialNode = MaterialNode.Solid(COLOR)
+        if (limit == "depth") repeat(64) { child = MaterialNode.Opacity(child, .5f) }
+        else if (limit == "nodes") repeat(12) { child = MaterialNode.Blend(org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER, child, child) }
+        else {
+            // 2048 occurrences of a 32,832-byte block exceed 64 MiB, while the
+            // whole tree has exactly 4096 nodes and shares one immutable uniform owner.
+            val slots = List(513) { RuntimeUniformSlotV2("u$it", RuntimeUniformType.MAT4X4, it * 64, 64, 16, 1, 0) }
+            val largeBlock = RuntimeEffectDescriptor.of(RuntimeEffectId("test.unregistered-large-block"),
+                RuntimeEffectAbi.SHADER, 1, RuntimeUniformBlockV1.of(slots, 513 * 64), emptyList())
+            val matrix = RuntimeUniformValue.M4(FloatArray(16))
+            child = MaterialNode.RuntimeEffect.of(largeBlock, slots.associate { it.name to matrix }, emptyList())
+            repeat(11) { child = MaterialNode.Blend(org.graphiks.kanvas.render.ir.BlendMode.SRC_OVER, child, child) }
+        }
+        // Public immutable IR deliberately bypasses Canvas capture, exercising planning itself.
+        val descriptor = RuntimeEffectDescriptor.of(RuntimeEffectId("test.unregistered-budget-order"),
+            RuntimeEffectAbi.SHADER, 1, RuntimeUniformBlockV1.of(emptyList(), 0),
+            listOf(RuntimeChildSlotV2("child", RuntimeChildType.SHADER, false)))
+        val material = MaterialNode.RuntimeEffect.of(descriptor, emptyMap(), listOf(RuntimeMaterialChild("child", child)))
+        val paint = PaintSceneAdapter.capture(Paint(antiAlias = false)).copy(shader = material)
+        val extent = SceneExtent(1, 1)
+        val scene = SceneSnapshot.of(extent, ColorSpace.SRGB, listOf(SceneCommand.Draw(DrawNode(
+            GeometryNode.Rect.of(BOUNDS), material, CoverageRequest.HARD_EDGE, ClipStackNode.Empty,
+            BlendNode.SrcOver, EffectStack.Empty, Matrix3x3F32.Identity, paint = paint))))
+        GpuRenderContext.createProduction().use { context ->
+            val result = context.planSurfaceExecutor().plan(scene, RenderTargetDescriptor(extent, ColorSpace.SRGB),
+                frameLocalBudgetBytes = 64L * 1024L * 1024L)
+            val refusal = assertIs<GpuPlanSurfacePlanResult.Terminal>(result)
+            assertEquals("unsupported.material.runtime_effect.budget", refusal.diagnostics.single().code.value)
         }
     }
 

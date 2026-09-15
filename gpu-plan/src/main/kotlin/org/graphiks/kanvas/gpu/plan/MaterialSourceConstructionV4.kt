@@ -337,29 +337,45 @@ internal class MaterialSourceConstructionV4 private constructor(
             var cursor = 0L
             var occurrences = 0
             var maximumDepthI32 = 0
+            var runtimeUniformBytesI64 = 0L
+            val runtimeNodes = mutableListOf<MaterialNode.RuntimeEffect>()
             val runtimeEntries = java.util.IdentityHashMap<MaterialNode.RuntimeEffect,RuntimeEffectSemanticEntryV1>()
             val limits = org.graphiks.kanvas.render.ir.GraphLimits()
             // Validate original occurrences separately from immutable metadata reuse
-            // and from the two synthesized paint nodes, which are not public input.
-            fun validate(node: MaterialNode,depth: Int) {
-                require(depth <= limits.maxDepth && ++occurrences <= limits.maxNodes && active.put(node,Unit) == null) { W5gPlanDiagnostics.Schema }
+            // and the synthesized paint nodes. This pass must not resolve semantics:
+            // an unknown runtime parent cannot hide an oversized descendant graph.
+            fun validateStructure(node: MaterialNode,depth: Int) {
+                if (node is MaterialNode.RuntimeEffect) runtimeNodes += node
+                require(depth <= limits.maxDepth && ++occurrences <= limits.maxNodes) {
+                    if (runtimeNodes.isEmpty()) W5gPlanDiagnostics.Schema else W5hPlanDiagnostics.Budget
+                }
+                require(active.put(node,Unit) == null) { W5gPlanDiagnostics.Schema }
                 maximumDepthI32=maxOf(maximumDepthI32,depth)
                 when (node) {
-                    is MaterialNode.Blend -> { validate(node.dst,depth+1); validate(node.src,depth+1) }
-                    is MaterialNode.Opacity -> validate(node.material,depth+1)
-                    is MaterialNode.WithColorFilter -> validate(node.material,depth+1)
-                    is MaterialNode.WithWorkingColorSpace -> validate(node.material,depth+1)
-                    is MaterialNode.WithLocalMatrix -> validate(node.material,depth+1)
-                    is MaterialNode.CoordClamp -> validate(node.material,depth+1)
+                    is MaterialNode.Blend -> { validateStructure(node.dst,depth+1); validateStructure(node.src,depth+1) }
+                    is MaterialNode.Opacity -> validateStructure(node.material,depth+1)
+                    is MaterialNode.WithColorFilter -> validateStructure(node.material,depth+1)
+                    is MaterialNode.WithWorkingColorSpace -> validateStructure(node.material,depth+1)
+                    is MaterialNode.WithLocalMatrix -> validateStructure(node.material,depth+1)
+                    is MaterialNode.CoordClamp -> validateStructure(node.material,depth+1)
                     is MaterialNode.RuntimeEffect -> {
-                        runtimeEntries.getOrPut(node) { RuntimeEffectExpectationV1.validate(node,runtimeCatalog) }
-                        node.forEach { validate(it.material,depth+1) }
+                        // Count the declared block extent per occurrence, including padding,
+                        // without ABI validation or copying any captured uniform value.
+                        runtimeUniformBytesI64 = Math.addExact(runtimeUniformBytesI64,
+                            node.descriptor.uniformBlock.sizeBytesI32.toLong())
+                        require(runtimeUniformBytesI64 <= 64L * 1024L * 1024L) { W5hPlanDiagnostics.Budget }
+                        node.forEach { validateStructure(it.material,depth+1) }
                     }
                     else -> Unit
                 }
                 active.remove(node)
             }
-            validate(draw.material,1)
+            validateStructure(draw.material,1)
+            // Only a structurally admitted graph may perform exact catalogue/ABI lookup.
+            // Repeated captured owners reuse their single semantic result in the later DAG.
+            runtimeNodes.forEach { node ->
+                runtimeEntries.getOrPut(node) { RuntimeEffectExpectationV1.validate(node,runtimeCatalog) }
+            }
             require(runtimeEntries.values.all { occurrences <= it.graphLimits.maxNodes && maximumDepthI32 <= it.graphLimits.maxDepth }) {
                 W5hPlanDiagnostics.Budget
             }
