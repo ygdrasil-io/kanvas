@@ -20,7 +20,7 @@
 - New geometry and transform value objects belong only in `:math`, with I32/I64/F32/F64 nomenclature. W5h should not need a new geometry type; reuse the existing math types.
 - Font/shaping/glyph implementation changes, font discovery, dedicated font assertions/suites, external image codecs, Skia GMs, dashboards, renders, baselines, scores, `jpg-color-cube`, `:integration-tests:skia`, and global suites are outside every gate.
 - Text coverage may reuse the existing in-memory synthetic `FontTypeface` fixture and pre-resolved glyph IDs/positions. Its existing rasterization can execute to supply A8 coverage; no font/shaping/glyph-generation implementation, assertion, discovery or dedicated gate is added or changed.
-- W5h runtime entries and instances are **none-only** for their own logical resources: reject every nonempty runtime resource list before `Ready`. Typed resource facts remain representable in IR for deterministic validation/wire, but W5h adds no runtime resource API, binding or materialization path. Existing image/gradient/noise child resources keep their prior owners. This implements the review's explicit restriction of the resource shapes described in design §6; it does not claim runtime resource execution coverage.
+- W5h models and transports all three approved runtime resource forms: storage-read bytes, float-filterable 2D sampled textures and filtering/non-filtering samplers. The initial `child-opacity` built-in declares none, so valid resource-bearing positive execution is reviewed statically until another built-in is specified; nevertheless, descriptor, instance binding, Picture, logical-to-physical mapping, pessimistic accounting, renderer reflection, materialization, cache generation and lease ownership are complete. Hidden or undeclared resources, arrays, comparison samplers, storage textures and external images refuse before ownership.
 - Serialize all Gradle runs. Run shell commands through `rtk` or `rtk proxy` with workdir `/Users/chaos/.codex/worktrees/cbf6/kanvas`.
 - A native process exit 133 has cause `UNKNOWN` unless concrete evidence proves a cause. Report Gradle exit, XML method results, native exit, and source custody separately.
 - Preserve W5g semantics: occurrence-based capture limits, first-owner refusal order, frame-wide immutable ownership, stop deduplication by content, independent image owners, pessimistic cache admission, one lease per consumer, and lease retention to frame completion.
@@ -55,6 +55,7 @@ RES  = kanvas/src/test/resources/picture/
 | `PLAN/MaterialSourceConstructionV4.kt`, `FrameSourceLayoutV4.kt`, `MaterialSourceFootprintV4.kt`, `RawMaterialRequirementsV2.kt` | Resolve the semantic catalogue, validate descriptor/children/uniforms/resources, seal owners and physical layout, and account before publication. |
 | `GPU/planning/GpuRenderContext.kt` (`GpuPlanSurfaceExecutor.plan`), `PLAN/CapabilityCompilerChain.kt`, `W5eImagePlanCompiler.kt`, `W5aCompositePlanCompiler.kt`, `SourceDeferredRenderConstructionV4.kt`, `RenderGraph.kt`, `RenderGraphConstruction.kt`, `PlanPasses.kt` | Freeze one plan-owned catalogue snapshot at frame entry, pass it through every nested compiler/source capture, and keep V6 publication transactional. |
 | `GPU/materials/W5aMaterialSourceStage.kt`, `W5fColorOperationEmitterV1.kt`, `W5aPacketMaterialSourceV2.kt` | Generate runtime WGSL from the sealed numeric graph, assemble the common program, bind the sealed V6 layout, and keep dynamic values out of program identity. |
+| `GPU/recording/GPUFramePlan.kt`, `GPU/recording/GPUW5aGeometryHostTemplateV1.kt`, `GPU/execution/GPUFramePreflighter.kt` | Seal geometry source/layout facts without native handles and validate every V6 sibling before `beginFramePreparation`; transport one non-null witness to all materializers. |
 | `GPU/runtimeeffects/KanvasRuntimeEffectRegistry.kt`, `RuntimeEffectContracts.kt`, `KanvasPreparedRuntimeEffectResolver.kt` | Split the positive built-in renderer manifest from legacy registries; verify the sealed triplet/numeric identity before pipeline or resource ownership. |
 | `GPU/planning/W5bAnalyticRRectGraphLowerer.kt`, `W4bAnalyticRRectGraphLowerer.kt`, `W4dPathStrokeGraphLowerer.kt`, `W5bPreparedPointBridgeV3.kt` | Retain geometry/coverage authority and consume `MaterialPlanRef` V6 instead of extracting or rejecting material locally. |
 | `GPU/materials/GPUPreparedTextMaterialPlanProvenance.kt`, `GPUPreparedVerticesMaterialPlanProvenance.kt` | Replace W5a-only provenance with version-neutral references authenticated against the V6 table. |
@@ -65,13 +66,16 @@ RES  = kanvas/src/test/resources/picture/
 New files have one narrow owner:
 
 - `IR/CanonicalHashBytesV1.kt`: checked canonical byte encoder and positive/legacy runtime ABI hash recipes.
+- `IR/RuntimeEffectResourceBindingV1.kt`: immutable backend-neutral captured storage/texture/sampler instance bindings.
 - `PLAN/RuntimeEffectSemanticCatalog.kt`: immutable exact-key catalogue, semantic entry and built-in semantic graph/evaluator identity.
 - `PLAN/RuntimeEffectCpuEvaluatorV1.kt`: backend-neutral typed evaluation inputs, numerical rejection contract and executable child-opacity CPU evaluator.
 - `PLAN/ComposedMaterialPlanV6.kt`: V6 program/binding expectations and runtime node data added to the existing composed table.
 - `PLAN/W5hPlanDiagnostics.kt`: exact W5h refusal codes and classifiers.
 - `GPU/runtimeeffects/W5hRuntimeEffectManifest.kt`: positive renderer manifest and exact triplet lookup.
 - `GPU/materials/W5hRuntimeEffectWgslEmitter.kt`: deterministic emission from the sealed numeric graph only.
-- `GPU/execution/W5hFrameSourcePreflightV1.kt`: frame-wide non-owning source validation and immutable validation witness before dispatcher materialization.
+- `GPU/execution/W5hFrameSourcePreflightV1.kt`: frame-wide host-only source validation and immutable witness issued before `GPUFramePreflighter` opens any native owner scope.
+- `GPU/recording/GPUW5aGeometryHostTemplateV1.kt`: native-handle-free geometry WGSL/layout/target facts sealed into the frame plan before execution.
+- `API/pipeline/RuntimeEffectResourceBinding.kt`: public storage/image/sampler binding values and immutable named binding set.
 - `TEST/pipeline/W5hRuntimeEffectCatalogTest.kt`: public exact lookup and public construction behavior.
 - `TEST/picture/W5hRuntimeEffectPictureTest.kt`: public v12 round trip and historical v11-v0 behavior.
 - `TEST/surface/W5hRuntimeEffectCpuOracle.kt`: independent test-only pixel oracle.
@@ -92,9 +96,11 @@ Before editing an existing owner, read its complete relevant function and direct
 **Files — Create:**
 
 - `IR/CanonicalHashBytesV1.kt`
+- `IR/RuntimeEffectResourceBindingV1.kt`
 - `PLAN/RuntimeEffectSemanticCatalog.kt`
 - `PLAN/RuntimeEffectCpuEvaluatorV1.kt`
 - `PLAN/W5hPlanDiagnostics.kt`
+- `API/pipeline/RuntimeEffectResourceBinding.kt`
 - `TEST/pipeline/W5hRuntimeEffectCatalogTest.kt`
 
 **Files — Modify:**
@@ -105,6 +111,9 @@ Before editing an existing owner, read its complete relevant function and direct
 - `API/pipeline/RuntimeEffect.kt`
 - `API/pipeline/ShaderModule.kt`
 - `API/pipeline/RuntimeEffectWgsl4kWiring.kt`
+- `API/paint/Shader.kt`
+- `API/paint/ColorFilter.kt`
+- `API/paint/Blender.kt`
 
 ### Contract to implement
 
@@ -182,7 +191,64 @@ public data class RuntimeLogicalResourceSlotV1(
 )
 ```
 
-The declarations above specify signatures; implement `of` with an unmodifiable defensive list copy, distinct nonblank names, checked local align/size/offset computation and final size aligned to 16. Resource slots require distinct nonnegative logical slots and matching kind/facts; storage size is positive, texture multisampled is false. Arrays, comparison samplers, storage textures, hidden samplers, and non-2D/non-filterable texture facts cannot be admitted. `RuntimeEffectDescriptor` retains its public name with `versionI32=3`, `id`, `abi`, `semanticVersionI32`, `abiHash`, `uniformBlock`, `childSlots`, `logicalResources`, and nullable `legacyV0`; all collections are immutable defensive snapshots. `legacyV0` holds original uniform layout, child slots, vertex layout and module facts exactly as specified in design §9. Positive descriptors require `legacyV0=null`; zero requires a legacy section and its separate hash recipe. Descriptor facts can represent a nonempty resource list for decode validation, but positive catalogue entry construction and W5 admission reject it.
+The declarations above specify signatures; implement `of` with an unmodifiable defensive list copy, distinct nonblank names, checked local align/size/offset computation and final size aligned to 16. Resource slots require distinct nonnegative logical slots and matching kind/facts; storage size is positive, texture multisampled is false. Arrays, comparison samplers, storage textures, hidden samplers, and non-2D/non-filterable texture facts cannot be admitted. `RuntimeEffectDescriptor` retains its public name with `versionI32=3`, `id`, `abi`, `semanticVersionI32`, `abiHash`, `uniformBlock`, `childSlots`, `logicalResources`, and nullable `legacyV0`; all collections are immutable defensive snapshots. `legacyV0` holds original uniform layout, child slots, vertex layout and module facts exactly as specified in design §9. Positive descriptors require `legacyV0=null`; zero requires a legacy section and its separate hash recipe.
+
+### Runtime resource instance API and captured values
+
+In `API/pipeline/RuntimeEffectResourceBinding.kt`, define:
+
+```kotlin
+public sealed interface RuntimeEffectResourceBinding {
+    public class StorageRead private constructor(bytes: ByteArray) : RuntimeEffectResourceBinding {
+        public val sizeBytesI32: Int
+        public fun copyBytes(): ByteArray
+        public companion object { public fun copyOf(bytes: ByteArray): StorageRead }
+    }
+    public data class SampledTexture(public val image: Image) : RuntimeEffectResourceBinding
+    public data class Sampler(public val type: RuntimeSamplerTypeV1) : RuntimeEffectResourceBinding
+}
+public class RuntimeEffectResourceBindings private constructor(
+    bindings: Map<String, RuntimeEffectResourceBinding>,
+) {
+    public val sizeI32: Int
+    public operator fun get(name: String): RuntimeEffectResourceBinding?
+    public fun entries(): Set<Map.Entry<String, RuntimeEffectResourceBinding>>
+    public companion object {
+        public fun of(bindings: Map<String, RuntimeEffectResourceBinding>): RuntimeEffectResourceBindings
+        public val Empty: RuntimeEffectResourceBindings
+    }
+}
+```
+
+Construction rejects blank/duplicate names and snapshots the map. `StorageRead.copyOf` validates `bytes.size` in I64, rejects zero length and owns a defensive copy; `SampledTexture` accepts only `Image.fromPixels`-backed images during scene capture, never an external reference; `Sampler` has no hidden state beyond its declared type. The resource set is matched byte-exactly to descriptor slots by name, order-independent at the API boundary and re-ordered into descriptor slot order at capture. Missing, extra, wrong-kind or facts-mismatched bindings are terminal semantic refusals.
+
+In `IR/RuntimeEffectResourceBindingV1.kt`, capture the immutable backend-neutral form:
+
+```kotlin
+public sealed interface RuntimeEffectResourceBindingV1 : CanonicalValue {
+    public class StorageRead(public val bytes: ImmutableBytes) : RuntimeEffectResourceBindingV1
+    public class SampledTexture(public val image: ImageResourceSnapshot.Pixels) : RuntimeEffectResourceBindingV1
+    public data class Sampler(public val type: RuntimeSamplerTypeV1) : RuntimeEffectResourceBindingV1
+}
+public data class RuntimeEffectResourceBindingEntryV1(
+    public val logicalSlotI32: Int,
+    public val name: String,
+    public val binding: RuntimeEffectResourceBindingV1,
+)
+public class RuntimeEffectResourceBindingSetV1 private constructor(
+    entries: Collection<RuntimeEffectResourceBindingEntryV1>,
+) : Iterable<RuntimeEffectResourceBindingEntryV1> {
+    public val sizeI32: Int
+    public fun entryAt(indexI32: Int): RuntimeEffectResourceBindingEntryV1
+    override fun iterator(): Iterator<RuntimeEffectResourceBindingEntryV1>
+    public companion object {
+        public fun of(entries: Collection<RuntimeEffectResourceBindingEntryV1>): RuntimeEffectResourceBindingSetV1
+        public val Empty: RuntimeEffectResourceBindingSetV1
+    }
+}
+```
+
+The captured set stores `(logicalSlotI32, name, binding)` rows with unique slots/names, checked cumulative storage/image byte counts in I64 and immutable owner identity. `MaterialNode.RuntimeEffect` stores this set beside uniforms and children; its canonical identity includes each binding's canonical value. The SceneArchive v6 writer/reader serializes storage bytes, pixel-backed image snapshot facts/bytes and sampler type in logical-slot order. Runtime storage bytes are counted before the IR copy and again in frame planning; image snapshots reuse existing immutable image capture and wire routines.
 
 ### Exact public RuntimeEffect representation and compatibility
 
@@ -217,9 +283,28 @@ public val children: List<ChildSlot>
 
 `LegacyV0` snapshots module/layout/children and reports version zero. Because one legacy effect may be wrapped as different ABI roles, its `descriptor`, `kind` and `abiHash` getters return `null`; `PaintSceneAdapter.toDescriptor(abi)` constructs the role-specific legacy descriptor and v0 hash at capture. Its module/layout getters preserve their old values. Keep the old internal constructor signature as a deprecated `LegacyV0` adapter, including `registerOnConstruction`; it can never create a positive value. Update all module/layout consumers to branch on `semanticVersionI32` before legacy access. This preserves source signatures without inventing an empty WGSL module or a false intrinsic ABI for legacy values.
 
-Keep exact existing factory signatures `makeShader(uniforms: UniformBlock, children: Map<String, Shader> = emptyMap()): Shader.RuntimeEffect`, `makeColorFilter(uniforms: UniformBlock, children: Map<String, ColorFilter> = emptyMap()): ColorFilter`, and `makeBlender(uniforms: UniformBlock): Blender`. Positive factories require respectively SHADER, COLOR_FILTER, BLENDER and never call legacy hooks; the sole SHADER built-in therefore rejects the latter two with `IllegalArgumentException("Runtime effect kind mismatch")`. No positive COLOR_FILTER/BLENDER implementation is introduced until a matching built-in exists. Legacy factories retain historical wrappers/hooks but remain inadmissible to W5. `register`, one-argument `registered`, and `compile` are deprecated v0-only; `register(positive)` rejects. Do not add a resource argument to any factory.
+Keep the exact existing factory signatures as overloads delegating `RuntimeEffectResourceBindings.Empty`, and add these explicit overloads:
 
-Task 2 changes the existing `PaintSceneAdapter` private `RuntimeEffect.toDescriptor(abi: RuntimeEffectAbi, extraChildren: Collection<RuntimeChildSlot> = emptyList()): RuntimeEffectDescriptor`: for positive values require `abi==kind` and empty extraChildren, return the already immutable positive descriptor; for v0 preserve original facts and build the role-specific legacy adapter/hash. Capture copies instance uniform values/children after budget validation; factories do not permit modifying descriptor identity. Positive archive reconstruction requires exact `(id,version,hash)` and descriptor facts; it cannot fabricate a built-in with `fromBuiltin` from unchecked bytes.
+```kotlin
+public fun makeShader(
+    uniforms: UniformBlock,
+    children: Map<String, Shader>,
+    resources: RuntimeEffectResourceBindings,
+): Shader.RuntimeEffect
+public fun makeColorFilter(
+    uniforms: UniformBlock,
+    children: Map<String, ColorFilter>,
+    resources: RuntimeEffectResourceBindings,
+): ColorFilter
+public fun makeBlender(
+    uniforms: UniformBlock,
+    resources: RuntimeEffectResourceBindings,
+): Blender
+```
+
+Positive factories require respectively SHADER, COLOR_FILTER or BLENDER and never call legacy hooks; the sole SHADER built-in therefore rejects the latter two with `IllegalArgumentException("Runtime effect kind mismatch")`. They validate resource names/kinds against the positive descriptor before constructing the public wrapper. `Shader.RuntimeEffect`, `ColorFilter.RuntimeEffect` and the runtime Blender wrapper retain the immutable resource set along with uniforms/children so `PaintSceneAdapter` can capture it. No positive COLOR_FILTER/BLENDER built-in is introduced until a matching entry exists. Legacy factories preserve their old results only when `resources` is empty; nonempty legacy resources refuse because v0 has no typed logical resource ABI. `register`, one-argument `registered`, and `compile` are deprecated v0-only; `register(positive)` rejects.
+
+Task 2 changes the existing `PaintSceneAdapter` private `RuntimeEffect.toDescriptor(abi: RuntimeEffectAbi, extraChildren: Collection<RuntimeChildSlot> = emptyList()): RuntimeEffectDescriptor`: for positive values require `abi==kind` and empty extraChildren, return the already immutable positive descriptor; for v0 preserve original facts and build the role-specific legacy adapter/hash. Capture validates I64 uniform/storage/image counts before copying instance values, then snapshots uniforms, children and resources in descriptor order. Factories do not permit modifying descriptor identity. Positive archive reconstruction requires exact `(id,version,hash)` and descriptor facts; it cannot fabricate a built-in with `fromBuiltin` from unchecked bytes.
 
 `RuntimeEffectSemanticCatalogSnapshot` is immutable after construction. Exact lookup requires the complete triplet after descriptor hash verification; `(id, version)` lookup exists only to construct the public built-in object. Duplicate exact keys with unequal facts and duplicate `(id, version)` with different `abiHash` fail snapshot construction.
 
@@ -249,7 +334,7 @@ public class RuntimeEffectCpuInputsV1(
 }
 public interface RuntimeEffectCpuEvaluatorV1 {
     public val id: String
-    public val semanticVersionI32: Int
+    public val evaluatorVersionI32: Int
     public fun evaluate(inputs: RuntimeEffectCpuInputsV1): RuntimeEffectCpuColorF32
 }
 ```
@@ -284,7 +369,7 @@ In `PLAN/RuntimeEffectSemanticCatalog.kt`, expose `RuntimeEffectSemanticCatalog.
 
 ### TDD and implementation steps
 
-- [ ] **Step 1 — Write the public RED.** In `W5hRuntimeEffectCatalogTest`, assert that `registered("kanvas.runtime.child-opacity", 1)` returns the same public descriptor facts across lookups (no object-identity assertion); unknown ID, version 0, version 2, and negative version return `null`; the one-argument `registered(id)` cannot select the positive effect; `compile(wgsl)` still yields version zero. Through public descriptor access, assert exact ordered child/uniform facts, absent resources, `moduleOrNull==null`, the specified exceptions from legacy module/layout getters and incompatible color-filter/blender factories, and the known ABI hash literal computed independently from the spec bytes. Assert a legacy ID collision cannot shadow the positive descriptor.
+- [ ] **Step 1 — Write the public RED.** In `W5hRuntimeEffectCatalogTest`, assert that `registered("kanvas.runtime.child-opacity", 1)` returns the same public descriptor facts across lookups (no object-identity assertion); unknown ID, version 0, version 2, and negative version return `null`; the one-argument `registered(id)` cannot select the positive effect; `compile(wgsl)` still yields version zero. Through public descriptor access, assert exact ordered child/uniform facts, absent built-in resources, `moduleOrNull==null`, the specified exceptions from legacy module/layout getters and incompatible color-filter/blender factories, and the known ABI hash literal computed independently from the spec bytes. Assert a legacy ID collision cannot shadow the positive descriptor. Publicly pass one extra storage, texture or sampler binding to child-opacity and assert exact extra-resource refusal without reading internals.
 - [ ] **Step 2 — Prove the RED is causal.** Run:
 
   ```bash
@@ -292,8 +377,8 @@ In `PLAN/RuntimeEffectSemanticCatalog.kt`, expose `RuntimeEffectSemanticCatalog.
   ```
 
   Record the failing methods and XML path in the SDD report. Existing production must fail because the versioned lookup/descriptor v3 is absent.
-- [ ] **Step 3 — Add canonical values and hash recipes.** Implement `CanonicalHashBytesV1`, the V2 slot/block/resource values, descriptor-v3 validation, both hash domains, and exhaustive numeric tags from spec §§6 and 9. Keep old public type names as deprecated adapters when source compatibility requires them; positive construction must use only the new logical fields.
-- [ ] **Step 4 — Add the immutable semantic catalogue.** Implement the factory, exact-key value, `RuntimeEffectSemanticEntryV1`, none-only resource validation, finite graph/capture limits and real `ChildOpacityCpuEvaluatorV1` defined above. Bind its actual identity/version and the sole `child-opacity` entry to `NumericOperationGraphV1`; add only the typed runtime operation needed for `scaleAlpha`.
+- [ ] **Step 3 — Add canonical values, instance bindings and hash recipes.** Implement `CanonicalHashBytesV1`, the V2 slot/block/resource facts, public and IR resource binding sets, descriptor-v3 validation, both hash domains, and exhaustive numeric tags from spec §§6 and 9. Keep old public type names as deprecated adapters when source compatibility requires them; positive construction uses only the new logical fields.
+- [ ] **Step 4 — Add the immutable semantic catalogue.** Implement the factory, exact-key value, `RuntimeEffectSemanticEntryV1`, all allowed logical resource-shape validation, finite graph/capture/resource limits and real `ChildOpacityCpuEvaluatorV1` defined above. Bind its actual identity/version and the sole resource-free `child-opacity` entry to `NumericOperationGraphV1`; add only the typed runtime operation needed for `scaleAlpha`.
 - [ ] **Step 5 — Split positive lookup from legacy registration.** Update `RuntimeEffect` so exact versioned lookup returns a positive immutable built-in without module WGSL. Keep compile/register/one-argument lookup version-zero only and deprecate them. A legacy ID collision must not shadow the positive built-in.
 - [ ] **Step 6 — Run the focused GREEN and compiles.** Run serially:
 
@@ -313,6 +398,7 @@ In `PLAN/RuntimeEffectSemanticCatalog.kt`, expose `RuntimeEffectSemanticCatalog.
 - Positive descriptors contain no WGSL or physical binding.
 - Legacy v0 remains isolated and cannot satisfy positive lookup.
 - Hash encoding and catalogue validation are backend-neutral and checked.
+- Public/IR storage, sampled-texture and sampler bindings are immutable, descriptor-matched and ready for full V6 transport; child-opacity rejects extras.
 - No renderer, H-lane, Picture writer, external codec, font, or GM path changed.
 
 ---
@@ -330,6 +416,7 @@ In `PLAN/RuntimeEffectSemanticCatalog.kt`, expose `RuntimeEffectSemanticCatalog.
 
 - `API/render/ir/PaintSceneAdapter.kt`
 - `IR/SceneArchiveCodec.kt`
+- `IR/MaterialNode.kt`
 - `API/picture/Picture.kt`
 - `IR/ResourceSnapshot.kt` only for adapter helpers not completed in Task 1
 
@@ -337,7 +424,7 @@ In `PLAN/RuntimeEffectSemanticCatalog.kt`, expose `RuntimeEffectSemanticCatalog.
 
 - Writer constants become Picture `12` and scene schema `6`.
 - Readers accept historical Picture versions `8`, `9`, `10`, `11` and current `12` through explicit branches, retaining each old version's existing scene-schema number; only Picture 12 writes scene schema 6.
-- A positive v3 descriptor writes `semanticVersionI32`, `abiHash`, logical uniform block facts, ordered child nullability, logical resource facts and no module.
+- A positive v3 descriptor writes `semanticVersionI32`, `abiHash`, logical uniform block facts, ordered child nullability, logical resource facts and no module. Each runtime material instance then writes its ordered captured storage bytes, pixel-backed sampled-texture snapshot or sampler value separately from the descriptor.
 - A v0 descriptor writes the legacy section only. It stores the v0 SHA-256 in `RuntimeEffectDescriptor.abiHash` but that hash grants no W5 capability.
 - Every v2 reader feeds one v2-to-v3 adapter using the exact align/size table from spec §6. Historical children become `nullable=false`; resources are empty; version is zero.
 - Positive-with-module, zero-pretending-positive, negative-version, malformed-hash, overflow, invalid count and truncated input are rejected before registration.
@@ -347,7 +434,7 @@ In `PLAN/RuntimeEffectSemanticCatalog.kt`, expose `RuntimeEffectSemanticCatalog.
 
 - [ ] **Step 1 — Capture a genuine v11 fixture before writer edits.** Add a disposable public JUnit producer that records one `compile(wgsl)` shader with one uniform and one child, serializes it with the current Picture 11 writer and prints Base64. Run only that producer, copy the exact output into `format-11-runtime-effect-v0.base64` with `apply_patch`, then remove the producer before any production edit. Record base commit `983c4f1e6`, the public construction input and the decoded byte SHA-256 in the SDD report. The producer is not a committed test or gate.
 - [ ] **Step 2 — Write Picture RED tests.** Through public `PictureRecorder`/`Picture.toByteArray`/`Picture.fromByteArray`/`Picture.playback`, cover positive `child-opacity` with alpha `0.5`, child order, mutation after capture, round-trip bytes, playback into a second recorder twice, and the stored v11 fixture. Task 2's GREEN asserts capture, decoded descriptor and bytes only. Task 3 adds replay-pixel, inert-v0 rendering refusal and same-surface positive recovery methods to this class; do not add disabled/skipped execution tests during Task 2.
-- [ ] **Step 3 — Add malformed public byte cases.** In public methods `decodeRejectsUnknownRuntimeTriplet`, `decodeRejectsRuntimeAbiHashMismatch`, and `decodeRejectsMalformedRuntimeDescriptor`, start from public writer bytes and alter the ID, positive version, well-formed but unequal ABI hash, hash syntax, module or count fields with a small test-local wire parser. Cover unknown ID/version, negative version, non-lowercase/short hash, positive-with-module, positive nonempty resource declaration, truncated uniform list and overflowing count. `Picture.fromByteArray` returns `null` on rejection; subsequent valid decode and exact positive lookup remain unchanged. These bytes are the public path for invalid positive identity/ABI cases; never use internal constructors to force a Surface RED.
+- [ ] **Step 3 — Add malformed public byte cases.** In public methods `decodeRejectsUnknownRuntimeTriplet`, `decodeRejectsRuntimeAbiHashMismatch`, and `decodeRejectsMalformedRuntimeDescriptor`, start from public writer bytes and alter the ID, positive version, well-formed but unequal ABI hash, hash syntax, module or count fields with a small test-local wire parser. Cover unknown ID/version, negative version, non-lowercase/short hash, positive-with-module, a nonempty resource declaration added to the resource-free child-opacity descriptor, truncated uniform/resource lists and overflowing counts. `Picture.fromByteArray` returns `null` on rejection; subsequent valid decode and exact positive lookup remain unchanged. These bytes are the public path for invalid positive identity/ABI cases; never use internal constructors to force a Surface RED.
 - [ ] **Step 4 — Prove RED causality.** Run:
 
   ```bash
@@ -355,7 +442,7 @@ In `PLAN/RuntimeEffectSemanticCatalog.kt`, expose `RuntimeEffectSemanticCatalog.
   ```
 
   The positive descriptor/wire round trip must fail on Picture 11/schema 5; record its causal byte/descriptor failure. Do not demand a positive render during this task. Historical v0 execution/refusal evidence belongs to Task 3.
-- [ ] **Step 5 — Implement v12/schema6 and the common adapter.** Change writer/reader constants, encode v3 exhaustively, route Picture v8–v11 runtime descriptors through one checked v2-to-v3 adapter, and retain their existing scene-schema mappings and other historical field readers. Do not reinterpret unrelated Picture fields.
+- [ ] **Step 5 — Implement v12/schema6 and the common adapter.** Change writer/reader constants, encode v3 and instance resource bindings exhaustively, route Picture v8–v11 runtime descriptors through one checked v2-to-v3 adapter, and retain their existing scene-schema mappings and other historical field readers. Reject external sampled-texture references and validate every length/count in I64 before allocation. Do not reinterpret unrelated Picture fields.
 - [ ] **Step 6 — Make reconstruction exact and inert.** Update `PaintSceneAdapter` to capture positive built-ins by exact version/hash, preserve immutable uniform bytes and child snapshots, and reconstruct v0 detached values without any renderer hook. Register/install only after complete archive validation.
 - [ ] **Step 7 — Run focused GREEN and compatibility gates.** Run serially:
 
@@ -389,6 +476,8 @@ In `PLAN/RuntimeEffectSemanticCatalog.kt`, expose `RuntimeEffectSemanticCatalog.
 - `GPU/runtimeeffects/W5hRuntimeEffectManifest.kt`
 - `GPU/materials/W5hRuntimeEffectWgslEmitter.kt`
 - `GPU/execution/W5hFrameSourcePreflightV1.kt`
+- `GPU/recording/GPUW5aGeometryHostTemplateV1.kt`
+- `GPU/execution/GPUW5hRuntimeResourceSessionCache.kt`
 - `TEST/surface/W5hRuntimeEffectCpuOracle.kt`
 - `TEST/surface/W5hRuntimeEffectSurfacePixelTest.kt`
 
@@ -404,6 +493,8 @@ In `PLAN/RuntimeEffectSemanticCatalog.kt`, expose `RuntimeEffectSemanticCatalog.
 - `PLAN/FrameSourceLayoutV4.kt`
 - `PLAN/MaterialSourceFootprintV4.kt`
 - `PLAN/RawMaterialRequirementsV2.kt`
+- `PLAN/PlanResources.kt`
+- `PLAN/PlanCacheResourceRequest.kt`
 - `PLAN/EffectiveMaterialPlanner.kt`
 - `PLAN/CapabilityCompilerChain.kt`
 - `PLAN/W5eImagePlanCompiler.kt`
@@ -422,8 +513,21 @@ In `PLAN/RuntimeEffectSemanticCatalog.kt`, expose `RuntimeEffectSemanticCatalog.
 - `GPU/runtimeeffects/RuntimeEffectContracts.kt`
 - `GPU/runtimeeffects/KanvasPreparedRuntimeEffectResolver.kt`
 - `GPU/execution/GPUW5aSourceStageNativeV2.kt`
+- `GPU/execution/GPUFramePreflighter.kt`
+- `GPU/execution/GPUPreparedNativeFramePayload.kt`
+- `GPU/execution/GPUBackendRuntimeNative.kt`
 - `GPU/execution/GPUWgpu4kFramePayloadMaterializerDispatcher.kt`
+- `GPU/execution/GPUWgpu4kCorePrimitiveSessionCache.kt`
+- `GPU/execution/GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt`
+- `GPU/execution/GPUWgpu4kSolidRectFramePayloadMaterializer.kt`
+- `GPU/execution/GPUWgpu4kRegisteredUniformRectFramePayloadMaterializer.kt`
+- `GPU/execution/GPUWgpu4kSeparableBlurRectFramePayloadMaterializer.kt`
+- `GPU/execution/GPUWgpu4kMaskBlurFramePayloadMaterializer.kt`
+- `GPU/execution/GPUWgpu4kColorGlyphFramePayloadMaterializer.kt`
+- `GPU/execution/GPUWgpu4kPreparedSurfaceFramePayloadMaterializer.kt`
+- `GPU/execution/GPUWgpu4kDestinationCopyFramePayloadMaterializer.kt`
 - `GPU/planning/GpuRenderContext.kt`
+- `GPU/recording/GPUFramePlan.kt`
 - `GPU/materials/W5aFrameMaterialBudgetV2.kt`
 - `GPU/planning/W4aAnalyticRectGraphLowerer.kt`
 - `GPU/planning/W4cPathFillGraphLowerer.kt`
@@ -487,7 +591,23 @@ The planner order is fixed:
 7. validate frame/device capabilities and pessimistic budgets;
 8. publish V6 `Ready` only after all draws/siblings succeed.
 
-The V6 layout extends `ComposedBindingLayoutV1` rather than replacing it. Uniform node bases are 16-byte aligned; local F32 fields keep 4-byte alignment. Existing child-family resources follow the uniform binding in owner-prefix order; runtime-owned resource lists must be empty. `composedBindingLayoutHash` keeps domain `kanvas-material-binding-layout-v1`, and includes the exact uniform binding/mappings/resource options from spec §6.
+The V6 layout extends `ComposedBindingLayoutV1` rather than replacing it. Uniform node bases are 16-byte aligned; local F32 fields keep 4-byte alignment. Existing child-family and runtime resources follow the uniform binding in owner-prefix/logical-slot order. `composedBindingLayoutHash` keeps domain `kanvas-material-binding-layout-v1`, and includes the exact uniform binding/mappings/resource options from spec §6.
+
+### Complete logical-resource transport
+
+For every runtime node, V6 retains ordered `RuntimeEffectResourceReferenceV1` rows containing `ownerNodeIndexI32`, the exact descriptor slot, captured `RuntimeEffectResourceBindingV1`, physical group/binding, and one typed `PlanCacheResourceRequest` where the lifetime is device/session cached. Mapping is exact:
+
+| Logical slot | Physical V6 mapping | Plan/accounting | Native ownership after witness |
+| --- | --- | --- | --- |
+| `StorageRead(minBindingSizeBytesI64)` | group 1, next binding, fragment-visible read-only-storage buffer, no dynamic offset | captured byte count and declared minimum are checked in I64; frame budget charges a complete buffer miss and one binding | bounded `GPUW5hRuntimeResourceSessionCache` entry keyed by `(deviceGeneration, abiHash, logicalSlotI32, contentSha256, byteCountI64)`; one completion lease per consumer |
+| `Texture2DFloatFilterable(false)` | group 1, next binding, 2D float-filterable sampled texture | reuse exact `ImageUploadPlanV1` and owner-aware texture request; independent captured image owners remain independent admission reservations | reuse `GPUW5eDecodedImageSessionCache`; cache key begins with device generation and each consumer retains its own completion lease |
+| `Sampler(FILTERING/NON_FILTERING)` | group 1, next binding, matching sampler binding type | zero payload bytes but one logical/physical binding, cache request and device-entry budget | same bounded runtime resource cache, keyed by `(deviceGeneration, samplerType)`; one completion lease per consumer |
+
+`ComposedBindingLayoutV1.Resource` gains a sampler option with exhaustive buffer/texture/sampler exclusivity. Runtime resource rows participate in prefix-owner ordering and `composedBindingLayoutHash`; dynamic bytes/pixels never enter program identity. `FrameSourceLayoutV4`, `MaterialSourceFootprintV4`, `RawMaterialRequirementsV2` and the combined frame budget count runtime storage bytes, texture residency, sampler entries, binding count and lease count pessimistically before cache lookup. A shared immutable owner is charged once in frame inventory but still creates one lease per consuming binding; separately captured equal values remain separate admission owners. Overflow, device limits, missing capabilities or a binding mismatch refuse before `Ready`.
+
+`GPUW5hRuntimeResourceSessionCache` owns only storage buffers and samplers; it is bounded by entry and byte limits, uses access-order LRU, evicts only zero-lease entries, quarantines failed closes and retires the entire generation on device loss. Texture ownership stays in the existing decoded-image cache. `GPUBackendRuntimeNative` creates both caches for one device generation and retires them together. After the frame-wide witness exists, `materializeW5aSourcePartitionV2` acquires these typed leases, creates bind groups from the sealed resource order and attaches every lease to the existing frame completion owner. No resource allocation, upload, cache read or lease occurs during semantic planning or renderer preflight.
+
+The shipped `child-opacity` entry exercises the empty-resource case. Public Task 1 tests prove extra resource rejection on that descriptor; Picture malformed tests prove descriptor/binding mismatch rejection. Because positive application registration is forbidden and no resource-bearing built-in is specified, successful nonempty runtime-resource execution is an explicitly non-public static review obligation: Sol traces API value → IR capture/wire → V6 mapping/budget → manifest reflection → post-witness cache/lease materialization. This is not replaced by internal tests, fake catalogues or mocks.
 
 Define `ComposedMaterialProgramV6.programIdentity: String` as raw lowercase SHA-256 of `CanonicalHashBytesV1`, with this exact ordered preimage:
 
@@ -503,13 +623,64 @@ Use the checked Task 1 encoder for every list/text/integer; no ad-hoc separators
 
 Dynamic uniform values, colors/stops/pixels, transforms represented as uniforms, image contents/handles, mutable cache state and device generation are excluded from this preimage. Runtime ABI hash stays logical and never absorbs composed offsets/layout. The renderer's source program cache key begins `(deviceGeneration, programIdentity)`; geometry/target pipeline specialization follows these fields. Layout/sampler/texture cache keys also begin with device generation and retain their family-specific identities. Thus runtime numeric/CPU identity and physical composition both affect program identity even when generated WGSL happens to match.
 
-### Non-owning renderer preflight before every native materialization
+### Host geometry templates and renderer preflight before native ownership
 
-The renderer receives no semantic catalogue object. Add `preflightW5hFrameSourcesV1(framePlan: GPUFramePlan): W5hFrameSourcePreflightResultV1` in `GPU/execution/W5hFrameSourcePreflightV1.kt`; define a sealed result with `Validated(witness: W5hFrameSourceValidationWitnessV1)` and `Refused(diagnostics: List<RenderDiagnostic>)`. The witness has a private constructor, binds the immutable frame plan identity, and stores all V6 source structural IDs, generated assembled module text, validated layouts and sealed expectations as immutable host values. It owns no device objects or leases and is produced only when the complete frame passes.
+The renderer receives no semantic catalogue object. Split the current `GPUW5aGeometryPipelineTemplate`, which is reconstructed from a native `GPURenderPipeline`, into an immutable host recipe and a later native realization.
 
-Call it at entry to `GPUWgpu4kFramePayloadMaterializerDispatcher`, before dispatching geometry or any other materializer. First enumerate **all** frame sources, across render steps/partitions/lanes and all siblings. For each V6 source, recompute manifest ABI and compare its triplet, numeric contract and CPU evaluator ID/version against the sealed expectation (which Task 1 derives from the actual evaluator); verify runtime resources are empty; emit from the sealed numeric graph; assemble with the sealed composed layout; validate WGSL parse, reflection and full layout/hash equality. The renderer never receives or invokes the catalogue's evaluator. Cache lookup/population, pipeline creation, geometry buffers, stop/noise buffers, image upload, uniforms and lease acquisition are prohibited during this first pass. A late sibling mismatch returns terminal diagnostics for the whole frame, with no fallback or mutation of `Ready`.
+`GPU/recording/GPUW5aGeometryHostTemplateV1.kt` defines:
 
-Only after the witness exists may the dispatcher call its geometry/resource materializers and then `materializeW5aSourcePartitionV2`. Add required parameter `sourceWitness: W5hFrameSourceValidationWitnessV1` to that function's existing signature (after `framePlan`); authenticate the exact frame and source at its entry and consume the previously validated module/layout. No default/nullable witness and no per-packet validation followed immediately by allocation is allowed. Hoist the current materializer's non-owning stop/noise owner/layout checks into the same first pass, before its existing early buffer uploads. All sibling validation must finish before any buffer/upload/cache/pipeline/lease operation, including geometry. Hand-written W5h WGSL and manifest-driven semantic reconstruction remain forbidden. Static Sol review traces the dispatcher order and witness custody; unreachable malformed manifests remain an explicit integration gap, never a private/fake test.
+```kotlin
+internal data class GPUW5aGeometryHostTemplateV1(
+    val packetId: String,
+    val pipelineRecipeId: String,
+    val sourceWgsl: String,
+    val vertexEntryPoint: String,
+    val fragmentEntryPoint: String,
+    val target: GPUW5aHostColorTargetV1,
+    val groupZeroLayout: GPUW5aHostBindGroupLayoutV1,
+    val w5bInlineCoverageV3: GPUW5bInlineCoverageV3?,
+    val materialCoordinateSlot: MaterialCoordinateSlotV1?,
+)
+internal data class GPUW5aHostColorTargetV1(
+    val format: GPUTextureFormat,
+    val colorBlend: GPUW5aHostBlendComponentV1,
+    val alphaBlend: GPUW5aHostBlendComponentV1,
+    val writeMaskU32: UInt,
+)
+internal data class GPUW5aHostBlendComponentV1(
+    val operation: GPUBlendOperation,
+    val srcFactor: GPUBlendFactor,
+    val dstFactor: GPUBlendFactor,
+)
+internal sealed interface GPUW5aHostBindingLayoutV1 {
+    data class Buffer(val type: GPUBufferBindingType, val hasDynamicOffset: Boolean,
+        val minBindingSizeBytesI64: Long) : GPUW5aHostBindingLayoutV1
+    data class Texture(val sampleType: GPUTextureSampleType, val viewDimension: GPUTextureViewDimension,
+        val multisampled: Boolean) : GPUW5aHostBindingLayoutV1
+    data class Sampler(val type: GPUSamplerBindingType) : GPUW5aHostBindingLayoutV1
+}
+internal data class GPUW5aHostBindGroupEntryV1(
+    val bindingI32: Int,
+    val visibilityFlagsU32: UInt,
+    val layout: GPUW5aHostBindingLayoutV1,
+)
+internal class GPUW5aHostBindGroupLayoutV1 private constructor(
+    entries: Collection<GPUW5aHostBindGroupEntryV1>,
+) {
+    val entries: List<GPUW5aHostBindGroupEntryV1>
+    companion object { fun of(entries: Collection<GPUW5aHostBindGroupEntryV1>): GPUW5aHostBindGroupLayoutV1 }
+}
+```
+
+The host bind-group entries carry only bindingI32, visibility, buffer/texture/sampler kind and its exact layout options; they contain no `GPUDevice`, shader module, pipeline layout, `GPUBindGroupLayout` or other handle. During renderer recording/lowering, the existing pure WGSL builders and plan/pipeline recipe facts seal one template for every packet that has a material source partition. Store the immutable packetId-keyed template list on `GPUFramePlan`, include it in the frame stable identity, and require exact one-to-one coverage with V6 source packets. `GPUWgpu4kCorePrimitiveSessionCache` and `GPUWgpu4kCorePrimitiveFramePayloadMaterializer` later create their native group-zero layout/pipeline from this same host recipe and authenticate the resulting descriptor before publication; they no longer recover source WGSL/layout facts from an already-created native pipeline.
+
+Add `preflightW5hFrameSourcesV1(framePlan: GPUFramePlan): W5hFrameSourcePreflightResultV1` in `GPU/execution/W5hFrameSourcePreflightV1.kt`; define a sealed result with `Validated(witness: W5hFrameSourceValidationWitnessV1)` and `Refused(diagnostics: List<RenderDiagnostic>)`. The witness has a private constructor, binds the immutable frame-plan identity, and stores packet/template IDs, all V6 structural IDs, generated assembled module text, validated group layouts and sealed expectations as immutable host values. It owns no device objects or leases and is produced only when the complete frame passes.
+
+Call this function in `GPUFramePreflighter.preflight` **before** `resourceProvider.beginFramePreparation`. First enumerate all frame sources/templates across render steps, partitions, lanes and siblings. For each V6 source, recompute manifest ABI and compare its triplet, numeric contract and actual CPU evaluator ID/version against the sealed expectation; validate every declared/captured runtime resource and its logical-to-physical row; emit from the sealed numeric graph; compose with `sourceWgsl`; validate WGSL parse, reflection and full group-zero/composed-layout/hash equality against the host template. The renderer never receives or invokes the catalogue evaluator. Also hoist the existing non-owning stop/noise/image-owner/layout checks into this pass.
+
+This phase must not call `beginFramePreparation`, resource/surface/completion providers, a native factory or any cache. It creates no owner scope, readback lease, buffer, texture, sampler, upload, bind group, shader module, pipeline layout, pipeline or resource lease. A late sibling mismatch returns the terminal frame refusal directly, before rollback state exists, with no fallback or mutation of plan `Ready`.
+
+Change `GPUPreparedNativeFramePayloadMaterializer.materializeReusable` to require `sourceWitness: W5hFrameSourceValidationWitnessV1` after `framePlan`; update every implementation named in Task 3 and the `GPUFramePreflighter` call site. Even a frame without V6 receives the non-null empty witness tied to its exact frame identity. Transport the same witness unchanged through `materializeRenderOperands`, the native boundary, `GPUWgpu4kFramePayloadMaterializerDispatcher`, geometry materializers and `materializeW5aSourcePartitionV2`. The dispatcher and source materializer authenticate the frame and packet IDs and consume only the prevalidated assembled module/layout. No default, nullable witness, thread-local or second validation-then-allocation loop is allowed. All native materialization begins only after this host-only witness exists. Hand-written W5h WGSL and manifest-driven semantic reconstruction remain forbidden. Static Sol review traces host template sealing, pre-`beginFramePreparation` order and witness custody; unreachable malformed manifests remain an explicit integration gap, never a private/fake test.
 
 ### Public test matrix
 
@@ -525,12 +696,12 @@ Use a non-white, non-opaque child color so channel and premultiplication errors 
 | budgets | public graph depth/node count and uniform byte limit refuse before render publication; immediately render a valid draw on the same surface |
 | prior W5 | one solid, gradient, image shader, color filter, W5g blend and Noise control remain byte-exact |
 
-The public exact lookup returns `null` for unknown ID/version and exposes no positive custom constructor. Surface REDs therefore cover only constructible compile-v0, invalid child/uniform/value and public budget cases. Descriptor/catalogue/manifest mismatch, evaluator identity disagreement, nonempty positive catalogue entries and unbounded positive graph construction are static Sol checks or explicit integration gaps; never fabricate an internal manifest/reflection/capability mismatch or count one as a public gate.
+The public exact lookup returns `null` for unknown ID/version and exposes no positive custom constructor. Surface REDs therefore cover only constructible compile-v0, invalid child/uniform/resource/value and public budget cases. Descriptor/catalogue/manifest mismatch, evaluator identity disagreement, successful nonempty positive execution and unbounded positive graph construction are static Sol checks or explicit integration gaps; never fabricate an internal manifest/reflection/capability mismatch or count one as a public gate.
 
 ### TDD and implementation steps
 
 - [ ] **Step 1 — Write independent oracle and execution RED.** Add Rect and both Path-fill route cases for alpha `1.0`/`0.5`, nested ordering, mutation after capture, repeat render and one Picture replay. Assert the exact bytes or two adjacent oracle bytes.
-- [ ] **Step 2 — Write refusal/recovery RED.** Add public compile-v0/historical-v0, child, uniform/value and depth/node/byte-budget refusals with the exact diagnostic category from `W5hPlanDiagnostics`; after each refusal, render a positive built-in on the same `Surface`. Add the Picture replay/refusal methods specified by Task 2 here. Unknown positive triplet/hash refusal remains exclusively in the public decode tests.
+- [ ] **Step 2 — Write refusal/recovery RED.** Add public compile-v0/historical-v0, child, uniform/value, extra storage/texture/sampler and depth/node/byte-budget refusals with the exact diagnostic category from `W5hPlanDiagnostics`; after each refusal, render a positive built-in on the same `Surface`. Add the Picture replay/refusal methods specified by Task 2 here. Unknown positive triplet/hash refusal remains exclusively in the public decode tests.
 - [ ] **Step 3 — Prove RED causality.** Run:
 
   ```bash
@@ -540,8 +711,8 @@ The public exact lookup returns `null` for unknown ID/version and exposes no pos
   Record failing method names and confirm the first positive render is refused by the current W5g runtime slice, not by the fixture.
 - [ ] **Step 4 — Extend V5 into V6 in the existing plan.** Add runtime nodes/expectations to the current evaluation DAG and table, resolve the immutable catalogue during source construction, authenticate the descriptor, inline the child, compute checked layout/footprint and issue V6 only after whole-frame validation. Keep V1–V5 compatibility readers but select V6 for every new W5h-ready plan.
 - [ ] **Step 5 — Extend numeric proof and emission.** Add one typed `scaleAlpha` operation with the same input/output color domain as the built-in. Prove finite alpha `[0,1]`, preserve the existing `WgslFloatEnvelopeV1` contract, and emit it through `W5fColorOperationEmitterV1`/the common source stage.
-- [ ] **Step 6 — Add renderer manifest verification.** Implement the frame-wide non-owning preflight and required witness contract above at dispatcher entry, before geometry materialization. Validate every sibling's manifest/ABI/numeric/CPU identity, emitted WGSL and reflection/layout before all cache/pipeline/buffer/upload/lease operations, then require its witness in `materializeW5aSourcePartitionV2`. Keep legacy registry/resolver paths v0-only and unreachable from V6.
-- [ ] **Step 7 — Complete ownership and keying.** Put `deviceGeneration` first in all newly touched pipeline/layout/sampler/texture keys; charge a complete miss without cache lookup; retain leases until completion; only evict zero-lease entries; invalidate prior generation entries on existing device-loss flow. Reuse a shared immutable owner once per frame while retaining a lease per consumer.
+- [ ] **Step 6 — Add host templates and frame-wide renderer verification.** Seal native-handle-free geometry source/layout/target recipes into `GPUFramePlan`. Invoke the complete non-owning preflight in `GPUFramePreflighter.preflight` before `beginFramePreparation`, validate every sibling's manifest/ABI/numeric/CPU identity, emitted WGSL, resource mapping and reflection/layout, then pass its required witness through every native materializer to `materializeW5aSourcePartitionV2`. Keep legacy registry/resolver paths v0-only and unreachable from V6.
+- [ ] **Step 7 — Complete resource ownership and keying.** Implement storage, sampled-texture and sampler plan rows, budgets, materialization and bounded caches exactly as specified above. Put `deviceGeneration` first in all newly touched pipeline/layout/storage/sampler/texture keys; charge a complete miss without cache lookup; retain one lease per consumer until completion; only evict zero-lease entries; invalidate prior-generation entries on existing device loss. Reuse a shared immutable owner once per frame while keeping independently captured owners separate for admission.
 - [ ] **Step 8 — Run focused GREEN.** Run serially:
 
   ```bash
@@ -560,7 +731,7 @@ The public exact lookup returns `null` for unknown ID/version and exposes no pos
 
 - Rect and both Path-fill routes render the positive effect via common V6.
 - All semantic validation and budgets complete before `Ready`.
-- Renderer verification completes before native ownership and uses only sealed expectations/graph.
+- Renderer verification and host template composition complete before `beginFramePreparation` or any native ownership and use only sealed expectations/graph/resource mappings.
 - Program structure excludes dynamic uniform values; program/layout keys start with device generation.
 - Version zero never executes; refusal recovery is public and same-surface.
 
@@ -759,7 +930,7 @@ Every lane also covers post-capture uniform/child mutation and one refusal follo
   ```
 
   Confirm text/vertices fail at the W5a-only provenance boundary and not in fixture construction.
-- [ ] **Step 4 — Generalize provenance and bridges.** Make existing provenance version-neutral and authenticate V6 against the same table/layout owner. Replace W5a-only material bridges with common-plan references; carry authenticated runtime uniforms and existing child-family resource owners, with no runtime-owned resource path.
+- [ ] **Step 4 — Generalize provenance and bridges.** Make existing provenance version-neutral and authenticate V6 against the same table/layout owner. Replace W5a-only material bridges with common-plan references; carry authenticated runtime uniforms/resource references and existing child-family resource owners through the same frame inventory.
 - [ ] **Step 5 — Compose source in the existing shader stages.** Text multiplies A8 coverage after material evaluation. Vertices/Mesh composes vertex colors/operation blend in its existing source position, then uses the common final blend. Remove text/vertices local material source generation from promoted routes.
 - [ ] **Step 6 — Quarantine MeshProgram legacy resolution.** Require a positive catalogued triplet for W5 admission. Since no W5h mesh semantic exists, existing legacy programs remain on their historical non-W5 path or refuse; they cannot borrow the shader built-in's capability.
 - [ ] **Step 7 — Run focused GREEN and bounded prior controls.** Run serially:
@@ -960,12 +1131,12 @@ rtk proxy ./gradlew :kanvas:compileTestKotlin
   rtk proxy ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.W5hConvergenceSurfacePixelTest
   ```
 
-- [ ] **Step 4 — Perform static architecture cleanup.** Trace callers of `GPUMaterialMapper`, W5a-only text/vertices provenance, legacy runtime child authority/resolvers, direct-image tint/`SRC_OVER`, and text/vertices/mesh local material program builders. Remove only branches/files unreachable from all remaining legitimate routes. Record remaining legacy files and their W8 consumer in the task report. This review is static; do not create code-shape tests.
+- [ ] **Step 4 — Perform static architecture cleanup.** Trace callers of `GPUMaterialMapper`, W5a-only text/vertices provenance, legacy runtime child authority/resolvers, direct-image tint/`SRC_OVER`, and text/vertices/mesh local material program builders. Trace storage/texture/sampler values from public API through IR/wire, V6 layout/budget, pre-`beginFramePreparation` reflection and post-witness native lease materialization. Remove only branches/files unreachable from all remaining legitimate routes. Record remaining legacy files and their W8 consumer in the task report. This review is static; do not create code-shape tests.
 - [ ] **Step 5 — Run the frozen-source covering.** Record HEAD and the hashes of every production source file before the command. Run the exact covering command once, inspect all JUnit XML, and record registered/pass/failure/error/skip counts. If Gradle ends with native exit 133 after XML is complete, report cause `UNKNOWN`; do not label the native run green.
 - [ ] **Step 6 — Run the five compiles.** Execute each listed compile separately and record its exit code. No global suite, GM, dashboard, render regeneration, font suite, codec suite or `jpg-color-cube` run is permitted.
 - [ ] **Step 7 — Update durable tracking.** In `refactor/waves/W05-material-graph/status.md`, transcribe all H01–H33 ledger results with exact class/method/invocations and alpha/mutation/final-blend evidence, count Task 4's 14 + Task 5's 12 + Task 6's 7 cells separately from public test invocation counts, and record causal RED/GREEN source custody. Report required/closed/missing cells, compile results, review verdicts, commit IDs, native status, deleted static files and remaining W8/device-loss or non-public mismatch gaps. Update `refactor/README.md` with the W5h branch/PR state. Add a concise final checkpoint at the top of this plan and check completed boxes; do not create another status markdown.
 - [ ] **Step 8 — Commit Task 7.** Commit production/test convergence with `feat(gpu): close w5 registered runtime effect lanes`, then commit tracking-only changes with `docs(refactor): record w5h closure` if the task review requires a stable production commit before docs.
-- [ ] **Step 9 — Obtain whole-branch Sol review.** Review the complete diff from `da9b367bd` to W5h HEAD against the approved design and this plan. Required verdict: no Critical or Important findings, exact module authority, no H-lane parallel material route, no forbidden tests/scope, and explicit Minor/integration gaps.
+- [ ] **Step 9 — Obtain whole-branch Sol review.** Review the complete diff from `da9b367bd` to W5h HEAD against the approved design and this plan. Required verdict: no Critical or Important findings, exact module authority, no H-lane parallel material route, complete three-kind runtime-resource transport, host-only preflight before `beginFramePreparation`, non-null witness custody through materialization, no forbidden tests/scope, and explicit Minor/integration gaps.
 - [ ] **Step 10 — Apply one bounded correction wave if required.** A single non-Sol implementer fixes all accepted Critical/Important findings with RED/GREEN evidence where behavior changes. The same Sol reviewer performs one scoped re-review. Do not restart the review loop for nonblocking stylistic observations.
 - [ ] **Step 11 — Push and publish one stacked Draft PR.** Push `codex/w5h-registered-runtime-effects`, create or update one Draft PR targeting `codex/w5g-composed-procedural-materials`, and include: architecture summary, seven-lot commit map, public test counts, five compile results, exact native-exit disclosure, excluded suites, transition-v0/W8 note, device-loss integration gap, final Sol verdict, and parent PR link. Do not merge either PR.
 
@@ -976,6 +1147,7 @@ rtk proxy ./gradlew :kanvas:compileTestKotlin
 - Descriptor, catalogue, CPU evaluator, renderer manifest, numeric graph, `abiHash` and `composedBindingLayoutHash` agree at their specified authority boundaries.
 - Dynamic values do not enter program identity; physical layout does not enter logical ABI identity.
 - Uniform, binding, resource and frame budgets are checked before copy/publication/native ownership.
+- Storage-read, sampled-texture and sampler runtime bindings have complete API/IR/wire/plan/layout/accounting/reflection/materialization/cache/lease paths, although the shipped resource-free built-in leaves successful nonempty execution as a static review obligation.
 - Cache keys begin with device generation; pessimistic admission, lease lifetime, zero-lease LRU eviction and generation invalidation remain enforced by production design and public reachable behavior.
 - The common owner is preserved across lanes; stop/image sharing policies remain family-correct.
 - Public focused/frozen-source gates have no new failure/error. Historical AA4 skips remain explicitly counted rather than relabeled.
