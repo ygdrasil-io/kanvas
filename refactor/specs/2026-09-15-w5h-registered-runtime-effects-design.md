@@ -436,18 +436,24 @@ Les images de test sont construites depuis des pixels déjà décodés en mémoi
 
 ## 12. Diagnostics, budgets et récupération
 
-Les refus sont terminaux avant `Ready` et avant ownership natif. Ils distinguent
-au minimum :
+Les refus sémantiques et de planning sont terminaux avant publication `Ready`.
+Ils distinguent au minimum :
 
 - version zéro ou triplet absent :
   `unsupported.material.runtime_effect.unregistered_semantics` ;
 - version, kind ou descriptor incompatible ;
-- ABI ou manifest mismatch ;
+- ABI descriptor/catalogue mismatch ;
 - uniform manquant, extra, non fini ou de mauvais type ;
 - child manquant, extra, mal ordonné, nullable/type incompatible ;
-- ressource logique ou reflection physique incompatible ;
+- ressource logique incompatible ;
 - graph/capture/device/frame budget dépassé ;
 - capability physique absente.
+
+Après `Ready`, le renderer peut encore refuser un manifest, le WGSL généré ou
+une reflection physique incompatible avec les attentes V6 scellées. Ces refus
+sont terminaux pour la frame, mais surviennent toujours avant création de
+pipeline, acquisition de lease ou tout autre ownership natif. Ils ne modifient
+ni ne republient le plan `Ready` et ne déclenchent aucun fallback.
 
 Le diagnostic conserve l'index du draw et l'identité material sans objet
 backend. Un refus ne prépare aucune ressource. La récupération est prouvée par
