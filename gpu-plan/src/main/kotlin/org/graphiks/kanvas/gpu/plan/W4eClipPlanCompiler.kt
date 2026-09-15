@@ -50,10 +50,14 @@ import org.graphiks.math.matrix.toMatrix3x3F64
  * constructor; this compiler owns only clip preparation, pooled mask resources, and typed
  * consumer insertion.
  */
-public class W4eClipPlanCompiler(
+public class W4eClipPlanCompiler internal constructor(
     private val clipPolicyF64: ClipPreparationPolicyF64,
+    private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
 ) : GpuPlanCompiler {
+    public constructor(clipPolicyF64: ClipPreparationPolicyF64) : this(clipPolicyF64,RuntimeEffectSemanticCatalogSnapshot.Unbound)
     public constructor() : this(ClipPreparationPolicyF64())
+    internal fun withRuntimeCatalog(catalog: RuntimeEffectSemanticCatalogSnapshot): W4eClipPlanCompiler =
+        W4eClipPlanCompiler(clipPolicyF64,catalog)
 
     /**
      * Producer-only W4e seam for an already admitted non-Path color consumer. All clip math,
@@ -143,12 +147,14 @@ public class W4eClipPlanCompiler(
         strokePolicyF64 = org.graphiks.math.geometry.PathStrokePolicyF64(),
         acceptsNarrowTransforms = true,
         retainGeometryConstructionGraph = true,
+        runtimeCatalog = runtimeCatalog,
     )
     private val w4dAaSeam = W4dGeneralPathPlanCompiler(
         strokePolicyF64 = org.graphiks.math.geometry.PathStrokePolicyF64(),
         acceptsNarrowTransforms = true,
         forceAaFrame = true,
         retainGeometryConstructionGraph = true,
+        runtimeCatalog = runtimeCatalog,
     )
 
     override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {

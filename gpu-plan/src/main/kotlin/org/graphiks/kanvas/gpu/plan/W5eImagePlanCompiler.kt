@@ -117,7 +117,8 @@ public class W5eImageConstructionPlanV1 internal constructor(
 }
 
 /** Geometry authorities remain W4-owned; only source/material authority is overlaid by W5e. */
-public class W5eImagePlanCompiler : GpuPlanCompiler {
+public class W5eImagePlanCompiler(private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot) : GpuPlanCompiler {
+    public constructor() : this(RuntimeEffectSemanticCatalogSnapshot.Unbound)
     private class Candidate(val owner: W5eImagePlanCompiler, val scene: SceneSnapshot,
         override val target: RenderTargetDescriptor) : GpuPlanCandidate {
         override val capabilityId: String = CAPABILITY_ID
@@ -276,10 +277,10 @@ public class W5eImagePlanCompiler : GpuPlanCompiler {
                 (command as? SceneCommand.Draw)?.node?.let { node -> node.paint?.colorFilter != null ||
                     hasDeferredColor(node.material) || node.paint?.shader?.let(::hasDeferredColor) == true } == true
             }
-            val emptyCompiler = W3SolidRectPlanCompiler()
+            val emptyCompiler = W3SolidRectPlanCompiler(runtimeCatalog)
             val compiler: GpuPlanCompiler = if (metadataOnly) emptyCompiler else CapabilityCompilerChain.of(listOf(
-                W5aCompositePlanCompiler(constructionEntries), W3SolidRectPlanCompiler(), W4aAnalyticRectPlanCompiler(),
-                W4cPathFillPlanCompiler(), W4dPathStrokePlanCompiler(), W4dGeneralPathPlanCompiler()))
+                W5aCompositePlanCompiler(constructionEntries,runtimeCatalog), W3SolidRectPlanCompiler(), W4aAnalyticRectPlanCompiler(),
+                W4cPathFillPlanCompiler(), W4dPathStrokePlanCompiler(), W4dGeneralPathPlanCompiler()),runtimeCatalog)
             val selection = if (metadataOnly) {
                 require(noOpDraws.isNotEmpty() && selected.scene.all { command ->
                     command !is SceneCommand.Draw || noOpDraws.values.any { it === command.node }
@@ -291,7 +292,7 @@ public class W5eImagePlanCompiler : GpuPlanCompiler {
                 // the geometry capability cannot construct the corresponding footprint.
                 for ((constructionIndexI32, node) in sourceNodes) when (val source = EffectiveMaterialPlanner.planW5eImageSource(node,
                     RectI32(0, 0, selected.target.extent.width, selected.target.extent.height), maxLatticeCellsI64,
-                    constructionEntries.getValue(constructionIndexI32))) {
+                    constructionEntries.getValue(constructionIndexI32),runtimeCatalog)) {
                     is EffectiveMaterialPlanner.Result.Refused -> throw IllegalArgumentException(source.diagnosticCode)
                     else -> Unit
                 }
@@ -309,7 +310,7 @@ public class W5eImagePlanCompiler : GpuPlanCompiler {
                         sourceNodes[geometryDraw.commandIndex]?.let { original ->
                             val bounds = geometryDraw.w5eDeviceBoundsI32()
                             val metadata = when (val captured = EffectiveMaterialPlanner.describeW5eImageSource(original,bounds,
-                                maxLatticeCellsI64,constructionEntries.getValue(geometryDraw.commandIndex),true)) {
+                                maxLatticeCellsI64,constructionEntries.getValue(geometryDraw.commandIndex),true,runtimeCatalog)) {
                                 is SourceConstructionResultV4.Built -> captured.value
                                 is SourceConstructionResultV4.Refused -> throw IllegalArgumentException(captured.diagnosticCode)
                             }
@@ -319,7 +320,7 @@ public class W5eImagePlanCompiler : GpuPlanCompiler {
                                 W5eImagePlanDiagnostics.BindingLimit
                             }
                             MaterialSourceConstructionV4.captureImage(metadata,RectF32.ofLTRB(bounds.left.toFloat(),bounds.top.toFloat(),
-                                bounds.right.toFloat(),bounds.bottom.toFloat()),geometryDraw.blend)
+                                bounds.right.toFloat(),bounds.bottom.toFloat()),geometryDraw.blend,runtimeCatalog)
                         }
                     }
                 }) {
@@ -360,7 +361,7 @@ public class W5eImagePlanCompiler : GpuPlanCompiler {
                 val draw = requireNotNull(geometry[commandI32]) { W5eImagePlanDiagnostics.UnsupportedSlice }
                 val bounds = draw.w5eDeviceBoundsI32()
                 val source = when (val result = EffectiveMaterialPlanner.planW5eImageSource(node, bounds, maxLatticeCellsI64,
-                    constructionEntries.getValue(commandI32))) {
+                    constructionEntries.getValue(commandI32),runtimeCatalog)) {
                     is EffectiveMaterialPlanner.Result.Ready -> result
                     is EffectiveMaterialPlanner.Result.Refused -> throw IllegalArgumentException(result.diagnosticCode)
                 }

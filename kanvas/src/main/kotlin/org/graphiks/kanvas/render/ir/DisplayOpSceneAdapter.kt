@@ -35,6 +35,8 @@ public data class SceneCaptureLimits(
     public val maxResources: Int = 1_024,
     public val maxGradientStopsI32: Int = 65_536,
     public val maxImageBytesI64: Long = 64L * 1024L * 1024L,
+    /** Maximum occurrence-counted runtime uniform bytes before a capture copy. */
+    public val maxRuntimeUniformBytesI64: Long = 64L * 1024L * 1024L,
 ) {
     init {
         require(maxDepth > 0) { "SceneCaptureLimits.maxDepth must be positive" }
@@ -42,6 +44,7 @@ public data class SceneCaptureLimits(
         require(maxResources > 0) { "SceneCaptureLimits.maxResources must be positive" }
         require(maxGradientStopsI32 > 0) { "SceneCaptureLimits.maxGradientStopsI32 must be positive" }
         require(maxImageBytesI64 > 0L) { "SceneCaptureLimits.maxImageBytesI64 must be positive" }
+        require(maxRuntimeUniformBytesI64 > 0L) { "SceneCaptureLimits.maxRuntimeUniformBytesI64 must be positive" }
     }
 
     public companion object {
@@ -343,6 +346,7 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
     private val capturedImages = mutableListOf<ImageResourceSnapshot>()
     private var preflightImageBytesI64 = 0L
     private var imageBytesI64 = 0L
+    private var runtimeUniformBytesI64 = 0L
     private var nodes: Int = 0
     private var graphNodes: Int = 0
 
@@ -483,7 +487,12 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
         defaultMaterial: Boolean,
         visitPicture: ((org.graphiks.kanvas.picture.Picture) -> Unit)? = null,
     ) {
-        ColorFilterCapturePreflight.validatePaint(paint, limits)?.let {
+        ColorFilterCapturePreflight.validatePaint(paint, limits) { bytes ->
+            runtimeUniformBytesI64=try { Math.addExact(runtimeUniformBytesI64,bytes) }
+                catch(_: ArithmeticException) { throw CaptureFailure(org.graphiks.kanvas.gpu.plan.W5hPlanDiagnostics.Budget,"Runtime uniform count overflows I64") }
+            if(runtimeUniformBytesI64 > limits.maxRuntimeUniformBytesI64)
+                throw CaptureFailure(org.graphiks.kanvas.gpu.plan.W5hPlanDiagnostics.Budget,"Runtime uniforms exceed complete capture byte budget")
+        }?.let {
             throw CaptureFailure(it.code.value, it.message)
         }
         val roots = buildList<Any> {

@@ -33,7 +33,8 @@ import org.graphiks.math.geometry.SizeI32
 import org.graphiks.math.matrix.Matrix3x3F32
 
 /** W3's closed capability: pixel-aligned solid rectangles and SrcOver only. */
-public class W3SolidRectPlanCompiler : GpuPlanCompiler {
+public class W3SolidRectPlanCompiler internal constructor(private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot) : GpuPlanCompiler {
+    public constructor() : this(RuntimeEffectSemanticCatalogSnapshot.Unbound)
     override fun select(
         scene: SceneSnapshot,
         target: RenderTargetDescriptor,
@@ -287,7 +288,7 @@ public class W3SolidRectPlanCompiler : GpuPlanCompiler {
         val visible = intersect(target, geometry) ?: return semanticGap("Draw is outside the target")
         val clipped = if (clip == null) visible else intersect(visible, clip)
             ?: return semanticGap("Draw is fully clipped out")
-        return when (val planned = EffectiveMaterialPlanner.normalizeSourcesV4(node,targetClamp,clipped,legacyGradientBoundsI32=null)) {
+        return when (val planned = EffectiveMaterialPlanner.normalizeSourcesV4(node,targetClamp,clipped,legacyGradientBoundsI32=null,runtimeCatalog=runtimeCatalog)) {
                 EffectiveMaterialPlanner.SourceNormalizationV4.NoOp -> DrawRecognition.NoOp
                 is EffectiveMaterialPlanner.SourceNormalizationV4.Refused -> DrawRecognition.MaterialRefused(EffectiveMaterialPlanner.Result.Refused(planned.diagnosticCode))
                 is EffectiveMaterialPlanner.SourceNormalizationV4.Source -> {

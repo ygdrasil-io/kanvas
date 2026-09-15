@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
+import org.graphiks.kanvas.gpu.renderer.passes.materialSourcePartitionV3
+
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.security.MessageDigest
@@ -664,6 +666,8 @@ class GPUFramePlan(
     val atomicallyRefused: Boolean = false,
     val w5eConstructionV1: org.graphiks.kanvas.gpu.plan.W5eImageConstructionPlanV1? = null,
     val w5ePreparedFrameV1: org.graphiks.kanvas.gpu.renderer.passes.W5ePreparedFrameWitnessV1? = null,
+    /** Internal native projection retains the original, pre-owned source authority root. */
+    w5hSourceRootFrameV1: GPUFramePlan? = null,
 ) {
     val recordingSeals: List<GPURecordingSeal> = immutableList(recordingSeals)
     val steps: List<GPUFrameStep> = immutableList(steps)
@@ -672,6 +676,13 @@ class GPUFramePlan(
     val dependencies: List<GPUTaskDependency> = immutableList(dependencies)
     val phaseOrder: List<GPUTaskPhase> = immutableList(phaseOrder)
     val elidedNoOpDraws: List<GPUFrameElidedNoOpDraw> = immutableList(elidedNoOpDraws)
+    internal val w5aGeometryHostTemplatesV1: List<GPUW5aGeometryHostTemplateV1> = immutableList(
+        this.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+            .filter { it.materialSourcePartitionV3() != null }
+            .mapNotNull { packet -> w5hSourceRootFrameV1?.w5hSourceAuthorityRootV1?.template(packet)
+                ?: if (w5hSourceRootFrameV1 == null) sealW5aGeometryHostTemplateV1(packet) else null })
+    internal val w5hSourceAuthorityRootV1: GPUW5hSourceAuthorityRootV1 =
+        w5hSourceRootFrameV1?.w5hSourceAuthorityRootV1 ?: GPUW5hSourceAuthorityRootV1(this)
 
     init {
         require(frameId == capabilitySeal.frameId) {
@@ -816,6 +827,17 @@ private fun GPUFramePlan.canonicalPreimageHash(): String =
         w5eConstructionV1?.let { string("w5eConstructionV1", it.canonicalIdentity) }
         // Source-plan identity only: the witness's expected frame hash is never recursively hashed.
         w5ePreparedFrameV1?.let { string("w5ePreparedFrameV1", it.canonicalIdentity) }
+        list("w5aGeometryHostTemplatesV1", w5aGeometryHostTemplatesV1) { template ->
+            string("packet", template.packetId)
+            string("recipe", template.pipelineRecipeId)
+            string("source", template.sourceWgsl)
+            string("vertexEntry", template.vertexEntryPoint)
+            string("fragmentEntry", template.fragmentEntryPoint)
+            string("target", template.target.toString())
+            list("groupZero", template.groupZeroLayout.entries) { string("entry", it.toString()) }
+            nullableString("coverage", template.w5bInlineCoverageV3?.name)
+            nullableString("coordinates", template.materialCoordinateSlot?.name)
+        }
         list("recordingSeals", recordingSeals) { seal ->
             tag("GPURecordingSeal")
             string("recordingId", seal.recordingId.value)

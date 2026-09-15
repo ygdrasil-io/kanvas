@@ -39,7 +39,8 @@ import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.matrix.mapAxisAligned
 
 /** W4b's closed capability: analytic antialiased solid rounded rectangles. */
-public class W4bAnalyticRRectPlanCompiler : GpuPlanCompiler {
+public class W4bAnalyticRRectPlanCompiler internal constructor(private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot) : GpuPlanCompiler {
+    public constructor() : this(RuntimeEffectSemanticCatalogSnapshot.Unbound)
     override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) {
             return invalidSelection(diag(W4bPlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "Scene and target descriptors disagree"))
@@ -261,7 +262,7 @@ public class W4bAnalyticRRectPlanCompiler : GpuPlanCompiler {
         if (visible.isEmpty) return DrawRecognition.Gap("Draw is fully clipped out")
         val raster = rasterBounds(visible) ?: return DrawRecognition.Gap("Visible raster bounds exceed I32")
         return when (val planned = EffectiveMaterialPlanner.normalizeSourcesV4(node, FORMAT.blendTargetClampV1(), raster,
-            coverage=CoveragePlan.AnalyticScalarAA, legacyGradientBoundsI32=null)) {
+            coverage=CoveragePlan.AnalyticScalarAA, legacyGradientBoundsI32=null,runtimeCatalog=runtimeCatalog)) {
             EffectiveMaterialPlanner.SourceNormalizationV4.NoOp -> DrawRecognition.NoOp
             is EffectiveMaterialPlanner.SourceNormalizationV4.Refused -> DrawRecognition.MaterialRefused(
                 EffectiveMaterialPlanner.Result.Refused(planned.diagnosticCode))

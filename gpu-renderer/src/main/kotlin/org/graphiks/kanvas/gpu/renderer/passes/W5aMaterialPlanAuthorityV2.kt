@@ -28,7 +28,7 @@ internal class W5aMaterialPlanVersionWitnessV2 private constructor(
     private val programVersionsI32: List<Int>,
 ) {
     internal fun validates(): Boolean =
-        programVersionsI32.isNotEmpty() && programVersionsI32.all { it == MATERIAL_PLAN_VERSION_I32 || it == 2 || it == 3 || it == 4 || it == 5 }
+        programVersionsI32.isNotEmpty() && programVersionsI32.all { it in MATERIAL_PLAN_VERSION_I32..6 }
 
     internal companion object {
         const val MATERIAL_PLAN_VERSION_I32: Int = 1
@@ -45,7 +45,7 @@ internal class W5aMaterialPlanVersionWitnessV2 private constructor(
                     val deferredImageV3 = materialTable.authenticatesDeferredImageV3(authority)
                     if (entry.program.versionI32 == 3 && !deferredImageV3) return null
                     if ((entry.program.versionI32 == 4 || deferredImageV3) != (authority is PlanDrawMaterialAuthority.MaterialV4)) return null
-                    if ((entry.program.versionI32 == 5) != (authority is PlanDrawMaterialAuthority.MaterialV5)) return null
+                    if ((entry.program.versionI32 in 5..6) != (authority is PlanDrawMaterialAuthority.MaterialV5)) return null
                     entry.program.versionI32
                 }
             } catch (_: IllegalArgumentException) {
@@ -115,7 +115,7 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
     private fun validates(commandIdI32: Int, ref: MaterialPlanRef): Boolean =
         materialWitness.validates() && refsByCommandId[commandIdI32] == ref &&
             ref.indexI32 < table.sizeI32 &&
-            (table.entry(ref).program.versionI32 in setOf(1,2,4,5) ||
+            (table.entry(ref).program.versionI32 in setOf(1,2,4,5,6) ||
                 table.authenticatesDeferredImageV3(authoritiesByCommandIdI32.getValue(commandIdI32))) &&
             (table.entry(ref).bindings.versionI32 == table.entry(ref).program.versionI32 ||
                 table.entry(ref).program.versionI32 == 4 &&

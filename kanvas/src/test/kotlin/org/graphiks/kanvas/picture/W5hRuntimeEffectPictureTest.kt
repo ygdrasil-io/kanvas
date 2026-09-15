@@ -14,6 +14,53 @@ import org.junit.jupiter.api.Test
 import kotlin.test.*
 
 class W5hRuntimeEffectPictureTest {
+    @OptIn(ExperimentalUnsignedTypes::class)
+    @Test fun positivePictureReplaysRuntimePixels() {
+        val picture = assertNotNull(Picture.fromByteArray(positivePicture().toByteArray()))
+        val surface = org.graphiks.kanvas.surface.Surface(2, 1)
+        surface.canvas { picture.playback(this) }
+        repeat(2) {
+            val pixels = surface.render().pixels
+            for (pixel in 0..1) {
+                assertTrue(pixels[pixel * 4].toInt() in 187..188)
+                assertEquals(0, pixels[pixel * 4 + 1].toInt())
+                assertEquals(0, pixels[pixel * 4 + 2].toInt())
+                assertTrue(pixels[pixel * 4 + 3].toInt() in 127..128)
+            }
+        }
+    }
+
+    @OptIn(ExperimentalUnsignedTypes::class)
+    @Test fun historicalV0RenderRefusesAndSameSurfaceRecovers() {
+        val bytes=historicalFixture()
+        val original="compiled-d949d49d".encodeToByteArray()
+        val taskId="task3-v0-history1"
+        val replacement=taskId.encodeToByteArray()
+        assertEquals(original.size,replacement.size)
+        bytes.indices.filter { offset -> offset+original.size <= bytes.size &&
+            bytes.copyOfRange(offset,offset+original.size).contentEquals(original) }.forEach { offset ->
+            replacement.copyInto(bytes,offset)
+        }
+        val positive=assertNotNull(RuntimeEffect.registered(ID,1))
+        val historical = assertNotNull(Picture.fromByteArray(bytes))
+        assertNull(RuntimeEffect.registered(taskId,1))
+        assertEquals(positive.abiHash,assertNotNull(RuntimeEffect.registered(ID,1)).abiHash)
+        val surface = org.graphiks.kanvas.surface.Surface(2, 1)
+        surface.canvas { historical.playback(this) }
+        val failure = assertFailsWith<IllegalStateException> { surface.render() }
+        assertEquals("unsupported.material.runtime_effect.unregistered_semantics", failure.message.orEmpty().substringBefore(':'))
+        surface.discardRecordedOperations()
+        surface.canvas { positivePicture().playback(this) }
+        repeat(2) {
+            val pixels = surface.render().pixels
+            for (pixel in 0..1) {
+                assertTrue(pixels[pixel * 4].toInt() in 187..188)
+                assertEquals(0, pixels[pixel * 4 + 1].toInt())
+                assertEquals(0, pixels[pixel * 4 + 2].toInt())
+                assertTrue(pixels[pixel * 4 + 3].toInt() in 127..128)
+            }
+        }
+    }
     @Test fun positiveDescriptorAndValuesRoundTrip() {
         val picture = positivePicture()
         val bytes = picture.toByteArray()

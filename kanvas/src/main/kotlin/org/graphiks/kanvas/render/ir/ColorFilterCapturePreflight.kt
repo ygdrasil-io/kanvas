@@ -11,7 +11,7 @@ import org.graphiks.kanvas.paint.Shader
 /** Metadata only. Even runtime/merge child collections are traversed without copying. */
 @OptIn(ExperimentalUnsignedTypes::class)
 internal object ColorFilterCapturePreflight {
-    fun validatePaint(paint: Paint, limits: SceneCaptureLimits): RenderDiagnostic? {
+    fun validatePaint(paint: Paint, limits: SceneCaptureLimits, reserveRuntimeUniformBytes: (Long)->Unit = {}): RenderDiagnostic? {
         data class Frame(val children: Iterator<Any>, val depthI32: Int, val parent: Any?)
         fun diagnostic(code: String, message: String) = RenderDiagnostic(RenderDiagnosticCode(code),
             RenderDiagnosticDomain.SCENE, RenderDiagnosticSeverity.ERROR, message)
@@ -20,6 +20,8 @@ internal object ColorFilterCapturePreflight {
         stack.addLast(Frame(listOfNotNull(paint.shader, paint.colorFilter, paint.maskFilter,
             paint.pathEffect, paint.imageFilter, paint.blender).iterator(), 1, null))
         var countI32 = 0
+        var runtimeUniformBytesI64 = 0L
+        var runtimeSourceSeen = false
         while (stack.isNotEmpty()) {
             val frame = stack.peekLast()
             if (!frame.children.hasNext()) {
@@ -28,12 +30,41 @@ internal object ColorFilterCapturePreflight {
                 continue
             }
             val value = frame.children.next()
+            if(value is Shader.RuntimeEffect) runtimeSourceSeen=true
             if (active.put(value, Unit) != null)
                 return diagnostic("cyclic-effect-graph", "Paint, effect, or material graph contains an identity cycle")
             if (frame.depthI32 > minOf(limits.maxDepth, limits.graphLimits.maxDepth))
-                return diagnostic("graph-depth-limit", "Paint, effect, or material graph exceeds configured depth")
+                return diagnostic(if(runtimeSourceSeen) org.graphiks.kanvas.gpu.plan.W5hPlanDiagnostics.Budget else "graph-depth-limit",
+                    "Paint, effect, or material graph exceeds configured depth")
             if (++countI32 > limits.graphLimits.maxNodes)
-                return diagnostic("graph-node-limit", "Paint, effect, or material graph exceeds configured nodes")
+                return diagnostic(if(runtimeSourceSeen) org.graphiks.kanvas.gpu.plan.W5hPlanDiagnostics.Budget else "graph-node-limit",
+                    "Paint, effect, or material graph exceeds configured nodes")
+            val runtimeUniforms = when (value) {
+                is Shader.RuntimeEffect -> value.uniforms
+                is ColorFilter.RuntimeEffect -> value.uniforms
+                is ImageFilter.RuntimeEffect -> value.uniforms
+                else -> null
+            }
+            runtimeUniforms?.entries?.values?.forEach { uniform ->
+                val sizeI64 = when (uniform) {
+                    is org.graphiks.kanvas.pipeline.UniformValue.F1, is org.graphiks.kanvas.pipeline.UniformValue.I1 -> 4L
+                    is org.graphiks.kanvas.pipeline.UniformValue.F2 -> 8L
+                    is org.graphiks.kanvas.pipeline.UniformValue.F3 -> 12L
+                    is org.graphiks.kanvas.pipeline.UniformValue.F4 -> 16L
+                    is org.graphiks.kanvas.pipeline.UniformValue.M3 -> 48L
+                    is org.graphiks.kanvas.pipeline.UniformValue.M4 -> 64L
+                }
+                runtimeUniformBytesI64 = try { Math.addExact(runtimeUniformBytesI64, sizeI64) }
+                    catch (_: ArithmeticException) {
+                        return diagnostic("unsupported.material.runtime_effect.budget", "Runtime uniform byte count overflows I64")
+                    }
+                if (runtimeUniformBytesI64 > limits.maxRuntimeUniformBytesI64)
+                    return diagnostic(org.graphiks.kanvas.gpu.plan.W5hPlanDiagnostics.Budget, "Runtime uniforms exceed the capture byte budget")
+                reserveRuntimeUniformBytes(sizeI64)
+                if(value is Shader.RuntimeEffect && value.effect.semanticVersionI32 > 0 &&
+                    uniform is org.graphiks.kanvas.pipeline.UniformValue.F1 && !uniform.v.isFinite())
+                    return diagnostic(org.graphiks.kanvas.gpu.plan.W5hPlanDiagnostics.CpuUniforms,"Runtime scalar uniform must be finite")
+            }
             if (value is ColorFilter.Matrix) for (indexI32 in 0 until 20) {
                 if (!value.matrix[indexI32].isFinite())
                     return diagnostic("non-finite-value", "color-filter.matrix must be finite")

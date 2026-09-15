@@ -520,17 +520,7 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
     @Synchronized
     override fun sourceTemplate(pipeline: GPURenderPipeline): GPUW5aGeometryPipelineTemplate? {
         val (key, acquired) = live.entries.singleOrNull { it.value.pipeline === pipeline } ?: return null
-        val result = when (key.componentIdentity) {
-            PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY -> buildCorePrimitiveNativeShader()
-            PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY -> buildCorePrimitiveAnalyticShapeNativeShader()
-            PRODUCTION_CORE_PRIMITIVE_ANALYTIC_DRRECT_COMPONENT_IDENTITY -> buildCorePrimitiveAnalyticDRRectNativeShader()
-            PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY -> buildCorePrimitiveAnalyticClipNativeShader()
-            PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY -> buildCorePrimitiveAnalyticIntersection4NativeShader()
-            PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY -> buildCorePrimitiveCoverageMaskConsumerNativeShader()
-            else -> return null
-        }
-        val source = (result as? GPUCorePrimitiveNativeShaderResult.Ready)?.plan?.wgslSource ?: return null
-        return GPUW5aGeometryPipelineTemplate(source,
+        return GPUW5aGeometryPipelineTemplate(key.pipelineIdentity.toString(),
             corePrimitiveWgpu4kRenderPipelineDescriptor(key.pipelineIdentity, acquired.shader, acquired.pipelineLayout),
             acquired.bindGroupLayout, materialCoordinateSlot = MaterialCoordinateSlotV1.FragmentPosition)
     }
@@ -951,6 +941,20 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
         reason: GPUWgpu4kCorePrimitiveSessionCacheRefusal,
     ) = GPUWgpu4kCorePrimitiveSessionCacheAcquire.Refused(reason)
 
+}
+
+/** Same pure geometry recipe is used at frame sealing and native realization. */
+internal fun corePrimitiveMaterialGeometryWgslV1(component: GPUWgpu4kCorePrimitiveComponentIdentity): String? {
+    val result = when (component) {
+        PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY -> buildCorePrimitiveNativeShader()
+        PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY -> buildCorePrimitiveAnalyticShapeNativeShader()
+        PRODUCTION_CORE_PRIMITIVE_ANALYTIC_DRRECT_COMPONENT_IDENTITY -> buildCorePrimitiveAnalyticDRRectNativeShader()
+        PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY -> buildCorePrimitiveAnalyticClipNativeShader()
+        PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY -> buildCorePrimitiveAnalyticIntersection4NativeShader()
+        PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY -> buildCorePrimitiveCoverageMaskConsumerNativeShader()
+        else -> return null
+    }
+    return (result as? GPUCorePrimitiveNativeShaderResult.Ready)?.plan?.wgslSource
 }
 
 private fun GPUWgpu4kCorePrimitiveComponentIdentity.uniformBindingSizeBytes(): ULong = when (this) {

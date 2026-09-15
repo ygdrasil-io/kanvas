@@ -44,7 +44,8 @@ import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.matrix.mapPathFillInputF64
 
 /** Closed W4c capability for bounded solid hard-edge path fills. */
-public class W4cPathFillPlanCompiler : GpuPlanCompiler {
+public class W4cPathFillPlanCompiler internal constructor(private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot) : GpuPlanCompiler {
+    public constructor() : this(RuntimeEffectSemanticCatalogSnapshot.Unbound)
     override fun select(
         scene: SceneSnapshot,
         target: RenderTargetDescriptor,
@@ -213,7 +214,7 @@ public class W4cPathFillPlanCompiler : GpuPlanCompiler {
                 } catch (_: ArithmeticException) {
                     return DrawRecognition.ResourceLimit("Frame attempted-edge count overflowed")
                 }
-                val source = when (val planned = EffectiveMaterialPlanner.normalizeSourcesV4(node, FORMAT.blendTargetClampV1(), scissor)) {
+                val source = when (val planned = EffectiveMaterialPlanner.normalizeSourcesV4(node, FORMAT.blendTargetClampV1(), scissor,runtimeCatalog=runtimeCatalog)) {
                     EffectiveMaterialPlanner.SourceNormalizationV4.NoOp -> return DrawRecognition.NoOp(attemptedAfter)
                     is EffectiveMaterialPlanner.SourceNormalizationV4.Refused -> return DrawRecognition.MaterialRefused(
                         EffectiveMaterialPlanner.Result.Refused(planned.diagnosticCode), attemptedAfter)

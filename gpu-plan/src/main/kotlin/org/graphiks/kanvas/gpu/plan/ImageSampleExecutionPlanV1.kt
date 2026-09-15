@@ -140,7 +140,7 @@ public class ImageSampleExecutionPlanV1 internal constructor(
 ) {
     public val tileX: ImageTileAxisModePlanV1 get() = tileModes.x
     public val tileY: ImageTileAxisModePlanV1 get() = tileModes.y
-    public val cacheRequest: PlanCacheResourceRequest get() = upload.cacheRequest
+    public val cacheRequest: PlanCacheResourceRequest.Texture get() = upload.cacheRequest
     // Cells stay inside a single logical ImageDraw; their representation is already math-owned.
     public val cellSelection: ImageCellSelectionPlanV1? get() = numericAuthority.cellSelection
     public fun copySourceCellsF32(): List<RectF32> = cellSelection?.samples?.map { it.cell.copySourceF32() } ?: listOf(coordinates.copySourceF32())

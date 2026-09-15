@@ -40,8 +40,14 @@ public class ColorSourceProofV1 private constructor(
         }
     public fun copyOperationGraph(): ColorOperationGraphV1 = graph
     public val composedBindingLayout: ComposedBindingLayoutV1? get() = composedDefinition?.layout
+    public val composedProgramV6: ComposedMaterialProgramV6? get() = composedDefinition?.program
     public val composedImageResources: List<ComposedImageResourceV5> get() =
         composedDefinition?.imageReferences?.map { it.binding }.orEmpty()
+    public val runtimeResources: List<RuntimeEffectResourceReferenceV1> get() = composedDefinition?.runtimeResources.orEmpty()
+    public fun authenticatesRuntimeResource(reference: RuntimeEffectResourceReferenceV1): Boolean =
+        composedDefinition?.let { definition -> definition.frameOwner.owns(definition.captured) &&
+            definition.runtimeResources.any { it === reference } && definition.layout.resources.any { it === reference.resource }
+        } == true
     public val noiseTableSlab: NoiseTableSlabV1? get() = composedDefinition?.noiseSlab
     public fun authenticatesComposedNoise(resource: ComposedBindingLayoutV1.Resource, slab: NoiseTableSlabV1): Boolean =
         composedDefinition?.let { definition -> definition.noiseSlab === slab && slab.owner === definition.frameOwner &&

@@ -23,15 +23,24 @@ interface DisplayListBuffer {
 
 /** In-memory buffer that owns a defensive geometry snapshot at both boundaries. */
 internal class SnapshotDisplayListBuffer(
-    captureLimits: SceneCaptureLimits = SceneCaptureLimits.DEFAULT,
+    private val captureLimits: SceneCaptureLimits = SceneCaptureLimits.DEFAULT,
 ) : SnapshotOwningDisplayListBuffer {
     private val recorded = mutableListOf<DisplayOp>()
-    private val gradientStops = RecordingGradientStopBudget(captureLimits.maxGradientStopsI32)
-    private val imageBytes = RecordingImageByteBudget(captureLimits.maxImageBytesI64)
-    private val appendContext = GeometrySnapshotContext(gradientStops, imageBytes, captureLimits)
+    private var gradientStops = RecordingGradientStopBudget(captureLimits.maxGradientStopsI32)
+    private var imageBytes = RecordingImageByteBudget(captureLimits.maxImageBytesI64)
+    private var runtimeUniforms = RecordingRuntimeUniformByteBudget(captureLimits.maxRuntimeUniformBytesI64)
+    private var appendContext = GeometrySnapshotContext(gradientStops, imageBytes, captureLimits,runtimeUniforms)
+
+    fun discardRecordedOperations() {
+        recorded.clear()
+        gradientStops = RecordingGradientStopBudget(captureLimits.maxGradientStopsI32)
+        imageBytes = RecordingImageByteBudget(captureLimits.maxImageBytesI64)
+        runtimeUniforms = RecordingRuntimeUniformByteBudget(captureLimits.maxRuntimeUniformBytesI64)
+        appendContext = GeometrySnapshotContext(gradientStops, imageBytes, captureLimits,runtimeUniforms)
+    }
 
     override fun append(op: DisplayOp) {
-        gradientStops.append { imageBytes.append { appendContext.append(op) { recorded += it } } }
+        gradientStops.append { imageBytes.append { runtimeUniforms.append { appendContext.append(op) { recorded += it } } } }
     }
 
     override fun ops(): List<DisplayOp> {
@@ -56,10 +65,11 @@ internal class GeometrySnapshotDisplayListBuffer(
 ) : DisplayListBuffer {
     private val gradientStops = RecordingGradientStopBudget(SceneCaptureLimits.DEFAULT.maxGradientStopsI32)
     private val imageBytes = RecordingImageByteBudget(SceneCaptureLimits.DEFAULT.maxImageBytesI64)
-    private val appendContext = GeometrySnapshotContext(gradientStops, imageBytes)
+    private val runtimeUniforms = RecordingRuntimeUniformByteBudget(SceneCaptureLimits.DEFAULT.maxRuntimeUniformBytesI64)
+    private val appendContext = GeometrySnapshotContext(gradientStops, imageBytes,runtimeUniforms=runtimeUniforms)
 
     override fun append(op: DisplayOp) {
-        gradientStops.append { imageBytes.append { appendContext.append(op, delegate::append) } }
+        gradientStops.append { imageBytes.append { runtimeUniforms.append { appendContext.append(op, delegate::append) } } }
     }
 
     override fun ops(): List<DisplayOp> {
@@ -142,4 +152,21 @@ internal class RecordingImageByteBudget(private val maxImageBytesI64: Long) {
             limitI32 = Int.MAX_VALUE,
             requestedI64 = requestedBytesI64,
         )
+}
+
+/** Occurrences are charged even when immutable uniform blocks are shared by several draws. */
+internal class RecordingRuntimeUniformByteBudget(private val limitI64: Long) {
+    private var committedI64=0L
+    private var pendingI64=0L
+    fun reserve(bytesI64: Long) {
+        val requested=try { Math.addExact(Math.addExact(committedI64,pendingI64),bytesI64) }
+            catch(_: ArithmeticException) { Long.MAX_VALUE }
+        if(requested > limitI64) throw SceneRecordingLimitException(RenderDiagnostic(
+            RenderDiagnosticCode(org.graphiks.kanvas.gpu.plan.W5hPlanDiagnostics.Budget),RenderDiagnosticDomain.SCENE,
+            RenderDiagnosticSeverity.ERROR,"Recording runtime uniforms request $requested bytes, exceeding $limitI64"),Int.MAX_VALUE,requested)
+        pendingI64=Math.addExact(pendingI64,bytesI64)
+    }
+    fun append(block: ()->Unit) {
+        try { block(); committedI64=Math.addExact(committedI64,pendingI64) } finally { pendingI64=0L }
+    }
 }

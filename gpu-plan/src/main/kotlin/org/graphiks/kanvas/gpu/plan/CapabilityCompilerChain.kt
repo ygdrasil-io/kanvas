@@ -11,6 +11,7 @@ import org.graphiks.kanvas.render.ir.SceneSnapshot
 /** Selects the first semantic capability candidate, preserving ordered gaps. */
 public class CapabilityCompilerChain private constructor(
     private val compilers: List<GpuPlanCompiler>,
+    private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
 ) : GpuPlanCompiler {
     override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) {
@@ -106,7 +107,11 @@ public class CapabilityCompilerChain private constructor(
     }
 
     public companion object {
-        public fun of(compilers: List<GpuPlanCompiler>): CapabilityCompilerChain {
+        /** Unbound legacy callers cannot admit a positive runtime source. */
+        public fun of(compilers: List<GpuPlanCompiler>): CapabilityCompilerChain =
+            of(compilers, RuntimeEffectSemanticCatalogSnapshot.Unbound)
+
+        public fun of(compilers: List<GpuPlanCompiler>, runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): CapabilityCompilerChain {
             require(compilers.isNotEmpty()) { "CapabilityCompilerChain requires at least one compiler" }
             val ordered = compilers.toMutableList()
             val lastNarrowPathIndex = ordered.indexOfLast { compiler ->
@@ -119,7 +124,21 @@ public class CapabilityCompilerChain private constructor(
             if (w4dGeneralIndex >= 0 && ordered.none { it is W4eClipPlanCompiler }) {
                 ordered.add(w4dGeneralIndex + 1, W4eClipPlanCompiler())
             }
-            return CapabilityCompilerChain(ordered)
+            return CapabilityCompilerChain(ordered.map { it.bindRuntimeCatalog(runtimeCatalog) }, runtimeCatalog)
         }
     }
+}
+
+/** Bind by immutable copy before selection; no compiler mutates its semantic scope. */
+internal fun GpuPlanCompiler.bindRuntimeCatalog(catalog: RuntimeEffectSemanticCatalogSnapshot): GpuPlanCompiler = when (this) {
+    is W3SolidRectPlanCompiler -> W3SolidRectPlanCompiler(catalog)
+    is W4aAnalyticRectPlanCompiler -> W4aAnalyticRectPlanCompiler(catalog)
+    is W4bAnalyticRRectPlanCompiler -> W4bAnalyticRRectPlanCompiler(catalog)
+    is W4cPathFillPlanCompiler -> W4cPathFillPlanCompiler(catalog)
+    is W4dPathStrokePlanCompiler -> withRuntimeCatalog(catalog)
+    is W4dGeneralPathPlanCompiler -> withRuntimeCatalog(catalog)
+    is W4eClipPlanCompiler -> withRuntimeCatalog(catalog)
+    is W5eImagePlanCompiler -> W5eImagePlanCompiler(catalog)
+    is W5aCompositePlanCompiler -> withRuntimeCatalog(catalog)
+    else -> this
 }

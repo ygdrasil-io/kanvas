@@ -67,6 +67,12 @@ class Surface(
     fun canvas(): Canvas { if (canvasInstance == null) canvasInstance = Canvas(buffer); return canvasInstance!! }
 
     /**
+     * Discard retained draws after a terminal refusal so this surface can record a new frame.
+     * Canvas transform, clip and save state are preserved; recording resource budgets restart.
+     */
+    fun discardRecordedOperations() { buffer.discardRecordedOperations() }
+
+    /**
      * Render all recorded drawing commands to a pixel buffer.
      *
      * The returned [RenderResult] contains the rasterised pixels, any diagnostics

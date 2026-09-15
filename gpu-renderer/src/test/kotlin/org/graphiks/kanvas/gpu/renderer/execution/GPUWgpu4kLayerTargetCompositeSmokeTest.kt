@@ -336,6 +336,10 @@ class GPUWgpu4kLayerTargetCompositeSmokeTest {
         try {
             val materialization = materializer.materializeReusable(
                 fixture.framePlan,
+                when (val preflight = preflightW5hFrameSourcesV1(fixture.framePlan)) {
+                    is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                    is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+                },
                 fixture.encoderPlan,
                 fixture.resources,
                 fixture.generationSeal,

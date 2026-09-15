@@ -729,6 +729,11 @@ internal class GPUFramePreflighter(
             )
         }
 
+        val sourceWitness = when (val sources = preflightW5hFrameSourcesV1(framePlan)) {
+            is W5hFrameSourcePreflightResultV1.Validated -> sources.witness
+            is W5hFrameSourcePreflightResultV1.Refused -> return GPUFramePreflightResult.Refused(
+                diagnostic(sources.diagnostics.first().code.value, sources.diagnostics.joinToString("; ") { it.message }))
+        }
         val ownerScope = try {
             resourceProvider.beginFramePreparation(framePlan.frameId.value, context.deviceGeneration).ownerScope
         } catch (failure: Throwable) {
@@ -887,6 +892,7 @@ internal class GPUFramePreflighter(
         acquiredAnyResource = true
         val renderMaterialization = materializeRenderOperands(
             framePlan,
+            sourceWitness,
             ownerScope,
             corePrimitiveDirectRoutes,
             corePrimitiveClipStencilPreparedRoutes,
@@ -1071,7 +1077,7 @@ internal class GPUFramePreflighter(
         var nativeOwnership: GPUPreparedNativeFrameOwnership? = null
         nativeBoundary?.let { boundary ->
             val materialization = try {
-                boundary.materializeReusable(framePlan, encoderPlan, resources, generationSeal)
+                boundary.materializeReusable(framePlan, sourceWitness, encoderPlan, resources, generationSeal)
             } catch (failure: Throwable) {
                 return refuseWithRollback(
                     rollback,
@@ -8249,6 +8255,7 @@ internal class GPUFramePreflighter(
 
     private fun materializeRenderOperands(
         framePlan: GPUFramePlan,
+        sourceWitness: W5hFrameSourceValidationWitnessV1,
         ownerScope: String,
         corePrimitiveDirectRoutes: GPUCorePrimitiveDirectNativeFrameRouteSeal,
         corePrimitiveClipStencilPreparedRoutes:
@@ -8256,6 +8263,7 @@ internal class GPUFramePreflighter(
         corePrimitiveCoverageMaskPreparedRoutes:
             GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal,
     ): GPUResourceMaterializationDecision {
+        require(sourceWitness.authenticates(framePlan))
         val renderScopes = framePlan.steps.mapIndexedNotNull { sourceStepIndex, step ->
             (step as? GPUFrameStep.RenderPassStep)?.let { render ->
                 Triple(

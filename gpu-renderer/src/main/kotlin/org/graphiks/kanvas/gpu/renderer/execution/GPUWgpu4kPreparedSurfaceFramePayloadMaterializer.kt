@@ -70,10 +70,12 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
     @Synchronized
     override fun materializeReusable(
         framePlan: GPUFramePlan,
+        sourceWitness: W5hFrameSourceValidationWitnessV1,
         encoderPlan: GPUCommandEncoderPlan,
         resources: GPUPreparedResourceSet,
         generationSeal: GPUPreparedGenerationSeal,
     ): GPUPreparedNativeFramePayloadMaterialization {
+        require(sourceWitness.authenticates(framePlan)) { "W5h source witness belongs to another frame root" }
         if (closed || consumed) {
             return refused(
                 "unsupported.prepared-surface.materializer-state",

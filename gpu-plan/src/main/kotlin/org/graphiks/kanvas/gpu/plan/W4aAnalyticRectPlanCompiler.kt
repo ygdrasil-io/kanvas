@@ -35,7 +35,8 @@ import org.graphiks.math.geometry.SizeI32
 import org.graphiks.math.matrix.Matrix3x3F32
 
 /** W4a's closed capability: fractional solid rectangles with analytic scalar AA. */
-public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
+public class W4aAnalyticRectPlanCompiler internal constructor(private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot) : GpuPlanCompiler {
+    public constructor() : this(RuntimeEffectSemanticCatalogSnapshot.Unbound)
     override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) {
             return invalidSelection(diag(W4aPlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "Scene and target descriptors disagree"))
@@ -233,7 +234,7 @@ public class W4aAnalyticRectPlanCompiler : GpuPlanCompiler {
         if (visible.isEmpty) return DrawRecognition.Gap("Draw is fully clipped out")
         val raster = rasterBounds(visible) ?: return DrawRecognition.Gap("Visible raster bounds exceed I32")
         return when (val planned = EffectiveMaterialPlanner.normalizeSourcesV4(node, FORMAT.blendTargetClampV1(), raster,
-            CoveragePlan.AnalyticScalarAA,legacyGradientBoundsI32=null)) {
+            CoveragePlan.AnalyticScalarAA,legacyGradientBoundsI32=null,runtimeCatalog=runtimeCatalog)) {
             EffectiveMaterialPlanner.SourceNormalizationV4.NoOp -> DrawRecognition.NoOp(hasFractionalEdge(device))
             is EffectiveMaterialPlanner.SourceNormalizationV4.Refused -> DrawRecognition.MaterialRefused(
                 EffectiveMaterialPlanner.Result.Refused(planned.diagnosticCode), hasFractionalEdge(device))

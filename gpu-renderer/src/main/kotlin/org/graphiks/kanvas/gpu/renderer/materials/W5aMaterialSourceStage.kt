@@ -50,13 +50,23 @@ internal class W5aMaterialSourceStage private constructor(
                         require(gradientStopSlab != null && requireNotNull(composedProof).authenticatesComposedStorage(it,gradientStopSlab))
                     org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.NOISE_U32 ->
                         require(noiseTableSlab != null && requireNotNull(composedProof).authenticatesComposedNoise(it,noiseTableSlab))
+                    org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.RUNTIME_READ ->
+                        require(requireNotNull(composedProof).runtimeResources.single { reference -> reference.resource === it }
+                            .let(composedProof::authenticatesRuntimeResource))
                 }
                 Binding(it.bindingI32,"storageBuffer",it)
             }
             2u -> {
-                val image=requireNotNull(composedProof).composedImageResources.first { image -> image.resource === it }
-                require(composedProof.authenticatesComposedImage(it,image.upload))
+                val proof=requireNotNull(composedProof)
+                val image=proof.composedImageResources.firstOrNull { image -> image.resource === it }
+                require(if(image != null) proof.authenticatesComposedImage(it,image.upload)
+                    else proof.runtimeResources.single { reference -> reference.resource === it }.let(proof::authenticatesRuntimeResource))
                 Binding(it.bindingI32,"sampledTexture",it)
+            }
+            3u -> {
+                val proof=requireNotNull(composedProof)
+                require(proof.runtimeResources.single { reference -> reference.resource === it }.let(proof::authenticatesRuntimeResource))
+                Binding(it.bindingI32,"sampler",it)
             }
             else -> error("Invalid composed resource")
         }
@@ -119,6 +129,7 @@ internal class W5aMaterialSourceStage private constructor(
                 $imageDeclaration
                 $composedTextures
                 $composedAddresses
+                ${W5hRuntimeEffectEmitterV1.resourceDeclarations(proof)}
                 $W5D_SAFE_DIVIDE_WGSL
                 fn w5f_device_point(pixel: vec2<f32>) -> vec2<f32> { return pixel; }
                 fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {

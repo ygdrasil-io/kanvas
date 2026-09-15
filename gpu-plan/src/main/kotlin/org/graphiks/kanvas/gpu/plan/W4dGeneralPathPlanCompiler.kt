@@ -80,7 +80,10 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     private val forceAaFrame: Boolean = false,
     /** W4e inserts its clip consumers before promoting the shared material/resource graph. */
     private val retainGeometryConstructionGraph: Boolean = false,
+    private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot = RuntimeEffectSemanticCatalogSnapshot.Unbound,
 ) : GpuPlanCompiler {
+    internal fun withRuntimeCatalog(catalog: RuntimeEffectSemanticCatalogSnapshot): W4dGeneralPathPlanCompiler =
+        W4dGeneralPathPlanCompiler(strokePolicyF64, acceptsNarrowTransforms, forceAaFrame, retainGeometryConstructionGraph, catalog)
     public constructor() : this(PathStrokePolicyF64())
 
     /**
@@ -264,7 +267,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                 ) return DrawResult.Limit("W4d.2 winding path exceeds the stencil edge limit")
                 val source = when (val planned = EffectiveMaterialPlanner.normalizeSourcesV4(
                     if (node.paint?.colorFilter == null) node.copy(effects = EffectStack.Empty) else node,
-                    FORMAT.blendTargetClampV1(),scissor)) {
+                    FORMAT.blendTargetClampV1(),scissor,runtimeCatalog=runtimeCatalog)) {
                     is EffectiveMaterialPlanner.SourceNormalizationV4.Refused -> return DrawResult.MaterialRefused(
                         EffectiveMaterialPlanner.Result.Refused(planned.diagnosticCode), prepared.frameWorkUsageI64)
                     EffectiveMaterialPlanner.SourceNormalizationV4.NoOp -> return DrawResult.NoOp(prepared.frameWorkUsageI64)

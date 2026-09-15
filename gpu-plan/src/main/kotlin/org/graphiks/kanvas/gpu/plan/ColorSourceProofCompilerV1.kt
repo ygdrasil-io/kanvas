@@ -67,6 +67,11 @@ internal object ColorSourceProofCompilerV1 {
                     words[offset] = original.alpha.toRawBits()
                     ColorOperationGraphV1(child().outputs.map { ColorOperationGraphV1.Scalar.Multiply(it,ColorOperationGraphV1.Scalar.DynamicF32(offset)) })
                 }
+                is org.graphiks.kanvas.render.ir.MaterialNode.RuntimeEffect -> {
+                    val numeric = requireNotNull(node.runtime).numericGraph as NumericOperationGraphV1.RuntimeChildOpacity
+                    words[offset] = (original.uniforms().getValue("alpha") as org.graphiks.kanvas.render.ir.RuntimeUniformValue.F1).value.toRawBits()
+                    numeric.colorGraph.bindInput(child(),offset)
+                }
                 is org.graphiks.kanvas.render.ir.MaterialNode.WithColorFilter -> {
                     val filter = requireNotNull(node.filter)
                     filter.forEachWord { index,value -> words[Math.addExact(offset,index)] = value }
@@ -160,7 +165,8 @@ internal object ColorSourceProofCompilerV1 {
             entries += MaterialEvaluationDagV5.Entry(node.ownerNodeIndexI32,node.children,node.gradientSource?.coordinates ?:
                 node.imageSource?.coordinates?.let(SourceCoordinatesV4::V2) ?:
                 node.noiseSource?.coordinates?.let(SourceCoordinatesV4::V2) ?: SourceCoordinatesV4.None,
-                ComposedMaterialProgramV5(MaterialProgramPlanId("composed-evaluation-v5:${node.topologyIdentity}:${graph.canonicalIdentity}"),graph))
+                ComposedMaterialProgramV5(MaterialProgramPlanId(if (node.runtime != null) "runtime-effect-v1"
+                    else "composed-evaluation-v5:${node.topologyIdentity}:${graph.canonicalIdentity}"),graph))
         }
         return ComposedGraph(MaterialEvaluationDagV5.of(entries),graphs.last(),words,tables,integers)
     }

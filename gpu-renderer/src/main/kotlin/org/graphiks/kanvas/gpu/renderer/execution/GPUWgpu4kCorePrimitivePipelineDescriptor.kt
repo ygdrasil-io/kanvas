@@ -1062,27 +1062,23 @@ internal fun corePrimitiveWgpu4kRenderPipelineDescriptor(
                 CORE_PRIMITIVE_NATIVE_COLOR_FRAGMENT_ENTRY_POINT
             },
             targets = listOf(
-                ColorTargetState(
-                    format = when (identity.targetFormat) {
-                        "rgba8unorm" -> GPUTextureFormat.RGBA8Unorm
-                        "rgba8unorm-srgb" -> GPUTextureFormat.RGBA8UnormSrgb
-                        "bgra8unorm" -> GPUTextureFormat.BGRA8Unorm
-                        else -> error("Validated CorePrimitive target format became unsupported")
-                    },
-                    blend = when {
-                        producer -> null
-                        else -> identity.blendProgram.toWgpuBlendStateOrNull()
-                    },
-                    writeMask = if (identity.blendProgram.writesColor()) {
-                        GPUColorWrite.All
-                    } else {
-                        GPUColorWrite.None
-                    },
-                ),
+                corePrimitiveColorTargetStateV1(identity, producer),
             ),
         ),
     )
 }
+
+internal fun corePrimitiveColorTargetStateV1(identity: GPUWgpu4kCorePrimitiveRenderPipelineIdentity,
+    producer: Boolean = false): ColorTargetState = ColorTargetState(
+    format = when (identity.targetFormat) {
+        "rgba8unorm" -> GPUTextureFormat.RGBA8Unorm
+        "rgba8unorm-srgb" -> GPUTextureFormat.RGBA8UnormSrgb
+        "bgra8unorm" -> GPUTextureFormat.BGRA8Unorm
+        else -> error("Validated CorePrimitive target format became unsupported")
+    },
+    blend = if (producer) null else identity.blendProgram.toWgpuBlendStateOrNull(),
+    writeMask = if (identity.blendProgram.writesColor()) GPUColorWrite.All else GPUColorWrite.None,
+)
 
 internal fun isSupportedCorePrimitiveRenderPipelineIdentity(
     identity: GPUWgpu4kCorePrimitiveRenderPipelineIdentity,

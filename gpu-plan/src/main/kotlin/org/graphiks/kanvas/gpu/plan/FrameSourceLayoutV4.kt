@@ -36,6 +36,7 @@ internal class FrameSourceLayoutV4 private constructor(
     private val legacyAllocations = immutableList(legacyAllocations)
     private val imageInventory = immutableList(imageInventory)
     private val imageDescriptions = immutableList(imageDescriptions)
+    private val runtimeInventory = immutableList(sources.flatMap { it.composed?.runtimeResources.orEmpty() })
     val noiseRanges: List<NoiseTableRangeV1> = immutableList(noiseRanges)
     fun noiseRange(normalizedSeedI32: Int): NoiseTableRangeV1 =
         noiseRanges.single { it.normalizedSeedI32 == normalizedSeedI32 }
@@ -99,7 +100,7 @@ internal class FrameSourceLayoutV4 private constructor(
                     val proof = ColorSourceProofV1.issueComposed(definition)
                         ?: throw IllegalArgumentException(if (definition.noiseReferences.isNotEmpty())
                             W5gPlanDiagnostics.NoiseNumericDomainUnbounded else W5gPlanDiagnostics.NumericDomainUnbounded)
-                    MaterialPlanTable.of(listOf(MaterialPlanEntry(definition.program,ComposedMaterialBindingV5(definition,proof),definition.slab)))
+                    MaterialPlanTable.of(listOf(MaterialPlanEntry(definition.program,ComposedMaterialBindingV6(definition,proof),definition.slab)))
                 } else if (source.image != null) {
                     val resolved = source.image.bind(source.image.child?.let(::bind),
                         Math.addExact(Math.addExact(nonUniformBytesI64,stopBytesI64),uniformBytesI64),
@@ -239,7 +240,8 @@ internal class FrameSourceLayoutV4 private constructor(
                 binding.upload === prepared.imageUpload(description)
         } } && issuedImages.size == imageDescriptions.size) { W5gPlanDiagnostics.Schema }
         val actualUploads=java.util.IdentityHashMap<ImageUploadPlanV1,Unit>()
-        (actualV4.values.mapNotNull { it.proof.imageExecution?.upload } + composedImages.map { it.upload })
+        (actualV4.values.mapNotNull { it.proof.imageExecution?.upload } + composedImages.map { it.upload } +
+            actualV4.values.flatMap { it.proof.runtimeResources }.mapNotNull { it.imageUpload })
             .forEach { actualUploads[it]=Unit }
         require(actualUploads.size == imageInventory.size && imageInventory.all { allocation ->
             val issued=prepared.uploads.getValue(allocation.pixels)
@@ -370,6 +372,22 @@ internal class FrameSourceLayoutV4 private constructor(
         uploads: Map<org.graphiks.kanvas.render.ir.ImageResourceSnapshot.Pixels,ImageUploadPlanV1>) {
         internal val uploads: Map<org.graphiks.kanvas.render.ir.ImageResourceSnapshot.Pixels,ImageUploadPlanV1> =
             java.util.Collections.unmodifiableMap(java.util.IdentityHashMap(uploads))
+        private val runtime = java.util.IdentityHashMap<CapturedRuntimeResourceV1,RuntimeEffectResourceReferenceV1>()
+        private val runtimeRequests = RuntimeResourceOwnerIndexV1<PlanCacheResourceRequest>()
+        fun runtimeResource(captured: CapturedRuntimeResourceV1): RuntimeEffectResourceReferenceV1 {
+            require(owner.runtimeInventory.any { it === captured }) { W5hPlanDiagnostics.Descriptor }
+            return runtime.getOrPut(captured) {
+                val image = (captured.binding as? org.graphiks.kanvas.render.ir.RuntimeEffectResourceBindingV1.SampledTexture)
+                    ?.let { requireNotNull(uploads[it.image]) }
+                val request = runtimeRequests.getOrPut(captured) { when(val binding = captured.binding) {
+                    is org.graphiks.kanvas.render.ir.RuntimeEffectResourceBindingV1.StorageRead ->
+                        PlanCacheResourceRequest.Storage(captured.descriptor.abiHash,captured.slot.logicalSlotI32,binding.bytes)
+                    is org.graphiks.kanvas.render.ir.RuntimeEffectResourceBindingV1.SampledTexture -> requireNotNull(image).cacheRequest
+                    is org.graphiks.kanvas.render.ir.RuntimeEffectResourceBindingV1.Sampler -> PlanCacheResourceRequest.Sampler(binding.type)
+                } }
+                RuntimeEffectResourceReferenceV1(captured,request,image)
+            }
+        }
         fun imageUpload(metadata: MaterialSourceConstructionV4.ImageMetadata): ImageUploadPlanV1 {
             require(owner.sources.any { it.image === metadata }) { W5fPlanDiagnostics.Schema }
             return requireNotNull(uploads[metadata.upload.pixelsOwner]) { W5fPlanDiagnostics.Schema }.also {
@@ -592,6 +610,37 @@ internal class FrameSourceLayoutV4 private constructor(
                     require(allocation.authenticates(description)) { W5gPlanDiagnostics.Schema }
                 }
                 .filter { seenImages.put(it.pixels,Unit) == null }
+            val runtimeInventory = sources.flatMap { it.composed?.runtimeResources.orEmpty() }
+            val runtimeEntries = sources.flatMap { it.composed?.nodes.orEmpty() }.mapNotNull { it.runtime }
+            val noiseWorkLimitI64 = minOf(budget.materialFrameLimits.maxNoiseOctaveEvaluationsI64,
+                runtimeEntries.minOfOrNull { it.frameLimits.maxNoiseOctaveEvaluationsI64 } ?: Long.MAX_VALUE)
+            val runtimeOwners=RuntimeResourceOwnerIndexV1<CapturedRuntimeResourceV1>()
+            val runtimeAllocations=runtimeInventory.map { runtimeOwners.getOrPut(it) { it } }.distinct()
+            runtimeInventory.mapNotNull { (it.binding as? org.graphiks.kanvas.render.ir.RuntimeEffectResourceBindingV1.SampledTexture)?.image }
+                .forEach { pixels -> imageOwners.getOrPut(pixels) {
+                    val row = Math.multiplyExact(pixels.width.toLong(),pixels.pixelFormat.bytesPerPixel.toLong())
+                    val size = Math.multiplyExact(row,pixels.height.toLong())
+                    require(pixels.width > 0 && pixels.height > 0 && pixels.rowBytes >= row && size <= Int.MAX_VALUE &&
+                        pixels.pixelFormat in setOf(org.graphiks.kanvas.render.ir.ImagePixelFormat.RGBA_8888,
+                            org.graphiks.kanvas.render.ir.ImagePixelFormat.BGRA_8888,org.graphiks.kanvas.render.ir.ImagePixelFormat.SRGBA_8888,
+                            org.graphiks.kanvas.render.ir.ImagePixelFormat.ALPHA_8)) { W5hPlanDiagnostics.Descriptor }
+                    ImageAllocation(pixels,row,size,if(pixels.pixelFormat == org.graphiks.kanvas.render.ir.ImagePixelFormat.ALPHA_8)
+                        ImagePhysicalFormatV1.R8_UNORM else ImagePhysicalFormatV1.RGBA8_UNORM,null).also { imageInventory += it }
+                } }
+            val runtimeStorage = runtimeAllocations.mapNotNull { it.binding as? org.graphiks.kanvas.render.ir.RuntimeEffectResourceBindingV1.StorageRead }
+            val runtimeBytes = runtimeStorage.fold(0L) { bytes,binding ->
+                val size = alignRuntimeStorageBytesI64(binding.bytes.sizeBytesI32.toLong())
+                require(size <= caps.maxBufferSizeBytes && caps.maxStorageBufferBindingSizeBytesI64?.let { size <= it } == true) {
+                    W5hPlanDiagnostics.Budget
+                }
+                Math.addExact(bytes,size)
+            }
+            require(runtimeAllocations.count { it.binding !is org.graphiks.kanvas.render.ir.RuntimeEffectResourceBindingV1.SampledTexture } <=
+                PlanCacheResourceRequest.MAX_RUNTIME_ENTRIES_I32 && runtimeBytes <= PlanCacheResourceRequest.MAX_RUNTIME_BYTES_I64 &&
+                imageInventory.size <= PlanCacheResourceRequest.MAX_RUNTIME_ENTRIES_I32 &&
+                imageInventory.fold(0L) { bytes,image -> Math.addExact(bytes,image.byteCountI64) } <= PlanCacheResourceRequest.MAX_RUNTIME_BYTES_I64) {
+                W5hPlanDiagnostics.Budget
+            }
             // Scalar seed decisions are deduplicated only within this physical frame slab.
             val noiseSeeds=sources.flatMap { it.composed?.nodes.orEmpty() }
                 .mapNotNull { it.noiseSource?.parameters?.normalizedSeedI32 }.distinct()
@@ -635,6 +684,7 @@ internal class FrameSourceLayoutV4 private constructor(
                 }
             }
             var noiseWork=0L
+            var runtimeLeasesI64=0L
             actualSourceDraws.forEach { (source,draw) -> source.composed?.layout?.let { layout ->
                 require(sources.any { it === source }) { W5gPlanDiagnostics.Schema }
                 val destination=draw.blend as? BlendPlan.DestinationReadV1
@@ -645,6 +695,15 @@ internal class FrameSourceLayoutV4 private constructor(
                     else -> throw IllegalArgumentException(W5gPlanDiagnostics.Binding)
                 }
                 val textures=Math.addExact(layout.resources.count { it.texture != null },finalTextures)
+                runtimeLeasesI64=Math.addExact(runtimeLeasesI64,requireNotNull(source.composed).runtimeResources.size.toLong())
+                require(runtimeLeasesI64 <= PlanCacheResourceRequest.MAX_RUNTIME_LEASES_I32) { W5hPlanDiagnostics.Budget }
+                val samplers=layout.resources.count { it.sampler != null }
+                if(samplers > 0) require(caps.maxSamplersPerShaderStageI32?.let { it >= samplers } == true) { W5hPlanDiagnostics.Budget }
+                if(layout.resources.any { it.buffer?.storageKind == ComposedBindingLayoutV1.StorageKind.RUNTIME_READ })
+                    require(caps.supportedOperations().containsAll(setOf(PlanOperationCapability.StorageBuffer,PlanOperationCapability.CopyUpload)) &&
+                        caps.maxStorageBuffersPerShaderStageI32?.let { it >= layout.resources.count { row -> row.buffer != null } } == true) {
+                        W5hPlanDiagnostics.Budget
+                    }
                 if(textures > 0) require(caps.maxSampledTexturesPerShaderStageI32?.let { it >= textures } == true) {
                     W5gPlanDiagnostics.Binding
                 }
@@ -667,13 +726,14 @@ internal class FrameSourceLayoutV4 private constructor(
                         noiseNodes.forEach { noise -> noiseWork=Math.addExact(noiseWork,
                             Math.multiplyExact(Math.multiplyExact(area,noise.parameters.octavesI32.toLong()),4L)) }
                     } catch (_: ArithmeticException) { throw IllegalArgumentException(W5gPlanDiagnostics.NoiseWork) }
-                    require(noiseWork <= budget.materialFrameLimits.maxNoiseOctaveEvaluationsI64) { W5gPlanDiagnostics.NoiseWork }
+                    require(noiseWork <= noiseWorkLimitI64) { if(runtimeEntries.isEmpty()) W5gPlanDiagnostics.NoiseWork else W5hPlanDiagnostics.Budget }
                 }
             } }
             require(sources.filter { it.composed != null }.all { source -> actualSourceDraws.any { it.first === source } }) {
                 W5gPlanDiagnostics.Schema
             }
             nonUniform=Math.addExact(nonUniform,noiseBytes)
+            nonUniform=Math.addExact(nonUniform,runtimeBytes)
             require(nonUniform <= budget.maxFrameLocalBytes) { W5gPlanDiagnostics.NoiseStorage }
             var total = nonUniform
             fun add(bytes: Long,code: String) {

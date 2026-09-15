@@ -55,7 +55,7 @@ internal object GPUW5eImageNativeV1 {
         }
         return expected.imageDraws().isNotEmpty()
     }
-    fun acquire(cache: GPUW5eDecodedImageSessionCache, request: PlanCacheResourceRequest,
+    fun acquire(cache: GPUW5eDecodedImageSessionCache, request: PlanCacheResourceRequest.Texture,
         generationI64: Long): GPUW5eDecodedImageSessionCache.Lease {
         require(cache.deviceGenerationI64 == generationI64) { "stale.material.image.device-generation" }
         return cache.acquire(request).also { require(it.generationI64 == generationI64) }

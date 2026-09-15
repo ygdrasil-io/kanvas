@@ -57,6 +57,8 @@ public class RuntimeEffectSemanticCatalogSnapshot private constructor(entries: C
     public fun builtinDescriptor(id: String, semanticVersionI32: Int): RuntimeEffectDescriptor? =
         values.values.firstOrNull { it.descriptor.id.value == id && it.descriptor.semanticVersionI32 == semanticVersionI32 }?.descriptor
     internal companion object {
+        /** Compatibility compiler scope: no registered semantic entry can be admitted. */
+        val Unbound: RuntimeEffectSemanticCatalogSnapshot = RuntimeEffectSemanticCatalogSnapshot(emptyList())
         fun of(entries: Collection<RuntimeEffectSemanticEntryV1>): RuntimeEffectSemanticCatalogSnapshot = RuntimeEffectSemanticCatalogSnapshot(entries)
     }
 }

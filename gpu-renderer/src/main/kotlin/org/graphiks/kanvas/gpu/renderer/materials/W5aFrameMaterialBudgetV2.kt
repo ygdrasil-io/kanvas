@@ -34,6 +34,7 @@ private fun GPUFramePlan.w5eImageAllocationsV3(limits: GPULimits): List<GPUFrame
         .mapNotNull { it.materialSourcePartitionV3()?.stage }
     val seen=java.util.IdentityHashMap<org.graphiks.kanvas.gpu.plan.PlanCacheResourceRequest,Unit>()
     val requests=stages.flatMap { stage -> listOfNotNull(stage.imageV3?.cacheRequest) +
+        stage.composedProof?.runtimeResources.orEmpty().mapNotNull { it.imageUpload?.cacheRequest } +
         stage.composedProof?.composedImageResources.orEmpty().map { image ->
             require(requireNotNull(stage.composedProof).authenticatesComposedImage(image.resource,image.upload))
             image.upload.cacheRequest
@@ -59,10 +60,24 @@ private fun GPUFramePlan.w5eImageAllocationsV3(limits: GPULimits): List<GPUFrame
 internal fun GPUFramePlan.w5aCombinedMemoryBudgetV2(limits: GPULimits): GPUFrameMemoryBudgetPlan =
     GPUFrameMemoryBudgetPlanner.plan(GPUFrameMemoryBudgetRequest(
         allocations = memoryBudget.allocations + w5aMaterialAllocationsV2() + w5eImageAllocationsV3(limits) +
-            w5eChildStopAllocationsV3() + w5gDeclaredStopAllocationsV5() + w5gNoiseAllocationsV1(),
+            w5eChildStopAllocationsV3() + w5gDeclaredStopAllocationsV5() + w5gNoiseAllocationsV1() + w5hRuntimeAllocationsV1(),
         configuredAggregateBudgetBytes = memoryBudget.configuredAggregateBudgetBytes,
         deviceLimits = limits,
     ))
+
+private fun GPUFramePlan.w5hRuntimeAllocationsV1(): List<GPUFrameMemoryAllocation> {
+    val references=steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+        .flatMap { it.materialSourcePartitionV3()?.stage?.composedProof?.runtimeResources.orEmpty() }
+    require(references.size <= PlanCacheResourceRequest.MAX_RUNTIME_LEASES_I32)
+    val requests=references.map { it.cacheRequest }.filter { it !is PlanCacheResourceRequest.Texture }.distinct()
+    require(requests.size <= PlanCacheResourceRequest.MAX_RUNTIME_ENTRIES_I32 &&
+        requests.fold(0L) { bytes,request -> Math.addExact(bytes,request.byteSizeI64) } <= PlanCacheResourceRequest.MAX_RUNTIME_BYTES_I64)
+    // Samplers have zero payload bytes but consume the entry/lease reservations above.
+    return requests.filterIsInstance<PlanCacheResourceRequest.Storage>().mapIndexed { index,request ->
+        GPUFrameMemoryAllocation("w5h.runtime-owner.$index",GPUFrameMemoryCategory.ReusableScratch,request.byteSizeI64,
+            GPUFrameMemoryResourceKind.Buffer,null,0,steps.size.coerceAtLeast(1))
+    }
+}
 
 /** Marks an existing graph-owned allocation, without charging that slab twice. */
 internal fun org.graphiks.kanvas.gpu.plan.RenderGraph.composedStopAllocationLabelV5(sessionIdentity: String): String? {

@@ -4,8 +4,12 @@ import org.graphiks.kanvas.render.ir.*
 import org.graphiks.math.geometry.RectF32
 
 /** A separate capability: ordered native lanes, one material table and one target lifetime. */
-public class W5aCompositePlanCompiler internal constructor(private val imageEntries: Map<Int, ImageConstructionEntryV1>) : GpuPlanCompiler {
-    public constructor() : this(emptyMap())
+public class W5aCompositePlanCompiler internal constructor(private val imageEntries: Map<Int, ImageConstructionEntryV1>,
+    private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot) : GpuPlanCompiler {
+    public constructor(runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot) : this(emptyMap(), runtimeCatalog)
+    public constructor() : this(RuntimeEffectSemanticCatalogSnapshot.Unbound)
+    internal fun withRuntimeCatalog(catalog: RuntimeEffectSemanticCatalogSnapshot): W5aCompositePlanCompiler =
+        W5aCompositePlanCompiler(imageEntries, catalog)
     private enum class LaneKind { Rect, RRect, PathFill, PathStroke, Image }
     private data class LaneClassification(val kind: LaneKind, val geometryKindI32: Int)
     private class Lane(val compiler: GpuPlanCompiler, val candidate: GpuPlanCandidate)
@@ -70,9 +74,10 @@ public class W5aCompositePlanCompiler internal constructor(private val imageEntr
                 2 -> W4cPathFillPlanCompiler()
                 else -> W4dPathStrokePlanCompiler()
             }
+            compiler = compiler.bindRuntimeCatalog(runtimeCatalog)
             var selection = compiler.select(laneScene, target)
             if (selection is GpuPlanSelection.NotCandidate && geometryKind(run.first().value) == 0) {
-                compiler = W4aAnalyticRectPlanCompiler()
+                compiler = W4aAnalyticRectPlanCompiler(runtimeCatalog)
                 selection = compiler.select(laneScene, target)
             }
             if (selection is GpuPlanSelection.NotCandidate && geometryKind(run.first().value) in setOf(2, 3) &&
@@ -81,7 +86,7 @@ public class W5aCompositePlanCompiler internal constructor(private val imageEntr
                     is BlendNode.Paint -> blend.blender == null && blend.mode != BlendMode.SRC_OVER
                     else -> false
                 } })) {
-                compiler = W4dGeneralPathPlanCompiler()
+                compiler = W4dGeneralPathPlanCompiler().withRuntimeCatalog(runtimeCatalog)
                 selection = compiler.select(laneScene, target)
             }
             when (selection) {

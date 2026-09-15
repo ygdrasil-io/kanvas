@@ -8976,6 +8976,7 @@ class GPUFramePreflighterTest {
 
         override fun materializeReusable(
             framePlan: GPUFramePlan,
+            sourceWitness: W5hFrameSourceValidationWitnessV1,
             encoderPlan: GPUCommandEncoderPlan,
             resources: GPUPreparedResourceSet,
             generationSeal: GPUPreparedGenerationSeal,
@@ -9107,6 +9108,7 @@ class GPUFramePreflighterTest {
     ) : GPUPreparedNativeFramePayloadMaterializer {
         override fun materializeReusable(
             framePlan: GPUFramePlan,
+            sourceWitness: W5hFrameSourceValidationWitnessV1,
             encoderPlan: GPUCommandEncoderPlan,
             resources: GPUPreparedResourceSet,
             generationSeal: GPUPreparedGenerationSeal,

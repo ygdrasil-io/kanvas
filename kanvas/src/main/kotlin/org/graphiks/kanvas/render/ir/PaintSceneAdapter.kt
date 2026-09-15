@@ -203,12 +203,16 @@ public object PaintSceneAdapter {
         is Shader.WithWorkingColorSpace -> MaterialNode.WithWorkingColorSpace(child(shader), ColorInterpolation.valueOf(interpolation.name))
         is Shader.CoordClamp -> MaterialNode.CoordClamp(child(shader),
             if (preserveW5dMatrices) subset.copy() else subset.checked("shader.subset"))
-        is Shader.RuntimeEffect -> MaterialNode.RuntimeEffect.of(
-            effect.toDescriptor(RuntimeEffectAbi.SHADER),
-            uniforms.toRuntimeUniforms(),
-            children.map { (name, shader) -> RuntimeMaterialChild(name, child(shader,false)) },
-            resources.toRuntimeResources(effect.toDescriptor(RuntimeEffectAbi.SHADER), captureImage),
-        )
+        is Shader.RuntimeEffect -> {
+            val descriptor=effect.toDescriptor(RuntimeEffectAbi.SHADER)
+            val capturedUniforms=uniforms.toRuntimeUniforms()
+            if(descriptor.semanticVersionI32 > 0) org.graphiks.kanvas.gpu.plan.W5hPlanDiagnostics.bindingCode(
+                RuntimeBindingValidator.validate(descriptor,capturedUniforms,children.keys.map { RuntimeChildBinding(it,RuntimeChildType.SHADER) }))
+                ?.let { throw CaptureFailure(it,"Runtime effect bindings do not match the registered descriptor") }
+            MaterialNode.RuntimeEffect.of(descriptor,capturedUniforms,
+                children.map { (name, shader) -> RuntimeMaterialChild(name, child(shader,false)) },
+                resources.toRuntimeResources(descriptor,captureImage))
+        }
         }
         active.remove(this)
         completed.getOrPut(this) { mutableMapOf() }[preserveW5dMatrices] = captured

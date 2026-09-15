@@ -75,8 +75,8 @@ public object EffectiveMaterialPlanner {
     }
     /** Original IMAGE/Rect/Path source authority, independent of its W4 construction projection. */
     internal fun planW5eImageSource(draw: DrawNode, deviceBoundsI32: org.graphiks.math.geometry.RectI32,
-        maxCellsI64: Long = 9L, constructionEntry: ImageConstructionEntryV1? = null): Result {
-        return when (val described = describeW5eImageSource(draw,deviceBoundsI32,maxCellsI64,constructionEntry,false)) {
+        maxCellsI64: Long, constructionEntry: ImageConstructionEntryV1?,runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): Result {
+        return when (val described = describeW5eImageSource(draw,deviceBoundsI32,maxCellsI64,constructionEntry,false,runtimeCatalog)) {
             is SourceConstructionResultV4.Refused -> Result.Refused(described.diagnosticCode)
             is SourceConstructionResultV4.Built -> try {
                 val image = described.value
@@ -89,6 +89,7 @@ public object EffectiveMaterialPlanner {
 
     internal fun describeW5eImageSource(draw: DrawNode,deviceBoundsI32: org.graphiks.math.geometry.RectI32,
         maxCellsI64: Long,constructionEntry: ImageConstructionEntryV1?,deferred: Boolean,
+        runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
     ): SourceConstructionResultV4<MaterialSourceConstructionV4.ImageMetadata> = try {
             val direct = draw.origin in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.IMAGE, org.graphiks.kanvas.render.ir.DrawOrigin.IMAGE_NINE,
                 org.graphiks.kanvas.render.ir.DrawOrigin.IMAGE_LATTICE, org.graphiks.kanvas.render.ir.DrawOrigin.ATLAS)
@@ -161,7 +162,7 @@ public object EffectiveMaterialPlanner {
                     transform = if (atlas != null) requireNotNull(constructionEntry).copyTransformF32() else draw.transform,
                     paint = if (atlasColor == null) draw.paint else draw.paint?.let { it.copy(color = it.color.withAlpha(255)) })
                 if (deferred) when (val captured = normalizeSourcesV4(childDraw,
-                    PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1(),deviceBoundsI32,imageMaskChild=true)) {
+                    PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1(),deviceBoundsI32,imageMaskChild=true,runtimeCatalog=runtimeCatalog)) {
                     is SourceNormalizationV4.Source -> captured.captured
                     is SourceNormalizationV4.Refused -> throw IllegalArgumentException(captured.diagnosticCode)
                     SourceNormalizationV4.NoOp -> error(W5eImagePlanDiagnostics.InvalidContract)
@@ -268,7 +269,8 @@ public object EffectiveMaterialPlanner {
         bounds: org.graphiks.math.geometry.RectI32,coverage: CoveragePlan = CoveragePlan.FullOrScissor,
         sample: SamplePlan = SamplePlan.SingleSample,
         legacyGradientBoundsI32: org.graphiks.math.geometry.RectI32? = bounds,
-        imageMaskChild: Boolean = false): SourceNormalizationV4 {
+        imageMaskChild: Boolean = false,
+        runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): SourceNormalizationV4 {
         val coordinateNodes = mutableListOf<CoordinateNodeV2>()
         var leaf = if (imageMaskChild) imageMaskMaterial(draw) else draw.material
         var filtered = !imageMaskChild && draw.paint?.colorFilter != null
@@ -303,7 +305,7 @@ public object EffectiveMaterialPlanner {
                 if (coverage == CoveragePlan.AnalyticScalarAA) BlendCoverageApplicationV1.SourceMultiplication
                 else BlendCoverageApplicationV1.DestinationInterpolation)
                 ?: return SourceNormalizationV4.Refused(W5aPlanDiagnostics.UnsupportedDrawState)
-            return when(val captured = MaterialSourceConstructionV4.capture(draw,SourceCoordinatesV4.None,actualBounds,blend,imageMaskChild)) {
+            return when(val captured = MaterialSourceConstructionV4.capture(draw,SourceCoordinatesV4.None,actualBounds,blend,imageMaskChild,runtimeCatalog)) {
                 is SourceConstructionResultV4.Built -> if (blend == BlendPlan.NoOpV1 && !imageMaskChild)
                     SourceNormalizationV4.NoOp else SourceNormalizationV4.Source(captured.value)
                 is SourceConstructionResultV4.Refused -> SourceNormalizationV4.Refused(captured.diagnosticCode)
@@ -342,7 +344,7 @@ public object EffectiveMaterialPlanner {
             is MaterialCoordinatePlanV2.Build.Ready -> SourceCoordinatesV4.V2(built.coordinates)
             is MaterialCoordinatePlanV2.Build.Refused -> return SourceNormalizationV4.Refused(built.code)
         }
-        return when (val captured = MaterialSourceConstructionV4.capture(draw,coordinates,actualBounds,blend,imageMaskChild)) {
+        return when (val captured = MaterialSourceConstructionV4.capture(draw,coordinates,actualBounds,blend,imageMaskChild,runtimeCatalog)) {
             is SourceConstructionResultV4.Built -> if (!collapses) SourceNormalizationV4.Source(captured.value)
                 else when (val solid = collapseOriginalStopV4(captured.value)) {
                     is Result.Ready -> SourceNormalizationV4.Source(MaterialSourceConstructionV4.retain(draw,solid,actualBounds))

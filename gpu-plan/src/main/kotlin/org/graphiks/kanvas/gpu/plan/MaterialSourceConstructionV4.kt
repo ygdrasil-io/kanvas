@@ -129,6 +129,7 @@ internal class MaterialSourceConstructionV4 private constructor(
     val gradient: GradientMetadata?,
     val image: ImageMetadata? = null,
     val composed: ComposedMetadata? = null,
+    private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot? = null,
 ) {
     private val bounds = bounds.copy()
     val deviceBoundsF32: RectF32 get() = bounds.copy()
@@ -251,16 +252,27 @@ internal class MaterialSourceConstructionV4 private constructor(
 
     internal class ComposedMetadata(nodes: List<Node>, val layout: ComposedBindingLayoutV1) {
         val nodes: List<Node> = immutableList(nodes)
+        val runtimeResources: List<CapturedRuntimeResourceV1> = immutableList(this.nodes.filter { it.runtime != null }
+            .distinctBy { it.ownerNodeIndexI32 }.sortedBy { it.ownerNodeIndexI32 }.flatMap { node ->
+                val original = node.original as MaterialNode.RuntimeEffect
+                original.descriptor.logicalResources.map { slot ->
+                    CapturedRuntimeResourceV1(node.ownerNodeIndexI32,original.descriptor,slot,
+                        original.resources.single { it.logicalSlotI32 == slot.logicalSlotI32 }.binding,
+                        layout.resources.single { it.ownerNodeIndexI32 == node.ownerNodeIndexI32 && it.logicalSlotI32 == slot.logicalSlotI32 })
+                }
+            })
         class Node(val ownerNodeIndexI32: Int, val original: MaterialNode, children: List<MaterialEvaluationRefV5>,
             val offsetBytesI32: Int, val filter: ColorFilterExecutionPlanV1?,
             val gradientSource: MaterialSourceConstructionV4? = null,
             val imageSource: ImageChildMetadata? = null,
-            val noiseSource: NoiseChildMetadata? = null) {
+            val noiseSource: NoiseChildMetadata? = null,
+            val runtime: RuntimeEffectSemanticEntryV1? = null) {
             val children: List<MaterialEvaluationRefV5> = immutableList(children)
             val topologyIdentity: String = when (original) {
                 MaterialNode.Transparent -> "transparent"
                 is MaterialNode.Solid -> "solid"
                 is MaterialNode.Opacity -> "opacity"
+                is MaterialNode.RuntimeEffect -> "runtime-effect-v1"
                 is MaterialNode.Blend -> "blend:${original.mode}"
                 is MaterialNode.WithColorFilter -> "filter:${requireNotNull(filter).structuralIdentity}"
                 is MaterialNode.WithWorkingColorSpace -> "working:${original.interpolation}"
@@ -284,7 +296,7 @@ internal class MaterialSourceConstructionV4 private constructor(
 
     companion object {
         fun containsComposed(root: MaterialNode): Boolean = when (root) {
-            is MaterialNode.Blend, is MaterialNode.PerlinNoise, is MaterialNode.FractalNoise -> true
+            is MaterialNode.Blend, is MaterialNode.PerlinNoise, is MaterialNode.FractalNoise, is MaterialNode.RuntimeEffect -> true
             is MaterialNode.Opacity -> containsComposed(root.material)
             is MaterialNode.WithColorFilter -> containsComposed(root.material)
             is MaterialNode.WithWorkingColorSpace -> containsComposed(root.material)
@@ -292,7 +304,8 @@ internal class MaterialSourceConstructionV4 private constructor(
             is MaterialNode.CoordClamp -> containsComposed(root.material)
             else -> false
         }
-        private fun captureComposed(draw: DrawNode,bounds: RectF32,blend: BlendPlan): MaterialSourceConstructionV4 {
+        private fun captureComposed(draw: DrawNode,bounds: RectF32,blend: BlendPlan,
+            runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): MaterialSourceConstructionV4 {
             var sliceLeaf = draw.material
             while (true) sliceLeaf = when (val node = sliceLeaf) {
                 is MaterialNode.Opacity -> node.material
@@ -313,7 +326,7 @@ internal class MaterialSourceConstructionV4 private constructor(
             data class Field(val owner: Int,val ordinal: Int,val bytes: Long)
             data class Draft(val owner: Int,val original: MaterialNode,val children: List<MaterialEvaluationRefV5>,
                 val field: Field?,val filter: ColorFilterExecutionPlanV1?,val gradient: MaterialSourceConstructionV4?,
-                val image: ImageChildMetadata?, val noise: NoiseChildMetadata?)
+                val image: ImageChildMetadata?, val noise: NoiseChildMetadata?, val runtime: RuntimeEffectSemanticEntryV1?)
             val completed = java.util.IdentityHashMap<MaterialNode,MutableMap<Context,MaterialEvaluationRefV5>>()
             val ownerIndices = java.util.IdentityHashMap<MaterialNode,Int>()
             val scalarFields = java.util.IdentityHashMap<MaterialNode,Field>()
@@ -323,11 +336,14 @@ internal class MaterialSourceConstructionV4 private constructor(
             var owners = 0
             var cursor = 0L
             var occurrences = 0
+            var maximumDepthI32 = 0
+            val runtimeEntries = java.util.IdentityHashMap<MaterialNode.RuntimeEffect,RuntimeEffectSemanticEntryV1>()
             val limits = org.graphiks.kanvas.render.ir.GraphLimits()
             // Validate original occurrences separately from immutable metadata reuse
             // and from the two synthesized paint nodes, which are not public input.
             fun validate(node: MaterialNode,depth: Int) {
                 require(depth <= limits.maxDepth && ++occurrences <= limits.maxNodes && active.put(node,Unit) == null) { W5gPlanDiagnostics.Schema }
+                maximumDepthI32=maxOf(maximumDepthI32,depth)
                 when (node) {
                     is MaterialNode.Blend -> { validate(node.dst,depth+1); validate(node.src,depth+1) }
                     is MaterialNode.Opacity -> validate(node.material,depth+1)
@@ -335,11 +351,18 @@ internal class MaterialSourceConstructionV4 private constructor(
                     is MaterialNode.WithWorkingColorSpace -> validate(node.material,depth+1)
                     is MaterialNode.WithLocalMatrix -> validate(node.material,depth+1)
                     is MaterialNode.CoordClamp -> validate(node.material,depth+1)
+                    is MaterialNode.RuntimeEffect -> {
+                        runtimeEntries.getOrPut(node) { RuntimeEffectExpectationV1.validate(node,runtimeCatalog) }
+                        node.forEach { validate(it.material,depth+1) }
+                    }
                     else -> Unit
                 }
                 active.remove(node)
             }
             validate(draw.material,1)
+            require(runtimeEntries.values.all { occurrences <= it.graphLimits.maxNodes && maximumDepthI32 <= it.graphLimits.maxDepth }) {
+                W5hPlanDiagnostics.Budget
+            }
             fun gradientSource(node: MaterialNode,context: Context): MaterialSourceConstructionV4 {
                 val coordinateNodes = context.coordinateNodes.map { when(it) {
                     is MaterialNode.WithLocalMatrix -> CoordinateNodeV2.LocalMatrix(it.matrix)
@@ -364,7 +387,7 @@ internal class MaterialSourceConstructionV4 private constructor(
                 } }
                 val childDraw = draw.copy(material=wrapped,paint=draw.paint?.copy(shader=wrapped,
                     color=ColorARGB.White,colorFilter=null),effects=org.graphiks.kanvas.render.ir.EffectStack.Empty)
-                return when(val captured=capture(childDraw,coordinates,bounds,blend)) {
+                return when(val captured=capture(childDraw,coordinates,bounds,blend,runtimeCatalog=runtimeCatalog)) {
                     is SourceConstructionResultV4.Built -> captured.value
                     is SourceConstructionResultV4.Refused -> throw IllegalArgumentException(captured.diagnosticCode)
                 }
@@ -373,6 +396,7 @@ internal class MaterialSourceConstructionV4 private constructor(
                 require(active.put(node,Unit) == null) { W5gPlanDiagnostics.Schema }
                 completed[node]?.get(context)?.let { active.remove(node); return it }
                 val owner = ownerIndices.getOrPut(node) { owners++ }
+                val runtime = (node as? MaterialNode.RuntimeEffect)?.let { runtimeEntries.getValue(it) }
                 val filter = (node as? MaterialNode.WithColorFilter)?.let { compileFilter(it.filter) }
                 val gradient = when(node) {
                     is MaterialNode.LinearGradient,is MaterialNode.RadialGradient,is MaterialNode.SweepGradient,
@@ -412,6 +436,7 @@ internal class MaterialSourceConstructionV4 private constructor(
                 }
                 val bytes = when(node) {
                     MaterialNode.Transparent, is MaterialNode.Solid, is MaterialNode.Opacity -> 16L
+                    is MaterialNode.RuntimeEffect -> requireNotNull(runtime).descriptor.uniformBlock.sizeBytesI32.toLong()
                     is MaterialNode.WithColorFilter -> requireNotNull(filter).dynamicByteCountI64
                     is MaterialNode.Blend, is MaterialNode.WithWorkingColorSpace,
                     is MaterialNode.WithLocalMatrix,is MaterialNode.CoordClamp -> 0L
@@ -437,9 +462,10 @@ internal class MaterialSourceConstructionV4 private constructor(
                         context.copy(coordinateNodes=context.coordinateNodes+node)))
                     is MaterialNode.CoordClamp -> listOf(visit(node.material,
                         context.copy(coordinateNodes=context.coordinateNodes+node)))
+                    is MaterialNode.RuntimeEffect -> node.map { visit(it.material,context) }
                     else -> emptyList()
                 }
-                drafts += Draft(owner,node,children,field,filter,gradient,image,noise)
+                drafts += Draft(owner,node,children,field,filter,gradient,image,noise,runtime)
                 active.remove(node)
                 return MaterialEvaluationRefV5(drafts.lastIndex).also { completed.getOrPut(node) { mutableMapOf() }[context] = it }
             }
@@ -454,21 +480,40 @@ internal class MaterialSourceConstructionV4 private constructor(
                 val base=cursor
                 fields.filter { it.owner == owner }.forEach { field ->
                     offsets[field]=Math.toIntExact(cursor)
-                    mappings += ComposedBindingLayoutV1.UniformMapping(owner,Math.toIntExact(cursor-base),
+                    val runtime = drafts.first { it.field === field }.runtime
+                    if (runtime == null) mappings += ComposedBindingLayoutV1.UniformMapping(owner,Math.toIntExact(cursor-base),
                         Math.toIntExact(cursor),Math.toIntExact(field.bytes),16)
+                    else runtime.descriptor.uniformBlock.slots.forEach { slot ->
+                        mappings += ComposedBindingLayoutV1.UniformMapping(owner,slot.offsetBytesI32,
+                            Math.toIntExact(Math.addExact(cursor,slot.offsetBytesI32.toLong())),slot.sizeBytesI32,slot.alignmentBytesI32)
+                    }
                     cursor=Math.addExact(cursor,field.bytes)
                     require(cursor <= Int.MAX_VALUE.toLong() && cursor <= UInt.MAX_VALUE.toLong()) { W5gPlanDiagnostics.Uniform }
                 }
             }
             drafts.forEach { nodes += ComposedMetadata.Node(it.owner,it.original,it.children,
-                it.field?.let(offsets::getValue) ?: 0,it.filter,it.gradient,it.image,it.noise) }
+                it.field?.let(offsets::getValue) ?: 0,it.filter,it.gradient,it.image,it.noise,it.runtime) }
             val firstGradientOwner=nodes.filter { it.gradientSource?.hasGradientStorage == true }.minOfOrNull { it.ownerNodeIndexI32 }
             val firstNoiseOwner=nodes.filter { it.noiseSource != null }
                 .minOfOrNull { it.ownerNodeIndexI32 }
-            val resourceOwners=nodes.filter { it.imageSource != null }.map { it.ownerNodeIndexI32 }.distinct() +
-                listOfNotNull(firstGradientOwner,firstNoiseOwner)
-            val resources=resourceOwners.sorted().mapIndexed { index,owner ->
-                if(owner == firstGradientOwner) ComposedBindingLayoutV1.Resource(owner,0,1,index+1,2u,1u,
+            val resourceOwners=nodes.filter { it.imageSource != null }.map { it.ownerNodeIndexI32 to 0 }.distinct() +
+                listOfNotNull(firstGradientOwner,firstNoiseOwner).map { it to 0 } + nodes.filter { it.runtime != null }
+                    .distinctBy { it.ownerNodeIndexI32 }.flatMap { node -> requireNotNull(node.runtime).descriptor.logicalResources.map {
+                        node.ownerNodeIndexI32 to it.logicalSlotI32 } }
+            val resources=resourceOwners.sortedWith(compareBy({it.first},{it.second})).mapIndexed { index,(owner,logicalSlot) ->
+                val runtime = nodes.firstOrNull { it.ownerNodeIndexI32 == owner }?.runtime
+                if (runtime != null) when (val facts = runtime.descriptor.logicalResources.single { it.logicalSlotI32 == logicalSlot }.facts) {
+                    is org.graphiks.kanvas.render.ir.RuntimeLogicalResourceFactsV1.StorageRead -> ComposedBindingLayoutV1.Resource(owner,logicalSlot,1,index+1,2u,1u,
+                        buffer=ComposedBindingLayoutV1.Buffer(2u,alignRuntimeStorageBytesI64(facts.minBindingSizeBytesI64),storageKind=ComposedBindingLayoutV1.StorageKind.RUNTIME_READ))
+                    is org.graphiks.kanvas.render.ir.RuntimeLogicalResourceFactsV1.Texture2DFloatFilterable -> ComposedBindingLayoutV1.Resource(owner,logicalSlot,1,index+1,2u,2u,
+                        texture=ComposedBindingLayoutV1.Texture(1u,1u,facts.multisampled))
+                    is org.graphiks.kanvas.render.ir.RuntimeLogicalResourceFactsV1.Sampler -> ComposedBindingLayoutV1.Resource(owner,logicalSlot,1,index+1,2u,3u,
+                        sampler=ComposedBindingLayoutV1.Sampler(when(facts.type) {
+                            org.graphiks.kanvas.render.ir.RuntimeSamplerTypeV1.FILTERING -> 1u
+                            org.graphiks.kanvas.render.ir.RuntimeSamplerTypeV1.NON_FILTERING -> 2u
+                        }))
+                }
+                else if(owner == firstGradientOwner) ComposedBindingLayoutV1.Resource(owner,0,1,index+1,2u,1u,
                     buffer=ComposedBindingLayoutV1.Buffer(2u,32L))
                 else if(owner == firstNoiseOwner) ComposedBindingLayoutV1.Resource(owner,0,1,index+1,2u,1u,
                     buffer=ComposedBindingLayoutV1.Buffer(2u,16L,storageKind=ComposedBindingLayoutV1.StorageKind.NOISE_U32))
@@ -476,7 +521,7 @@ internal class MaterialSourceConstructionV4 private constructor(
             }
             val metadata = ComposedMetadata(nodes,ComposedBindingLayoutV1(mappings,cursor,resources))
             return MaterialSourceConstructionV4(draw.material,draw.paint,SourceCoordinatesV4.None,bounds,blend,
-                "captured-composed-v5:${java.util.UUID.randomUUID()}",null,null,composed=metadata)
+                "captured-composed-v6:${java.util.UUID.randomUUID()}",null,null,composed=metadata,runtimeCatalog=runtimeCatalog)
         }
         /** At this leaf's prefix visit only: validate recorded metadata, never prepare a pending source. */
         private fun validatePendingGradient(source: MaterialNode) {
@@ -520,7 +565,8 @@ internal class MaterialSourceConstructionV4 private constructor(
             val tile = requested.operationGraph((degeneracy as? SweepGradientDegeneracyV1)?.sweepFullCoverage == true)
             GradientStopCursorV4.of(stops,tile.effectiveMode,source is MaterialNode.ConicalGradient)
         }
-        fun captureImage(metadata: ImageMetadata,bounds: RectF32,blend: BlendPlan): MaterialSourceConstructionV4 {
+        fun captureImage(metadata: ImageMetadata,bounds: RectF32,blend: BlendPlan,
+            runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): MaterialSourceConstructionV4 {
             val identity = buildString {
                 append("captured-image-source-v4:").append(metadata.upload.contentIdentity)
                 append(':').append(metadata.coordinates.canonicalIdentity).append(':').append(metadata.color)
@@ -537,7 +583,7 @@ internal class MaterialSourceConstructionV4 private constructor(
                 append(':').append(bounds.right.toRawBits()).append(':').append(bounds.bottom.toRawBits())
             }
             return MaterialSourceConstructionV4(metadata.originalDraw.material,metadata.originalDraw.paint,
-                SourceCoordinatesV4.V3(metadata.coordinates),bounds,blend,identity,null,null,metadata)
+                SourceCoordinatesV4.V3(metadata.coordinates),bounds,blend,identity,null,null,metadata,runtimeCatalog=runtimeCatalog)
         }
 
         fun retain(draw: DrawNode, resolved: EffectiveMaterialPlanner.Result.Ready, bounds: RectF32): MaterialSourceConstructionV4 =
@@ -553,11 +599,12 @@ internal class MaterialSourceConstructionV4 private constructor(
             }, bounds, resolved.blend, resolved.table.sourceIdentity(resolved.root), resolved, null)
 
         fun capture(draw: DrawNode, coordinates: SourceCoordinatesV4, bounds: RectF32,
-            blend: BlendPlan,imageMaskChild: Boolean = false): SourceConstructionResultV4<MaterialSourceConstructionV4> = try {
+            blend: BlendPlan,imageMaskChild: Boolean = false,
+            runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): SourceConstructionResultV4<MaterialSourceConstructionV4> = try {
             require(bounds.isFinite() && bounds.isSorted()) { W5fPlanDiagnostics.Schema }
             if (containsComposed(draw.material)) {
                 require(!imageMaskChild) { W5gPlanDiagnostics.Unpromoted }
-                SourceConstructionResultV4.Built(captureComposed(draw,bounds,blend))
+                SourceConstructionResultV4.Built(captureComposed(draw,bounds,blend,runtimeCatalog))
             } else {
             require(imageMaskChild || draw.origin in setOf(DrawOrigin.RECT, DrawOrigin.RRECT, DrawOrigin.PATH) &&
                 draw.resource == null && draw.operationBlendMode == null) { W5fPlanDiagnostics.Unpromoted }
@@ -658,7 +705,7 @@ internal class MaterialSourceConstructionV4 private constructor(
                 "${coordinates.identityV4()}:${bounds.left.toRawBits()}:${bounds.top.toRawBits()}:" +
                 "${bounds.right.toRawBits()}:${bounds.bottom.toRawBits()}:$blend:${metadata.rangeIdentity}"
             SourceConstructionResultV4.Built(MaterialSourceConstructionV4(original, draw.paint,
-                coordinates, bounds, blend, identity, null, metadata))
+                coordinates, bounds, blend, identity, null, metadata,runtimeCatalog=runtimeCatalog))
             }
         } catch (failure: IllegalArgumentException) {
             sourceConstructionRefusalV4(failure.message ?: W5fPlanDiagnostics.Schema)

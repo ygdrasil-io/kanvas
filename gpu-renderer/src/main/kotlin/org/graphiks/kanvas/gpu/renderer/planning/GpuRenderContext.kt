@@ -410,18 +410,20 @@ public class GpuPlanSurfaceExecutor internal constructor(
         materialFrameLimits: org.graphiks.kanvas.gpu.plan.MaterialFrameLimits =
             org.graphiks.kanvas.gpu.plan.MaterialFrameLimits(),
     ): GpuPlanSurfacePlanResult {
+        val runtimeCatalog = org.graphiks.kanvas.gpu.plan.RuntimeEffectSemanticCatalog.builtinSnapshot()
         val backend = GpuRenderBackend(
             compiler = CapabilityCompilerChain.of(
                 listOf(
-                    org.graphiks.kanvas.gpu.plan.W5eImagePlanCompiler(),
+                    org.graphiks.kanvas.gpu.plan.W5eImagePlanCompiler(runtimeCatalog),
                     W3SolidRectPlanCompiler(),
                     W4aAnalyticRectPlanCompiler(),
                     W4bAnalyticRRectPlanCompiler(),
                     W4cPathFillPlanCompiler(),
                     W4dPathStrokePlanCompiler(),
                     W4dGeneralPathPlanCompiler(),
-                    org.graphiks.kanvas.gpu.plan.W5aCompositePlanCompiler(),
+                    org.graphiks.kanvas.gpu.plan.W5aCompositePlanCompiler(runtimeCatalog),
                 ),
+                runtimeCatalog,
             ),
             context = context,
             targetConfig = GpuRenderTargetConfig(target.extent, target.colorSpace, frameLocalBudgetBytes,
