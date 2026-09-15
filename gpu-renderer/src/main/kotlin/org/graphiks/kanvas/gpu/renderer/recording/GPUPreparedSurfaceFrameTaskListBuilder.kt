@@ -131,6 +131,8 @@ data class GPUPreparedSurfaceFrameRequest(
     val w5bPointBlends: Map<Int, org.graphiks.kanvas.gpu.plan.BlendPlan> = emptyMap(),
     val w5bPointClips: Map<Int, org.graphiks.kanvas.render.ir.ClipStackNode> = emptyMap(),
     val w5bPointCaptures: Map<Int, W5bPreparedPointCaptureV3> = emptyMap(),
+    val w5hPointSources: Map<Int, org.graphiks.kanvas.gpu.plan.W5hPreparedPointMaterialV6> = emptyMap(),
+    val w5hPointBudget: org.graphiks.kanvas.gpu.plan.PlanBudget? = null,
     val synthesizedSceneClearCommandIdI32: Int? = null,
 )
 
@@ -952,7 +954,8 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         }
         if (request.semanticsByCommandId.values.any { semantic ->
                 semantic is GPUDrawSemanticPayload.CorePrimitive &&
-                    semantic.material is org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1
+                    semantic.material is org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1 &&
+                    request.w5hPointSources[semantic.payloadRef.commandIdValue]?.sourceRef != semantic.material.ref
             }
         ) return refused("invalid.material.w5a_core_authority", "W5a core material references require a sealed frame authority.")
         request.baseTaskList.tasks.filterIsInstance<GPUTask.Refused>().firstOrNull()?.let {

@@ -567,11 +567,12 @@ public class AnalyticRRectDraw private constructor(
             blend: BlendPlan = BlendPlan.LegacySrcOverV1,
             coordinates: MaterialCoordinatePlanV1? = null,
             coordinatesV2: MaterialCoordinatePlanV2? = null,
+            composedV5: Boolean = false,
         ): AnalyticRRectDraw {
             validateMaterialGeometry(commandIndexI32, origin, deviceShape, rasterBounds, scissor)
             return AnalyticRRectDraw(
                 commandIndexI32,
-                coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
+                if (composedV5) PlanDrawMaterialAuthority.MaterialV5(material) else coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
                     ?: PlanDrawMaterialAuthority.MaterialV1(material, coordinates),
                 origin,
                 deviceShape,
@@ -608,7 +609,7 @@ public fun AnalyticRRectDraw.withMaterialRef(material: MaterialPlanRef): Analyti
         AnalyticRRectDraw.ofMaterialV4(commandIndex, material, origin, copyDeviceShape(), copyRasterBounds(),
             copyScissor(), blend, it.coordinates)
     } ?: AnalyticRRectDraw.ofMaterial(commandIndex, material, origin, copyDeviceShape(), copyRasterBounds(),
-        copyScissor(), blend, materialCoordinates, materialCoordinatesV2)
+        copyScissor(), blend, materialCoordinates, materialCoordinatesV2, materialAuthority is PlanDrawMaterialAuthority.MaterialV5)
 
 /** A sealed W4c path-fill draw whose geometry authority remains owned by `:math`. */
 public class PathFillDraw private constructor(
@@ -757,10 +758,11 @@ public class PathStrokeDraw private constructor(
             blend: BlendPlan = BlendPlan.SrcOver,
             coordinates: MaterialCoordinatePlanV1? = null,
             coordinatesV2: MaterialCoordinatePlanV2? = null,
+            composedV5: Boolean = false,
         ): PathStrokeDraw {
             validateMaterialGeometry(commandIndexI32, geometryF32, scissorI32)
             return PathStrokeDraw(
-                commandIndexI32, coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
+                commandIndexI32, if (composedV5) PlanDrawMaterialAuthority.MaterialV5(material) else coordinatesV2?.let { PlanDrawMaterialAuthority.MaterialV2(material, it) }
                     ?: PlanDrawMaterialAuthority.MaterialV1(material, coordinates), geometryF32, mode, styleF64, scissorI32, blend,
             )
         }
@@ -786,7 +788,7 @@ public fun PathStrokeDraw.withMaterialRef(material: MaterialPlanRef): PathStroke
         PathStrokeDraw.ofMaterialV4(commandIndex, material, copyGeometryF32(), copyScissorI32(), mode,
             styleF64, blend, it.coordinates)
     } ?: PathStrokeDraw.ofMaterial(commandIndex, material, copyGeometryF32(), copyScissorI32(), mode,
-        styleF64, blend, materialCoordinates, materialCoordinatesV2)
+        styleF64, blend, materialCoordinates, materialCoordinatesV2, materialAuthority is PlanDrawMaterialAuthority.MaterialV5)
 
 private fun pathFillStrategy(geometryF32: PathFillGeometryF32): PathFillStrategy = when {
     geometryF32.copyDirectTriangleF32OrNull() != null && geometryF32.copyStencilEdgeFanF32OrNull() == null ->

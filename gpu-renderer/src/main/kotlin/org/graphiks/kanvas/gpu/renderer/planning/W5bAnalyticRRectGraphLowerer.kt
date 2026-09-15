@@ -57,11 +57,11 @@ internal class W5bAnalyticRRectGraphLowerer {
         require(memory.diagnostic == null && memory.peakFrameTransientBytes + memory.targetResidentBytes == graph.peakFrameLocalBytes)
         val table = requireNotNull(graph.materialPlanTableOrNull())
         val built = draws.mapIndexed { index, draw ->
-            val v4 = draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4
+            val source = draw.materialAuthority.takeIf { it.colorSourceCoordinatesV4() != null }
             W4bAnalyticRRectGraphLowerer().packet(draw,
-                if (v4 != null) org.graphiks.math.color.ColorF32.Transparent else requireNotNull(W5aMaterialPlanLowerer().lower(table,
+                if (source != null) org.graphiks.math.color.ColorF32.Transparent else requireNotNull(W5aMaterialPlanLowerer().lower(table,
                     draw.materialAuthority.materialPlanRef())), index, bounds, table, w5b = true,
-                packedSourceV4=v4?.let(graph::packedMaterialSourceV4))
+                packedSourceV4=source?.let(graph::packedMaterialSourceV4))
         }
         val packets = built.map { it.packet }
         val semantics = packets.map { it.semanticPayload as GPUDrawSemanticPayload.CorePrimitive }

@@ -300,12 +300,16 @@ public object EffectiveMaterialPlanner {
         val domain = if (leafDomain == null) null else workingDomain ?: leafDomain
         val actualBounds = org.graphiks.math.geometry.RectF32.ofLTRB(bounds.left.toFloat(),bounds.top.toFloat(),
             bounds.right.toFloat(),bounds.bottom.toFloat())
-        if (MaterialSourceConstructionV4.containsComposed(draw.material)) {
+        val promotedGeometrySource = !imageMaskChild && (draw.origin == org.graphiks.kanvas.render.ir.DrawOrigin.RRECT ||
+            draw.origin == org.graphiks.kanvas.render.ir.DrawOrigin.PATH && draw.paint?.style == org.graphiks.kanvas.render.ir.PaintStyleNode.STROKE ||
+            draw.origin in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.POINT,org.graphiks.kanvas.render.ir.DrawOrigin.POINTS))
+        if (promotedGeometrySource || MaterialSourceConstructionV4.containsComposed(draw.material)) {
             val blend = FinalBlendPlanner.plan(draw.blend,coverage,sample,targetClamp,
                 if (coverage == CoveragePlan.AnalyticScalarAA) BlendCoverageApplicationV1.SourceMultiplication
                 else BlendCoverageApplicationV1.DestinationInterpolation)
                 ?: return SourceNormalizationV4.Refused(W5aPlanDiagnostics.UnsupportedDrawState)
-            return when(val captured = MaterialSourceConstructionV4.capture(draw,SourceCoordinatesV4.None,actualBounds,blend,imageMaskChild,runtimeCatalog)) {
+            return when(val captured = MaterialSourceConstructionV4.capture(draw,SourceCoordinatesV4.None,actualBounds,blend,imageMaskChild,runtimeCatalog,
+                composedV6=promotedGeometrySource)) {
                 is SourceConstructionResultV4.Built -> if (blend == BlendPlan.NoOpV1 && !imageMaskChild)
                     SourceNormalizationV4.NoOp else SourceNormalizationV4.Source(captured.value)
                 is SourceConstructionResultV4.Refused -> SourceNormalizationV4.Refused(captured.diagnosticCode)

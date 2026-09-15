@@ -20,16 +20,16 @@ public class CapabilityCompilerChain private constructor(
             ))
         }
 
-        // Structural ownership only: no native capability or geometry promotion
-        // is asserted for the pending composed H origins.
+        // Source admission does not replace each compiler's geometry authority.
         scene.forEach { command ->
             val draw = (command as? org.graphiks.kanvas.render.ir.SceneCommand.Draw)?.node ?: return@forEach
             if (MaterialSourceConstructionV4.containsComposed(draw.material) &&
-                (draw.origin !in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.RECT,org.graphiks.kanvas.render.ir.DrawOrigin.PATH) ||
-                    draw.paint?.style != org.graphiks.kanvas.render.ir.PaintStyleNode.FILL ||
+                (!(draw.origin in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.RECT,org.graphiks.kanvas.render.ir.DrawOrigin.RRECT,
+                        org.graphiks.kanvas.render.ir.DrawOrigin.PATH) && draw.paint?.style == org.graphiks.kanvas.render.ir.PaintStyleNode.FILL ||
+                    draw.origin == org.graphiks.kanvas.render.ir.DrawOrigin.PATH && draw.paint?.style == org.graphiks.kanvas.render.ir.PaintStyleNode.STROKE) ||
                     draw.resource != null || draw.operationBlendMode != null))
                 return GpuPlanSelection.InvalidScene(listOf(diagnostic(W5gPlanDiagnostics.Unpromoted,
-                    "This composed source origin is outside the uniform-only Rect/Path fill slice.")))
+                    "This composed source origin is outside the promoted geometry source lanes.")))
         }
 
         val gaps = mutableListOf<RenderDiagnostic>()

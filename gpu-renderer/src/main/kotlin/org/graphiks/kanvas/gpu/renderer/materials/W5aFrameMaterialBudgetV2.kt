@@ -169,7 +169,9 @@ private fun GPUFramePlan.w5gDeclaredStopAllocationsV5(): List<GPUFrameMemoryAllo
                 require(witness.graph.materialPlanTableOrNull()?.gradientStopSlab === slab)
                 val scratch=witness.scratch
                 require(scratch.deviceGeneration == capabilitySeal.deviceGeneration.value)
-                val session="w3.session.${scratch.deviceGeneration}.${scratch.targetBounds.width}x${scratch.targetBounds.height}.rgba8unorm-srgb"
+                val session=if (witness.graph.capabilityId == W5bCorePrimitiveGraph.CAPABILITY_ID)
+                    scratch.target.value.removeSuffix(".target")
+                else "w3.session.${scratch.deviceGeneration}.${scratch.targetBounds.width}x${scratch.targetBounds.height}.rgba8unorm-srgb"
                 if(witness.graph.capabilityId in setOf(org.graphiks.kanvas.gpu.plan.W5bCorePrimitiveGraph.CAPABILITY_ID,
                     org.graphiks.kanvas.gpu.plan.W3SolidRectPlanCompiler.CAPABILITY_ID,
                     org.graphiks.kanvas.gpu.plan.W3SolidRectPlanCompiler.W5A_CAPABILITY_ID)) {

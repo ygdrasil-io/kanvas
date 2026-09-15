@@ -2554,6 +2554,19 @@ internal fun DisplayOp.DrawPoints.toPath(): Path = when (this.mode) {
     }
 }
 
+/** Reuse the existing Point(s) path expansion only inside W4d's admitted stroke context. */
+internal fun DisplayOp.DrawPoints.w5hStrokePathOrNull(): DisplayOp.DrawPath? {
+    if (mode == PointMode.POINTS || paint.antiAlias ||
+        !(transform.isIdentity || transform.isScaleTranslate())) return null
+    val capturedClip = org.graphiks.kanvas.render.ir.DisplayOpSceneAdapter.captureClip(clip)
+    if (capturedClip != org.graphiks.kanvas.render.ir.ClipStackNode.Empty &&
+        (capturedClip !is org.graphiks.kanvas.render.ir.ClipStackNode.DeviceRect || capturedClip.antiAlias)) return null
+    return DisplayOp.DrawPath.withSourceOperation(toPath(), paint.copy(style = org.graphiks.kanvas.paint.PaintStyle.STROKE),
+        transform, clip, sourceOperation = if (mode == PointMode.LINES)
+            org.graphiks.kanvas.canvas.DrawPathSourceOperation.DRAW_POINTS_LINES
+        else org.graphiks.kanvas.canvas.DrawPathSourceOperation.DRAW_POINTS_POLYGON)
+}
+
 private val org.graphiks.kanvas.geometry.FillType.isInverse: Boolean
     get() = this == org.graphiks.kanvas.geometry.FillType.INVERSE_WINDING ||
         this == org.graphiks.kanvas.geometry.FillType.INVERSE_EVEN_ODD

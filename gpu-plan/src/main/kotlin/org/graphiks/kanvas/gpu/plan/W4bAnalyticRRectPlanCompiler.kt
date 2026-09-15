@@ -235,7 +235,7 @@ public class W4bAnalyticRRectPlanCompiler internal constructor(private val runti
             }
             else -> return DrawRecognition.Gap("Draw geometry is outside W4b")
         }
-        if (!w4bPaint(node.paint, true) || !w4bBlend(node.blend) || node.effects !is EffectStack.Empty || node.resource != null || node.operationBlendMode != null) {
+        if (!w4bPaint(node.paint, true) || !w4bBlend(node.blend) || !colorFilterEffectsMatchPaint(node) || node.resource != null || node.operationBlendMode != null) {
             return DrawRecognition.Gap("Draw state is outside W4b")
         }
         if (!materialMatchesPaintAuthority(node)) return DrawRecognition.Gap("Draw material disagrees with paint authority")
@@ -368,7 +368,7 @@ public class W4bAnalyticRRectPlanCompiler internal constructor(private val runti
     }
 
     private fun w4bPaint(paint: PaintNode?, acceptsMaterialShader: Boolean): Boolean = paint == null || (
-        (paint.shader == null || acceptsMaterialShader) && paint.blender == null && paint.colorFilter == null &&
+        (paint.shader == null || acceptsMaterialShader) && paint.blender == null &&
             paint.maskFilter == null && paint.pathEffect == null && paint.imageFilter == null &&
             paint.style == PaintStyleNode.FILL
         )

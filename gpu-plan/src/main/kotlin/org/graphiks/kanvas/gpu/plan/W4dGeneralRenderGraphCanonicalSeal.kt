@@ -342,7 +342,6 @@ private class W4dGeneralGraphDigestWriter(private val table: MaterialPlanTable?)
         if (materialV2) {
             when (val authority = draw.materialAuthority) {
                 is PlanDrawMaterialAuthority.MaterialV5 -> {
-                    require(draw.copyPathGeometry() is PathDrawGeometry.Fill) { W5gPlanDiagnostics.Unpromoted }
                     requireNotNull(table).colorSourceProofV5(authority.ref)
                     text("$prefix.material-authority","material-v5")
                     i32("$prefix.material-ref",authority.ref.indexI32)

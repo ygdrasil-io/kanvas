@@ -241,7 +241,7 @@ internal object W5bDestinationGraphSealer {
                                 draw.copyDeviceShape(), draw.copyRasterBounds(), draw.copyScissor(), sealed, it.coordinates)
                         } ?: AnalyticRRectDraw.ofMaterial(draw.commandIndex, draw.materialAuthority.materialPlanRef(), draw.origin,
                             draw.copyDeviceShape(), draw.copyRasterBounds(), draw.copyScissor(), sealed,
-                            draw.materialCoordinates, draw.materialCoordinatesV2)
+                            draw.materialCoordinates, draw.materialCoordinatesV2, draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV5)
                         is PathFillDraw -> PathFillDraw.ofMaterial(draw.commandIndex,
                             draw.materialAuthority.materialPlanRef(),
                             draw.copyGeometryF32(), draw.strategy, draw.copyScissorI32(), sealed, draw.materialCoordinates, draw.materialCoordinatesV2,
@@ -253,7 +253,8 @@ internal object W5bDestinationGraphSealer {
                             PathStrokeDraw.ofMaterialV4(draw.commandIndex, it.ref, draw.copyGeometryF32(), draw.copyScissorI32(),
                                 draw.mode, draw.styleF64, sealed, it.coordinates)
                         } ?: PathStrokeDraw.ofMaterial(draw.commandIndex, draw.materialAuthority.materialPlanRef(), draw.copyGeometryF32(),
-                            draw.copyScissorI32(), draw.mode, draw.styleF64, sealed, draw.materialCoordinates, draw.materialCoordinatesV2)
+                            draw.copyScissorI32(), draw.mode, draw.styleF64, sealed, draw.materialCoordinates, draw.materialCoordinatesV2,
+                            draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV5)
                         else -> error("unsupported.w5b.destination-geometry")
                     })
                 } else render(draw)

@@ -117,6 +117,10 @@ internal object GPUPlanSurfaceCandidateGate {
     fun accepts(operations: List<DisplayOp>, config: RenderConfig): Boolean =
         config.gpuColorFormat == GPUColorFormat.RGBA8_UNORM_SRGB &&
             (ownsW5eImages(operations) || operations.all { operation ->
+                if (operation is DisplayOp.DrawRRect && !operation.paint.isStroke() ||
+                    operation is DisplayOp.DrawPath && operation.paint.style == org.graphiks.kanvas.paint.PaintStyle.STROKE &&
+                    operation.sourceOperation in setOf(DrawPathSourceOperation.DRAW_PATH.stableName,
+                        "drawPoints.lines", "drawPoints.polygon")) return@all true
                 if (operation.hasComposedSource()) return@all true
                 if ((operation is DisplayOp.DrawRect || operation is DisplayOp.DrawRRect ||
                         operation is DisplayOp.DrawPath) &&

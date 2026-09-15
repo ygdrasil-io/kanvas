@@ -234,7 +234,7 @@ internal class W5bNativeGeometryGraphLowerer {
                         if (draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV4) org.graphiks.math.color.ColorF32.Transparent
                         else requireNotNull(W5aMaterialPlanLowerer().lower(table,
                             draw.materialAuthority.materialPlanRef())), index, bounds, table, w5b = true,
-                        packedSourceV4=(draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let(graph::packedMaterialSourceV4)) }
+                        packedSourceV4=draw.materialAuthority.takeIf { it.colorSourceCoordinatesV4() != null }?.let(graph::packedMaterialSourceV4)) }
                     val lanePackets = built.map { it.packet }
                     val semantics = lanePackets.map { it.semanticPayload as GPUDrawSemanticPayload.CorePrimitive }
                     val semanticAuthorities = semantics.map(GPUCorePrimitivePreparedSemanticAuthority::capture)

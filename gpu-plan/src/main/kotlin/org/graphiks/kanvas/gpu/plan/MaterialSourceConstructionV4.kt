@@ -317,7 +317,9 @@ internal class MaterialSourceConstructionV4 private constructor(
             }
             val sliceCode = if (sliceLeaf is MaterialNode.PerlinNoise || sliceLeaf is MaterialNode.FractalNoise)
                 W5gPlanDiagnostics.NoiseUnpromoted else W5gPlanDiagnostics.Unpromoted
-            require(draw.origin in setOf(DrawOrigin.RECT,DrawOrigin.PATH) && draw.paint?.style == PaintStyleNode.FILL &&
+            require((draw.origin in setOf(DrawOrigin.RECT,DrawOrigin.RRECT,DrawOrigin.PATH) && draw.paint?.style == PaintStyleNode.FILL ||
+                draw.origin == DrawOrigin.PATH && draw.paint?.style == PaintStyleNode.STROKE ||
+                draw.origin in setOf(DrawOrigin.POINT,DrawOrigin.POINTS)) &&
                 draw.resource == null && draw.operationBlendMode == null) { sliceCode }
             require(colorFilterEffectsMatchPaint(draw)) { W5gPlanDiagnostics.Schema }
             val nodes = mutableListOf<ComposedMetadata.Node>()
@@ -616,13 +618,14 @@ internal class MaterialSourceConstructionV4 private constructor(
 
         fun capture(draw: DrawNode, coordinates: SourceCoordinatesV4, bounds: RectF32,
             blend: BlendPlan,imageMaskChild: Boolean = false,
-            runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): SourceConstructionResultV4<MaterialSourceConstructionV4> = try {
+            runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
+            composedV6: Boolean = false): SourceConstructionResultV4<MaterialSourceConstructionV4> = try {
             require(bounds.isFinite() && bounds.isSorted()) { W5fPlanDiagnostics.Schema }
-            if (containsComposed(draw.material)) {
+            if (composedV6 || containsComposed(draw.material)) {
                 require(!imageMaskChild) { W5gPlanDiagnostics.Unpromoted }
                 SourceConstructionResultV4.Built(captureComposed(draw,bounds,blend,runtimeCatalog))
             } else {
-            require(imageMaskChild || draw.origin in setOf(DrawOrigin.RECT, DrawOrigin.RRECT, DrawOrigin.PATH) &&
+            require(imageMaskChild || draw.origin in setOf(DrawOrigin.RECT, DrawOrigin.RRECT, DrawOrigin.PATH, DrawOrigin.POINT, DrawOrigin.POINTS) &&
                 draw.resource == null && draw.operationBlendMode == null) { W5fPlanDiagnostics.Unpromoted }
             require(colorFilterEffectsMatchPaint(draw)) { W5fPlanDiagnostics.Schema }
             val wrappers = mutableListOf<SourceUnaryMetadataV4>()

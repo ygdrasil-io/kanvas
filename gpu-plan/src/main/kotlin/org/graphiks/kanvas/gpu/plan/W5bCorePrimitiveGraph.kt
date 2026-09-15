@@ -16,7 +16,16 @@ public object W5bCorePrimitiveGraph {
         require(draws.map { it.commandIndex }.distinct().size == draws.size)
         // These bounds are owned by the admitted geometry. A fully clipped square
         // has no consumer pixels and must not issue an empty destination copy.
-        val visibleDraws = draws.filter { draw ->
+        val visibleDraws = draws.filter { draw -> isVisible(draw, extent) }
+        val targetBytesI64 = Math.multiplyExact(Math.multiplyExact(extent.width.toLong(), extent.height.toLong()), 4L)
+        val widthBytesI64 = Math.multiplyExact(extent.width.toLong(), 4L)
+        val alignmentI64 = capabilities.copyBytesPerRowAlignment.toLong()
+        val rowBytesI64 = Math.addExact(widthBytesI64, (alignmentI64 - widthBytesI64 % alignmentI64) % alignmentI64)
+        return W5bDestinationGraphSealer.seal(id, CAPABILITY_ID, extent, capabilities, budget, visibleDraws, material,
+            targetBytesI64, Math.multiplyExact(rowBytesI64, extent.height.toLong()), rowBytesI64)
+    }
+
+    internal fun isVisible(draw: PlanDraw, extent: SizeI32): Boolean {
             val bounds = when (draw) {
                 is W5bPointDraw -> draw.copyBoundsI32()
                 is SolidRectDraw -> draw.copyVisibleBounds()
@@ -27,15 +36,8 @@ public object W5bCorePrimitiveGraph {
                 is SolidRectDraw -> draw.copyScissor()
                 else -> error("Unsupported admitted Core draw")
             }
-            maxOf(0, bounds.left, scissor.left) < minOf(extent.width, bounds.right, scissor.right) &&
+            return maxOf(0, bounds.left, scissor.left) < minOf(extent.width, bounds.right, scissor.right) &&
                 maxOf(0, bounds.top, scissor.top) < minOf(extent.height, bounds.bottom, scissor.bottom)
-        }
-        val targetBytesI64 = Math.multiplyExact(Math.multiplyExact(extent.width.toLong(), extent.height.toLong()), 4L)
-        val widthBytesI64 = Math.multiplyExact(extent.width.toLong(), 4L)
-        val alignmentI64 = capabilities.copyBytesPerRowAlignment.toLong()
-        val rowBytesI64 = Math.addExact(widthBytesI64, (alignmentI64 - widthBytesI64 % alignmentI64) % alignmentI64)
-        return W5bDestinationGraphSealer.seal(id, CAPABILITY_ID, extent, capabilities, budget, visibleDraws, material,
-            targetBytesI64, Math.multiplyExact(rowBytesI64, extent.height.toLong()), rowBytesI64)
     }
 
     public fun normalizeSource(draw: DrawNode, targetClamp: BlendTargetClampV1): EffectiveMaterialPlanner.Result =
@@ -49,7 +51,7 @@ public object W5bCorePrimitiveGraph {
 /** Exact W5a device squares/fans retained independently from SolidRect. */
 public class W5bPointDraw private constructor(
     override public val commandIndex: Int,
-    override public val materialAuthority: PlanDrawMaterialAuthority.MaterialV1,
+    override public val materialAuthority: PlanDrawMaterialAuthority,
     verticesF32: FloatArray,
     indicesI32: IntArray,
     contourStartsI32: IntArray,
@@ -73,11 +75,14 @@ public class W5bPointDraw private constructor(
     public fun copyScissorI32(): RectI32 = scissor.copy()
     internal fun withBlend(plan: BlendPlan): W5bPointDraw = W5bPointDraw(commandIndex, materialAuthority,
         vertices, indices, contours, bounds, scissor, plan, clipOnly)
+    internal fun withMaterialRef(ref: MaterialPlanRef, composedV5: Boolean = materialAuthority is PlanDrawMaterialAuthority.MaterialV5): W5bPointDraw =
+        W5bPointDraw(commandIndex, if (composedV5) PlanDrawMaterialAuthority.MaterialV5(ref)
+            else PlanDrawMaterialAuthority.MaterialV1(ref), vertices, indices, contours, bounds, scissor, blend, clipOnly)
 
     public companion object {
         public fun of(commandIndexI32: Int, material: MaterialPlanRef, verticesF32: FloatArray,
             indicesI32: IntArray, contourStartsI32: IntArray, boundsI32: RectI32,
-            scissorI32: RectI32, blend: BlendPlan, clipOnly: W4eClipOnlyPlan? = null): W5bPointDraw {
+            scissorI32: RectI32, blend: BlendPlan, clipOnly: W4eClipOnlyPlan? = null, composedV5: Boolean = false): W5bPointDraw {
             require(commandIndexI32 >= 0 && !boundsI32.isEmpty && !scissorI32.isEmpty)
             require(contourStartsI32.size in 1..64 && verticesF32.size == contourStartsI32.size * 8 &&
                 indicesI32.size == contourStartsI32.size * 6 && verticesF32.all(Float::isFinite))
@@ -96,7 +101,8 @@ public class W5bPointDraw private constructor(
                     CoveragePlan.AnalyticScalarAA, SamplePlan.SingleSample, BlendTargetClampV1.Unavailable)) as BlendPlan.DestinationReadV1)
                     .copy(compositionAbiI32 = 4)
             }
-            return W5bPointDraw(commandIndexI32, PlanDrawMaterialAuthority.MaterialV1(material),
+            return W5bPointDraw(commandIndexI32, if (composedV5) PlanDrawMaterialAuthority.MaterialV5(material)
+                else PlanDrawMaterialAuthority.MaterialV1(material),
                 verticesF32, indicesI32, contourStartsI32, boundsI32, scissorI32, finalBlend, clipOnly)
         }
     }

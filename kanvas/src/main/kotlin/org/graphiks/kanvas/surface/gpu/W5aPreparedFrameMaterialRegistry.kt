@@ -30,6 +30,36 @@ internal data class W5aPreparedFrameMaterialRegistry(
     val refsByCommandId: Map<Int, MaterialPlanRef>,
 ) {
     internal companion object {
+        fun capturePointSources(operations: List<DisplayOp>, width: Int, height: Int,
+            targetClamp: org.graphiks.kanvas.gpu.plan.BlendTargetClampV1): Map<Int, org.graphiks.kanvas.gpu.plan.W5hPreparedPointMaterialV6> {
+            fun pointPaint(operation: DisplayOp) = when (operation) {
+                is DisplayOp.DrawPoint -> operation.paint
+                is DisplayOp.DrawPoints -> operation.paint.takeIf { operation.mode == PointMode.POINTS }
+                else -> null
+            }
+            val points = operations.mapNotNull(::pointPaint)
+            // This source join belongs to the existing hairline-square prepared frame.
+            // Wider/stencil and round-cap geometry keeps its historical admission.
+            if (points.isEmpty() || points.any { it.strokeWidth != 0f || it.strokeCap == StrokeCap.ROUND }) return emptyMap()
+            val catalog = org.graphiks.kanvas.gpu.plan.RuntimeEffectSemanticCatalog.builtinSnapshot()
+            val sources = linkedMapOf<Int, org.graphiks.kanvas.gpu.plan.W5hPreparedPointMaterialV6>()
+            operations.forEachIndexed { index, operation ->
+                val candidate = when (operation) {
+                    is DisplayOp.DrawPoint -> operation.paint.strokeCap != StrokeCap.ROUND
+                    is DisplayOp.DrawPoints -> operation.mode == PointMode.POINTS && operation.paint.strokeCap != StrokeCap.ROUND
+                    is DisplayOp.DrawRect -> !operation.paint.isStroke()
+                    else -> false
+                }
+                if (!candidate) return@forEachIndexed
+                val captured = DisplayOpSceneAdapter.capture(listOf(operation), SceneExtent(width, height), ColorSpace.SRGB)
+                    as? SceneCaptureResult.Captured ?: return@forEachIndexed
+                val draw = captured.scene.singleOrNull() as? SceneCommand.Draw ?: return@forEachIndexed
+                sources[index] = org.graphiks.kanvas.gpu.plan.W5hPreparedPointMaterialV6.capture(draw.node,
+                    org.graphiks.math.geometry.RectI32(0, 0, width, height), targetClamp, catalog)
+            }
+            return java.util.Collections.unmodifiableMap(sources)
+        }
+
         fun capturePointClips(operations: List<DisplayOp>): Map<Int, org.graphiks.kanvas.render.ir.ClipStackNode> =
             operations.mapIndexedNotNull { index, operation ->
                 val clip = when (operation) {
@@ -45,9 +75,11 @@ internal data class W5aPreparedFrameMaterialRegistry(
             width: Int,
             height: Int,
             targetClamp: org.graphiks.kanvas.gpu.plan.BlendTargetClampV1,
+            deferredOperationIndices: Set<Int> = emptySet(),
         ): Map<Int, EffectiveMaterialPlanner.Result.Ready> {
             val plannedByOperationIndex = linkedMapOf<Int, EffectiveMaterialPlanner.Result.Ready>()
             operations.forEachIndexed { operationIndex, operation ->
+                if (operationIndex in deferredOperationIndices) return@forEachIndexed
                 if (!operation.isW5aCoreMaterialCandidate()) return@forEachIndexed
                 val paint = when (operation) {
                     is DisplayOp.DrawRect -> operation.paint
@@ -88,7 +120,7 @@ internal data class W5aPreparedFrameMaterialRegistry(
                     is GPUDrawSemanticPayload.CorePrimitive -> {
                         val material = semantic.material as? GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1
                             ?: return@forEach
-                        requireNotNull(corePlansByCommandId[commandId]).also { require(it.root == material.ref) }
+                        corePlansByCommandId[commandId]?.also { require(it.root == material.ref) }
                     }
                     is GPUDrawSemanticPayload.TextA8 -> semantic.materialPlanProvenance?.let {
                         EffectiveMaterialPlanner.Result.Ready(it.sourcePlanTable, it.ref)

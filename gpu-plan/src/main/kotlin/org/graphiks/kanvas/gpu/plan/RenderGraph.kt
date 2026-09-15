@@ -135,6 +135,8 @@ public class RenderGraph private constructor(
                 (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw || it is PathStrokeDraw || it is GeneralPathDraw || it is W5bW4ePathDraw) &&
                     (it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1 ||
                         (it is SolidRectDraw || it is AnalyticRectDraw || it is PathFillDraw ||
+                            (it is AnalyticRRectDraw || it is PathStrokeDraw || it is GeneralPathDraw) &&
+                                it.materialAuthority is PlanDrawMaterialAuthority.MaterialV5 ||
                             it is GeneralPathDraw && it.copyPathGeometry() is PathDrawGeometry.Fill ||
                             (it is AnalyticRRectDraw || it is PathStrokeDraw || it is GeneralPathDraw) &&
                                 table?.isUnfilteredGradientV4(it.materialAuthority.materialPlanRef()) == true) &&

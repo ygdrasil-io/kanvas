@@ -247,6 +247,9 @@ enum class GPUCorePrimitiveMaterialKind(val wireId: String) {
  * finite nine-value matrices and does not interpret them.
  */
 sealed interface GPUCorePrimitiveMaterialPayload {
+    /** Opaque source owner; geometry bridges never decode the carrier's color payload. */
+    val materialSourceAuthority: org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2.MaterializedSolidV2?
+        get() = null
     val kind: GPUCorePrimitiveMaterialKind
     val tileMode: String
     val interpolation: String
@@ -257,6 +260,7 @@ sealed interface GPUCorePrimitiveMaterialPayload {
         premultipliedRgba: List<Float>,
         internal val w5aAuthority: org.graphiks.kanvas.gpu.renderer.passes.W5aCorePrimitiveMaterialAuthorityV2.MaterializedSolidV2?,
     ) : GPUCorePrimitiveMaterialPayload {
+        override val materialSourceAuthority get() = w5aAuthority
         constructor(premultipliedRgba: List<Float>) : this(premultipliedRgba, null)
 
         internal constructor(

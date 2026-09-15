@@ -755,8 +755,11 @@ private data class GPUCorePrimitivePathStencilPacketPlan(
 internal fun GPUDrawPacket.hasCorePrimitiveSemanticAuthority(
     semantic: GPUDrawSemanticPayload.CorePrimitive,
     capabilities: GPUCapabilities,
+    capturedSource: org.graphiks.kanvas.gpu.plan.W5hPreparedPointMaterialV6? = null,
 ): Boolean {
     if (!semantic.hasStructuralIntegrity()) return false
+    val opaqueSource = capturedSource != null &&
+        (semantic.material as? GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1)?.ref == capturedSource.sourceRef
     if (semantic.sourceFamily != GPUCorePrimitiveSourceFamily.Rect) {
         if (semantic.sourceFamily == GPUCorePrimitiveSourceFamily.RRect) {
             return analysisRecordId == semantic.analysisRecordId &&
@@ -800,7 +803,7 @@ internal fun GPUDrawPacket.hasCorePrimitiveSemanticAuthority(
         CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY ->
             semantic.rectRouteAuthority == GPUCorePrimitiveRectRouteAuthority.RectAxisAligned &&
                 semantic.geometry is GPUCorePrimitiveGeometry.Rect &&
-                semantic.material is GPUCorePrimitiveMaterialPayload.SolidColor
+                (opaqueSource || semantic.material is GPUCorePrimitiveMaterialPayload.SolidColor)
         "linear.gradient.fill" ->
             semantic.material is GPUCorePrimitiveMaterialPayload.LinearGradient &&
                 (

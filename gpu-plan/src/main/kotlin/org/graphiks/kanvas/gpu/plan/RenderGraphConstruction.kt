@@ -85,12 +85,17 @@ internal fun remapSourcePassesV4(sourcePasses: List<PlanPass>,
         fun draw(source: PlanDraw): PlanDraw = copied.getOrPut(source) {
             val ref = overlayReference?.invoke(source) ?: remap(source.materialAuthority.materialPlanRef())
             if (composed?.invoke(ref) == true) return@getOrPut when (source) {
+                is W5bPointDraw -> source.withMaterialRef(ref, composedV5=true)
                 is SolidRectDraw -> SolidRectDraw.ofMaterial(source.commandIndex,ref,source.copyVisibleBounds(),
                     source.copyScissor(),source.coverage,source.sample,source.blend,composedV5=true)
                 is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(source.commandIndex,ref,source.copyDeviceBounds(),
                     source.copyRasterBounds(),source.copyScissor(),source.blend,composedV5=true)
+                is AnalyticRRectDraw -> AnalyticRRectDraw.ofMaterial(source.commandIndex,ref,source.origin,source.copyDeviceShape(),
+                    source.copyRasterBounds(),source.copyScissor(),source.blend,composedV5=true)
                 is PathFillDraw -> PathFillDraw.ofMaterial(source.commandIndex,ref,source.copyGeometryF32(),source.strategy,
                     source.copyScissorI32(),source.blend,composedV5=true)
+                is PathStrokeDraw -> PathStrokeDraw.ofMaterial(source.commandIndex,ref,source.copyGeometryF32(),
+                    source.copyScissorI32(),source.mode,source.styleF64,source.blend,composedV5=true)
                 is GeneralPathDraw -> GeneralPathDraw.ofMaterial(source.commandIndex,ref,source.copyPathGeometry(),
                     source.strategy,source.copyScissorI32(),source.coverage,source.sample,source.blend,composedV5=true)
                 else -> error(W5gPlanDiagnostics.Unpromoted)
@@ -108,6 +113,7 @@ internal fun remapSourcePassesV4(sourcePasses: List<PlanPass>,
                 else -> error(W5fPlanDiagnostics.Unpromoted)
             }
             when (source) {
+                is W5bPointDraw -> source.withMaterialRef(ref)
                 is SolidRectDraw -> source.withMaterialRef(ref)
                 is AnalyticRectDraw -> source.withMaterialRef(ref)
                 is AnalyticRRectDraw -> source.withMaterialRef(ref)
@@ -174,6 +180,8 @@ internal class PackedFrameSourcesV4 private constructor(private val table: Mater
                 draw.materialAuthority.colorSourceCoordinatesV4()?.let { coordinates ->
                     val ref = draw.materialAuthority.materialPlanRef()
                     require(draw is SolidRectDraw || draw is AnalyticRectDraw || draw is PathFillDraw ||
+                        (draw is AnalyticRRectDraw || draw is PathStrokeDraw || draw is GeneralPathDraw || draw is W5bPointDraw) &&
+                            draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV5 ||
                         draw is GeneralPathDraw && draw.copyPathGeometry() is PathDrawGeometry.Fill ||
                         (draw is AnalyticRRectDraw || draw is PathStrokeDraw || draw is GeneralPathDraw) &&
                             table?.isUnfilteredGradientV4(ref) == true) { W5fPlanDiagnostics.Unpromoted }
