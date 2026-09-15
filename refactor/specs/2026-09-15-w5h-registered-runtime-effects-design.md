@@ -142,13 +142,20 @@ W5 manuscrit est interdit, même s'il possède la bonne ABI.
 Avant toute pipeline native, le renderer :
 
 1. recalcule l'`abiHash` du manifest ;
-2. l'égale byte-exactement au descriptor et à l'entrée sémantique ;
-3. égale `numericContractId` et l'identité/version CPU aux valeurs du plan ;
+2. l'égale byte-exactement à l'attente scellée dans le plan V6 ;
+3. égale `numericContractId` et l'identité/version CPU aux attentes scellées
+   dans V6 ;
 4. génère le fragment depuis le graphe numérique scellé ;
-5. refuse avant `Ready` tout graphe dont `WgslFloatEnvelopeV1` est `Unbounded` ;
-6. assemble les bindings depuis le layout composé scellé ;
-7. valide parser et reflection du module assemblé contre ce layout ;
-8. matérialise uniquement les ressources déjà planifiées.
+5. assemble les bindings depuis le layout composé scellé ;
+6. valide parser et reflection du module assemblé contre ce layout ;
+7. matérialise uniquement les ressources déjà planifiées.
+
+La comparaison descriptor/catalogue, l'identité CPU et la preuve que
+`WgslFloatEnvelopeV1` est bornée appartiennent exclusivement à `:gpu-plan` et
+sont terminées avant la publication `Ready`. Le renderer ne relit jamais
+l'entrée du catalogue sémantique ; après `Ready`, il compare seulement son
+manifest et sa reflection aux attentes immuables du plan, mais toujours avant
+pipeline et ownership natif.
 
 ### 5.4 `:kanvas`
 
@@ -294,15 +301,41 @@ L'adaptateur v0 synthétise exactement :
 - le module, les bindings et tailles déclarées historiques dans la section
   legacy v0 uniquement.
 
-Le hash v0 est le SHA-256 d'une préimage `CanonicalHashBytesV1` au domain tag
-`kanvas-runtime-effect-legacy-abi-v0`. Elle encode, dans cet ordre, l'ID, le tag
-ABI legacy (`SHADER=1`, `COLOR_FILTER=2`, `IMAGE_FILTER=3`, `BLENDER=4`), la
-liste originale des uniforms (`name`, `bindingI32`, type tag, `sizeI32`), la
-liste originale des children (`name`, type tag), le vertex layout optionnel
-(stride, step mode, puis attributes format/offset/location) et le module
-optionnel (source UTF-8, entrypoint, uniforms et textures dans l'ordre). Ce hash
-sert uniquement à l'identité et à la reconstruction legacy ; ce n'est jamais
-un `abiHash` positif W5.
+Pour `semanticVersionI32=0`, le champ `RuntimeEffectDescriptorV3.abiHash`
+transporte le SHA-256 d'une préimage `CanonicalHashBytesV1` au domain tag
+`kanvas-runtime-effect-legacy-abi-v0`. La version du descriptor sélectionne
+donc sans ambiguïté la recette legacy ou la recette positive
+`kanvas-runtime-effect-abi-v1`.
+
+La préimage v0 encode exactement, dans cet ordre :
+
+1. l'ID puis le tag ABI legacy ;
+2. la liste originale des uniforms, chacun avec `name`, `bindingI32`, type tag
+   et `sizeI32` ;
+3. la liste originale des children, chacun avec `name` et type tag ;
+4. l'option vertex layout : `strideI32`, step mode, puis liste des attributes
+   `formatTagU32`, `offsetI32`, `shaderLocationI32` ;
+5. l'option module : source UTF-8, entrypoint, liste des uniforms encodés comme
+   au point 2, puis liste des textures `name`, `bindingI32`.
+
+Les tags v0 sont exhaustifs :
+
+| Famille | Tags U32 |
+| --- | --- |
+| ABI/child | `SHADER=1`, `COLOR_FILTER=2`, `IMAGE_FILTER=3`, `BLENDER=4` |
+| uniform | `FLOAT=1`, `INT1=2`, `FLOAT2=3`, `FLOAT3=4`, `FLOAT4=5`, `MAT3X3=6`, `MAT4X4=7` |
+| vertex step | `VERTEX=1`, `INSTANCE=2` |
+| vertex format | `FLOAT32=1`, `FLOAT32X2=2`, `FLOAT32X3=3`, `FLOAT32X4=4`, `UINT8X4=5`, `SINT16X2=6`, `SINT16X4=7` |
+
+Comme pour la recette positive, le domain tag ASCII est terminé par `00`, une
+option vaut l'octet `00` ou `01` suivi de sa valeur, une liste commence par son
+count U32, une chaîne par sa longueur UTF-8 U32 et les entiers sont little-endian
+en complément à deux sur leur largeur. Tout count, longueur et cumul est validé
+en I64 puis représentable en U32 avant copie ou hash. Aucun `ordinal`, nom
+d'enum, normalisation de chaîne ou fait backend n'est utilisé.
+
+Ce hash v0 sert uniquement à l'identité et à la reconstruction legacy ; il ne
+constitue jamais un `abiHash` positif W5 et ne confère aucune capability.
 
 La reconstruction et l'installation legacy restent transactionnelles après
 validation complète de l'archive, mais sont inertes : aucun lookup renderer,
@@ -425,12 +458,17 @@ frame. Les opérations utilisent l'arithmétique checked I32/I64. Le layout
 composé, les textures, buffers, samplers, binding counts et évaluations runtime
 participent aux limites existantes avant allocation native.
 
-Le même owner immuable conserve upload, cache request, accounting et lease à
-travers toutes les lanes. Deux owners indépendants restent deux réservations,
-même si leur contenu canonique est égal. Une miss évince d'abord les seules
-entrées sans lease et refuse transactionnellement si les budgets restent
-insuffisants. Les chemins de device loss non injectables demeurent un gap
-d'intégration documenté ; aucun fake device n'est introduit pour les simuler.
+Le même owner immuable conserve upload, cache request et accounting à travers
+toutes les lanes, sans double charge. Les politiques de partage restent propres
+à chaque famille : les stop buffers peuvent être dédupliqués par contenu dans
+la frame ; deux images capturées indépendamment restent deux réservations même
+si leurs contenus sont égaux ; un cache device/session peut partager une entrée
+canonique mais retient un lease par consumer. Le budget d'admission reste
+pessimiste par requête selon le contrat de la ressource, indépendamment d'un
+cache hit mutable. Une miss évince d'abord les seules entrées sans lease et
+refuse transactionnellement si les budgets restent insuffisants. Les chemins de
+device loss non injectables demeurent un gap d'intégration documenté ; aucun
+fake device n'est introduit pour les simuler.
 
 ## 13. Stratégie de tests
 
@@ -451,8 +489,6 @@ Elles couvrent :
 - budgets cumulés de frame/device pour uniforms, bindings et ressources, avec
   refus avant ownership puis récupération ;
 - capability authentique absente lorsqu'un environnement public la fournit ;
-- refus de toute entrée cataloguée dont l'enveloppe numérique ne peut pas être
-  prouvée bornée ;
 - chaque cellule H applicable avec alpha non trivial, mutation post-capture et
   blend final non trivial ;
 - Rect, RRect, Path fill, Path stroke/hairline, Point(s), Text pré-résolu,
@@ -466,12 +502,14 @@ Les comparaisons sont byte-exactes lorsque l'enveloppe numérique est singleton,
 ou limitées aux deux codes adjacents explicitement produits par l'oracle
 analytique. Aucun seuil de similarité n'est introduit.
 
-Le catalogue livré ne contient que des graphes dont l'enveloppe est bornée. Si
-une limite native ou un graphe de catalogue invalide n'est pas constructible
-depuis l'API publique sans injection interdite, la gate est une validation de
-construction plus une review humaine, et le manque de preuve native est tracé
-comme gap d'intégration. Il n'est jamais remplacé par un mock, une capability
-fabriquée ou un test de structure.
+Le catalogue livré ne contient que des graphes dont l'enveloppe est bornée.
+Cette propriété est un invariant de construction contrôlé par l'autorité de
+plan et par review humaine ; elle ne remplace aucune gate publique et n'est pas
+utilisée pour fermer une cellule de la matrice. Comme l'enregistrement
+applicatif est hors W5h, aucune entrée positive `Unbounded` n'est constructible
+par l'API publique. Si une limite native n'est pas atteignable sans injection
+interdite, le manque de preuve reste un gap d'intégration explicite. Il n'est
+jamais remplacé par un mock, une capability fabriquée ou un test de structure.
 
 Sont interdits : tests de source shape, private/internal comme preuve,
 reflection de test, call counts, assertion d'identité de cache, mocks/fake
@@ -541,8 +579,10 @@ W5h et W5 sont fermés lorsque :
 8. les program/layout keys commencent par `deviceGeneration`, l'admission est
    pessimiste, les leases vivent jusqu'à completion, l'éviction LRU ne touche
    que les entrées sans lease et un device loss invalide toute la génération ;
-9. le même owner conserve sa ressource et son accounting entre lanes, tandis
-   que deux owners distincts ne sont jamais fusionnés par contenu ;
+9. le même owner conserve sa ressource et son accounting entre lanes ; la
+   déduplication frame-local des stops, l'indépendance des owners image et le
+   partage canonique des caches avec un lease par consumer respectent chacun
+   leur contrat propre ;
 10. les gates publiques ciblées sont vertes sans nouveau failure/error ;
 11. les 45 DrawPoint historiques restent fermés ;
 12. aucun test font, codec externe, GM, dashboard, baseline, score,
