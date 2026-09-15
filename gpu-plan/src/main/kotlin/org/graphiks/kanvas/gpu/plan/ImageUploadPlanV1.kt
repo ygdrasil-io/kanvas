@@ -6,6 +6,7 @@ import org.graphiks.kanvas.render.ir.ImageResourceSnapshot
 
 /** Canonical logical rows; neither source padding nor sampling participates in content identity. */
 public class ImageUploadPlanV1 private constructor(
+    internal val pixelsOwner: ImageResourceSnapshot.Pixels,
     public val widthI32: Int,
     public val heightI32: Int,
     public val logicalRowBytesI64: Long,
@@ -32,6 +33,13 @@ public class ImageUploadPlanV1 private constructor(
     public val cacheRequest: PlanCacheResourceRequest = PlanCacheResourceRequest(contentIdentity, physicalFormat,
         widthI32, heightI32, byteCountI64, this.bytes)
 
+    /** Content equality alone never proves captured ownership. */
+    internal fun sharesOwnerAndPhysicalFacts(other: ImageUploadPlanV1): Boolean =
+        pixelsOwner === other.pixelsOwner && widthI32 == other.widthI32 && heightI32 == other.heightI32 &&
+            sourceRowBytesI64 == other.sourceRowBytesI64 && logicalRowBytesI64 == other.logicalRowBytesI64 &&
+            logicalFormat == other.logicalFormat && physicalFormat == other.physicalFormat &&
+            byteCountI64 == other.byteCountI64 && contentIdentity == other.contentIdentity && bytes.contentEquals(other.bytes)
+
     internal companion object {
         fun seal(pixels: ImageResourceSnapshot.Pixels): ImageUploadPlanV1 {
             val format = pixels.pixelFormat
@@ -56,7 +64,7 @@ public class ImageUploadPlanV1 private constructor(
                 source.copyInto(tight, Math.toIntExact(destinationOffsetI64), Math.toIntExact(sourceOffsetI64),
                     Math.toIntExact(Math.addExact(sourceOffsetI64, logicalI64)))
             }
-            return ImageUploadPlanV1(pixels.width, pixels.height, logicalI64, pixels.rowBytes.toLong(),
+            return ImageUploadPlanV1(pixels, pixels.width, pixels.height, logicalI64, pixels.rowBytes.toLong(),
                 format, if (format == ImagePixelFormat.ALPHA_8) ImagePhysicalFormatV1.R8_UNORM else ImagePhysicalFormatV1.RGBA8_UNORM, tight)
         }
     }

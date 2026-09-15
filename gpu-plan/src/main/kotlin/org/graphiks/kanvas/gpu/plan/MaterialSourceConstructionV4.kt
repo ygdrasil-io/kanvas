@@ -180,7 +180,9 @@ internal class MaterialSourceConstructionV4 private constructor(
         val layout: ImageSourceLayoutV3 get() = ImageSourceLayoutV3(child?.hasGradientStorage == true,
             cells != null,latticeKinds != null,maxOf(1,cells?.size ?: 9),atlasColor != null)
 
-        fun bind(childSource: EffectiveMaterialPlanner.Result.Ready?,frameBytesI64: Long): EffectiveMaterialPlanner.Result.Ready {
+        fun bind(childSource: EffectiveMaterialPlanner.Result.Ready?,frameBytesI64: Long,
+            upload: ImageUploadPlanV1 = this.upload): EffectiveMaterialPlanner.Result.Ready {
+            require(this.upload.sharesOwnerAndPhysicalFacts(upload)) { W5eImagePlanDiagnostics.InvalidContract }
             require((child == null) == (childSource == null)) { W5eImagePlanDiagnostics.InvalidContract }
             val program = if (childSource == null) ImageMaterialProgramV3.ColorV3(color.channelOrder,
                 color.alphaType,color.transfer,color.gamut,sampling,tileModes,cells != null,latticeKinds,

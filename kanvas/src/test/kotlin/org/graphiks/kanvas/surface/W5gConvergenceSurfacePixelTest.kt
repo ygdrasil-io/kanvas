@@ -4,6 +4,7 @@ package org.graphiks.kanvas.surface
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.GradientStop
@@ -29,6 +30,54 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class W5gConvergenceSurfacePixelTest {
+    @ParameterizedTest(name = "one captured image across ordinary and composed sources: reversed={0}")
+    @CsvSource("false", "true")
+    fun sameImageOwnerSharesOneMixedFrameReservationWhileEqualIndependentOwnersDoNot(reversed: Boolean) {
+        val pixels = ByteArray(256 * 256 * 4) { indexI32 -> if (indexI32 % 4 >= 2) -1 else 0 }
+        val image = Image.fromPixels(256, 256, pixels, sourceId = "mixed-shared-owner", alphaType = AlphaType.OPAQUE)
+        // Distinct sourceId preserves a distinct captured owner despite equal bytes.
+        val independent = Image.fromPixels(256, 256, pixels.copyOf(),
+            sourceId = "mixed-independent-owner", alphaType = AlphaType.OPAQUE)
+        val ordinary = Shader.Image(image)
+        fun composed(value: Image) = Shader.Blend(BlendMode.SRC_OVER,
+            Shader.Image(value), Shader.SolidColor(ColorARGB.Red.withAlpha(128)))
+        val sharedShader = composed(image)
+        val independentShader = composed(independent)
+        val expected = listOf(
+            W5fColorCpuOracle.expectedShaderTree(ordinary, devicePointF32 = Point2F32(.5f, .5f)),
+            W5fColorCpuOracle.expectedShaderTree(sharedShader, devicePointF32 = Point2F32(1.5f, .5f)))
+        expected.forEach(W5fSurfacePixelFixtures::requireBounded)
+        val independentExpected = W5fColorCpuOracle.expectedShaderTree(independentShader,
+            devicePointF32 = Point2F32(1.5f, .5f))
+        W5fSurfacePixelFixtures.requireBounded(independentExpected)
+        assertEquals(channels(expected[1]), channels(independentExpected))
+        disjoint(expected[0], expected[1])
+        // Complete inventory derived before execution: common25144 bytes;
+        // each owner adds262144 texture +262144 staging. One549432; two1073720.
+        // 800000 is between those inventories;1200000 admits either control.
+        fun frame(shader: Shader, budgetI64: Long) = Surface(2, 1,
+            config = RenderConfig(frameLocalBudgetBytes = budgetI64)).also { surface ->
+            surface.canvas {
+                val shaders = listOf(ordinary, shader)
+                val order = if (reversed) shaders.indices.reversed() else shaders.indices
+                for (indexI32 in order) drawRect(RectF32.ofLTRB(indexI32.toFloat(), 0f, indexI32 + 1f, 1f),
+                    Paint(shader = shaders[indexI32], blendMode = BlendMode.SRC, antiAlias = false))
+            }
+        }
+        val wideShared = frame(sharedShader, 1_200_000)
+        val wideIndependent = frame(independentShader, 1_200_000)
+        val shared = frame(sharedShader, 800_000)
+        val refused = frame(independentShader, 800_000)
+        W5fSurfacePixelFixtures.assertNativePixels(wideShared.render(), expected)
+        W5fSurfacePixelFixtures.assertNativePixels(wideIndependent.render(), expected)
+        repeat(2) {
+            val failure = assertFailsWith<IllegalStateException> { refused.render() }
+            assertEquals("resource-limit.w5g.composed-binding", failure.message.orEmpty().substringBefore(':'))
+            W5fSurfacePixelFixtures.assertNativePixels(wideShared.render(), expected)
+            W5fSurfacePixelFixtures.assertNativePixels(shared.render(), expected)
+        }
+    }
+
     @ParameterizedTest(name = "separate unpromoted boundary: {0}")
     @CsvSource("stroke,unsupported.material.composed.slice",
         "aa4,w4d.general.texture-sample-support-unavailable",

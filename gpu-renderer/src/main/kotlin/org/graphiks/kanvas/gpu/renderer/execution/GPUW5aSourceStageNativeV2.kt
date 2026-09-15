@@ -342,8 +342,7 @@ internal fun materializeW5aSourcePartitionV2(
         val pipelines = mutableMapOf<SourcePipelineKey, Pair<GPUPreparedNativeRenderPipelineOperand, GPUBindGroupLayout>>()
         val buffers = mutableMapOf<String, GPUBuffer>()
         val groups = mutableMapOf<Pair<String, GPUBindGroupLayout>, GPUPreparedNativeBindGroupOperand>()
-        val imageLeases = mutableMapOf<String, GPUW5eDecodedImageSessionCache.Lease>()
-        val composedImageLeases=java.util.IdentityHashMap<org.graphiks.kanvas.gpu.plan.PlanCacheResourceRequest,GPUW5eDecodedImageSessionCache.Lease>()
+        val imageLeases=java.util.IdentityHashMap<org.graphiks.kanvas.gpu.plan.PlanCacheResourceRequest,GPUW5eDecodedImageSessionCache.Lease>()
         val destinationSnapshot = old.auxiliaryOwnedHandles.mapNotNull { it.handle as? GPUW5bDestinationSnapshotNativeV3 }.singleOrNull()
         val coverage = old.auxiliaryOwnedHandles.mapNotNull { it.handle as? GPUW5bCoverageNativeV4 }.singleOrNull()
         require(coverage == null || coverage.witness.validates(framePlan))
@@ -450,7 +449,7 @@ internal fun materializeW5aSourcePartitionV2(
                     }
                 }
                 val imageLease = source.stage.imageV3?.let { execution ->
-                    imageLeases.getOrPut(execution.cacheRequest.canonicalPhysicalIdentity) {
+                    imageLeases.getOrPut(execution.cacheRequest) {
                         owned.own(GPUW5eImageNativeV1.acquire(requireNotNull(imageCache), execution.cacheRequest, generation.value))
                     }
                 }
@@ -459,7 +458,7 @@ internal fun materializeW5aSourcePartitionV2(
                     val image=proof.composedImageResources.first { it.resource === resource }
                     require(proof.authenticatesComposedImage(resource,image.upload))
                     val request=image.upload.cacheRequest
-                    val lease=composedImageLeases.getOrPut(request) {
+                    val lease=imageLeases.getOrPut(request) {
                         owned.own(GPUW5eImageNativeV1.acquire(requireNotNull(imageCache),request,generation.value))
                     }
                     require(lease.matches(request,generation.value))

@@ -32,15 +32,16 @@ internal fun GPUFramePlan.w5aMaterialAllocationsV2(): List<GPUFrameMemoryAllocat
 private fun GPUFramePlan.w5eImageAllocationsV3(limits: GPULimits): List<GPUFrameMemoryAllocation> {
     val stages=steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
         .mapNotNull { it.materialSourcePartitionV3()?.stage }
-    val legacy=steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
-        .mapNotNull { it.materialSourcePartitionV3()?.stage?.imageV3?.cacheRequest }
-        .distinctBy { it.canonicalPhysicalIdentity }
     val seen=java.util.IdentityHashMap<org.graphiks.kanvas.gpu.plan.PlanCacheResourceRequest,Unit>()
-    val composed=stages.flatMap { stage -> stage.composedProof?.composedImageResources.orEmpty().map { image ->
-        require(requireNotNull(stage.composedProof).authenticatesComposedImage(image.resource,image.upload))
-        image.upload.cacheRequest
+    val requests=stages.flatMap { stage -> listOfNotNull(stage.imageV3?.cacheRequest) +
+        stage.composedProof?.composedImageResources.orEmpty().map { image ->
+            require(requireNotNull(stage.composedProof).authenticatesComposedImage(image.resource,image.upload))
+            image.upload.cacheRequest
     } }.filter { seen.put(it,Unit) == null }
-    return (legacy.map { it to "w5e" } + composed.mapIndexed { index,request -> request to "w5g.$index" }).flatMap { (request,prefix) ->
+    // One issued request per captured frame owner, even across source versions.
+    // Equal canonical contents from different owners keep separate reservations.
+    return requests.flatMapIndexed { index,request ->
+            val prefix = "w5e.frame-owner.$index"
             val alignmentI64 = lcmW5eAlignmentI64(256L, limits.copyBytesPerRowAlignment)
             val logicalRowI64 = Math.multiplyExact(request.widthI32.toLong(), request.format.bytesPerPixelI32.toLong())
             val rowI64 = Math.addExact(logicalRowI64, (alignmentI64 - logicalRowI64 % alignmentI64) % alignmentI64)

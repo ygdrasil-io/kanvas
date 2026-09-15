@@ -14,7 +14,7 @@ internal class FrameSourceLayoutV4 private constructor(
     pendingRanges: Map<MaterialSourceConstructionV4,GradientStopRangeV1>,
     legacyRanges: Map<MaterialBindingPlan,GradientStopRangeV1>,
     legacyAllocations: List<RawMaterialRequirementsV2.RelocatedLegacyLayout>,
-    imageUploads: List<ImageUploadPlanV1>,
+    imageInventory: List<ImageAllocation>,
     imageDescriptions: List<EffectiveMaterialPlanner.ImageSampleDescription>,
     noiseRanges: List<NoiseTableRangeV1>,
     val noiseBytesI64: Long,
@@ -34,7 +34,7 @@ internal class FrameSourceLayoutV4 private constructor(
     private val pendingRanges = java.util.Collections.unmodifiableMap(java.util.IdentityHashMap(pendingRanges))
     private val legacyRanges = java.util.Collections.unmodifiableMap(java.util.IdentityHashMap(legacyRanges))
     private val legacyAllocations = immutableList(legacyAllocations)
-    private val imageUploads = immutableList(imageUploads)
+    private val imageInventory = immutableList(imageInventory)
     private val imageDescriptions = immutableList(imageDescriptions)
     val noiseRanges: List<NoiseTableRangeV1> = immutableList(noiseRanges)
     fun noiseRange(normalizedSeedI32: Int): NoiseTableRangeV1 =
@@ -59,7 +59,7 @@ internal class FrameSourceLayoutV4 private constructor(
     /** Image and ordinary consumers cross the one real permit before either graph is published. */
     fun <T> prepareImageFrame(finish: (RenderGraph,MaterialPlanTable,Long)->T): SourceConstructionResultV4<T> =
         prepareAndFinish { table,roots ->
-            require(imageUploads.isNotEmpty()) { W5fPlanDiagnostics.Schema }
+            require(imageInventory.any { it.upload != null }) { W5fPlanDiagnostics.Schema }
             val graphs = if (ordinaryLayout == null) listOf(constructBound(table,roots))
                 else nativeLanes.mapIndexed { index,source -> constructLaneBound(source,nativeOffsetsI32[index],table,roots) }
             val nonUniformAndStops = Math.addExact(nonUniformBytesI64,stopBytesI64)
@@ -102,7 +102,8 @@ internal class FrameSourceLayoutV4 private constructor(
                     MaterialPlanTable.of(listOf(MaterialPlanEntry(definition.program,ComposedMaterialBindingV5(definition,proof),definition.slab)))
                 } else if (source.image != null) {
                     val resolved = source.image.bind(source.image.child?.let(::bind),
-                        Math.addExact(Math.addExact(nonUniformBytesI64,stopBytesI64),uniformBytesI64))
+                        Math.addExact(Math.addExact(nonUniformBytesI64,stopBytesI64),uniformBytesI64),
+                        prepared.imageUpload(source.image))
                     boundImages[source] = (resolved.table.entry(resolved.root).bindings as ImageSampleV3).execution
                     resolved.table.sealColorSourceV4(resolved.root,source.coordinates,source.deviceBoundsF32)
                 } else {
@@ -224,13 +225,6 @@ internal class FrameSourceLayoutV4 private constructor(
             actualLegacy.size == legacyAllocations.size && legacyAllocations.all { planned ->
                 actualLegacy.any { planned.authenticatesFinal(it,table.gradientStopSlab) }
             }) { W5fPlanDiagnostics.Schema }
-        val actualUploads = actualV4.values.mapNotNull { it.proof.imageExecution?.upload }
-            .distinctBy { it.cacheRequest.canonicalPhysicalIdentity }
-        require(actualUploads.size == imageUploads.size && imageUploads.all { planned ->
-            actualUploads.any { actual -> actual.cacheRequest.canonicalPhysicalIdentity == planned.cacheRequest.canonicalPhysicalIdentity &&
-                actual.byteCountI64 == planned.byteCountI64 && actual.logicalRowBytesI64 == planned.logicalRowBytesI64 &&
-                imagePhysicalBytesI64(actual,lane.capabilities) == imagePhysicalBytesI64(planned,lane.capabilities) }
-        }) { W5fPlanDiagnostics.Schema }
         val composedImages=actualV4.values.flatMap { it.proof.composedImageResources }
         val issuedImages=java.util.IdentityHashMap<ImageUploadPlanV1,Unit>()
         require(imageDescriptions.all { description ->
@@ -244,10 +238,17 @@ internal class FrameSourceLayoutV4 private constructor(
                 binding.upload === prepared.imageUpload(binding.metadata.description) &&
                 binding.upload === prepared.imageUpload(description)
         } } && issuedImages.size == imageDescriptions.size) { W5gPlanDiagnostics.Schema }
-        val plannedImageBytes=imageDescriptions.fold(0L) { bytes,description -> Math.addExact(bytes,
-            imagePhysicalBytesI64(description.pixels.width,description.pixels.height,description.logicalRowBytesI64,
-                description.byteCountI64,description.physicalFormat,lane.capabilities)) }
-        val issuedImageBytes=issuedImages.keys.fold(0L) { bytes,upload ->
+        val actualUploads=java.util.IdentityHashMap<ImageUploadPlanV1,Unit>()
+        (actualV4.values.mapNotNull { it.proof.imageExecution?.upload } + composedImages.map { it.upload })
+            .forEach { actualUploads[it]=Unit }
+        require(actualUploads.size == imageInventory.size && imageInventory.all { allocation ->
+            val issued=prepared.uploads.getValue(allocation.pixels)
+            allocation.authenticates(issued) && actualUploads.containsKey(issued) &&
+                actualUploads.keys.single { it.pixelsOwner === allocation.pixels }.cacheRequest === issued.cacheRequest
+        }) { W5gPlanDiagnostics.Schema }
+        val plannedImageBytes=imageInventory.fold(0L) { bytes,allocation ->
+            Math.addExact(bytes,allocation.physicalBytesI64(lane.capabilities)) }
+        val issuedImageBytes=actualUploads.keys.fold(0L) { bytes,upload ->
             Math.addExact(bytes,imagePhysicalBytesI64(upload,lane.capabilities)) }
         require(plannedImageBytes == issuedImageBytes) { W5gPlanDiagnostics.Schema }
         val actualUniformBytes = actualLegacy.fold(0L) { bytes,value -> Math.addExact(bytes,value.uniformByteCountI64) }
@@ -347,15 +348,39 @@ internal class FrameSourceLayoutV4 private constructor(
     }
     private class RangeAllocation(val range: GradientStopRangeV1,val values: RangeValues)
 
+    /** One physical reservation keyed by captured Pixels identity, never its content hash. */
+    private class ImageAllocation(val pixels: org.graphiks.kanvas.render.ir.ImageResourceSnapshot.Pixels,
+        val logicalRowBytesI64: Long,val byteCountI64: Long,val physicalFormat: ImagePhysicalFormatV1,
+        val upload: ImageUploadPlanV1?) {
+        fun authenticates(candidate: ImageUploadPlanV1): Boolean = candidate.pixelsOwner === pixels &&
+            candidate.widthI32 == pixels.width && candidate.heightI32 == pixels.height &&
+            candidate.sourceRowBytesI64 == pixels.rowBytes.toLong() && candidate.logicalFormat == pixels.pixelFormat &&
+            candidate.logicalRowBytesI64 == logicalRowBytesI64 && candidate.byteCountI64 == byteCountI64 &&
+            candidate.physicalFormat == physicalFormat && (upload?.sharesOwnerAndPhysicalFacts(candidate) ?: true)
+        fun authenticates(description: EffectiveMaterialPlanner.ImageSampleDescription): Boolean =
+            description.pixels === pixels && description.logicalRowBytesI64 == logicalRowBytesI64 &&
+                description.byteCountI64 == byteCountI64 && description.physicalFormat == physicalFormat
+        fun physicalBytesI64(caps: PlanCapabilitySnapshot): Long = imagePhysicalBytesI64(pixels.width,pixels.height,
+            logicalRowBytesI64,byteCountI64,physicalFormat,caps)
+    }
+
     /** Only this factory can create prepared frame data; it accepts no caller tuple. */
     internal class PreparedStops private constructor(val owner: FrameSourceLayoutV4,val slab: GradientStopSlabPlanV1?,
         val noiseSlab: NoiseTableSlabV1?,
         uploads: Map<org.graphiks.kanvas.render.ir.ImageResourceSnapshot.Pixels,ImageUploadPlanV1>) {
-        private val uploads=java.util.Collections.unmodifiableMap(java.util.IdentityHashMap(uploads))
+        internal val uploads: Map<org.graphiks.kanvas.render.ir.ImageResourceSnapshot.Pixels,ImageUploadPlanV1> =
+            java.util.Collections.unmodifiableMap(java.util.IdentityHashMap(uploads))
+        fun imageUpload(metadata: MaterialSourceConstructionV4.ImageMetadata): ImageUploadPlanV1 {
+            require(owner.sources.any { it.image === metadata }) { W5fPlanDiagnostics.Schema }
+            return requireNotNull(uploads[metadata.upload.pixelsOwner]) { W5fPlanDiagnostics.Schema }.also {
+                require(metadata.upload.sharesOwnerAndPhysicalFacts(it)) { W5fPlanDiagnostics.Schema }
+            }
+        }
         fun imageUpload(description: EffectiveMaterialPlanner.ImageSampleDescription): ImageUploadPlanV1 {
             require(owner.ownsImage(description)) { W5gPlanDiagnostics.Schema }
             val upload=requireNotNull(uploads[description.pixels]) { W5gPlanDiagnostics.Schema }
-            require(upload.widthI32 == description.pixels.width && upload.heightI32 == description.pixels.height &&
+            require(upload.pixelsOwner === description.pixels &&
+                upload.widthI32 == description.pixels.width && upload.heightI32 == description.pixels.height &&
                 upload.sourceRowBytesI64 == description.pixels.rowBytes.toLong() &&
                 upload.logicalRowBytesI64 == description.logicalRowBytesI64 && upload.byteCountI64 == description.byteCountI64 &&
                 upload.logicalFormat == description.pixels.pixelFormat && upload.physicalFormat == description.physicalFormat) { W5gPlanDiagnostics.Schema }
@@ -399,8 +424,9 @@ internal class FrameSourceLayoutV4 private constructor(
                 }
                 require(values.size.toLong()*32L == owner.stopBytesI64) { W5fPlanDiagnostics.Schema }
                 val uploads=java.util.IdentityHashMap<org.graphiks.kanvas.render.ir.ImageResourceSnapshot.Pixels,ImageUploadPlanV1>()
-                owner.imageDescriptions.forEach { description ->
-                    require(uploads.put(description.pixels,ImageUploadPlanV1.seal(description.pixels)) == null) { W5gPlanDiagnostics.Schema }
+                owner.imageInventory.forEach { allocation ->
+                    val upload=allocation.upload ?: ImageUploadPlanV1.seal(allocation.pixels)
+                    require(allocation.authenticates(upload) && uploads.put(allocation.pixels,upload) == null) { W5gPlanDiagnostics.Schema }
                 }
                 return PreparedStops(owner,values.takeIf { it.isNotEmpty() }?.let(GradientStopSlabPlanV1::of),
                     NoiseTableSlabV1.prepare(owner),uploads)
@@ -547,10 +573,24 @@ internal class FrameSourceLayoutV4 private constructor(
             val pending = sources.filter { it.pending }.distinctBy { it.canonicalIdentity }
             val caps = lane.capabilities
             val budget = lane.budget
-            val imageUploads = sources.mapNotNull { it.image?.upload }
-                .distinctBy { it.cacheRequest.canonicalPhysicalIdentity }
+            val imageInventory=mutableListOf<ImageAllocation>()
+            val imageOwners=java.util.IdentityHashMap<org.graphiks.kanvas.render.ir.ImageResourceSnapshot.Pixels,ImageAllocation>()
+            sources.mapNotNull { it.image?.upload }.forEach { upload ->
+                val allocation=imageOwners.getOrPut(upload.pixelsOwner) {
+                    ImageAllocation(upload.pixelsOwner,upload.logicalRowBytesI64,upload.byteCountI64,upload.physicalFormat,upload)
+                        .also { imageInventory += it }
+                }
+                require(allocation.authenticates(upload)) { W5fPlanDiagnostics.Schema }
+            }
             val seenImages=java.util.IdentityHashMap<org.graphiks.kanvas.render.ir.ImageResourceSnapshot.Pixels,Unit>()
             val imageDescriptions=sources.flatMap { it.composed?.nodes.orEmpty() }.mapNotNull { it.imageSource?.description }
+                .onEach { description ->
+                    val allocation=imageOwners.getOrPut(description.pixels) {
+                        ImageAllocation(description.pixels,description.logicalRowBytesI64,description.byteCountI64,
+                            description.physicalFormat,null).also { imageInventory += it }
+                    }
+                    require(allocation.authenticates(description)) { W5gPlanDiagnostics.Schema }
+                }
                 .filter { seenImages.put(it.pixels,Unit) == null }
             // Scalar seed decisions are deduplicated only within this physical frame slab.
             val noiseSeeds=sources.flatMap { it.composed?.nodes.orEmpty() }
@@ -577,12 +617,12 @@ internal class FrameSourceLayoutV4 private constructor(
                     nonUniform = Math.addExact(nonUniform,bytes)
                 }
             }
-            imageUploads.forEach { nonUniform = Math.addExact(nonUniform,imagePhysicalBytesI64(it,caps)) }
+            imageInventory.filter { it.upload != null }.forEach {
+                nonUniform = Math.addExact(nonUniform,it.physicalBytesI64(caps)) }
             require(nonUniform <= budget.maxFrameLocalBytes) { W5eImagePlanDiagnostics.FrameBudget }
             try {
-                imageDescriptions.forEach { description ->
-                    nonUniform=Math.addExact(nonUniform,imagePhysicalBytesI64(description.pixels.width,description.pixels.height,
-                        description.logicalRowBytesI64,description.byteCountI64,description.physicalFormat,caps))
+                imageInventory.filter { it.upload == null }.forEach { allocation ->
+                    nonUniform=Math.addExact(nonUniform,allocation.physicalBytesI64(caps))
                     require(nonUniform <= budget.maxFrameLocalBytes) { W5gPlanDiagnostics.Binding }
                 }
             } catch (_: IllegalArgumentException) { throw IllegalArgumentException(W5gPlanDiagnostics.Binding) }
@@ -673,7 +713,7 @@ internal class FrameSourceLayoutV4 private constructor(
             retainedV4.forEach { add(it.uniformByteCountI64-it.sourceUniformByteCountI64,W5fPlanDiagnostics.FilterUniform) }
             pending.forEach { add(it.uniformBytesI64()-it.uniformBytesI64(true),W5fPlanDiagnostics.FilterUniform) }
             SourceConstructionResultV4.Built(FrameSourceLayoutV4(lane,interner,sources,rows,allocations,pendingRanges,legacyRanges,
-                legacy,imageUploads,imageDescriptions,noiseRanges,noiseBytes,nonUniform,stopBytes,Math.subtractExact(Math.subtractExact(total,nonUniform),stopBytes),
+                legacy,imageInventory,imageDescriptions,noiseRanges,noiseBytes,nonUniform,stopBytes,Math.subtractExact(Math.subtractExact(total,nonUniform),stopBytes),
                 nativeLanes,nativeOffsetsI32,nativeGeometry,ordinaryLayout))
         } catch (failure: IllegalArgumentException) {
             sourceConstructionRefusalV4(failure.message ?: W5fPlanDiagnostics.Schema)
