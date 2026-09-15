@@ -41,20 +41,29 @@ internal data class W5aPreparedFrameMaterialRegistry(
             // This source join belongs to the existing hairline-square prepared frame.
             // Wider/stencil and round-cap geometry keeps its historical admission.
             if (points.isEmpty() || points.any { it.strokeWidth != 0f || it.strokeCap == StrokeCap.ROUND }) return emptyMap()
-            val catalog = org.graphiks.kanvas.gpu.plan.RuntimeEffectSemanticCatalog.builtinSnapshot()
-            val sources = linkedMapOf<Int, org.graphiks.kanvas.gpu.plan.W5hPreparedPointMaterialV6>()
-            operations.forEachIndexed { index, operation ->
-                val candidate = when (operation) {
-                    is DisplayOp.DrawPoint -> operation.paint.strokeCap != StrokeCap.ROUND
-                    is DisplayOp.DrawPoints -> operation.mode == PointMode.POINTS && operation.paint.strokeCap != StrokeCap.ROUND
+            // A deferred Point source requires a closed set of real material siblings.
+            // State/metadata carries no source; every other operation must belong to the
+            // existing join domain before any V6 capture or deferred index is produced.
+            val sourceOperations = operations.withIndex().filterNot { (_, operation) ->
+                operation is DisplayOp.SetTransform || operation is DisplayOp.SetClip || operation is DisplayOp.Annotation
+            }
+            if (sourceOperations.any { (_, operation) ->
+                !when (operation) {
+                    is DisplayOp.DrawPoint -> true
+                    is DisplayOp.DrawPoints -> operation.mode == PointMode.POINTS
                     is DisplayOp.DrawRect -> !operation.paint.isStroke()
                     else -> false
                 }
-                if (!candidate) return@forEachIndexed
+            }) return emptyMap()
+            val draws = sourceOperations.map { (index, operation) ->
                 val captured = DisplayOpSceneAdapter.capture(listOf(operation), SceneExtent(width, height), ColorSpace.SRGB)
-                    as? SceneCaptureResult.Captured ?: return@forEachIndexed
-                val draw = captured.scene.singleOrNull() as? SceneCommand.Draw ?: return@forEachIndexed
-                sources[index] = org.graphiks.kanvas.gpu.plan.W5hPreparedPointMaterialV6.capture(draw.node,
+                    as? SceneCaptureResult.Captured ?: return emptyMap()
+                val draw = captured.scene.singleOrNull() as? SceneCommand.Draw ?: return emptyMap()
+                index to draw.node
+            }
+            val catalog = org.graphiks.kanvas.gpu.plan.RuntimeEffectSemanticCatalog.builtinSnapshot()
+            val sources = draws.associate { (index, draw) ->
+                index to org.graphiks.kanvas.gpu.plan.W5hPreparedPointMaterialV6.capture(draw,
                     org.graphiks.math.geometry.RectI32(0, 0, width, height), targetClamp, catalog)
             }
             return java.util.Collections.unmodifiableMap(sources)

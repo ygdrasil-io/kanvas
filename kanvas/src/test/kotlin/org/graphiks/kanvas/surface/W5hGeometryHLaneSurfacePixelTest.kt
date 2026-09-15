@@ -385,6 +385,39 @@ class W5hGeometryHLaneSurfacePixelTest {
         repeat(2) { assertLanePixels(lane, surface.render(), continued) }
     }
 
+    @ParameterizedTest(name = "mixed historical frame: {0}/{1}") @MethodSource("pointHistoricalMixedFrames")
+    fun pointsMixedClearAndColorPreserveHistoricalPixels(lane: String, background: String) {
+        val wanted = W5fColorCpuOracle.expectedShaderTree(Shader.SolidColor(ColorARGB.Red),
+            destination = ColorARGB.Blue, finalBlend = BlendMode.SRC_OVER, destinationBlend = BlendMode.SRC)
+        val untouched = W5fColorCpuOracle.expectedShaderTree(Shader.SolidColor(ColorARGB.Blue))
+        W5fSurfacePixelFixtures.requireBounded(wanted)
+        W5fSurfacePixelFixtures.requireBounded(untouched)
+        fun assertFrame(result: RenderResult) {
+            assertEquals(8, result.pixels.size)
+            WgslFloatEnvelopeV1Oracle.assertAdmits(wanted, result.pixels.copyOfRange(0, 4))
+            WgslFloatEnvelopeV1Oracle.assertAdmits(untouched, result.pixels.copyOfRange(4, 8))
+        }
+        fun Canvas.frame() {
+            when (background) {
+                "Clear" -> clear(ColorARGB.Blue)
+                "DrawColor" -> drawColor(ColorARGB.Blue, BlendMode.SRC)
+                else -> error(background)
+            }
+            drawLane(lane, Paint(color = ColorARGB.Red, blendMode = BlendMode.SRC_OVER, antiAlias = false))
+        }
+        val surface = Surface(2, 1)
+        surface.canvas { frame() }
+        val recorder = PictureRecorder()
+        recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 2f, 1f)).frame()
+        val picture = recorder.finishRecordingAsPicture()
+        repeat(2) { assertFrame(surface.render()) }
+        for (replay in listOf(picture, assertNotNull(Picture.fromByteArray(picture.toByteArray())))) {
+            val target = Surface(2, 1)
+            target.canvas { replay.playback(this) }
+            repeat(2) { assertFrame(target.render()) }
+        }
+    }
+
     @ParameterizedTest(name = "same Surface recovery: {0}") @MethodSource("allLanes")
     fun materialRefusalThenSameSurfaceRecovers(lane: String) {
         val valid = runtimeFixture("child")
@@ -444,5 +477,6 @@ class W5hGeometryHLaneSurfacePixelTest {
         @JvmStatic fun allLanes() = RRECT + STROKES + POINTS
         @JvmStatic fun pointFinalBlendTopology() = cases(listOf("DrawPoint", "POINTS"),
             listOf("dst-background", "dst-only", "difference-first", "dst-then-difference"))
+        @JvmStatic fun pointHistoricalMixedFrames() = cases(listOf("DrawPoint", "POINTS"), listOf("Clear", "DrawColor"))
     }
 }
