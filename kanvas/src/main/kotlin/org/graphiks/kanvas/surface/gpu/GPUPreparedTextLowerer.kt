@@ -76,6 +76,7 @@ internal object GPUPreparedTextLowerer {
         capabilities: GPUCapabilities,
         fontResolver: GPUPreparedTextFontResolver,
         materialBridge: W5aPreparedTextMaterialBridge? = null,
+        geometryOnly: Boolean = false,
     ): GPUPreparedTextLowering {
         val fontResolution = try {
             fontResolver.resolve(operation.blob.typeface)
@@ -475,14 +476,23 @@ internal object GPUPreparedTextLowerer {
             )
         }
 
-        val w5aResult = materialPlan?.let { planned ->
+        if (geometryOnly) return GPUPreparedTextLowering.GeometryReady(
+            if (representations.all { it == GPUPreparedTextRepresentation.A8_MASK } &&
+                paint.style == PaintStyle.FILL && paint.maskFilter == null && clipProof.commonSourceClipEligible)
+                GPUPreparedTextGeometry(operationIndex, resolved.face, immutablePreparedTextList(preparedGlyphs),
+                    operation.x, operation.y, operation.transform.snapshotForPreparedText(), clipProof.contentKey,
+                    clipProof.clip, target.colorFormat, capabilities.canonicalSnapshotHash(),
+                    GPUPreparedTextRepresentationPolicy.create(representations), clipProof.coveragePlan) else null)
+
+        val commonProgram = materialPlan?.commonProgram
+        val w5aResult = materialPlan?.takeIf { commonProgram == null }?.let { planned ->
             GPUPreparedMaterialProgramCompiler.compileW5aForPreparedText(
                 table = planned.table,
                 root = planned.ref,
                 context = preparedTextMaterialContext(target, capabilities),
             )
         }
-        val materialResult = w5aResult?.let { result ->
+        val materialResult = commonProgram?.let { GPUPreparedMaterialProgramResult.Ready(it) } ?: w5aResult?.let { result ->
             when (result) {
                 is org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextW5aProgramResult.Ready ->
                     GPUPreparedMaterialProgramResult.Ready(result.program)
@@ -561,7 +571,7 @@ internal object GPUPreparedTextLowerer {
                 paint = paint.snapshotForPreparedText(),
                 material = material,
                 materialPlan = materialPlan,
-                materialPlanEmission = (
+                materialPlanEmission = commonProgram?.let(org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextMaterialPlanEmission::common) ?: (
                     w5aResult as?
                         org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextW5aProgramResult.Ready
                     )?.emission,
@@ -722,6 +732,8 @@ private sealed interface PreparedTextClipResult {
     data class Ready(
         val clip: ClipStack,
         val contentKey: String,
+        val commonSourceClipEligible: Boolean,
+        val coveragePlan: GPUClipCoveragePlan,
     ) : PreparedTextClipResult
     data class Refused(val message: String) : PreparedTextClipResult
 }
@@ -738,6 +750,8 @@ private fun validateAndSnapshotPreparedTextClip(
         return PreparedTextClipResult.Ready(
             clip = ClipStack.WideOpen,
             contentKey = "prepared-text-clip:wide-open",
+            commonSourceClipEligible = true,
+            coveragePlan = GPUClipCoveragePlan.NoClip,
         )
     }
     val clipFacts = runCatching { clip.toGPUClipFacts(target) }.getOrNull()
@@ -766,6 +780,8 @@ private fun validateAndSnapshotPreparedTextClip(
         else -> PreparedTextClipResult.Ready(
             clip = clip.snapshotForPreparedText(),
             contentKey = request.contentKey,
+            commonSourceClipEligible = plan is GPUClipCoveragePlan.NoClip || plan is GPUClipCoveragePlan.Scissor,
+            coveragePlan = plan,
         )
     }
 }

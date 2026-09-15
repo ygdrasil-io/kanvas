@@ -1147,6 +1147,14 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                     GPUPreparedNativeScopeKey::operandKeys,
                 ),
                 auxiliaryOwnedHandles = buildList {
+                    verticesDestinationNativeResources.values.filter { it.plan.packet.w5aSourceStageV2 != null }.forEach {
+                        add(GPUPreparedNativeAuxiliaryHandle(GPUW5bPreparedDestinationNativeV6(it.plan.copyStep, it.view),
+                            GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion))
+                    }
+                    textDestinationNativeResources.values.filter { it.plan.packet.w5aSourceStageV2 != null }.forEach {
+                        add(GPUPreparedNativeAuxiliaryHandle(GPUW5bPreparedDestinationNativeV6(it.plan.copyStep, it.view),
+                            GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion))
+                    }
                     coreDestination?.let { snapshot ->
                         add(GPUPreparedNativeAuxiliaryHandle(snapshot, GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion))
                     }

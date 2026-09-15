@@ -3846,7 +3846,7 @@ sealed interface NormalizedDrawCommand {
             }
             require(
                 (preparedW5aMaterialProvenance == null) ==
-                    (preparedMaterial?.preparedTextW5aAdmissionToken == null),
+                    (preparedMaterial?.preparedTextW5aAdmissionToken == null && preparedMaterial?.commonSource == null),
             ) {
                 "DrawTextRun W5a provenance and compiler admission token must be paired"
             }

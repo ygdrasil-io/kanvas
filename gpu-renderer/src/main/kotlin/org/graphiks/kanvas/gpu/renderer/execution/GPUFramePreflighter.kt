@@ -8376,7 +8376,7 @@ internal class GPUFramePreflighter(
             )
         }
         val verticesSemantic = packet.semanticPayload as? GPUDrawSemanticPayload.Vertices
-        if (verticesSemantic != null) {
+        if (verticesSemantic != null && verticesSemantic.material.commonSource == null) {
             add(
                 operand(
                     packet,
@@ -8569,7 +8569,7 @@ internal class GPUFramePreflighter(
             val expectedBindGroupCount =
                 if (clipStencilScope is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer) {
                     0
-                } else if (verticesSemantic != null) {
+                } else if (verticesSemantic != null && verticesSemantic.material.commonSource == null) {
                     2
                 } else {
                     1
@@ -8675,7 +8675,7 @@ internal class GPUFramePreflighter(
                             GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer
                         ) {
                             0
-                        } else if (verticesSemantic != null) {
+                        } else if (verticesSemantic != null && verticesSemantic.material.commonSource == null) {
                             2
                         } else {
                             1
@@ -9604,6 +9604,7 @@ internal class GPUFramePreflighter(
                             "prepared-text:${packet.packetId.value}:draw-group",
                         ),
                         )
+                        if (step.preparedTextBindingsByPacketId.getValue(packet.packetId).nativeProgram.commonGeometry.not()) {
                         add(
                         key(
                             GPUPreparedNativeOperandRole.RenderBindGroup,
@@ -9618,6 +9619,7 @@ internal class GPUFramePreflighter(
                             "prepared-text:${packet.packetId.value}:atlas-group",
                         ),
                         )
+                        }
                         if (step.preparedTextBindingsByPacketId[packet.packetId]
                                 ?.coverageMaskResource != null
                         ) {
@@ -9629,7 +9631,7 @@ internal class GPUFramePreflighter(
                                 ),
                             )
                         }
-                        if (packet.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead) {
+                        if (packet.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead && packet.w5aSourceStageV2 == null) {
                             add(
                                 key(
                                     GPUPreparedNativeOperandRole.RenderBindGroup,
@@ -9807,7 +9809,7 @@ internal class GPUFramePreflighter(
                         }
                     ) {
                         val destinationBindGroups = step.drawPackets.count { packet ->
-                            packet.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead
+                            packet.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead && packet.w5aSourceStageV2 == null
                         }
                         val firstBuffer = bridgeKeys.indexOfFirst { candidate ->
                             candidate.kind == GPUPreparedNativeOperandKind.Buffer

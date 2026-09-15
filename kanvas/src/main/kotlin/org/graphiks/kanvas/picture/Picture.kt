@@ -244,7 +244,7 @@ class Picture internal constructor(
                     is DisplayOp.DrawText -> canvas.drawText(op.blob, op.x, op.y, op.paint)
                     is DisplayOp.DrawPicture -> canvas.drawPicture(op.picture, op.paint)
                     is DisplayOp.DrawVertices -> canvas.drawVertices(op.vertices, op.paint)
-                    is DisplayOp.DrawMesh -> canvas.drawMesh(op.mesh, op.paint, op.blendMode)
+                    is DisplayOp.DrawMesh -> canvas.drawCapturedMesh(op.mesh, op.paint, op.blendMode)
                     is DisplayOp.DrawAtlas -> canvas.drawAtlas(op.atlas, op.transforms, op.texRects, op.colors, op.blendMode, op.paint)
                     is DisplayOp.DrawColor -> canvas.drawColor(op.color, op.mode)
                     is DisplayOp.Clear -> canvas.clear(op.color)

@@ -5297,8 +5297,8 @@ internal object GPUPreparedSurfaceEncoderScopeAuthority {
         ) {
             return false
         }
-        return scope.nativeOperandKeys ==
-            expectedRenderOperandKeys(render, scope, expectedLabels, stream)
+        val expectedKeys = expectedRenderOperandKeys(render, scope, expectedLabels, stream)
+        return scope.nativeOperandKeys == expectedKeys
     }
 
     private fun expectedRenderStream(
@@ -5544,6 +5544,7 @@ internal object GPUPreparedSurfaceEncoderScopeAuthority {
                     "prepared-text:${packet.packetId.value}:draw-group",
                 ),
                 )
+                if (render.preparedTextBindingsByPacketId.getValue(packet.packetId).nativeProgram.commonGeometry.not()) {
                 add(
                 key(
                     GPUPreparedNativeOperandRole.RenderBindGroup,
@@ -5558,6 +5559,7 @@ internal object GPUPreparedSurfaceEncoderScopeAuthority {
                     "prepared-text:${packet.packetId.value}:atlas-group",
                 ),
                 )
+                }
                 if (render.preparedTextBindingsByPacketId[packet.packetId]
                         ?.coverageMaskResource != null
                 ) {
@@ -5569,7 +5571,7 @@ internal object GPUPreparedSurfaceEncoderScopeAuthority {
                         ),
                     )
                 }
-                if (packet.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead) {
+                if (packet.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead && packet.w5aSourceStageV2 == null) {
                     add(
                         key(
                             GPUPreparedNativeOperandRole.RenderBindGroup,
@@ -5721,7 +5723,7 @@ internal object GPUPreparedSurfaceEncoderScopeAuthority {
             }
         ) {
             val destinationBindGroups = render.drawPackets.count { packet ->
-                packet.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead
+                packet.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead && packet.w5aSourceStageV2 == null
             }
             val firstBuffer = keys.indexOfFirst { candidate ->
                 candidate.kind == GPUPreparedNativeOperandKind.Buffer
@@ -6466,7 +6468,8 @@ private val PREPARED_VERTICES_ABI_HASH_PATTERN = Regex("sha256:[0-9a-f]{64}")
 /** The native seam accepts W5a vertices only with its sealed table/program/command witness. */
 private fun GPUDrawSemanticPayload.Vertices.hasValidW5aMaterialPlanProvenance(): Boolean {
     val provenance = materialPlanProvenance
-    return (provenance == null) == (material.preparedVerticesW5aAdmissionToken == null) &&
+    return (provenance == null) ==
+        (material.preparedVerticesW5aAdmissionToken == null && material.commonSource == null) &&
         (provenance == null || provenance.validates(payloadRef.commandIdValue, material))
 }
 

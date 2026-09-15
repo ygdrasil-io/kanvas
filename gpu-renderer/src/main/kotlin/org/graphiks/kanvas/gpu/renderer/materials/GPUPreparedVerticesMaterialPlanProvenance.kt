@@ -10,10 +10,16 @@ public class GPUPreparedVerticesMaterialPlanEmission internal constructor(
     private val ref: MaterialPlanRef,
     private val program: GPUPreparedMaterialProgram,
 ) {
-    private val admissionToken: GPUPreparedVerticesW5aAdmissionToken =
-        requireNotNull(program.preparedVerticesW5aAdmissionToken) {
-            "Prepared vertices W5a emission requires a compiler-issued admission token"
+    private val admissionToken: GPUPreparedVerticesW5aAdmissionToken? = program.preparedVerticesW5aAdmissionToken
+    init {
+        require(admissionToken != null || program.commonSource?.let { it.frame.table === table && it.ref == ref } == true)
+    }
+    public companion object {
+        public fun common(program: GPUPreparedMaterialProgram): GPUPreparedVerticesMaterialPlanEmission {
+            val source = requireNotNull(program.commonSource)
+            return GPUPreparedVerticesMaterialPlanEmission(source.frame.table, source.ref, program)
         }
+    }
 
     public fun bind(
         commandIdValueI32: Int,
@@ -23,7 +29,8 @@ public class GPUPreparedVerticesMaterialPlanEmission internal constructor(
             candidate.preparedVerticesW5aAdmissionToken !== admissionToken
         ) return null
         val entry = runCatching { table.entry(ref) }.getOrNull() ?: return null
-        if (entry.program.versionI32 != 1 || entry.bindings.versionI32 != 1) return null
+        val versionI32 = if (program.commonSource == null) 1 else 6
+        if (entry.program.versionI32 != versionI32 || entry.bindings.versionI32 != versionI32) return null
         return GPUPreparedVerticesMaterialPlanProvenance(
             table, ref, commandIdValueI32, program, admissionToken,
             entry.program.versionI32, entry.bindings.versionI32,
@@ -37,19 +44,24 @@ public class GPUPreparedVerticesMaterialPlanProvenance internal constructor(
     val ref: MaterialPlanRef,
     private val commandIdValueI32: Int,
     private val program: GPUPreparedMaterialProgram,
-    private val admissionToken: GPUPreparedVerticesW5aAdmissionToken,
+    private val admissionToken: GPUPreparedVerticesW5aAdmissionToken?,
     private val programVersionI32: Int,
     private val bindingVersionI32: Int,
 ) {
     public val sourcePlanTable: MaterialPlanTable get() = table
 
     public fun remappedEmission(table: MaterialPlanTable, ref: MaterialPlanRef): GPUPreparedVerticesMaterialPlanEmission {
+        program.commonSource?.let {
+            require(table === this.table && ref == this.ref) { "Common V6 source cannot be re-interned or resealed" }
+            return GPUPreparedVerticesMaterialPlanEmission(table, ref, program)
+        }
         require(requireNotNull(W5aMaterialSourceStage.lower(this.table, this.ref)).canonicalIdentity ==
             requireNotNull(W5aMaterialSourceStage.lower(table, ref)).canonicalIdentity)
         return GPUPreparedVerticesMaterialPlanEmission(table, ref, program)
     }
     init {
-        require(program.preparedVerticesW5aAdmissionToken === admissionToken) {
+        require(program.preparedVerticesW5aAdmissionToken === admissionToken &&
+            (admissionToken != null || program.commonSource?.let { it.frame.table === table && it.ref == ref } == true)) {
             "Prepared vertices W5a provenance requires its compiler-issued admission token"
         }
     }
@@ -66,10 +78,15 @@ public class GPUPreparedVerticesMaterialPlanProvenance internal constructor(
                 val entry = table.entry(ref)
                 entry.program.versionI32 == programVersionI32 &&
                     entry.bindings.versionI32 == bindingVersionI32 &&
-                    programVersionI32 == 1 && bindingVersionI32 == 1
+                    programVersionI32 == (if (program.commonSource == null) 1 else 6) && bindingVersionI32 == programVersionI32
             }.getOrDefault(false)
 
-    private fun tableSnapshotIdentity(): String = table.entries().joinToString("|") { entry ->
+    internal fun commonPacketSource(): W5aPacketMaterialSourceV2? = program.commonSource?.let {
+        require(validates(commandIdValueI32, program))
+        it.bind(commandIdValueI32)
+    }
+
+    private fun tableSnapshotIdentity(): String = program.commonSource?.stage?.canonicalIdentity ?: table.entries().joinToString("|") { entry ->
         val binding = when (val value = entry.bindings) {
             is org.graphiks.kanvas.gpu.plan.ComposedMaterialBindingV5 -> error(org.graphiks.kanvas.gpu.plan.W5gPlanDiagnostics.Unpromoted)
             is org.graphiks.kanvas.gpu.plan.ColorFilterBindingV4 -> error(org.graphiks.kanvas.gpu.plan.W5fPlanDiagnostics.Unpromoted)

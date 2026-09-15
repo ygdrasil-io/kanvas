@@ -677,10 +677,11 @@ class GPUFramePlan(
     val phaseOrder: List<GPUTaskPhase> = immutableList(phaseOrder)
     val elidedNoOpDraws: List<GPUFrameElidedNoOpDraw> = immutableList(elidedNoOpDraws)
     internal val w5aGeometryHostTemplatesV1: List<GPUW5aGeometryHostTemplateV1> = immutableList(
-        this.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
-            .filter { it.materialSourcePartitionV3() != null }
-            .mapNotNull { packet -> w5hSourceRootFrameV1?.w5hSourceAuthorityRootV1?.template(packet)
-                ?: if (w5hSourceRootFrameV1 == null) sealW5aGeometryHostTemplateV1(packet) else null })
+        this.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { render ->
+            render.drawPackets.filter { it.materialSourcePartitionV3() != null }.mapNotNull { packet ->
+                w5hSourceRootFrameV1?.w5hSourceAuthorityRootV1?.template(packet)
+                    ?: if (w5hSourceRootFrameV1 == null) sealW5aGeometryHostTemplateV1(packet,
+                        render.preparedTextBindingsByPacketId[packet.packetId]) else null } })
     internal val w5hSourceAuthorityRootV1: GPUW5hSourceAuthorityRootV1 =
         w5hSourceRootFrameV1?.w5hSourceAuthorityRootV1 ?: GPUW5hSourceAuthorityRootV1(this)
 

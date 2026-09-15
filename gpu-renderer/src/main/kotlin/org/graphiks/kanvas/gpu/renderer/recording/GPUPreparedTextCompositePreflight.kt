@@ -110,7 +110,7 @@ internal object GPUPreparedTextCompositePreflight {
         if (materialPlan?.validates(semantic.payloadRef.commandIdValue, semantic.material) == false ||
             binding.preflightSeal.materialPlanProvenanceIdentity != materialPlan?.canonicalIdentity() ||
             binding.preflightSeal.materialPlanAdmissionToken !== semanticAdmissionToken ||
-            (materialPlan == null) != (semanticAdmissionToken == null) ||
+            (materialPlan == null) != (semanticAdmissionToken == null && semantic.material.commonSource == null) ||
             materialPlan?.matchesAdmissionToken(
                 binding.preflightSeal.materialPlanAdmissionToken,
             ) == false
@@ -140,7 +140,7 @@ internal object GPUPreparedTextCompositePreflight {
                 "Prepared TextA8 composite requires one exact target descriptor.",
             )
         val expectedFragment = runCatching {
-            semantic.material.authenticatedSnapshot().composableFragment
+            semantic.material.authenticatedSnapshot().let { if (it.commonSource == null) it.composableFragment else null }
         }.getOrElse { failure ->
             return sourceRefusal(
                 "Prepared TextA8 material could not be re-authenticated: " +
@@ -237,20 +237,21 @@ internal object GPUPreparedTextCompositePreflight {
 
     private fun validateBindingLayout(
         actual: GPUPreparedTextCompositeProgram,
-        expectedFragment: GPUPreparedMaterialFragment,
+        expectedFragment: GPUPreparedMaterialFragment?,
         render: GPUFrameStep.RenderPassStep,
     ): GPUPreparedTextCompositePreflightRefusal? {
         val coverageMaskVariant =
             actual.clipVariant ==
                 org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextClipVariant.CoverageMask
-        val destinationVariant = actual.destinationBlend != null
+        val common = expectedFragment == null
+        val destinationVariant = actual.destinationBlend != null && !common
         val destinationGroup = if (coverageMaskVariant) 4 else 3
         if (actual.bindingPlan.drawUniformGroup != 0 ||
             actual.bindingPlan.drawUniformBinding != 0 ||
-            actual.bindingPlan.atlasTextureGroup != 2 ||
-            actual.bindingPlan.atlasTextureBinding != 0 ||
-            actual.bindingPlan.atlasSamplerGroup != 2 ||
-            actual.bindingPlan.atlasSamplerBinding != 1 ||
+            actual.bindingPlan.atlasTextureGroup != (if (common) 0 else 2) ||
+            actual.bindingPlan.atlasTextureBinding != (if (common) 1 else 0) ||
+            actual.bindingPlan.atlasSamplerGroup != (if (common) 0 else 2) ||
+            actual.bindingPlan.atlasSamplerBinding != (if (common) 2 else 1) ||
             actual.bindingPlan.coverageMaskTextureGroup !=
             3.takeIf { coverageMaskVariant } ||
             actual.bindingPlan.coverageMaskTextureBinding !=
@@ -648,9 +649,10 @@ internal object GPUPreparedTextCompositePreflight {
         return null
     }
 
-    private fun GPUPreparedMaterialFragment.matches(
-        expected: GPUPreparedMaterialFragment,
+    private fun GPUPreparedMaterialFragment?.matches(
+        expected: GPUPreparedMaterialFragment?,
     ): Boolean =
+        if (this == null || expected == null) this === expected else
         declarationsWgsl == expected.declarationsWgsl &&
             evaluationFunctionWgsl == expected.evaluationFunctionWgsl &&
             uniformBinding == expected.uniformBinding &&

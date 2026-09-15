@@ -233,6 +233,10 @@ internal object W5fColorOperationEmitterV1 {
                     "f32(w5gNoiseGradient(${word(read.tableRangeWordOffsetU32)}, $x, $y, ${read.channelI32}u, ${read.axisI32}u))"
                 }
                 is ColorOperationGraphV1.Scalar.InputLinearPremul -> "($inputRgbaExpression)[${node.channelI32}u]"
+                is ColorOperationGraphV1.Scalar.PrimitiveEncodedInput -> {
+                    require(composedProof?.consumesPrimitiveEncodedInput == true)
+                    "w5h_primitive_encoded[${node.channelI32}u]"
+                }
                 is ColorOperationGraphV1.Scalar.ImageEncodedInput ->
                     "(${requireNotNull(imageEncodedRgbaExpression)})[${node.channelI32}u]"
                 is ColorOperationGraphV1.Scalar.ImageTexelValid -> "f32(${imageAddress(node.read)}.z)"

@@ -2147,7 +2147,7 @@ class GPUPreparedTextPayloadGatherer {
         val material = input.material.preparedTextSnapshot()
         require(
             (input.materialPlanProvenance == null) ==
-                (material.preparedTextW5aAdmissionToken == null) &&
+                (material.preparedTextW5aAdmissionToken == null && material.commonSource == null) &&
                 input.materialPlanProvenance?.validates(input.commandIdValue, material) != false,
         ) {
             "Prepared text W5a material provenance does not match its command or program"

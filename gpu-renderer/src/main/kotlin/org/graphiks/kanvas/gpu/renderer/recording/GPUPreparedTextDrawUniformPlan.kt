@@ -230,10 +230,7 @@ internal fun buildPreparedTextDrawUniformBufferPlan(
         )
     }
     val strideBytes = try {
-        alignUpPreparedTextDrawUniform(
-            PREPARED_TEXT_DRAW_UNIFORM_LOGICAL_BYTES,
-            alignmentBytes,
-        )
+        preparedTextDrawUniformStrideBytesI64(alignmentBytes)
     } catch (_: ArithmeticException) {
         return GPUPreparedTextDrawUniformPlanResult.Refused(
             code = "unsupported.recording.prepared_text_draw_uniform_buffer",
@@ -361,4 +358,8 @@ internal fun ByteArray.preparedTextSha256(): String =
     }
 
 internal const val PREPARED_TEXT_DRAW_UNIFORM_LOGICAL_BYTES: Long = 80L
+
+/** The same physical draw-uniform stride used before and after material admission. */
+fun preparedTextDrawUniformStrideBytesI64(alignmentBytesI64: Long): Long =
+    alignUpPreparedTextDrawUniform(PREPARED_TEXT_DRAW_UNIFORM_LOGICAL_BYTES, alignmentBytesI64)
 private const val PREPARED_TEXT_LOWER_HEX_DIGITS = "0123456789abcdef"

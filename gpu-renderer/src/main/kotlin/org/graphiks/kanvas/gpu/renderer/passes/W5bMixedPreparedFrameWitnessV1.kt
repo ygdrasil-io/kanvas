@@ -10,6 +10,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.*
 import org.graphiks.kanvas.gpu.renderer.resources.*
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import org.graphiks.kanvas.gpu.renderer.materials.w5aMaterialAllocationsV2
+import org.graphiks.kanvas.gpu.renderer.materials.w5hPreparedGeometryAllocationsV6
 import org.graphiks.kanvas.gpu.renderer.execution.*
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 
@@ -53,19 +54,19 @@ internal class W5bMixedPreparedFrameWitnessV1 private constructor(
                 val material = plan.materialFragment
                 val bindings = buildList {
                     add(plan.drawUniformGroup to plan.drawUniformBinding)
-                    material.uniformBinding?.let { add(it.group to it.binding) }
-                    material.sampledBindings.forEach { add(it.textureGroup to it.textureBinding); add(it.samplerGroup to it.samplerBinding) }
+                    material?.uniformBinding?.let { add(it.group to it.binding) }
+                    material?.sampledBindings.orEmpty().forEach { add(it.textureGroup to it.textureBinding); add(it.samplerGroup to it.samplerBinding) }
                     add(plan.atlasTextureGroup to plan.atlasTextureBinding)
                     add(plan.atlasSamplerGroup to plan.atlasSamplerBinding)
                     plan.coverageMaskTextureGroup?.let { add(it to requireNotNull(plan.coverageMaskTextureBinding)) }
                     plan.destinationTextureGroup?.let { add(it to requireNotNull(plan.destinationTextureBinding)) }
                     plan.destinationSamplerGroup?.let { add(it to requireNotNull(plan.destinationSamplerBinding)) }
                 }
-                val texturesI64 = Math.addExact(material.sampledBindings.size.toLong(),
+                val texturesI64 = Math.addExact(material?.sampledBindings.orEmpty().size.toLong(),
                     1L + (if (plan.coverageMaskTextureGroup != null) 1L else 0L) + (if (plan.destinationTextureGroup != null) 1L else 0L))
-                val samplersI64 = Math.addExact(material.sampledBindings.size.toLong(),
+                val samplersI64 = Math.addExact(material?.sampledBindings.orEmpty().size.toLong(),
                     1L + (if (plan.destinationSamplerGroup != null) 1L else 0L))
-                val uniformsI64 = if (material.uniformBinding == null) 1L else 2L
+                val uniformsI64 = if (material?.uniformBinding == null) 1L else 2L
                 admit(RefusalReason.TextBindingCapability, bindings.maxOf { it.first }.toLong() < requireNotNull(limits.maxBindGroupsI32).toLong() &&
                     bindings.groupBy { it.first }.values.all { entries ->
                         entries.size <= requireNotNull(limits.maxBindingsPerBindGroupI32) &&
@@ -74,7 +75,7 @@ internal class W5bMixedPreparedFrameWitnessV1 private constructor(
                     samplersI64 <= requireNotNull(limits.maxSamplersPerShaderStageI32).toLong() &&
                     uniformsI64 <= requireNotNull(limits.maxUniformBuffersPerShaderStageI32).toLong() &&
                     uniformsI64 <= requireNotNull(limits.maxDynamicUniformBuffersPerPipelineLayout) &&
-                    maxOf(80L, material.uniformBinding?.minBindingSizeBytes?.toLong() ?: 0L) <=
+                    maxOf(80L, material?.uniformBinding?.minBindingSizeBytes?.toLong() ?: 0L) <=
                     requireNotNull(limits.maxUniformBufferBindingSizeBytesI64))
             }
         val coreRenders = actual.steps.withIndex().filter { (_, step) -> step is GPUFrameStep.RenderPassStep &&
@@ -110,7 +111,8 @@ internal class W5bMixedPreparedFrameWitnessV1 private constructor(
             }
         })
         val physicalBytesI64 = (actual.memoryBudget.allocations.filterNot { it.label in replacedLabels }.map { it.bytes } +
-            actual.w5aMaterialAllocationsV2().map { it.bytes } + capacities).fold(0L, Math::addExact)
+            actual.w5aMaterialAllocationsV2().map { it.bytes } +
+            actual.w5hPreparedGeometryAllocationsV6().map { it.bytes } + capacities).fold(0L, Math::addExact)
         admit(RefusalReason.PhysicalBudget, physicalBytesI64 <= timeline.budget.maxFrameLocalBytes)
         val inventory = NativeInventory(sizing)
         require(sealedNativeInventory == null || sealedNativeInventory == inventory)
@@ -319,7 +321,8 @@ internal class W5bMixedPreparedFrameWitnessV1 private constructor(
                 })
             }
             val physicalI64 = (listOf(frame.memoryBudget.targetResidentBytes, frame.memoryBudget.peakFrameTransientBytes) +
-                frame.w5aMaterialAllocationsV2().map { it.bytes }).fold(0L, Math::addExact)
+                frame.w5aMaterialAllocationsV2().map { it.bytes } +
+                frame.w5hPreparedGeometryAllocationsV6().map { it.bytes }).fold(0L, Math::addExact)
             admit(RefusalReason.PhysicalBudget, physicalI64 <= timeline.budget.maxFrameLocalBytes)
             val coreIds = core.map { it.packetId }.toSet()
             require(nativeCoreDestinationTasks.flatMap { it.payload.operations }.size ==

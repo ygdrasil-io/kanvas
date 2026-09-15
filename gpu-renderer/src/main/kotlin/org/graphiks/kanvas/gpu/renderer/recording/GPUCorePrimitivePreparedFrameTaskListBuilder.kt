@@ -5549,6 +5549,15 @@ private data class GPUCorePrimitiveDestinationSnapshotPlan(
  * command and blend only (family-agnostic), so the same [GPUDestinationSnapshotOperation.TextureCopy]
  * machinery the ColorGlyph lane uses serves the core-primitive lane unchanged.
  */
+/** Exact shared snapshot capacity, also used before common prepared-source publication. */
+fun preparedCoreDestinationCapacityBoundsV6(bounds: List<GPUPixelBounds>, rowAlignmentI64: Long): GPUPixelBounds {
+    require(bounds.isNotEmpty() && bounds.none { it.isEmpty })
+    val maximumRowBytesI64 = Math.multiplyExact(bounds.maxOf { it.width }.toLong(), 4L)
+    val capacityRowBytesI64 = corePrimitiveAlignUpPreparedText(maximumRowBytesI64, rowAlignmentI64)
+    require(capacityRowBytesI64 % 4L == 0L)
+    return GPUPixelBounds(0, 0, Math.toIntExact(capacityRowBytesI64 / 4L), bounds.maxOf { it.height })
+}
+
 private fun buildCorePrimitiveDestinationSnapshotPlans(
     request: GPUCorePrimitivePreparedFrameRequest,
     packets: List<GPUDrawPacket>,
@@ -5564,11 +5573,9 @@ private fun buildCorePrimitiveDestinationSnapshotPlans(
         else request.targetBounds // Unpromoted destination path retains its existing contract.
     }
     val allW5b = destinationPackets.all { (it.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead)?.sealedW5b != null }
-    val maximumRowBytes = Math.multiplyExact(boundsByPacketId.values.maxOf { it.width }.toLong(), 4L)
-    val capacityRowBytes = if (allW5b) corePrimitiveAlignUpPreparedText(maximumRowBytes, limits.copyBytesPerRowAlignment)
-        else maximumRowBytes
-    require(capacityRowBytes % 4L == 0L)
-    val capacity = GPUPixelBounds(0, 0, Math.toIntExact(capacityRowBytes / 4L), boundsByPacketId.values.maxOf { it.height })
+    val capacity = preparedCoreDestinationCapacityBoundsV6(boundsByPacketId.values.toList(),
+        if (allW5b) limits.copyBytesPerRowAlignment else 4L)
+    val capacityRowBytes = Math.multiplyExact(capacity.width.toLong(), 4L)
     val textureBytes = Math.multiplyExact(capacityRowBytes, capacity.height.toLong())
     val snapshot = GPUFrameTextureRef(
         "texture.core-primitive.destination-snapshot.${request.baseTaskList.frameId.value}",

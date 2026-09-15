@@ -2179,7 +2179,7 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFac
                 if (!clipStencilProducer) add("setBindGroup")
                 val verticesSemantic = packet.semanticPayload as?
                     org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.Vertices
-                if (verticesSemantic != null) add("setBindGroup")
+                if (verticesSemantic != null && verticesSemantic.material.commonSource == null) add("setBindGroup")
                 val directRoutes = scope.corePrimitiveDirectNativeRouteSeal as?
                     GPUCorePrimitiveDirectNativeRouteSeal.Routes
                 val clipStencilSealed =
@@ -2254,7 +2254,7 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassS
         if (!clipStencilProducer) add(packet.packetId)
         val verticesSemantic = packet.semanticPayload as?
             org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.Vertices
-        if (verticesSemantic != null) add(packet.packetId)
+        if (verticesSemantic != null && verticesSemantic.material.commonSource == null) add(packet.packetId)
         if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
             verticesSemantic != null ||
             directRoutes?.routesByPacketId?.containsKey(packet.packetId) == true ||

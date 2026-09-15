@@ -832,6 +832,7 @@ class GPUPreparedTextRenderBinding(
 
 /** Passive Task 5 handoff; native execution consumes no materials-package semantic type. */
 internal class GPUPreparedTextNativeProgramHandoff private constructor(
+    val commonGeometry: Boolean,
     val wgslSource: String,
     val vertexEntryPoint: String,
     val fragmentEntryPoint: String,
@@ -864,17 +865,18 @@ internal class GPUPreparedTextNativeProgramHandoff private constructor(
         ): GPUPreparedTextNativeProgramHandoff {
             val fragment = program.bindingPlan.materialFragment
             return GPUPreparedTextNativeProgramHandoff(
+                commonGeometry = fragment == null,
                 wgslSource = program.wgslSource,
                 vertexEntryPoint = program.vertexEntryPoint,
                 fragmentEntryPoint = program.fragmentEntryPoint,
                 drawUniformBinding = program.bindingPlan.drawUniformBinding,
-                materialUniformBinding = fragment.uniformBinding?.let { binding ->
+                materialUniformBinding = fragment?.uniformBinding?.let { binding ->
                     GPUPreparedTextNativeUniformBinding(
                         binding = binding.binding,
                         minBindingSizeBytes = binding.minBindingSizeBytes,
                     )
                 },
-                materialSampledBindings = fragment.sampledBindings.map { binding ->
+                materialSampledBindings = fragment?.sampledBindings.orEmpty().map { binding ->
                     GPUPreparedTextNativeSampledBinding(
                         textureBinding = binding.textureBinding,
                         samplerBinding = binding.samplerBinding,

@@ -11,6 +11,10 @@ internal class W5aPacketMaterialSourceV2 private constructor(
     val canonicalIdentity: String = "${if (stage.imageV3 == null) "w5a-source-v2" else "w5e-source-v3"}:$commandIdI32:${stage.canonicalIdentity}"
 
     companion object {
+        fun bindCommon(stage: W5aMaterialSourceStage, commandIdI32: Int): W5aPacketMaterialSourceV2 {
+            require(commandIdI32 >= 0 && stage.composedProof?.composedProgramV6 != null)
+            return W5aPacketMaterialSourceV2(commandIdI32, stage)
+        }
         fun issueImage(table: MaterialPlanTable, authority: org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority,
             execution: org.graphiks.kanvas.gpu.plan.ImageSampleExecutionPlanV1,commandIdI32: Int,
             packedSourceV4: org.graphiks.kanvas.gpu.plan.RawMaterialRequirementsV2? = null): W5aPacketMaterialSourceV2 {

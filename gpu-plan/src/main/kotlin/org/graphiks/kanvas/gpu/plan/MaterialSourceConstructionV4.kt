@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.plan
 
+import org.graphiks.kanvas.render.ir.GeometryNode
+
 import org.graphiks.kanvas.color.ColorInterpolationProgramV1
 import org.graphiks.kanvas.render.ir.ColorInterpolation
 import org.graphiks.kanvas.render.ir.DrawNode
@@ -250,7 +252,10 @@ internal class MaterialSourceConstructionV4 private constructor(
         val uniformBytesI64: Long = Math.addExact(NoiseOperationGraphV1.HEADER_BYTES_I64, coordinates.uniformByteSizeI64)
     }
 
-    internal class ComposedMetadata(nodes: List<Node>, val layout: ComposedBindingLayoutV1) {
+    internal class ComposedMetadata(nodes: List<Node>, val layout: ComposedBindingLayoutV1,
+        val primitiveEvaluationRef: MaterialEvaluationRefV5? = null,
+        val primitiveBlendMode: org.graphiks.kanvas.render.ir.BlendMode? = null,
+        val primitiveGeometry: GeometryNode.IndexedMesh? = null) {
         val nodes: List<Node> = immutableList(nodes)
         val runtimeResources: List<CapturedRuntimeResourceV1> = immutableList(this.nodes.filter { it.runtime != null }
             .distinctBy { it.ownerNodeIndexI32 }.sortedBy { it.ownerNodeIndexI32 }.flatMap { node ->
@@ -317,10 +322,13 @@ internal class MaterialSourceConstructionV4 private constructor(
             }
             val sliceCode = if (sliceLeaf is MaterialNode.PerlinNoise || sliceLeaf is MaterialNode.FractalNoise)
                 W5gPlanDiagnostics.NoiseUnpromoted else W5gPlanDiagnostics.Unpromoted
+            val mesh = draw.geometry as? org.graphiks.kanvas.render.ir.GeometryNode.IndexedMesh
+            val preparedMesh = draw.origin in setOf(DrawOrigin.VERTICES, DrawOrigin.MESH) &&
+                mesh != null && mesh.program == null && mesh.meshProgram == null
             require((draw.origin in setOf(DrawOrigin.RECT,DrawOrigin.RRECT,DrawOrigin.PATH) && draw.paint?.style == PaintStyleNode.FILL ||
                 draw.origin == DrawOrigin.PATH && draw.paint?.style == PaintStyleNode.STROKE ||
-                draw.origin in setOf(DrawOrigin.POINT,DrawOrigin.POINTS)) &&
-                draw.resource == null && draw.operationBlendMode == null) { sliceCode }
+                draw.origin in setOf(DrawOrigin.POINT,DrawOrigin.POINTS,DrawOrigin.TEXT) || preparedMesh) &&
+                draw.resource == null && (draw.operationBlendMode == null || preparedMesh)) { sliceCode }
             require(colorFilterEffectsMatchPaint(draw)) { W5gPlanDiagnostics.Schema }
             val nodes = mutableListOf<ComposedMetadata.Node>()
             val mappings = mutableListOf<ComposedBindingLayoutV1.UniformMapping>()
@@ -493,6 +501,8 @@ internal class MaterialSourceConstructionV4 private constructor(
             // Prefix owner assignment includes the actual outer paint operations;
             // postorder evaluation refs remain explicit and independently checked.
             visit(root,Context(emptyList(),null))
+            val primitiveRef = if (preparedMesh && mesh!!.copyColors() != null)
+                completed.getValue(draw.material).getValue(Context(emptyList(), null)) else null
             val offsets = mutableMapOf<Field,Int>()
             for(owner in 0 until owners) {
                 val base=cursor
@@ -537,7 +547,9 @@ internal class MaterialSourceConstructionV4 private constructor(
                     buffer=ComposedBindingLayoutV1.Buffer(2u,16L,storageKind=ComposedBindingLayoutV1.StorageKind.NOISE_U32))
                 else ComposedBindingLayoutV1.Resource(owner,0,1,index+1,2u,2u,texture=ComposedBindingLayoutV1.Texture(1u,1u))
             }
-            val metadata = ComposedMetadata(nodes,ComposedBindingLayoutV1(mappings,cursor,resources))
+            val metadata = ComposedMetadata(nodes,ComposedBindingLayoutV1(mappings,cursor,resources), primitiveRef,
+                primitiveRef?.let { draw.operationBlendMode ?: org.graphiks.kanvas.render.ir.BlendMode.MODULATE },
+                primitiveRef?.let { draw.geometry as GeometryNode.IndexedMesh })
             return MaterialSourceConstructionV4(draw.material,draw.paint,SourceCoordinatesV4.None,bounds,blend,
                 "captured-composed-v6:${java.util.UUID.randomUUID()}",null,null,composed=metadata,runtimeCatalog=runtimeCatalog)
         }
@@ -625,8 +637,12 @@ internal class MaterialSourceConstructionV4 private constructor(
                 require(!imageMaskChild) { W5gPlanDiagnostics.Unpromoted }
                 SourceConstructionResultV4.Built(captureComposed(draw,bounds,blend,runtimeCatalog))
             } else {
-            require(imageMaskChild || draw.origin in setOf(DrawOrigin.RECT, DrawOrigin.RRECT, DrawOrigin.PATH, DrawOrigin.POINT, DrawOrigin.POINTS) &&
-                draw.resource == null && draw.operationBlendMode == null) { W5fPlanDiagnostics.Unpromoted }
+            val preparedMesh = (draw.geometry as? org.graphiks.kanvas.render.ir.GeometryNode.IndexedMesh)?.let {
+                draw.origin in setOf(DrawOrigin.VERTICES, DrawOrigin.MESH) && it.program == null && it.meshProgram == null
+            } == true
+            require(imageMaskChild || (draw.origin in setOf(DrawOrigin.RECT, DrawOrigin.RRECT, DrawOrigin.PATH,
+                DrawOrigin.POINT, DrawOrigin.POINTS, DrawOrigin.TEXT) || preparedMesh) &&
+                draw.resource == null && (draw.operationBlendMode == null || preparedMesh)) { W5fPlanDiagnostics.Unpromoted }
             require(colorFilterEffectsMatchPaint(draw)) { W5fPlanDiagnostics.Schema }
             val wrappers = mutableListOf<SourceUnaryMetadataV4>()
             val coordinateNodes = mutableListOf<CoordinateNodeV2>()

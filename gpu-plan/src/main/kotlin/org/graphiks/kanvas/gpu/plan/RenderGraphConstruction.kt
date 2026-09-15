@@ -152,6 +152,15 @@ internal class PackedFrameSourcesV4 private constructor(private val table: Mater
     private val capabilities: PlanCapabilitySnapshot, private val budget: PlanBudget,
     sources: Map<String, RawMaterialRequirementsV2>) {
     private val sources = java.util.Collections.unmodifiableMap(LinkedHashMap(sources))
+    fun forPrepared(candidate: MaterialPlanTable, ref: MaterialPlanRef,
+        coordinates: SourceCoordinatesV4): RawMaterialRequirementsV2 {
+        require(candidate === table) { W5fPlanDiagnostics.Schema }
+        val footprint = RawMaterialRequirementsV2.measureV4(candidate, ref)
+        require(footprint.proof.authenticates(candidate, ref, coordinates)) { W5fPlanDiagnostics.Schema }
+        return requireNotNull(sources[footprint.canonicalIdentity]).also {
+            require(it.canonicalIdentity.endsWith(footprint.canonicalIdentity)) { W5fPlanDiagnostics.Schema }
+        }
+    }
     fun forConstruction(graph: RenderGraphConstruction): Map<String, RawMaterialRequirementsV2> {
         require(graph.materialTable === table && graph.capabilities == capabilities && graph.budget == budget) {
             W5fPlanDiagnostics.Schema
@@ -201,13 +210,24 @@ internal class PackedFrameSourcesV4 private constructor(private val table: Mater
             RawMaterialRequirementsV2.requireFrameBudget(legacy,nonUniformBytesI64,first.budget,"w5a.composite.unsupported")
             val packed = if (footprints.isEmpty()) emptyMap() else {
                 val base = legacy.fold(nonUniformBytesI64) { bytes, source -> Math.addExact(bytes,source.uniformByteCountI64) }
-                val permit = RawMaterialRequirementsV2.requireFrameBudgetV4(footprints,base,first.budget,first.capabilities,
-                    "resource-limit.w5b.source-budget")
-                footprints.distinctBy { it.canonicalIdentity }.associate {
-                    it.canonicalIdentity to RawMaterialRequirementsV2.packV4(it,permit)
-                }
+                packFootprints(footprints, base, first.budget, first.capabilities)
             }
             return PackedFrameSourcesV4(table,first.capabilities,first.budget,packed)
+        }
+
+        fun issuePrepared(table: MaterialPlanTable, capabilities: PlanCapabilitySnapshot, budget: PlanBudget,
+            footprints: List<MaterialSourceFootprintV4>, nonUniformBytesI64: Long): PackedFrameSourcesV4 =
+            PackedFrameSourcesV4(table, capabilities, budget,
+                packFootprints(footprints, nonUniformBytesI64, budget, capabilities))
+
+        /** One permit/packing authority for both real graph and prepared-source inputs. */
+        private fun packFootprints(footprints: List<MaterialSourceFootprintV4>, base: Long,
+            budget: PlanBudget, capabilities: PlanCapabilitySnapshot): Map<String, RawMaterialRequirementsV2> {
+            val permit = RawMaterialRequirementsV2.requireFrameBudgetV4(footprints, base, budget, capabilities,
+                "resource-limit.w5b.source-budget")
+            return footprints.distinctBy { it.canonicalIdentity }.associate {
+                it.canonicalIdentity to RawMaterialRequirementsV2.packV4(it, permit)
+            }
         }
     }
 }

@@ -1002,6 +1002,16 @@ internal fun GPUFramePathVisualCommand.isInPreparedPointDomain(targetBounds: GPU
     }
 }
 
+/** The already-admitted Rect's actual device geometry and exact integral clip. */
+internal fun GPUFramePathVisualCommand.preparedRectDestinationBounds(target: GPUPixelBounds): GPUPixelBounds {
+    require(isInPreparedPointDomain(target, false))
+    val rect = normalized.toDeviceGeometry(target) as GPUCorePrimitiveGeometryInput.Rect
+    val bounds = org.graphiks.kanvas.gpu.renderer.commands.GPUBounds(rect.left, rect.top, rect.right, rect.bottom)
+        .preparedVerticesPixelBounds(target)
+    return org.graphiks.kanvas.gpu.renderer.destination.preparedDestinationIntersection(bounds,
+        requireNotNull(clipCoverage.toPreparedScissorBounds(target)), target)
+}
+
 private fun GPUFramePathVisualCommand.coreCoverageMode(directStrokeUnderHardPathClip: Boolean = false): GPUCorePrimitiveCoverageMode =
     if (directStrokeUnderHardPathClip || normalized is NormalizedDrawCommand.FillPath && normalized.isHairlinePointCommand())
         GPUCorePrimitiveCoverageMode.FullOrScissor else coverageMode()

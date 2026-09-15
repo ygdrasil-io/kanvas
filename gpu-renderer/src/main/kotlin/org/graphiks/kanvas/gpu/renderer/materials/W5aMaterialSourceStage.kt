@@ -132,7 +132,7 @@ internal class W5aMaterialSourceStage private constructor(
                 ${W5hRuntimeEffectEmitterV1.resourceDeclarations(proof)}
                 $W5D_SAFE_DIVIDE_WGSL
                 fn w5f_device_point(pixel: vec2<f32>) -> vec2<f32> { return pixel; }
-                fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {
+                fn kanvas_material_source(localPosition: vec2<f32>${if (proof.consumesPrimitiveEncodedInput) ", w5h_primitive_encoded: vec4<f32>" else ""}) -> vec4<f32> {
                     $code
                 }
             """.trimIndent(),requirements.bindingCountI32,false,slab,"w5f_device_point",image,

@@ -291,6 +291,20 @@ class Canvas internal constructor(buffer: DisplayListBuffer) {
         buffer.append(DisplayOp.DrawVertices(vertices.snapshotForDisplayList(), paint, currentTransform, currentRecordedClip))
     }
 
+    /** Combines the paint shader (source) with vertex colors (destination), then applies paint alpha/filter and final blend. */
+    fun drawVertices(vertices: Vertices, operationBlendMode: BlendMode, paint: Paint) {
+        val snapshot = vertices.snapshotForDisplayList()
+        val bounds = requireNotNull(RectF32.bounds(snapshot.positions.toTypedArray())) {
+            "Vertices positions must be finite"
+        }
+        drawCapturedMesh(Mesh(snapshot, bounds = bounds), paint, operationBlendMode)
+    }
+
+    /** Preserve the captured operation role when replaying the existing Mesh wire form. */
+    internal fun drawCapturedMesh(mesh: Mesh, paint: Paint, operationBlendMode: BlendMode?) {
+        buffer.append(DisplayOp.DrawMesh(mesh, paint, operationBlendMode, currentTransform, currentRecordedClip))
+    }
+
     fun drawMesh(mesh: Mesh, paint: Paint, blendMode: BlendMode? = null) {
         if (mesh.program != null) {
             buffer.append(DisplayOp.DrawMesh(mesh, paint, blendMode, currentTransform, currentRecordedClip))

@@ -68,7 +68,8 @@ public class W5bMixedFramePlanV1 private constructor(
             val sourceRequirements = mutableListOf<RawMaterialRequirementsV2>()
             val draws = inputs.map { input ->
                 require(input.commandIndexI32 >= 0)
-                if (input.sourceTable.coordinatesV4(input.sourceRef) != null) {
+                if (input.sourceTable.coordinatesV4(input.sourceRef) != null ||
+                    input.sourceTable.entry(input.sourceRef).bindings is ComposedMaterialBindingV5) {
                     if (input.blend != BlendPlan.NoOpV1) RawMaterialRequirementsV2.measureV4(input.sourceTable,input.sourceRef)
                 } else {
                     val source = RawMaterialRequirementsV2.of(input.sourceTable, input.sourceRef)

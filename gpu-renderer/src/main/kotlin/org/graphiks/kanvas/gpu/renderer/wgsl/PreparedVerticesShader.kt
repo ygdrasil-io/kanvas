@@ -88,7 +88,7 @@ object PreparedVerticesShaderAssembler {
         reflectionProvider: WGSLReflectionProvider,
     ): GPUPreparedVerticesShaderResult {
         if ((materialPlanProvenance == null) !=
-            (material.preparedVerticesW5aAdmissionToken == null) ||
+            (material.preparedVerticesW5aAdmissionToken == null && material.commonSource == null) ||
             (materialPlanProvenance != null &&
                 (commandIdValueI32 == null || !materialPlanProvenance.validates(commandIdValueI32, material)))
         ) {
@@ -117,7 +117,10 @@ object PreparedVerticesShaderAssembler {
             )
         }
         val hasTexCoord = layout.attributes.contains("texcoord")
-        val fragment = material.composableFragment
+        val common = material.commonSource
+        require(common == null || common.stage.composedProof?.consumesPrimitiveEncodedInput == hasColor)
+        val fragment = if (common == null) material.composableFragment else null
+        val geometryDestination = if (common == null) destinationBlend else null
         if (destinationBlend?.let { blend ->
                 blend.sourceCoverageEncoding !=
                     org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding.None ||
@@ -138,7 +141,7 @@ object PreparedVerticesShaderAssembler {
             hasColor,
             hasTexCoord,
             fragment,
-            destinationBlend,
+            geometryDestination,
         )
 
         val parsedModule = validator.parse(source)
@@ -169,7 +172,7 @@ object PreparedVerticesShaderAssembler {
                 "Prepared vertices reflection did not prove the exact entry-point ABI",
             )
         }
-        preparedVerticesBindingMismatch(fragment, destinationBlend != null, report.bindings)?.let { message ->
+        preparedVerticesBindingMismatch(fragment, geometryDestination != null, report.bindings)?.let { message ->
             return preparedVerticesRefused(GPUPreparedVerticesRefusalCodes.Material, message)
         }
         preparedVerticesLayoutMismatch(fragment, report.layouts)?.let { message ->
@@ -192,8 +195,9 @@ object PreparedVerticesShaderAssembler {
                     "Prepared vertices module could not be lowered",
                 )
             }
-        val materialSignatureProven =
+        val materialSignatureProven = if (common == null)
             lowered.hasMaterialColorFunctionSignature(MATERIAL_EVALUATION_FUNCTION)
+        else source.contains(PREPARED_VERTICES_COMMON_SOURCE_SLOT) && report.bindings.all { it.group == 0 }
         if (!materialSignatureProven) {
             return preparedVerticesRefused(
                 GPUPreparedVerticesRefusalCodes.Material,
@@ -202,13 +206,16 @@ object PreparedVerticesShaderAssembler {
         }
 
         val vertexLayoutHash = preparedVerticesVertexLayoutHash(layout)
-        val bindingLayoutHash = preparedVerticesBindingLayoutHash(fragment, destinationBlend)
+        val bindingLayoutHash = preparedVerticesBindingLayoutHash(fragment, geometryDestination)
         val reflectedAbiHash = preparedVerticesReflectedAbiHash(
             report = report,
             interfaceFacts = interfaceFacts,
             materialSignatureProven = materialSignatureProven,
         )
-        val pipelineKeyHash = preparedVerticesPipelineKeyHash(
+        val pipelineKeyHash = if (common != null) CanonicalIdentityEncoder("prepared-vertices-geometry-v6")
+            .text("vertexLayout", vertexLayoutHash).text("bindings", bindingLayoutHash)
+            .text("reflection", reflectedAbiHash).text("topology", topology.sourceLabel).digestIdentity()
+        else preparedVerticesPipelineKeyHash(
             vertexLayoutHash = vertexLayoutHash,
             bindingLayoutHash = bindingLayoutHash,
             reflectedAbiHash = reflectedAbiHash,
@@ -239,7 +246,7 @@ private fun preparedVerticesRefused(
 private fun preparedVerticesShaderSource(
     hasColor: Boolean,
     hasTexCoord: Boolean,
-    fragment: GPUPreparedMaterialFragment,
+    fragment: GPUPreparedMaterialFragment?,
     destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead?,
 ): String = listOf(
     """
@@ -302,7 +309,7 @@ struct PreparedVerticesDrawUniforms {
         append("    return output;\n")
         append("}")
     },
-    fragment.declarationsWgsl + "\n\n" + fragment.evaluationFunctionWgsl,
+    fragment?.let { it.declarationsWgsl + "\n\n" + it.evaluationFunctionWgsl }.orEmpty(),
     destinationBlend?.let { blend ->
         """
 @group(2) @binding(0) var preparedVerticesDestination: texture_2d<f32>;
@@ -321,6 +328,13 @@ ${requireNotNull(GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(
             "fn fs_main(input: PreparedVerticesVertexOutput) -> " +
                 "@location(0) vec4<f32> {\n",
         )
+        if (fragment == null) {
+            // Geometry-only expression slot; the sealed common source composer must replace
+            // this exact return before the pipeline can enter the native source partition.
+            append("    $PREPARED_VERTICES_COMMON_SOURCE_SLOT\n")
+            append("}")
+            return@buildString
+        }
         append("    let materialPremul = kanvas_evaluate_material(input.localPosition);\n")
         if (hasColor) {
             // The scene target stores through the LinearPremul sRGB attachment authority: the
@@ -358,7 +372,7 @@ ${requireNotNull(GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(
 ).joinToString("\n\n")
 
 private fun preparedVerticesBindingMismatch(
-    fragment: GPUPreparedMaterialFragment,
+    fragment: GPUPreparedMaterialFragment?,
     hasDestinationBlend: Boolean,
     bindings: List<WgslBindingReflection>,
 ): String? {
@@ -373,7 +387,7 @@ private fun preparedVerticesBindingMismatch(
                 viewDimension = null,
             ),
         )
-        fragment.uniformBinding?.let { uniformBinding ->
+        fragment?.uniformBinding?.let { uniformBinding ->
             add(
                 PreparedBindingFacts(
                     group = uniformBinding.group,
@@ -385,7 +399,7 @@ private fun preparedVerticesBindingMismatch(
                 ),
             )
         }
-        fragment.sampledBindings.forEach { sampledBinding ->
+        fragment?.sampledBindings.orEmpty().forEach { sampledBinding ->
             add(
                 PreparedBindingFacts(
                     group = sampledBinding.textureGroup,
@@ -450,7 +464,7 @@ private fun preparedVerticesBindingMismatch(
 }
 
 private fun preparedVerticesLayoutMismatch(
-    fragment: GPUPreparedMaterialFragment,
+    fragment: GPUPreparedMaterialFragment?,
     layouts: List<WgslLayoutReflection>,
 ): String? {
     val drawLayout = layouts.singleOrNull { it.structName == DRAW_UNIFORMS_STRUCT_NAME }
@@ -479,7 +493,7 @@ private fun preparedVerticesLayoutMismatch(
     ) {
         return "Prepared vertices draw-uniform layout members were not reflected exactly"
     }
-    fragment.uniformBinding?.let { uniformBinding ->
+    fragment?.uniformBinding?.let { uniformBinding ->
         if (layouts.none { layout ->
                 layout.addressSpace == "uniform" &&
                     layout.structName != DRAW_UNIFORMS_STRUCT_NAME &&
@@ -621,7 +635,7 @@ private fun preparedVerticesVertexLayoutHash(layout: GPUVertexLayoutPlan): Strin
         .digestIdentity()
 
 private fun preparedVerticesBindingLayoutHash(
-    fragment: GPUPreparedMaterialFragment,
+    fragment: GPUPreparedMaterialFragment?,
     destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead?,
 ): String =
     CanonicalIdentityEncoder("prepared-vertices-binding-layout-v1")
@@ -632,14 +646,14 @@ private fun preparedVerticesBindingLayoutHash(
         )
         .text(
             "materialUniform",
-            fragment.uniformBinding?.let { uniformBinding ->
+            fragment?.uniformBinding?.let { uniformBinding ->
                 "group=${uniformBinding.group};binding=${uniformBinding.binding};" +
                     "size=${uniformBinding.minBindingSizeBytes}"
             } ?: "none",
         )
         .texts(
             "sampledBindings",
-            fragment.sampledBindings.map { sampledBinding ->
+            fragment?.sampledBindings.orEmpty().map { sampledBinding ->
                 "texture=${sampledBinding.textureGroup}:${sampledBinding.textureBinding};" +
                     "sampler=${sampledBinding.samplerGroup}:${sampledBinding.samplerBinding}"
             },
@@ -748,6 +762,7 @@ private data class PreparedLayoutMember(
 )
 
 private const val VERTEX_ENTRY_POINT = "vs_main"
+internal const val PREPARED_VERTICES_COMMON_SOURCE_SLOT = "return vec4<f32>(input.localPosition, 0.0, 0.0);"
 private const val FRAGMENT_ENTRY_POINT = "fs_main"
 private const val MATERIAL_EVALUATION_FUNCTION = "kanvas_evaluate_material"
 private const val PREPARED_VERTICES_BLEND_FUNCTION = "kanvasPreparedVerticesBlend"

@@ -51,3 +51,10 @@ internal fun GPUTextA8Instance.preparedTextPixelBounds(
         bottom = ceil(ys.max()).toInt().coerceIn(target.top, target.bottom),
     ).takeUnless(GPUPixelBounds::isEmpty)
 }
+
+/** Same integral projection used by the Vertices semantic payload and its CPU inventory. */
+internal fun GPUBounds.preparedVerticesPixelBounds(target: GPUPixelBounds): GPUPixelBounds = GPUPixelBounds(
+    floor(left.toDouble()).coerceIn(target.left.toDouble(), target.right.toDouble()).toInt(),
+    floor(top.toDouble()).coerceIn(target.top.toDouble(), target.bottom.toDouble()).toInt(),
+    ceil(right.toDouble()).coerceIn(target.left.toDouble(), target.right.toDouble()).toInt(),
+    ceil(bottom.toDouble()).coerceIn(target.top.toDouble(), target.bottom.toDouble()).toInt())

@@ -22,7 +22,7 @@ import org.graphiks.wgsl.parser.parseWgslResult
 data class GPUPreparedTextCompositeBindingPlan(
     val drawUniformGroup: Int,
     val drawUniformBinding: Int,
-    val materialFragment: GPUPreparedMaterialFragment,
+    val materialFragment: GPUPreparedMaterialFragment?,
     val atlasTextureGroup: Int,
     val atlasTextureBinding: Int,
     val atlasSamplerGroup: Int,
@@ -97,18 +97,19 @@ private class GPUPreparedTextCompositeAdmission(
                         failure::class.simpleName.orEmpty(),
                 )
             }
-        val fragment = authenticatedMaterial.composableFragment
-        if (
+        val common = authenticatedMaterial.commonSource != null
+        val fragment = if (common) null else authenticatedMaterial.composableFragment
+        if (fragment != null && (
             fragment.colorContract !=
             GPUPreparedMaterialColorContract.LinearPremultipliedRgba ||
             fragment.coordinateContract !=
-            GPUPreparedMaterialCoordinateContract.LocalPosition2D
+            GPUPreparedMaterialCoordinateContract.LocalPosition2D)
         ) {
             preparedTextCompositeAdmissionRefused(
                 "Prepared material fragment contracts are not composable with text",
             )
         }
-        preparedTextReservedIdentifierCollision(fragment)?.let { identifier ->
+        fragment?.let(::preparedTextReservedIdentifierCollision)?.let { identifier ->
             preparedTextCompositeAdmissionRefused(
                 "Prepared material fragment collides with reserved identifier $identifier",
             )
@@ -119,7 +120,7 @@ private class GPUPreparedTextCompositeAdmission(
                 fragment,
                 sourceCoverageEncoding,
                 clipVariant,
-                destinationBlend,
+                if (common) null else destinationBlend,
             )
         }.getOrElse { failure ->
             preparedTextCompositeAdmissionRefused(
@@ -176,10 +177,10 @@ private class GPUPreparedTextCompositeAdmission(
             drawUniformGroup = DRAW_UNIFORM_GROUP,
             drawUniformBinding = DRAW_UNIFORM_BINDING,
             materialFragment = fragment,
-            atlasTextureGroup = ATLAS_GROUP,
-            atlasTextureBinding = ATLAS_TEXTURE_BINDING,
-            atlasSamplerGroup = ATLAS_GROUP,
-            atlasSamplerBinding = ATLAS_SAMPLER_BINDING,
+            atlasTextureGroup = if (common) 0 else ATLAS_GROUP,
+            atlasTextureBinding = if (common) 1 else ATLAS_TEXTURE_BINDING,
+            atlasSamplerGroup = if (common) 0 else ATLAS_GROUP,
+            atlasSamplerBinding = if (common) 2 else ATLAS_SAMPLER_BINDING,
             coverageMaskTextureGroup =
                 COVERAGE_MASK_GROUP.takeIf {
                     clipVariant == GPUPreparedTextClipVariant.CoverageMask
@@ -188,7 +189,7 @@ private class GPUPreparedTextCompositeAdmission(
                 COVERAGE_MASK_TEXTURE_BINDING.takeIf {
                     clipVariant == GPUPreparedTextClipVariant.CoverageMask
                 },
-            destinationTextureGroup = destinationBlend?.let {
+            destinationTextureGroup = destinationBlend?.takeUnless { common }?.let {
                 if (clipVariant == GPUPreparedTextClipVariant.CoverageMask) {
                     DESTINATION_WITH_COVERAGE_MASK_GROUP
                 } else {
@@ -196,9 +197,9 @@ private class GPUPreparedTextCompositeAdmission(
                 }
             },
             destinationTextureBinding = DESTINATION_TEXTURE_BINDING.takeIf {
-                destinationBlend != null
+                destinationBlend != null && !common
             },
-            destinationSamplerGroup = destinationBlend?.let {
+            destinationSamplerGroup = destinationBlend?.takeUnless { common }?.let {
                 if (clipVariant == GPUPreparedTextClipVariant.CoverageMask) {
                     DESTINATION_WITH_COVERAGE_MASK_GROUP
                 } else {
@@ -206,7 +207,7 @@ private class GPUPreparedTextCompositeAdmission(
                 }
             },
             destinationSamplerBinding = DESTINATION_SAMPLER_BINDING.takeIf {
-                destinationBlend != null
+                destinationBlend != null && !common
             },
         )
         vertexLayout = exactVertexLayout
@@ -429,15 +430,15 @@ private fun preparedTextCompositeAdmissionRefused(message: String): Nothing =
     throw GPUPreparedTextCompositeAdmissionRefused(message)
 
 private fun preparedTextCompositeSourceForFragment(
-    fragment: GPUPreparedMaterialFragment,
+    fragment: GPUPreparedMaterialFragment?,
     sourceCoverageEncoding: GPUSourceCoverageEncoding,
     clipVariant: GPUPreparedTextClipVariant,
     destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead?,
 ): String = listOf(
-    fragment.declarationsWgsl,
-    fragment.evaluationFunctionWgsl,
+    fragment?.declarationsWgsl.orEmpty(),
+    fragment?.evaluationFunctionWgsl.orEmpty(),
     PreparedTextA8Shader.vertexWgsl,
-    PreparedTextA8Shader.fragmentWgsl(sourceCoverageEncoding, clipVariant, destinationBlend),
+    PreparedTextA8Shader.fragmentWgsl(sourceCoverageEncoding, clipVariant, destinationBlend, commonGeometry = fragment == null),
 ).joinToString("\n\n")
 
 private fun preparedTextReservedIdentifierCollision(
@@ -451,7 +452,7 @@ private fun preparedTextReservedIdentifierCollision(
 
 private fun preparedTextCompositeAbiFacts(
     vertexLayout: GPUPreparedTextVertexLayout,
-    fragment: GPUPreparedMaterialFragment,
+    fragment: GPUPreparedMaterialFragment?,
     report: WgslReflectionReport,
 ): List<String> = buildList {
     add("prepared-text-composite-abi:v1")
@@ -478,8 +479,8 @@ private fun preparedTextCompositeAbiFacts(
     report.entryPoints.forEach { entryPoint ->
         add("entry=${entryPoint.name}:${entryPoint.stage}")
     }
-    add("material.colorContract=${fragment.colorContract.name}")
-    add("material.coordinateContract=${fragment.coordinateContract.name}")
+    add("material.colorContract=${fragment?.colorContract?.name ?: "common-source-v6"}")
+    add("material.coordinateContract=${fragment?.coordinateContract?.name ?: "common-device-point-v6"}")
     add("coordinate=device-pixels-to-ndc:y-down-to-y-up")
     add("coordinate=device-to-local-affine-two-row")
     add("coverage=a8-r-sampled-once:premul-modulated-once")
@@ -487,7 +488,7 @@ private fun preparedTextCompositeAbiFacts(
 }
 
 internal fun preparedTextFinalModuleRefusal(
-    fragment: GPUPreparedMaterialFragment,
+    fragment: GPUPreparedMaterialFragment?,
     report: WgslReflectionReport,
 ): GPUPreparedTextCompositeProgramResult.Refused? {
     val mismatch = preparedTextFinalModuleMismatch(fragment, report) ?: return null
@@ -498,7 +499,7 @@ internal fun preparedTextFinalModuleRefusal(
 }
 
 private fun preparedTextFinalModuleMismatch(
-    fragment: GPUPreparedMaterialFragment,
+    fragment: GPUPreparedMaterialFragment?,
     report: WgslReflectionReport,
 ): String? {
     if (!report.validation.success || report.unsupportedFeatures.isNotEmpty()) {
@@ -517,11 +518,15 @@ private fun preparedTextFinalModuleMismatch(
     if (coordinates.distinct().size != coordinates.size) {
         return "Prepared text final module contains a binding collision"
     }
-    preparedTextMaterialBindingMismatch(fragment, report.bindings)?.let {
-        return it
-    }
-    preparedTextTaskBindingMismatch(report.bindings)?.let {
-        return it
+    if (fragment == null) {
+        val expected = EXPECTED_TASK_BINDINGS.map { binding ->
+            if (binding.group == ATLAS_GROUP) binding.copy(group = 0, binding = binding.binding + 1) else binding
+        }
+        if (report.bindings.map(WgslBindingReflection::preparedTextAbi).sortedBy { it.binding } != expected)
+            return "Prepared text common geometry bindings were not reflected exactly"
+    } else {
+        preparedTextMaterialBindingMismatch(fragment, report.bindings)?.let { return it }
+        preparedTextTaskBindingMismatch(report.bindings)?.let { return it }
     }
     if (!report.bindings.all { it.group in DRAW_UNIFORM_GROUP..DESTINATION_WITH_COVERAGE_MASK_GROUP }) {
         return "Prepared text final bindings must occupy only deterministic groups 0 through 4"

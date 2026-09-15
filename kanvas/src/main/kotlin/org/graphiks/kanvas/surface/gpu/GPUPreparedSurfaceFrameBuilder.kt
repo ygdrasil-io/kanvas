@@ -208,7 +208,10 @@ internal object GPUPreparedSurfaceFrameBuilder {
             } else {
                 0
             }
-            val pointSources = if (request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul &&
+            val commonSources = if (request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul &&
+                request.includeReadback && GPUColorFormat(request.targetFacts.colorFormat) == GPUColorFormat.RGBA8UnormSrgb)
+                W5hPreparedMaterialFrameV6.prepare(request, frameGeneration) else null
+            val pointSources = if (commonSources == null && request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul &&
                 request.includeReadback && GPUColorFormat(request.targetFacts.colorFormat) == GPUColorFormat.RGBA8UnormSrgb)
                 W5aPreparedFrameMaterialRegistry.capturePointSources(operations, request.targetBounds.width, request.targetBounds.height,
                     if (GPUColorFormat(request.targetFacts.colorFormat) == GPUColorFormat.RGBA8UnormSrgb)
@@ -216,7 +219,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     else org.graphiks.kanvas.gpu.plan.BlendTargetClampV1.Unavailable,
                     request.targetFacts, request.candidate.config, request.capabilities)
                 else emptyMap()
-            val coreMaterialCandidates = if (request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul) {
+            val coreMaterialCandidates = commonSources?.corePlans ?: if (request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul) {
                 W5aPreparedFrameMaterialRegistry.captureCoreCandidates(
                     operations, request.targetBounds.width, request.targetBounds.height,
                     if (GPUColorFormat(request.targetFacts.colorFormat) == GPUColorFormat.RGBA8UnormSrgb)
@@ -225,12 +228,12 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     deferredOperationIndices = pointSources.keys,
                 )
             } else emptyMap()
-            val textMaterials = if (request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul) {
+            val textMaterials = if (commonSources == null && request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul) {
                 W5aPreparedTextMaterialBridge.capture(
                     operations, request.targetBounds.width, request.targetBounds.height,
                 )
             } else null
-            val textPreparation = GPUPreparedTextFramePreparer.prepareInventory(
+            val textPreparation = commonSources?.text ?: GPUPreparedTextFramePreparer.prepareInventory(
                 operations = operations,
                 target = request.targetFacts,
                 capabilities = request.capabilities,
@@ -259,10 +262,14 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 config = request.candidate.config,
                 capabilities = request.capabilities,
                 preparedTextInventory = textPreparation.inventory,
-                mappingBoundary = flatElidedOperationIndices.let { elided ->
+                commonInventory = commonSources?.vertices,
+                mappingBoundary = (flatElidedOperationIndices + commonSources?.elidedOperationIndices.orEmpty()).let { elided ->
                     GPUPreparedFrameMappingBoundary { operations, target, config, capabilities,
                         textInventory, verticesInventory ->
-                        zeroSurvivorCandidate = operations.zeroSurvivorCandidate(
+                        zeroSurvivorCandidate = if (commonSources != null &&
+                            operations.withIndex().filter { it.value.isVisualDraw() }.map { it.index }.toSet() == commonSources.elidedOperationIndices)
+                            GPUPreparedZeroSurvivorCandidate(emptyMap())
+                        else operations.zeroSurvivorCandidate(
                             request.candidate.color.interpretation, textPreparation, verticesInventory, coreMaterialCandidates)
                         fun mapWithSceneClear(synthesizeSceneClear: Boolean) = GPUOpMapper.mapOperations(
                             operations = operations,
@@ -311,7 +318,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 mapping = mapping,
                 operations = operations,
                 inventory = textPreparation.inventory,
-                elidedOperationIndices = flatElidedOperationIndices,
+                elidedOperationIndices = flatElidedOperationIndices + commonSources?.elidedOperationIndices.orEmpty(),
             )
             if (preparedImages is PreparedImageVisuals.Refused) {
                 return GPUPreparedSurfaceFrameBuildResult.Refused(preparedImages.diagnostic)
@@ -453,7 +460,15 @@ internal object GPUPreparedSurfaceFrameBuilder {
             val admittedPointSources = mapping.commandIdsByOperationIndex.flatMap { (operationIndex, commandIds) ->
                 pointSources[operationIndex]?.let { source -> commandIds.filter(admittedSemantics::containsKey).map { it to source } }.orEmpty()
             }.toMap()
-            val frameMaterials = W5aPreparedFrameMaterialRegistry.seal(admittedSemantics,
+            val frameMaterials = if (commonSources != null) commonSources.sourceFrame?.let { sourceFrame ->
+                val refs = mapping.commandIdsByOperationIndex.flatMap { (operationIndex, commandIds) ->
+                    if (operationIndex !in sourceFrame.operationIndicesI32) emptyList()
+                    else commandIds.filter(admittedSemantics::containsKey).map { it to sourceFrame.ref(operationIndex) }
+                }.toMap() + verticesInventory.mappedCommands.filter { it.commandId in admittedSemantics }.associate {
+                    it.commandId to sourceFrame.ref(it.operationIndex)
+                }
+                W5aPreparedFrameMaterialRegistry(sourceFrame.table, refs)
+            } else W5aPreparedFrameMaterialRegistry.seal(admittedSemantics,
                 corePlansByCommandId.filterKeys { it !in admittedPointSources })
             val pointClipCandidates = W5aPreparedFrameMaterialRegistry.capturePointClips(operations)
             val pointClips = mapping.commandIdsByOperationIndex.flatMap { (operationIndex, commandIds) ->
@@ -461,7 +476,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
             }.toMap()
             val semantics = admittedSemantics.mapValues { (commandId, semantic) ->
                 val ref = frameMaterials?.refsByCommandId?.get(commandId)
-                if (ref == null) semantic else when (semantic) {
+                if (ref == null || commonSources != null) semantic else when (semantic) {
                     is GPUDrawSemanticPayload.TextA8 -> semantic.withW5aFrameMaterial(frameMaterials.table, ref)
                     is GPUDrawSemanticPayload.Vertices -> semantic.withW5aFrameMaterial(frameMaterials.table, ref)
                     else -> semantic
@@ -508,6 +523,9 @@ internal object GPUPreparedSurfaceFrameBuilder {
                                     when (val authority = corePlansByCommandId.getValue(commandId).materialAuthority) {
                                         is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV1 -> authority.copy(ref = ref)
                                         is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV2 -> authority.copy(ref = ref)
+                                        is org.graphiks.kanvas.gpu.plan.PlanDrawMaterialAuthority.MaterialV5 -> authority.also {
+                                            require(commonSources != null && it.ref == ref)
+                                        }
                                         else -> error(org.graphiks.kanvas.gpu.plan.W5fPlanDiagnostics.Unpromoted)
                                     }
                                 }, sourcePlansByCommandIdI32 = refs.keys.associateWith { commandId ->
@@ -516,6 +534,10 @@ internal object GPUPreparedSurfaceFrameBuilder {
                                 finalBlendsByCommandIdI32 = refs.keys.associateWith { commandId ->
                                     corePlansByCommandId.getValue(commandId).blend
                                 },
+                                packedV4ByCommandIdI32 = commonSources?.let { common -> refs.keys.associateWith { commandId ->
+                                    val operationIndex = mapping.commandIdsByOperationIndex.entries.single { commandId in it.value }.key
+                                    requireNotNull(common.sourceFrame).packedSource(operationIndex)
+                                } }.orEmpty(),
                             ),
                         ) { "invalid.material.w5a_core_authority" }
                     },

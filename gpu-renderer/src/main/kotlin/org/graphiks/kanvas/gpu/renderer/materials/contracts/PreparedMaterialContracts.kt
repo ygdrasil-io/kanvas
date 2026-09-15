@@ -135,7 +135,7 @@ class GPUPreparedMaterialProgram private constructor(
     val materialKey: String,
     val wgslSource: String,
     val entryPoint: String,
-    val composableFragment: GPUPreparedMaterialFragment,
+    private val legacyFragment: GPUPreparedMaterialFragment?,
     uniformBytes: List<Int>,
     sampledResources: List<GPUPreparedMaterialSampledResource>,
     childPrograms: List<GPUPreparedRuntimeEffectChildProgram>,
@@ -143,12 +143,16 @@ class GPUPreparedMaterialProgram private constructor(
     val sourceKind: GPUMaterialSourceKind,
     val preCoverageSourceAlpha: GPUSourceAlphaClassification,
     val abiHash: String,
-    private val admission: GPUPreparedMaterialProgramAdmission,
+    private val admission: GPUPreparedMaterialProgramAdmission?,
     /** Runtime-only witness for compiler-issued prepared-text W5a admission. */
     internal val preparedTextW5aAdmissionToken: GPUPreparedTextW5aAdmissionToken? = null,
     /** Runtime-only witness for compiler-issued prepared-vertices W5a admission. */
     internal val preparedVerticesW5aAdmissionToken: GPUPreparedVerticesW5aAdmissionToken? = null,
+    internal val commonSource: org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedCommonSourceV6? = null,
 ) {
+    val composableFragment: GPUPreparedMaterialFragment get() = requireNotNull(legacyFragment) {
+        "A common V6 source cannot enter a legacy prepared material composer"
+    }
     val uniformBytes: List<Int> = immutableList(uniformBytes)
     val sampledResources: List<GPUPreparedMaterialSampledResource> =
         immutableList(sampledResources)
@@ -169,6 +173,10 @@ class GPUPreparedMaterialProgram private constructor(
             "Prepared material ABI hash must be canonical"
         }
 
+        if (commonSource != null) {
+            require(legacyFragment == null && admission == null && this.uniformBytes.isEmpty() &&
+                this.sampledResources.isEmpty() && this.childPrograms.isEmpty() && paintAlpha == 1f)
+        } else {
         val uniformBinding = composableFragment.uniformBinding
         require((uniformBinding == null) == this.uniformBytes.isEmpty()) {
             "Prepared material fragment uniform topology must match its payload"
@@ -187,11 +195,12 @@ class GPUPreparedMaterialProgram private constructor(
         require(this.childPrograms.map { child -> child.name }.distinct().size == this.childPrograms.size) {
             "Prepared runtime-effect child program names must be unique"
         }
+        }
     }
 
     @JvmSynthetic
     internal fun authenticatedSnapshot(): GPUPreparedMaterialProgram =
-        createAuthenticatedCore(
+        if (commonSource != null) this else createAuthenticatedCore(
             materialKey = materialKey,
             wgslSource = wgslSource,
             entryPoint = entryPoint,
@@ -210,7 +219,7 @@ class GPUPreparedMaterialProgram private constructor(
             paintAlpha = paintAlpha,
             sourceKind = sourceKind,
             preCoverageSourceAlpha = preCoverageSourceAlpha,
-            admission = admission,
+            admission = requireNotNull(admission),
             retainedFragment = composableFragment,
             retainedAbiHash = abiHash,
             preparedTextW5aAdmissionToken = preparedTextW5aAdmissionToken,
@@ -247,7 +256,7 @@ class GPUPreparedMaterialProgram private constructor(
             paintAlpha = paintAlpha,
             sourceKind = sourceKind,
             preCoverageSourceAlpha = preCoverageSourceAlpha,
-            admission = admission,
+            admission = requireNotNull(admission),
             retainedFragment = composableFragment,
             retainedAbiHash = abiHash,
             preparedTextW5aAdmissionToken = token,
@@ -282,7 +291,7 @@ class GPUPreparedMaterialProgram private constructor(
             paintAlpha = paintAlpha,
             sourceKind = sourceKind,
             preCoverageSourceAlpha = preCoverageSourceAlpha,
-            admission = admission,
+            admission = requireNotNull(admission),
             retainedFragment = composableFragment,
             retainedAbiHash = abiHash,
             preparedTextW5aAdmissionToken = preparedTextW5aAdmissionToken,
@@ -315,6 +324,7 @@ class GPUPreparedMaterialProgram private constructor(
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is GPUPreparedMaterialProgram) return false
+        if (commonSource != null || other.commonSource != null) return commonSource === other.commonSource
 
         return materialKey == other.materialKey &&
             wgslSource == other.wgslSource &&
@@ -330,6 +340,7 @@ class GPUPreparedMaterialProgram private constructor(
     }
 
     override fun hashCode(): Int {
+        commonSource?.let { return System.identityHashCode(it) }
         var result = materialKey.hashCode()
         result = 31 * result + wgslSource.hashCode()
         result = 31 * result + entryPoint.hashCode()
@@ -349,7 +360,7 @@ class GPUPreparedMaterialProgram private constructor(
             "materialKey=$materialKey, " +
             "wgslSource=$wgslSource, " +
             "entryPoint=$entryPoint, " +
-            "composableFragment=$composableFragment, " +
+            "composableFragment=$legacyFragment, " +
             "uniformBytes=$uniformBytes, " +
             "sampledResources=$sampledResources, " +
             "childPrograms=$childPrograms, " +
@@ -359,6 +370,14 @@ class GPUPreparedMaterialProgram private constructor(
             "abiHash=$abiHash)"
 
     companion object {
+        /** Transport of the existing common plan. No descriptor, source interner or compiler. */
+        fun fromCommonSource(frame: org.graphiks.kanvas.gpu.plan.PreparedSourceFrameV6, sourceKeyI32: Int): GPUPreparedMaterialProgram {
+            val common = org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedCommonSourceV6(frame, sourceKeyI32)
+            return GPUPreparedMaterialProgram(common.program.structuralId.value, common.stage.declarationsWgsl,
+                "kanvas_material_source", null, emptyList(), emptyList(), emptyList(), 1f,
+                GPUMaterialSourceKind.ShaderBlend, GPUSourceAlphaClassification.Translucent,
+                "sha256:${common.layout.composedBindingLayoutHash}", null, commonSource = common)
+        }
         @JvmSynthetic
         internal fun createAuthenticated(
             wgslSource: String,
@@ -446,7 +465,7 @@ class GPUPreparedMaterialProgram private constructor(
                 materialKey = materialKey,
                 wgslSource = wgslSource,
                 entryPoint = entryPoint,
-                composableFragment = fragment,
+                legacyFragment = fragment,
                 uniformBytes = uniformBytes,
                 sampledResources = sampledResources,
                 childPrograms = childPrograms,

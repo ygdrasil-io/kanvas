@@ -93,7 +93,7 @@ internal class GPUPreparedVerticesPayloadSnapshot(
         }
     init {
         require((materialPlanProvenance == null) ==
-            (material.preparedVerticesW5aAdmissionToken == null)) {
+            (material.preparedVerticesW5aAdmissionToken == null && material.commonSource == null)) {
             "Prepared vertices W5a provenance must match its compiler-issued program"
         }
     }

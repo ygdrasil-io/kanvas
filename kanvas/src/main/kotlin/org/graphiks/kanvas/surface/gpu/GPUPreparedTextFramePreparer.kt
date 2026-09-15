@@ -104,6 +104,7 @@ internal object GPUPreparedTextFramePreparer {
                         preparedDraws += lowered.draw
                     }
                 }
+                is GPUPreparedTextLowering.GeometryReady -> error("Geometry-only admission cannot publish a prepared draw")
                 is GPUPreparedTextLowering.Refused ->
                     return GPUPreparedTextFrameInventoryPreparation.Refused(
                         GPUPreparedOperationRefusal(
@@ -166,7 +167,7 @@ internal object GPUPreparedTextFramePreparer {
         )
     }
 
-    private fun defaultLimits(
+    internal fun defaultLimits(
         target: GPUTargetFacts,
         capabilities: GPUCapabilities,
     ): PreparedTextFrameInventoryLimits {

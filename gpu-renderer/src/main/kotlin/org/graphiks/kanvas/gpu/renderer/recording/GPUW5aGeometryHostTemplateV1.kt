@@ -15,6 +15,7 @@ internal data class GPUW5aGeometryHostTemplateV1(
     val groupZeroLayout: GPUW5aHostBindGroupLayoutV1,
     val w5bInlineCoverageV3: GPUW5bInlineCoverageV3?,
     val materialCoordinateSlot: MaterialCoordinateSlotV1?,
+    val primitiveEncodedInput: Boolean = false,
 )
 
 internal data class GPUW5aHostColorTargetV1(
@@ -88,7 +89,44 @@ internal fun GPUColorTargetState.hostTargetV1(): GPUW5aHostColorTargetV1 {
         GPUW5aHostBlendComponentV1(blend.alpha.operation, blend.alpha.srcFactor, blend.alpha.dstFactor), writeMask.value.toUInt())
 }
 
-internal fun sealW5aGeometryHostTemplateV1(packet: GPUDrawPacket): GPUW5aGeometryHostTemplateV1? {
+internal fun sealW5aGeometryHostTemplateV1(packet: GPUDrawPacket,
+    textBinding: GPUPreparedTextRenderBinding? = null): GPUW5aGeometryHostTemplateV1? {
+    (packet.semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.TextA8)
+        ?.takeIf { it.material.commonSource != null }?.let { text ->
+            val binding = requireNotNull(textBinding)
+            require(binding.packetId == packet.packetId && binding.preflightSeal.semanticCanonicalHash == text.canonicalHash &&
+                text.materialPlanProvenance?.validates(text.payloadRef.commandIdValue, text.material) == true)
+            val program = binding.nativeProgram
+            require(program.commonGeometry)
+            return GPUW5aGeometryHostTemplateV1(packet.packetId.value, program.pipelineKey, program.wgslSource,
+                program.vertexEntryPoint, program.fragmentEntryPoint,
+                ColorTargetState(program.targetFormatClass.toPreparedTextTargetFormat(), program.fixedFunctionBlendState.toPreparedTextBlendState(),
+                    program.fixedFunctionBlendState.toPreparedTextWriteMask()).hostTargetV1(),
+                preparedTextDrawLayoutV6(program).hostLayoutV1(), GPUW5bInlineCoverageV3.PreparedTextA8, MaterialCoordinateSlotV1.InputPosition)
+        }
+    (packet.semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.Vertices)
+        ?.takeIf { it.material.commonSource != null }?.let { vertices ->
+            if (vertices.artifact.layout.attributes.contains("color")) {
+                val bytes = vertices.artifact.vertexBytesForUpload()
+                val alphaOffsetI32 = Math.addExact(vertices.artifact.layout.offsets.getValue("color"), 3)
+                val alphas = List(vertices.artifact.vertexCount) { indexI32 ->
+                    bytes[Math.addExact(Math.multiplyExact(indexI32, vertices.artifact.layout.strideBytes), alphaOffsetI32)].toInt() and 255
+                }
+                require(requireNotNull(vertices.material.commonSource).stage.composedProof
+                    ?.authenticatesPrimitiveAlphaStream(alphas) == true)
+            }
+            val shader = (org.graphiks.kanvas.gpu.renderer.artifacts.PreparedVerticesShaderAssembler.assemble(
+                vertices.artifact.layout, vertices.artifact.topology, vertices.material,
+                vertices.artifact.layout.attributes.contains("color"), vertices.materialPlanProvenance,
+                vertices.payloadRef.commandIdValue, packet.blendPlan as? org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan.ShaderBlendWithDstRead)
+                as? org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesShaderResult.Ready)?.program ?: return null
+            val blend = requirePreparedVerticesBlend(packet.blendPlan, vertices)
+            return GPUW5aGeometryHostTemplateV1(packet.packetId.value, shader.pipelineKeyHash, shader.wgslSource,
+                shader.vertexEntryPoint, shader.fragmentEntryPoint,
+                ColorTargetState(vertices.targetFormat.toPreparedVerticesTargetFormat(), blend.toPreparedVerticesBlendState(),
+                    blend.toPreparedVerticesWriteMask()).hostTargetV1(), preparedVerticesDrawLayoutV6().hostLayoutV1(),
+                null, MaterialCoordinateSlotV1.InputPosition, vertices.artifact.layout.attributes.contains("color"))
+        }
     val key = packet.corePrimitivePreparedAuthority?.structuralPipelineKey ?: return sealW4eMaterialGeometryHostV1(packet)
     val mapped = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key) as? GPUWgpu4kCorePrimitivePipelineMapping.Mapped
         ?: return null

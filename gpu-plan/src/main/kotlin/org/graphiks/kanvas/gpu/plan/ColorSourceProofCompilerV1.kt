@@ -53,7 +53,7 @@ internal object ColorSourceProofCompilerV1 {
         metadata.nodes.forEach { node ->
             val offset = node.offsetBytesI32.toLong()/4L
             fun child(index: Int = 0) = graphs[node.children[index].indexI32]
-            val graph = when(val original = node.original) {
+            var graph = when(val original = node.original) {
                 org.graphiks.kanvas.render.ir.MaterialNode.Transparent -> ColorOperationGraphV1(List(4) { ColorOperationGraphV1.constant(0f) })
                 is org.graphiks.kanvas.render.ir.MaterialNode.Solid -> {
                     val color = original.color
@@ -160,6 +160,13 @@ internal object ColorSourceProofCompilerV1 {
                     }
                 }
                 else -> error(W5gPlanDiagnostics.Unpromoted)
+            }
+            if (metadata.primitiveEvaluationRef?.indexI32 == graphs.size) {
+                val primitive = List(4) { channel -> S.PrimitiveEncodedInput(channel).let {
+                    if (channel == 3) it else ColorOperationGraphV1.eotf(it)
+                } }
+                graph = BlendFormulaProgramV1.colorOperations(requireNotNull(metadata.primitiveBlendMode).name.lowercase(),
+                    graph.outputs, primitive)
             }
             graphs += graph
             entries += MaterialEvaluationDagV5.Entry(node.ownerNodeIndexI32,node.children,node.gradientSource?.coordinates ?:
