@@ -731,7 +731,7 @@ private fun List<DisplayOp>.requiresDstReadSceneClear(
             index in survivingOperationIndices &&
             index !in textInventory?.elidedTextOperationIndices.orEmpty() &&
             index !in verticesInventory.elidedVerticesOperationIndices
-            && corePlansByOperationIndex[index]?.blend != BlendPlan.NoOpV1
+            && (pointSourcesByOperationIndex[index]?.blend ?: corePlansByOperationIndex[index]?.blend) != BlendPlan.NoOpV1
     } ?: return false
     return when (firstVisual.value) {
         is DisplayOp.DrawText -> {

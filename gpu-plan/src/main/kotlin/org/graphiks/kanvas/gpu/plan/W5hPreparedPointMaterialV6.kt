@@ -32,7 +32,9 @@ public class W5hPreparedPointMaterialV6 private constructor(
         /** Geometry has already been admitted. Bind every sibling through Task 3's one frame owner. */
         public fun seal(id: PlanId, extent: SizeI32, capabilities: PlanCapabilitySnapshot, budget: PlanBudget,
             draws: List<PlanDraw>, sources: List<W5hPreparedPointMaterialV6>): RenderGraph {
-            require(draws.size == sources.size && draws.any { it is W5bPointDraw } &&
+            // Authenticated NoOps may leave only Rect siblings, or no writes at all. The
+            // common destination topology owns transparent initialization in the latter case.
+            require(draws.size == sources.size &&
                 draws.all { it is W5bPointDraw || it is SolidRectDraw })
             require(draws.indices.all { draws[it].materialAuthority.materialPlanRef() == MaterialPlanRef(it) })
             val visibleIndices = draws.indices.filter { W5bCorePrimitiveGraph.isVisible(draws[it], extent) }
@@ -48,6 +50,11 @@ public class W5hPreparedPointMaterialV6 private constructor(
             val widthBytes = Math.multiplyExact(extent.width.toLong(), 4L)
             val alignment = capabilities.copyBytesPerRowAlignment.toLong()
             val rowBytes = Math.addExact(widthBytes, (alignment - widthBytes % alignment) % alignment)
+            // No source survives to prepare or own. Issue only the existing clear/readback
+            // topology; FrameSourceLayout's nonempty-source contract remains unchanged.
+            if (visible.isEmpty()) return W5bDestinationGraphSealer.seal(id, W5bCorePrimitiveGraph.CAPABILITY_ID,
+                extent, capabilities, budget, emptyList(), null, targetBytes,
+                Math.multiplyExact(rowBytes, extent.height.toLong()), rowBytes)
             val topology = W5bDestinationGraphSealer.describeSources(W5bCorePrimitiveGraph.CAPABILITY_ID, extent,
                 capabilities, budget, visible, targetBytes, Math.multiplyExact(rowBytes, extent.height.toLong()), rowBytes)
             val metadata = when (val result = MaterialSourceConstructionTableV4.of(visibleIndices.map { sources[it].source })) {

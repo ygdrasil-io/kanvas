@@ -46,6 +46,7 @@ class W5hGeometryHLaneSurfacePixelTest {
     fun pointsAddressingCaptureBlend(lane: String, variant: String) {
         captureBlend(lane, "address/$variant") { addressingFixture(variant) }
         if (variant == "tile-DECAL") captureBlend(lane, "address/tile-DECAL-outside") { addressingFixture("tile-DECAL-outside") }
+        if (variant == "tile-MIRROR") captureBlend(lane, "address/tile-MIRROR-distinct") { addressingFixture("tile-MIRROR-distinct") }
     }
 
     @ParameterizedTest(name = "{0}/{1}") @MethodSource("rrectImages")
@@ -85,16 +86,21 @@ class W5hGeometryHLaneSurfacePixelTest {
                 destinationBlend = BlendMode.SRC)
             val mutated = W5fColorCpuOracle.capturedShaderTree(fixture.changedOracle, PAINT_ALPHA, fixture.changedExternal,
                 destinationBlend = BlendMode.SRC)
+            val addressing = fixture.addressingOracle?.let { W5fColorCpuOracle.capturedShaderTree(it, PAINT_ALPHA,
+                fixture.external, destinationBlend = BlendMode.SRC) }
             // Oracle-only fixture selection precedes every public capture/native action. Neither
             // the candidate set nor its strict two-adjacent-code gate consults rendered pixels.
             var lastResult = ""
             val witness = DESTINATIONS.firstNotNullOfOrNull { destination ->
                 val wanted = runCatching { expected(destination,mode) }.getOrNull()
                 val changed = runCatching { mutated(destination,mode) }.getOrNull()
-                lastResult = "$wanted / $changed"
+                val substituted = addressing?.let { runCatching { it(destination,mode) }.getOrNull() }
+                lastResult = "$wanted / $changed / addressing=$substituted"
                 if (wanted is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded &&
                     changed is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded &&
-                    wanted.channels.indices.any { wanted.channels[it].intersect(changed.channels[it]).isEmpty() })
+                    wanted.channels.indices.any { wanted.channels[it].intersect(changed.channels[it]).isEmpty() } &&
+                    (addressing == null || substituted is WgslFloatEnvelopeV1Oracle.DrawResult.Bounded &&
+                        wanted.channels.indices.any { wanted.channels[it].intersect(substituted.channels[it]).isEmpty() }))
                     destination to wanted else null
             }
             assertNotNull(witness, "No bounded independent destination for $fixtureKey/$mode: $lastResult")
@@ -164,7 +170,8 @@ class W5hGeometryHLaneSurfacePixelTest {
     }
 
     private class Fixture(val shader: Shader, val oracle: Shader = shader, val changedOracle: Shader,
-        val external: ColorFilter? = null, val changedExternal: ColorFilter? = external, val mutate: () -> Unit)
+        val external: ColorFilter? = null, val changedExternal: ColorFilter? = external,
+        val addressingOracle: Shader? = null, val mutate: () -> Unit)
 
     private fun gradientFixture(variant: String): Fixture {
         val (family, size) = variant.split('/')
@@ -195,7 +202,7 @@ class W5hGeometryHLaneSurfacePixelTest {
         val stops = mutableListOf(GradientStop(0f, SOURCE), GradientStop(.5f, SOURCE),
             GradientStop(.5f, SECOND), GradientStop(1f, SECOND))
         fun wrap(values: List<GradientStop>): Shader {
-            val tile = if (variant.startsWith("tile-")) TileMode.valueOf(variant.removePrefix("tile-").removeSuffix("-outside")) else TileMode.CLAMP
+            val tile = if (variant.startsWith("tile-")) TileMode.valueOf(variant.removePrefix("tile-").removeSuffix("-outside").removeSuffix("-distinct")) else TileMode.CLAMP
             val leaf = gradient("linear", values, tile)
             return when (variant) {
                 "identity" -> Shader.WithLocalMatrix(leaf, Matrix3x3F32())
@@ -212,6 +219,7 @@ class W5hGeometryHLaneSurfacePixelTest {
                 "clamp-matrix" -> Shader.CoordClamp(Shader.WithLocalMatrix(leaf, Matrix3x3F32.translation(-1f, 0f)),
                     RectF32.ofLTRB(-.25f, 2f, .25f, 3f))
                 "tile-DECAL" -> Shader.WithLocalMatrix(leaf, Matrix3x3F32.translation(-1.25f, 0f))
+                "tile-MIRROR-distinct" -> Shader.WithLocalMatrix(leaf, Matrix3x3F32.translation(-3f, 0f))
                 else -> Shader.WithLocalMatrix(leaf, Matrix3x3F32.translation(-2.25f, 0f))
             }
         }
@@ -223,7 +231,9 @@ class W5hGeometryHLaneSurfacePixelTest {
         // A post-source bias makes the exterior DECAL/CLAMP distinction observable without
         // an unbounded quantized destination decode/re-encode identity fixture.
         val exteriorFilter = if (variant == "tile-DECAL-outside") ColorFilter.Matrix(noiseMarker()) else null
-        return Fixture(wrap(stops), changedOracle = counterfactual, external = exteriorFilter) {
+        val addressing = if (variant == "tile-MIRROR-distinct") Shader.WithLocalMatrix(
+            gradient("linear", stops.toList(), TileMode.CLAMP), Matrix3x3F32.translation(-3f, 0f)) else null
+        return Fixture(wrap(stops), changedOracle = counterfactual, external = exteriorFilter, addressingOracle = addressing) {
             stops.replaceAll { it.copy(position = if (it.position < .75f) 0f else 1f, color = MUTATED) }
         }
     }
@@ -342,6 +352,39 @@ class W5hGeometryHLaneSurfacePixelTest {
         assertNotNull(RuntimeEffect.registered("kanvas.runtime.child-opacity", 1)),
         UniformBlock { float1("alpha", alpha) }, children)
 
+    @ParameterizedTest(name = "final blend topology: {0}/{1}") @MethodSource("pointFinalBlendTopology")
+    fun pointsFinalBlendTopologyPreservesPixels(lane: String, variant: String) {
+        val fixture = runtimeFixture("child")
+        val paint = Paint(color = ColorARGB.of(149, 255, 255, 255), shader = fixture.shader, antiAlias = false)
+        val difference = variant in listOf("difference-first", "dst-then-difference")
+        val wanted = if (difference) W5fColorCpuOracle.expectedShaderTree(fixture.oracle, PAINT_ALPHA,
+            finalBlend = BlendMode.DIFFERENCE)
+        else W5fColorCpuOracle.expectedShaderTree(Shader.SolidColor(
+            if (variant == "dst-background") DESTINATION else ColorARGB.Transparent))
+        W5fSurfacePixelFixtures.requireBounded(wanted)
+        fun Canvas.frame() {
+            if (variant == "dst-background") background()
+            if (variant != "difference-first") drawLane(lane, paint.copy(blendMode = BlendMode.DST))
+            if (difference) drawLane(lane, paint.copy(blendMode = BlendMode.DIFFERENCE))
+        }
+        val surface = Surface(1, 1)
+        surface.canvas { frame() }
+        val recorder = PictureRecorder()
+        recorder.beginRecording(UNIT).frame()
+        val picture = recorder.finishRecordingAsPicture()
+        repeat(2) { assertLanePixels(lane, surface.render(), wanted) }
+        for (replay in listOf(picture, assertNotNull(Picture.fromByteArray(picture.toByteArray())))) {
+            val target = Surface(1, 1)
+            target.canvas { replay.playback(this) }
+            repeat(2) { assertLanePixels(lane, target.render(), wanted) }
+        }
+        // The same public Surface remains usable after a no-write/initialization frame.
+        surface.canvas { drawLane(lane, paint.copy(blendMode = BlendMode.SRC)) }
+        val continued = W5fColorCpuOracle.expectedShaderTree(fixture.oracle, PAINT_ALPHA)
+        W5fSurfacePixelFixtures.requireBounded(continued)
+        repeat(2) { assertLanePixels(lane, surface.render(), continued) }
+    }
+
     @ParameterizedTest(name = "same Surface recovery: {0}") @MethodSource("allLanes")
     fun materialRefusalThenSameSurfaceRecovers(lane: String) {
         val valid = runtimeFixture("child")
@@ -399,5 +442,7 @@ class W5hGeometryHLaneSurfacePixelTest {
         @JvmStatic fun strokeRuntime() = cases(STROKES, RUNTIME)
         @JvmStatic fun pointRuntime() = cases(POINTS, RUNTIME)
         @JvmStatic fun allLanes() = RRECT + STROKES + POINTS
+        @JvmStatic fun pointFinalBlendTopology() = cases(listOf("DrawPoint", "POINTS"),
+            listOf("dst-background", "dst-only", "difference-first", "dst-then-difference"))
     }
 }

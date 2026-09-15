@@ -73,12 +73,29 @@ internal object W5bPreparedPointBridgeV3 {
                 require(semantic.clipExecutionPlanIdentity?.let { it == execution.canonicalIdentity() } != false) { "W5b semantic clip execution changed" }
                 require(packet.diagnostics.isEmpty()) { "W5b cannot discard packet diagnostics" }
             }
-            val pendingSources = if (request.w5hPointSources.isEmpty()) null else semantics.map { semantic ->
-                requireNotNull(request.w5hPointSources[semantic.payloadRef.commandIdValue]).also {
-                    require((semantic.material as? GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1)?.ref == it.sourceRef)
+            val sourceSemantics = if (request.w5hPointSources.isEmpty()) semantics else {
+                // The mapper's clear has no public operation/source. Authenticate it through
+                // the existing initialization authority, never fabricate a material sibling.
+                val clearId = request.synthesizedSceneClearCommandIdI32
+                if (clearId == null) semantics else {
+                    require(clearId == 0 && packets.first().commandIdValue == clearId &&
+                        renders.first().drawPackets.size == 1 && clearId !in request.w5hPointSources &&
+                        org.graphiks.kanvas.gpu.renderer.passes.isW5bPreparedSceneInitialization(
+                            packets.first(), semantics.first(), request.targetBounds)) { "W5b scene initialization changed" }
+                    semantics.drop(1)
                 }
             }
-            val sources = if (pendingSources != null) emptyList() else semantics.map { semantic ->
+            // Every packet/capture above is authenticated before elision. Compact the source
+            // and semantic together, before constructing any draw or assigning frame refs.
+            val pending = if (request.w5hPointSources.isEmpty()) null else sourceSemantics.map { semantic ->
+                val source = requireNotNull(request.w5hPointSources[semantic.payloadRef.commandIdValue])
+                require((semantic.material as? GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1)?.ref == source.sourceRef &&
+                    request.w5bPointBlends[semantic.payloadRef.commandIdValue] == source.blend)
+                semantic to source
+            }.filter { (_, source) -> source.blend != BlendPlan.NoOpV1 }
+            val drawSemantics = pending?.map { it.first } ?: sourceSemantics
+            val pendingSources = pending?.map { it.second }
+            val sources = if (pendingSources != null) emptyList() else drawSemantics.map { semantic ->
                 requireNotNull(semantic.material.materialSourceAuthority)
                     .also { require(it.validates(semantic.payloadRef.commandIdValue)) }
             }
@@ -87,7 +104,7 @@ internal object W5bPreparedPointBridgeV3 {
                 as? GpuPlanCapabilityAdapterResult.Supported ?: error("unsupported.w5b.point-capability")
             val budget = request.w5hPointBudget?.let { it.copy(maxFrameLocalBytes = minOf(it.maxFrameLocalBytes, budgetBytesI64)) }
                 ?: PlanBudget(budgetBytesI64)
-            val maskCommands = semantics.filter { it.clipCoveragePlan != org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.NoClip &&
+            val maskCommands = drawSemantics.filter { it.clipCoveragePlan != org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.NoClip &&
                 it.clipCoveragePlan !is org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.Scissor }
                 .map { it.payloadRef.commandIdValue }.toSet()
             val clipOperations = maskCommands.map { requireNotNull(request.w5bPointClips[it]) }.distinctBy { it.canonicalId }
@@ -95,7 +112,7 @@ internal object W5bPreparedPointBridgeV3 {
             val clipOnly = clipOperations.singleOrNull()?.let { operations -> W4eClipPlanCompiler().sealClipOnly(
                 operations, SizeI32(request.targetBounds.width, request.targetBounds.height), capability.snapshot,
                 budget) }
-            val draws = semantics.mapIndexed { ordinalI32, semantic ->
+            val draws = drawSemantics.mapIndexed { ordinalI32, semantic ->
                 val commandI32 = semantic.payloadRef.commandIdValue
                 val material = if (pendingSources != null) MaterialPlanRef(ordinalI32)
                     else requireNotNull(interned).remap(ordinalI32, sources[ordinalI32].ref)
@@ -128,7 +145,7 @@ internal object W5bPreparedPointBridgeV3 {
             when (val lowered = GpuPlanTaskListLowerer().lower(GpuPlanLoweringRequest(graph, request.capabilities,
                 request.baseTaskList.capabilitySeal.deviceGeneration, budget, request.baseTaskList.frameId,
                 request.baseTaskList.recordingSeals.single().recordingId, budgetBytesI64,
-                w5bPreparedSemantics = semantics.associateBy { it.payloadRef.commandIdValue },
+                w5bPreparedSemantics = drawSemantics.associateBy { it.payloadRef.commandIdValue },
                 w5bPreparedTarget = request.target))) {
                 is GpuPlanLoweringResult.Lowered -> GPUPreparedSurfaceFrameResult.Recorded(lowered.taskList)
                 is GpuPlanLoweringResult.InvalidPlan -> refused(lowered.diagnostic.message)
