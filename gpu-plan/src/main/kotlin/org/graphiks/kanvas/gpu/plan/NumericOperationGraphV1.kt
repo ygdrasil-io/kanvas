@@ -80,6 +80,26 @@ public sealed interface NumericOperationGraphV1 {
         }
     }
 
+    /** Source-only registered runtime graph; never admitted as a W5a attachment program. */
+    public class RuntimeChildOpacity internal constructor() : NumericOperationGraphV1 {
+        override val root: Node = Node(Operation.OPACITY_F32, listOf(Node(Operation.INPUT_MATERIAL_LINEAR_PREMUL)))
+        public val colorGraph: ColorOperationGraphV1 = ColorOperationGraphV1.runtimeChildOpacity()
+        public val alphaMinF32: Float = 0f
+        public val alphaMaxF32: Float = 1f
+        init {
+            require(alphaMinF32.isFinite() && alphaMaxF32.isFinite() && alphaMinF32 == 0f && alphaMaxF32 == 1f)
+            require(colorGraph.contractId == contractId)
+            // This bounded grammar has one multiplication per channel. For every finite
+            // F32 child and alpha in [0,1], |child * alpha| <= Float.MAX_VALUE;
+            // rounding and optional subnormal flush cannot introduce an infinity.
+            colorGraph.outputs.forEachIndexed { channelI32, output ->
+                require(output is ColorOperationGraphV1.Scalar.Multiply &&
+                    output.a == ColorOperationGraphV1.Scalar.InputLinearPremul(channelI32) &&
+                    output.b == ColorOperationGraphV1.Scalar.DynamicF32(0L)) { "invalid.material.runtime_effect.cpu_numeric" }
+            }
+        }
+    }
+
     public companion object {
         /** Full source-to-attachment graph for a transparent W5a material. */
         public fun transparent(): NumericOperationGraphV1 = output(Node(Operation.CONSTANT_TRANSPARENT))

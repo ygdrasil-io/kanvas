@@ -60,6 +60,7 @@ sealed interface Shader {
         val effect: org.graphiks.kanvas.pipeline.RuntimeEffect,
         val uniforms: org.graphiks.kanvas.pipeline.UniformBlock,
         val children: Map<String, Shader> = emptyMap(),
+        val resources: org.graphiks.kanvas.pipeline.RuntimeEffectResourceBindings = org.graphiks.kanvas.pipeline.RuntimeEffectResourceBindings.Empty,
     ) : Shader
     data class WithLocalMatrix(val shader: Shader, val matrix: Matrix3x3F32) : Shader
     data class WithColorFilter(val shader: Shader, val filter: ColorFilter) : Shader

@@ -341,6 +341,10 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
         return ColorOperationGraphV1(outputs.map(::bind))
     }
     internal companion object {
+        /** Four separate F32 products; no clamp, premultiply or channel reordering. */
+        fun runtimeChildOpacity(): ColorOperationGraphV1 = ColorOperationGraphV1(List(4) {
+            Scalar.Multiply(Scalar.InputLinearPremul(it), Scalar.DynamicF32(0L))
+        })
         fun constant(valueF32: Float): Scalar = Scalar.ConstantF32(valueF32.toRawBits())
         fun eotf(input: Scalar): Scalar = conversion(input,ColorInterpolationProgramV1.RecipeKind.EOTF)
         private fun conversion(input: Scalar, kind: ColorInterpolationProgramV1.RecipeKind): Scalar =
