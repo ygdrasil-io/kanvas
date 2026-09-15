@@ -15,6 +15,14 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 - zéro fallback CPU silencieux ;
 - une liste fermée et documentée des écarts Skia acceptés.
 
+Checkpoint W5g/Task4 accepté : le lot Noise `9a14bdf96` et sa correction bornée `b63f4ceb3` sont committés avec 62 chemins Task4 et 5 témoins vérifiés byte à byte. Le `final4` figé obtient 197/197 PASS publics (57 Noise Surface, 10 Noise Picture, 125 Blend Surface, 5 Blend Picture), sans failure/error/skip. Gradle reste exit1 avec l'Executor242 natif exit133 de cause `UNKNOWN` : ce résultat n'est pas requalifié en native green. La re-review Sol confirme les deux findings `ADDRESSED` — reader de clips schema 5 et identité typée commune FLOOR/fraction/adresses — avec 0 Critical/Important/Minor et `Ready to proceed: Yes`. Deux gaps Picture préexistants restent trackés hors Task4 : `Picture.playback(Canvas)` perd `SetClip`, et le composite refuse encore les clips complexes. Task5/convergence est la prochaine étape ; W5g global reste ouvert.
+
+Checkpoint W5g/Task4 : l'epoch 6 ciblée obtient 13/22 PASS ; les six domaines Noise 2/8/255, les trois routes d'accounting, les trois mixes Noise/gradient/image et le budget public 32 KB passent. Les neuf échecs restants sont séparés en sept refus numériques de filtre, un mauvais clip AA de fixture sur les lanes mixtes et une attente de diagnostic Stroke située après la vraie frontière publique. R37 aligne uniquement cette attente sur `unsupported.material.composed.slice`; R38 rend uniquement le clip de la fixture explicitement hard-edge. Aucun owner production, promotion geometry/AA, test d'infrastructure ou changement de priorité n'est ajouté. Gradle exit1 / native exit133 reste de cause `UNKNOWN`.
+
+R39 autorise uniquement deux faits corrélés dans la preuve Noise existante : le même `f` dans `f*f*(3-2*f)` et le même `a` dans `a+(b-a)*t`. Les opérations originales sont d'abord validées, puis leur enveloppe ordinaire est intersectée avec des extrema dirigés et une erreur explicite gamma/DAZ/FTZ dans un nouveau contexte d'identité immuable ; une intersection vide refuse. Aucun WGSL, opcode, clamp, epsilon, alpha supposé, domaine, tail d'octave ou tolérance ne change. Risque : sous-estimer l'amplification ou confondre l'identité d'un scalaire ; final4 et la review Sol restent obligatoires. Scope inchangé.
+
+Epoch 7 ciblée : 8/9 PASS en 27 s ; compositions6/6, Stroke/recovery et mixed Rect/direct/stencil passent. Le seul refus est la mutation Picture Fractal8, dont le domaine 1x1 traverse plusieurs floors et conserve légitimement alpha=0 avant Matrix unpremultiply. R40 ramène uniquement ce child incident à Fractal2, en gardant matrice mutable, deux familles/seeds, stitch, capture, replay et roundtrip ; octave8/255 reste couvert indépendamment sur les deux géométries et en stitch. Aucun guard, preuve, production ou tolérance ne change. Native133 reste `UNKNOWN`.
+
 ## Documents autoritaires
 
 ### Spécifications
@@ -49,7 +57,46 @@ Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :
 
 - [Plan W5g — Blend partagé, NoiseV1 et convergence](plans/2026-09-14-w5g-composed-procedural-materials-implementation-plan.md) — Tasks1–3 / Blend borné acceptés, reviews Sol COMPLIANT/APPROVED,0Critical/Important/0nouveau Minor. Scalar98PASS puis gradients462PASS/1AA4skip ; images/fix `48b0bb4f4` final5=529PASS0failure/error/skip, mêmes529cas et18blobs testés/committés vérifiés ROOT. Commandes respectivement FAILED/native195,209,224exit133,causeUNKNOWN, jamais nativeGREEN. Suite entière : Noise4 dérivation255/archives8/9/10/storage, convergence5/final19/cinq compiles/review globale puis ONE Draft empilée sur W5f#2400 inchangée. Domaines conservateurs, vrais RED/échecs/coûts sont conservés au plan/status. Aucun push/PR W5g encore, pas Ready-to-merge/ISO.
 
+R36 conserve le graph/WGSL et précise la preuve des mêmes opérations Noise : phase corrélée sur FLOOR singleton, adresses floor+corner/période/permutation exactes vers le slab authentifié, fallback all256. Floor BigInteger négatif vers −∞ ; aucun epsilon, alpha supposé ou échantillonnage. Les pixels négatifs/transforms/stitch/seeds/Matrix/mutation, final4 et review Sol couvrent le risque d’over-admission. Scope inchangé39 Modify/5 Kotlin Create/21 assets/2 producteurs éphémères.
+
+R35 raccorde le preflight W3 exact au même slab Noise authentifié : l’allocation R34 est vérifiée une fois, sans preparation supplémentaire, et les guards geometry/clip/blend/readback/Gradient restent inchangés. Risque : refus direct/composite, slab contrefait ou double charge. Scope Task4 : 39 Modify, 5 Kotlin Create, 21 assets, 2 producteurs historiques éphémères ; aucun test d’infrastructure/harness.
+
+R34 raccorde le même slab Noise authentifié à cinq owners de lowering/custody W3/W5b/composite : un seul label physique, un seul peak/allocation, validation packet exacte et aucune charge par lane. Les comptes geometry et les gates AA/clip/capability restent inchangés. Le risque de refus direct-W3, sous-comptage ou duplication demeure couvert par les preuves publiques et la review Sol ; aucun test d'infrastructure ni changement de harness. Scope Task4 : 38 Modify, 5 Kotlin Create, 21 assets et 2 producteurs historiques éphémères.
+
 ### État et rapports finaux
+
+Noise4 : dérivation255 corrigée validée MAIN (R28), phase F32 originale,
+lattice/périodes128bits et accumulation255 conservée. Bilerp suit le schedule
+Skia a+(b-a)*t ; certificat floor/fract inclut le cas subnormal/DAZ, sans
+élargir les gardes globales. Coût : arithmetic entière/preuve plus complexes,
+risque de mauvais carry/corrélation ou refus conservateur ; domaines extrêmes
+non prouvés restent explicitement refusés, pas une clôture générale Noise.
+Vrai RED public vérifié ROOT :12cas/12refusproduction, aucun échec oracle,
+production inchangée et XML/SHA exacts. Même Astra peut maintenant implémenter.
+R29 classe la capture publique temporaire des vrais writers8/9/10 et21assets
+Noise ciblés ; aucun changement du harnais natif. Coût : mauvaise provenance
+si le classpath réutilisait un writer actuel ; commits/inputs/bytes documentés,
+rejets historiques conservés, replay public obligatoire avant compatibilité.
+R30 autorise8signatures/1forwarding dans un test existant, aucune assertion
+ajoutée ni exécution infrastructure. Coût : compilation ou snapshot perdu ;
+transport exact du budget et vrais tests publics Noise/recovery obligatoires.
+R31 autorise uniquement le rôle NoiseTableData distinct, ajouté sans changer
+les rôles/guards existants. Coût : nouveau consommateur exhaustif ou ressource
+mal authentifiée ; toute adaptation supplémentaire est classifiée avant edit,
+inventaire complet/preuve/native et tests publics restent obligatoires.
+R33 raccorde uniquement le même slab Noise authentifié au RenderGraph et à ses
+inventaires de paths : une charge physique complète, mêmes guards/lifetimes,
+aucune promotion AA4/H. Coût : ressource contrefaite/omise, double comptage ou
+régression de géométrie ; inventaire, budgets/recovery publics et review Sol requis.
+Les15fixtures réellement capturées8/9/10 ont une provenance vérifiée ROOT ;
+NaN/infini sont refusés par les trois writers. R32 autorise les sixassets
+manquants comme constructions volontairement invalides du vieux wire format,
+jamais captures writer : quatre widths F32 seulement, headers/versions conservés.
+Coût : mauvais offset/provenance pouvant masquer un rejet ; bytes/SHA vérifiés
+et Picture.fromByteArray doit refuser publiquement. Positifs8/9/10/new11 restent
+obligatoires ; aucune clôture statique de compatibilité.
+Convergence5 et les gates
+finales suivront séquentiellement ; aucune clôture W5g globale anticipée.
 
 W5g continue entièrement : Task3 images/Blend sur Astra/high, puis Noise4,
 convergence5, review globale Sol et une Draft empilée sur W5f#2400 inchangée.
