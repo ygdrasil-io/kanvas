@@ -53,10 +53,10 @@ internal fun lowerW5bW4eLaneV3(request: GpuPlanLoweringRequest, lane: W5bGeometr
                 if (sourcePass.phase == PathRenderPhase.SingleSampleStencilProducer) BlendPlan.LegacySrcOverV1
                 else requireNotNull(draw).blend)
         if (draw != null) {
-            val material = draw.materialAuthority as PlanDrawMaterialAuthority.MaterialV1
+            val material = draw.materialAuthority
             packet.attachW5aSourceStageV2(org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2.issue(
-                requireNotNull(graph.materialPlanTableOrNull()), material.ref, packet.commandIdValue,
-                coordinates = material.coordinates))
+                requireNotNull(graph.materialPlanTableOrNull()), material, packet.commandIdValue,
+                if (material is PlanDrawMaterialAuthority.MaterialV5) graph.packedMaterialSourceV4(material) else null))
         }
         val uses = builder.resourceUses(sourcePass ?: pass, refs, originalById, consumer, prepared).map { use ->
             if (pass is PlanPass.StencilGeometryProducerV3 && use.resource == target &&

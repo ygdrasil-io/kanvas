@@ -81,9 +81,12 @@ public class W4dGeneralPathPlanCompiler internal constructor(
     /** W4e inserts its clip consumers before promoting the shared material/resource graph. */
     private val retainGeometryConstructionGraph: Boolean = false,
     private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot = RuntimeEffectSemanticCatalogSnapshot.Unbound,
+    private val imageProjection: ImageOriginGeometryProjectionV6? = null,
 ) : GpuPlanCompiler {
     internal fun withRuntimeCatalog(catalog: RuntimeEffectSemanticCatalogSnapshot): W4dGeneralPathPlanCompiler =
-        W4dGeneralPathPlanCompiler(strokePolicyF64, acceptsNarrowTransforms, forceAaFrame, retainGeometryConstructionGraph, catalog)
+        W4dGeneralPathPlanCompiler(strokePolicyF64, acceptsNarrowTransforms, forceAaFrame, retainGeometryConstructionGraph, catalog,imageProjection)
+    internal fun withImageOriginProjection(projection: ImageOriginGeometryProjectionV6?): W4dGeneralPathPlanCompiler =
+        W4dGeneralPathPlanCompiler(strokePolicyF64,acceptsNarrowTransforms,forceAaFrame,retainGeometryConstructionGraph,runtimeCatalog,projection)
     public constructor() : this(PathStrokePolicyF64())
 
     /**
@@ -204,6 +207,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         val materialRefusals = mutableListOf<EffectiveMaterialPlanner.Result.Refused>()
         var visualDrawCountI32 = 0
         var elidedNoOpsI32 = 0
+        var emptyImageCandidatesI32 = 0
         var requestedAa = false
         var frameWorkUsageI64 = PathStrokeWorkUsageI64()
         scene.withIndex().forEach { (commandIndex, command) ->
@@ -219,7 +223,10 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                             frameWorkUsageI64 = result.frameWorkUsageI64
                         }
                         is DrawResult.NoOp -> { elidedNoOpsI32++; frameWorkUsageI64 = result.frameWorkUsageI64 }
-                        is DrawResult.Empty -> frameWorkUsageI64 = result.frameWorkUsageI64
+                        is DrawResult.Empty -> {
+                            if (imageProjection?.owns(commandIndex,command.node) == true) emptyImageCandidatesI32++
+                            frameWorkUsageI64 = result.frameWorkUsageI64
+                        }
                         is DrawResult.Gap -> return Recognition.Gap(result.message)
                         is DrawResult.Invalid -> return Recognition.Invalid(result.message)
                         is DrawResult.Horizon -> return Recognition.Horizon(result.message)
@@ -233,7 +240,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             }
         }
         if (materialRefusals.isNotEmpty()) return Recognition.MaterialRefused(materialRefusals)
-        return if (draws.isEmpty() && elidedNoOpsI32 == 0) Recognition.Limit("W4d.2 retained no visible prepared geometry")
+        return if (draws.isEmpty() && elidedNoOpsI32 == 0 && emptyImageCandidatesI32 == 0)
+            Recognition.Limit("W4d.2 retained no visible prepared geometry")
         else {
             val pending = sources.any { it.pending }
             Recognition.Ready(if (pending) draws.mapIndexed { ordinal,draw -> draw.copy(material=MaterialPlanRef(ordinal)) } else draws,

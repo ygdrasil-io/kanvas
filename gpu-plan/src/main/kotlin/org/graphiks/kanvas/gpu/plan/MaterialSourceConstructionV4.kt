@@ -243,7 +243,9 @@ internal class MaterialSourceConstructionV4 private constructor(
     }
 
     internal class ImageChildMetadata(val original: MaterialNode.ImageSample,
-        val description: EffectiveMaterialPlanner.ImageSampleDescription,val coordinates: MaterialCoordinatePlanV2) {
+        val description: EffectiveMaterialPlanner.ImageSampleDescription,val coordinates: MaterialCoordinatePlanV2,
+        val origin: DrawNode? = null,
+        val projection: ImageCoordinatePlanV1 = ImageCoordinatePlanV1.sealShader(org.graphiks.math.matrix.Matrix3x3F32(),emptyList())) {
         val headerBytesI64: Long = ImageSourceLayoutV3(false,false,false,9,false).imageUniformByteCountI64
         val uniformBytesI64: Long = Math.addExact(headerBytesI64,coordinates.uniformByteSizeI64)
     }
@@ -284,7 +286,7 @@ internal class MaterialSourceConstructionV4 private constructor(
                 is MaterialNode.WithLocalMatrix -> "local-matrix"
                 is MaterialNode.CoordClamp -> "coord-clamp"
                 is MaterialNode.ImageSample -> requireNotNull(imageSource).let {
-                    "image:${it.description.color}:${it.description.sampling.topologyId}:${it.description.tileModes.topologyId}:${it.coordinates.topologyIdentity}"
+                    "image:${it.description.color}:${it.description.sampling.topologyId}:${it.description.tileModes.topologyId}:${it.coordinates.topologyIdentity}:origin=${it.origin != null}"
                 }
                 is MaterialNode.PerlinNoise, is MaterialNode.FractalNoise ->
                     "noise-v1:${requireNotNull(noiseSource).coordinates.topologyIdentity}"
@@ -309,42 +311,38 @@ internal class MaterialSourceConstructionV4 private constructor(
             is MaterialNode.CoordClamp -> containsComposed(root.material)
             else -> false
         }
-        private fun captureComposed(draw: DrawNode,bounds: RectF32,blend: BlendPlan,
-            runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): MaterialSourceConstructionV4 {
-            var sliceLeaf = draw.material
-            while (true) sliceLeaf = when (val node = sliceLeaf) {
-                is MaterialNode.Opacity -> node.material
-                is MaterialNode.WithColorFilter -> node.material
-                is MaterialNode.WithWorkingColorSpace -> node.material
-                is MaterialNode.WithLocalMatrix -> node.material
-                is MaterialNode.CoordClamp -> node.material
-                else -> break
+        private fun describeImageOrigin(draw: DrawNode): ImageChildMetadata {
+            val patch = draw.geometry as? GeometryNode.ImagePatch
+            require(draw.origin == DrawOrigin.IMAGE && patch != null && colorFilterEffectsMatchPaint(draw)) { W5eImagePlanDiagnostics.InvalidContract }
+            val sample = draw.material as? MaterialNode.ImageSample ?: error(W5eImagePlanDiagnostics.InvalidContract)
+            val description = EffectiveMaterialPlanner.describeImageSample(sample,true) { pixels ->
+                require(draw.resource === pixels && patch.image.id.value == pixels.sourceId) { W5eImagePlanDiagnostics.InvalidContract }
             }
-            val sliceCode = if (sliceLeaf is MaterialNode.PerlinNoise || sliceLeaf is MaterialNode.FractalNoise)
-                W5gPlanDiagnostics.NoiseUnpromoted else W5gPlanDiagnostics.Unpromoted
-            val mesh = draw.geometry as? org.graphiks.kanvas.render.ir.GeometryNode.IndexedMesh
-            val preparedMesh = draw.origin in setOf(DrawOrigin.VERTICES, DrawOrigin.MESH) &&
-                mesh != null && mesh.program == null && mesh.meshProgram == null
-            require((draw.origin in setOf(DrawOrigin.RECT,DrawOrigin.RRECT,DrawOrigin.PATH) && draw.paint?.style == PaintStyleNode.FILL ||
-                draw.origin == DrawOrigin.PATH && draw.paint?.style == PaintStyleNode.STROKE ||
-                draw.origin in setOf(DrawOrigin.POINT,DrawOrigin.POINTS,DrawOrigin.TEXT) || preparedMesh) &&
-                draw.resource == null && (draw.operationBlendMode == null || preparedMesh)) { sliceCode }
-            require(colorFilterEffectsMatchPaint(draw)) { W5gPlanDiagnostics.Schema }
-            val nodes = mutableListOf<ComposedMetadata.Node>()
-            val mappings = mutableListOf<ComposedBindingLayoutV1.UniformMapping>()
-            data class Context(val coordinateNodes: List<MaterialNode>,val domain: ColorInterpolation?)
-            data class Field(val owner: Int,val ordinal: Int,val bytes: Long)
-            data class Draft(val owner: Int,val original: MaterialNode,val children: List<MaterialEvaluationRefV5>,
-                val field: Field?,val filter: ColorFilterExecutionPlanV1?,val gradient: MaterialSourceConstructionV4?,
-                val image: ImageChildMetadata?, val noise: NoiseChildMetadata?, val runtime: RuntimeEffectSemanticEntryV1?)
-            val completed = java.util.IdentityHashMap<MaterialNode,MutableMap<Context,MaterialEvaluationRefV5>>()
-            val ownerIndices = java.util.IdentityHashMap<MaterialNode,Int>()
-            val scalarFields = java.util.IdentityHashMap<MaterialNode,Field>()
-            val fields = mutableListOf<Field>()
-            val drafts = mutableListOf<Draft>()
+            description.validateUploadMetadata()
+            val coordinates = when (val result = MaterialCoordinatePlanV2.fromCtmAndNodes(org.graphiks.math.matrix.Matrix3x3F32(),emptyList())) {
+                is MaterialCoordinatePlanV2.Build.Ready -> result.coordinates
+                is MaterialCoordinatePlanV2.Build.Refused -> throw IllegalArgumentException(result.code)
+            }
+            return ImageChildMetadata(sample,description,coordinates,draw,
+                ImageCoordinatePlanV1.seal(draw.transform,patch.copySource(),patch.copyDestination()))
+        }
+
+        fun captureImageOrigin(draw: DrawNode,bounds: RectF32,blend: BlendPlan,
+            runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): MaterialSourceConstructionV4 {
+            val origin = describeImageOrigin(draw)
+            val sample = origin.original
+            val description = origin.description
+            val mask = description.color.channelOrder == ImageChannelOrderV1.ALPHA
+            val material = if (mask) MaterialNode.Blend(org.graphiks.kanvas.render.ir.BlendMode.MODULATE,
+                EffectiveMaterialPlanner.imageMaskMaterial(draw),sample) else sample
+            val alpha = if (!mask || draw.paint?.shader != null) draw.paint?.color?.alphaNormalized ?: 1f else 1f
+            return captureComposed(draw,bounds,blend,runtimeCatalog,material,origin,alpha)
+        }
+
+        /** Shared pre-layout admission; elided origins authenticate without constructing a source. */
+        private fun authenticateComposed(material: MaterialNode,
+            runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): java.util.IdentityHashMap<MaterialNode.RuntimeEffect,RuntimeEffectSemanticEntryV1> {
             val active = java.util.IdentityHashMap<MaterialNode,Unit>()
-            var owners = 0
-            var cursor = 0L
             var occurrences = 0
             var maximumDepthI32 = 0
             var runtimeUniformBytesI64 = 0L
@@ -380,7 +378,7 @@ internal class MaterialSourceConstructionV4 private constructor(
                 }
                 active.remove(node)
             }
-            validateStructure(draw.material,1)
+            validateStructure(material,1)
             // Only a structurally admitted graph may perform exact catalogue/ABI lookup.
             // Repeated captured owners reuse their single semantic result in the later DAG.
             runtimeNodes.forEach { node ->
@@ -389,18 +387,118 @@ internal class MaterialSourceConstructionV4 private constructor(
             require(runtimeEntries.values.all { occurrences <= it.graphLimits.maxNodes && maximumDepthI32 <= it.graphLimits.maxDepth }) {
                 W5hPlanDiagnostics.Budget
             }
+            return runtimeEntries
+        }
+
+        fun authenticateElidedImageOrigin(draw: DrawNode,runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot) {
+            val origin = describeImageOrigin(draw)
+            // RGBA paint shaders are not source consumers, including on eliminated draws.
+            val material = if (origin.description.color.channelOrder == ImageChannelOrderV1.ALPHA)
+                EffectiveMaterialPlanner.imageMaskMaterial(draw) else origin.original
+            authenticateComposed(material,runtimeCatalog)
+            draw.paint?.colorFilter?.let(::compileFilter)
+            fun visit(node: MaterialNode,coordinates: List<CoordinateNodeV2>) {
+                validateComposedNode(node)
+                composedNoiseParameters(node)
+                val needsCoordinates = node is MaterialNode.ImageSample || node is MaterialNode.PerlinNoise ||
+                    node is MaterialNode.FractalNoise || node is MaterialNode.LinearGradient ||
+                    node is MaterialNode.RadialGradient || node is MaterialNode.SweepGradient || node is MaterialNode.ConicalGradient
+                if (needsCoordinates && node !== origin.original && !gradientCollapsesCoordinates(node)) {
+                    when (val result = MaterialCoordinatePlanV2.fromCtmAndNodes(draw.transform,coordinates)) {
+                        is MaterialCoordinatePlanV2.Build.Ready -> Unit
+                        is MaterialCoordinatePlanV2.Build.Refused -> throw IllegalArgumentException(result.code)
+                    }
+                }
+                if (node is MaterialNode.ImageSample && node !== origin.original)
+                    EffectiveMaterialPlanner.describeImageSample(node,false).validateUploadMetadata()
+                when (node) {
+                    is MaterialNode.Blend -> { visit(node.dst,coordinates); visit(node.src,coordinates) }
+                    is MaterialNode.Opacity -> visit(node.material,coordinates)
+                    is MaterialNode.WithColorFilter -> visit(node.material,coordinates)
+                    is MaterialNode.WithWorkingColorSpace -> visit(node.material,coordinates)
+                    is MaterialNode.WithLocalMatrix -> visit(node.material,coordinates+CoordinateNodeV2.LocalMatrix(node.matrix))
+                    is MaterialNode.CoordClamp -> visit(node.material,coordinates+CoordinateNodeV2.CoordClamp(node.copySubset()))
+                    is MaterialNode.RuntimeEffect -> node.forEach { visit(it.material,coordinates) }
+                    else -> Unit
+                }
+            }
+            visit(material,emptyList())
+        }
+
+        /** The same prefix metadata checks serve consumers and authenticated elisions. */
+        private fun validateComposedNode(node: MaterialNode): ColorFilterExecutionPlanV1? {
+            validatePendingGradient(node)
+            if (node is MaterialNode.Opacity) require(node.alpha.isFinite() && node.alpha in 0f..1f) { W5aPlanDiagnostics.InvalidOpacity }
+            return when (node) {
+                is MaterialNode.WithColorFilter -> compileFilter(node.filter)
+                MaterialNode.Transparent,is MaterialNode.Solid,is MaterialNode.Opacity,is MaterialNode.Blend,
+                is MaterialNode.RuntimeEffect,is MaterialNode.WithWorkingColorSpace,is MaterialNode.WithLocalMatrix,
+                is MaterialNode.CoordClamp,is MaterialNode.ImageSample,is MaterialNode.PerlinNoise,is MaterialNode.FractalNoise,
+                is MaterialNode.LinearGradient,is MaterialNode.RadialGradient,is MaterialNode.SweepGradient,is MaterialNode.ConicalGradient -> null
+            }
+        }
+
+        private fun composedNoiseParameters(node: MaterialNode): NoiseParametersV1? = when (node) {
+            is MaterialNode.PerlinNoise -> NoiseParametersV1(node.baseX,node.baseY,node.numOctaves,node.seed,node.tileSize,false)
+            is MaterialNode.FractalNoise -> NoiseParametersV1(node.baseX,node.baseY,node.numOctaves,node.seed,node.tileSize,true)
+            else -> null
+        }
+
+        private fun gradientCollapsesCoordinates(node: MaterialNode): Boolean = when (node) {
+            is MaterialNode.LinearGradient -> node.stops().size == 1
+            is MaterialNode.RadialGradient -> node.stops().size == 1
+            is MaterialNode.SweepGradient -> node.stops().size == 1
+            else -> false
+        }
+
+        private fun captureComposed(draw: DrawNode,bounds: RectF32,blend: BlendPlan,
+            runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot, material: MaterialNode = draw.material,
+            imageOrigin: ImageChildMetadata? = null,
+            tailAlphaF32: Float = draw.paint?.takeIf { it.shader != null }?.color?.alphaNormalized ?: 1f): MaterialSourceConstructionV4 {
+            var sliceLeaf = material
+            while (true) sliceLeaf = when (val node = sliceLeaf) {
+                is MaterialNode.Opacity -> node.material
+                is MaterialNode.WithColorFilter -> node.material
+                is MaterialNode.WithWorkingColorSpace -> node.material
+                is MaterialNode.WithLocalMatrix -> node.material
+                is MaterialNode.CoordClamp -> node.material
+                else -> break
+            }
+            val sliceCode = if (sliceLeaf is MaterialNode.PerlinNoise || sliceLeaf is MaterialNode.FractalNoise)
+                W5gPlanDiagnostics.NoiseUnpromoted else W5gPlanDiagnostics.Unpromoted
+            val mesh = draw.geometry as? org.graphiks.kanvas.render.ir.GeometryNode.IndexedMesh
+            val preparedMesh = draw.origin in setOf(DrawOrigin.VERTICES, DrawOrigin.MESH) &&
+                mesh != null && mesh.program == null && mesh.meshProgram == null
+            require(imageOrigin?.origin === draw || (draw.origin in setOf(DrawOrigin.RECT,DrawOrigin.RRECT,DrawOrigin.PATH) && draw.paint?.style == PaintStyleNode.FILL ||
+                draw.origin == DrawOrigin.PATH && draw.paint?.style == PaintStyleNode.STROKE ||
+                draw.origin in setOf(DrawOrigin.POINT,DrawOrigin.POINTS,DrawOrigin.TEXT) || preparedMesh) &&
+                draw.resource == null && (draw.operationBlendMode == null || preparedMesh)) { sliceCode }
+            require(colorFilterEffectsMatchPaint(draw)) { W5gPlanDiagnostics.Schema }
+            // The mask product is synthesized, like paint alpha/filter, not a captured occurrence.
+            val runtimeEntries = authenticateComposed(if (imageOrigin != null && material is MaterialNode.Blend)
+                material.dst else material,runtimeCatalog)
+            val nodes = mutableListOf<ComposedMetadata.Node>()
+            val mappings = mutableListOf<ComposedBindingLayoutV1.UniformMapping>()
+            data class Context(val coordinateNodes: List<MaterialNode>,val domain: ColorInterpolation?)
+            data class Field(val owner: Int,val ordinal: Int,val bytes: Long)
+            data class Draft(val owner: Int,val original: MaterialNode,val children: List<MaterialEvaluationRefV5>,
+                val field: Field?,val filter: ColorFilterExecutionPlanV1?,val gradient: MaterialSourceConstructionV4?,
+                val image: ImageChildMetadata?, val noise: NoiseChildMetadata?, val runtime: RuntimeEffectSemanticEntryV1?)
+            val completed = java.util.IdentityHashMap<MaterialNode,MutableMap<Context,MaterialEvaluationRefV5>>()
+            val ownerIndices = java.util.IdentityHashMap<MaterialNode,Int>()
+            val scalarFields = java.util.IdentityHashMap<MaterialNode,Field>()
+            val fields = mutableListOf<Field>()
+            val drafts = mutableListOf<Draft>()
+            val active = java.util.IdentityHashMap<MaterialNode,Unit>()
+            var owners = 0
+            var cursor = 0L
             fun gradientSource(node: MaterialNode,context: Context): MaterialSourceConstructionV4 {
                 val coordinateNodes = context.coordinateNodes.map { when(it) {
                     is MaterialNode.WithLocalMatrix -> CoordinateNodeV2.LocalMatrix(it.matrix)
                     is MaterialNode.CoordClamp -> CoordinateNodeV2.CoordClamp(it.copySubset())
                     else -> error(W5gPlanDiagnostics.Schema)
                 } }
-                val solidStop=when(node) {
-                    is MaterialNode.LinearGradient -> node.stops().size == 1
-                    is MaterialNode.RadialGradient -> node.stops().size == 1
-                    is MaterialNode.SweepGradient -> node.stops().size == 1
-                    else -> false
-                }
+                val solidStop=gradientCollapsesCoordinates(node)
                 val coordinates = if(solidStop) SourceCoordinatesV4.None else when(val built=MaterialCoordinatePlanV2.fromCtmAndNodes(draw.transform,coordinateNodes)) {
                     is MaterialCoordinatePlanV2.Build.Ready -> SourceCoordinatesV4.V2(built.coordinates)
                     is MaterialCoordinatePlanV2.Build.Refused -> throw IllegalArgumentException(built.code)
@@ -413,7 +511,8 @@ internal class MaterialSourceConstructionV4 private constructor(
                 } }
                 val childDraw = draw.copy(material=wrapped,paint=draw.paint?.copy(shader=wrapped,
                     color=ColorARGB.White,colorFilter=null),effects=org.graphiks.kanvas.render.ir.EffectStack.Empty)
-                return when(val captured=capture(childDraw,coordinates,bounds,blend,runtimeCatalog=runtimeCatalog)) {
+                return when(val captured=capture(childDraw,coordinates,bounds,blend,runtimeCatalog=runtimeCatalog,
+                    imageOriginLeaf=imageOrigin != null)) {
                     is SourceConstructionResultV4.Built -> captured.value
                     is SourceConstructionResultV4.Refused -> throw IllegalArgumentException(captured.diagnosticCode)
                 }
@@ -423,13 +522,14 @@ internal class MaterialSourceConstructionV4 private constructor(
                 completed[node]?.get(context)?.let { active.remove(node); return it }
                 val owner = ownerIndices.getOrPut(node) { owners++ }
                 val runtime = (node as? MaterialNode.RuntimeEffect)?.let { runtimeEntries.getValue(it) }
-                val filter = (node as? MaterialNode.WithColorFilter)?.let { compileFilter(it.filter) }
+                val filter = validateComposedNode(node)
                 val gradient = when(node) {
                     is MaterialNode.LinearGradient,is MaterialNode.RadialGradient,is MaterialNode.SweepGradient,
-                    is MaterialNode.ConicalGradient -> { validatePendingGradient(node); gradientSource(node,context) }
+                    is MaterialNode.ConicalGradient -> gradientSource(node,context)
                     else -> null
                 }
                 val image = (node as? MaterialNode.ImageSample)?.let { sample ->
+                    if (imageOrigin?.original === sample) imageOrigin else {
                     val description=EffectiveMaterialPlanner.describeImageSample(sample,false)
                     description.validateUploadMetadata()
                     val coordinates=when(val built=MaterialCoordinatePlanV2.fromCtmAndNodes(draw.transform,
@@ -442,12 +542,9 @@ internal class MaterialSourceConstructionV4 private constructor(
                         is MaterialCoordinatePlanV2.Build.Refused -> throw IllegalArgumentException(built.code)
                     }
                     ImageChildMetadata(sample,description,coordinates)
+                    }
                 }
-                val parameters = when (node) {
-                    is MaterialNode.PerlinNoise -> NoiseParametersV1(node.baseX,node.baseY,node.numOctaves,node.seed,node.tileSize,false)
-                    is MaterialNode.FractalNoise -> NoiseParametersV1(node.baseX,node.baseY,node.numOctaves,node.seed,node.tileSize,true)
-                    else -> null
-                }
+                val parameters = composedNoiseParameters(node)
                 val noise = parameters?.let {
                     val coordinates = when (val built = MaterialCoordinatePlanV2.fromCtmAndNodes(draw.transform,
                         context.coordinateNodes.map { wrapper -> when (wrapper) {
@@ -475,7 +572,6 @@ internal class MaterialSourceConstructionV4 private constructor(
                         throw IllegalArgumentException(W5gPlanDiagnostics.Unpromoted)
                     }
                 }
-                if (node is MaterialNode.Opacity) require(node.alpha.isFinite() && node.alpha in 0f..1f) { W5aPlanDiagnostics.InvalidOpacity }
                 val field = if(bytes == 0L) null else if(gradient != null || image != null || noise != null) Field(owner,fields.size,bytes).also { fields += it }
                     else scalarFields.getOrPut(node) { Field(owner,fields.size,bytes).also { fields += it } }
                 val children = when(node) {
@@ -495,8 +591,7 @@ internal class MaterialSourceConstructionV4 private constructor(
                 active.remove(node)
                 return MaterialEvaluationRefV5(drafts.lastIndex).also { completed.getOrPut(node) { mutableMapOf() }[context] = it }
             }
-            val alpha = draw.paint?.takeIf { it.shader != null }?.color?.alphaNormalized ?: 1f
-            var root: MaterialNode = MaterialNode.Opacity(draw.material,alpha)
+            var root: MaterialNode = MaterialNode.Opacity(material,tailAlphaF32)
             draw.paint?.colorFilter?.let { root = MaterialNode.WithColorFilter(root,it) }
             // Prefix owner assignment includes the actual outer paint operations;
             // postorder evaluation refs remain explicit and independently checked.
@@ -631,7 +726,8 @@ internal class MaterialSourceConstructionV4 private constructor(
         fun capture(draw: DrawNode, coordinates: SourceCoordinatesV4, bounds: RectF32,
             blend: BlendPlan,imageMaskChild: Boolean = false,
             runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
-            composedV6: Boolean = false): SourceConstructionResultV4<MaterialSourceConstructionV4> = try {
+            composedV6: Boolean = false,
+            imageOriginLeaf: Boolean = false): SourceConstructionResultV4<MaterialSourceConstructionV4> = try {
             require(bounds.isFinite() && bounds.isSorted()) { W5fPlanDiagnostics.Schema }
             if (composedV6 || containsComposed(draw.material)) {
                 require(!imageMaskChild) { W5gPlanDiagnostics.Unpromoted }
@@ -640,7 +736,8 @@ internal class MaterialSourceConstructionV4 private constructor(
             val preparedMesh = (draw.geometry as? org.graphiks.kanvas.render.ir.GeometryNode.IndexedMesh)?.let {
                 draw.origin in setOf(DrawOrigin.VERTICES, DrawOrigin.MESH) && it.program == null && it.meshProgram == null
             } == true
-            require(imageMaskChild || (draw.origin in setOf(DrawOrigin.RECT, DrawOrigin.RRECT, DrawOrigin.PATH,
+            require(imageMaskChild || imageOriginLeaf && draw.origin == DrawOrigin.IMAGE && draw.geometry is GeometryNode.ImagePatch ||
+                (draw.origin in setOf(DrawOrigin.RECT, DrawOrigin.RRECT, DrawOrigin.PATH,
                 DrawOrigin.POINT, DrawOrigin.POINTS, DrawOrigin.TEXT) || preparedMesh) &&
                 draw.resource == null && (draw.operationBlendMode == null || preparedMesh)) { W5fPlanDiagnostics.Unpromoted }
             require(colorFilterEffectsMatchPaint(draw)) { W5fPlanDiagnostics.Schema }

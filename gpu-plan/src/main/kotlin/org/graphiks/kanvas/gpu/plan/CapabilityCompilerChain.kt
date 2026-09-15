@@ -65,18 +65,25 @@ public class CapabilityCompilerChain private constructor(
         budget: PlanBudget,
         overlay: (SourceDeferredRenderConstructionV4)->SourceConstructionResultV4<SourceDeferredRenderConstructionV4>,
     ): RenderPlanResult<FrameSourceLayoutV4> {
+        val lanes = when (val result = constructSourceLanes(candidate,capabilities,budget)) {
+            is RenderPlanResult.Ready -> result.plan
+            is RenderPlanResult.GapNotMigrated -> return result
+            is RenderPlanResult.GapOnPromotedScope -> return result
+            is RenderPlanResult.InvalidScene -> return result
+            is RenderPlanResult.ResourceLimitExceeded -> return result
+        }
+        return sourceLayoutV4(lanes,overlay)
+    }
+
+    /** Complete geometry validation precedes any overlay, resource capture or publication. */
+    internal fun constructSourceLanes(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget): RenderPlanResult<List<SourceDeferredRenderConstructionV4>> {
         val chained = candidate as? ChainCandidate ?: return invalidCandidate()
         if (chained.owner !== this || compilers.getOrNull(chained.index) !== chained.compiler) return invalidCandidate()
         if (chained.compiler is W5aCompositePlanCompiler)
-            return chained.compiler.constructSourceLayout(chained.candidate,capabilities,budget,overlay)
+            return chained.compiler.constructSourceLanes(chained.candidate,capabilities,budget)
         return when (val result = chained.compiler.constructSourceLaneV4(chained.candidate,capabilities,budget)) {
-            is RenderPlanResult.Ready -> when (val captured = overlay(result.plan)) {
-                is SourceConstructionResultV4.Refused -> captured.failure
-                is SourceConstructionResultV4.Built -> when (val layout = FrameSourceLayoutV4.standalone(captured.value)) {
-                    is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(layout.value)
-                    is SourceConstructionResultV4.Refused -> layout.failure
-                }
-            }
+            is RenderPlanResult.Ready -> RenderPlanResult.Ready(listOf(result.plan))
             is RenderPlanResult.GapNotMigrated -> result
             is RenderPlanResult.GapOnPromotedScope -> result
             is RenderPlanResult.InvalidScene -> result

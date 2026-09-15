@@ -40,6 +40,7 @@ internal class SourceDeferredRenderConstructionV4 private constructor(
     geometryCommandsI32: List<Int>,
     data: Map<Int, PlanDrawDataResources>,
     depth: Map<Int, PlanResourceId>,
+    val w4ePayload: W4eNativePayloadPlan?,
 ) {
     private val extent = extent.copy()
     val targetExtent: SizeI32 get() = extent.copy()
@@ -58,6 +59,17 @@ internal class SourceDeferredRenderConstructionV4 private constructor(
     fun drawDataByCommandI32(): Map<Int, PlanDrawDataResources> = dataValues
     fun depthStencilByCommandI32(): Map<Int, PlanResourceId> = depthValues
 
+    /** A validated clear-only lane has no material consumer and issues no material table. */
+    fun publishClearOnly(): RenderGraph {
+        require(visualCommandCount == 0 && RenderGraph.visualDraws(passValues).isEmpty() && geometrySource == null) {
+            W5fPlanDiagnostics.Schema
+        }
+        var graph = RenderGraph.construct(id,capabilityId,targetExtent,colorFormat,capabilities,budget,0,
+            resourceValues,passValues,dependencyValues,peakFrameLocalBytesI64)
+        if (topology == DeferredLaneTopologyV4.GeometryBridge) graph = RenderGraph.issueW5bGeometry(graph)
+        return graph.publish()
+    }
+
     /** Replace only real compiler-issued color-source occurrences, keeping every geometry fact. */
     fun overlayImageSources(capture: (PlanDraw)->MaterialSourceConstructionV4?): SourceConstructionResultV4<SourceDeferredRenderConstructionV4> { return try {
         val originalDraws = RenderGraph.visualDraws(passValues)
@@ -74,10 +86,13 @@ internal class SourceDeferredRenderConstructionV4 private constructor(
             // occurrence by command; the checked structural interner runs only afterwards.
             val passes = remapSourcePassesV4(original.passes(),overlayCoordinates = { draw ->
                 captured[byCommand.getValue(draw.commandIndex).indexI32].takeIf { it.image != null }?.coordinates
-            },remap = { it },overlayReference = { draw -> byCommand.getValue(draw.commandIndex) })
+            },composed = { captured[it.indexI32].composed != null },
+                w4eColorPasses=geometry?.takeIf { it.w4ePayload != null }?.passes()?.filterIsInstance<PlanPass.PathRenderPass>()
+                    ?.filter { it.phase != PathRenderPhase.SingleSampleStencilProducer }?.associateBy { it.draw.commandIndex },
+                remap = { it },overlayReference = { draw -> byCommand.getValue(draw.commandIndex) })
             return of(original.id,original.capabilityId,original.targetExtent,original.colorFormat,original.capabilities,
                 original.budget,original.visualCommandCount,original.resources(),passes,original.dependencies(),sources,
-                original.topology,geometry,original.geometryCommandsI32(),original.drawDataByCommandI32(),original.depthStencilByCommandI32())
+                original.topology,geometry,original.geometryCommandsI32(),original.drawDataByCommandI32(),original.depthStencilByCommandI32(),original.w4ePayload)
         }
         val geometry = geometrySource?.let { original -> when (val result = rebuild(original,null)) {
             is SourceConstructionResultV4.Built -> result.value
@@ -112,11 +127,15 @@ internal class SourceDeferredRenderConstructionV4 private constructor(
             sources: MaterialSourceConstructionTableV4, topology: DeferredLaneTopologyV4,
             geometrySource: SourceDeferredRenderConstructionV4?, geometryCommandsI32: List<Int>,
             data: Map<Int, PlanDrawDataResources>, depth: Map<Int, PlanResourceId>,
+            w4ePayload: W4eNativePayloadPlan? = null,
         ): SourceConstructionResultV4<SourceDeferredRenderConstructionV4> = try {
             // This is the very same resource, lifetime, dependency and geometry validator used
             // by RenderGraph.construct. No material table or source certificate is fabricated.
             RenderGraph.validateConstructionTopology(capabilityId, extent, format, caps, budget,
-                visualCommandCount, resources, passes, dependencies, RenderGraph.peak(resources, passes.size))
+                visualCommandCount, resources, passes, dependencies, RenderGraph.peak(resources, passes.size),
+                w5bW4eFacts=geometrySource?.takeIf { it.w4ePayload != null }?.let(W4eGeometryFactsV6::from))
+            require(w4ePayload == null || capabilityId == W4eClipPlanCompiler.W5A_HARD_CAPABILITY_ID &&
+                w4ePayload.matchesDeclaredResources(resources)) { W5fPlanDiagnostics.Schema }
             val allDraws = passes.flatMap { pass -> when (pass) {
                 is PlanPass.RenderPass -> pass.draws()
                 is PlanPass.StencilProducer -> listOf(pass.draw)
@@ -161,7 +180,7 @@ internal class SourceDeferredRenderConstructionV4 private constructor(
             }
             SourceConstructionResultV4.Built(SourceDeferredRenderConstructionV4(id, capabilityId, extent,
                 format, caps, budget, visualCommandCount, resources, passes, dependencies, sources,
-                topology, geometrySource, geometryCommandsI32, data, depth))
+                topology, geometrySource, geometryCommandsI32, data, depth,w4ePayload))
         } catch (failure: IllegalArgumentException) {
             sourceConstructionRefusalV4(failure.message ?: W5fPlanDiagnostics.Schema)
         } catch (_: ArithmeticException) {

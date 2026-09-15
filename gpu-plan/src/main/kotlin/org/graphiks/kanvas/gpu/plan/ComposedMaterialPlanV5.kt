@@ -136,7 +136,8 @@ public class ComposedImageResourceV5 internal constructor(
     public val upload: ImageUploadPlanV1 = prepared.imageUpload(metadata.description)
     public val graph: ImageNumericOperationGraphV1 = ImageNumericOperationGraphV1.of(metadata.description.color,
         metadata.description.sampling,metadata.description.tileModes)
-    internal val projection: ImageCoordinatePlanV1 = ImageCoordinatePlanV1.sealShader(org.graphiks.math.matrix.Matrix3x3F32(),emptyList())
+    internal val projection: ImageCoordinatePlanV1 = metadata.projection
+    internal val originalImageDraw: org.graphiks.kanvas.render.ir.DrawNode? get() = metadata.origin
     init {
         require(resource.kindTagU32 == 2u && resource.texture != null && resource.buffer == null &&
             upload.widthI32 > 0 && upload.heightI32 > 0 &&

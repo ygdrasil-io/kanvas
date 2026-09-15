@@ -65,7 +65,6 @@ internal class FrameSourceLayoutV4 private constructor(
     /** Image and ordinary consumers cross the one real permit before either graph is published. */
     fun <T> prepareImageFrame(finish: (RenderGraph,MaterialPlanTable,Long)->T): SourceConstructionResultV4<T> =
         prepareAndFinish { table,roots ->
-            require(imageInventory.any { it.upload != null }) { W5fPlanDiagnostics.Schema }
             val graphs = if (ordinaryLayout == null) listOf(constructBound(table,roots))
                 else nativeLanes.mapIndexed { index,source -> constructLaneBound(source,nativeOffsetsI32[index],table,roots) }
             val nonUniformAndStops = Math.addExact(nonUniformBytesI64,stopBytesI64)
@@ -285,17 +284,21 @@ internal class FrameSourceLayoutV4 private constructor(
     }
 
     private fun constructBound(table: MaterialPlanTable,roots: List<MaterialPlanRef>): RenderGraphConstruction {
-        val passes = remapSourcePassesV4(lane.passes(),composed={ table.entry(it).bindings is ComposedMaterialBindingV5 }) { symbolic -> roots[symbolic.indexI32] }
+        val geometrySource = lane.geometrySource?.let { constructLaneBound(it,0,table,roots) }
+        val passes = remapSourcePassesV4(lane.passes(),composed={ table.entry(it).bindings is ComposedMaterialBindingV5 },
+            w4eColorPasses=geometrySource?.takeIf { it.w4ePayload != null }?.passes()?.filterIsInstance<PlanPass.PathRenderPass>()
+                ?.filter { it.phase != PathRenderPhase.SingleSampleStencilProducer }?.associateBy { it.draw.commandIndex }) { symbolic -> roots[symbolic.indexI32] }
         var constructed = RenderGraph.construct(lane.id,lane.capabilityId,lane.targetExtent,lane.colorFormat,
             lane.capabilities,lane.budget,lane.visualCommandCount,lane.resources(),passes,lane.dependencies(),
-            lane.peakFrameLocalBytesI64,table)
+            lane.peakFrameLocalBytesI64,table,
+            w5bW4eFacts=geometrySource?.takeIf { it.w4ePayload != null }?.let(W4eGeometryFactsV6::from))
         val nativeWitnessLanes = nativeGeometry?.lanes?.map { metadata ->
             val deferred = nativeLanes[metadata.ordinalI32]
             GeometryLaneConstruction(constructLaneBound(deferred.geometrySource ?: deferred,nativeOffsetsI32[metadata.ordinalI32],table,roots),
                 metadata.commandsI32,metadata.data,metadata.depth)
         }.orEmpty()
         if (lane.topology == DeferredLaneTopologyV4.GeneralGeometryAndColor) {
-            val source = constructLaneBound(requireNotNull(lane.geometrySource),0,table,roots)
+            val source = requireNotNull(geometrySource)
             val commands = lane.geometryCommandsI32()
             val data = lane.drawDataByCommandI32().values.distinct().single()
             val depth = lane.depthStencilByCommandI32().values.distinct().singleOrNull()
@@ -318,6 +321,7 @@ internal class FrameSourceLayoutV4 private constructor(
         if (source.capabilityId == W4dPathStrokePlanCompiler.CAPABILITY_ID)
             geometry = RenderGraph.issueW4dCompilerWitness(geometry)
         if (source.topology == DeferredLaneTopologyV4.GeometryBridge) geometry = RenderGraph.issueW5bGeometry(geometry)
+        source.w4ePayload?.let { geometry = geometry.withW4ePayload(it) }
         return geometry
     }
 
@@ -547,7 +551,9 @@ internal class FrameSourceLayoutV4 private constructor(
             require(lane?.resources().orEmpty().none { it.role == PlanResourceRole.GradientStopData }) { W5fPlanDiagnostics.Schema }
             val sources = preparedInput?.sources ?: if (ordinaryLayout == null) requireNotNull(lane).sourceTable().sources()
                 else nativeLanes.flatMap { it.sourceTable().sources() }
-            require(sources.isNotEmpty() && sources.any { it.pending }) { W5fPlanDiagnostics.Schema }
+            // Image geometry may remove every pending origin while retaining ordinary sources.
+            // Those exact surviving rows still use this one interner/budget/publication owner.
+            require(sources.isNotEmpty()) { W5fPlanDiagnostics.Schema }
             fun row(source: MaterialSourceConstructionV4): List<SourceEntry> =
                 source.resolvedSource?.table?.entries()?.map { SourceEntry(source,it,-1,it.internerDescriptorV4()) }
                     ?: source.image?.child?.let(::row).orEmpty() + List(source.wrappers.size+1) { index ->

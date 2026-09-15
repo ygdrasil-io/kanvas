@@ -186,7 +186,7 @@ class W5eImageShaderSurfacePixelTest {
             }
             val result = surface.render()
             assertContentEquals((clear + clear).toUByteArray(), result.pixels)
-            assertEquals(1, result.stats.opsDispatched)
+            assertEquals(if (pathI32 == 0) 0 else 1, result.stats.opsDispatched)
             assertEquals(0, result.stats.opsRefused)
         }
     }

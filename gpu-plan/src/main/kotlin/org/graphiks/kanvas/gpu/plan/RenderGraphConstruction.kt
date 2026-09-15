@@ -21,6 +21,7 @@ internal class RenderGraphConstruction internal constructor(
     val generalIssued: Boolean = false,
     val geometryIssued: Boolean = false,
     geometryLanes: List<GeometryLaneConstruction> = emptyList(),
+    val w4ePayload: W4eNativePayloadPlan? = null,
 ) {
     private val extent = targetExtent.copy()
     val targetExtent: SizeI32 get() = extent.copy()
@@ -36,7 +37,12 @@ internal class RenderGraphConstruction internal constructor(
     fun withWitness(w4d: Boolean = w4dIssued, general: Boolean = generalIssued,
         geometry: Boolean = geometryIssued, newLanes: List<GeometryLaneConstruction> = lanes): RenderGraphConstruction =
         RenderGraphConstruction(id,capabilityId,targetExtent,colorFormat,capabilities,budget,visualCommandCount,
-            resources(),passes(),dependencies(),peakFrameLocalBytes,materialTable,w4d,general,geometry,newLanes)
+            resources(),passes(),dependencies(),peakFrameLocalBytes,materialTable,w4d,general,geometry,newLanes,w4ePayload)
+    fun withW4ePayload(payload: W4eNativePayloadPlan): RenderGraphConstruction {
+        require(w4ePayload == null && payload.matchesDeclaredResources(resources()))
+        return RenderGraphConstruction(id,capabilityId,targetExtent,colorFormat,capabilities,budget,visualCommandCount,
+            resources(),passes(),dependencies(),peakFrameLocalBytes,materialTable,w4dIssued,generalIssued,geometryIssued,lanes,payload)
+    }
     fun resources(): List<PlanResource> = resourceValues
     fun passes(): List<PlanPass> = passValues
     fun dependencies(): List<PlanPassDependency> = dependencyValues
@@ -80,9 +86,14 @@ internal fun remapSourcePassesV4(sourcePasses: List<PlanPass>,
     overlayCoordinates: ((PlanDraw)->SourceCoordinatesV4?)? = null,
     overlayReference: ((PlanDraw)->MaterialPlanRef)? = null,
     composed: ((MaterialPlanRef)->Boolean)? = null,
+    w4eColorPasses: Map<Int,PlanPass.PathRenderPass>? = null,
     remap: (MaterialPlanRef) -> MaterialPlanRef): List<PlanPass> {
         val copied = java.util.IdentityHashMap<PlanDraw, PlanDraw>()
         fun draw(source: PlanDraw): PlanDraw = copied.getOrPut(source) {
+            if (source is W5bW4ePathDraw) return@getOrPut W5bW4ePathDraw(
+                requireNotNull(w4eColorPasses?.get(source.commandIndex)),source.blend)
+            if (source is ClippedGeneralPathDraw) return@getOrPut ClippedGeneralPathDraw.of(
+                draw(source.source) as GeneralPathDraw,source.clip)
             val ref = overlayReference?.invoke(source) ?: remap(source.materialAuthority.materialPlanRef())
             if (composed?.invoke(ref) == true) return@getOrPut when (source) {
                 is W5bPointDraw -> source.withMaterialRef(ref, composedV5=true)
@@ -189,7 +200,8 @@ internal class PackedFrameSourcesV4 private constructor(private val table: Mater
                 draw.materialAuthority.colorSourceCoordinatesV4()?.let { coordinates ->
                     val ref = draw.materialAuthority.materialPlanRef()
                     require(draw is SolidRectDraw || draw is AnalyticRectDraw || draw is PathFillDraw ||
-                        (draw is AnalyticRRectDraw || draw is PathStrokeDraw || draw is GeneralPathDraw || draw is W5bPointDraw) &&
+                        (draw is AnalyticRRectDraw || draw is PathStrokeDraw || draw is GeneralPathDraw || draw is W5bPointDraw ||
+                            draw is W5bW4ePathDraw || draw is ClippedGeneralPathDraw) &&
                             draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV5 ||
                         draw is GeneralPathDraw && draw.copyPathGeometry() is PathDrawGeometry.Fill ||
                         (draw is AnalyticRRectDraw || draw is PathStrokeDraw || draw is GeneralPathDraw) &&
