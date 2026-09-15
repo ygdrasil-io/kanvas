@@ -310,7 +310,7 @@ class Picture internal constructor(
 
 private val MAGIC = byteArrayOf(0x4B, 0x50, 0x49, 0x43)
 private const val FORMAT_VERSION = 10
-private const val STABLE_WIRE_VERSION = 11
+private const val STABLE_WIRE_VERSION = 12
 private const val PREVIOUS_STABLE_WIRE_VERSION = 10
 private const val HISTORICAL_WIRE_VERSION_V8 = 8
 
@@ -939,6 +939,9 @@ private fun decodePicture(data: ByteArray): Picture? {
     } catch (_: IndexOutOfBoundsException) {
         null
     } ?: return null
+    // The historical facade reader retains its legacy-only transaction. Scene
+    // archive reconstruction creates detached values and contributes no registry entries.
+    // registerDecoded never invokes renderer hooks or changes the positive catalogue.
     return picture.takeIf { RuntimeEffect.registerDecoded(decodedRuntimeEffects) }
 }
 
@@ -961,6 +964,7 @@ private fun decodePicture(data: ByteArray, decodedRuntimeEffects: MutableList<Ru
         }
         9,
         PREVIOUS_STABLE_WIRE_VERSION,
+        11,
         STABLE_WIRE_VERSION,
         -> when (val decoded = SceneArchiveCodec.decodePicture(data)) {
             is SceneArchiveDecodeResult.Decoded -> try {

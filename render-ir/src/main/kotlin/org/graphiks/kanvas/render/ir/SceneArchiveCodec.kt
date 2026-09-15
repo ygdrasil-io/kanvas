@@ -30,7 +30,7 @@ import org.graphiks.math.vector.Vector2F32
 /**
  * The owner of the versioned Picture payload.
  *
- * A v8/v9/v10/v11 archive starts with the public `KPIC` magic, its version integer and the
+ * A v8/v9/v10/v11/v12 archive starts with the public `KPIC` magic, its version integer and the
  * cull rectangle.  The following negative marker occupies the old v8
  * `opCount` slot: it can therefore never be mistaken for a valid historical
  * v8 op count.  Historical Task 8 v8 streams deliberately return [LegacyV8]
@@ -38,11 +38,11 @@ import org.graphiks.math.vector.Vector2F32
  */
 public object SceneArchiveCodec {
     private val magic: ByteArray = byteArrayOf(0x4b, 0x50, 0x49, 0x43)
-    private const val pictureVersion: Int = 11
+    private const val pictureVersion: Int = 12
     private const val irMarker: Int = -1_391_019_346
-    private const val schemaVersion: Int = 5
+    private const val schemaVersion: Int = 6
 
-    /** Encodes a deeply immutable Scene IR as the sole v11 Picture writer. */
+    /** Encodes a deeply immutable Scene IR as the sole v12 Picture writer. */
     public fun encodePicture(scene: SceneSnapshot, cullRect: RectF32): ByteArray {
         requireSemanticValidity(scene)
         val writer = ArchiveWriter()
@@ -61,7 +61,7 @@ public object SceneArchiveCodec {
         return try {
             if (!reader.bytesEqual(magic)) return SceneArchiveDecodeResult.Invalid("invalid-magic", "Picture magic is not KPIC")
             val encodedPictureVersion = reader.i32()
-            if (encodedPictureVersion !in setOf(8, 9, 10, pictureVersion)) {
+            if (encodedPictureVersion !in setOf(8, 9, 10, 11, pictureVersion)) {
                 return SceneArchiveDecodeResult.Invalid("unknown-version", "Picture version is not supported")
             }
             val cull = reader.rect()
@@ -78,6 +78,7 @@ public object SceneArchiveCodec {
                 8 -> 2
                 9 -> 3
                 10 -> 4
+                11 -> 5
                 pictureVersion -> schemaVersion
                 else -> 0
             }
@@ -146,6 +147,7 @@ private class ArchiveWriter {
     fun finish(): ByteArray = output.toByteArray()
     fun bytes(value: ByteArray) = stream.write(value)
     fun i32(value: Int) = stream.writeInt(value)
+    fun i64(value: Long) = stream.writeLong(value)
     fun bool(value: Boolean) = stream.writeBoolean(value)
     fun f32(value: Float) {
         require(value.isFinite()) { "Scene archives reject non-finite floats" }
@@ -311,7 +313,7 @@ private class ArchiveWriter {
             is MaterialNode.ConicalGradient -> { i32(6); point(value.start); f32(value.startRadius); point(value.end); f32(value.endRadius); stops(value.stops()); enum(value.tileMode); enum(value.interpolation) }
             is MaterialNode.ImageSample -> { i32(7); image(value.image); enum(value.tileModeX); enum(value.tileModeY); sampling(value.sampling) }
             is MaterialNode.Blend -> { i32(8); enum(value.mode); material(value.dst); material(value.src) }
-            is MaterialNode.RuntimeEffect -> { i32(9); descriptor(value.descriptor); uniforms(value.uniforms()); list(value.toList()) { text(it.name); material(it.material) } }
+            is MaterialNode.RuntimeEffect -> { i32(9); descriptor(value.descriptor); uniforms(value.uniforms()); list(value.toList()) { text(it.name); material(it.material) }; runtimeResources(value.descriptor, value.resources) }
             is MaterialNode.WithLocalMatrix -> { i32(10); material(value.material); matrix(value.matrix) }
             is MaterialNode.WithColorFilter -> { i32(11); material(value.material); colorFilter(value.filter) }
             is MaterialNode.Opacity -> { i32(12); material(value.material); f32(value.alpha) }
@@ -339,10 +341,40 @@ private class ArchiveWriter {
     fun imageMetadata(value: ImageResourceSnapshot) { text(value.sourceId); i32(value.width); i32(value.height); enum(value.pixelFormat); enum(value.alphaType); colorSpace(value.colorSpace) }
 
     fun descriptor(value: RuntimeEffectDescriptor): Unit = nested {
-        text(value.id.value); enum(value.abi); list(value.uniformLayout.toList()) { uniformSlot(it) }
-        list(value.toList()) { text(it.name); enum(it.type) }
-        optional(value.vertexLayout, ::vertexLayout)
-        optional(value.module, ::module)
+        text(value.id.value); enum(value.abi); i32(value.semanticVersionI32); text(value.abiHash)
+        if (value.semanticVersionI32 > 0) {
+            i32(value.uniformBlock.sizeBytesI32)
+            list(value.uniformBlock.slots) {
+                text(it.name); enum(it.type); i32(it.offsetBytesI32); i32(it.sizeBytesI32)
+                i32(it.alignmentBytesI32); i32(it.arrayCountI32); i32(it.arrayStrideBytesI32)
+            }
+            list(value.childSlots) { text(it.name); enum(it.type); bool(it.nullable) }
+            list(value.logicalResources) {
+                text(it.name); i32(it.logicalSlotI32); enum(it.kind)
+                when (val facts = it.facts) {
+                    is RuntimeLogicalResourceFactsV1.StorageRead -> i64(facts.minBindingSizeBytesI64)
+                    is RuntimeLogicalResourceFactsV1.Texture2DFloatFilterable -> bool(facts.multisampled)
+                    is RuntimeLogicalResourceFactsV1.Sampler -> enum(facts.type)
+                }
+            }
+        }
+        optional(value.legacyV0) {
+            list(it.uniformLayout.toList(), ::uniformSlot)
+            list(it.childSlots) { child -> text(child.name); enum(child.type) }
+            optional(it.vertexLayout, ::vertexLayout); optional(it.module, ::module)
+        }
+    }
+    fun runtimeResources(descriptor: RuntimeEffectDescriptor, values: RuntimeEffectResourceBindingSetV1) {
+        values.requireMatches(descriptor)
+        list(descriptor.logicalResources) { slot ->
+            val entry = values.first { it.logicalSlotI32 == slot.logicalSlotI32 }
+            i32(entry.logicalSlotI32); text(entry.name)
+            when (val binding = entry.binding) {
+                is RuntimeEffectResourceBindingV1.StorageRead -> { i32(1); byteArray(binding.bytes.copyToByteArray()) }
+                is RuntimeEffectResourceBindingV1.SampledTexture -> { i32(2); image(binding.image) }
+                is RuntimeEffectResourceBindingV1.Sampler -> { i32(3); enum(binding.type) }
+            }
+        }
     }
     fun uniformSlot(value: RuntimeUniformSlot) { text(value.name); i32(value.binding); enum(value.type); i32(value.size) }
     fun vertexLayout(value: RuntimeVertexLayout) { i32(value.stride); enum(value.stepMode); list(value.toList()) { enum(it.format); i32(it.offset); i32(it.shaderLocation) } }
@@ -437,6 +469,7 @@ private class ArchiveReader(private val data: ByteArray) {
     }
     fun requireEnd() { if (offset != data.size) throw ArchiveFailure("trailing-data", "Archive contains trailing bytes") }
     fun i32(): Int { requireBytes(4); val value = (data[offset].toInt() shl 24) or ((data[offset + 1].toInt() and 255) shl 16) or ((data[offset + 2].toInt() and 255) shl 8) or (data[offset + 3].toInt() and 255); offset += 4; return value }
+    fun i64(): Long = (i32().toLong() shl 32) or (i32().toLong() and 0xffffffffL)
     fun bool(): Boolean = when (val value = byte()) { 0 -> false; 1 -> true; else -> throw ArchiveFailure("invalid-boolean", "Boolean tag $value is invalid") }
     fun byte(): Int { requireBytes(1); return data[offset++].toInt() and 255 }
     fun f32(): Float = Float.fromBits(i32()).also { if (!it.isFinite()) throw ArchiveFailure("non-finite", "Archive contains a non-finite float") }
@@ -479,8 +512,8 @@ private class ArchiveReader(private val data: ByteArray) {
     inline fun <reified T : Enum<T>> enum(): T = try { enumValueOf<T>(text()) } catch (_: IllegalArgumentException) { throw ArchiveFailure("invalid-enum", "Unknown ${T::class.simpleName} value") }
     fun colorSpace(): ColorSpace = ColorSpace(text(), enum<TransferFunction>(), enum<Gamut>())
     fun <T> list(read: () -> T): List<T> { val count = length(MAX_COLLECTION_SIZE, "collection"); return List(count) { read() } }
-    fun ints(): IntArray { val count = length(MAX_COLLECTION_SIZE, "int array"); return IntArray(count) { i32() } }
-    fun floats(): FloatArray { val count = length(MAX_COLLECTION_SIZE, "float array"); return FloatArray(count) { f32() } }
+    fun ints(): IntArray { val count = length(MAX_COLLECTION_SIZE, "int array"); requireBytesI64(count.toLong() * 4L); return IntArray(count) { i32() } }
+    fun floats(): FloatArray { val count = length(MAX_COLLECTION_SIZE, "float array"); requireBytesI64(count.toLong() * 4L); return FloatArray(count) { f32() } }
     fun ubytes(): UByteArray { val count = length(MAX_BINARY_SIZE, "byte array"); return UByteArray(count) { byte().toUByte() } }
     fun byteArray(): ByteArray { val count = length(MAX_BINARY_SIZE, "byte array"); requireBytes(count); return data.copyOfRange(offset, offset + count).also { offset += count } }
     fun stringFloatMap(): Map<String, Float> = list { text() to f32() }.also(::requireDistinctKeys).toMap()
@@ -491,8 +524,9 @@ private class ArchiveReader(private val data: ByteArray) {
         depth += 1
         return try { block() } finally { depth -= 1 }
     }
-    private fun requireBytes(count: Int) { if (count < 0 || data.size - offset < count) throw ArchiveFailure("truncated", "Archive ended unexpectedly") }
-    private fun length(max: Int, name: String): Int { val value = i32(); if (value < 0 || value > max || value > data.size - offset) throw ArchiveFailure("invalid-length", "$name length is invalid"); return value }
+    private fun requireBytes(count: Int) = requireBytesI64(count.toLong())
+    private fun requireBytesI64(count: Long) { if (count < 0L || data.size.toLong() - offset.toLong() < count) throw ArchiveFailure("truncated", "Archive ended unexpectedly") }
+    private fun length(max: Int, name: String): Int { val value = i32().toLong(); if (value < 0L || value > max.toLong() || value > data.size.toLong() - offset.toLong()) throw ArchiveFailure("invalid-length", "$name length is invalid"); return value.toInt() }
     private fun <T> requireDistinctKeys(values: List<Pair<String, T>>) { if (values.map { it.first }.toSet().size != values.size) throw ArchiveFailure("duplicate-key", "Archive contains duplicate map keys") }
 
     fun scene(): SceneSnapshot = nested {
@@ -577,7 +611,14 @@ private class ArchiveReader(private val data: ByteArray) {
         1 -> MaterialNode.Transparent; 2 -> MaterialNode.Solid(color()); 3 -> MaterialNode.LinearGradient.of(point(), point(), stops(), enum(), enum())
         4 -> MaterialNode.RadialGradient.of(point(), f32(), stops(), enum(), enum()); 5 -> MaterialNode.SweepGradient.of(point(), f32(), f32(), stops(), enum(), enum())
         6 -> MaterialNode.ConicalGradient.of(point(), f32(), point(), f32(), stops(), enum(), enum()); 7 -> MaterialNode.ImageSample(image(), enum(), enum(), sampling())
-        8 -> MaterialNode.Blend(enum(), material(), material()); 9 -> MaterialNode.RuntimeEffect.of(descriptor(), uniforms(), list { RuntimeMaterialChild(text(), material()) })
+        8 -> MaterialNode.Blend(enum(), material(), material())
+        9 -> {
+            val descriptor = descriptor()
+            val uniforms = uniforms()
+            val children = list { RuntimeMaterialChild(text(), material()) }
+            MaterialNode.RuntimeEffect.of(descriptor, uniforms, children,
+                if (sceneArchiveSchemaVersion >= 6) runtimeResources(descriptor) else RuntimeEffectResourceBindingSetV1.Empty)
+        }
         10 -> MaterialNode.WithLocalMatrix(material(), matrix()); 11 -> MaterialNode.WithColorFilter(material(), colorFilter()); 12 -> MaterialNode.Opacity(material(), f32())
         13 -> MaterialNode.PerlinNoise(f32(), f32(), i32(), i32(), optional(::noiseTile)); 14 -> MaterialNode.FractalNoise(f32(), f32(), i32(), i32(), optional(::noiseTile))
         15 -> MaterialNode.WithWorkingColorSpace(material(), enum()); 16 -> MaterialNode.CoordClamp(material(), rect()); else -> failTag("material")
@@ -600,7 +641,60 @@ private class ArchiveReader(private val data: ByteArray) {
     }
     private data class ImageMeta(val sourceId: String, val width: Int, val height: Int, val format: ImagePixelFormat, val alpha: ImageAlphaType, val colorSpace: ColorSpace)
     private fun imageMetadata(): ImageMeta = ImageMeta(text(), i32().nonNegative("image width"), i32().nonNegative("image height"), enum(), enum(), colorSpace())
-    fun descriptor(): RuntimeEffectDescriptor = nested { RuntimeEffectDescriptor.of(RuntimeEffectId(text()), enum(), RuntimeUniformLayout.of(list(::uniformSlot)), list { RuntimeChildSlot(text(), enum()) }, optional(::vertexLayout), optional(::module)) }
+    fun descriptor(): RuntimeEffectDescriptor = nested {
+        val id = RuntimeEffectId(text())
+        val abi = enum<RuntimeEffectAbi>()
+        if (sceneArchiveSchemaVersion < 6) return@nested legacyDescriptor(id, abi)
+        val version = i32()
+        require(version >= 0) { "Negative runtime semantic version" }
+        val hash = text()
+        require(hash.matches(Regex("[0-9a-f]{64}"))) { "Malformed runtime ABI hash" }
+        val result = if (version == 0) {
+            require(bool()) { "Version zero requires its legacy section" }
+            legacyDescriptor(id, abi)
+        } else {
+            val size = i32()
+            val slots = list { RuntimeUniformSlotV2(text(), enum(), i32(), i32(), i32(), i32(), i32()) }
+            val block = RuntimeUniformBlockV1.of(slots, size)
+            val children = list { RuntimeChildSlotV2(text(), enum(), bool()) }
+            val resources = list {
+                val name = text(); val slot = i32(); val kind = enum<RuntimeLogicalResourceKindV1>()
+                val facts = when (kind) {
+                    RuntimeLogicalResourceKindV1.STORAGE_BUFFER -> RuntimeLogicalResourceFactsV1.StorageRead(i64())
+                    RuntimeLogicalResourceKindV1.SAMPLED_TEXTURE -> RuntimeLogicalResourceFactsV1.Texture2DFloatFilterable(bool())
+                    RuntimeLogicalResourceKindV1.SAMPLER -> RuntimeLogicalResourceFactsV1.Sampler(enum())
+                }
+                RuntimeLogicalResourceSlotV1(name, slot, kind, facts)
+            }
+            require(!bool()) { "Positive runtime effects cannot contain a legacy module" }
+            RuntimeEffectDescriptor.of(id, abi, version, block, children, resources)
+        }
+        require(result.abiHash == hash) { "Runtime ABI hash mismatch" }
+        result
+    }
+    /** All historical scene schemas and the v3 legacy section share one v2-to-v3 adapter. */
+    private fun legacyDescriptor(id: RuntimeEffectId, abi: RuntimeEffectAbi): RuntimeEffectDescriptor =
+        RuntimeEffectDescriptor.of(id, abi, RuntimeUniformLayout.of(list(::uniformSlot)),
+            list { RuntimeChildSlot(text(), enum()) }, optional(::vertexLayout), optional(::module))
+
+    fun runtimeResources(descriptor: RuntimeEffectDescriptor): RuntimeEffectResourceBindingSetV1 {
+        val entries = list {
+            val slot = i32(); val name = text()
+            val binding = when (i32()) {
+                1 -> RuntimeEffectResourceBindingV1.StorageRead(ImmutableBytes.copyOf(byteArray()))
+                2 -> RuntimeEffectResourceBindingV1.SampledTexture(requireNotNull(image() as? ImageResourceSnapshot.Pixels) {
+                    "Runtime sampled texture must contain pixels"
+                })
+                3 -> RuntimeEffectResourceBindingV1.Sampler(enum())
+                else -> failTag("runtime resource binding")
+            }
+            RuntimeEffectResourceBindingEntryV1(slot, name, binding)
+        }
+        require(entries.map { it.logicalSlotI32 } == descriptor.logicalResources.map { it.logicalSlotI32 }) {
+            "Runtime resource order mismatch"
+        }
+        return RuntimeEffectResourceBindingSetV1.of(entries).also { it.requireMatches(descriptor) }
+    }
     fun uniformSlot(): RuntimeUniformSlot = RuntimeUniformSlot(text(), i32().nonNegative("uniform binding"), enum(), i32().nonNegative("uniform size"))
     fun vertexLayout(): RuntimeVertexLayout {
         val stride = i32().nonNegative("vertex stride")
@@ -626,7 +720,7 @@ private class ArchiveReader(private val data: ByteArray) {
                         perspectiveCaptureRefusal = bool(),
                         transformClass = text(),
                     )
-                    2, 3, 4, 5 -> clipTransformV2()
+                    2, 3, 4, 5, 6 -> clipTransformV2()
                     else -> throw ArchiveFailure("unknown-schema", "Scene archive schema is not supported")
                 }
                 ClipEntry(geometry, operation, antiAlias, transform)
