@@ -2,6 +2,7 @@
 package org.graphiks.kanvas.picture
 
 import java.util.Base64
+import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.ColorFilter
@@ -15,15 +16,59 @@ import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.SizeF32
 import org.graphiks.math.geometry.SizeI32
 import org.graphiks.math.color.ColorMatrixF32
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import kotlin.test.assertFailsWith
+import kotlin.test.assertContentEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class W5gNoisePictureCompatibilityTest {
+    @Test fun currentNoisePictureRoundtripsSchema5ComplexClipAndPreservesBoundedRefusal() {
+        val noise=Shader.PerlinNoise(.125f,.25f,2,7,null)
+        val samples=listOf(.5f,1.5f).map { x ->
+            W5gNoiseCpuOracle.expected(noise,Point2F32(x,.5f)).also(W5fSurfacePixelFixtures::requireBounded)
+        }
+        val transparent=W5gNoiseCpuOracle.expected(Shader.PerlinNoise(.125f,.25f,0,7,null),Point2F32(.5f,.5f))
+        // The translated triangle has upper edge y=-2*x+2: left center is inside,
+        // right center is outside. Without its captured translation both are outside.
+        // Without the clip both centers contain nonzero Noise. Bound both mutants first.
+        disjoint(samples[0],transparent)
+        disjoint(samples[1],transparent)
+        val expected=listOf(samples[0],transparent)
+        val recorder=PictureRecorder()
+        val canvas=recorder.beginRecording(RectF32.ofLTRB(0f,0f,2f,1f))
+        canvas.concat(Matrix3x3F32(tx=1f))
+        canvas.clipPath(Path().apply {
+            moveTo(-2f,-2f); lineTo(1f,-2f); lineTo(-2f,4f); close()
+        },antiAlias=false)
+        canvas.resetMatrix()
+        canvas.drawPath(Path().apply {
+            moveTo(-10f,-10f); lineTo(20f,-10f); lineTo(-10f,20f); close()
+        },Paint(shader=noise,blendMode=BlendMode.SRC,antiAlias=false))
+        val picture=recorder.finishRecordingAsPicture()
+        val encoded=picture.toByteArray()
+        val decoded=assertNotNull(Picture.fromByteArray(encoded))
+        val reencoded=decoded.toByteArray()
+        assertContentEquals(encoded,reencoded)
+        val decodedAgain=assertNotNull(Picture.fromByteArray(reencoded))
+        assertContentEquals(reencoded,decodedAgain.toByteArray())
+        // Schema 5 roundtrips the captured clip. Public composite replay retains its
+        // documented refusal; the analytical clip discriminants are not rendered pixels.
+        for (value in listOf(picture,decoded,decodedAgain)) {
+            val surface=Surface(expected.size,1)
+            surface.canvas { drawPicture(value) }
+            repeat(2) {
+                val failure=assertFailsWith<IllegalStateException> { surface.render() }
+                assertTrue(failure.message.orEmpty().startsWith("unsupported.composite.clip:"),
+                    "Schema 5 complex clip replay must preserve its bounded refusal: ${failure.message}")
+            }
+        }
+    }
+
     @Test fun capturedNoiseFilterMutationCannotChangeSurfaceOrPicture() {
         val leaf=Shader.Blend(BlendMode.SRC_OVER,Shader.PerlinNoise(.125f,.25f,2,7,SizeI32(8,4)),
             Shader.FractalNoise(.125f,.25f,2,1,null))

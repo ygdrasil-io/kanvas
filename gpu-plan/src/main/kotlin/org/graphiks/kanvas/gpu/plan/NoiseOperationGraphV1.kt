@@ -73,7 +73,10 @@ public class NoiseOperationGraphV1 internal constructor(
     public val localX: S,
     public val localY: S,
 ) {
-    public class Phase internal constructor(public val q: S)
+    public class Phase internal constructor(public val q: S) {
+        public val floor: S.NoisePhaseComponent = S.NoisePhaseComponent(this, PhaseKind.FLOOR)
+        public val fraction: S.NoisePhaseComponent = S.NoisePhaseComponent(this, PhaseKind.FRACTION)
+    }
     public enum class PhaseKind { FLOOR, FRACTION }
     public class Corner internal constructor(public val phase: Phase, public val offsetI32: Int,
         public val periodWordOffsetU32: Long) {
@@ -111,8 +114,8 @@ public class NoiseOperationGraphV1 internal constructor(
         val isFractal = P.UniformU32Equal(wordOffsetU32 + 3L, 1u)
         initialState = listOf(S.Multiply(S.Add(localX, half), S.DynamicF32(wordOffsetU32)),
             S.Multiply(S.Add(localY, half), S.DynamicF32(wordOffsetU32 + 1L)), one, zero, zero, zero, zero)
-        val fx = S.NoisePhaseComponent(xPhase, PhaseKind.FRACTION)
-        val fy = S.NoisePhaseComponent(yPhase, PhaseKind.FRACTION)
+        val fx = xPhase.fraction
+        val fy = yPhase.fraction
         originalFractions = listOf(fx, fy)
         val reads = mutableListOf<S.NoiseGradientU16>()
         fun smooth(f: S) = S.Multiply(S.Multiply(f, f), S.Subtract(c(3f), S.Multiply(c(2f), f)))

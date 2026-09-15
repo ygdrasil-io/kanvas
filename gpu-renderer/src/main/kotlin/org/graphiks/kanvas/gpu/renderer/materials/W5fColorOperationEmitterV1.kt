@@ -60,8 +60,7 @@ internal object W5fColorOperationEmitterV1 {
             }
             return result;
         }
-        fn w5gNoiseAddress(q: f32, corner: u32, period: vec4<u32>) -> u32 {
-            let lattice = floor(q);
+        fn w5gNoiseAddress(lattice: f32, corner: u32, period: vec4<u32>) -> u32 {
             var magnitude = w5gNoiseMagnitude(lattice);
             var negative = lattice < 0.0;
             if(corner != 0u) {
@@ -155,6 +154,23 @@ internal object W5fColorOperationEmitterV1 {
                     val bodyCache=java.util.IdentityHashMap(cache)
                     region.states.forEachIndexed { index,state -> bodyCache[state]="${prefix}State$index" }
                     bodyCache[region.xPhase]="${prefix}Period0"; bodyCache[region.yPhase]="${prefix}Period1"
+                    val integral=expression(region.integral,code,bodyCache)
+                    val phases=listOf(region.xPhase,region.yPhase)
+                    phases.forEachIndexed { axis,_ ->
+                        code.append("var ${prefix}Floor$axis: f32 = 0.0;\nvar ${prefix}Fraction$axis: f32 = 0.0;\n")
+                    }
+                    // Materialize the SAME original phase operations once, shared by every
+                    // channel/branch/address. The integral tail keeps these dead operations absent.
+                    code.append("if ($integral != 1.0) {\n")
+                    val phaseCache=java.util.IdentityHashMap(bodyCache)
+                    phases.forEachIndexed { axis,phase ->
+                        val floor=expression(phase.floor,code,phaseCache)
+                        val fraction=expression(phase.fraction,code,phaseCache)
+                        code.append("${prefix}Floor$axis = $floor;\n${prefix}Fraction$axis = $fraction;\n")
+                        bodyCache[phase.floor]="${prefix}Floor$axis"
+                        bodyCache[phase.fraction]="${prefix}Fraction$axis"
+                    }
+                    code.append("}\n")
                     val next=region.nextState.drop(2).map { expression(it,code,bodyCache) }
                     // The unused final q-double is absent; accumulator Adds and amplitude-half are never omitted.
                     code.append("if (${prefix}Octave + 1u < $count) {\n")
@@ -208,12 +224,12 @@ internal object W5fColorOperationEmitterV1 {
                 is ColorOperationGraphV1.Scalar.NoiseIntegralF32 -> "f32(w5gNoiseIntegral(${arg(node.x.q)}) && w5gNoiseIntegral(${arg(node.y.q)}))"
                 is ColorOperationGraphV1.Scalar.NoisePhaseComponent -> {
                     val q=arg(node.phase.q)
-                    if(node.kind == org.graphiks.kanvas.gpu.plan.NoiseOperationGraphV1.PhaseKind.FLOOR) "floor($q)" else "($q - floor($q))"
+                    if(node.kind == org.graphiks.kanvas.gpu.plan.NoiseOperationGraphV1.PhaseKind.FLOOR) "floor($q)" else "($q - ${arg(node.phase.floor)})"
                 }
                 is ColorOperationGraphV1.Scalar.NoiseGradientU16 -> {
                     val read=node.read
-                    val x="w5gNoiseAddress(${arg(read.x.phase.q)}, ${read.x.offsetI32}u, ${requireNotNull(cache[read.x.phase])})"
-                    val y="w5gNoiseAddress(${arg(read.y.phase.q)}, ${read.y.offsetI32}u, ${requireNotNull(cache[read.y.phase])})"
+                    val x="w5gNoiseAddress(${arg(read.x.phase.floor)}, ${read.x.offsetI32}u, ${requireNotNull(cache[read.x.phase])})"
+                    val y="w5gNoiseAddress(${arg(read.y.phase.floor)}, ${read.y.offsetI32}u, ${requireNotNull(cache[read.y.phase])})"
                     "f32(w5gNoiseGradient(${word(read.tableRangeWordOffsetU32)}, $x, $y, ${read.channelI32}u, ${read.axisI32}u))"
                 }
                 is ColorOperationGraphV1.Scalar.InputLinearPremul -> "($inputRgbaExpression)[${node.channelI32}u]"

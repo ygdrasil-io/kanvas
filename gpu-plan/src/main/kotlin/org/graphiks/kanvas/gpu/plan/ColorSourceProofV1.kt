@@ -407,8 +407,7 @@ internal object ColorRoundedGraphProofV1 {
                                     // original fractions are zero. This is R28's explicit dead-q abstraction.
                                     val endpoint=java.util.IdentityHashMap(selected)
                                     region.originalFractions.forEach { fraction ->
-                                        evaluate(ColorOperationGraphV1.Scalar.NoisePhaseComponent(fraction.phase,
-                                            NoiseOperationGraphV1.PhaseKind.FLOOR),selected)
+                                        evaluate(fraction.phase.floor,selected)
                                         endpoint[fraction]=exact(0f)
                                     }
                                     val bytes=requireNotNull(composed.noiseSlab).bytes
@@ -525,8 +524,7 @@ internal object ColorRoundedGraphProofV1 {
                         // The SAME original operands certify subtraction's correlation, not independent q/floor boxes.
                         // Retained negative subnormal q after a DAZ floor input permits a negative-tiny fraction.
                         // For finite F32 |q|>=2^23 floor(q)=q exactly; all other retained fractions are in [0,1].
-                        val originalFloor=ColorOperationGraphV1.Scalar.NoisePhaseComponent(node.phase,
-                            NoiseOperationGraphV1.PhaseKind.FLOOR)
+                        val originalFloor=node.phase.floor
                         val floor=value(originalFloor)
                         if(q.lowerF64 >= 8388608.0 || q.upperF64 <= -8388608.0) exact(0f)
                         else if(floor.lowerF64 == floor.upperF64) {
@@ -551,8 +549,7 @@ internal object ColorRoundedGraphProofV1 {
                         val period=(if(axis == 0) reference.metadata.parameters.periodX else reference.metadata.parameters.periodY)
                             .shiftLeft(octave)
                         require(period.bitLength() <= 128)
-                        val floor=value(ColorOperationGraphV1.Scalar.NoisePhaseComponent(corner.phase,
-                            NoiseOperationGraphV1.PhaseKind.FLOOR))
+                        val floor=value(corner.phase.floor)
                         // Explicit FLOOR, not BigDecimal.toBigInteger's negative truncation.
                         fun integerFloor(bound: Double)=java.math.BigDecimal(bound)
                             .setScale(0,java.math.RoundingMode.FLOOR).toBigIntegerExact()
