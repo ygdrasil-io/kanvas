@@ -539,6 +539,22 @@ In `PLAN/RuntimeEffectSemanticCatalog.kt`, expose `RuntimeEffectSemanticCatalog.
 - `API/surface/gpu/W5dGradientCandidateV2.kt`
 - `TEST/picture/W5hRuntimeEffectPictureTest.kt` for the now-executable replay/refusal methods specified by Task 2
 
+**Mechanical test-source compatibility — not W5h evidence:**
+
+- `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUColorGlyphPreparedTaskListBuilderTest.kt`
+- `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kFramePayloadMaterializerDispatcherTest.kt`
+- `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitiveW4dGeneralFrameTest.kt`
+- `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest.kt`
+- `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kLayerTargetCompositeSmokeTest.kt`
+- `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitiveW4cFramePayloadMaterializerTest.kt`
+- `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest.kt`
+- `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitiveW4dFramePayloadMaterializerTest.kt`
+- `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedSurfaceNativePreflightTest.kt`
+- `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kMaskBlurFramePayloadMaterializerTest.kt`
+- `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFramePreflighterTest.kt`
+
+These files are listed only because the required `materializeReusable` signature changes. Update existing test implementors mechanically to accept the required witness. At every direct invocation, call `preflightW5hFrameSourcesV1(framePlan)`, require `Validated`, fail fixture construction immediately on `Refused`, and pass that exact witness for that exact `framePlan`. Do not add a four-argument compatibility overload, default, nullable witness, new assertion or new test execution. These edits and their compilation are not behavioral W5h evidence and must not be reported as such.
+
 ### V6 contract
 
 ### Frame composition root and snapshot transport
@@ -722,6 +738,7 @@ The public exact lookup returns `null` for unknown ID/version and exposes no pos
   rtk proxy ./gradlew :render-ir:compileKotlin
   rtk proxy ./gradlew :gpu-plan:compileKotlin
   rtk proxy ./gradlew :gpu-renderer:compileKotlin
+  rtk proxy ./gradlew :gpu-renderer:compileTestKotlin
   rtk proxy ./gradlew :kanvas:compileTestKotlin
   ```
 
@@ -1101,12 +1118,13 @@ rtk proxy ./gradlew :kanvas:test \
 
 Before running, verify every class name exists with `rtk rg --files kanvas/src/test/kotlin`. Do not add an infrastructure wrapper suite.
 
-Then run five separate incremental compiles, still serially:
+Then run six separate incremental compiles, still serially:
 
 ```bash
 rtk proxy ./gradlew :render-ir:compileKotlin
 rtk proxy ./gradlew :gpu-plan:compileKotlin
 rtk proxy ./gradlew :gpu-renderer:compileKotlin
+rtk proxy ./gradlew :gpu-renderer:compileTestKotlin
 rtk proxy ./gradlew :kanvas:compileKotlin
 rtk proxy ./gradlew :kanvas:compileTestKotlin
 ```
@@ -1133,12 +1151,12 @@ rtk proxy ./gradlew :kanvas:compileTestKotlin
 
 - [ ] **Step 4 — Perform static architecture cleanup.** Trace callers of `GPUMaterialMapper`, W5a-only text/vertices provenance, legacy runtime child authority/resolvers, direct-image tint/`SRC_OVER`, and text/vertices/mesh local material program builders. Trace storage/texture/sampler values from public API through IR/wire, V6 layout/budget, pre-`beginFramePreparation` reflection and post-witness native lease materialization. Remove only branches/files unreachable from all remaining legitimate routes. Record remaining legacy files and their W8 consumer in the task report. This review is static; do not create code-shape tests.
 - [ ] **Step 5 — Run the frozen-source covering.** Record HEAD and the hashes of every production source file before the command. Run the exact covering command once, inspect all JUnit XML, and record registered/pass/failure/error/skip counts. If Gradle ends with native exit 133 after XML is complete, report cause `UNKNOWN`; do not label the native run green.
-- [ ] **Step 6 — Run the five compiles.** Execute each listed compile separately and record its exit code. No global suite, GM, dashboard, render regeneration, font suite, codec suite or `jpg-color-cube` run is permitted.
+- [ ] **Step 6 — Run the six compiles.** Execute each listed compile separately and record its exit code. No global suite, GM, dashboard, render regeneration, font suite, codec suite or `jpg-color-cube` run is permitted.
 - [ ] **Step 7 — Update durable tracking.** In `refactor/waves/W05-material-graph/status.md`, transcribe all H01–H33 ledger results with exact class/method/invocations and alpha/mutation/final-blend evidence, count Task 4's 14 + Task 5's 12 + Task 6's 7 cells separately from public test invocation counts, and record causal RED/GREEN source custody. Report required/closed/missing cells, compile results, review verdicts, commit IDs, native status, deleted static files and remaining W8/device-loss or non-public mismatch gaps. Update `refactor/README.md` with the W5h branch/PR state. Add a concise final checkpoint at the top of this plan and check completed boxes; do not create another status markdown.
 - [ ] **Step 8 — Commit Task 7.** Commit production/test convergence with `feat(gpu): close w5 registered runtime effect lanes`, then commit tracking-only changes with `docs(refactor): record w5h closure` if the task review requires a stable production commit before docs.
 - [ ] **Step 9 — Obtain whole-branch Sol review.** Review the complete diff from `da9b367bd` to W5h HEAD against the approved design and this plan. Required verdict: no Critical or Important findings, exact module authority, no H-lane parallel material route, complete three-kind runtime-resource transport, host-only preflight before `beginFramePreparation`, non-null witness custody through materialization, no forbidden tests/scope, and explicit Minor/integration gaps.
 - [ ] **Step 10 — Apply one bounded correction wave if required.** A single non-Sol implementer fixes all accepted Critical/Important findings with RED/GREEN evidence where behavior changes. The same Sol reviewer performs one scoped re-review. Do not restart the review loop for nonblocking stylistic observations.
-- [ ] **Step 11 — Push and publish one stacked Draft PR.** Push `codex/w5h-registered-runtime-effects`, create or update one Draft PR targeting `codex/w5g-composed-procedural-materials`, and include: architecture summary, seven-lot commit map, public test counts, five compile results, exact native-exit disclosure, excluded suites, transition-v0/W8 note, device-loss integration gap, final Sol verdict, and parent PR link. Do not merge either PR.
+- [ ] **Step 11 — Push and publish one stacked Draft PR.** Push `codex/w5h-registered-runtime-effects`, create or update one Draft PR targeting `codex/w5g-composed-procedural-materials`, and include: architecture summary, seven-lot commit map, public test counts, six compile results, exact native-exit disclosure, excluded suites, transition-v0/W8 note, device-loss integration gap, final Sol verdict, and parent PR link. Do not merge either PR.
 
 ### Task 7 and W5h acceptance
 
