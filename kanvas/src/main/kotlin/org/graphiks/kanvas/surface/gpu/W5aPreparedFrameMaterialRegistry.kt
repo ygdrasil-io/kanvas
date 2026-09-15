@@ -18,6 +18,11 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.planning.W5bPreparedPointDomainV3
+import org.graphiks.kanvas.surface.RenderConfig
 
 /**
  * Interns immutable W5a sources for authentic prepared core, A8 text and vertices lanes.
@@ -31,7 +36,9 @@ internal data class W5aPreparedFrameMaterialRegistry(
 ) {
     internal companion object {
         fun capturePointSources(operations: List<DisplayOp>, width: Int, height: Int,
-            targetClamp: org.graphiks.kanvas.gpu.plan.BlendTargetClampV1): Map<Int, org.graphiks.kanvas.gpu.plan.W5hPreparedPointMaterialV6> {
+            targetClamp: org.graphiks.kanvas.gpu.plan.BlendTargetClampV1,
+            target: GPUTargetFacts, config: RenderConfig, capabilities: GPUCapabilities,
+        ): Map<Int, org.graphiks.kanvas.gpu.plan.W5hPreparedPointMaterialV6> {
             fun pointPaint(operation: DisplayOp) = when (operation) {
                 is DisplayOp.DrawPoint -> operation.paint
                 is DisplayOp.DrawPoints -> operation.paint.takeIf { operation.mode == PointMode.POINTS }
@@ -55,6 +62,23 @@ internal data class W5aPreparedFrameMaterialRegistry(
                     else -> false
                 }
             }) return emptyMap()
+            // Prove closure before capturing even one material. Mapper refs here are unbound
+            // source slots, not a table/owner; the real mapper later authenticates its packets.
+            // Reuse its transformations, culling and clip plans, and the semantic builder's
+            // exact device geometry. A non-closed frame retains its entire historical route.
+            val mapping = GPUOpMapper.mapOperations(operations, target, config, capabilities,
+                w5aPointMaterialRefs = sourceOperations.associate { it.index to MaterialPlanRef(0) })
+            if (mapping.preparedRefusal != null) return emptyMap()
+            val clips = capturePointClips(operations)
+            val clipsByCommand = clips.flatMap { (index, clip) ->
+                mapping.commandIdsByOperationIndex[index].orEmpty().map { it to clip }
+            }.toMap()
+            val bounds = GPUPixelBounds(0, 0, width, height)
+            if (mapping.visualCommands.any { !it.isInPreparedPointDomain(bounds,
+                    clipsByCommand.containsKey(it.normalized.commandId.value)) }) return emptyMap()
+            val maskClips = mapping.visualCommands.filter { W5bPreparedPointDomainV3.requiresMask(it.clipCoverage) }
+                .map { clipsByCommand[it.normalized.commandId.value] ?: return emptyMap() }
+            if (!W5bPreparedPointDomainV3.acceptsClips(maskClips)) return emptyMap()
             val draws = sourceOperations.map { (index, operation) ->
                 val captured = DisplayOpSceneAdapter.capture(listOf(operation), SceneExtent(width, height), ColorSpace.SRGB)
                     as? SceneCaptureResult.Captured ?: return emptyMap()

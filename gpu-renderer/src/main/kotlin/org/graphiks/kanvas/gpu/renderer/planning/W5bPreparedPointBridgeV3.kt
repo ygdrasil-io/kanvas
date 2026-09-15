@@ -21,10 +21,8 @@ internal object W5bPreparedPointBridgeV3 {
                             blend.mode == org.graphiks.kanvas.render.ir.BlendMode.PLUS
                     } == true)
             }) return null
-        if (semantics.any { (it.coverageMode != GPUCorePrimitiveCoverageMode.FullOrScissor ||
-                it.clipCoveragePlan != org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.NoClip &&
-                it.clipCoveragePlan !is org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.Scissor) &&
-                (it.sourceFamily != GPUCorePrimitiveSourceFamily.PointLine || request.w5bPointClips[it.payloadRef.commandIdValue] == null) } ||
+        if (semantics.any { !W5bPreparedPointDomainV3.acceptsCoverage(it.sourceFamily, it.coverageMode,
+                it.clipCoveragePlan, request.w5bPointClips[it.payloadRef.commandIdValue] != null) } ||
             request.targetFormat != GPUColorFormat.RGBA8UnormSrgb || request.readbackRequestId == null) return null
         GPUFramePlanner.validateRecordingEnvelope(request.baseTaskList)?.let {
             return GPUPreparedSurfaceFrameResult.Refused(it)
@@ -104,11 +102,10 @@ internal object W5bPreparedPointBridgeV3 {
                 as? GpuPlanCapabilityAdapterResult.Supported ?: error("unsupported.w5b.point-capability")
             val budget = request.w5hPointBudget?.let { it.copy(maxFrameLocalBytes = minOf(it.maxFrameLocalBytes, budgetBytesI64)) }
                 ?: PlanBudget(budgetBytesI64)
-            val maskCommands = drawSemantics.filter { it.clipCoveragePlan != org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.NoClip &&
-                it.clipCoveragePlan !is org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.Scissor }
+            val maskCommands = drawSemantics.filter { W5bPreparedPointDomainV3.requiresMask(it.clipCoveragePlan) }
                 .map { it.payloadRef.commandIdValue }.toSet()
-            val clipOperations = maskCommands.map { requireNotNull(request.w5bPointClips[it]) }.distinctBy { it.canonicalId }
-            require(clipOperations.size <= 1) { "unsupported.w5b.point-distinct-clips" }
+            val clipOperations = W5bPreparedPointDomainV3.distinctClips(maskCommands.map { requireNotNull(request.w5bPointClips[it]) })
+            require(W5bPreparedPointDomainV3.acceptsClips(clipOperations)) { "unsupported.w5b.point-distinct-clips" }
             val clipOnly = clipOperations.singleOrNull()?.let { operations -> W4eClipPlanCompiler().sealClipOnly(
                 operations, SizeI32(request.targetBounds.width, request.targetBounds.height), capability.snapshot,
                 budget) }
@@ -121,16 +118,14 @@ internal object W5bPreparedPointBridgeV3 {
                 val pointClip = clipOnly.takeIf { commandI32 in maskCommands }
                 when (val geometry = semantic.geometry) {
                     is GPUCorePrimitiveGeometry.TriangulatedPath -> {
-                        require(semantic.sourceFamily == GPUCorePrimitiveSourceFamily.PointLine &&
-                            geometry.geometryMode == GPUCorePrimitiveGeometryMode.DirectTriangles)
+                        require(W5bPreparedPointDomainV3.acceptsPath(semantic.sourceFamily, geometry.geometryMode))
                         W5bPointDraw.of(commandI32, material, geometry.vertices.toFloatArray(),
                             geometry.indices.toIntArray(), geometry.sourceContourStarts.toIntArray(),
                             geometry.coverBounds.let { RectI32(it.left, it.top, it.right, it.bottom) }, scissor, blend, pointClip,
                             composedV5 = pendingSources != null)
                     }
                     is GPUCorePrimitiveGeometry.Rect -> {
-                        val edges = listOf(geometry.left, geometry.top, geometry.right, geometry.bottom)
-                        require(edges.all { it.toInt().toFloat() == it })
+                        require(W5bPreparedPointDomainV3.acceptsRect(geometry.left, geometry.top, geometry.right, geometry.bottom))
                         SolidRectDraw.ofMaterial(commandI32, material,
                             RectI32(geometry.left.toInt(), geometry.top.toInt(), geometry.right.toInt(), geometry.bottom.toInt()),
                             scissor, CoveragePlan.FullOrScissor, SamplePlan.SingleSample, blend, composedV5 = pendingSources != null)

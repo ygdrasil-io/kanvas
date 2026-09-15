@@ -208,11 +208,13 @@ internal object GPUPreparedSurfaceFrameBuilder {
             } else {
                 0
             }
-            val pointSources = if (request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul)
+            val pointSources = if (request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul &&
+                request.includeReadback && GPUColorFormat(request.targetFacts.colorFormat) == GPUColorFormat.RGBA8UnormSrgb)
                 W5aPreparedFrameMaterialRegistry.capturePointSources(operations, request.targetBounds.width, request.targetBounds.height,
                     if (GPUColorFormat(request.targetFacts.colorFormat) == GPUColorFormat.RGBA8UnormSrgb)
                         org.graphiks.kanvas.gpu.plan.BlendTargetClampV1.UnitInterval
-                    else org.graphiks.kanvas.gpu.plan.BlendTargetClampV1.Unavailable)
+                    else org.graphiks.kanvas.gpu.plan.BlendTargetClampV1.Unavailable,
+                    request.targetFacts, request.candidate.config, request.capabilities)
                 else emptyMap()
             val coreMaterialCandidates = if (request.candidate.color.interpretation == GPUColorInterpretation.LinearPremul) {
                 W5aPreparedFrameMaterialRegistry.captureCoreCandidates(

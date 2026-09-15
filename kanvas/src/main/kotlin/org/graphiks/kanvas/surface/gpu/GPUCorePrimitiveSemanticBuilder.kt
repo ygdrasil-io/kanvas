@@ -45,6 +45,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeLoweringP
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeStyle
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.sealedDeviceGeometryInput
+import org.graphiks.kanvas.gpu.renderer.planning.W5bPreparedPointDomainV3
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecording
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.paint.StrokeCap
@@ -746,13 +747,7 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
         // The canonical hairline point square is hard DirectTriangles geometry, so its
         // coverage is full-or-scissor even though the FillPath command derives stencil
         // coverage for general path fills.
-        coverageMode = if (directStrokeUnderHardPathClip ||
-            normalized is NormalizedDrawCommand.FillPath && normalized.isHairlinePointCommand()
-        ) {
-            GPUCorePrimitiveCoverageMode.FullOrScissor
-        } else {
-            coverageMode()
-        },
+        coverageMode = coreCoverageMode(directStrokeUnderHardPathClip),
         analysisRecordId = analysisRecord.recordId.takeIf {
             sourceFamily == GPUCorePrimitiveSourceFamily.Rect ||
                 sourceFamily == GPUCorePrimitiveSourceFamily.RRect ||
@@ -986,6 +981,30 @@ private fun GPUCorePrimitiveColorTransform.apply(channel: Float): Float = when (
         ((channel + 0.055f) / 1.055f).pow(2.4f)
     }
 }
+
+/** Unowned admission only: use the very same device geometry and coverage as semantic gathering. */
+internal fun GPUFramePathVisualCommand.isInPreparedPointDomain(targetBounds: GPUPixelBounds,
+    hasPointClip: Boolean): Boolean {
+    if (geometryRefusal != null || normalized.maskFilterOrNull() != null || clipExecutionPlan is GPUClipExecutionPlan.Refused)
+        return false
+    if (normalized !is NormalizedDrawCommand.FillRect && normalized !is NormalizedDrawCommand.FillPath) return false
+    return try {
+        val family = normalized.toCoreSourceFamily()
+        W5bPreparedPointDomainV3.acceptsCoverage(family, coreCoverageMode(), clipCoverage, hasPointClip) &&
+            when (val geometry = normalized.toDeviceGeometry(targetBounds)) {
+                is GPUCorePrimitiveGeometryInput.Rect -> W5bPreparedPointDomainV3.acceptsRect(
+                    geometry.left, geometry.top, geometry.right, geometry.bottom)
+                is GPUCorePrimitiveGeometryInput.TriangulatedPath -> W5bPreparedPointDomainV3.acceptsPath(family, geometry.geometryMode)
+                else -> false
+            }
+    } catch (_: GPUCorePrimitiveGeometryRefusalException) {
+        false
+    }
+}
+
+private fun GPUFramePathVisualCommand.coreCoverageMode(directStrokeUnderHardPathClip: Boolean = false): GPUCorePrimitiveCoverageMode =
+    if (directStrokeUnderHardPathClip || normalized is NormalizedDrawCommand.FillPath && normalized.isHairlinePointCommand())
+        GPUCorePrimitiveCoverageMode.FullOrScissor else coverageMode()
 
 private fun GPUFramePathVisualCommand.coverageMode(): GPUCorePrimitiveCoverageMode = when (geometryCoverage) {
     GPUCoverageConsumption.FullOrScissor -> GPUCorePrimitiveCoverageMode.FullOrScissor

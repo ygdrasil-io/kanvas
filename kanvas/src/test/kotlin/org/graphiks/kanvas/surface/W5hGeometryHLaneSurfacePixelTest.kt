@@ -22,6 +22,7 @@ import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.pipeline.RuntimeEffect
 import org.graphiks.kanvas.pipeline.UniformBlock
 import org.graphiks.kanvas.types.PointMode
+import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.color.ColorMatrixF32
 import org.graphiks.math.geometry.CornerRadiiF32
@@ -418,6 +419,76 @@ class W5hGeometryHLaneSurfacePixelTest {
         }
     }
 
+    /** Premature V6 ownership must not remove the historical geometry/clip route. */
+    @ParameterizedTest(name = "historical geometry closure: {0}/{1}") @MethodSource("pointHistoricalGeometryFrames")
+    fun pointsMixedGeometryAndClipsPreserveHistoricalPixels(lane: String, variant: String) {
+        val colors = listOf(ColorARGB.Red, ColorARGB.Blue)
+        val wanted = colors.map { W5fColorCpuOracle.expectedShaderTree(Shader.SolidColor(it)) }
+        wanted.forEach(W5fSurfacePixelFixtures::requireBounded)
+        fun assertFrame(result: RenderResult) {
+            assertEquals(8, result.pixels.size)
+            wanted.forEachIndexed { pixel, expected ->
+                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, result.pixels.copyOfRange(pixel * 4, pixel * 4 + 4))
+            }
+        }
+        fun Canvas.point(x: Float, color: ColorARGB) {
+            val paint = Paint(color = color, strokeWidth = 0f, blendMode = BlendMode.SRC_OVER, antiAlias = false)
+            if (lane == "DrawPoint") drawPoint(x, .5f, paint)
+            else drawPoints(PointMode.POINTS, listOf(Point2F32(x, .5f)), paint)
+        }
+        fun clip(edge: Float) = Path().apply {
+            moveTo(-10f, -10f); lineTo(edge, -10f); lineTo(-10f, edge); close()
+        }
+        fun Canvas.frame() {
+            save()
+            when (variant) {
+                "translated-rect" -> translate(.5f, 0f)
+                "skew-rect" -> concat(Matrix3x3F32(kx = .25f))
+                "hard-clip-rect" -> clipPath(clip(20f), ClipOp.INTERSECT, antiAlias = false)
+            }
+            // Both sample centers lie strictly inside this rectangle (also after translation/skew).
+            drawRect(RectF32.ofLTRB(if (variant == "fractional-rect") -1.5f else -2f, -2f, 4f, 4f),
+                Paint(color = ColorARGB.Blue, blendMode = BlendMode.SRC, antiAlias = variant == "aa-rect"))
+            restore()
+            if (variant == "distinct-hard-clips") {
+                save(); clipPath(clip(20f), ClipOp.INTERSECT, antiAlias = false)
+                point(.5f, ColorARGB.Red); restore()
+                save(); clipPath(clip(24f), ClipOp.INTERSECT, antiAlias = false)
+                point(1.5f, ColorARGB.Green); restore()
+            } else point(.5f, ColorARGB.Red)
+        }
+        val surface = Surface(2, 1)
+        surface.canvas { frame() }
+        val historicalRefusal = when (variant) {
+            "aa-rect" -> "invalid.preflight.core_primitive_direct_load_store: The two-render dst-copy shape requires the clear/store producer, the ordered snapshot copy, then the load/store consuming pass."
+            "hard-clip-rect" -> "unsupported.recording.core_primitive_clip_stencil_mixed_geometry: The bounded clip-stencil scope accepts only a direct solid FillRect prefix."
+            "distinct-hard-clips" -> "unsupported.recording.core_primitive_clip_stencil_multiple_native_artifacts: The bounded native clip-stencil candidate accepts exactly one path artifact."
+            else -> null
+        }
+        if (historicalRefusal != null) {
+            repeat(2) { assertEquals(historicalRefusal, assertFailsWith<IllegalStateException> { surface.render() }.message) }
+            surface.discardRecordedOperations()
+            surface.canvas {
+                drawRect(RectF32.ofLTRB(0f, 0f, 2f, 1f), Paint(color = ColorARGB.Blue, blendMode = BlendMode.SRC, antiAlias = false))
+                point(.5f, ColorARGB.Red)
+            }
+            repeat(2) { assertFrame(surface.render()) }
+            return
+        }
+        repeat(2) { assertFrame(surface.render()) }
+        // Picture's historical CTM restore boundary is not promoted by this source-join fix.
+        // Intrinsic fractional edges exercise the same domain boundary without a CTM change.
+        if (variant != "fractional-rect") return
+        val recorder = PictureRecorder()
+        recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 2f, 1f)).frame()
+        val picture = recorder.finishRecordingAsPicture()
+        for (replay in listOf(picture, assertNotNull(Picture.fromByteArray(picture.toByteArray())))) {
+            val target = Surface(2, 1)
+            target.canvas { replay.playback(this) }
+            repeat(2) { assertFrame(target.render()) }
+        }
+    }
+
     @ParameterizedTest(name = "same Surface recovery: {0}") @MethodSource("allLanes")
     fun materialRefusalThenSameSurfaceRecovers(lane: String) {
         val valid = runtimeFixture("child")
@@ -478,5 +549,7 @@ class W5hGeometryHLaneSurfacePixelTest {
         @JvmStatic fun pointFinalBlendTopology() = cases(listOf("DrawPoint", "POINTS"),
             listOf("dst-background", "dst-only", "difference-first", "dst-then-difference"))
         @JvmStatic fun pointHistoricalMixedFrames() = cases(listOf("DrawPoint", "POINTS"), listOf("Clear", "DrawColor"))
+        @JvmStatic fun pointHistoricalGeometryFrames() = cases(listOf("DrawPoint", "POINTS"),
+            listOf("fractional-rect", "translated-rect", "skew-rect", "aa-rect", "hard-clip-rect", "distinct-hard-clips"))
     }
 }
