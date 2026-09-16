@@ -124,7 +124,7 @@ internal class FrameSourceLayoutV4 private constructor(
             is SourceConstructionResultV4.Refused -> result.failure
         }
 
-    private fun <T> prepareAndFinish(finish: (MaterialPlanTable,List<MaterialPlanRef>,List<LayerSourceAllocationV1>)->T): SourceConstructionResultV4<T> = try {
+    private fun <T> prepareAndFinish(finish: (MaterialPlanTable,List<MaterialPlanRef>,SourcePhysicalConstructionV1)->T): SourceConstructionResultV4<T> = try {
         val prepared = PreparedStops.prepare(this)
         val boundSources = java.util.IdentityHashMap<MaterialSourceConstructionV4,EffectiveMaterialPlanner.Result.Ready>()
         val boundImages = java.util.IdentityHashMap<MaterialSourceConstructionV4,ImageSampleExecutionPlanV1>()
@@ -292,24 +292,42 @@ internal class FrameSourceLayoutV4 private constructor(
         val actualUniformBytes = actualLegacy.fold(0L) { bytes,value -> Math.addExact(bytes,value.uniformByteCountI64) }
         require(actualV4.values.fold(actualUniformBytes) { bytes,value ->
             Math.addExact(bytes,value.uniformByteCountI64) } == uniformBytesI64) { W5fPlanDiagnostics.Schema }
-        val inventory = if (layeredInput == null) emptyList() else buildList {
-            actualLegacy.forEach { source -> add(LayerSourceAllocationV1(source.canonicalIdentity,
-                PlanResourceKind.Buffer, source.uniformByteCountI64, uniform = true)) }
-            actualV4.values.forEach { source -> add(LayerSourceAllocationV1(source.canonicalIdentity,
-                PlanResourceKind.Buffer, source.uniformByteCountI64, uniform = true)) }
+        val inventory = if (layeredInput == null) SourcePhysicalConstructionV1() else {
+            val resources = mutableListOf<PlanResource>()
+            val uniforms = linkedMapOf<String, PlanResourceId>()
+            val caches = mutableListOf<PlanCacheBindingV1>()
+            fun buffer(role: PlanResourceRole, ordinal: Int, bytes: Long, usage: PlanResourceUsage,
+                lifetime: PlanResourceLifetime = PlanResourceLifetime.FrameLocal): PlanResourceId =
+                PlanResource.of(role, ordinal, PlanResourceKind.Buffer, null, null, bytes,
+                    setOf(usage, PlanResourceUsage.CopyDestination), lifetime, 0, layeredInput.passCountI32)
+                    .also { resources += it }.id
+            (actualLegacy.map { it.canonicalIdentity to it.uniformByteCountI64 } +
+                actualV4.values.map { it.canonicalIdentity to it.uniformByteCountI64 }).forEach { (identity, bytes) ->
+                uniforms[identity] = buffer(PlanResourceRole.SourceUniformData, uniforms.size, bytes, PlanResourceUsage.Uniform)
+            }
             imageInventory.forEachIndexed { index, allocation ->
-                add(LayerSourceAllocationV1("image.$index", PlanResourceKind.Texture2D, allocation.byteCountI64,
-                    org.graphiks.math.geometry.SizeI32(allocation.pixels.width, allocation.pixels.height)))
-                add(LayerSourceAllocationV1("image-upload.$index", PlanResourceKind.Buffer,
-                    Math.subtractExact(allocation.physicalBytesI64(capabilities), allocation.byteCountI64)))
+                val request = prepared.uploads.getValue(allocation.pixels).cacheRequest
+                val row = PlanResource.of(PlanResourceRole.DecodedImageV1, index, PlanResourceKind.Texture2D,
+                    PlanTextureFormat.ImageV1(request.format), org.graphiks.math.geometry.SizeI32(request.widthI32, request.heightI32),
+                    request.byteSizeI64, request.usages(), request.lifetime, 0, layeredInput.passCountI32)
+                resources += row
+                val uploadBytes = Math.subtractExact(allocation.physicalBytesI64(capabilities), allocation.byteCountI64)
+                val upload = buffer(PlanResourceRole.ImageUploadStaging, index, uploadBytes, PlanResourceUsage.CopySource)
+                caches += PlanCacheBindingV1(row.id, request, upload, uploadBytes / request.heightI32)
             }
             actualV4.values.flatMap { it.proof.runtimeResources }.map { it.cacheRequest }
                 .filterIsInstance<PlanCacheResourceRequest.Storage>().distinct().forEachIndexed { index, request ->
-                    add(LayerSourceAllocationV1("runtime-storage.$index", PlanResourceKind.Buffer, request.byteSizeI64))
+                    caches += PlanCacheBindingV1(buffer(PlanResourceRole.RuntimeStorageData, index, request.byteSizeI64,
+                        PlanResourceUsage.StorageRead, request.lifetime), request)
                 }
-            require(filter { it.uniform }.sumOf { it.bytesI64 } == uniformBytesI64)
-            val extra = filterNot { it.uniform }.fold(0L) { bytes, row -> Math.addExact(bytes, row.bytesI64) }
+            actualV4.values.flatMap { it.proof.runtimeResources }.map { it.cacheRequest }
+                .filterIsInstance<PlanCacheResourceRequest.Sampler>().distinct().forEachIndexed { index, request ->
+                    caches += PlanCacheBindingV1(planResourceId(PlanResourceRole.RuntimeSampler, index), request)
+                }
+            require(resources.filter { it.role == PlanResourceRole.SourceUniformData }.sumOf { it.byteSize } == uniformBytesI64)
+            val extra = resources.filterNot { it.role == PlanResourceRole.SourceUniformData }.fold(0L) { bytes, row -> Math.addExact(bytes, row.byteSize) }
             require(Math.addExact(layeredInput.nonUniformBytesI64, Math.addExact(extra, noiseBytesI64)) == nonUniformBytesI64)
+            SourcePhysicalConstructionV1(resources, uniforms, caches)
         }
         SourceConstructionResultV4.Built(finish(table,roots,inventory))
     } catch (failure: RawMaterialRequirementsV2.Refusal) {
@@ -743,10 +761,12 @@ internal class FrameSourceLayoutV4 private constructor(
             }
             imageInventory.filter { it.upload != null }.forEach {
                 nonUniform = Math.addExact(nonUniform,it.physicalBytesI64(caps)) }
+            if (layeredInput != null) W6aLayerPlanBudget.requireWithin(nonUniform, budget)
             require(nonUniform <= budget.maxFrameLocalBytes) { W5eImagePlanDiagnostics.FrameBudget }
             try {
                 imageInventory.filter { it.upload == null }.forEach { allocation ->
                     nonUniform=Math.addExact(nonUniform,allocation.physicalBytesI64(caps))
+                    if (layeredInput != null) W6aLayerPlanBudget.requireWithin(nonUniform, budget)
                     require(nonUniform <= budget.maxFrameLocalBytes) { W5gPlanDiagnostics.Binding }
                 }
             } catch (_: IllegalArgumentException) { throw IllegalArgumentException(W5gPlanDiagnostics.Binding) }
@@ -810,10 +830,12 @@ internal class FrameSourceLayoutV4 private constructor(
             }
             nonUniform=Math.addExact(nonUniform,noiseBytes)
             nonUniform=Math.addExact(nonUniform,runtimeBytes)
+            if (layeredInput != null) W6aLayerPlanBudget.requireWithin(nonUniform, budget)
             require(nonUniform <= budget.maxFrameLocalBytes) { W5gPlanDiagnostics.NoiseStorage }
             var total = nonUniform
             fun add(bytes: Long,code: String) {
                 total = Math.addExact(total,bytes)
+                if (layeredInput != null) W6aLayerPlanBudget.requireWithin(total, budget)
                 require(total <= budget.maxFrameLocalBytes) { code }
             }
             legacy.sortedBy { it.hasCoordinatesV2 }.forEach {

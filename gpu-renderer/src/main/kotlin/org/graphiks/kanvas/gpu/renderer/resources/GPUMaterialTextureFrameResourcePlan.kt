@@ -246,6 +246,15 @@ internal class GPUMaterialTextureUploadV1 private constructor(
             val rowI64 = alignUpMaterialTexture(logicalRowI64, alignmentI64)
             val sizeI64 = Math.multiplyExact(rowI64, heightI32.toLong())
             require(sizeI64 <= Int.MAX_VALUE && sizeI64 <= maxBufferBytesI64)
+            return planned(widthI32, heightI32, bytesPerPixelI32, logicalBytes, rowI64, sizeI64)
+        }
+
+        /** Copies bytes into the exact pre-publication W6 allocation; never chooses padding or size. */
+        fun planned(widthI32: Int, heightI32: Int, bytesPerPixelI32: Int, logicalBytes: ByteArray,
+            rowI64: Long, sizeI64: Long): GPUMaterialTextureUploadV1 {
+            val logicalRowI64 = Math.multiplyExact(widthI32.toLong(), bytesPerPixelI32.toLong())
+            require(logicalBytes.size.toLong() == Math.multiplyExact(logicalRowI64, heightI32.toLong()) &&
+                rowI64 >= logicalRowI64 && sizeI64 == Math.multiplyExact(rowI64, heightI32.toLong()) && sizeI64 <= Int.MAX_VALUE)
             val padded = ByteArray(sizeI64.toInt())
             for (rowI32 in 0 until heightI32) logicalBytes.copyInto(padded,
                 Math.toIntExact(rowI32 * rowI64), Math.toIntExact(rowI32 * logicalRowI64), Math.toIntExact((rowI32 + 1L) * logicalRowI64))

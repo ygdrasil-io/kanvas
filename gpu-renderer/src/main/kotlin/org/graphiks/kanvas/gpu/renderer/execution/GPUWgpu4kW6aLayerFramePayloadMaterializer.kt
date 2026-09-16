@@ -27,12 +27,13 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         try {
             val graph = frame.graph
             val generation = generationSeal.deviceGeneration
-            val root = graph.resources().single { it.role == PlanResourceRole.LogicalTarget }
+            val root = frame.physical.resource(graph.resources().single { it.role == PlanResourceRole.LogicalTarget }.id)
             require(rootTarget.width == root.copyExtent()?.width && rootTarget.height == root.copyExtent()?.height &&
                 rootTarget.deviceGeneration == generation && rootTarget.targetGeneration == generationSeal.targetGeneration)
             val (rootTexture, rootView) = rootTarget.borrow()
             val views = linkedMapOf(root.id to rootView)
             graph.resources().filter { it.role == PlanResourceRole.LayerTarget }.forEach { resource ->
+                val slot = frame.physical.slot(resource.id)
                 val extent = requireNotNull(resource.copyExtent())
                 require(resource.format == PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) && resource.sampleCountI32 == 1)
                 val usage = resource.usages().fold(GPUTextureUsage.None) { result, value -> result or when (value) {
@@ -41,10 +42,10 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     else -> error("Unadmitted layer usage")
                 } }
                 val texture = owned.own(device.createTexture(TextureDescriptor(size = Extent3D(extent.width.toUInt(), extent.height.toUInt()),
-                    format = GPUTextureFormat.RGBA8UnormSrgb, usage = usage, label = resource.id.value)))
+                    format = GPUTextureFormat.RGBA8UnormSrgb, usage = usage, label = "w6a.slot.${slot.slotI32}")))
                 views[resource.id] = owned.own(texture.createView())
             }
-            val geometryUniform = graph.resources().single { it.role == PlanResourceRole.UniformData }
+            val geometryUniform = frame.physical.resource(graph.resources().single { it.role == PlanResourceRole.UniformData }.id)
             val uniform = owned.own(device.createBuffer(BufferDescriptor(size = geometryUniform.byteSize.toULong(),
                 usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst, label = "w6a.geometry.uniform")))
             queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(ByteArray(geometryUniform.byteSize.toInt())))
@@ -101,7 +102,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     }
                     is PlanPass.ReadbackPass -> {
                         val output = resources.outputOwnedReadbacks.single()
-                        val staging = graph.resources().single { it.id == pass.staging }
+                        val staging = frame.physical.resource(pass.staging)
                         require(output.stagingLease.backingBufferBytes == staging.byteSize && output.layout.paddedBytesPerRow == pass.bytesPerRow &&
                             output.layout.totalBufferBytes == pass.mappedBytesI64)
                         val buffer = device.createBuffer(BufferDescriptor(size = staging.byteSize.toULong(),

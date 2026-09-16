@@ -135,18 +135,25 @@ public class W6aLayerPlanCompiler public constructor(
             val bindings = mutableListOf<W6aLayerSourceBinding>()
             for (segment in selected.segments) when (val result = segment.compiler.constructSourceLanes(segment.candidate, capabilities, budget)) {
                 is RenderPlanResult.Ready -> result.plan.forEach { bindings += W6aLayerSourceBinding(segment.scopeI32, it) }
-                else -> return RenderPlanResult.GapOnPromotedScope(listOf(diagnostic(W6aPlanDiagnostics.UnsupportedChild, "Layer source construction refused.")))
+                is RenderPlanResult.ResourceLimitExceeded -> return W6aLayerPlanBudget.translate(result)
+                is RenderPlanResult.GapNotMigrated -> return result
+                is RenderPlanResult.GapOnPromotedScope -> return result
+                is RenderPlanResult.InvalidScene -> return result
             }
             val frame = W6aLayerGraphConstruction(PlanId("w6a.${selected.sceneCanonicalId.value}"), org.graphiks.math.geometry.SizeI32(selected.target.extent.width, selected.target.extent.height),
                 capabilities, budget, selected.occurrences, bindings)
             when (val layout = FrameSourceLayoutV4.layeredFrame(frame)) {
-                is SourceConstructionResultV4.Built -> layout.value.prepareAndPublish()
-                is SourceConstructionResultV4.Refused -> layout.failure
+                is SourceConstructionResultV4.Built -> W6aLayerPlanBudget.translate(layout.value.prepareAndPublish())
+                is SourceConstructionResultV4.Refused -> W6aLayerPlanBudget.translate(layout.failure)
             }
+        } catch (failure: W6aResourceLimitFailure) {
+            W6aLayerPlanBudget.refusal(failure.message ?: "Layer frame budget exceeded.")
+        } catch (failure: RawMaterialRequirementsV2.Refusal) {
+            W6aLayerPlanBudget.translate(sourceConstructionRefusalV4(failure.code).failure)
         } catch (failure: IllegalArgumentException) {
             RenderPlanResult.GapOnPromotedScope(listOf(diagnostic(W6aPlanDiagnostics.UnsupportedChild, failure.message ?: "Invalid layer construction.")))
         } catch (_: ArithmeticException) {
-            RenderPlanResult.ResourceLimitExceeded(listOf(diagnostic("w6a.layer.resource_limit", "Layer resource sizing overflows.")))
+            W6aLayerPlanBudget.refusal("Layer resource sizing overflows.")
         }
     }
 

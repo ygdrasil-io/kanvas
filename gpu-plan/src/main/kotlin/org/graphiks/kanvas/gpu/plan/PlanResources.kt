@@ -23,6 +23,10 @@ public enum class PlanResourceRole {
     DestinationSnapshot,
     DecodedImageV1,
     NoiseTableData,
+    SourceUniformData,
+    ImageUploadStaging,
+    RuntimeStorageData,
+    RuntimeSampler,
 }
 public enum class PlanResourceUsage {
     RenderAttachment,

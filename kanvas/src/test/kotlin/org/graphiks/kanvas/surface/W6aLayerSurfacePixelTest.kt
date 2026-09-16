@@ -27,6 +27,11 @@ class W6aLayerSurfacePixelTest {
 
     @Test
     fun `rootAndSiblingLayersRetainOneFrameWideGradientSource`() {
+        // Encoded-sRGB interpolation at x = .5, 1.5, 2.5, 3.5: t = 1/8, 3/8, 5/8, 7/8.
+        // Rounded 8-bit red/blue values, independently of either rendering route.
+        val row = ubyteArrayOf(223u, 0u, 32u, 255u, 159u, 0u, 96u, 255u,
+            96u, 0u, 159u, 255u, 32u, 0u, 223u, 255u)
+        val expected = UByteArray(64) { row[it % 16] }
         val shader = Shader.Blend(BlendMode.SRC_OVER,
             Shader.LinearGradient(Point2F32(0f, 0f), Point2F32(4f, 0f), listOf(
                 GradientStop(0f, ColorARGB.Red), GradientStop(1f, ColorARGB.Blue))),
@@ -34,7 +39,7 @@ class W6aLayerSurfacePixelTest {
         val paint = Paint(shader = shader, antiAlias = false)
         val control = Surface(4, 4)
         control.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), paint) }
-        val expected = control.render().pixels
+        assertContentEquals(expected, control.render().pixels)
         val layered = Surface(4, 4)
         layered.canvas {
             drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), paint)
@@ -45,8 +50,31 @@ class W6aLayerSurfacePixelTest {
             drawRect(RectF32.ofLTRB(2f, 0f, 4f, 4f), paint)
             restore()
         }
-        assertTrue(expected[0] != expected[12], "The gradient must discriminate device coordinates")
         assertContentEquals(expected, layered.render().pixels)
+    }
+
+    @Test
+    fun `siblingTargetsExceedBudgetAtomicallyAndRecoverWithOneLayer`() {
+        val expected = UByteArray(16)
+        // 2x2 root + one layer (32), two aligned readback rows (512), geometry uniform (16).
+        // A second live layer requires another 16 bytes; equal descriptors cannot imply aliasing.
+        val surface = Surface(2, 2, config = RenderConfig(frameLocalBudgetBytes = 560L))
+        surface.canvas { saveLayer(); restore(); saveLayer(); restore() }
+        assertTerminalWithoutReadbackMutation(surface, "w6a.layer.resource_limit")
+        surface.discardRecordedOperations()
+        surface.canvas { saveLayer(); restore() }
+        assertContentEquals(expected, surface.render().pixels)
+    }
+
+    @Test
+    fun `sourceUniformBudgetRefusesPreciselyAndRecovers`() {
+        val expected = UByteArray(16)
+        val surface = Surface(2, 2, config = RenderConfig(frameLocalBudgetBytes = 560L))
+        surface.canvas { saveLayer(); drawW5Rect(ColorARGB.Blue); restore() }
+        assertTerminalWithoutReadbackMutation(surface, "w6a.layer.resource_limit")
+        surface.discardRecordedOperations()
+        surface.canvas { saveLayer(); restore() }
+        assertContentEquals(expected, surface.render().pixels)
     }
 
     @Test

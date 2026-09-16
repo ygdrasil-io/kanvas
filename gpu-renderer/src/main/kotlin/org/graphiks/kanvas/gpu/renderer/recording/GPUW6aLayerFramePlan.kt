@@ -12,12 +12,13 @@ import org.graphiks.math.color.ColorF32
 /** Exact handle-free projection of a compiler-authenticated frame, including empty clear scopes. */
 class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLoweringRequest) {
     internal val graph: RenderGraph = request.graph
-    private val layers = requireNotNull(graph.layerFramePlanOrNull())
+    internal val physical = requireNotNull(graph.physicalLayoutOrNull())
     private val seal = GPUFrameCapabilitySeal.capture(request.frameId, request.deviceGeneration, request.capabilities)
     private val recording = GPURecordingSeal(request.recordingId, 0L, graph.id.value, graph.id.value, seal.sealHash)
     internal val refs: Map<PlanResourceId, GPUFrameResourceRef> = graph.resources().associate { resource ->
-        resource.id to if (resource.kind == PlanResourceKind.Texture2D) GPUFrameTargetRef("w6a.${resource.id.value}")
-            else GPUFrameBufferRef("w6a.${resource.id.value}")
+        val slot = physical.slot(resource.id)
+        resource.id to if (resource.kind == PlanResourceKind.Texture2D) GPUFrameTargetRef("w6a.slot.${slot.slotI32}")
+            else GPUFrameBufferRef("w6a.slot.${slot.slotI32}")
     }
     private val bounds = GPUPixelBounds(0, 0, graph.targetExtent.width, graph.targetExtent.height)
     internal val readback = GPUFrameReadbackRequest(GPUReadbackRequestID("w6a.${graph.id.value}.readback"), bounds,
@@ -37,15 +38,11 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                 else -> GPUFrameMemoryCategory.ReusableScratch
             }, resource.byteSize,
             if (resource.kind == PlanResourceKind.Texture2D) GPUFrameMemoryResourceKind.Texture2D else GPUFrameMemoryResourceKind.Buffer,
-            resource.copyExtent()?.let { GPUPixelBounds(0, 0, it.width, it.height) }, resource.firstPassIndex, resource.lastPassIndexExclusive) } +
-            layers.sourceAllocations().mapIndexed { index, row -> GPUFrameMemoryAllocation("w6a.source.$index.${row.identity}",
-                GPUFrameMemoryCategory.ReusableScratch, row.bytesI64,
-                if (row.kind == PlanResourceKind.Texture2D) GPUFrameMemoryResourceKind.Texture2D else GPUFrameMemoryResourceKind.Buffer,
-                row.copyExtentI32()?.let { GPUPixelBounds(0, 0, it.width, it.height) }, 0, graph.passes().size) }
+            resource.copyExtent()?.let { GPUPixelBounds(0, 0, it.width, it.height) }, resource.firstPassIndex, resource.lastPassIndexExclusive) }
         memory = GPUFrameMemoryBudgetPlanner.plan(GPUFrameMemoryBudgetRequest(allocations,
             minOf(graph.budget.maxFrameLocalBytes, request.rendererAggregateMemoryBudgetBytes ?: Long.MAX_VALUE), requireNotNull(request.capabilities.limits)))
         require(memory.diagnostic == null && memory.targetResidentBytes + memory.peakFrameTransientBytes ==
-            Math.addExact(graph.peakFrameLocalBytes, layers.sourceBytesI64))
+            graph.peakFrameLocalBytes)
         val preparations = graph.resources().filter { it.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget, PlanResourceRole.ReadbackStaging) }
             .map { resource -> GPUResourcePreparationRequest(refs.getValue(resource.id),
                 resource.copyExtent()?.let { GPUFrameTextureDescriptor(GPUPixelBounds(0, 0, it.width, it.height), GPUColorFormat.RGBA8UnormSrgb, resource.sampleCountI32) }

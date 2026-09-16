@@ -27,6 +27,7 @@ public class RenderGraph private constructor(
     private val w5eImageConstruction: W5eImageConstructionPlanV1? = null,
     packedSourcesV4: Map<String, RawMaterialRequirementsV2> = emptyMap(),
     private val w6aLayerFramePlan: LayerFramePlanV1? = null,
+    private val physicalLayoutV1: PlanPhysicalLayoutV1? = null,
 ) {
     private val storedTargetExtent: SizeI32 = targetExtent.copy()
     public val targetExtent: SizeI32
@@ -58,11 +59,12 @@ public class RenderGraph private constructor(
 
     /** W6a's compiler-issued layer semantics; renderer consumers must not re-plan a scope. */
     public fun layerFramePlanOrNull(): LayerFramePlanV1? = w6aLayerFramePlan
+    public fun physicalLayoutOrNull(): PlanPhysicalLayoutV1? = physicalLayoutV1
 
     /** Verifies that this graph's layer semantics were sealed by the W6a compiler. */
     public fun verifyW6aLayerCompilerWitness(): Boolean =
         capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID &&
-            w6aLayerFramePlan != null
+            w6aLayerFramePlan != null && physicalLayoutV1 != null
 
     public fun verifyW5bGeometryCompilerWitness(): Boolean = w5bGeometryIssued
     public fun w5bGeometryLanes(): List<W5bGeometryLanePlanV3> = storedW5bGeometryLanes
@@ -212,7 +214,7 @@ public class RenderGraph private constructor(
 
         /** The only publication boundary for W6a semantic layer scope authority. */
         internal fun publishW6a(construction: RenderGraphConstruction, frame: LayerFramePlanV1,
-            packed: PackedFrameSourcesV4): RenderGraph {
+            packed: PackedFrameSourcesV4, source: SourcePhysicalConstructionV1): RenderGraph {
             require(construction.capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID)
             require(frame.scopes().map { it.targetResource }.toSet() == construction.resources()
                 .filter { it.role == PlanResourceRole.LayerTarget }.map { it.id }.toSet())
@@ -221,7 +223,7 @@ public class RenderGraph private constructor(
                 construction.colorFormat, construction.capabilities, construction.budget, construction.visualCommandCount,
                 construction.resources(), construction.passes(), construction.dependencies(), construction.peakFrameLocalBytes,
                 null, null, null, null, construction.materialTable, packedSourcesV4 = packed.forConstruction(construction),
-                w6aLayerFramePlan = frame)
+                w6aLayerFramePlan = frame, physicalLayoutV1 = PlanPhysicalLayoutV1.seal(construction, source))
         }
 
         public fun of(
@@ -301,7 +303,8 @@ public class RenderGraph private constructor(
                     source
                 }
                 val peakI64 = Math.addExact(peakFrameLocalBytes, stopSlab.byteSizeI64)
-                RawMaterialRequirementsV2.requireFrameBudget(sourceRequirements, peakI64, budget, W5cPlanDiagnostics.StopBudget)
+                if (capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID) W6aLayerPlanBudget.requireWithin(peakI64, budget)
+                else RawMaterialRequirementsV2.requireFrameBudget(sourceRequirements, peakI64, budget, W5cPlanDiagnostics.StopBudget)
                 val stopResource = PlanResource.of(PlanResourceRole.GradientStopData, 0, PlanResourceKind.Buffer,
                     null, null, stopSlab.byteSizeI64, setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination),
                     PlanResourceLifetime.FrameLocal, 0, passes.size)
@@ -337,6 +340,7 @@ public class RenderGraph private constructor(
                         PlanOperationCapability.StorageBuffer, PlanOperationCapability.CopyUpload))) { W5gPlanDiagnostics.NoiseStorage }
                 if (noiseResources.isEmpty()) {
                     val peak = Math.addExact(peakFrameLocalBytes, bytes)
+                    if (capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID) W6aLayerPlanBudget.requireWithin(peak, budget)
                     require(peak <= budget.maxFrameLocalBytes) { W5gPlanDiagnostics.NoiseStorage }
                     val resource = PlanResource.of(PlanResourceRole.NoiseTableData, 0, PlanResourceKind.Buffer,
                         null, null, bytes, setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination),
@@ -432,7 +436,8 @@ public class RenderGraph private constructor(
             validatePassCapabilities(passes, capabilities)
             if (capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID) {
                 validateW6aLayerTopology(resources, passes, dependencies, targetExtent, visualCommandCount, capabilities.copyBytesPerRowAlignment)
-                require(peak(resources, passes.size) == peakFrameLocalBytes && peakFrameLocalBytes <= budget.maxFrameLocalBytes)
+                require(peak(resources, passes.size) == peakFrameLocalBytes)
+                W6aLayerPlanBudget.requireWithin(peakFrameLocalBytes, budget)
                 return
             }
             validateW5bDestinationVersions(passes)

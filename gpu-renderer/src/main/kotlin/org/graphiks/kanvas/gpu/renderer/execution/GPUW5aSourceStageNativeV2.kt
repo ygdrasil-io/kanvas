@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.*
+import org.graphiks.kanvas.gpu.plan.PlanResourceRole
+import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorWgslValidation
 import org.graphiks.kanvas.gpu.renderer.color.validateColorWgsl
 import org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2
@@ -367,15 +369,24 @@ internal fun materializeW5aSourcePartitionV2(
     val generation = old.identity.deviceGeneration
     var replacement: GPUPreparedNativeFrameDraft? = null
     try {
+        val physical = framePlan.w6aLayerFrameV1?.also { require(it.validates(framePlan)) }?.physical
+        fun plannedResource(role: PlanResourceRole) = physical?.let { layout ->
+            val row = framePlan.w6aLayerFrameV1.graph.resources().single { it.role == role }
+            layout.resource(row.id)
+        }
         val stopSlabs = renders.values.flatMap { it.drawPackets }.mapNotNull { it.materialSourcePartitionV3()?.stage?.gradientStopSlab }
             .distinctBy { it.canonicalIdentity }
-        val stopBuffer = stopSlabs.singleOrNull()?.let { materializeGradientStopsV1(device, queue, it, owned) }
+        val stopBuffer = stopSlabs.singleOrNull()?.let { materializeGradientStopsV1(device, queue, it, owned,
+            plannedResource(PlanResourceRole.GradientStopData)) }
         val noiseStages=renders.values.flatMap { it.drawPackets }.mapNotNull { it.materialSourcePartitionV3()?.stage }
             .filter { it.noiseTableSlab != null }
         val noiseSlabs=noiseStages.map { requireNotNull(it.noiseTableSlab) }.distinct()
         val noiseBuffer=noiseSlabs.singleOrNull()?.let { slab ->
             val bytes=ByteArray(slab.bytes.sizeI32) { slab.bytes[it].toByte() }
-            owned.own(device.createBuffer(BufferDescriptor(size=bytes.size.toULong(),
+            val planned = plannedResource(PlanResourceRole.NoiseTableData)
+            require(planned == null || planned.byteSize == bytes.size.toLong() &&
+                planned.usages() == setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination))
+            owned.own(device.createBuffer(BufferDescriptor(size=(planned?.byteSize ?: bytes.size.toLong()).toULong(),
                 usage=GPUBufferUsage.Storage or GPUBufferUsage.CopyDst,label="Kanvas.noise-v1.tables"))).also {
                 queue.writeBuffer(it,0uL,ArrayBuffer.of(bytes),0uL,bytes.size.toULong())
             }
@@ -488,24 +499,28 @@ internal fun materializeW5aSourcePartitionV2(
                 // The authenticated source layout already includes a reachable
                 // degenerate average, if any. Native upload never integrates colors.
                 require(bytes.size.toLong() == source.stage.uniformByteCountI64)
-                val buffer = buffers.getOrPut(source.stage.canonicalIdentity) {
-                    owned.own(device.createBuffer(BufferDescriptor(size = bytes.size.toULong(),
+                val uniform = physical?.sourceUniform(source.commandIdI32)
+                require(uniform == null || uniform.byteSize == bytes.size.toLong() &&
+                    uniform.usages() == setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination))
+                val bufferKey = uniform?.let { "w6a.slot.${physical.slot(it.id).slotI32}" } ?: source.stage.canonicalIdentity
+                val buffer = buffers.getOrPut(bufferKey) {
+                    owned.own(device.createBuffer(BufferDescriptor(size = (uniform?.byteSize ?: bytes.size.toLong()).toULong(),
                         usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst, label = "Kanvas.w5a.raw-source-v2"))).also {
                         queue.writeBuffer(it, 0uL, ArrayBuffer.of(bytes), 0uL, bytes.size.toULong())
                     }
                 }
                 val imageLease = source.stage.imageV3?.let { execution ->
-                    owned.own(GPUW5eImageNativeV1.acquire(requireNotNull(imageCache), execution.cacheRequest, generation.value))
+                    owned.own(GPUW5eImageNativeV1.acquire(requireNotNull(imageCache), execution.cacheRequest, generation.value, physical))
                 }
                 val composedImages=source.stage.composedProof?.composedImageResources.orEmpty().distinctBy { it.resource }.map { image ->
                     val request=image.upload.cacheRequest
-                    val lease=owned.own(GPUW5eImageNativeV1.acquire(requireNotNull(imageCache),request,generation.value))
+                    val lease=owned.own(GPUW5eImageNativeV1.acquire(requireNotNull(imageCache),request,generation.value,physical))
                     GPUW5gImageLeaseV5(image,lease)
                 }
                 val runtimeLeases=source.stage.composedProof?.runtimeResources.orEmpty().map { reference ->
-                    when(val request=reference.cacheRequest) {
+                    when(val request=physical?.cacheBinding(reference.cacheRequest)?.request ?: reference.cacheRequest) {
                         is org.graphiks.kanvas.gpu.plan.PlanCacheResourceRequest.Texture -> GPUW5hResourceLeaseV1(reference,
-                            texture=owned.own(GPUW5eImageNativeV1.acquire(requireNotNull(imageCache),request,generation.value)))
+                            texture=owned.own(GPUW5eImageNativeV1.acquire(requireNotNull(imageCache),request,generation.value,physical)))
                         is org.graphiks.kanvas.gpu.plan.PlanCacheResourceRequest.Storage,
                         is org.graphiks.kanvas.gpu.plan.PlanCacheResourceRequest.Sampler ->
                             GPUW5hResourceLeaseV1(reference,runtime=owned.own(requireNotNull(runtimeResourceCache).acquire(request,generation.value)))

@@ -55,11 +55,13 @@ internal class GPUW5eDecodedImageSessionCache(
         if (closing && entries.values.all { it.leasesI32 == 0 }) close()
     }
 
-    @Synchronized fun acquire(request: PlanCacheResourceRequest.Texture): Lease {
+    @Synchronized fun acquire(request: PlanCacheResourceRequest.Texture, physical: PlanPhysicalLayoutV1? = null): Lease {
         check(!closing && !isClosed) { "stale.material.image.device-generation" }
         require(request.kind == PlanResourceKind.Texture2D && request.abiVersionI32 == 1 &&
             request.lifetime == PlanResourceLifetime.DeviceSessionCache &&
             request.usages() == setOf(PlanResourceUsage.Sampled, PlanResourceUsage.CopyDestination)) { W5eImagePlanDiagnostics.InvalidContract }
+        val planned = physical?.cacheBinding(request)
+        val uploadResource = planned?.let { physical.resource(requireNotNull(it.uploadResourceId)) }
         val key = "$deviceGenerationI64:${request.canonicalPhysicalIdentity}"
         entries[key]?.let { entry ->
             require(entry.request.format == request.format && entry.request.widthI32 == request.widthI32 &&
@@ -81,8 +83,10 @@ internal class GPUW5eDecodedImageSessionCache(
             }
             entries.remove(victim.key)
         }
-        val upload = GPUMaterialTextureUploadV1.of(request.widthI32, request.heightI32, request.format.bytesPerPixelI32,
+        val upload = if (planned == null) GPUMaterialTextureUploadV1.of(request.widthI32, request.heightI32, request.format.bytesPerPixelI32,
             request.copyUploadBytes(), rowAlignmentI64, maxBufferBytesI64)
+        else GPUMaterialTextureUploadV1.planned(request.widthI32, request.heightI32, request.format.bytesPerPixelI32,
+            request.copyUploadBytes(), requireNotNull(planned.uploadBytesPerRowI64), requireNotNull(uploadResource).byteSize)
         val format = when (request.format) { ImagePhysicalFormatV1.RGBA8_UNORM -> GPUTextureFormat.RGBA8Unorm; ImagePhysicalFormatV1.R8_UNORM -> GPUTextureFormat.R8Unorm }
         val texture = device.createTexture(TextureDescriptor(size = Extent3D(request.widthI32.toUInt(), request.heightI32.toUInt(), 1u),
             format = format, usage = GPUTextureUsage.CopyDst or GPUTextureUsage.TextureBinding,

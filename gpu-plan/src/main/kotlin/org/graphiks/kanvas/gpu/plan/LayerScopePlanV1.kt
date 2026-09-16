@@ -108,27 +108,9 @@ public sealed interface LayerExecutionStepV1 {
 public class LayerFramePlanV1 internal constructor(
     scopes: List<LayerScopePlanV1>,
     executionSteps: List<LayerExecutionStepV1>,
-    sourceAllocations: List<LayerSourceAllocationV1> = emptyList(),
 ) {
     private val scopes = immutableList(scopes)
     private val executionSteps = immutableList(executionSteps)
-    private val sourceAllocations = immutableList(sourceAllocations)
     public fun scopes(): List<LayerScopePlanV1> = scopes
     public fun executionSteps(): List<LayerExecutionStepV1> = executionSteps
-    /** Additional common-source reservations issued by FrameSourceLayoutV4, not a second packer. */
-    public fun sourceAllocations(): List<LayerSourceAllocationV1> = sourceAllocations
-    public val sourceBytesI64: Long = sourceAllocations.fold(0L) { bytes, row -> Math.addExact(bytes, row.bytesI64) }
-}
-
-/** A complete-frame material reservation; stops/noise already declared in RenderGraph are excluded. */
-public class LayerSourceAllocationV1 internal constructor(
-    public val identity: String,
-    public val kind: PlanResourceKind,
-    public val bytesI64: Long,
-    extent: org.graphiks.math.geometry.SizeI32? = null,
-    internal val uniform: Boolean = false,
-) {
-    private val extent = extent?.copy()
-    public fun copyExtentI32(): org.graphiks.math.geometry.SizeI32? = extent?.copy()
-    init { require(identity.isNotBlank() && bytesI64 > 0L && (kind == PlanResourceKind.Texture2D) == (extent != null)) }
 }

@@ -32,6 +32,7 @@ internal class W6aLayerGraphConstruction(
     private val frame: LayerFramePlanV1
     private val resources: List<PlanResource>
     val nonUniformBytesI64: Long
+    val passCountI32: Int get() = rawPasses.size
 
     init {
         require(lanes.all { it.capabilities == caps && it.budget == budget })
@@ -111,23 +112,20 @@ internal class W6aLayerGraphConstruction(
         nonUniformBytesI64 = W6aLayerPlanBudget.peak(resources, passes.size, budget)
     }
 
-    fun publish(table: MaterialPlanTable?, bound: List<List<PlanPass>>, sourceAllocations: List<LayerSourceAllocationV1> = emptyList()): RenderGraph {
+    fun publish(table: MaterialPlanTable?, bound: List<List<PlanPass>>, source: SourcePhysicalConstructionV1 = SourcePhysicalConstructionV1()): RenderGraph {
         require(bound.size == lanes.size || bound.isEmpty() && table == null)
         val byCommand = bound.flatMap { RenderGraph.visualDraws(it) }.associateBy { it.commandIndex }
         val passes = rawPasses.map { pass -> if (pass is PlanPass.RenderPass) PlanPass.RenderPass(pass.ordinal, pass.target,
             pass.draws().map { byCommand.getValue(it.commandIndex) }, pass.load, pass.store,
             destinationVersionAfter = pass.destinationVersionAfter) else pass }
+        val allResources = resources + source.resources
+        val peak = W6aLayerPlanBudget.peak(allResources, passes.size, budget)
         val construction = RenderGraph.construct(id, W6aLayerPlanCompiler.CAPABILITY_ID, extent,
-            PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL, caps, budget, byCommand.size, resources, passes,
-            passes.zipWithNext { a, b -> PlanPassDependency(a.id, b.id) }, nonUniformBytesI64, table)
-        val finalFrame = LayerFramePlanV1(frame.scopes(), frame.executionSteps(), sourceAllocations)
-        require(Math.addExact(construction.peakFrameLocalBytes, finalFrame.sourceBytesI64) <= budget.maxFrameLocalBytes) {
-            "w6a.layer.resource_limit"
-        }
-        val sourceNonUniform = sourceAllocations.filterNot { it.uniform }.fold(construction.peakFrameLocalBytes) { bytes, row ->
-            Math.addExact(bytes, row.bytesI64)
-        }
-        return RenderGraph.publishW6a(construction, finalFrame,
-            packConstructedFrame(listOf(construction), table, sourceNonUniform))
+            PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL, caps, budget, byCommand.size, allResources, passes,
+            passes.zipWithNext { a, b -> PlanPassDependency(a.id, b.id) }, peak, table)
+        val sourceNonUniform = Math.subtractExact(construction.peakFrameLocalBytes,
+            source.resources.filter { it.role == PlanResourceRole.SourceUniformData }.fold(0L) { bytes, row -> Math.addExact(bytes, row.byteSize) })
+        return RenderGraph.publishW6a(construction, frame,
+            packConstructedFrame(listOf(construction), table, sourceNonUniform), source)
     }
 }
