@@ -18,6 +18,7 @@ internal class GPUW5hSourceAuthorityRootV1(frame: GPUFramePlan) {
     private val coreDispatches = java.util.Collections.unmodifiableMap(coreDispatchPackets.mapValues { (_, packet) ->
         val dispatch = requireNotNull(packet.corePrimitivePreparedAuthority?.materialDispatchPlan)
         requireNotNull(packet.commonCoreSemanticAuthority())
+        require(dispatch.validatesUniformPacket(packet))
         dispatch to dispatch.geometry.arena.packedGeometryHash
     })
     fun coreBinding(packet: GPUDrawPacket) = coreBindings[packet.packetId.value].also {
@@ -35,7 +36,8 @@ internal class GPUW5hSourceAuthorityRootV1(frame: GPUFramePlan) {
                 val dispatch = packet.corePrimitivePreparedAuthority?.materialDispatchPlan
                 val retained = coreDispatches[packet.packetId]
                 coreDispatchPackets[packet.packetId] !== packet || dispatch !== retained?.first ||
-                    dispatch?.geometry?.arena?.packedGeometryHash != retained?.second || packet.commonCoreSemanticAuthority() == null
+                    dispatch?.geometry?.arena?.packedGeometryHash != retained?.second || packet.commonCoreSemanticAuthority() == null ||
+                    dispatch?.validatesUniformPacket(packet) != true
             }) return false
         return selected.map { it.packetId.value }.distinct().size == selected.size &&
             frame.w5aGeometryHostTemplatesV1.map { it.packetId } == selected.map { it.packetId.value } && selected.all { packet ->

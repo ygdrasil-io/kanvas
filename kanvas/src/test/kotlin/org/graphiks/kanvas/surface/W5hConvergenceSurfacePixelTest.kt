@@ -46,6 +46,54 @@ class W5hConvergenceSurfacePixelTest {
         surface.canvas { everyLane(shader) }
         children["child"] = Shader.SolidColor(ColorARGB.Green)
         repeat(2) { assertLanePixels(surface.render(), wanted) }
+
+        // Equal public work, with only a non-Core consumer moved between the two
+        // Core groups. Neither physical run may charge the other group's uniforms.
+        val splitChild = Shader.LinearGradient(Point2F32(.5f, 0f), Point2F32(2.5f, 0f),
+            listOf(GradientStop(0f, ColorARGB.Red), GradientStop(.5f, ColorARGB.Green),
+                GradientStop(1f, ColorARGB.Blue)))
+        val splitShader = Shader.RuntimeEffect(
+            assertNotNull(RuntimeEffect.registered("kanvas.runtime.child-opacity", 1)),
+            UniformBlock { float1("alpha", 1f) }, mapOf("child" to splitChild))
+        val splitPaint = Paint(shader = splitShader, antiAlias = false)
+        val splitWanted = (0..2).map { index ->
+            W5fColorCpuOracle.expectedShaderTree(splitChild,
+                devicePointF32 = Point2F32(index + .5f, .5f))
+        }
+        splitWanted.forEach(W5fSurfacePixelFixtures::requireBounded)
+        fun recordSplit(target: Surface, interleaved: Boolean, count: Int = 256) = target.canvas {
+            fun core(left: Float) = repeat(count) {
+                drawRRect(RRectF32.of(RectF32.ofLTRB(left, -1f, left + 2f, 2f),
+                    CornerRadiiF32.of(.5f)), splitPaint)
+            }
+            fun middle() = drawVertices(Vertices(VertexMode.TRIANGLES,
+                listOf(Point2F32(1f, 0f), Point2F32(2f, 0f), Point2F32(2f, 1f), Point2F32(1f, 1f)),
+                indices = listOf(0, 1, 2, 0, 2, 3)), splitPaint)
+            core(-1f)
+            if (interleaved) middle()
+            core(2f)
+            if (!interleaved) middle()
+        }
+        fun assertSplit(target: Surface) = repeat(2) {
+            val pixels = target.render().pixels
+            splitWanted.forEachIndexed { index, expected ->
+                WgslFloatEnvelopeV1Oracle.assertAdmits(expected, pixels.copyOfRange(index * 4, index * 4 + 4))
+            }
+        }
+        val bounded = Surface(3, 1, config = RenderConfig(frameLocalBudgetBytes = 400_000))
+        recordSplit(bounded, interleaved = false)
+        assertSplit(bounded)
+        bounded.discardRecordedOperations()
+        recordSplit(bounded, interleaved = true)
+        assertSplit(bounded)
+        bounded.discardRecordedOperations()
+        recordSplit(bounded, interleaved = true, count = 512)
+        val budgetFailure = assertFailsWith<IllegalStateException> { bounded.render() }
+        assertEquals("invalid.surface.prepared.frame-build-contract",
+            budgetFailure.message.orEmpty().substringBefore(':'))
+        bounded.discardRecordedOperations()
+        recordSplit(bounded, interleaved = true)
+        assertSplit(bounded)
     }
 
     @Test fun independentEqualRuntimeOwnersKeepTheirImageBudgets() {

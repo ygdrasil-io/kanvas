@@ -1705,7 +1705,6 @@ class GPUCorePrimitiveFrameGeometryInventory internal constructor(
     internal val geometryBytesByCommandId: Map<Int, GPUCorePrimitiveDirectGeometryBytes>,
     internal val uniformGeometryByCommandId: Map<Int, GPUCorePrimitiveGeometryUniformBytes>,
     internal val materialEnvelopeGeometryByCommandId: Map<Int, GPUCorePrimitiveGeometryUniformBytes>,
-    internal val uniformLayoutByByteCount: Map<Int, GPUUniformSlabLayout>,
     internal val snapshots: List<GPUCorePrimitiveDestinationGeometrySnapshot>,
     internal val geometryVertexBytesI64: Long,
     internal val geometryIndexBytesI64: Long,
@@ -1987,8 +1986,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                             geometry, route, captured.uniformGeometry)
                 }
             }
-            val layouts = linkedMapOf<Int, GPUUniformSlabLayout>()
-            uniforms.entries.groupBy { it.value.byteCountI32 }.forEach { (byteCount, entries) ->
+            fun prepareUniformLayout(commandIds: List<Int>): GPUUniformSlabLayout {
+                val byteCount = uniforms.getValue(commandIds.first()).byteCountI32
                 val analytic = byteCount != 32
                 val layout = when (val result = GPUUniformSlabPlanner.layout(
                     sourceLabel = if (analytic) "core-primitive-analytic-shape-uniform-pass" else "core-primitive-uniform-pass",
@@ -1997,15 +1996,16 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                     uploadBudgetBytes = minOf(request.configuredAggregateBudgetBytes, maxBuffer),
                     maxBufferSize = maxBuffer,
                     maxDynamicUniformBuffersPerPipelineLayout = maxDynamic,
-                    payloads = entries.map { (commandId, uniform) -> GPUUniformSlabPayloadFootprint(
-                        if (analytic) "analytic-shape-draw-$commandId" else "draw-$commandId", uniform.byteCountI32.toLong()) },
+                    payloads = commandIds.map { commandId -> GPUUniformSlabPayloadFootprint(
+                        if (analytic) "analytic-shape-draw-$commandId" else "draw-$commandId", uniforms.getValue(commandId).byteCountI32.toLong()) },
                 )) {
                     is GPUUniformSlabLayoutResult.Accepted -> result.plan
-                    is GPUUniformSlabLayoutResult.Refused -> return refuse(result.diagnostic.code, "Prepared Core uniform geometry layout refused.")
+                    is GPUUniformSlabLayoutResult.Refused -> throw GPUCorePrimitiveGeometryRunPlan.UniformLayoutRefusal(
+                        result.diagnostic.code, "Prepared Core uniform geometry layout refused.")
                 }
-                if (layout.totalBytes > Int.MAX_VALUE.toLong()) return refuse(
+                if (layout.totalBytes > Int.MAX_VALUE.toLong()) throw GPUCorePrimitiveGeometryRunPlan.UniformLayoutRefusal(
                     "unsupported.recording.core_primitive_uniform_slab_host_size", "Prepared Core slab exceeds host-addressable size.")
-                layouts[byteCount] = layout
+                return layout
             }
             val snapshots = buildCorePrimitiveDestinationGeometrySnapshots(request.recording.frameId, request.targetFormat,
                 packets.filter { blend(it)?.destinationReadRequirement == GPUBlendDestinationReadRequirement.DestinationTextureRequired }
@@ -2013,16 +2013,18 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                         .getValue(it.commandIdValue).destinationBounds) }, limits.copyBytesPerRowAlignment, limits.copyBytesPerRowAlignment)
             fun <T> frozen(values: Map<Int, T>): Map<Int, T> = java.util.Collections.unmodifiableMap(LinkedHashMap(values))
             val runPlan = GPUCorePrimitiveGeometryRunPlan.prepare(plans, request.allConsumerCommandIds,
-                geometries, directRoutes, uniforms, layouts, snapshots.mapTo(linkedSetOf()) { it.commandIdI32 },
+                geometries, directRoutes, uniforms, ::prepareUniformLayout, snapshots.mapTo(linkedSetOf()) { it.commandIdI32 },
                 limits.minUniformBufferOffsetAlignment, minOf(request.configuredAggregateBudgetBytes, maxBuffer))
             return GPUCorePrimitiveGeometryInventoryResult.Prepared(GPUCorePrimitiveFrameGeometryInventory(
                 frozen(geometries), frozen(directRoutes), frozen(analyticShapes), frozen(pathScissors), frozen(pathGeometries), frozen(byteFootprints),
-                frozen(uniforms), frozen(materialEnvelopes), frozen(layouts), immutableList(snapshots),
+                frozen(uniforms), frozen(materialEnvelopes), immutableList(snapshots),
                 byteFootprints.values.fold(0L) { total, bytes -> Math.addExact(total, bytes.vertexBytes) },
                 byteFootprints.values.fold(0L) { total, bytes -> Math.addExact(total, bytes.indexBytes) },
                 if (pathScissors.isEmpty()) null else corePrimitiveDepthStencilByteSize(request.targetBounds, 1),
                 runPlan,
             ))
+        } catch (failure: GPUCorePrimitiveGeometryRunPlan.UniformLayoutRefusal) {
+            return refuse(failure.code, requireNotNull(failure.message))
         } catch (_: GPUCorePrimitiveGeometryRunPlan.HostSizeRefusal) {
             return refuse("unsupported.recording.core_primitive_geometry_size", "Prepared Core geometry exceeds the bounded host arena envelope.")
         } catch (_: ArithmeticException) {
@@ -3558,14 +3560,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 "Direct CorePrimitive uniform slab planning requires the observed dynamic-uniform limit.",
             )
         }
-        val uniformSlabPlan = if (legacyUniformPackets.isEmpty()) {
+        val uniformSlabPlan = if (legacyUniformPackets.isEmpty() || geometryInventory != null) {
             null
-        } else if (geometryInventory != null) {
-            geometryInventory.uniformLayoutByByteCount.getValue(32).bind(legacyUniformPackets.map { packet ->
-                GPUUniformSlabPayload("draw-${packet.commandIdValue}",
-                    geometryInventory.uniformGeometryByCommandId.getValue(packet.commandIdValue)
-                        .bindSourceColor(request.coreSemantics().getValue(packet.commandIdValue).premultipliedRgba))
-            })
         } else {
             val legacyUniformBytesByCommandId = legacyUniformPackets.associate { packet ->
                 val semantic = request.coreSemantics().getValue(packet.commandIdValue)
@@ -3676,15 +3672,10 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan,
         >()
         analyticShapeUniformPacketsByLayout.forEach { (layout, packets) ->
+            if (geometryInventory != null) return@forEach
             val drrect = layout ==
                 GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1
-            val plan = if (geometryInventory != null) {
-                require(!drrect)
-                geometryInventory.uniformLayoutByByteCount.getValue(80).bind(packets.map { packet ->
-                    GPUUniformSlabPayload("analytic-shape-draw-${packet.commandIdValue}",
-                        preparedAnalyticShapesByCommandId.getValue(packet.commandIdValue).uniformBytes)
-                })
-            } else when (val planned = GPUUniformSlabPlanner.plan(
+            val plan = when (val planned = GPUUniformSlabPlanner.plan(
                 sourceLabel = if (drrect) "core-primitive-analytic-drrect-uniform-pass"
                 else "core-primitive-analytic-shape-uniform-pass",
                 deviceGeneration = request.baseTaskList.capabilitySeal.deviceGeneration.value,
@@ -3719,7 +3710,11 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             }
             analyticShapeUniformSlabPlans[layout] = plan
         }
-        val analyticShapeUniformSlabPlanByCommandId = analyticShapeUniformPacketsByLayout
+        val analyticShapeUniformSlabPlanByCommandId = if (materialDispatchPlan != null) {
+            analyticShapeUniformPackets.associate { packet ->
+                packet.commandIdValue to materialDispatchPlan.uniformSlab(packet.packetId).plan
+            }
+        } else analyticShapeUniformPacketsByLayout
             .flatMap { (layout, packets) ->
                 val plan = analyticShapeUniformSlabPlans.getValue(layout)
                 packets.map { it.commandIdValue to plan }
@@ -3944,6 +3939,9 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         val uniformSlab = uniformSlabPlan?.let {
             GPUFrameBufferRef("buffer.core-primitive.uniforms.${request.baseTaskList.frameId.value}")
         }
+        val physicalUniformSlabs = materialDispatchPlan?.uniformSlabs.orEmpty().mapIndexed { index, seal ->
+            GPUFrameBufferRef("buffer.core-primitive.run-uniforms.${request.baseTaskList.frameId.value}.$index") to seal
+        }
         val analyticShapeUniformSlabs = analyticShapeUniformSlabPlans.mapValues { (layout, _) ->
             GPUFrameBufferRef(
                 "buffer.core-primitive.${if (
@@ -3951,7 +3949,9 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 ) "analytic-drrect" else "analytic-shape"}-uniforms.${request.baseTaskList.frameId.value}",
             )
         }
-        val analyticShapeUniformSlabByCommandId = analyticShapeUniformPacketsByLayout
+        val analyticShapeUniformSlabByCommandId = analyticShapeUniformPacketsByLayout.filterKeys {
+            it in analyticShapeUniformSlabPlans
+        }
             .flatMap { (layout, packets) ->
                 val slab = analyticShapeUniformSlabs.getValue(layout)
                 packets.map { it.commandIdValue to slab }
@@ -4085,6 +4085,17 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 diagnosticLabel = "core-primitive.uniforms",
             )
         }
+        physicalUniformSlabs.forEachIndexed { index, (resource, seal) ->
+            preparations += GPUResourcePreparationRequest(
+                resource = resource,
+                descriptor = GPUFrameBufferDescriptor(seal.plan.totalBytes, seal.plan.alignmentBytes),
+                role = GPUFrameResourceRole.UniformData,
+                usages = setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.Uniform),
+                lifetime = GPUFrameResourceLifetime.FrameLocal,
+                byteSize = seal.plan.totalBytes,
+                diagnosticLabel = "core-primitive.run-uniforms.$index",
+            )
+        }
         analyticShapeUniformSlabPlans.forEach { (layout, plan) ->
             val drrect = layout ==
                 GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1
@@ -4211,6 +4222,15 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 null,
             )
         }
+        physicalUniformSlabs.forEachIndexed { index, (_, seal) ->
+            allocations += GPUFrameMemoryAllocation(
+                "core-primitive.run-uniforms.$index",
+                GPUFrameMemoryCategory.ReusableScratch,
+                seal.plan.totalBytes,
+                GPUFrameMemoryResourceKind.Buffer,
+                null,
+            )
+        }
         analyticShapeUniformSlabPlans.forEach { (layout, plan) ->
             allocations += GPUFrameMemoryAllocation(
                 if (layout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1) {
@@ -4329,7 +4349,11 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             } else {
                 emptyList()
             }
-            val packetUniformSlab = when (basePacket.commandIdValue) {
+            val packetUniformSlab = if (materialDispatchPlan != null) {
+                val packetId = if (pathPlan == null) basePacket.packetId else corePrimitivePathPacketIdentity(
+                    basePacket.packetId, pathPacketRole != GPUDrawPacketRole.PathStencilCover)
+                physicalUniformSlabs[materialDispatchPlan.geometry.boundaries.segment(packetId)].first
+            } else when (basePacket.commandIdValue) {
                 in preparedAnalyticShapesByCommandId ->
                     analyticShapeUniformSlabByCommandId[basePacket.commandIdValue]
                 in analyticClipAuthoritiesByCommandId -> analyticUniformSlab
@@ -4537,7 +4561,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                                 basePacket.commandIdValue in directGeometryBytesByCommandId &&
                                 basePacket.commandIdValue in pathRunPacketIds
                             ) || basePacket.commandIdValue in nativeClipStencilPrefixCommandIds,
-                        uniformSlabSeal = uniformSlabSeal,
+                        uniformSlabSeal = materialDispatchPlan?.uniformSlab(basePacket.packetId) ?: uniformSlabSeal,
                         analyticShape = preparedAnalyticShapesByCommandId[basePacket.commandIdValue],
                         analyticShapeUniformSlabPlansByCommandId = analyticShapeUniformSlabPlanByCommandId,
                         analyticClipAuthority = analyticClipAuthoritiesByCommandId[basePacket.commandIdValue],
@@ -4564,7 +4588,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                         GPUDrawPacketRole.PathStencilProducer,
                         GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer,
                         corePrimitiveColorWriteNoneBlendPlan(),
-                        uniformSlabSeal,
+                        materialDispatchPlan?.uniformSlab(corePrimitivePathPacketIdentity(basePacket.packetId, true)) ?: uniformSlabSeal,
                         analyticClipAuthoritiesByCommandId[basePacket.commandIdValue],
                         analyticUniformSlabPlan,
                         analyticUniformBytesByCommandId[basePacket.commandIdValue],
@@ -4583,7 +4607,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                         GPUDrawPacketRole.PathStencilCover,
                         GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover,
                         requireNotNull(basePacket.blendPlan),
-                        uniformSlabSeal,
+                        materialDispatchPlan?.uniformSlab(corePrimitivePathPacketIdentity(basePacket.packetId, false)) ?: uniformSlabSeal,
                         analyticClipAuthoritiesByCommandId[basePacket.commandIdValue],
                         analyticUniformSlabPlan,
                         analyticUniformBytesByCommandId[basePacket.commandIdValue],

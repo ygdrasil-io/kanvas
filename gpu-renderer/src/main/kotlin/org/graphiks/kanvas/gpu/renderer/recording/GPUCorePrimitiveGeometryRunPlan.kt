@@ -99,6 +99,7 @@ internal class GPUCorePrimitiveGeometryRunPlan private constructor(
     private val packetCommandIds: Map<GPUDrawPacketID, Int>,
 ) {
     internal class HostSizeRefusal : IllegalArgumentException("Core host arenas exceed the admitted buffer envelope")
+    internal class UniformLayoutRefusal(val code: String, message: String) : IllegalArgumentException(message)
     val coreLayoutRuns = immutableList(coreLayoutRuns.map(::immutableList))
     val layoutKeys = immutableMap(layoutKeys)
     val pathPairs = immutableMap(pathPairs)
@@ -123,7 +124,17 @@ internal class GPUCorePrimitiveGeometryRunPlan private constructor(
                     Math.toIntExact(Math.addExact(base, slot.alignedOffset)), semantics.getValue(commandId).premultipliedRgba)
             }
         }
-        return GPUCorePrimitiveMaterialDispatchPlan(this, bytes, immutableMap(semantics))
+        val slabs = layouts.mapIndexed { index, layout ->
+            val base = Math.toIntExact(requireNotNull(sizing).uniformBasesI64[index])
+            val packed = bytes.copyOfRange(base, Math.addExact(base, Math.toIntExact(layout.totalBytes)))
+            val plan = layout.bind(layout.slots.map { slot ->
+                val start = Math.toIntExact(slot.alignedOffset)
+                GPUUniformSlabPayload(slot.slotLabel,
+                    packed.copyOfRange(start, Math.addExact(start, Math.toIntExact(slot.payloadBytes))))
+            })
+            GPUCorePrimitiveUniformSlabSeal(plan, slabCommandIds[index], packed)
+        }
+        return GPUCorePrimitiveMaterialDispatchPlan(this, bytes, immutableMap(semantics), immutableList(slabs))
     }
 
     fun validateRoutes(routes: List<GPUCorePrimitiveNativeScopeRouteSeal.Routes>) {
@@ -134,6 +145,7 @@ internal class GPUCorePrimitiveGeometryRunPlan private constructor(
             require(route.uniformPlan.totalBytes == expected.totalBytes &&
                 route.uniformPlan.alignmentBytes == expected.alignmentBytes &&
                 route.uniformPlan.deviceGeneration == expected.deviceGeneration &&
+                route.commandIds == slabCommandIds[index] &&
                 route.uniformCommandIds == slabCommandIds[index] &&
                 route.uniformPlan.slots.map { Triple(it.slotLabel, it.alignedOffset, it.allocatedBytes) } ==
                 expected.slots.map { Triple(it.slotLabel, it.alignedOffset, it.allocatedBytes) }) {
@@ -168,7 +180,8 @@ internal class GPUCorePrimitiveGeometryRunPlan private constructor(
             plans: List<GPURecordedPlan.Routed>, allConsumerCommandIds: List<Int>,
             geometries: Map<Int, GPUCorePrimitiveGeometryAuthority>,
             directRoutes: Map<Int, GPUCorePrimitiveDirectNativeRoute.Accepted>,
-            uniforms: Map<Int, GPUCorePrimitiveGeometryUniformBytes>, layouts: Map<Int, GPUUniformSlabLayout>,
+            uniforms: Map<Int, GPUCorePrimitiveGeometryUniformBytes>,
+            prepareUniformLayout: (List<Int>) -> GPUUniformSlabLayout,
             destinationCommandIds: Set<Int>, alignment: Long, maxArenaBytesI64: Long,
         ): GPUCorePrimitiveGeometryRunPlan {
             val packets = plans.flatMap { it.plan.pass.drawPackets }
@@ -215,12 +228,12 @@ internal class GPUCorePrimitiveGeometryRunPlan private constructor(
                 pieces += piecesForCommand
             }
             val boundary = GPUHostRunBoundaryPlan.prepare(inputs)
-            val runLayouts = boundary.segments.map { ids ->
-                val sizes = ids.map { uniforms.getValue(packetCommands.getValue(it)).byteCountI32 }.distinct()
+            val slabCommands = boundary.segments.map { ids -> ids.map(packetCommands::getValue).distinct() }
+            val runLayouts = slabCommands.map { commandIds ->
+                val sizes = commandIds.map { uniforms.getValue(it).byteCountI32 }.distinct()
                 require(sizes.size == 1) { "A physical Core run cannot mix uniform layouts" }
-                layouts.getValue(sizes.single())
+                prepareUniformLayout(commandIds)
             }
-            val slabCommands = runLayouts.map { layout -> uniforms.filterValues { it.byteCountI32.toLong() == layout.slots.first().payloadBytes }.keys.toList() }
             val sizing = if (pieces.isEmpty()) null else corePrimitiveRenderRunSizingV1(
                 listOf(GPUCorePrimitiveNativeScopeGeometryArena.countsI64(pieces)),
                 runLayouts.map { it.totalBytes }, alignment)
@@ -251,7 +264,26 @@ internal class GPUCorePrimitiveMaterialDispatchPlan internal constructor(
     val geometry: GPUCorePrimitiveGeometryRunPlan,
     private val uniforms: ByteArray,
     private val semantics: Map<Int, GPUDrawSemanticPayload.CorePrimitive>,
+    val uniformSlabs: List<GPUCorePrimitiveUniformSlabSeal>,
 ) {
+    fun uniformSlab(packetId: GPUDrawPacketID): GPUCorePrimitiveUniformSlabSeal =
+        uniformSlabs[geometry.boundaries.segment(packetId)]
+    fun validatesUniformPacket(packet: GPUDrawPacket): Boolean {
+        val authority = packet.corePrimitivePreparedAuthority ?: return false
+        val slab = uniformSlab(packet.packetId)
+        return authority.materialDispatchPlan === this && when (val shape = authority.analyticShapeUniformSeal) {
+            null -> authority.uniformSlabSeal === slab
+            else -> shape.plan === slab.plan && shape.commandId == packet.commandIdValue &&
+                slab.commandIds.getOrNull(shape.slotIndex) == packet.commandIdValue &&
+                shape.hasExactPayload(uniformPayload(packet.commandIdValue))
+        }
+    }
+    fun validateRoutes(routes: List<GPUCorePrimitiveNativeScopeRouteSeal.Routes>) {
+        geometry.validateRoutes(routes)
+        require(routes.indices.all { routes[it].uniformPlan === uniformSlabs[it].plan }) {
+            "Material dispatch substituted a bound physical uniform slab"
+        }
+    }
     fun packedUniformBytesForUpload(): ByteArray = uniforms.copyOf()
     fun uniformPayload(commandId: Int): ByteArray {
         val (offset, count) = geometry.uniformRange(commandId)

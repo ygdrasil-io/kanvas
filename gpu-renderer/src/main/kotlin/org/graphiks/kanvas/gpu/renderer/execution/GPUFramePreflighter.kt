@@ -637,7 +637,7 @@ internal class GPUFramePreflighter(
                     require(packets.all { it.commonCoreSemanticAuthority() != null })
                     corePrimitiveNativeScopeRoutes.retainedFor(index, packets.map { it.packetId }) as GPUCorePrimitiveNativeScopeRouteSeal.Routes
                 }
-                dispatch.geometry.validateRoutes(routes)
+                dispatch.validateRoutes(routes)
             }
         } catch (_: IllegalArgumentException) {
             return GPUFramePreflightResult.Refused(diagnostic("invalid.preflight.common-core-run-plan",
@@ -4425,6 +4425,16 @@ internal class GPUFramePreflighter(
         val corePacketById = indexedCoreRenders
             .flatMap { (_, render) -> corePackets(render) }
             .associateBy(GPUDrawPacket::packetId)
+        val commonDispatch = corePacketById.values.map { it.corePrimitivePreparedAuthority?.materialDispatchPlan }
+            .distinct().singleOrNull()
+        val physicalUniformSeals = if (commonDispatch == null) emptyMap() else indexedCoreRenders.associate { (index, render) ->
+            val packets = corePackets(render)
+            val seal = commonDispatch.uniformSlab(packets.first().packetId)
+            if (packets.any { !commonDispatch.validatesUniformPacket(it) ||
+                    commonDispatch.uniformSlab(it.packetId) !== seal })
+                return refused("Common path scope substituted its captured physical uniform slab.")
+            index to seal
+        }
         var sharedUniformSeal: org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal? = null
         var sharedAnalyticPlan: org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan? = null
         var uniformSlotIndex = 0
@@ -4528,8 +4538,9 @@ internal class GPUFramePreflighter(
                     if (!requireStepUniformAuthority(sourceStepIndex, "uniform32")) {
                         return refused("A path render cannot mix uniform32 and analytic uniform64 authority.")
                     }
-                    if (sharedUniformSeal == null) sharedUniformSeal = directUniformSeal
-                    if (sharedUniformSeal !== directUniformSeal) {
+                    if (commonDispatch == null && sharedUniformSeal == null) sharedUniformSeal = directUniformSeal
+                    if ((commonDispatch == null && sharedUniformSeal !== directUniformSeal) ||
+                        (commonDispatch != null && physicalUniformSeals[sourceStepIndex] !== directUniformSeal)) {
                         return refused("Mixed direct packets substituted their shared uniform32 slab authority.")
                     }
                     val route = packet.corePrimitivePreparedAuthority?.materialDispatchPlan?.let { dispatch ->
@@ -4722,11 +4733,13 @@ internal class GPUFramePreflighter(
                             ?: return refused("Legacy path producer is missing its uniform32 slab.")
                         val coverSlab = coverAuthority.first.uniformSlabSeal
                             ?: return refused("Legacy path cover is missing its uniform32 slab.")
-                        if (producerSlab !== coverSlab) {
+                        if ((commonDispatch == null && producerSlab !== coverSlab) ||
+                            (commonDispatch != null && (physicalUniformSeals[sourceStepIndex] !== producerSlab ||
+                                physicalUniformSeals[coverStepIndex] !== coverSlab))) {
                             return refused("Legacy path pair substituted its shared uniform32 slab.")
                         }
-                        if (sharedUniformSeal == null) sharedUniformSeal = producerSlab
-                        if (sharedUniformSeal !== producerSlab) {
+                        if (commonDispatch == null && sharedUniformSeal == null) sharedUniformSeal = producerSlab
+                        if (commonDispatch == null && sharedUniformSeal !== producerSlab) {
                             return refused("Legacy path pairs substituted their pass uniform32 slab.")
                         }
                     }
@@ -4765,7 +4778,8 @@ internal class GPUFramePreflighter(
                             // seals, which are rebased per render scope for split frames.
                             requireNotNull(coverAuthority.first.analyticClipUniformSeal).slotIndex
                         } else {
-                            projection?.uniformSlot(packet) ?: uniformSlotIndex
+                            commonDispatch?.uniformSlab(packet.packetId)?.commandIds?.indexOf(packet.commandIdValue)
+                                ?: projection?.uniformSlot(packet) ?: uniformSlotIndex
                         },
                         packet.packetId,
                         cover.packetId,
@@ -4811,6 +4825,15 @@ internal class GPUFramePreflighter(
         }
 
         val uniformSeal = sharedUniformSeal
+        physicalUniformSeals.forEach { (stepIndex, seal) ->
+            val packets = corePackets(renderByStepIndex.getValue(stepIndex)).distinctBy { it.commandIdValue }
+            if (seal.commandIds != packets.map { it.commandIdValue } || seal.plan.slots.size != packets.size ||
+                packets.withIndex().any { (slot, packet) ->
+                    val bytes = (packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive).payloadRef.uniformBlock?.bytes
+                    bytes == null || seal.plan.slots[slot].slotLabel != "draw-${packet.commandIdValue}" ||
+                        !seal.hasExactPayload(slot, packet.commandIdValue, bytes)
+                }) return refused("Common path uniforms must exhaust their exact physical scope in command order.")
+        }
         val analyticSeals = preparedPathAnalyticSealsByStep.values.flatten()
         val limits = capabilities.limits
             ?: return refused("Path stencil requires observed backend limits.")
@@ -4899,7 +4922,7 @@ internal class GPUFramePreflighter(
                 if (analyticSeals.isEmpty()) {
                     GPUCorePrimitivePathStencilPreparedPassSeal(
                         preparedPathPairs,
-                        requireNotNull(uniformSeal),
+                        physicalUniformSeals[sourceStepIndex] ?: requireNotNull(uniformSeal),
                     )
                 } else {
                     GPUCorePrimitivePathStencilPreparedPassSeal(preparedPathPairs, analyticSeals)
@@ -4984,7 +5007,7 @@ internal class GPUFramePreflighter(
         fun stepUniformPlan(stepIndex: Int): org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan =
             when (stepUniformAuthorityKinds.getValue(stepIndex)) {
                 "analytic64" -> requireNotNull(sharedAnalyticPlan)
-                else -> requireNotNull(uniformSeal).plan
+                else -> (physicalUniformSeals[stepIndex] ?: requireNotNull(uniformSeal)).plan
             }
         indexedCoreRenders.forEach { (stepIndex, render) ->
             val stepPreparation = uniformPreparationByResource[
@@ -5127,14 +5150,14 @@ internal class GPUFramePreflighter(
         val directPasses = linkedMapOf<Int, GPUCorePrimitiveDirectPreparedPassAuthority>()
         directStructuralKeysByStep.forEach { (sourceStepIndex, directStructuralKeys) ->
             if (directStructuralKeys.isNotEmpty()) {
-                val exactUniform32 = uniformSeal
+                val exactUniform32 = physicalUniformSeals[sourceStepIndex] ?: uniformSeal
                     ?: return refused("Mixed direct path packets require the exact uniform32 authority.")
                 if (directStructuralKeys.distinct().size != 1) {
                     return refused("Mixed direct packets must share one neutral depth/stencil structural key.")
                 }
                 directPasses[sourceStepIndex] = GPUCorePrimitiveDirectPreparedPassSeal(
                     directStructuralKeys.first(),
-                    if (indexedCoreRenders.size == 1) {
+                    if (commonDispatch != null || indexedCoreRenders.size == 1) {
                         exactUniform32
                     } else {
                         sliceUniformSlabSealToCommands(
@@ -5151,7 +5174,9 @@ internal class GPUFramePreflighter(
             >()
         var firstUniformIndex = 0
         unifiedUnitsByStep.forEach { (sourceStepIndex, unifiedUnits) ->
-            val uniformCoverage = if (mixedPreparedSurface) {
+            val uniformCoverage = if (commonDispatch != null) {
+                GPUCorePrimitiveNativeScopeUniformCoverage.ExactScope
+            } else if (mixedPreparedSurface) {
                 GPUCorePrimitiveNativeScopeUniformCoverage.ExactCommandRange(
                     if (projection == null) firstUniformIndex else requireNotNull(uniformSeal).commandIds.indexOf(unifiedUnits.first().commandIdValue),
                     unifiedUnits.size,
@@ -5160,6 +5185,8 @@ internal class GPUFramePreflighter(
                 GPUCorePrimitiveNativeScopeUniformCoverage.ExactScope
             }
             val routes = when {
+                commonDispatch != null -> GPUCorePrimitiveNativeScopeRouteSeal.Routes(
+                    unifiedUnits, physicalUniformSeals.getValue(sourceStepIndex), uniformCoverage)
                 preparedPathAnalyticSealsByStep.getValue(sourceStepIndex).isNotEmpty() ->
                     GPUCorePrimitiveNativeScopeRouteSeal.Routes(
                         unifiedUnits,
@@ -6641,22 +6668,27 @@ internal class GPUFramePreflighter(
         val legacyUniformSeal = legacyUniformAcceptedIndices.firstOrNull()?.let { acceptedIndex ->
             packetAuthorities[acceptedIndex].uniformSlabSeal
         }
-        if (legacyUniformAcceptedIndices.isNotEmpty()) {
-            val seal = legacyUniformSeal ?: return refuse(
+        val physicalLegacyGroups = if (legacyUniformAcceptedIndices.isNotEmpty() &&
+            legacyUniformAcceptedIndices.all { accepted[it].packet.corePrimitivePreparedAuthority?.materialDispatchPlan != null }
+        ) legacyUniformAcceptedIndices.groupBy { packetAuthorities[it].uniformSlabSeal }.values.toList()
+        else listOf(legacyUniformAcceptedIndices).filter { it.isNotEmpty() }
+        physicalLegacyGroups.forEach { groupIndices ->
+            val seal = packetAuthorities[groupIndices.first()].uniformSlabSeal ?: return refuse(
                 "Direct CorePrimitive builder uniform slab seal contradicts current packet or limit authority.",
             )
+            val commonRun = groupIndices.all { accepted[it].packet.corePrimitivePreparedAuthority?.materialDispatchPlan != null }
             if (seal.plan.sourceLabel != "core-primitive-uniform-pass" ||
                 seal.plan.deviceGeneration != context.deviceGeneration.value ||
                 seal.plan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
                 seal.plan.totalBytes > maxBufferSize || maxDynamicUniformBuffers < 1L ||
-                (if (projection == null) seal.plan.slots.size != legacyUniformAcceptedIndices.size ||
-                    seal.drawCount != legacyUniformAcceptedIndices.size else !projection.fullUniform(seal))
+                (if (projection == null || commonRun) seal.plan.slots.size != groupIndices.size ||
+                    seal.drawCount != groupIndices.size else !projection.fullUniform(seal))
             ) {
                 return refuse("Direct CorePrimitive builder uniform slab seal contradicts current packet or limit authority.")
             }
-            legacyUniformAcceptedIndices.forEachIndexed { localSlotIndex, acceptedIndex ->
+            groupIndices.forEachIndexed { localSlotIndex, acceptedIndex ->
                 val entry = accepted[acceptedIndex]
-                val slotIndex = projection?.uniformSlot(entry.packet) ?: localSlotIndex
+                val slotIndex = if (commonRun) localSlotIndex else projection?.uniformSlot(entry.packet) ?: localSlotIndex
                 val uniformBlock = entry.semantic.payloadRef.uniformBlock ?: return diagnostic(
                     "invalid.preflight.core_primitive_semantic_integrity",
                     "Core primitive packet authority contradicts its immutable semantic input.",
@@ -6665,6 +6697,8 @@ internal class GPUFramePreflighter(
                     seal.commandIds[slotIndex] != entry.packet.commandIdValue ||
                     seal.plan.slots[slotIndex].slotLabel != "draw-${entry.packet.commandIdValue}" ||
                     !seal.hasExactPayload(slotIndex, entry.packet.commandIdValue, uniformBlock.bytes)
+                    || (commonRun && entry.packet.corePrimitivePreparedAuthority?.materialDispatchPlan
+                        ?.validatesUniformPacket(entry.packet) != true)
                 ) {
                     return refuse("Direct CorePrimitive builder uniform slab seal contradicts current packet or limit authority.")
                 }
@@ -6761,8 +6795,17 @@ internal class GPUFramePreflighter(
             it.layout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ||
                 it.layout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1
         }
-        analyticShapeSteps.groupBy(StepUniformAuthority::layout).forEach { (analyticLayout, stepsForLayout) ->
-            val uniform80AcceptedIndices = layoutAcceptedIndices(analyticLayout)
+        analyticShapeSteps.groupBy(StepUniformAuthority::layout).forEach { (analyticLayout, layoutSteps) ->
+            val commonLayout = layoutAcceptedIndices(analyticLayout).all {
+                accepted[it].packet.corePrimitivePreparedAuthority?.materialDispatchPlan != null
+            }
+            val physicalGroups = if (commonLayout) layoutSteps.groupBy { it.uniformPlan }.values.toList()
+                else listOf(layoutSteps)
+            physicalGroups.forEach { stepsForLayout ->
+            val commandIds = stepsForLayout.flatMap { it.analyticShapeSeals }.map { it.commandId }
+            val uniform80AcceptedIndices = layoutAcceptedIndices(analyticLayout).filter {
+                !commonLayout || accepted[it].packet.commandIdValue in commandIds
+            }
             val frame80Plan = stepsForLayout.first().uniformPlan
             val analyticUniformBytes = if (
                 analyticLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1
@@ -6823,11 +6866,14 @@ internal class GPUFramePreflighter(
                     else "analytic-shape-draw-${entry.packet.commandIdValue}") ||
                     seal.alignedOffset != slot.alignedOffset || slot.alignedOffset > UInt.MAX_VALUE.toLong() ||
                     !exactRange || !seal.hasExactPayload(expectedBytes)
+                    || (commonLayout && entry.packet.corePrimitivePreparedAuthority?.materialDispatchPlan
+                        ?.validatesUniformPacket(entry.packet) != true)
                 ) {
                     return refuseShape(
                         "Analytic shape uniform80 seal contradicts packet, semantic, route, layout, or generation authority.",
                     )
                 }
+            }
             }
         }
         val analyticClipSteps = stepUniformAuthorities.values.filter {
@@ -7124,13 +7170,16 @@ internal class GPUFramePreflighter(
                 val stepStructuralKeys = stepAcceptedIndices.map { packetAuthorities[it].structuralPipelineKey }
                 val stepMultiKey = stepStructuralKeys.distinct().size > 1
                 val stepAuthority = stepUniformAuthorities.getValue(stepIndex)
+                val commonDispatch = stepAcceptedIndices.map { accepted[it].packet.corePrimitivePreparedAuthority?.materialDispatchPlan }
+                    .distinct().singleOrNull()
+                val commonUniformSlab = commonDispatch?.uniformSlab(accepted[stepAcceptedIndices.first()].packet.packetId)
                 val stepAnalyticShapeSeals = when {
                     stepAuthority.layout !=
                         GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 &&
                         stepAuthority.layout !=
                         GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1 ->
                         emptyList()
-                    analyticShapeSteps.count { it.layout == stepAuthority.layout } <= 1 ->
+                    commonUniformSlab != null || analyticShapeSteps.count { it.layout == stepAuthority.layout } <= 1 ->
                         stepAuthority.analyticShapeSeals
                     else -> sliceAnalyticShapeUniformSealsToCommands(
                         stepAuthority.analyticShapeSeals,
@@ -7175,6 +7224,7 @@ internal class GPUFramePreflighter(
                                 GPUCorePrimitiveMultiKeyDirectPreparedPassSeal.analyticShape(
                                     structuralPipelineKeys = stepStructuralKeys.distinct(),
                                     analyticShapeUniformSeals = stepAnalyticShapeSeals,
+                                    preparedUniformSlab = commonUniformSlab,
                                 )
                             } catch (_: Throwable) {
                                 return refuseShape(
@@ -7195,6 +7245,7 @@ internal class GPUFramePreflighter(
                         GPUCorePrimitiveDirectPreparedPassSeal.analyticShape(
                             structuralPipelineKey = stepStructuralKeys.first(),
                             analyticShapeUniformSeals = stepAnalyticShapeSeals,
+                            preparedUniformSlab = commonUniformSlab,
                         )
                     } catch (_: Throwable) {
                         return refuseShape("Analytic shape packet ranges cannot form one exact packed uniform80 slab.")

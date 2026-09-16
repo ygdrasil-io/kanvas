@@ -326,7 +326,7 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
         if (dispatches.isNotEmpty()) {
             require(commonDispatch != null && plans.flatMap { it.renderStep.drawPackets }.all {
                 it.corePrimitivePreparedAuthority?.materialDispatchPlan === commonDispatch && it.commonCoreSemanticAuthority() != null })
-            commonDispatch.geometry.validateRoutes(routes)
+            commonDispatch.validateRoutes(routes)
         }
 
         val geometry = try {
