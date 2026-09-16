@@ -26,6 +26,7 @@ public class RenderGraph private constructor(
     w5bGeometryLanes: List<W5bGeometryLanePlanV3> = emptyList(),
     private val w5eImageConstruction: W5eImageConstructionPlanV1? = null,
     packedSourcesV4: Map<String, RawMaterialRequirementsV2> = emptyMap(),
+    private val w6aLayerFramePlan: LayerFramePlanV1? = null,
 ) {
     private val storedTargetExtent: SizeI32 = targetExtent.copy()
     public val targetExtent: SizeI32
@@ -54,6 +55,14 @@ public class RenderGraph private constructor(
     public fun materialPlanTableOrNull(): MaterialPlanTable? = materialPlanTable
 
     public fun w5aCompositePlanOrNull(): W5aCompositePlanV1? = w5aCompositePlan
+
+    /** W6a's compiler-issued layer semantics; renderer consumers must not re-plan a scope. */
+    public fun layerFramePlanOrNull(): LayerFramePlanV1? = w6aLayerFramePlan
+
+    /** Verifies that this graph's layer semantics were sealed by the W6a compiler. */
+    public fun verifyW6aLayerCompilerWitness(): Boolean =
+        capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID &&
+            w6aLayerFramePlan != null
 
     public fun verifyW5bGeometryCompilerWitness(): Boolean = w5bGeometryIssued
     public fun w5bGeometryLanes(): List<W5bGeometryLanePlanV3> = storedW5bGeometryLanes
@@ -201,6 +210,20 @@ public class RenderGraph private constructor(
                 packedSourcesV4 = lanes.flatMap { it.storedPackedSourcesV4.entries }.associate { it.key to it.value })
         }
 
+        /** The only publication boundary for W6a semantic layer scope authority. */
+        internal fun publishW6a(construction: RenderGraphConstruction, frame: LayerFramePlanV1,
+            packed: PackedFrameSourcesV4): RenderGraph {
+            require(construction.capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID)
+            require(frame.scopes().map { it.targetResource }.toSet() == construction.resources()
+                .filter { it.role == PlanResourceRole.LayerTarget }.map { it.id }.toSet())
+            require(frame.executionSteps().all { step -> construction.passes().any { it.id == step.passId } })
+            return RenderGraph(construction.id, construction.capabilityId, construction.targetExtent,
+                construction.colorFormat, construction.capabilities, construction.budget, construction.visualCommandCount,
+                construction.resources(), construction.passes(), construction.dependencies(), construction.peakFrameLocalBytes,
+                null, null, null, null, construction.materialTable, packedSourcesV4 = packed.forConstruction(construction),
+                w6aLayerFramePlan = frame)
+        }
+
         public fun of(
             id: PlanId,
             capabilityId: String,
@@ -295,8 +318,8 @@ public class RenderGraph private constructor(
                 val definition = requireNotNull(proof.composedDefinition) { W5gPlanDiagnostics.Schema }
                 require(proof.authenticates(table, root, coordinates) &&
                     slab.owner === definition.frameOwner && definition.frameOwner.owns(definition.captured) &&
-                    slab.owner.lane.targetExtent == targetExtent && slab.owner.lane.capabilities == capabilities &&
-                    slab.owner.lane.budget == budget && slab.byteCountI64 == slab.owner.noiseBytesI64 &&
+                    slab.owner.targetExtent == targetExtent && slab.owner.capabilities == capabilities &&
+                    slab.owner.budget == budget && slab.byteCountI64 == slab.owner.noiseBytesI64 &&
                     definition.layout.resources.singleOrNull {
                         it.buffer?.storageKind == ComposedBindingLayoutV1.StorageKind.NOISE_U32
                     }?.let { proof.authenticatesComposedNoise(it, slab) } == true) { W5gPlanDiagnostics.Schema }
@@ -407,6 +430,11 @@ public class RenderGraph private constructor(
             }
             require(dependencies.distinct().size == dependencies.size) { "Dependencies must be unique" }
             validatePassCapabilities(passes, capabilities)
+            if (capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID) {
+                validateW6aLayerTopology(resources, passes, dependencies, targetExtent, visualCommandCount, capabilities.copyBytesPerRowAlignment)
+                require(peak(resources, passes.size) == peakFrameLocalBytes && peakFrameLocalBytes <= budget.maxFrameLocalBytes)
+                return
+            }
             validateW5bDestinationVersions(passes)
             validateColorPasses(passes, resourcesById, targetExtent, colorFormat, capabilityId)
             val usesExplicitAa4PathPasses = passes.any {
@@ -636,6 +664,7 @@ public class RenderGraph private constructor(
                 (pass.draw.blend as? BlendPlan.DestinationReadV1)?.snapshotResource,
             )
             is PlanPass.TextureCopy -> listOf(pass.source, pass.destination)
+            is PlanPass.LayerComposite -> listOf(pass.source, pass.destination)
             is PlanPass.FilterPass -> pass.inputs() + pass.output
             is PlanPass.ResolvePass -> listOf(pass.source, pass.destination)
             is PlanPass.ReadbackPass -> listOf(pass.source, pass.staging)

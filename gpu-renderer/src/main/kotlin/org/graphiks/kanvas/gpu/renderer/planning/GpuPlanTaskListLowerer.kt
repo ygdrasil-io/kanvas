@@ -121,6 +121,8 @@ public class GpuPlanTaskListLowerer {
         if (request.graph.verifyW5bGeometryCompilerWitness() && request.graph.visualCommandCount == 0)
             return lowerW3(request, current)
         return when (request.graph.capabilityId) {
+            org.graphiks.kanvas.gpu.plan.W6aLayerPlanCompiler.CAPABILITY_ID ->
+                W6aLayerGraphLowerer().lower(request)
             org.graphiks.kanvas.gpu.plan.W5eImagePlanCompiler.CAPABILITY_ID -> W5eImagePlanLowerer().lower(request)
             org.graphiks.kanvas.gpu.plan.W5eImagePlanCompiler.CONSTRUCTION_CAPABILITY_ID -> lowerW3(request, current)
             W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID -> W5bAnalyticRRectGraphLowerer().lower(request)

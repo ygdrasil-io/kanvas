@@ -1053,6 +1053,7 @@ internal sealed interface GPUPreparedNativeScopeOperand {
         val passSegment: RenderPassSegment? = null,
         w5aSourceBindingsV2: List<GPUW5aNativeSourceBindingV2> = emptyList(),
         val w5bInitialClearV3: org.graphiks.kanvas.gpu.renderer.passes.W5bInitialClearV3? = null,
+        val w6aPassV1: org.graphiks.kanvas.gpu.plan.PlanPass? = null,
     ) : GPUPreparedNativeScopeOperand {
         val commands = immutableList(commands)
         val semanticPayloads = immutableList(semanticPayloads)
@@ -1395,7 +1396,9 @@ internal sealed interface GPUPreparedNativeScopeOperand {
         }
 
         init {
-            require(if (w5bInitialClearV3 != null) this.commands.isEmpty() && this.semanticPayloads.isEmpty() &&
+            require(if (w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass && w6aPassV1.draws().isEmpty())
+                this.commands.isEmpty() && this.semanticPayloads.isEmpty() && pass.loadOperation == GPUPreparedNativeLoadOperation.Clear
+                else if (w5bInitialClearV3 != null) this.commands.isEmpty() && this.semanticPayloads.isEmpty() &&
                 this.w5aSourceBindingsV2.isEmpty() && pass.loadOperation == GPUPreparedNativeLoadOperation.Clear &&
                 pass.clearColor == GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0) else this.commands.any {
                 it is GPUPreparedNativeRenderCommand.Draw || it is GPUPreparedNativeRenderCommand.DrawIndexed

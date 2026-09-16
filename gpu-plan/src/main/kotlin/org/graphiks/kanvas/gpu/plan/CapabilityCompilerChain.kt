@@ -14,6 +14,17 @@ public class CapabilityCompilerChain private constructor(
     private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
 ) : GpuPlanCompiler {
     override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
+        // Layer ownership precedes all geometry/source admission, including composed-source gaps.
+        if (scene.any { it is org.graphiks.kanvas.render.ir.SceneCommand.BeginLayer || it is org.graphiks.kanvas.render.ir.SceneCommand.EndLayer }) {
+            val index = compilers.indexOfFirst { it is W6aLayerPlanCompiler }
+            if (index >= 0) {
+                val compiler = compilers[index]
+                return when (val selection = compiler.select(scene, target)) {
+                    is GpuPlanSelection.Candidate -> GpuPlanSelection.Candidate(ChainCandidate(this, index, compiler, selection.candidate))
+                    else -> selection
+                }
+            }
+        }
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) {
             return GpuPlanSelection.InvalidScene(listOf(
                 diagnostic("gpu-plan.selection.scene-target-mismatch", "Scene and target descriptors disagree."),
@@ -147,5 +158,6 @@ internal fun GpuPlanCompiler.bindRuntimeCatalog(catalog: RuntimeEffectSemanticCa
     is W4eClipPlanCompiler -> withRuntimeCatalog(catalog)
     is W5eImagePlanCompiler -> W5eImagePlanCompiler(catalog)
     is W5aCompositePlanCompiler -> withRuntimeCatalog(catalog)
+    is W6aLayerPlanCompiler -> W6aLayerPlanCompiler(catalog)
     else -> this
 }

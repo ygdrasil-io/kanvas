@@ -1470,6 +1470,10 @@ internal class PreparedGPUFrame(
         require(rollback.ownsCompletionTicket(completionTicket)) {
             "PreparedGPUFrame rollback must own the exact completion ticket instance"
         }
+        val sealedW6a = semanticPlan.w6aLayerFrameV1?.let { authority ->
+            require(authority.validates(semanticPlan)) { "Invalid frozen W6a frame" }
+            true
+        } ?: false
         require(this.stepPartition.map { it.sourceStepIndex } == semanticPlan.steps.indices.toList()) {
             "PreparedGPUFrame.stepPartition must cover every semantic step exactly once and in order"
         }
@@ -1518,7 +1522,8 @@ internal class PreparedGPUFrame(
             require(scope.resourceGenerationLabels == expectedResources) {
                 "PreparedGPUFrame encoder resource generations must exactly match the semantic step"
             }
-            if (step is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep) {
+            if (step is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep &&
+                scope.operationKind == GPUEncoderOperationKind.Render) {
                 step.drawPackets.firstOrNull()?.w5bFinalFrameWitnessV3?.takeIf { it.w4eLane != null }?.let { witness ->
                     require(witness.validates(semanticPlan)) { "Prepared W4e final-color scopes require their complete sealed frame" }
                 }
@@ -1729,7 +1734,8 @@ internal class PreparedGPUFrame(
                 require(sealedW4e || stream.sourcePacketIds == step.expectedRenderCommandPacketIds(scope)) {
                     "PreparedGPUFrame render command stream must have exact per-packet command structure"
                 }
-                val expectedPassIds = step.w5bInitialClearV3?.let { listOf("w5b.${it.graph.id.value}.initial-clear") }
+                val expectedPassIds = step.w6aPassV1?.let { require(sealedW6a); listOf(it.id.value) }
+                    ?: step.w5bInitialClearV3?.let { listOf("w5b.${it.graph.id.value}.initial-clear") }
                     ?: step.drawPackets.map { it.passId }.distinct()
                 require(stream.sourcePassIds == expectedPassIds) {
                     "PreparedGPUFrame render command stream must retain original pass identities"
@@ -1737,7 +1743,7 @@ internal class PreparedGPUFrame(
                 require(stream.commandLabels == scope.facadeOperationClasses) {
                     "PreparedGPUFrame render facade operations must exactly match its command stream"
                 }
-                require(sealedW4e || stream.operandBridge.size >= expectedPackets.size * 2) {
+                require(sealedW4e || sealedW6a || stream.operandBridge.size >= expectedPackets.size * 2) {
                     "PreparedGPUFrame render command stream must bridge at least pipeline and bind group operands per packet"
                 }
             } else {
@@ -2140,7 +2146,8 @@ private fun GPUFrameResourceRef.typedLabel(): String = "${this::class.simpleName
 
 internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedEncoderOperationKind():
     GPUEncoderOperationKind = when (this) {
-    is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep -> GPUEncoderOperationKind.Render
+    is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep ->
+        if (w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.LayerComposite) GPUEncoderOperationKind.LayerComposite else GPUEncoderOperationKind.Render
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.ComputePassStep -> GPUEncoderOperationKind.Compute
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.UploadResourceStep -> GPUEncoderOperationKind.Upload
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.CopyResourceStep -> GPUEncoderOperationKind.Copy
@@ -2159,6 +2166,10 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFac
     when (this) {
         is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep -> buildList {
             add("beginRenderPass")
+            if (w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.LayerComposite) {
+                addAll(listOf("setRenderPipeline", "setBindGroup", "draw", "endRenderPass"))
+                return@buildList
+            }
             if (w5bInitialClearV3 != null) {
                 add("endRenderPass")
                 return@buildList

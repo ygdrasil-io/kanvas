@@ -57,14 +57,16 @@ private fun GPUFramePlan.w5eImageAllocationsV3(limits: GPULimits): List<GPUFrame
         }
 }
 
-internal fun GPUFramePlan.w5aCombinedMemoryBudgetV2(limits: GPULimits): GPUFrameMemoryBudgetPlan =
-    GPUFrameMemoryBudgetPlanner.plan(GPUFrameMemoryBudgetRequest(
+internal fun GPUFramePlan.w5aCombinedMemoryBudgetV2(limits: GPULimits): GPUFrameMemoryBudgetPlan {
+    w6aLayerFrameV1?.let { require(it.validates(this)); return memoryBudget }
+    return GPUFrameMemoryBudgetPlanner.plan(GPUFrameMemoryBudgetRequest(
         allocations = memoryBudget.allocations + w5aMaterialAllocationsV2() + w5eImageAllocationsV3(limits) +
             w5eChildStopAllocationsV3() + w5gDeclaredStopAllocationsV5() + w5gNoiseAllocationsV1() + w5hRuntimeAllocationsV1() +
             w5hPreparedGeometryAllocationsV6(),
         configuredAggregateBudgetBytes = memoryBudget.configuredAggregateBudgetBytes,
         deviceLimits = limits,
     ))
+}
 
 /** Physical native bytes absent from the legacy logical Vertices inventory. */
 internal fun GPUFramePlan.w5hPreparedGeometryAllocationsV6(): List<GPUFrameMemoryAllocation> {

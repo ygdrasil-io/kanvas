@@ -223,7 +223,7 @@ internal object W5bDestinationGraphSealer {
                     val version = DestinationVersionI64(versionI64)
                     val region = regions.getValue(draw.commandIndex)
                     passes += PlanPass.TextureCopy(copyOrdinalI32++, target.id, requireNotNull(snapshot).id, version,
-                        region, alignedRowBytesI64(capabilities, region.width()))
+                        region, bytesPerRowI64 = alignedRowBytesI64(capabilities, region.width()))
                     val sealed = blend.copy(requiredDestinationVersion = version, snapshotResource = snapshot.id)
                     render(when (draw) {
                         is SolidRectDraw -> SolidRectDraw.ofMaterial(draw.commandIndex,

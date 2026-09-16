@@ -523,6 +523,8 @@ internal class MaterialTableInterningRecipeV4 private constructor(
     }
 
     companion object {
+        /** No material table is issued for a frame containing only clears/restores. */
+        fun emptyFrame(): MaterialTableInterningRecipeV4 = MaterialTableInterningRecipeV4(emptyList(), emptyList(), emptyList())
         fun of(sources: List<List<MaterialInternerDescriptorV4>>): MaterialTableInterningRecipeV4 {
             require(sources.isNotEmpty()) { "At least one lane table is required" }
             require(sources.all { it.isNotEmpty() }) { "A material table must contain at least one entry" }

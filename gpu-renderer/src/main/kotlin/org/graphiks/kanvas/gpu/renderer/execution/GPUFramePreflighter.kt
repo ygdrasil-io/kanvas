@@ -250,6 +250,11 @@ internal class GPUFramePreflighter(
         value == resourceId || value.endsWith(".$resourceId")
 
     fun preflight(framePlan: GPUFramePlan): GPUFramePreflightResult {
+        val w6a = framePlan.w6aLayerFrameV1
+        if (w6a == null && framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().any { it.w6aPassV1 != null })
+            return GPUFramePreflightResult.Refused(diagnostic("w6a.layer.invalid_plan", "Layer operands require complete frame authority."))
+        if (w6a != null && !w6a.validates(framePlan)) return GPUFramePreflightResult.Refused(
+            diagnostic("w6a.layer.invalid_plan", "The layer frame differs from its frozen graph projection."))
         val mixedW5b = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
             .mapNotNull { it.w5bMixedFrameWitnessV1 }.firstOrNull()
         if (mixedW5b != null) {
@@ -909,7 +914,7 @@ internal class GPUFramePreflighter(
         }
 
         acquiredAnyResource = true
-        val renderMaterialization = materializeRenderOperands(
+        val renderMaterialization = if (w6a != null) GPUResourceMaterializationDecision.Materialized(emptyList()) else materializeRenderOperands(
             framePlan,
             sourceWitness,
             ownerScope,
@@ -945,7 +950,7 @@ internal class GPUFramePreflighter(
                 ),
             )
         }
-        validateRenderOperands(
+        if (w6a == null) validateRenderOperands(
             framePlan,
             materialized,
             ownerScope,
@@ -957,7 +962,7 @@ internal class GPUFramePreflighter(
         }
 
         val encoderScopes = try {
-            lowerEncoderScopes(
+            w6a?.encoderScopes(framePlan, preparedGenerationMap, context.targetGeneration) ?: lowerEncoderScopes(
                 framePlan,
                 materialized,
                 preparedGenerationMap,
@@ -3223,6 +3228,8 @@ internal class GPUFramePreflighter(
             return diagnostic("stale.preflight.capability_seal", "The current capability snapshot differs from the frame seal.")
         }
         framePlan.memoryBudget.diagnostic?.let { return it }
+        framePlan.w6aLayerFrameV1?.let { return if (it.validates(framePlan)) null else
+            diagnostic("w6a.layer.invalid_plan", "Invalid W6 graph projection") }
         if (framePlan.w4eRenderSteps().isNotEmpty()) {
             return validateW4eSceneMsaaContinuation(framePlan)
         }
