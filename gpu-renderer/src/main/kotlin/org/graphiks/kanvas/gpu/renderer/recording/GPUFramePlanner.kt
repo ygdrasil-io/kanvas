@@ -854,9 +854,25 @@ object GPUFramePlanner {
         val diagnostics = mutableListOf<GPUDiagnostic>()
         val openedRenderSegments = mutableSetOf<RenderContinuationKey>()
         val pendingRenderSlices = mutableListOf<RenderSlice>()
+        val commonPackets = orderedTasks.filterIsInstance<GPUTask.Render>().flatMap { it.drawPackets }
+            .filter { it.corePrimitivePreparedAuthority?.materialDispatchPlan != null }
+        val commonDispatches = commonPackets.map { requireNotNull(it.corePrimitivePreparedAuthority?.materialDispatchPlan) }.distinct()
+        val commonBoundaries = commonDispatches.singleOrNull()?.geometry?.boundaries
+        if (commonDispatches.isNotEmpty() && (commonBoundaries == null ||
+                commonPackets.map { it.packetId } != commonBoundaries.segments.flatten() ||
+                destinationSchedule.consumerPacketIds.intersect(commonBoundaries.segmentByPacketId.keys) != commonBoundaries.mandatoryCopyConsumers)) {
+            return Linearization.Refused(diagnostic("invalid.frame_plan.host_run_boundaries",
+                "Bound Core commands or destination consumers differ from their prepublication run plan"))
+        }
         fun flushPendingRenderSlices(): GPUDiagnostic? {
             if (pendingRenderSlices.isEmpty()) return null
             val firstTask = pendingRenderSlices.first().task
+            val pendingPackets = pendingRenderSlices.flatMap { it.drawPackets }
+            pendingPackets.first().corePrimitivePreparedAuthority?.materialDispatchPlan?.geometry?.boundaries?.let { plan ->
+                val segment = plan.segment(pendingPackets.first().packetId)
+                if (pendingPackets.map { it.packetId } != plan.segments[segment]) return diagnostic(
+                    "invalid.frame_plan.host_run_segment", "A material dispatch must consume one complete prepublication Core segment")
+            }
             val continuationKey = firstTask.continuationKey()
             val renderStep = batchRenderSegment(
                 slices = pendingRenderSlices,
@@ -872,16 +888,28 @@ object GPUFramePlanner {
         }
 
         fun enqueueRenderSlice(slice: RenderSlice): GPUDiagnostic? {
-            val firstPendingTask = pendingRenderSlices.firstOrNull()?.task
-            val incomingTaskRequiresBoundary = slice.task.drawPackets.any { packet ->
-                packet.blendPlan is GPUBlendPlan.NoOp || packet.blendPlan is GPUBlendPlan.UnsupportedBlend
+            val boundary = slice.drawPackets.first().corePrimitivePreparedAuthority?.materialDispatchPlan?.geometry?.boundaries
+            val slices = if (boundary == null) listOf(slice) else boundary.segments.mapNotNull { ids ->
+                slice.drawPackets.filter { it.packetId in ids }.takeIf { it.isNotEmpty() }?.let { RenderSlice(slice.task, it) }
+            }.also { require(it.flatMap { part -> part.drawPackets } == slice.drawPackets) }
+            for (incoming in slices) {
+                val firstPending = pendingRenderSlices.firstOrNull()
+                val firstPendingTask = firstPending?.task
+                val pendingBoundary = firstPending?.drawPackets?.first()?.corePrimitivePreparedAuthority?.materialDispatchPlan?.geometry?.boundaries
+                val incomingTaskRequiresBoundary = incoming.task.drawPackets.any { packet ->
+                    packet.blendPlan is GPUBlendPlan.NoOp || packet.blendPlan is GPUBlendPlan.UnsupportedBlend
+                }
+                val share = if (boundary != null || pendingBoundary != null) boundary === pendingBoundary &&
+                    boundary != null && boundary.segment(requireNotNull(firstPending).drawPackets.first().packetId) ==
+                    boundary.segment(incoming.drawPackets.first().packetId)
+                    else firstPendingTask?.canShareProvisionalSegment(incoming.task) == true
+                if (firstPendingTask != null &&
+                    (incomingTaskRequiresBoundary || !share)
+                ) {
+                    flushPendingRenderSlices()?.let { return it }
+                }
+                pendingRenderSlices += incoming
             }
-            if (firstPendingTask != null &&
-                (incomingTaskRequiresBoundary || !firstPendingTask.canShareProvisionalSegment(slice.task))
-            ) {
-                flushPendingRenderSlices()?.let { return it }
-            }
-            pendingRenderSlices += slice
             return null
         }
 
@@ -1050,6 +1078,9 @@ object GPUFramePlanner {
             }
         }
         flushPendingRenderSlices()?.let { return Linearization.Refused(it) }
+        commonBoundaries?.requireExactSegments(steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .filter { render -> render.drawPackets.any { it.corePrimitivePreparedAuthority?.materialDispatchPlan != null } }
+            .map { render -> render.drawPackets.map { it.packetId } })
         // Composite steps must follow every scene/layer render pass (the composite samples the
         // layer texture over the already-rendered parent target) and precede the readback or
         // surface suffix. Insert the per-layer triplet after the last render pass step.
@@ -1219,12 +1250,10 @@ object GPUFramePlanner {
             other.w4dGeneralContinuationBridgeOrNullForBoundary() == null &&
             w4eMaskContinuation == other.w4eMaskContinuation &&
             w4eSceneContinuation == other.w4eSceneContinuation &&
-            target == other.target &&
-            loadStore == other.loadStore &&
-            depthStencilLoadStore == other.depthStencilLoadStore &&
-            samplePlan == other.samplePlan &&
-            provisionalSegmentKey == other.provisionalSegmentKey &&
-            drawPackets.first().targetStateHash == other.drawPackets.first().targetStateHash
+            hostRenderMergeFacts() == other.hostRenderMergeFacts()
+
+    private fun GPUTask.Render.hostRenderMergeFacts() = GPUHostRenderMergeFacts(
+        target, loadStore, depthStencilLoadStore, samplePlan, provisionalSegmentKey, drawPackets.first().targetStateHash)
 
     private fun GPUTask.Render.w4dGeneralContinuationBridgeOrNullForBoundary():
         GPUPlanW4dGeneralPreparedAuthority? =

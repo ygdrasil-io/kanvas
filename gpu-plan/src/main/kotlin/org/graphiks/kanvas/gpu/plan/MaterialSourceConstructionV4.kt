@@ -254,6 +254,16 @@ internal class MaterialSourceConstructionV4 private constructor(
         val uniformBytesI64: Long = Math.addExact(NoiseOperationGraphV1.HEADER_BYTES_I64, coordinates.uniformByteSizeI64)
     }
 
+    /** Semantic admission only: no DAG owner/index, scalar field, source table or resource lease. */
+    internal class PreparedAuthentication internal constructor(
+        internal val draw: DrawNode,
+        internal val material: MaterialNode,
+        internal val imageOrigin: ImageChildMetadata?,
+        internal val tailAlphaF32: Float,
+        internal val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
+        internal val runtimeEntries: java.util.IdentityHashMap<MaterialNode.RuntimeEffect, RuntimeEffectSemanticEntryV1>,
+    )
+
     internal class ComposedMetadata(nodes: List<Node>, val layout: ComposedBindingLayoutV1,
         val primitiveEvaluationRef: MaterialEvaluationRefV5? = null,
         val primitiveBlendMode: org.graphiks.kanvas.render.ir.BlendMode? = null,
@@ -329,6 +339,18 @@ internal class MaterialSourceConstructionV4 private constructor(
 
         fun captureImageOrigin(draw: DrawNode,bounds: RectF32,blend: BlendPlan,
             runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): MaterialSourceConstructionV4 {
+            return captureAuthenticated(authenticatePrepared(draw, runtimeCatalog), bounds, blend)
+        }
+
+        fun authenticatePrepared(draw: DrawNode,
+            runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): PreparedAuthentication {
+            if (draw.origin != DrawOrigin.IMAGE) {
+                validateComposedDraw(draw, draw.material, null)
+                val entries = authenticateComposed(draw.material, runtimeCatalog)
+                authenticateComposedMetadata(draw, draw.material, null)
+                return PreparedAuthentication(draw, draw.material, null,
+                    draw.paint?.takeIf { it.shader != null }?.color?.alphaNormalized ?: 1f, runtimeCatalog, entries)
+            }
             val origin = describeImageOrigin(draw)
             val sample = origin.original
             val description = origin.description
@@ -336,9 +358,18 @@ internal class MaterialSourceConstructionV4 private constructor(
             val material = if (mask) MaterialNode.Blend(org.graphiks.kanvas.render.ir.BlendMode.MODULATE,
                 EffectiveMaterialPlanner.imageMaskMaterial(draw),sample) else sample
             val alpha = if (!mask || draw.paint?.shader != null) draw.paint?.color?.alphaNormalized ?: 1f else 1f
-            return captureComposed(draw,bounds,blend,runtimeCatalog,material,origin,alpha)
+            validateComposedDraw(draw, material, origin)
+            val authenticated = if (mask) (material as MaterialNode.Blend).dst else material
+            val entries = authenticateComposed(authenticated, runtimeCatalog)
+            authenticateComposedMetadata(draw, authenticated, origin)
+            return PreparedAuthentication(draw, material, origin, alpha, runtimeCatalog, entries)
         }
 
+        fun captureAuthenticated(authentication: PreparedAuthentication, bounds: RectF32,
+            blend: BlendPlan): MaterialSourceConstructionV4 = captureComposed(
+            authentication.draw, bounds, blend, authentication.runtimeCatalog, authentication.material,
+            authentication.imageOrigin, authentication.tailAlphaF32, authentication,
+        )
         /** Shared pre-layout admission; elided origins authenticate without constructing a source. */
         private fun authenticateComposed(material: MaterialNode,
             runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): java.util.IdentityHashMap<MaterialNode.RuntimeEffect,RuntimeEffectSemanticEntryV1> {
@@ -396,6 +427,11 @@ internal class MaterialSourceConstructionV4 private constructor(
             val material = if (origin.description.color.channelOrder == ImageChannelOrderV1.ALPHA)
                 EffectiveMaterialPlanner.imageMaskMaterial(draw) else origin.original
             authenticateComposed(material,runtimeCatalog)
+            authenticateComposedMetadata(draw, material, origin)
+        }
+
+        /** This metadata walk is shared by authenticated projection and the historical image elision. */
+        private fun authenticateComposedMetadata(draw: DrawNode, material: MaterialNode, origin: ImageChildMetadata?) {
             draw.paint?.colorFilter?.let(::compileFilter)
             fun visit(node: MaterialNode,coordinates: List<CoordinateNodeV2>) {
                 validateComposedNode(node)
@@ -403,13 +439,13 @@ internal class MaterialSourceConstructionV4 private constructor(
                 val needsCoordinates = node is MaterialNode.ImageSample || node is MaterialNode.PerlinNoise ||
                     node is MaterialNode.FractalNoise || node is MaterialNode.LinearGradient ||
                     node is MaterialNode.RadialGradient || node is MaterialNode.SweepGradient || node is MaterialNode.ConicalGradient
-                if (needsCoordinates && node !== origin.original && !gradientCollapsesCoordinates(node)) {
+                if (needsCoordinates && node !== origin?.original && !gradientCollapsesCoordinates(node)) {
                     when (val result = MaterialCoordinatePlanV2.fromCtmAndNodes(draw.transform,coordinates)) {
                         is MaterialCoordinatePlanV2.Build.Ready -> Unit
                         is MaterialCoordinatePlanV2.Build.Refused -> throw IllegalArgumentException(result.code)
                     }
                 }
-                if (node is MaterialNode.ImageSample && node !== origin.original)
+                if (node is MaterialNode.ImageSample && node !== origin?.original)
                     EffectiveMaterialPlanner.describeImageSample(node,false).validateUploadMetadata()
                 when (node) {
                     is MaterialNode.Blend -> { visit(node.dst,coordinates); visit(node.src,coordinates) }
@@ -454,7 +490,27 @@ internal class MaterialSourceConstructionV4 private constructor(
         private fun captureComposed(draw: DrawNode,bounds: RectF32,blend: BlendPlan,
             runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot, material: MaterialNode = draw.material,
             imageOrigin: ImageChildMetadata? = null,
-            tailAlphaF32: Float = draw.paint?.takeIf { it.shader != null }?.color?.alphaNormalized ?: 1f): MaterialSourceConstructionV4 {
+            tailAlphaF32: Float = draw.paint?.takeIf { it.shader != null }?.color?.alphaNormalized ?: 1f,
+            authentication: PreparedAuthentication? = null): MaterialSourceConstructionV4 {
+            val mesh = draw.geometry as? org.graphiks.kanvas.render.ir.GeometryNode.IndexedMesh
+            val preparedMesh = draw.origin in setOf(DrawOrigin.VERTICES, DrawOrigin.MESH) &&
+                mesh != null && mesh.program == null && mesh.meshProgram == null
+            val runtimeEntries = if (authentication == null) {
+                validateComposedDraw(draw, material, imageOrigin)
+                // The mask product is synthesized, like paint alpha/filter, not a captured occurrence.
+                authenticateComposed(if (imageOrigin != null && material is MaterialNode.Blend)
+                    material.dst else material, runtimeCatalog)
+            } else {
+                require(authentication.draw === draw && authentication.material === material &&
+                    authentication.imageOrigin === imageOrigin && authentication.runtimeCatalog === runtimeCatalog &&
+                    authentication.tailAlphaF32 == tailAlphaF32) { W5gPlanDiagnostics.Schema }
+                authentication.runtimeEntries
+            }
+            return captureComposedNodes(draw, bounds, blend, runtimeCatalog, material, imageOrigin, tailAlphaF32,
+                preparedMesh, mesh, runtimeEntries)
+        }
+
+        private fun validateComposedDraw(draw: DrawNode, material: MaterialNode, imageOrigin: ImageChildMetadata?) {
             var sliceLeaf = material
             while (true) sliceLeaf = when (val node = sliceLeaf) {
                 is MaterialNode.Opacity -> node.material
@@ -474,9 +530,13 @@ internal class MaterialSourceConstructionV4 private constructor(
                 draw.origin in setOf(DrawOrigin.POINT,DrawOrigin.POINTS,DrawOrigin.TEXT) || preparedMesh) &&
                 draw.resource == null && (draw.operationBlendMode == null || preparedMesh)) { sliceCode }
             require(colorFilterEffectsMatchPaint(draw)) { W5gPlanDiagnostics.Schema }
-            // The mask product is synthesized, like paint alpha/filter, not a captured occurrence.
-            val runtimeEntries = authenticateComposed(if (imageOrigin != null && material is MaterialNode.Blend)
-                material.dst else material,runtimeCatalog)
+        }
+
+        private fun captureComposedNodes(draw: DrawNode, bounds: RectF32, blend: BlendPlan,
+            runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot, material: MaterialNode,
+            imageOrigin: ImageChildMetadata?, tailAlphaF32: Float, preparedMesh: Boolean,
+            mesh: org.graphiks.kanvas.render.ir.GeometryNode.IndexedMesh?,
+            runtimeEntries: java.util.IdentityHashMap<MaterialNode.RuntimeEffect, RuntimeEffectSemanticEntryV1>): MaterialSourceConstructionV4 {
             val nodes = mutableListOf<ComposedMetadata.Node>()
             val mappings = mutableListOf<ComposedBindingLayoutV1.UniformMapping>()
             data class Context(val coordinateNodes: List<MaterialNode>,val domain: ColorInterpolation?)

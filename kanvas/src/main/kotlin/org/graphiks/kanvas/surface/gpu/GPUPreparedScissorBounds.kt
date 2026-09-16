@@ -26,9 +26,11 @@ internal fun GPUClipCoveragePlan.toPreparedScissorBounds(
 
 internal fun List<GPUTextA8Instance>.preparedTextBounds(
     target: GPUTargetFacts,
-): GPUBounds? {
-    val coordinates = flatMap(GPUTextA8Instance::deviceQuad)
-    if (coordinates.size != size * 8 || coordinates.any { coordinate -> !coordinate.isFinite() }) return null
+): GPUBounds? = preparedTextQuadBounds(map(GPUTextA8Instance::deviceQuad), target)
+
+internal fun preparedTextQuadBounds(quads: List<List<Float>>, target: GPUTargetFacts): GPUBounds? {
+    val coordinates = quads.flatten()
+    if (coordinates.size != quads.size * 8 || coordinates.any { coordinate -> !coordinate.isFinite() }) return null
     val xs = coordinates.filterIndexed { index, _ -> index % 2 == 0 }
     val ys = coordinates.filterIndexed { index, _ -> index % 2 == 1 }
     val left = xs.minOrNull()?.coerceIn(0f, target.width.toFloat()) ?: return null

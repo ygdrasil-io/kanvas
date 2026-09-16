@@ -225,6 +225,16 @@ internal sealed interface GPUWgpu4kCorePrimitivePipelineMapping {
     ) : GPUWgpu4kCorePrimitivePipelineMapping
 }
 
+/** The same closed key used by native pipeline interning, without consulting a cache or device. */
+internal fun preparedCoreNativePipelineIdentity(
+    packet: org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket,
+): GPUWgpu4kCorePrimitivePipelineMapping.Mapped =
+    requireNotNull(mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
+        requireNotNull(packet.corePrimitivePreparedAuthority).structuralPipelineKey,
+    ) as? GPUWgpu4kCorePrimitivePipelineMapping.Mapped) {
+        "Prepared Core pipeline must have one exact native mapping"
+    }
+
 /**
  * Consumes the handle-free structural authority and accepts only a closed native program plus its
  * exact fixed-function blend program. Dynamic geometry, bounds, scissor, load/store, and stencil

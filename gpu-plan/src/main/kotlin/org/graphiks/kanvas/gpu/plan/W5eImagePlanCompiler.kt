@@ -519,40 +519,14 @@ public class W5eImagePlanCompiler(private val runtimeCatalog: RuntimeEffectSeman
 
     private fun projectGeometry(node: DrawNode, physicalDestination: RectF32? = null,
         physicalTransform: org.graphiks.math.matrix.Matrix3x3F32 = node.transform): DrawNode {
-        val node = node.copy(transform = physicalTransform)
         val neutral = MaterialNode.Transparent
         val paint = node.paint?.copy(color = ColorARGB.Transparent, shader = neutral,colorFilter=null) ?: PaintNode(
             ColorARGB.Transparent, neutral, BlendMode.SRC_OVER, null, null, null, null, null,
             PaintStyleNode.FILL, 0f, StrokeCapNode.BUTT, StrokeJoinNode.MITER, 4f, node.coverage == CoverageRequest.ANTIALIASED)
-        if (node.origin != DrawOrigin.IMAGE && node.origin != DrawOrigin.IMAGE_NINE && node.origin != DrawOrigin.IMAGE_LATTICE && node.origin != DrawOrigin.ATLAS)
-            return node.copy(material = neutral, paint = paint,effects=EffectStack.Empty)
-        val destination = physicalDestination ?: when (val source = node.geometry) {
-            is GeometryNode.ImagePatch -> source.copyDestination()
-            is GeometryNode.ImageNine -> source.copyDestination()
-            is GeometryNode.ImageLattice -> source.copyDestination()
-            else -> throw IllegalArgumentException(W5eImagePlanDiagnostics.InvalidContract)
-        }
-        val bounds = RectF32.ofLTRB(minOf(destination.left, destination.right), minOf(destination.top, destination.bottom),
-            maxOf(destination.left, destination.right), maxOf(destination.top, destination.bottom))
-        val deviceEdgesF64 = listOf(
-            bounds.left.toDouble() * node.transform.sx.toDouble() + node.transform.tx.toDouble(),
-            bounds.right.toDouble() * node.transform.sx.toDouble() + node.transform.tx.toDouble(),
-            bounds.top.toDouble() * node.transform.sy.toDouble() + node.transform.ty.toDouble(),
-            bounds.bottom.toDouble() * node.transform.sy.toDouble() + node.transform.ty.toDouble())
-        val aligned = deviceEdgesF64.all { it.isFinite() && it == kotlin.math.floor(it) }
-        val rectLane = (node.transform.isIdentity || node.transform.isScaleTranslate()) &&
-            (node.coverage == CoverageRequest.ANTIALIASED || aligned) &&
-            node.clip !is ClipStackNode.Operations && (node.clip as? ClipStackNode.DeviceRect)?.antiAlias != true
-        val geometry = if (rectLane) GeometryNode.Rect.of(bounds) else GeometryNode.Path(PathBuilder().addRect(bounds).build())
-        // An omitted image Paint has the same hard-edge construction as the
-        // neutral paint synthesized above. Keep DEFAULT on the original image
-        // draw; only its physical construction must name the existing coverage.
-        val coverage = if (node.paint == null && node.coverage == CoverageRequest.DEFAULT)
-            CoverageRequest.HARD_EDGE else node.coverage
-        return node.copy(geometry = geometry, origin = if (rectLane) DrawOrigin.RECT else DrawOrigin.PATH,
-            coverage = coverage,
-            resource = null, material = neutral, paint = paint, operationBlendMode = null,effects=EffectStack.Empty)
+        return projectW5eImageGeometry(node, physicalDestination, physicalTransform)
+            .copy(material = neutral, paint = paint, effects = EffectStack.Empty)
     }
+
     private fun isImageSource(node: DrawNode): Boolean {
         var source = node.material
         repeat(65) {
@@ -612,6 +586,37 @@ public class W5eImagePlanCompiler(private val runtimeCatalog: RuntimeEffectSeman
         public const val CAPABILITY_ID: String = "w5e-decoded-nearest-image-v1"
         public const val CONSTRUCTION_CAPABILITY_ID: String = "w5e-rect-construction-v1"
     }
+}
+
+/** Geometry projection only: source/paint identity is retained, not replaced or captured. */
+public fun projectW5eImageGeometry(node: DrawNode, physicalDestination: RectF32? = null,
+    physicalTransform: org.graphiks.math.matrix.Matrix3x3F32 = node.transform): DrawNode {
+    val node = node.copy(transform = physicalTransform)
+    if (node.origin != DrawOrigin.IMAGE && node.origin != DrawOrigin.IMAGE_NINE && node.origin != DrawOrigin.IMAGE_LATTICE && node.origin != DrawOrigin.ATLAS)
+        return node
+    val destination = physicalDestination ?: when (val source = node.geometry) {
+        is GeometryNode.ImagePatch -> source.copyDestination()
+        is GeometryNode.ImageNine -> source.copyDestination()
+        is GeometryNode.ImageLattice -> source.copyDestination()
+        else -> throw IllegalArgumentException(W5eImagePlanDiagnostics.InvalidContract)
+    }
+    val bounds = RectF32.ofLTRB(minOf(destination.left, destination.right), minOf(destination.top, destination.bottom),
+        maxOf(destination.left, destination.right), maxOf(destination.top, destination.bottom))
+    val deviceEdgesF64 = listOf(
+        bounds.left.toDouble() * node.transform.sx.toDouble() + node.transform.tx.toDouble(),
+        bounds.right.toDouble() * node.transform.sx.toDouble() + node.transform.tx.toDouble(),
+        bounds.top.toDouble() * node.transform.sy.toDouble() + node.transform.ty.toDouble(),
+        bounds.bottom.toDouble() * node.transform.sy.toDouble() + node.transform.ty.toDouble())
+    val aligned = deviceEdgesF64.all { it.isFinite() && it == kotlin.math.floor(it) }
+    val rectLane = (node.transform.isIdentity || node.transform.isScaleTranslate()) &&
+        (node.coverage == CoverageRequest.ANTIALIASED || aligned) &&
+        node.clip !is ClipStackNode.Operations && (node.clip as? ClipStackNode.DeviceRect)?.antiAlias != true
+    val geometry = if (rectLane) GeometryNode.Rect.of(bounds) else GeometryNode.Path(PathBuilder().addRect(bounds).build())
+    // DEFAULT stays on the original image; only its physical construction names hard coverage.
+    val coverage = if (node.paint == null && node.coverage == CoverageRequest.DEFAULT)
+        CoverageRequest.HARD_EDGE else node.coverage
+    return node.copy(geometry = geometry, origin = if (rectLane) DrawOrigin.RECT else DrawOrigin.PATH,
+        coverage = coverage, resource = null, operationBlendMode = null)
 }
 
 /** Original image upload row-alignment arithmetic, shared with the final metadata inventory. */

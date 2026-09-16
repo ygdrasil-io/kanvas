@@ -44,6 +44,7 @@ internal object GPUPreparedSurfaceSemanticBuilder {
         imageArtifactsByCommandId: Map<Int, GPUPreparedImageUploadArtifact>,
         textSemanticsByCommandId: Map<Int, GPUDrawSemanticPayload> = emptyMap(),
         verticesSemanticsByCommandId: Map<Int, GPUDrawSemanticPayload.Vertices> = emptyMap(),
+        capturedCoreSemantics: Map<Int, GPUDrawSemanticPayload.CorePrimitive>? = null,
         blendAuthorityPolicy: GPUCorePrimitiveBlendAuthorityPolicy =
             GPUCorePrimitiveBlendAuthorityPolicy.Required,
     ): GPUPreparedSurfaceSemanticGatherResult {
@@ -116,7 +117,12 @@ internal object GPUPreparedSurfaceSemanticBuilder {
             visual.normalized is NormalizedDrawCommand.DrawImageRect ||
                 visual.preparedText != null
         }
-        val coreSemantics = when (
+        val coreSemantics = capturedCoreSemantics?.also { captured ->
+            require(captured.keys == coreVisuals.map { it.normalized.commandId.value }.toSet() &&
+                captured.all { (id, semantic) -> semantic.payloadRef.commandIdValue == id && semantic.targetBounds == targetBounds }) {
+                "Captured Core semantic join must retain exact geometry and command identities"
+            }
+        } ?: when (
             val gathered = GPUCorePrimitiveSemanticBuilder.gather(
                 visualCommands = coreVisuals,
                 recording = recording,

@@ -1711,7 +1711,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
             -> error("Coverage-mask layouts were refused before direct binding selection")
         }
-        val uniformUploadBytes = singleKeySeal.packedUniformBytesForUpload()
+        val uniformUploadBytes = renderStep.drawPackets.first().corePrimitivePreparedAuthority?.materialDispatchPlan
+            ?.packedUniformBytesForUpload() ?: singleKeySeal.packedUniformBytesForUpload()
         fun packedRangeEquals(offset: Long, expected: ByteArray): Boolean {
             if (offset < 0L || offset > uniformUploadBytes.size.toLong() - expected.size.toLong()) {
                 return false
@@ -1800,16 +1801,13 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 val packetAuthority = requireNotNull(packet.corePrimitivePreparedAuthority)
                 val seal = analyticShapeUniformSeals[packetIndex]
                 val slot = sealedUniformPlan.slots[packetIndex]
-                val rebuilt = buildCorePrimitiveAnalyticShapeUniform(
-                    semantic,
-                    GPUCorePrimitivePreparedSemanticAuthority.capture(semantic),
-                )
-                val expectedBytes = when (rebuilt) {
-                    is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted -> rebuilt.bytes
-                    is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Refused -> return refuseAnalyticShape(
-                        "Analytic shape semantic can no longer be recomposed into the sealed uniform80 ABI.",
-                    )
-                }
+                val expectedBytes = packetAuthority.materialDispatchPlan?.uniformPayload(packet.commandIdValue)
+                    ?: when (val rebuilt = buildCorePrimitiveAnalyticShapeUniform(
+                        semantic, GPUCorePrimitivePreparedSemanticAuthority.capture(semantic))) {
+                        is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted -> rebuilt.bytes
+                        is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Refused -> return refuseAnalyticShape(
+                            "Analytic shape semantic can no longer be recomposed into the sealed uniform80 ABI.")
+                    }
                 val route = acceptedGeometries[packetIndex]
                 val renderScissor = route.renderScissor ?: return refuseAnalyticShape(
                     "Analytic shape route is missing its exact non-empty render scissor.",
@@ -2039,7 +2037,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             }
         }
         val arena = try {
-            packCorePrimitiveFrameGeometry(acceptedGeometries)
+            renderStep.drawPackets.first().corePrimitivePreparedAuthority?.materialDispatchPlan?.geometry?.arena
+                ?.directCompatibilityView() ?: packCorePrimitiveFrameGeometry(acceptedGeometries)
         } catch (failure: Throwable) {
             return refused(
                 "invalid.native-core-primitive.geometry-arena",
@@ -6770,7 +6769,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         }
         val renderScissors = semanticPackets.map { it.third.scissorBounds }
         val arena = try {
-            packCorePrimitiveFrameGeometry(acceptedGeometries)
+            renderStep.drawPackets.first().corePrimitivePreparedAuthority?.materialDispatchPlan?.geometry?.arena
+                ?.directCompatibilityView() ?: packCorePrimitiveFrameGeometry(acceptedGeometries)
         } catch (failure: Throwable) {
             return refused(
                 "invalid.native-core-primitive.geometry-arena",
@@ -9678,7 +9678,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         }
 
         val arena = try {
-            GPUCorePrimitiveNativeScopeGeometryArena.pack(unifiedRoute)
+            renderStep.drawPackets.first().corePrimitivePreparedAuthority?.materialDispatchPlan?.geometry?.arena
+                ?: GPUCorePrimitiveNativeScopeGeometryArena.pack(unifiedRoute)
         } catch (_: IllegalArgumentException) {
             return refused(
                 "invalid.native-core-primitive.indexed-geometry-arena",

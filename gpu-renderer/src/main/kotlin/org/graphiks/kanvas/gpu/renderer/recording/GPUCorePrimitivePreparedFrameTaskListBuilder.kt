@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
 import org.graphiks.kanvas.gpu.renderer.destination.preparedDestinationBounds
+import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
 
 import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureUsage
@@ -34,12 +35,14 @@ import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupK
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupingResult
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotMaterialization
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
-import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformBuildResult
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeGeometryUniformBuildResult
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
-import org.graphiks.kanvas.gpu.renderer.passes.buildCorePrimitiveAnalyticShapeUniform
+import org.graphiks.kanvas.gpu.renderer.passes.buildCorePrimitiveAnalyticShapeGeometryUniform
 import org.graphiks.kanvas.gpu.renderer.passes.buildCorePrimitiveGradientAnalyticShapeUniform
 import org.graphiks.kanvas.gpu.renderer.passes.validateCorePrimitiveDirectNativeRoute
+import org.graphiks.kanvas.gpu.renderer.passes.validateCorePrimitiveDirectGeometrySnapshot
+import org.graphiks.kanvas.gpu.renderer.passes.validateCorePrimitiveDirectBlend
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
@@ -51,15 +54,18 @@ import org.graphiks.kanvas.gpu.renderer.passes.isCorePrimitiveDirectLaneBlend
 import org.graphiks.kanvas.gpu.renderer.passes.isW5bW3Blend
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedPacketAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedSemanticAuthority
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveGeometryAuthority
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCapturedGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryUniformBytes
+import org.graphiks.kanvas.gpu.renderer.payloads.corePrimitiveGeometryUniformBytes
 import org.graphiks.kanvas.gpu.renderer.passes.W3SessionScratchV1
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeLoweringProof
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskAttachmentAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskAttachmentFormat
-import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskConsumerInput
-import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPreparedCandidate
-import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPreparedCandidateDecision
-import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPreparedRoute
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskGeometryConsumer
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskGeometryInventory
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskGeometryPreparation
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskProducerUniformSlotSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskConsumerUniformSlotSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskUniformSlabSeal
@@ -70,10 +76,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveCoverageMaskConsumer
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveCoverageMaskProducerUniformBytes
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageSampleAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveCoverageMaskConsumerDependencyToken
-import org.graphiks.kanvas.gpu.renderer.passes.snapshotGPUCorePrimitiveCoverageMaskPreparedCandidate
-import org.graphiks.kanvas.gpu.renderer.passes.sealGPUCorePrimitiveCoverageMaskPreparedRoute
 import org.graphiks.kanvas.gpu.renderer.passes.validateCorePrimitiveCoverageSampleAuthority
-import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPreparedRouteRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticClipUniformSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticIntersectionElementSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticIntersectionUniformSeal
@@ -139,6 +142,9 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureCopyLayout
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPayload
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlanner
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlanningResult
+import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabLayout
+import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabLayoutResult
+import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPayloadFootprint
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
@@ -427,15 +433,25 @@ internal fun corePrimitiveAnalyticClipAuthority(
 internal fun corePrimitiveAnalyticClipUniformBytes(
     semantic: GPUDrawSemanticPayload.CorePrimitive,
     authority: GPUCorePrimitiveAnalyticClipAuthority.Accepted,
-): ByteArray = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN).apply {
-    putFloat(semantic.targetBounds.width.toFloat())
-    putFloat(semantic.targetBounds.height.toFloat())
-    putInt(if (authority.clipType == GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect) 0 else 1)
-    putInt(if (authority.antiAlias) 1 else 0)
-    semantic.premultipliedRgba.forEach(::putFloat)
-    authority.bounds.forEach(::putFloat)
-    authority.packedRadii.forEach(::putFloat)
-}.array()
+): ByteArray = corePrimitiveAnalyticClipGeometryUniformBytes(
+    GPUCorePrimitiveGeometryAuthority.capture(semantic), authority).bindSourceColor(semantic.premultipliedRgba)
+
+internal fun corePrimitiveAnalyticClipGeometryUniformBytes(
+    geometry: GPUCorePrimitiveGeometryAuthority,
+    authority: GPUCorePrimitiveAnalyticClipAuthority.Accepted,
+): GPUCorePrimitiveGeometryUniformBytes {
+    val header = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN).apply {
+        putFloat(geometry.targetBounds.width.toFloat())
+        putFloat(geometry.targetBounds.height.toFloat())
+        putInt(if (authority.clipType == GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect) 0 else 1)
+        putInt(if (authority.antiAlias) 1 else 0)
+    }.array()
+    val tail = ByteBuffer.allocate(32).order(ByteOrder.LITTLE_ENDIAN).apply {
+        authority.bounds.forEach(::putFloat)
+        authority.packedRadii.forEach(::putFloat)
+    }.array()
+    return GPUCorePrimitiveGeometryUniformBytes(header, tail)
+}
 
 internal class GPUCorePrimitiveAnalyticIntersectionElementAuthority(
     val clipType: GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry,
@@ -561,21 +577,31 @@ internal fun corePrimitiveAnalyticIntersectionAuthority(
 internal fun corePrimitiveAnalyticIntersectionUniformBytes(
     semantic: GPUDrawSemanticPayload.CorePrimitive,
     authority: GPUCorePrimitiveAnalyticIntersectionAuthority.Accepted,
-): ByteArray = ByteBuffer.allocate(160).order(ByteOrder.LITTLE_ENDIAN).apply {
-    putFloat(semantic.targetBounds.width.toFloat())
-    putFloat(semantic.targetBounds.height.toFloat())
-    putInt(authority.elements.size)
-    putInt(0)
-    semantic.premultipliedRgba.forEach(::putFloat)
-    repeat(4) { index ->
-        authority.elements.getOrNull(index)?.let { element ->
-            element.bounds.forEach(::putFloat)
-            element.packedRadii.forEach(::putFloat)
-            putInt(if (element.clipType == GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect) 0 else 1)
-            putInt(if (element.antiAlias) 1 else 0)
-        } ?: repeat(32) { put(0.toByte()) }
-    }
-}.array()
+): ByteArray = corePrimitiveAnalyticIntersectionGeometryUniformBytes(
+    GPUCorePrimitiveGeometryAuthority.capture(semantic), authority).bindSourceColor(semantic.premultipliedRgba)
+
+internal fun corePrimitiveAnalyticIntersectionGeometryUniformBytes(
+    geometry: GPUCorePrimitiveGeometryAuthority,
+    authority: GPUCorePrimitiveAnalyticIntersectionAuthority.Accepted,
+): GPUCorePrimitiveGeometryUniformBytes {
+    val header = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN).apply {
+        putFloat(geometry.targetBounds.width.toFloat())
+        putFloat(geometry.targetBounds.height.toFloat())
+        putInt(authority.elements.size)
+        putInt(0)
+    }.array()
+    val tail = ByteBuffer.allocate(128).order(ByteOrder.LITTLE_ENDIAN).apply {
+        repeat(4) { index ->
+            authority.elements.getOrNull(index)?.let { element ->
+                element.bounds.forEach(::putFloat)
+                element.packedRadii.forEach(::putFloat)
+                putInt(if (element.clipType == GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect) 0 else 1)
+                putInt(if (element.antiAlias) 1 else 0)
+            } ?: repeat(32) { put(0.toByte()) }
+        }
+    }.array()
+    return GPUCorePrimitiveGeometryUniformBytes(header, tail)
+}
 
 internal fun corePrimitiveRenderPipelineKey(
     semantic: GPUDrawSemanticPayload.CorePrimitive,
@@ -719,12 +745,35 @@ internal fun corePrimitiveTargetByteSize(bounds: GPUPixelBounds): Long =
 internal fun corePrimitiveDepthStencilByteSize(bounds: GPUPixelBounds, sampleCount: Int): Long =
     Math.multiplyExact(corePrimitiveTargetByteSize(bounds), sampleCount.toLong())
 
-private data class GPUCorePrimitiveDirectGeometryBytes(
+internal data class GPUCorePrimitiveDirectGeometryBytes(
     val vertexBytes: Long,
     val indexBytes: Long,
 )
 
-private data class GPUCorePrimitivePreparedAnalyticShape(
+private fun GPUCorePrimitiveDirectNativeRoute.Accepted.geometryByteFootprint() =
+    GPUCorePrimitiveDirectGeometryBytes(
+        vertexBytes = Math.multiplyExact(Math.multiplyExact(vertexCount.toLong(), 2L), Float.SIZE_BYTES.toLong()),
+        indexBytes = Math.multiplyExact(indexCount.toLong(), Int.SIZE_BYTES.toLong()),
+    )
+
+/** Geometry-only result; binding never repeats analytic validation or packing. */
+internal data class GPUCorePrimitiveAnalyticShapeGeometryInventory(
+    val geometryAuthority: GPUCorePrimitiveGeometryAuthority,
+    val route: GPUCorePrimitiveDirectNativeRoute.Accepted,
+    val uniformGeometry: GPUCorePrimitiveGeometryUniformBytes,
+) {
+    fun bind(semantic: GPUDrawSemanticPayload.CorePrimitive): GPUCorePrimitivePreparedAnalyticShape {
+        val semanticAuthority = GPUCorePrimitivePreparedSemanticAuthority.capture(semantic, geometryAuthority)
+        return GPUCorePrimitivePreparedAnalyticShape(
+            semantic,
+            semanticAuthority,
+            route,
+            uniformGeometry.bindSourceColor(semantic.premultipliedRgba),
+        )
+    }
+}
+
+internal data class GPUCorePrimitivePreparedAnalyticShape(
     val semantic: GPUDrawSemanticPayload.CorePrimitive,
     val semanticAuthority: GPUCorePrimitivePreparedSemanticAuthority,
     val route: GPUCorePrimitiveDirectNativeRoute.Accepted,
@@ -750,6 +799,7 @@ private fun GPUDrawSemanticPayload.CorePrimitive.hasPathStencilCoverGeometry(): 
 private data class GPUCorePrimitivePathStencilPacketPlan(
     val semantic: GPUDrawSemanticPayload.CorePrimitive,
     val scissorBounds: GPUPixelBounds,
+    val geometryPlan: org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryPlan? = null,
 )
 
 internal fun GPUDrawPacket.hasCorePrimitiveSemanticAuthority(
@@ -999,8 +1049,12 @@ private fun GPUDrawSemanticPayload.CorePrimitive.hasExactClampGradientHardPathCl
 
 private fun pathStencilGeometryBytes(
     semantic: GPUDrawSemanticPayload.CorePrimitive,
+): GPUCorePrimitiveDirectGeometryBytes? = pathStencilGeometryBytes(semantic.geometry)
+
+private fun pathStencilGeometryBytes(
+    retainedGeometry: GPUCorePrimitiveGeometry,
 ): GPUCorePrimitiveDirectGeometryBytes? {
-    val geometry = semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath ?: return null
+    val geometry = retainedGeometry as? GPUCorePrimitiveGeometry.TriangulatedPath ?: return null
     if (geometry.geometryMode !in setOf(
             GPUCorePrimitiveGeometryMode.StencilEdgeFan,
             GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan,
@@ -1594,7 +1648,92 @@ data class GPUCorePrimitivePreparedFrameRequest(
     val readbackRequestId: GPUReadbackRequestID? = null,
     val configuredAggregateBudgetBytes: Long = 1L shl 30,
     val targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
+    val geometryInventory: GPUCorePrimitiveFrameGeometryInventory? = null,
 )
+
+/** Pre-publication Core inventory input. The recording has not emitted a task list. */
+class GPUCorePrimitiveGeometryFrameRequest(
+    val recording: GPURecordingGeometryAnalysis,
+    val capabilities: GPUCapabilities,
+    val targetBounds: GPUPixelBounds,
+    geometriesByCommandId: Map<Int, org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryPlan>,
+    sourceInventoriesByCommandId: Map<Int, GPUCorePrimitiveSourceGeometryInventory>,
+    finalBlendsByCommandId: Map<Int, org.graphiks.kanvas.gpu.plan.BlendPlan>,
+    val configuredAggregateBudgetBytes: Long = 1L shl 30,
+    val targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
+    allConsumerCommandIds: List<Int> = geometriesByCommandId.keys.sorted(),
+    val target: GPUFrameTargetRef = GPUFrameTargetRef("frame.scene"),
+) {
+    internal val geometriesByCommandId = immutableMap(geometriesByCommandId)
+    internal val sourceInventoriesByCommandId = immutableMap(sourceInventoriesByCommandId)
+    internal val finalBlendsByCommandId = immutableMap(finalBlendsByCommandId)
+    internal val allConsumerCommandIds = immutableList(allConsumerCommandIds)
+}
+
+/** Exact pre-ID admission and geometry bytes; this token cannot acquire a material binding. */
+class GPUCorePrimitiveSourceGeometryInventory internal constructor(
+    internal val geometrySnapshot: org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveGeometrySnapshot,
+    internal val capabilities: GPUCapabilities,
+    internal val targetFormat: GPUColorFormat,
+    internal val clip: GPUClipExecutionPlan,
+    internal val directRoute: GPUCorePrimitiveDirectNativeRoute.Accepted?,
+    internal val pathScissor: GPUPixelBounds?,
+    internal val geometryBytes: GPUCorePrimitiveDirectGeometryBytes,
+    internal val uniformGeometry: GPUCorePrimitiveGeometryUniformBytes,
+    internal val materialEnvelope: GPUCorePrimitiveGeometryUniformBytes,
+    internal val destinationBounds: GPUPixelBounds,
+)
+
+sealed interface GPUCorePrimitiveSourceGeometryInventoryResult {
+    data class Captured(val inventory: GPUCorePrimitiveSourceGeometryInventory) : GPUCorePrimitiveSourceGeometryInventoryResult
+    data object OutsideDomain : GPUCorePrimitiveSourceGeometryInventoryResult
+    data class Refused(val code: String, val message: String) : GPUCorePrimitiveSourceGeometryInventoryResult
+}
+
+/**
+ * Bounded host-only Core facts. No packet, semantic, material ref, RGBA, table, or source
+ * binding is retained. Complex clip/MSAA frames never acquire this inventory.
+ */
+class GPUCorePrimitiveFrameGeometryInventory internal constructor(
+    internal val geometryByCommandId: Map<Int, GPUCorePrimitiveGeometryAuthority>,
+    internal val directRoutesByCommandId: Map<Int, GPUCorePrimitiveDirectNativeRoute.Accepted>,
+    internal val analyticShapesByCommandId: Map<Int, GPUCorePrimitiveAnalyticShapeGeometryInventory>,
+    internal val pathScissorsByCommandId: Map<Int, GPUPixelBounds>,
+    internal val pathGeometryByCommandId: Map<Int, org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryPlan>,
+    internal val geometryBytesByCommandId: Map<Int, GPUCorePrimitiveDirectGeometryBytes>,
+    internal val uniformGeometryByCommandId: Map<Int, GPUCorePrimitiveGeometryUniformBytes>,
+    internal val materialEnvelopeGeometryByCommandId: Map<Int, GPUCorePrimitiveGeometryUniformBytes>,
+    internal val uniformLayoutByByteCount: Map<Int, GPUUniformSlabLayout>,
+    internal val snapshots: List<GPUCorePrimitiveDestinationGeometrySnapshot>,
+    internal val geometryVertexBytesI64: Long,
+    internal val geometryIndexBytesI64: Long,
+    internal val pathDepthStencilBytesI64: Long?,
+    internal val runPlan: GPUCorePrimitiveGeometryRunPlan,
+) {
+    val commandIdsI32: Set<Int> = java.util.Collections.unmodifiableSet(LinkedHashSet(geometryByCommandId.keys))
+
+    /** Physical scratch policy is owned by the observed plan capabilities, not the coordinator. */
+    fun physicalFootprintBytesI64(capabilities: org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot): Long {
+        var bytesI64 = pathDepthStencilBytesI64 ?: 0L
+        fun addBuffer(kind: org.graphiks.kanvas.gpu.plan.PlanScratchBufferKind, requestedI64: Long) {
+            if (requestedI64 == 0L) return
+            val reserved = requireNotNull(capabilities.bufferAllocationPolicy.reserve(kind, requestedI64))
+            require(reserved <= capabilities.maxBufferSizeBytes)
+            bytesI64 = Math.addExact(bytesI64, reserved)
+        }
+        addBuffer(org.graphiks.kanvas.gpu.plan.PlanScratchBufferKind.Vertex, geometryVertexBytesI64)
+        addBuffer(org.graphiks.kanvas.gpu.plan.PlanScratchBufferKind.Index, geometryIndexBytesI64)
+        addBuffer(org.graphiks.kanvas.gpu.plan.PlanScratchBufferKind.Uniform, runPlan.sizing?.uniformBytesI64 ?: 0L)
+        snapshots.distinctBy { it.snapshot }.forEach { bytesI64 = Math.addExact(bytesI64, it.allocation.bytes) }
+        return bytesI64
+    }
+}
+
+sealed interface GPUCorePrimitiveGeometryInventoryResult {
+    data class Prepared(val inventory: GPUCorePrimitiveFrameGeometryInventory) : GPUCorePrimitiveGeometryInventoryResult
+    data object OutsideDomain : GPUCorePrimitiveGeometryInventoryResult
+    data class Refused(val code: String, val message: String) : GPUCorePrimitiveGeometryInventoryResult
+}
 
 sealed interface GPUCorePrimitivePreparedFrameResult {
     data class Recorded(val taskList: GPUTaskList) : GPUCorePrimitivePreparedFrameResult
@@ -1642,6 +1781,37 @@ internal data class GPUW5aCompositeLaneWitnessV1(
 class GPUCorePrimitivePreparedFrameTaskListBuilder(
     private val readbackLayoutPlanner: GPUReadbackLayoutPlanner = GPUReadbackLayoutPlanner(),
 ) {
+    fun captureSourceGeometryInventory(
+        captured: GPUCorePrimitiveCapturedGeometry,
+        capabilities: GPUCapabilities,
+        targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
+    ): GPUCorePrimitiveSourceGeometryInventoryResult =
+        GPUCorePrimitivePreparedFrameTaskListAssembler(readbackLayoutPlanner)
+            .captureSourceGeometryInventory(captured, capabilities, targetFormat)
+
+    fun captureGeneratedClearGeometryInventory(
+        geometry: org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryPlan,
+        recording: GPURecordingGeometryAnalysis,
+        capabilities: GPUCapabilities,
+        targetFormat: GPUColorFormat,
+    ): GPUCorePrimitiveSourceGeometryInventoryResult =
+        GPUCorePrimitivePreparedFrameTaskListAssembler(readbackLayoutPlanner)
+            .captureGeneratedClearGeometryInventory(geometry, recording, capabilities, targetFormat)
+
+    fun bindGeneratedClear(
+        geometry: org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryPlan,
+        inventory: GPUCorePrimitiveSourceGeometryInventory,
+        command: org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand.FillRect,
+        blendPlan: GPUBlendPlan,
+    ): GPUDrawSemanticPayload.CorePrimitive {
+        require(geometry.authority.snapshot === inventory.geometrySnapshot)
+        return org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer().bindGeneratedClear(
+            geometry, command, blendPlan.canonicalIdentity(), inventory.materialEnvelope)
+    }
+
+    fun prepareGeometryInventory(request: GPUCorePrimitiveGeometryFrameRequest): GPUCorePrimitiveGeometryInventoryResult =
+        GPUCorePrimitivePreparedFrameTaskListAssembler(readbackLayoutPlanner).prepareGeometryInventory(request)
+
     fun build(request: GPUCorePrimitivePreparedFrameRequest): GPUCorePrimitivePreparedFrameResult =
         when (
             val result = GPUPreparedSurfaceFrameTaskListBuilder(readbackLayoutPlanner).build(
@@ -1668,6 +1838,194 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
 internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
     private val readbackLayoutPlanner: GPUReadbackLayoutPlanner = GPUReadbackLayoutPlanner(),
 ) {
+    /** Admission and clip/bounds projection happen once, while the command still has no ID. */
+    fun captureSourceGeometryInventory(
+        captured: GPUCorePrimitiveCapturedGeometry,
+        capabilities: GPUCapabilities,
+        targetFormat: GPUColorFormat,
+    ): GPUCorePrimitiveSourceGeometryInventoryResult = captureGeometryInventory(
+        captured.snapshot, captured.analysis.capturedCommand.clip.executionPlan, capabilities, targetFormat)
+
+    /** The real generated clear is admitted once after its final ID is known, before source capture. */
+    fun captureGeneratedClearGeometryInventory(
+        geometry: org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryPlan,
+        recording: GPURecordingGeometryAnalysis,
+        capabilities: GPUCapabilities,
+        targetFormat: GPUColorFormat,
+    ): GPUCorePrimitiveSourceGeometryInventoryResult {
+        val clear = recording.commands.single { it.commandId.value == geometry.authority.commandIdI32 }
+        val material = clear.material as? org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.SolidColor
+        require(clear.commandId.value == 0 && clear.source.operation == "clear" && clear.w5aMaterialPlanRef == null &&
+            material != null && material.r == 0f && material.g == 0f && material.b == 0f && material.a == 0f)
+        return captureGeometryInventory(geometry.authority.snapshot, clear.clip.executionPlan, capabilities, targetFormat)
+    }
+
+    private fun captureGeometryInventory(
+        geometry: org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveGeometrySnapshot,
+        clip: GPUClipExecutionPlan?,
+        capabilities: GPUCapabilities,
+        targetFormat: GPUColorFormat,
+    ): GPUCorePrimitiveSourceGeometryInventoryResult {
+        fun refuse(code: String, message: String) = GPUCorePrimitiveSourceGeometryInventoryResult.Refused(code, message)
+        if (clip != GPUClipExecutionPlan.NoClip && clip !is GPUClipExecutionPlan.ScissorOnly ||
+            geometry.targetBounds.left != 0 || geometry.targetBounds.top != 0 || geometry.targetBounds.isEmpty ||
+            targetFormat !in corePrimitiveSceneTargetFormats ||
+            geometry.coverageMode !in setOf(GPUCorePrimitiveCoverageMode.FullOrScissor, GPUCorePrimitiveCoverageMode.Stencil1x) ||
+            geometry.geometry is GPUCorePrimitiveGeometry.DRRect ||
+            geometry.clipExecutionPlanIdentity != clip.canonicalIdentity()
+        ) return GPUCorePrimitiveSourceGeometryInventoryResult.OutsideDomain
+        when (val coverage = validateCorePrimitiveCoverageSampleAuthority(geometry.geometry,
+            geometry.coverageMode, geometry.targetBounds, GPUSamplePlan.SingleSampleFrame, capabilities)) {
+            GPUCorePrimitiveCoverageSampleAuthority.Accepted -> Unit
+            is GPUCorePrimitiveCoverageSampleAuthority.Refused -> return refuse(coverage.code, coverage.message)
+        }
+        try {
+            val materialEnvelope = corePrimitiveGeometryUniformBytes(geometry.targetBounds)
+            val pathBytes = pathStencilGeometryBytes(geometry.geometry)
+            val directRoute: GPUCorePrimitiveDirectNativeRoute.Accepted?
+            val pathScissor: GPUPixelBounds?
+            val geometryBytes: GPUCorePrimitiveDirectGeometryBytes
+            val uniform: GPUCorePrimitiveGeometryUniformBytes
+            if (pathBytes != null) {
+                if (geometry.coverageMode != GPUCorePrimitiveCoverageMode.Stencil1x)
+                    return GPUCorePrimitiveSourceGeometryInventoryResult.OutsideDomain
+                directRoute = null
+                pathScissor = pathStencilScissorBounds(
+                    geometry.geometry as GPUCorePrimitiveGeometry.TriangulatedPath, clip, geometry.targetBounds)
+                geometryBytes = pathBytes
+                uniform = materialEnvelope
+            } else {
+                directRoute = when (val route = validateCorePrimitiveDirectGeometrySnapshot(
+                    geometry, (corePrimitiveDirectClipAuthority(clip, geometry.targetBounds) as?
+                        GPUCorePrimitiveDirectClipAuthority.Accepted)?.scissor,
+                    GPUSamplePlan.SingleSampleFrame, targetFormat.value)) {
+                    is GPUCorePrimitiveDirectNativeRoute.Accepted -> route
+                    is GPUCorePrimitiveDirectNativeRoute.Refused -> return refuse(route.code, route.message)
+                }
+                pathScissor = null
+                geometryBytes = directRoute.geometryByteFootprint()
+                uniform = if (directRoute.lane == GPUCorePrimitiveDirectNativeRoute.Lane.AnalyticShape) {
+                    when (val result = buildCorePrimitiveAnalyticShapeGeometryUniform(geometry)) {
+                        is GPUCorePrimitiveAnalyticShapeGeometryUniformBuildResult.Accepted -> result.bytes
+                        is GPUCorePrimitiveAnalyticShapeGeometryUniformBuildResult.Refused -> return refuse(result.code, result.message)
+                    }
+                } else materialEnvelope
+            }
+            return GPUCorePrimitiveSourceGeometryInventoryResult.Captured(GPUCorePrimitiveSourceGeometryInventory(
+                geometry, capabilities, targetFormat, clip, directRoute, pathScissor, geometryBytes,
+                uniform, materialEnvelope, geometry.preparedDestinationBounds(geometry.targetBounds),
+            ))
+        } catch (_: ArithmeticException) {
+            return refuse("unsupported.recording.core_primitive_geometry_size", "Prepared Core geometry accounting overflowed.")
+        }
+    }
+
+    /** The same native geometry, analytic ABI, slab and snapshot owners run before source binding. */
+    fun prepareGeometryInventory(request: GPUCorePrimitiveGeometryFrameRequest): GPUCorePrimitiveGeometryInventoryResult {
+        fun refuse(code: String, message: String) = GPUCorePrimitiveGeometryInventoryResult.Refused(code, message)
+        val plans = request.recording.plans.filterIsInstance<GPURecordedPlan.Routed>()
+        val packets = plans.flatMap { it.plan.pass.drawPackets }
+        fun blend(packet: GPUDrawPacket) = request.finalBlendsByCommandId[packet.commandIdValue]?.let {
+            org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.lowerForRecording(it)
+        } ?: packet.blendPlan
+        if (plans.size != request.recording.plans.size ||
+            plans.any { it.analysisDecision !is org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysisDecision.Candidate } ||
+            packets.map { it.commandIdValue }.distinct().size != packets.size ||
+            packets.map { it.commandIdValue }.toSet() != request.geometriesByCommandId.keys ||
+            request.geometriesByCommandId.keys != request.sourceInventoriesByCommandId.keys ||
+            packets.any { it.role != GPUDrawPacketRole.Shading ||
+                it.clipExecutionPlan != GPUClipExecutionPlan.NoClip && it.clipExecutionPlan !is GPUClipExecutionPlan.ScissorOnly } ||
+            request.targetBounds.left != 0 || request.targetBounds.top != 0 || request.targetBounds.isEmpty ||
+            request.targetFormat !in corePrimitiveSceneTargetFormats
+        ) return GPUCorePrimitiveGeometryInventoryResult.OutsideDomain
+        val limits = request.capabilities.limits ?: return refuse(
+            "unsupported.recording.core_primitive_limits_unavailable", "Prepared Core geometry requires observed limits.")
+        val maxBuffer = limits.maxBufferSize ?: return refuse(
+            "unsupported.recording.core_primitive_max_buffer_size_unavailable", "Prepared Core geometry requires maxBufferSize.")
+        val maxDynamic = limits.maxDynamicUniformBuffersPerPipelineLayout ?: return refuse(
+            "unsupported.recording.core_primitive_dynamic_uniform_limit_unavailable", "Prepared Core geometry requires the dynamic-uniform limit.")
+        val geometries = linkedMapOf<Int, GPUCorePrimitiveGeometryAuthority>()
+        val directRoutes = linkedMapOf<Int, GPUCorePrimitiveDirectNativeRoute.Accepted>()
+        val analyticShapes = linkedMapOf<Int, GPUCorePrimitiveAnalyticShapeGeometryInventory>()
+        val pathScissors = linkedMapOf<Int, GPUPixelBounds>()
+        val pathGeometries = linkedMapOf<Int, org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryPlan>()
+        val byteFootprints = linkedMapOf<Int, GPUCorePrimitiveDirectGeometryBytes>()
+        val uniforms = linkedMapOf<Int, GPUCorePrimitiveGeometryUniformBytes>()
+        val materialEnvelopes = linkedMapOf<Int, GPUCorePrimitiveGeometryUniformBytes>()
+        try {
+            for (packet in packets) {
+                val geometry = request.geometriesByCommandId.getValue(packet.commandIdValue).authority
+                val captured = request.sourceInventoriesByCommandId.getValue(packet.commandIdValue)
+                val finalBlend = blend(packet)
+                if (geometry.commandIdI32 != packet.commandIdValue || geometry.targetBounds != request.targetBounds ||
+                    geometry.snapshot !== captured.geometrySnapshot || captured.capabilities != request.capabilities ||
+                    captured.targetFormat != request.targetFormat || finalBlend == null ||
+                    finalBlend is GPUBlendPlan.NoOp || finalBlend is GPUBlendPlan.UnsupportedBlend
+                ) return GPUCorePrimitiveGeometryInventoryResult.OutsideDomain
+                val clip = requireNotNull(packet.clipExecutionPlan)
+                if (captured.clip != clip)
+                    return GPUCorePrimitiveGeometryInventoryResult.OutsideDomain
+                geometries[packet.commandIdValue] = geometry
+                materialEnvelopes[packet.commandIdValue] = captured.materialEnvelope
+                byteFootprints[packet.commandIdValue] = captured.geometryBytes
+                uniforms[packet.commandIdValue] = captured.uniformGeometry
+                val route = captured.directRoute
+                if (route == null) {
+                    pathScissors[packet.commandIdValue] = captured.pathScissor
+                        ?: return GPUCorePrimitiveGeometryInventoryResult.OutsideDomain
+                    pathGeometries[packet.commandIdValue] = org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryPlan(
+                        GPUCorePrimitiveGeometryAuthority.bindPreparedPathScissor(geometry, captured.pathScissor))
+                } else {
+                    validateCorePrimitiveDirectBlend(finalBlend)?.let { return refuse(it.code, it.message) }
+                    directRoutes[packet.commandIdValue] = route
+                    if (route.lane == GPUCorePrimitiveDirectNativeRoute.Lane.AnalyticShape)
+                        analyticShapes[packet.commandIdValue] = GPUCorePrimitiveAnalyticShapeGeometryInventory(
+                            geometry, route, captured.uniformGeometry)
+                }
+            }
+            val layouts = linkedMapOf<Int, GPUUniformSlabLayout>()
+            uniforms.entries.groupBy { it.value.byteCountI32 }.forEach { (byteCount, entries) ->
+                val analytic = byteCount != 32
+                val layout = when (val result = GPUUniformSlabPlanner.layout(
+                    sourceLabel = if (analytic) "core-primitive-analytic-shape-uniform-pass" else "core-primitive-uniform-pass",
+                    deviceGeneration = request.recording.deviceGeneration.value,
+                    alignmentBytes = limits.minUniformBufferOffsetAlignment,
+                    uploadBudgetBytes = minOf(request.configuredAggregateBudgetBytes, maxBuffer),
+                    maxBufferSize = maxBuffer,
+                    maxDynamicUniformBuffersPerPipelineLayout = maxDynamic,
+                    payloads = entries.map { (commandId, uniform) -> GPUUniformSlabPayloadFootprint(
+                        if (analytic) "analytic-shape-draw-$commandId" else "draw-$commandId", uniform.byteCountI32.toLong()) },
+                )) {
+                    is GPUUniformSlabLayoutResult.Accepted -> result.plan
+                    is GPUUniformSlabLayoutResult.Refused -> return refuse(result.diagnostic.code, "Prepared Core uniform geometry layout refused.")
+                }
+                if (layout.totalBytes > Int.MAX_VALUE.toLong()) return refuse(
+                    "unsupported.recording.core_primitive_uniform_slab_host_size", "Prepared Core slab exceeds host-addressable size.")
+                layouts[byteCount] = layout
+            }
+            val snapshots = buildCorePrimitiveDestinationGeometrySnapshots(request.recording.frameId, request.targetFormat,
+                packets.filter { blend(it)?.destinationReadRequirement == GPUBlendDestinationReadRequirement.DestinationTextureRequired }
+                    .map { Triple(it.packetId, it.commandIdValue, request.sourceInventoriesByCommandId
+                        .getValue(it.commandIdValue).destinationBounds) }, limits.copyBytesPerRowAlignment, limits.copyBytesPerRowAlignment)
+            fun <T> frozen(values: Map<Int, T>): Map<Int, T> = java.util.Collections.unmodifiableMap(LinkedHashMap(values))
+            val runPlan = GPUCorePrimitiveGeometryRunPlan.prepare(plans, request.allConsumerCommandIds,
+                geometries, directRoutes, uniforms, layouts, snapshots.mapTo(linkedSetOf()) { it.commandIdI32 },
+                limits.minUniformBufferOffsetAlignment, minOf(request.configuredAggregateBudgetBytes, maxBuffer))
+            return GPUCorePrimitiveGeometryInventoryResult.Prepared(GPUCorePrimitiveFrameGeometryInventory(
+                frozen(geometries), frozen(directRoutes), frozen(analyticShapes), frozen(pathScissors), frozen(pathGeometries), frozen(byteFootprints),
+                frozen(uniforms), frozen(materialEnvelopes), frozen(layouts), immutableList(snapshots),
+                byteFootprints.values.fold(0L) { total, bytes -> Math.addExact(total, bytes.vertexBytes) },
+                byteFootprints.values.fold(0L) { total, bytes -> Math.addExact(total, bytes.indexBytes) },
+                if (pathScissors.isEmpty()) null else corePrimitiveDepthStencilByteSize(request.targetBounds, 1),
+                runPlan,
+            ))
+        } catch (_: GPUCorePrimitiveGeometryRunPlan.HostSizeRefusal) {
+            return refuse("unsupported.recording.core_primitive_geometry_size", "Prepared Core geometry exceeds the bounded host arena envelope.")
+        } catch (_: ArithmeticException) {
+            return refuse("unsupported.recording.core_primitive_geometry_size", "Prepared Core geometry accounting overflowed.")
+        }
+    }
+
     /** Attaches the W3 prepare/readback envelope without changing the supplied render packets. */
     fun buildPreplanned(
         request: GPUCorePrimitivePreplannedFrameRequest,
@@ -2317,6 +2675,20 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 "Every accepted base packet requires exactly one gathered semantic payload and clip plan.",
             )
         }
+        val geometryInventory = request.geometryInventory
+        if (geometryInventory != null &&
+            (geometryInventory.commandIdsI32 != basePackets.map { it.commandIdValue }.toSet() ||
+                baseRenders.any { it.samplePlan != GPUSamplePlan.SingleSampleFrame } ||
+                basePackets.any { it.clipExecutionPlan != GPUClipExecutionPlan.NoClip &&
+                    it.clipExecutionPlan !is GPUClipExecutionPlan.ScissorOnly })
+        ) return refused("invalid.recording.core_primitive_geometry_inventory",
+            "Prepared Core inventory must retain its exact bounded command topology.")
+        val inventorySemantics = geometryInventory?.geometryByCommandId?.mapValues { (commandId, geometry) ->
+            request.coreSemantics().getValue(commandId).withClipExecutionPlanIdentity(
+                requireNotNull(basePackets.single { it.commandIdValue == commandId }.clipExecutionPlan).canonicalIdentity(),
+            ).also { require(geometry.matches(it)) { "Prepared Core geometry was substituted before material binding" } }
+        }.orEmpty()
+        val materialDispatchPlan = geometryInventory?.runPlan?.bindMaterials(inventorySemantics)
         basePackets.firstOrNull { packet ->
             packet.renderStepId.value == CORE_PRIMITIVE_AFFINE_FILL_RECT_STEP_IDENTITY &&
                 request.coreSemantics().getValue(packet.commandIdValue).material !is
@@ -2509,10 +2881,17 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         // former mixed_uniform_layouts code for this single-draw combination is retired with the
         // uniform64/160 split admission (the frame-level mixed gate is gone too).
         val preparedAnalyticShapesByCommandId = linkedMapOf<Int, GPUCorePrimitivePreparedAnalyticShape>()
+        geometryInventory?.analyticShapesByCommandId?.forEach { (commandId, geometry) ->
+            preparedAnalyticShapesByCommandId[commandId] = geometry.bind(inventorySemantics.getValue(commandId))
+        }
         for (render in baseRenders) {
             for (packet in render.drawPackets) {
                 val commandId = packet.commandIdValue
                 if (commandId !in analyticShapeCommandIds) continue
+                if (geometryInventory != null) {
+                    require(commandId in preparedAnalyticShapesByCommandId) { "Prepared analytic geometry inventory changed" }
+                    continue
+                }
                 val clipExecutionPlan = requireNotNull(packet.clipExecutionPlan)
                 if (clipExecutionPlan != GPUClipExecutionPlan.NoClip &&
                     clipExecutionPlan !is GPUClipExecutionPlan.ScissorOnly &&
@@ -2529,13 +2908,14 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 }
                 val preparedSemantic = request.coreSemantics().getValue(commandId)
                     .withClipExecutionPlanIdentity(clipExecutionPlan.canonicalIdentity())
-                val semanticAuthority = GPUCorePrimitivePreparedSemanticAuthority.capture(preparedSemantic)
-                val uniformBytes = when (val uniform = buildCorePrimitiveAnalyticShapeUniform(
-                    preparedSemantic,
-                    semanticAuthority,
+                val geometryAuthority = GPUCorePrimitiveGeometryAuthority.capture(preparedSemantic)
+                val uniformGeometry = when (val uniform =
+                    buildCorePrimitiveAnalyticShapeGeometryUniform(
+                    geometryAuthority,
                 )) {
-                    is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted -> uniform.bytes
-                    is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Refused ->
+                    is GPUCorePrimitiveAnalyticShapeGeometryUniformBuildResult.Accepted ->
+                        uniform.bytes
+                    is GPUCorePrimitiveAnalyticShapeGeometryUniformBuildResult.Refused ->
                         return refused(uniform.code, uniform.message)
                 }
                 val route = when (val decision = classifyCorePrimitiveDirectNativeRoute(
@@ -2549,12 +2929,11 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                     is GPUCorePrimitiveDirectNativeRoute.Refused ->
                         return refused(decision.code, decision.message)
                 }
-                preparedAnalyticShapesByCommandId[commandId] = GPUCorePrimitivePreparedAnalyticShape(
-                    semantic = preparedSemantic,
-                    semanticAuthority = semanticAuthority,
+                preparedAnalyticShapesByCommandId[commandId] = GPUCorePrimitiveAnalyticShapeGeometryInventory(
+                    geometryAuthority = geometryAuthority,
                     route = route,
-                    uniformBytes = uniformBytes,
-                )
+                    uniformGeometry = uniformGeometry,
+                ).bind(preparedSemantic)
             }
         }
         basePackets.mapNotNull(GPUDrawPacket::clipExecutionPlan)
@@ -2619,7 +2998,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                                 "AnalyticCoverage execution.",
                         )
                     }
-                    val scissorBounds = pathStencilScissorBounds(
+                    val scissorBounds = geometryInventory?.pathScissorsByCommandId?.get(packet.commandIdValue) ?: pathStencilScissorBounds(
                         geometry,
                         clipExecutionPlan,
                         request.targetBounds,
@@ -2628,7 +3007,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                         "Prepared path stencil geometry and its classified scissor must overlap.",
                     )
                     pathStencilPlansByCommandId[packet.commandIdValue] =
-                        GPUCorePrimitivePathStencilPacketPlan(semantic, scissorBounds)
+                        GPUCorePrimitivePathStencilPacketPlan(semantic, scissorBounds,
+                            geometryInventory?.pathGeometryByCommandId?.get(packet.commandIdValue))
                 }
             }
         }
@@ -2689,20 +3069,20 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                     .withClipExecutionPlanIdentity(maskPlan.canonicalIdentity())
             }
         }.orEmpty()
-        val coverageMaskPreparedRequest = staticCoverageMaskPlan?.takeIf {
+        val coverageMaskGeometryInventory = staticCoverageMaskPlan?.takeIf {
             staticCoverageMaskConsumers.size == basePackets.size
         }?.let { maskPlan ->
             val key = maskPlan.clipResourceKey()
-            GPUCorePrimitiveCoverageMaskPreparedRouteRequest(
+            val decision = GPUCorePrimitiveCoverageMaskGeometryInventory.prepare(
                 plan = maskPlan,
                 consumers = staticCoverageMaskConsumers.map { packet ->
                     val semantic = preparedCoverageMaskSemanticsByCommandId
                         .getValue(packet.commandIdValue)
-                    GPUCorePrimitiveCoverageMaskConsumerInput(
+                    GPUCorePrimitiveCoverageMaskGeometryConsumer(
                         packetId = packet.packetId,
                         commandId = packet.commandIdValue,
                         sourceOrder = packet.originalPaintOrder,
-                        semanticAuthority = GPUCorePrimitivePreparedSemanticAuthority.capture(semantic),
+                        geometryAuthority = GPUCorePrimitiveGeometryAuthority.capture(semantic),
                         coverageMode = semantic.coverageMode,
                         blendPlan = requireNotNull(packet.blendPlan),
                         orderingToken = maskPlan.orderingToken,
@@ -2720,19 +3100,16 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                     resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
                 ),
             )
+            (decision as? GPUCorePrimitiveCoverageMaskGeometryPreparation.Prepared)
+                ?.inventory
         }
-        val coverageMaskPreparedCandidate = coverageMaskPreparedRequest?.let { routeRequest ->
-            val decision = snapshotGPUCorePrimitiveCoverageMaskPreparedCandidate(routeRequest)
-            (decision as? GPUCorePrimitiveCoverageMaskPreparedCandidateDecision.Accepted)?.candidate
-        }
-        val coverageMaskPreparedRoute = coverageMaskPreparedCandidate?.let { candidate ->
-            when (val sealed = sealGPUCorePrimitiveCoverageMaskPreparedRoute(
-                candidate,
-                requireNotNull(coverageMaskPreparedRequest),
-            )) {
-                is GPUCorePrimitiveCoverageMaskPreparedRoute.Accepted -> sealed
-                is GPUCorePrimitiveCoverageMaskPreparedRoute.Refused -> null
-            }
+        val coverageMaskPreparedRoute = coverageMaskGeometryInventory?.let { inventory ->
+            inventory.bind(inventory.consumers.associate { consumer ->
+                consumer.commandId to GPUCorePrimitivePreparedSemanticAuthority.capture(
+                    preparedCoverageMaskSemanticsByCommandId.getValue(consumer.commandId),
+                    consumer.geometryAuthority,
+                )
+            })
         }
         val nativeCoverageMaskPlan = staticCoverageMaskPlan?.takeIf {
             coverageMaskPreparedRoute != null
@@ -3014,7 +3391,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             }
         }
         val directGeometryBytesByCommandId = try {
-            basePackets.mapNotNull { packet ->
+            geometryInventory?.geometryBytesByCommandId?.filterKeys { it !in geometryInventory.pathScissorsByCommandId } ?: basePackets.mapNotNull { packet ->
                 val analyticShape = preparedAnalyticShapesByCommandId[packet.commandIdValue]
                 val bytes = if (analyticShape == null) {
                     directCorePrimitiveGeometryBytes(
@@ -3023,16 +3400,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                         acceptedCoverageMaskPlan = nativeCoverageMaskPlan,
                     )
                 } else {
-                    GPUCorePrimitiveDirectGeometryBytes(
-                        vertexBytes = Math.multiplyExact(
-                            Math.multiplyExact(analyticShape.route.vertexCount.toLong(), 2L),
-                            Float.SIZE_BYTES.toLong(),
-                        ),
-                        indexBytes = Math.multiplyExact(
-                            analyticShape.route.indexCount.toLong(),
-                            Int.SIZE_BYTES.toLong(),
-                        ),
-                    )
+                    analyticShape.route.geometryByteFootprint()
                 }
                 bytes?.let { packet.commandIdValue to it }
             }.toMap()
@@ -3059,10 +3427,10 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 )
         }
         val geometryBytesByCommandId = try {
-            directGeometryBytesByCommandId + nativeClipStencilConsumerGeometryBytesByCommandId +
+            geometryInventory?.geometryBytesByCommandId ?: (directGeometryBytesByCommandId + nativeClipStencilConsumerGeometryBytesByCommandId +
                 pathStencilPlansByCommandId.mapValues { (_, plan) ->
                     requireNotNull(pathStencilGeometryBytes(plan.semantic))
-                }
+                })
         } catch (_: ArithmeticException) {
             return refused(
                 "unsupported.recording.core_primitive_geometry_size",
@@ -3096,7 +3464,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 }
             }
         val geometryVertexBytes = try {
-            geometryBytesByCommandId.values.fold(
+            geometryInventory?.geometryVertexBytesI64 ?: geometryBytesByCommandId.values.fold(
                 nativeClipStencilProducerFan?.vertices?.size?.let { count ->
                     Math.multiplyExact(count.toLong(), Float.SIZE_BYTES.toLong())
                 } ?: 0L,
@@ -3110,7 +3478,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             )
         }
         val geometryIndexBytes = try {
-            geometryBytesByCommandId.values.fold(
+            geometryInventory?.geometryIndexBytesI64 ?: geometryBytesByCommandId.values.fold(
                 nativeClipStencilProducerFan?.indices?.size?.let { count ->
                     Math.multiplyExact(count.toLong(), Int.SIZE_BYTES.toLong())
                 } ?: 0L,
@@ -3188,6 +3556,12 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         }
         val uniformSlabPlan = if (legacyUniformPackets.isEmpty()) {
             null
+        } else if (geometryInventory != null) {
+            geometryInventory.uniformLayoutByByteCount.getValue(32).bind(legacyUniformPackets.map { packet ->
+                GPUUniformSlabPayload("draw-${packet.commandIdValue}",
+                    geometryInventory.uniformGeometryByCommandId.getValue(packet.commandIdValue)
+                        .bindSourceColor(request.coreSemantics().getValue(packet.commandIdValue).premultipliedRgba))
+            })
         } else {
             val legacyUniformBytesByCommandId = legacyUniformPackets.associate { packet ->
                 val semantic = request.coreSemantics().getValue(packet.commandIdValue)
@@ -3300,7 +3674,13 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         analyticShapeUniformPacketsByLayout.forEach { (layout, packets) ->
             val drrect = layout ==
                 GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticDRRectUniform128V1
-            val plan = when (val planned = GPUUniformSlabPlanner.plan(
+            val plan = if (geometryInventory != null) {
+                require(!drrect)
+                geometryInventory.uniformLayoutByByteCount.getValue(80).bind(packets.map { packet ->
+                    GPUUniformSlabPayload("analytic-shape-draw-${packet.commandIdValue}",
+                        preparedAnalyticShapesByCommandId.getValue(packet.commandIdValue).uniformBytes)
+                })
+            } else when (val planned = GPUUniformSlabPlanner.plan(
                 sourceLabel = if (drrect) "core-primitive-analytic-drrect-uniform-pass"
                 else "core-primitive-analytic-shape-uniform-pass",
                 deviceGeneration = request.baseTaskList.capabilitySeal.deviceGeneration.value,
@@ -3341,7 +3721,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 packets.map { it.commandIdValue to plan }
             }.toMap()
         val coverageMaskUniformPayloads = nativeCoverageMaskPlan?.let { maskPlan ->
-            val candidate = requireNotNull(coverageMaskPreparedCandidate)
+            val candidate = requireNotNull(coverageMaskGeometryInventory)
             candidate.producers.zip(maskPlan.producers).map { (snapshot, producer) ->
                 GPUUniformSlabPayload(
                     slotLabel = "coverage-mask-producer-${snapshot.sourceOrder}",
@@ -3389,8 +3769,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         }
         val coverageMaskUniformSlabSeal = coverageMaskUniformSlabPlan?.let { plan ->
             val maskPlan = requireNotNull(nativeCoverageMaskPlan)
-            val candidate = requireNotNull(coverageMaskPreparedCandidate)
             val preparedRoute = requireNotNull(coverageMaskPreparedRoute)
+            val candidate = preparedRoute
             val key = maskPlan.clipResourceKey()
             val packedBytes = ByteArray(plan.totalBytes.toInt())
             coverageMaskUniformPayloads.zip(plan.slots).forEach { (payload, slot) ->
@@ -3585,6 +3965,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         }
         val pathDepthStencilBytes = if (pathStencilPlansByCommandId.isEmpty()) {
             null
+        } else if (geometryInventory != null) {
+            requireNotNull(geometryInventory.pathDepthStencilBytesI64)
         } else {
             try {
                 corePrimitiveDepthStencilByteSize(request.targetBounds, preparedSamplePlan.sampleCount)
@@ -3643,7 +4025,9 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         // destination-reading packet, consumed by that packet's shader-with-destination
         // formula render. The grouping plans by command/blend only — it is family-agnostic.
         val destinationReadPlans = try {
-            buildCorePrimitiveDestinationSnapshotPlans(
+            geometryInventory?.snapshots?.map { snapshot ->
+                snapshot.bindConsumer(basePackets.single { it.packetId == snapshot.packetId })
+            } ?: buildCorePrimitiveDestinationSnapshotPlans(
                 request = request,
                 packets = basePackets,
                 limits = limits,
@@ -3905,19 +4289,11 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
 
         val prepareId = GPUTaskID("task.core-primitive.prepare.${request.baseTaskList.frameId.value}")
         val topologiesByContentKey = clipTopologies.associateBy(GPUCoreClipArtifactTopology::contentKey)
-        val pathDepthStencilLoadStore = GPUDepthStencilLoadStorePlan.WritableStencil(
-            GPUStencilLoadOperation.Clear,
-            GPUStorePlan.Discard,
-            0u,
-        )
+        val pathDepthStencilLoadStore = corePrimitivePathDepthStencilLoadStore()
         // A continued destination-read path splits its producer (which clears and
         // stores the fan) from its cover (which loads the fan read-only and blends the snapshot).
-        val pathDepthStencilProducerLoadStore = GPUDepthStencilLoadStorePlan.WritableStencil(
-            GPUStencilLoadOperation.Clear,
-            GPUStorePlan.Store,
-            0u,
-        )
-        val pathDepthStencilCoverLoadStore = GPUDepthStencilLoadStorePlan.ReadOnlyKeep
+        val pathDepthStencilProducerLoadStore = corePrimitivePathDepthStencilLoadStore(GPUDrawPacketRole.PathStencilProducer)
+        val pathDepthStencilCoverLoadStore = corePrimitivePathDepthStencilLoadStore(GPUDrawPacketRole.PathStencilCover)
 
         fun consumerResourceUses(
             baseRender: GPUTask.Render,
@@ -4031,7 +4407,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             resourceUses.none { it.role == GPUFrameResourceRole.ClipDepthStencil } &&
             (depthStencilLoadStore == null || depthStencilLoadStore == pathDepthStencilLoadStore)
 
-        val geometryBatchPredicted = nativeCoverageMaskPlan == null &&
+        val geometryBatchPredicted = geometryInventory?.runPlan?.layoutBatch ?: (nativeCoverageMaskPlan == null &&
             nativeClipStencilPlan == null &&
             baseRenders.isNotEmpty() && baseRenders.all { baseRender ->
             baseRender.drawPackets.all { basePacket ->
@@ -4056,7 +4432,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                     )
                 }
             }
-        }
+        })
         val directPathDepthStencilCompatible =
             pathStencilPlansByCommandId.isNotEmpty() && geometryBatchPredicted
         // Layout-run grouping: consecutive consumer renders whose packets share
@@ -4072,18 +4448,12 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         // gate (above) backstops any such divergence by refusing the analytic-clip frames;
         // relaxing that gate requires re-verifying this key agreement first.
         fun consumerRunKey(packet: GPUDrawPacket): String {
+            geometryInventory?.runPlan?.let { return it.layoutKeys.getValue(packet.commandIdValue) }
             val pathPlan = pathStencilPlansByCommandId[packet.commandIdValue]
             if (pathPlan != null) {
                 val clip = requireNotNull(packet.clipExecutionPlan)
-                return when {
-                    clip is GPUClipExecutionPlan.AnalyticCoverage -> "path-analytic-clip"
-                    packet.commandIdValue in destinationReadPlansByCommandId ->
-                        // A destination-reading path pair splits from the
-                        // background fill so the ordered snapshot copy lands between the two
-                        // passes (the continued cover pass binds the snapshot).
-                        "path-dst-read"
-                    else -> "uniform32"
-                }
+                return corePrimitiveGeometryRunLayoutKey(true, clip is GPUClipExecutionPlan.AnalyticCoverage,
+                    packet.commandIdValue in destinationReadPlansByCommandId, 32)
             }
             val clip = requireNotNull(packet.clipExecutionPlan)
             val structuralKey = corePrimitiveRenderPipelineStructuralKey(
@@ -4115,15 +4485,13 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 // clip, so the group key follows the cover's layout.
                 val cover = packets.firstOrNull { it.role == GPUDrawPacketRole.PathStencilCover }
                 val clip = cover?.clipExecutionPlan ?: requireNotNull(pathPacket.clipExecutionPlan)
-                return when {
-                    clip is GPUClipExecutionPlan.AnalyticCoverage -> "path-analytic-clip"
-                    pathPacket.commandIdValue in destinationReadPlansByCommandId -> "path-dst-read"
-                    else -> "uniform32"
-                }
+                return corePrimitiveGeometryRunLayoutKey(true, clip is GPUClipExecutionPlan.AnalyticCoverage,
+                    pathPacket.commandIdValue in destinationReadPlansByCommandId, 32)
             }
             return consumerRunKey(packets.single())
         }
-        val pathRunPacketIds: Set<Int> = buildList {
+        val pathRunPacketIds: Set<Int> = geometryInventory?.runPlan?.coreLayoutRuns?.filter { run ->
+            run.any { it in pathStencilPlansByCommandId } }?.flatten()?.toSet() ?: buildList {
             var runPacketIds = mutableListOf<Int>()
             var runHasPath = false
             var previousKey: String? = null
@@ -4153,7 +4521,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                         requireNotNull(request.coreSemantics()[basePacket.commandIdValue]),
                         preparedSemanticOverride = preparedCoverageMaskSemanticsByCommandId[
                             basePacket.commandIdValue
-                        ] ?: preparedAnalyticShapesByCommandId[basePacket.commandIdValue]?.semantic,
+                        ] ?: preparedAnalyticShapesByCommandId[basePacket.commandIdValue]?.semantic
+                        ?: inventorySemantics[basePacket.commandIdValue],
                         direct = basePacket.commandIdValue in directGeometryBytesByCommandId ||
                             basePacket.commandIdValue in
                             nativeClipStencilConsumerGeometryBytesByCommandId,
@@ -4179,6 +4548,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                         sampleCount = preparedSamplePlan.sampleCount,
                         targetFormat = request.targetFormat,
                         publicPipelineKeys = publicPipelineKeys,
+                        materialDispatchPlan = materialDispatchPlan,
                     )
                 } else {
                     null
@@ -4197,6 +4567,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                         preparedSamplePlan.sampleCount,
                         request.targetFormat,
                         publicPipelineKeys,
+                        materialDispatchPlan,
                     )
                 } else {
                     null
@@ -4215,6 +4586,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                         preparedSamplePlan.sampleCount,
                         request.targetFormat,
                         publicPipelineKeys,
+                        materialDispatchPlan,
                     )
                 } else {
                     null
@@ -4308,16 +4680,10 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         // group owns its slab). A single-run frame produces the exact legacy batch identity so
         // single-layout frames keep their sealed shape byte-for-byte.
         val layoutRuns = unbatchedPreparedRenders.takeIf { geometryBatchConstructedCompatible }?.let { renders ->
-            val runs = mutableListOf<MutableList<GPUTask.Render>>()
-            renders.forEach { render ->
-                val key = consumerRenderRunKey(render)
-                val lastRun = runs.lastOrNull()
-                if (lastRun != null && consumerRenderRunKey(lastRun.first()) == key) {
-                    lastRun += render
-                } else {
-                    runs += mutableListOf(render)
-                }
-            }
+            val runs = geometryInventory?.runPlan?.coreLayoutRuns?.map { commandIds ->
+                renders.filter { render -> render.drawPackets.first().commandIdValue in commandIds }
+            } ?: partitionHostRuns(renders, ::consumerRenderRunKey)
+            require(runs.flatten() == renders) { "Core material binding changed its captured layout-run order" }
             runs.mapIndexed { index, run ->
                 val first = run.first()
                 val runHasPathStencil = run.any { render ->
@@ -5153,6 +5519,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         sampleCount: Int,
         targetFormat: GPUColorFormat,
         publicPipelineKeys: MutableMap<GPUCorePrimitiveRenderPipelineStructuralKey, GPURenderPipelineKey>,
+        materialDispatchPlan: GPUCorePrimitiveMaterialDispatchPlan? = null,
     ): GPUDrawPacket {
         require(
             packetRole == GPUDrawPacketRole.PathStencilProducer &&
@@ -5176,6 +5543,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             scissorBounds = pathPlan.scissorBounds,
             clipExecutionPlanIdentity = clipExecutionPlan.canonicalIdentity(),
             blendPlanIdentity = blendPlan.canonicalIdentity(),
+            geometryPlan = pathPlan.geometryPlan,
         )
         val structuralPipelineKey = corePrimitivePathStencilRenderPipelineStructuralKey(
             preparedSemantic,
@@ -5189,7 +5557,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             structuralPipelineKey.stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY)
         }
         val roleLabel = if (packetRole == GPUDrawPacketRole.PathStencilProducer) "producer" else "cover"
-        val packetId = GPUDrawPacketID("${basePacket.packetId.value}.path-stencil-$roleLabel")
+        val packetId = corePrimitivePathPacketIdentity(basePacket.packetId, packetRole == GPUDrawPacketRole.PathStencilProducer)
         val bindingLayoutHash = if (packetAnalyticClipAuthority == null) {
             CORE_PRIMITIVE_BINDING_LAYOUT_HASH
         } else {
@@ -5253,6 +5621,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 renderPipelineKey = renderPipelineKey,
                 uniformSlabSeal = uniformSlabSeal.takeIf { analyticClipUniformSeal == null },
                 analyticClipUniformSeal = analyticClipUniformSeal,
+                semanticAuthority = GPUCorePrimitivePreparedSemanticAuthority.capture(preparedSemantic),
+                materialDispatchPlan = materialDispatchPlan,
             ),
         )
     }
@@ -5261,6 +5631,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         scissorBounds: GPUPixelBounds,
         clipExecutionPlanIdentity: String,
         blendPlanIdentity: String,
+        geometryPlan: org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryPlan? = null,
     ) = GPUDrawSemanticPayload.CorePrimitive(
         payloadRef = payloadRef,
         sourceFamily = sourceFamily,
@@ -5278,6 +5649,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         rectRouteAuthority = rectRouteAuthority,
         rectGeometryAuthority = rectGeometryAuthority,
         rrectGeometryAuthority = rrectGeometryAuthority,
+        material = if (geometryPlan != null) material else null,
+        geometryPlan = geometryPlan,
     )
 
     private fun GPUDrawSemanticPayload.CorePrimitive.withAnalyticClipState(
@@ -5326,6 +5699,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         sampleCount: Int,
         targetFormat: GPUColorFormat,
         publicPipelineKeys: MutableMap<GPUCorePrimitiveRenderPipelineStructuralKey, GPURenderPipelineKey>,
+        materialDispatchPlan: GPUCorePrimitiveMaterialDispatchPlan? = null,
     ): GPUDrawPacket {
         val clipExecutionPlan = requireNotNull(basePacket.clipExecutionPlan)
         val analyticScissor = analyticClipAuthority?.conservativeScissor
@@ -5507,6 +5881,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             coverageMaskUniformSlabSeal = coverageMaskUniformSlabSeal.takeIf {
                 coverageMaskConsumerSlot != null
             },
+            semanticAuthority = analyticShape?.semanticAuthority ?: GPUCorePrimitivePreparedSemanticAuthority.capture(preparedSemantic),
+            materialDispatchPlan = materialDispatchPlan,
         ),
     )
     }
@@ -5530,7 +5906,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
 }
 
 /** One ordered core-primitive destination snapshot plan and its physical resource facts. */
-private data class GPUCorePrimitiveDestinationSnapshotPlan(
+internal data class GPUCorePrimitiveDestinationSnapshotPlan(
     val groupIndex: Int,
     val packet: GPUDrawPacket,
     val snapshot: GPUFrameTextureRef,
@@ -5540,6 +5916,29 @@ private data class GPUCorePrimitiveDestinationSnapshotPlan(
     val preparation: GPUResourcePreparationRequest,
     val allocation: GPUFrameMemoryAllocation,
 )
+
+/** Source-free snapshot facts; a later bind supplies only the original consumer packet. */
+internal data class GPUCorePrimitiveDestinationGeometrySnapshot(
+    val groupIndex: Int,
+    val packetId: GPUDrawPacketID,
+    val commandIdI32: Int,
+    val snapshot: GPUFrameTextureRef,
+    val logicalBounds: GPUPixelBounds,
+    val copiedBytes: Long,
+    val paddedBytesPerRow: Long,
+    val preparation: GPUResourcePreparationRequest,
+    val allocation: GPUFrameMemoryAllocation,
+) {
+    private fun requireConsumer(packet: GPUDrawPacket) {
+        require(packet.packetId == packetId && packet.commandIdValue == commandIdI32)
+    }
+
+    internal fun bindConsumer(packet: GPUDrawPacket): GPUCorePrimitiveDestinationSnapshotPlan {
+        requireConsumer(packet)
+        return GPUCorePrimitiveDestinationSnapshotPlan(groupIndex, packet, snapshot, logicalBounds,
+            copiedBytes, paddedBytesPerRow, preparation, allocation)
+    }
+}
 
 /**
  * Plans one GPU-owned TextureCopy snapshot per destination-reading core packet.
@@ -5573,27 +5972,43 @@ private fun buildCorePrimitiveDestinationSnapshotPlans(
         else request.targetBounds // Unpromoted destination path retains its existing contract.
     }
     val allW5b = destinationPackets.all { (it.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead)?.sealedW5b != null }
-    val capacity = preparedCoreDestinationCapacityBoundsV6(boundsByPacketId.values.toList(),
-        if (allW5b) limits.copyBytesPerRowAlignment else 4L)
+    return buildCorePrimitiveDestinationGeometrySnapshots(
+        request.baseTaskList.frameId,
+        request.targetFormat,
+        destinationPackets.map { Triple(it.packetId, it.commandIdValue, boundsByPacketId.getValue(it.packetId)) },
+        limits.copyBytesPerRowAlignment,
+        if (allW5b) limits.copyBytesPerRowAlignment else 4L,
+    ).zip(destinationPackets) { geometry, packet -> geometry.bindConsumer(packet) }
+}
+
+private fun buildCorePrimitiveDestinationGeometrySnapshots(
+    frameId: GPUFrameID,
+    targetFormat: GPUColorFormat,
+    consumers: List<Triple<GPUDrawPacketID, Int, GPUPixelBounds>>,
+    copyBytesPerRowAlignmentI64: Long,
+    capacityRowAlignmentI64: Long,
+): List<GPUCorePrimitiveDestinationGeometrySnapshot> {
+    if (consumers.isEmpty()) return emptyList()
+    val capacity = preparedCoreDestinationCapacityBoundsV6(consumers.map { it.third }, capacityRowAlignmentI64)
     val capacityRowBytes = Math.multiplyExact(capacity.width.toLong(), 4L)
     val textureBytes = Math.multiplyExact(capacityRowBytes, capacity.height.toLong())
     val snapshot = GPUFrameTextureRef(
-        "texture.core-primitive.destination-snapshot.${request.baseTaskList.frameId.value}",
+        "texture.core-primitive.destination-snapshot.${frameId.value}",
     )
-    return destinationPackets.mapIndexed { index, packet ->
-        val logicalBounds = boundsByPacketId.getValue(packet.packetId)
+    return consumers.mapIndexed { index, (packetId, commandIdI32, logicalBounds) ->
         val logicalBytesPerRow = Math.multiplyExact(logicalBounds.width.toLong(), 4L)
         val paddedBytesPerRow = corePrimitiveAlignUpPreparedText(
             logicalBytesPerRow,
-            limits.copyBytesPerRowAlignment,
+            copyBytesPerRowAlignmentI64,
         )
         val copiedBytes = Math.multiplyExact(
             paddedBytesPerRow,
             logicalBounds.height.toLong(),
         )
-        GPUCorePrimitiveDestinationSnapshotPlan(
+        GPUCorePrimitiveDestinationGeometrySnapshot(
             groupIndex = index,
-            packet = packet,
+            packetId = packetId,
+            commandIdI32 = commandIdI32,
             snapshot = snapshot,
             logicalBounds = logicalBounds,
             copiedBytes = copiedBytes,
@@ -5602,7 +6017,7 @@ private fun buildCorePrimitiveDestinationSnapshotPlans(
                 resource = snapshot,
                 descriptor = GPUFrameTextureDescriptor(
                     logicalBounds = capacity,
-                    format = request.targetFormat,
+                    format = targetFormat,
                     sampleCount = 1,
                 ),
                 role = GPUFrameResourceRole.DestinationSnapshot,
@@ -5612,10 +6027,10 @@ private fun buildCorePrimitiveDestinationSnapshotPlans(
                 ),
                 lifetime = GPUFrameResourceLifetime.FrameLocal,
                 byteSize = textureBytes,
-                diagnosticLabel = "core-primitive.destination-snapshot.${packet.packetId.value}",
+                diagnosticLabel = "core-primitive.destination-snapshot.${packetId.value}",
             ),
             allocation = GPUFrameMemoryAllocation(
-                "core-primitive.destination-snapshot.${packet.packetId.value}",
+                "core-primitive.destination-snapshot.${packetId.value}",
                 GPUFrameMemoryCategory.DestinationSnapshot,
                 textureBytes,
                 GPUFrameMemoryResourceKind.Texture2D,

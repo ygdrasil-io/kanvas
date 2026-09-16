@@ -132,7 +132,7 @@ internal class PreparedVerticesFrameInventory internal constructor(
     val limitEvidence: PreparedVerticesFrameLimitEvidence,
     elidedNoOps: List<GPUPreparedElidedNoOpOperation> = emptyList(),
 ) {
-    fun withCapturedElisions(captures: Map<Int, org.graphiks.kanvas.gpu.plan.PreparedSourceCaptureV6>,
+    fun withAuthenticatedElisions(captures: Map<Int, org.graphiks.kanvas.gpu.plan.PreparedSourceAuthenticationV6>,
         geometry: List<GPUPreparedVerticesGeometry>): PreparedVerticesFrameInventory {
         require(captures.all { (index, capture) -> capture.blend == org.graphiks.kanvas.gpu.plan.BlendPlan.NoOpV1 ||
             geometry.singleOrNull { it.operationIndex == index }?.culledByClip == true })

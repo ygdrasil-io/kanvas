@@ -12,6 +12,7 @@ import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.commonCoreSemanticAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
@@ -320,8 +321,20 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
         if (mixedInventory != null && mixedInventory != corePrimitiveRenderRunSizingV1(routes, limits.minUniformBufferOffsetAlignment))
             return refused("invalid.native-core-primitive.mixed-inventory", "Native runs differ from their pre-allocation physical inventory.")
 
+        val dispatches = plans.flatMap { it.renderStep.drawPackets }.mapNotNull { it.corePrimitivePreparedAuthority?.materialDispatchPlan }.distinct()
+        val commonDispatch = dispatches.singleOrNull()
+        if (dispatches.isNotEmpty()) {
+            require(commonDispatch != null && plans.flatMap { it.renderStep.drawPackets }.all {
+                it.corePrimitivePreparedAuthority?.materialDispatchPlan === commonDispatch && it.commonCoreSemanticAuthority() != null })
+            commonDispatch.geometry.validateRoutes(routes)
+        }
+
         val geometry = try {
-            batchGeometry(routes)
+            if (commonDispatch == null) batchGeometry(routes) else {
+                val arena = commonDispatch.geometry.arena
+                BatchedGeometry(FloatArray(arena.vertexFloatCount).also { arena.copyVerticesInto(it) },
+                    IntArray(arena.indexCount).also { arena.copyIndicesInto(it) }, commonDispatch.geometry.slicesByRun)
+            }
         } catch (failure: Throwable) {
             return refused(
                 "invalid.native-core-primitive.frame-global-geometry-arena",
@@ -358,7 +371,9 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
             )
         }
         val uniformBatch = try {
-            batchUniforms(routes, generationSeal)
+            if (commonDispatch == null) batchUniforms(routes, generationSeal) else BatchedUniforms(
+                commonDispatch.packedUniformBytesForUpload(), requireNotNull(commonDispatch.geometry.sizing).uniformBytesI64,
+                commonDispatch.geometry.uniformOffsets(routes))
         } catch (failure: Throwable) {
             return refused(
                 "invalid.native-core-primitive.frame-global-uniform",
@@ -1227,18 +1242,25 @@ internal data class GPUCorePrimitiveRenderRunSizingV1(
 internal fun corePrimitiveRenderRunSizingV1(
     routes: List<GPUCorePrimitiveNativeScopeRouteSeal.Routes>,
     alignmentI64: Long,
+): GPUCorePrimitiveRenderRunSizingV1 = corePrimitiveRenderRunSizingV1(
+    routes.map(GPUCorePrimitiveNativeScopeGeometryArena::countsI64), routes.map { it.uniformPlan.totalBytes }, alignmentI64)
+
+/** The same checked physical sizing owner accepts source-free final run layouts. */
+internal fun corePrimitiveRenderRunSizingV1(
+    geometryCounts: List<Pair<Long, Long>>, uniformLayoutBytes: List<Long>, alignmentI64: Long,
 ): GPUCorePrimitiveRenderRunSizingV1 {
-    require(routes.isNotEmpty() && alignmentI64 > 0L)
+    require(geometryCounts.isNotEmpty() && uniformLayoutBytes.isNotEmpty() && alignmentI64 > 0L)
     var vertexCountI64 = 0L
     var indexCountI64 = 0L
     var uniformBytesI64 = 0L
-    val bases = routes.map { route ->
-        val counts = GPUCorePrimitiveNativeScopeGeometryArena.countsI64(route)
+    geometryCounts.forEach { counts ->
         vertexCountI64 = Math.addExact(vertexCountI64, counts.first)
         indexCountI64 = Math.addExact(indexCountI64, counts.second)
+    }
+    val bases = uniformLayoutBytes.map { totalBytes ->
         val remainder = uniformBytesI64 % alignmentI64
         val base = if (remainder == 0L) uniformBytesI64 else Math.addExact(uniformBytesI64, alignmentI64 - remainder)
-        uniformBytesI64 = Math.addExact(base, route.uniformPlan.totalBytes)
+        uniformBytesI64 = Math.addExact(base, totalBytes)
         base
     }
     require(Math.multiplyExact(vertexCountI64, 2L) <= Int.MAX_VALUE && indexCountI64 <= Int.MAX_VALUE &&

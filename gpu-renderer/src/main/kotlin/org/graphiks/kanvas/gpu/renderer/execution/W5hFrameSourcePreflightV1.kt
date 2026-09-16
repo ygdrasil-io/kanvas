@@ -28,6 +28,8 @@ internal class W5hFrameSourceValidationWitnessV1 private constructor(
         val materialLayout: GPUW5aHostBindGroupLayoutV1,
         val structuralId: String,
         expectations: List<ComposedMaterialProgramV6.RuntimeNodeExpectation>,
+        val geometryAuthority: org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveGeometryAuthority?,
+        val materialBindingAuthority: org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveMaterialBindingAuthority?,
     ) {
         val expectations = java.util.Collections.unmodifiableList(ArrayList(expectations))
     }
@@ -38,6 +40,9 @@ internal class W5hFrameSourceValidationWitnessV1 private constructor(
         require(authenticates(frame)) { "W5h source witness belongs to another frame root" }
         return requireNotNull(packets[packet.packetId.value]).also {
             require(root.template(packet) === it.template && packet.materialSourcePartitionV3() === it.source)
+            val binding = root.coreBinding(packet)
+            require(binding?.geometryAuthority === it.geometryAuthority &&
+                binding?.materialBindingAuthority === it.materialBindingAuthority)
         }
     }
     companion object {
@@ -99,7 +104,9 @@ internal class W5hFrameSourceValidationWitnessV1 private constructor(
                     }
                     GPUW5aHostBindGroupEntryV1(binding.bindingI32, 2u, entry)
                 })
-                packet.packetId.value to Packet(source, template, module, layout, stage.structuralId, expectations)
+                val binding = frame.w5hSourceAuthorityRootV1.coreBinding(packet)
+                packet.packetId.value to Packet(source, template, module, layout, stage.structuralId, expectations,
+                    binding?.geometryAuthority, binding?.materialBindingAuthority)
             }
             W5hFrameSourcePreflightResultV1.Validated(W5hFrameSourceValidationWitnessV1(frame.w5hSourceAuthorityRootV1, validated))
         } catch (failure: IllegalArgumentException) {

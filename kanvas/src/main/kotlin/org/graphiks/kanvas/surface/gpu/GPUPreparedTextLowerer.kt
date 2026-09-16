@@ -482,7 +482,8 @@ internal object GPUPreparedTextLowerer {
                 GPUPreparedTextGeometry(operationIndex, resolved.face, immutablePreparedTextList(preparedGlyphs),
                     operation.x, operation.y, operation.transform.snapshotForPreparedText(), clipProof.contentKey,
                     clipProof.clip, target.colorFormat, capabilities.canonicalSnapshotHash(),
-                    GPUPreparedTextRepresentationPolicy.create(representations), clipProof.coveragePlan) else null)
+                    GPUPreparedTextRepresentationPolicy.create(representations), clipProof.coveragePlan,
+                    clipProof.clipFacts, clipProof.coveragePlan.toExecutionPlan(capabilities, target)) else null)
 
         val commonProgram = materialPlan?.commonProgram
         val w5aResult = materialPlan?.takeIf { commonProgram == null }?.let { planned ->
@@ -734,6 +735,7 @@ private sealed interface PreparedTextClipResult {
         val contentKey: String,
         val commonSourceClipEligible: Boolean,
         val coveragePlan: GPUClipCoveragePlan,
+        val clipFacts: org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts,
     ) : PreparedTextClipResult
     data class Refused(val message: String) : PreparedTextClipResult
 }
@@ -752,6 +754,7 @@ private fun validateAndSnapshotPreparedTextClip(
             contentKey = "prepared-text-clip:wide-open",
             commonSourceClipEligible = true,
             coveragePlan = GPUClipCoveragePlan.NoClip,
+            clipFacts = clip.toGPUClipFacts(target),
         )
     }
     val clipFacts = runCatching { clip.toGPUClipFacts(target) }.getOrNull()
@@ -782,6 +785,7 @@ private fun validateAndSnapshotPreparedTextClip(
             contentKey = request.contentKey,
             commonSourceClipEligible = plan is GPUClipCoveragePlan.NoClip || plan is GPUClipCoveragePlan.Scissor,
             coveragePlan = plan,
+            clipFacts = clipFacts,
         )
     }
 }

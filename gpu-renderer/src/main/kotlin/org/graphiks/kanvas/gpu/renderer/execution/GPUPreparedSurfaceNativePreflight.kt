@@ -5662,7 +5662,7 @@ internal object GPUPreparedSurfaceEncoderScopeAuthority {
                             .GPUMaterializedCommandOperandKind.RenderPipeline
                 }
                 .zip(render.drawPackets)
-                .distinctBy { (_, packet) -> packet.renderPipelineKey }
+                .distinctBy { (_, packet) -> preparedCoreNativePipelineIdentity(packet) }
                 .mapNotNull { (bridge, _) -> bridgeKey(bridge) }
             val bindGroups = stream.operandBridge
                 .filter {
@@ -5697,7 +5697,7 @@ internal object GPUPreparedSurfaceEncoderScopeAuthority {
                         .GPUMaterializedCommandOperandKind.RenderPipeline
             }
             pipelineBridges.zip(render.drawPackets)
-                .distinctBy { (_, packet) -> packet.renderPipelineKey }
+                .distinctBy { (_, packet) -> preparedCoreNativePipelineIdentity(packet) }
                 .map { (bridge, _) -> bridge } +
                 listOfNotNull(
                     stream.operandBridge.firstOrNull {

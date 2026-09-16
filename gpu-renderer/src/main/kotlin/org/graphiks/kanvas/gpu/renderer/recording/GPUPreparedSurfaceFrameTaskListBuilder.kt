@@ -134,6 +134,7 @@ data class GPUPreparedSurfaceFrameRequest(
     val w5hPointSources: Map<Int, org.graphiks.kanvas.gpu.plan.W5hPreparedPointMaterialV6> = emptyMap(),
     val w5hPointBudget: org.graphiks.kanvas.gpu.plan.PlanBudget? = null,
     val synthesizedSceneClearCommandIdI32: Int? = null,
+    val coreGeometryInventory: GPUCorePrimitiveFrameGeometryInventory? = null,
 )
 
 /** Checked structural ceilings applied before one prepared task graph is published. */
@@ -947,7 +948,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         allowEmptyBaseTaskList: Boolean = false,
     ): GPUPreparedSurfaceFrameResult {
         request.w5aCoreMaterialAuthority?.let { authority ->
-            val materialized = authority.materialize(request.semanticsByCommandId)
+            val materialized = authority.materialize(request.semanticsByCommandId, request.coreGeometryInventory)
                 ?: return refused("invalid.material.w5a_core_authority", "W5a core material authority does not match the frame.")
             return build(
                 request.copy(semanticsByCommandId = materialized, w5aCoreMaterialAuthority = null),
@@ -1176,13 +1177,13 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             return refused("invalid.recording.w5b-mixed-initialization",
                 "A sole synthesized clear must authenticate the complete mapped frame.")
         }
-        if (allCore && !soleSceneInitialization) {
+        if (allCore && !soleSceneInitialization && request.coreGeometryInventory == null) {
             @Suppress("UNCHECKED_CAST")
             val coreSemantics = request.semanticsByCommandId as
                 Map<Int, GPUDrawSemanticPayload.CorePrimitive>
             // Only the exact admitted packet sequence may enter the replacement graph.
             // Keep the common base/identity checks above and the graph-limit policy shared.
-            org.graphiks.kanvas.gpu.renderer.planning.W5bPreparedPointBridgeV3.lower(
+            if (request.coreGeometryInventory == null) org.graphiks.kanvas.gpu.renderer.planning.W5bPreparedPointBridgeV3.lower(
                 request, packets, configuredAggregateBudgetBytes,
             )?.let { result ->
                 if (result is GPUPreparedSurfaceFrameResult.Recorded) {
@@ -1218,6 +1219,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                         readbackRequestId = request.readbackRequestId,
                         configuredAggregateBudgetBytes = configuredAggregateBudgetBytes,
                         targetFormat = request.targetFormat,
+                        geometryInventory = request.coreGeometryInventory,
                     ),
                 )
             ) {
@@ -3005,7 +3007,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             is GPUDrawSemanticPayload.Vertices -> semantic.w5bFinalBlendPlan
             else -> null
         } }
-        if (!hasExactSoleSceneInitialization(request, packets) &&
+        if (request.coreGeometryInventory == null && !hasExactSoleSceneInitialization(request, packets) &&
             finalBlends.all(org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer::isLegacySrcOverEquivalent)) return null
         val capability = request.capabilities.toPlanCapabilitySnapshot(request.baseTaskList.capabilitySeal.deviceGeneration)
             as? org.graphiks.kanvas.gpu.renderer.planning.GpuPlanCapabilityAdapterResult.Supported
@@ -3230,6 +3232,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     readbackRequestId = null,
                     configuredAggregateBudgetBytes = configuredAggregateBudgetBytes,
                     targetFormat = request.targetFormat,
+                    geometryInventory = request.coreGeometryInventory,
                 ),
                 additionalMemoryAllocations = additionalMemoryAllocations,
             )
@@ -4225,16 +4228,21 @@ private fun List<GPUDrawPacket>.contiguousRouteRuns(
     baseRenderByPacketId: Map<org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID, GPUTask.Render>,
     sealedCopyConsumers: Set<org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID> = emptySet(),
 ): List<List<GPUDrawPacket>> {
-    val runs = mutableListOf<MutableList<GPUDrawPacket>>()
-    forEach { packet ->
-        val render = baseRenderByPacketId.getValue(packet.packetId)
-        val coreRouteIdentity = if (
-            packet.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
-        ) {
-            render.taskId.value
-        } else {
-            null
+    fun coreRouteIdentity(packet: GPUDrawPacket, render: GPUTask.Render): String? {
+        if (packet.semanticPayload !is GPUDrawSemanticPayload.CorePrimitive) return null
+        // Mixed assembly removes path depth/stencil from direct packets. Those consumers
+        // cannot rejoin a stencil-bearing run merely because the Core assembler batched
+        // their original packets. Keep the exact producer/cover pair together instead.
+        val path = packet.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilProducer ||
+            packet.role == org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilCover
+        return "${render.taskId.value}.${if (path) "path-pair" else "direct"}"
+    }
+    fun key(packet: GPUDrawPacket): Any {
+        packet.corePrimitivePreparedAuthority?.materialDispatchPlan?.geometry?.boundaries?.let { plan ->
+            return plan to plan.segment(packet.packetId)
         }
+        val render = baseRenderByPacketId.getValue(packet.packetId)
+        val coreRouteIdentity = coreRouteIdentity(packet, render)
         val key = PreparedRouteRunKey(
             semanticKind = when (packet.semanticPayload) {
                 is GPUDrawSemanticPayload.SampledImage -> "sampled-image"
@@ -4261,51 +4269,9 @@ private fun List<GPUDrawPacket>.contiguousRouteRuns(
             targetStateHash = coreRouteIdentity ?: packet.targetStateHash,
             continuationKey = render.sampleContinuationKey?.toString(),
         )
-        val current = runs.lastOrNull()
-        val currentKey = current?.firstOrNull()?.let { first ->
-            val firstRender = baseRenderByPacketId.getValue(first.packetId)
-            val firstCoreRouteIdentity = if (
-                first.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
-            ) {
-                firstRender.taskId.value
-            } else {
-                null
-            }
-            PreparedRouteRunKey(
-                semanticKind = when (first.semanticPayload) {
-                    is GPUDrawSemanticPayload.SampledImage -> "sampled-image"
-                    is GPUDrawSemanticPayload.CorePrimitive -> "core-primitive"
-                    is GPUDrawSemanticPayload.TextA8 -> "text-a8"
-                    is GPUDrawSemanticPayload.ColorGlyph -> "color-glyph"
-                    is GPUDrawSemanticPayload.Vertices -> "vertices"
-                    else -> "unsupported"
-                },
-                passId = first.passId,
-                renderStepId = firstCoreRouteIdentity ?: first.renderStepId.value,
-                renderStepVersion =
-                    if (firstCoreRouteIdentity == null) first.renderStepVersion else 0,
-                renderPipelineKey = if (firstCoreRouteIdentity == null) {
-                    first.renderPipelineKey?.value
-                } else {
-                    null
-                },
-                bindingLayoutHash = firstCoreRouteIdentity ?: first.bindingLayoutHash,
-                samplePlanKey = firstRender.samplePlan.specializationKey,
-                target = firstRender.target.value,
-                loadStore = firstRender.loadStore,
-                provisionalSegmentKey = firstRender.provisionalSegmentKey,
-                depthStencilLoadStore = firstRender.depthStencilLoadStore,
-                targetStateHash = firstCoreRouteIdentity ?: first.targetStateHash,
-                continuationKey = firstRender.sampleContinuationKey?.toString(),
-            )
-        }
-        if (current == null || currentKey != key || packet.packetId in sealedCopyConsumers || current.last().packetId in sealedCopyConsumers) {
-            runs += mutableListOf(packet)
-        } else {
-            current += packet
-        }
+        return key
     }
-    return runs
+    return partitionHostRuns(this, ::key, { it.packetId in sealedCopyConsumers }, { it.packetId in sealedCopyConsumers })
 }
 
 private fun verticesStagingRef(frameId: GPUFrameID): GPUFrameBufferRef =

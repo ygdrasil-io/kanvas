@@ -39,7 +39,7 @@ fun NormalizedDrawCommand.FillPath.isBoundedNativePathHairline(): Boolean =
             (transform.isUniformPositiveScale() || transform.isUniformPositiveScaleTranslate())) &&
         (clip.executionPlan == GPUClipExecutionPlan.NoClip ||
             clip.executionPlan is GPUClipExecutionPlan.ScissorOnly) &&
-        material is GPUMaterialDescriptor.SolidColor &&
+        (material is GPUMaterialDescriptor.SolidColor || hasPlanSourceGeometry) &&
         blend.mode == GPUBlendMode.SRC_OVER &&
         layer.scopeKind == GPULayerScopeKind.Root &&
         tessellatedVertices.all(Float::isFinite) &&

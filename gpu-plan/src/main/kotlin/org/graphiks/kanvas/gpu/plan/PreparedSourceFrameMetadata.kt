@@ -6,23 +6,38 @@ import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.SizeI32
 
 /** Source capture after a prepared consumer's real geometry admission; never geometry authority. */
-public class PreparedSourceCaptureV6 private constructor(internal val source: MaterialSourceConstructionV4) {
+public class PreparedSourceCaptureV6 internal constructor(internal val source: MaterialSourceConstructionV4) {
     public val blend: BlendPlan get() = source.blend
 
     public companion object {
         public fun capture(draw: DrawNode, deviceBoundsF32: RectF32, coverage: CoveragePlan,
-            targetClamp: BlendTargetClampV1, catalog: RuntimeEffectSemanticCatalogSnapshot): PreparedSourceCaptureV6 {
-            require(draw.origin in setOf(DrawOrigin.TEXT, DrawOrigin.VERTICES, DrawOrigin.MESH, DrawOrigin.RECT))
+            targetClamp: BlendTargetClampV1, catalog: RuntimeEffectSemanticCatalogSnapshot): PreparedSourceCaptureV6 =
+            PreparedSourceAuthenticationV6.authenticate(draw, coverage, targetClamp, catalog).capture(deviceBoundsF32)
+    }
+}
+
+/**
+ * Authenticates every sibling before atomic projection. The opaque value has no material
+ * owner, source index, table, packed uniform or lease; only surviving occurrences capture it.
+ */
+public class PreparedSourceAuthenticationV6 private constructor(
+    private val authentication: MaterialSourceConstructionV4.PreparedAuthentication,
+    public val blend: BlendPlan,
+) {
+    public fun capture(deviceBoundsF32: RectF32): PreparedSourceCaptureV6 = PreparedSourceCaptureV6(
+        MaterialSourceConstructionV4.captureAuthenticated(authentication, deviceBoundsF32, blend))
+
+    public companion object {
+        public fun authenticate(draw: DrawNode, coverage: CoveragePlan, targetClamp: BlendTargetClampV1,
+            catalog: RuntimeEffectSemanticCatalogSnapshot): PreparedSourceAuthenticationV6 {
+            require(draw.origin in setOf(DrawOrigin.TEXT, DrawOrigin.VERTICES, DrawOrigin.MESH,
+                DrawOrigin.RECT, DrawOrigin.RRECT, DrawOrigin.PATH, DrawOrigin.POINT, DrawOrigin.POINTS, DrawOrigin.IMAGE))
             val blend = requireNotNull(FinalBlendPlanner.plan(draw.blend, coverage, SamplePlan.SingleSample, targetClamp,
                 if (coverage == CoveragePlan.AnalyticScalarAA) BlendCoverageApplicationV1.SourceMultiplication
                 else BlendCoverageApplicationV1.DestinationInterpolation)) {
                 W5aPlanDiagnostics.UnsupportedDrawState
             }
-            return when (val captured = MaterialSourceConstructionV4.capture(draw, SourceCoordinatesV4.None,
-                deviceBoundsF32, blend, runtimeCatalog = catalog, composedV6 = true)) {
-                is SourceConstructionResultV4.Built -> PreparedSourceCaptureV6(captured.value)
-                is SourceConstructionResultV4.Refused -> throw IllegalArgumentException(captured.diagnosticCode)
-            }
+            return PreparedSourceAuthenticationV6(MaterialSourceConstructionV4.authenticatePrepared(draw, catalog), blend)
         }
     }
 }

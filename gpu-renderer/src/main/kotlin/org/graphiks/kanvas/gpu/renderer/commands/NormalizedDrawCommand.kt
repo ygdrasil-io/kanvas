@@ -24,6 +24,7 @@ import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialP
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
 import org.graphiks.kanvas.gpu.renderer.state.GPUPathSourceAuthority
 import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
+import org.graphiks.kanvas.gpu.renderer.recording.GPURecordedSourceOccurrence
 
 private val IDENTITY_GRADIENT_LOCAL_MATRIX = listOf(
     1f, 0f, 0f,
@@ -3647,6 +3648,57 @@ object GPUApplyFilterCommandBuilder {
     }
 }
 
+/** Command identity is absent, not synthesized, during source-free recording analysis. */
+private sealed interface GPURecordedCommandIdentity {
+    val occurrence: GPURecordedSourceOccurrence?
+    fun requireCommandId(): GPUDrawCommandID
+
+    class Bound(
+        private val id: GPUDrawCommandID,
+        override val occurrence: GPURecordedSourceOccurrence? = null,
+    ) : GPURecordedCommandIdentity {
+        override fun requireCommandId(): GPUDrawCommandID = id
+        override fun equals(other: Any?): Boolean =
+            other is Bound && id == other.id && occurrence === other.occurrence
+        override fun hashCode(): Int =
+            if (occurrence == null) id.hashCode() else 31 * id.hashCode() + occurrence.hashCode()
+        override fun toString(): String = id.toString()
+    }
+
+    class Unbound(override val occurrence: GPURecordedSourceOccurrence) : GPURecordedCommandIdentity {
+        override fun requireCommandId(): GPUDrawCommandID =
+            error("Command identity has not been bound to its recorded occurrence")
+        override fun equals(other: Any?): Boolean = other is Unbound && occurrence === other.occurrence
+        override fun hashCode(): Int = occurrence.hashCode()
+        override fun toString(): String = "Unbound($occurrence)"
+    }
+}
+
+/** Exactly one source state, orthogonal to the command's geometry. */
+internal sealed interface GPUCommandSourceBinding {
+    data class LegacyDescriptor(val descriptor: GPUMaterialDescriptor) : GPUCommandSourceBinding
+    data class BoundPlanRef(val ref: MaterialPlanRef) : GPUCommandSourceBinding
+    data class UnboundSourceOccurrence(val occurrence: GPURecordedSourceOccurrence) : GPUCommandSourceBinding
+}
+
+internal val NormalizedDrawCommand.deferredSourceOccurrence: GPURecordedSourceOccurrence?
+    get() = when (this) {
+        is NormalizedDrawCommand.FillRect -> unboundSourceOccurrence
+        is NormalizedDrawCommand.FillRRect -> unboundSourceOccurrence
+        is NormalizedDrawCommand.FillPath -> unboundSourceOccurrence
+        else -> null
+    }
+
+internal val NormalizedDrawCommand.sourceBinding: GPUCommandSourceBinding?
+    get() = deferredSourceOccurrence?.let(GPUCommandSourceBinding::UnboundSourceOccurrence)
+        ?: w5aMaterialPlanRef?.let(GPUCommandSourceBinding::BoundPlanRef)
+        ?: material?.let(GPUCommandSourceBinding::LegacyDescriptor)
+
+/** Geometry may admit a deferred source, but this does not authenticate its semantics. */
+internal val NormalizedDrawCommand.hasPlanSourceGeometry: Boolean
+    get() = sourceBinding is GPUCommandSourceBinding.BoundPlanRef ||
+        sourceBinding is GPUCommandSourceBinding.UnboundSourceOccurrence
+
 /** High-level draw command after legacy state has been captured and normalized. */
 sealed interface NormalizedDrawCommand {
     /** Recording-local command identifier. */
@@ -3682,54 +3734,301 @@ sealed interface NormalizedDrawCommand {
         get() = "${source.adapter}:${source.operation}#${commandId.value}"
 
     /** First-slice filled rectangle command with captured state. */
-    data class FillRect(
-        override val commandId: GPUDrawCommandID,
-        val rect: GPURect,
-        override val transform: GPUTransformFacts,
-        override val clip: GPUClipFacts,
-        override val layer: GPULayerFacts,
-        override val material: GPUMaterialDescriptor?,
-        override val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
-        override val bounds: GPUBounds,
-        override val ordering: GPUOrderingFacts,
-        override val source: GPUCommandSource,
-        /**
-         * `true` when the originating paint requested a stroke (or
-         * stroke-and-fill) style. Stroke draws are refused with
-         * `unsupported_stroke` instead of being silently filled. Defaults to
-         * `false` so all existing fill callers keep fill behavior.
-         */
-        val stroke: Boolean = false,
-        val antiAlias: Boolean = true,
-        /** Mask filter descriptor for post-processing the fill output. Null when no mask filter is active. */
-        val maskFilter: NormalizedMaskFilter? = null,
-        override val w5aMaterialPlanRef: MaterialPlanRef? = null,
-    ) : NormalizedDrawCommand {
-        init { require((material != null) xor (w5aMaterialPlanRef != null)) }
+    class FillRect private constructor(private val facts: Facts) : NormalizedDrawCommand {
+        /** Historical bound constructor; source-free intake uses the occurrence overload below. */
+        constructor(
+            commandId: GPUDrawCommandID,
+            rect: GPURect,
+            transform: GPUTransformFacts,
+            clip: GPUClipFacts,
+            layer: GPULayerFacts,
+            material: GPUMaterialDescriptor?,
+            blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+            bounds: GPUBounds,
+            ordering: GPUOrderingFacts,
+            source: GPUCommandSource,
+            stroke: Boolean = false,
+            antiAlias: Boolean = true,
+            maskFilter: NormalizedMaskFilter? = null,
+            w5aMaterialPlanRef: MaterialPlanRef? = null,
+            unboundSourceOccurrence: GPURecordedSourceOccurrence? = null,
+        ) : this(Facts(GPURecordedCommandIdentity.Bound(commandId, unboundSourceOccurrence), rect, transform, clip, layer, material, blend, bounds, ordering, source, stroke, antiAlias, maskFilter, w5aMaterialPlanRef))
+
+        /** Module-boundary facade for an internally issued, source-free recording occurrence. */
+        constructor(
+            sourceOccurrence: GPURecordedSourceOccurrence,
+            rect: GPURect,
+            transform: GPUTransformFacts,
+            clip: GPUClipFacts,
+            layer: GPULayerFacts,
+            blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+            bounds: GPUBounds,
+            ordering: GPUOrderingFacts,
+            source: GPUCommandSource,
+            stroke: Boolean = false,
+            antiAlias: Boolean = true,
+            maskFilter: NormalizedMaskFilter? = null,
+        ) : this(Facts(GPURecordedCommandIdentity.Unbound(sourceOccurrence), rect, transform, clip, layer, null, blend, bounds, ordering, source, stroke, antiAlias, maskFilter, null))
+
+        override val commandId: GPUDrawCommandID get() = facts.commandId.requireCommandId()
+        val rect: GPURect = facts.rect
+        override val transform: GPUTransformFacts = facts.transform
+        override val clip: GPUClipFacts = facts.clip
+        override val layer: GPULayerFacts = facts.layer
+        override val material: GPUMaterialDescriptor? = facts.material
+        override val blend: GPUBlendFacts = facts.blend
+        override val bounds: GPUBounds = facts.bounds
+        override val ordering: GPUOrderingFacts = facts.ordering
+        override val source: GPUCommandSource = facts.source
+        val stroke: Boolean = facts.stroke
+        val antiAlias: Boolean = facts.antiAlias
+        val maskFilter: NormalizedMaskFilter? = facts.maskFilter
+        override val w5aMaterialPlanRef: MaterialPlanRef? = facts.w5aMaterialPlanRef
+        internal val unboundSourceOccurrence: GPURecordedSourceOccurrence? = facts.commandId.occurrence
+        internal val hasBoundCommandIdentity: Boolean = facts.commandId is GPURecordedCommandIdentity.Bound
+
+        init {
+            require(listOf(material, w5aMaterialPlanRef, unboundSourceOccurrence)
+                .count { it != null } == 1) { "FillRect requires exactly one source state" }
+        }
+
         override val drawKind: GPUDrawKind = GPUDrawKind.FillRect
+
+        /** Legacy copy is post-ID only; it cannot assign an ID to an unbound occurrence. */
+        fun copy(
+            commandId: GPUDrawCommandID = this.commandId,
+            rect: GPURect = this.rect,
+            transform: GPUTransformFacts = this.transform,
+            clip: GPUClipFacts = this.clip,
+            layer: GPULayerFacts = this.layer,
+            material: GPUMaterialDescriptor? = this.material,
+            blend: GPUBlendFacts = this.blend,
+            bounds: GPUBounds = this.bounds,
+            ordering: GPUOrderingFacts = this.ordering,
+            source: GPUCommandSource = this.source,
+            stroke: Boolean = this.stroke,
+            antiAlias: Boolean = this.antiAlias,
+            maskFilter: NormalizedMaskFilter? = this.maskFilter,
+            w5aMaterialPlanRef: MaterialPlanRef? = this.w5aMaterialPlanRef,
+            unboundSourceOccurrence: GPURecordedSourceOccurrence? = this.unboundSourceOccurrence,
+        ): FillRect {
+            check(hasBoundCommandIdentity) { "An unbound command requires the recorder's identity bind" }
+            require(unboundSourceOccurrence === this.unboundSourceOccurrence ||
+                (this.unboundSourceOccurrence != null && unboundSourceOccurrence == null && w5aMaterialPlanRef != null))
+            require(this.unboundSourceOccurrence == null ||
+                (commandId == this.commandId && (unboundSourceOccurrence === this.unboundSourceOccurrence ||
+                    (unboundSourceOccurrence == null && w5aMaterialPlanRef != null))))
+            return FillRect(commandId, rect, transform, clip, layer, material, blend, bounds, ordering, source, stroke, antiAlias, maskFilter, w5aMaterialPlanRef, unboundSourceOccurrence)
+        }
+
+        /** Geometry adapters retain the exact occurrence without reading or assigning a command ID. */
+        fun copyCapturedGeometry(
+            clip: GPUClipFacts = this.clip,
+            bounds: GPUBounds = this.bounds,
+            ordering: GPUOrderingFacts = this.ordering,
+            source: GPUCommandSource = this.source,
+        ): FillRect = FillRect(facts.copy(clip = clip, bounds = bounds, ordering = ordering, source = source))
+
+        internal fun bindCommandIdentity(commandId: GPUDrawCommandID): FillRect {
+            val identity = facts.commandId as? GPURecordedCommandIdentity.Unbound
+                ?: error("Command identity was already bound")
+            return FillRect(facts.copy(commandId = GPURecordedCommandIdentity.Bound(commandId, identity.occurrence),
+                ordering = facts.ordering.copy(paintOrder = commandId.value)))
+        }
+
+        internal fun bindSource(ref: MaterialPlanRef): FillRect {
+            check(hasBoundCommandIdentity && unboundSourceOccurrence != null)
+            return FillRect(facts.copy(
+                commandId = GPURecordedCommandIdentity.Bound(commandId),
+                w5aMaterialPlanRef = ref,
+            ))
+        }
+
+        operator fun component1(): GPUDrawCommandID = commandId
+        operator fun component2(): GPURect = rect
+        operator fun component3(): GPUTransformFacts = transform
+        operator fun component4(): GPUClipFacts = clip
+        operator fun component5(): GPULayerFacts = layer
+        operator fun component6(): GPUMaterialDescriptor? = material
+        operator fun component7(): GPUBlendFacts = blend
+        operator fun component8(): GPUBounds = bounds
+        operator fun component9(): GPUOrderingFacts = ordering
+        operator fun component10(): GPUCommandSource = source
+        operator fun component11(): Boolean = stroke
+        operator fun component12(): Boolean = antiAlias
+        operator fun component13(): NormalizedMaskFilter? = maskFilter
+        operator fun component14(): MaterialPlanRef? = w5aMaterialPlanRef
+
+        override fun equals(other: Any?): Boolean = other is FillRect && facts == other.facts
+        override fun hashCode(): Int = facts.hashCode()
+        override fun toString(): String = "FillRect" + facts.toString().removePrefix("Facts")
+
+        /** Data semantics retain the historical field order, including FloatArray identity equality. */
+        private data class Facts(
+            val commandId: GPURecordedCommandIdentity,
+            val rect: GPURect,
+            val transform: GPUTransformFacts,
+            val clip: GPUClipFacts,
+            val layer: GPULayerFacts,
+            val material: GPUMaterialDescriptor?,
+            val blend: GPUBlendFacts,
+            val bounds: GPUBounds,
+            val ordering: GPUOrderingFacts,
+            val source: GPUCommandSource,
+            val stroke: Boolean,
+            val antiAlias: Boolean,
+            val maskFilter: NormalizedMaskFilter?,
+            val w5aMaterialPlanRef: MaterialPlanRef?,
+        )
     }
 
     /** First-expansion filled rounded rectangle command with captured state. */
-    data class FillRRect(
-        override val commandId: GPUDrawCommandID,
-        val rrect: GPURRect,
-        override val transform: GPUTransformFacts,
-        override val clip: GPUClipFacts,
-        override val layer: GPULayerFacts,
-        override val material: GPUMaterialDescriptor?,
-        override val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
-        override val bounds: GPUBounds,
-        override val ordering: GPUOrderingFacts,
-        override val source: GPUCommandSource,
-        /** See [FillRect.stroke]. Stroke rrect draws refuse instead of filling. */
-        val stroke: Boolean = false,
-        val antiAlias: Boolean = true,
-        /** Mask filter descriptor for post-processing the fill output. Null when no mask filter is active. */
-        val maskFilter: NormalizedMaskFilter? = null,
-        override val w5aMaterialPlanRef: MaterialPlanRef? = null,
-    ) : NormalizedDrawCommand {
-        init { require((material != null) xor (w5aMaterialPlanRef != null)) }
+    class FillRRect private constructor(private val facts: Facts) : NormalizedDrawCommand {
+        /** Historical bound constructor; source-free intake uses the occurrence overload below. */
+        constructor(
+            commandId: GPUDrawCommandID,
+            rrect: GPURRect,
+            transform: GPUTransformFacts,
+            clip: GPUClipFacts,
+            layer: GPULayerFacts,
+            material: GPUMaterialDescriptor?,
+            blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+            bounds: GPUBounds,
+            ordering: GPUOrderingFacts,
+            source: GPUCommandSource,
+            stroke: Boolean = false,
+            antiAlias: Boolean = true,
+            maskFilter: NormalizedMaskFilter? = null,
+            w5aMaterialPlanRef: MaterialPlanRef? = null,
+            unboundSourceOccurrence: GPURecordedSourceOccurrence? = null,
+        ) : this(Facts(GPURecordedCommandIdentity.Bound(commandId, unboundSourceOccurrence), rrect, transform, clip, layer, material, blend, bounds, ordering, source, stroke, antiAlias, maskFilter, w5aMaterialPlanRef))
+
+        /** Module-boundary facade for an internally issued, source-free recording occurrence. */
+        constructor(
+            sourceOccurrence: GPURecordedSourceOccurrence,
+            rrect: GPURRect,
+            transform: GPUTransformFacts,
+            clip: GPUClipFacts,
+            layer: GPULayerFacts,
+            blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+            bounds: GPUBounds,
+            ordering: GPUOrderingFacts,
+            source: GPUCommandSource,
+            stroke: Boolean = false,
+            antiAlias: Boolean = true,
+            maskFilter: NormalizedMaskFilter? = null,
+        ) : this(Facts(GPURecordedCommandIdentity.Unbound(sourceOccurrence), rrect, transform, clip, layer, null, blend, bounds, ordering, source, stroke, antiAlias, maskFilter, null))
+
+        override val commandId: GPUDrawCommandID get() = facts.commandId.requireCommandId()
+        val rrect: GPURRect = facts.rrect
+        override val transform: GPUTransformFacts = facts.transform
+        override val clip: GPUClipFacts = facts.clip
+        override val layer: GPULayerFacts = facts.layer
+        override val material: GPUMaterialDescriptor? = facts.material
+        override val blend: GPUBlendFacts = facts.blend
+        override val bounds: GPUBounds = facts.bounds
+        override val ordering: GPUOrderingFacts = facts.ordering
+        override val source: GPUCommandSource = facts.source
+        val stroke: Boolean = facts.stroke
+        val antiAlias: Boolean = facts.antiAlias
+        val maskFilter: NormalizedMaskFilter? = facts.maskFilter
+        override val w5aMaterialPlanRef: MaterialPlanRef? = facts.w5aMaterialPlanRef
+        internal val unboundSourceOccurrence: GPURecordedSourceOccurrence? = facts.commandId.occurrence
+        internal val hasBoundCommandIdentity: Boolean = facts.commandId is GPURecordedCommandIdentity.Bound
+
+        init {
+            require(listOf(material, w5aMaterialPlanRef, unboundSourceOccurrence)
+                .count { it != null } == 1) { "FillRRect requires exactly one source state" }
+        }
+
         override val drawKind: GPUDrawKind = GPUDrawKind.FillRRect
+
+        /** Legacy copy is post-ID only; it cannot assign an ID to an unbound occurrence. */
+        fun copy(
+            commandId: GPUDrawCommandID = this.commandId,
+            rrect: GPURRect = this.rrect,
+            transform: GPUTransformFacts = this.transform,
+            clip: GPUClipFacts = this.clip,
+            layer: GPULayerFacts = this.layer,
+            material: GPUMaterialDescriptor? = this.material,
+            blend: GPUBlendFacts = this.blend,
+            bounds: GPUBounds = this.bounds,
+            ordering: GPUOrderingFacts = this.ordering,
+            source: GPUCommandSource = this.source,
+            stroke: Boolean = this.stroke,
+            antiAlias: Boolean = this.antiAlias,
+            maskFilter: NormalizedMaskFilter? = this.maskFilter,
+            w5aMaterialPlanRef: MaterialPlanRef? = this.w5aMaterialPlanRef,
+            unboundSourceOccurrence: GPURecordedSourceOccurrence? = this.unboundSourceOccurrence,
+        ): FillRRect {
+            check(hasBoundCommandIdentity) { "An unbound command requires the recorder's identity bind" }
+            require(unboundSourceOccurrence === this.unboundSourceOccurrence ||
+                (this.unboundSourceOccurrence != null && unboundSourceOccurrence == null && w5aMaterialPlanRef != null))
+            require(this.unboundSourceOccurrence == null ||
+                (commandId == this.commandId && (unboundSourceOccurrence === this.unboundSourceOccurrence ||
+                    (unboundSourceOccurrence == null && w5aMaterialPlanRef != null))))
+            return FillRRect(commandId, rrect, transform, clip, layer, material, blend, bounds, ordering, source, stroke, antiAlias, maskFilter, w5aMaterialPlanRef, unboundSourceOccurrence)
+        }
+
+        /** Geometry adapters retain the exact occurrence without reading or assigning a command ID. */
+        fun copyCapturedGeometry(
+            clip: GPUClipFacts = this.clip,
+            bounds: GPUBounds = this.bounds,
+            ordering: GPUOrderingFacts = this.ordering,
+            source: GPUCommandSource = this.source,
+        ): FillRRect = FillRRect(facts.copy(clip = clip, bounds = bounds, ordering = ordering, source = source))
+
+        internal fun bindCommandIdentity(commandId: GPUDrawCommandID): FillRRect {
+            val identity = facts.commandId as? GPURecordedCommandIdentity.Unbound
+                ?: error("Command identity was already bound")
+            return FillRRect(facts.copy(commandId = GPURecordedCommandIdentity.Bound(commandId, identity.occurrence),
+                ordering = facts.ordering.copy(paintOrder = commandId.value)))
+        }
+
+        internal fun bindSource(ref: MaterialPlanRef): FillRRect {
+            check(hasBoundCommandIdentity && unboundSourceOccurrence != null)
+            return FillRRect(facts.copy(
+                commandId = GPURecordedCommandIdentity.Bound(commandId),
+                w5aMaterialPlanRef = ref,
+            ))
+        }
+
+        operator fun component1(): GPUDrawCommandID = commandId
+        operator fun component2(): GPURRect = rrect
+        operator fun component3(): GPUTransformFacts = transform
+        operator fun component4(): GPUClipFacts = clip
+        operator fun component5(): GPULayerFacts = layer
+        operator fun component6(): GPUMaterialDescriptor? = material
+        operator fun component7(): GPUBlendFacts = blend
+        operator fun component8(): GPUBounds = bounds
+        operator fun component9(): GPUOrderingFacts = ordering
+        operator fun component10(): GPUCommandSource = source
+        operator fun component11(): Boolean = stroke
+        operator fun component12(): Boolean = antiAlias
+        operator fun component13(): NormalizedMaskFilter? = maskFilter
+        operator fun component14(): MaterialPlanRef? = w5aMaterialPlanRef
+
+        override fun equals(other: Any?): Boolean = other is FillRRect && facts == other.facts
+        override fun hashCode(): Int = facts.hashCode()
+        override fun toString(): String = "FillRRect" + facts.toString().removePrefix("Facts")
+
+        /** Data semantics retain the historical field order, including FloatArray identity equality. */
+        private data class Facts(
+            val commandId: GPURecordedCommandIdentity,
+            val rrect: GPURRect,
+            val transform: GPUTransformFacts,
+            val clip: GPUClipFacts,
+            val layer: GPULayerFacts,
+            val material: GPUMaterialDescriptor?,
+            val blend: GPUBlendFacts,
+            val bounds: GPUBounds,
+            val ordering: GPUOrderingFacts,
+            val source: GPUCommandSource,
+            val stroke: Boolean,
+            val antiAlias: Boolean,
+            val maskFilter: NormalizedMaskFilter?,
+            val w5aMaterialPlanRef: MaterialPlanRef?,
+        )
     }
 
     /** Bounded analytic double-rounded-rectangle command retained before any path lowering. */
@@ -3753,57 +4052,231 @@ sealed interface NormalizedDrawCommand {
     }
 
     /** M15 path-fill command with tessellated vertex buffers from the shadow adapter. */
-    data class FillPath(
-        override val commandId: GPUDrawCommandID,
-        val pathKey: String,
-        val pathDescriptor: GPUPathFacts,
-        val tessellatedVertices: List<Float>,
-        val contourStarts: List<Int>,
-        val totalVertexCount: Int,
-        val edgeCount: Int,
-        override val transform: GPUTransformFacts,
-        override val clip: GPUClipFacts,
-        override val layer: GPULayerFacts,
-        /**
-         * Legacy material authority.  W5a point commands deliberately leave this absent: their
-         * source authority is [w5aMaterialPlanRef], never a reconstructed descriptor.
-         */
-        override val material: GPUMaterialDescriptor? = null,
-        /** Versioned sealed material reference used only by the W5a prepared point bridge. */
-        override val w5aMaterialPlanRef: MaterialPlanRef? = null,
-        /** Non-renderable geometry keeps its command and has no material to evaluate. */
-        val preMaterialGeometryRefusalCode: String? = null,
-        override val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
-        override val bounds: GPUBounds,
-        override val ordering: GPUOrderingFacts,
-        override val source: GPUCommandSource,
-        /** See [FillRect.stroke]. Stroke path draws refuse instead of filling. */
-        val stroke: Boolean = false,
-        /** Stroke width used when [stroke] is true. Default 1f. */
-        val strokeWidth: Float = 1f,
-        /** Dash intervals for path effects. Null means no dashing. */
-        val dashIntervals: FloatArray? = null,
-        /** Dash phase offset. */
-        val dashPhase: Float = 0f,
-        /** Original non-dash path effect retained so bounded stroke lowering can refuse it. */
-        val pathEffectKind: String? = null,
-        /** Stroke cap style: "butt", "round", "square". */
-        val strokeCap: String = "butt",
-        /** Stroke join style: "miter", "round", "bevel". */
-        val strokeJoin: String = "miter",
-        /** Source miter limit retained until canonical stroke lowering consumes it. */
-        val strokeMiterLimit: Float = 4f,
-        val antiAlias: Boolean = true,
-        /** Mask filter descriptor for post-processing the fill output. Null when no mask filter is active. */
-        val maskFilter: NormalizedMaskFilter? = null,
-    ) : NormalizedDrawCommand {
+    class FillPath private constructor(private val facts: Facts) : NormalizedDrawCommand {
+        /** Historical bound constructor; source-free intake uses the occurrence overload below. */
+        constructor(
+            commandId: GPUDrawCommandID,
+            pathKey: String,
+            pathDescriptor: GPUPathFacts,
+            tessellatedVertices: List<Float>,
+            contourStarts: List<Int>,
+            totalVertexCount: Int,
+            edgeCount: Int,
+            transform: GPUTransformFacts,
+            clip: GPUClipFacts,
+            layer: GPULayerFacts,
+            material: GPUMaterialDescriptor? = null,
+            w5aMaterialPlanRef: MaterialPlanRef? = null,
+            preMaterialGeometryRefusalCode: String? = null,
+            blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+            bounds: GPUBounds,
+            ordering: GPUOrderingFacts,
+            source: GPUCommandSource,
+            stroke: Boolean = false,
+            strokeWidth: Float = 1f,
+            dashIntervals: FloatArray? = null,
+            dashPhase: Float = 0f,
+            pathEffectKind: String? = null,
+            strokeCap: String = "butt",
+            strokeJoin: String = "miter",
+            strokeMiterLimit: Float = 4f,
+            antiAlias: Boolean = true,
+            maskFilter: NormalizedMaskFilter? = null,
+            unboundSourceOccurrence: GPURecordedSourceOccurrence? = null,
+        ) : this(Facts(GPURecordedCommandIdentity.Bound(commandId, unboundSourceOccurrence), pathKey, pathDescriptor, tessellatedVertices, contourStarts, totalVertexCount, edgeCount, transform, clip, layer, material, w5aMaterialPlanRef, preMaterialGeometryRefusalCode, blend, bounds, ordering, source, stroke, strokeWidth, dashIntervals, dashPhase, pathEffectKind, strokeCap, strokeJoin, strokeMiterLimit, antiAlias, maskFilter))
+
+        /** Module-boundary facade for an internally issued, source-free recording occurrence. */
+        constructor(
+            sourceOccurrence: GPURecordedSourceOccurrence,
+            pathKey: String,
+            pathDescriptor: GPUPathFacts,
+            tessellatedVertices: List<Float>,
+            contourStarts: List<Int>,
+            totalVertexCount: Int,
+            edgeCount: Int,
+            transform: GPUTransformFacts,
+            clip: GPUClipFacts,
+            layer: GPULayerFacts,
+            blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+            bounds: GPUBounds,
+            ordering: GPUOrderingFacts,
+            source: GPUCommandSource,
+            stroke: Boolean = false,
+            strokeWidth: Float = 1f,
+            dashIntervals: FloatArray? = null,
+            dashPhase: Float = 0f,
+            pathEffectKind: String? = null,
+            strokeCap: String = "butt",
+            strokeJoin: String = "miter",
+            strokeMiterLimit: Float = 4f,
+            antiAlias: Boolean = true,
+            maskFilter: NormalizedMaskFilter? = null,
+        ) : this(Facts(GPURecordedCommandIdentity.Unbound(sourceOccurrence), pathKey, pathDescriptor, tessellatedVertices, contourStarts, totalVertexCount, edgeCount, transform, clip, layer, null, null, null, blend, bounds, ordering, source, stroke, strokeWidth, dashIntervals, dashPhase, pathEffectKind, strokeCap, strokeJoin, strokeMiterLimit, antiAlias, maskFilter))
+
+        override val commandId: GPUDrawCommandID get() = facts.commandId.requireCommandId()
+        val pathKey: String = facts.pathKey
+        val pathDescriptor: GPUPathFacts = facts.pathDescriptor
+        val tessellatedVertices: List<Float> = facts.tessellatedVertices
+        val contourStarts: List<Int> = facts.contourStarts
+        val totalVertexCount: Int = facts.totalVertexCount
+        val edgeCount: Int = facts.edgeCount
+        override val transform: GPUTransformFacts = facts.transform
+        override val clip: GPUClipFacts = facts.clip
+        override val layer: GPULayerFacts = facts.layer
+        override val material: GPUMaterialDescriptor? = facts.material
+        override val w5aMaterialPlanRef: MaterialPlanRef? = facts.w5aMaterialPlanRef
+        val preMaterialGeometryRefusalCode: String? = facts.preMaterialGeometryRefusalCode
+        override val blend: GPUBlendFacts = facts.blend
+        override val bounds: GPUBounds = facts.bounds
+        override val ordering: GPUOrderingFacts = facts.ordering
+        override val source: GPUCommandSource = facts.source
+        val stroke: Boolean = facts.stroke
+        val strokeWidth: Float = facts.strokeWidth
+        val dashIntervals: FloatArray? = facts.dashIntervals
+        val dashPhase: Float = facts.dashPhase
+        val pathEffectKind: String? = facts.pathEffectKind
+        val strokeCap: String = facts.strokeCap
+        val strokeJoin: String = facts.strokeJoin
+        val strokeMiterLimit: Float = facts.strokeMiterLimit
+        val antiAlias: Boolean = facts.antiAlias
+        val maskFilter: NormalizedMaskFilter? = facts.maskFilter
+        internal val unboundSourceOccurrence: GPURecordedSourceOccurrence? = facts.commandId.occurrence
+        internal val hasBoundCommandIdentity: Boolean = facts.commandId is GPURecordedCommandIdentity.Bound
+
         init {
-            require(listOf(material, w5aMaterialPlanRef, preMaterialGeometryRefusalCode).count { it != null } == 1) {
-                "FillPath requires one legacy descriptor, W5a material reference, or geometry refusal"
-            }
+            require(listOf(material, w5aMaterialPlanRef, unboundSourceOccurrence, preMaterialGeometryRefusalCode)
+                .count { it != null } == 1) { "FillPath requires exactly one source state or geometry refusal" }
         }
 
         override val drawKind: GPUDrawKind = GPUDrawKind.FillPath
+
+        /** Legacy copy is post-ID only; it cannot assign an ID to an unbound occurrence. */
+        fun copy(
+            commandId: GPUDrawCommandID = this.commandId,
+            pathKey: String = this.pathKey,
+            pathDescriptor: GPUPathFacts = this.pathDescriptor,
+            tessellatedVertices: List<Float> = this.tessellatedVertices,
+            contourStarts: List<Int> = this.contourStarts,
+            totalVertexCount: Int = this.totalVertexCount,
+            edgeCount: Int = this.edgeCount,
+            transform: GPUTransformFacts = this.transform,
+            clip: GPUClipFacts = this.clip,
+            layer: GPULayerFacts = this.layer,
+            material: GPUMaterialDescriptor? = this.material,
+            w5aMaterialPlanRef: MaterialPlanRef? = this.w5aMaterialPlanRef,
+            preMaterialGeometryRefusalCode: String? = this.preMaterialGeometryRefusalCode,
+            blend: GPUBlendFacts = this.blend,
+            bounds: GPUBounds = this.bounds,
+            ordering: GPUOrderingFacts = this.ordering,
+            source: GPUCommandSource = this.source,
+            stroke: Boolean = this.stroke,
+            strokeWidth: Float = this.strokeWidth,
+            dashIntervals: FloatArray? = this.dashIntervals,
+            dashPhase: Float = this.dashPhase,
+            pathEffectKind: String? = this.pathEffectKind,
+            strokeCap: String = this.strokeCap,
+            strokeJoin: String = this.strokeJoin,
+            strokeMiterLimit: Float = this.strokeMiterLimit,
+            antiAlias: Boolean = this.antiAlias,
+            maskFilter: NormalizedMaskFilter? = this.maskFilter,
+            unboundSourceOccurrence: GPURecordedSourceOccurrence? = this.unboundSourceOccurrence,
+        ): FillPath {
+            check(hasBoundCommandIdentity) { "An unbound command requires the recorder's identity bind" }
+            require(unboundSourceOccurrence === this.unboundSourceOccurrence ||
+                (this.unboundSourceOccurrence != null && unboundSourceOccurrence == null && w5aMaterialPlanRef != null))
+            require(this.unboundSourceOccurrence == null ||
+                (commandId == this.commandId && (unboundSourceOccurrence === this.unboundSourceOccurrence ||
+                    (unboundSourceOccurrence == null && w5aMaterialPlanRef != null))))
+            return FillPath(commandId, pathKey, pathDescriptor, tessellatedVertices, contourStarts, totalVertexCount, edgeCount, transform, clip, layer, material, w5aMaterialPlanRef, preMaterialGeometryRefusalCode, blend, bounds, ordering, source, stroke, strokeWidth, dashIntervals, dashPhase, pathEffectKind, strokeCap, strokeJoin, strokeMiterLimit, antiAlias, maskFilter, unboundSourceOccurrence)
+        }
+
+        /** Geometry adapters retain the exact occurrence without reading or assigning a command ID. */
+        fun copyCapturedGeometry(
+            clip: GPUClipFacts = this.clip,
+            bounds: GPUBounds = this.bounds,
+            ordering: GPUOrderingFacts = this.ordering,
+            source: GPUCommandSource = this.source,
+            stroke: Boolean = this.stroke,
+            pathDescriptor: GPUPathFacts = this.pathDescriptor,
+        ): FillPath = FillPath(facts.copy(clip = clip, bounds = bounds, ordering = ordering, source = source, stroke = stroke, pathDescriptor = pathDescriptor))
+
+        internal fun bindCommandIdentity(commandId: GPUDrawCommandID): FillPath {
+            val identity = facts.commandId as? GPURecordedCommandIdentity.Unbound
+                ?: error("Command identity was already bound")
+            return FillPath(facts.copy(commandId = GPURecordedCommandIdentity.Bound(commandId, identity.occurrence),
+                ordering = facts.ordering.copy(paintOrder = commandId.value)))
+        }
+
+        internal fun bindSource(ref: MaterialPlanRef): FillPath {
+            check(hasBoundCommandIdentity && unboundSourceOccurrence != null)
+            return FillPath(facts.copy(
+                commandId = GPURecordedCommandIdentity.Bound(commandId),
+                w5aMaterialPlanRef = ref,
+            ))
+        }
+
+        operator fun component1(): GPUDrawCommandID = commandId
+        operator fun component2(): String = pathKey
+        operator fun component3(): GPUPathFacts = pathDescriptor
+        operator fun component4(): List<Float> = tessellatedVertices
+        operator fun component5(): List<Int> = contourStarts
+        operator fun component6(): Int = totalVertexCount
+        operator fun component7(): Int = edgeCount
+        operator fun component8(): GPUTransformFacts = transform
+        operator fun component9(): GPUClipFacts = clip
+        operator fun component10(): GPULayerFacts = layer
+        operator fun component11(): GPUMaterialDescriptor? = material
+        operator fun component12(): MaterialPlanRef? = w5aMaterialPlanRef
+        operator fun component13(): String? = preMaterialGeometryRefusalCode
+        operator fun component14(): GPUBlendFacts = blend
+        operator fun component15(): GPUBounds = bounds
+        operator fun component16(): GPUOrderingFacts = ordering
+        operator fun component17(): GPUCommandSource = source
+        operator fun component18(): Boolean = stroke
+        operator fun component19(): Float = strokeWidth
+        operator fun component20(): FloatArray? = dashIntervals
+        operator fun component21(): Float = dashPhase
+        operator fun component22(): String? = pathEffectKind
+        operator fun component23(): String = strokeCap
+        operator fun component24(): String = strokeJoin
+        operator fun component25(): Float = strokeMiterLimit
+        operator fun component26(): Boolean = antiAlias
+        operator fun component27(): NormalizedMaskFilter? = maskFilter
+
+        override fun equals(other: Any?): Boolean = other is FillPath && facts == other.facts
+        override fun hashCode(): Int = facts.hashCode()
+        override fun toString(): String = "FillPath" + facts.toString().removePrefix("Facts")
+
+        /** Data semantics retain the historical field order, including FloatArray identity equality. */
+        private data class Facts(
+            val commandId: GPURecordedCommandIdentity,
+            val pathKey: String,
+            val pathDescriptor: GPUPathFacts,
+            val tessellatedVertices: List<Float>,
+            val contourStarts: List<Int>,
+            val totalVertexCount: Int,
+            val edgeCount: Int,
+            val transform: GPUTransformFacts,
+            val clip: GPUClipFacts,
+            val layer: GPULayerFacts,
+            val material: GPUMaterialDescriptor?,
+            val w5aMaterialPlanRef: MaterialPlanRef?,
+            val preMaterialGeometryRefusalCode: String?,
+            val blend: GPUBlendFacts,
+            val bounds: GPUBounds,
+            val ordering: GPUOrderingFacts,
+            val source: GPUCommandSource,
+            val stroke: Boolean,
+            val strokeWidth: Float,
+            val dashIntervals: FloatArray?,
+            val dashPhase: Float,
+            val pathEffectKind: String?,
+            val strokeCap: String,
+            val strokeJoin: String,
+            val strokeMiterLimit: Float,
+            val antiAlias: Boolean,
+            val maskFilter: NormalizedMaskFilter?,
+        )
     }
 
     /**

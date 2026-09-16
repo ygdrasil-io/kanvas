@@ -377,7 +377,17 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
         val hasLayerCompositeSteps = framePlan.steps.any {
             it is GPUFrameStep.LayerCompositeRenderStep
         }
-        if (hasLayerCompositeSteps ||
+        val commonCorePackets = w4eRenderSteps.flatMap { it.drawPackets }
+            .filter { it.corePrimitivePreparedAuthority?.materialDispatchPlan != null }
+        val commonPreparedFrame = commonCorePackets.isNotEmpty()
+        if (commonPreparedFrame && commonCorePackets.mapNotNull { it.w5bMixedFrameWitnessV1 }
+                .distinct().singleOrNull()?.validates(framePlan) != true) {
+            return GPUPreparedNativeFramePayloadMaterialization.Refused(
+                "invalid.native-frame-payload.common-prepared-frame",
+                "Common Core geometry requires its exact prepared frame witness.",
+            )
+        }
+        if (commonPreparedFrame || hasLayerCompositeSteps ||
             selectWgpu4kPreparedFramePayloadRoute(
                 fullSemantics.map { it::class },
                 fullHasDestinationCopy,

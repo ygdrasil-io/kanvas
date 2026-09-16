@@ -8,6 +8,7 @@ import org.graphiks.kanvas.gpu.renderer.analysis.GPUAnalysisDependency
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUAnalysisDiagnostic
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUColorGlyphRoutePlanner
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUFirstRoutePlan
+import org.graphiks.kanvas.gpu.renderer.analysis.GPUFirstRouteGeometryAnalysis
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUFirstRoutePlanner
 import org.graphiks.kanvas.gpu.renderer.analysis.SortKey
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -17,6 +18,9 @@ import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.commands.deferredSourceOccurrence
+import org.graphiks.kanvas.render.ir.DrawNode
+import org.graphiks.kanvas.gpu.plan.MaterialPlanRef
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupingResult
 import org.graphiks.kanvas.gpu.renderer.destination.CopyAsDrawMaterialization
@@ -266,7 +270,22 @@ object GPURecordingOrder {
         }
 }
 
-private sealed interface GPURecordedPlan {
+/**
+ * Opaque host-only occurrence. Its type is public solely because normalized command
+ * constructors cross module boundaries; issuance and all contents remain internal.
+ * The captured DrawNode is the immutable public-adapter snapshot, never the caller's Paint.
+ */
+class GPURecordedSourceOccurrence internal constructor(
+    private val issuer: Any,
+    private val capturedDraw: DrawNode,
+    private val ordinal: Int,
+) {
+    internal fun isOwnedBy(owner: Any, occurrenceOrdinal: Int): Boolean =
+        issuer === owner && ordinal == occurrenceOrdinal
+    internal fun ownsSnapshot(draw: DrawNode): Boolean = capturedDraw === draw
+}
+
+internal sealed interface GPURecordedPlan {
     val analysisRecord: GPUDrawAnalysisRecord
     val analysisDecision: GPUDrawAnalysisDecision
     val routeDecision: GPURouteDecision
@@ -286,6 +305,49 @@ private sealed interface GPURecordedPlan {
 }
 
 private fun routed(plan: GPUFirstRoutePlan): GPURecordedPlan = GPURecordedPlan.Routed(plan)
+
+private fun NormalizedDrawCommand.hasBoundCoreCommandIdentity(): Boolean = when (this) {
+    is NormalizedDrawCommand.FillRect -> hasBoundCommandIdentity
+    is NormalizedDrawCommand.FillRRect -> hasBoundCommandIdentity
+    is NormalizedDrawCommand.FillPath -> hasBoundCommandIdentity
+    else -> true
+}
+
+/** ID-free, source-free first-route facts in exact captured occurrence order. */
+class GPURecordingSourceGeometryAnalysis internal constructor(
+    private val issuer: Any,
+    internal val commands: List<NormalizedDrawCommand>,
+    val commandGeometry: List<GPUFirstRouteGeometryAnalysis>,
+) {
+    internal fun isOwnedBy(owner: Any): Boolean = issuer === owner
+}
+
+/** Exact surviving occurrence and its final ID, supplied after atomic frame projection. */
+class GPURecordedCommandIdentityBinding(
+    internal val capturedCommand: NormalizedDrawCommand,
+    internal val commandId: GPUDrawCommandID,
+)
+
+/** Host-only analysis: no task list, source table, materialized source, or native owner. */
+class GPURecordingGeometryAnalysis internal constructor(
+    private val issuer: Any,
+    internal val frameId: GPUFrameID,
+    internal val deviceGeneration: GPUDeviceGenerationID,
+    internal val commands: List<NormalizedDrawCommand>,
+    internal val plans: List<GPURecordedPlan>,
+    val analysis: GPUDrawAnalysis,
+    internal val sourceGeometry: GPURecordingSourceGeometryAnalysis? = null,
+    internal val preparedConsumerIds: Set<Int> = emptySet(),
+) {
+    internal fun isOwnedBy(owner: Any): Boolean = issuer === owner
+}
+
+/** Exact occurrence join supplied only after the frame's source table is published. */
+class GPURecordedSourceBinding(
+    internal val commandId: GPUDrawCommandID,
+    internal val capturedDraw: DrawNode,
+    internal val ref: MaterialPlanRef,
+)
 
 /**
  * Recorder for already-normalized first-route commands.
@@ -309,15 +371,184 @@ class GPURecorder(
 ) {
     private val commands = mutableListOf<NormalizedDrawCommand>()
     private var closedRecording: GPURecording? = null
+    private val geometryIssuer = Any()
+    private var sourceGeometryAnalysis: GPURecordingSourceGeometryAnalysis? = null
+    private var geometryAnalysis: GPURecordingGeometryAnalysis? = null
 
     /** Returns a snapshot of recorded commands (defensive copy). */
     fun recordedCommands(): List<NormalizedDrawCommand> = commands.toList()
 
     /** Records one already-normalized command into this recorder scope. */
     fun record(command: NormalizedDrawCommand) {
-        check(closedRecording == null) { "GPURecorder.record cannot be called after close" }
+        check(closedRecording == null && geometryAnalysis == null && sourceGeometryAnalysis == null) {
+            "GPURecorder.record cannot be called after geometry analysis or close"
+        }
+        require(command.deferredSourceOccurrence?.isOwnedBy(geometryIssuer, commands.size) != false) {
+            "Deferred source occurrence belongs to a different recorder, command, or position"
+        }
         commands += command
     }
+
+    /** Issues one occurrence only while recording its already-captured immutable source snapshot. */
+    fun recordSourceGeometry(
+        capturedDraw: DrawNode,
+        normalize: (GPURecordedSourceOccurrence) -> NormalizedDrawCommand,
+    ): NormalizedDrawCommand {
+        check(closedRecording == null && geometryAnalysis == null && sourceGeometryAnalysis == null)
+        val occurrence = GPURecordedSourceOccurrence(geometryIssuer, capturedDraw, commands.size)
+        val command = normalize(occurrence)
+        require(command.deferredSourceOccurrence === occurrence && !command.hasBoundCoreCommandIdentity())
+        record(command)
+        return command
+    }
+
+    /** Runs the existing first-route geometry algorithms once, without any numerical command ID. */
+    fun analyzeSourceGeometry(): GPURecordingSourceGeometryAnalysis {
+        sourceGeometryAnalysis?.let { return it }
+        check(closedRecording == null && geometryAnalysis == null)
+        val snapshot = immutableList(commands)
+        val planner = GPUFirstRoutePlanner(capabilities)
+        val facts = snapshot.mapIndexed { ordinal, command ->
+            require(command.deferredSourceOccurrence?.isOwnedBy(geometryIssuer, ordinal) == true &&
+                !command.hasBoundCoreCommandIdentity()) { "Source-free intake requires exact unbound occurrences" }
+            when (command) {
+                is NormalizedDrawCommand.FillRect -> planner.captureGeometry(command)
+                is NormalizedDrawCommand.FillRRect -> planner.captureGeometry(command)
+                is NormalizedDrawCommand.FillPath -> planner.captureGeometry(command)
+                else -> error("This command is outside source-free Core intake")
+            }
+        }
+        return GPURecordingSourceGeometryAnalysis(geometryIssuer, snapshot, immutableList(facts))
+            .also { sourceGeometryAnalysis = it }
+    }
+
+    /**
+     * Binds IDs once after the caller's whole-frame projection. The explicit elided partition
+     * prevents an absent binding from silently dropping a sibling. No geometry is recomputed.
+     */
+    fun bindCommandIdentities(
+        analysis: GPURecordingSourceGeometryAnalysis,
+        bindings: List<GPURecordedCommandIdentityBinding>,
+        elidedCommands: List<NormalizedDrawCommand>,
+        preparedConsumerIds: Set<Int> = emptySet(),
+        synthesizedClear: NormalizedDrawCommand.FillRect? = null,
+    ): GPURecordingGeometryAnalysis {
+        check(closedRecording == null && geometryAnalysis == null)
+        require(analysis === sourceGeometryAnalysis && analysis.isOwnedBy(geometryIssuer))
+        val ordinalByCommand = java.util.IdentityHashMap<NormalizedDrawCommand, Int>()
+        analysis.commands.forEachIndexed { ordinal, command -> ordinalByCommand[command] = ordinal }
+        val survivorOrdinals = bindings.map { binding ->
+            requireNotNull(ordinalByCommand[binding.capturedCommand]) { "Unknown surviving occurrence" }
+        }
+        val elidedOrdinals = elidedCommands.map { command ->
+            requireNotNull(ordinalByCommand[command]) { "Unknown elided occurrence" }
+        }
+        val partition = survivorOrdinals + elidedOrdinals
+        require(partition.size == analysis.commands.size && partition.distinct().size == partition.size) {
+            "Every analyzed occurrence must be bound or explicitly elided exactly once"
+        }
+        require(survivorOrdinals.zipWithNext().all { (a, b) -> a < b } &&
+            bindings.zipWithNext().all { (a, b) -> a.commandId.value < b.commandId.value }) {
+            "Command identity bindings must preserve captured and final draw order"
+        }
+        synthesizedClear?.let { clear ->
+            val solid = clear.material as? org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.SolidColor
+            require(clear.commandId.value == 0 && clear.deferredSourceOccurrence == null &&
+                clear.w5aMaterialPlanRef == null && clear.source.operation == "clear" &&
+                solid != null && solid.r == 0f && solid.g == 0f && solid.b == 0f && solid.a == 0f &&
+                bindings.all { it.commandId.value > 0 }) { "Generated scene initialization must be the real transparent clear at ID 0" }
+        }
+        val allIds = bindings.map { it.commandId.value } + preparedConsumerIds +
+            listOfNotNull(synthesizedClear?.commandId?.value)
+        require(allIds.distinct().size == allIds.size && allIds.all { it >= 0 } &&
+            allIds.sorted() == allIds.indices.toList()) { "Final frame command IDs must form one complete ordered bijection" }
+        val bound = bindings.map { binding ->
+            analysis.commandGeometry[ordinalByCommand.getValue(binding.capturedCommand)]
+                .bindCommandIdentity(binding.commandId)
+        }
+        val boundCommands = immutableList(listOfNotNull(synthesizedClear) + bound.map { it.first })
+        val plans = immutableList(listOfNotNull(synthesizedClear?.let(::planCommand)) + bound.map { routed(it.second) })
+        return GPURecordingGeometryAnalysis(
+            geometryIssuer, frameId, deviceGeneration, boundCommands, plans, analysisFor(plans), analysis,
+            java.util.Collections.unmodifiableSet(LinkedHashSet(preparedConsumerIds)),
+        ).also { geometryAnalysis = it }
+    }
+
+    /** Executes each first-route geometry planner once, without publishing executable work. */
+    fun analyzeGeometry(): GPURecordingGeometryAnalysis {
+        geometryAnalysis?.let { return it }
+        check(closedRecording == null && sourceGeometryAnalysis == null)
+        require(commands.all { it.hasBoundCoreCommandIdentity() }) { "Unbound identities require source-free analysis" }
+        require(commands.map { it.commandId }.distinct().size == commands.size) { "Duplicate recording command identity" }
+        val snapshot = immutableList(commands)
+        val plans = immutableList(snapshot.map(::planCommand))
+        return GPURecordingGeometryAnalysis(
+            geometryIssuer,
+            frameId,
+            deviceGeneration,
+            snapshot,
+            plans,
+            analysisFor(plans),
+        ).also { geometryAnalysis = it }
+    }
+
+    /** Joins exact source occurrences, then emits the historical recording without replanning geometry. */
+    fun bindGeometry(
+        analysis: GPURecordingGeometryAnalysis,
+        bindings: List<GPURecordedSourceBinding>,
+        preparedConsumers: List<NormalizedDrawCommand> = emptyList(),
+        bindPreparedConsumers: ((List<NormalizedDrawCommand>) -> List<NormalizedDrawCommand>)? = null,
+    ): GPURecording {
+        check(closedRecording == null)
+        require(analysis === geometryAnalysis && analysis.isOwnedBy(geometryIssuer))
+        require(bindPreparedConsumers == null || preparedConsumers.isEmpty())
+        val byCommand = bindings.groupBy { it.commandId }
+        val deferred = analysis.commands.filter { it.deferredSourceOccurrence != null }
+        require(byCommand.keys == deferred.map { it.commandId }.toSet() && byCommand.values.all { it.size == 1 }) {
+            "Source bindings must cover each recorded occurrence exactly once"
+        }
+        val boundCommands = analysis.commands.mapIndexed { ordinal, command ->
+            val occurrence = command.deferredSourceOccurrence ?: return@mapIndexed command
+            val binding = byCommand.getValue(command.commandId).single()
+            val capturedOrdinal = sourceGeometryAnalysis?.commands?.indexOfFirst {
+                it.deferredSourceOccurrence === occurrence
+            } ?: ordinal
+            require(occurrence.isOwnedBy(geometryIssuer, capturedOrdinal) &&
+                occurrence.ownsSnapshot(binding.capturedDraw)) { "Source binding occurrence mismatch" }
+            when (command) {
+                is NormalizedDrawCommand.FillRect -> command.bindSource(binding.ref)
+                is NormalizedDrawCommand.FillRRect -> command.bindSource(binding.ref)
+                is NormalizedDrawCommand.FillPath -> command.bindSource(binding.ref)
+                else -> error("Deferred source is not supported by this command")
+            }
+        }
+        require(boundCommands.none { it.deferredSourceOccurrence != null })
+        val consumers = bindPreparedConsumers?.invoke(immutableList(boundCommands)) ?: preparedConsumers
+        require(consumers.map { it.commandId.value }.toSet() == analysis.preparedConsumerIds &&
+            consumers.map { it.commandId.value }.distinct().size == consumers.size &&
+            consumers.zipWithNext().all { (a, b) -> a.commandId.value < b.commandId.value } &&
+            consumers.all { it is NormalizedDrawCommand.DrawTextRun || it is NormalizedDrawCommand.DrawPreparedVertices }) {
+            "Prepared consumer bind must retain the exact declared IDs, families and order"
+        }
+        val planner = GPUFirstRoutePlanner(capabilities)
+        val boundPlans = analysis.plans.zip(boundCommands).map { (plan, command) ->
+            when (plan) {
+                is GPURecordedPlan.Routed -> routed(planner.bindGeometryPlan(command, plan.plan))
+                is GPURecordedPlan.SemanticOnly -> plan
+            }
+        }
+        val joined = (boundCommands.zip(boundPlans) + consumers.map { it to planCommand(it) })
+            .sortedBy { it.first.commandId.value }
+        return publishRecording(joined.map { it.first }, joined.map { it.second })
+    }
+
+    private fun analysisFor(plans: List<GPURecordedPlan>): GPUDrawAnalysis = GPUDrawAnalysis(
+        analysisId = "analysis.${recordingId.value}",
+        records = plans.map { it.analysisRecord },
+        dependencies = plans.analysisDependencies(),
+        occlusionProofs = emptyList(),
+        diagnostics = plans.flatMap { it.analysisRecord.diagnostics },
+    )
 
     /**
      * Closes the recorder and returns immutable recording evidence.
@@ -328,15 +559,15 @@ class GPURecorder(
      */
     fun close(): GPURecording {
         closedRecording?.let { return it }
+        require(commands.none { it.deferredSourceOccurrence != null }) {
+            "Unbound sources require an exact late bind before recording publication"
+        }
+        return bindGeometry(analyzeGeometry(), emptyList())
+    }
 
-        val plans = commands.map(::planCommand)
-        val analysis = GPUDrawAnalysis(
-            analysisId = "analysis.${recordingId.value}",
-            records = plans.map { plan -> plan.analysisRecord },
-            dependencies = plans.analysisDependencies(),
-            occlusionProofs = emptyList(),
-            diagnostics = plans.flatMap { plan -> plan.analysisRecord.diagnostics },
-        )
+    private fun publishRecording(commands: List<NormalizedDrawCommand>, plans: List<GPURecordedPlan>): GPURecording {
+        require(commands.none { it.deferredSourceOccurrence != null })
+        val analysis = analysisFor(plans)
         val analysisDecisionDump = analysisDecisionDump(recordingId = recordingId, plans = plans)
         val compatibilityKey = compatibilityKey(commands = commands, capabilities = capabilities)
         val taskList = taskList(
@@ -374,11 +605,11 @@ class GPURecorder(
 
     private fun planCommand(command: NormalizedDrawCommand): GPURecordedPlan =
         when (command) {
-            is NormalizedDrawCommand.FillRect -> routed(GPUFirstRoutePlanner(capabilities = capabilities).plan(command))
-            is NormalizedDrawCommand.FillRRect -> routed(GPUFirstRoutePlanner(capabilities = capabilities).plan(command))
+            is NormalizedDrawCommand.FillRect -> routed(GPUFirstRoutePlanner(capabilities = capabilities).analyzeGeometry(command))
+            is NormalizedDrawCommand.FillRRect -> routed(GPUFirstRoutePlanner(capabilities = capabilities).analyzeGeometry(command))
             is NormalizedDrawCommand.FillDRRect -> routed(GPUFirstRoutePlanner(capabilities = capabilities).plan(command))
             is NormalizedDrawCommand.DrawTextRun -> routed(planDrawTextRun(command))
-            is NormalizedDrawCommand.FillPath -> routed(GPUFirstRoutePlanner(capabilities = capabilities).plan(command))
+            is NormalizedDrawCommand.FillPath -> routed(GPUFirstRoutePlanner(capabilities = capabilities).analyzeGeometry(command))
             is NormalizedDrawCommand.DrawImageRect -> routed(GPUFirstRoutePlanner(capabilities = capabilities).plan(command))
             is NormalizedDrawCommand.DrawPreparedVertices -> planPreparedVertices(command)
             is NormalizedDrawCommand.ApplyFilter -> routed(GPUFirstRoutePlanner(capabilities = capabilities).plan(command))

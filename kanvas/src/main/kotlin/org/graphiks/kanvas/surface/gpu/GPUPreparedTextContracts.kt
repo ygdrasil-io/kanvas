@@ -171,6 +171,8 @@ internal class GPUPreparedTextGeometry(
     override val capabilitySnapshotHash: String,
     override val representationPolicy: GPUPreparedTextRepresentationPolicy,
     val coveragePlan: org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan,
+    val clipFacts: org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts,
+    val clipExecution: org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan,
 ) : GPUPreparedTextGeometryInput {
     override val coveragePaintStyle get() = org.graphiks.kanvas.paint.PaintStyle.FILL
     override val coverageMaskFilter: org.graphiks.kanvas.paint.MaskFilter? get() = null
@@ -183,7 +185,7 @@ internal class GPUPreparedTextGeometry(
             clipContentKey, clip, paint, program, plan,
             org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextMaterialPlanEmission.common(program),
             org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.lowerForRecording(plan.blend),
-            targetColorFormat, capabilitySnapshotHash, representationPolicy)
+            targetColorFormat, capabilitySnapshotHash, representationPolicy, sourceGeometry = this)
     }
 }
 
@@ -206,6 +208,7 @@ internal class GPUPreparedTextDraw private constructor(
     override val targetColorFormat: String,
     override val capabilitySnapshotHash: String,
     override val representationPolicy: GPUPreparedTextRepresentationPolicy,
+    val sourceGeometry: GPUPreparedTextGeometry?,
 ) : GPUPreparedTextGeometryInput {
     init {
         require(targetColorFormat.isNotBlank()) { "Prepared text target format must not be blank" }
@@ -261,6 +264,7 @@ internal class GPUPreparedTextDraw private constructor(
             targetColorFormat: String,
             capabilitySnapshotHash: String,
             representationPolicy: GPUPreparedTextRepresentationPolicy,
+            sourceGeometry: GPUPreparedTextGeometry? = null,
         ): GPUPreparedTextDraw = GPUPreparedTextDraw(
             operationIndex = operationIndex,
             face = GPUPreparedFontFaceSnapshot.create(
@@ -290,6 +294,7 @@ internal class GPUPreparedTextDraw private constructor(
             representationPolicy = GPUPreparedTextRepresentationPolicy.create(
                 representationPolicy.representations,
             ),
+            sourceGeometry = sourceGeometry,
         )
     }
 }

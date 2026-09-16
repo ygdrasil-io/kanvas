@@ -31,6 +31,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUnif
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticClipUniformSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticIntersectionUniformSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedSemanticAuthority
+import org.graphiks.kanvas.gpu.renderer.passes.commonCoreSemanticAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPreparedRoute
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
@@ -624,6 +625,24 @@ internal class GPUFramePreflighter(
             ?: pureValidation.corePrimitivePathStencilRoutes
         val corePrimitiveNativeScopeRoutes = plannedPathValidation?.unifiedRouteSeal
             ?: pureValidation.corePrimitiveNativeScopeRoutes
+        try {
+            val commonRenders = framePlan.steps.withIndex().filter { (_, step) -> step is GPUFrameStep.RenderPassStep &&
+                step.drawPackets.any { it.corePrimitivePreparedAuthority?.materialDispatchPlan != null } }
+            val dispatches = commonRenders.flatMap { (it.value as GPUFrameStep.RenderPassStep).drawPackets }
+                .map { requireNotNull(it.corePrimitivePreparedAuthority?.materialDispatchPlan) }.distinct()
+            if (dispatches.isNotEmpty()) {
+                val dispatch = dispatches.single()
+                val routes = commonRenders.map { (index, value) ->
+                    val packets = (value as GPUFrameStep.RenderPassStep).drawPackets
+                    require(packets.all { it.commonCoreSemanticAuthority() != null })
+                    corePrimitiveNativeScopeRoutes.retainedFor(index, packets.map { it.packetId }) as GPUCorePrimitiveNativeScopeRouteSeal.Routes
+                }
+                dispatch.geometry.validateRoutes(routes)
+            }
+        } catch (_: IllegalArgumentException) {
+            return GPUFramePreflightResult.Refused(diagnostic("invalid.preflight.common-core-run-plan",
+                "Core native ranges differ from their exact prepublication geometry arenas"))
+        }
         if (mixedW5b != null) {
             try {
                 mixedW5b.sealNativeInventory(framePlan, corePrimitiveNativeScopeRoutes, requireNotNull(capabilities.limits))
@@ -3590,7 +3609,8 @@ internal class GPUFramePreflighter(
                         corePackets.map(GPUDrawPacket::packetId),
                     ) as? GPUCorePrimitiveDirectNativeRouteSeal.Routes
                     )?.preparedPassSeal ?: return@forEachIndexed
-                val uniformCoverage = if (hasExactPreparedSurfaceMixedNativeBoundary(framePlan)) {
+                val uniformCoverage = if (hasExactPreparedSurfaceMixedNativeBoundary(framePlan) ||
+                    corePackets.all { it.corePrimitivePreparedAuthority?.materialDispatchPlan != null }) {
                         GPUCorePrimitiveNativeScopeUniformCoverage.ExactCommandRange(
                             startIndex = preparedPass.commandIds.indexOf(
                                 units.first().commandIdValue,
@@ -4512,7 +4532,10 @@ internal class GPUFramePreflighter(
                     if (sharedUniformSeal !== directUniformSeal) {
                         return refused("Mixed direct packets substituted their shared uniform32 slab authority.")
                     }
-                    val route = classifyCorePrimitiveDirectNativeRoute(
+                    val route = packet.corePrimitivePreparedAuthority?.materialDispatchPlan?.let { dispatch ->
+                        requireNotNull(packet.commonCoreSemanticAuthority())
+                        dispatch.geometry.directRoutes.getValue(packet.commandIdValue)
+                    } ?: classifyCorePrimitiveDirectNativeRoute(
                         semantic,
                         corePrimitiveDirectClipAuthority(
                             packet.clipExecutionPlan ?: return refused("A direct packet is missing clip authority."),
@@ -4708,7 +4731,14 @@ internal class GPUFramePreflighter(
                         }
                     }
                     val pair = try {
-                        GPUCorePrimitivePathStencilNativeRoute.AcceptedPair(
+                        packet.corePrimitivePreparedAuthority?.materialDispatchPlan?.let { dispatch ->
+                            requireNotNull(packet.commonCoreSemanticAuthority())
+                            requireNotNull(cover.commonCoreSemanticAuthority())
+                            require(cover.corePrimitivePreparedAuthority?.materialDispatchPlan === dispatch)
+                            dispatch.geometry.pathPairs.getValue(packet.commandIdValue).also {
+                                require(it.producerPacketId == packet.packetId && it.coverPacketId == cover.packetId)
+                            }
+                        } ?: GPUCorePrimitivePathStencilNativeRoute.AcceptedPair(
                             packet.packetId,
                             cover.packetId,
                             FloatArray(producerGeometry.vertices.size) { producerGeometry.vertices[it] },
@@ -6052,7 +6082,10 @@ internal class GPUFramePreflighter(
                 Triple(
                     render,
                     packet to semantic,
-                    classifyCorePrimitiveDirectNativeRoute(
+                    packet.corePrimitivePreparedAuthority?.materialDispatchPlan?.let { dispatch ->
+                        requireNotNull(packet.commonCoreSemanticAuthority())
+                        dispatch.geometry.directRoutes.getValue(packet.commandIdValue)
+                    } ?: classifyCorePrimitiveDirectNativeRoute(
                         semantic,
                         corePrimitiveDirectClipAuthority(
                             clipExecutionPlan,
@@ -6749,16 +6782,13 @@ internal class GPUFramePreflighter(
                 val entry = accepted[acceptedIndex]
                 val seal = shapeSeals[indexAt]
                 val slot = frame80Plan.slots[indexAt]
-                val rebuilt = buildCorePrimitiveAnalyticShapeUniform(
-                    entry.semantic,
-                    GPUCorePrimitivePreparedSemanticAuthority.capture(entry.semantic),
-                )
-                val expectedBytes = when (rebuilt) {
-                    is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted -> rebuilt.bytes
-                    is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Refused -> return refuseShape(
-                        "Analytic shape semantic can no longer be recomposed into the sealed uniform80 ABI.",
-                    )
-                }
+                val expectedBytes = entry.packet.corePrimitivePreparedAuthority?.materialDispatchPlan
+                    ?.uniformPayload(entry.packet.commandIdValue) ?: when (val rebuilt = buildCorePrimitiveAnalyticShapeUniform(
+                        entry.semantic, GPUCorePrimitivePreparedSemanticAuthority.capture(entry.semantic))) {
+                        is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted -> rebuilt.bytes
+                        is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Refused -> return refuseShape(
+                            "Analytic shape semantic can no longer be recomposed into the sealed uniform80 ABI.")
+                    }
                 val renderScissor = entry.route.renderScissor ?: return refuseShape(
                     "Analytic shape route is missing its exact non-empty render scissor.",
                 )
@@ -7071,7 +7101,10 @@ internal class GPUFramePreflighter(
                     stepAuthority.layout ==
                     GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.GradientAnalyticShape656V1
                 ) {
-                    if (singleStepFrame || exactPreparedSurfaceMixedBoundary) {
+                    if (singleStepFrame || exactPreparedSurfaceMixedBoundary ||
+                        stepAcceptedIndicesByIndex.getValue(stepIndex).all {
+                            accepted[it].packet.corePrimitivePreparedAuthority?.materialDispatchPlan != null
+                        }) {
                         stepAuthority.uniformSlabSeal
                     } else {
                         stepAuthority.uniformSlabSeal?.let { frameSeal ->
@@ -9506,6 +9539,12 @@ internal class GPUFramePreflighter(
                     GPUPreparedNativeOperandOwnership.Borrowed
                 }
                 val streamBridges = requireNotNull(stream).operandBridge
+                fun nativeCorePipelineIdentity(packet: GPUDrawPacket): Any {
+                    if (!pathCore && !directCore) return requireNotNull(packet.renderPipelineKey)
+                    // The native owner interns by this exact closed mapping, not the richer
+                    // structural key (e.g. fill/stroke producers can share one native pipeline).
+                    return preparedCoreNativePipelineIdentity(packet)
+                }
                 val nativeBridges = if (pathCore || clipStencilCore || coverageMaskCore) {
                     val pipelineBridges = streamBridges.filter {
                         it.operand.kind == GPUMaterializedCommandOperandKind.RenderPipeline
@@ -9545,7 +9584,7 @@ internal class GPUFramePreflighter(
                         pipelineBridges + bindGroupBridges
                     } else {
                         pipelineBridges.zip(step.drawPackets)
-                            .distinctBy { (_, packet) -> packet.renderPipelineKey }
+                            .distinctBy { (_, packet) -> nativeCorePipelineIdentity(packet) }
                             .map { (bridge, _) -> bridge } + bindGroupBridges
                     }
                 } else if (directCore) {
@@ -9553,7 +9592,7 @@ internal class GPUFramePreflighter(
                         it.operand.kind == GPUMaterializedCommandOperandKind.RenderPipeline
                     }
                     pipelineBridges.zip(step.drawPackets)
-                        .distinctBy { (_, packet) -> packet.renderPipelineKey }
+                        .distinctBy { (_, packet) -> nativeCorePipelineIdentity(packet) }
                         .map { (bridge, _) -> bridge } +
                         listOfNotNull(
                             streamBridges.firstOrNull {
