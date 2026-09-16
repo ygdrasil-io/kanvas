@@ -67,7 +67,8 @@ internal class W5hPreparedMaterialFrameV6 private constructor(
                     is DisplayOp.DrawRect -> op.paint.isStroke()
                     is DisplayOp.DrawRRect -> op.paint.isStroke()
                     is DisplayOp.DrawPoint, is DisplayOp.DrawPoints -> !op.isPreparedPointSourceDomainV6()
-                    is DisplayOp.DrawPath, is DisplayOp.DrawImage -> false
+                    is DisplayOp.DrawPath -> false
+                    is DisplayOp.DrawImage -> !GPUPlanSurfaceCandidateGate.ownsW5eDirectImage(op)
                     is DisplayOp.DrawText, is DisplayOp.DrawVertices -> false
                     is DisplayOp.DrawMesh -> op.mesh.program != null
                     else -> true
@@ -131,6 +132,8 @@ internal class W5hPreparedMaterialFrameV6 private constructor(
                     it.visual.clipExecutionPlan !is GPUClipExecutionPlan.ScissorOnly } ||
                 textGeometry.any { it.operationIndex !in emptyTextClips && it.clipExecution != GPUClipExecutionPlan.NoClip &&
                     it.clipExecution !is GPUClipExecutionPlan.ScissorOnly }) return null
+            // Mask-filter first routes remain bound-only; decline all siblings before analysis/source ownership.
+            if (coreVisuals.values.any { it.visual.normalized.hasBlurMaskFilter() }) return null
             val sourceAnalysis = recorder.analyzeSourceGeometry()
             val capturedCore = linkedMapOf<Int, GPUCorePrimitiveCapturedGeometry>()
             val coreSourceInventories = linkedMapOf<Int, GPUCorePrimitiveSourceGeometryInventory>()

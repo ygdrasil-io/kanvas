@@ -1716,7 +1716,7 @@ internal fun GPUClipCoveragePlan.toExecutionPlan(
 }
 
 /** True when the normalized command carries a mask blur filter (the mask-blur composite lane). */
-private fun NormalizedDrawCommand.hasBlurMaskFilter(): Boolean = when (this) {
+internal fun NormalizedDrawCommand.hasBlurMaskFilter(): Boolean = when (this) {
     is NormalizedDrawCommand.FillRect -> maskFilter != null
     is NormalizedDrawCommand.FillRRect -> maskFilter != null
     is NormalizedDrawCommand.FillDRRect -> maskFilter != null
