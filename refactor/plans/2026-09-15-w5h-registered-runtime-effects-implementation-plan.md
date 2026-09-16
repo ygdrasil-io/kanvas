@@ -1,6 +1,10 @@
 # W5h Registered Runtime Effects and H-Lane Closure Implementation Plan
 
-## Final checkpoint — 2026-09-16 (local Steps1–8 complete; controller review pending)
+## Review correction checkpoint — 2026-09-16 (R1 local complete; Sol re-review pending)
+
+Task7 Sol review:0 Critical/1 Important, accepted per-run uniform-layout duplication. Correction R1 `70c70d344edddab1873acea399ab6fc18d8dcd58` removes the common global byte-count layout and uses only each final boundary segment's ordered command IDs for layout, bytes, sizing, resources, post-bind seals and native offsets. Root/preflight/native authenticate the exact same lists/plans; legacy routes remain unchanged, no second planner/repack/budget/geometry change. One existing convergence method now proves clustered-versus-interrupted CoreA→Vertices→CoreB at400000 bytes: causal RED on9ef, corrected pixels/budget refusal/same-Surface recovery GREEN; convergence5/5 XML PASS, native133 UNKNOWN. Preservation H598+444+84 and683 PASS;1128 registered/1127PASS/1failure/0error/0skip, the lone Point tuple exactly baseline(42 internalPASS/3SOFT_LIGHT), Gradle1/9m26s without native133/OOM. Three requested compiles GREEN; additional renderer compileTest baseline16 exactly/0new.1062 production hashes plus convergence hash verified unchanged after gates; durable status/report retain exact commands/XML/manifest. Same Sol re-review and whole-branch review remain controller-owned; Steps9–11 stay unchecked, publication Draft pending final Sol review. The following d88 covering is historical custody and is not transferred to R1.
+
+## Previous final checkpoint — 2026-09-16 (local Steps1–8 complete before review)
 
 Tasks1–6 are accepted;33 required H cells/33 closed/0 missing. Task7 source commits: `9a25200b427fcd9e9fd1a6382d37d870a4102a45` convergence/common-owner extraction, `e9c9ff1cbd4a6a5bb4fcbb6b387ffa35540906ac` Point/SCISSOR, and frozen `d88d8f49132fc7a4461df9945145dfc0feadb5e9` image/mask-filter eligibility. Five convergence behaviors and1021 H invocations PASS. Common frame ownership is bounded to NoClip/Scissor single-sample, exact Task4 width0/non-round Point(s), existing Path stroke/hairline geometry; other topologies decline before publication and retain historical owners/budgets, including Task6 W4e IMAGE. Static review retains legitimate legacy/W8 consumers; no file deleted.
 
