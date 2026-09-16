@@ -5,6 +5,10 @@ architecturale du renderer. Les artefacts techniques générés — captures PNG
 diffs, métriques, manifests et résultats JSON — restent dans leurs répertoires
 de preuve existants.
 
+## W5h — checkpoint local
+
+La branche `codex/w5h-registered-runtime-effects` est localement complète sur son périmètre borné, source figée `d88d8f49132fc7a4461df9945145dfc0feadb5e9` :33/33 cellules H et cinq comportements de convergence vérifiés. Le covering qualifié compte2084 invocations :2019PASS,63 failures attribuées (61 dettes historiques et2 stale refusals de promotion),0error,2skips AA4. Deux selectors sont explicitement `EXCLUDED — historical proof heap exhaustion` ; le total XML brut2085 inclut une interruption OOM, jamais un PASS. Les1062 hashes restent exacts. Cinq gates de compilation sont GREEN ; renderer compileTest conserve exactement16 erreurs préexistantes. Native133 reste `UNKNOWN`. Task review, whole-branch Sol et **publication Draft pending final Sol review** sont à la charge du contrôleur. La future Draft cible directement `codex/w5g-composed-procedural-materials` ; aucune URL W5h ni verdict final n'est inventé. [Suivi W05](waves/W05-material-graph/status.md) et [plan W5h](plans/2026-09-15-w5h-registered-runtime-effects-implementation-plan.md) conservent les comptes, commits, limites NoClip/Scissor et gaps W8/intégration.
+
 ## Objectif
 
 Atteindre une compatibilité Skia quasi isopixel hors `font` et `codec`, avec :

@@ -1,5 +1,154 @@
 # État W05 — material graph, gradients, images et color filters
 
+## W5h — implémentation locale figée ; publication Draft pending final Sol review
+
+Source Task7 figée `d88d8f49132fc7a4461df9945145dfc0feadb5e9` après implémentation `9a25200b427fcd9e9fd1a6382d37d870a4102a45` et correction Point/SCISSOR `e9c9ff1cbd4a6a5bb4fcbb6b387ffa35540906ac`, base Task6 `343dfafcb831c81e2ed2a49746ce096664811906`, branche `codex/w5h-registered-runtime-effects`, cible empilée `codex/w5g-composed-procedural-materials`. Les trois diagnostics image/mask-filter sont corrigés ; covering final attribué et six compiles achevés sur ce freeze, avec les dettes/exclusions explicites ci-dessous. Les Steps1–8 locaux sont clos par le commit tracking-only `docs(refactor): record w5h closure`. La review Task7, la review Sol whole-branch et la publication Draft appartiennent au contrôleur et restent pending ; aucun verdict final ni URL W5h n'est présumé. Pas de push ni merge dans ce lot.
+
+Les 33 cellules H sont closes sur leur domaine public borné : **33 required / 33 closed / 0 missing**. Ce nombre est distinct des invocations : Task4 = 14 cellules, 567 H + 31 contrôles = 598 ; Task5 = 12 cellules, 390 H + 54 contrôles = 444 ; Task6 = 7 cellules, 64 H + 20 contrôles = 84. Le contrôle élargi Task7 confirme 1181/1181 PASS (ces 1126 + W5b50 + convergence5), zéro failure/error/skip assertion ; Gradle exit1, Executor220 exit133 `UNKNOWN`, 7m59s. Les derniers 39 contrôles historiques + convergence5 donnent 44/44 PASS, Gradle exit0/17s. Ces checkpoints ne remplacent pas le covering figé ci-dessous.
+
+### Inventaire H01–H33 et custody causale
+
+Classes exactes : G4 = `org.graphiks.kanvas.surface.W5hGeometryHLaneSurfacePixelTest`, G5 = `org.graphiks.kanvas.surface.W5hTextVerticesSurfacePixelTest`, G6 = `org.graphiks.kanvas.surface.W5hImageOriginSurfacePixelTest`. Dans chaque ligne, le nom après la classe est la méthode exacte, et le nombre est celui des invocations JUnit, pas des rendus ni des cellules.
+
+Witness A : paint alpha149/255, runtime `child-opacity` .5 (nested .5×.5), véritables familles antérieures conservées ; mutation post-capture des child maps, stops, matrices, bytes et filtres applicables ; deux rendus Surface et replays Picture supportés. Finals SRC_IN et DIFFERENCE sur destination colorée nonopaque. G4 Point(s) garde ses limites Picture/CTM/clip documentées ; G5 Text garde le replay mémoire obligatoire et la limite wire du fixture synthétique ; G6 H conserve Picture mémoire/wire, ses contrôles de clip complexes sont Surface-only. A8 multiplie la vraie couverture ; RGBA ignore le paint shader et applique paint alpha. Witness B = A avec les quatre finals SRC_OVER/SRC_IN/DIFFERENCE/DST explicites de H03. H01 inclut Solid/Opacity/runtime × masques0/127/255 ; H02 prouve les shaders child/nested ignorés. Les oracles sont indépendants, calculés avant capture, singleton ou deux codes adjacents sans tolérance élargie.
+
+| Cellule | Classe.méthode | Invocations | Alpha/mutation/final | RED → GREEN |
+| --- | --- | ---: | --- | --- |
+| H01 | G6.a8SolidOpacityCaptureBlend | 9 | A, masques0/127/255 | R6 → V6 |
+| H02 | G6.rgbaPaintAlphaCaptureBlend | 2 | A, shader ignoré | R6 → V6 |
+| H03 | G6.imageOriginsFinalBlendCapture | 8 | B | R6 → V6 |
+| H04 | G4.pointsFourGradientsCaptureBlend | 80 | A | R4 → V4 |
+| H05 | G5.textFourGradientsCaptureBlend | 20 | A | R5 → V5 |
+| H06 | G5.verticesMeshFourGradientsCaptureBlend | 61 | A | R5 → V5 |
+| H07 | G6.a8FourGradientsCaptureBlend | 20 | A | R6 → V6 |
+| H08 | G4.pointsAddressingCaptureBlend | 60 | A, MIRROR≠CLAMP | R4 → V4 |
+| H09 | G5.textAddressingCaptureBlend | 15 | A | R5 → V5 |
+| H10 | G5.verticesMeshAddressingCaptureBlend | 46 | A | R5 → V5 |
+| H11 | G6.a8AddressingCaptureBlend | 17 | A, DECAL/MIRROR | R6 → V6 |
+| H12 | G4.rrectImageSampleCaptureBlend | 6 | A | R4 → V4 |
+| H13 | G4.strokeImageSampleCaptureBlend | 12 | A | R4 → V4 |
+| H14 | G4.pointsImageSampleCaptureBlend | 24 | A | R4 → V4 |
+| H15 | G5.textImageSampleCaptureBlend | 6 | A | R5 → V5 |
+| H16 | G5.verticesMeshImageSampleCaptureBlend | 19 | A | R5 → V5 |
+| H17 | G4.rrectColorFiltersCaptureBlend | 47 | A | R4 → V4 |
+| H18 | G4.strokeColorFiltersCaptureBlend | 94 | A | R4 → V4 |
+| H19 | G4.pointsColorFiltersCaptureBlend | 188 | A | R4 → V4 |
+| H20 | G5.textColorFiltersCaptureBlend | 47 | A | R5 → V5 |
+| H21 | G5.verticesMeshColorFiltersCaptureBlend | 142 | A | R5 → V5 |
+| H22 | G4.rrectBlendNoiseCaptureBlend | 3 | A | R4 → V4 |
+| H23 | G4.strokeBlendNoiseCaptureBlend | 6 | A | R4 → V4 |
+| H24 | G4.pointsBlendNoiseCaptureBlend | 12 | A | R4 → V4 |
+| H25 | G5.textBlendNoiseCaptureBlend | 3 | A | R5 → V5 |
+| H26 | G5.verticesMeshBlendNoiseCaptureBlend | 10 | A | R5 → V5 |
+| H27 | G6.a8BlendNoiseCaptureBlend | 3 | A | R6 → V6 |
+| H28 | G4.rrectRuntimeCaptureBlend | 5 | A | R4 → V4 |
+| H29 | G4.strokeRuntimeCaptureBlend | 10 | A | R4 → V4 |
+| H30 | G4.pointsRuntimeCaptureBlend | 20 | A | R4 → V4 |
+| H31 | G5.textRuntimeCaptureBlend | 5 | A | R5 → V5 |
+| H32 | G5.verticesMeshRuntimeCaptureBlend | 16 | A | R5 → V5 |
+| H33 | G6.a8RuntimeCaptureBlend | 5 | A | R6 → V6 |
+
+R4 = base `d9bc90d5`, `/private/tmp/w5h-task4-red-after-refactor-d9bc.xml` ; V4 = source `27810104`, `/private/tmp/w5h-task4-fix3-full-green.xml`. R5 = base `27810104`, `/private/tmp/w5h-task5-red-causal-424.xml` (412 failures causaux + 12 contrôles) ; V5 = source `0806d477`, `/private/tmp/w5h-task5-fix1-full-green-444.xml`. R6 = base `0806d477`, `/private/tmp/w5h-task6-red-initial-71.xml` (53 refus production causaux, quatre problèmes de fixture séparés), complété par les RED ownership/ordre/clip du rapport Task6 ; V6 = source `343dfafc`, `/private/tmp/w5h-task6-final-84.xml`. Les rapports SDD gitignored gardent commandes, messages, mutations et corrections de fixture exacts ; les nouvelles corrections n'effacent pas ces RED.
+
+### Commits, convergence et autorité commune
+
+| Lot | Commits d'implémentation/correction | Review contrôleur acquise |
+| --- | --- | --- |
+| Task1 catalogue/version/ABI | `19ad1543c` | Sol clean |
+| Task2 capture/Picture12/schema6 | `fd85e9cfb`, `6ab18765f` | Sol clean |
+| Task3 V6/root/witness/resources | `f4905f2e9`, `d9bc90d51` | clean après correction budgets pré-catalogue |
+| Task4 géométrie H | `d68056475`, `54598871e`, `00f106c66`, `278101046` | clean après trois corrections, ADDRESSED |
+| Task5 Text/Vertices/Mesh | `5ad7b0c2f`, `0806d4773` | clean après une correction, aucun nouveau C/I |
+| Task6 origines A8/RGBA | `343dfafcb` | Sol C0/I0/M0 |
+| Task7 convergence/owner frame-wide | `9a25200b4`, `e9c9ff1cb` (Point domain/SCISSOR), `d88d8f491` (image/mask-filter domain) | Task review et whole-branch Sol pending contrôleur |
+
+La seule nouvelle classe `W5hConvergenceSurfacePixelTest` contient exactement cinq comportements publics : `sameCapturedRuntimeOwnerAcrossEveryLane`, `independentEqualRuntimeOwnersKeepTheirImageBudgets`, `mixedPriorFamiliesStayUnderChildOpacity`, `lateSiblingRefusalDoesNotPublishAndSameSurfaceRecovers`, `pictureReplaysMixedPromotedLanesAfterCaptureMutation`. Baseline sur Task6 inchangée : 5 enregistrés, 3 PASS, deux RED Surface/Picture avec `unsupported.material.runtime_effect.descriptor` (`/private/tmp/w5h-task7-convergence-baseline-343dfafc.xml`). Les trois comportements initialement verts gardent leur causalité Tasks1–6 ; aucun défaut artificiel n'a été introduit. Le gap réel était le fallback local lorsque les lanes Core rejoignaient Text/Vertices.
+
+Task7 extrait les mêmes builders en deux autorités : `GeometryAuthority` host-only sans source et `MaterialBindingAuthority` après V6 ; la façade composée reste pour les consumers legacy post-bind. Un occurrence token opaque garde issuer, DrawNode immutable et ordinal ; sa visibilité de type est une contrainte ABI Kotlin entre modules, pas une nouvelle API Surface/wire. Les vrais IDs n'existent qu'après projection. Ordre final : geometry source-free → authentification de tous siblings → NoOp/culling atomique → packing Text survivant unique → vrais IDs et clear synthétique réel → run-plan/arenas Core exacts → footprint complet → capture/layout/table/packed V6 unique → bind/timeline/task list/root/witness → native. Les deux tokens et les ranges/hash exacts sont authentifiés ; pas de replan/reseal/repack après publication. Même les frames V6 exclusivement Core passent par l'assembler préparé commun ; le shortcut historique reste sans inventory.
+
+### Static cleanup et limites conservées
+
+Aucun fichier supprimé. `GPUMaterialMapper` reste consommé par les routes legacy `GPUOpMapper` et StrokeRect ; `toPreparedMaterialMapping` par Text/Vertices et image-shader locaux ; le builder MeshProgram explicite et son runtime resolver restent W8. Les provenances Text/Vertices V1 et V6 restent nécessaires à leurs normalized commands, semantic builders, host templates et native bindings. `GPUPreparedDrawImageLowerer` garde tint/SRC_OVER pour le direct legacy unowned, Nine/Lattice (`GPUPreparedImageGridLowerer`) et Atlas (`GPUPreparedAtlasLowerer`). Aucune suppression fondée sur des tests de structure ; seulement retrait de code intermédiaire Task7 devenu inutilisé et omission du join Point legacy sur le common route dont le seul bridge est inaccessible.
+
+Storage-read, sampled-texture et typed sampler : API immutable → `PaintSceneAdapter` checked capture → IR/wire tags1/2/3 → catalogue/ABI/`CapturedRuntimeResourceV1` → layout group1 et `RuntimeResourceOwnerIndexV1` → accounting pessimiste partagé/leases par consumer → reflection manifest/WGSL et root witness avant `beginFramePreparation` → `GPUW5aSourceStageNativeV2` et caches génération-first. Storage/sampler utilisent `GPUW5hRuntimeResourceSessionCache`, texture le cache decoded-image existant ; eviction zéro-lease, retirement et quarantine sont conservés. Même image/stop/noise/runtime owner logique partagé, owners indépendants distincts ; aucune source/frame charge doublée.
+
+Gap explicite W8/intégration : **frame multi-lane common owner limitée à NoClip/Scissor ; autres topologies déclinent avant publication**. Les géométries Path stencil/cover 1x existantes et hairline bornée DirectTriangles1px sont incluses ; MSAA/AA4, hard-path/complex clip, clip-stencil/multi-artifact et hairline générale restent hors domaine. Point(s) commun garde exactement le domaine préparé Task4 : DrawPoint ou DrawPoints/POINTS, strokeWidth0 et cap non-ROUND ; points larges/caps ronds/autres modes déclinent la frame entière avant catalogue et conservent leur vrai budget legacy. Le coût de cette frontière est une promotion W8/intégration encore nécessaire pour ces points. La route direct IMAGE complexe W4e promue en Task6 est conservée. Version0/WGSL embarqué reste décodable mais inert/refusé ; unowned/explicit MeshProgram et compatibility facades attendent W8. Le built-in livré est resource-free : successful nonempty runtime resources, device loss/native limits, mismatch non injectable publiquement, cleanup failures/cache internals restent des preuves statiques/gaps d'intégration, pas des mocks. Picture/SetClip et CTM historiques restent suivis ; aucune réparation font/codec/math/GM n'est revendiquée.
+
+### Covering final qualifié sur source figée
+
+Source immuable `d88d8f49132fc7a4461df9945145dfc0feadb5e9` ;1062 fichiers production/resources (971 main+75 commonMain+14 generated+2 jvmMain) SHA256 pré/post exacts pour chaque shard et chaque méthode isolée, puis après les compiles. Manifest `/private/tmp/w5h-task7-frozen-d88d8f4-all-production.sha256`, SHA256 `d1b1ea0dbe1edb5237a068713bed7b75e1f7d75833032867103dcb97435c28c4`. Test convergence inchangé SHA256 `0f9d68ef2b6b5a1aaa8fc983b7954792e366709db878562aca0b6096a97365c8`. Les27 classes exactes ont été vérifiées par `rtk rg --files` ; aucune suite wrapper. Aucun edit source/test après ce freeze.
+
+Le protocole contrôleur remplace le monolithe inexécutable par A26 classes hors W5d, puis B40 méthodes W5d hors sweep historique. Après OOM B, les15 méthodes absentes ont chacune une invocation Gradle neuve default8g, strictement séquentielle. Toutes gardent `--rerun-tasks --no-parallel --console=plain`. W5d :41 méthodes publiques inventoriées,39 qualifiées+2 exclusions nommées, zéro méthode restante ni doublon. Les replays exact343 ne sont jamais ajoutés aux comptes finaux.
+
+| Classe exacte, préfixe `org.graphiks.kanvas.` | Registered | PASS | Failure | Error | Skip XML |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| picture.W5fPictureFilterInterpolationTest | 8 | 8 | 0 | 0 | 0 |
+| picture.W5gComposedMaterialPictureTest | 5 | 5 | 0 | 0 | 0 |
+| picture.W5gNoisePictureCompatibilityTest | 10 | 10 | 0 | 0 | 0 |
+| picture.W5hRuntimeEffectPictureTest | 9 | 9 | 0 | 0 | 0 |
+| pipeline.W5hRuntimeEffectCatalogTest | 6 | 6 | 0 | 0 | 0 |
+| surface.gpu.GPUAllApiBlendSurfaceTest | 1 | 0 | 1 | 0 | 0 |
+| surface.W5aMaterialSurfacePixelTest | 48 | 46 | 1 | 0 | 1 |
+| surface.W5bBlendSurfacePixelTest | 50 | 50 | 0 | 0 | 0 |
+| surface.W5cGradientSurfacePixelTest | 27 | 20 | 7 | 0 | 0 |
+| surface.W5dGradientAddressingSurfacePixelTest | 40 | 26 | 12 | 0 | 2 |
+| surface.W5eDecodedImageSurfacePixelTest | 14 | 14 | 0 | 0 | 0 |
+| surface.W5eImageConvergenceSurfaceTest | 15 | 15 | 0 | 0 | 0 |
+| surface.W5eImageFamiliesSurfacePixelTest | 27 | 27 | 0 | 0 | 0 |
+| surface.W5eImageShaderSurfacePixelTest | 27 | 23 | 4 | 0 | 0 |
+| surface.W5fColorFilterSurfacePixelTest | 44 | 44 | 0 | 0 | 0 |
+| surface.W5fConvergenceSurfacePixelTest | 7 | 7 | 0 | 0 | 0 |
+| surface.W5fFilterOrderingSurfacePixelTest | 10 | 10 | 0 | 0 | 0 |
+| surface.W5fGradientInterpolationSurfacePixelTest | 280 | 248 | 32 | 0 | 0 |
+| surface.W5fImageFilterSurfacePixelTest | 92 | 92 | 0 | 0 | 0 |
+| surface.W5gComposedMaterialSurfacePixelTest | 125 | 122 | 3 | 0 | 0 |
+| surface.W5gConvergenceSurfacePixelTest | 34 | 32 | 2 | 0 | 0 |
+| surface.W5gNoiseSurfacePixelTest | 57 | 57 | 0 | 0 | 0 |
+| surface.W5hConvergenceSurfacePixelTest | 5 | 5 | 0 | 0 | 0 |
+| surface.W5hGeometryHLaneSurfacePixelTest | 598 | 598 | 0 | 0 | 0 |
+| surface.W5hImageOriginSurfacePixelTest | 84 | 84 | 0 | 0 | 0 |
+| surface.W5hRuntimeEffectSurfacePixelTest | 18 | 18 | 0 | 0 | 0 |
+| surface.W5hTextVerticesSurfacePixelTest | 444 | 443 | 1 | 0 | 0 |
+| Total XML brut final | 2085 | 2019 | 63 | 0 | 3 |
+| Total qualifié hors interruption exclue | 2084 | 2019 | 63 | 0 | 2 |
+
+Les3 skips XML bruts sont les2 AA4 historiques (W5a et W5d) et le nœud vide interrompu de `coordinateUniformBudgetRefusesPreciselyAndRecovers`, pas un vrai skip ni un PASS. Le total qualifié retire uniquement cette interruption explicitement exclue. `sweepFullCoveragePreservesRequestedTileBudgetIdentity` n'est pas enregistré dans cet epoch final. Les2 selectors sont **EXCLUDED — historical proof heap exhaustion**, jamais GREEN. Les17 XML process/executor supplémentaires (2 dans B,15 lors des méthodes isolées) sont séparés des2085 invocations publiques. Native exit133 reste **UNKNOWN**.
+
+ShardA :2045/1993PASS/51failure/0error/1skip,26 classes complètes,36m58/Gradle1 pour assertions, sans133/OOM/XML process dans cette invocation. B interrompu :25/17PASS/6failure/0error/2skip,6m53/Gradle1/native133 UNKNOWN. Continuation isolée15 :9PASS/6failure/0error/skip, chacun1m14–1m24/Gradle1/native133 UNKNOWN. W5d consolidé brut40/26PASS/12failure/0error/2skip. H1021 et convergence5 PASS. Les63 failures globales sont61 dettes baseline qualifiées et2 selectors déjà rouges contenant une promotion attendue ; zéro nouvelle failure non attribuée. Il ne s'agit ni d'un covering entièrement GREEN ni d'une preuve native GREEN.
+
+Custody : `/private/tmp/w5h-task7-frozen-d88d8f4-shard-a-26.log`, `...-shard-a-TEST-*`, `...-shard-b-w5d-40.log`, `...-shard-b-TEST-*`, puis `/private/tmp/w5h-task7-d88-b-m01-isolated.log` à `m15` et leurs `-TEST-*`/receipts pré-post. Le rapport Task7 conserve les commandes exactes, chaque méthode, tuple type/message/causes/pixels, tous les XML, les replays343 et les checksums. La comparaison A multiset conserve2045 invocations/2037 identités de nom ; aucun nom paramétré dupliqué n'est perdu. Seules les3 corrections image/mask-filter changent RED→GREEN contre e9. Seule normalisation autorisée pour certains messages : l'adresse volatile `Diagnostics@hex`, jamais les pixels/diagnostics.
+
+### Baselines, promotions et coût des exclusions
+
+Point : un seul selector JUnit agrège45 combinaisons internes,42PASS et3 erreurs SOFT_LIGHT `UNCLIPPED`/`SCISSOR`/`ALPHA_MASK`, message exact `Bare sqrt has no bounded inherited accuracy at zero/subnormal input {}`, inchangé à Task4 `/private/tmp/w5h-task4-historical-base-d9bc.xml`. L'ancien skip AA4 Task4 était un contrôle GPUPlan distinct, pas une46e invocation de cette matrice. W5eShader : exactement4 failures RRect/Path stroke/Path hairline/Vertices `Expected IllegalStateException to be thrown, but nothing was thrown`, aucune cinquième, base `/private/tmp/w5h-task6-w5e-shader-baseline-0806.xml`.
+
+W5a/W5c/W5d assertions, W5f interpolation32 et W5g refus/preflight sont qualifiés sur snapshot immuable exact `343dfafcb831c81e2ed2a49746ce096664811906`, sans edit des tests. Les11 failures W5d exactes incluent les6 de B et5 de la continuation (diagnostic non-uniform owner, budget composite, matrice familles28 lignes, sweep endpoints8 lignes, linear signed boundaries4 lignes). Les16 diagnostics renderer compileTest restent identiques. Toutes ces dettes restent rouges.
+
+H5 contrôle `legacyMeshProgramRefusesThenSameSurfaceRecovers` : **BASELINE ORDER-POLLUTION**. Isolé1PASS ; le couple minimal catalogue `legacyArchiveIdCannotShadowPositiveLookup` → H5 produit1PASS/1failure sur e9 et343, même ordre et `Runtime effect id kanvas.runtime.child-opacity is already registered with an incompatible descriptor`. Coût : collision globale v0 historique en composition, malgré390 invocations H5 PASS. Aucun edit registry/test/harness.
+
+Deux **EXPECTED PROMOTION / PRE-EXISTING STALE REFUSAL**, jamais tuples baseline identiques : (1) W5g RRect Blend déjà FAIL343 sur `source_unimplemented`, désormais rendu bleu `[0,0,-1,-1]` conforme à H22 ; (2) W5d `excludedLinearPaintLanesPreservePreparedRefusals`, déjà FAIL343 sur8 diagnostics NaN inchangés, ajoute8 rendus au lieu de refus pour RRect FILL NoClip,17 stops,4 tile modes×bare/identity wrapper. Le selector reste un JUnit rouge. Témoin positif correspondant H28 `rrectRuntimeCaptureBlend`/`RRect/stops-child` :17-stop child, paint alpha, mutation et finals, PASS dans A ; il ne prétend pas reproduire tous les8 fixtures bare/wrapped. Les deux convergence mixed Surface/Picture valident aussi le common RRect owner. Coût : ces anciennes assertions de refus ne prouvent plus la limite promue ; leur maintenance et les8 diagnostics NaN restent hors lot. Aucun ancien test modifié.
+
+Le monolithe exact27/default8g sur9a a OOM pendant le sweep :177/161PASS/13failure/0error/3skip,9/27 classes,8m45. Le sweep isolé343@8g reproduit l'OOM `ColorRoundedGraphProofV1.contexts:389`,4m22 ; RSS maximal observé7.50GiB, pas un pic exact. Le seul retry autorisé27/16g sure9 OOM après19m6, avant la borne30min,178/162PASS/13failure/0error/3skip,10/27 classes ; allocation `IdentityHashMap.resize/put → evaluate:1041`, même proof owner mais pas stack byte-identique. Heap observé15.24GiB/16GiB, RSS observé6.70GiB, aucun signal/hausse supplémentaire. Native133 demeure distinct UNKNOWN. Custody exacte343@8g isolé,9a@8g monolithe,e9@16g ; aucun sweep e9@8g inventé.
+
+B surd88 révèle le second OOM `coordinateUniformBudgetRefusesPreciselyAndRecovers`, contexts389, RSS observé6.79GiB. Le selector seul sur343 OOM aussi, evaluate1290,5m55,1registered/1skip interrompu ; RSS observé6.62GiB, pas pic/heap exact. Le contrôleur exclut ce selector sans replay d88 isolé. Coût : le monolithe et ces2 preuves ne sont pas exécutables avec le proof owner actuel ; le sharding conserve source/hashes et toute la surface publique restante sans affaiblir budgets/assertions, ni edit proof/build. La preuve `ColorSourceProofV1.kt` reste byte-identique343/d88 SHA256 `fc7ff8a883441a08bdd23d6e4aaa98d6a1a5bcf5429cca95e21a7d521fb713bf`.
+
+Les vrais deltas Task7 ont leurs RED conservés et sont fermés : Point width1 conserve le budget legacy2048 via le prédicat Task4 exact ;14 SCISSOR vides deviennent projection host-only Culled authentifiée, sans bounds/bytes/uniform/slab/snapshot ;3 diagnostics image/mask-filter retrouvent leurs owners historiques par prédicats partagés, avant capture. Aucun nouveau compiler/source owner, géométrie, tolérance ou diagnostic faible. Coût des frontières : wide/round Point reste W8 ; direct-image hors domaine/mask-filter doit décliner atomiquement pour éviter `frame-build-contract`. Gates644/643PASS+Point baseline et134/132PASS+2W5g baselines précèdent le freeze final.
+
+### Six compilations finales séparées
+
+Chaque commande `rtk proxy ./gradlew <task> --no-parallel --console=plain` est exécutée séparément, après attribution complète, sans `--rerun-tasks` conformément au gate incremental.
+
+| Task | Exit | Résultat | Durée |
+| --- | ---: | --- | --- |
+| :render-ir:compileKotlin |0|GREEN|829ms|
+| :gpu-plan:compileKotlin |0|GREEN|625ms|
+| :gpu-renderer:compileKotlin |0|GREEN|696ms|
+| :gpu-renderer:compileTestKotlin |1|Baseline16 exacte, zéro nouvelle erreur|8s|
+| :kanvas:compileKotlin |0|GREEN|702ms|
+| :kanvas:compileTestKotlin |0|GREEN|653ms|
+
+Logs `/private/tmp/w5h-task7-final-compile-1-render-ir-compileKotlin.log` à `-6-kanvas-compileTestKotlin.log`. Comparaison du multiset exact fichier/ligne/colonne/message contre `w5h-task7-host-inventory-test-compile.log` :16/16,0 nouveau/0 absent ;2 NormalizedDrawCommandTest,3 GPUFramePreflighterTest,11 GpuPlanTaskListLowererTest. Aucun test d'infrastructure ni shim modifié. Toutes1062 empreintes et le test convergence restent exacts après les six compiles. Aucun global suite, GM/Skia/dashboard/render/baseline/score, `jpg-color-cube`, font ou codec gate exécuté.
+
 ## W5g — CLOSED sur le périmètre fonctionnel borné ; Draft PR #2401
 
 Tasks1–5 sont acceptées sur `c28615222`, empilées sur W5f `55e4992d5`. Le `final19` corrigé compte 921 cas publics : 919 PASS, les 2 skips AA4 historiques, 0 failure/error public. Gradle1/Executor258 exit133 garde la cause `UNKNOWN` et ne devient pas un native green ; cinq compilations séparées terminent exit0. La review Sol globale a trouvé un Important : le même owner image était chargé et loué deux fois entre W5e ordinaire et V5. Le RED public causal à 800000 octets, le correctif owner-aware `c28615222` et la re-review ciblée clôturent ce finding `ADDRESSED`, `COMPLIANT`/`APPROVED`, C0/I0/M0. La [Draft PR W5g #2401](https://github.com/ygdrasil-io/kanvas/pull/2401) cible uniquement W5f #2400 ; aucun merge/update du parent, claim ISO, score GM ou Ready-to-merge.

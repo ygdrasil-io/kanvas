@@ -1,5 +1,11 @@
 # W5h Registered Runtime Effects and H-Lane Closure Implementation Plan
 
+## Final checkpoint — 2026-09-16 (local Steps1–8 complete; controller review pending)
+
+Tasks1–6 are accepted;33 required H cells/33 closed/0 missing. Task7 source commits: `9a25200b427fcd9e9fd1a6382d37d870a4102a45` convergence/common-owner extraction, `e9c9ff1cbd4a6a5bb4fcbb6b387ffa35540906ac` Point/SCISSOR, and frozen `d88d8f49132fc7a4461df9945145dfc0feadb5e9` image/mask-filter eligibility. Five convergence behaviors and1021 H invocations PASS. Common frame ownership is bounded to NoClip/Scissor single-sample, exact Task4 width0/non-round Point(s), existing Path stroke/hairline geometry; other topologies decline before publication and retain historical owners/budgets, including Task6 W4e IMAGE. Static review retains legitimate legacy/W8 consumers; no file deleted.
+
+Controller-authorized covering is fully attributed on1062 immutable hashes: A26 classes, B interrupted then15 fresh-worker exact method invocations; W5d41 public methods=39 qualified+2 explicitly excluded historical proof-heap OOMs. Raw final XML2085/2019PASS/63failure/0error/3skip includes one OOM interruption; qualified2084/2019PASS/63failure/0error/2historicalAA4. The63 failures are61 qualified baseline debts and2 EXPECTED PROMOTION/PRE-EXISTING STALE REFUSAL selectors; H5 is BASELINE ORDER-POLLUTION. Neither excluded OOM nor native133 UNKNOWN is GREEN. Original27/default8g and authorized16g monoliths remain recorded as incomplete, not replaced silently. No source/test/build/proof edit during this final epoch. Six separate incremental compiles are complete: five exit0, renderer compileTest exit1 with exactly16 baseline diagnostics and zero new errors. Tracking-only commit closes local Steps1–8; Steps9–11, Task review and whole-branch Sol remain pending controller: **publication Draft pending final Sol review**, stacked directly on `codex/w5g-composed-procedural-materials`, no W5h URL/final verdict invented. Exact H ledger, XML counts/custody/commands, exclusions, costs and remaining integration gaps are in `refactor/waves/W05-material-graph/status.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Deliver the registered `child-opacity` runtime effect through the common W5 material authority, promote every applicable H lane, preserve Picture compatibility, and close W5 with public pixel evidence.
@@ -369,18 +375,18 @@ In `PLAN/RuntimeEffectSemanticCatalog.kt`, expose `RuntimeEffectSemanticCatalog.
 
 ### TDD and implementation steps
 
-- [ ] **Step 1 — Write the public RED.** In `W5hRuntimeEffectCatalogTest`, assert that `registered("kanvas.runtime.child-opacity", 1)` returns the same public descriptor facts across lookups (no object-identity assertion); unknown ID, version 0, version 2, and negative version return `null`; the one-argument `registered(id)` cannot select the positive effect; `compile(wgsl)` still yields version zero. Through public descriptor access, assert exact ordered child/uniform facts, absent built-in resources, `moduleOrNull==null`, the specified exceptions from legacy module/layout getters and incompatible color-filter/blender factories, and the known ABI hash literal computed independently from the spec bytes. Assert a legacy ID collision cannot shadow the positive descriptor. Publicly pass one extra storage, texture or sampler binding to child-opacity and assert exact extra-resource refusal without reading internals.
-- [ ] **Step 2 — Prove the RED is causal.** Run:
+- [x] **Step 1 — Write the public RED.** In `W5hRuntimeEffectCatalogTest`, assert that `registered("kanvas.runtime.child-opacity", 1)` returns the same public descriptor facts across lookups (no object-identity assertion); unknown ID, version 0, version 2, and negative version return `null`; the one-argument `registered(id)` cannot select the positive effect; `compile(wgsl)` still yields version zero. Through public descriptor access, assert exact ordered child/uniform facts, absent built-in resources, `moduleOrNull==null`, the specified exceptions from legacy module/layout getters and incompatible color-filter/blender factories, and the known ABI hash literal computed independently from the spec bytes. Assert a legacy ID collision cannot shadow the positive descriptor. Publicly pass one extra storage, texture or sampler binding to child-opacity and assert exact extra-resource refusal without reading internals.
+- [x] **Step 2 — Prove the RED is causal.** Run:
 
   ```bash
   rtk proxy ./gradlew :kanvas:test --tests org.graphiks.kanvas.pipeline.W5hRuntimeEffectCatalogTest
   ```
 
   Record the failing methods and XML path in the SDD report. Existing production must fail because the versioned lookup/descriptor v3 is absent.
-- [ ] **Step 3 — Add canonical values, instance bindings and hash recipes.** Implement `CanonicalHashBytesV1`, the V2 slot/block/resource facts, public and IR resource binding sets, descriptor-v3 validation, both hash domains, and exhaustive numeric tags from spec §§6 and 9. Keep old public type names as deprecated adapters when source compatibility requires them; positive construction uses only the new logical fields.
-- [ ] **Step 4 — Add the immutable semantic catalogue.** Implement the factory, exact-key value, `RuntimeEffectSemanticEntryV1`, all allowed logical resource-shape validation, finite graph/capture/resource limits and real `ChildOpacityCpuEvaluatorV1` defined above. Bind its actual identity/version and the sole resource-free `child-opacity` entry to `NumericOperationGraphV1`; add only the typed runtime operation needed for `scaleAlpha`.
-- [ ] **Step 5 — Split positive lookup from legacy registration.** Update `RuntimeEffect` so exact versioned lookup returns a positive immutable built-in without module WGSL. Keep compile/register/one-argument lookup version-zero only and deprecate them. A legacy ID collision must not shadow the positive built-in.
-- [ ] **Step 6 — Run the focused GREEN and compiles.** Run serially:
+- [x] **Step 3 — Add canonical values, instance bindings and hash recipes.** Implement `CanonicalHashBytesV1`, the V2 slot/block/resource facts, public and IR resource binding sets, descriptor-v3 validation, both hash domains, and exhaustive numeric tags from spec §§6 and 9. Keep old public type names as deprecated adapters when source compatibility requires them; positive construction uses only the new logical fields.
+- [x] **Step 4 — Add the immutable semantic catalogue.** Implement the factory, exact-key value, `RuntimeEffectSemanticEntryV1`, all allowed logical resource-shape validation, finite graph/capture/resource limits and real `ChildOpacityCpuEvaluatorV1` defined above. Bind its actual identity/version and the sole resource-free `child-opacity` entry to `NumericOperationGraphV1`; add only the typed runtime operation needed for `scaleAlpha`.
+- [x] **Step 5 — Split positive lookup from legacy registration.** Update `RuntimeEffect` so exact versioned lookup returns a positive immutable built-in without module WGSL. Keep compile/register/one-argument lookup version-zero only and deprecate them. A legacy ID collision must not shadow the positive built-in.
+- [x] **Step 6 — Run the focused GREEN and compiles.** Run serially:
 
   ```bash
   rtk proxy ./gradlew :kanvas:test --tests org.graphiks.kanvas.pipeline.W5hRuntimeEffectCatalogTest
@@ -390,7 +396,7 @@ In `PLAN/RuntimeEffectSemanticCatalog.kt`, expose `RuntimeEffectSemanticCatalog.
   ```
 
   Verify all new test methods pass in XML; report any native exit separately.
-- [ ] **Step 7 — Refactor and commit.** Remove duplicate hash/tag logic introduced during GREEN, keep all public values immutable, run the focused test once more if source changed, and commit with `feat(runtime-effects): add versioned semantic catalog`.
+- [x] **Step 7 — Refactor and commit.** Remove duplicate hash/tag logic introduced during GREEN, keep all public values immutable, run the focused test once more if source changed, and commit with `feat(runtime-effects): add versioned semantic catalog`.
 
 ### Task 1 acceptance
 
@@ -432,19 +438,19 @@ In `PLAN/RuntimeEffectSemanticCatalog.kt`, expose `RuntimeEffectSemanticCatalog.
 
 ### TDD and implementation steps
 
-- [ ] **Step 1 — Capture a genuine v11 fixture before writer edits.** Add a disposable public JUnit producer that records one `compile(wgsl)` shader with one uniform and one child, serializes it with the current Picture 11 writer and prints Base64. Run only that producer, copy the exact output into `format-11-runtime-effect-v0.base64` with `apply_patch`, then remove the producer before any production edit. Record base commit `983c4f1e6`, the public construction input and the decoded byte SHA-256 in the SDD report. The producer is not a committed test or gate.
-- [ ] **Step 2 — Write Picture RED tests.** Through public `PictureRecorder`/`Picture.toByteArray`/`Picture.fromByteArray`/`Picture.playback`, cover positive `child-opacity` with alpha `0.5`, child order, mutation after capture, round-trip bytes, playback into a second recorder twice, and the stored v11 fixture. Task 2's GREEN asserts capture, decoded descriptor and bytes only. Task 3 adds replay-pixel, inert-v0 rendering refusal and same-surface positive recovery methods to this class; do not add disabled/skipped execution tests during Task 2.
-- [ ] **Step 3 — Add malformed public byte cases.** In public methods `decodeRejectsUnknownRuntimeTriplet`, `decodeRejectsRuntimeAbiHashMismatch`, and `decodeRejectsMalformedRuntimeDescriptor`, start from public writer bytes and alter the ID, positive version, well-formed but unequal ABI hash, hash syntax, module or count fields with a small test-local wire parser. Cover unknown ID/version, negative version, non-lowercase/short hash, positive-with-module, a nonempty resource declaration added to the resource-free child-opacity descriptor, truncated uniform/resource lists and overflowing counts. `Picture.fromByteArray` returns `null` on rejection; subsequent valid decode and exact positive lookup remain unchanged. These bytes are the public path for invalid positive identity/ABI cases; never use internal constructors to force a Surface RED.
-- [ ] **Step 4 — Prove RED causality.** Run:
+- [x] **Step 1 — Capture a genuine v11 fixture before writer edits.** Add a disposable public JUnit producer that records one `compile(wgsl)` shader with one uniform and one child, serializes it with the current Picture 11 writer and prints Base64. Run only that producer, copy the exact output into `format-11-runtime-effect-v0.base64` with `apply_patch`, then remove the producer before any production edit. Record base commit `983c4f1e6`, the public construction input and the decoded byte SHA-256 in the SDD report. The producer is not a committed test or gate.
+- [x] **Step 2 — Write Picture RED tests.** Through public `PictureRecorder`/`Picture.toByteArray`/`Picture.fromByteArray`/`Picture.playback`, cover positive `child-opacity` with alpha `0.5`, child order, mutation after capture, round-trip bytes, playback into a second recorder twice, and the stored v11 fixture. Task 2's GREEN asserts capture, decoded descriptor and bytes only. Task 3 adds replay-pixel, inert-v0 rendering refusal and same-surface positive recovery methods to this class; do not add disabled/skipped execution tests during Task 2.
+- [x] **Step 3 — Add malformed public byte cases.** In public methods `decodeRejectsUnknownRuntimeTriplet`, `decodeRejectsRuntimeAbiHashMismatch`, and `decodeRejectsMalformedRuntimeDescriptor`, start from public writer bytes and alter the ID, positive version, well-formed but unequal ABI hash, hash syntax, module or count fields with a small test-local wire parser. Cover unknown ID/version, negative version, non-lowercase/short hash, positive-with-module, a nonempty resource declaration added to the resource-free child-opacity descriptor, truncated uniform/resource lists and overflowing counts. `Picture.fromByteArray` returns `null` on rejection; subsequent valid decode and exact positive lookup remain unchanged. These bytes are the public path for invalid positive identity/ABI cases; never use internal constructors to force a Surface RED.
+- [x] **Step 4 — Prove RED causality.** Run:
 
   ```bash
   rtk proxy ./gradlew :kanvas:test --tests org.graphiks.kanvas.picture.W5hRuntimeEffectPictureTest
   ```
 
   The positive descriptor/wire round trip must fail on Picture 11/schema 5; record its causal byte/descriptor failure. Do not demand a positive render during this task. Historical v0 execution/refusal evidence belongs to Task 3.
-- [ ] **Step 5 — Implement v12/schema6 and the common adapter.** Change writer/reader constants, encode v3 and instance resource bindings exhaustively, route Picture v8–v11 runtime descriptors through one checked v2-to-v3 adapter, and retain their existing scene-schema mappings and other historical field readers. Reject external sampled-texture references and validate every length/count in I64 before allocation. Do not reinterpret unrelated Picture fields.
-- [ ] **Step 6 — Make reconstruction exact and inert.** Update `PaintSceneAdapter` to capture positive built-ins by exact version/hash, preserve immutable uniform bytes and child snapshots, and reconstruct v0 detached values without any renderer hook. Register/install only after complete archive validation.
-- [ ] **Step 7 — Run focused GREEN and compatibility gates.** Run serially:
+- [x] **Step 5 — Implement v12/schema6 and the common adapter.** Change writer/reader constants, encode v3 and instance resource bindings exhaustively, route Picture v8–v11 runtime descriptors through one checked v2-to-v3 adapter, and retain their existing scene-schema mappings and other historical field readers. Reject external sampled-texture references and validate every length/count in I64 before allocation. Do not reinterpret unrelated Picture fields.
+- [x] **Step 6 — Make reconstruction exact and inert.** Update `PaintSceneAdapter` to capture positive built-ins by exact version/hash, preserve immutable uniform bytes and child snapshots, and reconstruct v0 detached values without any renderer hook. Register/install only after complete archive validation.
+- [x] **Step 7 — Run focused GREEN and compatibility gates.** Run serially:
 
   ```bash
   rtk proxy ./gradlew :kanvas:test --tests org.graphiks.kanvas.picture.W5hRuntimeEffectPictureTest
@@ -455,7 +461,7 @@ In `PLAN/RuntimeEffectSemanticCatalog.kt`, expose `RuntimeEffectSemanticCatalog.
   ```
 
   Inspect XML for method-level results and keep native exit reporting separate.
-- [ ] **Step 8 — Refactor and commit.** Remove the disposable producer, verify only the genuine Base64 fixture remains, rerun `W5hRuntimeEffectPictureTest` if source changed, and commit with `feat(picture): encode runtime effect descriptor v3`.
+- [x] **Step 8 — Refactor and commit.** Remove the disposable producer, verify only the genuine Base64 fixture remains, rerun `W5hRuntimeEffectPictureTest` if source changed, and commit with `feat(picture): encode runtime effect descriptor v3`.
 
 ### Task 2 acceptance
 
@@ -716,20 +722,20 @@ The public exact lookup returns `null` for unknown ID/version and exposes no pos
 
 ### TDD and implementation steps
 
-- [ ] **Step 1 — Write independent oracle and execution RED.** Add Rect and both Path-fill route cases for alpha `1.0`/`0.5`, nested ordering, mutation after capture, repeat render and one Picture replay. Assert the exact bytes or two adjacent oracle bytes.
-- [ ] **Step 2 — Write refusal/recovery RED.** Add public compile-v0/historical-v0, child, uniform/value, extra storage/texture/sampler and depth/node/byte-budget refusals with the exact diagnostic category from `W5hPlanDiagnostics`; after each refusal, render a positive built-in on the same `Surface`. Add the Picture replay/refusal methods specified by Task 2 here. Unknown positive triplet/hash refusal remains exclusively in the public decode tests.
-- [ ] **Step 3 — Prove RED causality.** Run:
+- [x] **Step 1 — Write independent oracle and execution RED.** Add Rect and both Path-fill route cases for alpha `1.0`/`0.5`, nested ordering, mutation after capture, repeat render and one Picture replay. Assert the exact bytes or two adjacent oracle bytes.
+- [x] **Step 2 — Write refusal/recovery RED.** Add public compile-v0/historical-v0, child, uniform/value, extra storage/texture/sampler and depth/node/byte-budget refusals with the exact diagnostic category from `W5hPlanDiagnostics`; after each refusal, render a positive built-in on the same `Surface`. Add the Picture replay/refusal methods specified by Task 2 here. Unknown positive triplet/hash refusal remains exclusively in the public decode tests.
+- [x] **Step 3 — Prove RED causality.** Run:
 
   ```bash
   rtk proxy ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.W5hRuntimeEffectSurfacePixelTest
   ```
 
   Record failing method names and confirm the first positive render is refused by the current W5g runtime slice, not by the fixture.
-- [ ] **Step 4 — Extend V5 into V6 in the existing plan.** Add runtime nodes/expectations to the current evaluation DAG and table, resolve the immutable catalogue during source construction, authenticate the descriptor, inline the child, compute checked layout/footprint and issue V6 only after whole-frame validation. Keep V1–V5 compatibility readers but select V6 for every new W5h-ready plan.
-- [ ] **Step 5 — Extend numeric proof and emission.** Add one typed `scaleAlpha` operation with the same input/output color domain as the built-in. Prove finite alpha `[0,1]`, preserve the existing `WgslFloatEnvelopeV1` contract, and emit it through `W5fColorOperationEmitterV1`/the common source stage.
-- [ ] **Step 6 — Add host templates and frame-wide renderer verification.** Seal native-handle-free geometry source/layout/target recipes into `GPUFramePlan`. Invoke the complete non-owning preflight in `GPUFramePreflighter.preflight` before `beginFramePreparation`, validate every sibling's manifest/ABI/numeric/CPU identity, emitted WGSL, resource mapping and reflection/layout, then pass its required witness through every native materializer to `materializeW5aSourcePartitionV2`. Keep legacy registry/resolver paths v0-only and unreachable from V6.
-- [ ] **Step 7 — Complete resource ownership and keying.** Implement storage, sampled-texture and sampler plan rows, budgets, materialization and bounded caches exactly as specified above. Put `deviceGeneration` first in all newly touched pipeline/layout/storage/sampler/texture keys; charge a complete miss without cache lookup; retain one lease per consumer until completion; only evict zero-lease entries; invalidate prior-generation entries on existing device loss. Reuse a shared immutable owner once per frame while keeping independently captured owners separate for admission.
-- [ ] **Step 8 — Run focused GREEN.** Run serially:
+- [x] **Step 4 — Extend V5 into V6 in the existing plan.** Add runtime nodes/expectations to the current evaluation DAG and table, resolve the immutable catalogue during source construction, authenticate the descriptor, inline the child, compute checked layout/footprint and issue V6 only after whole-frame validation. Keep V1–V5 compatibility readers but select V6 for every new W5h-ready plan.
+- [x] **Step 5 — Extend numeric proof and emission.** Add one typed `scaleAlpha` operation with the same input/output color domain as the built-in. Prove finite alpha `[0,1]`, preserve the existing `WgslFloatEnvelopeV1` contract, and emit it through `W5fColorOperationEmitterV1`/the common source stage.
+- [x] **Step 6 — Add host templates and frame-wide renderer verification.** Seal native-handle-free geometry source/layout/target recipes into `GPUFramePlan`. Invoke the complete non-owning preflight in `GPUFramePreflighter.preflight` before `beginFramePreparation`, validate every sibling's manifest/ABI/numeric/CPU identity, emitted WGSL, resource mapping and reflection/layout, then pass its required witness through every native materializer to `materializeW5aSourcePartitionV2`. Keep legacy registry/resolver paths v0-only and unreachable from V6.
+- [x] **Step 7 — Complete resource ownership and keying.** Implement storage, sampled-texture and sampler plan rows, budgets, materialization and bounded caches exactly as specified above. Put `deviceGeneration` first in all newly touched pipeline/layout/storage/sampler/texture keys; charge a complete miss without cache lookup; retain one lease per consumer until completion; only evict zero-lease entries; invalidate prior-generation entries on existing device loss. Reuse a shared immutable owner once per frame while keeping independently captured owners separate for admission.
+- [x] **Step 8 — Run focused GREEN.** Run serially:
 
   ```bash
   rtk proxy ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.W5hRuntimeEffectSurfacePixelTest
@@ -742,7 +748,7 @@ The public exact lookup returns `null` for unknown ID/version and exposes no pos
   rtk proxy ./gradlew :kanvas:compileTestKotlin
   ```
 
-- [ ] **Step 9 — Refactor and commit.** Search touched renderer code for runtime WGSL literals and V6 semantic re-resolution; remove duplicates, rerun the focused runtime surface class after source changes, and commit with `feat(gpu): render registered runtime effects through material v6`.
+- [x] **Step 9 — Refactor and commit.** Search touched renderer code for runtime WGSL literals and V6 semantic re-resolution; remove duplicates, rerun the focused runtime surface class after source changes, and commit with `feat(gpu): render registered runtime effects through material v6`.
 
 ### Task 3 acceptance
 
@@ -850,19 +856,19 @@ Every lane also covers post-capture uniform/child mutation and one refusal follo
 
 ### TDD and implementation steps
 
-- [ ] **Step 1 — Write geometry RED cases.** Implement the 14 named Task 4 ledger methods and all their specified family/lane invocations. Each has nontrivial alpha, post-capture mutation and the final-blend witnesses; record a causal RED for each newly promoted family/lane, including points gradients/addressing and RRect/stroke/points ImageSample, filters, Blend and both Noise variants.
-- [ ] **Step 2 — Add historical preservation calls.** Invoke `GPUAllApiBlendSurfaceTest.drawPointHistoricalW5bMatrix` as a separate gate for its 45 public cases; do not copy or weaken its assertions. Add one public W4 RRect and stroke coverage control to the new class only where the current public tests do not already cover it.
-- [ ] **Step 3 — Prove RED causality.** Run:
+- [x] **Step 1 — Write geometry RED cases.** Implement the 14 named Task 4 ledger methods and all their specified family/lane invocations. Each has nontrivial alpha, post-capture mutation and the final-blend witnesses; record a causal RED for each newly promoted family/lane, including points gradients/addressing and RRect/stroke/points ImageSample, filters, Blend and both Noise variants.
+- [x] **Step 2 — Add historical preservation calls.** Invoke `GPUAllApiBlendSurfaceTest.drawPointHistoricalW5bMatrix` as a separate gate for its 45 public cases; do not copy or weaken its assertions. Add one public W4 RRect and stroke coverage control to the new class only where the current public tests do not already cover it.
+- [x] **Step 3 — Prove RED causality.** Run:
 
   ```bash
   rtk proxy ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.W5hGeometryHLaneSurfacePixelTest
   ```
 
   Confirm each lane reaches its present material refusal/solid extraction boundary.
-- [ ] **Step 4 — Replace lane barriers with V6 references.** Keep the existing geometry plan, bounds, tessellation, coverage, clip, AA and final blend. Replace only the material rejection/extraction with authenticated `MaterialPlanRef` V6 transport into the common source stage.
-- [ ] **Step 5 — Remove point-local solid authority.** `W5bPreparedPointBridgeV3` transports the plan reference and binding owner; it does not decode `SolidColor`, multiply alpha, or choose blend. Preserve all existing point modes and draw ordering.
-- [ ] **Step 6 — Keep publication and ownership transactional.** Ensure every geometry sibling completes preflight before any runtime pipeline/resource lease. Reuse the Task 3 layout/program/cache identities and frame owners.
-- [ ] **Step 7 — Run focused GREEN and historical point gate.** Run serially:
+- [x] **Step 4 — Replace lane barriers with V6 references.** Keep the existing geometry plan, bounds, tessellation, coverage, clip, AA and final blend. Replace only the material rejection/extraction with authenticated `MaterialPlanRef` V6 transport into the common source stage.
+- [x] **Step 5 — Remove point-local solid authority.** `W5bPreparedPointBridgeV3` transports the plan reference and binding owner; it does not decode `SolidColor`, multiply alpha, or choose blend. Preserve all existing point modes and draw ordering.
+- [x] **Step 6 — Keep publication and ownership transactional.** Ensure every geometry sibling completes preflight before any runtime pipeline/resource lease. Reuse the Task 3 layout/program/cache identities and frame owners.
+- [x] **Step 7 — Run focused GREEN and historical point gate.** Run serially:
 
   ```bash
   rtk proxy ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.W5hGeometryHLaneSurfacePixelTest
@@ -872,7 +878,7 @@ Every lane also covers post-capture uniform/child mutation and one refusal follo
   rtk proxy ./gradlew :kanvas:compileTestKotlin
   ```
 
-- [ ] **Step 8 — Refactor and commit.** Delete material-only branch code made unreachable in these lanes, retain W8 legacy routes still used elsewhere, rerun the new class if source changed, and commit with `feat(gpu): promote geometry h lanes to material v6`.
+- [x] **Step 8 — Refactor and commit.** Delete material-only branch code made unreachable in these lanes, retain W8 legacy routes still used elsewhere, rerun the new class if source changed, and commit with `feat(gpu): promote geometry h lanes to material v6`.
 
 ### Task 4 acceptance
 
@@ -938,26 +944,26 @@ Every lane also covers post-capture uniform/child mutation and one refusal follo
 
 ### TDD and implementation steps
 
-- [ ] **Step 1 — Write pre-resolved Text RED.** Build `TextBlob` with the existing synthetic `FontTypeface` fixture above. Implement the six `TV.text*CaptureBlend` ledger methods for all six families, each with nontrivial alpha, caller-input mutation after capture and nontrivial final blend. Rasterization is a coverage prerequisite, not a font gate or assertion target.
-- [ ] **Step 2 — Write Vertices/Mesh RED.** Implement the six `TV.verticesMesh*CaptureBlend` ledger methods with all family invocations, no-texture vertices, vertex colors with noncommutative operation blend and in-memory textured routes. Add public legacy `MeshProgram` refusal/recovery without internal resolver assertions.
-- [ ] **Step 3 — Prove RED causality.** Run:
+- [x] **Step 1 — Write pre-resolved Text RED.** Build `TextBlob` with the existing synthetic `FontTypeface` fixture above. Implement the six `TV.text*CaptureBlend` ledger methods for all six families, each with nontrivial alpha, caller-input mutation after capture and nontrivial final blend. Rasterization is a coverage prerequisite, not a font gate or assertion target.
+- [x] **Step 2 — Write Vertices/Mesh RED.** Implement the six `TV.verticesMesh*CaptureBlend` ledger methods with all family invocations, no-texture vertices, vertex colors with noncommutative operation blend and in-memory textured routes. Add public legacy `MeshProgram` refusal/recovery without internal resolver assertions.
+- [x] **Step 3 — Prove RED causality.** Run:
 
   ```bash
   rtk proxy ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.W5hTextVerticesSurfacePixelTest
   ```
 
   Confirm text/vertices fail at the W5a-only provenance boundary and not in fixture construction.
-- [ ] **Step 4 — Generalize provenance and bridges.** Make existing provenance version-neutral and authenticate V6 against the same table/layout owner. Replace W5a-only material bridges with common-plan references; carry authenticated runtime uniforms/resource references and existing child-family resource owners through the same frame inventory.
-- [ ] **Step 5 — Compose source in the existing shader stages.** Text multiplies A8 coverage after material evaluation. Vertices/Mesh composes vertex colors/operation blend in its existing source position, then uses the common final blend. Remove text/vertices local material source generation from promoted routes.
-- [ ] **Step 6 — Quarantine MeshProgram legacy resolution.** Require a positive catalogued triplet for W5 admission. Since no W5h mesh semantic exists, existing legacy programs remain on their historical non-W5 path or refuse; they cannot borrow the shader built-in's capability.
-- [ ] **Step 7 — Run focused GREEN and bounded prior controls.** Run serially:
+- [x] **Step 4 — Generalize provenance and bridges.** Make existing provenance version-neutral and authenticate V6 against the same table/layout owner. Replace W5a-only material bridges with common-plan references; carry authenticated runtime uniforms/resource references and existing child-family resource owners through the same frame inventory.
+- [x] **Step 5 — Compose source in the existing shader stages.** Text multiplies A8 coverage after material evaluation. Vertices/Mesh composes vertex colors/operation blend in its existing source position, then uses the common final blend. Remove text/vertices local material source generation from promoted routes.
+- [x] **Step 6 — Quarantine MeshProgram legacy resolution.** Require a positive catalogued triplet for W5 admission. Since no W5h mesh semantic exists, existing legacy programs remain on their historical non-W5 path or refuse; they cannot borrow the shader built-in's capability.
+- [x] **Step 7 — Run focused GREEN and bounded prior controls.** Run serially:
 
   ```bash
   rtk proxy ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.W5hTextVerticesSurfacePixelTest
   rtk proxy ./gradlew :gpu-renderer:compileKotlin
   rtk proxy ./gradlew :kanvas:compileTestKotlin
   ```
-- [ ] **Step 8 — Refactor and commit.** Remove W5a-only provenance/bridge branches made unreachable for promoted routes, preserve other legacy consumers, rerun the new public class after source edits, and commit with `feat(gpu): promote text vertices and mesh material lanes`.
+- [x] **Step 8 — Refactor and commit.** Remove W5a-only provenance/bridge branches made unreachable for promoted routes, preserve other legacy consumers, rerun the new public class after source edits, and commit with `feat(gpu): promote text vertices and mesh material lanes`.
 
 ### Task 5 acceptance
 
@@ -1024,19 +1030,19 @@ Task 6 additionally owns the seven exact ledger methods H01/H02/H03/H07/H11/H27/
 
 ### TDD and implementation steps
 
-- [ ] **Step 1 — Write RGBA/A8 RED.** Implement the seven named Task 6 ledger methods and every family invocation, with nontrivial alpha, post-capture mutation and nontrivial final blend. Add small in-memory image controls from the origin matrix and an RGBA case whose runtime child would visibly alter color if incorrectly evaluated.
-- [ ] **Step 2 — Write ownership/budget RED.** Build one public frame sharing the same immutable image owner across direct/source uses and another with two independently constructed equal-content images. Use an already exposed public budget boundary; assert the bounded failure diagnostic and same-surface recovery without observing cache identity or counters.
-- [ ] **Step 3 — Prove RED causality.** Run:
+- [x] **Step 1 — Write RGBA/A8 RED.** Implement the seven named Task 6 ledger methods and every family invocation, with nontrivial alpha, post-capture mutation and nontrivial final blend. Add small in-memory image controls from the origin matrix and an RGBA case whose runtime child would visibly alter color if incorrectly evaluated.
+- [x] **Step 2 — Write ownership/budget RED.** Build one public frame sharing the same immutable image owner across direct/source uses and another with two independently constructed equal-content images. Use an already exposed public budget boundary; assert the bounded failure diagnostic and same-surface recovery without observing cache identity or counters.
+- [x] **Step 3 — Prove RED causality.** Run:
 
   ```bash
   rtk proxy ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.W5hImageOriginSurfacePixelTest
   ```
 
   Confirm failures arise from current tint/`SRC_OVER`/A8 source barriers.
-- [ ] **Step 4 — Route origins through common composition.** Extend the existing image plan to select RGBA alpha-only or A8 mask-material composition, use V6 for the A8 material, preserve source/filter/final-blend/coverage order, and publish only after frame-wide validation.
-- [ ] **Step 5 — Remove local image material authority.** Delete promoted-path tint computation and local `SRC_OVER` gate from `GPUPreparedDrawImageLowerer`; retain only geometry/sample facts. Resolve final blend through the common destination graph and source stage.
-- [ ] **Step 6 — Preserve owner-aware accounting.** Reuse the W5g owner inventory for an identical captured owner across routes, keep independent owners separate for admission, start cache keys with device generation, and retain a lease for every consumer until completion.
-- [ ] **Step 7 — Run focused GREEN and W5e public controls.** Run serially:
+- [x] **Step 4 — Route origins through common composition.** Extend the existing image plan to select RGBA alpha-only or A8 mask-material composition, use V6 for the A8 material, preserve source/filter/final-blend/coverage order, and publish only after frame-wide validation.
+- [x] **Step 5 — Remove local image material authority.** Delete promoted-path tint computation and local `SRC_OVER` gate from `GPUPreparedDrawImageLowerer`; retain only geometry/sample facts. Resolve final blend through the common destination graph and source stage.
+- [x] **Step 6 — Preserve owner-aware accounting.** Reuse the W5g owner inventory for an identical captured owner across routes, keep independent owners separate for admission, start cache keys with device generation, and retain a lease for every consumer until completion.
+- [x] **Step 7 — Run focused GREEN and W5e public controls.** Run serially:
 
   ```bash
   rtk proxy ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.W5hImageOriginSurfacePixelTest
@@ -1049,7 +1055,7 @@ Task 6 additionally owns the seven exact ledger methods H01/H02/H03/H07/H11/H27/
   rtk proxy ./gradlew :kanvas:compileTestKotlin
   ```
 
-- [ ] **Step 8 — Refactor and commit.** Remove newly dead direct-image material branches only, preserve external codec boundaries untouched, rerun the new public class after source edits, and commit with `feat(gpu): unify image origins with material v6`.
+- [x] **Step 8 — Refactor and commit.** Remove newly dead direct-image material branches only, preserve external codec boundaries untouched, rerun the new public class after source edits, and commit with `feat(gpu): unify image origins with material v6`.
 
 ### Task 6 acceptance
 
@@ -1141,19 +1147,19 @@ rtk proxy ./gradlew :kanvas:compileTestKotlin
 
 ### TDD, review, and publication steps
 
-- [ ] **Step 1 — Run the convergence baseline.** Add only the five cross-lane behaviors above and run on unchanged Task 6 production. If GREEN, retain the result and map every behavior to its causal RED/GREEN evidence in its owning Tasks 1–6; no new defect or redundant RED is required. If a new observable split owner/publication/material failure appears, retain its causal RED. Missing earlier causal evidence is a coverage gap to document and resolve against that behavior's owning-task source revision, not a reason to alter correct production artificially.
-- [ ] **Step 2 — Close demonstrated convergence gaps in existing owners.** Fix only a common plan, transport, inventory or ownership owner responsible for an observed RED. When the baseline is already GREEN and prior causal evidence is complete, no production correction is required. Do not add a convergence-only route or widen diagnostics/tolerances.
-- [ ] **Step 3 — Run convergence GREEN.** Run:
+- [x] **Step 1 — Run the convergence baseline.** Add only the five cross-lane behaviors above and run on unchanged Task 6 production. If GREEN, retain the result and map every behavior to its causal RED/GREEN evidence in its owning Tasks 1–6; no new defect or redundant RED is required. If a new observable split owner/publication/material failure appears, retain its causal RED. Missing earlier causal evidence is a coverage gap to document and resolve against that behavior's owning-task source revision, not a reason to alter correct production artificially.
+- [x] **Step 2 — Close demonstrated convergence gaps in existing owners.** Fix only a common plan, transport, inventory or ownership owner responsible for an observed RED. When the baseline is already GREEN and prior causal evidence is complete, no production correction is required. Do not add a convergence-only route or widen diagnostics/tolerances.
+- [x] **Step 3 — Run convergence GREEN.** Run:
 
   ```bash
   rtk proxy ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.W5hConvergenceSurfacePixelTest
   ```
 
-- [ ] **Step 4 — Perform static architecture cleanup.** Trace callers of `GPUMaterialMapper`, W5a-only text/vertices provenance, legacy runtime child authority/resolvers, direct-image tint/`SRC_OVER`, and text/vertices/mesh local material program builders. Trace storage/texture/sampler values from public API through IR/wire, V6 layout/budget, pre-`beginFramePreparation` reflection and post-witness native lease materialization. Remove only branches/files unreachable from all remaining legitimate routes. Record remaining legacy files and their W8 consumer in the task report. This review is static; do not create code-shape tests.
-- [ ] **Step 5 — Run the frozen-source covering.** Record HEAD and the hashes of every production source file before the command. Run the exact covering command once, inspect all JUnit XML, and record registered/pass/failure/error/skip counts. If Gradle ends with native exit 133 after XML is complete, report cause `UNKNOWN`; do not label the native run green.
-- [ ] **Step 6 — Run the six compiles.** Execute each listed compile separately and record its exit code. No global suite, GM, dashboard, render regeneration, font suite, codec suite or `jpg-color-cube` run is permitted.
-- [ ] **Step 7 — Update durable tracking.** In `refactor/waves/W05-material-graph/status.md`, transcribe all H01–H33 ledger results with exact class/method/invocations and alpha/mutation/final-blend evidence, count Task 4's 14 + Task 5's 12 + Task 6's 7 cells separately from public test invocation counts, and record causal RED/GREEN source custody. Report required/closed/missing cells, compile results, review verdicts, commit IDs, native status, deleted static files and remaining W8/device-loss or non-public mismatch gaps. Update `refactor/README.md` with the W5h branch/PR state. Add a concise final checkpoint at the top of this plan and check completed boxes; do not create another status markdown.
-- [ ] **Step 8 — Commit Task 7.** Commit production/test convergence with `feat(gpu): close w5 registered runtime effect lanes`, then commit tracking-only changes with `docs(refactor): record w5h closure` if the task review requires a stable production commit before docs.
+- [x] **Step 4 — Perform static architecture cleanup.** Trace callers of `GPUMaterialMapper`, W5a-only text/vertices provenance, legacy runtime child authority/resolvers, direct-image tint/`SRC_OVER`, and text/vertices/mesh local material program builders. Trace storage/texture/sampler values from public API through IR/wire, V6 layout/budget, pre-`beginFramePreparation` reflection and post-witness native lease materialization. Remove only branches/files unreachable from all remaining legitimate routes. Record remaining legacy files and their W8 consumer in the task report. This review is static; do not create code-shape tests.
+- [x] **Step 5 — Run the frozen-source covering.** Record HEAD and the hashes of every production source file before the command. Run the exact covering command once, inspect all JUnit XML, and record registered/pass/failure/error/skip counts. If Gradle ends with native exit 133 after XML is complete, report cause `UNKNOWN`; do not label the native run green.
+- [x] **Step 6 — Run the six compiles.** Execute each listed compile separately and record its exit code. No global suite, GM, dashboard, render regeneration, font suite, codec suite or `jpg-color-cube` run is permitted.
+- [x] **Step 7 — Update durable tracking.** In `refactor/waves/W05-material-graph/status.md`, transcribe all H01–H33 ledger results with exact class/method/invocations and alpha/mutation/final-blend evidence, count Task 4's 14 + Task 5's 12 + Task 6's 7 cells separately from public test invocation counts, and record causal RED/GREEN source custody. Report required/closed/missing cells, compile results, review verdicts, commit IDs, native status, deleted static files and remaining W8/device-loss or non-public mismatch gaps. Update `refactor/README.md` with the W5h branch/PR state. Add a concise final checkpoint at the top of this plan and check completed boxes; do not create another status markdown.
+- [x] **Step 8 — Commit Task 7.** Commit production/test convergence with `feat(gpu): close w5 registered runtime effect lanes`, then commit tracking-only changes with `docs(refactor): record w5h closure` if the task review requires a stable production commit before docs.
 - [ ] **Step 9 — Obtain whole-branch Sol review.** Review the complete diff from `da9b367bd` to W5h HEAD against the approved design and this plan. Required verdict: no Critical or Important findings, exact module authority, no H-lane parallel material route, complete three-kind runtime-resource transport, host-only preflight before `beginFramePreparation`, non-null witness custody through materialization, no forbidden tests/scope, and explicit Minor/integration gaps.
 - [ ] **Step 10 — Apply one bounded correction wave if required.** A single non-Sol implementer fixes all accepted Critical/Important findings with RED/GREEN evidence where behavior changes. The same Sol reviewer performs one scoped re-review. Do not restart the review loop for nonblocking stylistic observations.
 - [ ] **Step 11 — Push and publish one stacked Draft PR.** Push `codex/w5h-registered-runtime-effects`, create or update one Draft PR targeting `codex/w5g-composed-procedural-materials`, and include: architecture summary, seven-lot commit map, public test counts, six compile results, exact native-exit disclosure, excluded suites, transition-v0/W8 note, device-loss integration gap, final Sol verdict, and parent PR link. Do not merge either PR.
