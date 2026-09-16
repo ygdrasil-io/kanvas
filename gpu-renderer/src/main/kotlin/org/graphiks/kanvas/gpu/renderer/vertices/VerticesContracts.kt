@@ -178,6 +178,8 @@ data class GPUVertexTexCoordPlan(
 /** Primitive blend plan for drawVertices-style input. */
 data class GPUPrimitiveBlendPlan(
     val plan: GPUBlendPlan,
+    /** Non-null only for the raw public operation: apply after its primitive blend. */
+    val tailPaintAlphaF32: Float? = null,
 )
 
 /** Index buffer plan. */

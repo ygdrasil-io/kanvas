@@ -441,7 +441,13 @@ class GPUDrawPacket(
                 require(witness.validates(commandIdValue))
                 org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2.issue(
                     witness.sourcePlanTable, witness.materialAuthority, commandIdValue, witness.packedSourceV4)
-            }
+            } ?: if (role == GPUDrawPacketRole.Shading) when (val semantic = semanticPayload) {
+                is org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.TextA8 ->
+                    semantic.materialPlanProvenance?.commonPacketSource()
+                is org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.Vertices ->
+                    semantic.materialPlanProvenance?.commonPacketSource()
+                else -> null
+            } else null
         private set
 
     internal fun attachW5aSourceStageV2(source: org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2) {

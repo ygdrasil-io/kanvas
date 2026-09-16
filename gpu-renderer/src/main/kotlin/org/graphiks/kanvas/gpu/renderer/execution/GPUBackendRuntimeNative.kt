@@ -1168,7 +1168,9 @@ private class WgpuBackendSession(
     private val queueCompletionRuntime = wgpuQueueCompletionRuntime(
         deviceGeneration = deviceGeneration,
         queue = glfw.wgpuContext.device.queue,
-        onQueueFailure = { decodedImageCache.retireGeneration() },
+        onQueueFailure = {
+            try { decodedImageCache.retireGeneration() } finally { runtimeResourceCache.retireGeneration() }
+        },
     )
     private val preparedSceneChildren = GPUPreparedSceneChildRegistry(::closeRuntimeResources)
     private val preparedSceneSetupRollbackQuarantine = GPUPreparedSceneSetupRollbackQuarantine()
@@ -1215,6 +1217,7 @@ private class WgpuBackendSession(
                                 addAll(quarantinedDestinationCopyCaches)
                                 addAll(quarantinedSurfaceBlitCaches)
                                 if (!decodedImageCache.isClosed) add(decodedImageCache)
+                                if (!runtimeResourceCache.isClosed) add(runtimeResourceCache)
                             }
                         }
                     },
@@ -1285,6 +1288,9 @@ private class WgpuBackendSession(
     private val decodedImageCache = GPUW5eDecodedImageSessionCache(
         glfw.wgpuContext.device, glfw.wgpuContext.device.queue, deviceGeneration.value,
         requireNotNull(backendLimits.copyBytesPerRowAlignment), requireNotNull(backendLimits.maxBufferSize),
+    )
+    private val runtimeResourceCache = GPUW5hRuntimeResourceSessionCache(
+        glfw.wgpuContext.device,glfw.wgpuContext.device.queue,deviceGeneration.value,
     )
 
     override val adapterInfo: GPUBackendAdapterSummary? = adapterSummary(glfw.wgpuContext.adapter.info)
@@ -1652,6 +1658,7 @@ private class WgpuBackendSession(
                     corePrimitiveLimits = backendLimits,
                     preparedSurfaceMixedMaterializer = preparedSurfaceMixedMaterializer,
                     decodedImageCache = decodedImageCache,
+                    runtimeResourceCache = runtimeResourceCache,
                     onDestinationSnapshotCreated =
                         preparedSurfaceDestinationSnapshots::recordCreation,
                 )

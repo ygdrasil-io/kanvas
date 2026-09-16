@@ -19,6 +19,8 @@ import org.graphiks.math.geometry.Point2F32
 
 internal enum class DrawPathSourceOperation(internal val stableName: String) {
     DRAW_PATH("drawPath"),
+    DRAW_POINTS_LINES("drawPoints.lines"),
+    DRAW_POINTS_POLYGON("drawPoints.polygon"),
     TEXT_EXPANDED("text-expanded"),
     ;
 

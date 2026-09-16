@@ -49,9 +49,10 @@ internal object GPUPreparedVerticesFramePreparer {
         operations: List<DisplayOp>,
         target: GPUTargetFacts,
         capabilities: GPUCapabilities,
+        commonMaterialBridge: W5aPreparedVerticesMaterialBridge? = null,
     ): GPUPreparedVerticesDrawPreparation {
         val operationSnapshot = operations.toList()
-        val materialBridge = W5aPreparedVerticesMaterialBridge.capture(
+        val materialBridge = commonMaterialBridge ?: W5aPreparedVerticesMaterialBridge.capture(
             operations = operationSnapshot,
             width = target.width,
             height = target.height,
@@ -84,6 +85,7 @@ internal object GPUPreparedVerticesFramePreparer {
                 )
             ) {
                 is GPUPreparedVerticesLowering.Ready -> draws += lowered.draw
+                is GPUPreparedVerticesLowering.GeometryReady -> error("Geometry-only admission cannot publish a prepared draw")
                 is GPUPreparedVerticesLowering.Refused ->
                     return GPUPreparedVerticesDrawPreparation.Refused(
                         GPUPreparedOperationRefusal(
@@ -106,9 +108,10 @@ internal object GPUPreparedVerticesFramePreparer {
         limits: PreparedVerticesFrameInventoryLimits = defaultLimits(capabilities),
         preparedTextInventory: PreparedTextFrameInventory? = null,
         mappingBoundary: GPUPreparedFrameMappingBoundary = canonicalPreparedFrameMappingBoundary,
+        commonInventory: PreparedVerticesFrameInventory? = null,
     ): GPUPreparedVerticesFramePreparation {
         val operationSnapshot = operations.toList()
-        val draws = when (val lowered = lowerDraws(
+        val draws = if (commonInventory != null) emptyList() else when (val lowered = lowerDraws(
             operationSnapshot, target, capabilities,
         )) {
             is GPUPreparedVerticesDrawPreparation.Ready -> lowered.draws
@@ -116,7 +119,7 @@ internal object GPUPreparedVerticesFramePreparer {
                 return GPUPreparedVerticesFramePreparation.Refused(lowered.refusal)
         }
 
-        val inventory = when (
+        val inventory = commonInventory ?: when (
             val built = PreparedVerticesFrameInventoryBuilder.build(draws, limits, capabilities)
         ) {
             is PreparedVerticesFrameInventoryResult.Ready -> built.inventory
@@ -158,7 +161,7 @@ internal object GPUPreparedVerticesFramePreparer {
         operations.indexOfFirst { it is DisplayOp.DrawVertices || it is DisplayOp.DrawMesh }
             .coerceAtLeast(0)
 
-    private fun defaultLimits(capabilities: GPUCapabilities): PreparedVerticesFrameInventoryLimits {
+    internal fun defaultLimits(capabilities: GPUCapabilities): PreparedVerticesFrameInventoryLimits {
         val policyBufferBytes = 64L * 1024L * 1024L
         val deviceBufferBytes = capabilities.limits?.maxBufferSize ?: policyBufferBytes
         val effectiveBufferBytes = minOf(policyBufferBytes, deviceBufferBytes)

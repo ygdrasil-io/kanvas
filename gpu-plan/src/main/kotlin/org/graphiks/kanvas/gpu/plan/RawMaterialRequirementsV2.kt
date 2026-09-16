@@ -30,6 +30,10 @@ public class RawMaterialRequirementsV2 private constructor(
     slabIdentity: String,
     private val imageSource: Boolean = false,
     public val imageLayoutV3: ImageSourceLayoutV3? = null,
+    public val runtimeStorageBytesI64: Long = 0L,
+    public val runtimeTextureBytesI64: Long = 0L,
+    public val runtimeSamplerEntriesI32: Int = 0,
+    public val runtimeLeaseCountI32: Int = 0,
 ) {
     /** The materializer consumes this same immutable packing and allocation identity. */
     public fun copyUniformBytes(): ByteArray = uniformBytes.copyOf()
@@ -193,7 +197,8 @@ public class RawMaterialRequirementsV2 private constructor(
             check(bytes.position() == bytes.capacity())
             return RawMaterialRequirementsV2(1,footprint.uniformByteCountI64,false,footprint.bindingCountI32,
                 footprint.table.entry(footprint.root).program.structuralId.value,bytes.array(),footprint.canonicalIdentity,
-                footprint.proof.imageExecution != null,footprint.proof.imageLayout)
+                footprint.proof.imageExecution != null,footprint.proof.imageLayout,footprint.runtimeStorageBytesI64,
+                footprint.runtimeTextureBytesI64,footprint.runtimeSamplerEntriesI32,footprint.runtimeLeaseCountI32)
         }
         public const val BINDING_STRIDE_BYTES_I64: Long = 16L
 

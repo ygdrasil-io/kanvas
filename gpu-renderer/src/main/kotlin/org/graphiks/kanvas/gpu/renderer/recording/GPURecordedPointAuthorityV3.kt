@@ -26,8 +26,9 @@ class GPURecordedPointAuthorityV3 private constructor(
         semantic: GPUDrawSemanticPayload.CorePrimitive,
         blend: BlendPlan,
         clip: ClipStackNode?,
-        table: MaterialPlanTable,
+        table: MaterialPlanTable?,
         ref: MaterialPlanRef,
+        source: org.graphiks.kanvas.gpu.plan.W5hPreparedPointMaterialV6? = null,
     ): W5bPreparedPointCaptureV3 {
         require(owns(packet) && semantic.hasCanonicalHashIntegrity())
         require(semantic.sourceFamily == GPUCorePrimitiveSourceFamily.PointLine &&
@@ -41,8 +42,13 @@ class GPURecordedPointAuthorityV3 private constructor(
             semantic.payloadRef.gradientStore == null)
         require(semantic.clipExecutionPlanIdentity?.let { it == packet.clipExecutionPlan?.canonicalIdentity() } != false)
         require(blendMatches(packet.blendPlan, blend)) { "W5b requested blend contradicts its recorder packet" }
-        return W5bPreparedPointCaptureV3(this, semantic, blend, clip, table, ref, sourceRef)
+        require(table != null || source != null && source.sourceRef == sourceRef && source.blend == blend)
+        return W5bPreparedPointCaptureV3(this, semantic, blend, clip, table, ref, sourceRef, source)
     }
+
+    fun capturePrepared(semantic: GPUDrawSemanticPayload.CorePrimitive, blend: BlendPlan, clip: ClipStackNode?,
+        source: org.graphiks.kanvas.gpu.plan.W5hPreparedPointMaterialV6): W5bPreparedPointCaptureV3 =
+        capturePrepared(semantic, blend, clip, null, source.sourceRef, source)
 
     companion object {
         internal fun issue(command: NormalizedDrawCommand, packet: GPUDrawPacket): GPURecordedPointAuthorityV3? {
@@ -88,16 +94,21 @@ class W5bPreparedPointCaptureV3 internal constructor(
     private val original: GPUDrawSemanticPayload.CorePrimitive,
     private val blend: BlendPlan,
     private val clip: ClipStackNode?,
-    private val table: MaterialPlanTable,
+    private val table: MaterialPlanTable?,
     private val ref: MaterialPlanRef,
     private val sourceRef: MaterialPlanRef,
+    private val source: org.graphiks.kanvas.gpu.plan.W5hPreparedPointMaterialV6?,
 ) {
     internal fun validates(packet: GPUDrawPacket, semantic: GPUDrawSemanticPayload.CorePrimitive,
-        requestedBlend: BlendPlan?, requestedClip: ClipStackNode?): Boolean {
-        val material = (semantic.material as? GPUCorePrimitiveMaterialPayload.SolidColor)?.w5aAuthority ?: return false
+        requestedBlend: BlendPlan?, requestedClip: ClipStackNode?,
+        requestedSource: org.graphiks.kanvas.gpu.plan.W5hPreparedPointMaterialV6? = null): Boolean {
+        val material = semantic.material.materialSourceAuthority
+        val materialMatches = if (source != null) requestedSource === source && semantic === original &&
+            (semantic.material as? GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1)?.ref == sourceRef
+        else material != null && material.validates(packet.commandIdValue) && material.sourcePlanTable === table &&
+            material.ref == ref && material.sourceRef == sourceRef
         return recorded.owns(packet) && requestedBlend == blend && requestedClip === clip &&
-            material.validates(packet.commandIdValue) && material.sourcePlanTable === table &&
-            material.ref == ref && material.sourceRef == sourceRef &&
+            materialMatches &&
             semantic.hasCanonicalHashIntegrity() && original.hasCanonicalHashIntegrity() &&
             semantic.payloadRef.commandIdValue == original.payloadRef.commandIdValue &&
             semantic.payloadRef.resourceSlot == original.payloadRef.resourceSlot &&

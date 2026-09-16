@@ -101,6 +101,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
     private val countersObserver: ((GPUPreparedVerticesBatchingCounters) -> Unit)? = null,
 ) {
     private val pipelineByKey = linkedMapOf<PreparedVerticesPipelineKey, PreparedVerticesPipelineSet>()
+    private val commonTemplates = java.util.IdentityHashMap<GPURenderPipeline, GPUW5aGeometryPipelineTemplate>()
 
     fun materializeAcceptedRun(
         plan: GPUPreparedVerticesRenderRunPlan,
@@ -224,7 +225,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                     ),
                 )
             }
-            val owner = GPUPreparedRenderRunOwnedResources(created)
+            val owner = GPUPreparedRenderRunOwnedResources(created, commonTemplates.filterKeys { pipeline -> created.any { it === pipeline } })
             created.clear()
             GPUPreparedRenderRunMaterialization.Ready(
                 scopeOperands = scopeOperands,
@@ -532,11 +533,11 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                 ),
             ),
         ).track(created)
-        val materialGroup = device.createBindGroup(
+        val materialGroup = if (packet.material.commonSource != null) null else device.createBindGroup(
             BindGroupDescriptor(
                 label = "Kanvas.frame.preparedVertices.material-group." +
                     "${packet.payloadRef.commandIdValue}",
-                layout = pipelineSet.materialBindGroupLayout,
+                layout = requireNotNull(pipelineSet.materialBindGroupLayout),
                 entries = buildList {
                     packet.material.composableFragment.uniformBinding?.let { uniform ->
                         add(
@@ -553,7 +554,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                 },
             ),
         ).track(created)
-        val destinationGroup = entry.destinationRead?.let { destination ->
+        val destinationGroup = entry.destinationRead?.takeIf { packet.material.commonSource == null }?.let { destination ->
             val sampler = device.createSampler(
                 SamplerDescriptor(
                     addressModeU = GPUAddressMode.ClampToEdge,
@@ -603,7 +604,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                 ),
             )
         }
-        add(
+        materialGroup?.let { add(
             GPUPreparedNativeRenderCommand.SetBindGroup(
                 1,
                 GPUPreparedNativeBindGroupOperand(
@@ -612,7 +613,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                     GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
                 ),
             ),
-        )
+        ) }
         add(
             GPUPreparedNativeRenderCommand.SetVertexBuffer(
                 slot = 0,
@@ -672,7 +673,8 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
         actualDeviceGeneration: GPUDeviceGenerationID,
         created: MutableList<AutoCloseable>,
     ): PreparedVerticesPipelineSet {
-        val destination = entry.destinationRead?.plan?.blendPlan
+        val commonGeometry = entry.packet.material.commonSource != null
+        val destination = entry.destinationRead?.plan?.blendPlan?.takeUnless { commonGeometry }
         val key = PreparedVerticesPipelineKey(
             deviceGeneration = actualDeviceGeneration,
             shader = PreparedVerticesShaderCompatibilityKey(
@@ -694,7 +696,8 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
             vertexStepMode = GPUVertexStepMode.Vertex,
             sampleCountI32 = 1,
             drawUniformSizeBytesI32 = PREPARED_VERTICES_DRAW_UNIFORM_SIZE_BYTES,
-            materialUniformBinding = entry.packet.material.composableFragment.uniformBinding,
+            materialUniformBinding = if (commonGeometry) null else entry.packet.material.composableFragment.uniformBinding,
+            commonGeometry = commonGeometry,
             destination = destination?.let { blend ->
                 PreparedVerticesDestinationPipelineKey(
                     formulaIdentity = blend.formulaId,
@@ -715,22 +718,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
         created: MutableList<AutoCloseable>,
     ): PreparedVerticesPipelineSet {
         val layout = key.vertexLayout
-        val drawLayout = device.createBindGroupLayout(
-            BindGroupLayoutDescriptor(
-                label = "Kanvas.frame.preparedVertices.drawLayout",
-                entries = listOf(
-                    BindGroupLayoutEntry(
-                        binding = 0u,
-                        visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
-                        buffer = BufferBindingLayout(
-                            type = GPUBufferBindingType.Uniform,
-                            hasDynamicOffset = false,
-                            minBindingSize = key.drawUniformSizeBytesI32.toULong(),
-                        ),
-                    ),
-                ),
-            ),
-        ).track(created)
+        val drawLayout = device.createBindGroupLayout(preparedVerticesDrawLayoutV6()).track(created)
         val materialEntries = buildList {
             key.materialUniformBinding?.let { uniform ->
                 add(
@@ -746,7 +734,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                 )
             }
         }
-        val materialLayout = device.createBindGroupLayout(
+        val materialLayout = if (key.commonGeometry) null else device.createBindGroupLayout(
             BindGroupLayoutDescriptor(
                 label = "Kanvas.frame.preparedVertices.materialLayout",
                 entries = materialEntries,
@@ -789,8 +777,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                 bindGroupLayouts = listOfNotNull(drawLayout, materialLayout, destinationLayout),
             ),
         ).track(created)
-        val pipeline = device.createRenderPipeline(
-            RenderPipelineDescriptor(
+        val descriptor = RenderPipelineDescriptor(
                 label = "Kanvas.frame.preparedVertices.pipeline.${program.pipelineKeyHash}",
                 layout = pipelineLayout,
                 vertex = VertexState(
@@ -824,8 +811,10 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                         ),
                     ),
                 ),
-            ),
-        ).track(created)
+            )
+        val pipeline = device.createRenderPipeline(descriptor).track(created)
+        if (key.commonGeometry) commonTemplates[pipeline] = GPUW5aGeometryPipelineTemplate(
+            program.pipelineKeyHash, descriptor, drawLayout, materialCoordinateSlot = MaterialCoordinateSlotV1.InputPosition)
         return PreparedVerticesPipelineSet(
             drawBindGroupLayout = drawLayout,
             materialBindGroupLayout = materialLayout,
@@ -873,6 +862,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
         val sampleCountI32: Int,
         val drawUniformSizeBytesI32: Int,
         val materialUniformBinding: GPUPreparedMaterialUniformBinding?,
+        val commonGeometry: Boolean,
         val destination: PreparedVerticesDestinationPipelineKey?,
     )
 
@@ -898,7 +888,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
 
     private data class PreparedVerticesPipelineSet(
         val drawBindGroupLayout: GPUBindGroupLayout,
-        val materialBindGroupLayout: GPUBindGroupLayout,
+        val materialBindGroupLayout: GPUBindGroupLayout?,
         val destinationBindGroupLayout: GPUBindGroupLayout?,
         val pipelineLayout: GPUPipelineLayout,
         val pipeline: GPURenderPipeline,
@@ -1315,7 +1305,7 @@ private fun preparedVerticesBatchingCounters(
     )
 }
 
-private fun requirePreparedVerticesBlend(
+internal fun requirePreparedVerticesBlend(
     blendPlan: GPUBlendPlan?,
     packet: GPUDrawSemanticPayload.Vertices,
 ): GPUFixedFunctionBlendState {
@@ -1356,7 +1346,9 @@ private fun preparedVerticesDrawUniformBytes(
         for (row in 0..2) {
             buffer.putFloat(values[row * 3 + column])
         }
-        buffer.putInt(0)
+        // The raw-operation ABI names the first matrix padding word as its alpha tail.
+        // All legacy and common-source draw bytes remain unchanged.
+        buffer.putInt(if (column == 0) packet.primitiveBlendPlan?.tailPaintAlphaF32?.toRawBits() ?: 0 else 0)
     }
     buffer.putFloat(packet.targetBounds.width.toFloat())
     buffer.putFloat(packet.targetBounds.height.toFloat())
@@ -1405,14 +1397,14 @@ private fun String.toPreparedVerticesNativeIndexFormat(): GPUPreparedNativeIndex
         else -> error("Unsupported prepared-vertices index format $this")
     }
 
-private fun String.toPreparedVerticesTargetFormat(): GPUTextureFormat = when (this) {
+internal fun String.toPreparedVerticesTargetFormat(): GPUTextureFormat = when (this) {
     "rgba8unorm" -> GPUTextureFormat.RGBA8Unorm
     "rgba8unorm-srgb" -> GPUTextureFormat.RGBA8UnormSrgb
     "bgra8unorm" -> GPUTextureFormat.BGRA8Unorm
     else -> error("Unsupported prepared-vertices target format: $this")
 }
 
-private fun GPUFixedFunctionBlendState.toPreparedVerticesBlendState():
+internal fun GPUFixedFunctionBlendState.toPreparedVerticesBlendState():
     io.ygdrasil.webgpu.BlendState = io.ygdrasil.webgpu.BlendState(
     color = io.ygdrasil.webgpu.BlendComponent(
         operation = color.operation.toPreparedVerticesBlendOperation(),
@@ -1449,7 +1441,7 @@ private fun String.toPreparedVerticesBlendOperation(): GPUBlendOperation = when 
     else -> error("Unsupported prepared-vertices fixed-function blend operation: $this")
 }
 
-private fun GPUFixedFunctionBlendState.toPreparedVerticesWriteMask(): GPUColorWrite =
+internal fun GPUFixedFunctionBlendState.toPreparedVerticesWriteMask(): GPUColorWrite =
     when (writeMask) {
         "rgba" -> GPUColorWrite.All
         "none" -> GPUColorWrite.None
@@ -1484,6 +1476,12 @@ private fun alignedFourBytes(byteCount: Long): Long {
     return if (remainder == 0L) byteCount else byteCount + (4L - remainder)
 }
 
+/** Exact native index-buffer padding, shared with pre-publication geometry accounting. */
+fun preparedVerticesIndexBufferBytesI64(byteCountI64: Long): Long = alignedFourBytes(byteCountI64)
+
+fun preparedVerticesDrawUniformBytesI64(drawCountI32: Int): Long =
+    Math.multiplyExact(drawCountI32.toLong(), PREPARED_VERTICES_DRAW_UNIFORM_SIZE_BYTES.toLong())
+
 /** Pads raw bytes to a WebGPU 4-byte aligned copy size (zero fill). */
 private fun ByteArray.paddedToFourBytes(): ByteArray {
     val remainder = size % 4
@@ -1492,3 +1490,9 @@ private fun ByteArray.paddedToFourBytes(): ByteArray {
     copyInto(padded)
     return padded
 }
+
+internal fun preparedVerticesDrawLayoutV6(): BindGroupLayoutDescriptor = BindGroupLayoutDescriptor(
+    label = "Kanvas.frame.preparedVertices.drawLayout", entries = listOf(BindGroupLayoutEntry(
+        binding = 0u, visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
+        buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform, hasDynamicOffset = false,
+            minBindingSize = PREPARED_VERTICES_DRAW_UNIFORM_SIZE_BYTES.toULong()))))

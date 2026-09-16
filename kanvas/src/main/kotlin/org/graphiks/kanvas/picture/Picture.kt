@@ -244,7 +244,7 @@ class Picture internal constructor(
                     is DisplayOp.DrawText -> canvas.drawText(op.blob, op.x, op.y, op.paint)
                     is DisplayOp.DrawPicture -> canvas.drawPicture(op.picture, op.paint)
                     is DisplayOp.DrawVertices -> canvas.drawVertices(op.vertices, op.paint)
-                    is DisplayOp.DrawMesh -> canvas.drawMesh(op.mesh, op.paint, op.blendMode)
+                    is DisplayOp.DrawMesh -> canvas.drawCapturedMesh(op.mesh, op.paint, op.blendMode)
                     is DisplayOp.DrawAtlas -> canvas.drawAtlas(op.atlas, op.transforms, op.texRects, op.colors, op.blendMode, op.paint)
                     is DisplayOp.DrawColor -> canvas.drawColor(op.color, op.mode)
                     is DisplayOp.Clear -> canvas.clear(op.color)
@@ -310,7 +310,7 @@ class Picture internal constructor(
 
 private val MAGIC = byteArrayOf(0x4B, 0x50, 0x49, 0x43)
 private const val FORMAT_VERSION = 10
-private const val STABLE_WIRE_VERSION = 11
+private const val STABLE_WIRE_VERSION = 12
 private const val PREVIOUS_STABLE_WIRE_VERSION = 10
 private const val HISTORICAL_WIRE_VERSION_V8 = 8
 
@@ -939,7 +939,100 @@ private fun decodePicture(data: ByteArray): Picture? {
     } catch (_: IndexOutOfBoundsException) {
         null
     } ?: return null
+    // Scene archive restoration keeps all effects detached until the entire Picture
+    // has decoded. Join those exact objects to the historical facade's one transaction.
+    picture.collectDecodedRuntimeEffects(decodedRuntimeEffects)
     return picture.takeIf { RuntimeEffect.registerDecoded(decodedRuntimeEffects) }
+}
+
+/** Visits every reconstructed runtime-bearing public node without installing during traversal. */
+private fun Picture.collectDecodedRuntimeEffects(effects: MutableList<RuntimeEffect>) {
+    val pending = ArrayDeque<Any>()
+    fun add(value: Any?) { if (value != null) pending.addLast(value) }
+    add(this)
+    while (pending.isNotEmpty()) {
+        when (val value = pending.removeFirst()) {
+            is Picture -> value.ops.forEach(::add)
+            is RuntimeEffect -> if (value.semanticVersionI32 == 0) effects.add(value)
+            is DisplayOp -> when (value) {
+                is DisplayOp.DrawRect -> add(value.paint)
+                is DisplayOp.DrawRRect -> add(value.paint)
+                is DisplayOp.DrawPath -> add(value.paint)
+                is DisplayOp.DrawImage -> add(value.paint)
+                is DisplayOp.DrawText -> add(value.paint)
+                is DisplayOp.DrawPoint -> add(value.paint)
+                is DisplayOp.DrawPoints -> add(value.paint)
+                is DisplayOp.DrawDRRect -> add(value.paint)
+                is DisplayOp.DrawImageNine -> add(value.paint)
+                is DisplayOp.DrawImageLattice -> add(value.paint)
+                is DisplayOp.DrawVertices -> add(value.paint)
+                is DisplayOp.DrawAtlas -> add(value.paint)
+                is DisplayOp.DrawPicture -> { add(value.paint); add(value.picture) }
+                is DisplayOp.DrawMesh -> { add(value.paint); add(value.mesh.program) }
+                is DisplayOp.BeginLayer -> { add(value.rec.paint); add(value.rec.backdrop) }
+                is DisplayOp.SetTransform, is DisplayOp.SetClip, is DisplayOp.DrawColor,
+                is DisplayOp.Clear, is DisplayOp.Annotation, is DisplayOp.FlushAndSnapshot,
+                DisplayOp.EndLayer -> Unit
+            }
+            is Paint -> { add(value.shader); add(value.colorFilter); add(value.maskFilter); add(value.imageFilter) }
+            is Shader -> when (value) {
+                is Shader.RuntimeEffect -> { add(value.effect); value.children.values.forEach(::add) }
+                is Shader.Blend -> { add(value.dst); add(value.src) }
+                is Shader.Opacity -> add(value.shader)
+                is Shader.WithLocalMatrix -> add(value.shader)
+                is Shader.WithWorkingColorSpace -> add(value.shader)
+                is Shader.CoordClamp -> add(value.shader)
+                is Shader.WithColorFilter -> { add(value.shader); add(value.filter) }
+                is Shader.SolidColor, is Shader.LinearGradient, is Shader.RadialGradient,
+                is Shader.SweepGradient, is Shader.ConicalGradient, is Shader.Image,
+                is Shader.PerlinNoise, is Shader.FractalNoise -> Unit
+            }
+            is ColorFilter -> when (value) {
+                is ColorFilter.RuntimeEffect -> { add(value.effect); value.children.values.forEach(::add) }
+                is ColorFilter.Compose -> { add(value.outer); add(value.inner) }
+                is ColorFilter.Lerp -> { add(value.dst); add(value.src) }
+                is ColorFilter.Matrix, is ColorFilter.Blend, is ColorFilter.Table,
+                is ColorFilter.Lighting, is ColorFilter.HSLAMatrix, ColorFilter.SRGBToLinear,
+                ColorFilter.LinearToSRGB, ColorFilter.HighContrast, ColorFilter.Luma, ColorFilter.Overdraw -> Unit
+            }
+            is MaskFilter -> when (value) {
+                is MaskFilter.Shader -> add(value.shader)
+                is MaskFilter.Blur, is MaskFilter.Table -> Unit
+            }
+            is ImageFilter -> when (value) {
+                is ImageFilter.RuntimeEffect -> { add(value.effect); value.childImageFilters.values.forEach(::add) }
+                is ImageFilter.Picture -> add(value.picture)
+                is ImageFilter.ColorFilter -> { add(value.filter); add(value.input) }
+                is ImageFilter.Compose -> { add(value.outer); add(value.inner) }
+                is ImageFilter.Blend -> { add(value.background); add(value.foreground) }
+                is ImageFilter.Merge -> value.inputs.forEach(::add)
+                is ImageFilter.DisplacementMap -> { add(value.displacement); add(value.input) }
+                is ImageFilter.Crop -> add(value.input)
+                is ImageFilter.Blur -> add(value.input)
+                is ImageFilter.DropShadow -> add(value.input)
+                is ImageFilter.Dilate -> add(value.input)
+                is ImageFilter.Erode -> add(value.input)
+                is ImageFilter.DistantLitDiffuse -> add(value.input)
+                is ImageFilter.PointLitDiffuse -> add(value.input)
+                is ImageFilter.SpotLitDiffuse -> add(value.input)
+                is ImageFilter.DistantLitSpecular -> add(value.input)
+                is ImageFilter.PointLitSpecular -> add(value.input)
+                is ImageFilter.SpotLitSpecular -> add(value.input)
+                is ImageFilter.Offset -> add(value.input)
+                is ImageFilter.Tile -> add(value.input)
+                is ImageFilter.Magnifier -> add(value.input)
+                is ImageFilter.MatrixConvolution -> add(value.input)
+            }
+            is MeshProgram -> {
+                add(value.effect)
+                value.children.entries.forEach { entry -> when (val child = entry.child) {
+                    is ShaderChild -> add(child.shader)
+                    is ColorFilterChild -> add(child.filter)
+                    is BlenderChild -> Unit // Public blenders have no runtime wrapper.
+                } }
+            }
+        }
+    }
 }
 
 private fun decodePicture(data: ByteArray, decodedRuntimeEffects: MutableList<RuntimeEffect>): Picture? {
@@ -961,6 +1054,7 @@ private fun decodePicture(data: ByteArray, decodedRuntimeEffects: MutableList<Ru
         }
         9,
         PREVIOUS_STABLE_WIRE_VERSION,
+        11,
         STABLE_WIRE_VERSION,
         -> when (val decoded = SceneArchiveCodec.decodePicture(data)) {
             is SceneArchiveDecodeResult.Decoded -> try {

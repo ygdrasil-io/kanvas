@@ -6,7 +6,8 @@ import org.graphiks.math.color.ColorF32
 
 /** Checked final allocation metadata. It cannot stand in for the real packing permit. */
 internal class FrameSourceLayoutV4 private constructor(
-    val lane: SourceDeferredRenderConstructionV4,
+    private val deferredLane: SourceDeferredRenderConstructionV4?,
+    private val preparedInput: PreparedSourceFrameMetadata?,
     val interner: MaterialTableInterningRecipeV4,
     sources: List<MaterialSourceConstructionV4>,
     entries: List<List<SourceEntry>>,
@@ -26,6 +27,10 @@ internal class FrameSourceLayoutV4 private constructor(
     private val nativeGeometry: NativeCompositeGeometryLayoutV4?,
     private val ordinaryLayout: OrdinaryCompositeSourceLayoutV4? = null,
 ) {
+    val lane: SourceDeferredRenderConstructionV4 get() = requireNotNull(deferredLane) { W5fPlanDiagnostics.Schema }
+    val capabilities: PlanCapabilitySnapshot get() = deferredLane?.capabilities ?: requireNotNull(preparedInput).capabilities
+    val targetExtent: org.graphiks.math.geometry.SizeI32 get() = deferredLane?.targetExtent ?: requireNotNull(preparedInput).targetExtent
+    val budget: PlanBudget get() = deferredLane?.budget ?: requireNotNull(preparedInput).budget
     private val nativeLanes = immutableList(nativeLanes)
     private val sources = immutableList(sources)
     private val nativeOffsetsI32 = immutableList(nativeOffsetsI32)
@@ -36,6 +41,7 @@ internal class FrameSourceLayoutV4 private constructor(
     private val legacyAllocations = immutableList(legacyAllocations)
     private val imageInventory = immutableList(imageInventory)
     private val imageDescriptions = immutableList(imageDescriptions)
+    private val runtimeInventory = immutableList(sources.flatMap { it.composed?.runtimeResources.orEmpty() })
     val noiseRanges: List<NoiseTableRangeV1> = immutableList(noiseRanges)
     fun noiseRange(normalizedSeedI32: Int): NoiseTableRangeV1 =
         noiseRanges.single { it.normalizedSeedI32 == normalizedSeedI32 }
@@ -59,7 +65,6 @@ internal class FrameSourceLayoutV4 private constructor(
     /** Image and ordinary consumers cross the one real permit before either graph is published. */
     fun <T> prepareImageFrame(finish: (RenderGraph,MaterialPlanTable,Long)->T): SourceConstructionResultV4<T> =
         prepareAndFinish { table,roots ->
-            require(imageInventory.any { it.upload != null }) { W5fPlanDiagnostics.Schema }
             val graphs = if (ordinaryLayout == null) listOf(constructBound(table,roots))
                 else nativeLanes.mapIndexed { index,source -> constructLaneBound(source,nativeOffsetsI32[index],table,roots) }
             val nonUniformAndStops = Math.addExact(nonUniformBytesI64,stopBytesI64)
@@ -74,6 +79,20 @@ internal class FrameSourceLayoutV4 private constructor(
         require(ordinaryLayout == null) { W5fPlanDiagnostics.Schema }
         constructBound(table,roots)
     }
+
+    /** Prepared geometry projects the same bound sources through the same permit and packer. */
+    fun preparePreparedFrame(metadata: PreparedSourceFrameMetadata): SourceConstructionResultV4<PreparedSourceFrameV6> =
+        prepareAndFinish { table, roots ->
+            require(metadata === preparedInput && deferredLane == null) { W5fPlanDiagnostics.Schema }
+            val footprints = sources.mapIndexed { index, source ->
+                RawMaterialRequirementsV2.measureV4(table, roots[index]).also {
+                    require(it.proof.authenticates(table, roots[index], source.coordinates)) { W5fPlanDiagnostics.Schema }
+                }
+            }
+            val packed = PackedFrameSourcesV4.issuePrepared(table, capabilities, budget, footprints,
+                Math.addExact(nonUniformBytesI64, stopBytesI64))
+            PreparedSourceFrameV6(metadata, table, roots, packed)
+        }
 
     fun prepareAndPublishOrdinary(): org.graphiks.kanvas.render.ir.RenderPlanResult<RenderGraph> =
         when (val result = prepareAndFinish { table,roots ->
@@ -99,7 +118,7 @@ internal class FrameSourceLayoutV4 private constructor(
                     val proof = ColorSourceProofV1.issueComposed(definition)
                         ?: throw IllegalArgumentException(if (definition.noiseReferences.isNotEmpty())
                             W5gPlanDiagnostics.NoiseNumericDomainUnbounded else W5gPlanDiagnostics.NumericDomainUnbounded)
-                    MaterialPlanTable.of(listOf(MaterialPlanEntry(definition.program,ComposedMaterialBindingV5(definition,proof),definition.slab)))
+                    MaterialPlanTable.of(listOf(MaterialPlanEntry(definition.program,ComposedMaterialBindingV6(definition,proof),definition.slab)))
                 } else if (source.image != null) {
                     val resolved = source.image.bind(source.image.child?.let(::bind),
                         Math.addExact(Math.addExact(nonUniformBytesI64,stopBytesI64),uniformBytesI64),
@@ -239,7 +258,8 @@ internal class FrameSourceLayoutV4 private constructor(
                 binding.upload === prepared.imageUpload(description)
         } } && issuedImages.size == imageDescriptions.size) { W5gPlanDiagnostics.Schema }
         val actualUploads=java.util.IdentityHashMap<ImageUploadPlanV1,Unit>()
-        (actualV4.values.mapNotNull { it.proof.imageExecution?.upload } + composedImages.map { it.upload })
+        (actualV4.values.mapNotNull { it.proof.imageExecution?.upload } + composedImages.map { it.upload } +
+            actualV4.values.flatMap { it.proof.runtimeResources }.mapNotNull { it.imageUpload })
             .forEach { actualUploads[it]=Unit }
         require(actualUploads.size == imageInventory.size && imageInventory.all { allocation ->
             val issued=prepared.uploads.getValue(allocation.pixels)
@@ -247,9 +267,9 @@ internal class FrameSourceLayoutV4 private constructor(
                 actualUploads.keys.single { it.pixelsOwner === allocation.pixels }.cacheRequest === issued.cacheRequest
         }) { W5gPlanDiagnostics.Schema }
         val plannedImageBytes=imageInventory.fold(0L) { bytes,allocation ->
-            Math.addExact(bytes,allocation.physicalBytesI64(lane.capabilities)) }
+            Math.addExact(bytes,allocation.physicalBytesI64(capabilities)) }
         val issuedImageBytes=actualUploads.keys.fold(0L) { bytes,upload ->
-            Math.addExact(bytes,imagePhysicalBytesI64(upload,lane.capabilities)) }
+            Math.addExact(bytes,imagePhysicalBytesI64(upload,capabilities)) }
         require(plannedImageBytes == issuedImageBytes) { W5gPlanDiagnostics.Schema }
         val actualUniformBytes = actualLegacy.fold(0L) { bytes,value -> Math.addExact(bytes,value.uniformByteCountI64) }
         require(actualV4.values.fold(actualUniformBytes) { bytes,value ->
@@ -264,17 +284,21 @@ internal class FrameSourceLayoutV4 private constructor(
     }
 
     private fun constructBound(table: MaterialPlanTable,roots: List<MaterialPlanRef>): RenderGraphConstruction {
-        val passes = remapSourcePassesV4(lane.passes(),composed={ table.entry(it).bindings is ComposedMaterialBindingV5 }) { symbolic -> roots[symbolic.indexI32] }
+        val geometrySource = lane.geometrySource?.let { constructLaneBound(it,0,table,roots) }
+        val passes = remapSourcePassesV4(lane.passes(),composed={ table.entry(it).bindings is ComposedMaterialBindingV5 },
+            w4eColorPasses=geometrySource?.takeIf { it.w4ePayload != null }?.passes()?.filterIsInstance<PlanPass.PathRenderPass>()
+                ?.filter { it.phase != PathRenderPhase.SingleSampleStencilProducer }?.associateBy { it.draw.commandIndex }) { symbolic -> roots[symbolic.indexI32] }
         var constructed = RenderGraph.construct(lane.id,lane.capabilityId,lane.targetExtent,lane.colorFormat,
             lane.capabilities,lane.budget,lane.visualCommandCount,lane.resources(),passes,lane.dependencies(),
-            lane.peakFrameLocalBytesI64,table)
+            lane.peakFrameLocalBytesI64,table,
+            w5bW4eFacts=geometrySource?.takeIf { it.w4ePayload != null }?.let(W4eGeometryFactsV6::from))
         val nativeWitnessLanes = nativeGeometry?.lanes?.map { metadata ->
             val deferred = nativeLanes[metadata.ordinalI32]
             GeometryLaneConstruction(constructLaneBound(deferred.geometrySource ?: deferred,nativeOffsetsI32[metadata.ordinalI32],table,roots),
                 metadata.commandsI32,metadata.data,metadata.depth)
         }.orEmpty()
         if (lane.topology == DeferredLaneTopologyV4.GeneralGeometryAndColor) {
-            val source = constructLaneBound(requireNotNull(lane.geometrySource),0,table,roots)
+            val source = requireNotNull(geometrySource)
             val commands = lane.geometryCommandsI32()
             val data = lane.drawDataByCommandI32().values.distinct().single()
             val depth = lane.depthStencilByCommandI32().values.distinct().singleOrNull()
@@ -297,6 +321,7 @@ internal class FrameSourceLayoutV4 private constructor(
         if (source.capabilityId == W4dPathStrokePlanCompiler.CAPABILITY_ID)
             geometry = RenderGraph.issueW4dCompilerWitness(geometry)
         if (source.topology == DeferredLaneTopologyV4.GeometryBridge) geometry = RenderGraph.issueW5bGeometry(geometry)
+        source.w4ePayload?.let { geometry = geometry.withW4ePayload(it) }
         return geometry
     }
 
@@ -370,6 +395,22 @@ internal class FrameSourceLayoutV4 private constructor(
         uploads: Map<org.graphiks.kanvas.render.ir.ImageResourceSnapshot.Pixels,ImageUploadPlanV1>) {
         internal val uploads: Map<org.graphiks.kanvas.render.ir.ImageResourceSnapshot.Pixels,ImageUploadPlanV1> =
             java.util.Collections.unmodifiableMap(java.util.IdentityHashMap(uploads))
+        private val runtime = java.util.IdentityHashMap<CapturedRuntimeResourceV1,RuntimeEffectResourceReferenceV1>()
+        private val runtimeRequests = RuntimeResourceOwnerIndexV1<PlanCacheResourceRequest>()
+        fun runtimeResource(captured: CapturedRuntimeResourceV1): RuntimeEffectResourceReferenceV1 {
+            require(owner.runtimeInventory.any { it === captured }) { W5hPlanDiagnostics.Descriptor }
+            return runtime.getOrPut(captured) {
+                val image = (captured.binding as? org.graphiks.kanvas.render.ir.RuntimeEffectResourceBindingV1.SampledTexture)
+                    ?.let { requireNotNull(uploads[it.image]) }
+                val request = runtimeRequests.getOrPut(captured) { when(val binding = captured.binding) {
+                    is org.graphiks.kanvas.render.ir.RuntimeEffectResourceBindingV1.StorageRead ->
+                        PlanCacheResourceRequest.Storage(captured.descriptor.abiHash,captured.slot.logicalSlotI32,binding.bytes)
+                    is org.graphiks.kanvas.render.ir.RuntimeEffectResourceBindingV1.SampledTexture -> requireNotNull(image).cacheRequest
+                    is org.graphiks.kanvas.render.ir.RuntimeEffectResourceBindingV1.Sampler -> PlanCacheResourceRequest.Sampler(binding.type)
+                } }
+                RuntimeEffectResourceReferenceV1(captured,request,image)
+            }
+        }
         fun imageUpload(metadata: MaterialSourceConstructionV4.ImageMetadata): ImageUploadPlanV1 {
             require(owner.sources.any { it.image === metadata }) { W5fPlanDiagnostics.Schema }
             return requireNotNull(uploads[metadata.upload.pixelsOwner]) { W5fPlanDiagnostics.Schema }.also {
@@ -435,6 +476,8 @@ internal class FrameSourceLayoutV4 private constructor(
     }
 
     companion object {
+        fun prepared(metadata: PreparedSourceFrameMetadata): SourceConstructionResultV4<FrameSourceLayoutV4> =
+            checked(null, emptyList(), emptyList(), null, preparedInput = metadata)
         fun standalone(lane: SourceDeferredRenderConstructionV4): SourceConstructionResultV4<FrameSourceLayoutV4> =
             checked(lane,emptyList(),emptyList(),null)
 
@@ -500,13 +543,17 @@ internal class FrameSourceLayoutV4 private constructor(
             } catch (_: ArithmeticException) { return sourceConstructionRefusalV4(W5cPlanDiagnostics.StopBudget) }
         }
 
-        private fun checked(lane: SourceDeferredRenderConstructionV4,nativeLanes: List<SourceDeferredRenderConstructionV4>,
+        private fun checked(lane: SourceDeferredRenderConstructionV4?,nativeLanes: List<SourceDeferredRenderConstructionV4>,
             nativeOffsetsI32: List<Int>,nativeGeometry: NativeCompositeGeometryLayoutV4?,
-            ordinaryLayout: OrdinaryCompositeSourceLayoutV4? = null): SourceConstructionResultV4<FrameSourceLayoutV4> = try {
-            require(lane.resources().none { it.role == PlanResourceRole.GradientStopData }) { W5fPlanDiagnostics.Schema }
-            val sources = if (ordinaryLayout == null) lane.sourceTable().sources()
+            ordinaryLayout: OrdinaryCompositeSourceLayoutV4? = null,
+            preparedInput: PreparedSourceFrameMetadata? = null): SourceConstructionResultV4<FrameSourceLayoutV4> = try {
+            require((lane == null) != (preparedInput == null)) { W5fPlanDiagnostics.Schema }
+            require(lane?.resources().orEmpty().none { it.role == PlanResourceRole.GradientStopData }) { W5fPlanDiagnostics.Schema }
+            val sources = preparedInput?.sources ?: if (ordinaryLayout == null) requireNotNull(lane).sourceTable().sources()
                 else nativeLanes.flatMap { it.sourceTable().sources() }
-            require(sources.isNotEmpty() && sources.any { it.pending }) { W5fPlanDiagnostics.Schema }
+            // Image geometry may remove every pending origin while retaining ordinary sources.
+            // Those exact surviving rows still use this one interner/budget/publication owner.
+            require(sources.isNotEmpty()) { W5fPlanDiagnostics.Schema }
             fun row(source: MaterialSourceConstructionV4): List<SourceEntry> =
                 source.resolvedSource?.table?.entries()?.map { SourceEntry(source,it,-1,it.internerDescriptorV4()) }
                     ?: source.image?.child?.let(::row).orEmpty() + List(source.wrappers.size+1) { index ->
@@ -571,8 +618,9 @@ internal class FrameSourceLayoutV4 private constructor(
                 it.materialAuthority is PlanDrawMaterialAuthority.MaterialV4
             }?.let { RawMaterialRequirementsV2.measureV4(it.table,it.root) } }.distinctBy { it.canonicalIdentity }
             val pending = sources.filter { it.pending }.distinctBy { it.canonicalIdentity }
-            val caps = lane.capabilities
-            val budget = lane.budget
+            val caps = lane?.capabilities ?: requireNotNull(preparedInput).capabilities
+            val budget = lane?.budget ?: requireNotNull(preparedInput).budget
+            val extent = lane?.targetExtent ?: requireNotNull(preparedInput).targetExtent
             val imageInventory=mutableListOf<ImageAllocation>()
             val imageOwners=java.util.IdentityHashMap<org.graphiks.kanvas.render.ir.ImageResourceSnapshot.Pixels,ImageAllocation>()
             sources.mapNotNull { it.image?.upload }.forEach { upload ->
@@ -592,6 +640,37 @@ internal class FrameSourceLayoutV4 private constructor(
                     require(allocation.authenticates(description)) { W5gPlanDiagnostics.Schema }
                 }
                 .filter { seenImages.put(it.pixels,Unit) == null }
+            val runtimeInventory = sources.flatMap { it.composed?.runtimeResources.orEmpty() }
+            val runtimeEntries = sources.flatMap { it.composed?.nodes.orEmpty() }.mapNotNull { it.runtime }
+            val noiseWorkLimitI64 = minOf(budget.materialFrameLimits.maxNoiseOctaveEvaluationsI64,
+                runtimeEntries.minOfOrNull { it.frameLimits.maxNoiseOctaveEvaluationsI64 } ?: Long.MAX_VALUE)
+            val runtimeOwners=RuntimeResourceOwnerIndexV1<CapturedRuntimeResourceV1>()
+            val runtimeAllocations=runtimeInventory.map { runtimeOwners.getOrPut(it) { it } }.distinct()
+            runtimeInventory.mapNotNull { (it.binding as? org.graphiks.kanvas.render.ir.RuntimeEffectResourceBindingV1.SampledTexture)?.image }
+                .forEach { pixels -> imageOwners.getOrPut(pixels) {
+                    val row = Math.multiplyExact(pixels.width.toLong(),pixels.pixelFormat.bytesPerPixel.toLong())
+                    val size = Math.multiplyExact(row,pixels.height.toLong())
+                    require(pixels.width > 0 && pixels.height > 0 && pixels.rowBytes >= row && size <= Int.MAX_VALUE &&
+                        pixels.pixelFormat in setOf(org.graphiks.kanvas.render.ir.ImagePixelFormat.RGBA_8888,
+                            org.graphiks.kanvas.render.ir.ImagePixelFormat.BGRA_8888,org.graphiks.kanvas.render.ir.ImagePixelFormat.SRGBA_8888,
+                            org.graphiks.kanvas.render.ir.ImagePixelFormat.ALPHA_8)) { W5hPlanDiagnostics.Descriptor }
+                    ImageAllocation(pixels,row,size,if(pixels.pixelFormat == org.graphiks.kanvas.render.ir.ImagePixelFormat.ALPHA_8)
+                        ImagePhysicalFormatV1.R8_UNORM else ImagePhysicalFormatV1.RGBA8_UNORM,null).also { imageInventory += it }
+                } }
+            val runtimeStorage = runtimeAllocations.mapNotNull { it.binding as? org.graphiks.kanvas.render.ir.RuntimeEffectResourceBindingV1.StorageRead }
+            val runtimeBytes = runtimeStorage.fold(0L) { bytes,binding ->
+                val size = alignRuntimeStorageBytesI64(binding.bytes.sizeBytesI32.toLong())
+                require(size <= caps.maxBufferSizeBytes && caps.maxStorageBufferBindingSizeBytesI64?.let { size <= it } == true) {
+                    W5hPlanDiagnostics.Budget
+                }
+                Math.addExact(bytes,size)
+            }
+            require(runtimeAllocations.count { it.binding !is org.graphiks.kanvas.render.ir.RuntimeEffectResourceBindingV1.SampledTexture } <=
+                PlanCacheResourceRequest.MAX_RUNTIME_ENTRIES_I32 && runtimeBytes <= PlanCacheResourceRequest.MAX_RUNTIME_BYTES_I64 &&
+                imageInventory.size <= PlanCacheResourceRequest.MAX_RUNTIME_ENTRIES_I32 &&
+                imageInventory.fold(0L) { bytes,image -> Math.addExact(bytes,image.byteCountI64) } <= PlanCacheResourceRequest.MAX_RUNTIME_BYTES_I64) {
+                W5hPlanDiagnostics.Budget
+            }
             // Scalar seed decisions are deduplicated only within this physical frame slab.
             val noiseSeeds=sources.flatMap { it.composed?.nodes.orEmpty() }
                 .mapNotNull { it.noiseSource?.parameters?.normalizedSeedI32 }.distinct()
@@ -604,8 +683,8 @@ internal class FrameSourceLayoutV4 private constructor(
             val noiseRanges=noiseSeeds.mapIndexed { index,seed ->
                 NoiseTableRangeV1(seed,Math.multiplyExact(index.toLong(),NoiseTableV1.WORD_COUNT_I32.toLong()).toUInt())
             }
-            var nonUniform = ordinaryLayout?.nonUniformWithoutStopsI64 ?: lane.peakFrameLocalBytesI64
-            if (ordinaryLayout == null && lane.capabilityId == W3SolidRectPlanCompiler.W5A_CAPABILITY_ID) {
+            var nonUniform = preparedInput?.nonUniformBytesI64 ?: ordinaryLayout?.nonUniformWithoutStopsI64 ?: requireNotNull(lane).peakFrameLocalBytesI64
+            if (ordinaryLayout == null && lane?.capabilityId == W3SolidRectPlanCompiler.W5A_CAPABILITY_ID) {
                 val alignment = caps.minUniformBufferOffsetAlignment.toLong()
                 require(alignment > 0L) { W5fPlanDiagnostics.FilterBinding }
                 val stride = Math.addExact(32L,(alignment-32L%alignment)%alignment)
@@ -629,15 +708,17 @@ internal class FrameSourceLayoutV4 private constructor(
                 catch (_: ArithmeticException) { throw IllegalArgumentException(W5gPlanDiagnostics.Binding) }
             // Inspect every actual final draw, not the canonically deduplicated
             // source list: a shared source may have different final blend ABIs.
-            val actualSourceDraws=(if(ordinaryLayout == null) listOf(lane) else nativeLanes).flatMap { actualLane ->
+            val actualSourceDraws=preparedInput?.sources?.map { it to it.blend } ?:
+                (if(ordinaryLayout == null) listOf(requireNotNull(lane)) else nativeLanes).flatMap { actualLane ->
                 RenderGraph.visualDraws(actualLane.passes()).map { draw ->
-                    actualLane.sourceTable().source(draw.materialAuthority.materialPlanRef()) to draw
+                    actualLane.sourceTable().source(draw.materialAuthority.materialPlanRef()) to draw.blend
                 }
             }
             var noiseWork=0L
-            actualSourceDraws.forEach { (source,draw) -> source.composed?.layout?.let { layout ->
+            var runtimeLeasesI64=0L
+            actualSourceDraws.forEach { (source,blend) -> source.composed?.layout?.let { layout ->
                 require(sources.any { it === source }) { W5gPlanDiagnostics.Schema }
-                val destination=draw.blend as? BlendPlan.DestinationReadV1
+                val destination=blend as? BlendPlan.DestinationReadV1
                 val finalTextures=when(destination?.compositionAbiI32) {
                     null -> 0
                     3 -> 1
@@ -645,6 +726,15 @@ internal class FrameSourceLayoutV4 private constructor(
                     else -> throw IllegalArgumentException(W5gPlanDiagnostics.Binding)
                 }
                 val textures=Math.addExact(layout.resources.count { it.texture != null },finalTextures)
+                runtimeLeasesI64=Math.addExact(runtimeLeasesI64,requireNotNull(source.composed).runtimeResources.size.toLong())
+                require(runtimeLeasesI64 <= PlanCacheResourceRequest.MAX_RUNTIME_LEASES_I32) { W5hPlanDiagnostics.Budget }
+                val samplers=layout.resources.count { it.sampler != null }
+                if(samplers > 0) require(caps.maxSamplersPerShaderStageI32?.let { it >= samplers } == true) { W5hPlanDiagnostics.Budget }
+                if(layout.resources.any { it.buffer?.storageKind == ComposedBindingLayoutV1.StorageKind.RUNTIME_READ })
+                    require(caps.supportedOperations().containsAll(setOf(PlanOperationCapability.StorageBuffer,PlanOperationCapability.CopyUpload)) &&
+                        caps.maxStorageBuffersPerShaderStageI32?.let { it >= layout.resources.count { row -> row.buffer != null } } == true) {
+                        W5hPlanDiagnostics.Budget
+                    }
                 if(textures > 0) require(caps.maxSampledTexturesPerShaderStageI32?.let { it >= textures } == true) {
                     W5gPlanDiagnostics.Binding
                 }
@@ -657,9 +747,9 @@ internal class FrameSourceLayoutV4 private constructor(
                     }
                     try {
                         val bounds=source.deviceBoundsF32
-                        val width=kotlin.math.ceil((minOf(bounds.right.toDouble(),lane.targetExtent.width.toDouble())-
+                        val width=kotlin.math.ceil((minOf(bounds.right.toDouble(),extent.width.toDouble())-
                             maxOf(bounds.left.toDouble(),0.0)).coerceAtLeast(0.0))
-                        val height=kotlin.math.ceil((minOf(bounds.bottom.toDouble(),lane.targetExtent.height.toDouble())-
+                        val height=kotlin.math.ceil((minOf(bounds.bottom.toDouble(),extent.height.toDouble())-
                             maxOf(bounds.top.toDouble(),0.0)).coerceAtLeast(0.0))
                         require(width.isFinite() && height.isFinite() && width >= 0.0 && height >= 0.0 &&
                             width < Long.MAX_VALUE.toDouble() && height < Long.MAX_VALUE.toDouble()) { W5gPlanDiagnostics.NoiseWork }
@@ -667,13 +757,14 @@ internal class FrameSourceLayoutV4 private constructor(
                         noiseNodes.forEach { noise -> noiseWork=Math.addExact(noiseWork,
                             Math.multiplyExact(Math.multiplyExact(area,noise.parameters.octavesI32.toLong()),4L)) }
                     } catch (_: ArithmeticException) { throw IllegalArgumentException(W5gPlanDiagnostics.NoiseWork) }
-                    require(noiseWork <= budget.materialFrameLimits.maxNoiseOctaveEvaluationsI64) { W5gPlanDiagnostics.NoiseWork }
+                    require(noiseWork <= noiseWorkLimitI64) { if(runtimeEntries.isEmpty()) W5gPlanDiagnostics.NoiseWork else W5hPlanDiagnostics.Budget }
                 }
             } }
             require(sources.filter { it.composed != null }.all { source -> actualSourceDraws.any { it.first === source } }) {
                 W5gPlanDiagnostics.Schema
             }
             nonUniform=Math.addExact(nonUniform,noiseBytes)
+            nonUniform=Math.addExact(nonUniform,runtimeBytes)
             require(nonUniform <= budget.maxFrameLocalBytes) { W5gPlanDiagnostics.NoiseStorage }
             var total = nonUniform
             fun add(bytes: Long,code: String) {
@@ -712,7 +803,7 @@ internal class FrameSourceLayoutV4 private constructor(
             add(stopBytes-ordinaryStopBytes,W5gPlanDiagnostics.Storage)
             retainedV4.forEach { add(it.uniformByteCountI64-it.sourceUniformByteCountI64,W5fPlanDiagnostics.FilterUniform) }
             pending.forEach { add(it.uniformBytesI64()-it.uniformBytesI64(true),W5fPlanDiagnostics.FilterUniform) }
-            SourceConstructionResultV4.Built(FrameSourceLayoutV4(lane,interner,sources,rows,allocations,pendingRanges,legacyRanges,
+            SourceConstructionResultV4.Built(FrameSourceLayoutV4(lane,preparedInput,interner,sources,rows,allocations,pendingRanges,legacyRanges,
                 legacy,imageInventory,imageDescriptions,noiseRanges,noiseBytes,nonUniform,stopBytes,Math.subtractExact(Math.subtractExact(total,nonUniform),stopBytes),
                 nativeLanes,nativeOffsetsI32,nativeGeometry,ordinaryLayout))
         } catch (failure: IllegalArgumentException) {

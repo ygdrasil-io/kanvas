@@ -853,8 +853,12 @@ private data class MaterializedBinding(
 
 internal class GPUPreparedRenderRunOwnedResources(
     handles: List<AutoCloseable>,
-) : AutoCloseable {
+    geometryTemplates: Map<io.ygdrasil.webgpu.GPURenderPipeline, GPUW5aGeometryPipelineTemplate> = emptyMap(),
+) : AutoCloseable, GPUW5aGeometryPipelineTemplateProvider {
     private var pending = handles.asReversed().distinctNativeIdentities().toMutableList()
+    private val geometryTemplates = java.util.IdentityHashMap(geometryTemplates)
+    override fun sourceTemplate(pipeline: io.ygdrasil.webgpu.GPURenderPipeline): GPUW5aGeometryPipelineTemplate? =
+        geometryTemplates[pipeline]
 
     @Synchronized
     internal fun ownedHandlesSnapshot(): List<AutoCloseable> = pending.toList()

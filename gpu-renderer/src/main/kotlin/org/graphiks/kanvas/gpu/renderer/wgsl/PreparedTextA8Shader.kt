@@ -145,8 +145,11 @@ ${PREPARED_TEXT_CORNER_INDICES.joinToString(",\n") { "        ${it}u" }},
         sourceCoverageEncoding: GPUSourceCoverageEncoding,
         clipVariant: GPUPreparedTextClipVariant = GPUPreparedTextClipVariant.None,
         destinationBlend: GPUBlendPlan.ShaderBlendWithDstRead? = null,
+        commonGeometry: Boolean = false,
     ): String {
-        val encodedSource = if (destinationBlend != null) {
+        require(!commonGeometry || clipVariant == GPUPreparedTextClipVariant.None && destinationBlend == null)
+        val encodedSource = if (commonGeometry) "return coverageFactor * vec4<f32>(input.localPosition, 0.0, 0.0);"
+        else if (destinationBlend != null) {
             require(sourceCoverageEncoding == GPUSourceCoverageEncoding.ScalarCoverageInShader) {
                 "Prepared text destination blends require scalar coverage interpolation"
             }
@@ -190,8 +193,8 @@ ${PREPARED_TEXT_CORNER_INDICES.joinToString(",\n") { "        ${it}u" }},
             -> "prepared_text_rrect_coverage(input.position.xy)"
         }
         return """
-@group(2) @binding(0) var textAtlas: texture_2d<f32>;
-@group(2) @binding(1) var textSampler: sampler;
+@group(${if (commonGeometry) 0 else 2}) @binding(${if (commonGeometry) 1 else 0}) var textAtlas: texture_2d<f32>;
+@group(${if (commonGeometry) 0 else 2}) @binding(${if (commonGeometry) 2 else 1}) var textSampler: sampler;
 ${if (clipVariant == GPUPreparedTextClipVariant.CoverageMask) {
             """
 @group(3) @binding(0) var preparedTextCoverageMask: texture_2d<f32>;
@@ -226,12 +229,11 @@ $clipCoverageDeclarations
 
 @fragment
 fn fs_main(input: PreparedTextVertexOutput) -> @location(0) vec4<f32> {
-    let materialPremul = kanvas_evaluate_material(input.localPosition);
+    ${if (commonGeometry) "" else "let materialPremul = kanvas_evaluate_material(input.localPosition);"}
     let glyphCoverage = textureSample(textAtlas, textSampler, input.uv).r;
     let clipCoverage = $clipCoverageExpression;
     let coverageFactor = glyphCoverage * clipCoverage;
-    let paintAlpha = clamp(drawUniforms.targetSizeAndPaintAlpha.z, 0.0, 1.0);
-    let preparedSource = materialPremul * paintAlpha;
+    ${if (commonGeometry) "" else "let paintAlpha = clamp(drawUniforms.targetSizeAndPaintAlpha.z, 0.0, 1.0);\n    let preparedSource = materialPremul * paintAlpha;"}
     $encodedSource
 }
 """.trimIndent()

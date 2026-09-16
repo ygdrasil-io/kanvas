@@ -210,6 +210,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         try {
             val result = materializer.materializeReusable(
                 fixture.plan,
+                when (val preflight = preflightW5hFrameSourcesV1(fixture.plan)) {
+                    is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                    is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+                },
                 fixture.encoderPlan,
                 fixture.resources,
                 fixture.generationSeal,
@@ -276,6 +280,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         try {
             val result = materializer.materializeReusable(
                 fixture.plan,
+                when (val preflight = preflightW5hFrameSourcesV1(fixture.plan)) {
+                    is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                    is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+                },
                 fixture.encoderPlan,
                 fixture.resources,
                 fixture.generationSeal,
@@ -381,6 +389,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         try {
             val result = materializer.materializeReusable(
                 fixture.plan,
+                when (val preflight = preflightW5hFrameSourcesV1(fixture.plan)) {
+                    is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                    is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+                },
                 fixture.encoderPlan,
                 fixture.resources,
                 fixture.generationSeal,
@@ -532,6 +544,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(
                 materializer.materializeReusable(
                     fixture.plan,
+                    when (val preflight = preflightW5hFrameSourcesV1(fixture.plan)) {
+                        is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                        is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+                    },
                     fixture.encoderPlan,
                     fixture.resources,
                     fixture.generationSeal,
@@ -556,6 +572,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         try {
             val result = materializer.materializeReusable(
                 fixture.plan,
+                when (val preflight = preflightW5hFrameSourcesV1(fixture.plan)) {
+                    is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                    is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+                },
                 fixture.encoderPlan,
                 fixture.resources,
                 fixture.generationSeal,
@@ -710,6 +730,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
                 materializer.materializeReusable(
                     fixture.plan,
+                    when (val preflight = preflightW5hFrameSourcesV1(fixture.plan)) {
+                        is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                        is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+                    },
                     fixture.encoderPlan,
                     fixture.resources,
                     forged,
@@ -747,6 +771,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
 
             val result = materializer.materializeReusable(
                 fixture.plan,
+                when (val preflight = preflightW5hFrameSourcesV1(fixture.plan)) {
+                    is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                    is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+                },
                 fixture.encoderPlan,
                 fixture.resources,
                 forged,
@@ -1257,6 +1285,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
 
             val result = materializer.materializeReusable(
                 corruptedPlan,
+                when (val preflight = preflightW5hFrameSourcesV1(corruptedPlan)) {
+                    is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                    is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+                },
                 fixture.encoderPlan,
                 fixture.resources,
                 fixture.generationSeal,
@@ -1346,6 +1378,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         val nativeMaterializer = object : GPUPreparedNativeFramePayloadMaterializer {
             override fun materializeReusable(
                 framePlan: GPUFramePlan,
+                sourceWitness: W5hFrameSourceValidationWitnessV1,
                 encoderPlan: GPUCommandEncoderPlan,
                 resources: GPUPreparedResourceSet,
                 generationSeal: GPUPreparedGenerationSeal,
@@ -1431,6 +1464,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
 
         val result = materializer.materializeReusable(
             fixture.plan,
+            when (val preflight = preflightW5hFrameSourcesV1(fixture.plan)) {
+                is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+            },
             fixture.encoderPlan,
             fixture.resources,
             fixture.generationSeal,
@@ -2836,6 +2873,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
 
             val result = materializer.materializeReusable(
                 input.plan,
+                when (val preflight = preflightW5hFrameSourcesV1(input.plan)) {
+                    is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                    is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+                },
                 input.encoderPlan,
                 input.resources,
                 input.generationSeal,
@@ -3113,6 +3154,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         )
         fixture.native.events.clear()
 
+        val shiftedFramePlan = fixture.plan.replacingStep(readback, shifted)
         val result = GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             fixture.native.device,
             fixture.native.queue,
@@ -3120,7 +3162,11 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             fixture.cache,
             fixture.limits,
         ).materializeReusable(
-            fixture.plan.replacingStep(readback, shifted),
+            shiftedFramePlan,
+            when (val preflight = preflightW5hFrameSourcesV1(shiftedFramePlan)) {
+                is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+            },
             fixture.encoderPlan,
             fixture.resources,
             fixture.generationSeal,
@@ -3324,6 +3370,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
 
             val result = materializer.materializeReusable(
                 materializationInput.plan,
+                when (val preflight = preflightW5hFrameSourcesV1(materializationInput.plan)) {
+                    is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                    is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+                },
                 materializationInput.encoderPlan,
                 materializationInput.resources,
                 materializationInput.generationSeal,
@@ -4073,6 +4123,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
 
         val refused = materializer.materializeReusable(
             fixture.plan,
+            when (val preflight = preflightW5hFrameSourcesV1(fixture.plan)) {
+                is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+            },
             fixture.encoderPlan,
             GPUPreparedResourceSet(emptyList(), emptyList()),
             fixture.generationSeal,
@@ -4099,6 +4153,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
 
         val result = materializer.materializeReusable(
                 fixture.plan,
+                when (val preflight = preflightW5hFrameSourcesV1(fixture.plan)) {
+                    is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                    is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+                },
                 fixture.encoderPlan,
                 fixture.resources,
                 fixture.generationSeal,
@@ -4324,7 +4382,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             fixture.target,
             fixture.cache,
             fixture.limits,
-        ).materializeReusable(plan, fixture.encoderPlan, fixture.resources, fixture.generationSeal)
+        ).materializeReusable(plan, when (val preflight = preflightW5hFrameSourcesV1(plan)) {
+            is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+            is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+        }, fixture.encoderPlan, fixture.resources, fixture.generationSeal)
 
         assertEquals(
             "invalid.native-core-primitive.packet-authority",
@@ -4465,7 +4526,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             fixture.target,
             fixture.cache,
             fixture.limits,
-        ).materializeReusable(plan, fixture.encoderPlan, fixture.resources, fixture.generationSeal)
+        ).materializeReusable(plan, when (val preflight = preflightW5hFrameSourcesV1(plan)) {
+            is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+            is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+        }, fixture.encoderPlan, fixture.resources, fixture.generationSeal)
 
         assertEquals(
             "invalid.native-core-primitive.packet-authority",
@@ -4552,7 +4616,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             fixture.target,
             fixture.cache,
             fixture.limits,
-        ).materializeReusable(plan, encoderPlan, fixture.resources, fixture.generationSeal)
+        ).materializeReusable(plan, when (val preflight = preflightW5hFrameSourcesV1(plan)) {
+            is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+            is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+        }, encoderPlan, fixture.resources, fixture.generationSeal)
 
         assertEquals(
             "invalid.native-core-primitive.analytic-intersection-uniform-seal",
@@ -5030,6 +5097,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             fixture.limits,
         ).materializeReusable(
             corruptedPlan,
+            when (val preflight = preflightW5hFrameSourcesV1(corruptedPlan)) {
+                is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+            },
             fixture.encoderPlan,
             fixture.resources,
             fixture.generationSeal,
@@ -5092,6 +5163,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             fixture.limits,
         ).materializeReusable(
             fixture.plan,
+            when (val preflight = preflightW5hFrameSourcesV1(fixture.plan)) {
+                is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+            },
             encoderPlan,
             fixture.resources,
             fixture.generationSeal,
@@ -5400,6 +5475,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             fixture.limits,
         ).materializeReusable(
             fixture.plan,
+            when (val preflight = preflightW5hFrameSourcesV1(fixture.plan)) {
+                is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+            },
             fixture.encoderPlan,
             GPUPreparedResourceSet(emptyList(), emptyList()),
             fixture.generationSeal,
@@ -5460,6 +5539,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         val materialized = assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(
             materializer.materializeReusable(
                 fixture.plan,
+                when (val preflight = preflightW5hFrameSourcesV1(fixture.plan)) {
+                    is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                    is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+                },
                 fixture.encoderPlan,
                 fixture.resources,
                 fixture.generationSeal,
@@ -5603,7 +5686,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             fixture.target,
             fixture.cache,
             fixture.limits,
-        ).materializeReusable(plan, fixture.encoderPlan, fixture.resources, fixture.generationSeal)
+        ).materializeReusable(plan, when (val preflight = preflightW5hFrameSourcesV1(plan)) {
+            is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+            is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+        }, fixture.encoderPlan, fixture.resources, fixture.generationSeal)
 
         assertEquals(
             "invalid.native-core-primitive.packet-authority",
@@ -5636,7 +5722,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             fixture.target,
             fixture.cache,
             fixture.limits,
-        ).materializeReusable(plan, fixture.encoderPlan, GPUPreparedResourceSet(emptyList(), emptyList()), fixture.generationSeal)
+        ).materializeReusable(plan, when (val preflight = preflightW5hFrameSourcesV1(plan)) {
+            is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+            is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+        }, fixture.encoderPlan, GPUPreparedResourceSet(emptyList(), emptyList()), fixture.generationSeal)
 
         assertEquals(
             "unsupported.native-core-primitive.readback-layout",
@@ -5663,7 +5752,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                 minUniformBufferOffsetAlignment = alignment,
                 maxBufferSize = 1L shl 33,
             ),
-        ).materializeReusable(plan, fixture.encoderPlan, fixture.resources, fixture.generationSeal)
+        ).materializeReusable(plan, when (val preflight = preflightW5hFrameSourcesV1(plan)) {
+            is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+            is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+        }, fixture.encoderPlan, fixture.resources, fixture.generationSeal)
 
         assertEquals(
             "invalid.native-core-primitive.uniform-seal-generation",
@@ -5736,6 +5828,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
                 materializer.materializeReusable(
                     fixture.plan,
+                    when (val preflight = preflightW5hFrameSourcesV1(fixture.plan)) {
+                        is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                        is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+                    },
                     fixture.encoderPlan,
                     fixture.resources,
                     fixture.generationSeal,
@@ -5770,6 +5866,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
             materializer.materializeReusable(
                 fixture.plan,
+                when (val preflight = preflightW5hFrameSourcesV1(fixture.plan)) {
+                    is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                    is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+                },
                 fixture.encoderPlan,
                 fixture.resources,
                 fixture.generationSeal,
@@ -5805,6 +5905,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         val materialized = assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(
             materializer.materializeReusable(
                 fixture.plan,
+                when (val preflight = preflightW5hFrameSourcesV1(fixture.plan)) {
+                    is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                    is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+                },
                 fixture.encoderPlan,
                 fixture.resources,
                 fixture.generationSeal,
@@ -8041,7 +8145,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                 cache,
                 limits,
             )
-            return materializer.materializeReusable(plan, encoderPlan, resources, generationSeal).also {
+            return materializer.materializeReusable(plan, when (val preflight = preflightW5hFrameSourcesV1(plan)) {
+                is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+            }, encoderPlan, resources, generationSeal).also {
                 materializer.close()
             }
         }
@@ -8057,7 +8164,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                 limits,
                 coverageMaskProducerMaterializer,
             )
-            return materializer.materializeReusable(plan, encoderPlan, resources, generationSeal).also {
+            return materializer.materializeReusable(plan, when (val preflight = preflightW5hFrameSourcesV1(plan)) {
+                is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+            }, encoderPlan, resources, generationSeal).also {
                 materializer.close()
             }
         }

@@ -13,7 +13,7 @@ internal fun RenderGraphConstruction.hasW5aMaterialPathContract(): Boolean {
     return paths.isNotEmpty() && paths.all { pass ->
         val ref = when (val authority = pass.draw.materialAuthority) {
             is PlanDrawMaterialAuthority.MaterialV5 -> {
-                if (pass.draw !is GeneralPathDraw || pass.draw.copyPathGeometry() !is PathDrawGeometry.Fill ||
+                if (pass.draw !is GeneralPathDraw && pass.draw !is ClippedGeneralPathDraw ||
                     !table.colorSourceProofV5(authority.ref).authenticates(table,authority.ref,SourceCoordinatesV4.None)) return@all false
                 authority.ref
             }

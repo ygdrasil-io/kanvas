@@ -4,8 +4,13 @@ import org.graphiks.kanvas.render.ir.*
 import org.graphiks.math.geometry.RectF32
 
 /** A separate capability: ordered native lanes, one material table and one target lifetime. */
-public class W5aCompositePlanCompiler internal constructor(private val imageEntries: Map<Int, ImageConstructionEntryV1>) : GpuPlanCompiler {
-    public constructor() : this(emptyMap())
+public class W5aCompositePlanCompiler internal constructor(private val imageEntries: Map<Int, ImageConstructionEntryV1>,
+    private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
+    private val imageProjection: ImageOriginGeometryProjectionV6? = null) : GpuPlanCompiler {
+    public constructor(runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot) : this(emptyMap(), runtimeCatalog)
+    public constructor() : this(RuntimeEffectSemanticCatalogSnapshot.Unbound)
+    internal fun withRuntimeCatalog(catalog: RuntimeEffectSemanticCatalogSnapshot): W5aCompositePlanCompiler =
+        W5aCompositePlanCompiler(imageEntries, catalog,imageProjection)
     private enum class LaneKind { Rect, RRect, PathFill, PathStroke, Image }
     private data class LaneClassification(val kind: LaneKind, val geometryKindI32: Int)
     private class Lane(val compiler: GpuPlanCompiler, val candidate: GpuPlanCandidate)
@@ -70,9 +75,10 @@ public class W5aCompositePlanCompiler internal constructor(private val imageEntr
                 2 -> W4cPathFillPlanCompiler()
                 else -> W4dPathStrokePlanCompiler()
             }
+            compiler = compiler.bindRuntimeCatalog(runtimeCatalog)
             var selection = compiler.select(laneScene, target)
             if (selection is GpuPlanSelection.NotCandidate && geometryKind(run.first().value) == 0) {
-                compiler = W4aAnalyticRectPlanCompiler()
+                compiler = W4aAnalyticRectPlanCompiler(runtimeCatalog)
                 selection = compiler.select(laneScene, target)
             }
             if (selection is GpuPlanSelection.NotCandidate && geometryKind(run.first().value) in setOf(2, 3) &&
@@ -81,7 +87,7 @@ public class W5aCompositePlanCompiler internal constructor(private val imageEntr
                     is BlendNode.Paint -> blend.blender == null && blend.mode != BlendMode.SRC_OVER
                     else -> false
                 } })) {
-                compiler = W4dGeneralPathPlanCompiler()
+                compiler = W4dGeneralPathPlanCompiler().withImageOriginProjection(imageProjection).withRuntimeCatalog(runtimeCatalog)
                 selection = compiler.select(laneScene, target)
             }
             when (selection) {
@@ -137,31 +143,30 @@ public class W5aCompositePlanCompiler internal constructor(private val imageEntr
         budget: PlanBudget,
         overlay: (SourceDeferredRenderConstructionV4)->SourceConstructionResultV4<SourceDeferredRenderConstructionV4>,
     ): RenderPlanResult<FrameSourceLayoutV4> {
-        val selected = candidate as? Candidate
-        if (selected == null || selected.owner !== this)
-            return RenderPlanResult.InvalidScene(listOf(diagnostic("Foreign composite candidate")))
-        val sources = mutableListOf<SourceDeferredRenderConstructionV4>()
-        for (lane in selected.lanes) when (val result = lane.compiler.constructSourceLaneV4(lane.candidate,capabilities,budget)) {
-            is RenderPlanResult.Ready -> when (val captured = overlay(result.plan)) {
-                is SourceConstructionResultV4.Built -> sources += captured.value
-                is SourceConstructionResultV4.Refused -> return captured.failure
-            }
+        val lanes = when (val result = constructSourceLanes(candidate,capabilities,budget)) {
+            is RenderPlanResult.Ready -> result.plan
             is RenderPlanResult.GapNotMigrated -> return result
             is RenderPlanResult.GapOnPromotedScope -> return result
             is RenderPlanResult.InvalidScene -> return result
             is RenderPlanResult.ResourceLimitExceeded -> return result
         }
-        val native = sources.any { graph -> graph.topology != DeferredLaneTopologyV4.Ordinary ||
-            graph.capabilityId == W4dGeneralPathPlanCompiler.W5A_HARD_CAPABILITY_ID || graph.passes().any {
-                it is PlanPass.TextureCopy || it is PlanPass.RenderPass && it.draws().any { draw ->
-                    draw.blend != BlendPlan.LegacySrcOverV1 && (draw.blend as? BlendPlan.FixedFunctionV1)?.mode != BlendMode.SRC_OVER
-                }
-            } }
-        return when (val layout = if (native) FrameSourceLayoutV4.nativeComposite(sources)
-            else FrameSourceLayoutV4.ordinaryComposite(sources)) {
-            is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(layout.value)
-            is SourceConstructionResultV4.Refused -> layout.failure
+        return sourceLayoutV4(lanes,overlay)
+    }
+
+    internal fun constructSourceLanes(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget): RenderPlanResult<List<SourceDeferredRenderConstructionV4>> {
+        val selected = candidate as? Candidate
+        if (selected == null || selected.owner !== this)
+            return RenderPlanResult.InvalidScene(listOf(diagnostic("Foreign composite candidate")))
+        val sources = mutableListOf<SourceDeferredRenderConstructionV4>()
+        for (lane in selected.lanes) when (val result = lane.compiler.constructSourceLaneV4(lane.candidate,capabilities,budget)) {
+            is RenderPlanResult.Ready -> sources += result.plan
+            is RenderPlanResult.GapNotMigrated -> return result
+            is RenderPlanResult.GapOnPromotedScope -> return result
+            is RenderPlanResult.InvalidScene -> return result
+            is RenderPlanResult.ResourceLimitExceeded -> return result
         }
+        return RenderPlanResult.Ready(sources.toList())
     }
 
     public companion object {
@@ -172,6 +177,29 @@ public class W5aCompositePlanCompiler internal constructor(private val imageEntr
             RenderDiagnosticSeverity.ERROR, message,
         )
     }
+}
+
+/** One composition decision over the already validated, exact surviving geometry lanes. */
+internal fun sourceLayoutV4(lanes: List<SourceDeferredRenderConstructionV4>,
+    overlay: (SourceDeferredRenderConstructionV4)->SourceConstructionResultV4<SourceDeferredRenderConstructionV4>,
+): RenderPlanResult<FrameSourceLayoutV4> {
+        val sources = mutableListOf<SourceDeferredRenderConstructionV4>()
+        for (lane in lanes) when (val captured = overlay(lane)) {
+            is SourceConstructionResultV4.Built -> sources += captured.value
+            is SourceConstructionResultV4.Refused -> return captured.failure
+        }
+        val native = sources.any { graph -> graph.topology != DeferredLaneTopologyV4.Ordinary ||
+            graph.capabilityId == W4dGeneralPathPlanCompiler.W5A_HARD_CAPABILITY_ID || graph.passes().any {
+                it is PlanPass.TextureCopy || it is PlanPass.RenderPass && it.draws().any { draw ->
+                    draw.blend != BlendPlan.LegacySrcOverV1 && (draw.blend as? BlendPlan.FixedFunctionV1)?.mode != BlendMode.SRC_OVER
+                }
+            } }
+        return when (val layout = if (sources.size == 1) FrameSourceLayoutV4.standalone(sources.single())
+            else if (native) FrameSourceLayoutV4.nativeComposite(sources)
+            else FrameSourceLayoutV4.ordinaryComposite(sources)) {
+            is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(layout.value)
+            is SourceConstructionResultV4.Refused -> layout.failure
+        }
 }
 
 private fun GpuPlanCompiler.hasPendingSourcesV4(candidate: GpuPlanCandidate): Boolean = when (this) {
@@ -192,6 +220,7 @@ internal fun GpuPlanCompiler.constructSourceLaneV4(candidate: GpuPlanCandidate,c
     is W4cPathFillPlanCompiler -> constructSources(candidate,capabilities,budget)
     is W4dPathStrokePlanCompiler -> constructSources(candidate,capabilities,budget)
     is W4dGeneralPathPlanCompiler -> constructSources(candidate,capabilities,budget)
+    is W4eClipPlanCompiler -> constructSources(candidate,capabilities,budget)
     else -> sourceConstructionRefusalV4(W5fPlanDiagnostics.Unpromoted).failure
 }
 

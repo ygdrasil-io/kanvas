@@ -14,7 +14,7 @@ internal class GPUW5eDecodedImageSessionCache(
     private val maxEntriesI32: Int = 128,
     private val maxBytesI64: Long = 64L * 1024L * 1024L,
 ) : AutoCloseable {
-    internal class Entry(val request: PlanCacheResourceRequest, private var texture: GPUTexture?, var view: GPUTextureView?) : AutoCloseable {
+    internal class Entry(val request: PlanCacheResourceRequest.Texture, private var texture: GPUTexture?, var view: GPUTextureView?) : AutoCloseable {
         var leasesI32: Int = 0
         override fun close() {
             view?.close()
@@ -27,7 +27,7 @@ internal class GPUW5eDecodedImageSessionCache(
         private var released = false
         val view: GPUTextureView get() = synchronized(owner) { check(!released && !owner.closing); requireNotNull(entry.view) }
         val generationI64: Long get() = owner.deviceGenerationI64
-        fun matches(request: PlanCacheResourceRequest, generationI64: Long): Boolean = synchronized(owner) {
+        fun matches(request: PlanCacheResourceRequest.Texture, generationI64: Long): Boolean = synchronized(owner) {
             !released && !owner.closing && entry.view != null && owner.deviceGenerationI64 == generationI64 &&
                 entry.request.canonicalPhysicalIdentity == request.canonicalPhysicalIdentity &&
                 entry.request.widthI32 == request.widthI32 && entry.request.heightI32 == request.heightI32 &&
@@ -55,7 +55,7 @@ internal class GPUW5eDecodedImageSessionCache(
         if (closing && entries.values.all { it.leasesI32 == 0 }) close()
     }
 
-    @Synchronized fun acquire(request: PlanCacheResourceRequest): Lease {
+    @Synchronized fun acquire(request: PlanCacheResourceRequest.Texture): Lease {
         check(!closing && !isClosed) { "stale.material.image.device-generation" }
         require(request.kind == PlanResourceKind.Texture2D && request.abiVersionI32 == 1 &&
             request.lifetime == PlanResourceLifetime.DeviceSessionCache &&

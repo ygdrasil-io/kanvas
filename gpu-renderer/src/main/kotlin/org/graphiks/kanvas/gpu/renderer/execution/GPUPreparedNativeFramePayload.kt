@@ -2223,6 +2223,7 @@ internal interface GPUPreparedNativeFramePayloadMaterializer {
 
     fun materializeReusable(
         framePlan: GPUFramePlan,
+        sourceWitness: W5hFrameSourceValidationWitnessV1,
         encoderPlan: GPUCommandEncoderPlan,
         resources: GPUPreparedResourceSet,
         generationSeal: GPUPreparedGenerationSeal,
@@ -2321,12 +2322,15 @@ internal class GPUPreparedNativeFrameBoundary private constructor(
 
     internal fun materializeReusable(
         framePlan: GPUFramePlan,
+        sourceWitness: W5hFrameSourceValidationWitnessV1,
         encoderPlan: GPUCommandEncoderPlan,
         resources: GPUPreparedResourceSet,
         generationSeal: GPUPreparedGenerationSeal,
     ): GPUPreparedNativeFramePayloadMaterialization {
+        require(sourceWitness.authenticates(framePlan)) { "W5h source witness belongs to another frame root" }
         val result = materializer.materializeReusable(
             framePlan,
+            sourceWitness,
             encoderPlan,
             resources,
             generationSeal,

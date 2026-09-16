@@ -39,7 +39,8 @@ import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.matrix.mapAxisAligned
 
 /** W4b's closed capability: analytic antialiased solid rounded rectangles. */
-public class W4bAnalyticRRectPlanCompiler : GpuPlanCompiler {
+public class W4bAnalyticRRectPlanCompiler internal constructor(private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot) : GpuPlanCompiler {
+    public constructor() : this(RuntimeEffectSemanticCatalogSnapshot.Unbound)
     override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) {
             return invalidSelection(diag(W4bPlanDiagnostics.SceneInvalid, RenderDiagnosticDomain.SCENE, "Scene and target descriptors disagree"))
@@ -234,7 +235,7 @@ public class W4bAnalyticRRectPlanCompiler : GpuPlanCompiler {
             }
             else -> return DrawRecognition.Gap("Draw geometry is outside W4b")
         }
-        if (!w4bPaint(node.paint, true) || !w4bBlend(node.blend) || node.effects !is EffectStack.Empty || node.resource != null || node.operationBlendMode != null) {
+        if (!w4bPaint(node.paint, true) || !w4bBlend(node.blend) || !colorFilterEffectsMatchPaint(node) || node.resource != null || node.operationBlendMode != null) {
             return DrawRecognition.Gap("Draw state is outside W4b")
         }
         if (!materialMatchesPaintAuthority(node)) return DrawRecognition.Gap("Draw material disagrees with paint authority")
@@ -261,7 +262,7 @@ public class W4bAnalyticRRectPlanCompiler : GpuPlanCompiler {
         if (visible.isEmpty) return DrawRecognition.Gap("Draw is fully clipped out")
         val raster = rasterBounds(visible) ?: return DrawRecognition.Gap("Visible raster bounds exceed I32")
         return when (val planned = EffectiveMaterialPlanner.normalizeSourcesV4(node, FORMAT.blendTargetClampV1(), raster,
-            coverage=CoveragePlan.AnalyticScalarAA, legacyGradientBoundsI32=null)) {
+            coverage=CoveragePlan.AnalyticScalarAA, legacyGradientBoundsI32=null,runtimeCatalog=runtimeCatalog)) {
             EffectiveMaterialPlanner.SourceNormalizationV4.NoOp -> DrawRecognition.NoOp
             is EffectiveMaterialPlanner.SourceNormalizationV4.Refused -> DrawRecognition.MaterialRefused(
                 EffectiveMaterialPlanner.Result.Refused(planned.diagnosticCode))
@@ -367,7 +368,7 @@ public class W4bAnalyticRRectPlanCompiler : GpuPlanCompiler {
     }
 
     private fun w4bPaint(paint: PaintNode?, acceptsMaterialShader: Boolean): Boolean = paint == null || (
-        (paint.shader == null || acceptsMaterialShader) && paint.blender == null && paint.colorFilter == null &&
+        (paint.shader == null || acceptsMaterialShader) && paint.blender == null &&
             paint.maskFilter == null && paint.pathEffect == null && paint.imageFilter == null &&
             paint.style == PaintStyleNode.FILL
         )

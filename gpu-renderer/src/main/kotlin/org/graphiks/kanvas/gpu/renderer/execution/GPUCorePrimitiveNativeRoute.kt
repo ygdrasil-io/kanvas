@@ -205,6 +205,7 @@ internal class GPUCorePrimitiveDirectPreparedPassSeal private constructor(
         fun analyticShape(
             structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
             analyticShapeUniformSeals: List<GPUCorePrimitiveAnalyticShapeUniformSeal>,
+            preparedUniformSlab: GPUCorePrimitiveUniformSlabSeal? = null,
         ): GPUCorePrimitiveDirectPreparedPassSeal {
             val seals = immutableList(analyticShapeUniformSeals)
             require(seals.isNotEmpty()) {
@@ -218,9 +219,13 @@ internal class GPUCorePrimitiveDirectPreparedPassSeal private constructor(
                     seal.plan === plan && seal.structuralPipelineKey == structuralPipelineKey
                 }
             ) { "The analytic-shape uniform80 seals must retain one host-addressable ordered pass plan" }
-            val packed = ByteArray(plan.totalBytes.toInt())
-            seals.forEach { seal ->
-                seal.copyPayloadInto(packed, seal.alignedOffset.toInt())
+            val packed = preparedUniformSlab?.let { slab ->
+                require(slab.plan === plan && slab.commandIds == seals.map { it.commandId } &&
+                    seals.all { seal -> slab.hasExactPayload(seal.slotIndex, seal.commandId,
+                        seal.payloadBytesSnapshot().map { it.toInt() and 0xff }) })
+                slab.packedBytesSnapshot()
+            } ?: ByteArray(plan.totalBytes.toInt()).also { bytes ->
+                seals.forEach { seal -> seal.copyPayloadInto(bytes, seal.alignedOffset.toInt()) }
             }
             return GPUCorePrimitiveDirectPreparedPassSeal(
                 structuralPipelineKey = structuralPipelineKey,
@@ -319,6 +324,7 @@ internal class GPUCorePrimitiveMultiKeyDirectPreparedPassSeal private constructo
         fun analyticShape(
             structuralPipelineKeys: List<GPUCorePrimitiveRenderPipelineStructuralKey>,
             analyticShapeUniformSeals: List<GPUCorePrimitiveAnalyticShapeUniformSeal>,
+            preparedUniformSlab: GPUCorePrimitiveUniformSlabSeal? = null,
         ): GPUCorePrimitiveMultiKeyDirectPreparedPassSeal {
             require(analyticShapeUniformSeals.isNotEmpty()) {
                 "An analytic-shape multi-key direct CorePrimitive pass requires at least one uniform80 seal"
@@ -329,13 +335,17 @@ internal class GPUCorePrimitiveMultiKeyDirectPreparedPassSeal private constructo
                 analyticShapeUniformSeals.map { seal -> seal.slotIndex } == plan.slots.indices.toList() &&
                 analyticShapeUniformSeals.all { seal -> seal.plan === plan }
             ) { "The analytic-shape uniform80 seals must retain one host-addressable ordered pass plan" }
-            val packed = ByteArray(plan.totalBytes.toInt())
-            analyticShapeUniformSeals.forEach { seal ->
-                seal.copyPayloadInto(packed, seal.alignedOffset.toInt())
+            val packed = preparedUniformSlab?.let { slab ->
+                require(slab.plan === plan && slab.commandIds == analyticShapeUniformSeals.map { it.commandId } &&
+                    analyticShapeUniformSeals.all { seal -> slab.hasExactPayload(seal.slotIndex, seal.commandId,
+                        seal.payloadBytesSnapshot().map { it.toInt() and 0xff }) })
+                slab.packedBytesSnapshot()
+            } ?: ByteArray(plan.totalBytes.toInt()).also { bytes ->
+                analyticShapeUniformSeals.forEach { seal -> seal.copyPayloadInto(bytes, seal.alignedOffset.toInt()) }
             }
             return GPUCorePrimitiveMultiKeyDirectPreparedPassSeal(
                 structuralPipelineKeys = structuralPipelineKeys,
-                uniformSlabSeal = GPUCorePrimitiveUniformSlabSeal(
+                uniformSlabSeal = preparedUniformSlab ?: GPUCorePrimitiveUniformSlabSeal(
                     plan,
                     analyticShapeUniformSeals.map { it.commandId },
                     packed,

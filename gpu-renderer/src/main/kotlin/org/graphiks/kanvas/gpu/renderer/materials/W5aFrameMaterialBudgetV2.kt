@@ -34,6 +34,7 @@ private fun GPUFramePlan.w5eImageAllocationsV3(limits: GPULimits): List<GPUFrame
         .mapNotNull { it.materialSourcePartitionV3()?.stage }
     val seen=java.util.IdentityHashMap<org.graphiks.kanvas.gpu.plan.PlanCacheResourceRequest,Unit>()
     val requests=stages.flatMap { stage -> listOfNotNull(stage.imageV3?.cacheRequest) +
+        stage.composedProof?.runtimeResources.orEmpty().mapNotNull { it.imageUpload?.cacheRequest } +
         stage.composedProof?.composedImageResources.orEmpty().map { image ->
             require(requireNotNull(stage.composedProof).authenticatesComposedImage(image.resource,image.upload))
             image.upload.cacheRequest
@@ -59,10 +60,43 @@ private fun GPUFramePlan.w5eImageAllocationsV3(limits: GPULimits): List<GPUFrame
 internal fun GPUFramePlan.w5aCombinedMemoryBudgetV2(limits: GPULimits): GPUFrameMemoryBudgetPlan =
     GPUFrameMemoryBudgetPlanner.plan(GPUFrameMemoryBudgetRequest(
         allocations = memoryBudget.allocations + w5aMaterialAllocationsV2() + w5eImageAllocationsV3(limits) +
-            w5eChildStopAllocationsV3() + w5gDeclaredStopAllocationsV5() + w5gNoiseAllocationsV1(),
+            w5eChildStopAllocationsV3() + w5gDeclaredStopAllocationsV5() + w5gNoiseAllocationsV1() + w5hRuntimeAllocationsV1() +
+            w5hPreparedGeometryAllocationsV6(),
         configuredAggregateBudgetBytes = memoryBudget.configuredAggregateBudgetBytes,
         deviceLimits = limits,
     ))
+
+/** Physical native bytes absent from the legacy logical Vertices inventory. */
+internal fun GPUFramePlan.w5hPreparedGeometryAllocationsV6(): List<GPUFrameMemoryAllocation> {
+    val vertices = steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+        .mapNotNull { packet -> (packet.semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.Vertices)
+            ?.takeIf { it.material.commonSource != null }?.also { require(packet.materialSourcePartitionV3() != null) } }
+    if (vertices.isEmpty()) return emptyList()
+    val paddingI64 = vertices.distinctBy { it.artifact.key }.fold(0L) { bytes, semantic ->
+        val indexBytesI64 = semantic.artifact.indexBytesForUpload()?.size?.toLong()
+        Math.addExact(bytes, indexBytesI64?.let {
+            Math.subtractExact(org.graphiks.kanvas.gpu.renderer.execution.preparedVerticesIndexBufferBytesI64(it), it)
+        } ?: 0L)
+    }
+    val bytesI64 = Math.addExact(paddingI64,
+        org.graphiks.kanvas.gpu.renderer.execution.preparedVerticesDrawUniformBytesI64(vertices.size))
+    return listOf(GPUFrameMemoryAllocation("w5h.prepared.vertices-native-geometry", GPUFrameMemoryCategory.ReusableScratch,
+        bytesI64, GPUFrameMemoryResourceKind.Buffer, null, 0, steps.size.coerceAtLeast(1)))
+}
+
+private fun GPUFramePlan.w5hRuntimeAllocationsV1(): List<GPUFrameMemoryAllocation> {
+    val references=steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+        .flatMap { it.materialSourcePartitionV3()?.stage?.composedProof?.runtimeResources.orEmpty() }
+    require(references.size <= PlanCacheResourceRequest.MAX_RUNTIME_LEASES_I32)
+    val requests=references.map { it.cacheRequest }.filter { it !is PlanCacheResourceRequest.Texture }.distinct()
+    require(requests.size <= PlanCacheResourceRequest.MAX_RUNTIME_ENTRIES_I32 &&
+        requests.fold(0L) { bytes,request -> Math.addExact(bytes,request.byteSizeI64) } <= PlanCacheResourceRequest.MAX_RUNTIME_BYTES_I64)
+    // Samplers have zero payload bytes but consume the entry/lease reservations above.
+    return requests.filterIsInstance<PlanCacheResourceRequest.Storage>().mapIndexed { index,request ->
+        GPUFrameMemoryAllocation("w5h.runtime-owner.$index",GPUFrameMemoryCategory.ReusableScratch,request.byteSizeI64,
+            GPUFrameMemoryResourceKind.Buffer,null,0,steps.size.coerceAtLeast(1))
+    }
+}
 
 /** Marks an existing graph-owned allocation, without charging that slab twice. */
 internal fun org.graphiks.kanvas.gpu.plan.RenderGraph.composedStopAllocationLabelV5(sessionIdentity: String): String? {
@@ -105,12 +139,19 @@ private fun GPUFramePlan.w5gNoiseAllocationsV1(): List<GPUFrameMemoryAllocation>
         .mapNotNull { it.materialSourcePartitionV3()?.stage }.filter { it.noiseTableSlab != null }
     val slabs=stages.map { requireNotNull(it.noiseTableSlab) }.distinct()
     require(slabs.size <= 1)
+    val preparedTable = preparedCommonTableV6()
     slabs.forEach { slab ->
         stages.forEach { stage ->
             require(stage.noiseTableSlab === slab)
             val resource=requireNotNull(stage.composedLayout).resources.single {
                 it.buffer?.storageKind == org.graphiks.kanvas.gpu.plan.ComposedBindingLayoutV1.StorageKind.NOISE_U32 }
             require(requireNotNull(stage.composedProof).authenticatesComposedNoise(resource,slab))
+        }
+        if (preparedTable != null) {
+            require(preparedTable.entries().any { (it.bindings as? ComposedMaterialBindingV5)?.sourceProof?.noiseTableSlab === slab })
+            require(memoryBudget.allocations.none { it.label == NOISE_TABLE_ALLOCATION_LABEL_V1 })
+            return listOf(GPUFrameMemoryAllocation(NOISE_TABLE_ALLOCATION_LABEL_V1, GPUFrameMemoryCategory.ReusableScratch,
+                slab.byteCountI64, GPUFrameMemoryResourceKind.Buffer, null, 0, steps.size))
         }
         val allocation=memoryBudget.allocations.single { it.label == NOISE_TABLE_ALLOCATION_LABEL_V1 }
         val lastConsumer=steps.indexOfLast { step -> step is GPUFrameStep.RenderPassStep && step.drawPackets.any {
@@ -142,6 +183,11 @@ private fun GPUFramePlan.w5gDeclaredStopAllocationsV5(): List<GPUFrameMemoryAllo
         // exact frame-local object. Value equality is not an ownership proof.
         val consumers=packets.filter { it.materialSourcePartitionV3()?.stage?.gradientStopSlab != null }
         require(consumers.all { it.materialSourcePartitionV3()?.stage?.gradientStopSlab === slab })
+        preparedCommonTableV6()?.let { table ->
+            require(table.gradientStopSlab === slab)
+            return@mapNotNull GPUFrameMemoryAllocation("w5h.prepared.gradient-stops", GPUFrameMemoryCategory.ReusableScratch,
+                slab.byteSizeI64, GPUFrameMemoryResourceKind.Buffer, null, 0, steps.size)
+        }
         val composite=consumers.mapNotNull { it.w5aCompositeFrameAuthority }.distinct().singleOrNull()
         val expected=if(composite != null) {
             require(composite.validates(this,renders) && consumers.all { composite.owns(it) && it.w5aCompositeFrameAuthority === composite })
@@ -154,7 +200,9 @@ private fun GPUFramePlan.w5gDeclaredStopAllocationsV5(): List<GPUFrameMemoryAllo
                 require(witness.graph.materialPlanTableOrNull()?.gradientStopSlab === slab)
                 val scratch=witness.scratch
                 require(scratch.deviceGeneration == capabilitySeal.deviceGeneration.value)
-                val session="w3.session.${scratch.deviceGeneration}.${scratch.targetBounds.width}x${scratch.targetBounds.height}.rgba8unorm-srgb"
+                val session=if (witness.graph.capabilityId == W5bCorePrimitiveGraph.CAPABILITY_ID)
+                    scratch.target.value.removeSuffix(".target")
+                else "w3.session.${scratch.deviceGeneration}.${scratch.targetBounds.width}x${scratch.targetBounds.height}.rgba8unorm-srgb"
                 if(witness.graph.capabilityId in setOf(org.graphiks.kanvas.gpu.plan.W5bCorePrimitiveGraph.CAPABILITY_ID,
                     org.graphiks.kanvas.gpu.plan.W3SolidRectPlanCompiler.CAPABILITY_ID,
                     org.graphiks.kanvas.gpu.plan.W3SolidRectPlanCompiler.W5A_CAPABILITY_ID)) {
@@ -189,6 +237,24 @@ private fun GPUFramePlan.w5gDeclaredStopAllocationsV5(): List<GPUFrameMemoryAllo
         require(memoryBudget.allocations.count { it.label == expected.label } == 1 && expected in memoryBudget.allocations)
         null
     }
+}
+
+/** The mixed witness retains the exact common table and occurrence-to-command join. */
+private fun GPUFramePlan.preparedCommonTableV6(): MaterialPlanTable? {
+    val packets = steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+    val sourcePackets = packets.filter { it.materialSourcePartitionV3() != null }
+    val witness = sourcePackets.mapNotNull { it.w5bMixedFrameWitnessV1 }.distinct().singleOrNull() ?: return null
+    require(witness.validates(this))
+    val table = witness.timeline.draws.map { it.sourceTable }.distinct().singleOrNull() ?: return null
+    if (table.entries().none { it.bindings is ComposedMaterialBindingV5 }) return null
+    sourcePackets.forEach { packet ->
+        val draw = witness.timeline.draws.single { it.commandIndexI32 == packet.commandIdValue }
+        require(draw.sourceTable === table)
+        val binding = table.entry(draw.sourceRef).bindings as ComposedMaterialBindingV5
+        require(packet.materialSourcePartitionV3()?.stage?.composedProof === binding.sourceProof &&
+            binding.sourceProof.authenticates(table, draw.sourceRef, SourceCoordinatesV4.None))
+    }
+    return table
 }
 
 /** The W5e construction graph is neutral; its image children's shared slab is owned here. */

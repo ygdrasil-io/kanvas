@@ -123,7 +123,7 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
             )
         }
         val requiredDestinationPacketIds = plan.bindings.filter { binding ->
-            binding.nativeProgram.destinationTextureBinding != null
+            binding.compositeProgram.destinationBlend != null
         }.map(GPUPreparedTextRenderBinding::packetId).toSet()
         if (destinationReadsByPacketId.keys != requiredDestinationPacketIds ||
             destinationReadsByPacketId.any { (packetId, input) ->
@@ -293,19 +293,21 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
                 val packet = plan.packets[index]
                 val binding = plan.bindings[index]
                 val acquisition = acquisitions.getValue(binding.nativeProgram.pipelineKey)
+                val atlas = atlasNative.getValue(binding.atlasResourcePlan)
                 val drawGroup = createDrawGroup(
                     acquisition,
                     drawUniformBuffer,
                     binding.drawUniformSlice.sizeBytes,
+                    binding.nativeProgram,
+                    atlas.view,
                 ).track(created)
-                val materialGroup = createMaterialGroup(
+                val materialGroup = if (binding.nativeProgram.commonGeometry) null else createMaterialGroup(
                     binding,
                     acquisition,
                     materialUniformBuffer,
                     materialNative,
                 ).track(created)
-                val atlas = atlasNative.getValue(binding.atlasResourcePlan)
-                val atlasGroup = createAtlasGroup(acquisition, atlas.view).track(created)
+                val atlasGroup = if (binding.nativeProgram.commonGeometry) null else createAtlasGroup(acquisition, atlas.view).track(created)
                 val coverageMaskGroup = binding.coverageMaskResource?.let { resource ->
                     createCoverageMaskGroup(
                         acquisition,
@@ -313,7 +315,7 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
                         coverageMaskViews.getValue(resource),
                     ).track(created)
                 }
-                val destinationGroup = destinationReadsByPacketId[binding.packetId]?.let { input ->
+                val destinationGroup = destinationReadsByPacketId[binding.packetId]?.takeUnless { binding.nativeProgram.commonGeometry }?.let { input ->
                     createDestinationGroup(
                         acquisition,
                         binding.nativeProgram.destinationTextureBinding,
@@ -341,7 +343,7 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
                             dynamicOffsets = listOf(binding.drawUniformSlice.offsetBytes),
                         ),
                     )
-                    add(
+                    materialGroup?.let { add(
                         GPUPreparedNativeRenderCommand.SetBindGroup(
                             1,
                             GPUPreparedNativeBindGroupOperand(
@@ -355,8 +357,8 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
                                 listOf(binding.materialUniformOffsetBytes)
                             },
                         ),
-                    )
-                    add(
+                    ) }
+                    atlasGroup?.let { add(
                         GPUPreparedNativeRenderCommand.SetBindGroup(
                             2,
                             GPUPreparedNativeBindGroupOperand(
@@ -365,7 +367,7 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
                                 GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
                             ),
                         ),
-                    )
+                    ) }
                     if (coverageMaskGroup != null) {
                         add(
                             GPUPreparedNativeRenderCommand.SetBindGroup(
@@ -432,7 +434,9 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
                 operandsByStep[key.sourceStepIndex]
             }
             require(ordered.size == operandsByStep.size)
-            val owner = GPUPreparedRenderRunOwnedResources(created)
+            val owner = GPUPreparedRenderRunOwnedResources(created, acquisitions.values.mapNotNull {
+                it.commonGeometryTemplate?.let { template -> it.pipeline to template }
+            }.toMap())
             created.clear()
             GPUPreparedRenderRunMaterialization.Ready(
                 scopeOperands = immutableList(ordered),
@@ -506,6 +510,8 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
         acquisition: GPUWgpu4kPreparedTextPipelineAcquisition,
         drawUniformBuffer: GPUBuffer,
         logicalSize: Long,
+        program: org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextNativeProgramHandoff,
+        atlasView: GPUTextureView,
     ): GPUBindGroup = device.createBindGroup(
         BindGroupDescriptor(
             label = "Kanvas.frame.preparedText.draw-group",
@@ -519,7 +525,10 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
                         size = logicalSize.toULong(),
                     ),
                 ),
-            ),
+            ) + if (program.commonGeometry) listOf(
+                BindGroupEntry(binding = program.atlasTextureBinding.toUInt(), resource = atlasView),
+                BindGroupEntry(binding = program.atlasSamplerBinding.toUInt(), resource = acquisition.atlasSampler),
+            ) else emptyList(),
         ),
     )
 
@@ -564,7 +573,7 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
         return device.createBindGroup(
             BindGroupDescriptor(
                 label = "Kanvas.frame.preparedText.material-group",
-                layout = acquisition.materialBindGroupLayout,
+                layout = requireNotNull(acquisition.materialBindGroupLayout),
                 entries = entries,
             ),
         )
@@ -576,7 +585,7 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
     ): GPUBindGroup = device.createBindGroup(
         BindGroupDescriptor(
             label = "Kanvas.frame.preparedText.atlas-group",
-            layout = acquisition.atlasBindGroupLayout,
+            layout = requireNotNull(acquisition.atlasBindGroupLayout),
             entries = listOf(
                 BindGroupEntry(0u, atlasView),
                 BindGroupEntry(1u, acquisition.atlasSampler),

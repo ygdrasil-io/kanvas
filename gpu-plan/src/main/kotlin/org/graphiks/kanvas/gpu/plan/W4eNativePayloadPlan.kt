@@ -88,6 +88,11 @@ public class W4eNativePayloadPlan private constructor(
             materialPlanTable: MaterialPlanTable?,
         ): W4eNativePayloadPlan? = build(passes, resources, targetExtent, capabilities, materialPlanTable, null)
 
+        /** Geometry bytes only; symbolic source refs are authenticated, never evaluated here. */
+        internal fun fromDeferred(passes: List<PlanPass>,resources: List<PlanResource>,targetExtent: SizeI32,
+            capabilities: PlanCapabilitySnapshot,sources: MaterialSourceConstructionTableV4): W4eNativePayloadPlan? =
+            build(passes,resources,targetExtent,capabilities,null,null,sources)
+
         /** W4e producer-only payload. No color/path draw or material may enter this authority. */
         internal fun fromClipPrefix(
             passes: List<PlanPass>,
@@ -108,6 +113,7 @@ public class W4eNativePayloadPlan private constructor(
             capabilities: PlanCapabilitySnapshot,
             materialPlanTable: MaterialPlanTable?,
             clipOnlyData: PlanDrawDataResources?,
+            deferredSources: MaterialSourceConstructionTableV4? = null,
         ): W4eNativePayloadPlan? = try {
             if (targetExtent.isEmpty()) return null
             val pathPasses = passes.filterIsInstance<PlanPass.PathRenderPass>()
@@ -198,6 +204,7 @@ public class W4eNativePayloadPlan private constructor(
                             pass,
                             resourcesById,
                             materialPlanTable,
+                            deferredSources,
                             ::addGeometry,
                             ::addDirectGeometry,
                             ::addUniform,
@@ -271,11 +278,17 @@ public class W4eNativePayloadPlan private constructor(
             pass: PlanPass.PathRenderPass,
             resourcesById: Map<PlanResourceId, PlanResource>,
             materialPlanTable: MaterialPlanTable?,
+            deferredSources: MaterialSourceConstructionTableV4?,
             addGeometry: (String, String, FloatArray, IntArray) -> Boolean,
             addDirectGeometry: (String, String, PathFillGeometryF32) -> Boolean,
             addUniform: (String, String, FloatArray) -> Boolean,
         ): Boolean {
-            fun materialColor(): org.graphiks.math.color.ColorF32? = when (val authority = pass.draw.materialAuthority) {
+            fun materialColor(): org.graphiks.math.color.ColorF32? {
+                if (deferredSources != null) {
+                    deferredSources.source(pass.draw.materialAuthority.materialPlanRef())
+                    return org.graphiks.math.color.ColorF32.Transparent
+                }
+                return when (val authority = pass.draw.materialAuthority) {
                 is PlanDrawMaterialAuthority.MaterialV5 -> error(W5gPlanDiagnostics.Unpromoted)
                 is PlanDrawMaterialAuthority.MaterialV4 -> error(W5fPlanDiagnostics.Unpromoted)
                 is PlanDrawMaterialAuthority.MaterialV3 -> error(W5eImagePlanDiagnostics.InvalidContract)
@@ -287,6 +300,7 @@ public class W4eNativePayloadPlan private constructor(
                     org.graphiks.math.color.ColorF32.Transparent
                 }
                 is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
+                }
             }
             fun drawableGeometry(): PathFillGeometryF32? = when (val geometry = pass.draw.copyPathGeometry()) {
                 is PathDrawGeometry.Fill -> geometry.valueF32

@@ -58,7 +58,10 @@ import org.graphiks.math.matrix.preparePathStrokeGeometryF32
  */
 public class W4dPathStrokePlanCompiler internal constructor(
     private val strokePolicyF64: PathStrokePolicyF64,
+    private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot = RuntimeEffectSemanticCatalogSnapshot.Unbound,
 ) : GpuPlanCompiler {
+    internal fun withRuntimeCatalog(catalog: RuntimeEffectSemanticCatalogSnapshot): W4dPathStrokePlanCompiler =
+        W4dPathStrokePlanCompiler(strokePolicyF64, catalog)
     public constructor() : this(PathStrokePolicyF64())
     override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) return invalid("Scene and target differ")
@@ -211,7 +214,8 @@ public class W4dPathStrokePlanCompiler internal constructor(
                     // Path effects are geometry-only facts for this lane; the material plan
                     // remains the captured paint/material authority.
                     val normalized = when (val planned = EffectiveMaterialPlanner.normalizeSourcesV4(
-                        node.copy(effects = EffectStack.Empty), FORMAT.blendTargetClampV1(),scissor)) {
+                        node.copy(effects = EffectStack.of(listOfNotNull(node.paint?.colorFilter))),
+                        FORMAT.blendTargetClampV1(),scissor,runtimeCatalog=runtimeCatalog)) {
                         is EffectiveMaterialPlanner.SourceNormalizationV4.Refused -> return DrawResult.MaterialRefused(EffectiveMaterialPlanner.Result.Refused(planned.diagnosticCode), result.work, scope.stroke)
                         EffectiveMaterialPlanner.SourceNormalizationV4.NoOp -> return DrawResult.NoOp(result.work, scope.stroke)
                         is EffectiveMaterialPlanner.SourceNormalizationV4.Source -> planned.captured
@@ -416,7 +420,14 @@ public class W4dPathStrokePlanCompiler internal constructor(
             passes,passes.zipWithNext().map { PlanPassDependency(it.first.id,it.second.id) },memory.peakBytes))
     }
 
-    private fun solid(node: DrawNode, paint: PaintNode): Boolean = effectsMatchPaintPathEffect(node.effects, paint.pathEffect) && node.resource == null && node.operationBlendMode == null && w4Blend(node.blend) && paint.blender == null && paint.colorFilter == null && paint.maskFilter == null && paint.imageFilter == null && (paint.pathEffect == null || paint.pathEffect is PathEffectNode.Dash) && materialMatchesPaintAuthority(node)
+    private fun solid(node: DrawNode, paint: PaintNode): Boolean =
+        colorFilterEffectsMatchPaint(node.copy(effects = EffectStack.of(
+            (node.effects as? EffectStack.Entries)?.filterNot { it is PathEffectNode }.orEmpty()))) &&
+        effectsMatchPaintPathEffect(EffectStack.of(
+            (node.effects as? EffectStack.Entries)?.filter { it is PathEffectNode }.orEmpty()), paint.pathEffect) &&
+        node.resource == null && node.operationBlendMode == null && w4Blend(node.blend) && paint.blender == null &&
+        paint.maskFilter == null && paint.imageFilter == null && (paint.pathEffect == null || paint.pathEffect is PathEffectNode.Dash) &&
+        materialMatchesPaintAuthority(node)
     private fun effectsMatchPaintPathEffect(effects: EffectStack, pathEffect: PathEffectNode?): Boolean = when (effects) {
         EffectStack.Empty -> true
         is EffectStack.Entries -> {

@@ -170,20 +170,23 @@ public sealed interface MaterialNode : CanonicalValue {
         public val descriptor: RuntimeEffectDescriptor,
         uniforms: Map<String, RuntimeUniformValue>,
         children: Collection<RuntimeMaterialChild>,
+        public val resources: RuntimeEffectResourceBindingSetV1,
     ) : MaterialNode, Iterable<RuntimeMaterialChild> {
-        private val storedUniforms: Map<String, RuntimeUniformValue> = immutableUniformMap(uniforms)
-        private val storedChildren: List<RuntimeMaterialChild> = immutableList(children)
+        // Validate metadata and byte totals before creating immutable copies.
         init {
             require(descriptor.abi == RuntimeEffectAbi.SHADER) { "Runtime material must use SHADER ABI" }
-            require(storedChildren.map(RuntimeMaterialChild::name).distinct().size == storedChildren.size) {
-                "Runtime material child names must be unique"
-            }
-            RuntimeBindingValidator.validate(
-                descriptor,
-                storedUniforms,
-                storedChildren.map { RuntimeChildBinding(it.name, RuntimeChildType.SHADER) },
-            ).requireValid()
+            resources.requireMatches(descriptor)
+            require(descriptor.uniformBlock.sizeBytesI32.toLong() <= 64L * 1024L * 1024L)
+            require(resources.sizeBytesI64 <= 64L * 1024L * 1024L)
+            RuntimeBindingValidator.validate(descriptor, uniforms,
+                children.map { RuntimeChildBinding(it.name, RuntimeChildType.SHADER) }).requireValid()
         }
+        private val storedUniforms: Map<String, RuntimeUniformValue> = immutableUniformMap(
+            if (descriptor.semanticVersionI32 == 0) uniforms else
+                descriptor.uniformBlock.slots.associate { it.name to requireNotNull(uniforms[it.name]) })
+        private val storedChildren: List<RuntimeMaterialChild> = immutableList(
+            if (descriptor.semanticVersionI32 == 0) children else
+                descriptor.childSlots.map { slot -> children.first { it.name == slot.name } })
         public fun uniforms(): Map<String, RuntimeUniformValue> = storedUniforms
         public val childCount: Int get() = storedChildren.size
         public fun childAt(index: Int): RuntimeMaterialChild = storedChildren[index]
@@ -191,6 +194,7 @@ public sealed interface MaterialNode : CanonicalValue {
         override val canonicalId: CanonicalId = canonicalId(
             "material-runtime-effect-v1", descriptor.canonicalId.value, uniformMapId(storedUniforms).value,
             canonicalSequenceId("children", storedChildren.map { it.canonicalId.value }).value,
+            resources.canonicalId.value,
         )
         override fun equals(other: Any?): Boolean = other is RuntimeEffect && canonicalId == other.canonicalId
         override fun hashCode(): Int = canonicalId.hashCode()
@@ -199,7 +203,8 @@ public sealed interface MaterialNode : CanonicalValue {
                 descriptor: RuntimeEffectDescriptor,
                 uniforms: Map<String, RuntimeUniformValue>,
                 children: Collection<RuntimeMaterialChild>,
-            ): RuntimeEffect = RuntimeEffect(descriptor, uniforms, children)
+                resources: RuntimeEffectResourceBindingSetV1 = RuntimeEffectResourceBindingSetV1.Empty,
+            ): RuntimeEffect = RuntimeEffect(descriptor, uniforms, children, resources)
         }
     }
 

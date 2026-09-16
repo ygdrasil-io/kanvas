@@ -132,6 +132,15 @@ internal class PreparedVerticesFrameInventory internal constructor(
     val limitEvidence: PreparedVerticesFrameLimitEvidence,
     elidedNoOps: List<GPUPreparedElidedNoOpOperation> = emptyList(),
 ) {
+    fun withAuthenticatedElisions(captures: Map<Int, org.graphiks.kanvas.gpu.plan.PreparedSourceAuthenticationV6>,
+        geometry: List<GPUPreparedVerticesGeometry>): PreparedVerticesFrameInventory {
+        require(captures.all { (index, capture) -> capture.blend == org.graphiks.kanvas.gpu.plan.BlendPlan.NoOpV1 ||
+            geometry.singleOrNull { it.operationIndex == index }?.culledByClip == true })
+        require(captures.keys.none(commandsByOperationIndex::containsKey))
+        return PreparedVerticesFrameInventory(commands, artifactsByKey, materialsByKey, artifactKeyByOperationIndex,
+            vertexUploadRanges, indexUploadRanges, (elidedVerticesOperationOrder + captures.keys).distinct().sorted(),
+            mappedCommands, capabilitySnapshotHash, metrics, limitEvidence, elidedNoOps)
+    }
     val elidedNoOps: List<GPUPreparedElidedNoOpOperation> =
         Collections.unmodifiableList(ArrayList(elidedNoOps))
     val commands: List<PreparedVerticesFrameCommand> =
@@ -302,9 +311,29 @@ internal sealed interface PreparedVerticesFrameInventoryResult {
         val code: String,
         val operationIndex: Int?,
         facts: Map<String, String>,
-    ) : PreparedVerticesFrameInventoryResult {
+    ) : PreparedVerticesFrameInventoryResult, PreparedVerticesGeometryResult {
         val facts: Map<String, String> = Collections.unmodifiableMap(LinkedHashMap(facts))
     }
+}
+
+
+internal sealed interface PreparedVerticesGeometryResult
+
+/** Canonical CPU artifact/range accounting shared by both prepared material entry paths. */
+internal class PreparedVerticesGeometryInventory internal constructor(
+    artifacts: Map<String, GPUPreparedVerticesUploadArtifact>,
+    artifactKeys: Map<Int, String>,
+    vertexRanges: List<PreparedVerticesUploadRange>,
+    indexRanges: List<PreparedVerticesUploadRange>,
+    val vertexBytes: Long,
+    val indexBytes: Long,
+    val totalUploadBytes: Long,
+    val limitEvidence: PreparedVerticesFrameLimitEvidence,
+) : PreparedVerticesGeometryResult {
+    val artifacts = Collections.unmodifiableMap(LinkedHashMap(artifacts))
+    val artifactKeys = Collections.unmodifiableMap(LinkedHashMap(artifactKeys))
+    val vertexRanges = Collections.unmodifiableList(ArrayList(vertexRanges))
+    val indexRanges = Collections.unmodifiableList(ArrayList(indexRanges))
 }
 
 internal object PreparedVerticesFrameInventoryBuilder {
@@ -312,12 +341,14 @@ internal object PreparedVerticesFrameInventoryBuilder {
         draws: List<GPUPreparedVerticesDraw>,
         limits: PreparedVerticesFrameInventoryLimits,
         capabilities: GPUCapabilities,
+        preparedGeometry: PreparedVerticesGeometryInventory? = null,
     ): PreparedVerticesFrameInventoryResult = build(
         draws = draws,
         limits = limits,
         capabilities = capabilities,
         artifactKeySelector = GPUPreparedVerticesUploadArtifact::key,
         materialBudgetSelector = GPUPreparedMaterialProgram::frameMaterialBudget,
+        preparedGeometry = preparedGeometry,
     )
 
     @JvmSynthetic
@@ -330,6 +361,7 @@ internal object PreparedVerticesFrameInventoryBuilder {
             { snapshot -> snapshot.identity.bucketKey },
         materialBudgetSelector: (GPUPreparedMaterialProgram) -> Pair<Long, Int> =
             GPUPreparedMaterialProgram::frameMaterialBudget,
+        preparedGeometry: PreparedVerticesGeometryInventory? = null,
     ): PreparedVerticesFrameInventoryResult {
         val limitEvidence = effectiveLimits(limits, capabilities)
         val effective = limitEvidence.effective
@@ -357,96 +389,35 @@ internal object PreparedVerticesFrameInventoryBuilder {
         val visibleDraws = draws.filterNot { draw ->
             draw.culledByClip || draw.blendPlan is GPUBlendPlan.NoOp
         }
-        if (visibleDraws.size > effective.maxDraws) {
-            val offending = visibleDraws[effective.maxDraws]
-            return budgetRefusal(
-                offending.operationIndex, "maxDraws",
-                Math.addExact(effective.maxDraws.toLong(), 1L),
-                effective.maxDraws.toLong(), budgetCodeFor(offending.operationKind),
-            )
+        preparedGeometry?.let { captured ->
+            require(captured.limitEvidence == limitEvidence)
+            draws.filterNot { it.culledByClip }.forEach { draw ->
+                require(captured.artifacts.getValue(captured.artifactKeys.getValue(draw.operationIndex))
+                    .exactIdentityEquals(draw.artifact))
+            }
         }
-
-        val artifacts = linkedMapOf<String, GPUPreparedVerticesUploadArtifact>()
+        val geometry = when (val prepared = preparedGeometry?.takeIf {
+            it.artifactKeys.keys == visibleDraws.mapTo(linkedSetOf()) { draw -> draw.operationIndex }
+        } ?: prepareGeometryInternal(visibleDraws, limits, capabilities, artifactKeySelector)) {
+            is PreparedVerticesFrameInventoryResult.Refused -> return prepared
+            is PreparedVerticesGeometryInventory -> prepared
+        }
+        val artifacts = geometry.artifacts
+        val vertexRanges = geometry.vertexRanges
+        val indexRanges = geometry.indexRanges
+        val vertexBytes = geometry.vertexBytes
+        val indexBytes = geometry.indexBytes
+        val totalUploadBytes = geometry.totalUploadBytes
         val materials = linkedMapOf<String, GPUPreparedMaterialProgram>()
         val materialSnapshotsByBucketKey = linkedMapOf<String, GPUPreparedMaterialFrameSnapshot>()
         val commands = ArrayList<PreparedVerticesFrameCommand>(visibleDraws.size)
-        val vertexRanges = ArrayList<PreparedVerticesUploadRange>()
-        val indexRanges = ArrayList<PreparedVerticesUploadRange>()
         val artifactKeyByOperation = linkedMapOf<Int, String>()
-        var vertexBytes = 0L
-        var indexBytes = 0L
         var runtimeUniformBytes = 0L
         var runtimeChildren = 0L
-        var vertexOffset = 0L
-        var indexOffset = 0L
-
         for (draw in visibleDraws) {
             val operationIndex = draw.operationIndex
             val budgetCode = budgetCodeFor(draw.operationKind)
-            val artifact = draw.artifact
-            val artifactKey = artifactKeySelector(artifact)
-            if (artifactKey.isBlank()) {
-                return refused(operationIndex, "blank_artifact_key", code = budgetCode)
-            }
-            val existingArtifact = artifacts[artifactKey]
-            if (existingArtifact != null && !existingArtifact.exactIdentityEquals(artifact)) {
-                return refused(
-                    operationIndex,
-                    "artifact_identity_collision",
-                    mapOf(
-                        "artifactKey" to artifactKey,
-                        "authority" to "PreparedVerticesFrameInventory",
-                    ),
-                    budgetCode,
-                )
-            }
-            if (existingArtifact == null) {
-                if (artifacts.size >= effective.maxUniqueArtifacts) {
-                    return budgetRefusal(
-                        operationIndex, "maxUniqueArtifacts",
-                        Math.addExact(artifacts.size.toLong(), 1L),
-                        effective.maxUniqueArtifacts.toLong(),
-                        budgetCode,
-                    )
-                }
-                vertexBytes = checkedAddOrRefuse(vertexBytes, artifact.vertexByteCount(), operationIndex)
-                    ?: return overflowRefusal(operationIndex, "vertexBytes", budgetCode)
-                indexBytes = checkedAddOrRefuse(indexBytes, artifact.indexByteCount(), operationIndex)
-                    ?: return overflowRefusal(operationIndex, "indexBytes", budgetCode)
-                if (vertexBytes > effective.maxVertexBytes) {
-                    return budgetRefusal(operationIndex, "maxVertexBytes", vertexBytes, effective.maxVertexBytes, budgetCode)
-                }
-                if (indexBytes > effective.maxIndexBytes) {
-                    return budgetRefusal(operationIndex, "maxIndexBytes", indexBytes, effective.maxIndexBytes, budgetCode)
-                }
-                val vertexRange = rangeOrNull(
-                    artifactKey, PreparedVerticesUploadBufferKind.Vertex,
-                    vertexOffset, artifact.vertexByteCount(),
-                ) ?: return overflowRefusal(operationIndex, "vertexUploadRange", budgetCode)
-                val indexRange = artifact.indexByteCount().takeIf { it > 0L }?.let { byteCount ->
-                    rangeOrNull(
-                        artifactKey, PreparedVerticesUploadBufferKind.Index,
-                        indexOffset, byteCount,
-                    ) ?: return overflowRefusal(operationIndex, "indexUploadRange", budgetCode)
-                }
-                val nextVertexOffset = vertexRange.endExclusive
-                val nextIndexOffset = indexRange?.endExclusive ?: indexOffset
-                val totalUploadBytes = checkedAddOrRefuse(
-                    nextVertexOffset, nextIndexOffset, operationIndex,
-                ) ?: return overflowRefusal(operationIndex, "totalUploadBytes", budgetCode)
-                if (totalUploadBytes > effective.maxTotalUploadBytes) {
-                    return budgetRefusal(
-                        operationIndex, "maxTotalUploadBytes", totalUploadBytes,
-                        effective.maxTotalUploadBytes, budgetCode,
-                    )
-                }
-                artifacts[artifactKey] = artifact
-                vertexRanges += vertexRange
-                indexRange?.let(indexRanges::add)
-                vertexOffset = nextVertexOffset
-                indexOffset = nextIndexOffset
-            }
-
+            val artifactKey = geometry.artifactKeys.getValue(operationIndex)
             val materialFrameSnapshot = GPUPreparedMaterialFrameIdentityAuthority.authenticate(draw.material)
             val material = materialFrameSnapshot.program
             val materialBucketKey = materialBucketKeySelector(materialFrameSnapshot)
@@ -534,9 +505,6 @@ internal object PreparedVerticesFrameInventoryBuilder {
             )
         }
 
-        val totalUploadBytes = checkedAddOrRefuse(vertexOffset, indexOffset, null)
-            ?: error("Per-draw total upload accounting must already have refused overflow")
-
         return PreparedVerticesFrameInventoryResult.Ready(
             PreparedVerticesFrameInventory(
                 commands = commands,
@@ -560,6 +528,109 @@ internal object PreparedVerticesFrameInventoryBuilder {
                 limitEvidence = limitEvidence,
             ),
         )
+    }
+
+
+    fun prepareGeometry(draws: List<GPUPreparedVerticesGeometry>, limits: PreparedVerticesFrameInventoryLimits,
+        capabilities: GPUCapabilities): PreparedVerticesGeometryResult = prepareGeometryInternal(
+            draws.filterNot { it.culledByClip }, limits, capabilities, GPUPreparedVerticesUploadArtifact::key)
+
+    private fun prepareGeometryInternal(visibleDraws: List<GPUPreparedVerticesGeometryInput>,
+        limits: PreparedVerticesFrameInventoryLimits, capabilities: GPUCapabilities,
+        artifactKeySelector: (GPUPreparedVerticesUploadArtifact) -> String): PreparedVerticesGeometryResult {
+        val limitEvidence = effectiveLimits(limits, capabilities)
+        val effective = limitEvidence.effective
+        if (visibleDraws.map { it.operationIndex }.distinct().size != visibleDraws.size)
+            return refused(visibleDraws.firstOrNull()?.operationIndex, "duplicate_operation_index")
+        if (visibleDraws.size > effective.maxDraws) {
+            val offending = visibleDraws[effective.maxDraws]
+            return budgetRefusal(
+                offending.operationIndex, "maxDraws",
+                Math.addExact(effective.maxDraws.toLong(), 1L),
+                effective.maxDraws.toLong(), budgetCodeFor(offending.operationKind),
+            )
+        }
+
+        val artifacts = linkedMapOf<String, GPUPreparedVerticesUploadArtifact>()
+        val vertexRanges = ArrayList<PreparedVerticesUploadRange>()
+        val indexRanges = ArrayList<PreparedVerticesUploadRange>()
+        val artifactKeyByOperation = linkedMapOf<Int, String>()
+        var vertexBytes = 0L
+        var indexBytes = 0L
+        var vertexOffset = 0L
+        var indexOffset = 0L
+
+        for (draw in visibleDraws) {
+            val operationIndex = draw.operationIndex
+            val budgetCode = budgetCodeFor(draw.operationKind)
+            val artifact = draw.artifact
+            val artifactKey = artifactKeySelector(artifact)
+            if (artifactKey.isBlank()) {
+                return refused(operationIndex, "blank_artifact_key", code = budgetCode)
+            }
+            val existingArtifact = artifacts[artifactKey]
+            if (existingArtifact != null && !existingArtifact.exactIdentityEquals(artifact)) {
+                return refused(
+                    operationIndex,
+                    "artifact_identity_collision",
+                    mapOf(
+                        "artifactKey" to artifactKey,
+                        "authority" to "PreparedVerticesFrameInventory",
+                    ),
+                    budgetCode,
+                )
+            }
+            if (existingArtifact == null) {
+                if (artifacts.size >= effective.maxUniqueArtifacts) {
+                    return budgetRefusal(
+                        operationIndex, "maxUniqueArtifacts",
+                        Math.addExact(artifacts.size.toLong(), 1L),
+                        effective.maxUniqueArtifacts.toLong(),
+                        budgetCode,
+                    )
+                }
+                vertexBytes = checkedAddOrRefuse(vertexBytes, artifact.vertexByteCount(), operationIndex)
+                    ?: return overflowRefusal(operationIndex, "vertexBytes", budgetCode)
+                indexBytes = checkedAddOrRefuse(indexBytes, artifact.indexByteCount(), operationIndex)
+                    ?: return overflowRefusal(operationIndex, "indexBytes", budgetCode)
+                if (vertexBytes > effective.maxVertexBytes) {
+                    return budgetRefusal(operationIndex, "maxVertexBytes", vertexBytes, effective.maxVertexBytes, budgetCode)
+                }
+                if (indexBytes > effective.maxIndexBytes) {
+                    return budgetRefusal(operationIndex, "maxIndexBytes", indexBytes, effective.maxIndexBytes, budgetCode)
+                }
+                val vertexRange = rangeOrNull(
+                    artifactKey, PreparedVerticesUploadBufferKind.Vertex,
+                    vertexOffset, artifact.vertexByteCount(),
+                ) ?: return overflowRefusal(operationIndex, "vertexUploadRange", budgetCode)
+                val indexRange = artifact.indexByteCount().takeIf { it > 0L }?.let { byteCount ->
+                    rangeOrNull(
+                        artifactKey, PreparedVerticesUploadBufferKind.Index,
+                        indexOffset, byteCount,
+                    ) ?: return overflowRefusal(operationIndex, "indexUploadRange", budgetCode)
+                }
+                val nextVertexOffset = vertexRange.endExclusive
+                val nextIndexOffset = indexRange?.endExclusive ?: indexOffset
+                val totalUploadBytes = checkedAddOrRefuse(
+                    nextVertexOffset, nextIndexOffset, operationIndex,
+                ) ?: return overflowRefusal(operationIndex, "totalUploadBytes", budgetCode)
+                if (totalUploadBytes > effective.maxTotalUploadBytes) {
+                    return budgetRefusal(
+                        operationIndex, "maxTotalUploadBytes", totalUploadBytes,
+                        effective.maxTotalUploadBytes, budgetCode,
+                    )
+                }
+                artifacts[artifactKey] = artifact
+                vertexRanges += vertexRange
+                indexRange?.let(indexRanges::add)
+                vertexOffset = nextVertexOffset
+                indexOffset = nextIndexOffset
+            }
+
+            artifactKeyByOperation[operationIndex] = artifactKey
+        }
+        return PreparedVerticesGeometryInventory(artifacts, artifactKeyByOperation, vertexRanges, indexRanges,
+            vertexBytes, indexBytes, Math.addExact(vertexOffset, indexOffset), limitEvidence)
     }
 
     private fun effectiveLimits(

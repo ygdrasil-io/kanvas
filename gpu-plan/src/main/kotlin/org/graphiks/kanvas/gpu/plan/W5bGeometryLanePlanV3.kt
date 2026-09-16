@@ -183,7 +183,7 @@ internal fun nativeCompositeGeometryLayoutV4(inputs: List<NativeGeometryInputV4>
 
 /** Exact color/geometry split for the successor; historical W4 path validation stays closed. */
 internal fun validateW5bGeometryPasses(passes: List<PlanPass>, resources: Map<PlanResourceId, PlanResource>,
-    visualCommandCountI32: Int, w4eSource: RenderGraph? = null) {
+    visualCommandCountI32: Int, w4eSource: W4eGeometryFactsV6? = null) {
     val colors = passes.flatMap { pass -> when (pass) {
         is PlanPass.RenderPass -> pass.draws()
         is PlanPass.StencilCover -> listOf(pass.draw)
@@ -191,8 +191,8 @@ internal fun validateW5bGeometryPasses(passes: List<PlanPass>, resources: Map<Pl
     } }
     require(colors.size == visualCommandCountI32 && colors.zipWithNext().all { (a, b) -> a.commandIndex < b.commandIndex })
     require(colors.all { it.sample == SamplePlan.SingleSample && (it.materialAuthority is PlanDrawMaterialAuthority.MaterialV1 || it.materialAuthority is PlanDrawMaterialAuthority.MaterialV2 ||
-        (it is SolidRectDraw || it is AnalyticRectDraw || it is PathFillDraw ||
-            it is GeneralPathDraw && it.copyPathGeometry() is PathDrawGeometry.Fill) &&
+        (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw || it is PathStrokeDraw ||
+            it is GeneralPathDraw || it is W5bW4ePathDraw) &&
             it.materialAuthority is PlanDrawMaterialAuthority.MaterialV5 ||
         (it is SolidRectDraw || it is AnalyticRectDraw || it is AnalyticRRectDraw || it is PathFillDraw ||
             it is PathStrokeDraw || it is GeneralPathDraw) &&
@@ -232,7 +232,7 @@ internal fun validateW5bGeometryPasses(passes: List<PlanPass>, resources: Map<Pl
         }
         is PlanPass.StencilCover -> require(passes.getOrNull(indexI32 - 1) is PlanPass.StencilGeometryProducerV3)
         is PlanPass.ClipMaskInitialize, is PlanPass.ClipMaskProducer, is PlanPass.ClipMaskFold ->
-            require(w4eSource?.passes()?.any { it === pass } == true)
+            require(w4eSource?.passes?.any { it === pass } == true)
         is PlanPass.TextureCopy, is PlanPass.ReadbackPass -> Unit
         else -> error("Invalid W5b geometry-lane pass")
     } }

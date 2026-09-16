@@ -25,7 +25,10 @@ public class W5ePreparedFrameWitnessV1 internal constructor(internal val bridge:
         val image = expectedByCommandI32[packet.commandIdValue]
         val source = if (image != null) {
             require(image.authenticates(bridge.materialTable)) { W5eImagePlanDiagnostics.InvalidContract }
-            W5aPacketMaterialSourceV2.issueImage(bridge.materialTable,image.materialAuthority,image.execution,
+            if (image.materialAuthority is PlanDrawMaterialAuthority.MaterialV5)
+                W5aPacketMaterialSourceV2.issue(bridge.materialTable,image.materialAuthority,image.commandIndex,
+                    bridge.constructionGraph.packedMaterialSourceV4(image.materialAuthority))
+            else W5aPacketMaterialSourceV2.issueImage(bridge.materialTable,image.materialAuthority,image.execution,
                 image.commandIndex,(image.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let {
                     bridge.constructionGraph.packedMaterialSourceV4(it) })
         } else when (val authority = ordinaryByCommandI32.getValue(packet.commandIdValue)) {

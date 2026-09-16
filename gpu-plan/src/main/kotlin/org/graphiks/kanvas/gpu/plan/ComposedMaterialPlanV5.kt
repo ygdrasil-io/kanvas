@@ -7,7 +7,7 @@ public data class MaterialEvaluationRefV5(public val indexI32: Int) {
     init { require(indexI32 >= 0) { W5gPlanDiagnostics.Schema } }
 }
 
-public class ComposedMaterialProgramV5 internal constructor(
+public open class ComposedMaterialProgramV5 internal constructor(
     override val structuralId: MaterialProgramPlanId,
     internal val operationGraph: ColorOperationGraphV1,
 ) : MaterialProgramPlan {
@@ -15,7 +15,7 @@ public class ComposedMaterialProgramV5 internal constructor(
     override fun copyNumericOperationGraphV1(): NumericOperationGraphV1 = NumericOperationGraphV1.colorSourceV4()
 }
 
-public class ComposedMaterialBindingV5 internal constructor(
+public open class ComposedMaterialBindingV5 internal constructor(
     internal val definition: PreparedComposedSourceV5,
     public val sourceProof: ColorSourceProofV1,
 ) : MaterialBindingPlan {
@@ -36,7 +36,7 @@ public class ComposedBindingLayoutV1 internal constructor(
     public data class UniformMapping(public val ownerNodeIndexI32: Int, public val localOffsetBytesI32: Int,
         public val physicalOffsetBytesI32: Int, public val sizeBytesI32: Int, public val alignmentBytesI32: Int)
     public val uniformMappings: List<UniformMapping> = immutableList(mappings)
-    public enum class StorageKind { GRADIENT_STOPS, NOISE_U32 }
+    public enum class StorageKind { GRADIENT_STOPS, NOISE_U32, RUNTIME_READ }
     public data class Buffer(
         public val bufferTypeTagU32: UInt,
         public val minBindingSizeBytesI64: Long,
@@ -48,6 +48,7 @@ public class ComposedBindingLayoutV1 internal constructor(
         public val textureSampleTypeTagU32: UInt,
         public val multisampled: Boolean = false,
     )
+    public data class Sampler(public val samplerTypeTagU32: UInt)
     public data class Resource(
         public val ownerNodeIndexI32: Int,
         public val logicalSlotI32: Int,
@@ -57,6 +58,7 @@ public class ComposedBindingLayoutV1 internal constructor(
         public val kindTagU32: UInt,
         public val buffer: Buffer? = null,
         public val texture: Texture? = null,
+        public val sampler: Sampler? = null,
     )
     public val resources: List<Resource> = immutableList(resources)
     public val composedBindingLayoutHash: String
@@ -69,46 +71,44 @@ public class ComposedBindingLayoutV1 internal constructor(
             if (row.ownerNodeIndexI32 != owner) {
                 require(row.ownerNodeIndexI32 > owner) { W5gPlanDiagnostics.Schema }
                 owner = row.ownerNodeIndexI32
-                base = end
+                base = Math.addExact(end,(16L-end%16L)%16L)
             }
-            require(row.ownerNodeIndexI32 >= 0 && row.localOffsetBytesI32.toLong() == end-base && row.alignmentBytesI32 == 16 &&
-                row.sizeBytesI32 > 0 && row.sizeBytesI32 % 16 == 0 && row.physicalOffsetBytesI32.toLong() == end) { W5gPlanDiagnostics.Schema }
-            end = Math.addExact(end,row.sizeBytesI32.toLong())
+            require(row.ownerNodeIndexI32 >= 0 && row.localOffsetBytesI32 >= 0 && row.alignmentBytesI32 in setOf(4,8,16) &&
+                row.sizeBytesI32 > 0 && row.physicalOffsetBytesI32.toLong() >= end &&
+                row.physicalOffsetBytesI32.toLong() == Math.addExact(base,row.localOffsetBytesI32.toLong()) &&
+                row.physicalOffsetBytesI32 % row.alignmentBytesI32 == 0) { W5gPlanDiagnostics.Schema }
+            end = Math.addExact(row.physicalOffsetBytesI32.toLong(),row.sizeBytesI32.toLong())
         }
-        require(end == uniformBytesI64) { W5gPlanDiagnostics.Schema }
+        require(Math.addExact(end,(16L-end%16L)%16L) == uniformBytesI64) { W5gPlanDiagnostics.Schema }
         this.resources.forEachIndexed { index,row ->
             require(row.ownerNodeIndexI32 >= 0 && row.logicalSlotI32 >= 0 && row.groupI32 == 1 &&
                 row.bindingI32 == index+1 && row.visibilityFlagsU32 == 2u && when(row.kindTagU32) {
-                    1u -> row.texture == null && row.buffer?.let { it.bufferTypeTagU32 == 2u &&
+                    1u -> row.texture == null && row.sampler == null && row.buffer?.let { it.bufferTypeTagU32 == 2u &&
                         it.minBindingSizeBytesI64 == when (it.storageKind) {
                             StorageKind.GRADIENT_STOPS -> 32L
                             StorageKind.NOISE_U32 -> 16L
+                            StorageKind.RUNTIME_READ -> it.minBindingSizeBytesI64.also { bytes -> require(bytes > 0L) }
                         } && !it.hasDynamicOffset } == true
-                    2u -> row.buffer == null && row.texture?.let { it.textureViewDimensionTagU32 == 1u &&
+                    2u -> row.buffer == null && row.sampler == null && row.texture?.let { it.textureViewDimensionTagU32 == 1u &&
                         it.textureSampleTypeTagU32 == 1u && !it.multisampled } == true
+                    3u -> row.buffer == null && row.texture == null && row.sampler?.samplerTypeTagU32 in setOf(1u,2u)
                     else -> false
                 }) { W5gPlanDiagnostics.Schema }
         }
-        val hash = java.security.MessageDigest.getInstance("SHA-256")
-        fun i32(value: Int) { repeat(4) { hash.update((value ushr (it*8)).toByte()) } }
-        fun i64(value: Long) { repeat(8) { hash.update((value ushr (it*8)).toByte()) } }
-        hash.update("kanvas-material-binding-layout-v1".encodeToByteArray()); hash.update(0.toByte())
-        i32(1); i32(0); i32(2); i32(1); i64(uniformBytesI64); hash.update(0.toByte()); i64(uniformBytesI64)
-        i32(uniformMappings.size)
-        uniformMappings.forEach { i32(it.ownerNodeIndexI32); i32(it.localOffsetBytesI32); i32(it.physicalOffsetBytesI32)
-            i32(it.sizeBytesI32); i32(it.alignmentBytesI32) }
-        i32(this.resources.size)
-        this.resources.forEach { row ->
-            i32(row.ownerNodeIndexI32); i32(row.logicalSlotI32); i32(row.groupI32); i32(row.bindingI32)
-            i32(row.visibilityFlagsU32.toInt()); i32(row.kindTagU32.toInt())
-            hash.update(if(row.buffer == null) 0.toByte() else 1.toByte())
-            row.buffer?.let { i32(it.bufferTypeTagU32.toInt()); i64(it.minBindingSizeBytesI64); hash.update(0.toByte()) }
-            hash.update(if(row.texture == null) 0.toByte() else 1.toByte())
-            row.texture?.let { i32(it.textureViewDimensionTagU32.toInt()); i32(it.textureSampleTypeTagU32.toInt()); hash.update(0.toByte()) }
-            hash.update(0.toByte()) // sampler option absent
-        }
-        composedBindingLayoutHash = hash.digest().joinToString("") { "%02x".format(it) }
+        composedBindingLayoutHash = recomputeBindingLayoutHash()
     }
+    public fun recomputeBindingLayoutHash(): String = org.graphiks.kanvas.render.ir.CanonicalHashBytesV1("kanvas-material-binding-layout-v1").apply {
+            i32(1).i32(0).u32(2).u32(1).i64(uniformBytesI64).u8(0).i64(uniformBytesI64)
+            list(uniformMappings) { i32(it.ownerNodeIndexI32).i32(it.localOffsetBytesI32).i32(it.physicalOffsetBytesI32)
+                .i32(it.sizeBytesI32).i32(it.alignmentBytesI32) }
+            list(this@ComposedBindingLayoutV1.resources) { row ->
+                i32(row.ownerNodeIndexI32).i32(row.logicalSlotI32).i32(row.groupI32).i32(row.bindingI32)
+                    .u32(row.visibilityFlagsU32.toLong()).u32(row.kindTagU32.toLong())
+                option(row.buffer) { u32(it.bufferTypeTagU32.toLong()).i64(it.minBindingSizeBytesI64).u8(if(it.hasDynamicOffset) 1 else 0) }
+                option(row.texture) { u32(it.textureViewDimensionTagU32.toLong()).u32(it.textureSampleTypeTagU32.toLong()).u8(if(it.multisampled) 1 else 0) }
+                option(row.sampler) { u32(it.samplerTypeTagU32.toLong()) }
+            }
+        }.sha256Hex()
 }
 
 internal class MaterialEvaluationDagV5 private constructor(entries: List<Entry>, val root: MaterialEvaluationRefV5) {
@@ -136,7 +136,8 @@ public class ComposedImageResourceV5 internal constructor(
     public val upload: ImageUploadPlanV1 = prepared.imageUpload(metadata.description)
     public val graph: ImageNumericOperationGraphV1 = ImageNumericOperationGraphV1.of(metadata.description.color,
         metadata.description.sampling,metadata.description.tileModes)
-    internal val projection: ImageCoordinatePlanV1 = ImageCoordinatePlanV1.sealShader(org.graphiks.math.matrix.Matrix3x3F32(),emptyList())
+    internal val projection: ImageCoordinatePlanV1 = metadata.projection
+    internal val originalImageDraw: org.graphiks.kanvas.render.ir.DrawNode? get() = metadata.origin
     init {
         require(resource.kindTagU32 == 2u && resource.texture != null && resource.buffer == null &&
             upload.widthI32 > 0 && upload.heightI32 > 0 &&
@@ -161,7 +162,9 @@ internal class PreparedComposedSourceV5 private constructor(
     images: List<ImageReference> = emptyList(),
     val noiseSlab: NoiseTableSlabV1? = null,
     noises: List<NoiseReference> = emptyList(),
+    runtimeResources: List<RuntimeEffectResourceReferenceV1> = emptyList(),
 ) {
+    val runtimeResources: List<RuntimeEffectResourceReferenceV1> = immutableList(runtimeResources)
     class NoiseReference(val evaluationRef: MaterialEvaluationRefV5,val ownerNodeIndexI32: Int,
         val metadata: MaterialSourceConstructionV4.NoiseChildMetadata,
         val resource: ComposedBindingLayoutV1.Resource,val range: NoiseTableRangeV1,val wordOffsetI64: Long)
@@ -202,10 +205,10 @@ internal class PreparedComposedSourceV5 private constructor(
     val integerWordsU32: Map<Long,UInt> = java.util.Collections.unmodifiableMap(LinkedHashMap(integers))
     val tableRecords: Map<Long,ImmutableUBytes> = java.util.Collections.unmodifiableMap(LinkedHashMap(tables))
     val deviceBoundsF32: RectF32 get() = captured.deviceBoundsF32
-    val program: ComposedMaterialProgramV5 = ComposedMaterialProgramV5(MaterialProgramPlanId(
-        "composed-material-v5:${layout.composedBindingLayoutHash}:" + evaluation.entries.joinToString(";") {
-            "${it.ownerNodeIndexI32}:${it.children.map { child -> child.indexI32 }}:${it.program.structuralId.value}"
-        } + ":${operationGraph.canonicalIdentity}"),operationGraph)
+    val program: ComposedMaterialProgramV6 = ComposedMaterialProgramV6(evaluation,operationGraph,layout,
+        requireNotNull(captured.composed).nodes.mapIndexedNotNull { index,node -> node.runtime?.let {
+            ComposedMaterialProgramV6.RuntimeNodeExpectation(index,RuntimeEffectExpectationV1.from(it))
+        } })
     init {
         val metadata = requireNotNull(captured.composed) { W5gPlanDiagnostics.Schema }
         require(frameOwner.owns(captured) && metadata.layout === layout &&
@@ -252,7 +255,11 @@ internal class PreparedComposedSourceV5 private constructor(
         }
         require(imageReferences.map { it.evaluationRef.indexI32 } == metadata.nodes.indices.filter {
             metadata.nodes[it].imageSource != null
-        } && layout.resources.filter { it.texture != null }.all { resource -> imageReferences.any { it.binding.resource === resource } }) { W5gPlanDiagnostics.Schema }
+        } && layout.resources.filter { it.texture != null }.all { resource ->
+            imageReferences.any { it.binding.resource === resource } || runtimeResources.any { it.resource === resource } }) { W5gPlanDiagnostics.Schema }
+        require(runtimeResources.map { it.captured } == metadata.runtimeResources && runtimeResources.all {
+            layout.resources.any { row -> row === it.resource }
+        }) { W5hPlanDiagnostics.Descriptor }
         imageReferences.forEach { reference ->
             val node=metadata.nodes[reference.evaluationRef.indexI32]
             val image=reference.binding
@@ -292,7 +299,7 @@ internal class PreparedComposedSourceV5 private constructor(
             val built = ColorSourceProofCompilerV1.graphForComposed(metadata,definitions,images,noises)
             return PreparedComposedSourceV5(source,source.canonicalIdentity,frame,built.evaluation,metadata.layout,built.graph,
                 built.words,built.tables,built.integers,prepared.slab.takeIf { references.isNotEmpty() },references,images,
-                prepared.noiseSlab.takeIf { noises.isNotEmpty() },noises)
+                prepared.noiseSlab.takeIf { noises.isNotEmpty() },noises,metadata.runtimeResources.map(prepared::runtimeResource))
         }
     }
 }

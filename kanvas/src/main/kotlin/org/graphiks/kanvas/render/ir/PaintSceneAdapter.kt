@@ -203,11 +203,16 @@ public object PaintSceneAdapter {
         is Shader.WithWorkingColorSpace -> MaterialNode.WithWorkingColorSpace(child(shader), ColorInterpolation.valueOf(interpolation.name))
         is Shader.CoordClamp -> MaterialNode.CoordClamp(child(shader),
             if (preserveW5dMatrices) subset.copy() else subset.checked("shader.subset"))
-        is Shader.RuntimeEffect -> MaterialNode.RuntimeEffect.of(
-            effect.toDescriptor(RuntimeEffectAbi.SHADER),
-            uniforms.toRuntimeUniforms(),
-            children.map { (name, shader) -> RuntimeMaterialChild(name, child(shader,false)) },
-        )
+        is Shader.RuntimeEffect -> {
+            val descriptor=effect.toDescriptor(RuntimeEffectAbi.SHADER)
+            val capturedUniforms=uniforms.toRuntimeUniforms()
+            if(descriptor.semanticVersionI32 > 0) org.graphiks.kanvas.gpu.plan.W5hPlanDiagnostics.bindingCode(
+                RuntimeBindingValidator.validate(descriptor,capturedUniforms,children.keys.map { RuntimeChildBinding(it,RuntimeChildType.SHADER) }))
+                ?.let { throw CaptureFailure(it,"Runtime effect bindings do not match the registered descriptor") }
+            MaterialNode.RuntimeEffect.of(descriptor,capturedUniforms,
+                children.map { (name, shader) -> RuntimeMaterialChild(name, child(shader,false)) },
+                resources.toRuntimeResources(descriptor,captureImage))
+        }
         }
         active.remove(this)
         completed.getOrPut(this) { mutableMapOf() }[preserveW5dMatrices] = captured
@@ -311,6 +316,7 @@ public object PaintSceneAdapter {
             descriptor.registeredEffect(),
             uniforms().toUniformBlock(),
             associate { child -> child.name to child.material.toShader() },
+            resources.toPublicResources(),
         )
     }
 
@@ -404,36 +410,44 @@ public object PaintSceneAdapter {
     private fun org.graphiks.kanvas.pipeline.RuntimeEffect.toDescriptor(
         abi: RuntimeEffectAbi,
         extraChildren: Collection<RuntimeChildSlot> = emptyList(),
-    ): RuntimeEffectDescriptor = RuntimeEffectDescriptor.of(
-        id = RuntimeEffectId(id),
-        abi = abi,
-        uniformLayout = RuntimeUniformLayout.of(uniformLayout.slots.map { slot ->
-            RuntimeUniformSlot(slot.name, slot.binding, RuntimeUniformType.valueOf(slot.type.name), slot.size)
-        }),
-        childSlots = children.map { slot ->
-            extraChildren.firstOrNull { it.name == slot.name }
-                ?: RuntimeChildSlot(slot.name, abi.defaultChildType())
-        } + extraChildren.filter { extra -> children.none { it.name == extra.name } },
-        vertexLayout = RuntimeVertexLayout.of(
-            stride = module.vertexLayout.stride,
-            attributes = module.vertexLayout.attributes.map { attribute ->
-                RuntimeVertexAttribute(
-                    format = RuntimeVertexFormat.valueOf(attribute.format.name.uppercase()),
-                    offset = attribute.offset,
-                    shaderLocation = attribute.shaderLocation,
-                )
-            },
-            stepMode = RuntimeVertexStepMode.valueOf(module.vertexLayout.stepMode.name),
-        ),
-        module = ShaderModuleDescriptor.of(
-            source = module.source,
-            entryPoint = module.entryPoint,
-            uniforms = module.uniforms.map { slot ->
+    ): RuntimeEffectDescriptor {
+        descriptor?.let { positive ->
+            require(positive.abi == abi && extraChildren.isEmpty()) { "Runtime effect kind or children mismatch" }
+            val builtin = requireNotNull(org.graphiks.kanvas.pipeline.RuntimeEffect.registered(id, semanticVersionI32))
+            require(builtin.descriptor == positive && builtin.abiHash == abiHash)
+            return positive
+        }
+        return RuntimeEffectDescriptor.of(
+            id = RuntimeEffectId(id),
+            abi = abi,
+            uniformLayout = RuntimeUniformLayout.of(uniformLayout.slots.map { slot ->
                 RuntimeUniformSlot(slot.name, slot.binding, RuntimeUniformType.valueOf(slot.type.name), slot.size)
-            },
-            textures = module.textures.map { slot -> RuntimeTextureSlot(slot.name, slot.binding) },
-        ),
-    )
+            }),
+            childSlots = children.map { slot ->
+                extraChildren.firstOrNull { it.name == slot.name }
+                    ?: RuntimeChildSlot(slot.name, abi.defaultChildType())
+            } + extraChildren.filter { extra -> children.none { it.name == extra.name } },
+            vertexLayout = RuntimeVertexLayout.of(
+                stride = module.vertexLayout.stride,
+                attributes = module.vertexLayout.attributes.map { attribute ->
+                    RuntimeVertexAttribute(
+                        format = RuntimeVertexFormat.valueOf(attribute.format.name.uppercase()),
+                        offset = attribute.offset,
+                        shaderLocation = attribute.shaderLocation,
+                    )
+                },
+                stepMode = RuntimeVertexStepMode.valueOf(module.vertexLayout.stepMode.name),
+            ),
+            module = ShaderModuleDescriptor.of(
+                source = module.source,
+                entryPoint = module.entryPoint,
+                uniforms = module.uniforms.map { slot ->
+                    RuntimeUniformSlot(slot.name, slot.binding, RuntimeUniformType.valueOf(slot.type.name), slot.size)
+                },
+                textures = module.textures.map { slot -> RuntimeTextureSlot(slot.name, slot.binding) },
+            ),
+        )
+    }
 
     private fun RuntimeEffectAbi.defaultChildType(): RuntimeChildType = when (this) {
         RuntimeEffectAbi.SHADER -> RuntimeChildType.SHADER
@@ -442,15 +456,30 @@ public object PaintSceneAdapter {
         RuntimeEffectAbi.BLENDER -> RuntimeChildType.BLENDER
     }
 
-    private fun org.graphiks.kanvas.pipeline.UniformBlock.toRuntimeUniforms(): Map<String, RuntimeUniformValue> = entries.mapValues { (_, value) ->
-        when (value) {
-            is org.graphiks.kanvas.pipeline.UniformValue.F1 -> RuntimeUniformValue.F1(value.v.checked("runtime.uniform"))
-            is org.graphiks.kanvas.pipeline.UniformValue.F2 -> RuntimeUniformValue.F2(value.x.checked("runtime.uniform"), value.y.checked("runtime.uniform"))
-            is org.graphiks.kanvas.pipeline.UniformValue.F3 -> RuntimeUniformValue.F3(value.x.checked("runtime.uniform"), value.y.checked("runtime.uniform"), value.z.checked("runtime.uniform"))
-            is org.graphiks.kanvas.pipeline.UniformValue.F4 -> RuntimeUniformValue.F4(value.x.checked("runtime.uniform"), value.y.checked("runtime.uniform"), value.z.checked("runtime.uniform"), value.w.checked("runtime.uniform"))
-            is org.graphiks.kanvas.pipeline.UniformValue.I1 -> RuntimeUniformValue.I1(value.v)
-            is org.graphiks.kanvas.pipeline.UniformValue.M3 -> RuntimeUniformValue.M3(value.m.checked("runtime.uniform"))
-            is org.graphiks.kanvas.pipeline.UniformValue.M4 -> RuntimeUniformValue.M4(value.values.checked("runtime.uniform"))
+    private fun org.graphiks.kanvas.pipeline.UniformBlock.toRuntimeUniforms(): Map<String, RuntimeUniformValue> {
+        var bytesI64 = 0L
+        entries.values.forEach { value ->
+            val sizeI64 = when (value) {
+                is org.graphiks.kanvas.pipeline.UniformValue.F1, is org.graphiks.kanvas.pipeline.UniformValue.I1 -> 4L
+                is org.graphiks.kanvas.pipeline.UniformValue.F2 -> 8L
+                is org.graphiks.kanvas.pipeline.UniformValue.F3 -> 12L
+                is org.graphiks.kanvas.pipeline.UniformValue.F4 -> 16L
+                is org.graphiks.kanvas.pipeline.UniformValue.M3 -> 48L
+                is org.graphiks.kanvas.pipeline.UniformValue.M4 -> 64L
+            }
+            bytesI64 = Math.addExact(bytesI64, sizeI64)
+            require(bytesI64 <= 64L * 1024L * 1024L) { "Runtime uniform capture exceeds byte limit" }
+        }
+        return entries.mapValues { (_, value) ->
+            when (value) {
+                is org.graphiks.kanvas.pipeline.UniformValue.F1 -> RuntimeUniformValue.F1(value.v.checked("runtime.uniform"))
+                is org.graphiks.kanvas.pipeline.UniformValue.F2 -> RuntimeUniformValue.F2(value.x.checked("runtime.uniform"), value.y.checked("runtime.uniform"))
+                is org.graphiks.kanvas.pipeline.UniformValue.F3 -> RuntimeUniformValue.F3(value.x.checked("runtime.uniform"), value.y.checked("runtime.uniform"), value.z.checked("runtime.uniform"))
+                is org.graphiks.kanvas.pipeline.UniformValue.F4 -> RuntimeUniformValue.F4(value.x.checked("runtime.uniform"), value.y.checked("runtime.uniform"), value.z.checked("runtime.uniform"), value.w.checked("runtime.uniform"))
+                is org.graphiks.kanvas.pipeline.UniformValue.I1 -> RuntimeUniformValue.I1(value.v)
+                is org.graphiks.kanvas.pipeline.UniformValue.M3 -> RuntimeUniformValue.M3(value.m.checked("runtime.uniform"))
+                is org.graphiks.kanvas.pipeline.UniformValue.M4 -> RuntimeUniformValue.M4(value.values.checked("runtime.uniform"))
+            }
         }
     }
 
@@ -467,19 +496,71 @@ public object PaintSceneAdapter {
             } }
         }
 
-    private fun RuntimeEffectDescriptor.registeredEffect(): org.graphiks.kanvas.pipeline.RuntimeEffect =
-        requireNotNull(org.graphiks.kanvas.pipeline.RuntimeEffect.registered(id.value)) {
-            "Runtime effect ${id.value} is not registered for scene reconstruction"
-        }.also { registered ->
-            require(registered.id == id.value) { "Registered runtime effect identity does not match scene descriptor" }
-            val registeredDescriptor = registered.toDescriptor(
-                abi,
-                toList(),
-            )
-            require(registeredDescriptor == this) {
-                "Registered runtime effect descriptor does not match the scene descriptor"
-            }
+    private fun RuntimeEffectDescriptor.registeredEffect(): org.graphiks.kanvas.pipeline.RuntimeEffect {
+        if (semanticVersionI32 > 0) return requireNotNull(
+            org.graphiks.kanvas.pipeline.RuntimeEffect.registered(id.value, semanticVersionI32),
+        ) { "Unknown runtime effect triplet" }.also {
+            require(it.abiHash == abiHash && it.descriptor == this) { "Runtime effect ABI mismatch" }
         }
+        val legacy = requireNotNull(legacyV0)
+        val module = requireNotNull(legacy.module) { "Legacy runtime effect module is absent" }
+        val vertex = legacy.vertexLayout
+        return org.graphiks.kanvas.pipeline.RuntimeEffect.detached(
+            id.value,
+            org.graphiks.kanvas.pipeline.ShaderModule.of(module.source, module.entryPoint,
+                module.uniforms().map { org.graphiks.kanvas.pipeline.UniformSlot(it.name, it.binding, org.graphiks.kanvas.pipeline.UniformType.valueOf(it.type.name), it.size) },
+                module.textures().map { org.graphiks.kanvas.pipeline.TextureSlot(it.name, it.binding) },
+                org.graphiks.kanvas.pipeline.VertexLayout(
+                    vertex?.map { org.graphiks.kanvas.pipeline.VertexAttribute(
+                        org.graphiks.kanvas.pipeline.VertexFormat.entries.first { format -> format.name.uppercase() == it.format.name },
+                        it.offset, it.shaderLocation) } ?: emptyList(),
+                    vertex?.stride ?: 0,
+                    vertex?.let { org.graphiks.kanvas.pipeline.VertexStepMode.valueOf(it.stepMode.name) }
+                        ?: org.graphiks.kanvas.pipeline.VertexStepMode.VERTEX)),
+            org.graphiks.kanvas.pipeline.UniformLayout(legacy.uniformLayout.map {
+                org.graphiks.kanvas.pipeline.UniformSlot(it.name, it.binding, org.graphiks.kanvas.pipeline.UniformType.valueOf(it.type.name), it.size) }),
+            legacy.childSlots.map { org.graphiks.kanvas.pipeline.ChildSlot(it.name, org.graphiks.kanvas.pipeline.ChildType.valueOf(it.type.name)) },
+        )
+    }
+
+    private fun org.graphiks.kanvas.pipeline.RuntimeEffectResourceBindings.toRuntimeResources(
+        descriptor: RuntimeEffectDescriptor,
+        captureImage: (Image) -> ImageResourceSnapshot,
+    ): RuntimeEffectResourceBindingSetV1 {
+        require(sizeI32 == descriptor.logicalResources.size) { "Runtime resource count mismatch" }
+        var bytesI64 = 0L
+        entries().forEach { (_, binding) ->
+            val countI64 = when (binding) {
+                is org.graphiks.kanvas.pipeline.RuntimeEffectResourceBinding.StorageRead -> binding.sizeBytesI32.toLong()
+                is org.graphiks.kanvas.pipeline.RuntimeEffectResourceBinding.SampledTexture -> {
+                    val pixels = requireNotNull(binding.image.pixels) { "Runtime sampled textures must be pixel-backed" }
+                    val extentI64 = Math.multiplyExact(binding.image.rowBytesI32.toLong(), binding.image.height.toLong())
+                    require(extentI64 in 0L..pixels.size.toLong()) { "Runtime sampled texture extent is invalid" }
+                    pixels.size.toLong()
+                }
+                is org.graphiks.kanvas.pipeline.RuntimeEffectResourceBinding.Sampler -> 0L
+            }
+            bytesI64 = Math.addExact(bytesI64, countI64)
+            require(bytesI64 in 0L..(64L * 1024L * 1024L)) { "Runtime resource capture exceeds byte limit" }
+        }
+        return RuntimeEffectResourceBindingSetV1.of(descriptor.logicalResources.map { slot ->
+            val binding = requireNotNull(this[slot.name]) { "Missing runtime resource" }
+            RuntimeEffectResourceBindingEntryV1(slot.logicalSlotI32, slot.name, when (binding) {
+                is org.graphiks.kanvas.pipeline.RuntimeEffectResourceBinding.StorageRead ->
+                    RuntimeEffectResourceBindingV1.StorageRead(ImmutableBytes.copyOf(binding.copyBytes()))
+                is org.graphiks.kanvas.pipeline.RuntimeEffectResourceBinding.SampledTexture ->
+                    RuntimeEffectResourceBindingV1.SampledTexture(requireNotNull(captureImage(binding.image) as? ImageResourceSnapshot.Pixels))
+                is org.graphiks.kanvas.pipeline.RuntimeEffectResourceBinding.Sampler -> RuntimeEffectResourceBindingV1.Sampler(binding.type)
+            })
+        }).also { it.requireMatches(descriptor) }
+    }
+
+    private fun RuntimeEffectResourceBindingSetV1.toPublicResources(): org.graphiks.kanvas.pipeline.RuntimeEffectResourceBindings =
+        org.graphiks.kanvas.pipeline.RuntimeEffectResourceBindings.of(associate { entry -> entry.name to when (val binding = entry.binding) {
+            is RuntimeEffectResourceBindingV1.StorageRead -> org.graphiks.kanvas.pipeline.RuntimeEffectResourceBinding.StorageRead.copyOf(binding.bytes.copyToByteArray())
+            is RuntimeEffectResourceBindingV1.SampledTexture -> org.graphiks.kanvas.pipeline.RuntimeEffectResourceBinding.SampledTexture(ResourceSceneAdapter.toImage(binding.image))
+            is RuntimeEffectResourceBindingV1.Sampler -> org.graphiks.kanvas.pipeline.RuntimeEffectResourceBinding.Sampler(binding.type)
+        } })
 }
 
 private fun FloatArray.checked(field: String): FloatArray { forEach { it.checked(field) }; return copyOf() }

@@ -17,6 +17,10 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectGeometryAuthority
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
@@ -1177,16 +1181,171 @@ internal data class GPUCorePrimitiveCoverageMaskProducerUniformSlotSeal(
     val bindingLayoutHash: String,
 )
 
-/** O(1) builder authority for one exact prepared semantic object. */
+/**
+ * Exact immutable geometry token before numerical command identity. It contains no source,
+ * material, color, source uniform, final blend, analysis-record string or source table.
+ */
+internal class GPUCorePrimitiveGeometrySnapshot(
+    val renderStepIdentity: String,
+    val sourceFamily: GPUCorePrimitiveSourceFamily,
+    val geometry: GPUCorePrimitiveGeometry,
+    val targetBounds: GPUPixelBounds,
+    val scissorBounds: GPUPixelBounds,
+    val clipCoveragePlan: GPUClipCoveragePlan,
+    val clipExecutionPlanIdentity: String?,
+    val frameProvenance: GPUFrameProvenance,
+    val coverageMode: GPUCorePrimitiveCoverageMode,
+    val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?,
+    val rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority?,
+    val rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
+    val drrectOuterGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
+    val drrectInnerGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
+)
+
+/** Final command/analysis identity wrapper around the exact previously captured geometry token. */
+internal class GPUCorePrimitiveGeometryAuthority private constructor(
+    val commandIdI32: Int,
+    val snapshot: GPUCorePrimitiveGeometrySnapshot,
+    val analysisRecordId: String?,
+    val analysisCommandFamily: String?,
+    private val preparedPacketScissor: GPUPixelBounds? = null,
+) {
+    val renderStepIdentity: String get() = snapshot.renderStepIdentity
+    val sourceFamily: GPUCorePrimitiveSourceFamily get() = snapshot.sourceFamily
+    val geometry: GPUCorePrimitiveGeometry get() = snapshot.geometry
+    val targetBounds: GPUPixelBounds get() = snapshot.targetBounds
+    val scissorBounds: GPUPixelBounds get() = preparedPacketScissor ?: snapshot.scissorBounds
+    val clipCoveragePlan: GPUClipCoveragePlan get() = snapshot.clipCoveragePlan
+    val clipExecutionPlanIdentity: String? get() = snapshot.clipExecutionPlanIdentity
+    val frameProvenance: GPUFrameProvenance get() = snapshot.frameProvenance
+    val coverageMode: GPUCorePrimitiveCoverageMode get() = snapshot.coverageMode
+    val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority? get() = snapshot.rectRouteAuthority
+    val rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority? get() = snapshot.rectGeometryAuthority
+    val rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? get() = snapshot.rrectGeometryAuthority
+    val drrectOuterGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? get() = snapshot.drrectOuterGeometryAuthority
+    val drrectInnerGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? get() = snapshot.drrectInnerGeometryAuthority
+
+    fun matches(semantic: GPUDrawSemanticPayload.CorePrimitive): Boolean =
+        commandIdI32 == semantic.payloadRef.commandIdValue &&
+            renderStepIdentity == semantic.payloadRef.renderStepIdentity &&
+            sourceFamily == semantic.sourceFamily && geometry === semantic.geometry &&
+            targetBounds == semantic.targetBounds && scissorBounds == semantic.scissorBounds &&
+            clipCoveragePlan === semantic.clipCoveragePlan &&
+            clipExecutionPlanIdentity == semantic.clipExecutionPlanIdentity &&
+            frameProvenance == semantic.frameProvenance && coverageMode == semantic.coverageMode &&
+            analysisRecordId == semantic.analysisRecordId && analysisCommandFamily == semantic.analysisCommandFamily &&
+            rectRouteAuthority == semantic.rectRouteAuthority &&
+            rectGeometryAuthority === semantic.rectGeometryAuthority &&
+            rrectGeometryAuthority === semantic.rrectGeometryAuthority &&
+            drrectOuterGeometryAuthority === semantic.drrectOuterGeometryAuthority &&
+            drrectInnerGeometryAuthority === semantic.drrectInnerGeometryAuthority
+
+    companion object {
+        fun capture(
+            semantic: GPUDrawSemanticPayload.CorePrimitive,
+            clipExecutionPlanIdentity: String? = semantic.clipExecutionPlanIdentity,
+        ): GPUCorePrimitiveGeometryAuthority {
+            require(semantic.hasGeometryStructuralIntegrity()) { "Core geometry authority requires admitted geometry" }
+            semantic.geometryPlan?.authority?.let { retained ->
+                if (retained.clipExecutionPlanIdentity == clipExecutionPlanIdentity && retained.matches(semantic)) return retained
+            }
+            return GPUCorePrimitiveGeometryAuthority(
+                semantic.payloadRef.commandIdValue,
+                GPUCorePrimitiveGeometrySnapshot(
+                    semantic.payloadRef.renderStepIdentity, semantic.sourceFamily, semantic.geometry,
+                    semantic.targetBounds, semantic.scissorBounds, semantic.clipCoveragePlan,
+                    clipExecutionPlanIdentity, semantic.frameProvenance, semantic.coverageMode,
+                    semantic.rectRouteAuthority, semantic.rectGeometryAuthority, semantic.rrectGeometryAuthority,
+                    semantic.drrectOuterGeometryAuthority, semantic.drrectInnerGeometryAuthority,
+                ),
+                semantic.analysisRecordId, semantic.analysisCommandFamily,
+            )
+        }
+
+        /** Identity-only join; the admitted geometry snapshot is neither copied nor revalidated here. */
+        internal fun bindRecordedSnapshot(
+            commandId: Int,
+            snapshot: GPUCorePrimitiveGeometrySnapshot,
+            analysisRecordId: String?,
+            analysisCommandFamily: String?,
+        ): GPUCorePrimitiveGeometryAuthority {
+            require(commandId >= 0)
+            return GPUCorePrimitiveGeometryAuthority(commandId, snapshot, analysisRecordId, analysisCommandFamily)
+        }
+
+        /** Pre-publication packet wrapper retains the exact admitted snapshot and cached Path scissor. */
+        internal fun bindPreparedPathScissor(
+            base: GPUCorePrimitiveGeometryAuthority,
+            scissor: GPUPixelBounds,
+        ): GPUCorePrimitiveGeometryAuthority {
+            val path = base.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath
+            require(base.preparedPacketScissor == null &&
+                path != null &&
+                path.geometryMode in setOf(GPUCorePrimitiveGeometryMode.StencilEdgeFan,
+                    GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan))
+            return GPUCorePrimitiveGeometryAuthority(base.commandIdI32, base.snapshot,
+                base.analysisRecordId, base.analysisCommandFamily, scissor)
+        }
+    }
+}
+
+/** A completed source binding joins, but never reissues, its exact geometry token. */
+internal class GPUCorePrimitiveMaterialBindingAuthority private constructor(
+    val geometryAuthority: GPUCorePrimitiveGeometryAuthority,
+    semantic: GPUDrawSemanticPayload.CorePrimitive,
+) {
+    private val payloadReference = semantic.payloadRef
+    private val material = semantic.material
+    private val blendPlanIdentity = semantic.blendPlanIdentity
+    private val source = (material as? GPUCorePrimitiveMaterialPayload.SolidColor)?.w5aAuthority
+    private val table = source?.sourcePlanTable
+    private val ref = source?.ref
+    private val program = source?.let { it.sourcePlanTable.entry(it.ref).program }
+    private val packedSource = source?.packedSourceV4
+    private val finalBlend = source?.finalBlend
+
+    fun matches(semantic: GPUDrawSemanticPayload.CorePrimitive): Boolean =
+        geometryAuthority.matches(semantic) && payloadReference === semantic.payloadRef &&
+            material === semantic.material && blendPlanIdentity == semantic.blendPlanIdentity &&
+            (source == null || source.validates(semantic.payloadRef.commandIdValue) &&
+                source.sourcePlanTable === table && source.ref == ref &&
+                source.sourcePlanTable.entry(source.ref).program === program &&
+                source.packedSourceV4 === packedSource && source.finalBlend === finalBlend)
+
+    companion object {
+        fun bind(geometry: GPUCorePrimitiveGeometryAuthority,
+            semantic: GPUDrawSemanticPayload.CorePrimitive): GPUCorePrimitiveMaterialBindingAuthority {
+            require(geometry.matches(semantic) && semantic.hasMaterialStructuralIntegrity() &&
+                semantic.material !is GPUCorePrimitiveMaterialPayload.W5aMaterialPlanRefV1) {
+                "Core material binding requires an executable source and its exact admitted geometry"
+            }
+            (semantic.material as? GPUCorePrimitiveMaterialPayload.SolidColor)?.w5aAuthority?.let { source ->
+                W5aCorePrimitiveMaterialAuthorityV2.geometryInventory(source)?.let { inventory ->
+                    require(geometry === inventory.geometryByCommandId[geometry.commandIdI32] ||
+                        geometry === inventory.pathGeometryByCommandId[geometry.commandIdI32]?.authority) {
+                        "Common source binding must retain one exact prepublication geometry token"
+                    }
+                }
+            }
+            return GPUCorePrimitiveMaterialBindingAuthority(geometry, semantic)
+        }
+    }
+}
+
+/** Compatibility facade for one exact semantic, composed from geometry and source authorities. */
 internal sealed class GPUCorePrimitivePreparedSemanticAuthority private constructor() {
+    internal abstract val geometryAuthority: GPUCorePrimitiveGeometryAuthority
+    internal abstract val materialBindingAuthority: GPUCorePrimitiveMaterialBindingAuthority
     internal abstract fun matches(semantic: GPUDrawSemanticPayload.CorePrimitive): Boolean
     internal abstract fun retainedSemantic(): GPUDrawSemanticPayload.CorePrimitive
 
     private class Exact(
         private val preparedSemanticReference: GPUDrawSemanticPayload.CorePrimitive,
+        override val geometryAuthority: GPUCorePrimitiveGeometryAuthority,
+        override val materialBindingAuthority: GPUCorePrimitiveMaterialBindingAuthority,
     ) : GPUCorePrimitivePreparedSemanticAuthority() {
         override fun matches(semantic: GPUDrawSemanticPayload.CorePrimitive): Boolean =
-            preparedSemanticReference === semantic
+            preparedSemanticReference === semantic && materialBindingAuthority.matches(semantic)
 
         override fun retainedSemantic(): GPUDrawSemanticPayload.CorePrimitive =
             preparedSemanticReference
@@ -1195,9 +1354,35 @@ internal sealed class GPUCorePrimitivePreparedSemanticAuthority private construc
     internal companion object {
         fun capture(
             semantic: GPUDrawSemanticPayload.CorePrimitive,
-        ): GPUCorePrimitivePreparedSemanticAuthority =
-            Exact(semantic)
+            geometry: GPUCorePrimitiveGeometryAuthority = GPUCorePrimitiveGeometryAuthority.capture(semantic),
+        ): GPUCorePrimitivePreparedSemanticAuthority {
+            return Exact(semantic, geometry, GPUCorePrimitiveMaterialBindingAuthority.bind(geometry, semantic))
+        }
     }
+}
+
+/** Common-frame sources cannot become executable without both exact post-bind authorities. */
+internal fun GPUDrawPacket.commonCoreSemanticAuthority(): GPUCorePrimitivePreparedSemanticAuthority? {
+    val semantic = semanticPayload as? GPUDrawSemanticPayload.CorePrimitive ?: return null
+    val source = (semantic.material as? GPUCorePrimitiveMaterialPayload.SolidColor)?.w5aAuthority
+    val inventory = source?.let(W5aCorePrimitiveMaterialAuthorityV2::geometryInventory)
+    val dispatch = corePrimitivePreparedAuthority?.materialDispatchPlan
+    if (inventory == null && dispatch == null) return null
+    require(dispatch != null && dispatch.validatesMaterial(commandIdValue, semantic)) {
+        "Common Core packet lost its material dispatch over the original packed geometry"
+    }
+    if (inventory != null) require(dispatch.geometry === inventory.runPlan)
+    val authority = requireNotNull(corePrimitivePreparedAuthority?.semanticAuthority) {
+        "Common Core packet lost its geometry/material composition"
+    }
+    val geometry = authority.geometryAuthority
+    require(authority.matches(semantic) && authority.materialBindingAuthority.geometryAuthority === geometry &&
+        authority.materialBindingAuthority.matches(semantic) &&
+        (inventory == null || geometry === inventory.geometryByCommandId[commandIdValue] ||
+            geometry === inventory.pathGeometryByCommandId[commandIdValue]?.authority)) {
+        "Common Core packet substituted its exact geometry or material binding"
+    }
+    return authority
 }
 
 internal data class GPUCorePrimitiveCoverageMaskConsumerUniformSlotSeal(
@@ -1827,6 +2012,8 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
     val w4dGeneralFrameMaterializationAuthority:
         GPUW4dGeneralPreparedFrameMaterializationAuthority? = null,
     val w5bFrameWitnessV3: W5bPreparedFrameWitnessV3? = null,
+    val semanticAuthority: GPUCorePrimitivePreparedSemanticAuthority? = null,
+    val materialDispatchPlan: org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitiveMaterialDispatchPlan? = null,
 ) {
     internal constructor(
         structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
@@ -1836,6 +2023,8 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
         analyticClipUniformSeal: GPUCorePrimitiveAnalyticClipUniformSeal? = null,
         analyticIntersectionUniformSeal: GPUCorePrimitiveAnalyticIntersectionUniformSeal? = null,
         coverageMaskUniformSlabSeal: GPUCorePrimitiveCoverageMaskUniformSlabSeal? = null,
+        semanticAuthority: GPUCorePrimitivePreparedSemanticAuthority? = null,
+        materialDispatchPlan: org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitiveMaterialDispatchPlan? = null,
     ) : this(
         structuralPipelineKey,
         renderPipelineKey,
@@ -1852,6 +2041,8 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
         null,
         null,
         ScratchLane.Legacy,
+        semanticAuthority = semanticAuthority,
+        materialDispatchPlan = materialDispatchPlan,
     )
 
     init {
@@ -1952,6 +2143,8 @@ internal class GPUCorePrimitivePreparedPacketAuthority private constructor(
             w4dSessionScratch,
             scratchLane,
             w5bFrameWitnessV3 = w5bFrameWitnessV3,
+            semanticAuthority = semanticAuthority,
+            materialDispatchPlan = materialDispatchPlan,
         )
     }
 

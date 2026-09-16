@@ -191,24 +191,23 @@ private fun GPUFramePlan.corePrimitiveSceneTargetDescriptor(
 private class GPUW4eNativeOwnedHandles : AutoCloseable, GPUW5aGeometryPipelineTemplateProvider {
     private val handles = mutableListOf<AutoCloseable>()
     private var closed = false
-    private val shaders = java.util.IdentityHashMap<io.ygdrasil.webgpu.GPUShaderModule, String>()
     private val layouts = java.util.IdentityHashMap<io.ygdrasil.webgpu.GPUPipelineLayout, List<io.ygdrasil.webgpu.GPUBindGroupLayout>>()
     private val templates = java.util.IdentityHashMap<GPURenderPipeline, GPUW5aGeometryPipelineTemplate>()
 
     fun createShaderModule(device: GPUDevice, descriptor: ShaderModuleDescriptor): io.ygdrasil.webgpu.GPUShaderModule =
-        own(device.createShaderModule(descriptor)).also { shaders[it] = descriptor.code }
+        own(device.createShaderModule(descriptor))
 
     fun createPipelineLayout(device: GPUDevice, descriptor: PipelineLayoutDescriptor): io.ygdrasil.webgpu.GPUPipelineLayout =
         own(device.createPipelineLayout(descriptor)).also { layouts[it] = descriptor.bindGroupLayouts.toList() }
 
     fun createRenderPipeline(device: GPUDevice, descriptor: RenderPipelineDescriptor,
         coverage: GPUW5bInlineCoverageV3? = null,
-        coordinates: MaterialCoordinateSlotV1? = null): GPURenderPipeline =
+        coordinates: MaterialCoordinateSlotV1? = null,
+        recipe: GPUW4eMaterialGeometryRecipeV1? = null): GPURenderPipeline =
         own(device.createRenderPipeline(descriptor)).also { pipeline ->
             val groupZero = layouts[descriptor.layout]?.singleOrNull()
-            val source = shaders[descriptor.vertex.module]
-            if (groupZero != null && source != null) templates[pipeline] =
-                GPUW5aGeometryPipelineTemplate(source, descriptor, groupZero, coverage, coordinates)
+            if (groupZero != null && recipe != null) templates[pipeline] =
+                GPUW5aGeometryPipelineTemplate(recipe.name, descriptor, groupZero, coverage, coordinates)
         }
 
     override fun sourceTemplate(pipeline: GPURenderPipeline): GPUW5aGeometryPipelineTemplate? = templates[pipeline]
@@ -243,7 +242,7 @@ private data class GPUW4eNativePipeline(
     val layout: io.ygdrasil.webgpu.GPUBindGroupLayout,
 )
 
-private fun w4eFullscreenVertexShader(): String = """
+internal fun w4eFullscreenVertexShader(): String = """
     @vertex fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4f {
         let positions = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
         return vec4f(positions[index], 0.0, 1.0);
@@ -409,7 +408,7 @@ private fun createW4eFoldPipeline(
 }
 
 /** Mechanical translation of compiler-sealed factors; no mode classification occurs here. */
-private fun w4eFinalBlendState(plan: GPUBlendPlan?): BlendState = when (plan) {
+internal fun w4eFinalBlendState(plan: GPUBlendPlan?): BlendState = when (plan) {
     null -> w4eSrcOverBlendState()
     is GPUBlendPlan.FixedFunctionBlend -> {
         require(plan.state.writeMask == "rgba")
@@ -434,28 +433,10 @@ private fun createW4eConsumerPipeline(
     owned: GPUW4eNativeOwnedHandles,
     finalBlend: GPUBlendPlan? = null,
 ): GPUW4eNativePipeline {
-    val bindGroupLayout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(
-        label = "Kanvas.frame.w4e.consumerLayout",
-        entries = listOf(
-            BindGroupLayoutEntry(binding = 0u, visibility = GPUShaderStage.Fragment, texture = TextureBindingLayout(
-                sampleType = GPUTextureSampleType.Float, viewDimension = GPUTextureViewDimension.TwoD, multisampled = false,
-            )),
-            BindGroupLayoutEntry(binding = 1u, visibility = GPUShaderStage.Fragment, buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform)),
-        ),
-    )))
+    val bindGroupLayout = owned.own(device.createBindGroupLayout(w4eMaterialGeometryLayoutV1(GPUW4eMaterialGeometryRecipeV1.Consumer)))
     val shader = owned.createShaderModule(device, ShaderModuleDescriptor(
         label = "Kanvas.frame.w4e.consumerShader",
-        code = w4eFullscreenVertexShader() + """
-            struct ConsumerBlock { color: vec4f, inverse: f32, padding0: f32, padding1: f32, padding2: f32 };
-            @group(0) @binding(0) var clipMask: texture_2d<f32>;
-            @group(0) @binding(1) var<uniform> consumer: ConsumerBlock;
-            @fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
-                let maskSample: vec4f = textureLoad(clipMask, vec2i(position.xy), 0);
-                let rawCoverage = clamp(maskSample.r, 0.0, 1.0);
-                let coverage = select(rawCoverage, 1.0 - rawCoverage, consumer.inverse > 0.5);
-                return consumer.color * coverage;
-            }
-        """.trimIndent(),
+        code = w4eMaterialGeometrySourceV1(GPUW4eMaterialGeometryRecipeV1.Consumer),
     ))
     val pipelineLayout = owned.createPipelineLayout(device, PipelineLayoutDescriptor(
         label = "Kanvas.frame.w4e.consumerPipelineLayout", bindGroupLayouts = listOf(bindGroupLayout),
@@ -470,7 +451,7 @@ private fun createW4eConsumerPipeline(
         fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(
             format = format, blend = w4eFinalBlendState(finalBlend),
         ))),
-    ), GPUW5bInlineCoverageV3.NativeMask, MaterialCoordinateSlotV1.Position)
+    ), GPUW5bInlineCoverageV3.NativeMask, MaterialCoordinateSlotV1.Position, recipe = GPUW4eMaterialGeometryRecipeV1.Consumer)
     return GPUW4eNativePipeline(pipeline, bindGroupLayout)
 }
 
@@ -481,39 +462,10 @@ private fun createW4eBinaryConsumerPipeline(
     sampleCount: Int,
     owned: GPUW4eNativeOwnedHandles,
 ): GPUW4eNativePipeline {
-    val bindGroupLayout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(
-        label = "Kanvas.frame.w4e.binaryConsumerLayout",
-        entries = listOf(0u, 1u).map { binding -> BindGroupLayoutEntry(
-            binding = binding,
-            visibility = GPUShaderStage.Fragment,
-            texture = TextureBindingLayout(
-                sampleType = GPUTextureSampleType.Float,
-                viewDimension = GPUTextureViewDimension.TwoD,
-                multisampled = false,
-            ),
-        ) } + BindGroupLayoutEntry(
-            binding = 2u,
-            visibility = GPUShaderStage.Fragment,
-            buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
-        ),
-    )))
+    val bindGroupLayout = owned.own(device.createBindGroupLayout(w4eMaterialGeometryLayoutV1(GPUW4eMaterialGeometryRecipeV1.BinaryConsumer)))
     val shader = owned.createShaderModule(device, ShaderModuleDescriptor(
         label = "Kanvas.frame.w4e.binaryConsumerShader",
-        code = w4eFullscreenVertexShader() + """
-            struct ConsumerBlock { color: vec4f, inverse: f32, padding0: f32, padding1: f32, padding2: f32 };
-            @group(0) @binding(0) var pathMask: texture_2d<f32>;
-            @group(0) @binding(1) var clipMask: texture_2d<f32>;
-            @group(0) @binding(2) var<uniform> consumer: ConsumerBlock;
-            @fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
-                let coordinate = vec2i(position.xy);
-                let pathSample: vec4f = textureLoad(pathMask, coordinate, 0);
-                let clipSample: vec4f = textureLoad(clipMask, coordinate, 0);
-                let pathCoverage = clamp(pathSample.r, 0.0, 1.0);
-                let rawClip = clamp(clipSample.r, 0.0, 1.0);
-                let clipCoverage = select(rawClip, 1.0 - rawClip, consumer.inverse > 0.5);
-                return consumer.color * (pathCoverage * clipCoverage);
-            }
-        """.trimIndent(),
+        code = w4eMaterialGeometrySourceV1(GPUW4eMaterialGeometryRecipeV1.BinaryConsumer),
     ))
     val pipelineLayout = owned.createPipelineLayout(device, PipelineLayoutDescriptor(
         label = "Kanvas.frame.w4e.binaryConsumerPipelineLayout", bindGroupLayouts = listOf(bindGroupLayout),
@@ -527,7 +479,7 @@ private fun createW4eBinaryConsumerPipeline(
         fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(
             format = format, blend = w4eSrcOverBlendState(),
         ))),
-    ), coordinates = MaterialCoordinateSlotV1.Position)
+    ), coordinates = MaterialCoordinateSlotV1.Position, recipe = GPUW4eMaterialGeometryRecipeV1.BinaryConsumer)
     return GPUW4eNativePipeline(pipeline, bindGroupLayout)
 }
 
@@ -544,32 +496,10 @@ private fun createW4eMaskedPathPipeline(
     owned: GPUW4eNativeOwnedHandles,
     finalBlend: GPUBlendPlan? = null,
 ): GPUW4eNativePipeline {
-    val bindGroupLayout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(
-        label = "Kanvas.frame.w4e.maskedPathLayout",
-        entries = listOf(
-            BindGroupLayoutEntry(binding = 0u, visibility = GPUShaderStage.Fragment, texture = TextureBindingLayout(
-                sampleType = GPUTextureSampleType.Float, viewDimension = GPUTextureViewDimension.TwoD, multisampled = false,
-            )),
-            BindGroupLayoutEntry(binding = 1u, visibility = GPUShaderStage.Fragment,
-                buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform)),
-        ),
-    )))
+    val bindGroupLayout = owned.own(device.createBindGroupLayout(w4eMaterialGeometryLayoutV1(GPUW4eMaterialGeometryRecipeV1.MaskedPath)))
     val shader = owned.createShaderModule(device, ShaderModuleDescriptor(
         label = "Kanvas.frame.w4e.maskedPathShader",
-        code = """
-            struct ConsumerBlock { color: vec4f, inverse: f32, padding0: f32, padding1: f32, padding2: f32 };
-            @group(0) @binding(0) var clipMask: texture_2d<f32>;
-            @group(0) @binding(1) var<uniform> consumer: ConsumerBlock;
-            @vertex fn vs_main(@location(0) position: vec2f) -> @builtin(position) vec4f {
-                return vec4f(position, 0.0, 1.0);
-            }
-            @fragment fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
-                let maskSample: vec4f = textureLoad(clipMask, vec2i(position.xy), 0);
-                let rawCoverage = clamp(maskSample.r, 0.0, 1.0);
-                let coverage = select(rawCoverage, 1.0 - rawCoverage, consumer.inverse > 0.5);
-                return consumer.color * coverage;
-            }
-        """.trimIndent(),
+        code = w4eMaterialGeometrySourceV1(GPUW4eMaterialGeometryRecipeV1.MaskedPath),
     ))
     val pipelineLayout = owned.createPipelineLayout(device, PipelineLayoutDescriptor(
         label = "Kanvas.frame.w4e.maskedPathPipelineLayout", bindGroupLayouts = listOf(bindGroupLayout),
@@ -591,7 +521,7 @@ private fun createW4eMaskedPathPipeline(
         fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(
             format = format, blend = w4eFinalBlendState(finalBlend),
         ))),
-    ), GPUW5bInlineCoverageV3.NativeMask, MaterialCoordinateSlotV1.Position)
+    ), GPUW5bInlineCoverageV3.NativeMask, MaterialCoordinateSlotV1.Position, recipe = GPUW4eMaterialGeometryRecipeV1.MaskedPath)
     return GPUW4eNativePipeline(pipeline, bindGroupLayout)
 }
 
@@ -604,21 +534,10 @@ private fun createW4eUnmaskedCoverPipeline(
     owned: GPUW4eNativeOwnedHandles,
     finalBlend: GPUBlendPlan? = null,
 ): GPUW4eNativePipeline {
-    val bindGroupLayout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(
-        label = "Kanvas.frame.w4e.unmaskedPathLayout",
-        entries = listOf(BindGroupLayoutEntry(
-            binding = 0u,
-            visibility = GPUShaderStage.Fragment,
-            buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
-        )),
-    )))
+    val bindGroupLayout = owned.own(device.createBindGroupLayout(w4eMaterialGeometryLayoutV1(GPUW4eMaterialGeometryRecipeV1.UnmaskedCover)))
     val shader = owned.createShaderModule(device, ShaderModuleDescriptor(
         label = "Kanvas.frame.w4e.unmaskedPathShader",
-        code = w4eFullscreenVertexShader() + """
-            struct ColorBlock { color: vec4f };
-            @group(0) @binding(0) var<uniform> consumer: ColorBlock;
-            @fragment fn fs_main() -> @location(0) vec4f { return consumer.color; }
-        """.trimIndent(),
+        code = w4eMaterialGeometrySourceV1(GPUW4eMaterialGeometryRecipeV1.UnmaskedCover),
     ))
     val pipelineLayout = owned.createPipelineLayout(device, PipelineLayoutDescriptor(
         label = "Kanvas.frame.w4e.unmaskedPathPipelineLayout", bindGroupLayouts = listOf(bindGroupLayout),
@@ -633,7 +552,7 @@ private fun createW4eUnmaskedCoverPipeline(
         fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(
             format = format, blend = w4eFinalBlendState(finalBlend),
         ))),
-    ), GPUW5bInlineCoverageV3.NativeFull, MaterialCoordinateSlotV1.FragmentPosition)
+    ), GPUW5bInlineCoverageV3.NativeFull, MaterialCoordinateSlotV1.FragmentPosition, recipe = GPUW4eMaterialGeometryRecipeV1.UnmaskedCover)
     return GPUW4eNativePipeline(pipeline, bindGroupLayout)
 }
 
@@ -645,24 +564,10 @@ private fun createW4eUnmaskedPathPipeline(
     owned: GPUW4eNativeOwnedHandles,
     finalBlend: GPUBlendPlan? = null,
 ): GPUW4eNativePipeline {
-    val bindGroupLayout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(
-        label = "Kanvas.frame.w4e.unmaskedDirectPathLayout",
-        entries = listOf(BindGroupLayoutEntry(
-            binding = 0u,
-            visibility = GPUShaderStage.Fragment,
-            buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
-        )),
-    )))
+    val bindGroupLayout = owned.own(device.createBindGroupLayout(w4eMaterialGeometryLayoutV1(GPUW4eMaterialGeometryRecipeV1.UnmaskedPath)))
     val shader = owned.createShaderModule(device, ShaderModuleDescriptor(
         label = "Kanvas.frame.w4e.unmaskedDirectPathShader",
-        code = """
-            struct ColorBlock { color: vec4f };
-            @group(0) @binding(0) var<uniform> consumer: ColorBlock;
-            @vertex fn vs_main(@location(0) position: vec2f) -> @builtin(position) vec4f {
-                return vec4f(position, 0.0, 1.0);
-            }
-            @fragment fn fs_main() -> @location(0) vec4f { return consumer.color; }
-        """.trimIndent(),
+        code = w4eMaterialGeometrySourceV1(GPUW4eMaterialGeometryRecipeV1.UnmaskedPath),
     ))
     val pipelineLayout = owned.createPipelineLayout(device, PipelineLayoutDescriptor(
         label = "Kanvas.frame.w4e.unmaskedDirectPathPipelineLayout", bindGroupLayouts = listOf(bindGroupLayout),
@@ -683,7 +588,7 @@ private fun createW4eUnmaskedPathPipeline(
         fragment = FragmentState(module = shader, entryPoint = "fs_main", targets = listOf(ColorTargetState(
             format = format, blend = w4eFinalBlendState(finalBlend),
         ))),
-    ), GPUW5bInlineCoverageV3.NativeFull, MaterialCoordinateSlotV1.FragmentPosition)
+    ), GPUW5bInlineCoverageV3.NativeFull, MaterialCoordinateSlotV1.FragmentPosition, recipe = GPUW4eMaterialGeometryRecipeV1.UnmaskedPath)
     return GPUW4eNativePipeline(pipeline, bindGroupLayout)
 }
 
@@ -1256,10 +1161,12 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
 
     override fun materializeReusable(
         framePlan: GPUFramePlan,
+        sourceWitness: W5hFrameSourceValidationWitnessV1,
         encoderPlan: GPUCommandEncoderPlan,
         resources: GPUPreparedResourceSet,
         generationSeal: GPUPreparedGenerationSeal,
     ): GPUPreparedNativeFramePayloadMaterialization {
+        require(sourceWitness.authenticates(framePlan)) { "W5h source witness belongs to another frame root" }
         synchronized(this) {
             if (closed || consumed) {
                 return refused(
@@ -1804,7 +1711,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
             -> error("Coverage-mask layouts were refused before direct binding selection")
         }
-        val uniformUploadBytes = singleKeySeal.packedUniformBytesForUpload()
+        val uniformUploadBytes = renderStep.drawPackets.first().corePrimitivePreparedAuthority?.materialDispatchPlan
+            ?.packedUniformBytesForUpload() ?: singleKeySeal.packedUniformBytesForUpload()
         fun packedRangeEquals(offset: Long, expected: ByteArray): Boolean {
             if (offset < 0L || offset > uniformUploadBytes.size.toLong() - expected.size.toLong()) {
                 return false
@@ -1893,16 +1801,13 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 val packetAuthority = requireNotNull(packet.corePrimitivePreparedAuthority)
                 val seal = analyticShapeUniformSeals[packetIndex]
                 val slot = sealedUniformPlan.slots[packetIndex]
-                val rebuilt = buildCorePrimitiveAnalyticShapeUniform(
-                    semantic,
-                    GPUCorePrimitivePreparedSemanticAuthority.capture(semantic),
-                )
-                val expectedBytes = when (rebuilt) {
-                    is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted -> rebuilt.bytes
-                    is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Refused -> return refuseAnalyticShape(
-                        "Analytic shape semantic can no longer be recomposed into the sealed uniform80 ABI.",
-                    )
-                }
+                val expectedBytes = packetAuthority.materialDispatchPlan?.uniformPayload(packet.commandIdValue)
+                    ?: when (val rebuilt = buildCorePrimitiveAnalyticShapeUniform(
+                        semantic, GPUCorePrimitivePreparedSemanticAuthority.capture(semantic))) {
+                        is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted -> rebuilt.bytes
+                        is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Refused -> return refuseAnalyticShape(
+                            "Analytic shape semantic can no longer be recomposed into the sealed uniform80 ABI.")
+                    }
                 val route = acceptedGeometries[packetIndex]
                 val renderScissor = route.renderScissor ?: return refuseAnalyticShape(
                     "Analytic shape route is missing its exact non-empty render scissor.",
@@ -2132,7 +2037,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             }
         }
         val arena = try {
-            packCorePrimitiveFrameGeometry(acceptedGeometries)
+            renderStep.drawPackets.first().corePrimitivePreparedAuthority?.materialDispatchPlan?.geometry?.arena
+                ?.directCompatibilityView() ?: packCorePrimitiveFrameGeometry(acceptedGeometries)
         } catch (failure: Throwable) {
             return refused(
                 "invalid.native-core-primitive.geometry-arena",
@@ -6863,7 +6769,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         }
         val renderScissors = semanticPackets.map { it.third.scissorBounds }
         val arena = try {
-            packCorePrimitiveFrameGeometry(acceptedGeometries)
+            renderStep.drawPackets.first().corePrimitivePreparedAuthority?.materialDispatchPlan?.geometry?.arena
+                ?.directCompatibilityView() ?: packCorePrimitiveFrameGeometry(acceptedGeometries)
         } catch (failure: Throwable) {
             return refused(
                 "invalid.native-core-primitive.geometry-arena",
@@ -9771,7 +9678,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         }
 
         val arena = try {
-            GPUCorePrimitiveNativeScopeGeometryArena.pack(unifiedRoute)
+            renderStep.drawPackets.first().corePrimitivePreparedAuthority?.materialDispatchPlan?.geometry?.arena
+                ?: GPUCorePrimitiveNativeScopeGeometryArena.pack(unifiedRoute)
         } catch (_: IllegalArgumentException) {
             return refused(
                 "invalid.native-core-primitive.indexed-geometry-arena",

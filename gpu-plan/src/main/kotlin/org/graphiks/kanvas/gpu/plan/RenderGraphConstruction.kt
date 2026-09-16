@@ -21,6 +21,7 @@ internal class RenderGraphConstruction internal constructor(
     val generalIssued: Boolean = false,
     val geometryIssued: Boolean = false,
     geometryLanes: List<GeometryLaneConstruction> = emptyList(),
+    val w4ePayload: W4eNativePayloadPlan? = null,
 ) {
     private val extent = targetExtent.copy()
     val targetExtent: SizeI32 get() = extent.copy()
@@ -36,7 +37,12 @@ internal class RenderGraphConstruction internal constructor(
     fun withWitness(w4d: Boolean = w4dIssued, general: Boolean = generalIssued,
         geometry: Boolean = geometryIssued, newLanes: List<GeometryLaneConstruction> = lanes): RenderGraphConstruction =
         RenderGraphConstruction(id,capabilityId,targetExtent,colorFormat,capabilities,budget,visualCommandCount,
-            resources(),passes(),dependencies(),peakFrameLocalBytes,materialTable,w4d,general,geometry,newLanes)
+            resources(),passes(),dependencies(),peakFrameLocalBytes,materialTable,w4d,general,geometry,newLanes,w4ePayload)
+    fun withW4ePayload(payload: W4eNativePayloadPlan): RenderGraphConstruction {
+        require(w4ePayload == null && payload.matchesDeclaredResources(resources()))
+        return RenderGraphConstruction(id,capabilityId,targetExtent,colorFormat,capabilities,budget,visualCommandCount,
+            resources(),passes(),dependencies(),peakFrameLocalBytes,materialTable,w4dIssued,generalIssued,geometryIssued,lanes,payload)
+    }
     fun resources(): List<PlanResource> = resourceValues
     fun passes(): List<PlanPass> = passValues
     fun dependencies(): List<PlanPassDependency> = dependencyValues
@@ -80,17 +86,27 @@ internal fun remapSourcePassesV4(sourcePasses: List<PlanPass>,
     overlayCoordinates: ((PlanDraw)->SourceCoordinatesV4?)? = null,
     overlayReference: ((PlanDraw)->MaterialPlanRef)? = null,
     composed: ((MaterialPlanRef)->Boolean)? = null,
+    w4eColorPasses: Map<Int,PlanPass.PathRenderPass>? = null,
     remap: (MaterialPlanRef) -> MaterialPlanRef): List<PlanPass> {
         val copied = java.util.IdentityHashMap<PlanDraw, PlanDraw>()
         fun draw(source: PlanDraw): PlanDraw = copied.getOrPut(source) {
+            if (source is W5bW4ePathDraw) return@getOrPut W5bW4ePathDraw(
+                requireNotNull(w4eColorPasses?.get(source.commandIndex)),source.blend)
+            if (source is ClippedGeneralPathDraw) return@getOrPut ClippedGeneralPathDraw.of(
+                draw(source.source) as GeneralPathDraw,source.clip)
             val ref = overlayReference?.invoke(source) ?: remap(source.materialAuthority.materialPlanRef())
             if (composed?.invoke(ref) == true) return@getOrPut when (source) {
+                is W5bPointDraw -> source.withMaterialRef(ref, composedV5=true)
                 is SolidRectDraw -> SolidRectDraw.ofMaterial(source.commandIndex,ref,source.copyVisibleBounds(),
                     source.copyScissor(),source.coverage,source.sample,source.blend,composedV5=true)
                 is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(source.commandIndex,ref,source.copyDeviceBounds(),
                     source.copyRasterBounds(),source.copyScissor(),source.blend,composedV5=true)
+                is AnalyticRRectDraw -> AnalyticRRectDraw.ofMaterial(source.commandIndex,ref,source.origin,source.copyDeviceShape(),
+                    source.copyRasterBounds(),source.copyScissor(),source.blend,composedV5=true)
                 is PathFillDraw -> PathFillDraw.ofMaterial(source.commandIndex,ref,source.copyGeometryF32(),source.strategy,
                     source.copyScissorI32(),source.blend,composedV5=true)
+                is PathStrokeDraw -> PathStrokeDraw.ofMaterial(source.commandIndex,ref,source.copyGeometryF32(),
+                    source.copyScissorI32(),source.mode,source.styleF64,source.blend,composedV5=true)
                 is GeneralPathDraw -> GeneralPathDraw.ofMaterial(source.commandIndex,ref,source.copyPathGeometry(),
                     source.strategy,source.copyScissorI32(),source.coverage,source.sample,source.blend,composedV5=true)
                 else -> error(W5gPlanDiagnostics.Unpromoted)
@@ -108,6 +124,7 @@ internal fun remapSourcePassesV4(sourcePasses: List<PlanPass>,
                 else -> error(W5fPlanDiagnostics.Unpromoted)
             }
             when (source) {
+                is W5bPointDraw -> source.withMaterialRef(ref)
                 is SolidRectDraw -> source.withMaterialRef(ref)
                 is AnalyticRectDraw -> source.withMaterialRef(ref)
                 is AnalyticRRectDraw -> source.withMaterialRef(ref)
@@ -146,6 +163,15 @@ internal class PackedFrameSourcesV4 private constructor(private val table: Mater
     private val capabilities: PlanCapabilitySnapshot, private val budget: PlanBudget,
     sources: Map<String, RawMaterialRequirementsV2>) {
     private val sources = java.util.Collections.unmodifiableMap(LinkedHashMap(sources))
+    fun forPrepared(candidate: MaterialPlanTable, ref: MaterialPlanRef,
+        coordinates: SourceCoordinatesV4): RawMaterialRequirementsV2 {
+        require(candidate === table) { W5fPlanDiagnostics.Schema }
+        val footprint = RawMaterialRequirementsV2.measureV4(candidate, ref)
+        require(footprint.proof.authenticates(candidate, ref, coordinates)) { W5fPlanDiagnostics.Schema }
+        return requireNotNull(sources[footprint.canonicalIdentity]).also {
+            require(it.canonicalIdentity.endsWith(footprint.canonicalIdentity)) { W5fPlanDiagnostics.Schema }
+        }
+    }
     fun forConstruction(graph: RenderGraphConstruction): Map<String, RawMaterialRequirementsV2> {
         require(graph.materialTable === table && graph.capabilities == capabilities && graph.budget == budget) {
             W5fPlanDiagnostics.Schema
@@ -174,6 +200,9 @@ internal class PackedFrameSourcesV4 private constructor(private val table: Mater
                 draw.materialAuthority.colorSourceCoordinatesV4()?.let { coordinates ->
                     val ref = draw.materialAuthority.materialPlanRef()
                     require(draw is SolidRectDraw || draw is AnalyticRectDraw || draw is PathFillDraw ||
+                        (draw is AnalyticRRectDraw || draw is PathStrokeDraw || draw is GeneralPathDraw || draw is W5bPointDraw ||
+                            draw is W5bW4ePathDraw || draw is ClippedGeneralPathDraw) &&
+                            draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV5 ||
                         draw is GeneralPathDraw && draw.copyPathGeometry() is PathDrawGeometry.Fill ||
                         (draw is AnalyticRRectDraw || draw is PathStrokeDraw || draw is GeneralPathDraw) &&
                             table?.isUnfilteredGradientV4(ref) == true) { W5fPlanDiagnostics.Unpromoted }
@@ -193,13 +222,24 @@ internal class PackedFrameSourcesV4 private constructor(private val table: Mater
             RawMaterialRequirementsV2.requireFrameBudget(legacy,nonUniformBytesI64,first.budget,"w5a.composite.unsupported")
             val packed = if (footprints.isEmpty()) emptyMap() else {
                 val base = legacy.fold(nonUniformBytesI64) { bytes, source -> Math.addExact(bytes,source.uniformByteCountI64) }
-                val permit = RawMaterialRequirementsV2.requireFrameBudgetV4(footprints,base,first.budget,first.capabilities,
-                    "resource-limit.w5b.source-budget")
-                footprints.distinctBy { it.canonicalIdentity }.associate {
-                    it.canonicalIdentity to RawMaterialRequirementsV2.packV4(it,permit)
-                }
+                packFootprints(footprints, base, first.budget, first.capabilities)
             }
             return PackedFrameSourcesV4(table,first.capabilities,first.budget,packed)
+        }
+
+        fun issuePrepared(table: MaterialPlanTable, capabilities: PlanCapabilitySnapshot, budget: PlanBudget,
+            footprints: List<MaterialSourceFootprintV4>, nonUniformBytesI64: Long): PackedFrameSourcesV4 =
+            PackedFrameSourcesV4(table, capabilities, budget,
+                packFootprints(footprints, nonUniformBytesI64, budget, capabilities))
+
+        /** One permit/packing authority for both real graph and prepared-source inputs. */
+        private fun packFootprints(footprints: List<MaterialSourceFootprintV4>, base: Long,
+            budget: PlanBudget, capabilities: PlanCapabilitySnapshot): Map<String, RawMaterialRequirementsV2> {
+            val permit = RawMaterialRequirementsV2.requireFrameBudgetV4(footprints, base, budget, capabilities,
+                "resource-limit.w5b.source-budget")
+            return footprints.distinctBy { it.canonicalIdentity }.associate {
+                it.canonicalIdentity to RawMaterialRequirementsV2.packV4(it, permit)
+            }
         }
     }
 }

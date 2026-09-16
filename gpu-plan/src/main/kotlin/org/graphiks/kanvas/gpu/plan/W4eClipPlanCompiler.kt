@@ -50,10 +50,14 @@ import org.graphiks.math.matrix.toMatrix3x3F64
  * constructor; this compiler owns only clip preparation, pooled mask resources, and typed
  * consumer insertion.
  */
-public class W4eClipPlanCompiler(
+public class W4eClipPlanCompiler internal constructor(
     private val clipPolicyF64: ClipPreparationPolicyF64,
+    private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
 ) : GpuPlanCompiler {
+    public constructor(clipPolicyF64: ClipPreparationPolicyF64) : this(clipPolicyF64,RuntimeEffectSemanticCatalogSnapshot.Unbound)
     public constructor() : this(ClipPreparationPolicyF64())
+    internal fun withRuntimeCatalog(catalog: RuntimeEffectSemanticCatalogSnapshot): W4eClipPlanCompiler =
+        W4eClipPlanCompiler(clipPolicyF64,catalog)
 
     /**
      * Producer-only W4e seam for an already admitted non-Path color consumer. All clip math,
@@ -143,12 +147,14 @@ public class W4eClipPlanCompiler(
         strokePolicyF64 = org.graphiks.math.geometry.PathStrokePolicyF64(),
         acceptsNarrowTransforms = true,
         retainGeometryConstructionGraph = true,
+        runtimeCatalog = runtimeCatalog,
     )
     private val w4dAaSeam = W4dGeneralPathPlanCompiler(
         strokePolicyF64 = org.graphiks.math.geometry.PathStrokePolicyF64(),
         acceptsNarrowTransforms = true,
         forceAaFrame = true,
         retainGeometryConstructionGraph = true,
+        runtimeCatalog = runtimeCatalog,
     )
 
     override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
@@ -354,7 +360,13 @@ public class W4eClipPlanCompiler(
             is RenderPlanResult.ResourceLimitExceeded -> return resource(W4ePlanDiagnostics.BudgetFrameLocalExceeded, "W4d.2 frame resources are exceeded")
         }
         return try {
-            val graph = insertClips(base, selected, capabilities, budget, requiresAa, framePreview)
+            val clipped = insertClips(base.passes(),base.resources(),base.targetExtent,base.materialPlanTableOrNull(),
+                null,selected,capabilities,budget,framePreview)
+            val graph = RenderGraph.issueW4eCompilerWitness(RenderGraph.of(
+                PlanId(identity(selected,capabilities,budget,requiresAa)),
+                if (requiresAa) W5A_AA_CAPABILITY_ID else W5A_HARD_CAPABILITY_ID,
+                base.targetExtent,base.colorFormat,capabilities,budget,base.visualCommandCount,
+                clipped.resources,clipped.passes,clipped.dependencies,clipped.peakI64,base.materialPlanTableOrNull()),clipped.payload)
             if (successor && requiresAa) return promoted("W5b final blending requires the admitted single-sample W4e topology")
             // Preserve the admitted hard NoOp envelope and its logical target identity.
             val hardNoOpEnvelope = elidedNoOps && !requiresAa
@@ -372,18 +384,72 @@ public class W4eClipPlanCompiler(
         }
     }
 
+    /** Same clip/payload owner, before any material table or RenderGraph is published. */
+    internal fun constructSources(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget): RenderPlanResult<SourceDeferredRenderConstructionV4> {
+        val selected = candidate as? Candidate ?: return invalidCandidate()
+        if (selected.owner !== this || !selected.matches()) return invalidCandidate()
+        if (selected.capabilityId == W5A_AA_CAPABILITY_ID)
+            return promoted("W5b final blending requires the admitted single-sample W4e topology")
+        capabilityRefusal(capabilities,selected.stacks.filter { it.realization == Realization.Mask })?.let { return it }
+        val basePreview = when (val result = selected.constructionSeam.preflightFrame(selected.base,capabilities,budget)) {
+            is RenderPlanResult.Ready -> result.plan
+            is RenderPlanResult.GapNotMigrated -> return result
+            is RenderPlanResult.GapOnPromotedScope -> return result
+            is RenderPlanResult.InvalidScene -> return result
+            is RenderPlanResult.ResourceLimitExceeded -> return result
+        }
+        return try {
+            val preview = preflightCombinedFrame(selected,basePreview)
+            if (preview.peakFrameLocalBytes > budget.maxFrameLocalBytes)
+                return resource(W4ePlanDiagnostics.BudgetFrameLocalExceeded,"W4e pooled clip resources exceed the frame budget")
+            val base = when (val result = selected.constructionSeam.constructSources(selected.base,capabilities,budget)) {
+                is RenderPlanResult.Ready -> result.plan
+                is RenderPlanResult.GapNotMigrated -> return result
+                is RenderPlanResult.GapOnPromotedScope -> return result
+                is RenderPlanResult.InvalidScene -> return result
+                is RenderPlanResult.ResourceLimitExceeded -> return result
+            }
+            val clipped = insertClips(base.passes(),base.resources(),base.targetExtent,null,base.sourceTable(),
+                selected,capabilities,budget,preview)
+            val geometry = when (val result = SourceDeferredRenderConstructionV4.of(
+                PlanId(identity(selected,capabilities,budget,false)),W5A_HARD_CAPABILITY_ID,base.targetExtent,
+                base.colorFormat,capabilities,budget,base.visualCommandCount,clipped.resources,clipped.passes,
+                clipped.dependencies,base.sourceTable(),DeferredLaneTopologyV4.Ordinary,null,
+                emptyList(),emptyMap(),emptyMap(),clipped.payload)) {
+                is SourceConstructionResultV4.Built -> result.value
+                is SourceConstructionResultV4.Refused -> return result.failure
+            }
+            when (val result = describeW5bW4ePathSourcesV6(geometry,selected.finalBlendsByCommandI32)) {
+                is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(result.value)
+                is SourceConstructionResultV4.Refused -> result.failure
+            }
+        } catch (_: W4eNativePayloadLimit) {
+            resource(W4ePlanDiagnostics.BudgetFrameLocalExceeded,"W4e native payload exceeds its resource contract")
+        } catch (_: ArithmeticException) {
+            resource(W4ePlanDiagnostics.SizeOverflow,"W4e resource accounting overflowed")
+        } catch (failure: IllegalArgumentException) {
+            sourceConstructionRefusalV4(failure.message ?: W4ePlanDiagnostics.PlanIdentityInvalid.value).failure
+        }
+    }
+
+    private class ClippedTopology(val resources: List<PlanResource>,val passes: List<PlanPass>,
+        val dependencies: List<PlanPassDependency>,val peakI64: Long,val payload: W4eNativePayloadPlan)
+
     private fun insertClips(
-        base: RenderGraph,
+        basePasses: List<PlanPass>,
+        baseResources: List<PlanResource>,
+        extent: SizeI32,
+        materialTable: MaterialPlanTable?,
+        deferredSources: MaterialSourceConstructionTableV4?,
         selected: Candidate,
         capabilities: PlanCapabilitySnapshot,
         budget: PlanBudget,
-        frameAa: Boolean,
         framePreview: W4eFramePreview,
-    ): RenderGraph {
+    ): ClippedTopology {
         val prefix = mutableListOf<PlanPass>()
         val resources = mutableListOf<PlanResource>()
         val strategyByCommand = mutableMapOf<Int, ClipPlanStrategy>()
-        val extent = base.targetExtent
         val domain = RectI32(0, 0, extent.width, extent.height)
         val prefixCount = framePreview.prefixPassCount
 
@@ -448,7 +514,7 @@ public class W4eClipPlanCompiler(
 
         val clippedGeneralBySource = mutableMapOf<GeneralPathDraw, ClippedGeneralPathDraw>()
         val sealedInverseDrawsByConstructionSource = mutableMapOf<GeneralPathDraw, GeneralPathDraw>()
-        val clippedPasses = base.passes().map { pass ->
+        val clippedPasses = basePasses.map { pass ->
             // W4d.2's finite proxy is an admission-only construction detail.  Every W4e zero
             // interior restores either the exact original non-empty source or the one true Empty.
             pass.sealW4eInverseDomainZero(
@@ -468,14 +534,14 @@ public class W4eClipPlanCompiler(
             if (inverse.geometryF32.interiorCoverageF32 !is InverseInteriorCoverageF32.Geometry) return@mapIndexedNotNull null
             index to path
         }
-        val existingSceneDepthBySamples = base.resources()
+        val existingSceneDepthBySamples = baseResources
             .filter { resource -> resource.role == PlanResourceRole.DepthStencil }
             .associateBy(PlanResource::sampleCountI32)
         val newSceneDepthBySamples = linkedMapOf<Int, PlanResourceId>()
         inverseInteriorPaths.map { (_, path) -> path.draw.sample }.distinct().forEach { sample ->
             val sampleCount = if (sample == SamplePlan.Multisample4) 4 else 1
             if (existingSceneDepthBySamples[sampleCount] == null) {
-                val ordinal = base.resources().filter { it.role == PlanResourceRole.DepthStencil }.maxOfOrNull(PlanResource::ordinal)
+                val ordinal = baseResources.filter { it.role == PlanResourceRole.DepthStencil }.maxOfOrNull(PlanResource::ordinal)
                     ?.let { value -> value + 1 + newSceneDepthBySamples.size } ?: newSceneDepthBySamples.size
                 val id = planResourceId(PlanResourceRole.DepthStencil, ordinal)
                 val uses = inverseInteriorPaths.filter { (_, path) ->
@@ -508,19 +574,22 @@ public class W4eClipPlanCompiler(
             .filterIsInstance<PlanPass.PathRenderPass>()
             .mapNotNull(PlanPass.PathRenderPass::depthStencil)
             .toSet()
-        val shiftedResources = base.resources()
+        val shiftedResources = baseResources
             .filterNot { resource ->
                 resource.role == PlanResourceRole.DepthStencil && resource.id !in retainedSceneDepthIds
             }
             .map { resource -> resource.shifted(prefixCount) }
         val unsealedResources = resources + shiftedResources
-        val nativePayload = W4eNativePayloadPlan.from(
+        val nativePayload = if (deferredSources != null) W4eNativePayloadPlan.fromDeferred(
+            allPasses,unsealedResources,extent,capabilities,deferredSources)
+        else W4eNativePayloadPlan.from(
             passes = allPasses,
             resources = unsealedResources,
             targetExtent = extent,
             capabilities = capabilities,
-            materialPlanTable = base.materialPlanTableOrNull(),
-        ) ?: throw W4eNativePayloadLimit()
+            materialPlanTable = materialTable,
+        )
+        if (nativePayload == null) throw W4eNativePayloadLimit()
         val nativePrefixFirstUseById = linkedMapOf<PlanResourceId, Int>()
         fun retainNativePrefixFirstUse(resourceId: PlanResourceId, passIndex: Int) {
             nativePrefixFirstUseById.putIfAbsent(resourceId, passIndex)
@@ -550,21 +619,7 @@ public class W4eClipPlanCompiler(
         if (actualPeakFrameLocalBytes > budget.maxFrameLocalBytes) {
             throw W4eNativePayloadLimit()
         }
-        val graph = RenderGraph.of(
-            id = PlanId(identity(selected, capabilities, budget, frameAa)),
-            capabilityId = if (frameAa) W5A_AA_CAPABILITY_ID else W5A_HARD_CAPABILITY_ID,
-            targetExtent = extent,
-            colorFormat = base.colorFormat,
-            capabilities = capabilities,
-            budget = budget,
-            visualCommandCount = base.visualCommandCount,
-            resources = allResources,
-            passes = allPasses,
-            dependencies = dependencies,
-            peakFrameLocalBytes = actualPeakFrameLocalBytes,
-            materialPlanTable = base.materialPlanTableOrNull(),
-        )
-        return RenderGraph.issueW4eCompilerWitness(graph, nativePayload)
+        return ClippedTopology(allResources,allPasses,dependencies,actualPeakFrameLocalBytes,nativePayload)
     }
 
     private fun maskResources(

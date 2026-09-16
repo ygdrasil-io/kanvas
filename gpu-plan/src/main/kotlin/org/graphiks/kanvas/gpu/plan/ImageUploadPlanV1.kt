@@ -30,7 +30,7 @@ public class ImageUploadPlanV1 private constructor(
             Math.toIntExact(Math.multiplyExact(rowI32.toLong(), logicalRowBytesI64)), logicalRowBytesI64.toInt())
         digest.digest().joinToString("") { "%02x".format(it) }
     }
-    public val cacheRequest: PlanCacheResourceRequest = PlanCacheResourceRequest(contentIdentity, physicalFormat,
+    public val cacheRequest: PlanCacheResourceRequest.Texture = PlanCacheResourceRequest.Texture(contentIdentity, physicalFormat,
         widthI32, heightI32, byteCountI64, this.bytes)
 
     /** Content equality alone never proves captured ownership. */

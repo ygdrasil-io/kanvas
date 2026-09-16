@@ -21,7 +21,7 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
         }
         scalar = { node -> visited.getOrPut(node) { when(node) {
             is Scalar.DevicePositionF32 -> true
-            is Scalar.InputLinearPremul,is Scalar.ImageEncodedInput,is Scalar.DynamicF32,is Scalar.ConstantF32,
+            is Scalar.InputLinearPremul,is Scalar.ImageEncodedInput,is Scalar.PrimitiveEncodedInput,is Scalar.DynamicF32,is Scalar.ConstantF32,
             is Scalar.StopInterpolationInput,Scalar.DiscardF32 -> false
             is Scalar.ImageEncodedComponent,is Scalar.ImageTexelValid,is Scalar.ImageSampleComponent -> true
             is Scalar.NoiseComponent -> scalar(node.region.localX) || scalar(node.region.localY)
@@ -72,6 +72,10 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
         /** Exact U16 table selection converted to F32, before the shared decoder. */
         public class NoiseGradientU16(public val read: NoiseOperationGraphV1.GradientRead) : Scalar
         public data class InputLinearPremul(public val channelI32: Int) : Scalar {
+            init { require(channelI32 in 0..3) }
+        }
+        /** Actual prepared vertex UNORM8 attribute, decoded inside the common source DAG. */
+        public data class PrimitiveEncodedInput(public val channelI32: Int) : Scalar {
             init { require(channelI32 in 0..3) }
         }
         /** Lexical raw UNORM operand of the original decoded-image texel region. */
@@ -212,6 +216,7 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
             }
             val recipe = when (node) {
                 is Scalar.InputLinearPremul -> "input:${node.channelI32}"
+                is Scalar.PrimitiveEncodedInput -> "primitive-encoded-input:${node.channelI32}"
                 is Scalar.DevicePositionF32 -> "device-position:${node.channelI32}"
                 is Scalar.DynamicF32 -> "dynamic:${node.wordOffsetU32}"
                 is Scalar.ConstantF32 -> "constant:${node.bitsI32}"
@@ -289,6 +294,7 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
             }
             return bound[value] ?: when (value) {
             is Scalar.InputLinearPremul -> prefix.outputs[value.channelI32]
+            is Scalar.PrimitiveEncodedInput -> value
             is Scalar.ImageEncodedInput -> imageEncodedInputs?.get(value.channelI32) ?: value
             is Scalar.ImageSampleComponent -> Scalar.ImageSampleComponent(imageRegions.getOrPut(value.region) {
                 value.region.rebase(::bind) { read -> imageReads.getOrPut(read) {
@@ -341,6 +347,10 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
         return ColorOperationGraphV1(outputs.map(::bind))
     }
     internal companion object {
+        /** Four separate F32 products; no clamp, premultiply or channel reordering. */
+        fun runtimeChildOpacity(): ColorOperationGraphV1 = ColorOperationGraphV1(List(4) {
+            Scalar.Multiply(Scalar.InputLinearPremul(it), Scalar.DynamicF32(0L))
+        })
         fun constant(valueF32: Float): Scalar = Scalar.ConstantF32(valueF32.toRawBits())
         fun eotf(input: Scalar): Scalar = conversion(input,ColorInterpolationProgramV1.RecipeKind.EOTF)
         private fun conversion(input: Scalar, kind: ColorInterpolationProgramV1.RecipeKind): Scalar =

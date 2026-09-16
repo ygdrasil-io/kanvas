@@ -249,10 +249,49 @@ internal sealed interface PreparedTextFrameInventoryResult {
         val code: String,
         val operationIndex: Int?,
         facts: Map<String, String>,
-    ) : PreparedTextFrameInventoryResult {
+    ) : PreparedTextFrameInventoryResult, PreparedTextCoverageResult, PreparedTextResolvedCoverageResult {
         val facts: Map<String, String> =
             Collections.unmodifiableMap(LinkedHashMap(facts))
     }
+}
+
+internal sealed interface PreparedTextCoverageResult
+internal sealed interface PreparedTextResolvedCoverageResult
+
+/** Resolved host masks/quads only; the sole atlas packing happens after atomic projection. */
+internal class PreparedTextResolvedCoverageInventory internal constructor(
+    operationIndices: Set<Int>,
+    quadsByOperationIndex: Map<Int, List<List<Float>>>,
+    private val packSurvivors: (PreparedTextFrameInventoryLimits, Set<Int>) -> PreparedTextCoverageResult,
+) : PreparedTextResolvedCoverageResult {
+    val operationIndices = Collections.unmodifiableSet(LinkedHashSet(operationIndices))
+    val deviceQuadsByOperationIndex: Map<Int, List<List<Float>>> = Collections.unmodifiableMap(
+        quadsByOperationIndex.mapValues { (_, quads) -> Collections.unmodifiableList(quads.map {
+            Collections.unmodifiableList(ArrayList(it))
+        }) },
+    )
+    private var packed = false
+
+    fun pack(limits: PreparedTextFrameInventoryLimits, elidedOperationIndices: Set<Int>): PreparedTextCoverageResult {
+        check(!packed) { "Resolved Text coverage can be packed only once" }
+        require(elidedOperationIndices.all(operationIndices::contains))
+        packed = true
+        return packSurvivors(limits, elidedOperationIndices)
+    }
+}
+
+/** Complete CPU coverage inventory, with no source program or material owner in the A8 input. */
+internal class PreparedTextCoverageInventory internal constructor(
+    val metrics: GPUPreparedTextFrameMetrics,
+    val rasterNanoseconds: Long,
+    val packingNanoseconds: Long,
+    val pages: List<GPUTextA8AtlasPageArtifact>,
+    val subRunInstances: List<Pair<Int, List<GPUTextA8Instance>>>,
+    private val bindMaterials: (Map<Int, GPUPreparedTextDraw>) -> PreparedTextFrameInventory,
+) : PreparedTextCoverageResult {
+    fun bind(draws: List<GPUPreparedTextDraw>): PreparedTextFrameInventoryResult.Ready =
+        PreparedTextFrameInventoryResult.Ready(bindMaterials(draws.associateBy { it.operationIndex }),
+            rasterNanoseconds, packingNanoseconds)
 }
 
 internal sealed interface PreparedTextColorLayerArtifact {
@@ -321,7 +360,7 @@ private object NoOpPreparedTextFrameInventoryObserver :
 
 internal fun interface PreparedTextGlyphArtifactResolver {
     fun resolve(
-        draw: GPUPreparedTextDraw,
+        draw: GPUPreparedTextGeometryInput,
         glyphIndex: Int,
         representation: GPUPreparedTextRepresentation,
     ): PreparedTextGlyphArtifact
@@ -333,7 +372,7 @@ internal fun interface PreparedTextGlyphArtifactResolver {
  */
 internal object ExactPreparedTextGlyphArtifactResolver : PreparedTextGlyphArtifactResolver {
     override fun resolve(
-        draw: GPUPreparedTextDraw,
+        draw: GPUPreparedTextGeometryInput,
         glyphIndex: Int,
         representation: GPUPreparedTextRepresentation,
     ): PreparedTextGlyphArtifact = when (val face = reconstructExactTypeface(draw)) {
@@ -361,7 +400,7 @@ internal class PerFrameExactPreparedTextGlyphArtifactResolver(
     private val colorContexts = LinkedHashMap<ExactFaceKey, ExactColorContextResolution>()
 
     override fun resolve(
-        draw: GPUPreparedTextDraw,
+        draw: GPUPreparedTextGeometryInput,
         glyphIndex: Int,
         representation: GPUPreparedTextRepresentation,
     ): PreparedTextGlyphArtifact {
@@ -465,7 +504,7 @@ private sealed interface ExactColorContextResolution {
 }
 
 private fun reconstructExactTypeface(
-    draw: GPUPreparedTextDraw,
+    draw: GPUPreparedTextGeometryInput,
 ): ExactTypefaceResolution {
     val bytes = draw.face.bytes.map(Int::toByte).toByteArray()
     val fontName = draw.face.provenance.removePrefix("memory:")
@@ -495,7 +534,7 @@ private fun reconstructExactTypeface(
 }
 
 private fun resolveExactArtifact(
-    draw: GPUPreparedTextDraw,
+    draw: GPUPreparedTextGeometryInput,
     glyphIndex: Int,
     representation: GPUPreparedTextRepresentation,
     typeface: FontTypeface,
@@ -542,8 +581,44 @@ internal object PreparedTextFrameInventoryBuilder {
         observer: PreparedTextFrameInventoryObserver =
             NoOpPreparedTextFrameInventoryObserver,
         elidedTextOperationIndices: Set<Int> = emptySet(),
-    ): PreparedTextFrameInventoryResult {
-        val glyphCount = draws.sumOf { draw -> draw.glyphs.size.toLong() }
+    ): PreparedTextFrameInventoryResult = when (val coverage = buildCoverage(draws, generation, limits,
+        artifactResolver, observer, elidedTextOperationIndices)) {
+        is PreparedTextFrameInventoryResult.Refused -> coverage
+        is PreparedTextCoverageInventory -> coverage.bind(draws)
+    }
+
+    fun prepareGeometry(draws: List<GPUPreparedTextGeometry>, generation: GPUTextArtifactGeneration,
+        limits: PreparedTextFrameInventoryLimits, elidedOperationIndices: Set<Int> = emptySet()): PreparedTextCoverageResult = buildCoverage(
+        draws, generation, limits, PerFrameExactPreparedTextGlyphArtifactResolver(),
+        NoOpPreparedTextFrameInventoryObserver, elidedOperationIndices)
+
+    fun resolveGeometry(draws: List<GPUPreparedTextGeometry>, generation: GPUTextArtifactGeneration,
+        limits: PreparedTextFrameInventoryLimits): PreparedTextResolvedCoverageResult = resolveCoverage(
+        draws, generation, limits, PerFrameExactPreparedTextGlyphArtifactResolver(),
+        NoOpPreparedTextFrameInventoryObserver, emptySet())
+
+    private fun buildCoverage(
+        draws: List<GPUPreparedTextGeometryInput>,
+        generation: GPUTextArtifactGeneration,
+        limits: PreparedTextFrameInventoryLimits,
+        artifactResolver: PreparedTextGlyphArtifactResolver,
+        observer: PreparedTextFrameInventoryObserver,
+        elidedTextOperationIndices: Set<Int>,
+    ): PreparedTextCoverageResult = when (val resolved = resolveCoverage(draws, generation, limits,
+        artifactResolver, observer, elidedTextOperationIndices)) {
+        is PreparedTextFrameInventoryResult.Refused -> resolved
+        is PreparedTextResolvedCoverageInventory -> resolved.pack(limits, emptySet())
+    }
+
+    private fun resolveCoverage(
+        draws: List<GPUPreparedTextGeometryInput>,
+        generation: GPUTextArtifactGeneration,
+        limits: PreparedTextFrameInventoryLimits,
+        artifactResolver: PreparedTextGlyphArtifactResolver,
+        observer: PreparedTextFrameInventoryObserver,
+        elidedTextOperationIndices: Set<Int>,
+    ): PreparedTextResolvedCoverageResult {
+        val glyphCount = draws.fold(0L) { count, draw -> Math.addExact(count, draw.glyphs.size.toLong()) }
         if (glyphCount > limits.maxGlyphs.toLong()) {
             return refused(
                 code = GPUTextRefusalCodes.GLYPH_BUDGET_EXCEEDED,
@@ -584,19 +659,17 @@ internal object PreparedTextFrameInventoryBuilder {
                 facts = mapOf("reason" to "duplicate-operation-index"),
             )
         }
-        val drawByOperationIndex = draws.associateBy(GPUPreparedTextDraw::operationIndex)
-
         val uniqueMasks = LinkedHashMap<GlyphMaskKey, PreparedMask>()
         val rawContentByMaskKey = LinkedHashMap<GlyphMaskKey, String>()
         val rawFingerprintByMaskIdentity = IdentityHashMap<A8GlyphMask, String>()
         val preparedMaskCache = LinkedHashMap<PreparedMaskCacheKey, PreparedMask>()
-        val drawFacts = IdentityHashMap<GPUPreparedTextDraw, PreparedTextDrawFacts>()
+        val drawFacts = IdentityHashMap<GPUPreparedTextGeometryInput, PreparedTextDrawFacts>()
         val resolvedUses = ArrayList<ResolvedGlyphUse>()
         val strokePathsByOperation = LinkedHashMap<Int, List<GPUPreparedTextStrokePath>>()
         val rasterStartedAt = System.nanoTime()
         for (draw in draws) {
-            if (draw.paint.style == PaintStyle.STROKE) {
-                val strokePaths = when (val resolution = resolvePreparedTextStrokePaths(draw)) {
+            if (draw.coveragePaintStyle == PaintStyle.STROKE) {
+                val strokePaths = when (val resolution = resolvePreparedTextStrokePaths(requireNotNull(draw as? GPUPreparedTextDraw))) {
                     is PreparedTextStrokePathResolution.Ready -> resolution.paths
                     is PreparedTextStrokePathResolution.Refused -> return refused(
                         code = resolution.code,
@@ -679,6 +752,7 @@ internal object PreparedTextFrameInventoryBuilder {
                             glyphId = draw.glyphs[glyphIndex].glyphId,
                             representation = representation,
                             preparedMask = prepared,
+                            deviceQuad = deviceQuad(draw, glyphIndex, prepared.mask),
                             layerIndex = null,
                             colorPlan = null,
                         )
@@ -775,6 +849,7 @@ internal object PreparedTextFrameInventoryBuilder {
                                 glyphId = layer.mask.glyphId,
                                 representation = representation,
                                 preparedMask = prepared,
+                                deviceQuad = deviceQuad(draw, glyphIndex, prepared.mask),
                                 layerIndex = layer.layerIndex,
                                 colorPlan = gpuPlan,
                             )
@@ -784,6 +859,43 @@ internal object PreparedTextFrameInventoryBuilder {
             }
         }
         val rasterNanoseconds = Math.subtractExact(System.nanoTime(), rasterStartedAt)
+        resolvedUseBudgetRefusal(resolvedUses, limits)?.let { return it }
+        val capturedDraws = draws.toList()
+        val capturedUses = resolvedUses.toList()
+        return PreparedTextResolvedCoverageInventory(operationIndexes.toSet(),
+            capturedUses.groupBy { it.draw.operationIndex }.mapValues { (_, uses) -> uses.map { it.deviceQuad } }) {
+                survivorLimits, projectedElisions ->
+            require(survivorLimits.copy(maxGlyphs = limits.maxGlyphs, maxInstances = limits.maxInstances,
+                maxSubRuns = limits.maxSubRuns, maxInstanceBytes = limits.maxInstanceBytes) == limits) {
+                "Text projection must retain the captured atlas and mask limits"
+            }
+            val survivingDraws = capturedDraws.filterNot { it.operationIndex in projectedElisions }
+            val survivingUses = capturedUses.filterNot { it.draw.operationIndex in projectedElisions }
+            // Input order follows the first surviving use, exactly as the original builder.
+            val survivingMasks = linkedMapOf<GlyphMaskKey, PreparedMask>()
+            survivingUses.forEach { survivingMasks.putIfAbsent(it.preparedMask.maskKey, it.preparedMask) }
+            packCoverage(survivingDraws, generation, survivorLimits, observer,
+                elidedTextOperationIndices + projectedElisions, survivingMasks, drawFacts, survivingUses,
+                strokePathsByOperation.filterKeys { it !in projectedElisions }, rasterNanoseconds)
+        }
+    }
+
+    private fun packCoverage(
+        draws: List<GPUPreparedTextGeometryInput>,
+        generation: GPUTextArtifactGeneration,
+        limits: PreparedTextFrameInventoryLimits,
+        observer: PreparedTextFrameInventoryObserver,
+        elidedTextOperationIndices: Set<Int>,
+        uniqueMasks: Map<GlyphMaskKey, PreparedMask>,
+        drawFacts: Map<GPUPreparedTextGeometryInput, PreparedTextDrawFacts>,
+        resolvedUses: List<ResolvedGlyphUse>,
+        strokePathsByOperation: Map<Int, List<GPUPreparedTextStrokePath>>,
+        rasterNanoseconds: Long,
+    ): PreparedTextCoverageResult {
+        val glyphCount = draws.fold(0L) { count, draw -> Math.addExact(count, draw.glyphs.size.toLong()) }
+        if (glyphCount > limits.maxGlyphs.toLong()) return refused(GPUTextRefusalCodes.GLYPH_BUDGET_EXCEEDED,
+            draws.firstOrNull()?.operationIndex, mapOf("glyphCount" to glyphCount.toString()))
+        val operationIndexes = draws.map { it.operationIndex }
         val packingStartedAt = System.nanoTime()
 
         val maskKeyByHash = LinkedHashMap<String, GlyphMaskKey>()
@@ -799,23 +911,10 @@ internal object PreparedTextFrameInventoryBuilder {
             }
         }
 
-        if (resolvedUses.size > limits.maxInstances) {
-            return refused(
-                GPUTextRefusalCodes.INSTANCE_BUFFER_BUDGET_EXCEEDED,
-                resolvedUses.firstOrNull()?.draw?.operationIndex,
-                mapOf("instanceCount" to resolvedUses.size.toString()),
-            )
-        }
-        val instanceBytes = resolvedUses.size.toLong() * GPUTextA8Instance.ENCODED_BYTE_SIZE
-        if (instanceBytes > limits.maxInstanceBytes.toLong()) {
-            return refused(
-                GPUTextRefusalCodes.INSTANCE_BYTES_EXCEEDED,
-                resolvedUses.firstOrNull()?.draw?.operationIndex,
-                mapOf("instanceBytes" to instanceBytes.toString()),
-            )
-        }
+        resolvedUseBudgetRefusal(resolvedUses, limits)?.let { return it }
+        val instanceBytes = Math.multiplyExact(resolvedUses.size.toLong(), GPUTextA8Instance.ENCODED_BYTE_SIZE.toLong())
 
-        val packResult = GPUTextAtlasRectPacker.pack(
+        val packResult = if (uniqueMasks.isEmpty()) GPUTextAtlasPackingResult.Ready(0, emptyList()) else GPUTextAtlasRectPacker.pack(
             items = uniqueMasks.values.map { prepared ->
                 GPUTextAtlasRectItem(
                     itemKey = prepared.maskKey.sha256(),
@@ -863,7 +962,7 @@ internal object PreparedTextFrameInventoryBuilder {
             val instance = GPUTextA8Instance.create(
                 glyphId = use.glyphId,
                 sourceGlyphIndex = GPUTextSourceGlyphIndex(use.glyphIndex),
-                deviceQuad = deviceQuad(use.draw, use.glyphIndex, use.preparedMask.mask),
+                deviceQuad = use.deviceQuad,
                 uvRect = GPUTextFloatRect(
                     left = placement.contentRect.left.toFloat() / limits.pageWidth.toFloat(),
                     top = placement.contentRect.top.toFloat() / limits.pageHeight.toFloat(),
@@ -873,12 +972,10 @@ internal object PreparedTextFrameInventoryBuilder {
                 pageIndex = placement.pageIndex,
                 colorLayerIndex = use.layerIndex,
             )
-            val key = PreparedTextSubRunIdentity(
+            val key = PreparedTextCoverageSubRunIdentity(
                 operationIndex = use.draw.operationIndex,
                 representation = use.representation,
                 pageIndex = placement.pageIndex,
-                materialKey = facts.materialKey,
-                blendPlanIdentity = facts.blendPlanIdentity,
                 clipIdentity = facts.clipIdentity,
                 transformClass = facts.transformClass,
                 colorPlanIdentity = use.colorPlan?.artifactKey?.contentFingerprint,
@@ -942,8 +1039,31 @@ internal object PreparedTextFrameInventoryBuilder {
             )
         }
 
+        val metrics = GPUPreparedTextFrameMetrics(
+            glyphCount = glyphCount.toInt(), uniqueMaskCount = uniqueMasks.size,
+            instanceCount = resolvedUses.size,
+            a8InstanceCount = resolvedUses.count { it.representation == GPUPreparedTextRepresentation.A8_MASK },
+            colorGlyphInstanceCount = resolvedUses.count { it.representation == GPUPreparedTextRepresentation.COLRV0 },
+            pathStrokeDrawCount = strokePathCount, subRunCount = subRunCount,
+            pageCount = pageArtifacts.size, pageBytes = totalPageBytes.toInt(), instanceBytes = instanceBytes.toInt())
+        val packingNanoseconds = Math.subtractExact(System.nanoTime(), packingStartedAt)
+        return PreparedTextCoverageInventory(metrics, rasterNanoseconds, packingNanoseconds,
+            pageArtifacts.toList(), groupedSubRuns.map { it.key.operationIndex to it.instances.toList() }) { drawByOperationIndex ->
+        require(drawByOperationIndex.keys == operationIndexes.toSet())
+        draws.forEach { geometry ->
+            val bound = drawByOperationIndex.getValue(geometry.operationIndex)
+            require(bound.face == geometry.face && bound.glyphs == geometry.glyphs &&
+                bound.originX.toRawBits() == geometry.originX.toRawBits() &&
+                bound.originY.toRawBits() == geometry.originY.toRawBits() &&
+                bound.transform == geometry.transform && bound.clipContentKey == geometry.clipContentKey &&
+                bound.representationPolicy == geometry.representationPolicy &&
+                bound.targetColorFormat == geometry.targetColorFormat &&
+                bound.capabilitySnapshotHash == geometry.capabilitySnapshotHash)
+        }
         val subRunsByOperation = LinkedHashMap<Int, MutableList<GPUPreparedTextSubRun>>()
-        groupedSubRuns.forEach { grouped ->
+        val authenticatedNoOps = drawByOperationIndex.values.filter { it.blendPlan is org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan.NoOp }
+            .mapTo(linkedSetOf()) { it.operationIndex }
+        groupedSubRuns.filterNot { it.key.operationIndex in authenticatedNoOps }.forEach { grouped ->
             val key = grouped.key
             val operationSubRuns = subRunsByOperation.getOrPut(key.operationIndex) {
                 mutableListOf()
@@ -955,36 +1075,20 @@ internal object PreparedTextFrameInventoryBuilder {
                 representation = key.representation,
                 pageIndex = key.pageIndex,
                 instances = grouped.instances,
-                materialKey = key.materialKey,
-                blendPlanIdentity = key.blendPlanIdentity,
+                materialKey = drawByOperationIndex.getValue(key.operationIndex).material.materialKey,
+                blendPlanIdentity = drawByOperationIndex.getValue(key.operationIndex).blendPlan.canonicalIdentity(),
                 clipIdentity = key.clipIdentity,
                 transformClass = key.transformClass,
                 colorGlyphLayerPlan = grouped.colorPlan,
             )
         }
-        check(subRunsByOperation.values.sumOf { subRuns -> subRuns.size } == atlasSubRunCount)
+        check(subRunsByOperation.values.sumOf { subRuns -> subRuns.size } ==
+            groupedSubRuns.count { it.key.operationIndex !in authenticatedNoOps })
 
         val immutableSubRuns = LinkedHashMap<Int, List<GPUPreparedTextSubRun>>()
         subRunsByOperation.forEach { (operationIndex, subRuns) ->
             immutableSubRuns[operationIndex] = subRuns.toList()
         }
-        val metrics = GPUPreparedTextFrameMetrics(
-            glyphCount = glyphCount.toInt(),
-            uniqueMaskCount = uniqueMasks.size,
-            instanceCount = resolvedUses.size,
-            a8InstanceCount = resolvedUses.count { use ->
-                use.representation == GPUPreparedTextRepresentation.A8_MASK
-            },
-            colorGlyphInstanceCount = resolvedUses.count { use ->
-                use.representation == GPUPreparedTextRepresentation.COLRV0
-            },
-            pathStrokeDrawCount = strokePathCount,
-            subRunCount = subRunCount,
-            pageCount = pageArtifacts.size,
-            pageBytes = totalPageBytes.toInt(),
-            instanceBytes = instanceBytes.toInt(),
-        )
-        val packingNanoseconds = Math.subtractExact(System.nanoTime(), packingStartedAt)
         val acceptedTextOperationIndices =
             (operationIndexes + elidedTextOperationIndices).toCollection(linkedSetOf())
         val contentHash = inventoryHash(
@@ -996,22 +1100,29 @@ internal object PreparedTextFrameInventoryBuilder {
             metrics = metrics,
             identities = maskIdentities,
         )
-        return PreparedTextFrameInventoryResult.Ready(
-            inventory = PreparedTextFrameInventory.create(
+        PreparedTextFrameInventory.create(
                 generation = generation,
                 pages = pageArtifacts,
                 subRunsByOperationIndex = immutableSubRuns,
                 strokePathsByOperationIndex = strokePathsByOperation,
                 acceptedTextOperationIndices = acceptedTextOperationIndices,
-                elidedTextOperationIndices = elidedTextOperationIndices,
+                elidedTextOperationIndices = elidedTextOperationIndices + authenticatedNoOps,
                 metrics = metrics,
                 maskIdentityByGlyphUse = maskIdentities,
                 contentSha256 = contentHash,
-            ),
-            rasterNanoseconds = rasterNanoseconds,
-            packingNanoseconds = packingNanoseconds,
         )
+        }
     }
+}
+
+private fun resolvedUseBudgetRefusal(uses: List<ResolvedGlyphUse>, limits: PreparedTextFrameInventoryLimits):
+    PreparedTextFrameInventoryResult.Refused? {
+    if (uses.size > limits.maxInstances) return refused(GPUTextRefusalCodes.INSTANCE_BUFFER_BUDGET_EXCEEDED,
+        uses.firstOrNull()?.draw?.operationIndex, mapOf("instanceCount" to uses.size.toString()))
+    val bytes = Math.multiplyExact(uses.size.toLong(), GPUTextA8Instance.ENCODED_BYTE_SIZE.toLong())
+    if (bytes > limits.maxInstanceBytes.toLong()) return refused(GPUTextRefusalCodes.INSTANCE_BYTES_EXCEEDED,
+        uses.firstOrNull()?.draw?.operationIndex, mapOf("instanceBytes" to bytes.toString()))
+    return null
 }
 
 private data class PreparedMask(
@@ -1029,8 +1140,6 @@ private data class PreparedMaskCacheKey(
 
 private data class PreparedTextDrawFacts(
     val blur: GlyphMaskBlurKey?,
-    val materialKey: String,
-    val blendPlanIdentity: String,
     val clipIdentity: String,
     val transformClass: String,
 )
@@ -1056,11 +1165,12 @@ private sealed interface PreparedMaskResolution {
 }
 
 private data class ResolvedGlyphUse(
-    val draw: GPUPreparedTextDraw,
+    val draw: GPUPreparedTextGeometryInput,
     val glyphIndex: Int,
     val glyphId: Int,
     val representation: GPUPreparedTextRepresentation,
     val preparedMask: PreparedMask,
+    val deviceQuad: List<Float>,
     val layerIndex: Int?,
     val colorPlan: GPUColorGlyphLayerPlan?,
 )
@@ -1090,14 +1200,24 @@ internal fun countPreparedTextSubRuns(
     return count
 }
 
+/** Operation identity already keeps distinct paint/blend occurrences separate. */
+private data class PreparedTextCoverageSubRunIdentity(
+    val operationIndex: Int,
+    val representation: GPUPreparedTextRepresentation,
+    val pageIndex: Int,
+    val clipIdentity: String,
+    val transformClass: String,
+    val colorPlanIdentity: String?,
+)
+
 private data class SubRunInstance(
-    val key: PreparedTextSubRunIdentity,
+    val key: PreparedTextCoverageSubRunIdentity,
     val instance: GPUTextA8Instance,
     val colorPlan: GPUColorGlyphLayerPlan?,
 )
 
 private data class GroupedPreparedTextSubRun(
-    val key: PreparedTextSubRunIdentity,
+    val key: PreparedTextCoverageSubRunIdentity,
     val instances: List<GPUTextA8Instance>,
     val colorPlan: GPUColorGlyphLayerPlan?,
 )
@@ -1251,12 +1371,11 @@ private fun prepareMask(
     return PreparedMaskResolution.Ready(prepared)
 }
 
-private fun GPUPreparedTextDraw.inventoryFacts(
+private fun GPUPreparedTextGeometryInput.inventoryFacts(
     observer: PreparedTextFrameInventoryObserver,
 ): PreparedTextDrawFacts {
     observer.onDrawFactsComputed()
-    val paintSnapshot = paint
-    val blur = (paintSnapshot.maskFilter as? MaskFilter.Blur)
+    val blur = (coverageMaskFilter as? MaskFilter.Blur)
         ?.takeUnless { filter -> filter.sigma == 0f }
         ?.let { filter ->
         GlyphMaskBlurKey(
@@ -1273,8 +1392,6 @@ private fun GPUPreparedTextDraw.inventoryFacts(
     }
     return PreparedTextDrawFacts(
         blur = blur,
-        materialKey = material.materialKey,
-        blendPlanIdentity = blendPlan.canonicalIdentity(),
         clipIdentity = clipContentKey,
         transformClass = transformClass(transform),
     )
@@ -1482,7 +1599,7 @@ private fun copyMaskToPage(
 }
 
 private fun deviceQuad(
-    draw: GPUPreparedTextDraw,
+    draw: GPUPreparedTextGeometryInput,
     glyphIndex: Int,
     mask: A8GlyphMask,
 ): List<Float> {
@@ -1723,7 +1840,7 @@ private fun refused(
     )
 
 private fun resolveA8Artifact(
-    draw: GPUPreparedTextDraw,
+    draw: GPUPreparedTextGeometryInput,
     glyphIndex: Int,
     typeface: FontTypeface,
     glyphId: Int,
@@ -1765,7 +1882,7 @@ private fun resolveA8Artifact(
 }
 
 private fun resolveCOLRV0Artifact(
-    draw: GPUPreparedTextDraw,
+    draw: GPUPreparedTextGeometryInput,
     glyphIndex: Int,
     typeface: FontTypeface,
     colorContext: ExactColorContextResolution?,
@@ -1873,7 +1990,7 @@ private fun COLRV1GradientEvidence.immutableSnapshot(): COLRV1GradientEvidence =
 )
 
 private fun parseExactColorContext(
-    draw: GPUPreparedTextDraw,
+    draw: GPUPreparedTextGeometryInput,
     typeface: FontTypeface,
 ): ExactColorContextResolution {
     val source = FontSource(

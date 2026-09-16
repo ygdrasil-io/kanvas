@@ -26,6 +26,7 @@ public class ImmutableBytes private constructor(bytes: ByteArray) : CanonicalVal
     private val values: ByteArray = bytes.copyOf()
 
     internal val size: Int get() = values.size
+    public val sizeBytesI32: Int get() = values.size
     internal fun hasContent(values: ByteArray): Boolean = this.values.contentEquals(values)
     public fun copyToByteArray(): ByteArray = values.copyOf()
     override val canonicalId: CanonicalId = canonicalSequenceId("immutable-bytes-v1", values.map(Byte::toString))
@@ -145,6 +146,7 @@ public sealed interface ImageResourceSnapshot : ResourceSnapshot {
         }
 
         public fun copyPixels(): ByteArray = storedPixels.copyToByteArray()
+        public val sizeBytesI32: Int get() = storedPixels.sizeBytesI32
         /** Compares caller bytes without exposing this snapshot's owned storage. */
         public fun hasPixels(pixels: ByteArray): Boolean = storedPixels.hasContent(pixels)
         private val sourceSpaceCanonicalId: CanonicalId = canonicalId(
@@ -397,32 +399,147 @@ public class RuntimeVertexLayout private constructor(
     }
 }
 
-/** Registered runtime-effect contract retained by the IR without a compiled implementation. */
-public class RuntimeEffectDescriptor private constructor(
-    public val id: RuntimeEffectId,
-    public val abi: RuntimeEffectAbi,
+public data class RuntimeUniformSlotV2(
+    public val name: String,
+    public val type: RuntimeUniformType,
+    public val offsetBytesI32: Int,
+    public val sizeBytesI32: Int,
+    public val alignmentBytesI32: Int,
+    public val arrayCountI32: Int,
+    public val arrayStrideBytesI32: Int,
+)
+
+public class RuntimeUniformBlockV1 private constructor(slots: Collection<RuntimeUniformSlotV2>, public val sizeBytesI32: Int) {
+    public val slots: List<RuntimeUniformSlotV2> = immutableList(slots)
+    init {
+        require(this.slots.map { it.name }.distinct().size == this.slots.size)
+        var cursorI64 = 0L
+        this.slots.forEach { slot ->
+            require(slot.name.isNotBlank())
+            val (alignmentI32, sizeI32) = slot.type.logicalSize()
+            val offsetI64 = alignRuntimeBytes(cursorI64, alignmentI32)
+            require(offsetI64 <= Int.MAX_VALUE.toLong() && slot.offsetBytesI32.toLong() == offsetI64)
+            require(slot.alignmentBytesI32 == alignmentI32 && slot.sizeBytesI32 == sizeI32)
+            require(slot.arrayCountI32 == 1 && slot.arrayStrideBytesI32 == 0) { "Runtime uniform arrays are unsupported" }
+            cursorI64 = Math.addExact(offsetI64, sizeI32.toLong())
+        }
+        val sizeI64 = alignRuntimeBytes(cursorI64, 16)
+        require(sizeI64 <= Int.MAX_VALUE.toLong() && sizeBytesI32.toLong() == sizeI64)
+    }
+    public companion object {
+        public fun of(slots: Collection<RuntimeUniformSlotV2>, sizeBytesI32: Int): RuntimeUniformBlockV1 = RuntimeUniformBlockV1(slots, sizeBytesI32)
+    }
+}
+
+private fun RuntimeUniformType.logicalSize(): Pair<Int, Int> = when (this) {
+    RuntimeUniformType.FLOAT, RuntimeUniformType.INT1 -> 4 to 4
+    RuntimeUniformType.FLOAT2 -> 8 to 8
+    RuntimeUniformType.FLOAT3 -> 16 to 12
+    RuntimeUniformType.FLOAT4 -> 16 to 16
+    RuntimeUniformType.MAT3X3 -> 16 to 48
+    RuntimeUniformType.MAT4X4 -> 16 to 64
+}
+private fun alignRuntimeBytes(valueI64: Long, alignmentI32: Int): Long =
+    Math.addExact(valueI64, (alignmentI32 - valueI64 % alignmentI32) % alignmentI32)
+
+public data class RuntimeChildSlotV2(public val name: String, public val type: RuntimeChildType, public val nullable: Boolean) {
+    init { require(name.isNotBlank()) }
+}
+public enum class RuntimeLogicalResourceKindV1 { STORAGE_BUFFER, SAMPLED_TEXTURE, SAMPLER }
+public enum class RuntimeSamplerTypeV1 { FILTERING, NON_FILTERING }
+public sealed interface RuntimeLogicalResourceFactsV1 {
+    public data class StorageRead(public val minBindingSizeBytesI64: Long) : RuntimeLogicalResourceFactsV1 {
+        init { require(minBindingSizeBytesI64 > 0L) }
+    }
+    public data class Texture2DFloatFilterable(public val multisampled: Boolean = false) : RuntimeLogicalResourceFactsV1 {
+        init { require(!multisampled) }
+    }
+    public data class Sampler(public val type: RuntimeSamplerTypeV1) : RuntimeLogicalResourceFactsV1
+}
+public data class RuntimeLogicalResourceSlotV1(
+    public val name: String, public val logicalSlotI32: Int, public val kind: RuntimeLogicalResourceKindV1,
+    public val facts: RuntimeLogicalResourceFactsV1,
+) {
+    init {
+        require(name.isNotBlank() && logicalSlotI32 >= 0)
+        require(when (kind) {
+            RuntimeLogicalResourceKindV1.STORAGE_BUFFER -> facts is RuntimeLogicalResourceFactsV1.StorageRead
+            RuntimeLogicalResourceKindV1.SAMPLED_TEXTURE -> facts is RuntimeLogicalResourceFactsV1.Texture2DFloatFilterable
+            RuntimeLogicalResourceKindV1.SAMPLER -> facts is RuntimeLogicalResourceFactsV1.Sampler
+        })
+    }
+}
+/** Historical declarations remain intact and can never confer registered semantics. */
+public class RuntimeEffectLegacyV0(
     public val uniformLayout: RuntimeUniformLayout,
     childSlots: Collection<RuntimeChildSlot>,
     public val vertexLayout: RuntimeVertexLayout?,
     public val module: ShaderModuleDescriptor?,
+) {
+    public val childSlots: List<RuntimeChildSlot> = immutableList(childSlots)
+}
+
+/** Backend-neutral v3 ABI; physical declarations exist only in the v0 quarantine. */
+public class RuntimeEffectDescriptor private constructor(
+    public val id: RuntimeEffectId,
+    public val abi: RuntimeEffectAbi,
+    public val semanticVersionI32: Int,
+    public val uniformBlock: RuntimeUniformBlockV1,
+    childSlots: Collection<RuntimeChildSlotV2>,
+    logicalResources: Collection<RuntimeLogicalResourceSlotV1>,
+    public val legacyV0: RuntimeEffectLegacyV0?,
 ) : CanonicalValue, Iterable<RuntimeChildSlot> {
-    private val values: List<RuntimeChildSlot> = immutableList(childSlots)
-    init { require(values.map(RuntimeChildSlot::name).distinct().size == values.size) { "Runtime child slot names must be unique" } }
+    public val versionI32: Int = 3
+    public val childSlots: List<RuntimeChildSlotV2> = immutableList(childSlots)
+    public val logicalResources: List<RuntimeLogicalResourceSlotV1> = immutableList(logicalResources)
+    private val values = immutableList(this.childSlots.map { RuntimeChildSlot(it.name, it.type) })
+    init {
+        require(semanticVersionI32 >= 0)
+        require((semanticVersionI32 == 0) == (legacyV0 != null))
+        require(this.childSlots.map { it.name }.distinct().size == this.childSlots.size)
+        require(this.logicalResources.map { it.name }.distinct().size == this.logicalResources.size)
+        require(this.logicalResources.map { it.logicalSlotI32 }.distinct().size == this.logicalResources.size)
+        if (semanticVersionI32 > 0) {
+            abi.tagU32(false)
+            this.childSlots.forEach { it.type.tagU32(false) }
+            (uniformBlock.slots.map { it.name } + this.childSlots.map { it.name } + this.logicalResources.map { it.name }).forEach {
+                require(it.matches(Regex("[A-Za-z_][A-Za-z0-9_]*"))) { "Invalid runtime ABI identifier" }
+            }
+        }
+    }
+    public val abiHash: String = if (legacyV0 != null) legacyRuntimeAbiHash(id, abi, legacyV0)
+        else positiveRuntimeAbiHash(id, abi, semanticVersionI32, uniformBlock, this.childSlots, this.logicalResources)
+    /** Recomputes the normative bytes for catalogue/archive verification. */
+    public fun recomputeAbiHash(): String = if (legacyV0 != null) legacyRuntimeAbiHash(id, abi, legacyV0)
+        else positiveRuntimeAbiHash(id, abi, semanticVersionI32, uniformBlock, childSlots, logicalResources)
+    @Deprecated("Legacy physical layout only; use uniformBlock")
+    public val uniformLayout: RuntimeUniformLayout get() = legacyV0?.uniformLayout
+        ?: throw UnsupportedOperationException("Registered runtime effects have no legacy uniform layout")
+    @Deprecated("Legacy vertex layout only")
+    public val vertexLayout: RuntimeVertexLayout? get() = legacyV0?.vertexLayout
+    @Deprecated("Legacy WGSL only")
+    public val module: ShaderModuleDescriptor? get() = legacyV0?.module
     public val childSlotCount: Int get() = values.size
     public fun childSlotAt(index: Int): RuntimeChildSlot = values[index]
     override fun iterator(): Iterator<RuntimeChildSlot> = values.iterator()
     override val canonicalId: CanonicalId = canonicalId(
-        "runtime-effect-descriptor-v2",
+        "runtime-effect-descriptor-v3",
         id.value,
-        abi.name,
-        uniformLayout.canonicalId.value,
-        canonicalSequenceId("child-slots", values.map { it.canonicalId.value }).value,
-        canonicalOptionalId("vertex-layout", vertexLayout?.canonicalId).value,
-        canonicalOptionalId("module", module?.canonicalId).value,
+        semanticVersionI32.toString(),
+        abiHash,
     )
     override fun equals(other: Any?): Boolean = other is RuntimeEffectDescriptor && canonicalId == other.canonicalId
     override fun hashCode(): Int = canonicalId.hashCode()
     public companion object {
+        public fun of(
+            id: RuntimeEffectId, abi: RuntimeEffectAbi, semanticVersionI32: Int,
+            uniformBlock: RuntimeUniformBlockV1, childSlots: Collection<RuntimeChildSlotV2>,
+            logicalResources: Collection<RuntimeLogicalResourceSlotV1> = emptyList(),
+        ): RuntimeEffectDescriptor {
+            require(semanticVersionI32 > 0)
+            return RuntimeEffectDescriptor(id, abi, semanticVersionI32, uniformBlock, childSlots, logicalResources, null)
+        }
+        @Deprecated("Legacy v0 adapter; use the logical descriptor overload")
         public fun of(
             id: RuntimeEffectId,
             abi: RuntimeEffectAbi,
@@ -430,7 +547,22 @@ public class RuntimeEffectDescriptor private constructor(
             childSlots: Collection<RuntimeChildSlot>,
             vertexLayout: RuntimeVertexLayout? = null,
             module: ShaderModuleDescriptor? = null,
-        ): RuntimeEffectDescriptor = RuntimeEffectDescriptor(id, abi, uniformLayout, childSlots, vertexLayout, module)
+        ): RuntimeEffectDescriptor {
+            val legacy = RuntimeEffectLegacyV0(uniformLayout, childSlots, vertexLayout, module)
+            var cursorI64 = 0L
+            val slots = uniformLayout.map { slot ->
+                val (alignmentI32, sizeI32) = slot.type.logicalSize()
+                cursorI64 = alignRuntimeBytes(cursorI64, alignmentI32)
+                require(cursorI64 <= Int.MAX_VALUE.toLong())
+                val value = RuntimeUniformSlotV2(slot.name, slot.type, cursorI64.toInt(), sizeI32, alignmentI32, 1, 0)
+                cursorI64 = Math.addExact(cursorI64, sizeI32.toLong())
+                value
+            }
+            cursorI64 = alignRuntimeBytes(cursorI64, 16)
+            require(cursorI64 <= Int.MAX_VALUE.toLong())
+            return RuntimeEffectDescriptor(id, abi, 0, RuntimeUniformBlockV1.of(slots, cursorI64.toInt()),
+                legacy.childSlots.map { RuntimeChildSlotV2(it.name, it.type, false) }, emptyList(), legacy)
+        }
     }
 }
 
@@ -500,14 +632,14 @@ public object RuntimeBindingValidator {
         children.groupBy(RuntimeChildBinding::name).entries.firstOrNull { it.value.size > 1 }?.let { duplicate ->
             return RuntimeBindingValidationResult.DuplicateChild(duplicate.key)
         }
-        descriptor.uniformLayout.forEach { slot ->
+        descriptor.uniformBlock.slots.forEach { slot ->
             val value = uniforms[slot.name] ?: return RuntimeBindingValidationResult.MissingUniform(slot.name)
             val actual = value.runtimeType()
             if (actual != slot.type) {
                 return RuntimeBindingValidationResult.UniformTypeMismatch(slot.name, slot.type, actual)
             }
         }
-        uniforms.keys.firstOrNull { name -> descriptor.uniformLayout.none { it.name == name } }?.let { name ->
+        uniforms.keys.firstOrNull { name -> descriptor.uniformBlock.slots.none { it.name == name } }?.let { name ->
             return RuntimeBindingValidationResult.UnexpectedUniform(name)
         }
 

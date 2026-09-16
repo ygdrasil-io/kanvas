@@ -28,7 +28,7 @@ internal class W5aMaterialPlanVersionWitnessV2 private constructor(
     private val programVersionsI32: List<Int>,
 ) {
     internal fun validates(): Boolean =
-        programVersionsI32.isNotEmpty() && programVersionsI32.all { it == MATERIAL_PLAN_VERSION_I32 || it == 2 || it == 3 || it == 4 || it == 5 }
+        programVersionsI32.isNotEmpty() && programVersionsI32.all { it in MATERIAL_PLAN_VERSION_I32..6 }
 
     internal companion object {
         const val MATERIAL_PLAN_VERSION_I32: Int = 1
@@ -45,7 +45,7 @@ internal class W5aMaterialPlanVersionWitnessV2 private constructor(
                     val deferredImageV3 = materialTable.authenticatesDeferredImageV3(authority)
                     if (entry.program.versionI32 == 3 && !deferredImageV3) return null
                     if ((entry.program.versionI32 == 4 || deferredImageV3) != (authority is PlanDrawMaterialAuthority.MaterialV4)) return null
-                    if ((entry.program.versionI32 == 5) != (authority is PlanDrawMaterialAuthority.MaterialV5)) return null
+                    if ((entry.program.versionI32 in 5..6) != (authority is PlanDrawMaterialAuthority.MaterialV5)) return null
                     entry.program.versionI32
                 }
             } catch (_: IllegalArgumentException) {
@@ -94,6 +94,7 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
         override val ref: MaterialPlanRef,
         rgba: List<Float>,
         private val frameAuthority: W5aCorePrimitiveMaterialAuthorityV2,
+        val geometryInventory: org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitiveFrameGeometryInventory?,
     ) : MaterializedSolidV2 {
         override val sourcePlanTable: MaterialPlanTable get() = frameAuthority.table
         override val coordinates: org.graphiks.kanvas.gpu.plan.MaterialCoordinatePlanV1?
@@ -115,7 +116,7 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
     private fun validates(commandIdI32: Int, ref: MaterialPlanRef): Boolean =
         materialWitness.validates() && refsByCommandId[commandIdI32] == ref &&
             ref.indexI32 < table.sizeI32 &&
-            (table.entry(ref).program.versionI32 in setOf(1,2,4,5) ||
+            (table.entry(ref).program.versionI32 in setOf(1,2,4,5,6) ||
                 table.authenticatesDeferredImageV3(authoritiesByCommandIdI32.getValue(commandIdI32))) &&
             (table.entry(ref).bindings.versionI32 == table.entry(ref).program.versionI32 ||
                 table.entry(ref).program.versionI32 == 4 &&
@@ -124,7 +125,9 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
                     table.colorSourceProofV4(ref).authenticates(table,ref,it.coordinates)
                 } == true)
 
-    internal fun materializeSource(commandIdI32: Int, materialRef: MaterialPlanRef): MaterializedSolidV2? {
+    internal fun materializeSource(commandIdI32: Int, materialRef: MaterialPlanRef,
+        geometryInventory: org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitiveFrameGeometryInventory? = null,
+    ): MaterializedSolidV2? {
         if (!validates(commandIdI32, materialRef)) return null
         val authority = authoritiesByCommandIdI32.getValue(commandIdI32)
         val color = if (authority.colorSourceCoordinatesV4() != null) {
@@ -132,11 +135,12 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
                 packedV4ByCommandIdI32[commandIdI32] ?: return null) ?: return null
             org.graphiks.math.color.ColorF32.Transparent
         } else W5aMaterialPlanLowerer().lower(table, materialRef) ?: return null
-        return MaterializedSolid(commandIdI32, materialRef, listOf(color.red, color.green, color.blue, color.alpha), this)
+        return MaterializedSolid(commandIdI32, materialRef, listOf(color.red, color.green, color.blue, color.alpha), this, geometryInventory)
     }
 
     internal fun materialize(
         semanticsByCommandId: Map<Int, GPUDrawSemanticPayload>,
+        geometryInventory: org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitiveFrameGeometryInventory? = null,
     ): Map<Int, GPUDrawSemanticPayload>? {
         if (!materialWitness.validates() || refsByCommandId.isEmpty()) return null
         if (refsByCommandId.keys.any { it !in semanticsByCommandId }) return null
@@ -155,13 +159,18 @@ class W5aCorePrimitiveMaterialAuthorityV2 private constructor(
                 ?.ref ?: return null
             if (materialRef != sourceRefsByCommandIdI32[commandId] || !validates(commandId, expectedRef) || !core.hasStructuralIntegrity()) return null
             result[commandId] = core.materializeW5aSolid(
-                materializeSource(commandId, expectedRef) ?: return null,
+                materializeSource(commandId, expectedRef, geometryInventory) ?: return null,
+                geometryInventory?.materialEnvelopeGeometryByCommandId?.getValue(commandId),
             )
         }
         return java.util.Collections.unmodifiableMap(result)
     }
 
     companion object {
+        internal fun geometryInventory(source: MaterializedSolidV2):
+            org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitiveFrameGeometryInventory? =
+            (source as? MaterializedSolid)?.geometryInventory
+
         fun issue(
             sourceTable: MaterialPlanTable,
             refsByCommandIdI32: Map<Int, MaterialPlanRef>,

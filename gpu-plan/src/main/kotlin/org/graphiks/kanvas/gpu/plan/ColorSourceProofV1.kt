@@ -40,8 +40,18 @@ public class ColorSourceProofV1 private constructor(
         }
     public fun copyOperationGraph(): ColorOperationGraphV1 = graph
     public val composedBindingLayout: ComposedBindingLayoutV1? get() = composedDefinition?.layout
+    public val composedProgramV6: ComposedMaterialProgramV6? get() = composedDefinition?.program
+    public val consumesPrimitiveEncodedInput: Boolean get() = composedDefinition?.captured?.composed?.primitiveEvaluationRef != null
+    /** The packed stream leaves alpha unchanged; host geometry must retain that exact stream. */
+    public fun authenticatesPrimitiveAlphaStream(alphaU8: List<Int>): Boolean =
+        composedDefinition?.captured?.composed?.primitiveGeometry?.copyColors()?.map { it.alpha } == alphaU8
     public val composedImageResources: List<ComposedImageResourceV5> get() =
         composedDefinition?.imageReferences?.map { it.binding }.orEmpty()
+    public val runtimeResources: List<RuntimeEffectResourceReferenceV1> get() = composedDefinition?.runtimeResources.orEmpty()
+    public fun authenticatesRuntimeResource(reference: RuntimeEffectResourceReferenceV1): Boolean =
+        composedDefinition?.let { definition -> definition.frameOwner.owns(definition.captured) &&
+            definition.runtimeResources.any { it === reference } && definition.layout.resources.any { it === reference.resource }
+        } == true
     public val noiseTableSlab: NoiseTableSlabV1? get() = composedDefinition?.noiseSlab
     public fun authenticatesComposedNoise(resource: ComposedBindingLayoutV1.Resource, slab: NoiseTableSlabV1): Boolean =
         composedDefinition?.let { definition -> definition.noiseSlab === slab && slab.owner === definition.frameOwner &&
@@ -101,7 +111,8 @@ public class ColorSourceProofV1 private constructor(
             val identity = "composed-source-proof-v5:${definition.capturedIdentity}:${definition.layout.composedBindingLayoutHash}:" +
                 "${graph.canonicalIdentity}:${definition.numericWordsF32Bits}:${definition.integerWordsU32}:" +
                 "${definition.slab?.canonicalIdentity}:${definition.tableRecords.mapValues { it.value.canonicalId.value }}" +
-                (definition.noiseSlab?.let { ":noise:${it.bytes.canonicalId.value}" } ?: "")
+                (definition.noiseSlab?.let { ":noise:${it.bytes.canonicalId.value}" } ?: "") +
+                (definition.captured.composed?.primitiveGeometry?.let { ":primitive:${it.canonicalId.value}" } ?: "")
             return ColorSourceProofV1(identity,definition.capturedIdentity,SourceCoordinatesV4.None,graph,emptyList(),
                 definition.numericWordsF32Bits,definition.tableRecords,immutableList(facts),definition.deviceBoundsF32,
                 integerWordValuesU32=definition.integerWordsU32,gradientStopSlab=definition.slab,composedDefinition=definition)
@@ -579,6 +590,16 @@ internal object ColorRoundedGraphProofV1 {
                     ColorBoundsV1(values.min().toDouble(),values.max().toDouble())
                 }
                 is ColorOperationGraphV1.Scalar.InputLinearPremul -> error("Unbound source input")
+                is ColorOperationGraphV1.Scalar.PrimitiveEncodedInput -> {
+                    require(composed?.captured?.composed?.primitiveEvaluationRef != null)
+                    // The actual packer exposes premultiplied UNORM8 RGB, whose intrinsic
+                    // domain is [0,1]. Alpha is unchanged by packing: retain its captured
+                    // convex interpolation domain (including exact opaque/transparent streams).
+                    val colors = requireNotNull(composed.captured.composed.primitiveGeometry?.copyColors())
+                    require(colors.isNotEmpty())
+                    if (node.channelI32 != 3) ColorBoundsV1(0.0, 1.0)
+                    else colors.map { it.alphaNormalized.toDouble() }.let { ColorBoundsV1(it.min(), it.max()) }
+                }
                 is ColorOperationGraphV1.Scalar.ImageEncodedInput -> error("Unbound decoded-image texel operand")
                 ColorOperationGraphV1.Scalar.DiscardF32 -> exact(0f)
                 is ColorOperationGraphV1.Scalar.ImageEncodedComponent -> imageValues(node.read,node.channelI32).reduce(::hull)

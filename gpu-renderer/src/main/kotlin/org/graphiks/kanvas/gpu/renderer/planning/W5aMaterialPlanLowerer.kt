@@ -33,6 +33,7 @@ internal class W5aMaterialPlanLowerer {
         while (table.entry(leaf).bindings is org.graphiks.kanvas.gpu.plan.MaterialBindingPlan.OpacityF32V1)
             leaf = MaterialPlanRef(leaf.indexI32-1)
         if (table.entry(leaf).bindings is org.graphiks.kanvas.gpu.plan.ComposedMaterialBindingV5 ||
+            table.entry(leaf).bindings is org.graphiks.kanvas.gpu.plan.ImageSampleV3 ||
             table.entry(leaf).bindings is org.graphiks.kanvas.gpu.plan.ColorFilterBindingV4 ||
             table.entry(leaf).bindings is org.graphiks.kanvas.gpu.plan.GradientInterpolationBindingV4) {
             table.colorSourceProofV4(root)

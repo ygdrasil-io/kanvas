@@ -640,14 +640,22 @@ internal object W5fColorCpuOracle {
     fun expectedShaderTree(shader: Shader, paintAlphaF32: Float = 1f, external: ColorFilter? = null,
         destination: ColorARGB = ColorARGB.Transparent, finalBlend: BlendMode = BlendMode.SRC,
         devicePointF32: Point2F32 = Point2F32(.5f,.5f),
-        canvasMatrixF32: Matrix3x3F32 = Matrix3x3F32()): WgslFloatEnvelopeV1Oracle.DrawResult = try {
+        canvasMatrixF32: Matrix3x3F32 = Matrix3x3F32(),
+        destinationBlend: BlendMode = BlendMode.SRC_OVER): WgslFloatEnvelopeV1Oracle.DrawResult = try {
+        capturedShaderTree(shader,paintAlphaF32,external,devicePointF32,canvasMatrixF32,destinationBlend)(destination,finalBlend)
+    } catch(failure: IllegalArgumentException) {
+        WgslFloatEnvelopeV1Oracle.DrawResult.FixtureUnbounded(failure.message ?: "Unbounded independent source fixture")
+    }
+
+    /** Reuse one immutable public-value source envelope while selecting a bounded destination. */
+    fun capturedShaderTree(shader: Shader, paintAlphaF32: Float, external: ColorFilter?,
+        devicePointF32: Point2F32 = Point2F32(.5f,.5f), canvasMatrixF32: Matrix3x3F32 = Matrix3x3F32(),
+        destinationBlend: BlendMode = BlendMode.SRC_OVER): (ColorARGB,BlendMode) -> WgslFloatEnvelopeV1Oracle.DrawResult {
         val (x,y)=mapSegment(Interval.input(devicePointF32.x),Interval.input(devicePointF32.y),listOf(matrixValues(canvasMatrixF32)))
         var value = shaderSource(shader,x,y,null,emptyList())
             .map { mul(it,Interval.input(paintAlphaF32)) }.toTypedArray()
         if (external != null) value = applyFilter(value,external)
-        finish(value,destination,finalBlend,1f)
-    } catch(failure: IllegalArgumentException) {
-        WgslFloatEnvelopeV1Oracle.DrawResult.FixtureUnbounded(failure.message ?: "Unbounded independent source fixture")
+        return { destination, finalBlend -> finish(value,destination,finalBlend,1f,destinationBlend) }
     }
     fun expectedPaintSource(color: ColorARGB, filter: ColorFilter,
         destination: ColorARGB = ColorARGB.Transparent, finalBlend: BlendMode = BlendMode.SRC_OVER,

@@ -24,6 +24,7 @@ internal data class GPUPreparedVerticesMaterialPlan(
     val table: MaterialPlanTable,
     val ref: MaterialPlanRef,
     val blend: org.graphiks.kanvas.gpu.plan.BlendPlan,
+    val commonProgram: GPUPreparedMaterialProgram? = null,
 ) {
     init { table.entry(ref) }
 }
@@ -78,13 +79,54 @@ internal object GPUPreparedVerticesRefusalCoverage {
     ) = GPUPreparedVerticesRefusalClassification(disposition, authority, reason)
 }
 
+internal interface GPUPreparedVerticesGeometryInput {
+    val artifact: GPUPreparedVerticesUploadArtifact
+    val operationKind: GPUPreparedVerticesOperationKind
+    val operationIndex: Int
+    val culledByClip: Boolean
+}
+
+/** Actual packed geometry and clip only. Material is bound after the common source publication. */
+internal class GPUPreparedVerticesGeometry(
+    override val artifact: GPUPreparedVerticesUploadArtifact,
+    override val operationKind: GPUPreparedVerticesOperationKind,
+    override val operationIndex: Int,
+    val transform: Matrix3x3F32,
+    val clip: ClipStack,
+    val clipSnapshot: GPUPreparedVerticesClipSnapshot,
+    val sourceBounds: GPUPreparedVerticesFloatBounds,
+    val deviceBounds: GPUBounds,
+    val clippedBounds: GPUBounds?,
+    val meshBounds: RectF32?,
+    val provenance: String,
+    val primitiveColorPresent: Boolean,
+) : GPUPreparedVerticesGeometryInput {
+    override val culledByClip get() = clipSnapshot.scissorBounds != null && clippedBounds == null
+
+    fun bind(paint: org.graphiks.kanvas.paint.Paint, operationBlendMode: org.graphiks.kanvas.paint.BlendMode?,
+        targetColorFormat: String, plan: GPUPreparedVerticesMaterialPlan): GPUPreparedVerticesDraw {
+        val program = requireNotNull(plan.commonProgram)
+        val alpha = org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification.Translucent
+        val finalBlend = paint.blendMode.toGpuBlendFacts().copy(sourceAlpha = alpha)
+        val primitive = if (!primitiveColorPresent) null else GPUPrimitiveBlendPlan(
+            (operationBlendMode ?: org.graphiks.kanvas.paint.BlendMode.MODULATE).toGpuBlendFacts()
+                .copy(sourceAlpha = alpha).canonicalBlendPlan(
+                    org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption.FullOrScissor, targetColorFormat))
+        return GPUPreparedVerticesDraw.create(artifact, operationKind, program, plan,
+            GPUPreparedVerticesMaterialPlanEmission.common(program), transform, clip, clipSnapshot,
+            finalBlend, org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer.lowerForRecording(plan.blend),
+            sourceBounds, deviceBounds, clippedBounds, culledByClip, meshBounds, operationIndex,
+            provenance, 1, primitiveColorPresent, primitive)
+    }
+}
+
 /**
  * Immutable result of pure vertices/mesh lowering. It deliberately contains no
  * WebGPU objects, upload offsets, cache references, or native allocation state.
  */
 internal class GPUPreparedVerticesDraw private constructor(
-    val artifact: GPUPreparedVerticesUploadArtifact,
-    val operationKind: GPUPreparedVerticesOperationKind,
+    override val artifact: GPUPreparedVerticesUploadArtifact,
+    override val operationKind: GPUPreparedVerticesOperationKind,
     val material: GPUPreparedMaterialProgram,
     val materialPlan: GPUPreparedVerticesMaterialPlan?,
     val materialPlanEmission: GPUPreparedVerticesMaterialPlanEmission?,
@@ -97,14 +139,14 @@ internal class GPUPreparedVerticesDraw private constructor(
     val deviceBounds: GPUBounds,
     /** Null means the draw is wholly clipped and can be culled without restoring device bounds. */
     val clippedBounds: GPUBounds?,
-    val culledByClip: Boolean,
+    override val culledByClip: Boolean,
     meshBounds: RectF32?,
-    val operationIndex: Int,
+    override val operationIndex: Int,
     val provenance: String,
     val paintAlphaApplicationCount: Int,
     val primitiveColorPresent: Boolean,
     val primitiveBlendPlan: GPUPrimitiveBlendPlan?,
-) {
+) : GPUPreparedVerticesGeometryInput {
     private val clipState = clip.snapshotForPreparedText()
     private val meshBoundsSnapshot = meshBounds?.copy()
 
@@ -181,6 +223,8 @@ internal class GPUPreparedVerticesDraw private constructor(
 
 /** One terminal result, published only after every lowering authority succeeds. */
 internal sealed interface GPUPreparedVerticesLowering {
+    /** Actual packer/transform/clip admission with no material program or authority. */
+    data class GeometryReady(val geometry: GPUPreparedVerticesGeometry) : GPUPreparedVerticesLowering
     @ConsistentCopyVisibility
     data class Ready internal constructor(val draw: GPUPreparedVerticesDraw) : GPUPreparedVerticesLowering
 

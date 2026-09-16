@@ -34,20 +34,24 @@ internal object GPUPlanSurfaceCandidateGate {
         }
         return false
     }
+    /** Shared whole-frame admission; excluded direct images keep their legacy owner. */
+    fun ownsW5eDirectImage(operation: DisplayOp.DrawImage): Boolean =
+        operation.image.pixels != null &&
+            operation.image.colorType in setOf(org.graphiks.kanvas.image.ColorType.RGBA_8888,
+                org.graphiks.kanvas.image.ColorType.BGRA_8888, org.graphiks.kanvas.image.ColorType.SRGBA_8888,
+                org.graphiks.kanvas.image.ColorType.ALPHA_8) &&
+            operation.image.alphaType in setOf(org.graphiks.kanvas.image.AlphaType.OPAQUE,
+                org.graphiks.kanvas.image.AlphaType.PREMUL, org.graphiks.kanvas.image.AlphaType.UNPREMUL) &&
+            (operation.sampling in setOf(org.graphiks.kanvas.paint.SamplingOptions.NEAREST,
+                org.graphiks.kanvas.paint.SamplingOptions.LINEAR) || operation.sampling is org.graphiks.kanvas.paint.SamplingOptions.Cubic) &&
+            operation.paint.let { it == null || it.blender == null &&
+                it.maskFilter == null && it.imageFilter == null &&
+                it.pathEffect == null && it.style == org.graphiks.kanvas.paint.PaintStyle.FILL }
+
     fun ownsW5eImages(operations: List<DisplayOp>): Boolean =
         operations.any { it is DisplayOp.DrawImage || it is DisplayOp.DrawImageNine || it is DisplayOp.DrawImageLattice || it is DisplayOp.DrawAtlas || it.isW5eShaderOperation() } && operations.all { operation ->
             when (operation) {
-                is DisplayOp.DrawImage -> operation.image.pixels != null &&
-                    operation.image.colorType in setOf(org.graphiks.kanvas.image.ColorType.RGBA_8888,
-                        org.graphiks.kanvas.image.ColorType.BGRA_8888, org.graphiks.kanvas.image.ColorType.SRGBA_8888,
-                        org.graphiks.kanvas.image.ColorType.ALPHA_8) &&
-                    operation.image.alphaType in setOf(org.graphiks.kanvas.image.AlphaType.OPAQUE,
-                        org.graphiks.kanvas.image.AlphaType.PREMUL, org.graphiks.kanvas.image.AlphaType.UNPREMUL) &&
-                    (operation.sampling in setOf(org.graphiks.kanvas.paint.SamplingOptions.NEAREST,
-                        org.graphiks.kanvas.paint.SamplingOptions.LINEAR) || operation.sampling is org.graphiks.kanvas.paint.SamplingOptions.Cubic) &&
-                    operation.paint.let { it == null || it.blender == null &&
-                        it.maskFilter == null && it.imageFilter == null &&
-                        it.pathEffect == null && it.style == org.graphiks.kanvas.paint.PaintStyle.FILL }
+                is DisplayOp.DrawImage -> ownsW5eDirectImage(operation)
                 is DisplayOp.DrawImageNine -> operation.image.pixels != null &&
                     operation.image.colorType in setOf(org.graphiks.kanvas.image.ColorType.RGBA_8888,
                         org.graphiks.kanvas.image.ColorType.BGRA_8888, org.graphiks.kanvas.image.ColorType.SRGBA_8888,
@@ -117,6 +121,10 @@ internal object GPUPlanSurfaceCandidateGate {
     fun accepts(operations: List<DisplayOp>, config: RenderConfig): Boolean =
         config.gpuColorFormat == GPUColorFormat.RGBA8_UNORM_SRGB &&
             (ownsW5eImages(operations) || operations.all { operation ->
+                if (operation is DisplayOp.DrawRRect && !operation.paint.isStroke() ||
+                    operation is DisplayOp.DrawPath && operation.paint.style == org.graphiks.kanvas.paint.PaintStyle.STROKE &&
+                    operation.sourceOperation in setOf(DrawPathSourceOperation.DRAW_PATH.stableName,
+                        "drawPoints.lines", "drawPoints.polygon")) return@all true
                 if (operation.hasComposedSource()) return@all true
                 if ((operation is DisplayOp.DrawRect || operation is DisplayOp.DrawRRect ||
                         operation is DisplayOp.DrawPath) &&

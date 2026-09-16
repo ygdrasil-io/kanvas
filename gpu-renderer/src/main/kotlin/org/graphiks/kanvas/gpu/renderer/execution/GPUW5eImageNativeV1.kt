@@ -20,6 +20,11 @@ internal object GPUW5eImageNativeV1 {
         }
         expected.imageDraws().forEach { image ->
             require(image.authenticates(expected.materialTable)) { W5eImagePlanDiagnostics.InvalidContract }
+            if (image.materialAuthority is PlanDrawMaterialAuthority.MaterialV5) {
+                expected.constructionGraph.packedMaterialSourceV4(image.materialAuthority)
+                requireNotNull(image.composedOrigin) { W5eImagePlanDiagnostics.InvalidContract }
+                return@forEach
+            }
             (image.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let {
                 expected.constructionGraph.packedMaterialSourceV4(it)
             }
@@ -55,7 +60,7 @@ internal object GPUW5eImageNativeV1 {
         }
         return expected.imageDraws().isNotEmpty()
     }
-    fun acquire(cache: GPUW5eDecodedImageSessionCache, request: PlanCacheResourceRequest,
+    fun acquire(cache: GPUW5eDecodedImageSessionCache, request: PlanCacheResourceRequest.Texture,
         generationI64: Long): GPUW5eDecodedImageSessionCache.Lease {
         require(cache.deviceGenerationI64 == generationI64) { "stale.material.image.device-generation" }
         return cache.acquire(request).also { require(it.generationI64 == generationI64) }

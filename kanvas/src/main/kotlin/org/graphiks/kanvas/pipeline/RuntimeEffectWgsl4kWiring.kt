@@ -34,7 +34,7 @@ object RuntimeEffectWgsl4kWiring {
         }
 
         RuntimeEffect.makeColorFilterHook = { effect, uniforms, children ->
-            ColorFilter.RuntimeEffect(effect, uniforms, children)
+            if (effect.semanticVersionI32 == 0) ColorFilter.RuntimeEffect(effect, uniforms, children) else null
         }
     }
 

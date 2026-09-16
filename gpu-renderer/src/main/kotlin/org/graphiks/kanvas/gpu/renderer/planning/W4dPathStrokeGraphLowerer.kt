@@ -30,6 +30,7 @@ import org.graphiks.kanvas.gpu.plan.PlanTextureFormat
 import org.graphiks.kanvas.gpu.plan.RenderGraph
 import org.graphiks.kanvas.gpu.plan.W4dPathStrokePlanCompiler
 import org.graphiks.kanvas.gpu.plan.W4dPlanDiagnostics
+import org.graphiks.kanvas.gpu.plan.colorSourceCoordinatesV4
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
@@ -702,7 +703,7 @@ internal class W4dPathStrokeGraphLowerer {
                 premultipliedRgba = listOf(color.red, color.green, color.blue, color.alpha),
                 material = if (role == GPUDrawPacketRole.PathStencilProducer) null else
                     W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex,
-                        (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let {
+                        draw.materialAuthority.takeIf { it.colorSourceCoordinatesV4() != null }?.let {
                             requireNotNull(graph).packedMaterialSourceV4(it) }),
                 targetBounds = targetBounds,
                 scissorBounds = plannedScissor,
@@ -1092,7 +1093,7 @@ internal class W4dPathStrokeGraphLowerer {
         table: MaterialPlanTable?,
         authority: PlanDrawMaterialAuthority,
     ): ColorF32? = when (authority) {
-        is PlanDrawMaterialAuthority.MaterialV5 -> error(org.graphiks.kanvas.gpu.plan.W5gPlanDiagnostics.Unpromoted)
+        is PlanDrawMaterialAuthority.MaterialV5 -> table?.let { W5aMaterialPlanLowerer().lower(it,authority.ref) }
         is PlanDrawMaterialAuthority.MaterialV4 -> table?.let { W5aMaterialPlanLowerer().lower(it,authority.ref) }
         is PlanDrawMaterialAuthority.LegacyColorV1 -> authority.copyColorF32()
         is PlanDrawMaterialAuthority.MaterialV3 -> error(org.graphiks.kanvas.gpu.plan.W5eImagePlanDiagnostics.InvalidContract)

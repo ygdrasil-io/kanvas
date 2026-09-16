@@ -53,7 +53,7 @@ internal object ColorSourceProofCompilerV1 {
         metadata.nodes.forEach { node ->
             val offset = node.offsetBytesI32.toLong()/4L
             fun child(index: Int = 0) = graphs[node.children[index].indexI32]
-            val graph = when(val original = node.original) {
+            var graph = when(val original = node.original) {
                 org.graphiks.kanvas.render.ir.MaterialNode.Transparent -> ColorOperationGraphV1(List(4) { ColorOperationGraphV1.constant(0f) })
                 is org.graphiks.kanvas.render.ir.MaterialNode.Solid -> {
                     val color = original.color
@@ -66,6 +66,11 @@ internal object ColorSourceProofCompilerV1 {
                 is org.graphiks.kanvas.render.ir.MaterialNode.Opacity -> {
                     words[offset] = original.alpha.toRawBits()
                     ColorOperationGraphV1(child().outputs.map { ColorOperationGraphV1.Scalar.Multiply(it,ColorOperationGraphV1.Scalar.DynamicF32(offset)) })
+                }
+                is org.graphiks.kanvas.render.ir.MaterialNode.RuntimeEffect -> {
+                    val numeric = requireNotNull(node.runtime).numericGraph as NumericOperationGraphV1.RuntimeChildOpacity
+                    words[offset] = (original.uniforms().getValue("alpha") as org.graphiks.kanvas.render.ir.RuntimeUniformValue.F1).value.toRawBits()
+                    numeric.colorGraph.bindInput(child(),offset)
                 }
                 is org.graphiks.kanvas.render.ir.MaterialNode.WithColorFilter -> {
                     val filter = requireNotNull(node.filter)
@@ -156,11 +161,19 @@ internal object ColorSourceProofCompilerV1 {
                 }
                 else -> error(W5gPlanDiagnostics.Unpromoted)
             }
+            if (metadata.primitiveEvaluationRef?.indexI32 == graphs.size) {
+                val primitive = List(4) { channel -> S.PrimitiveEncodedInput(channel).let {
+                    if (channel == 3) it else ColorOperationGraphV1.eotf(it)
+                } }
+                graph = BlendFormulaProgramV1.colorOperations(requireNotNull(metadata.primitiveBlendMode).name.lowercase(),
+                    graph.outputs, primitive)
+            }
             graphs += graph
             entries += MaterialEvaluationDagV5.Entry(node.ownerNodeIndexI32,node.children,node.gradientSource?.coordinates ?:
                 node.imageSource?.coordinates?.let(SourceCoordinatesV4::V2) ?:
                 node.noiseSource?.coordinates?.let(SourceCoordinatesV4::V2) ?: SourceCoordinatesV4.None,
-                ComposedMaterialProgramV5(MaterialProgramPlanId("composed-evaluation-v5:${node.topologyIdentity}:${graph.canonicalIdentity}"),graph))
+                ComposedMaterialProgramV5(MaterialProgramPlanId(if (node.runtime != null) "runtime-effect-v1"
+                    else "composed-evaluation-v5:${node.topologyIdentity}:${graph.canonicalIdentity}"),graph))
         }
         return ComposedGraph(MaterialEvaluationDagV5.of(entries),graphs.last(),words,tables,integers)
     }

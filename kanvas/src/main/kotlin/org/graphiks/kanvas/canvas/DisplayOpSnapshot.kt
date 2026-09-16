@@ -43,6 +43,7 @@ internal class GeometrySnapshotContext(
     private val gradientStops: RecordingGradientStopBudget? = null,
     private val imageBytes: RecordingImageByteBudget? = null,
     private val captureLimits: org.graphiks.kanvas.render.ir.SceneCaptureLimits = org.graphiks.kanvas.render.ir.SceneCaptureLimits.DEFAULT,
+    private val runtimeUniforms: RecordingRuntimeUniformByteBudget? = null,
 ) {
     private val textBlobs = IdentityHashMap<TextBlob, TextBlob>()
     private var pendingTextBlobs: IdentityHashMap<TextBlob, TextBlob>? = null
@@ -118,7 +119,7 @@ internal class GeometrySnapshotContext(
             else -> null
         }
         fun validate(value: Paint) {
-            org.graphiks.kanvas.render.ir.ColorFilterCapturePreflight.validatePaint(value, captureLimits)?.let {
+            org.graphiks.kanvas.render.ir.ColorFilterCapturePreflight.validatePaint(value, captureLimits) { runtimeUniforms?.reserve(it) }?.let {
                 throw SceneRecordingValidationException(it)
             }
         }
@@ -197,7 +198,7 @@ internal class GeometrySnapshotContext(
                 is Shader.RuntimeEffect -> {
                     val children = linkedMapOf<String, Shader>()
                     shaderRuntimeChildren[value] = children
-                    shaders[value] = Shader.RuntimeEffect(value.effect, value.uniforms, Collections.unmodifiableMap(children))
+                    shaders[value] = Shader.RuntimeEffect(value.effect, value.uniforms, Collections.unmodifiableMap(children),snapshotRuntimeResources(value.resources))
                     pending += ShaderFrame(value, true)
                     value.children.values.reversed().forEach { pending += ShaderFrame(it, false) }
                 }
@@ -249,7 +250,7 @@ internal class GeometrySnapshotContext(
                 is ColorFilter.RuntimeEffect -> {
                     val children = linkedMapOf<String, ColorFilter>()
                     colorRuntimeChildren[value] = children
-                    colorFilters[value] = ColorFilter.RuntimeEffect(value.effect, value.uniforms, Collections.unmodifiableMap(children))
+                    colorFilters[value] = ColorFilter.RuntimeEffect(value.effect, value.uniforms, Collections.unmodifiableMap(children),snapshotRuntimeResources(value.resources))
                     pending += ColorFilterFrame(value, true)
                     value.children.values.reversed().forEach { pending += ColorFilterFrame(it, false) }
                 }
@@ -327,6 +328,13 @@ internal class GeometrySnapshotContext(
         }
         return imageFilters.getValue(filter)
     }
+
+    private fun snapshotRuntimeResources(resources: org.graphiks.kanvas.pipeline.RuntimeEffectResourceBindings) =
+        org.graphiks.kanvas.pipeline.RuntimeEffectResourceBindings.of(resources.entries().associate { (name,binding) -> name to when(binding) {
+            is org.graphiks.kanvas.pipeline.RuntimeEffectResourceBinding.SampledTexture -> binding.copy(image=snapshot(binding.image))
+            is org.graphiks.kanvas.pipeline.RuntimeEffectResourceBinding.StorageRead,
+            is org.graphiks.kanvas.pipeline.RuntimeEffectResourceBinding.Sampler -> binding
+        } })
 }
 
 /** Compares public image state with an owned immutable snapshot without retaining the producer. */

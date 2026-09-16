@@ -20,7 +20,7 @@ internal object W5bDestinationGraphSealer {
         drawDataResources: PlanDrawDataResources? = null,
         drawDataByCommandI32: Map<Int, PlanDrawDataResources> = emptyMap(),
         depthStencilByCommandI32: Map<Int, PlanResourceId> = emptyMap(),
-        w4eSource: RenderGraph? = null,
+        w4eSource: W4eGeometryFactsV6? = null,
     ): RenderGraph {
         return construct(id, capabilityId, extent, capabilities, budget, draws, material, targetBytesI64, stagingBytesI64, rowBytesI64, geometryResources, drawDataResources, drawDataByCommandI32, depthStencilByCommandI32, w4eSource).publish()
     }
@@ -40,7 +40,7 @@ internal object W5bDestinationGraphSealer {
         drawDataResources: PlanDrawDataResources? = null,
         drawDataByCommandI32: Map<Int, PlanDrawDataResources> = emptyMap(),
         depthStencilByCommandI32: Map<Int, PlanResourceId> = emptyMap(),
-        w4eSource: RenderGraph? = null,
+        w4eSource: W4eGeometryFactsV6? = null,
     ): RenderGraphConstruction {
         val sizing = sizeLayout(capabilityId, extent, capabilities, budget, draws, targetBytesI64, stagingBytesI64, rowBytesI64,
             geometryResources, drawDataResources, drawDataByCommandI32, depthStencilByCommandI32, w4eSource)
@@ -60,7 +60,7 @@ internal object W5bDestinationGraphSealer {
         })
         return RenderGraph.construct(id, capabilityId, extent, topology.format, capabilities, budget,
             draws.size, topology.resources, topology.passes, topology.dependencies, topology.peakI64,
-            material.takeIf { draws.isNotEmpty() }, w4eSource)
+            material.takeIf { draws.isNotEmpty() }, w5bW4eFacts = w4eSource)
     }
 
     private fun sizeLayout(
@@ -76,11 +76,11 @@ internal object W5bDestinationGraphSealer {
         drawDataResources: PlanDrawDataResources? = null,
         drawDataByCommandI32: Map<Int, PlanDrawDataResources> = emptyMap(),
         depthStencilByCommandI32: Map<Int, PlanResourceId> = emptyMap(),
-        w4eSource: RenderGraph? = null,
+        w4eSource: W4eGeometryFactsV6? = null,
     ): DestinationSizingV4 {
-        require(w4eSource == null || w4eSource.verifyW4eCompilerWitness() &&
+        require(w4eSource == null ||
             w4eSource.capabilityId == W4eClipPlanCompiler.W5A_HARD_CAPABILITY_ID && capabilityId == W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID)
-        val nativePrefix = w4eSource?.passes()?.filter { it is PlanPass.ClipMaskInitialize || it is PlanPass.ClipMaskProducer || it is PlanPass.ClipMaskFold }.orEmpty()
+        val nativePrefix = w4eSource?.passes?.filter { it is PlanPass.ClipMaskInitialize || it is PlanPass.ClipMaskProducer || it is PlanPass.ClipMaskFold }.orEmpty()
         val clips = draws.filterIsInstance<W5bPointDraw>().mapNotNull { it.clipOnly }.distinct()
         require(clips.size <= 1)
         val clip = clips.singleOrNull()
@@ -144,10 +144,11 @@ internal object W5bDestinationGraphSealer {
         rowBytesI64: Long, geometryResources: List<PlanResource> = emptyList(),
         drawDataResources: PlanDrawDataResources? = null,
         drawDataByCommandI32: Map<Int, PlanDrawDataResources> = emptyMap(),
-        depthStencilByCommandI32: Map<Int, PlanResourceId> = emptyMap()): DestinationTopologyV4 =
+        depthStencilByCommandI32: Map<Int, PlanResourceId> = emptyMap(),
+        w4eSource: W4eGeometryFactsV6? = null): DestinationTopologyV4 =
         sizeLayout(capabilityId, extent, capabilities, budget, draws, targetBytesI64, stagingBytesI64,
             rowBytesI64, geometryResources, drawDataResources, drawDataByCommandI32,
-            depthStencilByCommandI32, null).finish(draws)
+            depthStencilByCommandI32, w4eSource).finish(draws)
 
     private fun alignedRowBytesI64(capabilities: PlanCapabilitySnapshot, widthI32: Int): Long {
         val bytesI64 = Math.multiplyExact(widthI32.toLong(), 4L)
@@ -160,7 +161,7 @@ internal object W5bDestinationGraphSealer {
         originalDraws: List<PlanDraw>, val targetBytesI64: Long, val stagingBytesI64: Long,
         val rowBytesI64: Long, geometryResources: List<PlanResource>,
         val drawDataResources: PlanDrawDataResources?, drawDataByCommandI32: Map<Int, PlanDrawDataResources>,
-        depthStencilByCommandI32: Map<Int, PlanResourceId>, val w4eSource: RenderGraph?,
+        depthStencilByCommandI32: Map<Int, PlanResourceId>, val w4eSource: W4eGeometryFactsV6?,
         nativePrefix: List<PlanPass>, val clip: W4eClipOnlyPlan?, val destinationCountI32: Int,
         val initialClearI32: Int, val passCountI32: Int, regions: Map<Int, RectI32>,
         val snapshotExtent: SizeI32?, val snapshotBytesI64: Long, val peakI64: Long,
@@ -241,7 +242,7 @@ internal object W5bDestinationGraphSealer {
                                 draw.copyDeviceShape(), draw.copyRasterBounds(), draw.copyScissor(), sealed, it.coordinates)
                         } ?: AnalyticRRectDraw.ofMaterial(draw.commandIndex, draw.materialAuthority.materialPlanRef(), draw.origin,
                             draw.copyDeviceShape(), draw.copyRasterBounds(), draw.copyScissor(), sealed,
-                            draw.materialCoordinates, draw.materialCoordinatesV2)
+                            draw.materialCoordinates, draw.materialCoordinatesV2, draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV5)
                         is PathFillDraw -> PathFillDraw.ofMaterial(draw.commandIndex,
                             draw.materialAuthority.materialPlanRef(),
                             draw.copyGeometryF32(), draw.strategy, draw.copyScissorI32(), sealed, draw.materialCoordinates, draw.materialCoordinatesV2,
@@ -253,7 +254,8 @@ internal object W5bDestinationGraphSealer {
                             PathStrokeDraw.ofMaterialV4(draw.commandIndex, it.ref, draw.copyGeometryF32(), draw.copyScissorI32(),
                                 draw.mode, draw.styleF64, sealed, it.coordinates)
                         } ?: PathStrokeDraw.ofMaterial(draw.commandIndex, draw.materialAuthority.materialPlanRef(), draw.copyGeometryF32(),
-                            draw.copyScissorI32(), draw.mode, draw.styleF64, sealed, draw.materialCoordinates, draw.materialCoordinatesV2)
+                            draw.copyScissorI32(), draw.mode, draw.styleF64, sealed, draw.materialCoordinates, draw.materialCoordinatesV2,
+                            draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV5)
                         else -> error("unsupported.w5b.destination-geometry")
                     })
                 } else render(draw)

@@ -45,9 +45,10 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 
 internal sealed interface GPUWgpu4kPreparedTextPipelineAcquisition {
     val pipeline: GPURenderPipeline
+    val commonGeometryTemplate: GPUW5aGeometryPipelineTemplate?
     val drawBindGroupLayout: GPUBindGroupLayout
-    val materialBindGroupLayout: GPUBindGroupLayout
-    val atlasBindGroupLayout: GPUBindGroupLayout
+    val materialBindGroupLayout: GPUBindGroupLayout?
+    val atlasBindGroupLayout: GPUBindGroupLayout?
     val coverageMaskBindGroupLayout: GPUBindGroupLayout?
     val destinationBindGroupLayout: GPUBindGroupLayout?
     val destinationSampler: GPUSampler?
@@ -57,9 +58,10 @@ internal sealed interface GPUWgpu4kPreparedTextPipelineAcquisition {
 
 private class IssuedGPUWgpu4kPreparedTextPipelineAcquisition(
     override val pipeline: GPURenderPipeline,
+    override val commonGeometryTemplate: GPUW5aGeometryPipelineTemplate?,
     override val drawBindGroupLayout: GPUBindGroupLayout,
-    override val materialBindGroupLayout: GPUBindGroupLayout,
-    override val atlasBindGroupLayout: GPUBindGroupLayout,
+    override val materialBindGroupLayout: GPUBindGroupLayout?,
+    override val atlasBindGroupLayout: GPUBindGroupLayout?,
     override val coverageMaskBindGroupLayout: GPUBindGroupLayout?,
     override val destinationBindGroupLayout: GPUBindGroupLayout?,
     override val destinationSampler: GPUSampler?,
@@ -104,12 +106,13 @@ private class GPUWgpu4kPreparedTextCachedPipeline(
     val program: GPUPreparedTextNativeProgramHandoff,
     val shader: GPUShaderModule,
     val drawBindGroupLayout: GPUBindGroupLayout,
-    val materialBindGroupLayout: GPUBindGroupLayout,
-    val atlasBindGroupLayout: GPUBindGroupLayout,
+    val materialBindGroupLayout: GPUBindGroupLayout?,
+    val atlasBindGroupLayout: GPUBindGroupLayout?,
     val coverageMaskBindGroupLayout: GPUBindGroupLayout?,
     val destinationBindGroupLayout: GPUBindGroupLayout?,
     val pipelineLayout: GPUPipelineLayout,
     val pipeline: GPURenderPipeline,
+    val commonGeometryTemplate: GPUW5aGeometryPipelineTemplate?,
     val atlasSampler: GPUSampler,
     val destinationSampler: GPUSampler?,
     val owned: MutableList<AutoCloseable>,
@@ -199,6 +202,7 @@ internal class GPUWgpu4kPreparedTextSessionCache(
                 val cached = pipelines.getValue(sameKeyPrograms.first().pipelineKey)
                 IssuedGPUWgpu4kPreparedTextPipelineAcquisition(
                     pipeline = cached.pipeline,
+                    commonGeometryTemplate = cached.commonGeometryTemplate,
                     drawBindGroupLayout = cached.drawBindGroupLayout,
                     materialBindGroupLayout = cached.materialBindGroupLayout,
                     atlasBindGroupLayout = cached.atlasBindGroupLayout,
@@ -278,22 +282,7 @@ internal class GPUWgpu4kPreparedTextSessionCache(
     ): GPUWgpu4kPreparedTextCachedPipeline {
         val created = mutableListOf<AutoCloseable>()
         try {
-            val drawLayout = device.createBindGroupLayout(
-                BindGroupLayoutDescriptor(
-                    label = "Kanvas.session.preparedText.drawLayout",
-                    entries = listOf(
-                        BindGroupLayoutEntry(
-                            binding = program.drawUniformBinding.toUInt(),
-                            visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
-                            buffer = BufferBindingLayout(
-                                type = GPUBufferBindingType.Uniform,
-                                hasDynamicOffset = true,
-                                minBindingSize = 80uL,
-                            ),
-                        ),
-                    ),
-                ),
-            ).track(created)
+            val drawLayout = device.createBindGroupLayout(preparedTextDrawLayoutV6(program)).track(created)
             val materialEntries = buildList {
                 program.materialUniformBinding?.let { binding ->
                     add(
@@ -329,13 +318,13 @@ internal class GPUWgpu4kPreparedTextSessionCache(
                     )
                 }
             }
-            val materialLayout = device.createBindGroupLayout(
+            val materialLayout = if (program.commonGeometry) null else device.createBindGroupLayout(
                 BindGroupLayoutDescriptor(
                     label = "Kanvas.session.preparedText.materialLayout",
                     entries = materialEntries,
                 ),
             ).track(created)
-            val atlasLayout = device.createBindGroupLayout(
+            val atlasLayout = if (program.commonGeometry) null else device.createBindGroupLayout(
                 BindGroupLayoutDescriptor(
                     label = "Kanvas.session.preparedText.atlasLayout",
                     entries = listOf(
@@ -408,15 +397,14 @@ internal class GPUWgpu4kPreparedTextSessionCache(
                     label = "Kanvas.session.preparedText.pipelineLayout",
                     bindGroupLayouts = buildList {
                         add(drawLayout)
-                        add(materialLayout)
-                        add(atlasLayout)
+                        materialLayout?.let(::add)
+                        atlasLayout?.let(::add)
                         coverageMaskLayout?.let(::add)
                         destinationLayout?.let(::add)
                     },
                 ),
             ).track(created)
-            val pipeline = device.createRenderPipeline(
-                RenderPipelineDescriptor(
+            val descriptor = RenderPipelineDescriptor(
                     label = "Kanvas.session.preparedText.pipeline.${program.pipelineKey}",
                     layout = pipelineLayout,
                     vertex = VertexState(
@@ -470,8 +458,10 @@ internal class GPUWgpu4kPreparedTextSessionCache(
                             ),
                         ),
                     ),
-                ),
-            ).track(created)
+                )
+            val pipeline = device.createRenderPipeline(descriptor).track(created)
+            val commonGeometryTemplate = if (!program.commonGeometry) null else GPUW5aGeometryPipelineTemplate(
+                program.pipelineKey, descriptor, drawLayout, GPUW5bInlineCoverageV3.PreparedTextA8, MaterialCoordinateSlotV1.InputPosition)
             val atlasSampler = createSampler(
                 samplerState("nearest"),
                 "atlas",
@@ -492,6 +482,7 @@ internal class GPUWgpu4kPreparedTextSessionCache(
                 destinationBindGroupLayout = destinationLayout,
                 pipelineLayout = pipelineLayout,
                 pipeline = pipeline,
+                commonGeometryTemplate = commonGeometryTemplate,
                 atlasSampler = atlasSampler,
                 destinationSampler = destinationSampler,
                 owned = created,
@@ -612,7 +603,7 @@ private fun GPUPreparedTextNativeProgramHandoff.sameProgramAs(
     sourceCoverageEncoding == other.sourceCoverageEncoding &&
     clipVariant == other.clipVariant &&
     drawUniformBinding == other.drawUniformBinding &&
-    materialUniformBinding == other.materialUniformBinding &&
+    commonGeometry == other.commonGeometry && materialUniformBinding == other.materialUniformBinding &&
     materialSampledBindings == other.materialSampledBindings &&
     atlasTextureBinding == other.atlasTextureBinding &&
     atlasSamplerBinding == other.atlasSamplerBinding &&
@@ -623,14 +614,14 @@ private fun GPUPreparedTextNativeProgramHandoff.sameProgramAs(
     vertexLayout == other.vertexLayout &&
     pipelineKey == other.pipelineKey
 
-private fun String.toPreparedTextTargetFormat(): GPUTextureFormat = when (this) {
+internal fun String.toPreparedTextTargetFormat(): GPUTextureFormat = when (this) {
     "rgba8unorm" -> GPUTextureFormat.RGBA8Unorm
     "rgba8unorm-srgb" -> GPUTextureFormat.RGBA8UnormSrgb
     "bgra8unorm" -> GPUTextureFormat.BGRA8Unorm
     else -> error("Unsupported prepared-text target format: $this")
 }
 
-private fun GPUFixedFunctionBlendState.toPreparedTextBlendState(): BlendState = BlendState(
+internal fun GPUFixedFunctionBlendState.toPreparedTextBlendState(): BlendState = BlendState(
     color = BlendComponent(
         operation = color.operation.toPreparedTextBlendOperation(),
         srcFactor = color.sourceFactor.toPreparedTextBlendFactor(),
@@ -666,8 +657,21 @@ private fun String.toPreparedTextBlendOperation(): GPUBlendOperation = when (thi
     else -> error("Unsupported prepared-text fixed-function blend operation: $this")
 }
 
-private fun GPUFixedFunctionBlendState.toPreparedTextWriteMask(): GPUColorWrite = when (writeMask) {
+internal fun GPUFixedFunctionBlendState.toPreparedTextWriteMask(): GPUColorWrite = when (writeMask) {
     "rgba" -> GPUColorWrite.All
     "none" -> GPUColorWrite.None
     else -> error("Unsupported prepared-text write mask: $writeMask")
 }
+
+internal fun preparedTextDrawLayoutV6(program: GPUPreparedTextNativeProgramHandoff): BindGroupLayoutDescriptor =
+    BindGroupLayoutDescriptor(label = "Kanvas.session.preparedText.drawLayout", entries = buildList {
+        add(BindGroupLayoutEntry(binding = program.drawUniformBinding.toUInt(),
+            visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
+            buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform, hasDynamicOffset = true, minBindingSize = 80uL)))
+        if (program.commonGeometry) {
+            add(BindGroupLayoutEntry(binding = program.atlasTextureBinding.toUInt(), visibility = GPUShaderStage.Fragment,
+                texture = TextureBindingLayout(sampleType = GPUTextureSampleType.Float, viewDimension = GPUTextureViewDimension.TwoD)))
+            add(BindGroupLayoutEntry(binding = program.atlasSamplerBinding.toUInt(), visibility = GPUShaderStage.Fragment,
+                sampler = SamplerBindingLayout(GPUSamplerBindingType.Filtering)))
+        }
+    })

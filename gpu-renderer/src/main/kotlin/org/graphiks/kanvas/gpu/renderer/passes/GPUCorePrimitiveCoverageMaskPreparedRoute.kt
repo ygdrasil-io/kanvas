@@ -14,6 +14,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryUniformBytes
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 
@@ -286,6 +287,9 @@ internal fun validateGPUCorePrimitiveCoverageMaskPreparedAuthority(
             packet.targetStateHash != slot.targetStateHash ||
             packet.vertexSourceLabel != slot.vertexSourceLabel ||
             packet.scissorBoundsHash != slot.scissorBoundsHash ||
+            !slot.semanticAuthority.geometryAuthority.matches(semantic) ||
+            !slot.semanticAuthority.materialBindingAuthority.matches(semantic) ||
+            slot.semanticAuthority.materialBindingAuthority.geometryAuthority !== slot.semanticAuthority.geometryAuthority ||
             !slot.semanticAuthority.matches(semantic) ||
             prepared?.coverageMaskUniformSlabSeal !== slabSeal ||
             prepared.uniformSlabSeal != null || prepared.analyticShapeUniformSeal != null ||
@@ -450,18 +454,28 @@ internal fun corePrimitiveCoverageMaskProducerUniformBytes(
 internal fun corePrimitiveCoverageMaskConsumerUniformBytes(
     plan: GPUClipExecutionPlan.CoverageMask,
     semantic: GPUDrawSemanticPayload.CorePrimitive,
-): ByteArray = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN).apply {
-    putFloat(semantic.targetBounds.width.toFloat())
-    putFloat(semantic.targetBounds.height.toFloat())
-    putInt(plan.bounds.left)
-    putInt(plan.bounds.top)
-    putInt(plan.bounds.width)
-    putInt(plan.bounds.height)
-    putLong(0L)
-    semantic.premultipliedRgba.forEach(::putFloat)
-    putInt(if (plan.consumer.invert) 1 else 0)
-    repeat(12) { put(0) }
-}.array()
+): ByteArray = corePrimitiveCoverageMaskConsumerGeometryUniformBytes(plan,
+    GPUCorePrimitiveGeometryAuthority.capture(semantic)).bindSourceColor(semantic.premultipliedRgba)
+
+internal fun corePrimitiveCoverageMaskConsumerGeometryUniformBytes(
+    plan: GPUClipExecutionPlan.CoverageMask,
+    geometry: GPUCorePrimitiveGeometryAuthority,
+): GPUCorePrimitiveGeometryUniformBytes {
+    val header = ByteBuffer.allocate(32).order(ByteOrder.LITTLE_ENDIAN).apply {
+        putFloat(geometry.targetBounds.width.toFloat())
+        putFloat(geometry.targetBounds.height.toFloat())
+        putInt(plan.bounds.left)
+        putInt(plan.bounds.top)
+        putInt(plan.bounds.width)
+        putInt(plan.bounds.height)
+        putLong(0L)
+    }.array()
+    val tail = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN).apply {
+        putInt(if (plan.consumer.invert) 1 else 0)
+        repeat(12) { put(0) }
+    }.array()
+    return GPUCorePrimitiveGeometryUniformBytes(header, tail)
+}
 
 /** Pure authentication of one exact ordered producer-only CoverageMask slab authority. */
 internal fun validateCoverageMaskProducerUniformSlabSeal(
@@ -567,42 +581,139 @@ private sealed interface CoverageMaskRequestValidation {
     data class Refused(val code: String, val message: String) : CoverageMaskRequestValidation
 }
 
+/** Pre-publication consumer facts: no composed semantic or material-binding authority. */
+internal data class GPUCorePrimitiveCoverageMaskGeometryConsumer(
+    val packetId: GPUDrawPacketID,
+    val commandId: Int,
+    val sourceOrder: Int,
+    val geometryAuthority: GPUCorePrimitiveGeometryAuthority,
+    val coverageMode: GPUCorePrimitiveCoverageMode,
+    val blendPlan: GPUBlendPlan,
+    val orderingToken: GPUClipOrderingToken,
+    val packetRole: GPUDrawPacketRole,
+    val geometry: GPUCorePrimitiveGeometry,
+)
+
+internal data class GPUCorePrimitiveCoverageMaskGeometryConsumerSnapshot(
+    val packetId: GPUDrawPacketID,
+    val commandId: Int,
+    val sourceOrder: Int,
+    val geometryAuthority: GPUCorePrimitiveGeometryAuthority,
+    val packetRole: GPUDrawPacketRole,
+    val geometry: GPUCorePrimitiveCoverageMaskConsumerGeometrySnapshot,
+    val coverageMode: GPUCorePrimitiveCoverageMode,
+    val blendCanonicalIdentity: String,
+    val orderingToken: GPUClipOrderingToken,
+    val structuralKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+) {
+    fun bind(authority: GPUCorePrimitivePreparedSemanticAuthority): GPUCorePrimitiveCoverageMaskPreparedConsumerSnapshot {
+        require(authority.geometryAuthority === geometryAuthority &&
+            authority.materialBindingAuthority.geometryAuthority === geometryAuthority &&
+            authority.matches(authority.retainedSemantic())) {
+            "Coverage-mask source binding must retain its exact admitted geometry token"
+        }
+        return GPUCorePrimitiveCoverageMaskPreparedConsumerSnapshot(packetId, commandId, sourceOrder,
+            authority, packetRole, geometry, coverageMode, blendCanonicalIdentity, orderingToken, structuralKey)
+    }
+}
+
+/** Geometry and clip are validated once; only source binding creates the executable route. */
+internal class GPUCorePrimitiveCoverageMaskGeometryInventory private constructor(
+    private val plan: GPUClipExecutionPlan.CoverageMask,
+    producers: List<GPUCorePrimitiveCoverageMaskPreparedProducerSnapshot>,
+    consumers: List<GPUCorePrimitiveCoverageMaskGeometryConsumerSnapshot>,
+    private val attachment: GPUCorePrimitiveCoverageMaskAttachmentAuthority,
+) {
+    val producers = immutableList(producers)
+    val consumers = immutableList(consumers)
+
+    fun bind(authorities: Map<Int, GPUCorePrimitivePreparedSemanticAuthority>): GPUCorePrimitiveCoverageMaskPreparedRoute.Accepted {
+        require(authorities.keys == consumers.map { it.commandId }.toSet())
+        return GPUCorePrimitiveCoverageMaskPreparedRoute.Accepted(plan.contentKey, plan.canonicalIdentity(),
+            plan.bounds, plan.orderingToken, producers,
+            consumers.map { it.bind(authorities.getValue(it.commandId)) }, attachment)
+    }
+
+    companion object {
+        fun prepare(plan: GPUClipExecutionPlan.CoverageMask,
+            consumers: List<GPUCorePrimitiveCoverageMaskGeometryConsumer>,
+            attachment: GPUCorePrimitiveCoverageMaskAttachmentAuthority): GPUCorePrimitiveCoverageMaskGeometryPreparation =
+            when (val result = validateCoverageMaskGeometry(plan, consumers, attachment)) {
+                is CoverageMaskGeometryValidation.Refused ->
+                    GPUCorePrimitiveCoverageMaskGeometryPreparation.Refused(result.code, result.message)
+                is CoverageMaskGeometryValidation.Accepted ->
+                    GPUCorePrimitiveCoverageMaskGeometryPreparation.Prepared(
+                        GPUCorePrimitiveCoverageMaskGeometryInventory(plan, result.producers, result.consumers, attachment))
+            }
+    }
+}
+
+internal sealed interface GPUCorePrimitiveCoverageMaskGeometryPreparation {
+    data class Prepared(val inventory: GPUCorePrimitiveCoverageMaskGeometryInventory) : GPUCorePrimitiveCoverageMaskGeometryPreparation
+    data class Refused(val code: String, val message: String) : GPUCorePrimitiveCoverageMaskGeometryPreparation
+}
+
+private sealed interface CoverageMaskGeometryValidation {
+    data class Accepted(val producers: List<GPUCorePrimitiveCoverageMaskPreparedProducerSnapshot>,
+        val consumers: List<GPUCorePrimitiveCoverageMaskGeometryConsumerSnapshot>) : CoverageMaskGeometryValidation
+    data class Refused(val code: String, val message: String) : CoverageMaskGeometryValidation
+}
+
+private fun geometryRequestRefused(code: String, message: String) = CoverageMaskGeometryValidation.Refused(code, message)
+
+/** Historical post-bind adapter; it delegates every geometry decision to the source-free owner. */
 private fun GPUCorePrimitiveCoverageMaskPreparedRouteRequest.validate(): CoverageMaskRequestValidation {
-    if (plan.depthStencilRequired) return requestRefused(
+    val result = validateCoverageMaskGeometry(plan, consumers.map {
+        GPUCorePrimitiveCoverageMaskGeometryConsumer(it.packetId, it.commandId, it.sourceOrder,
+            it.semanticAuthority.geometryAuthority, it.coverageMode, it.blendPlan, it.orderingToken, it.packetRole, it.geometry)
+    }, attachment)
+    return when (result) {
+        is CoverageMaskGeometryValidation.Refused -> CoverageMaskRequestValidation.Refused(result.code, result.message)
+        is CoverageMaskGeometryValidation.Accepted -> CoverageMaskRequestValidation.Accepted(result.producers,
+            result.consumers.zip(consumers).map { (geometry, consumer) -> geometry.bind(consumer.semanticAuthority) })
+    }
+}
+
+private fun validateCoverageMaskGeometry(
+    plan: GPUClipExecutionPlan.CoverageMask,
+    consumers: List<GPUCorePrimitiveCoverageMaskGeometryConsumer>,
+    attachment: GPUCorePrimitiveCoverageMaskAttachmentAuthority,
+): CoverageMaskGeometryValidation {
+    if (plan.depthStencilRequired) return geometryRequestRefused(
         "unsupported.prepared-core-primitive.coverage-mask.depth-stencil",
         "B3.3d accepts only the color-only coverage-mask route.",
     )
-    if (plan.sampleCount != 1 || attachment.sampleCount != 1) return requestRefused(
+    if (plan.sampleCount != 1 || attachment.sampleCount != 1) return geometryRequestRefused(
         "unsupported.prepared-core-primitive.coverage-mask.msaa",
         "B3.3d coverage masks are single-sample.",
     )
     if (attachment.format != GPUCorePrimitiveCoverageMaskAttachmentFormat.Rgba8Unorm) {
-        return requestRefused(
+        return geometryRequestRefused(
             "unsupported.prepared-core-primitive.coverage-mask.target-format",
             "B3.3d coverage masks require one RGBA8unorm color target.",
         )
     }
     val fullTarget = GPUPixelBounds(0, 0, attachment.width, attachment.height)
-    if (plan.bounds != fullTarget) return requestRefused(
+    if (plan.bounds != fullTarget) return geometryRequestRefused(
         "invalid.prepared-core-primitive.coverage-mask.full-target",
         "The coverage-mask allocation must exactly cover the logical target.",
     )
-    if (plan.consumer.sampling != GPUClipMaskSampling.Nearest) return requestRefused(
+    if (plan.consumer.sampling != GPUClipMaskSampling.Nearest) return geometryRequestRefused(
         "unsupported.prepared-core-primitive.coverage-mask.sampling",
         "B3.3d coverage-mask consumers require nearest sampling.",
     )
-    if (plan.producers.any { it.geometry is GPUClipExecutionGeometry.Path }) return requestRefused(
+    if (plan.producers.any { it.geometry is GPUClipExecutionGeometry.Path }) return geometryRequestRefused(
         "unsupported.prepared-core-primitive.coverage-mask.producer-path",
         "B3.3d coverage-mask producers accept only Rect and RRect geometry.",
     )
     if (plan.producers.any { it.geometry !is GPUClipExecutionGeometry.Rect &&
             it.geometry !is GPUClipExecutionGeometry.RRect
         }
-    ) return requestRefused(
+    ) return geometryRequestRefused(
         "unsupported.prepared-core-primitive.coverage-mask.producer-geometry",
         "B3.3d coverage-mask producer geometry is not supported.",
     )
-    if (plan.producers.any { it.antiAlias }) return requestRefused(
+    if (plan.producers.any { it.antiAlias }) return geometryRequestRefused(
         "unsupported.prepared-core-primitive.coverage-mask.anti-alias",
         "B3.3d coverage-mask producers are explicitly non-AA.",
     )
@@ -610,53 +721,53 @@ private fun GPUCorePrimitiveCoverageMaskPreparedRouteRequest.validate(): Coverag
         (producer.geometry as? GPUClipExecutionGeometry.RRect)?.coverageMaskProducerClassification()
     }
     if (CoverageMaskRRectProducerClassification.MixedZeroRefused in rrectClassifications) {
-        return requestRefused(
+        return geometryRequestRefused(
             "unsupported.prepared-core-primitive.coverage-mask.rrect-mixed-zero-radii",
             "B3.3d RRect producers require either eight zero radii or eight strictly positive radii.",
         )
     }
     if (CoverageMaskRRectProducerClassification.SubEpsilonRefused in rrectClassifications) {
-        return requestRefused(
+        return geometryRequestRefused(
             "unsupported.prepared-core-primitive.coverage-mask.rrect-sub-epsilon-radii",
             "B3.3d RRect producer radii must be zero or at least 0.0001.",
         )
     }
-    if (CoverageMaskRRectProducerClassification.OverHalfRefused in rrectClassifications) return requestRefused(
+    if (CoverageMaskRRectProducerClassification.OverHalfRefused in rrectClassifications) return geometryRequestRefused(
         "unsupported.prepared-core-primitive.coverage-mask.rrect-radii",
         "B3.3d RRect producer radii must not exceed half of their exact bounds.",
     )
     if (!plan.producers.zipWithNext().all { (left, right) -> left.sourceOrder < right.sourceOrder }) {
-        return requestRefused(
+        return geometryRequestRefused(
             "invalid.prepared-core-primitive.coverage-mask.ordering",
             "Coverage-mask producers must retain strict source order.",
         )
     }
-    if (consumers.size < 2) return requestRefused(
+    if (consumers.size < 2) return geometryRequestRefused(
         "unsupported.prepared-core-primitive.coverage-mask.consumer-count",
         "B3.3d requires at least two typed CorePrimitive consumers.",
     )
     if (consumers.map { it.packetId }.distinct().size != consumers.size ||
         consumers.map { it.commandId }.distinct().size != consumers.size ||
         !consumers.zipWithNext().all { (left, right) -> left.sourceOrder < right.sourceOrder }
-    ) return requestRefused(
+    ) return geometryRequestRefused(
         "invalid.prepared-core-primitive.coverage-mask.ordering",
         "Coverage-mask consumers must retain unique identities and strict source order.",
     )
-    if (consumers.any { it.orderingToken != plan.orderingToken }) return requestRefused(
+    if (consumers.any { it.orderingToken != plan.orderingToken }) return geometryRequestRefused(
         "invalid.prepared-core-primitive.coverage-mask.ordering-authority",
         "Every CorePrimitive consumer must retain the exact mask ordering token.",
     )
-    if (consumers.any { it.packetRole != GPUDrawPacketRole.Shading }) return requestRefused(
+    if (consumers.any { it.packetRole != GPUDrawPacketRole.Shading }) return geometryRequestRefused(
         "unsupported.prepared-core-primitive.coverage-mask.consumer-role",
         "B3.3d accepts only Shading CorePrimitive packets as mask consumers.",
     )
     val consumerGeometry = consumers.map { it.geometry.coverageMaskDirectSnapshotOrNull() }
-    if (consumerGeometry.any { it == null }) return requestRefused(
+    if (consumerGeometry.any { it == null }) return geometryRequestRefused(
         "unsupported.prepared-core-primitive.coverage-mask.consumer-geometry",
         "B3.3d accepts only Rect or non-inverse unstroked DirectTriangles consumers.",
     )
     if (consumers.any { it.coverageMode != GPUCorePrimitiveCoverageMode.FullOrScissor }) {
-        return requestRefused(
+        return geometryRequestRefused(
             "unsupported.prepared-core-primitive.coverage-mask.consumer-coverage",
             "AA and stencil consumer coverage remain outside B3.3d.",
         )
@@ -664,11 +775,11 @@ private fun GPUCorePrimitiveCoverageMaskPreparedRouteRequest.validate(): Coverag
     if (consumers.any {
             it.blendPlan.destinationReadRequirement != GPUBlendDestinationReadRequirement.None
         }
-    ) return requestRefused(
+    ) return geometryRequestRefused(
         "unsupported.prepared-core-primitive.coverage-mask.destination-read",
         "Destination-read blends cannot consume the single sampled coverage mask.",
     )
-    if (consumers.any { !it.blendPlan.isCanonicalPremulSrcOver() }) return requestRefused(
+    if (consumers.any { !it.blendPlan.isCanonicalPremulSrcOver() }) return geometryRequestRefused(
         "unsupported.prepared-core-primitive.coverage-mask.blend",
         "B3.3d consumers require the exact fixed-function premultiplied SrcOver blend.",
     )
@@ -683,11 +794,11 @@ private fun GPUCorePrimitiveCoverageMaskPreparedRouteRequest.validate(): Coverag
         )
     }
     val consumerSnapshots = consumers.zip(consumerGeometry).map { (consumer, geometry) ->
-        GPUCorePrimitiveCoverageMaskPreparedConsumerSnapshot(
+        GPUCorePrimitiveCoverageMaskGeometryConsumerSnapshot(
             packetId = consumer.packetId,
             commandId = consumer.commandId,
             sourceOrder = consumer.sourceOrder,
-            semanticAuthority = consumer.semanticAuthority,
+            geometryAuthority = consumer.geometryAuthority,
             packetRole = consumer.packetRole,
             geometry = requireNotNull(geometry),
             coverageMode = consumer.coverageMode,
@@ -698,7 +809,7 @@ private fun GPUCorePrimitiveCoverageMaskPreparedRouteRequest.validate(): Coverag
             ),
         )
     }
-    return CoverageMaskRequestValidation.Accepted(producerSnapshots, consumerSnapshots)
+    return CoverageMaskGeometryValidation.Accepted(producerSnapshots, consumerSnapshots)
 }
 
 private fun CoverageMaskRequestValidation.Accepted.toCandidate(
@@ -818,9 +929,6 @@ internal fun corePrimitiveCoverageMaskProducerRenderPipelineStructuralKey(
         },
         combine = producer.combine,
     )
-
-private fun requestRefused(code: String, message: String) =
-    CoverageMaskRequestValidation.Refused(code, message)
 
 private fun routeRefused(code: String, message: String) =
     GPUCorePrimitiveCoverageMaskPreparedRoute.Refused(code, message)

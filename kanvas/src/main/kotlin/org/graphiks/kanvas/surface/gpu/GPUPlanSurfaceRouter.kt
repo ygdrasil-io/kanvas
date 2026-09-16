@@ -65,11 +65,14 @@ internal class GPUPlanSurfaceRouter(
         }
         // The compatibility lowerers below this continuation still own excluded
         // formats/effects in unpromoted mixtures. They never receive an owned plan.
-        if (!GPUPlanSurfaceCandidateGate.accepts(operations, config)) return legacy()
-        val imageOwned = GPUPlanSurfaceCandidateGate.ownsW5eImages(operations)
+        val planningOperations = operations.map { operation ->
+            (operation as? DisplayOp.DrawPoints)?.w5hStrokePathOrNull() ?: operation
+        }
+        if (!GPUPlanSurfaceCandidateGate.accepts(planningOperations, config)) return legacy()
+        val imageOwned = GPUPlanSurfaceCandidateGate.ownsW5eImages(planningOperations)
 
         val extent = SceneExtent(width, height)
-        val scene = when (val captured = capturePort.capture(operations, extent, ColorSpace.SRGB, captureLimits)) {
+        val scene = when (val captured = capturePort.capture(planningOperations, extent, ColorSpace.SRGB, captureLimits)) {
             is SceneCaptureResult.Captured -> captured.scene
             is SceneCaptureResult.Invalid -> {
                 if (!imageOwned && captured.diagnostics.isNotEmpty() &&

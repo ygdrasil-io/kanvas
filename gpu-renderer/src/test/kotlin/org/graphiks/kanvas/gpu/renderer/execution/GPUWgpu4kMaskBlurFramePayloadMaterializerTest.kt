@@ -299,6 +299,10 @@ class GPUWgpu4kMaskBlurFramePayloadMaterializerTest {
             assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(
                 materializer.materializeReusable(
                     fixture.plan,
+                    when (val preflight = preflightW5hFrameSourcesV1(fixture.plan)) {
+                        is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                        is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+                    },
                     fixture.encoderPlan,
                     fixture.resources,
                     fixture.generationSeal,
@@ -307,6 +311,10 @@ class GPUWgpu4kMaskBlurFramePayloadMaterializerTest {
             val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
                 materializer.materializeReusable(
                     fixture.plan,
+                    when (val preflight = preflightW5hFrameSourcesV1(fixture.plan)) {
+                        is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                        is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+                    },
                     fixture.encoderPlan,
                     fixture.resources,
                     fixture.generationSeal,
@@ -1149,6 +1157,10 @@ class GPUWgpu4kMaskBlurFramePayloadMaterializerTest {
             val materializer = materializer()
             return materializer.materializeReusable(
                 input.plan,
+                when (val preflight = preflightW5hFrameSourcesV1(input.plan)) {
+                    is W5hFrameSourcePreflightResultV1.Validated -> preflight.witness
+                    is W5hFrameSourcePreflightResultV1.Refused -> error(preflight.diagnostics.toString())
+                },
                 input.encoderPlan,
                 input.resources,
                 input.generationSeal,

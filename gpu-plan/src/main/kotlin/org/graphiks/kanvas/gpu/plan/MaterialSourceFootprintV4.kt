@@ -7,9 +7,17 @@ public class MaterialSourceFootprintV4 internal constructor(internal val table: 
     public val uniformByteCountI64: Long = Math.multiplyExact(proof.uniformWordCountI64,4L)
     public val sourceUniformByteCountI64: Long = Math.multiplyExact(proof.sourceUniformWordCountI64,4L)
     public val storageByteCountI64: Long = Math.addExact(proof.gradientStopSlab?.byteSizeI64 ?: 0L,
-        proof.noiseTableSlab?.byteCountI64 ?: 0L)
+        Math.addExact(proof.noiseTableSlab?.byteCountI64 ?: 0L,proof.runtimeResources.map { it.cacheRequest }
+            .filterIsInstance<PlanCacheResourceRequest.Storage>().distinct()
+            .fold(0L) { bytes,request -> Math.addExact(bytes,request.byteSizeI64) }))
     public val bindingCountI32: Int = proof.composedBindingLayout?.resources?.size?.let { Math.addExact(1,it) }
         ?: ((if (storageByteCountI64 == 0L) 1 else 2) + (if (proof.imageExecution == null) 0 else 1))
+    public val runtimeStorageBytesI64: Long = proof.runtimeResources.map { it.cacheRequest }.filterIsInstance<PlanCacheResourceRequest.Storage>()
+        .distinct().fold(0L) { bytes,request -> Math.addExact(bytes,request.byteSizeI64) }
+    public val runtimeTextureBytesI64: Long = proof.runtimeResources.map { it.cacheRequest }.filterIsInstance<PlanCacheResourceRequest.Texture>()
+        .distinct().fold(0L) { bytes,request -> Math.addExact(bytes,request.byteSizeI64) }
+    public val runtimeSamplerEntriesI32: Int = proof.runtimeResources.map { it.cacheRequest }.filterIsInstance<PlanCacheResourceRequest.Sampler>().distinct().size
+    public val runtimeLeaseCountI32: Int = proof.runtimeResources.size
     internal fun authenticates(): Boolean = table.colorSourceProofV4(root) === proof && proof.authenticates(table,root,proof.coordinates)
 }
 

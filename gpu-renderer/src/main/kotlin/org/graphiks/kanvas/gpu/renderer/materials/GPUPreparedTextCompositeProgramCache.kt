@@ -82,7 +82,7 @@ class GPUPreparedTextCompositeProgramCache(
                 destinationBlend,
             )
         val key = structuralKey(
-            authenticated.composableFragment,
+            if (authenticated.commonSource == null) authenticated.composableFragment else null,
             targetFormatClass,
             blendPlanIdentity,
             fixedFunctionBlendState,
@@ -164,15 +164,15 @@ class GPUPreparedTextCompositeProgramCache(
         )
 
     private fun structuralKey(
-        fragment: GPUPreparedMaterialFragment,
+        fragment: GPUPreparedMaterialFragment?,
         targetFormatClass: String,
         blendPlanIdentity: String,
         fixedFunctionBlendState: GPUFixedFunctionBlendState?,
         sourceCoverageEncoding: GPUSourceCoverageEncoding,
         clipVariant: GPUPreparedTextClipVariant,
     ): StructuralKey = StructuralKey(
-        fragmentHash = fragment.fragmentHash,
-        fragmentAbiHash = fragment.abiHash,
+        fragmentHash = fragment?.fragmentHash ?: "prepared-text-geometry-v6",
+        fragmentAbiHash = fragment?.abiHash ?: "prepared-text-group0-uniform-atlas-v6",
         vertexAbi = PreparedTextA8Shader.VertexLayout.canonicalCacheIdentity(),
         targetFormatClass = targetFormatClass,
         blendPlanIdentity = blendPlanIdentity,

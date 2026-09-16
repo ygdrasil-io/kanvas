@@ -70,10 +70,12 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
     @Synchronized
     override fun materializeReusable(
         framePlan: GPUFramePlan,
+        sourceWitness: W5hFrameSourceValidationWitnessV1,
         encoderPlan: GPUCommandEncoderPlan,
         resources: GPUPreparedResourceSet,
         generationSeal: GPUPreparedGenerationSeal,
     ): GPUPreparedNativeFramePayloadMaterialization {
+        require(sourceWitness.authenticates(framePlan)) { "W5h source witness belongs to another frame root" }
         if (closed || consumed) {
             return refused(
                 "unsupported.prepared-surface.materializer-state",
@@ -1145,6 +1147,14 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                     GPUPreparedNativeScopeKey::operandKeys,
                 ),
                 auxiliaryOwnedHandles = buildList {
+                    verticesDestinationNativeResources.values.filter { it.plan.packet.w5aSourceStageV2 != null }.forEach {
+                        add(GPUPreparedNativeAuxiliaryHandle(GPUW5bPreparedDestinationNativeV6(it.plan.copyStep, it.view),
+                            GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion))
+                    }
+                    textDestinationNativeResources.values.filter { it.plan.packet.w5aSourceStageV2 != null }.forEach {
+                        add(GPUPreparedNativeAuxiliaryHandle(GPUW5bPreparedDestinationNativeV6(it.plan.copyStep, it.view),
+                            GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion))
+                    }
                     coreDestination?.let { snapshot ->
                         add(GPUPreparedNativeAuxiliaryHandle(snapshot, GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion))
                     }

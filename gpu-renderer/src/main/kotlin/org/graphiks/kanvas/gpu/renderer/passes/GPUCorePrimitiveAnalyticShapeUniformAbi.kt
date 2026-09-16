@@ -4,6 +4,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryUniformBytes
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectGeometryAuthority
@@ -43,40 +44,79 @@ internal fun buildCorePrimitiveAnalyticShapeUniform(
     semantic: GPUDrawSemanticPayload.CorePrimitive,
     semanticAuthority: GPUCorePrimitivePreparedSemanticAuthority,
 ): GPUCorePrimitiveAnalyticShapeUniformBuildResult {
-    fun refused(code: String, message: String) =
-        GPUCorePrimitiveAnalyticShapeUniformBuildResult.Refused(code, message)
-
-    if (!semanticAuthority.matches(semantic)) {
-        return refused(
-            "invalid.native-core-primitive.analytic-shape.semantic-authority",
-            "Analytic shape uniform construction requires the exact prepared semantic object.",
-        )
+    if (!semanticAuthority.matches(semantic)) return GPUCorePrimitiveAnalyticShapeUniformBuildResult.Refused(
+        "invalid.native-core-primitive.analytic-shape.semantic-authority",
+        "Analytic shape uniform construction requires the exact prepared semantic object.",
+    )
+    return when (val geometry = buildCorePrimitiveAnalyticShapeGeometryUniform(semanticAuthority.geometryAuthority)) {
+        is GPUCorePrimitiveAnalyticShapeGeometryUniformBuildResult.Refused ->
+            GPUCorePrimitiveAnalyticShapeUniformBuildResult.Refused(geometry.code, geometry.message)
+        is GPUCorePrimitiveAnalyticShapeGeometryUniformBuildResult.Accepted -> try {
+            GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted(geometry.bytes.bindSourceColor(semantic.premultipliedRgba))
+        } catch (_: IllegalArgumentException) {
+            GPUCorePrimitiveAnalyticShapeUniformBuildResult.Refused(
+                "invalid.native-core-primitive.analytic-shape.semantic",
+                "Analytic shape semantic values do not satisfy the uniform80 ABI.",
+            )
+        }
     }
+}
 
-    val commandId = semantic.payloadRef.commandIdValue
-    val geometry = semantic.geometry
+internal sealed interface GPUCorePrimitiveAnalyticShapeGeometryUniformBuildResult {
+    data class Accepted(val bytes: GPUCorePrimitiveGeometryUniformBytes) : GPUCorePrimitiveAnalyticShapeGeometryUniformBuildResult
+    data class Refused(val code: String, val message: String) : GPUCorePrimitiveAnalyticShapeGeometryUniformBuildResult
+}
+
+internal fun buildCorePrimitiveAnalyticShapeGeometryUniform(
+    authority: GPUCorePrimitiveGeometryAuthority,
+): GPUCorePrimitiveAnalyticShapeGeometryUniformBuildResult = buildCorePrimitiveAnalyticShapeGeometryUniform(
+    authority.snapshot,
+    validateRecordedIdentity = { family ->
+        val (recordPrefix, commandFamily) = when (family) {
+            GPUCorePrimitiveSourceFamily.Rect -> "analysis.fill_rect." to "FillRect"
+            GPUCorePrimitiveSourceFamily.RRect -> "analysis.fill_rrect." to "FillRRect"
+            GPUCorePrimitiveSourceFamily.DRRect -> "analysis.fill_drrect." to "FillDRRect"
+            else -> error("Non-analytic geometry cannot request an analytic recording identity")
+        }
+        authority.analysisRecordId == "$recordPrefix${authority.commandIdI32}" &&
+            authority.analysisCommandFamily == commandFamily
+    },
+)
+
+/** Packing from the already-admitted occurrence snapshot does not require a numeric identity. */
+internal fun buildCorePrimitiveAnalyticShapeGeometryUniform(
+    snapshot: GPUCorePrimitiveGeometrySnapshot,
+): GPUCorePrimitiveAnalyticShapeGeometryUniformBuildResult =
+    buildCorePrimitiveAnalyticShapeGeometryUniform(snapshot, validateRecordedIdentity = null)
+
+private fun buildCorePrimitiveAnalyticShapeGeometryUniform(
+    authority: GPUCorePrimitiveGeometrySnapshot,
+    validateRecordedIdentity: ((GPUCorePrimitiveSourceFamily) -> Boolean)?,
+): GPUCorePrimitiveAnalyticShapeGeometryUniformBuildResult {
+    fun refused(code: String, message: String) =
+        GPUCorePrimitiveAnalyticShapeGeometryUniformBuildResult.Refused(code, message)
+
+    val geometry = authority.geometry
     val signedBounds: List<Float>
     val signedRadii: List<Float>
     var innerBounds: List<Float>? = null
     var innerRadii: List<Float>? = null
-    when (semantic.sourceFamily) {
+    when (authority.sourceFamily) {
         GPUCorePrimitiveSourceFamily.Rect -> {
             val rect = geometry as? GPUCorePrimitiveGeometry.Rect ?: return refused(
                 "invalid.native-core-primitive.analytic-shape.source",
                 "Analytic Rect uniform construction requires Rect source and device geometry.",
             )
-            if (semantic.analysisRecordId != "analysis.fill_rect.$commandId" ||
-                semantic.analysisCommandFamily != "FillRect"
-            ) {
+            if (validateRecordedIdentity?.invoke(authority.sourceFamily) == false) {
                 return refused(
                     "invalid.native-core-primitive.analytic-shape.source",
                     "Analytic Rect uniform construction requires exact FillRect analysis identity.",
                 )
             }
-            val rectAuthority = semantic.rectGeometryAuthority
-            if (semantic.rectRouteAuthority != GPUCorePrimitiveRectRouteAuthority.RectAxisAligned ||
+            val rectAuthority = authority.rectGeometryAuthority
+            if (authority.rectRouteAuthority != GPUCorePrimitiveRectRouteAuthority.RectAxisAligned ||
                 rectAuthority == null ||
-                semantic.rrectGeometryAuthority != null ||
+                authority.rrectGeometryAuthority != null ||
                 !GPUCorePrimitiveRectGeometryAuthority.hasExactAxisAlignedDeviceGeometry(
                     rectAuthority,
                     rect,
@@ -95,17 +135,15 @@ internal fun buildCorePrimitiveAnalyticShapeUniform(
                 "invalid.native-core-primitive.analytic-shape.source",
                 "Analytic RRect uniform construction requires RRect source and device geometry.",
             )
-            if (semantic.analysisRecordId != "analysis.fill_rrect.$commandId" ||
-                semantic.analysisCommandFamily != "FillRRect"
-            ) {
+            if (validateRecordedIdentity?.invoke(authority.sourceFamily) == false) {
                 return refused(
                     "invalid.native-core-primitive.analytic-shape.source",
                     "Analytic RRect uniform construction requires exact FillRRect analysis identity.",
                 )
             }
-            val rrectAuthority = semantic.rrectGeometryAuthority
-            if (semantic.rectRouteAuthority != null ||
-                semantic.rectGeometryAuthority != null ||
+            val rrectAuthority = authority.rrectGeometryAuthority
+            if (authority.rectRouteAuthority != null ||
+                authority.rectGeometryAuthority != null ||
                 rrectAuthority == null ||
                 !GPUCorePrimitiveRRectGeometryAuthority.hasExactDeviceGeometry(rrectAuthority, rrect)
             ) {
@@ -123,10 +161,9 @@ internal fun buildCorePrimitiveAnalyticShapeUniform(
                 "invalid.native-core-primitive.analytic-drrect.source",
                 "Analytic DRRect uniform construction requires typed DRRect device geometry.",
             )
-            val outerAuthority = semantic.drrectOuterGeometryAuthority
-            val innerAuthority = semantic.drrectInnerGeometryAuthority
-            if (semantic.analysisRecordId != "analysis.fill_drrect.$commandId" ||
-                semantic.analysisCommandFamily != "FillDRRect" ||
+            val outerAuthority = authority.drrectOuterGeometryAuthority
+            val innerAuthority = authority.drrectInnerGeometryAuthority
+            if (validateRecordedIdentity?.invoke(authority.sourceFamily) == false ||
                 outerAuthority == null || innerAuthority == null ||
                 !GPUCorePrimitiveRRectGeometryAuthority.hasExactDeviceGeometry(
                     outerAuthority,
@@ -153,7 +190,7 @@ internal fun buildCorePrimitiveAnalyticShapeUniform(
         )
     }
 
-    val antiAlias = when (semantic.coverageMode) {
+    val antiAlias = when (authority.coverageMode) {
         GPUCorePrimitiveCoverageMode.FullOrScissor -> false
         GPUCorePrimitiveCoverageMode.ScalarAA -> true
         GPUCorePrimitiveCoverageMode.Stencil1x,
@@ -164,25 +201,23 @@ internal fun buildCorePrimitiveAnalyticShapeUniform(
         )
     }
 
-    if (semantic.targetBounds.left != 0 || semantic.targetBounds.top != 0) {
+    if (authority.targetBounds.left != 0 || authority.targetBounds.top != 0) {
         return refused(
             "invalid.native-core-primitive.analytic-shape.semantic",
             "Analytic shape uniform construction requires a zero-origin target.",
         )
     }
     val bytes = try {
-        GPUCorePrimitiveAnalyticShapeUniformBlock(
-            targetWidth = semantic.targetBounds.width.toFloat(),
-            targetHeight = semantic.targetBounds.height.toFloat(),
+        GPUCorePrimitiveAnalyticShapeGeometryUniformBlock(
+            targetWidth = authority.targetBounds.width.toFloat(),
+            targetHeight = authority.targetBounds.height.toFloat(),
             antiAlias = antiAlias,
-            premultipliedRgba = semantic.premultipliedRgba,
             deviceBounds = signedBounds,
             normalizedRadii = signedRadii,
         ).let { outer ->
-            if (innerBounds == null) outer.packedBytes() else drrectUniformBytes(
-                targetWidth = semantic.targetBounds.width.toFloat(),
-                targetHeight = semantic.targetBounds.height.toFloat(),
-                premultipliedRgba = semantic.premultipliedRgba,
+            if (innerBounds == null) outer.packedGeometry() else drrectGeometryUniformBytes(
+                targetWidth = authority.targetBounds.width.toFloat(),
+                targetHeight = authority.targetBounds.height.toFloat(),
                 outerBounds = signedBounds,
                 outerRadii = signedRadii,
                 innerBounds = requireNotNull(innerBounds),
@@ -195,7 +230,7 @@ internal fun buildCorePrimitiveAnalyticShapeUniform(
             "Analytic shape semantic values do not satisfy the uniform80 ABI.",
         )
     }
-    return GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted(bytes)
+    return GPUCorePrimitiveAnalyticShapeGeometryUniformBuildResult.Accepted(bytes)
 }
 
 private fun GPUCorePrimitiveGeometry.DRRect.rrectGeometry(outer: Boolean): GPUCorePrimitiveGeometry.RRect {
@@ -258,25 +293,26 @@ internal fun buildCorePrimitiveGradientAnalyticShapeUniform(
     return GPUCorePrimitiveGradientAnalyticShapeUniformBuildResult.Accepted(bytes)
 }
 
-private fun drrectUniformBytes(
+private fun drrectGeometryUniformBytes(
     targetWidth: Float,
     targetHeight: Float,
-    premultipliedRgba: List<Float>,
     outerBounds: List<Float>,
     outerRadii: List<Float>,
     innerBounds: List<Float>,
     innerRadii: List<Float>,
-): ByteArray {
+): GPUCorePrimitiveGeometryUniformBytes {
     require(outerBounds.size == 4 && innerBounds.size == 4 && outerRadii.size == 8 && innerRadii.size == 8)
     require(outerBounds.all(Float::isFinite) && innerBounds.all(Float::isFinite) &&
         outerRadii.all { it.isFinite() && it >= 0f } && innerRadii.all { it.isFinite() && it >= 0f }
     )
-    return ByteBuffer.allocate(CORE_PRIMITIVE_ANALYTIC_DRRECT_UNIFORM_BYTES).order(ByteOrder.LITTLE_ENDIAN).apply {
+    val header = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN).apply {
         putFloat(targetWidth); putFloat(targetHeight); putInt(0); putInt(0)
-        premultipliedRgba.forEach(::putFloat)
+    }.array()
+    val geometry = ByteBuffer.allocate(96).order(ByteOrder.LITTLE_ENDIAN).apply {
         outerBounds.forEach(::putFloat); outerRadii.forEach(::putFloat)
         innerBounds.forEach(::putFloat); innerRadii.forEach(::putFloat)
     }.array()
+    return GPUCorePrimitiveGeometryUniformBytes(header, geometry)
 }
 
 /**
@@ -287,21 +323,30 @@ private fun drrectUniformBytes(
  * block only from sealed semantic and normalized-geometry authority.
  */
 internal class GPUCorePrimitiveAnalyticShapeUniformBlock(
-    private val targetWidth: Float,
-    private val targetHeight: Float,
-    private val antiAlias: Boolean,
+    targetWidth: Float,
+    targetHeight: Float,
+    antiAlias: Boolean,
     premultipliedRgba: List<Float>,
     deviceBounds: List<Float>,
     normalizedRadii: List<Float>,
 ) {
-    private val premultipliedRgbaSnapshot = premultipliedRgba.toList()
+    private val color = premultipliedRgba.toList()
+    private val geometry = GPUCorePrimitiveAnalyticShapeGeometryUniformBlock(
+        targetWidth, targetHeight, antiAlias, deviceBounds, normalizedRadii).packedGeometry()
+    fun packedBytes(): ByteArray = geometry.bindSourceColor(color)
+}
+
+internal class GPUCorePrimitiveAnalyticShapeGeometryUniformBlock(
+    private val targetWidth: Float,
+    private val targetHeight: Float,
+    private val antiAlias: Boolean,
+    deviceBounds: List<Float>,
+    normalizedRadii: List<Float>,
+) {
     private val deviceBoundsSnapshot = deviceBounds.toList()
     private val normalizedRadiiSnapshot = normalizedRadii.toList()
 
     init {
-        require(premultipliedRgbaSnapshot.size == 4) {
-            "Analytic shape premultiplied RGBA must contain four components"
-        }
         require(deviceBoundsSnapshot.size == 4) {
             "Analytic shape device bounds must contain left, top, right, bottom"
         }
@@ -310,16 +355,6 @@ internal class GPUCorePrimitiveAnalyticShapeUniformBlock(
         }
         require(targetWidth.isFinite() && targetWidth > 0f && targetHeight.isFinite() && targetHeight > 0f) {
             "Analytic shape target dimensions must be finite and positive"
-        }
-        require(premultipliedRgbaSnapshot.all(Float::isFinite)) {
-            "Analytic shape premultiplied RGBA must be finite"
-        }
-        require(premultipliedRgbaSnapshot.all { it in 0f..1f }) {
-            "Analytic shape premultiplied RGBA must remain in [0, 1]"
-        }
-        val alpha = premultipliedRgbaSnapshot[3]
-        require(premultipliedRgbaSnapshot.take(3).all { it <= alpha }) {
-            "Analytic shape RGB must be premultiplied by alpha"
         }
         require(deviceBoundsSnapshot.all(Float::isFinite)) {
             "Analytic shape device bounds must be finite"
@@ -352,17 +387,17 @@ internal class GPUCorePrimitiveAnalyticShapeUniformBlock(
         }
     }
 
-    fun packedBytes(): ByteArray =
-        ByteBuffer.allocate(CORE_PRIMITIVE_ANALYTIC_SHAPE_UNIFORM_BYTES)
-            .order(ByteOrder.LITTLE_ENDIAN)
-            .apply {
-                putFloat(targetWidth)
-                putFloat(targetHeight)
-                putInt(if (antiAlias) 1 else 0)
-                putInt(0)
-                premultipliedRgbaSnapshot.forEach(::putFloat)
-                deviceBoundsSnapshot.forEach(::putFloat)
-                normalizedRadiiSnapshot.forEach(::putFloat)
-            }
-            .array()
+    fun packedGeometry(): GPUCorePrimitiveGeometryUniformBytes {
+        val header = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN).apply {
+            putFloat(targetWidth)
+            putFloat(targetHeight)
+            putInt(if (antiAlias) 1 else 0)
+            putInt(0)
+        }.array()
+        val geometry = ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN).apply {
+            deviceBoundsSnapshot.forEach(::putFloat)
+            normalizedRadiiSnapshot.forEach(::putFloat)
+        }.array()
+        return GPUCorePrimitiveGeometryUniformBytes(header, geometry)
+    }
 }

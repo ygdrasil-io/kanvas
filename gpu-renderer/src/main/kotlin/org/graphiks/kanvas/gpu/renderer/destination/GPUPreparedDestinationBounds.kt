@@ -4,6 +4,8 @@ import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveGeometryAuthority
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveGeometrySnapshot
 
 /** Exact conservative projection of already-admitted prepared geometry; no geometry is rebuilt. */
 internal fun GPUDrawSemanticPayload.preparedDestinationBounds(target: GPUPixelBounds): GPUPixelBounds {
@@ -15,44 +17,72 @@ internal fun GPUDrawSemanticPayload.preparedDestinationBounds(target: GPUPixelBo
     }
     val bounds = when (this) {
         is GPUDrawSemanticPayload.Vertices -> conservativeDrawBounds ?: target
-        is GPUDrawSemanticPayload.CorePrimitive -> {
-            // Mixed W5b admits only the retained hard-edge geometry domain here.
-            // An unpromoted scalar-AA geometry lacks that proof and keeps full target.
-            if (coverageMode !in setOf(GPUCorePrimitiveCoverageMode.FullOrScissor,
-                    GPUCorePrimitiveCoverageMode.Stencil1x)) target
-            else when (val geometry = geometry) {
-                is GPUCorePrimitiveGeometry.TriangulatedPath ->
-                    if (geometry.inverseFill) scissorBounds else geometry.coverBounds
-                else -> {
-                    val edges = when (geometry) {
-                        is GPUCorePrimitiveGeometry.Rect -> listOf(geometry.left, geometry.top, geometry.right, geometry.bottom)
-                        is GPUCorePrimitiveGeometry.RRect -> listOf(geometry.left, geometry.top, geometry.right, geometry.bottom)
-                        is GPUCorePrimitiveGeometry.DRRect -> geometry.outerBounds
-                        else -> error("Unreachable retained geometry")
-                    }
-                    GPUPixelBounds(
-                        kotlin.math.floor(edges[0].toDouble()).coerceIn(target.left.toDouble(), target.right.toDouble()).toInt(),
-                        kotlin.math.floor(edges[1].toDouble()).coerceIn(target.top.toDouble(), target.bottom.toDouble()).toInt(),
-                        kotlin.math.ceil(edges[2].toDouble()).coerceIn(target.left.toDouble(), target.right.toDouble()).toInt(),
-                        kotlin.math.ceil(edges[3].toDouble()).coerceIn(target.top.toDouble(), target.bottom.toDouble()).toInt())
-                }
-            }
-        }
-        is GPUDrawSemanticPayload.TextA8 -> {
-            val quads = instances.map { it.deviceQuad }
-            require(quads.isNotEmpty() && quads.all { it.size == 8 && it.all(Float::isFinite) })
-            val xs = quads.flatMap { listOf(it[0], it[2], it[4], it[6]) }
-            val ys = quads.flatMap { listOf(it[1], it[3], it[5], it[7]) }
-            GPUPixelBounds(
-                kotlin.math.floor(xs.min().toDouble()).coerceIn(target.left.toDouble(), target.right.toDouble()).toInt(),
-                kotlin.math.floor(ys.min().toDouble()).coerceIn(target.top.toDouble(), target.bottom.toDouble()).toInt(),
-                kotlin.math.ceil(xs.max().toDouble()).coerceIn(target.left.toDouble(), target.right.toDouble()).toInt(),
-                kotlin.math.ceil(ys.max().toDouble()).coerceIn(target.top.toDouble(), target.bottom.toDouble()).toInt())
-        }
+        is GPUDrawSemanticPayload.CorePrimitive -> coreDestinationBounds(geometry, coverageMode, scissorBounds, target)
+        is GPUDrawSemanticPayload.TextA8 -> preparedTextDestinationBounds(instances, target)
         else -> target
     }
-    return GPUPixelBounds(maxOf(target.left, clip.left, bounds.left), maxOf(target.top, clip.top, bounds.top),
-        minOf(target.right, clip.right, bounds.right), minOf(target.bottom, clip.bottom, bounds.bottom)).also {
-        require(!it.isEmpty) { "Prepared destination consumer has no visible bounds" }
+    return preparedDestinationIntersection(bounds, clip, target)
+}
+
+internal fun GPUCorePrimitiveGeometryAuthority.preparedDestinationBounds(target: GPUPixelBounds): GPUPixelBounds =
+    snapshot.preparedDestinationBounds(target)
+
+internal fun GPUCorePrimitiveGeometrySnapshot.preparedDestinationBounds(target: GPUPixelBounds): GPUPixelBounds =
+    requireNotNull(preparedDestinationBoundsOrNull(target)) { "Prepared destination consumer has no visible bounds" }
+
+/** Host-only visibility projection; an empty result cannot become an executable consumer. */
+internal fun GPUCorePrimitiveGeometrySnapshot.preparedDestinationBoundsOrNull(target: GPUPixelBounds): GPUPixelBounds? =
+    preparedDestinationIntersectionOrNull(coreDestinationBounds(geometry, coverageMode, scissorBounds, target), scissorBounds, target)
+
+/** One bounds owner for pre-publication geometry and its post-bind semantic. */
+private fun coreDestinationBounds(geometry: GPUCorePrimitiveGeometry, coverageMode: GPUCorePrimitiveCoverageMode,
+    scissorBounds: GPUPixelBounds, target: GPUPixelBounds): GPUPixelBounds {
+    // An unpromoted scalar-AA geometry lacks a bounded hard-edge proof and keeps full target.
+    if (coverageMode !in setOf(GPUCorePrimitiveCoverageMode.FullOrScissor, GPUCorePrimitiveCoverageMode.Stencil1x)) return target
+    return when (geometry) {
+        is GPUCorePrimitiveGeometry.TriangulatedPath -> if (geometry.inverseFill) scissorBounds else geometry.coverBounds
+        else -> {
+            val edges = when (geometry) {
+                is GPUCorePrimitiveGeometry.Rect -> listOf(geometry.left, geometry.top, geometry.right, geometry.bottom)
+                is GPUCorePrimitiveGeometry.RRect -> listOf(geometry.left, geometry.top, geometry.right, geometry.bottom)
+                is GPUCorePrimitiveGeometry.DRRect -> geometry.outerBounds
+                else -> error("Unreachable retained geometry")
+            }
+            GPUPixelBounds(
+                kotlin.math.floor(edges[0].toDouble()).coerceIn(target.left.toDouble(), target.right.toDouble()).toInt(),
+                kotlin.math.floor(edges[1].toDouble()).coerceIn(target.top.toDouble(), target.bottom.toDouble()).toInt(),
+                kotlin.math.ceil(edges[2].toDouble()).coerceIn(target.left.toDouble(), target.right.toDouble()).toInt(),
+                kotlin.math.ceil(edges[3].toDouble()).coerceIn(target.top.toDouble(), target.bottom.toDouble()).toInt())
+        }
     }
+}
+
+/** Existing Text coverage bounds, usable by the material-free inventory as well. */
+fun preparedTextDestinationBounds(instances: List<org.graphiks.kanvas.glyph.gpu.GPUTextA8Instance>,
+    target: GPUPixelBounds): GPUPixelBounds {
+    val quads = instances.map { it.deviceQuad }
+    require(quads.isNotEmpty() && quads.all { it.size == 8 && it.all(Float::isFinite) })
+    val xs = quads.flatMap { listOf(it[0], it[2], it[4], it[6]) }
+    val ys = quads.flatMap { listOf(it[1], it[3], it[5], it[7]) }
+    return GPUPixelBounds(
+        kotlin.math.floor(xs.min().toDouble()).coerceIn(target.left.toDouble(), target.right.toDouble()).toInt(),
+        kotlin.math.floor(ys.min().toDouble()).coerceIn(target.top.toDouble(), target.bottom.toDouble()).toInt(),
+        kotlin.math.ceil(xs.max().toDouble()).coerceIn(target.left.toDouble(), target.right.toDouble()).toInt(),
+        kotlin.math.ceil(ys.max().toDouble()).coerceIn(target.top.toDouble(), target.bottom.toDouble()).toInt())
+}
+
+/** One intersection owner for all already-admitted prepared destination consumers. */
+fun preparedDestinationIntersection(bounds: GPUPixelBounds, clip: GPUPixelBounds,
+    target: GPUPixelBounds): GPUPixelBounds =
+    requireNotNull(preparedDestinationIntersectionOrNull(bounds, clip, target)) {
+        "Prepared destination consumer has no visible bounds"
+    }
+
+private fun preparedDestinationIntersectionOrNull(bounds: GPUPixelBounds, clip: GPUPixelBounds,
+    target: GPUPixelBounds): GPUPixelBounds? {
+    val left = maxOf(target.left, clip.left, bounds.left)
+    val top = maxOf(target.top, clip.top, bounds.top)
+    val right = minOf(target.right, clip.right, bounds.right)
+    val bottom = minOf(target.bottom, clip.bottom, bounds.bottom)
+    return if (right <= left || bottom <= top) null else GPUPixelBounds(left, top, right, bottom)
 }

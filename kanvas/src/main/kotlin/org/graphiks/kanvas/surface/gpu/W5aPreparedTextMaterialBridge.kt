@@ -23,8 +23,10 @@ internal class W5aPreparedTextMaterialBridge private constructor(
     private val candidatesByOperationIndex: Map<Int, DisplayOp.DrawText>,
     private val width: Int,
     private val height: Int,
+    private val common: Map<Int, GPUPreparedTextMaterialPlan> = emptyMap(),
 ) {
     fun materialFor(operationIndex: Int): GPUPreparedTextMaterialPlan? {
+        if (common.isNotEmpty()) return common[operationIndex]
         val operation = candidatesByOperationIndex[operationIndex] ?: return null
         // Scene capture is an optional W5a admission step. Invalid/non-finite inputs must
         // continue to prepared-text validation so its typed diagnostic is preserved rather
@@ -47,6 +49,8 @@ internal class W5aPreparedTextMaterialBridge private constructor(
     }
 
     internal companion object {
+        fun common(plans: Map<Int, GPUPreparedTextMaterialPlan>): W5aPreparedTextMaterialBridge =
+            W5aPreparedTextMaterialBridge(emptyMap(), 0, 0, plans.toMap())
         fun capture(
             operations: List<DisplayOp>,
             width: Int,

@@ -22,10 +22,12 @@ internal class GPUWgpu4kColorGlyphFramePayloadMaterializer(
     @Synchronized
     override fun materializeReusable(
         framePlan: GPUFramePlan,
+        sourceWitness: W5hFrameSourceValidationWitnessV1,
         encoderPlan: GPUCommandEncoderPlan,
         resources: GPUPreparedResourceSet,
         generationSeal: GPUPreparedGenerationSeal,
     ): GPUPreparedNativeFramePayloadMaterialization {
+        require(sourceWitness.authenticates(framePlan)) { "W5h source witness belongs to another frame root" }
         if (consumed) {
             return GPUPreparedNativeFramePayloadMaterialization.Refused(
                 "unsupported.native-color-glyph.materializer-state",
