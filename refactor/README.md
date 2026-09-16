@@ -45,6 +45,7 @@ Epoch 7 ciblée : 8/9 PASS en 27 s ; compositions6/6, Stroke/recovery et mixed R
 - [Clôture W4d–W4e — strokes, transforms/AA et clips complexes](specs/2026-09-06-w4-remaining-geometry-coverage-design.md)
 - [Material graph W5 — Solid/Opacity](specs/2026-09-09-w5-material-graph-design.md)
 - [W5e — autorité commune des images décodées](specs/2026-09-12-w5e-decoded-images-design.md)
+- [W6 — layers et effets spatiaux](specs/2026-09-16-w6-layers-effects-design.md)
 
 ### Plans
 
@@ -233,7 +234,7 @@ et gates finales obligatoires, aucun nativeGREEN, ISO, push/PR W5g ou clôture g
 | W3 | `gpu-plan` et premier `RenderGraph` | Capability rectangles solides/clip simple/`SrcOver` branchée et prouvée par pixels exacts ; baseline globale conservée (51 échecs connus, 0 erreur) |
 | W4 | Geometry/coverage | W4a ScalarAA Rect, W4b RRect analytique, W4c fills hard-edge et W4d.1 strokes/hairlines hard-edge sont atteints. W4d.2 ajoute les transforms F64 `Identity`/`AxisAlignedAffine`/`GeneralAffine`/`Perspective`, le graph AA4/resolve scellé et la lane hard générale prouvée byte-exact à travers `Surface`. W4e fournit hard mask 1×, inverse/D24S8 et oracle/matrice `Surface`; Task 9-fix1 clôt les 18 deltas frais, Task 9-fix2 élimine le fallback d'usages couleur implicite, et le correctif final post-revue couvre les consumers Rect/RRect/Path, les entrées/copies bornées et les buffers V/I/U scellés. `final-fix3` conserve ses preuves publiques de mutation/ordre; la pré-publication `.from` reste un constat statique, sans conclusion pixel sur l'identité du pool. La baseline globale historique reste 51 failures, 0 error et 2 skips, sans nouveau run global W5b. Les 45 DrawPoint sont désormais fermés par le gate public W5b; restent AA4 et `TopologyLimit` conservative F64→F32. Font/codec, GM/dashboard/baseline et `jpg-color-cube` exclus ([status](waves/W04-geometry-coverage/status.md)) |
 | W5 | Material graph, blends, gradients et images | W5a–W5h closes sur leurs périmètres fonctionnels bornés. W5f conserve 688PASS/2skipsAA4 et sa [Draft #2400](https://github.com/ygdrasil-io/kanvas/pull/2400). W5g livre Blend partagé, gradients/images, NoiseV1 et convergence : final921 cas/919PASS/2skipsAA4/0failure-error public, cinq compiles exit0, review finale `COMPLIANT`/`APPROVED` C0/I0/M0 après correction owner-aware ; [Draft #2401](https://github.com/ygdrasil-io/kanvas/pull/2401) empilée sur W5f. W5h ferme 33/33 cellules H dans son domaine borné (1021 invocations H, convergence5), reviews Task7 et whole-branch `APPROVED` C0/I0/M0 ; [Draft #2402](https://github.com/ygdrasil-io/kanvas/pull/2402) empilée sur W5g. Les exits natifs133 restent `UNKNOWN`, sans score ISO ni Ready-to-merge. Conical B-cross-zero, AA4, clips Picture complexes, close/rollback target-level, teardown et gaps W8/intégration restent réservés ; covering/baselines/exclusions W5h détaillés en tête et dans le [status](waves/W05-material-graph/status.md) |
-| W6 | Layers et effets | Non démarrée |
+| W6 | Layers et effets | Design validé : autorité layer plan-first, 22 familles de filtres et livraison W6a–W6e ; implémentation non démarrée ([spec](specs/2026-09-16-w6-layers-effects-design.md)) |
 | W7 | Convergence GM | Non démarrée |
 | W8 | Retrait legacy et runtime | Non démarrée |
 
