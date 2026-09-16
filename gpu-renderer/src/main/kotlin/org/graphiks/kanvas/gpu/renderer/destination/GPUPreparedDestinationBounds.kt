@@ -28,7 +28,11 @@ internal fun GPUCorePrimitiveGeometryAuthority.preparedDestinationBounds(target:
     snapshot.preparedDestinationBounds(target)
 
 internal fun GPUCorePrimitiveGeometrySnapshot.preparedDestinationBounds(target: GPUPixelBounds): GPUPixelBounds =
-    preparedDestinationIntersection(coreDestinationBounds(geometry, coverageMode, scissorBounds, target), scissorBounds, target)
+    requireNotNull(preparedDestinationBoundsOrNull(target)) { "Prepared destination consumer has no visible bounds" }
+
+/** Host-only visibility projection; an empty result cannot become an executable consumer. */
+internal fun GPUCorePrimitiveGeometrySnapshot.preparedDestinationBoundsOrNull(target: GPUPixelBounds): GPUPixelBounds? =
+    preparedDestinationIntersectionOrNull(coreDestinationBounds(geometry, coverageMode, scissorBounds, target), scissorBounds, target)
 
 /** One bounds owner for pre-publication geometry and its post-bind semantic. */
 private fun coreDestinationBounds(geometry: GPUCorePrimitiveGeometry, coverageMode: GPUCorePrimitiveCoverageMode,
@@ -70,7 +74,15 @@ fun preparedTextDestinationBounds(instances: List<org.graphiks.kanvas.glyph.gpu.
 /** One intersection owner for all already-admitted prepared destination consumers. */
 fun preparedDestinationIntersection(bounds: GPUPixelBounds, clip: GPUPixelBounds,
     target: GPUPixelBounds): GPUPixelBounds =
-    GPUPixelBounds(maxOf(target.left, clip.left, bounds.left), maxOf(target.top, clip.top, bounds.top),
-        minOf(target.right, clip.right, bounds.right), minOf(target.bottom, clip.bottom, bounds.bottom)).also {
-        require(!it.isEmpty) { "Prepared destination consumer has no visible bounds" }
+    requireNotNull(preparedDestinationIntersectionOrNull(bounds, clip, target)) {
+        "Prepared destination consumer has no visible bounds"
     }
+
+private fun preparedDestinationIntersectionOrNull(bounds: GPUPixelBounds, clip: GPUPixelBounds,
+    target: GPUPixelBounds): GPUPixelBounds? {
+    val left = maxOf(target.left, clip.left, bounds.left)
+    val top = maxOf(target.top, clip.top, bounds.top)
+    val right = minOf(target.right, clip.right, bounds.right)
+    val bottom = minOf(target.bottom, clip.bottom, bounds.bottom)
+    return if (right <= left || bottom <= top) null else GPUPixelBounds(left, top, right, bottom)
+}

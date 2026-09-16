@@ -66,7 +66,8 @@ internal class W5hPreparedMaterialFrameV6 private constructor(
             if (indexed.any { (_, op) -> when (op) {
                     is DisplayOp.DrawRect -> op.paint.isStroke()
                     is DisplayOp.DrawRRect -> op.paint.isStroke()
-                    is DisplayOp.DrawPath, is DisplayOp.DrawPoint, is DisplayOp.DrawPoints, is DisplayOp.DrawImage -> false
+                    is DisplayOp.DrawPoint, is DisplayOp.DrawPoints -> !op.isPreparedPointSourceDomainV6()
+                    is DisplayOp.DrawPath, is DisplayOp.DrawImage -> false
                     is DisplayOp.DrawText, is DisplayOp.DrawVertices -> false
                     is DisplayOp.DrawMesh -> op.mesh.program != null
                     else -> true
@@ -133,6 +134,7 @@ internal class W5hPreparedMaterialFrameV6 private constructor(
             val sourceAnalysis = recorder.analyzeSourceGeometry()
             val capturedCore = linkedMapOf<Int, GPUCorePrimitiveCapturedGeometry>()
             val coreSourceInventories = linkedMapOf<Int, GPUCorePrimitiveSourceGeometryInventory>()
+            val coreClipCulledIndices = linkedSetOf<Int>()
             coreVisuals.entries.zip(sourceAnalysis.commandGeometry).forEach { (entry, analysis) ->
                 // The mapper has already applied the exact visible-bounds predicate. A
                 // culled sibling still authenticates its source below, but owns no native
@@ -143,10 +145,13 @@ internal class W5hPreparedMaterialFrameV6 private constructor(
                 } catch (_: GPUCoreSourceGeometryRefusal) {
                     return null // Whole-frame topology decline, before catalogue or source ownership.
                 }
-                capturedCore[entry.key] = captured
                 when (val inventory = coreBuilder.captureSourceGeometryInventory(captured, request.capabilities,
                     GPUColorFormat(request.targetFacts.colorFormat))) {
-                    is GPUCorePrimitiveSourceGeometryInventoryResult.Captured -> coreSourceInventories[entry.key] = inventory.inventory
+                    is GPUCorePrimitiveSourceGeometryInventoryResult.Captured -> {
+                        capturedCore[entry.key] = captured
+                        coreSourceInventories[entry.key] = inventory.inventory
+                    }
+                    GPUCorePrimitiveSourceGeometryInventoryResult.Culled -> coreClipCulledIndices += entry.key
                     GPUCorePrimitiveSourceGeometryInventoryResult.OutsideDomain -> return null
                     is GPUCorePrimitiveSourceGeometryInventoryResult.Refused -> throw IllegalArgumentException(inventory.code)
                 }
@@ -176,6 +181,7 @@ internal class W5hPreparedMaterialFrameV6 private constructor(
             // These are the mapper's actual clip/coverage predicates, applied to the real
             // CPU inventory before any source exists. Empty clips are topology, not NoOp blends.
             val culledGeometryIndices = LinkedHashSet(emptyTextClips)
+            culledGeometryIndices += coreClipCulledIndices
             verticesGeometry.filter { it.culledByClip }.mapTo(culledGeometryIndices) { it.operationIndex }
             coreVisuals.filterValues { it.outsideTarget }.keys.forEach(culledGeometryIndices::add)
             // An out-of-target nonempty sub-run is not a representable prepared semantic.

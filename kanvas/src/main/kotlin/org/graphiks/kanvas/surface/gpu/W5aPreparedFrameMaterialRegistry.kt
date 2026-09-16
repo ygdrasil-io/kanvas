@@ -24,6 +24,16 @@ import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.planning.W5bPreparedPointDomainV3
 import org.graphiks.kanvas.surface.RenderConfig
 
+/** The existing Task4 prepared Point source domain, before any frame source capture. */
+internal fun DisplayOp.isPreparedPointSourceDomainV6(): Boolean {
+    val pointPaint = when (this) {
+        is DisplayOp.DrawPoint -> paint
+        is DisplayOp.DrawPoints -> paint.takeIf { mode == PointMode.POINTS }
+        else -> null
+    } ?: return false
+    return pointPaint.strokeWidth == 0f && pointPaint.strokeCap != StrokeCap.ROUND
+}
+
 /**
  * Interns immutable W5a sources for authentic prepared core, A8 text and vertices lanes.
  *
@@ -39,15 +49,10 @@ internal data class W5aPreparedFrameMaterialRegistry(
             targetClamp: org.graphiks.kanvas.gpu.plan.BlendTargetClampV1,
             target: GPUTargetFacts, config: RenderConfig, capabilities: GPUCapabilities,
         ): Map<Int, org.graphiks.kanvas.gpu.plan.W5hPreparedPointMaterialV6> {
-            fun pointPaint(operation: DisplayOp) = when (operation) {
-                is DisplayOp.DrawPoint -> operation.paint
-                is DisplayOp.DrawPoints -> operation.paint.takeIf { operation.mode == PointMode.POINTS }
-                else -> null
-            }
-            val points = operations.mapNotNull(::pointPaint)
+            val points = operations.filter { it is DisplayOp.DrawPoint || it is DisplayOp.DrawPoints }
             // This source join belongs to the existing hairline-square prepared frame.
             // Wider/stencil and round-cap geometry keeps its historical admission.
-            if (points.isEmpty() || points.any { it.strokeWidth != 0f || it.strokeCap == StrokeCap.ROUND }) return emptyMap()
+            if (points.isEmpty() || points.any { !it.isPreparedPointSourceDomainV6() }) return emptyMap()
             // A deferred Point source requires a closed set of real material siblings.
             // State/metadata carries no source; every other operation must belong to the
             // existing join domain before any V6 capture or deferred index is produced.

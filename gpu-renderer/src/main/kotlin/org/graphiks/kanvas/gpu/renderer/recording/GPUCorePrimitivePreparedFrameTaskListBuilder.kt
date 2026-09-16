@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
 import org.graphiks.kanvas.gpu.renderer.destination.preparedDestinationBounds
+import org.graphiks.kanvas.gpu.renderer.destination.preparedDestinationBoundsOrNull
 import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
 
 import io.ygdrasil.webgpu.GPUTextureFormat
@@ -1686,6 +1687,7 @@ class GPUCorePrimitiveSourceGeometryInventory internal constructor(
 
 sealed interface GPUCorePrimitiveSourceGeometryInventoryResult {
     data class Captured(val inventory: GPUCorePrimitiveSourceGeometryInventory) : GPUCorePrimitiveSourceGeometryInventoryResult
+    data object Culled : GPUCorePrimitiveSourceGeometryInventoryResult
     data object OutsideDomain : GPUCorePrimitiveSourceGeometryInventoryResult
     data class Refused(val code: String, val message: String) : GPUCorePrimitiveSourceGeometryInventoryResult
 }
@@ -1880,6 +1882,8 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             is GPUCorePrimitiveCoverageSampleAuthority.Refused -> return refuse(coverage.code, coverage.message)
         }
         try {
+            val destinationBounds = geometry.preparedDestinationBoundsOrNull(geometry.targetBounds)
+                ?: return GPUCorePrimitiveSourceGeometryInventoryResult.Culled
             val materialEnvelope = corePrimitiveGeometryUniformBytes(geometry.targetBounds)
             val pathBytes = pathStencilGeometryBytes(geometry.geometry)
             val directRoute: GPUCorePrimitiveDirectNativeRoute.Accepted?
@@ -1913,7 +1917,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             }
             return GPUCorePrimitiveSourceGeometryInventoryResult.Captured(GPUCorePrimitiveSourceGeometryInventory(
                 geometry, capabilities, targetFormat, clip, directRoute, pathScissor, geometryBytes,
-                uniform, materialEnvelope, geometry.preparedDestinationBounds(geometry.targetBounds),
+                uniform, materialEnvelope, destinationBounds,
             ))
         } catch (_: ArithmeticException) {
             return refuse("unsupported.recording.core_primitive_geometry_size", "Prepared Core geometry accounting overflowed.")
