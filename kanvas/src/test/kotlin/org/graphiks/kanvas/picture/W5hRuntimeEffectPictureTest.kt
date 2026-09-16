@@ -64,8 +64,8 @@ class W5hRuntimeEffectPictureTest {
     @Test fun positiveDescriptorAndValuesRoundTrip() {
         val picture = positivePicture()
         val bytes = picture.toByteArray()
-        assertEquals(12, ByteBuffer.wrap(bytes).getInt(4))
-        assertEquals(6, ByteBuffer.wrap(bytes).getInt(28))
+        assertEquals(13, ByteBuffer.wrap(bytes).getInt(4))
+        assertEquals(7, ByteBuffer.wrap(bytes).getInt(28))
         val decoded = assertNotNull(Picture.fromByteArray(bytes))
         assertContentEquals(bytes, decoded.toByteArray())
         val shader = runtime(decoded)

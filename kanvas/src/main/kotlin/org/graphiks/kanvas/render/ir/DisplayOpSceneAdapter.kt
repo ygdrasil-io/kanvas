@@ -191,6 +191,7 @@ public object DisplayOpSceneAdapter {
                     paint = paint,
                     blend = paint?.toBlendNode() ?: BlendNode.SrcOver,
                     compositeClip = operation.rec.compositeClip?.let(::captureClip),
+                    initWithPrevious = operation.rec.initWithPrevious,
                     backdrop = backdrop?.let { EffectStack.of(listOf(it)) } ?: EffectStack.Empty,
                     effects = paint?.toEffectStack() ?: EffectStack.Empty,
                     transform = operation.transform.checked("layer[$index].transform"),

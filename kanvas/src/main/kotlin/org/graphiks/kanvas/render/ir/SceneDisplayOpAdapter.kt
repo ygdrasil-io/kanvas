@@ -45,6 +45,7 @@ public object SceneDisplayOpAdapter {
                 paint = command.descriptor.paint?.let(PaintSceneAdapter::restore),
                 backdrop = command.descriptor.backdrop.singleImageFilterOrNull()?.let(PaintSceneAdapter::restoreImageFilter),
                 compositeClip = command.descriptor.compositeClip?.toClip(),
+                initWithPrevious = command.descriptor.initWithPrevious,
             ),
             command.descriptor.transform,
         )
