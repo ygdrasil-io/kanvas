@@ -45,10 +45,15 @@ internal fun validateW6aLayerTopology(resources: List<PlanResource>, passes: Lis
             require(origin.x >= 0 && origin.y >= 0 && origin.x.toLong() + bounds.width() <= extent.width && origin.y.toLong() + bounds.height() <= extent.height)
             require(pass.load == AttachmentLoadPlan.Load && pass.store == AttachmentStorePlan.Store)
             require(pass.restore.alphaF32.isFinite())
-            require(pass.restore.readsPriorDevice == (pass.restore.blend is BlendPlan.DestinationReadV1))
+            require(pass.restore.readsPriorDevice == pass.restore.blend.compositionFacts.readsPriorDevice)
+            require(pass.restore.writesParentDevice == pass.restore.blend.compositionFacts.writesParentDevice)
+            require(pass.restore.restoreAffectsTransparentBlack ==
+                ((pass.restore.colorFilter?.affectsTransparentBlack == true) ||
+                    pass.restore.blend.compositionFacts.affectsTransparentBlack))
             require((pass.restore.colorFilter == null) == (pass.restore.colorFilterUniformOffsetI64 == null))
             require(pass.restore.parentVersionBefore.valueI64 == versions[target.id])
-            versions[target.id] = Math.addExact(requireNotNull(versions[target.id]), 1L)
+            if (pass.restore.writesParentDevice)
+                versions[target.id] = Math.addExact(requireNotNull(versions[target.id]), 1L)
             require(pass.destinationVersionAfter == pass.restore.parentVersionAfter && pass.destinationVersionAfter.valueI64 == versions[target.id])
         }
         is PlanPass.TextureCopy -> {
@@ -60,9 +65,10 @@ internal fun validateW6aLayerTopology(resources: List<PlanResource>, passes: Lis
             require(pass.copyDestinationOriginI32() == org.graphiks.math.geometry.Point2I32.Origin)
             require(pass.destinationVersion?.valueI64 == versions[source.id])
             val consumer = passes.getOrNull(passes.indexOf(pass) + 1) as? PlanPass.LayerComposite
-            require(consumer?.restore?.blend is BlendPlan.DestinationReadV1)
-            val blend = consumer.restore.blend as BlendPlan.DestinationReadV1
-            require(blend.snapshotResource == destination.id && blend.requiredDestinationVersion == pass.destinationVersion)
+            require(consumer?.restore?.readsPriorDevice == true)
+            val blend = requireNotNull(consumer.restore.blend.takeIf { it.compositionFacts.readsPriorDevice })
+            require(blend.destinationReadSnapshotResourceV1() == destination.id &&
+                blend.requiredDestinationVersionV1() == pass.destinationVersion)
         }
         is PlanPass.ReadbackPass -> {
             require(pass === passes.last() && pass.source == root.id)

@@ -1,7 +1,6 @@
 package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.kanvas.render.ir.ClipStackNode
-import org.graphiks.kanvas.render.ir.BlendMode
 import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.RectI32
@@ -28,6 +27,21 @@ private class W6aScopeGeometry(
     val isElided: Boolean get() = compositeDomainDeviceI32 == null
     fun targetExtentI32(): SizeI32 = requireNotNull(compositeDomainDeviceI32).let { SizeI32(it.width(), it.height()) }
 }
+
+/** Restore semantics are sealed before geometry decides how large a transparent layer must be. */
+private class W6aRestoreFacts(
+    val alphaF32: Float,
+    val colorFilter: ColorFilterExecutionPlanV1?,
+    val blend: BlendPlan,
+) {
+    val readsPriorDevice: Boolean = blend.compositionFacts.readsPriorDevice
+    val writesParentDevice: Boolean = blend.compositionFacts.writesParentDevice
+    val restoreAffectsTransparentBlack: Boolean =
+        (colorFilter?.affectsTransparentBlack == true) || blend.compositionFacts.affectsTransparentBlack
+}
+
+/** Deliberately distinguished from malformed W6 topology so callers can recover before native work. */
+internal class W6aRestoreAdmissionFailure(message: String) : IllegalArgumentException(message)
 
 internal class W6aLayerGraphConstruction(
     private val id: PlanId,
@@ -61,7 +75,13 @@ internal class W6aLayerGraphConstruction(
             "w6a.layer.unsupported_child"
         }
 
-        geometries = immutableList(occurrences.map(::sealGeometry))
+        val restoreFactsByScope = occurrences.associate { occurrence ->
+            occurrence.idI32 to sealRestoreFacts(occurrence)
+        }
+        restoreFactsByScope.values.forEach(::admitRestoreBindings)
+        geometries = immutableList(occurrences.map { occurrence ->
+            sealGeometry(occurrence, restoreFactsByScope.getValue(occurrence.idI32))
+        })
         val geometryByScope = geometries.associateBy { it.occurrence.idI32 }
         val active = geometries.filterNot(W6aScopeGeometry::isElided)
         val passes = mutableListOf<PlanPass>()
@@ -108,35 +128,23 @@ internal class W6aLayerGraphConstruction(
                 steps += LayerExecutionStepV1.Initialize(scopeId, render(target, emptyList(), true).id)
                 bindings.filter { it.scopeI32 == occurrence.idI32 }.forEach(::segment)
                 val before = DestinationVersionI64(versionI64)
-                val paint = occurrence.descriptor.paint
-                val colorFilter = paint?.colorFilter?.let { filter ->
-                    (ColorFilterPlanCompilerV1.compile(filter) as? ColorFilterCompileResultV1.Ready)?.execution
-                        ?: throw IllegalArgumentException("${W6aPlanDiagnostics.UnsupportedRestore}: restore color filter")
-                }
-                val filterOffset = colorFilter?.let { execution ->
-                    uniformCursorI64 = alignUniform(uniformCursorI64)
+                val facts = restoreFactsByScope.getValue(occurrence.idI32)
+                val filterOffset = facts.colorFilter?.let { execution ->
+                    uniformCursorI64 = alignUniform(uniformCursorI64, caps.minUniformBufferOffsetAlignment)
                     uniformCursorI64.also { uniformCursorI64 = Math.addExact(it, maxOf(16L, execution.dynamicByteCountI64)) }
                 }
-                val selectedBlend = requireNotNull(FinalBlendPlanner.plan(occurrence.descriptor.blend,
-                    CoveragePlan.FullOrScissor, SamplePlan.SingleSample,
-                    PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1())) {
-                    "${W6aPlanDiagnostics.UnsupportedRestore}: restore blend"
-                }
-                val blend = (selectedBlend as? BlendPlan.DestinationReadV1)?.copy(
-                    requiredDestinationVersion = before,
-                    snapshotResource = planResourceId(PlanResourceRole.DestinationSnapshot, occurrence.idI32),
-                ) ?: selectedBlend
-                val alpha = paint?.color?.alpha?.toInt()?.div(255f) ?: 1f
-                val affectsTransparent = colorFilter != null || restoreAffectsTransparentBlack(blend)
-                val restore = LayerRestorePlanV1(alpha, colorFilter, blend, blend is BlendPlan.DestinationReadV1,
-                    affectsTransparent, before, DestinationVersionI64(Math.addExact(versionI64, 1L)), filterOffset)
+                val blend = if (facts.readsPriorDevice) facts.blend.bindDestinationReadV1(before,
+                    planResourceId(PlanResourceRole.DestinationSnapshot, occurrence.idI32)) else facts.blend
+                val after = DestinationVersionI64(if (facts.writesParentDevice) Math.addExact(versionI64, 1L) else versionI64)
+                val restore = LayerRestorePlanV1(facts.alphaF32, facts.colorFilter, blend, facts.readsPriorDevice,
+                    facts.writesParentDevice, facts.restoreAffectsTransparentBlack, before, after, filterOffset)
                 val targetDomain = requireNotNull(geometry.compositeDomainDeviceI32)
                 val sourceBounds = RectI32(0, 0, targetDomain.width(), targetDomain.height())
-                if (blend is BlendPlan.DestinationReadV1) {
-                    passes += PlanPass.TextureCopy(occurrence.idI32, root, requireNotNull(blend.snapshotResource), before,
+                if (facts.readsPriorDevice) {
+                    passes += PlanPass.TextureCopy(occurrence.idI32, root, requireNotNull(blend.destinationReadSnapshotResourceV1()), before,
                         rootDomainDeviceI32, Point2I32.Origin, rowBytesI64)
                 }
-                versionI64 = Math.addExact(versionI64, 1L)
+                versionI64 = after.valueI64
                 val composite = PlanPass.LayerComposite(occurrence.idI32, scopeId, target, root, sourceBounds,
                     Point2I32(targetDomain.left, targetDomain.top), restore, AttachmentLoadPlan.Load,
                     AttachmentStorePlan.Store, restore.parentVersionAfter)
@@ -179,7 +187,7 @@ internal class W6aLayerGraphConstruction(
                     checkedTextureBytesI64(4, targetExtent.width, targetExtent.height, 1),
                     setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), PlanResourceLifetime.FrameLocal, 0, passes.size))
             }
-            scopes.filter { it.restore.blend is BlendPlan.DestinationReadV1 }.forEach { scope ->
+            scopes.filter { it.restore.readsPriorDevice }.forEach { scope ->
                 add(PlanResource.of(PlanResourceRole.DestinationSnapshot, scope.id.valueI32, PlanResourceKind.Texture2D,
                     PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), extent,
                     checkedTextureBytesI64(4, extent.width, extent.height, 1),
@@ -226,7 +234,10 @@ internal class W6aLayerGraphConstruction(
             packConstructedFrame(listOf(construction), table, sourceNonUniform), source)
     }
 
-    private fun sealGeometry(occurrence: W6aLayerPlanCompiler.ScopeOccurrence): W6aScopeGeometry {
+    private fun sealGeometry(
+        occurrence: W6aLayerPlanCompiler.ScopeOccurrence,
+        restoreFacts: W6aRestoreFacts,
+    ): W6aScopeGeometry {
         // A proven-empty restore clip elides before inspecting any transform or hint.  Nothing
         // can allocate, render or sample from this scope.
         val desired = desiredOutput(occurrence.descriptor)
@@ -249,9 +260,10 @@ internal class W6aLayerGraphConstruction(
         // W6a's current transparent, identity restore has no filter expansion. The four values
         // remain distinct facts even when their no-filter derivations happen to coincide.
         val required = desired.copy()
-        // A nonempty bounds hint can enlarge the intermediate filter region but never clips an
-        // child. Empty content keeps the desired domain for future nontrivial restores.
-        val effective = if (known == null) desired else hintDomain?.let { union(known, it) } ?: known
+        // Transparent black is real input to an alpha-creating filter or a blend such as CLEAR.
+        // Its semantic restore domain is therefore the parent clip even when children are bounded.
+        val effective = if (restoreFacts.restoreAffectsTransparentBlack) desired
+            else if (known == null) desired else hintDomain?.let { union(known, it) } ?: known
         val composite = intersect(effective, desired)
         if (composite == null) return W6aScopeGeometry(occurrence, null, hint, known, desired, required, produced, null)
         val mapping = LayerMappingF64.ofOrNull(localToDevice, Point2I32(composite.left, composite.top))
@@ -310,11 +322,44 @@ internal class W6aLayerGraphConstruction(
         minOf(first.left, second.left), minOf(first.top, second.top), maxOf(first.right, second.right), maxOf(first.bottom, second.bottom),
     )
 
-    private fun alignUniform(bytesI64: Long): Long = Math.addExact(bytesI64, 255L) / 256L * 256L
+    private fun sealRestoreFacts(occurrence: W6aLayerPlanCompiler.ScopeOccurrence): W6aRestoreFacts {
+        val paint = occurrence.descriptor.paint
+        val colorFilter = paint?.colorFilter?.let { filter ->
+            (ColorFilterPlanCompilerV1.compile(filter) as? ColorFilterCompileResultV1.Ready)?.execution
+                ?: throw W6aRestoreAdmissionFailure("${W6aPlanDiagnostics.UnsupportedRestore}: restore color filter")
+        }
+        val blend = requireNotNull(FinalBlendPlanner.plan(occurrence.descriptor.blend,
+            CoveragePlan.FullOrScissor, SamplePlan.SingleSample,
+            PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1())) {
+            "${W6aPlanDiagnostics.UnsupportedRestore}: restore blend"
+        }
+        return W6aRestoreFacts(paint?.color?.alpha?.toInt()?.div(255f) ?: 1f, colorFilter, blend)
+    }
 
-    private fun restoreAffectsTransparentBlack(blend: BlendPlan): Boolean = when (blend) {
-        BlendPlan.LegacySrcOverV1, BlendPlan.NoOpV1 -> false
-        is BlendPlan.FixedFunctionV1 -> blend.mode !in setOf(BlendMode.DST, BlendMode.SRC_OVER, BlendMode.DST_OVER)
-        is BlendPlan.DestinationReadV1 -> blend.mode != BlendMode.DST
+    /**
+     * The exact W5 filter proof owns the uniform footprint; W6 only admits its materialization
+     * against the sealed capabilities and the composite's already-fixed binding inventory.
+     */
+    private fun admitRestoreBindings(facts: W6aRestoreFacts) {
+        val bindingCountI32 = 1 + (if (facts.colorFilter == null) 0 else 1) + (if (facts.readsPriorDevice) 1 else 0)
+        val sampledTextureCountI32 = 1 + if (facts.readsPriorDevice) 1 else 0
+        try {
+            facts.colorFilter?.let { filter ->
+                requireColorUniformBindingV4(maxOf(16L, filter.dynamicByteCountI64), caps, bindingCountI32)
+            }
+            require(caps.maxBindingsPerBindGroupI32?.let { it >= bindingCountI32 } == true &&
+                caps.maxSampledTexturesPerShaderStageI32?.let { it >= sampledTextureCountI32 } == true) {
+                "restore sampled/bind-group capability"
+            }
+        } catch (failure: RawMaterialRequirementsV2.Refusal) {
+            throw W6aRestoreAdmissionFailure("${W6aPlanDiagnostics.UnsupportedRestore}: ${failure.code}")
+        } catch (failure: IllegalArgumentException) {
+            throw W6aRestoreAdmissionFailure("${W6aPlanDiagnostics.UnsupportedRestore}: ${failure.message}")
+        }
+    }
+
+    private fun alignUniform(bytesI64: Long, alignmentI32: Int): Long {
+        val alignmentI64 = alignmentI32.toLong()
+        return Math.multiplyExact(Math.addExact(bytesI64, alignmentI64 - 1L) / alignmentI64, alignmentI64)
     }
 }

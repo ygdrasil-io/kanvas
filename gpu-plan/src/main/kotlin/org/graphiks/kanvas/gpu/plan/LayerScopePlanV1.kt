@@ -57,6 +57,7 @@ public class LayerRestorePlanV1 internal constructor(
     public val colorFilter: ColorFilterExecutionPlanV1?,
     public val blend: BlendPlan,
     public val readsPriorDevice: Boolean,
+    public val writesParentDevice: Boolean,
     public val restoreAffectsTransparentBlack: Boolean,
     public val parentVersionBefore: DestinationVersionI64,
     public val parentVersionAfter: DestinationVersionI64,

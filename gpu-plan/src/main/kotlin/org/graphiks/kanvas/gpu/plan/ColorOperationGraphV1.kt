@@ -1,6 +1,16 @@
 package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.kanvas.color.ColorInterpolationProgramV1
+import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.pow
+import kotlin.math.round
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 /** One immutable typed expression graph, shared by proof and WGSL emission. */
 public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
@@ -56,6 +66,71 @@ public class ColorOperationGraphV1 internal constructor(outputs: List<Scalar>) {
         outputs.any(scalar)
     }
     init { require(outputs.size == 4) }
+
+    /**
+     * Evaluates this sealed expression graph at transparent black.  W6 uses this W5 graph fact
+     * to decide whether a filter expands a restore domain; unknown graph vocabulary is retained
+     * as null so callers can conservatively preserve the whole domain.
+     */
+    internal fun transparentBlackOutputV1(
+        dynamicF32: (Long) -> Float,
+        tableByte: (Long, Int) -> Int,
+    ): List<Float>? = runCatching {
+        val values = java.util.IdentityHashMap<Scalar, Float>()
+        lateinit var scalar: (Scalar) -> Float
+        fun predicate(value: Predicate): Boolean = when (value) {
+            is Predicate.UniformU32Equal -> dynamicF32(value.wordOffsetU32).toRawBits().toUInt() == value.expectedU32
+            is Predicate.Equal -> scalar(value.a) == scalar(value.b)
+            is Predicate.LessEqual -> scalar(value.a) <= scalar(value.b)
+            is Predicate.Not -> !predicate(value.value)
+            is Predicate.And -> predicate(value.a) && predicate(value.b)
+            is Predicate.Finite -> scalar(value.value).isFinite()
+            is Predicate.ProjectiveValid -> scalar(value.division).isFinite()
+        }
+        scalar = { node -> values[node] ?: when (node) {
+            is Scalar.InputLinearPremul -> 0f
+            is Scalar.DynamicF32 -> dynamicF32(node.wordOffsetU32)
+            is Scalar.ConstantF32 -> Float.fromBits(node.bitsI32)
+            is Scalar.Add -> scalar(node.a) + scalar(node.b)
+            is Scalar.Subtract -> scalar(node.a) - scalar(node.b)
+            is Scalar.Multiply -> scalar(node.a) * scalar(node.b)
+            is Scalar.Divide -> scalar(node.a) / scalar(node.b)
+            is Scalar.ProjectiveDivide -> scalar(node.a) / scalar(node.b)
+            is Scalar.Pow -> scalar(node.a).toDouble().pow(scalar(node.b).toDouble()).toFloat()
+            is Scalar.Clamp01 -> scalar(node.value).coerceIn(0f, 1f)
+            is Scalar.TableByte -> {
+                val index = round(scalar(node.scaled)).toInt()
+                require(index in 0..255)
+                tableByte(node.tableWordOffsetU32, index).toFloat() / 255f
+            }
+            is Scalar.Min -> min(scalar(node.a), scalar(node.b))
+            is Scalar.Max -> max(scalar(node.a), scalar(node.b))
+            is Scalar.Abs -> abs(scalar(node.value))
+            is Scalar.Sqrt -> sqrt(scalar(node.value))
+            is Scalar.Atan2 -> atan2(scalar(node.y), scalar(node.x))
+            is Scalar.Sin -> sin(scalar(node.value))
+            is Scalar.Cos -> cos(scalar(node.value))
+            is Scalar.Floor -> floor(scalar(node.value))
+            is Scalar.Round -> round(scalar(node.value))
+            is Scalar.IntegerModulo -> scalar(node.value) % node.modulusI32.toFloat()
+            is Scalar.BranchComponent -> scalar(if (predicate(node.branch.predicate))
+                node.branch.yes[node.channelI32] else node.branch.no[node.channelI32])
+            is Scalar.EagerSelect -> {
+                val yes = scalar(node.yes)
+                val no = scalar(node.no)
+                if (predicate(node.predicate)) yes else no
+            }
+            is Scalar.LazyBranch -> if (predicate(node.predicate)) scalar(node.yes) else scalar(node.no)
+            is Scalar.NoiseStateF32, is Scalar.NoiseComponent, is Scalar.NoisePhaseComponent,
+            is Scalar.NoiseIntegralF32, is Scalar.NoiseGradientU16, is Scalar.PrimitiveEncodedInput,
+            is Scalar.ImageEncodedInput, is Scalar.ImageEncodedComponent, is Scalar.ImageTexelValid,
+            is Scalar.ImageSampleComponent, is Scalar.ImageIntegerOffset, Scalar.DiscardF32,
+            is Scalar.DevicePositionF32, is Scalar.StopInterpolationInput, is Scalar.GradientStopComponent
+            -> throw UnsupportedOperationException("Transparent-black fact has unsupported graph input")
+        }.also { values[node] = it } }
+        outputs.map(scalar)
+    }.getOrNull()
+
     public sealed interface Scalar {
         /** Lexical loop state, bound only inside its authenticated Noise region. */
         public class NoiseStateF32 internal constructor(public val slotI32: Int) : Scalar {

@@ -152,6 +152,9 @@ public class W6aLayerPlanCompiler public constructor(
             }
         } catch (failure: W6aResourceLimitFailure) {
             W6aLayerPlanBudget.refusal(failure.message ?: "Layer frame budget exceeded.")
+        } catch (failure: W6aRestoreAdmissionFailure) {
+            RenderPlanResult.GapOnPromotedScope(listOf(diagnostic(W6aPlanDiagnostics.RestoreCapability,
+                failure.message ?: "Restore bindings are unavailable on this device.")))
         } catch (failure: RawMaterialRequirementsV2.Refusal) {
             W6aLayerPlanBudget.translate(sourceConstructionRefusalV4(failure.code).failure)
         } catch (failure: IllegalArgumentException) {

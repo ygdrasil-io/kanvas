@@ -122,6 +122,46 @@ class W6aLayerRestoreSurfacePixelTest {
     }
 
     @Test
+    fun `clearRestoreWithBoundedChildClearsTheEntireParentClip`() {
+        // CLEAR consumes transparent black over the restore clip. The red child only occupies
+        // the first clipped pixel and therefore must not shrink that restore domain.
+        val blue = rgbaCpu(17, 61, 211, 255)
+        val transparent = rgbaCpu(0, 0, 0, 0)
+        val expected = blue + transparent + transparent + blue
+        val surface = Surface(4, 1)
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 4f, 1f), Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false))
+            clipRect(RectF32.ofLTRB(1f, 0f, 3f, 1f), antiAlias = false)
+            saveLayer(paint = Paint(blendMode = BlendMode.CLEAR, antiAlias = false))
+            drawRect(RectF32.ofLTRB(1f, 0f, 2f, 1f), Paint(ColorARGB.Red, antiAlias = false))
+            restore()
+        }
+        assertContentEquals(expected, surface.render().pixels)
+    }
+
+    @Test
+    fun `alphaCreatingColorFilterWithBoundedChildUsesTheEntireParentClip`() {
+        // The matrix makes every transparent layer pixel opaque green. A bounded red child
+        // cannot trim that fact away: both pixels of the parent clip are green after SRC.
+        val blue = rgbaCpu(17, 61, 211, 255)
+        val green = rgbaCpu(0, 255, 0, 255)
+        val expected = blue + green + green + blue
+        val surface = Surface(4, 1)
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 4f, 1f), Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false))
+            clipRect(RectF32.ofLTRB(1f, 0f, 3f, 1f), antiAlias = false)
+            saveLayer(paint = Paint(
+                colorFilter = opaqueGreenFromTransparentBlack(),
+                blendMode = BlendMode.SRC,
+                antiAlias = false,
+            ))
+            drawRect(RectF32.ofLTRB(1f, 0f, 2f, 1f), Paint(ColorARGB.Red, antiAlias = false))
+            restore()
+        }
+        assertContentEquals(expected, surface.render().pixels)
+    }
+
+    @Test
     fun `restoreIgnoresGeometryPaintAttributes`() {
         val expected = rgbaCpu(239, 51, 73, 255)
         val surface = Surface(1, 1)

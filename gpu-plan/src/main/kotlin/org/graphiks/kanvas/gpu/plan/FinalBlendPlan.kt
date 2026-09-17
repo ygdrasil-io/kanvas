@@ -23,10 +23,22 @@ public enum class BlendTargetClampV1 { Unavailable, UnitInterval }
 public fun PlanLogicalColorFormat.blendTargetClampV1(): BlendTargetClampV1 =
     if (clampsNormalizedColorWrites) BlendTargetClampV1.UnitInterval else BlendTargetClampV1.Unavailable
 
+/** Sealed W5 semantic facts. Callers consume them without reclassifying blend modes. */
+public class FinalBlendCompositionFactsV1 internal constructor(
+    public val readsPriorDevice: Boolean,
+    public val affectsTransparentBlack: Boolean,
+    public val writesParentDevice: Boolean,
+)
+
 /** Handle-free final target composition selected before a graph becomes Ready. */
 public sealed interface BlendPlan {
     public val canonicalLabel: String
-    public data object LegacySrcOverV1 : BlendPlan { override val canonicalLabel: String = "legacy-src-over-v1" }
+    public val compositionFacts: FinalBlendCompositionFactsV1
+    public data object LegacySrcOverV1 : BlendPlan {
+        override val canonicalLabel: String = "legacy-src-over-v1"
+        override val compositionFacts: FinalBlendCompositionFactsV1 = requireNotNull(
+            BlendFormulaProgramV1.finalCompositionFacts("src_over", readsPriorDevice = false, writesParentDevice = true))
+    }
 
     public data class FixedFunctionV1(
         public val mode: BlendMode,
@@ -36,7 +48,12 @@ public sealed interface BlendPlan {
         public val alphaDestination: BlendFactorV1,
         public val operation: BlendOperationV1 = BlendOperationV1.Add,
         public val coverage: BlendCoverageEncodingV1 = BlendCoverageEncodingV1.FullOrScissor,
-    ) : BlendPlan { override val canonicalLabel: String = "fixed-${mode.name.lowercase()}-${coverage.name}" }
+    ) : BlendPlan {
+        override val canonicalLabel: String = "fixed-${mode.name.lowercase()}-${coverage.name}"
+        override val compositionFacts: FinalBlendCompositionFactsV1
+            get() = requireNotNull(BlendFormulaProgramV1.finalCompositionFacts(
+                mode.name.lowercase(), readsPriorDevice = false, writesParentDevice = true))
+    }
 
     public data class DestinationReadV1(
         public val mode: BlendMode,
@@ -45,15 +62,40 @@ public sealed interface BlendPlan {
         public val requiredDestinationVersion: DestinationVersionI64,
         public val snapshotResource: PlanResourceId? = null,
         public val compositionAbiI32: Int = 3,
-    ) : BlendPlan { override val canonicalLabel: String = "destination-read-$formulaIdentity" }
+    ) : BlendPlan {
+        override val canonicalLabel: String = "destination-read-$formulaIdentity"
+        override val compositionFacts: FinalBlendCompositionFactsV1
+            get() = requireNotNull(BlendFormulaProgramV1.finalCompositionFacts(
+                mode.name.lowercase(), readsPriorDevice = true, writesParentDevice = true))
+    }
 
-    public data object NoOpV1 : BlendPlan { override val canonicalLabel: String = "no-op-dst-v1" }
+    public data object NoOpV1 : BlendPlan {
+        override val canonicalLabel: String = "no-op-dst-v1"
+        override val compositionFacts: FinalBlendCompositionFactsV1 = requireNotNull(
+            BlendFormulaProgramV1.finalCompositionFacts("dst", readsPriorDevice = false, writesParentDevice = false))
+    }
 
     public companion object {
         /** Transitional spelling retained solely for existing W3/W4 witnesses. */
         public val SrcOver: BlendPlan get() = LegacySrcOverV1
     }
 }
+
+/** Destination snapshot binding remains owned by the W5 selected-plan authority. */
+internal fun BlendPlan.bindDestinationReadV1(
+    requiredDestinationVersion: DestinationVersionI64,
+    snapshotResource: PlanResourceId,
+): BlendPlan {
+    require(compositionFacts.readsPriorDevice)
+    return (this as? BlendPlan.DestinationReadV1)?.copy(requiredDestinationVersion = requiredDestinationVersion,
+        snapshotResource = snapshotResource) ?: error("Selected blend facts lack destination-read payload")
+}
+
+internal fun BlendPlan.destinationReadSnapshotResourceV1(): PlanResourceId? =
+    (this as? BlendPlan.DestinationReadV1)?.snapshotResource
+
+internal fun BlendPlan.requiredDestinationVersionV1(): DestinationVersionI64? =
+    (this as? BlendPlan.DestinationReadV1)?.requiredDestinationVersion
 
 /** Backend-neutral classifier. Renderers lower an already-selected [BlendPlan] only. */
 public enum class BlendCoverageApplicationV1 { SourceMultiplication, DestinationInterpolation }
