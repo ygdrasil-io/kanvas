@@ -9,10 +9,12 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.render.ir.GraphLimits
 import org.graphiks.kanvas.render.ir.SceneCaptureLimits
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.color.ColorMatrixF32
 import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.Test
 
@@ -109,6 +111,27 @@ class W6aNestedLayerSurfacePixelTest {
     }
 
     @Test
+    fun `empty alpha creating child expands the bounded parent restore domain`() {
+        val transparent = rgba(0, 0, 0, 0)
+        val green = rgba(0, 255, 0)
+        val expected = transparent + green + green + green + transparent
+        val surface = Surface(5, 1)
+        surface.canvas {
+            clipRect(RectF32.ofLTRB(1f, 0f, 4f, 1f), antiAlias = false)
+            saveLayer()
+            drawOpaque(2f, 3f, ColorARGB.of(255, 17, 61, 211))
+            saveLayer(paint = Paint(
+                colorFilter = opaqueGreenFromTransparentBlack(),
+                blendMode = BlendMode.SRC,
+                antiAlias = false,
+            ))
+            restore()
+            restore()
+        }
+        assertContentEquals(expected, surface.render().pixels)
+    }
+
+    @Test
     fun `restoreToCountClosesLayersInOrder`() {
         val expected = rgba(239, 51, 73) + rgba(17, 61, 211) + rgba(43, 181, 93)
         val surface = Surface(3, 1)
@@ -128,10 +151,11 @@ class W6aNestedLayerSurfacePixelTest {
     @Test
     fun `depthLimitRefusesBeforeReadbackAndSameSurfaceRecovers`() {
         val expectedRecovery = rgba(17, 61, 211) + rgba(17, 61, 211)
-        val surface = Surface(2, 1, captureLimits = SceneCaptureLimits(graphLimits = GraphLimits(maxDepth = 1)))
+        val admittedDepth = 32
+        val surface = Surface(2, 1, captureLimits = SceneCaptureLimits(graphLimits = GraphLimits(maxDepth = admittedDepth)))
         surface.canvas {
-            repeat(2) { saveLayer() }
-            repeat(2) { restore() }
+            repeat(admittedDepth + 1) { saveLayer() }
+            repeat(admittedDepth + 1) { restore() }
         }
 
         val sentinel = UByteArray(8) { 0x5au }
@@ -147,12 +171,56 @@ class W6aNestedLayerSurfacePixelTest {
         assertContentEquals(expectedRecovery, surface.render().pixels)
     }
 
+    @Test
+    fun `substantial admitted depth renders and closes in order`() {
+        val admittedDepth = 32
+        val expected = rgba(239, 51, 73)
+        val surface = Surface(1, 1, captureLimits = SceneCaptureLimits(graphLimits = GraphLimits(maxDepth = admittedDepth)))
+        surface.canvas {
+            repeat(admittedDepth) { saveLayer() }
+            drawOpaque(0f, 1f, ColorARGB.of(255, 239, 51, 73))
+            repeat(admittedDepth) { restore() }
+        }
+        assertContentEquals(expected, surface.render().pixels)
+    }
+
+    @Test
+    fun `command limit refuses before readback and same surface recovers`() {
+        val expectedRecovery = rgba(43, 181, 93) + rgba(43, 181, 93)
+        val surface = Surface(2, 1, captureLimits = SceneCaptureLimits(graphLimits = GraphLimits(maxDepth = 8, maxNodes = 3)))
+        surface.canvas {
+            clipRect(RectF32.ofLTRB(0f, 0f, 2f, 1f), antiAlias = false)
+            saveLayer()
+            drawOpaque(0f, 2f, ColorARGB.of(255, 239, 51, 73))
+            restore()
+        }
+
+        val sentinel = UByteArray(8) { 0x5au }
+        val before = sentinel.copyOf()
+        val error = assertFailsWith<IllegalStateException> {
+            surface.readPixels(RectF32.ofLTRB(0f, 0f, 2f, 1f), sentinel)
+        }
+        assertTrue(error.message?.startsWith("w6a.layer.command_limit:") == true, error.message ?: "missing diagnostic")
+        assertContentEquals(before, sentinel)
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawOpaque(0f, 2f, ColorARGB.of(255, 43, 181, 93)) }
+        assertContentEquals(expectedRecovery, surface.render().pixels)
+    }
+
     private fun org.graphiks.kanvas.canvas.Canvas.drawOpaque(left: Float, right: Float, color: ColorARGB) {
         drawRect(RectF32.ofLTRB(left, 0f, right, 1f), Paint(color, antiAlias = false))
     }
 
     private fun rgba(red: Int, green: Int, blue: Int, alpha: Int = 255): UByteArray =
         ubyteArrayOf(red.toUByte(), green.toUByte(), blue.toUByte(), alpha.toUByte())
+
+    private fun opaqueGreenFromTransparentBlack(): ColorFilter = ColorFilter.Matrix(ColorMatrixF32.of(floatArrayOf(
+        0f, 0f, 0f, 0f, 0f,
+        0f, 0f, 0f, 0f, 1f,
+        0f, 0f, 0f, 0f, 0f,
+        0f, 0f, 0f, 0f, 1f,
+    )))
 
     /** W3C Difference for two opaque encoded-sRGB inputs, calculated in linear light. */
     private fun opaqueDifference(

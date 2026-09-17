@@ -225,8 +225,48 @@ public class RenderGraph private constructor(
             require(scopes.all { scope -> scope.childIds().all { child -> byScope[child]?.parentId == scope.id } })
             require(scopes.map { it.targetResource }.toSet() == construction.resources()
                 .filter { it.role == PlanResourceRole.LayerTarget }.map { it.id }.toSet())
+            val rootTarget = construction.resources().single { it.role == PlanResourceRole.LogicalTarget }.id
             val passesById = construction.passes().associateBy { it.id }
-            require(frame.executionSteps().all { step -> passesById.containsKey(step.passId) })
+            val passOrder = construction.passes().mapIndexed { indexI32, pass -> pass.id to indexI32 }.toMap()
+            val initialized = mutableSetOf<LayerScopeIdI32>()
+            val restored = mutableSetOf<LayerScopeIdI32>()
+            val initializeOrder = mutableMapOf<LayerScopeIdI32, Int>()
+            val restoreOrder = mutableMapOf<LayerScopeIdI32, Int>()
+            val steps = frame.executionSteps()
+            require(steps.zipWithNext().all { (first, second) ->
+                passOrder.getValue(first.passId) < passOrder.getValue(second.passId)
+            })
+            steps.forEachIndexed { stepIndexI32, step ->
+                val scope = byScope.getValue(step.scopeId)
+                when (step) {
+                    is LayerExecutionStepV1.Initialize -> {
+                        val pass = passesById[step.passId] as? PlanPass.RenderPass
+                        require(pass != null && pass.target == scope.targetResource && pass.load == AttachmentLoadPlan.ClearTransparent &&
+                            pass.draws().isEmpty() && initialized.add(scope.id) && scope.id !in restored)
+                        initializeOrder[scope.id] = stepIndexI32
+                    }
+                    is LayerExecutionStepV1.RenderChildren -> {
+                        val pass = passesById[step.passId] as? PlanPass.RenderPass
+                        require(scope.id in initialized && scope.id !in restored && pass != null && pass.target == scope.targetResource &&
+                            pass.load == AttachmentLoadPlan.Load && pass.draws().isNotEmpty())
+                    }
+                    is LayerExecutionStepV1.Restore -> {
+                        val pass = passesById[step.passId] as? PlanPass.LayerComposite
+                        val expectedDestination = scope.parentId?.let { byScope.getValue(it).targetResource } ?: rootTarget
+                        require(scope.id in initialized && restored.add(scope.id) && pass != null && pass.scopeId == scope.id &&
+                            pass.source == scope.targetResource && pass.destination == expectedDestination &&
+                            (pass.destination == rootTarget) == (scope.parentId == null) && pass.restore === scope.restore)
+                        restoreOrder[scope.id] = stepIndexI32
+                    }
+                }
+            }
+            require(initialized == byScope.keys && restored == byScope.keys)
+            require(scopes.all { scope -> scope.parentId?.let { parentId ->
+                initializeOrder.getValue(parentId) < initializeOrder.getValue(scope.id) &&
+                    restoreOrder.getValue(scope.id) < restoreOrder.getValue(parentId) &&
+                    byScope.getValue(parentId).beginCommandIndexI32 < scope.beginCommandIndexI32 &&
+                    scope.endCommandIndexI32 < byScope.getValue(parentId).endCommandIndexI32
+            } ?: true })
             require(scopes.all { scope ->
                 val restore = construction.passes().filterIsInstance<PlanPass.LayerComposite>().singleOrNull { it.scopeId == scope.id }
                 restore?.source == scope.targetResource && restore.restore === scope.restore

@@ -84,6 +84,7 @@ internal class W6aLayerGraphConstruction(
         require(occurrences.all { occurrence -> occurrence.childIdsI32.all { child ->
             occurrenceById[child]?.parentIdI32 == occurrence.idI32
         } })
+        require(occurrences.indices.all { indexI32 -> occurrences[indexI32].idI32 == indexI32 })
         require(bindings.all { binding -> binding.scopeI32 == null || binding.scopeI32 in occurrenceById })
         require(bindings.map { it.firstCommandIndexI32 }.distinct().size == bindings.size)
         require(lanes.all { source -> source.passes().all { it is PlanPass.RenderPass || it is PlanPass.ReadbackPass } &&
@@ -94,28 +95,65 @@ internal class W6aLayerGraphConstruction(
         val restoreFactsByScope = occurrences.associate { occurrence ->
             occurrence.idI32 to sealRestoreFacts(occurrence)
         }
-        val directKnownByScope = occurrences.associate { occurrence ->
-            occurrence.idI32 to directKnownContent(occurrence.idI32)
-        }
-        fun descendantKnown(scopeIdI32: Int): RectI32? {
-            val occurrence = occurrenceById.getValue(scopeIdI32)
-            return occurrence.childIdsI32.fold(directKnownByScope.getValue(scopeIdI32)) { known, childIdI32 ->
-                descendantKnown(childIdI32)?.let { child -> known?.let { union(it, child) } ?: child.copy() } ?: known
+        val directKnownByScope = arrayOfNulls<RectI32>(occurrences.size)
+        bindings.forEach { binding ->
+            val scopeIdI32 = binding.scopeI32 ?: return@forEach
+            RenderGraph.visualDraws(binding.source.passes()).filterIsInstance<SolidRectDraw>().forEach { draw ->
+                intersect(draw.copyVisibleBounds(), draw.copyScissor())?.let { bounds ->
+                    directKnownByScope[scopeIdI32] = unionOrNull(directKnownByScope[scopeIdI32], bounds)
+                }
             }
         }
-        val geometryByScope = linkedMapOf<Int, W6aScopeGeometry>()
+
+        // Desired restore output is semantic and flows from the root clip downward.  It must
+        // never be constrained by a parent's later, content-sized physical allocation.
+        val desiredOutputByScope = arrayOfNulls<RectI32>(occurrences.size)
         occurrences.forEach { occurrence ->
-            val parentDomain = occurrence.parentIdI32?.let { parent ->
-                geometryByScope.getValue(parent).compositeDomainDeviceI32
-            } ?: rootDomainDeviceI32
+            val parentDesired = if (occurrence.parentIdI32 == null) rootDomainDeviceI32
+                else desiredOutputByScope[occurrence.parentIdI32]
+            desiredOutputByScope[occurrence.idI32] = parentDesired?.let { desiredOutput(occurrence.descriptor, it) }
+        }
+
+        // Restore output is post-order.  This is an ID-indexed table rather than recursive
+        // descendant walks, so a legal GraphLimits depth has linear work and stack use.
+        val knownContentByScope = arrayOfNulls<RectI32>(occurrences.size)
+        val producedOutputByScope = arrayOfNulls<RectI32>(occurrences.size)
+        for (indexI32 in occurrences.indices.reversed()) {
+            val occurrence = occurrences[indexI32]
+            val desired = desiredOutputByScope[occurrence.idI32]
+            var known = directKnownByScope[occurrence.idI32]
+            occurrence.childIdsI32.forEach { childIdI32 ->
+                known = unionOrNull(known, producedOutputByScope[childIdI32])
+            }
+            known = desired?.let { desiredDomain -> known?.let { intersect(it, desiredDomain) } }
+            knownContentByScope[occurrence.idI32] = known
+            producedOutputByScope[occurrence.idI32] = when {
+                desired == null -> null
+                restoreFactsByScope.getValue(occurrence.idI32).restoreAffectsTransparentBlack -> desired.copy()
+                else -> known?.copy()
+            }
+        }
+
+        // Only after output is known do we freeze target domains.  A parent retains every child
+        // target domain it must composite, including a child whose restore expands transparent
+        // black beyond the parent's direct content.
+        val geometryByScope = arrayOfNulls<W6aScopeGeometry>(occurrences.size)
+        for (indexI32 in occurrences.indices.reversed()) {
+            val occurrence = occurrences[indexI32]
+            var physicalInput = directKnownByScope[occurrence.idI32]
+            occurrence.childIdsI32.forEach { childIdI32 ->
+                physicalInput = unionOrNull(physicalInput, geometryByScope[childIdI32]?.compositeDomainDeviceI32)
+            }
             geometryByScope[occurrence.idI32] = sealGeometry(
                 occurrence,
                 restoreFactsByScope.getValue(occurrence.idI32),
-                parentDomain,
-                descendantKnown(occurrence.idI32),
+                desiredOutputByScope[occurrence.idI32],
+                knownContentByScope[occurrence.idI32],
+                producedOutputByScope[occurrence.idI32],
+                physicalInput,
             )
         }
-        geometries = immutableList(occurrences.map { geometryByScope.getValue(it.idI32) })
+        geometries = immutableList(occurrences.map { requireNotNull(geometryByScope[it.idI32]) })
         val activeByScope = geometries.filterNot(W6aScopeGeometry::isElided).associateBy { it.occurrence.idI32 }
         activeByScope.values.forEach { geometry -> admitRestoreBindings(restoreFactsByScope.getValue(geometry.occurrence.idI32)) }
 
@@ -303,11 +341,12 @@ internal class W6aLayerGraphConstruction(
     private fun sealGeometry(
         occurrence: W6aLayerPlanCompiler.ScopeOccurrence,
         restoreFacts: W6aRestoreFacts,
-        parentDomainDeviceI32: RectI32?,
+        desired: RectI32?,
         known: RectI32?,
+        produced: RectI32?,
+        physicalInput: RectI32?,
     ): W6aScopeGeometry {
-        val desired = parentDomainDeviceI32?.let { desiredOutput(occurrence.descriptor, it) }
-            ?: return W6aScopeGeometry(occurrence, null, null, known, null, null, null, null)
+        if (desired == null) return W6aScopeGeometry(occurrence, null, null, known, null, null, produced, null)
         val transform = occurrence.descriptor.transform
         val localToDevice = Matrix3x3F64(
             transform.sx.toDouble(), transform.kx.toDouble(), transform.tx.toDouble(),
@@ -321,10 +360,9 @@ internal class W6aLayerGraphConstruction(
         }
         val hintDomain = hint?.roundOutToRectI32OrNull()
             ?: if (hint == null) null else throw IllegalArgumentException(W6aPlanDiagnostics.MappingOverflow)
-        val produced = known
         val required = desired.copy()
         val effective = if (restoreFacts.restoreAffectsTransparentBlack) desired
-            else if (known == null) desired else hintDomain?.let { union(known, it) } ?: known
+            else if (physicalInput == null) desired else hintDomain?.let { union(physicalInput, it) } ?: physicalInput
         val composite = intersect(effective, desired)
         if (composite == null) return W6aScopeGeometry(occurrence, null, hint, known, desired, required, produced, null)
         val mapping = LayerMappingF64.ofOrNull(localToDevice, Point2I32(composite.left, composite.top))
@@ -342,12 +380,6 @@ internal class W6aLayerGraphConstruction(
         }
         is ClipStackNode.Operations -> throw IllegalArgumentException("${W6aPlanDiagnostics.UnsupportedChild}: complex composite clip")
     }
-
-    private fun directKnownContent(scopeI32: Int): RectI32? = bindings.filter { it.scopeI32 == scopeI32 }
-        .flatMap { RenderGraph.visualDraws(it.source.passes()) }
-        .filterIsInstance<SolidRectDraw>()
-        .mapNotNull { draw -> intersect(draw.copyVisibleBounds(), draw.copyScissor()) }
-        .fold<RectI32, RectI32?>(null) { union, bounds -> union?.let { union(it, bounds) } ?: bounds.copy() }
 
     private fun localizeLayerDraw(draw: PlanDraw, mapping: LayerMappingF64, targetDomainDeviceI32: RectI32): PlanDraw {
         val solid = draw as? SolidRectDraw ?: error("w6a.layer.unsupported_child")
@@ -373,6 +405,12 @@ internal class W6aLayerGraphConstruction(
         minOf(first.left, second.left), minOf(first.top, second.top), maxOf(first.right, second.right), maxOf(first.bottom, second.bottom),
     )
 
+    private fun unionOrNull(first: RectI32?, second: RectI32?): RectI32? = when {
+        first == null -> second?.copy()
+        second == null -> first.copy()
+        else -> union(first, second)
+    }
+
     private fun sealRestoreFacts(occurrence: W6aLayerPlanCompiler.ScopeOccurrence): W6aRestoreFacts {
         val paint = occurrence.descriptor.paint
         val colorFilter = paint?.colorFilter?.let { filter ->
@@ -384,7 +422,7 @@ internal class W6aLayerGraphConstruction(
             PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1())) {
             "${W6aPlanDiagnostics.UnsupportedRestore}: restore blend"
         }
-        return W6aRestoreFacts(paint?.color?.alpha?.toInt()?.div(255f) ?: 1f, colorFilter, blend)
+        return W6aRestoreFacts(paint?.color?.alpha?.div(255f) ?: 1f, colorFilter, blend)
     }
 
     /** The W5 filter proof owns bytes; W6 admits only the already-sealed binding requirements. */
