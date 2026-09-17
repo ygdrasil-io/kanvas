@@ -11,6 +11,9 @@ public object W6aPlanDiagnostics {
     public const val MappingOverflow: String = "w6a.layer.mapping_overflow"
     public const val UnsupportedRestore: String = "w6a.layer.unsupported_restore"
     public const val RestoreCapability: String = "w6a.layer.restore_capability"
-    public const val UnsupportedNestedScope: String = "w6a.layer.unsupported_nested_scope"
+    /** Captured W6a scope stack exceeded its immutable GraphLimits depth. */
+    public const val DepthLimit: String = "w6a.layer.depth_limit"
+    /** Captured W6a command sequence exceeded its immutable GraphLimits node bound. */
+    public const val CommandLimit: String = "w6a.layer.command_limit"
     public const val UnsupportedChild: String = "w6a.layer.unsupported_child"
 }

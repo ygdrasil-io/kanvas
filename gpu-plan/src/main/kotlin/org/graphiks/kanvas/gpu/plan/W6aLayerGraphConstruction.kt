@@ -10,8 +10,12 @@ import org.graphiks.math.matrix.LayerMappingF64
 import org.graphiks.math.matrix.Matrix3x3F64
 import org.graphiks.math.matrix.mapRectBoundsF64OrNull
 
-/** One occurrence binding, still before material issuance and graph publication. */
-internal class W6aLayerSourceBinding(val scopeI32: Int?, val source: SourceDeferredRenderConstructionV4)
+/** One unpublished W3/W5 lane, attached to its exact command occurrence and immediate target. */
+internal class W6aLayerSourceBinding(
+    val scopeI32: Int?,
+    val firstCommandIndexI32: Int,
+    val source: SourceDeferredRenderConstructionV4,
+)
 
 /** All device-space regions are sealed before the physical target has an extent. */
 private class W6aScopeGeometry(
@@ -42,6 +46,10 @@ private class W6aRestoreFacts(
 /** Deliberately distinguished from malformed W6 topology so callers can recover before native work. */
 internal class W6aRestoreAdmissionFailure(message: String) : IllegalArgumentException(message)
 
+/**
+ * Freezes a complete layer event stack into one physical graph. In particular, this class never
+ * groups by depth: each Begin, direct draw segment, and End is emitted in captured command order.
+ */
 internal class W6aLayerGraphConstruction(
     private val id: PlanId,
     val extent: SizeI32,
@@ -56,7 +64,7 @@ internal class W6aLayerGraphConstruction(
     private val root = planResourceId(PlanResourceRole.LogicalTarget, 0)
     private val staging = planResourceId(PlanResourceRole.ReadbackStaging, 0)
     private val rootDomainDeviceI32 = RectI32(0, 0, extent.width, extent.height)
-    private val rowBytesI64 = Math.multiplyExact(extent.width.toLong(), 4L).let {
+    private val readbackRowBytesI64 = Math.multiplyExact(extent.width.toLong(), 4L).let {
         Math.addExact(it, (caps.copyBytesPerRowAlignment - it % caps.copyBytesPerRowAlignment) % caps.copyBytesPerRowAlignment)
     }
     private val geometries: List<W6aScopeGeometry>
@@ -68,7 +76,16 @@ internal class W6aLayerGraphConstruction(
 
     init {
         require(lanes.all { it.capabilities == caps && it.budget == budget })
-        require(bindings.all { it.scopeI32 == null || occurrences.any { scope -> scope.idI32 == it.scopeI32 } })
+        val occurrenceById = occurrences.associateBy { it.idI32 }
+        require(occurrenceById.size == occurrences.size)
+        require(occurrences.all { occurrence ->
+            occurrence.parentIdI32?.let { parent -> parent in occurrenceById && parent < occurrence.idI32 } ?: true
+        })
+        require(occurrences.all { occurrence -> occurrence.childIdsI32.all { child ->
+            occurrenceById[child]?.parentIdI32 == occurrence.idI32
+        } })
+        require(bindings.all { binding -> binding.scopeI32 == null || binding.scopeI32 in occurrenceById })
+        require(bindings.map { it.firstCommandIndexI32 }.distinct().size == bindings.size)
         require(lanes.all { source -> source.passes().all { it is PlanPass.RenderPass || it is PlanPass.ReadbackPass } &&
             RenderGraph.visualDraws(source.passes()).all { it is SolidRectDraw && it.blend !is BlendPlan.DestinationReadV1 } }) {
             "w6a.layer.unsupported_child"
@@ -77,136 +94,184 @@ internal class W6aLayerGraphConstruction(
         val restoreFactsByScope = occurrences.associate { occurrence ->
             occurrence.idI32 to sealRestoreFacts(occurrence)
         }
-        geometries = immutableList(occurrences.map { occurrence ->
-            sealGeometry(occurrence, restoreFactsByScope.getValue(occurrence.idI32))
-        })
-        val geometryByScope = geometries.associateBy { it.occurrence.idI32 }
-        val active = geometries.filterNot(W6aScopeGeometry::isElided)
-        // A semantic restore fact is sealed for every scope, but only a non-elided scope binds
-        // filter or destination resources.  This keeps required semantic refusals before
-        // geometry while avoiding capability admission for work that cannot materialize.
-        active.forEach { geometry ->
-            admitRestoreBindings(restoreFactsByScope.getValue(geometry.occurrence.idI32))
+        val directKnownByScope = occurrences.associate { occurrence ->
+            occurrence.idI32 to directKnownContent(occurrence.idI32)
         }
-        val passes = mutableListOf<PlanPass>()
-        val steps = mutableListOf<LayerExecutionStepV1>()
-        val scopes = mutableListOf<LayerScopePlanV1>()
-        var versionI64 = 0L
-        var uniformCursorI64 = 16L
-
-        fun render(target: PlanResourceId, draws: List<PlanDraw>, clear: Boolean): PlanPass.RenderPass {
-            val version = if (target == root) DestinationVersionI64(versionI64.also { versionI64 += draws.size }) else null
-            return PlanPass.RenderPass(
-                passes.count { it is PlanPass.RenderPass },
-                target,
-                draws,
-                if (clear) AttachmentLoadPlan.ClearTransparent else AttachmentLoadPlan.Load,
-                AttachmentStorePlan.Store,
-                destinationVersionAfter = if (target == root) DestinationVersionI64(versionI64) else version,
-            ).also { passes += it }
-        }
-
-        render(root, emptyList(), true)
-
-        fun segment(binding: W6aLayerSourceBinding) {
-            val target = binding.scopeI32?.let { planResourceId(PlanResourceRole.LayerTarget, it) } ?: root
-            val draws = RenderGraph.visualDraws(binding.source.passes())
-            if (draws.isNotEmpty()) {
-                val pass = render(target, draws, false)
-                binding.scopeI32?.let { steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(it), pass.id) }
+        fun descendantKnown(scopeIdI32: Int): RectI32? {
+            val occurrence = occurrenceById.getValue(scopeIdI32)
+            return occurrence.childIdsI32.fold(directKnownByScope.getValue(scopeIdI32)) { known, childIdI32 ->
+                descendantKnown(childIdI32)?.let { child -> known?.let { union(it, child) } ?: child.copy() } ?: known
             }
         }
-
-        var previousEndI32 = -1
+        val geometryByScope = linkedMapOf<Int, W6aScopeGeometry>()
         occurrences.forEach { occurrence ->
-            bindings.filter { binding ->
-                binding.scopeI32 == null && RenderGraph.visualDraws(binding.source.passes()).firstOrNull()?.commandIndex?.let {
-                    command -> command > previousEndI32 && command < occurrence.beginCommandIndexI32
-                } == true
-            }.forEach(::segment)
+            val parentDomain = occurrence.parentIdI32?.let { parent ->
+                geometryByScope.getValue(parent).compositeDomainDeviceI32
+            } ?: rootDomainDeviceI32
+            geometryByScope[occurrence.idI32] = sealGeometry(
+                occurrence,
+                restoreFactsByScope.getValue(occurrence.idI32),
+                parentDomain,
+                descendantKnown(occurrence.idI32),
+            )
+        }
+        geometries = immutableList(occurrences.map { geometryByScope.getValue(it.idI32) })
+        val activeByScope = geometries.filterNot(W6aScopeGeometry::isElided).associateBy { it.occurrence.idI32 }
+        activeByScope.values.forEach { geometry -> admitRestoreBindings(restoreFactsByScope.getValue(geometry.occurrence.idI32)) }
 
-            val geometry = geometryByScope.getValue(occurrence.idI32)
-            if (!geometry.isElided) {
+        val passes = mutableListOf<PlanPass>()
+        val steps = mutableListOf<LayerExecutionStepV1>()
+        val scopePlans = linkedMapOf<Int, LayerScopePlanV1>()
+        val versions = mutableMapOf<PlanResourceId, Long>()
+        var uniformCursorI64 = 16L
+
+        fun targetFor(scopeI32: Int?): PlanResourceId = scopeI32?.let { planResourceId(PlanResourceRole.LayerTarget, it) } ?: root
+        fun targetExtent(target: PlanResourceId): SizeI32 = if (target == root) extent.copy() else
+            activeByScope.getValue(target.value.substringAfter(':').toInt()).targetExtentI32()
+        fun targetOriginDevice(target: PlanResourceId): Point2I32 = if (target == root) Point2I32.Origin else
+            activeByScope.getValue(target.value.substringAfter(':').toInt()).mapping!!.copyLayerOriginDeviceI32()
+        fun appendRender(target: PlanResourceId, draws: List<PlanDraw>, clear: Boolean): PlanPass.RenderPass {
+            val before = versions[target] ?: 0L
+            val after = Math.addExact(before, draws.size.toLong())
+            versions[target] = after
+            return PlanPass.RenderPass(passes.size, target, draws,
+                if (clear) AttachmentLoadPlan.ClearTransparent else AttachmentLoadPlan.Load,
+                AttachmentStorePlan.Store, destinationVersionAfter = DestinationVersionI64(after)).also(passes::add)
+        }
+
+        // The root is the one scene attachment. It starts clear; every later root segment loads.
+        appendRender(root, emptyList(), true)
+        val bindingsByCommand = bindings.associateBy { it.firstCommandIndexI32 }
+        val begins = occurrences.associateBy { it.beginCommandIndexI32 }
+        val ends = occurrences.associateBy { it.endCommandIndexI32 }
+        val lastCommandIndexI32 = maxOf(
+            occurrences.maxOfOrNull { it.endCommandIndexI32 } ?: -1,
+            bindings.maxOfOrNull { it.firstCommandIndexI32 } ?: -1,
+        )
+        for (commandIndexI32 in 0..lastCommandIndexI32) {
+            begins[commandIndexI32]?.let { occurrence ->
+                val geometry = activeByScope[occurrence.idI32] ?: return@let
                 val scopeId = LayerScopeIdI32(occurrence.idI32)
-                val target = planResourceId(PlanResourceRole.LayerTarget, occurrence.idI32)
-                steps += LayerExecutionStepV1.Initialize(scopeId, render(target, emptyList(), true).id)
-                bindings.filter { it.scopeI32 == occurrence.idI32 }.forEach(::segment)
-                val before = DestinationVersionI64(versionI64)
+                steps += LayerExecutionStepV1.Initialize(scopeId, appendRender(targetFor(occurrence.idI32), emptyList(), true).id)
+                require(geometry.mapping != null)
+            }
+            bindingsByCommand[commandIndexI32]?.let { binding ->
+                if (binding.scopeI32 == null || binding.scopeI32 in activeByScope) {
+                    val draws = RenderGraph.visualDraws(binding.source.passes())
+                    if (draws.isNotEmpty()) {
+                        val pass = appendRender(targetFor(binding.scopeI32), draws, false)
+                        binding.scopeI32?.let { steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(it), pass.id) }
+                    }
+                }
+            }
+            ends[commandIndexI32]?.let { occurrence ->
+                val geometry = activeByScope[occurrence.idI32] ?: return@let
+                val scopeId = LayerScopeIdI32(occurrence.idI32)
+                val target = targetFor(occurrence.idI32)
+                val parentTarget = targetFor(occurrence.parentIdI32)
                 val facts = restoreFactsByScope.getValue(occurrence.idI32)
+                val before = DestinationVersionI64(versions[parentTarget] ?: 0L)
                 val filterOffset = facts.colorFilter?.let { execution ->
                     uniformCursorI64 = alignUniform(uniformCursorI64, caps.minUniformBufferOffsetAlignment)
                     uniformCursorI64.also { uniformCursorI64 = Math.addExact(it, maxOf(16L, execution.dynamicByteCountI64)) }
                 }
-                val blend = if (facts.readsPriorDevice) facts.blend.bindDestinationReadV1(before,
-                    planResourceId(PlanResourceRole.DestinationSnapshot, occurrence.idI32)) else facts.blend
-                val after = DestinationVersionI64(if (facts.writesParentDevice) Math.addExact(versionI64, 1L) else versionI64)
+                val snapshot = planResourceId(PlanResourceRole.DestinationSnapshot, occurrence.idI32)
+                val blend = if (facts.readsPriorDevice) facts.blend.bindDestinationReadV1(before, snapshot) else facts.blend
+                val after = DestinationVersionI64(if (facts.writesParentDevice) Math.addExact(before.valueI64, 1L) else before.valueI64)
                 val restore = LayerRestorePlanV1(facts.alphaF32, facts.colorFilter, blend, facts.readsPriorDevice,
                     facts.writesParentDevice, facts.restoreAffectsTransparentBlack, before, after, filterOffset)
-                val targetDomain = requireNotNull(geometry.compositeDomainDeviceI32)
-                val sourceBounds = RectI32(0, 0, targetDomain.width(), targetDomain.height())
                 if (facts.readsPriorDevice) {
-                    passes += PlanPass.TextureCopy(occurrence.idI32, root, requireNotNull(blend.destinationReadSnapshotResourceV1()), before,
-                        rootDomainDeviceI32, Point2I32.Origin, rowBytesI64)
+                    val parentExtent = targetExtent(parentTarget)
+                    passes += PlanPass.TextureCopy(passes.size, parentTarget, snapshot, before,
+                        RectI32(0, 0, parentExtent.width, parentExtent.height), Point2I32.Origin,
+                        Math.multiplyExact(parentExtent.width.toLong(), 4L))
                 }
-                versionI64 = after.valueI64
-                val composite = PlanPass.LayerComposite(occurrence.idI32, scopeId, target, root, sourceBounds,
-                    Point2I32(targetDomain.left, targetDomain.top), restore, AttachmentLoadPlan.Load,
-                    AttachmentStorePlan.Store, restore.parentVersionAfter)
+                versions[parentTarget] = after.valueI64
+                val childDomain = requireNotNull(geometry.compositeDomainDeviceI32)
+                val parentOrigin = targetOriginDevice(parentTarget)
+                val destinationOrigin = Point2I32(
+                    Math.toIntExact(Math.subtractExact(childDomain.left.toLong(), parentOrigin.x.toLong())),
+                    Math.toIntExact(Math.subtractExact(childDomain.top.toLong(), parentOrigin.y.toLong())),
+                )
+                val composite = PlanPass.LayerComposite(passes.size, scopeId, target, parentTarget,
+                    RectI32(0, 0, childDomain.width(), childDomain.height()), destinationOrigin, restore,
+                    AttachmentLoadPlan.Load, AttachmentStorePlan.Store, after)
                 passes += composite
                 steps += LayerExecutionStepV1.Restore(scopeId, composite.id)
-                scopes += LayerScopePlanV1(scopeId, null, occurrence.beginCommandIndexI32, occurrence.endCommandIndexI32,
-                    emptyList(), requireNotNull(geometry.mapping), LayerBoundsPlanV1(
+                scopePlans[occurrence.idI32] = LayerScopePlanV1(
+                    scopeId,
+                    occurrence.parentIdI32?.let(::LayerScopeIdI32),
+                    occurrence.beginCommandIndexI32,
+                    occurrence.endCommandIndexI32,
+                    occurrence.childIdsI32.filter { it in activeByScope }.map(::LayerScopeIdI32),
+                    requireNotNull(geometry.mapping),
+                    LayerBoundsPlanV1(
                         geometry.requestedHintDeviceF64,
                         geometry.knownContentDeviceI32,
                         requireNotNull(geometry.desiredOutputDeviceI32),
                         requireNotNull(geometry.requiredInputDeviceI32),
                         geometry.producedOutputDeviceI32,
-                        targetDomain,
-                    ), LayerInitializationPlanV1.TransparentBlack, restore, target)
+                        childDomain,
+                    ),
+                    LayerInitializationPlanV1.TransparentBlack,
+                    restore,
+                    target,
+                )
             }
-            previousEndI32 = occurrence.endCommandIndexI32
         }
-        bindings.filter { binding ->
-            binding.scopeI32 == null && RenderGraph.visualDraws(binding.source.passes()).firstOrNull()?.commandIndex?.let {
-                command -> command > previousEndI32
-            } == true
-        }.forEach(::segment)
-        passes += PlanPass.ReadbackPass(0, root, staging, rowBytesI64,
-            Math.addExact(Math.multiplyExact(rowBytesI64, (extent.height - 1).toLong()), Math.multiplyExact(extent.width.toLong(), 4L)))
+        passes += PlanPass.ReadbackPass(passes.size, root, staging, readbackRowBytesI64,
+            Math.addExact(Math.multiplyExact(readbackRowBytesI64, (extent.height - 1).toLong()), Math.multiplyExact(extent.width.toLong(), 4L)))
         rawPasses = immutableList(passes)
-        frame = LayerFramePlanV1(scopes, steps)
+        // IDs and semantic scope enumeration are assigned at BeginLayer in source order. Restore
+        // construction is post-order, but must not leak that implementation detail into the
+        // immutable plan metadata.
+        frame = LayerFramePlanV1(occurrences.mapNotNull { scopePlans[it.idI32] }, steps)
 
-        // Every handle is acquired by one frame draft and retained until completion. An active
-        // layer target therefore owns a distinct physical allocation even when another scope's
-        // render pass has finished.
+        val copySources = passes.filterIsInstance<PlanPass.TextureCopy>().map { it.source }.toSet()
+        val targetExtents = buildMap<PlanResourceId, SizeI32> {
+            put(root, extent.copy())
+            activeByScope.values.forEach { geometry -> put(targetFor(geometry.occurrence.idI32), geometry.targetExtentI32()) }
+        }
         resources = immutableList(buildList {
             add(PlanResource.of(PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D,
                 PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), extent,
                 checkedTextureBytesI64(4, extent.width, extent.height, 1),
                 setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource), PlanResourceLifetime.FrameLocal, 0, passes.size))
-            active.forEach { geometry ->
+            activeByScope.values.forEach { geometry ->
+                val target = targetFor(geometry.occurrence.idI32)
+                val usages = buildSet {
+                    add(PlanResourceUsage.RenderAttachment)
+                    add(PlanResourceUsage.Sampled)
+                    if (target in copySources) add(PlanResourceUsage.CopySource)
+                }
                 val targetExtent = geometry.targetExtentI32()
                 add(PlanResource.of(PlanResourceRole.LayerTarget, geometry.occurrence.idI32, PlanResourceKind.Texture2D,
                     PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), targetExtent,
-                    checkedTextureBytesI64(4, targetExtent.width, targetExtent.height, 1),
-                    setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), PlanResourceLifetime.FrameLocal, 0, passes.size))
+                    checkedTextureBytesI64(4, targetExtent.width, targetExtent.height, 1), usages,
+                    PlanResourceLifetime.FrameLocal, 0, passes.size))
             }
-            scopes.filter { it.restore.readsPriorDevice }.forEach { scope ->
+            scopePlans.values.filter { it.restore.readsPriorDevice }.forEach { scope ->
+                val parentTarget = scope.parentId?.let { targetFor(it.valueI32) } ?: root
+                val parentExtent = targetExtents.getValue(parentTarget)
                 add(PlanResource.of(PlanResourceRole.DestinationSnapshot, scope.id.valueI32, PlanResourceKind.Texture2D,
-                    PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), extent,
-                    checkedTextureBytesI64(4, extent.width, extent.height, 1),
+                    PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), parentExtent,
+                    checkedTextureBytesI64(4, parentExtent.width, parentExtent.height, 1),
                     setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.Sampled), PlanResourceLifetime.FrameLocal, 0, passes.size))
             }
             add(PlanResource.of(PlanResourceRole.ReadbackStaging, 0, PlanResourceKind.Buffer, null, null,
-                Math.multiplyExact(rowBytesI64, extent.height.toLong()), setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead),
-                PlanResourceLifetime.FrameLocal, 0, passes.size))
+                Math.multiplyExact(readbackRowBytesI64, extent.height.toLong()),
+                setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead), PlanResourceLifetime.FrameLocal, 0, passes.size))
             add(PlanResource.of(PlanResourceRole.UniformData, 0, PlanResourceKind.Buffer, null, null, uniformCursorI64,
                 setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination), PlanResourceLifetime.FrameLocal, 0, passes.size))
         })
         nonUniformBytesI64 = W6aLayerPlanBudget.peak(resources, passes.size, budget)
     }
 
-    fun publish(table: MaterialPlanTable?, bound: List<List<PlanPass>>, source: SourcePhysicalConstructionV1 = SourcePhysicalConstructionV1()): RenderGraph {
+    fun publish(
+        table: MaterialPlanTable?,
+        bound: List<List<PlanPass>>,
+        source: SourcePhysicalConstructionV1 = SourcePhysicalConstructionV1(),
+    ): RenderGraph {
         require(bound.size == lanes.size || bound.isEmpty() && table == null)
         val byCommand = bound.flatMap { RenderGraph.visualDraws(it) }.associateBy { it.commandIndex }
         val geometryByTarget = geometries.filterNot(W6aScopeGeometry::isElided).associateBy {
@@ -217,11 +282,8 @@ internal class W6aLayerGraphConstruction(
                 val mapped = pass.draws().map { byCommand.getValue(it.commandIndex) }
                 val local = if (pass.target == root) mapped else {
                     val geometry = geometryByTarget.getValue(pass.target)
-                    mapped.map { draw -> localizeLayerDraw(
-                        draw,
-                        requireNotNull(geometry.mapping),
-                        requireNotNull(geometry.compositeDomainDeviceI32),
-                    ) }
+                    mapped.map { draw -> localizeLayerDraw(draw, requireNotNull(geometry.mapping),
+                        requireNotNull(geometry.compositeDomainDeviceI32)) }
                 }
                 PlanPass.RenderPass(pass.ordinal, pass.target, local, pass.load, pass.store,
                     destinationVersionAfter = pass.destinationVersionAfter)
@@ -241,11 +303,11 @@ internal class W6aLayerGraphConstruction(
     private fun sealGeometry(
         occurrence: W6aLayerPlanCompiler.ScopeOccurrence,
         restoreFacts: W6aRestoreFacts,
+        parentDomainDeviceI32: RectI32?,
+        known: RectI32?,
     ): W6aScopeGeometry {
-        // A proven-empty restore clip elides before inspecting any transform or hint.  Nothing
-        // can allocate, render or sample from this scope.
-        val desired = desiredOutput(occurrence.descriptor)
-            ?: return W6aScopeGeometry(occurrence, null, null, null, null, null, null, null)
+        val desired = parentDomainDeviceI32?.let { desiredOutput(occurrence.descriptor, it) }
+            ?: return W6aScopeGeometry(occurrence, null, null, known, null, null, null, null)
         val transform = occurrence.descriptor.transform
         val localToDevice = Matrix3x3F64(
             transform.sx.toDouble(), transform.kx.toDouble(), transform.tx.toDouble(),
@@ -259,13 +321,8 @@ internal class W6aLayerGraphConstruction(
         }
         val hintDomain = hint?.roundOutToRectI32OrNull()
             ?: if (hint == null) null else throw IllegalArgumentException(W6aPlanDiagnostics.MappingOverflow)
-        val known = knownContent(occurrence.idI32)
         val produced = known
-        // W6a's current transparent, identity restore has no filter expansion. The four values
-        // remain distinct facts even when their no-filter derivations happen to coincide.
         val required = desired.copy()
-        // Transparent black is real input to an alpha-creating filter or a blend such as CLEAR.
-        // Its semantic restore domain is therefore the parent clip even when children are bounded.
         val effective = if (restoreFacts.restoreAffectsTransparentBlack) desired
             else if (known == null) desired else hintDomain?.let { union(known, it) } ?: known
         val composite = intersect(effective, desired)
@@ -275,31 +332,24 @@ internal class W6aLayerGraphConstruction(
         return W6aScopeGeometry(occurrence, mapping, hint, known, desired, required, produced, composite)
     }
 
-    private fun desiredOutput(descriptor: org.graphiks.kanvas.render.ir.LayerDescriptor): RectI32? = when (val clip = descriptor.compositeClip) {
-        null, ClipStackNode.Empty -> rootDomainDeviceI32.copy()
+    private fun desiredOutput(descriptor: org.graphiks.kanvas.render.ir.LayerDescriptor, parentDomain: RectI32): RectI32? = when (val clip = descriptor.compositeClip) {
+        null, ClipStackNode.Empty -> parentDomain.copy()
         is ClipStackNode.DeviceRect -> {
             val bounds = clip.copyBounds()
             if (bounds.left >= bounds.right || bounds.top >= bounds.bottom) null
-            else {
-                val rounded = RectF64(bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble())
-                    .roundOutToRectI32OrNull() ?: throw IllegalArgumentException(W6aPlanDiagnostics.MappingOverflow)
-                intersect(rounded, rootDomainDeviceI32)
-            }
+            else intersect(RectF64(bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble())
+                .roundOutToRectI32OrNull() ?: throw IllegalArgumentException(W6aPlanDiagnostics.MappingOverflow), parentDomain)
         }
         is ClipStackNode.Operations -> throw IllegalArgumentException("${W6aPlanDiagnostics.UnsupportedChild}: complex composite clip")
     }
 
-    private fun knownContent(scopeI32: Int): RectI32? = bindings.filter { it.scopeI32 == scopeI32 }
+    private fun directKnownContent(scopeI32: Int): RectI32? = bindings.filter { it.scopeI32 == scopeI32 }
         .flatMap { RenderGraph.visualDraws(it.source.passes()) }
         .filterIsInstance<SolidRectDraw>()
         .mapNotNull { draw -> intersect(draw.copyVisibleBounds(), draw.copyScissor()) }
         .fold<RectI32, RectI32?>(null) { union, bounds -> union?.let { union(it, bounds) } ?: bounds.copy() }
 
-    private fun localizeLayerDraw(
-        draw: PlanDraw,
-        mapping: LayerMappingF64,
-        targetDomainDeviceI32: RectI32,
-    ): PlanDraw {
+    private fun localizeLayerDraw(draw: PlanDraw, mapping: LayerMappingF64, targetDomainDeviceI32: RectI32): PlanDraw {
         val solid = draw as? SolidRectDraw ?: error("w6a.layer.unsupported_child")
         val visibleDevice = requireNotNull(intersect(solid.copyVisibleBounds(), targetDomainDeviceI32))
         val scissorDevice = requireNotNull(intersect(solid.copyScissor(), targetDomainDeviceI32))
@@ -307,21 +357,18 @@ internal class W6aLayerGraphConstruction(
         val scissorLayer = requireNotNull(mapping.mapDeviceRectToLayerI32OrNull(scissorDevice))
         return when (val authority = solid.materialAuthority) {
             is PlanDrawMaterialAuthority.LegacyColorV1 -> SolidRectDraw.of(
-                solid.commandIndex, authority.copyColorF32(), visibleLayer, scissorLayer,
-                solid.coverage, solid.sample, solid.blend,
+                solid.commandIndex, authority.copyColorF32(), visibleLayer, scissorLayer, solid.coverage, solid.sample, solid.blend,
             )
             is PlanDrawMaterialAuthority.MaterialV3 -> error("w6a.layer.unsupported_child")
             else -> SolidRectDraw.ofMaterial(
-                solid.commandIndex, authority.materialPlanRef(), visibleLayer, scissorLayer,
-                solid.coverage, solid.sample, solid.blend, solid.materialCoordinates, solid.materialCoordinatesV2,
-                (authority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
-                authority is PlanDrawMaterialAuthority.MaterialV5,
+                solid.commandIndex, authority.materialPlanRef(), visibleLayer, scissorLayer, solid.coverage, solid.sample,
+                solid.blend, solid.materialCoordinates, solid.materialCoordinatesV2,
+                (authority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates, authority is PlanDrawMaterialAuthority.MaterialV5,
             )
         }
     }
 
     private fun intersect(first: RectI32, second: RectI32): RectI32? = first.copy().takeIf { it.intersect(second) }
-
     private fun union(first: RectI32, second: RectI32): RectI32 = RectI32(
         minOf(first.left, second.left), minOf(first.top, second.top), maxOf(first.right, second.right), maxOf(first.bottom, second.bottom),
     )
@@ -340,17 +387,12 @@ internal class W6aLayerGraphConstruction(
         return W6aRestoreFacts(paint?.color?.alpha?.toInt()?.div(255f) ?: 1f, colorFilter, blend)
     }
 
-    /**
-     * The exact W5 filter proof owns the uniform footprint; W6 only admits its materialization
-     * against the sealed capabilities and the composite's already-fixed binding inventory.
-     */
+    /** The W5 filter proof owns bytes; W6 admits only the already-sealed binding requirements. */
     private fun admitRestoreBindings(facts: W6aRestoreFacts) {
         val bindingCountI32 = 1 + (if (facts.colorFilter == null) 0 else 1) + (if (facts.readsPriorDevice) 1 else 0)
         val sampledTextureCountI32 = 1 + if (facts.readsPriorDevice) 1 else 0
         try {
-            facts.colorFilter?.let { filter ->
-                requireColorUniformBindingV4(maxOf(16L, filter.dynamicByteCountI64), caps, bindingCountI32)
-            }
+            facts.colorFilter?.let { filter -> requireColorUniformBindingV4(maxOf(16L, filter.dynamicByteCountI64), caps, bindingCountI32) }
             require(caps.maxBindingsPerBindGroupI32?.let { it >= bindingCountI32 } == true &&
                 caps.maxSampledTexturesPerShaderStageI32?.let { it >= sampledTextureCountI32 } == true) {
                 "restore sampled/bind-group capability"

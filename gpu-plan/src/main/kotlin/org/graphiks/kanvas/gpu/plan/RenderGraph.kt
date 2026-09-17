@@ -216,9 +216,21 @@ public class RenderGraph private constructor(
         internal fun publishW6a(construction: RenderGraphConstruction, frame: LayerFramePlanV1,
             packed: PackedFrameSourcesV4, source: SourcePhysicalConstructionV1): RenderGraph {
             require(construction.capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID)
-            require(frame.scopes().map { it.targetResource }.toSet() == construction.resources()
+            val scopes = frame.scopes()
+            val byScope = scopes.associateBy { it.id }
+            require(byScope.size == scopes.size)
+            require(scopes.all { scope ->
+                scope.parentId?.let { parent -> byScope[parent]?.childIds()?.contains(scope.id) == true } ?: true
+            })
+            require(scopes.all { scope -> scope.childIds().all { child -> byScope[child]?.parentId == scope.id } })
+            require(scopes.map { it.targetResource }.toSet() == construction.resources()
                 .filter { it.role == PlanResourceRole.LayerTarget }.map { it.id }.toSet())
-            require(frame.executionSteps().all { step -> construction.passes().any { it.id == step.passId } })
+            val passesById = construction.passes().associateBy { it.id }
+            require(frame.executionSteps().all { step -> passesById.containsKey(step.passId) })
+            require(scopes.all { scope ->
+                val restore = construction.passes().filterIsInstance<PlanPass.LayerComposite>().singleOrNull { it.scopeId == scope.id }
+                restore?.source == scope.targetResource && restore.restore === scope.restore
+            })
             return RenderGraph(construction.id, construction.capabilityId, construction.targetExtent,
                 construction.colorFormat, construction.capabilities, construction.budget, construction.visualCommandCount,
                 construction.resources(), construction.passes(), construction.dependencies(), construction.peakFrameLocalBytes,

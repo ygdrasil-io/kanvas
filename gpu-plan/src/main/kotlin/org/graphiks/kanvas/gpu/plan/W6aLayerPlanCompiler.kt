@@ -29,9 +29,11 @@ public class W6aLayerPlanCompiler public constructor(
 
     internal data class ScopeOccurrence(
         val idI32: Int,
+        val parentIdI32: Int?,
         val beginCommandIndexI32: Int,
         val endCommandIndexI32: Int,
         val descriptor: LayerDescriptor,
+        val childIdsI32: List<Int> = emptyList(),
     )
 
     private class Candidate(
@@ -44,7 +46,13 @@ public class W6aLayerPlanCompiler public constructor(
         override val capabilityId: String = CAPABILITY_ID
     }
 
-    private class Segment(val scopeI32: Int?, val compiler: CapabilityCompilerChain, val candidate: GpuPlanCandidate)
+    /** One pre-publication W3/W5 lane, attached to the scope active at its recorded draw. */
+    private class Segment(
+        val scopeI32: Int?,
+        val firstCommandIndexI32: Int,
+        val compiler: CapabilityCompilerChain,
+        val candidate: GpuPlanCandidate,
+    )
 
     override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
         val commands = scene.toList()
@@ -55,30 +63,50 @@ public class W6aLayerPlanCompiler public constructor(
             return invalid(W6aPlanDiagnostics.UnsupportedChild, "Scene and target descriptors disagree.")
         }
 
-        val scopes = mutableListOf<ScopeOccurrence>()
-        var open: ScopeOccurrence? = null
+        // Layer occurrence limits come from the same immutable GraphLimits vocabulary used at
+        // capture.  W6 owns the resulting terminal refusal before it can issue a resource or
+        // ask the native renderer for a draft.
+        val graphLimits = scene.graphLimits
+        if (commands.size > graphLimits.maxNodes) return invalid(
+            W6aPlanDiagnostics.CommandLimit,
+            "Layer frame has ${commands.size} commands; limit is ${graphLimits.maxNodes}.",
+        )
+        data class MutableOccurrence(
+            val idI32: Int,
+            val parentIdI32: Int?,
+            val beginCommandIndexI32: Int,
+            val descriptor: LayerDescriptor,
+            val childIdsI32: MutableList<Int> = mutableListOf(),
+            var endCommandIndexI32: Int = -1,
+        )
+        val scopes = mutableListOf<MutableOccurrence>()
+        val stack = ArrayDeque<MutableOccurrence>()
+        val scopeByDrawIndex = mutableMapOf<Int, Int?>()
         commands.forEachIndexed { indexI32, command ->
             when (command) {
                 is SceneCommand.BeginLayer -> {
-                    if (open != null) return invalid(
-                        W6aPlanDiagnostics.UnsupportedNestedScope,
-                        "W6a accepts one active layer scope at a time.",
+                    if (stack.size >= graphLimits.maxDepth) return invalid(
+                        W6aPlanDiagnostics.DepthLimit,
+                        "Layer nesting exceeds depth ${graphLimits.maxDepth}.",
                     )
                     semanticRefusalFor(command.descriptor)?.let { (code, message) -> return invalid(code, message) }
                     if (!hasEmptyExplicitCompositeClip(command.descriptor)) {
                         geometryRefusalFor(command.descriptor, target)?.let { (code, message) -> return invalid(code, message) }
                     }
-                    open = ScopeOccurrence(scopes.size, indexI32, -1, command.descriptor)
+                    val occurrence = MutableOccurrence(scopes.size, stack.lastOrNull()?.idI32, indexI32, command.descriptor)
+                    stack.lastOrNull()?.childIdsI32?.add(occurrence.idI32)
+                    scopes += occurrence
+                    stack.addLast(occurrence)
                 }
                 SceneCommand.EndLayer -> {
-                    val begun = open ?: return invalid(
+                    val begun = stack.removeLastOrNull() ?: return invalid(
                         W6aPlanDiagnostics.MalformedStack,
                         "EndLayer has no matching BeginLayer.",
                     )
-                    scopes += begun.copy(endCommandIndexI32 = indexI32)
-                    open = null
+                    begun.endCommandIndexI32 = indexI32
                 }
                 is SceneCommand.Draw -> {
+                    scopeByDrawIndex[indexI32] = stack.lastOrNull()?.idI32
                     val paint = command.node.paint
                     if (paint?.imageFilter != null || paint?.maskFilter != null || command.node.effects !is EffectStack.Empty) {
                         return invalid(
@@ -99,31 +127,48 @@ public class W6aLayerPlanCompiler public constructor(
                 else -> return invalid(W6aPlanDiagnostics.UnsupportedChild, "This layer-frame command has no admitted source lane.")
             }
         }
-        if (open != null) return invalid(W6aPlanDiagnostics.MalformedStack, "BeginLayer has no matching EndLayer.")
+        if (stack.isNotEmpty()) return invalid(W6aPlanDiagnostics.MalformedStack, "BeginLayer has no matching EndLayer.")
         if (scopes.isEmpty()) return invalid(W6aPlanDiagnostics.MalformedStack, "Layer markers did not form a scope.")
 
         val segments = mutableListOf<Segment>()
-        val boundaries = listOf(-1) + scopes.flatMap { listOf(it.beginCommandIndexI32, it.endCommandIndexI32) } + commands.size
-        for ((before, after) in boundaries.zipWithNext()) {
-            val occurrence = scopes.singleOrNull { it.beginCommandIndexI32 == before }
-            // A restore clip is applied by the W6 target/composite domain.  It is not copied to
-            // children, which would turn saveLayer's restore semantics into a child clip.
-            val draws = if (occurrence?.let(::hasEmptyExplicitCompositeClip) == true) emptySet()
-                else (before + 1 until after).filter { commands[it] is SceneCommand.Draw }.toSet()
-            if (draws.isEmpty()) continue
+        val immutableScopes = scopes.map { occurrence -> ScopeOccurrence(
+            occurrence.idI32,
+            occurrence.parentIdI32,
+            occurrence.beginCommandIndexI32,
+            occurrence.endCommandIndexI32,
+            occurrence.descriptor,
+            occurrence.childIdsI32.toList(),
+        ) }
+        fun isElidedByExplicitAncestor(scopeI32: Int?): Boolean {
+            var current = scopeI32
+            while (current != null) {
+                val occurrence = immutableScopes[current]
+                if (hasEmptyExplicitCompositeClip(occurrence)) return true
+                current = occurrence.parentIdI32
+            }
+            return false
+        }
+        // Each recorded draw is its own unpublished lane.  This deliberately keeps Begin/Draw/
+        // End chronology as a first-class input instead of reconstructing parent segments from
+        // a flat collection after source planning.
+        scopeByDrawIndex.forEach { (drawIndexI32, scopeI32) ->
+            // Restore clips apply only at the typed composite.  A proven-empty one has no child
+            // render work, while semantic refusal has already run at BeginLayer.
+            if (isElidedByExplicitAncestor(scopeI32)) return@forEach
+            val draws = setOf(drawIndexI32)
             val segment = SceneSnapshot.of(scene.extent, scene.colorSpace, commands.mapIndexed { index, command ->
                 if (index in draws) {
                     command as SceneCommand.Draw
                     command
                 } else SceneCommand.Annotation.of(org.graphiks.math.geometry.RectF32(0f, 0f, 0f, 0f), "w6a.segment", index.toString())
-            })
+            }, graphLimits)
             val child = CapabilityCompilerChain.of(listOf(W3SolidRectPlanCompiler()), runtimeCatalog)
             when (val selection = child.select(segment, target)) {
-                is GpuPlanSelection.Candidate -> segments += Segment(occurrence?.idI32, child, selection.candidate)
+                is GpuPlanSelection.Candidate -> segments += Segment(scopeI32, drawIndexI32, child, selection.candidate)
                 else -> return invalid(W6aPlanDiagnostics.UnsupportedChild, "Layer segment is outside the admitted child geometry/source lanes.")
             }
         }
-        return GpuPlanSelection.Candidate(Candidate(this, scene.canonicalId, target, scopes.toList(), segments.toList()))
+        return GpuPlanSelection.Candidate(Candidate(this, scene.canonicalId, target, immutableScopes, segments.toList()))
     }
 
     override fun plan(
@@ -138,7 +183,9 @@ public class W6aLayerPlanCompiler public constructor(
         return try {
             val bindings = mutableListOf<W6aLayerSourceBinding>()
             for (segment in selected.segments) when (val result = segment.compiler.constructSourceLanes(segment.candidate, capabilities, budget)) {
-                is RenderPlanResult.Ready -> result.plan.forEach { bindings += W6aLayerSourceBinding(segment.scopeI32, it) }
+                is RenderPlanResult.Ready -> result.plan.forEach { bindings += W6aLayerSourceBinding(
+                    segment.scopeI32, segment.firstCommandIndexI32, it,
+                ) }
                 is RenderPlanResult.ResourceLimitExceeded -> return W6aLayerPlanBudget.translate(result)
                 is RenderPlanResult.GapNotMigrated -> return result
                 is RenderPlanResult.GapOnPromotedScope -> return result

@@ -19,6 +19,8 @@ public data class SceneExtent(
 public class SceneSnapshot private constructor(
     public val extent: SceneExtent,
     public val colorSpace: ColorSpace,
+    /** Immutable capture limit carried to selection; it never belongs to renderer-local state. */
+    public val graphLimits: GraphLimits,
     commands: Collection<SceneCommand>,
 ) : Iterable<SceneCommand>, CanonicalValue {
     private val values: List<SceneCommand> = immutableList(commands)
@@ -36,6 +38,7 @@ public class SceneSnapshot private constructor(
             extent: SceneExtent,
             colorSpace: ColorSpace,
             commands: Collection<SceneCommand>,
-        ): SceneSnapshot = SceneSnapshot(extent, colorSpace, commands)
+            graphLimits: GraphLimits = GraphLimits(),
+        ): SceneSnapshot = SceneSnapshot(extent, colorSpace, graphLimits, commands)
     }
 }

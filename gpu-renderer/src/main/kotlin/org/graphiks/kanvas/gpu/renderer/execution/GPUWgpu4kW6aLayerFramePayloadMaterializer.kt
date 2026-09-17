@@ -41,6 +41,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 val usage = resource.usages().fold(GPUTextureUsage.None) { result, value -> result or when (value) {
                     PlanResourceUsage.RenderAttachment -> GPUTextureUsage.RenderAttachment
                     PlanResourceUsage.Sampled -> GPUTextureUsage.TextureBinding
+                    PlanResourceUsage.CopySource -> GPUTextureUsage.CopySrc
                     PlanResourceUsage.CopyDestination -> GPUTextureUsage.CopyDst
                     else -> error("Unadmitted layer usage")
                 } }

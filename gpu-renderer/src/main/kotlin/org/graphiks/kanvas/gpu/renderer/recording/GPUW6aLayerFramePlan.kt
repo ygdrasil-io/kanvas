@@ -98,8 +98,9 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                     is PlanPass.ReadbackPass -> add(GPUFrameStep.ReadbackCopyStep(refs.getValue(pass.source) as GPUFrameTargetRef,
                         refs.getValue(pass.staging) as GPUFrameBufferRef, readback, task))
                     is PlanPass.TextureCopy -> add(GPUFrameStep.CopyResourceStep(refs.getValue(pass.source), refs.getValue(pass.destination),
-                        listOf(GPUResourceCopyRegion(0L, 0L, GPUPixelBounds(0, 0, graph.targetExtent.width, graph.targetExtent.height),
-                            graph.resources().single { it.id == pass.source }.byteSize)), task))
+                        listOf(GPUResourceCopyRegion(0L, 0L, pass.copySourceBoundsI32()?.let { bounds ->
+                            GPUPixelBounds(bounds.left, bounds.top, bounds.right, bounds.bottom)
+                        }, graph.resources().single { it.id == pass.source }.byteSize)), task))
                     else -> error("Unadmitted W6 pass")
                 }
             }
