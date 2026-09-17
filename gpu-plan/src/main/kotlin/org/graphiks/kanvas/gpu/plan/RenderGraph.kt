@@ -240,9 +240,25 @@ public class RenderGraph private constructor(
                 val scope = byScope.getValue(step.scopeId)
                 when (step) {
                     is LayerExecutionStepV1.Initialize -> {
-                        val pass = passesById[step.passId] as? PlanPass.RenderPass
-                        require(pass != null && pass.target == scope.targetResource && pass.load == AttachmentLoadPlan.ClearTransparent &&
-                            pass.draws().isEmpty() && initialized.add(scope.id) && scope.id !in restored)
+                        when (val initialization = scope.initialization) {
+                            LayerInitializationPlanV1.TransparentBlack -> {
+                                val pass = passesById[step.passId] as? PlanPass.RenderPass
+                                require(pass != null && pass.target == scope.targetResource &&
+                                    pass.load == AttachmentLoadPlan.ClearTransparent && pass.draws().isEmpty())
+                            }
+                            is LayerInitializationPlanV1.PreviousCopy -> {
+                                val pass = passesById[step.passId] as? PlanPass.TextureCopy
+                                val expectedParentTarget = scope.parentId?.let { byScope.getValue(it).targetResource } ?: rootTarget
+                                require(initialization.parentTarget == expectedParentTarget &&
+                                    initialization.layerTarget == scope.targetResource && pass != null &&
+                                    pass.source == initialization.parentTarget &&
+                                    pass.destination == initialization.layerTarget &&
+                                    pass.destinationVersion == initialization.capturedParentVersion &&
+                                    pass.copySourceBoundsI32() == initialization.copySourceBoundsParentI32() &&
+                                    pass.copyDestinationOriginI32() == initialization.copyDestinationOriginLayerI32())
+                            }
+                        }
+                        require(initialized.add(scope.id) && scope.id !in restored)
                         initializeOrder[scope.id] = stepIndexI32
                     }
                     is LayerExecutionStepV1.RenderChildren -> {

@@ -27,7 +27,9 @@ internal fun validateW6aLayerTopology(
             val target = byId.getValue(pass.target)
             require(target.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget))
             require(target.id !in restored && target.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages())
-            require(pass.load == if (initialized.add(target.id)) AttachmentLoadPlan.ClearTransparent else AttachmentLoadPlan.Load)
+            val alreadyInitialized = target.id in initialized
+            require(pass.load == if (alreadyInitialized) AttachmentLoadPlan.Load else AttachmentLoadPlan.ClearTransparent)
+            initialized += target.id
             require(pass.store == AttachmentStorePlan.Store)
             val targetExtent = requireNotNull(target.copyExtent())
             pass.draws().forEach { draw ->
@@ -55,7 +57,7 @@ internal fun validateW6aLayerTopology(
                 origin.y.toLong() + bounds.height() <= destinationExtent.height)
             require(pass.load == AttachmentLoadPlan.Load && pass.store == AttachmentStorePlan.Store)
             require(pass.restore.alphaF32.isFinite())
-            require(pass.restore.readsPriorDevice == pass.restore.blend.compositionFacts.readsPriorDevice)
+            require(!pass.restore.blend.compositionFacts.readsPriorDevice || pass.restore.readsPriorDevice)
             require(pass.restore.writesParentDevice == pass.restore.blend.compositionFacts.writesParentDevice)
             require(pass.restore.restoreAffectsTransparentBlack ==
                 pass.restore.blend.finalRestoreAffectsTransparentBlackV1(pass.restore.colorFilter))
@@ -68,18 +70,32 @@ internal fun validateW6aLayerTopology(
             val source = byId.getValue(pass.source)
             val destination = byId.getValue(pass.destination)
             require(source.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget) &&
-                destination.role == PlanResourceRole.DestinationSnapshot)
-            require(source.id in initialized && PlanResourceUsage.CopySource in source.usages() &&
+                source.id in initialized && PlanResourceUsage.CopySource in source.usages() &&
                 PlanResourceUsage.CopyDestination in destination.usages())
             val sourceExtent = requireNotNull(source.copyExtent())
-            require(pass.copySourceBoundsI32() == RectI32(0, 0, sourceExtent.width, sourceExtent.height))
-            require(pass.copyDestinationOriginI32() == Point2I32.Origin && destination.copyExtent() == sourceExtent)
+            val sourceBounds = requireNotNull(pass.copySourceBoundsI32())
+            require(sourceBounds.left >= 0 && sourceBounds.top >= 0 &&
+                sourceBounds.right <= sourceExtent.width && sourceBounds.bottom <= sourceExtent.height)
             require(pass.destinationVersion?.valueI64 == versions[source.id])
-            val consumer = passes.getOrNull(indexI32 + 1) as? PlanPass.LayerComposite
-            require(consumer?.destination == source.id && consumer.restore.readsPriorDevice)
-            val blend = requireNotNull(consumer.restore.blend.takeIf { it.compositionFacts.readsPriorDevice })
-            require(blend.destinationReadSnapshotResourceV1() == destination.id &&
-                blend.requiredDestinationVersionV1() == pass.destinationVersion)
+            when (destination.role) {
+                PlanResourceRole.DestinationSnapshot -> {
+                    require(sourceBounds == RectI32(0, 0, sourceExtent.width, sourceExtent.height))
+                    require(pass.copyDestinationOriginI32() == Point2I32.Origin && destination.copyExtent() == sourceExtent)
+                    val consumer = passes.getOrNull(indexI32 + 1) as? PlanPass.LayerComposite
+                    require(consumer?.destination == source.id && consumer.restore.blend.compositionFacts.readsPriorDevice)
+                    val blend = requireNotNull(consumer.restore.blend.takeIf { it.compositionFacts.readsPriorDevice })
+                    require(blend.destinationReadSnapshotResourceV1() == destination.id &&
+                        blend.requiredDestinationVersionV1() == pass.destinationVersion)
+                }
+                PlanResourceRole.LayerTarget -> {
+                    val destinationExtent = requireNotNull(destination.copyExtent())
+                    require(initialized.add(destination.id))
+                    require(pass.copyDestinationOriginI32() == Point2I32.Origin &&
+                        sourceBounds.width() == destinationExtent.width && sourceBounds.height() == destinationExtent.height)
+                    versions[destination.id] = 0L
+                }
+                else -> error("w6a.layer.unsupported_child")
+            }
         }
         is PlanPass.ReadbackPass -> {
             require(pass === passes.last() && pass.source == root.id)
