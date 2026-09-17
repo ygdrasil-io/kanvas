@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.plan
 
+import org.graphiks.kanvas.render.ir.BlendMode
 import org.graphiks.kanvas.render.ir.ClipStackNode
 import org.graphiks.kanvas.render.ir.ClipOperation
 import org.graphiks.kanvas.render.ir.ClipTransformSnapshot
@@ -44,10 +45,18 @@ private class W6aRestoreFacts(
 ) {
     /** Only the selected W5 destination-read blend needs a restore-time snapshot resource. */
     val restoreReadsPriorDevice: Boolean = blend.compositionFacts.readsPriorDevice
-    /** Save-time previous content becomes a required full-domain parent input when transformed. */
-    val previousContentRequiresFullParentDomain: Boolean = initWithPrevious && (
-        alphaF32 < 1f || colorFilter != null || blend != BlendPlan.LegacySrcOverV1
-    )
+    /**
+     * W5 seals an identity previous-content restore as fixed-function SRC_OVER.  It may retain
+     * the hint-sized domain because transparent source leaves the unchanged parent untouched;
+     * every other selected restore needs the complete parent domain at BeginLayer.
+     */
+    private val isIdentityPreviousPassthrough: Boolean = alphaF32 == 1f && colorFilter == null &&
+        (blend as? BlendPlan.FixedFunctionV1)?.let { fixed ->
+            fixed.mode == BlendMode.SRC_OVER && fixed.compositionFacts.let { facts ->
+                !facts.readsPriorDevice && !facts.affectsTransparentBlack && facts.writesParentDevice
+            }
+        } == true
+    val previousContentRequiresFullParentDomain: Boolean = initWithPrevious && !isIdentityPreviousPassthrough
     val readsPriorDevice: Boolean = restoreReadsPriorDevice || previousContentRequiresFullParentDomain
     val writesParentDevice: Boolean = blend.compositionFacts.writesParentDevice
     val restoreAffectsTransparentBlack: Boolean = blend.finalRestoreAffectsTransparentBlackV1(colorFilter)

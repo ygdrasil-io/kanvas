@@ -98,13 +98,41 @@ class W6aInitWithPreviousSurfacePixelTest {
 
     @Test
     fun `previousPlusColorFilterUsesFullDesiredOutput`() {
-        val expected = rgba(239, 51, 73) + rgba(17, 61, 211) + rgba(239, 51, 73) + rgba(239, 51, 73)
+        // Literal CPU oracle: the matrix preserves alpha and writes zero into every color
+        // channel. It therefore transforms both the copied red parent outside the hint and the
+        // blue child inside it into opaque black.
+        val expected = rgba(0, 0, 0) + rgba(0, 0, 0) + rgba(0, 0, 0) + rgba(0, 0, 0)
+        val blacken = ColorMatrixF32.of(
+            0f, 0f, 0f, 0f, 0f,
+            0f, 0f, 0f, 0f, 0f,
+            0f, 0f, 0f, 0f, 0f,
+            0f, 0f, 0f, 1f, 0f,
+        )
         val surface = Surface(4, 1)
         surface.canvas {
             drawOpaque(0f, 4f, red)
             saveLayer(SaveLayerRec(
                 bounds = RectF32.ofLTRB(1f, 0f, 3f, 1f),
-                paint = Paint(colorFilter = ColorFilter.Matrix(ColorMatrixF32.ofIdentity()), blendMode = BlendMode.SRC, antiAlias = false),
+                paint = Paint(colorFilter = ColorFilter.Matrix(blacken), antiAlias = false),
+                initWithPrevious = true,
+            ))
+            drawOpaque(1f, 2f, blue)
+            restore()
+        }
+
+        assertContentEquals(expected, surface.render().pixels)
+    }
+
+    @Test
+    fun `identityPreviousUsesHintSizedTargetWithinBudget`() {
+        val expected = rgba(239, 51, 73) + rgba(17, 61, 211) + rgba(239, 51, 73) + rgba(239, 51, 73)
+        // 4x1 root/readback/geometry plus a 1x1 layer is 324 bytes. A wrongly full-domain
+        // previous layer needs 12 additional bytes and must not be allocated for identity SRC_OVER.
+        val surface = Surface(4, 1, config = RenderConfig(frameLocalBudgetBytes = 324L))
+        surface.canvas {
+            drawOpaque(0f, 4f, red)
+            saveLayer(SaveLayerRec(
+                bounds = RectF32.ofLTRB(1f, 0f, 2f, 1f),
                 initWithPrevious = true,
             ))
             drawOpaque(1f, 2f, blue)
