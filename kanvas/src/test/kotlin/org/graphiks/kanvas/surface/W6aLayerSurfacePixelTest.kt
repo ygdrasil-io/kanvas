@@ -7,6 +7,8 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.paint.ImageFilter
+import org.graphiks.kanvas.paint.MaskFilter
+import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
@@ -202,6 +204,21 @@ class W6aLayerSurfacePixelTest {
                 RectF32.ofLTRB(0f, 0f, 2f, 2f),
                 Paint(ColorARGB.White, imageFilter = ImageFilter.Blur(1f, 1f), antiAlias = false),
             )
+            restore()
+        }
+
+        assertTerminalWithoutReadbackMutation(surface, "w6a.layer.unsupported_spatial_filter")
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 2f, 2f), Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+        assertPixel(surface.render().pixels, 2, 1, 1, 17, 61, 211, 255)
+    }
+
+    @Test
+    fun `restoreMaskFilterRefusesTerminallyAndRecovers`() {
+        val surface = Surface(2, 2)
+        surface.canvas {
+            saveLayer(paint = Paint(maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1f), antiAlias = false))
+            drawRect(RectF32.ofLTRB(0f, 0f, 2f, 2f), Paint(ColorARGB.White, antiAlias = false))
             restore()
         }
 

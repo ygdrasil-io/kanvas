@@ -60,8 +60,16 @@ public class LayerRestorePlanV1 internal constructor(
     public val restoreAffectsTransparentBlack: Boolean,
     public val parentVersionBefore: DestinationVersionI64,
     public val parentVersionAfter: DestinationVersionI64,
+    /** Byte offset in the one W6 frame uniform allocation, when W5 color data is consumed. */
+    public val colorFilterUniformOffsetI64: Long? = null,
 ) {
-    init { require(alphaF32.isFinite()) { "Layer restore alpha must be finite" } }
+    init {
+        require(alphaF32.isFinite()) { "Layer restore alpha must be finite" }
+        require(colorFilter == null || colorFilterUniformOffsetI64 != null) {
+            "A restore color filter requires its sealed W6 uniform placement"
+        }
+        require(colorFilter != null || colorFilterUniformOffsetI64 == null)
+    }
 }
 
 public class LayerScopePlanV1 internal constructor(

@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.kanvas.render.ir.ClipStackNode
+import org.graphiks.kanvas.render.ir.BlendMode
 import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.RectI32
@@ -67,6 +68,7 @@ internal class W6aLayerGraphConstruction(
         val steps = mutableListOf<LayerExecutionStepV1>()
         val scopes = mutableListOf<LayerScopePlanV1>()
         var versionI64 = 0L
+        var uniformCursorI64 = 16L
 
         fun render(target: PlanResourceId, draws: List<PlanDraw>, clear: Boolean): PlanPass.RenderPass {
             val version = if (target == root) DestinationVersionI64(versionI64.also { versionI64 += draws.size }) else null
@@ -105,10 +107,36 @@ internal class W6aLayerGraphConstruction(
                 val target = planResourceId(PlanResourceRole.LayerTarget, occurrence.idI32)
                 steps += LayerExecutionStepV1.Initialize(scopeId, render(target, emptyList(), true).id)
                 bindings.filter { it.scopeI32 == occurrence.idI32 }.forEach(::segment)
-                val restore = LayerRestorePlanV1(1f, null, BlendPlan.LegacySrcOverV1, false, false,
-                    DestinationVersionI64(versionI64), DestinationVersionI64(++versionI64))
+                val before = DestinationVersionI64(versionI64)
+                val paint = occurrence.descriptor.paint
+                val colorFilter = paint?.colorFilter?.let { filter ->
+                    (ColorFilterPlanCompilerV1.compile(filter) as? ColorFilterCompileResultV1.Ready)?.execution
+                        ?: throw IllegalArgumentException("${W6aPlanDiagnostics.UnsupportedRestore}: restore color filter")
+                }
+                val filterOffset = colorFilter?.let { execution ->
+                    uniformCursorI64 = alignUniform(uniformCursorI64)
+                    uniformCursorI64.also { uniformCursorI64 = Math.addExact(it, maxOf(16L, execution.dynamicByteCountI64)) }
+                }
+                val selectedBlend = requireNotNull(FinalBlendPlanner.plan(occurrence.descriptor.blend,
+                    CoveragePlan.FullOrScissor, SamplePlan.SingleSample,
+                    PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1())) {
+                    "${W6aPlanDiagnostics.UnsupportedRestore}: restore blend"
+                }
+                val blend = (selectedBlend as? BlendPlan.DestinationReadV1)?.copy(
+                    requiredDestinationVersion = before,
+                    snapshotResource = planResourceId(PlanResourceRole.DestinationSnapshot, occurrence.idI32),
+                ) ?: selectedBlend
+                val alpha = paint?.color?.alpha?.toInt()?.div(255f) ?: 1f
+                val affectsTransparent = colorFilter != null || restoreAffectsTransparentBlack(blend)
+                val restore = LayerRestorePlanV1(alpha, colorFilter, blend, blend is BlendPlan.DestinationReadV1,
+                    affectsTransparent, before, DestinationVersionI64(Math.addExact(versionI64, 1L)), filterOffset)
                 val targetDomain = requireNotNull(geometry.compositeDomainDeviceI32)
                 val sourceBounds = RectI32(0, 0, targetDomain.width(), targetDomain.height())
+                if (blend is BlendPlan.DestinationReadV1) {
+                    passes += PlanPass.TextureCopy(occurrence.idI32, root, requireNotNull(blend.snapshotResource), before,
+                        rootDomainDeviceI32, Point2I32.Origin, rowBytesI64)
+                }
+                versionI64 = Math.addExact(versionI64, 1L)
                 val composite = PlanPass.LayerComposite(occurrence.idI32, scopeId, target, root, sourceBounds,
                     Point2I32(targetDomain.left, targetDomain.top), restore, AttachmentLoadPlan.Load,
                     AttachmentStorePlan.Store, restore.parentVersionAfter)
@@ -151,10 +179,16 @@ internal class W6aLayerGraphConstruction(
                     checkedTextureBytesI64(4, targetExtent.width, targetExtent.height, 1),
                     setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled), PlanResourceLifetime.FrameLocal, 0, passes.size))
             }
+            scopes.filter { it.restore.blend is BlendPlan.DestinationReadV1 }.forEach { scope ->
+                add(PlanResource.of(PlanResourceRole.DestinationSnapshot, scope.id.valueI32, PlanResourceKind.Texture2D,
+                    PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), extent,
+                    checkedTextureBytesI64(4, extent.width, extent.height, 1),
+                    setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.Sampled), PlanResourceLifetime.FrameLocal, 0, passes.size))
+            }
             add(PlanResource.of(PlanResourceRole.ReadbackStaging, 0, PlanResourceKind.Buffer, null, null,
                 Math.multiplyExact(rowBytesI64, extent.height.toLong()), setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead),
                 PlanResourceLifetime.FrameLocal, 0, passes.size))
-            add(PlanResource.of(PlanResourceRole.UniformData, 0, PlanResourceKind.Buffer, null, null, 16L,
+            add(PlanResource.of(PlanResourceRole.UniformData, 0, PlanResourceKind.Buffer, null, null, uniformCursorI64,
                 setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination), PlanResourceLifetime.FrameLocal, 0, passes.size))
         })
         nonUniformBytesI64 = W6aLayerPlanBudget.peak(resources, passes.size, budget)
@@ -275,4 +309,12 @@ internal class W6aLayerGraphConstruction(
     private fun union(first: RectI32, second: RectI32): RectI32 = RectI32(
         minOf(first.left, second.left), minOf(first.top, second.top), maxOf(first.right, second.right), maxOf(first.bottom, second.bottom),
     )
+
+    private fun alignUniform(bytesI64: Long): Long = Math.addExact(bytesI64, 255L) / 256L * 256L
+
+    private fun restoreAffectsTransparentBlack(blend: BlendPlan): Boolean = when (blend) {
+        BlendPlan.LegacySrcOverV1, BlendPlan.NoOpV1 -> false
+        is BlendPlan.FixedFunctionV1 -> blend.mode !in setOf(BlendMode.DST, BlendMode.SRC_OVER, BlendMode.DST_OVER)
+        is BlendPlan.DestinationReadV1 -> blend.mode != BlendMode.DST
+    }
 }

@@ -1,10 +1,7 @@
 package org.graphiks.kanvas.gpu.plan
 
-import org.graphiks.kanvas.render.ir.BlendMode
-import org.graphiks.kanvas.render.ir.BlendNode
-import org.graphiks.kanvas.render.ir.EffectStack
 import org.graphiks.kanvas.render.ir.LayerDescriptor
-import org.graphiks.kanvas.render.ir.PaintNode
+import org.graphiks.kanvas.render.ir.EffectStack
 import org.graphiks.kanvas.render.ir.RenderDiagnostic
 import org.graphiks.kanvas.render.ir.RenderDiagnosticCode
 import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
@@ -172,16 +169,16 @@ public class W6aLayerPlanCompiler public constructor(
         if (descriptor.initWithPrevious) return W6aPlanDiagnostics.UnsupportedRestore to "Previous-content initialization is outside this slice."
         if (descriptor.backdrop !is EffectStack.Empty) return W6aPlanDiagnostics.UnsupportedBackdrop to
             "W6a does not admit layer backdrop filters."
-        if (descriptor.effects !is EffectStack.Empty) return W6aPlanDiagnostics.UnsupportedSpatialFilter to
-            "W6a does not admit layer effects."
-        if (descriptor.blend != BlendNode.SrcOver) return W6aPlanDiagnostics.UnsupportedRestore to "W6a initially supports only SRC_OVER restoration."
         if (descriptor.paint == null && descriptor.material != null) return W6aPlanDiagnostics.UnsupportedRestore to "A restore source without its captured paint is unsupported."
         val paint = descriptor.paint ?: return null
         if (paint.imageFilter != null || paint.maskFilter != null) return W6aPlanDiagnostics.UnsupportedSpatialFilter to
             "W6a does not admit filters on layer restore paint."
-        if (paint.colorFilter != null || paint.shader != null || paint.blender != null || paint.alphaNotOne() ||
-            paint.blendMode != BlendMode.SRC_OVER || descriptor.blend != BlendNode.SrcOver
-        ) return W6aPlanDiagnostics.UnsupportedRestore to "W6a initially supports only opaque SRC_OVER restoration."
+        val colorFilter = paint.colorFilter
+        if (colorFilter != null && ColorFilterPlanCompilerV1.compile(colorFilter) is ColorFilterCompileResultV1.Refused)
+            return W6aPlanDiagnostics.UnsupportedRestore to "W6a cannot compile this restore color filter."
+        if (FinalBlendPlanner.plan(descriptor.blend, CoveragePlan.FullOrScissor, SamplePlan.SingleSample,
+                PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1()) == null)
+            return W6aPlanDiagnostics.UnsupportedRestore to "W6a does not admit this restore blender."
         return null
     }
 
@@ -208,8 +205,6 @@ public class W6aLayerPlanCompiler public constructor(
         }
         return null
     }
-
-    private fun PaintNode.alphaNotOne(): Boolean = color.alpha != 255
 
     private fun LayerDescriptor.matrixF64(): Matrix3x3F64 = transform.let { matrix -> Matrix3x3F64(
         matrix.sx.toDouble(), matrix.kx.toDouble(), matrix.tx.toDouble(),

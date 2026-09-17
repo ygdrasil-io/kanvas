@@ -50,13 +50,15 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
             minOf(graph.budget.maxFrameLocalBytes, request.rendererAggregateMemoryBudgetBytes ?: Long.MAX_VALUE), requireNotNull(request.capabilities.limits)))
         require(memory.diagnostic == null && memory.targetResidentBytes + memory.peakFrameTransientBytes ==
             graph.peakFrameLocalBytes)
-        val preparations = graph.resources().filter { it.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget, PlanResourceRole.ReadbackStaging) }
+        val preparations = graph.resources().filter { it.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget,
+            PlanResourceRole.DestinationSnapshot, PlanResourceRole.ReadbackStaging) }
             .map { resource -> GPUResourcePreparationRequest(refs.getValue(resource.id),
                 resource.copyExtent()?.let { GPUFrameTextureDescriptor(GPUPixelBounds(0, 0, it.width, it.height), GPUColorFormat.RGBA8UnormSrgb, resource.sampleCountI32) }
                     ?: GPUFrameBufferDescriptor(resource.byteSize, graph.capabilities.copyBytesPerRowAlignment.toLong()),
                 when (resource.role) {
                     PlanResourceRole.LogicalTarget -> GPUFrameResourceRole.SceneTarget
                     PlanResourceRole.LayerTarget -> GPUFrameResourceRole.LayerTarget
+                    PlanResourceRole.DestinationSnapshot -> GPUFrameResourceRole.DestinationSnapshot
                     else -> GPUFrameResourceRole.ReadbackStaging
                 }, resource.usages().map { usage -> when (usage) {
                     PlanResourceUsage.RenderAttachment -> GPUFrameResourceUsage.RenderAttachment
@@ -95,6 +97,9 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                     }
                     is PlanPass.ReadbackPass -> add(GPUFrameStep.ReadbackCopyStep(refs.getValue(pass.source) as GPUFrameTargetRef,
                         refs.getValue(pass.staging) as GPUFrameBufferRef, readback, task))
+                    is PlanPass.TextureCopy -> add(GPUFrameStep.CopyResourceStep(refs.getValue(pass.source), refs.getValue(pass.destination),
+                        listOf(GPUResourceCopyRegion(0L, 0L, GPUPixelBounds(0, 0, graph.targetExtent.width, graph.targetExtent.height),
+                            graph.resources().single { it.id == pass.source }.byteSize)), task))
                     else -> error("Unadmitted W6 pass")
                 }
             }
@@ -110,6 +115,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                     }, w6aPassV1 = step.w6aPassV1)
                 is GPUFrameStep.ReadbackCopyStep -> GPUTask.Readback(id, request.recordingId, GPUTaskPhase.Readback,
                     step.source, step.staging, step.request)
+                is GPUFrameStep.CopyResourceStep -> GPUTask.Copy(id, request.recordingId, GPUTaskPhase.Copy,
+                    step.source, step.destination, step.regions)
                 else -> error("Unadmitted W6 step")
             }
         }

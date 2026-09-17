@@ -38,9 +38,15 @@ internal fun w6aColorTarget(blend: BlendPlan): ColorTargetState {
         BlendFactorV1.SrcColor -> GPUBlendFactor.Src
         BlendFactorV1.OneMinusSrcColor -> GPUBlendFactor.OneMinusSrc
     }
+    if (blend is BlendPlan.DestinationReadV1) return ColorTargetState(GPUTextureFormat.RGBA8UnormSrgb)
     val fixed = blend as? BlendPlan.FixedFunctionV1
-    require(fixed != null || blend == BlendPlan.LegacySrcOverV1)
+    val noOp = blend == BlendPlan.NoOpV1
+    require(fixed != null || blend == BlendPlan.LegacySrcOverV1 || noOp)
     return ColorTargetState(GPUTextureFormat.RGBA8UnormSrgb, BlendState(
-        BlendComponent(GPUBlendOperation.Add, fixed?.colorSource?.let(::factor) ?: GPUBlendFactor.One, fixed?.colorDestination?.let(::factor) ?: GPUBlendFactor.OneMinusSrcAlpha),
-        BlendComponent(GPUBlendOperation.Add, fixed?.alphaSource?.let(::factor) ?: GPUBlendFactor.One, fixed?.alphaDestination?.let(::factor) ?: GPUBlendFactor.OneMinusSrcAlpha)))
+        BlendComponent(GPUBlendOperation.Add,
+            if (noOp) GPUBlendFactor.Zero else fixed?.colorSource?.let(::factor) ?: GPUBlendFactor.One,
+            if (noOp) GPUBlendFactor.One else fixed?.colorDestination?.let(::factor) ?: GPUBlendFactor.OneMinusSrcAlpha),
+        BlendComponent(GPUBlendOperation.Add,
+            if (noOp) GPUBlendFactor.Zero else fixed?.alphaSource?.let(::factor) ?: GPUBlendFactor.One,
+            if (noOp) GPUBlendFactor.One else fixed?.alphaDestination?.let(::factor) ?: GPUBlendFactor.OneMinusSrcAlpha)))
 }

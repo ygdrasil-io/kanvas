@@ -14,12 +14,15 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
     return steps.mapIndexedNotNull { index, step ->
         if (step is GPUFrameStep.PrepareResourcesStep) return@mapIndexedNotNull null
         val render = step as? GPUFrameStep.RenderPassStep
+        val copy = step as? GPUFrameStep.CopyResourceStep
         val pass = graph.passes()[index - 1]
         val referenced = if (render != null) listOf(render.target) + render.resourceUses.map { it.resource }
-            else (step as GPUFrameStep.ReadbackCopyStep).let { listOf(it.source, it.staging) }
+            else copy?.let { listOf(it.source, it.destination) }
+                ?: (step as GPUFrameStep.ReadbackCopyStep).let { listOf(it.source, it.staging) }
         val labels = referenced.map { "${it::class.simpleName}:${it.value}@${requireNotNull(generations[it])}" }
         val composite = pass is PlanPass.LayerComposite
-        val kind = if (render == null) GPUEncoderOperationKind.Readback else if (composite) GPUEncoderOperationKind.LayerComposite else GPUEncoderOperationKind.Render
+        val kind = if (copy != null) GPUEncoderOperationKind.Copy else if (render == null) GPUEncoderOperationKind.Readback
+            else if (composite) GPUEncoderOperationKind.LayerComposite else GPUEncoderOperationKind.Render
         val stream = if (kind != GPUEncoderOperationKind.Render) null else GPUPassCommandStream("w6a.stream.$index", "w6a.packets.$index", pass.id.value,
             buildList {
                 add(GPUPassCommand.BeginRenderPass(corePrimitiveTargetStateHash(1, GPUColorFormat.RGBA8UnormSrgb),
@@ -32,7 +35,10 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
                 }
                 add(GPUPassCommand.EndRenderPass(pass.id.value))
             })
-        val keys = if (render == null) listOf(
+        val keys = if (copy != null) listOf(
+            key(GPUPreparedNativeOperandRole.CopySource, GPUPreparedNativeOperandKind.Texture, "w6a.$index.copy.source"),
+            key(GPUPreparedNativeOperandRole.CopyDestination, GPUPreparedNativeOperandKind.Texture, "w6a.$index.copy.destination"),
+        ) else if (render == null) listOf(
             key(GPUPreparedNativeOperandRole.ReadbackSource, GPUPreparedNativeOperandKind.Texture, "w6a.$index.source"),
             key(GPUPreparedNativeOperandRole.ReadbackDestination, GPUPreparedNativeOperandKind.Buffer, "w6a.$index.readback", GPUPreparedNativeOperandOwnership.OutputOwnedReadback))
         else buildList {
@@ -43,7 +49,8 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
             }
         }
         GPUCommandEncoderScopePlan(index, kind, sourceTaskIds = step.sourceTaskIds, sourcePacketIds = render?.drawPackets.orEmpty().map { it.packetId },
-            facadeOperationClasses = stream?.commandLabels ?: if (composite) listOf("beginRenderPass", "setRenderPipeline", "setBindGroup", "draw", "endRenderPass") else listOf("copyTextureToBuffer"),
+            facadeOperationClasses = stream?.commandLabels ?: if (composite) listOf("beginRenderPass", "setRenderPipeline", "setBindGroup", "draw", "endRenderPass")
+                else if (copy != null) List(copy.regions.size) { "copyResource" } else listOf("copyTextureToBuffer"),
             targetGeneration = targetGeneration, resourceGenerationLabels = labels, passCommandStream = stream).attachNativeOperandKeys(keys)
     }
 }

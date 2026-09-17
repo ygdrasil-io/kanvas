@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.math.geometry.SizeI32
+import org.graphiks.math.geometry.RectI32
 
 /** Per-target initialization, ordering and restore validation at the publication boundary. */
 internal fun validateW6aLayerTopology(resources: List<PlanResource>, passes: List<PlanPass>,
@@ -43,11 +44,25 @@ internal fun validateW6aLayerTopology(resources: List<PlanResource>, passes: Lis
             require(bounds.left >= 0 && bounds.top >= 0 && bounds.right <= sourceExtent.width && bounds.bottom <= sourceExtent.height)
             require(origin.x >= 0 && origin.y >= 0 && origin.x.toLong() + bounds.width() <= extent.width && origin.y.toLong() + bounds.height() <= extent.height)
             require(pass.load == AttachmentLoadPlan.Load && pass.store == AttachmentStorePlan.Store)
-            require(pass.restore.alphaF32 == 1f && pass.restore.colorFilter == null && pass.restore.blend == BlendPlan.LegacySrcOverV1)
-            require(!pass.restore.readsPriorDevice && !pass.restore.restoreAffectsTransparentBlack)
+            require(pass.restore.alphaF32.isFinite())
+            require(pass.restore.readsPriorDevice == (pass.restore.blend is BlendPlan.DestinationReadV1))
+            require((pass.restore.colorFilter == null) == (pass.restore.colorFilterUniformOffsetI64 == null))
             require(pass.restore.parentVersionBefore.valueI64 == versions[target.id])
             versions[target.id] = Math.addExact(requireNotNull(versions[target.id]), 1L)
             require(pass.destinationVersionAfter == pass.restore.parentVersionAfter && pass.destinationVersionAfter.valueI64 == versions[target.id])
+        }
+        is PlanPass.TextureCopy -> {
+            val source = byId.getValue(pass.source)
+            val destination = byId.getValue(pass.destination)
+            require(source.id == root.id && destination.role == PlanResourceRole.DestinationSnapshot)
+            require(PlanResourceUsage.CopySource in source.usages() && PlanResourceUsage.CopyDestination in destination.usages())
+            require(pass.copySourceBoundsI32() == RectI32(0, 0, extent.width, extent.height))
+            require(pass.copyDestinationOriginI32() == org.graphiks.math.geometry.Point2I32.Origin)
+            require(pass.destinationVersion?.valueI64 == versions[source.id])
+            val consumer = passes.getOrNull(passes.indexOf(pass) + 1) as? PlanPass.LayerComposite
+            require(consumer?.restore?.blend is BlendPlan.DestinationReadV1)
+            val blend = consumer.restore.blend as BlendPlan.DestinationReadV1
+            require(blend.snapshotResource == destination.id && blend.requiredDestinationVersion == pass.destinationVersion)
         }
         is PlanPass.ReadbackPass -> {
             require(pass === passes.last() && pass.source == root.id)
