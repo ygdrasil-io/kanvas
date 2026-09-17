@@ -4,6 +4,7 @@ import io.ygdrasil.webgpu.*
 import org.graphiks.kanvas.gpu.plan.*
 import org.graphiks.kanvas.gpu.renderer.execution.MaterialCoordinateSlotV1
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
+import org.graphiks.math.geometry.Point2I32
 
 internal const val W6A_VERTEX_SHADER: String = """
     @vertex fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
@@ -19,10 +20,12 @@ internal const val W6A_RECT_SHADER: String = W6A_VERTEX_SHADER + """
     }
 """
 
-internal fun w6aGeometryTemplate(packet: GPUDrawPacket, blend: BlendPlan): GPUW5aGeometryHostTemplateV1 =
-    GPUW5aGeometryHostTemplateV1(packet.packetId.value, "w6a.rect.v1.${packet.commandIdValue}", W6A_RECT_SHADER, "vs_main", "fs_main",
+internal fun w6aGeometryTemplate(packet: GPUDrawPacket, blend: BlendPlan, targetOriginDeviceI32: Point2I32): GPUW5aGeometryHostTemplateV1 =
+    GPUW5aGeometryHostTemplateV1(packet.packetId.value,
+        "w6a.rect.v1.${packet.commandIdValue}.${targetOriginDeviceI32.x}.${targetOriginDeviceI32.y}", W6A_RECT_SHADER, "vs_main", "fs_main",
         w6aColorTarget(blend).hostTargetV1(), GPUW5aHostBindGroupLayoutV1.of(listOf(GPUW5aHostBindGroupEntryV1(0, 2u,
-            GPUW5aHostBindingLayoutV1.Buffer(GPUBufferBindingType.Uniform, false, 16L)))), null, MaterialCoordinateSlotV1.FragmentPosition)
+            GPUW5aHostBindingLayoutV1.Buffer(GPUBufferBindingType.Uniform, false, 16L)))), null, MaterialCoordinateSlotV1.FragmentPosition,
+        materialDevicePointWgsl = "fragment_position.xy + vec2<f32>(${targetOriginDeviceI32.x}.0, ${targetOriginDeviceI32.y}.0)")
 
 internal fun w6aColorTarget(blend: BlendPlan): ColorTargetState {
     fun factor(value: BlendFactorV1): GPUBlendFactor = when (value) {

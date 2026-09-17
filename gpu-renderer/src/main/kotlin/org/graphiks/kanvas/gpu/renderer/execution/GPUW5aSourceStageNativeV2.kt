@@ -231,7 +231,7 @@ internal fun composeW5aHostSourceV1(template: GPUW5aGeometryHostTemplateV1, sour
     val requiresCoordinates = source.stage.consumesDevicePositionF32
     require(!requiresCoordinates || template.materialCoordinateSlot != null)
     require(template.primitiveEncodedInput == (source.stage.composedProof?.consumesPrimitiveEncodedInput == true))
-    val point = template.materialCoordinateSlot?.devicePointWgsl ?: "fragment_position.xy"
+    val point = template.materialDevicePointWgsl ?: template.materialCoordinateSlot?.devicePointWgsl ?: "fragment_position.xy"
     val coordinates = if (requiresCoordinates) "${source.stage.coordinateFunctionName}($point)" else "vec2<f32>(0.0)"
     val sourceExpression = "kanvas_material_source($coordinates${if (template.primitiveEncodedInput) ", input.primitiveColor" else ""})"
     val analyticCoverage = destination?.sealedW5b?.compositionAbiI32 == 3 &&

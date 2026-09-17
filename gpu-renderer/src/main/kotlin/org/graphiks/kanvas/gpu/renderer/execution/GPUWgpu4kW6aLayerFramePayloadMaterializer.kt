@@ -48,7 +48,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             val geometryUniform = frame.physical.resource(graph.resources().single { it.role == PlanResourceRole.UniformData }.id)
             val uniform = owned.own(device.createBuffer(BufferDescriptor(size = geometryUniform.byteSize.toULong(),
                 usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst, label = "w6a.geometry.uniform")))
-            queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(ByteArray(geometryUniform.byteSize.toInt())))
+            queue.writeBuffer(uniform, 0uL, ArrayBuffer.of(ByteArray(Math.toIntExact(geometryUniform.byteSize))))
             val renderOperands = mutableListOf<GPUPreparedNativeScopeOperand>()
             graph.passes().forEachIndexed { ordinal, pass ->
                 val stepIndex = ordinal + 1

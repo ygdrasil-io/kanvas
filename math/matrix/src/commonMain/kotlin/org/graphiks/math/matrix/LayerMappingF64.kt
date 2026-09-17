@@ -21,6 +21,9 @@ public class LayerMappingF64 private constructor(
             layerOriginDeviceI32: Point2I32,
         ): LayerMappingF64? {
             if (!localToDeviceF64.isFinite()) return null
+            // A layer mapping is a sealed reversible coordinate contract.  A reflection has a
+            // finite inverse and is therefore valid; a collapsed transform is not.
+            if (localToDeviceF64.invertFiniteOrNull() == null) return null
             val deviceToLayerF64 = Matrix3x3F64(
                 txF64 = -layerOriginDeviceI32.x.toDouble(),
                 tyF64 = -layerOriginDeviceI32.y.toDouble(),

@@ -8,6 +8,7 @@ import org.graphiks.kanvas.gpu.renderer.planning.*
 import org.graphiks.kanvas.gpu.renderer.resources.*
 import org.graphiks.kanvas.gpu.renderer.state.*
 import org.graphiks.math.color.ColorF32
+import org.graphiks.math.geometry.Point2I32
 
 /** Exact handle-free projection of a compiler-authenticated frame, including empty clear scopes. */
 class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLoweringRequest) {
@@ -24,6 +25,12 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     internal val readback = GPUFrameReadbackRequest(GPUReadbackRequestID("w6a.${graph.id.value}.readback"), bounds,
         GPUReadbackPixelFormat.Rgba8Unorm, GPUColorInterpretation.EncodedPremulSrgb)
     private val templates = mutableMapOf<GPUDrawPacketID, GPUW5aGeometryHostTemplateV1>()
+    private val targetOriginsDeviceI32: Map<PlanResourceId, Point2I32> = buildMap {
+        put(graph.resources().single { it.role == PlanResourceRole.LogicalTarget }.id, Point2I32.Origin)
+        requireNotNull(graph.layerFramePlanOrNull()).scopes().forEach { scope ->
+            put(scope.targetResource, scope.mapping.copyLayerOriginDeviceI32())
+        }
+    }
     internal val memory: GPUFrameMemoryBudgetPlan
     internal val steps: List<GPUFrameStep>
     private val tasks: List<GPUTask>
@@ -69,11 +76,12 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                         val targetId = render?.target ?: (pass as PlanPass.LayerComposite).destination
                         val targetExtent = requireNotNull(graph.resources().single { it.id == targetId }.copyExtent())
                         val targetBounds = GPUPixelBounds(0, 0, targetExtent.width, targetExtent.height)
+                        val targetOrigin = targetOriginsDeviceI32.getValue(targetId)
                         val packets = render?.draws().orEmpty().map { draw ->
                             val packet = GpuPlanTaskListLowerer().packet(draw, ColorF32.Transparent, draw.commandIndex, targetBounds,
                                 graph.materialPlanTableOrNull(), null,
                                 draw.materialAuthority.colorSourceCoordinatesV4()?.let { graph.packedMaterialSourceV4(draw.materialAuthority) })
-                            templates[packet.packetId] = w6aGeometryTemplate(packet, draw.blend)
+                            templates[packet.packetId] = w6aGeometryTemplate(packet, draw.blend, targetOrigin)
                             packet
                         }
                         add(GPUFrameStep.RenderPassStep(refs.getValue(targetId) as GPUFrameTargetRef,

@@ -13,6 +13,11 @@ import org.graphiks.kanvas.render.ir.RenderPlanResult
 import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
 import org.graphiks.kanvas.render.ir.SceneCommand
 import org.graphiks.kanvas.render.ir.SceneSnapshot
+import org.graphiks.math.geometry.Point2I32
+import org.graphiks.math.geometry.RectF64
+import org.graphiks.math.matrix.LayerMappingF64
+import org.graphiks.math.matrix.Matrix3x3F64
+import org.graphiks.math.matrix.mapRectBoundsF64OrNull
 
 /**
  * First layer authority. It recognizes every layer boundary before any child capability or
@@ -61,7 +66,7 @@ public class W6aLayerPlanCompiler public constructor(
                         W6aPlanDiagnostics.UnsupportedNestedScope,
                         "W6a accepts one active layer scope at a time.",
                     )
-                    refusalFor(command.descriptor)?.let { (code, message) -> return invalid(code, message) }
+                    refusalFor(command.descriptor, target)?.let { (code, message) -> return invalid(code, message) }
                     open = ScopeOccurrence(scopes.size, indexI32, -1, command.descriptor)
                 }
                 SceneCommand.EndLayer -> {
@@ -103,14 +108,15 @@ public class W6aLayerPlanCompiler public constructor(
         val boundaries = listOf(-1) + scopes.flatMap { listOf(it.beginCommandIndexI32, it.endCommandIndexI32) } + commands.size
         for ((before, after) in boundaries.zipWithNext()) {
             val occurrence = scopes.singleOrNull { it.beginCommandIndexI32 == before }
-            val draws = (before + 1 until after).filter { commands[it] is SceneCommand.Draw }.toSet()
+            // A restore clip is applied by the W6 target/composite domain.  It is not copied to
+            // children, which would turn saveLayer's restore semantics into a child clip.
+            val draws = if (occurrence?.let(::hasEmptyExplicitCompositeClip) == true) emptySet()
+                else (before + 1 until after).filter { commands[it] is SceneCommand.Draw }.toSet()
             if (draws.isEmpty()) continue
             val segment = SceneSnapshot.of(scene.extent, scene.colorSpace, commands.mapIndexed { index, command ->
                 if (index in draws) {
                     command as SceneCommand.Draw
-                    val clip = occurrence?.descriptor?.compositeClip
-                    if (clip != null && command.node.clip is org.graphiks.kanvas.render.ir.ClipStackNode.Empty)
-                        SceneCommand.Draw(command.node.copy(clip = clip)) else command
+                    command
                 } else SceneCommand.Annotation.of(org.graphiks.math.geometry.RectF32(0f, 0f, 0f, 0f), "w6a.segment", index.toString())
             })
             val child = CapabilityCompilerChain.of(listOf(W3SolidRectPlanCompiler()), runtimeCatalog)
@@ -157,7 +163,7 @@ public class W6aLayerPlanCompiler public constructor(
         }
     }
 
-    private fun refusalFor(descriptor: LayerDescriptor): Pair<String, String>? {
+    private fun refusalFor(descriptor: LayerDescriptor, target: RenderTargetDescriptor): Pair<String, String>? {
         if (descriptor.initWithPrevious) return W6aPlanDiagnostics.UnsupportedRestore to "Previous-content initialization is outside this slice."
         if (descriptor.backdrop !is EffectStack.Empty) return W6aPlanDiagnostics.UnsupportedBackdrop to
             "W6a does not admit layer backdrop filters."
@@ -165,6 +171,16 @@ public class W6aLayerPlanCompiler public constructor(
             "W6a does not admit layer effects."
         if (!finite(descriptor.transform) || descriptor.copyBounds()?.isFinite() == false) {
             return W6aPlanDiagnostics.NonFiniteTransform to "A layer descriptor contains non-finite geometry."
+        }
+        val localToDevice = descriptor.matrixF64()
+        if (LayerMappingF64.ofOrNull(localToDevice, Point2I32.Origin) == null) {
+            return W6aPlanDiagnostics.NonFiniteTransform to "A layer mapping is non-invertible."
+        }
+        val horizonProbe = descriptor.copyBounds()?.let { bounds ->
+            RectF64(bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble())
+        } ?: RectF64(0.0, 0.0, target.extent.width.toDouble(), target.extent.height.toDouble())
+        if (localToDevice.mapRectBoundsF64OrNull(horizonProbe) == null) {
+            return W6aPlanDiagnostics.MappingHorizon to "A layer mapping crosses a W=0 horizon."
         }
         if (descriptor.blend != BlendNode.SrcOver) return W6aPlanDiagnostics.UnsupportedRestore to "W6a initially supports only SRC_OVER restoration."
         if (descriptor.paint == null && descriptor.material != null) return W6aPlanDiagnostics.UnsupportedRestore to "A restore source without its captured paint is unsupported."
@@ -178,6 +194,16 @@ public class W6aLayerPlanCompiler public constructor(
     }
 
     private fun PaintNode.alphaNotOne(): Boolean = color.alpha != 255
+
+    private fun LayerDescriptor.matrixF64(): Matrix3x3F64 = transform.let { matrix -> Matrix3x3F64(
+        matrix.sx.toDouble(), matrix.kx.toDouble(), matrix.tx.toDouble(),
+        matrix.ky.toDouble(), matrix.sy.toDouble(), matrix.ty.toDouble(),
+        matrix.persp0.toDouble(), matrix.persp1.toDouble(), matrix.persp2.toDouble(),
+    ) }
+
+    private fun hasEmptyExplicitCompositeClip(occurrence: ScopeOccurrence): Boolean =
+        (occurrence.descriptor.compositeClip as? org.graphiks.kanvas.render.ir.ClipStackNode.DeviceRect)
+            ?.copyBounds()?.isEmpty == true
 
     private fun finite(matrix: org.graphiks.math.matrix.Matrix3x3F32): Boolean = listOf(
         matrix.sx, matrix.kx, matrix.tx, matrix.ky, matrix.sy, matrix.ty,

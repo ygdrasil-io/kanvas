@@ -16,6 +16,8 @@ internal data class GPUW5aGeometryHostTemplateV1(
     val w5bInlineCoverageV3: GPUW5bInlineCoverageV3?,
     val materialCoordinateSlot: MaterialCoordinateSlotV1?,
     val primitiveEncodedInput: Boolean = false,
+    /** Sealed device-space point expression for an offscreen target with a nonzero origin. */
+    val materialDevicePointWgsl: String? = null,
 )
 
 internal data class GPUW5aHostColorTargetV1(
