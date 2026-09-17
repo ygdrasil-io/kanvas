@@ -6,6 +6,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.SaveLayerRec
+import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.pipeline.BlurStyle
@@ -243,11 +244,39 @@ class W6aLayerSurfacePixelTest {
         assertPixel(surface.render().pixels, 2, 1, 1, 0, 0, 0, 255)
     }
 
+    @Test
+    fun `restore capability rejects active oversized composed filter before mutation and skips elided scope after recovery`() {
+        // Nine shared compositions expand one 256-byte table payload to 128 KiB: beyond the
+        // W5-authenticated uniform binding limit, while remaining within W5's traversal limits.
+        val oversizedFilter = oversizedComposedTableFilter()
+        val expectedElided = UByteArray(16)
+        val surface = Surface(2, 2)
+        surface.canvas {
+            saveLayer(paint = Paint(colorFilter = oversizedFilter, antiAlias = false))
+            restore()
+        }
+
+        assertTerminalWithoutReadbackMutation(surface, "w6a.layer.restore_capability")
+        surface.discardRecordedOperations()
+        surface.canvas {
+            clipRect(RectF32.ofLTRB(0f, 0f, 0f, 2f), antiAlias = false)
+            saveLayer(paint = Paint(colorFilter = oversizedFilter, antiAlias = false))
+            restore()
+        }
+        assertContentEquals(expectedElided, surface.render().pixels)
+    }
+
     private fun org.graphiks.kanvas.canvas.Canvas.drawW5Rect(color: ColorARGB) {
         drawRect(
             RectF32.ofLTRB(0f, 0f, 4f, 4f),
             Paint(shader = Shader.Opacity(Shader.SolidColor(color), 1f), antiAlias = false),
         )
+    }
+
+    private fun oversizedComposedTableFilter(): ColorFilter {
+        var filter: ColorFilter = ColorFilter.Table(UByteArray(256) { 0u })
+        repeat(9) { filter = ColorFilter.Compose(filter, filter) }
+        return filter
     }
 
     private fun assertTerminalWithoutReadbackMutation(surface: Surface, code: String) {

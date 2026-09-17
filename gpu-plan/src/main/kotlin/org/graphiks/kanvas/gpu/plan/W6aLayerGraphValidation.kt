@@ -48,8 +48,7 @@ internal fun validateW6aLayerTopology(resources: List<PlanResource>, passes: Lis
             require(pass.restore.readsPriorDevice == pass.restore.blend.compositionFacts.readsPriorDevice)
             require(pass.restore.writesParentDevice == pass.restore.blend.compositionFacts.writesParentDevice)
             require(pass.restore.restoreAffectsTransparentBlack ==
-                ((pass.restore.colorFilter?.affectsTransparentBlack == true) ||
-                    pass.restore.blend.compositionFacts.affectsTransparentBlack))
+                pass.restore.blend.finalRestoreAffectsTransparentBlackV1(pass.restore.colorFilter))
             require((pass.restore.colorFilter == null) == (pass.restore.colorFilterUniformOffsetI64 == null))
             require(pass.restore.parentVersionBefore.valueI64 == versions[target.id])
             if (pass.restore.writesParentDevice)

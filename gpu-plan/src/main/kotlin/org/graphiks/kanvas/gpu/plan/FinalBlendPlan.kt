@@ -81,6 +81,16 @@ public sealed interface BlendPlan {
     }
 }
 
+/**
+ * Composes the sealed W5 filter and blend facts at the restore boundary.  A no-op blend leaves
+ * the parent untouched, so it cannot make transparent layer input observably affect the parent.
+ */
+internal fun BlendPlan.finalRestoreAffectsTransparentBlackV1(
+    colorFilter: ColorFilterExecutionPlanV1?,
+): Boolean = compositionFacts.let { facts ->
+    facts.writesParentDevice && (facts.affectsTransparentBlack || colorFilter?.affectsTransparentBlack == true)
+}
+
 /** Destination snapshot binding remains owned by the W5 selected-plan authority. */
 internal fun BlendPlan.bindDestinationReadV1(
     requiredDestinationVersion: DestinationVersionI64,

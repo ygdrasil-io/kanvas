@@ -36,8 +36,7 @@ private class W6aRestoreFacts(
 ) {
     val readsPriorDevice: Boolean = blend.compositionFacts.readsPriorDevice
     val writesParentDevice: Boolean = blend.compositionFacts.writesParentDevice
-    val restoreAffectsTransparentBlack: Boolean =
-        (colorFilter?.affectsTransparentBlack == true) || blend.compositionFacts.affectsTransparentBlack
+    val restoreAffectsTransparentBlack: Boolean = blend.finalRestoreAffectsTransparentBlackV1(colorFilter)
 }
 
 /** Deliberately distinguished from malformed W6 topology so callers can recover before native work. */
@@ -78,12 +77,17 @@ internal class W6aLayerGraphConstruction(
         val restoreFactsByScope = occurrences.associate { occurrence ->
             occurrence.idI32 to sealRestoreFacts(occurrence)
         }
-        restoreFactsByScope.values.forEach(::admitRestoreBindings)
         geometries = immutableList(occurrences.map { occurrence ->
             sealGeometry(occurrence, restoreFactsByScope.getValue(occurrence.idI32))
         })
         val geometryByScope = geometries.associateBy { it.occurrence.idI32 }
         val active = geometries.filterNot(W6aScopeGeometry::isElided)
+        // A semantic restore fact is sealed for every scope, but only a non-elided scope binds
+        // filter or destination resources.  This keeps required semantic refusals before
+        // geometry while avoiding capability admission for work that cannot materialize.
+        active.forEach { geometry ->
+            admitRestoreBindings(restoreFactsByScope.getValue(geometry.occurrence.idI32))
+        }
         val passes = mutableListOf<PlanPass>()
         val steps = mutableListOf<LayerExecutionStepV1>()
         val scopes = mutableListOf<LayerScopePlanV1>()
