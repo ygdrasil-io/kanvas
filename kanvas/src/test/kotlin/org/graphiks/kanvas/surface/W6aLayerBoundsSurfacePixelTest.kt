@@ -5,6 +5,8 @@ package org.graphiks.kanvas.surface
 import kotlin.test.assertContentEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.canvas.SaveLayerRec
+import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Shader
@@ -119,6 +121,27 @@ class W6aLayerBoundsSurfacePixelTest {
             drawRect(RectF32.ofLTRB(1f, 1f, 2f, 2f), Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false))
         }
         assertContentEquals(expectedRecovery, surface.render().pixels)
+    }
+
+    @Test
+    fun `emptyCompositeClipDoesNotMaskUnsupportedBackdropAndSameSurfaceRecovers`() {
+        val expected = pixels(2, 2, 1, 1, ColorARGB.of(255, 17, 61, 211))
+        val surface = Surface(2, 2)
+
+        surface.canvas {
+            save()
+            clipRect(RectF32.ofLTRB(0f, 0f, 0f, 0f), antiAlias = false)
+            saveLayer(SaveLayerRec(backdrop = ImageFilter.Blur(1f, 1f)))
+            restore()
+            restore()
+        }
+        assertTerminalWithoutReadbackMutation(surface, "w6a.layer.unsupported_backdrop")
+
+        surface.discardRecordedOperations()
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(1f, 1f, 2f, 2f), Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false))
+        }
+        assertContentEquals(expected, surface.render().pixels)
     }
 
     @Test

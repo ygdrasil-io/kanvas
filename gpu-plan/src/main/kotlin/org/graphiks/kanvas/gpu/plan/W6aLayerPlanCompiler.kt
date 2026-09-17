@@ -67,8 +67,9 @@ public class W6aLayerPlanCompiler public constructor(
                         W6aPlanDiagnostics.UnsupportedNestedScope,
                         "W6a accepts one active layer scope at a time.",
                     )
+                    semanticRefusalFor(command.descriptor)?.let { (code, message) -> return invalid(code, message) }
                     if (!hasEmptyExplicitCompositeClip(command.descriptor)) {
-                        refusalFor(command.descriptor, target)?.let { (code, message) -> return invalid(code, message) }
+                        geometryRefusalFor(command.descriptor, target)?.let { (code, message) -> return invalid(code, message) }
                     }
                     open = ScopeOccurrence(scopes.size, indexI32, -1, command.descriptor)
                 }
@@ -163,12 +164,32 @@ public class W6aLayerPlanCompiler public constructor(
         }
     }
 
-    private fun refusalFor(descriptor: LayerDescriptor, target: RenderTargetDescriptor): Pair<String, String>? {
+    /**
+     * Refusals determined entirely by the descriptor's requested semantics.  These must stay
+     * observable even when an explicit empty composite clip later elides geometry and targets.
+     */
+    private fun semanticRefusalFor(descriptor: LayerDescriptor): Pair<String, String>? {
         if (descriptor.initWithPrevious) return W6aPlanDiagnostics.UnsupportedRestore to "Previous-content initialization is outside this slice."
         if (descriptor.backdrop !is EffectStack.Empty) return W6aPlanDiagnostics.UnsupportedBackdrop to
             "W6a does not admit layer backdrop filters."
         if (descriptor.effects !is EffectStack.Empty) return W6aPlanDiagnostics.UnsupportedSpatialFilter to
             "W6a does not admit layer effects."
+        if (descriptor.blend != BlendNode.SrcOver) return W6aPlanDiagnostics.UnsupportedRestore to "W6a initially supports only SRC_OVER restoration."
+        if (descriptor.paint == null && descriptor.material != null) return W6aPlanDiagnostics.UnsupportedRestore to "A restore source without its captured paint is unsupported."
+        val paint = descriptor.paint ?: return null
+        if (paint.imageFilter != null || paint.maskFilter != null) return W6aPlanDiagnostics.UnsupportedSpatialFilter to
+            "W6a does not admit filters on layer restore paint."
+        if (paint.colorFilter != null || paint.shader != null || paint.blender != null || paint.alphaNotOne() ||
+            paint.blendMode != BlendMode.SRC_OVER || descriptor.blend != BlendNode.SrcOver
+        ) return W6aPlanDiagnostics.UnsupportedRestore to "W6a initially supports only opaque SRC_OVER restoration."
+        return null
+    }
+
+    /**
+     * Refusals that require a device mapping or a usable layer extent.  An explicit empty
+     * composite clip elides this work before any mapping, horizon probe, or target allocation.
+     */
+    private fun geometryRefusalFor(descriptor: LayerDescriptor, target: RenderTargetDescriptor): Pair<String, String>? {
         if (!finite(descriptor.transform) || descriptor.copyBounds()?.isFinite() == false) {
             return W6aPlanDiagnostics.NonFiniteTransform to "A layer descriptor contains non-finite geometry."
         }
@@ -185,14 +206,6 @@ public class W6aLayerPlanCompiler public constructor(
         if (requestedHint != null && mappedProbe.roundOutToRectI32OrNull() == null) {
             return W6aPlanDiagnostics.MappingOverflow to "A layer hint cannot be represented in I32 device texels."
         }
-        if (descriptor.blend != BlendNode.SrcOver) return W6aPlanDiagnostics.UnsupportedRestore to "W6a initially supports only SRC_OVER restoration."
-        if (descriptor.paint == null && descriptor.material != null) return W6aPlanDiagnostics.UnsupportedRestore to "A restore source without its captured paint is unsupported."
-        val paint = descriptor.paint ?: return null
-        if (paint.imageFilter != null || paint.maskFilter != null) return W6aPlanDiagnostics.UnsupportedSpatialFilter to
-            "W6a does not admit filters on layer restore paint."
-        if (paint.colorFilter != null || paint.shader != null || paint.blender != null || paint.alphaNotOne() ||
-            paint.blendMode != BlendMode.SRC_OVER || descriptor.blend != BlendNode.SrcOver
-        ) return W6aPlanDiagnostics.UnsupportedRestore to "W6a initially supports only opaque SRC_OVER restoration."
         return null
     }
 
