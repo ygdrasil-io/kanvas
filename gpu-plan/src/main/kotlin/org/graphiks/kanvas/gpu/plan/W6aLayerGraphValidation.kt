@@ -9,7 +9,8 @@ internal fun validateW6aLayerTopology(resources: List<PlanResource>, passes: Lis
     val root = resources.single { it.role == PlanResourceRole.LogicalTarget }
     require(root.copyExtent() == extent)
     val layers = resources.filter { it.role == PlanResourceRole.LayerTarget }
-    require(layers.isNotEmpty())
+    // A proven-empty explicit restore clip owns no target or layer pass. Root draws before or
+    // after that scope remain valid and still flow through the same W6a graph.
     val initialized = mutableSetOf<PlanResourceId>()
     val restored = mutableSetOf<PlanResourceId>()
     val commands = mutableListOf<Int>()

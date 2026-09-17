@@ -6,11 +6,9 @@ import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
 import org.graphiks.math.geometry.roundOutToRectI32OrNull
-import org.graphiks.math.geometry.translateCheckedOrNull
 import org.graphiks.math.matrix.LayerMappingF64
 import org.graphiks.math.matrix.Matrix3x3F64
 import org.graphiks.math.matrix.mapRectBoundsF64OrNull
-import org.graphiks.math.vector.Vector2I32
 
 /** One occurrence binding, still before material issuance and graph publication. */
 internal class W6aLayerSourceBinding(val scopeI32: Int?, val source: SourceDeferredRenderConstructionV4)
@@ -173,7 +171,11 @@ internal class W6aLayerGraphConstruction(
                 val mapped = pass.draws().map { byCommand.getValue(it.commandIndex) }
                 val local = if (pass.target == root) mapped else {
                     val geometry = geometryByTarget.getValue(pass.target)
-                    mapped.map { draw -> localizeLayerDraw(draw, requireNotNull(geometry.compositeDomainDeviceI32)) }
+                    mapped.map { draw -> localizeLayerDraw(
+                        draw,
+                        requireNotNull(geometry.mapping),
+                        requireNotNull(geometry.compositeDomainDeviceI32),
+                    ) }
                 }
                 PlanPass.RenderPass(pass.ordinal, pass.target, local, pass.load, pass.store,
                     destinationVersionAfter = pass.destinationVersionAfter)
@@ -191,25 +193,32 @@ internal class W6aLayerGraphConstruction(
     }
 
     private fun sealGeometry(occurrence: W6aLayerPlanCompiler.ScopeOccurrence): W6aScopeGeometry {
+        // A proven-empty restore clip elides before inspecting any transform or hint.  Nothing
+        // can allocate, render or sample from this scope.
+        val desired = desiredOutput(occurrence.descriptor)
+            ?: return W6aScopeGeometry(occurrence, null, null, null, null, null, null, null)
         val transform = occurrence.descriptor.transform
         val localToDevice = Matrix3x3F64(
             transform.sx.toDouble(), transform.kx.toDouble(), transform.tx.toDouble(),
             transform.ky.toDouble(), transform.sy.toDouble(), transform.ty.toDouble(),
             transform.persp0.toDouble(), transform.persp1.toDouble(), transform.persp2.toDouble(),
         )
-        val hint = occurrence.descriptor.copyBounds()?.let { bounds ->
+        val hint = occurrence.descriptor.copyBounds()?.takeUnless { it.isEmpty }?.let { bounds ->
             localToDevice.mapRectBoundsF64OrNull(RectF64(bounds.left.toDouble(), bounds.top.toDouble(),
                 bounds.right.toDouble(), bounds.bottom.toDouble()))
                 ?: throw IllegalArgumentException(W6aPlanDiagnostics.MappingHorizon)
         }
-        val desired = desiredOutput(occurrence.descriptor)
-            ?: return W6aScopeGeometry(occurrence, null, hint, null, null, null, null, null)
+        val hintDomain = hint?.roundOutToRectI32OrNull()
+            ?: if (hint == null) null else throw IllegalArgumentException(W6aPlanDiagnostics.MappingOverflow)
         val known = knownContent(occurrence.idI32)
         val produced = known
         // W6a's current transparent, identity restore has no filter expansion. The four values
         // remain distinct facts even when their no-filter derivations happen to coincide.
         val required = desired.copy()
-        val composite = if (known == null) desired.copy() else intersect(known, desired)
+        // A nonempty bounds hint can enlarge the intermediate filter region but never clips an
+        // child. Empty content keeps the desired domain for future nontrivial restores.
+        val effective = if (known == null) desired else hintDomain?.let { union(known, it) } ?: known
+        val composite = intersect(effective, desired)
         if (composite == null) return W6aScopeGeometry(occurrence, null, hint, known, desired, required, produced, null)
         val mapping = LayerMappingF64.ofOrNull(localToDevice, Point2I32(composite.left, composite.top))
             ?: throw IllegalArgumentException(W6aPlanDiagnostics.NonFiniteTransform)
@@ -221,8 +230,11 @@ internal class W6aLayerGraphConstruction(
         is ClipStackNode.DeviceRect -> {
             val bounds = clip.copyBounds()
             if (bounds.left >= bounds.right || bounds.top >= bounds.bottom) null
-            else RectF64(bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble())
-                .roundOutToRectI32OrNull()?.let { intersect(it, rootDomainDeviceI32) }
+            else {
+                val rounded = RectF64(bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble())
+                    .roundOutToRectI32OrNull() ?: throw IllegalArgumentException(W6aPlanDiagnostics.MappingOverflow)
+                intersect(rounded, rootDomainDeviceI32)
+            }
         }
         is ClipStackNode.Operations -> throw IllegalArgumentException("${W6aPlanDiagnostics.UnsupportedChild}: complex composite clip")
     }
@@ -233,13 +245,16 @@ internal class W6aLayerGraphConstruction(
         .mapNotNull { draw -> intersect(draw.copyVisibleBounds(), draw.copyScissor()) }
         .fold<RectI32, RectI32?>(null) { union, bounds -> union?.let { union(it, bounds) } ?: bounds.copy() }
 
-    private fun localizeLayerDraw(draw: PlanDraw, targetDomainDeviceI32: RectI32): PlanDraw {
+    private fun localizeLayerDraw(
+        draw: PlanDraw,
+        mapping: LayerMappingF64,
+        targetDomainDeviceI32: RectI32,
+    ): PlanDraw {
         val solid = draw as? SolidRectDraw ?: error("w6a.layer.unsupported_child")
         val visibleDevice = requireNotNull(intersect(solid.copyVisibleBounds(), targetDomainDeviceI32))
         val scissorDevice = requireNotNull(intersect(solid.copyScissor(), targetDomainDeviceI32))
-        val translation = Vector2I32(-targetDomainDeviceI32.left, -targetDomainDeviceI32.top)
-        val visibleLayer = requireNotNull(visibleDevice.translateCheckedOrNull(translation))
-        val scissorLayer = requireNotNull(scissorDevice.translateCheckedOrNull(translation))
+        val visibleLayer = requireNotNull(mapping.mapDeviceRectToLayerI32OrNull(visibleDevice))
+        val scissorLayer = requireNotNull(mapping.mapDeviceRectToLayerI32OrNull(scissorDevice))
         return when (val authority = solid.materialAuthority) {
             is PlanDrawMaterialAuthority.LegacyColorV1 -> SolidRectDraw.of(
                 solid.commandIndex, authority.copyColorF32(), visibleLayer, scissorLayer,

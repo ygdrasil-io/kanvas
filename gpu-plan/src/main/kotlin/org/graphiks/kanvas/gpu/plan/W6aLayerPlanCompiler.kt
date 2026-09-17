@@ -15,6 +15,7 @@ import org.graphiks.kanvas.render.ir.SceneCommand
 import org.graphiks.kanvas.render.ir.SceneSnapshot
 import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.RectF64
+import org.graphiks.math.geometry.roundOutToRectI32OrNull
 import org.graphiks.math.matrix.LayerMappingF64
 import org.graphiks.math.matrix.Matrix3x3F64
 import org.graphiks.math.matrix.mapRectBoundsF64OrNull
@@ -66,7 +67,9 @@ public class W6aLayerPlanCompiler public constructor(
                         W6aPlanDiagnostics.UnsupportedNestedScope,
                         "W6a accepts one active layer scope at a time.",
                     )
-                    refusalFor(command.descriptor, target)?.let { (code, message) -> return invalid(code, message) }
+                    if (!hasEmptyExplicitCompositeClip(command.descriptor)) {
+                        refusalFor(command.descriptor, target)?.let { (code, message) -> return invalid(code, message) }
+                    }
                     open = ScopeOccurrence(scopes.size, indexI32, -1, command.descriptor)
                 }
                 SceneCommand.EndLayer -> {
@@ -79,9 +82,6 @@ public class W6aLayerPlanCompiler public constructor(
                 }
                 is SceneCommand.Draw -> {
                     val paint = command.node.paint
-                    if (open?.descriptor?.compositeClip?.let { it !is org.graphiks.kanvas.render.ir.ClipStackNode.Empty } == true &&
-                        command.node.clip !is org.graphiks.kanvas.render.ir.ClipStackNode.Empty)
-                        return invalid(W6aPlanDiagnostics.UnsupportedChild, "Combined child/restore clips await the bounded clip lane.")
                     if (paint?.imageFilter != null || paint?.maskFilter != null || command.node.effects !is EffectStack.Empty) {
                         return invalid(
                             W6aPlanDiagnostics.UnsupportedSpatialFilter,
@@ -176,11 +176,14 @@ public class W6aLayerPlanCompiler public constructor(
         if (LayerMappingF64.ofOrNull(localToDevice, Point2I32.Origin) == null) {
             return W6aPlanDiagnostics.NonFiniteTransform to "A layer mapping is non-invertible."
         }
-        val horizonProbe = descriptor.copyBounds()?.let { bounds ->
+        val requestedHint = descriptor.copyBounds()?.takeUnless { it.isEmpty }
+        val horizonProbe = requestedHint?.let { bounds ->
             RectF64(bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble())
         } ?: RectF64(0.0, 0.0, target.extent.width.toDouble(), target.extent.height.toDouble())
-        if (localToDevice.mapRectBoundsF64OrNull(horizonProbe) == null) {
-            return W6aPlanDiagnostics.MappingHorizon to "A layer mapping crosses a W=0 horizon."
+        val mappedProbe = localToDevice.mapRectBoundsF64OrNull(horizonProbe)
+            ?: return W6aPlanDiagnostics.MappingHorizon to "A layer mapping crosses a W=0 horizon."
+        if (requestedHint != null && mappedProbe.roundOutToRectI32OrNull() == null) {
+            return W6aPlanDiagnostics.MappingOverflow to "A layer hint cannot be represented in I32 device texels."
         }
         if (descriptor.blend != BlendNode.SrcOver) return W6aPlanDiagnostics.UnsupportedRestore to "W6a initially supports only SRC_OVER restoration."
         if (descriptor.paint == null && descriptor.material != null) return W6aPlanDiagnostics.UnsupportedRestore to "A restore source without its captured paint is unsupported."
@@ -201,9 +204,12 @@ public class W6aLayerPlanCompiler public constructor(
         matrix.persp0.toDouble(), matrix.persp1.toDouble(), matrix.persp2.toDouble(),
     ) }
 
-    private fun hasEmptyExplicitCompositeClip(occurrence: ScopeOccurrence): Boolean =
-        (occurrence.descriptor.compositeClip as? org.graphiks.kanvas.render.ir.ClipStackNode.DeviceRect)
+    private fun hasEmptyExplicitCompositeClip(descriptor: LayerDescriptor): Boolean =
+        (descriptor.compositeClip as? org.graphiks.kanvas.render.ir.ClipStackNode.DeviceRect)
             ?.copyBounds()?.isEmpty == true
+
+    private fun hasEmptyExplicitCompositeClip(occurrence: ScopeOccurrence): Boolean =
+        hasEmptyExplicitCompositeClip(occurrence.descriptor)
 
     private fun finite(matrix: org.graphiks.math.matrix.Matrix3x3F32): Boolean = listOf(
         matrix.sx, matrix.kx, matrix.tx, matrix.ky, matrix.sy, matrix.ty,

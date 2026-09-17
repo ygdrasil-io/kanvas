@@ -2,6 +2,8 @@ package org.graphiks.math.matrix
 
 import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.RectF64
+import org.graphiks.math.geometry.RectI32
+import org.graphiks.math.geometry.roundOutToRectI32OrNull
 
 /** Immutable local/device/layer mapping sealed before a layer graph is published. */
 public class LayerMappingF64 private constructor(
@@ -14,6 +16,15 @@ public class LayerMappingF64 private constructor(
     public fun copyDeviceToLayerF64(): Matrix3x3F64 = deviceToLayerF64.copy()
     public fun copyLocalToLayerF64(): Matrix3x3F64 = localToLayerF64.copy()
     public fun copyLayerOriginDeviceI32(): Point2I32 = Point2I32(layerOriginDeviceI32.x, layerOriginDeviceI32.y)
+
+    /** Projects a sealed device-space texel rectangle into checked layer texels. */
+    public fun mapDeviceRectToLayerI32OrNull(boundsDeviceI32: RectI32): RectI32? =
+        deviceToLayerF64.mapRectBoundsF64OrNull(RectF64(
+            boundsDeviceI32.left.toDouble(),
+            boundsDeviceI32.top.toDouble(),
+            boundsDeviceI32.right.toDouble(),
+            boundsDeviceI32.bottom.toDouble(),
+        ))?.roundOutToRectI32OrNull()
 
     public companion object {
         public fun ofOrNull(
