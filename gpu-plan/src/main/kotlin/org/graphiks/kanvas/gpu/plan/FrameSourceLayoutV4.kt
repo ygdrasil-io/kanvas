@@ -839,7 +839,8 @@ internal class FrameSourceLayoutV4 private constructor(
             var total = nonUniform
             fun add(bytes: Long,code: String) {
                 total = Math.addExact(total,bytes)
-                require(total <= budget.maxFrameLocalBytes) { code }
+                if (layeredInput != null) W6aLayerPlanBudget.requireWithin(total,budget)
+                else require(total <= budget.maxFrameLocalBytes) { code }
             }
             legacy.sortedBy { it.hasCoordinatesV2 }.forEach {
                 require(it.original.fitsUniformBinding(caps)) { if (it.hasCoordinatesV2)

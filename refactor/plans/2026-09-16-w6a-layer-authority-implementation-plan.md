@@ -819,3 +819,27 @@ rtk ./gradlew :kanvas:compileTestKotlin
 ## Execution Handoff
 
 The plan is ready for `superpowers:subagent-driven-development`, task by task, with Astra on architectural/numeric implementation and Sol only on reviews. Do not start W6b until Task 8 closes W6a or records a concrete blocker.
+
+## Task 8 durable checkpoint — 2026-09-22
+
+- [x] Les huit shards publics W6a, les selectors ciblés W4/W5 et les sept
+  compilations séparées ont été exécutés séquentiellement. La custody complète
+  (méthodes XML, PASS/failure/error/skip, exits Gradle et natifs) est dans
+  `refactor/waves/W06-layers-effects/status.md`.
+- [x] Une correction bornée de `FrameSourceLayoutV4` route les dépassements de
+  budget agrégé sous `layeredInput` vers
+  `w6a.layer.frame_budget_exceeded`; les deux REDs publics de convergence sont
+  repassés GREEN. Les routes W4/W5 non-layer restent inchangées et leur
+  préservation ciblée est consignée.
+- [x] L'audit de source classe les chemins prepared historiques comme
+  legacy/W8, hors route W6a; les ressources/passes W6a restent planifiées et
+  gelées dans `:gpu-plan` avant leur matérialisation native.
+- [x] Budgets : root/readback, targets de layers, previous copies, snapshots
+  destination, owners W4/W5, alignement/réservation et leases restent dans le
+  peak frame-wide; B/B−1 et recovery sont couverts publiquement.
+- [x] Exclusions explicites : backdrop, filtres image/mask/spatial, F16/HDR,
+  device-loss/visibilité native, fonts, codecs, GMs et gates globales. Aucun
+  GM/global Skia/`jpg-color-cube` n'a été lancé.
+- [ ] La revue whole-branch Sol, le push et la Draft PR empilée W5h sont des
+  actions du controller. Les exits natifs133 sont `UNKNOWN`, jamais GREEN; ce
+  checkpoint ne fait aucune claim ISO ni globale.
