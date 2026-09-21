@@ -837,9 +837,9 @@ internal class FrameSourceLayoutV4 private constructor(
             nonUniform=Math.addExact(nonUniform,runtimeBytes)
             require(nonUniform <= budget.maxFrameLocalBytes) { W5gPlanDiagnostics.NoiseStorage }
             var total = nonUniform
-            fun add(bytes: Long,code: String) {
+            fun add(bytes: Long,code: String,preserveOwnerForLayeredFrame: Boolean = false) {
                 total = Math.addExact(total,bytes)
-                if (layeredInput != null) W6aLayerPlanBudget.requireWithin(total,budget)
+                if (layeredInput != null && !preserveOwnerForLayeredFrame) W6aLayerPlanBudget.requireWithin(total,budget)
                 else require(total <= budget.maxFrameLocalBytes) { code }
             }
             legacy.sortedBy { it.hasCoordinatesV2 }.forEach {
@@ -855,7 +855,8 @@ internal class FrameSourceLayoutV4 private constructor(
                     ?: ((if (source.hasGradientStorage) 2 else 1) + (if (source.image != null) 1 else 0))
                 requireColorUniformBindingV4(bytes,caps,bindings,
                     if (source.composed != null) W5gPlanDiagnostics.Binding else W5dPlanDiagnostics.CoordinateUniformBudget)
-                add(source.uniformBytesI64(true),if (source.composed != null) W5gPlanDiagnostics.Uniform else W5dPlanDiagnostics.CoordinateUniformBudget)
+                add(source.uniformBytesI64(true),if (source.composed != null) W5gPlanDiagnostics.Uniform else W5dPlanDiagnostics.CoordinateUniformBudget,
+                    preserveOwnerForLayeredFrame = source.composed != null)
             }
             val stopBytes = Math.multiplyExact(stopCountI64,32L)
             val ordinaryStopBytes=allocations.filter { (it.values as? RangeValues.Pending)?.composedOwner == null }
