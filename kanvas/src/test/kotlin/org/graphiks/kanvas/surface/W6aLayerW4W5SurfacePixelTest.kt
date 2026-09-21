@@ -209,22 +209,41 @@ class W6aLayerW4W5SurfacePixelTest {
     }
 
     @Test
-    fun `vertices list strip fan and color coordinates share sealed geometry bindings`() {
-        val expected = rgba(0, 0, 0, 0) + rgba(255, 0, 0) + rgba(0, 0, 255) + rgba(0, 255, 0) + rgba(0, 0, 0, 0)
+    fun `vertices list strip fan and all attribute layouts share sealed geometry bindings`() {
+        val expected = rgba(0, 0, 0, 0) + rgba(255, 0, 0) + rgba(0, 0, 255) + rgba(0, 255, 0) +
+            rgba(255, 0, 0) + rgba(0, 0, 0, 0)
         val triangle = listOf(Point2F32(-1f, -1f), Point2F32(7f, -1f), Point2F32(-1f, 7f))
         val cases = listOf(
             Vertices(VertexMode.TRIANGLES, triangle) to ColorARGB.Red,
             Vertices(VertexMode.TRIANGLE_STRIP, triangle, indices = listOf(0, 1, 2)) to ColorARGB.Blue,
             Vertices(VertexMode.TRIANGLE_FAN, triangle, colors = List(3) { ColorARGB.Green },
                 texCoords = List(3) { Point2F32(.5f, .5f) }) to ColorARGB.White,
+            Vertices(VertexMode.TRIANGLES, triangle, colors = List(3) { ColorARGB.Red }) to ColorARGB.White,
         )
         for (layered in listOf(false, true)) {
-            val surface = Surface(5, 1)
+            val surface = Surface(6, 1)
             surface.canvas {
-                if (layered) saveLayer(RectF32.ofLTRB(1f, 0f, 4f, 1f))
+                if (layered) saveLayer(RectF32.ofLTRB(1f, 0f, 5f, 1f))
                 cases.forEachIndexed { index, (vertices, color) -> pixelClip(index + 1) {
                     drawVertices(vertices, opaque(color))
                 } }
+                if (layered) restore()
+            }
+            assertContentEquals(expected, surface.render().pixels, "layered=$layered")
+        }
+    }
+
+    @Test
+    fun `vertices UV only retain their canonical layout through a layer`() {
+        val expected = rgba(0, 0, 0, 0) + rgba(17, 61, 211) + rgba(0, 0, 0, 0)
+        val vertices = Vertices(VertexMode.TRIANGLES,
+            listOf(Point2F32(-1f, -1f), Point2F32(4f, -1f), Point2F32(-1f, 4f)),
+            texCoords = listOf(Point2F32(0f, 0f), Point2F32(1f, 0f), Point2F32(0f, 1f)))
+        for (layered in listOf(false, true)) {
+            val surface = Surface(3, 1)
+            surface.canvas {
+                if (layered) saveLayer(RectF32.ofLTRB(1f, 0f, 2f, 1f))
+                pixelClip(1) { drawVertices(vertices, opaque(BLUE)) }
                 if (layered) restore()
             }
             assertContentEquals(expected, surface.render().pixels, "layered=$layered")

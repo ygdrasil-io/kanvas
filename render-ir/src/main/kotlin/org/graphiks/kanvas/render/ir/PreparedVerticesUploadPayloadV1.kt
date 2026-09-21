@@ -62,7 +62,7 @@ public class PreparedVerticesUploadPayloadV1 private constructor(
             val coordinates = geometry.copyCoordinatesF32()
             val vertexCount = geometry.vertexCountI32
             require(colorsRgba8 == null || colorsRgba8.size == Math.multiplyExact(vertexCount, 4))
-            val stride = 8 + if (colorsRgba8 == null) 0 else 4 + if (coordinates == null) 0 else 8
+            val stride = 8 + (if (colorsRgba8 == null) 0 else 4) + (if (coordinates == null) 0 else 8)
             val vertexBytes = ByteArray(Math.multiplyExact(vertexCount, stride))
             var offset = 0
             repeat(vertexCount) { index ->
