@@ -84,11 +84,14 @@ internal class W5bVerticesPlanCompiler(private val catalog: RuntimeEffectSemanti
             val draw = selected.draw
             if (draw.indexElementBytesI32 == 4 && PlanOperationCapability.Uint32Index !in caps.supportedOperations())
                 return sourceConstructionRefusalV4(Codes.IndexFormat).failure
+            val sealedDraw = draw.withSealedUpload(PreparedVerticesUploadPayloadV1.seal(
+                draw.geometryF32, draw.copyColorsRgba8()))
+            val upload = requireNotNull(sealedDraw.sealedUploadPayloadOrNull())
             val extent = SizeI32(selected.target.extent.width, selected.target.extent.height)
             val resources = listOf(Triple(PlanResourceRole.VertexData, PlanResourceUsage.Vertex,
-                Math.multiplyExact(draw.geometryF32.vertexCountI32.toLong(), draw.vertexStrideBytesI32.toLong())),
+                upload.vertexBytesI64),
                 Triple(PlanResourceRole.IndexData, PlanResourceUsage.Index,
-                    maxOf(4L, Math.multiplyExact(draw.geometryF32.indexCountI32?.toLong() ?: 0L, draw.indexElementBytesI32?.toLong() ?: 0L))),
+                    maxOf(4L, upload.indexBytesI64)),
                 Triple(PlanResourceRole.UniformData, PlanResourceUsage.Uniform, 64L)).map { (role, usage, bytes) ->
                 require(bytes <= caps.maxBufferSizeBytes) { Codes.Budget }
                 PlanResource.of(role, 0, PlanResourceKind.Buffer, null, null,
@@ -98,7 +101,7 @@ internal class W5bVerticesPlanCompiler(private val catalog: RuntimeEffectSemanti
             val data = PlanDrawDataResources(resources[0].id, resources[1].id, resources[2].id)
             val row = Math.multiplyExact(extent.width.toLong(), 4L).let { Math.addExact(it,
                 (caps.copyBytesPerRowAlignment - it % caps.copyBytesPerRowAlignment) % caps.copyBytesPerRowAlignment) }
-            val topology = W5bDestinationGraphSealer.describeSources(CAPABILITY_ID, extent, caps, budget, listOf(draw),
+            val topology = W5bDestinationGraphSealer.describeSources(CAPABILITY_ID, extent, caps, budget, listOf(sealedDraw),
                 checkedTextureBytesI64(4, extent.width, extent.height, 1), Math.multiplyExact(row, extent.height.toLong()), row, resources, data)
             val sources = when (val result = MaterialSourceConstructionTableV4.of(listOf(selected.source))) {
                 is SourceConstructionResultV4.Built -> result.value

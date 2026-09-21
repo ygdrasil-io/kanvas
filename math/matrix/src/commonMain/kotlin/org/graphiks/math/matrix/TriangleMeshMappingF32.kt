@@ -16,8 +16,7 @@ public fun TriangleMeshF32.rasterBoundsI32OrNull(matrixF32: Matrix3x3F32, target
 public fun Matrix3x3F32.relativeToOriginI32OrNull(originI32: Point2I32): Matrix3x3F32? {
     if (!toMatrix3x3F64().isFinite() || hasPerspective()) return null
     fun translated(valueF32: Float, offsetI32: Int): Float? {
-        val exactF64 = valueF32.toDouble() - offsetI32.toDouble()
-        return exactF64.toFloat().takeIf { it.isFinite() && it.toDouble() == exactF64 }
+        return (valueF32 - offsetI32.toFloat()).takeIf(Float::isFinite)
     }
     return Matrix3x3F32.of(sx, kx, translated(tx, originI32.x) ?: return null,
         ky, sy, translated(ty, originI32.y) ?: return null, persp0, persp1, persp2)

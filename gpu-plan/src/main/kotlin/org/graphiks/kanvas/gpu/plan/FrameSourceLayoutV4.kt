@@ -768,12 +768,10 @@ internal class FrameSourceLayoutV4 private constructor(
             }
             imageInventory.filter { it.upload != null }.forEach {
                 nonUniform = Math.addExact(nonUniform,it.physicalBytesI64(caps)) }
-            if (layeredInput != null) W6aLayerPlanBudget.requireWithin(nonUniform, budget)
             require(nonUniform <= budget.maxFrameLocalBytes) { W5eImagePlanDiagnostics.FrameBudget }
             try {
                 imageInventory.filter { it.upload == null }.forEach { allocation ->
                     nonUniform=Math.addExact(nonUniform,allocation.physicalBytesI64(caps))
-                    if (layeredInput != null) W6aLayerPlanBudget.requireWithin(nonUniform, budget)
                     require(nonUniform <= budget.maxFrameLocalBytes) { W5gPlanDiagnostics.Binding }
                 }
             } catch (_: IllegalArgumentException) { throw IllegalArgumentException(W5gPlanDiagnostics.Binding) }
@@ -837,12 +835,10 @@ internal class FrameSourceLayoutV4 private constructor(
             }
             nonUniform=Math.addExact(nonUniform,noiseBytes)
             nonUniform=Math.addExact(nonUniform,runtimeBytes)
-            if (layeredInput != null) W6aLayerPlanBudget.requireWithin(nonUniform, budget)
             require(nonUniform <= budget.maxFrameLocalBytes) { W5gPlanDiagnostics.NoiseStorage }
             var total = nonUniform
             fun add(bytes: Long,code: String) {
                 total = Math.addExact(total,bytes)
-                if (layeredInput != null) W6aLayerPlanBudget.requireWithin(total, budget)
                 require(total <= budget.maxFrameLocalBytes) { code }
             }
             legacy.sortedBy { it.hasCoordinatesV2 }.forEach {

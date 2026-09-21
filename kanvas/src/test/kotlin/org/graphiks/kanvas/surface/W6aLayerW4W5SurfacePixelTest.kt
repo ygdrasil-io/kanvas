@@ -80,6 +80,60 @@ class W6aLayerW4W5SurfacePixelTest {
     }
 
     @Test
+    fun `fractional frozen path and path clip rebase at a nonzero layer origin`() {
+        val expected = rgba(0, 0, 0, 0) + rgba(17, 61, 211) + rgba(17, 61, 211) +
+            rgba(17, 61, 211) + rgba(0, 0, 0, 0) + rgba(0, 0, 0, 0)
+        val path = Path().apply {
+            moveTo(.1f, 0f); lineTo(3.1f, 0f); lineTo(3.1f, 1f); lineTo(.1f, 1f); close()
+        }
+        for (layered in listOf(false, true)) {
+            val surface = Surface(6, 1)
+            surface.canvas {
+                clipRect(RectF32.ofLTRB(1f, 0f, 5f, 1f), antiAlias = false)
+                if (layered) saveLayer()
+                translate(1f, 0f)
+                clipPath(path, antiAlias = false)
+                drawPath(path, opaque(BLUE))
+                if (layered) restore()
+            }
+            assertContentEquals(expected, surface.render().pixels, "layered=$layered")
+        }
+    }
+
+    @Test
+    fun `fractional frozen RRect rebases at a nonzero layer origin`() {
+        val expected = rgba(0, 0, 0, 0) + rgba(228, 48, 69, 229) + rgba(239, 51, 73)
+        for (layered in listOf(false, true)) {
+            val surface = Surface(3, 1)
+            surface.canvas {
+                if (layered) saveLayer(RectF32.ofLTRB(1f, 0f, 3f, 1f))
+                drawRRect(RRectF32.of(RectF32.ofLTRB(1.1f, -1f, 4.1f, 2f), CornerRadiiF32.of(.25f)),
+                    opaque(RED).copy(antiAlias = true))
+                if (layered) restore()
+            }
+            assertContentEquals(expected, surface.render().pixels, "layered=$layered")
+        }
+    }
+
+    @Test
+    fun `fractional frozen Point and Vertices rebase at a nonzero layer origin`() {
+        val expected = rgba(0, 0, 0, 0) + rgba(43, 181, 93) + rgba(239, 51, 73)
+        val triangle = Vertices(VertexMode.TRIANGLES,
+            listOf(Point2F32(2f, -1f), Point2F32(3f, -1f), Point2F32(2f, 2f)))
+        val surface = Surface(3, 1)
+        surface.canvas {
+            saveLayer(RectF32.ofLTRB(1f, 0f, 3f, 1f))
+            drawPoint(1.1f, .5f, opaque(GREEN).copy(strokeWidth = 0f))
+            save()
+            translate(.1f, 0f)
+            drawVertices(triangle, opaque(RED))
+            restore()
+            restore()
+        }
+        assertContentEquals(expected, surface.render().pixels)
+    }
+
+    @Test
     fun `destination only child lanes preserve the surrounding source`() {
         val expected = rgba(17, 61, 211)
         val vertices = Vertices(VertexMode.TRIANGLES, listOf(Point2F32(0f, 0f), Point2F32(3f, 0f), Point2F32(0f, 3f)))

@@ -113,35 +113,8 @@ public class PathFillGeometryF32 internal constructor(
 
     public fun copyStencilEdgeFanF32OrNull(): PathStencilEdgeFanF32? = stencilEdgeFanSnapshotF32?.copySnapshotF32()
 
-    /** Exact origin change of an admitted mesh; topology and work accounting are unchanged. */
+    /** F32 origin change of an admitted mesh; topology and work accounting are unchanged. */
     public fun relativeToOriginI32OrNull(originI32: Point2I32): PathFillGeometryF32? {
-        fun vertices(inputF32: FloatArray): FloatArray? = FloatArray(inputF32.size) { index ->
-            val valueF64 = inputF32[index].toDouble() -
-                (if (index % 2 == 0) originI32.x else originI32.y).toDouble()
-            val narrowedF32 = valueF64.toFloat()
-            if (!narrowedF32.isFinite() || narrowedF32.toDouble() != valueF64) return null
-            narrowedF32
-        }
-        fun edge(value: Int, origin: Int): Int? = (value.toLong() - origin.toLong())
-            .takeIf { it in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong() }?.toInt()
-        val old = conservativeScissorSnapshotI32
-        val scissor = RectI32(edge(old.left, originI32.x) ?: return null,
-            edge(old.top, originI32.y) ?: return null, edge(old.right, originI32.x) ?: return null,
-            edge(old.bottom, originI32.y) ?: return null)
-        val direct = directTriangleSnapshotF32?.let { PathFillDirectTriangleF32(
-            vertices(it.copyVerticesF32()) ?: return null, it.copyIndicesI32()) }
-        val fan = stencilEdgeFanSnapshotF32?.let { PathStencilEdgeFanF32(
-            vertices(it.copyVerticesF32()) ?: return null, it.copyIndicesI32(), it.copyContourStartsI32()) }
-        return PathFillGeometryF32(fillRule, attemptedEdgeCountI32, emittedNonZeroClosedEdgeCountI32,
-            scissor, direct, fan)
-    }
-
-    /**
-     * Rebases an already prepared device-space mesh with the F32 subtraction used by its target
-     * coordinate system. Unlike [relativeToOriginI32OrNull], this retains a valid F32 mesh when
-     * subtracting an integer layer origin changes the value's F64 representation.
-     */
-    public fun relativeToOriginI32F32OrNull(originI32: Point2I32): PathFillGeometryF32? {
         fun vertices(inputF32: FloatArray): FloatArray? = FloatArray(inputF32.size) { index ->
             val valueF32 = inputF32[index] - if (index % 2 == 0) originI32.x.toFloat() else originI32.y.toFloat()
             if (!valueF32.isFinite()) return null
@@ -160,6 +133,7 @@ public class PathFillGeometryF32 internal constructor(
         return PathFillGeometryF32(fillRule, attemptedEdgeCountI32, emittedNonZeroClosedEdgeCountI32,
             scissor, direct, fan)
     }
+
 }
 
 private fun PathFillDirectTriangleF32.copySnapshotF32(): PathFillDirectTriangleF32 = PathFillDirectTriangleF32(

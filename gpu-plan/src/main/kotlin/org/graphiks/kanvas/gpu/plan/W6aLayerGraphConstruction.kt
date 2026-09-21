@@ -676,7 +676,7 @@ internal class W6aLayerGraphConstruction(
             draw.copyColorsRgba8(), requireNotNull(draw.transformF32.relativeToOriginI32OrNull(mapping.copyLayerOriginDeviceI32())),
             requireNotNull(mapping.mapDeviceRectToLayerI32OrNull(requireNotNull(intersect(draw.copyBoundsI32(), targetDomainDeviceI32)))),
             requireNotNull(mapping.mapDeviceRectToLayerI32OrNull(requireNotNull(intersect(draw.copyScissorI32(), targetDomainDeviceI32)))),
-            draw.blend, draw.primitiveBlend)
+            draw.blend, draw.primitiveBlend, draw.sealedUploadPayloadOrNull())
         if (draw is W5bPointDraw) return requireNotNull(draw.relativeToOriginI32OrNull(mapping.copyLayerOriginDeviceI32(),
             requireNotNull(mapping.mapDeviceRectToLayerI32OrNull(requireNotNull(intersect(draw.copyScissorI32(), targetDomainDeviceI32))))))
         if (draw is PathFillDraw || draw is PathStrokeDraw) {
@@ -703,9 +703,9 @@ internal class W6aLayerGraphConstruction(
         if (draw is GeneralPathDraw) {
             val geometry = when (val source = draw.copyPathGeometry()) {
                 is PathDrawGeometry.Fill -> PathDrawGeometry.Fill(requireNotNull(
-                    source.valueF32.relativeToOriginI32F32OrNull(mapping.copyLayerOriginDeviceI32())))
+                    source.valueF32.relativeToOriginI32OrNull(mapping.copyLayerOriginDeviceI32())))
                 is PathDrawGeometry.Stroke -> PathDrawGeometry.Stroke(requireNotNull(
-                    source.valueF32.relativeToOriginI32F32OrNull(mapping.copyLayerOriginDeviceI32())))
+                    source.valueF32.relativeToOriginI32OrNull(mapping.copyLayerOriginDeviceI32())))
                 is PathDrawGeometry.InverseDomainSource -> PathDrawGeometry.InverseDomainSource.of(
                     source.copySourcePath(), requireNotNull(source.copySourceTransform().relativeToOriginI32OrNull(
                         mapping.copyLayerOriginDeviceI32())))

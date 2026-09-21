@@ -28,12 +28,14 @@ public class LayerMappingF64 private constructor(
             boundsDeviceI32.bottom.toDouble(),
         ))?.roundOutToRectI32OrNull()
 
-    /** Translation of an already raster-admitted analytic shape; no second projection. */
+    /**
+     * Translation of an already raster-admitted analytic shape; no second projection.
+     * The native ABI has frozen this shape as F32, so rebasing uses the same F32 subtraction.
+     */
     public fun mapDeviceRectToLayerF32OrNull(boundsDeviceF32: RectF32): RectF32? {
         fun edge(valueF32: Float, originI32: Int): Float? {
-            val valueF64 = valueF32.toDouble() - originI32.toDouble()
-            val resultF32 = valueF64.toFloat()
-            return resultF32.takeIf { it.isFinite() && it.toDouble() == valueF64 }
+            val resultF32 = valueF32 - originI32.toFloat()
+            return resultF32.takeIf(Float::isFinite)
         }
         return RectF32(
             edge(boundsDeviceF32.left, layerOriginDeviceI32.x) ?: return null,

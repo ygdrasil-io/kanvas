@@ -28,8 +28,8 @@ internal fun PlanPass.rebindW4eV6(ordinalI32: Int, resource: (PlanResourceId) ->
     fun domain(value: RectI32): RectI32 = if (mapping == null) value else requireNotNull(
         mapping.mapDeviceDomainToLayerI32OrNull(value, requireNotNull(targetDomainI32)))
     fun geometry(value: PathDrawGeometry): PathDrawGeometry = if (mapping == null) value else when (value) {
-        is PathDrawGeometry.Fill -> PathDrawGeometry.Fill(requireNotNull(value.valueF32.relativeToOriginI32F32OrNull(mapping.copyLayerOriginDeviceI32())))
-        is PathDrawGeometry.Stroke -> PathDrawGeometry.Stroke(requireNotNull(value.valueF32.relativeToOriginI32F32OrNull(mapping.copyLayerOriginDeviceI32())))
+        is PathDrawGeometry.Fill -> PathDrawGeometry.Fill(requireNotNull(value.valueF32.relativeToOriginI32OrNull(mapping.copyLayerOriginDeviceI32())))
+        is PathDrawGeometry.Stroke -> PathDrawGeometry.Stroke(requireNotNull(value.valueF32.relativeToOriginI32OrNull(mapping.copyLayerOriginDeviceI32())))
         is PathDrawGeometry.InverseDomainSource -> PathDrawGeometry.InverseDomainSource.of(value.copySourcePath(),
             requireNotNull(value.copySourceTransform().relativeToOriginI32OrNull(mapping.copyLayerOriginDeviceI32())))
         PathDrawGeometry.Empty -> value

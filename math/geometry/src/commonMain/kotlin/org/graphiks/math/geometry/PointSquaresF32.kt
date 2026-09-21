@@ -18,9 +18,8 @@ public class PointSquaresF32 private constructor(verticesF32: FloatArray, bounds
     public fun relativeToOriginI32OrNull(originI32: Point2I32): PointSquaresF32? {
         val localized = FloatArray(vertices.size)
         vertices.indices.forEach { index ->
-            val valueF64 = vertices[index].toDouble() - (if (index % 2 == 0) originI32.x else originI32.y).toDouble()
-            val valueF32 = valueF64.toFloat()
-            if (!valueF32.isFinite() || valueF32.toDouble() != valueF64) return null
+            val valueF32 = vertices[index] - if (index % 2 == 0) originI32.x.toFloat() else originI32.y.toFloat()
+            if (!valueF32.isFinite()) return null
             localized[index] = valueF32
         }
         fun edge(value: Int, offset: Int): Int? = (value.toLong() - offset.toLong())

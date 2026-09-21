@@ -156,7 +156,7 @@ class W6aLayerBudgetRecoverySurfacePixelTest {
 
         val refused = Surface(1, 1, config = RenderConfig(frameLocalBudgetBytes = exactBudgetBytes - 1L))
         refused.canvas(draw)
-        assertTerminalWithoutReadbackMutation(refused)
+        assertTerminalWithoutReadbackMutation(refused, "budget.w5g.composed-uniform:")
         assertContentEquals(expected, surface.render().pixels)
     }
 
@@ -207,13 +207,48 @@ class W6aLayerBudgetRecoverySurfacePixelTest {
         assertContentEquals(recovered, surface.render().pixels)
     }
 
-    private fun assertTerminalWithoutReadbackMutation(surface: Surface) {
+    @Test
+    fun `image owner budget refusal keeps its diagnostic and same surface recovers`() {
+        // The direct image source requires 540 bytes before W6 can construct its aggregate
+        // graph. The literal 500 is a public fixture, not a derived W6 budget, so the code
+        // belongs to the image owner rather than to the later W6 peak checker.
+        val image = org.graphiks.kanvas.image.Image.fromPixels(1, 1, byteArrayOf(17, 61, -45, -1),
+            alphaType = org.graphiks.kanvas.image.AlphaType.UNPREMUL)
+        val surface = Surface(1, 1, config = RenderConfig(frameLocalBudgetBytes = 500L))
+        surface.canvas {
+            saveLayer()
+            drawImage(image, RectF32.ofLTRB(0f, 0f, 1f, 1f), org.graphiks.kanvas.paint.SamplingOptions.NEAREST,
+                Paint(antiAlias = false))
+            restore()
+        }
+
         val sentinel = ubyteArrayOf(0x5au, 0x5au, 0x5au, 0x5au)
         val before = sentinel.copyOf()
         val failure = assertFailsWith<IllegalStateException> {
             surface.readPixels(RectF32.ofLTRB(0f, 0f, 1f, 1f), sentinel)
         }
-        assertTrue(failure.message?.startsWith("w6a.layer.frame_budget_exceeded:") == true,
+        assertTrue(failure.message?.startsWith("resource-limit.w5g.composed-binding:") == true,
+            failure.message ?: "missing diagnostic")
+        assertContentEquals(before, sentinel)
+
+        surface.discardRecordedOperations()
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f),
+                Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false))
+        }
+        assertContentEquals(ubyteArrayOf(17u, 61u, 211u, 255u), surface.render().pixels)
+    }
+
+    private fun assertTerminalWithoutReadbackMutation(
+        surface: Surface,
+        diagnosticPrefix: String = "w6a.layer.frame_budget_exceeded:",
+    ) {
+        val sentinel = ubyteArrayOf(0x5au, 0x5au, 0x5au, 0x5au)
+        val before = sentinel.copyOf()
+        val failure = assertFailsWith<IllegalStateException> {
+            surface.readPixels(RectF32.ofLTRB(0f, 0f, 1f, 1f), sentinel)
+        }
+        assertTrue(failure.message?.startsWith(diagnosticPrefix) == true,
             failure.message ?: "missing diagnostic")
         assertContentEquals(before, sentinel)
     }

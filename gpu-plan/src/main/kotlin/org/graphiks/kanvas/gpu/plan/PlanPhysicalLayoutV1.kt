@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.plan
 
+import org.graphiks.kanvas.render.ir.PreparedVerticesUploadPayloadV1
+
 /** A sealed allocation slot. No two resource IDs alias without an explicit future proof. */
 public class PlanPhysicalSlotV1 internal constructor(
     public val slotI32: Int,
@@ -34,6 +36,8 @@ public class PlanGeometryBufferBindingV1 internal constructor(
     public val uniformBytesI64: Long,
     public val vertexStrideBytesI32: Int = 8,
     public val indexElementBytesI32: Int = 4,
+    /** Sealed canonical V/I bytes for the only pre-publication Vertices authority. */
+    public val verticesUploadPayload: PreparedVerticesUploadPayloadV1? = null,
 ) {
     public val vertexBytesI64: Long = Math.multiplyExact(vertexCountI32.toLong(), vertexStrideBytesI32.toLong())
     public val indexBytesI64: Long = Math.multiplyExact(indexCountI32.toLong(), indexElementBytesI32.toLong())
@@ -112,9 +116,16 @@ public class PlanPhysicalLayoutV1 private constructor(
                 val direct = fill?.copyDirectTriangleF32OrNull()
                 val producer = pass is PlanPass.StencilGeometryProducerV3
                 val cover = pass is PlanPass.StencilCover
-                val binding = if (draw is W5bVerticesDraw) PlanGeometryBufferBindingV1(data, 0L, 0L, 0L,
-                    draw.geometryF32.vertexCountI32, draw.geometryF32.indexCountI32 ?: 0, draw.geometryF32.maxIndexI32 ?: 0,
-                    64L, draw.vertexStrideBytesI32, draw.indexElementBytesI32 ?: 0) else PlanGeometryBufferBindingV1(data,
+                val binding = if (draw is W5bVerticesDraw) {
+                    val upload = requireNotNull(draw.sealedUploadPayloadOrNull())
+                    require(upload.vertexCountI32 == draw.geometryF32.vertexCountI32 &&
+                        upload.indexCountI32 == draw.geometryF32.indexCountI32 &&
+                        upload.vertexStrideBytesI32 == draw.vertexStrideBytesI32 &&
+                        upload.indexElementBytesI32 == draw.indexElementBytesI32)
+                    PlanGeometryBufferBindingV1(data, 0L, 0L, 0L,
+                        upload.vertexCountI32, upload.indexCountI32 ?: 0, draw.geometryF32.maxIndexI32 ?: 0,
+                        64L, upload.vertexStrideBytesI32, upload.indexElementBytesI32 ?: 0, upload)
+                } else PlanGeometryBufferBindingV1(data,
                     if (cover) Math.multiplyExact(requireNotNull(fan).vertexCountI32.toLong(), 8L) else 0L,
                     if (cover) Math.multiplyExact(requireNotNull(fan).indexCountI32.toLong(), 4L) else 0L,
                     if (cover) maxOf(32L, graph.capabilities.minUniformBufferOffsetAlignment.toLong()) else 0L,

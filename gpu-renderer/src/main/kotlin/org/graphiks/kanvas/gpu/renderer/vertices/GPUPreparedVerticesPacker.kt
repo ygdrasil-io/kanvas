@@ -1,11 +1,9 @@
 package org.graphiks.kanvas.gpu.renderer.vertices
 
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.util.Collections
 import java.util.TreeMap
-import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesCanonicalizationIdentity
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesUploadArtifact
+import org.graphiks.kanvas.render.ir.PreparedVerticesUploadPayloadV1
 import org.graphiks.math.geometry.TriangleMeshF32
 import org.graphiks.math.geometry.TriangleTopologyI32
 
@@ -140,31 +138,13 @@ object GPUPreparedVerticesPacker {
             maxOf(limits.maxIndices, limits.maxFanExpandedIndices)))
         require(geometry.indexCountI32 == shape.topologyPlan.indexCount)
         val bounds = geometry.copyBoundsF32().let { GPUPreparedVerticesFloatBounds(it.left, it.top, it.right, it.bottom) }
-        val vertexBytes = packVertices(
-            source = source,
-            vertexCount = shape.vertexCount,
-            layout = shape.layout,
-            byteCount = shape.vertexByteCount.toInt(),
-        )
-        val indexBytes = indexByteCount?.let { byteCount ->
-            packIndices(requireNotNull(geometry.copyIndicesI32()), requireNotNull(indexFormat), byteCount.toInt())
-        }
+        val sealed = PreparedVerticesUploadPayloadV1.seal(geometry, source.colorsRgba8)
+        require(sealed.vertexCountI32 == shape.vertexCount && sealed.indexCountI32 == shape.topologyPlan.indexCount &&
+            sealed.vertexStrideBytesI32 == shape.layout.strideBytes && sealed.vertexBytesI64 == shape.vertexByteCount &&
+            sealed.indexBytesI64 == (indexByteCount ?: 0L) &&
+            sealed.indexElementBytesI32 == indexFormat?.let { if (it == UINT16_FORMAT) UINT16_BYTES else UINT32_BYTES })
         return GPUPreparedVerticesPackingResult.Ready(
-            artifact = GPUPreparedVerticesUploadArtifact(
-                topology = shape.topologyPlan.topology,
-                layout = shape.layout,
-                vertexBytes = vertexBytes,
-                indexBytes = indexBytes,
-                vertexCount = shape.vertexCount,
-                indexCount = shape.topologyPlan.indexCount,
-                indexFormat = indexFormat,
-                provenance = source.provenance,
-                canonicalizationIdentity = if (shape.topologyPlan.fanExpanded) {
-                    GPUPreparedVerticesCanonicalizationIdentity.TriangleFanToTriangleListV1
-                } else {
-                    GPUPreparedVerticesCanonicalizationIdentity.IdentityV1
-                },
-            ),
+            artifact = GPUPreparedVerticesUploadArtifact.fromSealedPayload(sealed, source.provenance),
             sourceBounds = bounds,
         )
     }
@@ -180,54 +160,6 @@ object GPUPreparedVerticesPacker {
         return byteCount.takeIf { it <= MAX_JVM_ARRAY_LENGTH.toLong() }
     }
 
-    private fun packVertices(
-        source: PreparedVerticesSourceSnapshot,
-        vertexCount: Int,
-        layout: GPUVertexLayoutPlan,
-        byteCount: Int,
-    ): ByteArray {
-        val output = ByteBuffer.allocate(byteCount).order(ByteOrder.LITTLE_ENDIAN)
-        repeat(vertexCount) { vertexIndex ->
-            val positionOffset = vertexIndex * POSITION_COMPONENTS
-            output.putFloat(source.positions[positionOffset])
-            output.putFloat(source.positions[positionOffset + 1])
-
-            source.colorsRgba8?.let { colors ->
-                val colorOffset = vertexIndex * COLOR_COMPONENTS
-                val alpha = colors[colorOffset + 3].toInt() and 0xff
-                output.put(premultiplyUnorm8(colors[colorOffset], alpha))
-                output.put(premultiplyUnorm8(colors[colorOffset + 1], alpha))
-                output.put(premultiplyUnorm8(colors[colorOffset + 2], alpha))
-                output.put(alpha.toByte())
-            }
-            source.texCoords?.let { texCoords ->
-                val texCoordOffset = vertexIndex * TEX_COORD_COMPONENTS
-                output.putFloat(texCoords[texCoordOffset])
-                output.putFloat(texCoords[texCoordOffset + 1])
-            }
-        }
-        check(output.position() == layout.strideBytes * vertexCount)
-        return output.array()
-    }
-
-    private fun packIndices(
-        indicesI32: IntArray,
-        indexFormat: String,
-        byteCount: Int,
-    ): ByteArray {
-        val output = ByteBuffer.allocate(byteCount).order(ByteOrder.LITTLE_ENDIAN)
-        fun putIndex(index: Int) {
-            when (indexFormat) {
-                UINT16_FORMAT -> output.putShort(index.toShort())
-                UINT32_FORMAT -> output.putInt(index)
-                else -> error("Validated prepared vertices index format required")
-            }
-        }
-
-        indicesI32.forEach(::putIndex)
-        check(output.position() == byteCount)
-        return output.array()
-    }
 }
 
 private data class PreparedVerticesSourceSnapshot(
@@ -535,11 +467,6 @@ private fun checkedFanIndexCount(sourceElementCount: Int): Int? {
     return count.takeIf { it <= Int.MAX_VALUE.toLong() }?.toInt()
 }
 
-private fun premultiplyUnorm8(component: Byte, alpha: Int): Byte {
-    val unsignedComponent = component.toInt() and 0xff
-    return ((unsignedComponent * alpha + UNORM8_ROUND_HALF_UP_BIAS) / UNORM8_MAX).toByte()
-}
-
 private const val POSITION_COMPONENTS = 2
 private const val COLOR_COMPONENTS = 4
 private const val TEX_COORD_COMPONENTS = 2
@@ -550,5 +477,3 @@ private const val UINT16_BYTES = 2
 private const val UINT32_BYTES = 4
 private const val UINT16_FORMAT = "uint16"
 private const val UINT32_FORMAT = "uint32"
-private const val UNORM8_MAX = 255
-private const val UNORM8_ROUND_HALF_UP_BIAS = 127

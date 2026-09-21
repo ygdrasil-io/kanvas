@@ -13,35 +13,27 @@ import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveTargetStateHash
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.vertices.*
-import org.graphiks.math.geometry.TriangleTopologyI32
+import org.graphiks.kanvas.render.ir.PreparedVerticesUploadPayloadV1
 
 /** Projection into the existing prepared-vertices ABI; no source or physical allocation owner. */
 internal fun lowerW5bVerticesDraw(draw: W5bVerticesDraw, target: GPUPixelBounds, graph: RenderGraph,
     frameSource: PreparedSourceFrameV6, capabilityHash: String, binding: PlanGeometryBufferBindingV1): GPUDrawPacket {
     require(graph.verifyW6aLayerCompilerWitness() && frameSource.table === graph.materialPlanTableOrNull() &&
         graph.passes().filterIsInstance<PlanPass.RenderPass>().flatMap { it.draws() }.any { it === draw })
-    val geometry = draw.geometryF32
-    val input = GPUPreparedVerticesArtifactInput(
-        if (geometry.topologyI32 == TriangleTopologyI32.Strip) GPUVertexMode.TriangleStrip else GPUVertexMode.Triangles,
-        geometry.copyPositionsF32(), draw.copyColorsRgba8(), geometry.copyCoordinatesF32(), geometry.copyIndicesI32(),
-        "plan.vertices.${draw.commandIndex}")
-    require(binding.vertexCountI32 == geometry.vertexCountI32 && binding.indexCountI32 == (geometry.indexCountI32 ?: 0) &&
-        binding.vertexStrideBytesI32 == draw.vertexStrideBytesI32 && binding.indexElementBytesI32 == (draw.indexElementBytesI32 ?: 0))
+    val upload = requireNotNull(binding.verticesUploadPayload)
+    require(binding.vertexCountI32 == upload.vertexCountI32 && binding.indexCountI32 == (upload.indexCountI32 ?: 0) &&
+        binding.vertexStrideBytesI32 == upload.vertexStrideBytesI32 && binding.indexElementBytesI32 == (upload.indexElementBytesI32 ?: 0) &&
+        upload === draw.sealedUploadPayloadOrNull())
     val vertexBytes = binding.vertexBytesI64
     val indexBytes = binding.indexBytesI64
-    val packed = GPUPreparedVerticesPacker.pack(input, GPUPreparedVerticesPackingLimits(binding.vertexCountI32,
-        binding.indexCountI32, vertexBytes, indexBytes, binding.indexCountI32),
-        PlanOperationCapability.Uint32Index in graph.capabilities.supportedOperations())
-    require(packed is GPUPreparedVerticesPackingResult.Ready) { packed.toString() }
-    val artifact = packed.artifact.let { value ->
-        require(value.layout.strideBytes == draw.vertexStrideBytesI32 && value.vertexCount == geometry.vertexCountI32 &&
-            value.indexCount == geometry.indexCountI32 && value.vertexBytesForUpload().size.toLong() == vertexBytes &&
-            (value.indexBytesForUpload()?.size?.toLong() ?: 0L) == indexBytes &&
-            value.indexFormat == draw.indexElementBytesI32?.let { if (it == 2) "uint16" else "uint32" })
-        if (!geometry.fanExpanded) value else GPUPreparedVerticesUploadArtifact(value.topology, value.layout,
-            value.vertexBytesForUpload(), value.indexBytesForUpload(), value.vertexCount, value.indexCount, value.indexFormat,
-            value.provenance, GPUPreparedVerticesCanonicalizationIdentity.TriangleFanToTriangleListV1)
-    }
+    require(upload.vertexBytesI64 == vertexBytes && upload.indexBytesI64 == indexBytes)
+    // The graph owns these already-canonical bytes.  The renderer only validates and wraps them
+    // in the established upload ABI; it never re-packs source geometry after publication.
+    val artifact = GPUPreparedVerticesUploadArtifact.fromSealedPayload(
+        upload, "plan.vertices.${draw.commandIndex}.${upload.canonicalIdentity}")
+    require(artifact.layout.strideBytes == upload.vertexStrideBytesI32 && artifact.vertexCount == upload.vertexCountI32 &&
+        artifact.indexCount == upload.indexCountI32 && artifact.vertexBytesForUpload().size.toLong() == vertexBytes &&
+        (artifact.indexBytesForUpload()?.size?.toLong() ?: 0L) == indexBytes)
     val material = GPUPreparedMaterialProgram.fromCommonSource(frameSource, draw.commandIndex)
     val blend = W5bBlendPlanLowerer.lower(draw.blend)
     val primitiveBlend = draw.primitiveBlend?.let { GPUPrimitiveBlendPlan(W5bBlendPlanLowerer.lower(it)) }
@@ -53,13 +45,14 @@ internal fun lowerW5bVerticesDraw(draw: W5bVerticesDraw, target: GPUPixelBounds,
     val gathered = GPUPreparedVerticesPayloadGatherer.gather(GPUPreparedVerticesPayloadInput(
         GPUDrawPayloadRef(draw.commandIndex, PREPARED_VERTICES_RENDER_STEP_IDENTITY), artifact, material,
         materialPlanEmission = GPUPreparedVerticesMaterialPlanEmission.common(material),
-        topologyIdentity = if (geometry.topologyI32 == TriangleTopologyI32.Strip) GPUPreparedVerticesTopologyIdentity.TriangleStrip else GPUPreparedVerticesTopologyIdentity.Triangles,
+        topologyIdentity = if (upload.topology == PreparedVerticesUploadPayloadV1.Topology.TriangleStrip)
+            GPUPreparedVerticesTopologyIdentity.TriangleStrip else GPUPreparedVerticesTopologyIdentity.Triangles,
         transformBytes = listOf(matrix.sx, matrix.kx, matrix.tx, matrix.ky, matrix.sy, matrix.ty,
             matrix.persp0, matrix.persp1, matrix.persp2).map(Float::toRawBits),
         targetBounds = target, scissorBounds = scissor,
         conservativeDrawBounds = draw.copyBoundsI32().let { GPUPixelBounds(it.left, it.top, it.right, it.bottom) },
         targetFormat = "rgba8unorm-srgb", clipIdentity = clip.canonicalIdentity(), clipCoverageIdentity = clip.canonicalIdentity(),
-        primitiveColorPresent = draw.copyColorsRgba8() != null, primitiveBlendIdentity = primitiveBlend?.plan?.canonicalIdentity(),
+        primitiveColorPresent = upload.hasColors, primitiveBlendIdentity = primitiveBlend?.plan?.canonicalIdentity(),
         primitiveBlendPlan = primitiveBlend, w5bFinalBlendPlan = draw.blend, finalBlendIdentity = blend.canonicalIdentity(),
         capabilitySnapshotHash = capabilityHash, drawProvenance = "plan.vertices.${draw.commandIndex}", frameProvenance = GPUFrameProvenance.None))
     require(gathered is GPUPreparedVerticesPayloadResult.Ready) { gathered.toString() }

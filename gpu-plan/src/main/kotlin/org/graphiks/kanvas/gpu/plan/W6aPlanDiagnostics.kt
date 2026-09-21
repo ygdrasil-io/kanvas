@@ -13,6 +13,8 @@ public object W6aPlanDiagnostics {
     public const val RestoreCapability: String = "w6a.layer.restore_capability"
     /** The frozen complete-frame physical allocation peak exceeds the admitted W6a budget. */
     public const val FrameBudgetExceeded: String = "w6a.layer.frame_budget_exceeded"
+    /** Checked construction arithmetic overflowed before a physical peak could be formed. */
+    public const val FrameConstructionOverflow: String = "resource.w6a.layer.frame-construction-overflow"
     /** Captured W6a scope stack exceeded its immutable GraphLimits depth. */
     public const val DepthLimit: String = "w6a.layer.depth_limit"
     /** Captured W6a command sequence exceeded its immutable GraphLimits node bound. */
