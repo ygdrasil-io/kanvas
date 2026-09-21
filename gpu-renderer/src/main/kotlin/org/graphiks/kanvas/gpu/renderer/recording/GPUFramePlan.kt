@@ -297,8 +297,7 @@ sealed interface GPUFrameStep {
         override val executionKind = GPUFrameStepExecutionKind.Encoder
 
         init {
-            require(if (w6aPassV1 != null) w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass ||
-                w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.LayerComposite else if (w5bInitialClearV3 == null) drawPackets.isNotEmpty() else
+            require(if (w6aPassV1 != null) w6aRenderPacketsMatch(w6aPassV1, drawPackets) else if (w5bInitialClearV3 == null) drawPackets.isNotEmpty() else
                 drawPackets.isEmpty() && w5bInitialClearV3.matches(target, loadStore, samplePlan)) {
                 "GPUFrameStep.RenderPassStep.drawPackets must not be empty"
             }

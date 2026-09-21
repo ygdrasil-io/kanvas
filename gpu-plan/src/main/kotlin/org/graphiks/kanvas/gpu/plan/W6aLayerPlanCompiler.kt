@@ -162,10 +162,20 @@ public class W6aLayerPlanCompiler public constructor(
                     command
                 } else SceneCommand.Annotation.of(org.graphiks.math.geometry.RectF32(0f, 0f, 0f, 0f), "w6a.segment", index.toString())
             }, graphLimits)
-            val child = CapabilityCompilerChain.of(listOf(W3SolidRectPlanCompiler()), runtimeCatalog)
+            val child = CapabilityCompilerChain.of(listOf(W5bVerticesPlanCompiler(runtimeCatalog), W5bPointPlanCompiler(runtimeCatalog), W5eImagePlanCompiler(), W3SolidRectPlanCompiler(),
+                W4aAnalyticRectPlanCompiler(), W4bAnalyticRRectPlanCompiler(),
+                W4cPathFillPlanCompiler(), W4dPathStrokePlanCompiler()), runtimeCatalog)
             when (val selection = child.select(segment, target)) {
                 is GpuPlanSelection.Candidate -> segments += Segment(scopeI32, drawIndexI32, child, selection.candidate)
-                else -> return invalid(W6aPlanDiagnostics.UnsupportedChild, "Layer segment is outside the admitted child geometry/source lanes.")
+                // A source lane that is admissible except for its W5 material must retain that
+                // material authority.  The outer router will terminalize it because W6 owns the
+                // layer boundary; collapsing it to UnsupportedChild would both lose the public
+                // diagnostic and make recovery observably unstable.
+                is GpuPlanSelection.MaterialOnlyRefusal -> return selection
+                is GpuPlanSelection.InvalidScene -> return selection
+                is GpuPlanSelection.ResourceLimitExceeded -> return selection
+                is GpuPlanSelection.NotCandidate -> return invalid(W6aPlanDiagnostics.UnsupportedChild,
+                    "Layer segment is outside the admitted child geometry/source lanes.")
             }
         }
         return GpuPlanSelection.Candidate(Candidate(this, scene.canonicalId, target, immutableScopes, segments.toList()))
@@ -205,7 +215,8 @@ public class W6aLayerPlanCompiler public constructor(
         } catch (failure: RawMaterialRequirementsV2.Refusal) {
             W6aLayerPlanBudget.translate(sourceConstructionRefusalV4(failure.code).failure)
         } catch (failure: IllegalArgumentException) {
-            RenderPlanResult.GapOnPromotedScope(listOf(diagnostic(W6aPlanDiagnostics.UnsupportedChild, failure.message ?: "Invalid layer construction.")))
+            RenderPlanResult.GapOnPromotedScope(listOf(diagnostic(W6aPlanDiagnostics.UnsupportedChild,
+                failure.message ?: "Invalid layer construction.")))
         } catch (_: ArithmeticException) {
             W6aLayerPlanBudget.refusal("Layer resource sizing overflows.")
         }

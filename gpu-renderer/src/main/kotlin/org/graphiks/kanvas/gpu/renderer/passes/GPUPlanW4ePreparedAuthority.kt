@@ -275,11 +275,31 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
                 graph.resources().map(::resourceFact),
                 graph.passes().map(PlanPass::id).map { it.value },
                 graph.passes().filterIsInstance<PlanPass.PathRenderPass>().mapNotNull { pass ->
-                    consumerFact(pass, graph)
+                    consumerFact(pass, domainFor(graph))
                 }.associateBy(GPUW4ePreparedClipConsumerAuthority::consumerPassId),
                 graph.passes().mapNotNull(::clipPassFact).associateBy(GPUW4ePreparedClipPassAuthority::passId),
-                graph.passes().filterIsInstance<PlanPass.PathRenderPass>().associate { pass ->
-                    pass.id.value to GPUW4ePreparedClipPassAuthority.Path(
+                graph.passes().filterIsInstance<PlanPass.PathRenderPass>().associate { it.id.value to pathFact(it) },
+                nativePayload,
+            )
+        }
+
+        /** The enclosing W6 graph authenticates these exact native passes and their physical slots. */
+        fun issueLayered(graph: RenderGraph, binding: org.graphiks.kanvas.gpu.plan.PlanW4eGeometryBindingV1): GPUPlanW4ePreparedAuthority {
+            require(graph.verifyW6aLayerCompilerWitness() &&
+                graph.physicalLayoutOrNull()?.w4eGeometryBindings()?.any { it === binding } == true &&
+                binding.payload.matchesDeclaredResources(graph.resources()))
+            val passes = binding.nativePasses()
+            val extent = binding.copyExtentI32()
+            val domain = GPUPixelBounds(0, 0, extent.width, extent.height)
+            return GPUPlanW4ePreparedAuthority("w6a-w4e-binding-v1", graph.id.value, graph.capabilityId,
+                graph.resources().map(::resourceFact), passes.map { it.id.value },
+                passes.filterIsInstance<PlanPass.PathRenderPass>().mapNotNull { consumerFact(it, domain) }
+                    .associateBy { it.consumerPassId },
+                passes.mapNotNull(::clipPassFact).associateBy { it.passId },
+                passes.filterIsInstance<PlanPass.PathRenderPass>().associate { it.id.value to pathFact(it) }, binding.payload)
+        }
+
+        private fun pathFact(pass: PlanPass.PathRenderPass): GPUW4ePreparedClipPassAuthority.Path = GPUW4ePreparedClipPassAuthority.Path(
                         pass.id.value,
                         pass.draw.commandIndex,
                         pass.phase,
@@ -305,17 +325,13 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
                         pass.atomicGroup?.value,
                         pass.draw.copyPathGeometry(),
                     )
-                },
-                nativePayload,
-            )
-        }
 
         private fun versionForCapability(capabilityId: String): String =
             if (W4eClipPlanCompiler.isW5aMaterialCapabilityId(capabilityId)) W5A_VERSION else VERSION
 
         private fun consumerFact(
             pass: PlanPass.PathRenderPass,
-            graph: RenderGraph,
+            targetDomain: GPUPixelBounds,
         ): GPUW4ePreparedClipConsumerAuthority? {
             val strategy = when (val draw = pass.draw) {
                 is ClippedGeneralPathDraw -> draw.clip
@@ -326,7 +342,7 @@ internal class GPUPlanW4ePreparedAuthority private constructor(
                 is ClipPlanStrategy.Mask -> GPUW4ePreparedClipConsumerAuthority.Mask(
                     pass.id.value,
                     strategy.resource.value,
-                    domainFor(graph),
+                    targetDomain,
                 )
                 is ClipPlanStrategy.InverseMask -> GPUW4ePreparedClipConsumerAuthority.InverseMask(
                     pass.id.value,

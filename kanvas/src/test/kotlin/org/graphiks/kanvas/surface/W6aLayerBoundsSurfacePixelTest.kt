@@ -43,7 +43,7 @@ class W6aLayerBoundsSurfacePixelTest {
             drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false))
             restore()
         }
-        assertTerminalWithoutReadbackMutation(oneByteTooSmall, "w6a.layer.resource_limit")
+        assertTerminalWithoutReadbackMutation(oneByteTooSmall, "w6a.layer.frame_budget_exceeded")
     }
 
     @Test

@@ -13,6 +13,7 @@ import org.graphiks.math.geometry.roundOutToRectI32OrNull
 import org.graphiks.math.matrix.LayerMappingF64
 import org.graphiks.math.matrix.Matrix3x3F64
 import org.graphiks.math.matrix.mapRectBoundsF64OrNull
+import org.graphiks.math.matrix.relativeToOriginI32OrNull
 
 /** One unpublished W3/W5 lane, attached to its exact command occurrence and immediate target. */
 internal class W6aLayerSourceBinding(
@@ -90,6 +91,8 @@ internal class W6aLayerGraphConstruction(
     private val rawPasses: List<PlanPass>
     private val frame: LayerFramePlanV1
     private val resources: List<PlanResource>
+    private val w4eBindings = mutableListOf<PlanW4eGeometryBindingV1>()
+    private val childSnapshots = mutableSetOf<PlanResourceId>()
     val nonUniformBytesI64: Long
     val passCountI32: Int get() = rawPasses.size
 
@@ -106,8 +109,15 @@ internal class W6aLayerGraphConstruction(
         require(occurrences.indices.all { indexI32 -> occurrences[indexI32].idI32 == indexI32 })
         require(bindings.all { binding -> binding.scopeI32 == null || binding.scopeI32 in occurrenceById })
         require(bindings.map { it.firstCommandIndexI32 }.distinct().size == bindings.size)
-        require(lanes.all { source -> source.passes().all { it is PlanPass.RenderPass || it is PlanPass.ReadbackPass } &&
-            RenderGraph.visualDraws(source.passes()).all { it is SolidRectDraw && it.blend !is BlendPlan.DestinationReadV1 } }) {
+        require(lanes.all { source -> source.passes().all { pass -> pass is PlanPass.RenderPass || pass is PlanPass.ReadbackPass ||
+            pass is PlanPass.StencilProducer || pass is PlanPass.StencilGeometryProducerV3 || pass is PlanPass.StencilCover || pass is PlanPass.TextureCopy ||
+            pass is PlanPass.ClipMaskInitialize || pass is PlanPass.ClipMaskProducer || pass is PlanPass.ClipMaskFold ||
+            pass is PlanPass.PathRenderPass && pass.draw is GeneralPathDraw && pass.draw.sample == SamplePlan.SingleSample &&
+                pass.phase in setOf(PathRenderPhase.SingleSampleDirectColor, PathRenderPhase.SingleSampleStencilProducer,
+                    PathRenderPhase.SingleSampleStencilColorCover) } &&
+            RenderGraph.visualDraws(source.passes()).all { (it is SolidRectDraw || it is AnalyticRectDraw ||
+                it is AnalyticRRectDraw || it is PathFillDraw || it is PathStrokeDraw || it is GeneralPathDraw ||
+                    it is W5bPointDraw || it is W5bVerticesDraw || it is W5bW4ePathDraw) } }) {
             "w6a.layer.unsupported_child"
         }
 
@@ -117,8 +127,8 @@ internal class W6aLayerGraphConstruction(
         val directKnownByScope = arrayOfNulls<RectI32>(occurrences.size)
         bindings.forEach { binding ->
             val scopeIdI32 = binding.scopeI32 ?: return@forEach
-            RenderGraph.visualDraws(binding.source.passes()).filterIsInstance<SolidRectDraw>().forEach { draw ->
-                intersect(draw.copyVisibleBounds(), draw.copyScissor())?.let { bounds ->
+            RenderGraph.visualDraws(binding.source.passes()).forEach { draw ->
+                intersect(w6aRasterBoundsI32(draw), w6aScissorI32(draw))?.let { bounds ->
                     directKnownByScope[scopeIdI32] = unionOrNull(directKnownByScope[scopeIdI32], bounds)
                 }
             }
@@ -189,13 +199,43 @@ internal class W6aLayerGraphConstruction(
             activeByScope.getValue(target.value.substringAfter(':').toInt()).targetExtentI32()
         fun targetOriginDevice(target: PlanResourceId): Point2I32 = if (target == root) Point2I32.Origin else
             activeByScope.getValue(target.value.substringAfter(':').toInt()).mapping!!.copyLayerOriginDeviceI32()
+        val dataByCommand = linkedMapOf<Int, PlanDrawDataResources>()
+        val laneResourceIds = lanes.mapIndexed { laneI32, lane -> lane.resources().associate { row -> row.id to when (row.role) {
+            PlanResourceRole.LogicalTarget -> targetFor(bindings[laneI32].scopeI32)
+            PlanResourceRole.ReadbackStaging -> staging
+            PlanResourceRole.DestinationSnapshot -> planResourceId(row.role, occurrences.size + laneI32)
+            PlanResourceRole.VertexData, PlanResourceRole.IndexData, PlanResourceRole.UniformData, PlanResourceRole.DepthStencil ->
+                planResourceId(row.role, laneI32 + 1)
+            else -> row.id // Replaced below by distinct per-role graph ordinals.
+        } }.toMutableMap() }
+        val nextOrdinal = mutableMapOf<PlanResourceRole, Int>()
+        lanes.forEachIndexed { laneI32, lane -> lane.resources().filter { it.role !in setOf(PlanResourceRole.LogicalTarget,
+            PlanResourceRole.ReadbackStaging, PlanResourceRole.DestinationSnapshot, PlanResourceRole.VertexData,
+            PlanResourceRole.IndexData, PlanResourceRole.UniformData, PlanResourceRole.DepthStencil) }.forEach { row ->
+            val ordinal = nextOrdinal[row.role] ?: 0
+            laneResourceIds[laneI32][row.id] = planResourceId(row.role, ordinal)
+            nextOrdinal[row.role] = Math.addExact(ordinal, 1)
+        } }
+        val nativeByLane = linkedMapOf<Int, LinkedHashMap<PlanPassId, PlanPass>>()
+        lanes.forEachIndexed { laneI32, lane ->
+            val data = lane.resources().filter { it.role in setOf(PlanResourceRole.VertexData,
+                PlanResourceRole.IndexData, PlanResourceRole.UniformData) }
+            if (data.isNotEmpty()) {
+                require(data.map { it.role }.toSet().size == 3 && data.size == 3)
+                val binding = PlanDrawDataResources(planResourceId(PlanResourceRole.VertexData, laneI32 + 1),
+                    planResourceId(PlanResourceRole.IndexData, laneI32 + 1),
+                    planResourceId(PlanResourceRole.UniformData, laneI32 + 1))
+                RenderGraph.visualDraws(lane.passes()).forEach { dataByCommand[it.commandIndex] = binding }
+            }
+        }
         fun appendRender(target: PlanResourceId, draws: List<PlanDraw>, clear: Boolean): PlanPass.RenderPass {
             val before = versions[target] ?: 0L
             val after = Math.addExact(before, draws.size.toLong())
             versions[target] = after
             return PlanPass.RenderPass(passes.size, target, draws,
                 if (clear) AttachmentLoadPlan.ClearTransparent else AttachmentLoadPlan.Load,
-                AttachmentStorePlan.Store, destinationVersionAfter = DestinationVersionI64(after)).also(passes::add)
+                AttachmentStorePlan.Store, drawDataResources = draws.firstOrNull()?.let { dataByCommand[it.commandIndex] },
+                destinationVersionAfter = DestinationVersionI64(after)).also(passes::add)
         }
 
         // The root is the one scene attachment. It starts clear; every later root segment loads.
@@ -252,8 +292,81 @@ internal class W6aLayerGraphConstruction(
                 if (binding.scopeI32 == null || binding.scopeI32 in activeByScope) {
                     val draws = RenderGraph.visualDraws(binding.source.passes())
                     if (draws.isNotEmpty()) {
-                        val pass = appendRender(targetFor(binding.scopeI32), draws, false)
-                        binding.scopeI32?.let { steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(it), pass.id) }
+                        val target = targetFor(binding.scopeI32)
+                        val selectedDraw = draws.single()
+                        val laneI32 = bindings.indexOf(binding)
+                        val w4e = binding.source.geometrySource?.takeIf { it.w4ePayload != null }
+                        // General W4d paths retain the same already-issued native PathRenderPass
+                        // authority as clipped W4e paths.  The W6 graph owns the remapped pass IDs,
+                        // target, and V/I/U slots; it never publishes the deferred source graph.
+                        val general = binding.source.takeIf {
+                            it.topology == DeferredLaneTopologyV4.GeneralGeometryAndColor
+                        }?.geometrySource ?: binding.source.takeIf {
+                            W4dGeneralPathPlanCompiler.isW5aMaterialCapabilityId(it.capabilityId)
+                        }
+                        val native = if (w4e == null && general == null) null else nativeByLane.getOrPut(laneI32, ::linkedMapOf)
+                        val geometry = binding.scopeI32?.let(activeByScope::getValue)
+                        fun localNative(pass: PlanPass, ordinal: Int): PlanPass = pass.rebindW4eV6(ordinal,
+                            laneResourceIds[laneI32]::getValue, geometry?.mapping, geometry?.compositeDomainDeviceI32)
+                        if (w4e != null) w4e.passes().filter { it is PlanPass.ClipMaskInitialize ||
+                            it is PlanPass.ClipMaskProducer || it is PlanPass.ClipMaskFold }.forEach { original ->
+                            val prefix = localNative(original, passes.size)
+                            passes += prefix
+                            requireNotNull(native)[prefix.id] = prefix
+                            binding.scopeI32?.let { steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(it), prefix.id) }
+                        }
+                        val selectedCopy = binding.source.passes().filterIsInstance<PlanPass.TextureCopy>().singleOrNull()
+                        val draw = if (selectedDraw.blend is BlendPlan.DestinationReadV1) {
+                            val copy = requireNotNull(selectedCopy)
+                            val snapshot = planResourceId(PlanResourceRole.DestinationSnapshot, occurrences.size + bindings.indexOf(binding))
+                            childSnapshots += snapshot
+                            val version = DestinationVersionI64(versions.getValue(target))
+                            passes += PlanPass.TextureCopy(passes.size, target, snapshot, version,
+                                copy.copySourceBoundsI32(), copy.copyDestinationOriginI32(), copy.bytesPerRowI64)
+                            selectedDraw.withFinalBlendV1(selectedDraw.blend.bindDestinationReadV1(version, snapshot))
+                        } else selectedDraw.also { require(selectedCopy == null) }
+                        if (draw is PathDraw && draw.strategy == PathFillStrategy.StencilCover) {
+                            val data = dataByCommand.getValue(draw.commandIndex)
+                            val depth = planResourceId(PlanResourceRole.DepthStencil, bindings.indexOf(binding) + 1)
+                            val group = canonicalPathAtomicGroup(draw)
+                            val producer = PlanPass.StencilGeometryProducerV3(passes.size, target, depth, draw.commandIndex,
+                                draw.copyPathGeometry(), draw.copyScissorI32(), data, group,
+                                AttachmentLoadPlan.Load, AttachmentStorePlan.Store)
+                            passes += producer
+                            val after = DestinationVersionI64(Math.addExact(versions.getValue(target), 1L))
+                            versions[target] = after.valueI64
+                            val cover = PlanPass.StencilCover(passes.size, target, depth, draw, data, group,
+                                AttachmentLoadPlan.Load, AttachmentStorePlan.Store, PlanDepthStencilAccess.ReadWrite,
+                                PlanDepthStencilLoadStore.LoadStoreTestReset, after)
+                            passes += cover
+                            if (w4e != null) {
+                                requireNotNull(native)[producer.id] = localNative(w4e.passes().filterIsInstance<PlanPass.PathRenderPass>()
+                                    .single { it.phase == PathRenderPhase.SingleSampleStencilProducer }, producer.ordinal)
+                                native[cover.id] = localNative((selectedDraw as W5bW4ePathDraw).nativeColorPass, cover.ordinal)
+                            } else if (general != null) {
+                                requireNotNull(native)[producer.id] = localNative(general.passes().filterIsInstance<PlanPass.PathRenderPass>()
+                                    .single { it.draw.commandIndex == draw.commandIndex &&
+                                        it.phase == PathRenderPhase.SingleSampleStencilProducer }, producer.ordinal)
+                                native[cover.id] = localNative(general.passes().filterIsInstance<PlanPass.PathRenderPass>()
+                                    .single { it.draw.commandIndex == draw.commandIndex &&
+                                        it.phase == PathRenderPhase.SingleSampleStencilColorCover }, cover.ordinal)
+                            }
+                            binding.scopeI32?.let { scope ->
+                                steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(scope), producer.id)
+                                steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(scope), cover.id)
+                            }
+                        } else {
+                            val pass = appendRender(target, listOf(draw), false)
+                            if (w4e != null) requireNotNull(native)[pass.id] = localNative((selectedDraw as W5bW4ePathDraw).nativeColorPass, pass.ordinal)
+                            else if (general != null) requireNotNull(native)[pass.id] = localNative(
+                                general.passes().filterIsInstance<PlanPass.PathRenderPass>().single {
+                                    it.draw.commandIndex == draw.commandIndex &&
+                                        it.phase == PathRenderPhase.SingleSampleDirectColor
+                                },
+                                pass.ordinal,
+                            )
+                            binding.scopeI32?.let { steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(it), pass.id) }
+                        }
                     }
                 }
             }
@@ -358,7 +471,28 @@ internal class W6aLayerGraphConstruction(
                 setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead), PlanResourceLifetime.FrameLocal, 0, passes.size))
             add(PlanResource.of(PlanResourceRole.UniformData, 0, PlanResourceKind.Buffer, null, null, uniformCursorI64,
                 setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination), PlanResourceLifetime.FrameLocal, 0, passes.size))
+            lanes.forEachIndexed { laneI32, lane ->
+                if (bindings[laneI32].scopeI32 != null && bindings[laneI32].scopeI32 !in activeByScope) return@forEachIndexed
+                lane.resources().filter { it.role !in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.ReadbackStaging) }.forEach { row ->
+                    val targetSized = row.kind == PlanResourceKind.Texture2D && row.role != PlanResourceRole.DestinationSnapshot
+                    val boundExtent = if (targetSized)
+                        targetExtents.getValue(targetFor(bindings[laneI32].scopeI32)) else row.copyExtent()
+                    val bytes = if (targetSized)
+                        checkedTextureBytesI64(4, requireNotNull(boundExtent).width, boundExtent.height, row.sampleCountI32) else row.byteSize
+                    val boundId = laneResourceIds[laneI32].getValue(row.id)
+                    add(PlanResource.of(row.role, boundId.value.substringAfter(':').toInt(),
+                        row.kind, row.format, boundExtent, bytes,
+                        row.usages(), row.lifetime, 0, passes.size, row.sampleCountI32))
+                }
+            }
         })
+        nativeByLane.forEach { (laneI32, native) ->
+            val target = targetFor(bindings[laneI32].scopeI32)
+            val targetExtent = targetExtents.getValue(target)
+            val payload = requireNotNull(W4eNativePayloadPlan.fromDeferred(native.values.toList(), resources, targetExtent,
+                caps, lanes[laneI32].sourceTable())) { "w6a.layer.w4e_payload" }
+            w4eBindings += PlanW4eGeometryBindingV1(target, targetExtent, native, payload)
+        }
         nonUniformBytesI64 = W6aLayerPlanBudget.peak(resources, passes.size, budget)
     }
 
@@ -372,17 +506,42 @@ internal class W6aLayerGraphConstruction(
         val geometryByTarget = geometries.filterNot(W6aScopeGeometry::isElided).associateBy {
             planResourceId(PlanResourceRole.LayerTarget, it.occurrence.idI32)
         }
+        val localized = linkedMapOf<Int, PlanDraw>()
+        val finalBlends = RenderGraph.visualDraws(rawPasses).associate { it.commandIndex to it.blend }
+        fun boundDraw(command: Int, target: PlanResourceId): PlanDraw = localized.getOrPut(command) {
+            val bound = byCommand.getValue(command)
+            val draw = if (finalBlends.getValue(command) is BlendPlan.DestinationReadV1)
+                bound.withFinalBlendV1(finalBlends.getValue(command)) else bound
+            if (draw is W5bW4ePathDraw) {
+                val native = w4eBindings.flatMap { it.nativePasses() }.filterIsInstance<PlanPass.PathRenderPass>()
+                    .single { it.draw.commandIndex == command && it.phase != PathRenderPhase.SingleSampleStencilProducer }
+                W5bW4ePathDraw(native.rebindW4eV6(native.ordinal, { it }, null, null, draw.materialAuthority) as PlanPass.PathRenderPass, draw.blend)
+            } else if (target == root) draw else geometryByTarget.getValue(target).let { geometry ->
+                localizeLayerDraw(draw, requireNotNull(geometry.mapping), requireNotNull(geometry.compositeDomainDeviceI32))
+            }
+        }
         val passes = rawPasses.map { pass ->
             if (pass is PlanPass.RenderPass) {
-                val mapped = pass.draws().map { byCommand.getValue(it.commandIndex) }
-                val local = if (pass.target == root) mapped else {
-                    val geometry = geometryByTarget.getValue(pass.target)
-                    mapped.map { draw -> localizeLayerDraw(draw, requireNotNull(geometry.mapping),
-                        requireNotNull(geometry.compositeDomainDeviceI32)) }
-                }
+                val local = pass.draws().map { boundDraw(it.commandIndex, pass.target) }
                 PlanPass.RenderPass(pass.ordinal, pass.target, local, pass.load, pass.store,
-                    destinationVersionAfter = pass.destinationVersionAfter)
-            } else pass
+                    drawDataResources = pass.drawDataResources, destinationVersionAfter = pass.destinationVersionAfter)
+            } else when (pass) {
+                is PlanPass.StencilGeometryProducerV3 -> {
+                    val draw = boundDraw(pass.commandIndexI32, pass.target) as PathDraw
+                    PlanPass.StencilGeometryProducerV3(pass.ordinal, pass.target, pass.depthStencil, pass.commandIndexI32,
+                        draw.copyPathGeometry(), draw.copyScissorI32(), pass.drawDataResources, pass.atomicGroup, pass.load, pass.store)
+                }
+                is PlanPass.StencilCover -> PlanPass.StencilCover(pass.ordinal, pass.target, pass.depthStencil,
+                    boundDraw(pass.draw.commandIndex, pass.target) as PathDraw, pass.drawDataResources, pass.atomicGroup,
+                    pass.load, pass.store, pass.depthStencilAccess, pass.depthStencilLoadStore, pass.destinationVersionAfter)
+                is PlanPass.TextureCopy -> if (pass.destination in childSnapshots && pass.source != root) {
+                    val mapping = requireNotNull(geometryByTarget.getValue(pass.source).mapping)
+                    PlanPass.TextureCopy(pass.ordinal, pass.source, pass.destination, pass.destinationVersion,
+                        requireNotNull(mapping.mapDeviceRectToLayerI32OrNull(requireNotNull(pass.copySourceBoundsI32()))),
+                        pass.copyDestinationOriginI32(), pass.bytesPerRowI64)
+                } else pass
+                else -> pass
+            }
         }
         val allResources = resources + source.resources
         val peak = W6aLayerPlanBudget.peak(allResources, passes.size, budget)
@@ -392,7 +551,8 @@ internal class W6aLayerGraphConstruction(
         val sourceNonUniform = Math.subtractExact(construction.peakFrameLocalBytes,
             source.resources.filter { it.role == PlanResourceRole.SourceUniformData }.fold(0L) { bytes, row -> Math.addExact(bytes, row.byteSize) })
         return RenderGraph.publishW6a(construction, frame,
-            packConstructedFrame(listOf(construction), table, sourceNonUniform), source)
+            packConstructedFrame(listOf(construction), table, sourceNonUniform), SourcePhysicalConstructionV1(
+                source.resources, source.uniforms, source.caches, w4eBindings.map { it.bindSources(localized) }))
     }
 
     private fun sealGeometry(
@@ -512,6 +672,72 @@ internal class W6aLayerGraphConstruction(
     }
 
     private fun localizeLayerDraw(draw: PlanDraw, mapping: LayerMappingF64, targetDomainDeviceI32: RectI32): PlanDraw {
+        if (draw is W5bVerticesDraw) return W5bVerticesDraw(draw.commandIndex, draw.materialAuthority, draw.geometryF32,
+            draw.copyColorsRgba8(), requireNotNull(draw.transformF32.relativeToOriginI32OrNull(mapping.copyLayerOriginDeviceI32())),
+            requireNotNull(mapping.mapDeviceRectToLayerI32OrNull(requireNotNull(intersect(draw.copyBoundsI32(), targetDomainDeviceI32)))),
+            requireNotNull(mapping.mapDeviceRectToLayerI32OrNull(requireNotNull(intersect(draw.copyScissorI32(), targetDomainDeviceI32)))),
+            draw.blend, draw.primitiveBlend)
+        if (draw is W5bPointDraw) return requireNotNull(draw.relativeToOriginI32OrNull(mapping.copyLayerOriginDeviceI32(),
+            requireNotNull(mapping.mapDeviceRectToLayerI32OrNull(requireNotNull(intersect(draw.copyScissorI32(), targetDomainDeviceI32))))))
+        if (draw is PathFillDraw || draw is PathStrokeDraw) {
+            val authority = draw.materialAuthority
+            val material = authority.materialPlanRef()
+            val scissor = requireNotNull(mapping.mapDeviceRectToLayerI32OrNull(
+                requireNotNull(intersect(w6aScissorI32(draw), targetDomainDeviceI32))))
+            val origin = mapping.copyLayerOriginDeviceI32()
+            return when (draw) {
+                is PathFillDraw -> PathFillDraw.ofMaterial(draw.commandIndex, material,
+                    requireNotNull(draw.copyGeometryF32().relativeToOriginI32OrNull(origin)), draw.strategy, scissor,
+                    draw.blend, draw.materialCoordinates, draw.materialCoordinatesV2,
+                    (authority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
+                    authority is PlanDrawMaterialAuthority.MaterialV5)
+                is PathStrokeDraw -> {
+                    val shape = requireNotNull(draw.copyGeometryF32().relativeToOriginI32OrNull(origin))
+                    if (authority is PlanDrawMaterialAuthority.MaterialV4) PathStrokeDraw.ofMaterialV4(draw.commandIndex,
+                        material, shape, scissor, draw.mode, draw.styleF64, draw.blend, authority.coordinates)
+                    else PathStrokeDraw.ofMaterial(draw.commandIndex, material, shape, scissor, draw.mode, draw.styleF64,
+                        draw.blend, draw.materialCoordinates, draw.materialCoordinatesV2, authority is PlanDrawMaterialAuthority.MaterialV5)
+                }
+            }
+        }
+        if (draw is GeneralPathDraw) {
+            val geometry = when (val source = draw.copyPathGeometry()) {
+                is PathDrawGeometry.Fill -> PathDrawGeometry.Fill(requireNotNull(
+                    source.valueF32.relativeToOriginI32F32OrNull(mapping.copyLayerOriginDeviceI32())))
+                is PathDrawGeometry.Stroke -> PathDrawGeometry.Stroke(requireNotNull(
+                    source.valueF32.relativeToOriginI32F32OrNull(mapping.copyLayerOriginDeviceI32())))
+                is PathDrawGeometry.InverseDomainSource -> PathDrawGeometry.InverseDomainSource.of(
+                    source.copySourcePath(), requireNotNull(source.copySourceTransform().relativeToOriginI32OrNull(
+                        mapping.copyLayerOriginDeviceI32())))
+                PathDrawGeometry.Empty -> source
+            }
+            val scissor = requireNotNull(mapping.mapDeviceRectToLayerI32OrNull(
+                requireNotNull(intersect(draw.copyScissorI32(), targetDomainDeviceI32))))
+            return draw.rebindGeometryV6(geometry, scissor)
+        }
+        if (draw is AnalyticRectDraw || draw is AnalyticRRectDraw) {
+            val raster = requireNotNull(mapping.mapDeviceRectToLayerI32OrNull(w6aRasterBoundsI32(draw)))
+            val scissor = requireNotNull(mapping.mapDeviceRectToLayerI32OrNull(
+                requireNotNull(intersect(w6aScissorI32(draw), targetDomainDeviceI32))))
+            val authority = draw.materialAuthority
+            val material = authority.materialPlanRef()
+            return when (draw) {
+                is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(draw.commandIndex, material,
+                    requireNotNull(mapping.mapDeviceRectToLayerF32OrNull(draw.copyDeviceBounds())), raster, scissor,
+                    draw.blend, draw.materialCoordinates, draw.materialCoordinatesV2,
+                    (authority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
+                    authority is PlanDrawMaterialAuthority.MaterialV5)
+                is AnalyticRRectDraw -> {
+                    val shape = requireNotNull(mapping.mapDeviceRRectToLayerF32OrNull(draw.copyDeviceShape()))
+                    if (authority is PlanDrawMaterialAuthority.MaterialV4)
+                        AnalyticRRectDraw.ofMaterialV4(draw.commandIndex, material, draw.origin, shape, raster,
+                            scissor, draw.blend, authority.coordinates)
+                    else AnalyticRRectDraw.ofMaterial(draw.commandIndex, material, draw.origin, shape, raster,
+                        scissor, draw.blend, draw.materialCoordinates, draw.materialCoordinatesV2,
+                        authority is PlanDrawMaterialAuthority.MaterialV5)
+                }
+            }
+        }
         val solid = draw as? SolidRectDraw ?: error("w6a.layer.unsupported_child")
         val visibleDevice = requireNotNull(intersect(solid.copyVisibleBounds(), targetDomainDeviceI32))
         val scissorDevice = requireNotNull(intersect(solid.copyScissor(), targetDomainDeviceI32))

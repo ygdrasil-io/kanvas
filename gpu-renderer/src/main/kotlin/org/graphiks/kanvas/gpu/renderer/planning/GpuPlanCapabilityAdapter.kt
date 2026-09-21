@@ -103,6 +103,7 @@ public fun GPUCapabilities.toPlanCapabilitySnapshot(
             else -> null
         }
     }.toMutableSet()
+    if (facts.any { it.name == "vertices.uint32_index" && it.value == "supported" }) operations += PlanOperationCapability.Uint32Index
     val depthStencilFormats = mutableSetOf<PlanDepthStencilFormat>()
     if (hasSingleSampleD24S8) {
         operations += PlanOperationCapability.DepthStencilAttachment

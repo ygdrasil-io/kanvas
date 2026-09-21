@@ -2,6 +2,8 @@ package org.graphiks.math.matrix
 
 import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.RectF64
+import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.roundOutToRectI32OrNull
 
@@ -25,6 +27,27 @@ public class LayerMappingF64 private constructor(
             boundsDeviceI32.right.toDouble(),
             boundsDeviceI32.bottom.toDouble(),
         ))?.roundOutToRectI32OrNull()
+
+    /** Translation of an already raster-admitted analytic shape; no second projection. */
+    public fun mapDeviceRectToLayerF32OrNull(boundsDeviceF32: RectF32): RectF32? {
+        fun edge(valueF32: Float, originI32: Int): Float? {
+            val valueF64 = valueF32.toDouble() - originI32.toDouble()
+            val resultF32 = valueF64.toFloat()
+            return resultF32.takeIf { it.isFinite() && it.toDouble() == valueF64 }
+        }
+        return RectF32(
+            edge(boundsDeviceF32.left, layerOriginDeviceI32.x) ?: return null,
+            edge(boundsDeviceF32.top, layerOriginDeviceI32.y) ?: return null,
+            edge(boundsDeviceF32.right, layerOriginDeviceI32.x) ?: return null,
+            edge(boundsDeviceF32.bottom, layerOriginDeviceI32.y) ?: return null,
+        ).takeUnless { it.isEmpty }
+    }
+
+    public fun mapDeviceRRectToLayerF32OrNull(shapeDeviceF32: RRectF32): RRectF32? =
+        mapDeviceRectToLayerF32OrNull(shapeDeviceF32.rect)?.let { rect ->
+            RRectF32.of(rect, shapeDeviceF32.topLeft, shapeDeviceF32.topRight,
+                shapeDeviceF32.bottomRight, shapeDeviceF32.bottomLeft)
+        }
 
     public companion object {
         public fun ofOrNull(

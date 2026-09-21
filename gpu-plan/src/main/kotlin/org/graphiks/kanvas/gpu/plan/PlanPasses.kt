@@ -168,6 +168,11 @@ public class GeneralPathDraw private constructor(
 
     override fun copyScissorI32(): RectI32 = scissorSnapshotI32.copy()
 
+    /** Pre-publication target rebinding retains this already selected General path contract. */
+    internal fun rebindGeometryV6(geometry: PathDrawGeometry, scissorI32: RectI32,
+        material: PlanDrawMaterialAuthority = materialAuthority): GeneralPathDraw =
+        GeneralPathDraw(commandIndex, material, geometry, strategy, scissorI32, coverage, sample, blend)
+
     /** Legacy-only compatibility view. W5 path draws carry no reconstructed colour. */
     override public val color: ColorF32
         get() = (materialAuthority as? PlanDrawMaterialAuthority.LegacyColorV1)?.copyColorF32()

@@ -171,6 +171,88 @@ public class W5eImagePlanCompiler(private val runtimeCatalog: RuntimeEffectSeman
             else GpuPlanSelection.Candidate(Candidate(this, scene, target))
     }
 
+    /** Promoted direct origins and image shaders expose the existing W4/source join before publication. */
+    internal fun constructDirectSourceLanes(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget): RenderPlanResult<List<SourceDeferredRenderConstructionV4>> {
+        val selected = candidate as? Candidate
+        if (selected == null || selected.owner !== this) return sourceConstructionRefusalV4(W5eImagePlanDiagnostics.InvalidContract).failure
+        return try {
+            val originals = selected.scene.withIndex().mapNotNull { (index, command) ->
+                val draw = (command as? SceneCommand.Draw)?.node ?: return@mapNotNull null
+                require(isImageSource(draw) && draw.origin in setOf(DrawOrigin.IMAGE, DrawOrigin.RECT,
+                    DrawOrigin.RRECT, DrawOrigin.PATH)) { W5eImagePlanDiagnostics.UnsupportedSlice }
+                index to draw
+            }.toMap()
+            val entries = originals.mapValues { (index, original) ->
+                ImageConstructionEntryV1(index, 0, index, original, null, original.transform, null)
+            }
+            val projected = SceneSnapshot.of(selected.scene.extent, selected.scene.colorSpace,
+                selected.scene.mapIndexed { index, command -> originals[index]?.let { SceneCommand.Draw(projectGeometry(it)) } ?: command },
+                selected.scene.graphLimits)
+            val projection = ImageOriginGeometryProjectionV6(projected, entries)
+            val chain = CapabilityCompilerChain.of(listOf(W3SolidRectPlanCompiler(), W4aAnalyticRectPlanCompiler(),
+                W4cPathFillPlanCompiler(), W4dPathStrokePlanCompiler(),
+                W4dGeneralPathPlanCompiler().withImageOriginProjection(projection)), runtimeCatalog)
+            val selection = chain.select(projected, selected.target)
+            if (selection !is GpuPlanSelection.Candidate) return when (selection) {
+                is GpuPlanSelection.NotCandidate -> RenderPlanResult.GapOnPromotedScope(selection.diagnostics())
+                is GpuPlanSelection.MaterialOnlyRefusal -> RenderPlanResult.GapOnPromotedScope(selection.diagnostics())
+                is GpuPlanSelection.InvalidScene -> RenderPlanResult.InvalidScene(selection.diagnostics())
+                is GpuPlanSelection.ResourceLimitExceeded -> RenderPlanResult.ResourceLimitExceeded(selection.diagnostics())
+            }
+            val lanes = when (val built = chain.constructSourceLanes(selection.candidate, capabilities, budget)) {
+                is RenderPlanResult.Ready -> built.plan
+                is RenderPlanResult.GapNotMigrated -> return built
+                is RenderPlanResult.GapOnPromotedScope -> return built
+                is RenderPlanResult.InvalidScene -> return built
+                is RenderPlanResult.ResourceLimitExceeded -> return built
+            }
+            val geometry = lanes.flatMap { RenderGraph.visualDraws(it.passes()) }.associateBy { it.commandIndex }
+            val captured = originals.mapNotNull { (command, original) ->
+                val draw = geometry[command]
+                if (draw == null) {
+                    MaterialSourceConstructionV4.authenticateElidedImageOrigin(original, runtimeCatalog)
+                    null
+                } else command to captureImageSource(original, draw, entries.getValue(command), capabilities,
+                    minOf(budget.maxFrameLocalBytes / 128L, Int.MAX_VALUE.toLong()))
+            }.toMap()
+            val overlaid = lanes.map { lane -> when (val result = lane.overlayImageSources { captured[it.commandIndex] }) {
+                is SourceConstructionResultV4.Built -> result.value
+                is SourceConstructionResultV4.Refused -> return result.failure
+            } }
+            RenderPlanResult.Ready(overlaid)
+        } catch (failure: IllegalArgumentException) {
+            sourceConstructionRefusalV4(failure.message ?: W5eImagePlanDiagnostics.InvalidContract).failure
+        } catch (_: ArithmeticException) {
+            sourceConstructionRefusalV4(W5eImagePlanDiagnostics.FrameBudget).failure
+        }
+    }
+
+    private fun captureDirectImageSource(original: DrawNode, geometry: PlanDraw): MaterialSourceConstructionV4 {
+        val bounds = geometry.w5eDeviceBoundsI32()
+        return MaterialSourceConstructionV4.captureImageOrigin(original,
+            RectF32.ofLTRB(bounds.left.toFloat(), bounds.top.toFloat(), bounds.right.toFloat(), bounds.bottom.toFloat()),
+            geometry.blend, runtimeCatalog)
+    }
+
+    private fun captureImageSource(original: DrawNode, geometry: PlanDraw, entry: ImageConstructionEntryV1,
+        capabilities: PlanCapabilitySnapshot, maxLatticeCellsI64: Long): MaterialSourceConstructionV4 {
+        if (original.origin == DrawOrigin.IMAGE) return captureDirectImageSource(original, geometry)
+        val bounds = geometry.w5eDeviceBoundsI32()
+        val metadata = when (val captured = EffectiveMaterialPlanner.describeW5eImageSource(original, bounds,
+            maxLatticeCellsI64, entry, true, runtimeCatalog)) {
+            is SourceConstructionResultV4.Built -> captured.value
+            is SourceConstructionResultV4.Refused -> throw IllegalArgumentException(captured.diagnosticCode)
+        }
+        val textureCount = 1 + (if (geometry.blend is BlendPlan.DestinationReadV1) 1 else 0) +
+            geometry.w5eGeometryTextureCountI32()
+        require(capabilities.maxSampledTexturesPerShaderStageI32?.let { it >= textureCount } == true) {
+            W5eImagePlanDiagnostics.BindingLimit
+        }
+        return MaterialSourceConstructionV4.captureImage(metadata, RectF32.ofLTRB(bounds.left.toFloat(),
+            bounds.top.toFloat(), bounds.right.toFloat(), bounds.bottom.toFloat()), geometry.blend, runtimeCatalog)
+    }
+
     override fun plan(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): RenderPlanResult<RenderGraph> {
         val selected = candidate as? Candidate
         if (selected == null || selected.owner !== this) return RenderPlanResult.InvalidScene(listOf(diagnostic(W5eImagePlanDiagnostics.InvalidContract)))
@@ -365,25 +447,8 @@ public class W5eImagePlanCompiler(private val runtimeCatalog: RuntimeEffectSeman
                             MaterialSourceConstructionV4.authenticateElidedImageOrigin(original,runtimeCatalog)
                         continue
                     }
-                    val bounds = geometryDraw.w5eDeviceBoundsI32()
-                    capturedSources[command] = if (original.origin == DrawOrigin.IMAGE)
-                        MaterialSourceConstructionV4.captureImageOrigin(original,
-                            RectF32.ofLTRB(bounds.left.toFloat(),bounds.top.toFloat(),bounds.right.toFloat(),bounds.bottom.toFloat()),
-                            geometryDraw.blend,runtimeCatalog)
-                    else {
-                        val metadata = when (val captured = EffectiveMaterialPlanner.describeW5eImageSource(original,bounds,
-                            maxLatticeCellsI64,constructionEntries.getValue(command),true,runtimeCatalog)) {
-                            is SourceConstructionResultV4.Built -> captured.value
-                            is SourceConstructionResultV4.Refused -> throw IllegalArgumentException(captured.diagnosticCode)
-                        }
-                        val textureCount = 1 + (if (geometryDraw.blend is BlendPlan.DestinationReadV1) 1 else 0) +
-                            geometryDraw.w5eGeometryTextureCountI32()
-                        require(capabilities.maxSampledTexturesPerShaderStageI32?.let { it >= textureCount } == true) {
-                            W5eImagePlanDiagnostics.BindingLimit
-                        }
-                        MaterialSourceConstructionV4.captureImage(metadata,RectF32.ofLTRB(bounds.left.toFloat(),bounds.top.toFloat(),
-                            bounds.right.toFloat(),bounds.bottom.toFloat()),geometryDraw.blend,runtimeCatalog)
-                    }
+                    capturedSources[command] = captureImageSource(original, geometryDraw,
+                        constructionEntries.getValue(command), capabilities, maxLatticeCellsI64)
                 }
                 if (survivingCommands.isEmpty()) return RenderPlanResult.Ready(lanes.first().publishClearOnly())
                 val survivingSources = sourceNodes.filterKeys { it in survivingCommands }

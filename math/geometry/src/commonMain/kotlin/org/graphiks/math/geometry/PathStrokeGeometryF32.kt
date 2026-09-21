@@ -72,6 +72,27 @@ public class PathStrokeGeometryF32 private constructor(
 
     public fun copyConservativeScissorI32(): RectI32 = fillGeometrySnapshotF32.copyConservativeScissorI32()
 
+    public fun relativeToOriginI32OrNull(originI32: Point2I32): PathStrokeGeometryF32? {
+        fun edge(valueF32: Float, origin: Int): Float? {
+            val valueF64 = valueF32.toDouble() - origin.toDouble()
+            return valueF64.toFloat().takeIf { it.isFinite() && it.toDouble() == valueF64 }
+        }
+        val bounds = conservativeBoundsSnapshotF32
+        return PathStrokeGeometryF32(fillGeometrySnapshotF32.relativeToOriginI32OrNull(originI32) ?: return null,
+            RectF32(edge(bounds.left, originI32.x) ?: return null, edge(bounds.top, originI32.y) ?: return null,
+                edge(bounds.right, originI32.x) ?: return null, edge(bounds.bottom, originI32.y) ?: return null), workUsageI64)
+    }
+
+    /** Retains a finite prepared stroke under the F32 target-coordinate subtraction. */
+    public fun relativeToOriginI32F32OrNull(originI32: Point2I32): PathStrokeGeometryF32? {
+        fun edge(valueF32: Float, originI32: Int): Float? =
+            (valueF32 - originI32.toFloat()).takeIf(Float::isFinite)
+        val bounds = conservativeBoundsSnapshotF32
+        return PathStrokeGeometryF32(fillGeometrySnapshotF32.relativeToOriginI32F32OrNull(originI32) ?: return null,
+            RectF32(edge(bounds.left, originI32.x) ?: return null, edge(bounds.top, originI32.y) ?: return null,
+                edge(bounds.right, originI32.x) ?: return null, edge(bounds.bottom, originI32.y) ?: return null), workUsageI64)
+    }
+
     internal companion object {
         internal fun of(
             fillGeometryF32: PathFillGeometryF32,

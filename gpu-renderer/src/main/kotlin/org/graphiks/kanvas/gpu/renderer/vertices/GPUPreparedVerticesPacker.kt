@@ -6,6 +6,8 @@ import java.util.Collections
 import java.util.TreeMap
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesCanonicalizationIdentity
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesUploadArtifact
+import org.graphiks.math.geometry.TriangleMeshF32
+import org.graphiks.math.geometry.TriangleTopologyI32
 
 data class GPUPreparedVerticesFloatBounds(
     val left: Float,
@@ -129,7 +131,15 @@ object GPUPreparedVerticesPacker {
                 ?.let { return it }
         }
 
-        val bounds = source.positions.bounds()
+        val geometry = requireNotNull(TriangleMeshF32.ofOrNull(when (source.topology) {
+            GPUVertexMode.Triangles -> TriangleTopologyI32.List
+            GPUVertexMode.TriangleStrip -> TriangleTopologyI32.Strip
+            GPUVertexMode.TriangleFan -> TriangleTopologyI32.Fan
+            is GPUVertexMode.Unsupported -> error("Topology was refused before geometry packing")
+        }, source.positions, source.texCoords, source.indices, limits.maxVertices,
+            maxOf(limits.maxIndices, limits.maxFanExpandedIndices)))
+        require(geometry.indexCountI32 == shape.topologyPlan.indexCount)
+        val bounds = geometry.copyBoundsF32().let { GPUPreparedVerticesFloatBounds(it.left, it.top, it.right, it.bottom) }
         val vertexBytes = packVertices(
             source = source,
             vertexCount = shape.vertexCount,
@@ -137,7 +147,7 @@ object GPUPreparedVerticesPacker {
             byteCount = shape.vertexByteCount.toInt(),
         )
         val indexBytes = indexByteCount?.let { byteCount ->
-            packIndices(source, shape.topologyPlan, requireNotNull(indexFormat), byteCount.toInt())
+            packIndices(requireNotNull(geometry.copyIndicesI32()), requireNotNull(indexFormat), byteCount.toInt())
         }
         return GPUPreparedVerticesPackingResult.Ready(
             artifact = GPUPreparedVerticesUploadArtifact(
@@ -201,8 +211,7 @@ object GPUPreparedVerticesPacker {
     }
 
     private fun packIndices(
-        source: PreparedVerticesSourceSnapshot,
-        topologyPlan: CanonicalTopologyPlan,
+        indicesI32: IntArray,
         indexFormat: String,
         byteCount: Int,
     ): ByteArray {
@@ -215,18 +224,7 @@ object GPUPreparedVerticesPacker {
             }
         }
 
-        if (topologyPlan.fanExpanded) {
-            val sourceCount = source.indices?.size ?: (source.positions.size / POSITION_COMPONENTS)
-            fun sourceIndex(position: Int): Int = source.indices?.get(position) ?: position
-            val anchor = sourceIndex(0)
-            for (position in 1 until sourceCount - 1) {
-                putIndex(anchor)
-                putIndex(sourceIndex(position))
-                putIndex(sourceIndex(position + 1))
-            }
-        } else {
-            requireNotNull(source.indices).forEach(::putIndex)
-        }
+        indicesI32.forEach(::putIndex)
         check(output.position() == byteCount)
         return output.array()
     }
@@ -527,24 +525,6 @@ private fun PreparedVerticesSourceSnapshot.refused(
     vararg details: Pair<String, String>,
 ): GPUPreparedVerticesPackingResult.Refused =
     refusalContext().refused(code, reason, *details)
-
-private fun FloatArray.bounds(): GPUPreparedVerticesFloatBounds {
-    var left = this[0]
-    var top = this[1]
-    var right = left
-    var bottom = top
-    var offset = POSITION_COMPONENTS
-    while (offset < size) {
-        val x = this[offset]
-        val y = this[offset + 1]
-        if (x < left) left = x
-        if (x > right) right = x
-        if (y < top) top = y
-        if (y > bottom) bottom = y
-        offset += POSITION_COMPONENTS
-    }
-    return GPUPreparedVerticesFloatBounds(left, top, right, bottom)
-}
 
 private fun checkedFanIndexCount(sourceElementCount: Int): Int? {
     val count = try {

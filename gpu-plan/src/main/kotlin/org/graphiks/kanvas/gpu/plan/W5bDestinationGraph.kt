@@ -102,6 +102,7 @@ internal object W5bDestinationGraphSealer {
             "unsupported.w5b.destination-texture"
         }
         require(destinationCountI32 > 0 || capabilityId in setOf(W5bCorePrimitiveGraph.CAPABILITY_ID,
+            W5bVerticesPlanCompiler.CAPABILITY_ID,
             W5eImagePlanCompiler.CONSTRUCTION_CAPABILITY_ID,
             W4aAnalyticRectPlanCompiler.W5B_CAPABILITY_ID, W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID,
             W4cPathFillPlanCompiler.W5B_CAPABILITY_ID, W4dPathStrokePlanCompiler.W5B_CAPABILITY_ID, W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID, W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID, W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID))
@@ -225,39 +226,7 @@ internal object W5bDestinationGraphSealer {
                     passes += PlanPass.TextureCopy(copyOrdinalI32++, target.id, requireNotNull(snapshot).id, version,
                         region, bytesPerRowI64 = alignedRowBytesI64(capabilities, region.width()))
                     val sealed = blend.copy(requiredDestinationVersion = version, snapshotResource = snapshot.id)
-                    render(when (draw) {
-                        is SolidRectDraw -> SolidRectDraw.ofMaterial(draw.commandIndex,
-                            draw.materialAuthority.materialPlanRef(),
-                            draw.copyVisibleBounds(), draw.copyScissor(), draw.coverage, draw.sample, sealed, draw.materialCoordinates, draw.materialCoordinatesV2,
-                            (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
-                            draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV5)
-                        is W5bPointDraw -> draw.withBlend(sealed)
-                        is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(draw.commandIndex,
-                            draw.materialAuthority.materialPlanRef(),
-                            draw.copyDeviceBounds(), draw.copyRasterBounds(), draw.copyScissor(), sealed, draw.materialCoordinates, draw.materialCoordinatesV2,
-                            (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
-                            draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV5)
-                        is AnalyticRRectDraw -> (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let {
-                            AnalyticRRectDraw.ofMaterialV4(draw.commandIndex, it.ref, draw.origin,
-                                draw.copyDeviceShape(), draw.copyRasterBounds(), draw.copyScissor(), sealed, it.coordinates)
-                        } ?: AnalyticRRectDraw.ofMaterial(draw.commandIndex, draw.materialAuthority.materialPlanRef(), draw.origin,
-                            draw.copyDeviceShape(), draw.copyRasterBounds(), draw.copyScissor(), sealed,
-                            draw.materialCoordinates, draw.materialCoordinatesV2, draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV5)
-                        is PathFillDraw -> PathFillDraw.ofMaterial(draw.commandIndex,
-                            draw.materialAuthority.materialPlanRef(),
-                            draw.copyGeometryF32(), draw.strategy, draw.copyScissorI32(), sealed, draw.materialCoordinates, draw.materialCoordinatesV2,
-                            (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates,
-                            draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV5)
-                        is W5bW4ePathDraw -> draw.withBlend(sealed)
-                        is GeneralPathDraw -> draw.withBlend(sealed)
-                        is PathStrokeDraw -> (draw.materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.let {
-                            PathStrokeDraw.ofMaterialV4(draw.commandIndex, it.ref, draw.copyGeometryF32(), draw.copyScissorI32(),
-                                draw.mode, draw.styleF64, sealed, it.coordinates)
-                        } ?: PathStrokeDraw.ofMaterial(draw.commandIndex, draw.materialAuthority.materialPlanRef(), draw.copyGeometryF32(),
-                            draw.copyScissorI32(), draw.mode, draw.styleF64, sealed, draw.materialCoordinates, draw.materialCoordinatesV2,
-                            draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV5)
-                        else -> error("unsupported.w5b.destination-geometry")
-                    })
+                    render(draw.withFinalBlendV1(sealed))
                 } else render(draw)
             }
             passes += PlanPass.ReadbackPass(0, target.id, staging.id, rowBytesI64)
@@ -293,6 +262,7 @@ private fun destinationBounds(draw: PlanDraw, extent: SizeI32): RectI32 {
         is AnalyticRectDraw -> draw.copyScissor()
         is AnalyticRRectDraw -> draw.copyScissor()
         is W5bPointDraw -> draw.copyScissorI32()
+        is W5bVerticesDraw -> draw.copyScissorI32()
         is PathDraw -> draw.copyScissorI32()
         else -> target
     }
@@ -302,6 +272,7 @@ private fun destinationBounds(draw: PlanDraw, extent: SizeI32): RectI32 {
         is AnalyticRectDraw -> draw.copyRasterBounds()
         is AnalyticRRectDraw -> draw.copyRasterBounds()
         is W5bPointDraw -> draw.copyBoundsI32()
+        is W5bVerticesDraw -> draw.copyBoundsI32()
         // W4e inverse consumers own a finite cover domain, not their finite interior bounds.
         is W5bW4ePathDraw -> scissor
         is PathDraw -> when (val geometry = draw.copyPathGeometry()) {
@@ -322,6 +293,34 @@ private fun destinationBounds(draw: PlanDraw, extent: SizeI32): RectI32 {
         minOf(extent.width, scissor.right, bounds.right), minOf(extent.height, scissor.bottom, bounds.bottom))
     require(!result.isEmpty) { "invalid.w5b.destination-empty-region" }
     return result
+}
+
+/** Rebinds an existing source draw's final blend without issuing a source or changing geometry. */
+internal fun PlanDraw.withFinalBlendV1(sealed: BlendPlan): PlanDraw {
+    val ref = materialAuthority.materialPlanRef()
+    val coordinates = (materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates
+    val composed = materialAuthority is PlanDrawMaterialAuthority.MaterialV5
+    return when (this) {
+        is SolidRectDraw -> SolidRectDraw.ofMaterial(commandIndex, ref, copyVisibleBounds(), copyScissor(),
+            coverage, sample, sealed, materialCoordinates, materialCoordinatesV2, coordinates, composed)
+        is W5bPointDraw -> withBlend(sealed)
+        is W5bVerticesDraw -> withBlend(sealed)
+        is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(commandIndex, ref, copyDeviceBounds(), copyRasterBounds(),
+            copyScissor(), sealed, materialCoordinates, materialCoordinatesV2, coordinates, composed)
+        is AnalyticRRectDraw -> if (coordinates != null) AnalyticRRectDraw.ofMaterialV4(commandIndex, ref, origin,
+            copyDeviceShape(), copyRasterBounds(), copyScissor(), sealed, coordinates)
+            else AnalyticRRectDraw.ofMaterial(commandIndex, ref, origin, copyDeviceShape(), copyRasterBounds(),
+                copyScissor(), sealed, materialCoordinates, materialCoordinatesV2, composed)
+        is PathFillDraw -> PathFillDraw.ofMaterial(commandIndex, ref, copyGeometryF32(), strategy,
+            copyScissorI32(), sealed, materialCoordinates, materialCoordinatesV2, coordinates, composed)
+        is PathStrokeDraw -> if (coordinates != null) PathStrokeDraw.ofMaterialV4(commandIndex, ref,
+            copyGeometryF32(), copyScissorI32(), mode, styleF64, sealed, coordinates)
+            else PathStrokeDraw.ofMaterial(commandIndex, ref, copyGeometryF32(), copyScissorI32(), mode,
+                styleF64, sealed, materialCoordinates, materialCoordinatesV2, composed)
+        is W5bW4ePathDraw -> withBlend(sealed)
+        is GeneralPathDraw -> withBlend(sealed)
+        else -> error("unsupported.w5b.destination-geometry")
+    }
 }
 
 /** Validates every read against the last write and exact immediately preceding copy. */

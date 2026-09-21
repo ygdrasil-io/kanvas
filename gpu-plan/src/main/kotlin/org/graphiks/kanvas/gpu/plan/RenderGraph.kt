@@ -262,9 +262,16 @@ public class RenderGraph private constructor(
                         initializeOrder[scope.id] = stepIndexI32
                     }
                     is LayerExecutionStepV1.RenderChildren -> {
-                        val pass = passesById[step.passId] as? PlanPass.RenderPass
-                        require(scope.id in initialized && scope.id !in restored && pass != null && pass.target == scope.targetResource &&
-                            pass.load == AttachmentLoadPlan.Load && pass.draws().isNotEmpty())
+                        val exactChild = when (val pass = passesById[step.passId]) {
+                            is PlanPass.RenderPass -> pass.target == scope.targetResource &&
+                                pass.load == AttachmentLoadPlan.Load && pass.draws().isNotEmpty()
+                            is PlanPass.StencilGeometryProducerV3 -> pass.target == scope.targetResource && pass.load == AttachmentLoadPlan.Load
+                            is PlanPass.StencilCover -> pass.target == scope.targetResource && pass.load == AttachmentLoadPlan.Load
+                            is PlanPass.ClipMaskInitialize, is PlanPass.ClipMaskProducer, is PlanPass.ClipMaskFold ->
+                                source.w4eGeometry.any { it.target == scope.targetResource && step.passId in it.graphPassIds() }
+                            else -> false
+                        }
+                        require(scope.id in initialized && scope.id !in restored && exactChild)
                     }
                     is LayerExecutionStepV1.Restore -> {
                         val pass = passesById[step.passId] as? PlanPass.LayerComposite
@@ -766,7 +773,7 @@ public class RenderGraph private constructor(
                         }
                         require(pass.draws().none { it.unwrapClippedSource().let { source -> source is PathRenderDraw &&
                             !(source is GeneralPathDraw && capabilityId in setOf(W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID,
-                                W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID)) } }) {
+                                W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID, W6aLayerPlanCompiler.CAPABILITY_ID)) } }) {
                             "General and binary masked path draws require explicit path render passes"
                         }
                         pass.draws().map { it.unwrapClippedSource() }.filterIsInstance<PathDraw>().forEach { draw ->

@@ -4,28 +4,28 @@ import java.util.Collections
 
 /** Canonical terminal refusals for the prepared DrawVertices and DrawMesh route. */
 object GPUPreparedVerticesRefusalCodes {
-    const val Topology = "unsupported.vertices.topology"
-    const val PositionCount = "unsupported.vertices.position_count"
-    const val AttributeCount = "unsupported.vertices.attribute_count"
-    const val NonFinite = "unsupported.vertices.non_finite"
-    const val IndexOutOfRange = "unsupported.vertices.index_out_of_range"
-    const val IndexFormat = "unsupported.vertices.index_format"
-    const val AttributeLayout = "unsupported.vertices.attribute_layout"
-    const val Transform = "unsupported.vertices.transform"
-    const val ColorConversion = "unsupported.vertices.color_conversion_unvalidated"
-    const val PrimitiveBlender = "unsupported.vertices.primitive_blender_unregistered"
-    const val Material = "unsupported.vertices.material"
-    const val Budget = "unsupported.vertices.budget"
-    const val ClipCoverage = "unsupported.vertices.clip_coverage"
-    const val MeshBounds = "unsupported.mesh.bounds"
-    const val MeshProgramUnregistered = "unsupported.mesh.program_unregistered"
-    const val MeshProgramCpuUnavailable = "unsupported.mesh.program_cpu_not_available"
-    const val MeshProgramWgslUnavailable = "unsupported.mesh.program_wgsl_not_available"
-    const val MeshProgramWgslValidation = "unsupported.mesh.program_wgsl_validation"
-    const val MeshProgramAbi = "unsupported.mesh.program_abi"
-    const val MeshProgramChild = "unsupported.mesh.program_child"
-    const val MeshProgramResource = "unsupported.mesh.program_resource"
-    const val MeshBudget = "unsupported.mesh.budget"
+    const val Topology = org.graphiks.kanvas.render.ir.PreparedVerticesRefusalCodesV1.Topology
+    const val PositionCount = org.graphiks.kanvas.render.ir.PreparedVerticesRefusalCodesV1.PositionCount
+    const val AttributeCount = org.graphiks.kanvas.render.ir.PreparedVerticesRefusalCodesV1.AttributeCount
+    const val NonFinite = org.graphiks.kanvas.render.ir.PreparedVerticesRefusalCodesV1.NonFinite
+    const val IndexOutOfRange = org.graphiks.kanvas.render.ir.PreparedVerticesRefusalCodesV1.IndexOutOfRange
+    const val IndexFormat = org.graphiks.kanvas.render.ir.PreparedVerticesRefusalCodesV1.IndexFormat
+    const val AttributeLayout = org.graphiks.kanvas.render.ir.PreparedVerticesRefusalCodesV1.AttributeLayout
+    const val Transform = org.graphiks.kanvas.render.ir.PreparedVerticesRefusalCodesV1.Transform
+    const val ColorConversion = org.graphiks.kanvas.render.ir.PreparedVerticesRefusalCodesV1.ColorConversion
+    const val PrimitiveBlender = org.graphiks.kanvas.render.ir.PreparedVerticesRefusalCodesV1.PrimitiveBlender
+    const val Material = org.graphiks.kanvas.render.ir.PreparedVerticesRefusalCodesV1.Material
+    const val Budget = org.graphiks.kanvas.render.ir.PreparedVerticesRefusalCodesV1.Budget
+    const val ClipCoverage = org.graphiks.kanvas.render.ir.PreparedVerticesRefusalCodesV1.ClipCoverage
+    const val MeshBounds = org.graphiks.kanvas.render.ir.PreparedVerticesRefusalCodesV1.MeshBounds
+    const val MeshProgramUnregistered = org.graphiks.kanvas.render.ir.PreparedVerticesRefusalCodesV1.MeshProgramUnregistered
+    const val MeshProgramCpuUnavailable = org.graphiks.kanvas.render.ir.PreparedVerticesRefusalCodesV1.MeshProgramCpuUnavailable
+    const val MeshProgramWgslUnavailable = org.graphiks.kanvas.render.ir.PreparedVerticesRefusalCodesV1.MeshProgramWgslUnavailable
+    const val MeshProgramWgslValidation = org.graphiks.kanvas.render.ir.PreparedVerticesRefusalCodesV1.MeshProgramWgslValidation
+    const val MeshProgramAbi = org.graphiks.kanvas.render.ir.PreparedVerticesRefusalCodesV1.MeshProgramAbi
+    const val MeshProgramChild = org.graphiks.kanvas.render.ir.PreparedVerticesRefusalCodesV1.MeshProgramChild
+    const val MeshProgramResource = org.graphiks.kanvas.render.ir.PreparedVerticesRefusalCodesV1.MeshProgramResource
+    const val MeshBudget = org.graphiks.kanvas.render.ir.PreparedVerticesRefusalCodesV1.MeshBudget
 
     val ALL: Set<String> = Collections.unmodifiableSet(linkedSetOf(
         Topology,

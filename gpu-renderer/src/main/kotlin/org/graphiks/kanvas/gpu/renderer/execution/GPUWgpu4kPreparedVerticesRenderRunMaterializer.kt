@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import io.ygdrasil.webgpu.GPUIndexFormat
+
 import io.ygdrasil.webgpu.BindGroupDescriptor
 import io.ygdrasil.webgpu.BindGroupEntry
 import io.ygdrasil.webgpu.BindGroupLayoutDescriptor
@@ -340,7 +342,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                 vertexSize = entry.fact.vertexByteCount,
                 indexBuffer = buffers.indexBuffer,
                 indexOffset = 0L,
-                indexSize = requireNotNull(entry.fact.indexByteCount),
+                indexSize = entry.fact.indexByteCount ?: 0L,
                 created = created,
                 uniformUploads = uniformUploads,
                 bufferCreationCount = bufferCreationCount,
@@ -693,6 +695,8 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                 "TriangleStrip" -> GPUPrimitiveTopology.TriangleStrip
                 else -> error("Unsupported prepared-vertices topology")
             },
+            stripIndexFormat = if (entry.packet.topologyIdentity.sourceLabel == "TriangleStrip")
+                entry.fact.indexFormat?.let { if (it == "uint16") GPUIndexFormat.Uint16 else GPUIndexFormat.Uint32 } else null,
             vertexStepMode = GPUVertexStepMode.Vertex,
             sampleCountI32 = 1,
             drawUniformSizeBytesI32 = PREPARED_VERTICES_DRAW_UNIFORM_SIZE_BYTES,
@@ -784,21 +788,10 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                     module = shader,
                     entryPoint = program.vertexEntryPoint,
                     buffers = listOf(
-                        VertexBufferLayout(
-                            arrayStride = layout.strideBytes.toULong(),
-                            stepMode = key.vertexStepMode,
-                            attributes = layout.attributes.map { attribute ->
-                                VertexAttribute(
-                                    format = attribute.toPreparedVerticesVertexFormat(),
-                                    offset = layout.offsets.getValue(attribute).toULong(),
-                                    shaderLocation =
-                                        layout.shaderLocations.getValue(attribute).toUInt(),
-                                )
-                            },
-                        ),
+                        preparedVerticesVertexLayoutV6(layout, key.vertexStepMode),
                     ),
                 ),
-                primitive = PrimitiveState(topology = key.topology),
+                primitive = PrimitiveState(topology = key.topology, stripIndexFormat = key.stripIndexFormat),
                 multisample = MultisampleState(count = key.sampleCountI32.toUInt()),
                 fragment = FragmentState(
                     module = shader,
@@ -858,6 +851,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
         val targetFormat: GPUTextureFormat,
         val vertexLayout: GPUVertexLayoutPlan,
         val topology: GPUPrimitiveTopology,
+        val stripIndexFormat: GPUIndexFormat?,
         val vertexStepMode: GPUVertexStepMode,
         val sampleCountI32: Int,
         val drawUniformSizeBytesI32: Int,
@@ -1335,7 +1329,7 @@ internal fun requirePreparedVerticesBlend(
 private fun <T : AutoCloseable> T.track(handles: MutableList<AutoCloseable>): T =
     also(handles::add)
 
-private fun preparedVerticesDrawUniformBytes(
+internal fun preparedVerticesDrawUniformBytes(
     packet: GPUDrawSemanticPayload.Vertices,
     destinationBounds: org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds?,
 ): ByteArray {
@@ -1383,6 +1377,12 @@ private fun preparedVerticesBufferUpload(
     consumerSourceStepIndices = renderScopeIndices,
     uploadRole = role,
 )
+
+internal fun preparedVerticesVertexLayoutV6(layout: GPUVertexLayoutPlan,
+    stepMode: GPUVertexStepMode = GPUVertexStepMode.Vertex): VertexBufferLayout = VertexBufferLayout(
+    arrayStride = layout.strideBytes.toULong(), stepMode = stepMode,
+    attributes = layout.attributes.map { attribute -> VertexAttribute(attribute.toPreparedVerticesVertexFormat(),
+        layout.offsets.getValue(attribute).toULong(), layout.shaderLocations.getValue(attribute).toUInt()) })
 
 private fun String.toPreparedVerticesVertexFormat(): GPUVertexFormat = when (this) {
     "position", "texcoord" -> GPUVertexFormat.Float32x2

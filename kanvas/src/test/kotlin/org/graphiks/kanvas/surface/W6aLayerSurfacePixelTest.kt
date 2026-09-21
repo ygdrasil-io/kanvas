@@ -63,7 +63,7 @@ class W6aLayerSurfacePixelTest {
         // A second live layer requires another 16 bytes; equal descriptors cannot imply aliasing.
         val surface = Surface(2, 2, config = RenderConfig(frameLocalBudgetBytes = 560L))
         surface.canvas { saveLayer(); restore(); saveLayer(); restore() }
-        assertTerminalWithoutReadbackMutation(surface, "w6a.layer.resource_limit")
+        assertTerminalWithoutReadbackMutation(surface, "w6a.layer.frame_budget_exceeded")
         surface.discardRecordedOperations()
         surface.canvas { saveLayer(); restore() }
         assertContentEquals(expected, surface.render().pixels)
@@ -74,7 +74,7 @@ class W6aLayerSurfacePixelTest {
         val expected = UByteArray(16)
         val surface = Surface(2, 2, config = RenderConfig(frameLocalBudgetBytes = 560L))
         surface.canvas { saveLayer(); drawW5Rect(ColorARGB.Blue); restore() }
-        assertTerminalWithoutReadbackMutation(surface, "w6a.layer.resource_limit")
+        assertTerminalWithoutReadbackMutation(surface, "w6a.layer.frame_budget_exceeded")
         surface.discardRecordedOperations()
         surface.canvas { saveLayer(); restore() }
         assertContentEquals(expected, surface.render().pixels)

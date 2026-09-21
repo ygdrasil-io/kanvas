@@ -21,8 +21,36 @@ internal fun validateW6aLayerTopology(
     val restored = mutableSetOf<PlanResourceId>()
     val commands = mutableListOf<Int>()
     val versions = mutableMapOf<PlanResourceId, Long>()
+    val preparedMasks = mutableSetOf<PlanResourceId>()
 
     passes.forEachIndexed { indexI32, pass -> when (pass) {
+        is PlanPass.ClipMaskInitialize -> {
+            val row = byId.getValue(pass.output)
+            require(row.format == PlanTextureFormat.CoverageMask && row.sampleCountI32 == 1 &&
+                PlanResourceUsage.RenderAttachment in row.usages() && PlanResourceUsage.Sampled in row.usages())
+            require(pass.copyDomainI32() == requireNotNull(row.copyExtent()).let { RectI32(0, 0, it.width, it.height) })
+            preparedMasks += pass.output
+        }
+        is PlanPass.ClipMaskProducer -> {
+            val row = byId.getValue(pass.target)
+            require(row.format == PlanTextureFormat.CoverageMask && row.sampleCountI32 == pass.sampleCountI32 &&
+                PlanResourceUsage.RenderAttachment in row.usages())
+            pass.depthStencil?.let { id -> require(byId.getValue(id).format is PlanTextureFormat.DepthStencil &&
+                byId.getValue(id).copyExtent() == row.copyExtent() && byId.getValue(id).sampleCountI32 == row.sampleCountI32) }
+            pass.resolveTarget?.let { id -> require(byId.getValue(id).format == PlanTextureFormat.CoverageMask &&
+                byId.getValue(id).copyExtent() == row.copyExtent() && byId.getValue(id).sampleCountI32 == 1) }
+            preparedMasks += pass.resolveTarget ?: pass.target
+        }
+        is PlanPass.ClipMaskFold -> {
+            require(pass.previous in preparedMasks && pass.source in preparedMasks &&
+                pass.output != pass.previous && pass.output != pass.source)
+            val rows = listOf(pass.previous, pass.source, pass.output).map(byId::getValue)
+            require(rows.all { it.format == PlanTextureFormat.CoverageMask && it.sampleCountI32 == 1 &&
+                PlanResourceUsage.Sampled in it.usages() && PlanResourceUsage.RenderAttachment in it.usages() } &&
+                rows.map { it.copyExtent() }.distinct().size == 1)
+            require(pass.copyDomainI32() == requireNotNull(rows.first().copyExtent()).let { RectI32(0, 0, it.width, it.height) })
+            preparedMasks += pass.output
+        }
         is PlanPass.RenderPass -> {
             val target = byId.getValue(pass.target)
             require(target.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget))
@@ -33,13 +61,59 @@ internal fun validateW6aLayerTopology(
             require(pass.store == AttachmentStorePlan.Store)
             val targetExtent = requireNotNull(target.copyExtent())
             pass.draws().forEach { draw ->
-                require(draw is SolidRectDraw && draw.sample == SamplePlan.SingleSample && draw.blend !is BlendPlan.DestinationReadV1)
-                val bounds = draw.copyScissor()
+                require((draw is SolidRectDraw || draw is AnalyticRectDraw || draw is AnalyticRRectDraw ||
+                    draw is PathFillDraw || draw is PathStrokeDraw || draw is GeneralPathDraw || draw is W5bPointDraw ||
+                    draw is W5bVerticesDraw || draw is W5bW4ePathDraw) &&
+                    draw.sample == SamplePlan.SingleSample && draw.blend != BlendPlan.NoOpV1)
+                (draw.blend as? BlendPlan.DestinationReadV1)?.let { blend ->
+                    val copy = passes.getOrNull(indexI32 - 1) as? PlanPass.TextureCopy
+                    require(copy != null && copy.source == pass.target && copy.destination == blend.snapshotResource &&
+                        copy.destinationVersion == blend.requiredDestinationVersion && blend.requiredDestinationVersion.valueI64 == versions[target.id])
+                }
+                val bounds = w6aScissorI32(draw)
                 require(bounds.left >= 0 && bounds.top >= 0 && bounds.right <= targetExtent.width && bounds.bottom <= targetExtent.height)
+                if (draw !is SolidRectDraw) {
+                    val data = requireNotNull(pass.drawDataResources)
+                    listOf(data.vertex to PlanResourceRole.VertexData, data.index to PlanResourceRole.IndexData,
+                        data.uniform to PlanResourceRole.UniformData).forEach { (id, role) ->
+                        require(byId.getValue(id).role == role && byId.getValue(id).kind == PlanResourceKind.Buffer)
+                    }
+                }
                 commands += draw.commandIndex
             }
             val after = Math.addExact(versions[target.id] ?: 0L, pass.draws().size.toLong())
             versions[target.id] = after
+            require(pass.destinationVersionAfter?.valueI64 == after)
+        }
+        is PlanPass.StencilGeometryProducerV3 -> {
+            val target = byId.getValue(pass.target)
+            val depth = byId.getValue(pass.depthStencil)
+            require(target.id in initialized && target.id !in restored && pass.load == AttachmentLoadPlan.Load)
+            require(depth.role == PlanResourceRole.DepthStencil && depth.copyExtent() == target.copyExtent() &&
+                depth.sampleCountI32 == 1 && depth.format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8))
+            val cover = passes.getOrNull(indexI32 + 1) as? PlanPass.StencilCover
+            require(cover != null && cover.target == pass.target && cover.depthStencil == pass.depthStencil &&
+                cover.atomicGroup == pass.atomicGroup && cover.drawDataResources == pass.drawDataResources &&
+                cover.draw.commandIndex == pass.commandIndexI32 && cover.draw.copyPathGeometry() == pass.copyGeometry() &&
+                cover.draw.copyScissorI32() == pass.copyScissorI32())
+        }
+        is PlanPass.StencilCover -> {
+            require(passes.getOrNull(indexI32 - 1) is PlanPass.StencilGeometryProducerV3 &&
+                pass.load == AttachmentLoadPlan.Load && pass.store == AttachmentStorePlan.Store &&
+                pass.depthStencilLoadStore == PlanDepthStencilLoadStore.LoadStoreTestReset &&
+                pass.draw.strategy == PathFillStrategy.StencilCover && pass.draw.sample == SamplePlan.SingleSample &&
+                pass.draw.blend != BlendPlan.NoOpV1)
+            (pass.draw.blend as? BlendPlan.DestinationReadV1)?.let { blend ->
+                val copy = passes.getOrNull(indexI32 - 2) as? PlanPass.TextureCopy
+                require(copy != null && copy.source == pass.target && copy.destination == blend.snapshotResource &&
+                    copy.destinationVersion == blend.requiredDestinationVersion && blend.requiredDestinationVersion.valueI64 == versions[pass.target])
+            }
+            val targetExtent = requireNotNull(byId.getValue(pass.target).copyExtent())
+            val scissor = pass.draw.copyScissorI32()
+            require(scissor.left >= 0 && scissor.top >= 0 && scissor.right <= targetExtent.width && scissor.bottom <= targetExtent.height)
+            commands += pass.draw.commandIndex
+            val after = Math.addExact(versions.getValue(pass.target), 1L)
+            versions[pass.target] = after
             require(pass.destinationVersionAfter?.valueI64 == after)
         }
         is PlanPass.LayerComposite -> {
@@ -79,11 +153,27 @@ internal fun validateW6aLayerTopology(
             require(pass.destinationVersion?.valueI64 == versions[source.id])
             when (destination.role) {
                 PlanResourceRole.DestinationSnapshot -> {
-                    require(sourceBounds == RectI32(0, 0, sourceExtent.width, sourceExtent.height))
-                    require(pass.copyDestinationOriginI32() == Point2I32.Origin && destination.copyExtent() == sourceExtent)
-                    val consumer = passes.getOrNull(indexI32 + 1) as? PlanPass.LayerComposite
-                    require(consumer?.destination == source.id && consumer.restore.blend.compositionFacts.readsPriorDevice)
-                    val blend = requireNotNull(consumer.restore.blend.takeIf { it.compositionFacts.readsPriorDevice })
+                    val destinationExtent = requireNotNull(destination.copyExtent())
+                    require(pass.copyDestinationOriginI32() == Point2I32.Origin &&
+                        destinationExtent.width >= sourceBounds.width() && destinationExtent.height >= sourceBounds.height())
+                    val consumer = passes.getOrNull(indexI32 + 1)
+                    val blend = when (consumer) {
+                        is PlanPass.LayerComposite -> {
+                            require(consumer.destination == source.id && sourceBounds == RectI32(0, 0, sourceExtent.width, sourceExtent.height) &&
+                                destinationExtent == sourceExtent)
+                            consumer.restore.blend
+                        }
+                        is PlanPass.RenderPass -> {
+                            require(consumer.target == source.id && consumer.draws().size == 1)
+                            consumer.draws().single().blend
+                        }
+                        is PlanPass.StencilGeometryProducerV3 -> {
+                            require(consumer.target == source.id)
+                            requireNotNull(passes.getOrNull(indexI32 + 2) as? PlanPass.StencilCover).draw.blend
+                        }
+                        else -> error("Invalid destination snapshot consumer")
+                    }
+                    require(blend.compositionFacts.readsPriorDevice)
                     require(blend.destinationReadSnapshotResourceV1() == destination.id &&
                         blend.requiredDestinationVersionV1() == pass.destinationVersion)
                 }
@@ -110,4 +200,31 @@ internal fun validateW6aLayerTopology(
     require(commands.size == visualCountI32 && commands.zipWithNext().all { (a, b) -> a < b })
     require(passes.filterIsInstance<PlanPass.ReadbackPass>().size == 1)
     require(dependencies == passes.zipWithNext { first, second -> PlanPassDependency(first.id, second.id) })
+}
+
+internal fun w6aRasterBoundsI32(draw: PlanDraw): RectI32 = when (draw) {
+    is SolidRectDraw -> draw.copyVisibleBounds()
+    is AnalyticRectDraw -> draw.copyRasterBounds()
+    is AnalyticRRectDraw -> draw.copyRasterBounds()
+    is PathFillDraw -> draw.copyGeometryF32().copyConservativeScissorI32()
+    is PathStrokeDraw -> draw.copyGeometryF32().copyConservativeScissorI32()
+    is GeneralPathDraw -> when (val geometry = draw.copyPathGeometry()) {
+        is PathDrawGeometry.Fill -> geometry.valueF32.copyConservativeScissorI32()
+        is PathDrawGeometry.Stroke -> geometry.valueF32.copyConservativeScissorI32()
+        is PathDrawGeometry.InverseDomainSource, PathDrawGeometry.Empty -> draw.copyScissorI32()
+    }
+    is W5bPointDraw -> draw.copyBoundsI32()
+    is W5bVerticesDraw -> draw.copyBoundsI32()
+    is W5bW4ePathDraw -> draw.copyScissorI32()
+    else -> error("w6a.layer.unsupported_child")
+}
+
+internal fun w6aScissorI32(draw: PlanDraw): RectI32 = when (draw) {
+    is SolidRectDraw -> draw.copyScissor()
+    is AnalyticRectDraw -> draw.copyScissor()
+    is AnalyticRRectDraw -> draw.copyScissor()
+    is PathDraw -> draw.copyScissorI32()
+    is W5bPointDraw -> draw.copyScissorI32()
+    is W5bVerticesDraw -> draw.copyScissorI32()
+    else -> error("w6a.layer.unsupported_child")
 }

@@ -1370,46 +1370,22 @@ private fun NormalizedDrawCommand.FillPath.hairlinePointDeviceGeometry(
     // A hairline point path flattens each degenerate point rect to exactly one vertex at the
     // point (every line-to coincides with the rect start), so the flattened path is one vertex
     // per point in command order.
-    val deviceSquares = tessellatedVertices.chunked(2).mapNotNull { vertex ->
-        val point = transform.map(vertex[0], vertex[1])
-        val left = floor(point.first).toInt()
-        val top = floor(point.second).toInt()
-        val clampedLeft = left.coerceIn(targetBounds.left, targetBounds.right)
-        val clampedTop = top.coerceIn(targetBounds.top, targetBounds.bottom)
-        val clampedRight = (left + 1).coerceIn(targetBounds.left, targetBounds.right)
-        val clampedBottom = (top + 1).coerceIn(targetBounds.top, targetBounds.bottom)
-        if (clampedRight <= clampedLeft || clampedBottom <= clampedTop) null
-        else GPUPixelBounds(clampedLeft, clampedTop, clampedRight, clampedBottom)
+    val devicePoints = tessellatedVertices.chunked(2).map { vertex ->
+        transform.map(vertex[0], vertex[1]).let { org.graphiks.math.geometry.Point2F32(it.first, it.second) }
     }
-    if (deviceSquares.isEmpty()) {
-        refuseGeometry(
+    val geometry = org.graphiks.math.geometry.PointSquaresF32.hairlineDevicePointsF32OrNull(devicePoints,
+        org.graphiks.math.geometry.RectI32(targetBounds.left, targetBounds.top, targetBounds.right, targetBounds.bottom))
+        ?: refuseGeometry(
             code = "unsupported.core_primitive.empty_path",
             facts = mapOf("source" to source.operation),
         )
-    }
-    val vertices = deviceSquares.flatMap { square ->
-        listOf(
-            square.left.toFloat(), square.top.toFloat(),
-            square.right.toFloat(), square.top.toFloat(),
-            square.right.toFloat(), square.bottom.toFloat(),
-            square.left.toFloat(), square.bottom.toFloat(),
-        )
-    }
-    val indices = deviceSquares.indices.flatMap { squareIndex ->
-        val base = squareIndex * 4
-        listOf(base, base + 1, base + 2, base, base + 2, base + 3)
-    }
+    val bounds = geometry.copyBoundsI32()
     return GPUCorePrimitiveGeometryInput.TriangulatedPath(
-        vertices = vertices,
-        indices = indices,
-        sourceContourStarts = deviceSquares.indices.map { it * 4 },
-        sourceVertexCount = deviceSquares.size * 4,
-        coverBounds = GPUPixelBounds(
-            deviceSquares.minOf { it.left },
-            deviceSquares.minOf { it.top },
-            deviceSquares.maxOf { it.right },
-            deviceSquares.maxOf { it.bottom },
-        ),
+        vertices = geometry.copyVerticesF32().toList(),
+        indices = geometry.copyIndicesI32().toList(),
+        sourceContourStarts = geometry.copyContourStartsI32().toList(),
+        sourceVertexCount = geometry.pointCountI32 * 4,
+        coverBounds = GPUPixelBounds(bounds.left, bounds.top, bounds.right, bounds.bottom),
         geometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
         sourceAuthority = pathDescriptor.sourceAuthority,
     )

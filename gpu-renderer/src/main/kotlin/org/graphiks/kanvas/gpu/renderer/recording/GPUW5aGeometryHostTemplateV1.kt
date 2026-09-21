@@ -130,6 +130,12 @@ internal fun sealW5aGeometryHostTemplateV1(packet: GPUDrawPacket,
                 null, MaterialCoordinateSlotV1.InputPosition, vertices.artifact.layout.attributes.contains("color"))
         }
     val key = packet.corePrimitivePreparedAuthority?.structuralPipelineKey ?: return sealW4eMaterialGeometryHostV1(packet)
+    return sealCorePrimitiveGeometryHostTemplateV1(packet, key)
+}
+
+/** Shared W4 geometry recipe; the caller retains its own whole-frame validation witness. */
+internal fun sealCorePrimitiveGeometryHostTemplateV1(packet: GPUDrawPacket,
+    key: org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey): GPUW5aGeometryHostTemplateV1? {
     val mapped = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key) as? GPUWgpu4kCorePrimitivePipelineMapping.Mapped
         ?: return null
     val source = corePrimitiveMaterialGeometryWgslV1(mapped.componentIdentity) ?: return null

@@ -29,6 +29,13 @@ internal class GPUW5bPreparedDestinationNativeV6(val copy: GPUFrameStep.CopyDest
     override fun close() = Unit
 }
 
+/** Borrow of one exact W6 graph snapshot; the frame draft retains the texture lifetime. */
+internal class GPUW6aDestinationNativeV1(val frame: org.graphiks.kanvas.gpu.renderer.recording.GPUW6aLayerFramePlan,
+    val copy: org.graphiks.kanvas.gpu.plan.PlanPass.TextureCopy, val view: GPUTextureView) : AutoCloseable {
+    init { require(frame.graph.passes().any { it === copy }) }
+    override fun close() = Unit
+}
+
 /** Borrowed canonical W4e mask view: its composite attachment lease owns the lifetime. */
 internal class GPUW5bCoverageNativeV4(val witness: org.graphiks.kanvas.gpu.renderer.passes.W5bPreparedFrameWitnessV3,
     val view: GPUTextureView) : AutoCloseable {
@@ -271,8 +278,7 @@ internal fun composeW5aHostSourceV1(template: GPUW5aGeometryHostTemplateV1, sour
                 }
             }
         } else {
-            if (template.materialCoordinateSlot != MaterialCoordinateSlotV1.InputPosition) {
-                require(geometry.contains("fn fs_main()"))
+            if (template.materialCoordinateSlot != MaterialCoordinateSlotV1.InputPosition && geometry.contains("fn fs_main()")) {
                 geometry = geometry.replace("fn fs_main()", "fn fs_main(@builtin(position) fragment_position: vec4<f32>)")
             }
         }
@@ -295,7 +301,7 @@ internal fun composeW5aHostSourceV1(template: GPUW5aGeometryHostTemplateV1, sour
     if (requiresCoordinates && geometry.contains("fn fs_main()")) geometry = geometry.replace("fn fs_main()",
         "fn fs_main(@builtin(position) fragment_position: vec4<f32>)")
     slots.forEach { slot -> geometry = geometry.replace(slot, if (destination == null || analyticCoverage) sourceExpression
-        else "kanvas_w5b_target($sourceExpression, $point)") }
+        else "kanvas_w5b_target($sourceExpression, ${template.materialCoordinateSlot?.devicePointWgsl ?: "fragment_position.xy"})") }
     val result = geometry + "\n" + source.stage.declarationsWgsl + "\n" + tail
     val composed = (validateColorWgsl("w5a-source-v2:${source.stage.structuralId}", result) as? GPUColorWgslValidation.Validated)
         ?.reflection?.report ?: error("Composed W5a fragment module failed parser validation")
@@ -404,6 +410,7 @@ internal fun materializeW5aSourcePartitionV2(
         val groups = mutableMapOf<Pair<String, GPUBindGroupLayout>, GPUPreparedNativeBindGroupOperand>()
         val destinationSnapshot = old.auxiliaryOwnedHandles.mapNotNull { it.handle as? GPUW5bDestinationSnapshotNativeV3 }.singleOrNull()
         val preparedDestinations = old.auxiliaryOwnedHandles.mapNotNull { it.handle as? GPUW5bPreparedDestinationNativeV6 }
+        val layeredDestinations = old.auxiliaryOwnedHandles.mapNotNull { it.handle as? GPUW6aDestinationNativeV1 }
         val coverage = old.auxiliaryOwnedHandles.mapNotNull { it.handle as? GPUW5bCoverageNativeV4 }.singleOrNull()
         require(coverage == null || coverage.witness.validates(framePlan))
         val coverageLayout = coverage?.let { owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(
@@ -413,7 +420,7 @@ internal fun materializeW5aSourcePartitionV2(
         val coverageGroup = coverage?.let { GPUPreparedNativeBindGroupOperand(owned.own(device.createBindGroup(
             BindGroupDescriptor(label = "Kanvas.w5b.w4e-coverage-v4", layout = requireNotNull(coverageLayout),
                 entries = listOf(BindGroupEntry(binding = 0u, resource = it.view))))), generation) }
-        val destinationLayout = if (destinationSnapshot == null && preparedDestinations.isEmpty()) null else owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(
+        val destinationLayout = if (destinationSnapshot == null && preparedDestinations.isEmpty() && layeredDestinations.isEmpty()) null else owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(
             label = "Kanvas.w5b.destination-group2-abi-v3", entries = listOf(
                 BindGroupLayoutEntry(binding = 0u, visibility = GPUShaderStage.Fragment,
                     texture = TextureBindingLayout(sampleType = GPUTextureSampleType.Float)),
@@ -437,6 +444,14 @@ internal fun materializeW5aSourcePartitionV2(
                     BindGroupEntry(binding = 0u, resource = borrowed.view), BindGroupEntry(binding = 1u, resource = sampler),
                 )))), generation)
         }
+        val layeredDestinationGroups = layeredDestinations.associate { borrowed ->
+            require(framePlan.w6aLayerFrameV1 === borrowed.frame && borrowed.frame.validates(framePlan))
+            val sampler = owned.own(device.createSampler(SamplerDescriptor(label = "Kanvas.w5b.layered.nearest",
+                magFilter = GPUFilterMode.Nearest, minFilter = GPUFilterMode.Nearest)))
+            borrowed.copy to GPUPreparedNativeBindGroupOperand(owned.own(device.createBindGroup(BindGroupDescriptor(
+                layout = requireNotNull(destinationLayout), entries = listOf(BindGroupEntry(0u, borrowed.view),
+                    BindGroupEntry(1u, sampler))))), generation)
+        }
         val operands = old.scopeOperands.map { operand ->
             if (operand !is GPUPreparedNativeScopeOperand.Render) return@map operand
             val packets = renders.getValue(operand.sourceStepIndex).drawPackets
@@ -454,9 +469,11 @@ internal fun materializeW5aSourcePartitionV2(
                 val validated = sourceWitness.packet(framePlan, requireNotNull(sourcePacket))
                 val destination = (sourcePacket?.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead)
                     ?.also { requireNotNull(it.sealedW5b) { "W5 destination-read source lost its sealed final blend" } }
-                val destinationCopy = destination?.let { framePlan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>()
+                val layeredCopy = destination?.let { framePlan.w6aLayerFrameV1?.destinationCopy(requireNotNull(sourcePacket)) }
+                val destinationCopy = destination?.takeIf { layeredCopy == null }?.let { framePlan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>()
                     .single { copy -> copy.consumers.any { it.packetId == sourcePacket?.packetId } } }
-                val exactDestinationGroup = destinationCopy?.let { preparedDestinationGroups[it] ?: destinationGroup }
+                val exactDestinationGroup = layeredCopy?.let { layeredDestinationGroups[it] }
+                    ?: destinationCopy?.let { preparedDestinationGroups[it] ?: destinationGroup }
                 require(destination == null || exactDestinationGroup != null)
                 val scalar = destination?.sealedW5b?.compositionAbiI32 == 4
                 require(!scalar || coverageGroup != null && packets[ordinalI32].corePrimitivePreparedAuthority?.w5bFrameWitnessV3 === coverage?.witness)

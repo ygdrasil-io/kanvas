@@ -14,7 +14,7 @@ internal object W6aLayerPlanBudget {
     }
 
     fun refusal(message: String): RenderPlanResult.ResourceLimitExceeded = RenderPlanResult.ResourceLimitExceeded(listOf(
-        RenderDiagnostic(RenderDiagnosticCode("w6a.layer.resource_limit"), RenderDiagnosticDomain.RESOURCE,
+        RenderDiagnostic(RenderDiagnosticCode(W6aPlanDiagnostics.FrameBudgetExceeded), RenderDiagnosticDomain.RESOURCE,
             RenderDiagnosticSeverity.ERROR, message)))
 
     fun <T : Any> translate(result: RenderPlanResult<T>): RenderPlanResult<T> = when (result) {

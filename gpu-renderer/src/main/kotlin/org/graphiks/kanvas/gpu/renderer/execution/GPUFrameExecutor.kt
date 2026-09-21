@@ -1411,6 +1411,10 @@ internal class GPUFrameExecutor(
         frame: PreparedGPUFrame,
         payload: GPUPreparedNativeFramePayload?,
     ): GPUDiagnostic? {
+        frame.semanticPlan.w6aLayerFrameV1?.let { authority ->
+            return if (authority.validatesNativePathPayload(frame, payload)) null else executionDiagnostic(
+                "w6a.layer.invalid_native_path", "W6 path operands differ from the frozen graph's stencil IDs, ordering or load/store.")
+        }
         val allRenders = frame.semanticPlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
         val composite = allRenders.flatMap { it.drawPackets }.mapNotNull { it.w5aCompositeFrameAuthority }.firstOrNull()
         if (composite != null && !composite.validates(frame.semanticPlan, allRenders)) return executionDiagnostic(

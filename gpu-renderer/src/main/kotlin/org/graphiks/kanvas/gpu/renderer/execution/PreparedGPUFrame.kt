@@ -157,15 +157,29 @@ class GPUCommandEncoderScopePlan internal constructor(
     /** W4e owns a sealed clip-producer D24S8 attachment independently of legacy stencil lanes. */
     internal var allowsW4ePreparedDepthStencil: Boolean = false
         private set
+    /** Reference to the sole frozen multi-target authority, never an independent route seal. */
+    internal var w6aFrameV1: org.graphiks.kanvas.gpu.renderer.recording.GPUW6aLayerFramePlan? = null
+        private set
 
     internal fun attachNativeOperandKeys(
         keys: List<GPUPreparedNativeOperandKey>,
         allowsClipStencilPrefixDepthStencil: Boolean = false,
         allowsW4dGeneralDepthStencil: Boolean = false,
         allowsW4ePreparedDepthStencil: Boolean = false,
+        w6aFrameV1: org.graphiks.kanvas.gpu.renderer.recording.GPUW6aLayerFramePlan? = null,
     ): GPUCommandEncoderScopePlan {
         check(nativeOperandKeys.isEmpty()) { "Native operand keys are already attached" }
         require(keys.isNotEmpty()) { "Native operand keys must not be empty" }
+        val w6aStep = w6aFrameV1?.steps?.get(sourceStepIndex)
+        if (w6aFrameV1 != null) require(w6aStep != null && sourceTaskIds == w6aStep.sourceTaskIds &&
+            sourcePacketIds == (w6aStep as? org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep)
+                ?.drawPackets.orEmpty().map { it.packetId }) { "W6 encoder scope must retain its frozen step" }
+        val w6aPass = (w6aStep as? org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep)?.w6aPassV1
+        val w6aNative = w6aPass?.let { w6aFrameV1?.physical?.w4eGeometryBinding(it.id)?.nativePass(it.id) }
+        val w6aStencil = w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3 ||
+            w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover ||
+            w6aNative is org.graphiks.kanvas.gpu.plan.PlanPass.ClipMaskProducer && w6aNative.depthStencil != null ||
+            w6aNative is org.graphiks.kanvas.gpu.plan.PlanPass.PathRenderPass && w6aNative.depthStencil != null
         val pathSealed = corePrimitivePathStencilNativeRouteSeal is
             GPUCorePrimitivePathStencilNativeRouteSeal.Pairs ||
             corePrimitivePathStencilNativeRouteSeal is
@@ -188,7 +202,7 @@ class GPUCommandEncoderScopePlan internal constructor(
         }
         require(
             if (pathSealed || clipStencilSealed || allowsClipStencilPrefixDepthStencil ||
-                allowsW4dGeneralDepthStencil || allowsW4ePreparedDepthStencil
+                allowsW4dGeneralDepthStencil || allowsW4ePreparedDepthStencil || w6aStencil
             ) {
                 depthStencilKeys.size == 1 &&
                     depthStencilKeys.single().kind == GPUPreparedNativeOperandKind.TextureView &&
@@ -218,6 +232,11 @@ class GPUCommandEncoderScopePlan internal constructor(
         }
         this.allowsW4dGeneralDepthStencil = allowsW4dGeneralDepthStencil
         this.allowsW4ePreparedDepthStencil = allowsW4ePreparedDepthStencil
+        require(w6aFrameV1 == null || !pathSealed && !clipStencilSealed && !coverageMaskSealed &&
+            !allowsClipStencilPrefixDepthStencil && !allowsW4dGeneralDepthStencil && !allowsW4ePreparedDepthStencil) {
+            "W6 scopes must not acquire a second geometry route authority"
+        }
+        this.w6aFrameV1 = w6aFrameV1
         if (coverageMaskSealed && coverageMaskSeal.units().size > 1) {
             val units = coverageMaskSeal.units()
             val producers = units.filterIsInstance<GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer>()
@@ -1486,6 +1505,7 @@ internal class PreparedGPUFrame(
         }
         encoderPlan.scopes.forEach { scope ->
             val step = semanticPlan.steps[scope.sourceStepIndex]
+            require(scope.w6aFrameV1 === semanticPlan.w6aLayerFrameV1) { "W6 scope authority must be the complete frozen frame" }
             require(scope.sourceTaskIds == step.sourceTaskIds) {
                 "PreparedGPUFrame encoder scope tasks must exactly match the semantic step"
             }
@@ -1554,11 +1574,13 @@ internal class PreparedGPUFrame(
                 require(scope.corePrimitiveNativeScopeRouteSeal !== GPUCorePrimitiveNativeScopeRouteSeal.Missing) {
                     "PreparedGPUFrame render scopes require a pure-preflight unified CorePrimitive route seal"
                 }
-                val pathSealed = scope.corePrimitivePathStencilNativeRouteSeal is
+                val w6aPath = sealedW6a && !sealedW4e && (step.w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3 ||
+                    step.w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover)
+                val pathSealed = w6aPath || scope.corePrimitivePathStencilNativeRouteSeal is
                     GPUCorePrimitivePathStencilNativeRouteSeal.Pairs ||
                     scope.corePrimitivePathStencilNativeRouteSeal is
                     GPUCorePrimitivePathStencilNativeRouteSeal.Continued
-                val unifiedContainsPath = (
+                val unifiedContainsPath = w6aPath || (
                     scope.corePrimitiveNativeScopeRouteSeal as? GPUCorePrimitiveNativeScopeRouteSeal.Routes
                     )?.orderedUnits?.any { unit ->
                     unit is GPUCorePrimitiveNativeScopeRouteUnit.PathPair ||
@@ -1602,7 +1624,7 @@ internal class PreparedGPUFrame(
                 if (w5bPathWitness != null) require(w5bPathWitness.validates(semanticPlan)) {
                     "Prepared W5b path scopes require the exact compiler-owned frame"
                 }
-                val plannedPathFrame = if (w5bPathWitness != null) true else if (compositeAuthority != null) {
+                val plannedPathFrame = if (w6aPath || w5bPathWitness != null) true else if (compositeAuthority != null) {
                     step.drawPackets.all { it.corePrimitivePreparedAuthority?.let { authority ->
                         authority.w4cSessionScratch != null || authority.w4dSessionScratch != null
                     } == true }
@@ -1614,7 +1636,7 @@ internal class PreparedGPUFrame(
                 // W4c/W4d scratch route seals, so it must not be reclassified as one of them.
                 val w4dGeneralScope = sealedW4e || plannedPathAuthority
                     ?.w4dGeneralFrameMaterializationAuthority != null
-                val hasPlannedPathAuthority = plannedPathAuthority?.w4cSessionScratch != null ||
+                val hasPlannedPathAuthority = w6aPath || plannedPathAuthority?.w4cSessionScratch != null ||
                     plannedPathAuthority?.w4dSessionScratch != null || w5bPathWitness != null
                 val expectedPlannedPathLoadStore = when (plannedPathPacket?.role) {
                     org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.PathStencilProducer ->
@@ -2205,6 +2227,9 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFac
                         GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition
                 val clipStencilPrefix = scope.allowsClipStencilPrefixDepthStencil
                 if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
+                    (w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass)?.drawDataResources != null ||
+                    w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3 ||
+                    w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover ||
                     verticesSemantic != null ||
                     directRoutes?.routesByPacketId?.containsKey(packet.packetId) == true ||
                     clipStencilSealed || coverageMaskConsumer || clipStencilPrefix) {
@@ -2267,6 +2292,9 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassS
             org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.Vertices
         if (verticesSemantic != null && verticesSemantic.material.commonSource == null) add(packet.packetId)
         if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
+            (w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass)?.drawDataResources != null ||
+            w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3 ||
+            w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover ||
             verticesSemantic != null ||
             directRoutes?.routesByPacketId?.containsKey(packet.packetId) == true ||
             clipStencilSealed || coverageMaskConsumer || clipStencilPrefix) {

@@ -38,7 +38,9 @@ internal fun w6aColorTarget(blend: BlendPlan): ColorTargetState {
         BlendFactorV1.SrcColor -> GPUBlendFactor.Src
         BlendFactorV1.OneMinusSrcColor -> GPUBlendFactor.OneMinusSrc
     }
-    if (blend is BlendPlan.DestinationReadV1) return ColorTargetState(GPUTextureFormat.RGBA8UnormSrgb)
+    if (blend is BlendPlan.DestinationReadV1) return ColorTargetState(GPUTextureFormat.RGBA8UnormSrgb,
+        BlendState(BlendComponent(GPUBlendOperation.Add, GPUBlendFactor.One, GPUBlendFactor.Zero),
+            BlendComponent(GPUBlendOperation.Add, GPUBlendFactor.One, GPUBlendFactor.Zero)))
     val fixed = blend as? BlendPlan.FixedFunctionV1
     val noOp = blend == BlendPlan.NoOpV1
     require(fixed != null || blend == BlendPlan.LegacySrcOverV1 || noOp)

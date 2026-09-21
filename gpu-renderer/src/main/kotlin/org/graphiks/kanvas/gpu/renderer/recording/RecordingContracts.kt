@@ -1153,7 +1153,7 @@ sealed interface GPUTask {
                 "One W4e render scope cannot own both mask and scene continuations"
             }
             require(if (w6aPassV1 != null) w5bInitialClearV3 == null &&
-                (w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass || w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.LayerComposite)
+                w6aRenderPacketsMatch(w6aPassV1, drawPackets)
                 else if (w5bInitialClearV3 == null) drawPackets.isNotEmpty() else
                 drawPackets.isEmpty() && w5bInitialClearV3.matches(target, loadStore, samplePlan)) {
                 "GPUTask.Render requires draws or the exact sealed W5b initial clear"

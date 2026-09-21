@@ -69,7 +69,14 @@ internal class FrameSourceLayoutV4 private constructor(
         if (sources.isEmpty()) return org.graphiks.kanvas.render.ir.RenderPlanResult.Ready(frame.publish(null, emptyList()))
         return when (val bound = prepareAndFinish { table, roots, inventory ->
             val lanes = nativeLanes.mapIndexed { index, lane ->
-                remapSourcePassesV4(lane.passes(), composed = { table.entry(it).bindings is ComposedMaterialBindingV5 }) {
+                val w4eColors = lane.geometrySource?.takeIf { it.w4ePayload != null }?.let { geometry ->
+                    remapSourcePassesV4(geometry.passes(), composed = { table.entry(it).bindings is ComposedMaterialBindingV5 }) {
+                        roots[nativeOffsetsI32[index] + it.indexI32]
+                    }.filterIsInstance<PlanPass.PathRenderPass>().filter { it.phase != PathRenderPhase.SingleSampleStencilProducer }
+                        .associateBy { it.draw.commandIndex }
+                }
+                remapSourcePassesV4(lane.passes(), composed = { table.entry(it).bindings is ComposedMaterialBindingV5 },
+                    w4eColorPasses = w4eColors) {
                     roots[nativeOffsetsI32[index] + it.indexI32]
                 }
             }

@@ -14,6 +14,7 @@ public enum class PlanOperationCapability {
     DepthStencilAttachment,
     StencilCover,
     StorageBuffer,
+    Uint32Index,
 }
 
 /** Exact texture format, sample count, and usage envelope supported by a planning device. */

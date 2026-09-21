@@ -34,11 +34,19 @@ public class CapabilityCompilerChain private constructor(
         // Source admission does not replace each compiler's geometry authority.
         scene.forEach { command ->
             val draw = (command as? org.graphiks.kanvas.render.ir.SceneCommand.Draw)?.node ?: return@forEach
+            // The pre-publication Point adapter owns geometry/coverage admission itself.
+            // A chain without that adapter retains its historical composed-source boundary.
+            val pointSourceLane = compilers.any { it is W5bPointPlanCompiler } &&
+                draw.origin in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.POINT, org.graphiks.kanvas.render.ir.DrawOrigin.POINTS) &&
+                (draw.geometry as? org.graphiks.kanvas.render.ir.GeometryNode.Points)?.mode == org.graphiks.kanvas.render.ir.PointMode.POINTS
+            val verticesSourceLane = compilers.any { it is W5bVerticesPlanCompiler } &&
+                draw.origin in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.VERTICES, org.graphiks.kanvas.render.ir.DrawOrigin.MESH) &&
+                draw.geometry is org.graphiks.kanvas.render.ir.GeometryNode.IndexedMesh
             if (MaterialSourceConstructionV4.containsComposed(draw.material) &&
-                (!(draw.origin in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.RECT,org.graphiks.kanvas.render.ir.DrawOrigin.RRECT,
+                (!(pointSourceLane || verticesSourceLane || draw.origin in setOf(org.graphiks.kanvas.render.ir.DrawOrigin.RECT,org.graphiks.kanvas.render.ir.DrawOrigin.RRECT,
                         org.graphiks.kanvas.render.ir.DrawOrigin.PATH) && draw.paint?.style == org.graphiks.kanvas.render.ir.PaintStyleNode.FILL ||
                     draw.origin == org.graphiks.kanvas.render.ir.DrawOrigin.PATH && draw.paint?.style == org.graphiks.kanvas.render.ir.PaintStyleNode.STROKE) ||
-                    draw.resource != null || draw.operationBlendMode != null))
+                    draw.resource != null || draw.operationBlendMode != null && !verticesSourceLane))
                 return GpuPlanSelection.InvalidScene(listOf(diagnostic(W5gPlanDiagnostics.Unpromoted,
                     "This composed source origin is outside the promoted geometry source lanes.")))
         }
@@ -93,6 +101,8 @@ public class CapabilityCompilerChain private constructor(
         if (chained.owner !== this || compilers.getOrNull(chained.index) !== chained.compiler) return invalidCandidate()
         if (chained.compiler is W5aCompositePlanCompiler)
             return chained.compiler.constructSourceLanes(chained.candidate,capabilities,budget)
+        if (chained.compiler is W5eImagePlanCompiler)
+            return chained.compiler.constructDirectSourceLanes(chained.candidate,capabilities,budget)
         return when (val result = chained.compiler.constructSourceLaneV4(chained.candidate,capabilities,budget)) {
             is RenderPlanResult.Ready -> RenderPlanResult.Ready(listOf(result.plan))
             is RenderPlanResult.GapNotMigrated -> result
