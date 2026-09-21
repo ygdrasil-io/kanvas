@@ -840,6 +840,10 @@ The plan is ready for `superpowers:subagent-driven-development`, task by task, w
 - [x] Exclusions explicites : backdrop, filtres image/mask/spatial, F16/HDR,
   device-loss/visibilité native, fonts, codecs, GMs et gates globales. Aucun
   GM/global Skia/`jpg-color-cube` n'a été lancé.
-- [ ] La revue whole-branch Sol, le push et la Draft PR empilée W5h sont des
-  actions du controller. Les exits natifs133 sont `UNKNOWN`, jamais GREEN; ce
-  checkpoint ne fait aucune claim ISO ni globale.
+- [x] La revue whole-branch Sol est clean. La correction finale
+  `4509aa9c6` préserve le diagnostic owner W5g sous warm replay; sa re-review
+  scoped est clean et les huit shards combinés sont 91/91 JUnit PASS.
+- [x] La branche est poussée et la Draft PR
+  [#2403](https://github.com/ygdrasil-io/kanvas/pull/2403) est empilée
+  directement sur `codex/w5h-registered-runtime-effects`. Les exits natifs
+  133 restent `UNKNOWN`, jamais GREEN; aucun claim ISO ni global n'est fait.

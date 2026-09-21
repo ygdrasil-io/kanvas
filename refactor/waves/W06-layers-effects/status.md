@@ -101,3 +101,22 @@ une autorité de fallback après sélection W6a.
 - Device-loss/visibilité native : non prouvés. Les exits 133 restent UNKNOWN.
 - Les voies legacy prepared et travaux W8 restent conservés et suivis; ce
   checkpoint ne réclame ni couverture ISO ni convergence globale.
+
+## Clôture W6a
+
+La revue Sol whole-branch sur `8bdc730c9..4fc780e07` n'a relevé aucun
+finding Critical, Important ou Minor. La vérification finale combinée a
+ensuite révélé que le diagnostic W5g `budget.w5g.composed-uniform` était
+réécrit par la correction de convergence; `4509aa9c6` préserve désormais cet
+owner précis tout en conservant `w6a.layer.frame_budget_exceeded` pour le
+budget frame-wide W6a. La re-review Sol scoped est clean.
+
+Sur le HEAD corrigé, les sept compilations prescrites sortent 0 et les huit
+shards publics W6a exécutés ensemble totalisent 91/91 assertions JUnit PASS.
+Le worker natif sort encore 133 après ces assertions : le statut natif reste
+**UNKNOWN**.
+
+Draft PR stackée directement sur `codex/w5h-registered-runtime-effects` :
+[#2403](https://github.com/ygdrasil-io/kanvas/pull/2403). W6a est clôturée dans
+les limites explicites ci-dessus; W6b est l'étape suivante pour les effets et
+capabilities exclus, sans réouvrir une autorité renderer-local.
