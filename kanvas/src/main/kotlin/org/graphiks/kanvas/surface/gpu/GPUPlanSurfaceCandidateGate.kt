@@ -7,6 +7,11 @@ import org.graphiks.kanvas.surface.RenderConfig
 
 /** Cheap composition admission only: it intentionally has no Scene or backend dependency. */
 internal object GPUPlanSurfaceCandidateGate {
+    /** Layers have their own terminal planner ownership before any format or effect filtering. */
+    fun ownsW6aLayers(operations: List<DisplayOp>): Boolean = operations.any {
+        it is DisplayOp.BeginLayer || it is DisplayOp.EndLayer
+    }
+
     /** Recognition routes pending composed geometry to its owned planner refusal. */
     private fun DisplayOp.hasComposedSource(): Boolean {
         var source = when (this) {

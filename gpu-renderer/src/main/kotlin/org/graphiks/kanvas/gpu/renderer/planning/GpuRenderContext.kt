@@ -414,6 +414,7 @@ public class GpuPlanSurfaceExecutor internal constructor(
         val backend = GpuRenderBackend(
             compiler = CapabilityCompilerChain.of(
                 listOf(
+                    org.graphiks.kanvas.gpu.plan.W6aLayerPlanCompiler(runtimeCatalog),
                     org.graphiks.kanvas.gpu.plan.W5eImagePlanCompiler(runtimeCatalog),
                     W3SolidRectPlanCompiler(),
                     W4aAnalyticRectPlanCompiler(),

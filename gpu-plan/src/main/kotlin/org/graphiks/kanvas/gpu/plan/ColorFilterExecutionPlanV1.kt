@@ -15,6 +15,17 @@ public class ColorFilterExecutionPlanV1 private constructor(
 ) {
     public val dynamicByteCountI64: Long = records.fold(0L) { size, record -> Math.addExact(size, record.wordsI32 * 4L) }
     public fun copyOperationGraph(): ColorOperationGraphV1 = graph
+    /** W5 graph-derived restore fact; unknown graph input remains conservatively affecting. */
+    public val affectsTransparentBlack: Boolean by lazy {
+        val words = FloatArray(Math.toIntExact(dynamicByteCountI64 / 4L))
+        val tables = mutableMapOf<Long, ImmutableUBytes>()
+        forEachWord { offset, bits -> words[Math.toIntExact(offset)] = Float.fromBits(bits) }
+        forEachTable { offset, table -> tables[offset] = table }
+        graph.transparentBlackOutputV1(
+            dynamicF32 = { offset -> words.getOrNull(Math.toIntExact(offset)) ?: error("Missing color filter word") },
+            tableByte = { offset, index -> requireNotNull(tables[offset])[index].toInt() },
+        )?.any { value -> value != 0f } ?: true
+    }
     internal fun forEachWord(action: (Long, Int) -> Unit) {
         var offsetI64 = 0L
         records.forEach { record ->

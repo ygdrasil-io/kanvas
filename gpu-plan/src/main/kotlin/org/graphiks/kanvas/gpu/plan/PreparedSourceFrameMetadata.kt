@@ -82,19 +82,47 @@ public class PreparedSourceFrameMetadata private constructor(
 }
 
 /** Exact common table/ref/packed-owner handoff; no source re-interning or publication API. */
-public class PreparedSourceFrameV6 internal constructor(
-    internal val metadata: PreparedSourceFrameMetadata,
-    public val table: MaterialPlanTable,
-    refs: List<MaterialPlanRef>,
-    private val packed: PackedFrameSourcesV4,
-) {
-    private val refs = immutableList(refs)
-    public val operationIndicesI32: List<Int> get() = metadata.operationIndicesI32
-    public fun ref(operationIndexI32: Int): MaterialPlanRef = refs[index(operationIndexI32)]
-    public fun blend(operationIndexI32: Int): BlendPlan = metadata.captures[index(operationIndexI32)].blend
-    public fun packedSource(operationIndexI32: Int): RawMaterialRequirementsV2 = packed.forPrepared(table,
-        ref(operationIndexI32), metadata.sources[index(operationIndexI32)].coordinates)
-    private fun index(operationIndexI32: Int): Int = metadata.operationIndicesI32.indexOf(operationIndexI32).also {
-        require(it >= 0) { W5fPlanDiagnostics.Schema }
+public class PreparedSourceFrameV6 private constructor(private val binding: Binding) {
+    private sealed interface Binding {
+        val table: MaterialPlanTable
+        val operations: List<Int>
+        fun ref(operation: Int): MaterialPlanRef
+        fun blend(operation: Int): BlendPlan
+        fun packed(operation: Int): RawMaterialRequirementsV2
+    }
+    private class Prepared(val metadata: PreparedSourceFrameMetadata, override val table: MaterialPlanTable,
+        refs: List<MaterialPlanRef>, val sources: PackedFrameSourcesV4) : Binding {
+        private val refs = immutableList(refs)
+        override val operations: List<Int> get() = metadata.operationIndicesI32
+        private fun index(operation: Int): Int = operations.indexOf(operation).also { require(it >= 0) { W5fPlanDiagnostics.Schema } }
+        override fun ref(operation: Int): MaterialPlanRef = refs[index(operation)]
+        override fun blend(operation: Int): BlendPlan = metadata.captures[index(operation)].blend
+        override fun packed(operation: Int): RawMaterialRequirementsV2 = sources.forPrepared(table,
+            ref(operation), metadata.sources[index(operation)].coordinates)
+    }
+    private class Layered(val graph: RenderGraph, draws: List<W5bVerticesDraw>) : Binding {
+        private val draws = draws.associateBy { it.commandIndex }
+        override val table: MaterialPlanTable = requireNotNull(graph.materialPlanTableOrNull())
+        override val operations: List<Int> = immutableList(draws.map { it.commandIndex })
+        override fun ref(operation: Int): MaterialPlanRef = draws.getValue(operation).materialAuthority.materialPlanRef()
+        override fun blend(operation: Int): BlendPlan = draws.getValue(operation).blend
+        override fun packed(operation: Int): RawMaterialRequirementsV2 = graph.packedMaterialSourceV4(draws.getValue(operation).materialAuthority)
+    }
+    internal constructor(metadata: PreparedSourceFrameMetadata, table: MaterialPlanTable, refs: List<MaterialPlanRef>,
+        packed: PackedFrameSourcesV4) : this(Prepared(metadata, table, refs, packed))
+    public val table: MaterialPlanTable get() = binding.table
+    public val operationIndicesI32: List<Int> get() = binding.operations
+    public fun ref(operationIndexI32: Int): MaterialPlanRef = binding.ref(operationIndexI32)
+    public fun blend(operationIndexI32: Int): BlendPlan = binding.blend(operationIndexI32)
+    public fun packedSource(operationIndexI32: Int): RawMaterialRequirementsV2 = binding.packed(operationIndexI32)
+
+    public companion object {
+        /** A view of the sole frozen graph owner; never an interner, packer or publication. */
+        public fun layeredVertices(graph: RenderGraph): PreparedSourceFrameV6 {
+            require(graph.verifyW6aLayerCompilerWitness())
+            val draws = RenderGraph.visualDraws(graph.passes()).filterIsInstance<W5bVerticesDraw>()
+            require(draws.isNotEmpty() && draws.all { it.materialAuthority is PlanDrawMaterialAuthority.MaterialV5 })
+            return PreparedSourceFrameV6(Layered(graph, draws))
+        }
     }
 }

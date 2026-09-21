@@ -108,7 +108,13 @@ public class W3SolidRectPlanCompiler internal constructor(private val runtimeCat
     internal fun constructSources(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,
         budget: PlanBudget): RenderPlanResult<SourceDeferredRenderConstructionV4> =
         constructChecked(candidate,capabilities,budget) { selected,extent,targetBytes,stagingBytes,memory ->
-            val sources = requireNotNull(selected.sourceTable) { W5fPlanDiagnostics.Schema }
+            val sources = selected.sourceTable ?: run {
+                require(selected.draws.isEmpty()) { W5fPlanDiagnostics.Schema }
+                when (val empty = MaterialSourceConstructionTableV4.of(emptyList())) {
+                    is SourceConstructionResultV4.Built -> empty.value
+                    is SourceConstructionResultV4.Refused -> return@constructChecked empty.failure
+                }
+            }
             val draws = selected.draws.mapIndexed { ordinal,draw -> draw.withMaterialRef(MaterialPlanRef(ordinal)) }
             val id = PlanId(planIdentity(selected.sceneCanonicalId,selected.target,capabilities,budget,selected.capabilityId))
             val topology = if (draws.any { it.blend is BlendPlan.DestinationReadV1 })

@@ -89,7 +89,9 @@ internal class W5hFrameSourceValidationWitnessV1 private constructor(
                     }
                 }
                 val destination = packet.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead
-                val bounds = destination?.let { frame.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>()
+                val bounds = destination?.let { frame.w6aLayerFrameV1?.destinationCopy(packet)?.copySourceBoundsI32()?.let {
+                    org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(it.left, it.top, it.right, it.bottom)
+                } ?: frame.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>()
                     .single { copy -> copy.consumers.any { it.packetId == packet.packetId } }.logicalBounds }
                 val module = composeW5aHostSourceV1(template, source, destination, bounds)
                 val layout = GPUW5aHostBindGroupLayoutV1.of(stage.bindingManifest.map { binding ->

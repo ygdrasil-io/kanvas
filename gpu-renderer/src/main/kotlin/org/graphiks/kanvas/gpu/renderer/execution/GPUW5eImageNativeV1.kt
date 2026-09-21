@@ -61,9 +61,9 @@ internal object GPUW5eImageNativeV1 {
         return expected.imageDraws().isNotEmpty()
     }
     fun acquire(cache: GPUW5eDecodedImageSessionCache, request: PlanCacheResourceRequest.Texture,
-        generationI64: Long): GPUW5eDecodedImageSessionCache.Lease {
+        generationI64: Long, physical: PlanPhysicalLayoutV1? = null): GPUW5eDecodedImageSessionCache.Lease {
         require(cache.deviceGenerationI64 == generationI64) { "stale.material.image.device-generation" }
-        return cache.acquire(request).also { require(it.generationI64 == generationI64) }
+        return cache.acquire(request, physical).also { require(it.generationI64 == generationI64) }
     }
     fun binding(lease: GPUW5eDecodedImageSessionCache.Lease, bindingU32: UInt): BindGroupEntry =
         BindGroupEntry(binding = bindingU32, resource = lease.view)

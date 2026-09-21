@@ -55,15 +55,8 @@ public class W5hPreparedPointMaterialV6 private constructor(
             if (visible.isEmpty()) return W5bDestinationGraphSealer.seal(id, W5bCorePrimitiveGraph.CAPABILITY_ID,
                 extent, capabilities, budget, emptyList(), null, targetBytes,
                 Math.multiplyExact(rowBytes, extent.height.toLong()), rowBytes)
-            val topology = W5bDestinationGraphSealer.describeSources(W5bCorePrimitiveGraph.CAPABILITY_ID, extent,
-                capabilities, budget, visible, targetBytes, Math.multiplyExact(rowBytes, extent.height.toLong()), rowBytes)
-            val metadata = when (val result = MaterialSourceConstructionTableV4.of(visibleIndices.map { sources[it].source })) {
-                is SourceConstructionResultV4.Built -> result.value
-                is SourceConstructionResultV4.Refused -> throw IllegalArgumentException(result.diagnosticCode)
-            }
-            val construction = SourceDeferredRenderConstructionV4.of(id, W5bCorePrimitiveGraph.CAPABILITY_ID, extent,
-                topology.format, capabilities, budget, visible.size, topology.resources, topology.passes,
-                topology.dependencies, metadata, DeferredLaneTopologyV4.Ordinary, null, emptyList(), emptyMap(), emptyMap())
+            val construction = constructSources(id, extent, capabilities, budget, visible,
+                visibleIndices.map { sources[it] })
             val result = when (construction) {
                 is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(construction.value).prepareAndPublishSourcesV4()
                 is SourceConstructionResultV4.Refused -> construction.failure
@@ -76,6 +69,27 @@ public class W5hPreparedPointMaterialV6 private constructor(
                 is RenderPlanResult.ResourceLimitExceeded -> result.diagnostics
             }
             throw IllegalArgumentException(diagnostics.joinToString { "${it.code.value}: ${it.message}" })
+        }
+
+        /** The point owner also participates in a multi-target frame before the sole W5 permit. */
+        internal fun constructSources(id: PlanId, extent: SizeI32, capabilities: PlanCapabilitySnapshot, budget: PlanBudget,
+            draws: List<PlanDraw>, sources: List<W5hPreparedPointMaterialV6>,
+            geometryResources: List<PlanResource> = emptyList(), data: PlanDrawDataResources? = null): SourceConstructionResultV4<SourceDeferredRenderConstructionV4> {
+            require(draws.size == sources.size && draws.indices.all { draws[it].materialAuthority.materialPlanRef() == MaterialPlanRef(it) })
+            val targetBytes = Math.multiplyExact(Math.multiplyExact(extent.width.toLong(), extent.height.toLong()), 4L)
+            val widthBytes = Math.multiplyExact(extent.width.toLong(), 4L)
+            val alignment = capabilities.copyBytesPerRowAlignment.toLong()
+            val rowBytes = Math.addExact(widthBytes, (alignment - widthBytes % alignment) % alignment)
+            val topology = W5bDestinationGraphSealer.describeSources(W5bCorePrimitiveGraph.CAPABILITY_ID, extent,
+                capabilities, budget, draws, targetBytes, Math.multiplyExact(rowBytes, extent.height.toLong()), rowBytes,
+                geometryResources, data)
+            val metadata = when (val result = MaterialSourceConstructionTableV4.of(sources.map { it.source })) {
+                is SourceConstructionResultV4.Built -> result.value
+                is SourceConstructionResultV4.Refused -> return result
+            }
+            return SourceDeferredRenderConstructionV4.of(id, W5bCorePrimitiveGraph.CAPABILITY_ID, extent,
+                topology.format, capabilities, budget, draws.size, topology.resources, topology.passes,
+                topology.dependencies, metadata, DeferredLaneTopologyV4.Ordinary, null, emptyList(), emptyMap(), emptyMap())
         }
     }
 }

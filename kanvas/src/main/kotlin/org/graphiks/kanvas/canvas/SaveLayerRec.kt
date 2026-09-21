@@ -18,4 +18,6 @@ data class SaveLayerRec(
      * group-composite semantics, but remains internal because Canvas derives it from state.
      */
     internal val compositeClip: ClipStack? = null,
+    /** Whether this layer starts from its parent's previous contents. */
+    public val initWithPrevious: Boolean = false,
 )

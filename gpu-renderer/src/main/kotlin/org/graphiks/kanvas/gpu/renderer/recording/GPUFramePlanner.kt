@@ -69,6 +69,9 @@ private fun GPUDrawPacket.withPlannedPreparedVerticesRenderAuthority(): GPUDrawP
 /** Pure deterministic linearizer between finalized recordings and resource preflight. */
 object GPUFramePlanner {
     fun plan(taskList: GPUTaskList): GPUFramePlan {
+        taskList.w6aLayerFrameV1?.let { return it.frame(taskList) }
+        if (taskList.tasks.filterIsInstance<GPUTask.Render>().any { it.w6aPassV1 != null })
+            return taskList.atomicallyRefused(diagnostic("w6a.layer.invalid_plan", "Layer tasks require their complete frozen frame authority."))
         validateRecordingEnvelope(taskList)?.let { return taskList.atomicallyRefused(it) }
 
         val orderedTasks = stableTopologicalOrder(taskList)

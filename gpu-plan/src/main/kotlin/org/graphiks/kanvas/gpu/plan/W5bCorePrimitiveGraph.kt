@@ -73,6 +73,13 @@ public class W5bPointDraw private constructor(
     public fun copyContourStartsI32(): IntArray = contours.copyOf()
     public fun copyBoundsI32(): RectI32 = bounds.copy()
     public fun copyScissorI32(): RectI32 = scissor.copy()
+    internal fun relativeToOriginI32OrNull(originI32: org.graphiks.math.geometry.Point2I32, scissorI32: RectI32): W5bPointDraw? {
+        require(clipOnly == null)
+        val local = org.graphiks.math.geometry.PointSquaresF32.fromDeviceQuadsF32OrNull(vertices, bounds)
+            ?.relativeToOriginI32OrNull(originI32) ?: return null
+        return W5bPointDraw(commandIndex, materialAuthority, local.copyVerticesF32(), indices, contours,
+            local.copyBoundsI32(), scissorI32, blend, null)
+    }
     internal fun withBlend(plan: BlendPlan): W5bPointDraw = W5bPointDraw(commandIndex, materialAuthority,
         vertices, indices, contours, bounds, scissor, plan, clipOnly)
     internal fun withMaterialRef(ref: MaterialPlanRef, composedV5: Boolean = materialAuthority is PlanDrawMaterialAuthority.MaterialV5): W5bPointDraw =

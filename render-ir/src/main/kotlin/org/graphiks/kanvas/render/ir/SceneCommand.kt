@@ -117,6 +117,8 @@ public class LayerDescriptor private constructor(
     public val clip: ClipStackNode,
     /** Clip reapplied while compositing this layer, distinct from child clip state. */
     public val compositeClip: ClipStackNode?,
+    /** Whether this layer starts from the prior contents of its parent. */
+    public val initWithPrevious: Boolean,
     public val backdrop: EffectStack,
     public val effects: EffectStack,
     public val transform: Matrix3x3F32,
@@ -128,7 +130,7 @@ public class LayerDescriptor private constructor(
     public fun copyBounds(): RectF32? = storedBounds?.copy()
 
     override val canonicalId: CanonicalId = canonicalId(
-        "layer-descriptor-v3",
+        "layer-descriptor-v4",
         label.orEmpty(),
         canonicalOptionalId("bounds", storedBounds?.let { rectId("value", it) }).value,
         canonicalOptionalId("material", material?.canonicalId).value,
@@ -136,6 +138,7 @@ public class LayerDescriptor private constructor(
         blend.canonicalId.value,
         clip.canonicalId.value,
         canonicalOptionalId("composite-clip", compositeClip?.canonicalId).value,
+        initWithPrevious.toString(),
         backdrop.canonicalId.value,
         effects.canonicalId.value,
         matrixId("transform", transform).value,
@@ -153,7 +156,8 @@ public class LayerDescriptor private constructor(
             backdrop: EffectStack = EffectStack.Empty,
             effects: EffectStack = EffectStack.Empty,
             transform: Matrix3x3F32 = Matrix3x3F32.Identity,
-        ): LayerDescriptor = LayerDescriptor(label, bounds, material, paint, blend, clip, compositeClip, backdrop, effects, transform)
+            initWithPrevious: Boolean = false,
+        ): LayerDescriptor = LayerDescriptor(label, bounds, material, paint, blend, clip, compositeClip, initWithPrevious, backdrop, effects, transform)
     }
 }
 

@@ -1107,6 +1107,7 @@ sealed interface GPUTask {
         /** Dedicated W4e scene MSAA continuation; it never uses generic or W4d.2 authority. */
         val w4eSceneContinuation: GPUW4eSceneContinuationRequest? = null,
         val w5bInitialClearV3: org.graphiks.kanvas.gpu.renderer.passes.W5bInitialClearV3? = null,
+        internal val w6aPassV1: org.graphiks.kanvas.gpu.plan.PlanPass? = null,
     ) : GPUTask {
         val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
         val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
@@ -1151,7 +1152,9 @@ sealed interface GPUTask {
             require(w4eMaskContinuation == null || w4eSceneContinuation == null) {
                 "One W4e render scope cannot own both mask and scene continuations"
             }
-            require(if (w5bInitialClearV3 == null) drawPackets.isNotEmpty() else
+            require(if (w6aPassV1 != null) w5bInitialClearV3 == null &&
+                w6aRenderPacketsMatch(w6aPassV1, drawPackets)
+                else if (w5bInitialClearV3 == null) drawPackets.isNotEmpty() else
                 drawPackets.isEmpty() && w5bInitialClearV3.matches(target, loadStore, samplePlan)) {
                 "GPUTask.Render requires draws or the exact sealed W5b initial clear"
             }
@@ -1187,8 +1190,8 @@ sealed interface GPUTask {
             }
         }
 
-        val passId: String get() = w5bInitialClearV3?.let { "w5b.${it.graph.id.value}.initial-clear" } ?: drawPackets.first().passId
-        val analysisRecordId: String get() = w5bInitialClearV3?.let { "w5b.${it.graph.id.value}.initial-clear" } ?: drawPackets.first().analysisRecordId
+        val passId: String get() = w6aPassV1?.id?.value ?: w5bInitialClearV3?.let { "w5b.${it.graph.id.value}.initial-clear" } ?: drawPackets.first().passId
+        val analysisRecordId: String get() = w6aPassV1?.id?.value ?: w5bInitialClearV3?.let { "w5b.${it.graph.id.value}.initial-clear" } ?: drawPackets.first().analysisRecordId
         val renderStepIds: List<String> get() = drawPackets.map { it.renderStepId.value }
         val pipelineKeyHashes: List<String> get() = drawPackets.mapNotNull { it.renderPipelineKey?.value }
         val preMaterialization: Boolean get() = true
@@ -1370,6 +1373,7 @@ class GPUTaskList(
     compositeCommands: List<GPUPassCommand> = emptyList(),
     val w5eConstructionV1: org.graphiks.kanvas.gpu.plan.W5eImageConstructionPlanV1? = null,
     val w5ePreparedFrameV1: org.graphiks.kanvas.gpu.renderer.passes.W5ePreparedFrameWitnessV1? = null,
+    val w6aLayerFrameV1: GPUW6aLayerFramePlan? = null,
 ) {
     val recordingSeals: List<GPURecordingSeal> = immutableList(recordingSeals)
     val tasks: List<GPUTask> = immutableList(tasks)

@@ -30,7 +30,7 @@ import org.graphiks.math.vector.Vector2F32
 /**
  * The owner of the versioned Picture payload.
  *
- * A v8/v9/v10/v11/v12 archive starts with the public `KPIC` magic, its version integer and the
+ * A v8/v9/v10/v11/v12/v13 archive starts with the public `KPIC` magic, its version integer and the
  * cull rectangle.  The following negative marker occupies the old v8
  * `opCount` slot: it can therefore never be mistaken for a valid historical
  * v8 op count.  Historical Task 8 v8 streams deliberately return [LegacyV8]
@@ -38,11 +38,11 @@ import org.graphiks.math.vector.Vector2F32
  */
 public object SceneArchiveCodec {
     private val magic: ByteArray = byteArrayOf(0x4b, 0x50, 0x49, 0x43)
-    private const val pictureVersion: Int = 12
+    private const val pictureVersion: Int = 13
     private const val irMarker: Int = -1_391_019_346
-    private const val schemaVersion: Int = 6
+    private const val schemaVersion: Int = 7
 
-    /** Encodes a deeply immutable Scene IR as the sole v12 Picture writer. */
+    /** Encodes a deeply immutable Scene IR as the sole v13 Picture writer. */
     public fun encodePicture(scene: SceneSnapshot, cullRect: RectF32): ByteArray {
         requireSemanticValidity(scene)
         val writer = ArchiveWriter()
@@ -61,7 +61,7 @@ public object SceneArchiveCodec {
         return try {
             if (!reader.bytesEqual(magic)) return SceneArchiveDecodeResult.Invalid("invalid-magic", "Picture magic is not KPIC")
             val encodedPictureVersion = reader.i32()
-            if (encodedPictureVersion !in setOf(8, 9, 10, 11, pictureVersion)) {
+            if (encodedPictureVersion !in 8..pictureVersion) {
                 return SceneArchiveDecodeResult.Invalid("unknown-version", "Picture version is not supported")
             }
             val cull = reader.rect()
@@ -79,7 +79,8 @@ public object SceneArchiveCodec {
                 9 -> 3
                 10 -> 4
                 11 -> 5
-                pictureVersion -> schemaVersion
+                12 -> 6
+                13 -> 7
                 else -> 0
             }
             if (decodedSchemaVersion !in 1..maxSchema) {
@@ -233,7 +234,7 @@ private class ArchiveWriter {
         optional(value.label, ::text); optional(value.copyBounds(), ::rect)
         optional(value.material, ::material); optional(value.paint, ::paint)
         blend(value.blend); clip(value.clip); optional(value.compositeClip, ::clip)
-        effects(value.backdrop); effects(value.effects); matrix(value.transform)
+        effects(value.backdrop); effects(value.effects); matrix(value.transform); bool(value.initWithPrevious)
     }
 
     fun paint(value: PaintNode): Unit = nested {
@@ -559,7 +560,32 @@ private class ArchiveReader(private val data: ByteArray) {
         }
         DrawNode(normalizedGeometry, material, coverage, clip, blend, effects, transform, origin, paint, resource, operationBlendMode)
     }
-    fun layer(): LayerDescriptor = nested { LayerDescriptor.of(optional(::text), optional(::rect), optional(::material), optional(::paint), blend(), clip(), optional(::clip), effects(), effects(), matrix()) }
+    fun layer(): LayerDescriptor = nested {
+        val label = optional(::text)
+        val bounds = optional(::rect)
+        val material = optional(::material)
+        val paint = optional(::paint)
+        val blend = blend()
+        val clip = clip()
+        val compositeClip = optional(::clip)
+        val backdrop = effects()
+        val effects = effects()
+        val transform = matrix()
+        val initWithPrevious = if (sceneArchiveSchemaVersion >= 7) bool() else false
+        LayerDescriptor.of(
+            label = label,
+            bounds = bounds,
+            material = material,
+            paint = paint,
+            blend = blend,
+            clip = clip,
+            compositeClip = compositeClip,
+            backdrop = backdrop,
+            effects = effects,
+            transform = transform,
+            initWithPrevious = initWithPrevious,
+        )
+    }
     fun paint(): PaintNode = nested { PaintNode(color(), optional(::material), enum(), optional(::blender), optional(::colorFilter), optional(::maskFilter), optional(::pathEffect), optional(::imageFilter), enum(), f32(), enum(), enum(), f32(), bool()) }
     fun <T> optional(read: () -> T): T? = if (bool()) read() else null
 
@@ -720,7 +746,7 @@ private class ArchiveReader(private val data: ByteArray) {
                         perspectiveCaptureRefusal = bool(),
                         transformClass = text(),
                     )
-                    2, 3, 4, 5, 6 -> clipTransformV2()
+                    2, 3, 4, 5, 6, 7 -> clipTransformV2()
                     else -> throw ArchiveFailure("unknown-schema", "Scene archive schema is not supported")
                 }
                 ClipEntry(geometry, operation, antiAlias, transform)

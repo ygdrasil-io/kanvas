@@ -97,6 +97,7 @@ internal fun remapSourcePassesV4(sourcePasses: List<PlanPass>,
             val ref = overlayReference?.invoke(source) ?: remap(source.materialAuthority.materialPlanRef())
             if (composed?.invoke(ref) == true) return@getOrPut when (source) {
                 is W5bPointDraw -> source.withMaterialRef(ref, composedV5=true)
+                is W5bVerticesDraw -> source.withMaterialRef(ref)
                 is SolidRectDraw -> SolidRectDraw.ofMaterial(source.commandIndex,ref,source.copyVisibleBounds(),
                     source.copyScissor(),source.coverage,source.sample,source.blend,composedV5=true)
                 is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(source.commandIndex,ref,source.copyDeviceBounds(),
@@ -200,7 +201,7 @@ internal class PackedFrameSourcesV4 private constructor(private val table: Mater
                 draw.materialAuthority.colorSourceCoordinatesV4()?.let { coordinates ->
                     val ref = draw.materialAuthority.materialPlanRef()
                     require(draw is SolidRectDraw || draw is AnalyticRectDraw || draw is PathFillDraw ||
-                        (draw is AnalyticRRectDraw || draw is PathStrokeDraw || draw is GeneralPathDraw || draw is W5bPointDraw ||
+                        (draw is AnalyticRRectDraw || draw is PathStrokeDraw || draw is GeneralPathDraw || draw is W5bPointDraw || draw is W5bVerticesDraw ||
                             draw is W5bW4ePathDraw || draw is ClippedGeneralPathDraw) &&
                             draw.materialAuthority is PlanDrawMaterialAuthority.MaterialV5 ||
                         draw is GeneralPathDraw && draw.copyPathGeometry() is PathDrawGeometry.Fill ||

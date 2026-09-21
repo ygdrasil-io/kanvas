@@ -26,6 +26,8 @@ public class RenderGraph private constructor(
     w5bGeometryLanes: List<W5bGeometryLanePlanV3> = emptyList(),
     private val w5eImageConstruction: W5eImageConstructionPlanV1? = null,
     packedSourcesV4: Map<String, RawMaterialRequirementsV2> = emptyMap(),
+    private val w6aLayerFramePlan: LayerFramePlanV1? = null,
+    private val physicalLayoutV1: PlanPhysicalLayoutV1? = null,
 ) {
     private val storedTargetExtent: SizeI32 = targetExtent.copy()
     public val targetExtent: SizeI32
@@ -54,6 +56,15 @@ public class RenderGraph private constructor(
     public fun materialPlanTableOrNull(): MaterialPlanTable? = materialPlanTable
 
     public fun w5aCompositePlanOrNull(): W5aCompositePlanV1? = w5aCompositePlan
+
+    /** W6a's compiler-issued layer semantics; renderer consumers must not re-plan a scope. */
+    public fun layerFramePlanOrNull(): LayerFramePlanV1? = w6aLayerFramePlan
+    public fun physicalLayoutOrNull(): PlanPhysicalLayoutV1? = physicalLayoutV1
+
+    /** Verifies that this graph's layer semantics were sealed by the W6a compiler. */
+    public fun verifyW6aLayerCompilerWitness(): Boolean =
+        capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID &&
+            w6aLayerFramePlan != null && physicalLayoutV1 != null
 
     public fun verifyW5bGeometryCompilerWitness(): Boolean = w5bGeometryIssued
     public fun w5bGeometryLanes(): List<W5bGeometryLanePlanV3> = storedW5bGeometryLanes
@@ -201,6 +212,95 @@ public class RenderGraph private constructor(
                 packedSourcesV4 = lanes.flatMap { it.storedPackedSourcesV4.entries }.associate { it.key to it.value })
         }
 
+        /** The only publication boundary for W6a semantic layer scope authority. */
+        internal fun publishW6a(construction: RenderGraphConstruction, frame: LayerFramePlanV1,
+            packed: PackedFrameSourcesV4, source: SourcePhysicalConstructionV1): RenderGraph {
+            require(construction.capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID)
+            val scopes = frame.scopes()
+            val byScope = scopes.associateBy { it.id }
+            require(byScope.size == scopes.size)
+            require(scopes.all { scope ->
+                scope.parentId?.let { parent -> byScope[parent]?.childIds()?.contains(scope.id) == true } ?: true
+            })
+            require(scopes.all { scope -> scope.childIds().all { child -> byScope[child]?.parentId == scope.id } })
+            require(scopes.map { it.targetResource }.toSet() == construction.resources()
+                .filter { it.role == PlanResourceRole.LayerTarget }.map { it.id }.toSet())
+            val rootTarget = construction.resources().single { it.role == PlanResourceRole.LogicalTarget }.id
+            val passesById = construction.passes().associateBy { it.id }
+            val passOrder = construction.passes().mapIndexed { indexI32, pass -> pass.id to indexI32 }.toMap()
+            val initialized = mutableSetOf<LayerScopeIdI32>()
+            val restored = mutableSetOf<LayerScopeIdI32>()
+            val initializeOrder = mutableMapOf<LayerScopeIdI32, Int>()
+            val restoreOrder = mutableMapOf<LayerScopeIdI32, Int>()
+            val steps = frame.executionSteps()
+            require(steps.zipWithNext().all { (first, second) ->
+                passOrder.getValue(first.passId) < passOrder.getValue(second.passId)
+            })
+            steps.forEachIndexed { stepIndexI32, step ->
+                val scope = byScope.getValue(step.scopeId)
+                when (step) {
+                    is LayerExecutionStepV1.Initialize -> {
+                        when (val initialization = scope.initialization) {
+                            LayerInitializationPlanV1.TransparentBlack -> {
+                                val pass = passesById[step.passId] as? PlanPass.RenderPass
+                                require(pass != null && pass.target == scope.targetResource &&
+                                    pass.load == AttachmentLoadPlan.ClearTransparent && pass.draws().isEmpty())
+                            }
+                            is LayerInitializationPlanV1.PreviousCopy -> {
+                                val pass = passesById[step.passId] as? PlanPass.TextureCopy
+                                val expectedParentTarget = scope.parentId?.let { byScope.getValue(it).targetResource } ?: rootTarget
+                                require(initialization.parentTarget == expectedParentTarget &&
+                                    initialization.layerTarget == scope.targetResource && pass != null &&
+                                    pass.source == initialization.parentTarget &&
+                                    pass.destination == initialization.layerTarget &&
+                                    pass.destinationVersion == initialization.capturedParentVersion &&
+                                    pass.copySourceBoundsI32() == initialization.copySourceBoundsParentI32() &&
+                                    pass.copyDestinationOriginI32() == initialization.copyDestinationOriginLayerI32())
+                            }
+                        }
+                        require(initialized.add(scope.id) && scope.id !in restored)
+                        initializeOrder[scope.id] = stepIndexI32
+                    }
+                    is LayerExecutionStepV1.RenderChildren -> {
+                        val exactChild = when (val pass = passesById[step.passId]) {
+                            is PlanPass.RenderPass -> pass.target == scope.targetResource &&
+                                pass.load == AttachmentLoadPlan.Load && pass.draws().isNotEmpty()
+                            is PlanPass.StencilGeometryProducerV3 -> pass.target == scope.targetResource && pass.load == AttachmentLoadPlan.Load
+                            is PlanPass.StencilCover -> pass.target == scope.targetResource && pass.load == AttachmentLoadPlan.Load
+                            is PlanPass.ClipMaskInitialize, is PlanPass.ClipMaskProducer, is PlanPass.ClipMaskFold ->
+                                source.w4eGeometry.any { it.target == scope.targetResource && step.passId in it.graphPassIds() }
+                            else -> false
+                        }
+                        require(scope.id in initialized && scope.id !in restored && exactChild)
+                    }
+                    is LayerExecutionStepV1.Restore -> {
+                        val pass = passesById[step.passId] as? PlanPass.LayerComposite
+                        val expectedDestination = scope.parentId?.let { byScope.getValue(it).targetResource } ?: rootTarget
+                        require(scope.id in initialized && restored.add(scope.id) && pass != null && pass.scopeId == scope.id &&
+                            pass.source == scope.targetResource && pass.destination == expectedDestination &&
+                            (pass.destination == rootTarget) == (scope.parentId == null) && pass.restore === scope.restore)
+                        restoreOrder[scope.id] = stepIndexI32
+                    }
+                }
+            }
+            require(initialized == byScope.keys && restored == byScope.keys)
+            require(scopes.all { scope -> scope.parentId?.let { parentId ->
+                initializeOrder.getValue(parentId) < initializeOrder.getValue(scope.id) &&
+                    restoreOrder.getValue(scope.id) < restoreOrder.getValue(parentId) &&
+                    byScope.getValue(parentId).beginCommandIndexI32 < scope.beginCommandIndexI32 &&
+                    scope.endCommandIndexI32 < byScope.getValue(parentId).endCommandIndexI32
+            } ?: true })
+            require(scopes.all { scope ->
+                val restore = construction.passes().filterIsInstance<PlanPass.LayerComposite>().singleOrNull { it.scopeId == scope.id }
+                restore?.source == scope.targetResource && restore.restore === scope.restore
+            })
+            return RenderGraph(construction.id, construction.capabilityId, construction.targetExtent,
+                construction.colorFormat, construction.capabilities, construction.budget, construction.visualCommandCount,
+                construction.resources(), construction.passes(), construction.dependencies(), construction.peakFrameLocalBytes,
+                null, null, null, null, construction.materialTable, packedSourcesV4 = packed.forConstruction(construction),
+                w6aLayerFramePlan = frame, physicalLayoutV1 = PlanPhysicalLayoutV1.seal(construction, source))
+        }
+
         public fun of(
             id: PlanId,
             capabilityId: String,
@@ -278,7 +378,8 @@ public class RenderGraph private constructor(
                     source
                 }
                 val peakI64 = Math.addExact(peakFrameLocalBytes, stopSlab.byteSizeI64)
-                RawMaterialRequirementsV2.requireFrameBudget(sourceRequirements, peakI64, budget, W5cPlanDiagnostics.StopBudget)
+                if (capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID) W6aLayerPlanBudget.requireWithin(peakI64, budget)
+                else RawMaterialRequirementsV2.requireFrameBudget(sourceRequirements, peakI64, budget, W5cPlanDiagnostics.StopBudget)
                 val stopResource = PlanResource.of(PlanResourceRole.GradientStopData, 0, PlanResourceKind.Buffer,
                     null, null, stopSlab.byteSizeI64, setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination),
                     PlanResourceLifetime.FrameLocal, 0, passes.size)
@@ -295,8 +396,8 @@ public class RenderGraph private constructor(
                 val definition = requireNotNull(proof.composedDefinition) { W5gPlanDiagnostics.Schema }
                 require(proof.authenticates(table, root, coordinates) &&
                     slab.owner === definition.frameOwner && definition.frameOwner.owns(definition.captured) &&
-                    slab.owner.lane.targetExtent == targetExtent && slab.owner.lane.capabilities == capabilities &&
-                    slab.owner.lane.budget == budget && slab.byteCountI64 == slab.owner.noiseBytesI64 &&
+                    slab.owner.targetExtent == targetExtent && slab.owner.capabilities == capabilities &&
+                    slab.owner.budget == budget && slab.byteCountI64 == slab.owner.noiseBytesI64 &&
                     definition.layout.resources.singleOrNull {
                         it.buffer?.storageKind == ComposedBindingLayoutV1.StorageKind.NOISE_U32
                     }?.let { proof.authenticatesComposedNoise(it, slab) } == true) { W5gPlanDiagnostics.Schema }
@@ -314,6 +415,7 @@ public class RenderGraph private constructor(
                         PlanOperationCapability.StorageBuffer, PlanOperationCapability.CopyUpload))) { W5gPlanDiagnostics.NoiseStorage }
                 if (noiseResources.isEmpty()) {
                     val peak = Math.addExact(peakFrameLocalBytes, bytes)
+                    if (capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID) W6aLayerPlanBudget.requireWithin(peak, budget)
                     require(peak <= budget.maxFrameLocalBytes) { W5gPlanDiagnostics.NoiseStorage }
                     val resource = PlanResource.of(PlanResourceRole.NoiseTableData, 0, PlanResourceKind.Buffer,
                         null, null, bytes, setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination),
@@ -407,6 +509,12 @@ public class RenderGraph private constructor(
             }
             require(dependencies.distinct().size == dependencies.size) { "Dependencies must be unique" }
             validatePassCapabilities(passes, capabilities)
+            if (capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID) {
+                validateW6aLayerTopology(resources, passes, dependencies, targetExtent, visualCommandCount, capabilities.copyBytesPerRowAlignment)
+                require(peak(resources, passes.size) == peakFrameLocalBytes)
+                W6aLayerPlanBudget.requireWithin(peakFrameLocalBytes, budget)
+                return
+            }
             validateW5bDestinationVersions(passes)
             validateColorPasses(passes, resourcesById, targetExtent, colorFormat, capabilityId)
             val usesExplicitAa4PathPasses = passes.any {
@@ -636,6 +744,7 @@ public class RenderGraph private constructor(
                 (pass.draw.blend as? BlendPlan.DestinationReadV1)?.snapshotResource,
             )
             is PlanPass.TextureCopy -> listOf(pass.source, pass.destination)
+            is PlanPass.LayerComposite -> listOf(pass.source, pass.destination)
             is PlanPass.FilterPass -> pass.inputs() + pass.output
             is PlanPass.ResolvePass -> listOf(pass.source, pass.destination)
             is PlanPass.ReadbackPass -> listOf(pass.source, pass.staging)
@@ -664,7 +773,7 @@ public class RenderGraph private constructor(
                         }
                         require(pass.draws().none { it.unwrapClippedSource().let { source -> source is PathRenderDraw &&
                             !(source is GeneralPathDraw && capabilityId in setOf(W4dGeneralPathPlanCompiler.W5B_HARD_CAPABILITY_ID,
-                                W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID)) } }) {
+                                W5bGeometryLanePlanV3.COMPOSITE_CAPABILITY_ID, W6aLayerPlanCompiler.CAPABILITY_ID)) } }) {
                             "General and binary masked path draws require explicit path render passes"
                         }
                         pass.draws().map { it.unwrapClippedSource() }.filterIsInstance<PathDraw>().forEach { draw ->

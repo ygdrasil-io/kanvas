@@ -13,6 +13,7 @@ import org.graphiks.kanvas.render.ir.DrawOrigin
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RectI32
+import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.ClipGeometryF32
 import org.graphiks.math.geometry.InversePathGeometryF32
 import org.graphiks.math.geometry.PathF32
@@ -37,6 +38,7 @@ public enum class PlanPassRole {
     ClipMaskInitialize,
     ClipMaskProducer,
     ClipMaskFold,
+    LayerComposite,
 }
 public enum class ClipCombineOperation { Intersect, Difference }
 
@@ -165,6 +167,11 @@ public class GeneralPathDraw private constructor(
     override fun copyPathGeometry(): PathDrawGeometry = geometrySnapshot
 
     override fun copyScissorI32(): RectI32 = scissorSnapshotI32.copy()
+
+    /** Pre-publication target rebinding retains this already selected General path contract. */
+    internal fun rebindGeometryV6(geometry: PathDrawGeometry, scissorI32: RectI32,
+        material: PlanDrawMaterialAuthority = materialAuthority): GeneralPathDraw =
+        GeneralPathDraw(commandIndex, material, geometry, strategy, scissorI32, coverage, sample, blend)
 
     /** Legacy-only compatibility view. W5 path draws carry no reconstructed colour. */
     override public val color: ColorF32
@@ -984,15 +991,47 @@ public sealed interface PlanPass {
         public val destination: PlanResourceId,
         public val destinationVersion: DestinationVersionI64? = null,
         sourceBoundsI32: RectI32? = null,
+        destinationOriginI32: Point2I32 = Point2I32.Origin,
         public val bytesPerRowI64: Long? = null,
     ) : PlanPass {
         private val sourceBoundsSnapshotI32 = sourceBoundsI32?.copy()
+        private val destinationOriginSnapshotI32 = Point2I32(destinationOriginI32.x, destinationOriginI32.y)
         public fun copySourceBoundsI32(): RectI32? = sourceBoundsSnapshotI32?.copy()
+        public fun copyDestinationOriginI32(): Point2I32 =
+            Point2I32(destinationOriginSnapshotI32.x, destinationOriginSnapshotI32.y)
         init {
             require(destinationVersion == null || sourceBoundsSnapshotI32?.isEmpty == false &&
                 bytesPerRowI64 != null && bytesPerRowI64 >= Math.multiplyExact(sourceBoundsSnapshotI32.width().toLong(), 4L))
         }
         override val role: PlanPassRole = PlanPassRole.TextureCopy
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+    }
+
+    /** One already-planned layer restore into its immediate parent target. */
+    public class LayerComposite(
+        override val ordinal: Int,
+        public val scopeId: LayerScopeIdI32,
+        public val source: PlanResourceId,
+        public val destination: PlanResourceId,
+        sourceBoundsLayerI32: RectI32,
+        destinationOriginParentI32: Point2I32,
+        public val restore: LayerRestorePlanV1,
+        public val load: AttachmentLoadPlan,
+        public val store: AttachmentStorePlan,
+        public val destinationVersionAfter: DestinationVersionI64,
+    ) : PlanPass {
+        private val sourceBoundsLayerSnapshotI32 = sourceBoundsLayerI32.copy()
+        private val destinationOriginParentSnapshotI32 = Point2I32(
+            destinationOriginParentI32.x,
+            destinationOriginParentI32.y,
+        )
+        init { require(!sourceBoundsLayerSnapshotI32.isEmpty) { "Layer composite source bounds must be non-empty" } }
+        public fun copySourceBoundsLayerI32(): RectI32 = sourceBoundsLayerSnapshotI32.copy()
+        public fun copyDestinationOriginParentI32(): Point2I32 = Point2I32(
+            destinationOriginParentSnapshotI32.x,
+            destinationOriginParentSnapshotI32.y,
+        )
+        override val role: PlanPassRole = PlanPassRole.LayerComposite
         override val id: PlanPassId = checkedPassId(role, ordinal)
     }
 
@@ -1021,6 +1060,8 @@ public sealed interface PlanPass {
         public val source: PlanResourceId,
         public val staging: PlanResourceId,
         public val bytesPerRow: Long,
+        /** Exact mapped range, excluding unused padding after the final row when specified. */
+        public val mappedBytesI64: Long? = null,
     ) : PlanPass {
         override val role: PlanPassRole = PlanPassRole.Readback
         override val id: PlanPassId = checkedPassId(role, ordinal)

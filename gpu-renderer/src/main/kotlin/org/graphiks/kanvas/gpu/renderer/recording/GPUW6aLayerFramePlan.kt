@@ -1,0 +1,326 @@
+package org.graphiks.kanvas.gpu.renderer.recording
+
+import org.graphiks.kanvas.gpu.plan.*
+import org.graphiks.kanvas.gpu.renderer.color.*
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.passes.*
+import org.graphiks.kanvas.gpu.renderer.planning.*
+import org.graphiks.kanvas.gpu.renderer.resources.*
+import org.graphiks.kanvas.gpu.renderer.state.*
+import org.graphiks.math.color.ColorF32
+import org.graphiks.math.geometry.Point2I32
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.execution.*
+
+internal fun w6aRenderPacketsMatch(pass: PlanPass, packets: List<GPUDrawPacket>): Boolean {
+    val w4e = packets.singleOrNull()?.takeIf { it.role == GPUDrawPacketRole.W4ePrepared }
+    if (w4e != null) return when (pass) {
+        is PlanPass.RenderPass -> pass.draws().singleOrNull()?.let { it is PathDraw && it.commandIndex == w4e.commandIdValue } == true
+        is PlanPass.StencilGeometryProducerV3 -> pass.commandIndexI32 == w4e.commandIdValue &&
+            w4e.w4ePreparedPath?.phase == PathRenderPhase.SingleSampleStencilProducer
+        is PlanPass.StencilCover -> pass.draw.commandIndex == w4e.commandIdValue
+        is PlanPass.ClipMaskInitialize, is PlanPass.ClipMaskProducer, is PlanPass.ClipMaskFold -> w4e.w4ePreparedClipPass?.passId == pass.id.value
+        else -> false
+    }
+    return when (pass) {
+    is PlanPass.RenderPass -> packets.map { it.commandIdValue } == pass.draws().map { it.commandIndex } &&
+        packets.all { it.role == GPUDrawPacketRole.Shading }
+    is PlanPass.StencilGeometryProducerV3 -> packets.singleOrNull()?.let {
+        it.commandIdValue == pass.commandIndexI32 && it.role == GPUDrawPacketRole.PathStencilProducer } == true
+    is PlanPass.StencilCover -> packets.singleOrNull()?.let {
+        it.commandIdValue == pass.draw.commandIndex && it.role == GPUDrawPacketRole.PathStencilCover } == true
+    is PlanPass.LayerComposite -> packets.isEmpty()
+    else -> false
+}
+}
+
+/** Exact handle-free projection of a compiler-authenticated frame, including empty clear scopes. */
+class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLoweringRequest) {
+    internal val graph: RenderGraph = request.graph
+    internal val physical = requireNotNull(graph.physicalLayoutOrNull())
+    internal val w4eAuthorities = physical.w4eGeometryBindings().associateWith { GPUPlanW4ePreparedAuthority.issueLayered(graph, it) }
+    private val seal = GPUFrameCapabilitySeal.capture(request.frameId, request.deviceGeneration, request.capabilities)
+    private val recording = GPURecordingSeal(request.recordingId, 0L, graph.id.value, graph.id.value, seal.sealHash)
+    internal val refs: Map<PlanResourceId, GPUFrameResourceRef> = graph.resources().associate { resource ->
+        val slot = physical.slot(resource.id)
+        resource.id to if (resource.kind == PlanResourceKind.Texture2D) GPUFrameTargetRef("w6a.slot.${slot.slotI32}.${resource.id.value}")
+            else GPUFrameBufferRef("w6a.slot.${slot.slotI32}.${resource.id.value}")
+    }
+    private val bounds = GPUPixelBounds(0, 0, graph.targetExtent.width, graph.targetExtent.height)
+    internal val readback = GPUFrameReadbackRequest(GPUReadbackRequestID("w6a.${graph.id.value}.readback"), bounds,
+        GPUReadbackPixelFormat.Rgba8Unorm, GPUColorInterpretation.EncodedPremulSrgb)
+    private val templates = mutableMapOf<GPUDrawPacketID, GPUW5aGeometryHostTemplateV1>()
+    private val analyticUniforms = mutableMapOf<GPUDrawPacketID, ByteArray>()
+    private val geometryPipelines = mutableMapOf<GPUDrawPacketID, GPUWgpu4kCorePrimitivePipelineMapping.Mapped>()
+    private val targetOriginsDeviceI32: Map<PlanResourceId, Point2I32> = buildMap {
+        put(graph.resources().single { it.role == PlanResourceRole.LogicalTarget }.id, Point2I32.Origin)
+        requireNotNull(graph.layerFramePlanOrNull()).scopes().forEach { scope ->
+            put(scope.targetResource, scope.mapping.copyLayerOriginDeviceI32())
+        }
+    }
+    internal val memory: GPUFrameMemoryBudgetPlan
+    internal val steps: List<GPUFrameStep>
+    private val tasks: List<GPUTask>
+
+    init {
+        require(graph.verifyW6aLayerCompilerWitness())
+        val verticesSource = if (graph.passes().filterIsInstance<PlanPass.RenderPass>().flatMap { it.draws() }.any { it is W5bVerticesDraw })
+            PreparedSourceFrameV6.layeredVertices(graph) else null
+        val allocations = graph.resources().map { resource -> GPUFrameMemoryAllocation(refs.getValue(resource.id).value,
+            when (resource.role) {
+                PlanResourceRole.LogicalTarget -> GPUFrameMemoryCategory.CanonicalTarget
+                PlanResourceRole.LayerTarget -> GPUFrameMemoryCategory.LayerTarget
+                PlanResourceRole.ReadbackStaging -> GPUFrameMemoryCategory.ReadbackStaging
+                else -> GPUFrameMemoryCategory.ReusableScratch
+            }, resource.byteSize,
+            if (resource.kind == PlanResourceKind.Texture2D) GPUFrameMemoryResourceKind.Texture2D else GPUFrameMemoryResourceKind.Buffer,
+            resource.copyExtent()?.let { GPUPixelBounds(0, 0, it.width, it.height) }, resource.firstPassIndex, resource.lastPassIndexExclusive) }
+        memory = GPUFrameMemoryBudgetPlanner.plan(GPUFrameMemoryBudgetRequest(allocations,
+            minOf(graph.budget.maxFrameLocalBytes, request.rendererAggregateMemoryBudgetBytes ?: Long.MAX_VALUE), requireNotNull(request.capabilities.limits)))
+        require(memory.diagnostic == null && memory.targetResidentBytes + memory.peakFrameTransientBytes ==
+            graph.peakFrameLocalBytes)
+        val preparations = graph.resources().filter { it.kind == PlanResourceKind.Texture2D && it.lifetime == PlanResourceLifetime.FrameLocal ||
+            it.role == PlanResourceRole.ReadbackStaging || physical.w4eGeometryBindings().any { binding ->
+                it.id in setOf(binding.payload.vertexResourceId, binding.payload.indexResourceId, binding.payload.uniformResourceId) } }
+            .map { resource -> GPUResourcePreparationRequest(refs.getValue(resource.id),
+                resource.copyExtent()?.let { GPUFrameTextureDescriptor(GPUPixelBounds(0, 0, it.width, it.height),
+                    when (resource.format) {
+                        is PlanTextureFormat.DepthStencil -> GPUColorFormat("depth24plus-stencil8")
+                        PlanTextureFormat.CoverageMask -> GPUColorFormat("rgba8unorm")
+                        else -> GPUColorFormat.RGBA8UnormSrgb
+                    }, resource.sampleCountI32) }
+                    ?: GPUFrameBufferDescriptor(resource.byteSize, graph.capabilities.copyBytesPerRowAlignment.toLong()),
+                when (resource.role) {
+                    PlanResourceRole.LogicalTarget -> GPUFrameResourceRole.SceneTarget
+                    PlanResourceRole.LayerTarget -> GPUFrameResourceRole.LayerTarget
+                    PlanResourceRole.DestinationSnapshot -> GPUFrameResourceRole.DestinationSnapshot
+                    PlanResourceRole.DepthStencil, PlanResourceRole.CoverageMaskDepthStencil -> GPUFrameResourceRole.PathDepthStencil
+                    PlanResourceRole.CoverageMaskAccumulator, PlanResourceRole.CoverageMaskScratch,
+                    PlanResourceRole.CoverageMaskMultisampleScratch -> GPUFrameResourceRole.ClipMask
+                    PlanResourceRole.VertexData -> GPUFrameResourceRole.VertexData
+                    PlanResourceRole.IndexData -> GPUFrameResourceRole.IndexData
+                    PlanResourceRole.UniformData -> GPUFrameResourceRole.UniformData
+                    else -> GPUFrameResourceRole.ReadbackStaging
+                }, resource.usages().map { usage -> when (usage) {
+                    PlanResourceUsage.RenderAttachment, PlanResourceUsage.DepthStencilAttachment -> GPUFrameResourceUsage.RenderAttachment
+                    PlanResourceUsage.Sampled -> GPUFrameResourceUsage.TextureBinding
+                    PlanResourceUsage.CopySource -> GPUFrameResourceUsage.CopySource
+                    PlanResourceUsage.CopyDestination -> GPUFrameResourceUsage.CopyDestination
+                    PlanResourceUsage.MapRead -> GPUFrameResourceUsage.MapRead
+                    PlanResourceUsage.Vertex -> GPUFrameResourceUsage.Vertex
+                    PlanResourceUsage.Index -> GPUFrameResourceUsage.Index
+                    PlanResourceUsage.Uniform -> GPUFrameResourceUsage.Uniform
+                    else -> error("Unsupported W6 target usage")
+                } }.toSet(), GPUFrameResourceLifetime.FrameLocal, resource.byteSize, refs.getValue(resource.id).value) }
+        steps = java.util.Collections.unmodifiableList(buildList {
+            add(GPUFrameStep.PrepareResourcesStep(preparations, listOf(GPUTaskID("w6a.prepare"))))
+            graph.passes().forEach { pass ->
+                val task = listOf(GPUTaskID("w6a.${pass.id.value}"))
+                val w4eBinding = physical.w4eGeometryBinding(pass.id)
+                if (w4eBinding != null) {
+                    val authority = w4eAuthorities.getValue(w4eBinding)
+                    val native = requireNotNull(w4eBinding.nativePass(pass.id))
+                    val builder = W4eClipGraphLowerer()
+                    val path = native as? PlanPass.PathRenderPass
+                    val color: PlanDraw? = when (pass) {
+                        is PlanPass.RenderPass -> pass.draws().single() as? PathDraw
+                        is PlanPass.StencilCover -> pass.draw
+                        else -> null
+                    }
+                    val consumer = path?.takeUnless { it.phase == PathRenderPhase.SingleSampleStencilProducer }?.let { authority.consumerFor(it.id.value) }
+                    val prepared = path?.let { requireNotNull(authority.pathFor(it.id.value)) }
+                    val packet = if (prepared == null) builder.preparedClipPacket(native, pass.ordinal,
+                        requireNotNull(authority.clipPassFor(native.id.value))) else builder.pathPacket(prepared, consumer, pass.ordinal,
+                        color?.blend ?: BlendPlan.LegacySrcOverV1)
+                    color?.let { draw -> packet.attachW5aSourceStageV2(org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2.issue(
+                        requireNotNull(graph.materialPlanTableOrNull()), draw.materialAuthority, draw.commandIndex,
+                        draw.materialAuthority.colorSourceCoordinatesV4()?.let { graph.packedMaterialSourceV4(draw.materialAuthority) })) }
+                    val uses = builder.resourceUses(native, refs.mapKeys { it.key.value }, graph.resources().associateBy { it.id.value }, consumer, prepared,
+                        PlanDrawDataResources(w4eBinding.payload.vertexResourceId, w4eBinding.payload.indexResourceId, w4eBinding.payload.uniformResourceId))
+                    val targetId = when (native) {
+                        is PlanPass.PathRenderPass -> native.target
+                        is PlanPass.ClipMaskInitialize -> native.output
+                        is PlanPass.ClipMaskProducer -> native.target
+                        is PlanPass.ClipMaskFold -> native.output
+                        else -> error("Unadmitted W4e native pass")
+                    }
+                    val samples = if (native is PlanPass.ClipMaskProducer && native.sampleCountI32 == 4)
+                        GPUSamplePlan.MultisampleFrame(4) else GPUSamplePlan.SingleSampleFrame
+                    add(GPUFrameStep.RenderPassStep(refs.getValue(targetId) as GPUFrameTargetRef,
+                        GPULoadStorePlan(if (path == null) "clear" else "load", GPUStorePlan.Store), samples,
+                        resourceUses = uses, drawPackets = listOf(packet), sourceTaskIds = task,
+                        batches = listOf(GPUFrameRenderBatch("w6a.${pass.id.value}", GPUPassBatchKind.Isolated, listOf(packet), task)),
+                        depthStencilLoadStore = path?.let(builder::depthStencilLoadStore), w6aPassV1 = pass))
+                    return@forEach
+                }
+                when (pass) {
+                    is PlanPass.RenderPass, is PlanPass.LayerComposite, is PlanPass.StencilGeometryProducerV3, is PlanPass.StencilCover -> {
+                        val render = pass as? PlanPass.RenderPass
+                        val targetId = when (pass) {
+                            is PlanPass.RenderPass -> pass.target
+                            is PlanPass.StencilGeometryProducerV3 -> pass.target
+                            is PlanPass.StencilCover -> pass.target
+                            is PlanPass.LayerComposite -> pass.destination
+                        }
+                        val depthId = when (pass) {
+                            is PlanPass.StencilGeometryProducerV3 -> pass.depthStencil
+                            is PlanPass.StencilCover -> pass.depthStencil
+                            else -> null
+                        }
+                        val draws = when (pass) {
+                            is PlanPass.RenderPass -> pass.draws()
+                            is PlanPass.StencilGeometryProducerV3 -> listOf(graph.passes().filterIsInstance<PlanPass.StencilCover>()
+                                .single { it.draw.commandIndex == pass.commandIndexI32 }.draw)
+                            is PlanPass.StencilCover -> listOf(pass.draw)
+                            else -> emptyList()
+                        }
+                        val targetExtent = requireNotNull(graph.resources().single { it.id == targetId }.copyExtent())
+                        val targetBounds = GPUPixelBounds(0, 0, targetExtent.width, targetExtent.height)
+                        val targetOrigin = targetOriginsDeviceI32.getValue(targetId)
+                        val packets = draws.map { draw ->
+                            val table = requireNotNull(graph.materialPlanTableOrNull())
+                            val packed = draw.materialAuthority.colorSourceCoordinatesV4()?.let { graph.packedMaterialSourceV4(draw.materialAuthority) }
+                            val packet = when (draw) {
+                                is W5bVerticesDraw -> lowerW5bVerticesDraw(draw, targetBounds, graph, requireNotNull(verticesSource),
+                                    seal.sealHash, requireNotNull(physical.geometryBinding(pass.id)))
+                                is SolidRectDraw -> GpuPlanTaskListLowerer().packet(draw, ColorF32.Transparent,
+                                    draw.commandIndex, targetBounds, table, null, packed)
+                                is W5bPointDraw -> GpuPlanTaskListLowerer().packet(draw, ColorF32.Transparent,
+                                    draw.commandIndex, targetBounds, table, null, packed, graph)
+                                is AnalyticRectDraw -> W4aAnalyticRectGraphLowerer().packet(draw, ColorF32.Transparent,
+                                    draw.commandIndex, targetBounds, table, w5b = true, packedSourceV4 = packed).packet
+                                is AnalyticRRectDraw -> W4bAnalyticRRectGraphLowerer().packet(draw, ColorF32.Transparent,
+                                    draw.commandIndex, targetBounds, table, w5b = true, packedSourceV4 = packed).packet
+                                is PathFillDraw -> W4cPathFillGraphLowerer().w5bPacket(pass, listOf(draw), table, targetBounds, graph).packet
+                                is PathStrokeDraw -> W4dPathStrokeGraphLowerer().w5bPacket(pass, listOf(draw), table, targetBounds, graph).packet
+                                else -> error("Unadmitted W6 geometry")
+                            }
+                            if (draw is SolidRectDraw) templates[packet.packetId] = w6aGeometryTemplate(packet, draw.blend, targetOrigin)
+                            else if (draw is W5bVerticesDraw) {
+                                templates[packet.packetId] = requireNotNull(sealW5aGeometryHostTemplateV1(packet)).copy(
+                                    materialDevicePointWgsl = "input.position.xy + vec2<f32>(${targetOrigin.x}.0, ${targetOrigin.y}.0)")
+                                analyticUniforms[packet.packetId] = preparedVerticesDrawUniformBytes(
+                                    packet.semanticPayload as GPUDrawSemanticPayload.Vertices, null)
+                            }
+                            else {
+                                val semantic = packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive
+                                val key = if (draw is PathFillDraw) W4cPathFillGraphLowerer().w5bPacket(pass, listOf(draw), table, targetBounds, graph).structuralPipelineKey
+                                    else if (draw is PathStrokeDraw) W4dPathStrokeGraphLowerer().w5bPacket(pass, listOf(draw), table, targetBounds, graph).structuralPipelineKey
+                                    else corePrimitiveRenderPipelineStructuralKey(semantic, requireNotNull(packet.clipExecutionPlan),
+                                        requireNotNull(packet.blendPlan), 1, GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat())
+                                val mapping = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key)
+                                require(mapping is GPUWgpu4kCorePrimitivePipelineMapping.Mapped)
+                                geometryPipelines[packet.packetId] = mapping
+                                analyticUniforms[packet.packetId] = if (draw is PathDraw || draw is W5bPointDraw)
+                                    requireNotNull(semantic.payloadRef.uniformBlock).bytes.map(Int::toByte).toByteArray()
+                                else {
+                                    val uniform = buildCorePrimitiveAnalyticShapeUniform(semantic, GPUCorePrimitivePreparedSemanticAuthority.capture(semantic))
+                                    require(uniform is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted)
+                                    uniform.bytes.copyOf()
+                                }
+                                if (packet.role != GPUDrawPacketRole.PathStencilProducer)
+                                    templates[packet.packetId] = requireNotNull(sealCorePrimitiveGeometryHostTemplateV1(packet, key)).copy(
+                                        materialDevicePointWgsl = "fragment_position.xy + vec2<f32>(${targetOrigin.x}.0, ${targetOrigin.y}.0)")
+                            }
+                            packet
+                        }
+                        add(GPUFrameStep.RenderPassStep(refs.getValue(targetId) as GPUFrameTargetRef,
+                            GPULoadStorePlan(if (render?.load == AttachmentLoadPlan.ClearTransparent) "clear" else "load", GPUStorePlan.Store),
+                            GPUSamplePlan.SingleSampleFrame,
+                            resourceUses = if (pass is PlanPass.LayerComposite) listOf(GPUFrameResourceUse(refs.getValue(pass.source),
+                                GPUFrameResourceRole.LayerTarget, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false))
+                                else depthId?.let { listOf(GPUFrameResourceUse(refs.getValue(it), GPUFrameResourceRole.PathDepthStencil,
+                                    GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceLifetime.FrameLocal, true)) }.orEmpty(),
+                            drawPackets = packets, sourceTaskIds = task,
+                            batches = if (packets.isEmpty()) emptyList() else listOf(GPUFrameRenderBatch("w6a.${pass.id.value}", GPUPassBatchKind.Isolated, packets, task)),
+                            depthStencilLoadStore = depthId?.let { GPUDepthStencilLoadStorePlan.WritableStencil(
+                                if (pass is PlanPass.StencilGeometryProducerV3) GPUStencilLoadOperation.Clear else GPUStencilLoadOperation.Load,
+                                GPUStorePlan.Store, if (pass is PlanPass.StencilGeometryProducerV3) 0u else null) }, w6aPassV1 = pass))
+                    }
+                    is PlanPass.ReadbackPass -> add(GPUFrameStep.ReadbackCopyStep(refs.getValue(pass.source) as GPUFrameTargetRef,
+                        refs.getValue(pass.staging) as GPUFrameBufferRef, readback, task))
+                    is PlanPass.TextureCopy -> add(GPUFrameStep.CopyResourceStep(refs.getValue(pass.source), refs.getValue(pass.destination),
+                        listOf(GPUResourceCopyRegion(0L, 0L, pass.copySourceBoundsI32()?.let { bounds ->
+                            GPUPixelBounds(bounds.left, bounds.top, bounds.right, bounds.bottom)
+                        }, graph.resources().single { it.id == pass.source }.byteSize)), task))
+                    else -> error("Unadmitted W6 pass")
+                }
+            }
+        })
+        tasks = steps.map { step ->
+            val id = step.sourceTaskIds.single()
+            when (step) {
+                is GPUFrameStep.PrepareResourcesStep -> GPUTask.PrepareResources(id, request.recordingId, GPUTaskPhase.Prepare, step.requests)
+                is GPUFrameStep.RenderPassStep -> GPUTask.Render(id, request.recordingId, GPUTaskPhase.Render,
+                    step.target, step.loadStore, step.samplePlan, resourceUses = step.resourceUses,
+                    drawPackets = step.drawPackets, batchEligibilityByPacketId = step.drawPackets.associate {
+                        it.packetId to GPUPassBatchEligibility(GPUPassBatchKind.Isolated)
+                    }, depthStencilLoadStore = step.depthStencilLoadStore, w6aPassV1 = step.w6aPassV1)
+                is GPUFrameStep.ReadbackCopyStep -> GPUTask.Readback(id, request.recordingId, GPUTaskPhase.Readback,
+                    step.source, step.staging, step.request)
+                is GPUFrameStep.CopyResourceStep -> GPUTask.Copy(id, request.recordingId, GPUTaskPhase.Copy,
+                    step.source, step.destination, step.regions)
+                else -> error("Unadmitted W6 step")
+            }
+        }
+        w4eAuthorities.forEach { (binding, authority) ->
+            val renders = tasks.filterIsInstance<GPUTask.Render>().filter { it.w6aPassV1?.id in binding.graphPassIds() }
+            val frameAuthority = authority.issueFrameAuthority(request.frameId.value, seal.sealHash, renders)
+            renders.forEach { render ->
+                val packet = render.drawPackets.single()
+                packet.attachW4ePreparedFrameAuthority(frameAuthority)
+                if (packet.materialSourcePartitionV3() != null) {
+                    val origin = targetOriginsDeviceI32.getValue(binding.target)
+                    val template = requireNotNull(sealW4eMaterialGeometryHostV1(packet, commonFinalSource = true))
+                    templates[packet.packetId] = template.copy(materialDevicePointWgsl =
+                        "${requireNotNull(template.materialCoordinateSlot).devicePointWgsl} + vec2<f32>(${origin.x}.0, ${origin.y}.0)")
+                }
+            }
+            require(frameAuthority.validatesRenders(request.frameId.value, seal.sealHash, renders))
+        }
+    }
+
+    internal fun taskList(): GPUTaskList = GPUTaskList(request.frameId, seal, listOf(recording), graph.id.value,
+        tasks, emptyList(), GPUTaskPhase.entries, memory, w6aLayerFrameV1 = this)
+
+    /** Exact plan-owned snapshot consumer, with coordinates in its target's local space. */
+    internal fun destinationCopy(packet: GPUDrawPacket): PlanPass.TextureCopy? {
+        val pass = graph.passes().singleOrNull { pass -> when (pass) {
+            is PlanPass.RenderPass -> pass.draws().any { it.commandIndex == packet.commandIdValue }
+            is PlanPass.StencilCover -> pass.draw.commandIndex == packet.commandIdValue
+            else -> false
+        } } ?: return null
+        val draw = when (pass) {
+            is PlanPass.RenderPass -> pass.draws().single()
+            is PlanPass.StencilCover -> pass.draw
+            else -> error("Unreachable destination consumer")
+        }
+        val blend = draw.blend as? BlendPlan.DestinationReadV1 ?: return null
+        return graph.passes().filterIsInstance<PlanPass.TextureCopy>().single { it.destination == blend.snapshotResource &&
+            it.destinationVersion == blend.requiredDestinationVersion }
+    }
+
+    internal fun frame(tasks: GPUTaskList): GPUFramePlan {
+        require(tasks.w6aLayerFrameV1 === this && tasks.capabilitySeal === seal &&
+            tasks.frameId == request.frameId && tasks.recordingSeals == listOf(recording) && tasks.memoryBudget == memory &&
+            tasks.dependencies.isEmpty() && tasks.phaseOrder == GPUTaskPhase.entries && tasks.compositeCommands.isEmpty() &&
+            tasks.tasks.size == this.tasks.size && tasks.tasks.zip(this.tasks).all { (a, b) -> a === b })
+        return GPUFramePlan(request.frameId, seal, listOf(recording), steps, memory, emptyList(), w6aLayerFrameV1 = this)
+    }
+
+    internal fun validates(frame: GPUFramePlan): Boolean = frame.w6aLayerFrameV1 === this &&
+        frame.capabilitySeal === seal && frame.steps.size == steps.size && frame.steps.zip(steps).all { (a, b) -> a === b } &&
+        frame.frameId == request.frameId && frame.recordingSeals == listOf(recording) && frame.dependencies.isEmpty() &&
+        frame.phaseOrder == GPUTaskPhase.entries && frame.diagnostics.isEmpty() && frame.elidedNoOpDraws.isEmpty() &&
+        !frame.atomicallyRefused && frame.memoryBudget == memory && graph.verifyW6aLayerCompilerWitness()
+
+    internal fun template(packet: GPUDrawPacket): GPUW5aGeometryHostTemplateV1? = templates[packet.packetId]
+    internal fun validatesW4eFragments(frame: GPUFramePlan): Boolean = validates(frame) && w4eAuthorities.all { (binding, _) ->
+        val renders = frame.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().filter { it.w6aPassV1?.id in binding.graphPassIds() }
+        val authority = renders.firstOrNull()?.drawPackets?.singleOrNull()?.w4ePreparedFrameAuthority
+        renders.size == binding.graphPassIds().size && authority?.nativePayload === binding.payload &&
+            authority.validatesRenderSteps(frame.frameId.value, frame.capabilitySeal.sealHash, renders)
+    }
+    internal fun analyticUniform(packet: GPUDrawPacket): ByteArray = requireNotNull(analyticUniforms[packet.packetId]).copyOf()
+    internal fun geometryPipeline(packet: GPUDrawPacket): GPUWgpu4kCorePrimitivePipelineMapping.Mapped? = geometryPipelines[packet.packetId]
+}

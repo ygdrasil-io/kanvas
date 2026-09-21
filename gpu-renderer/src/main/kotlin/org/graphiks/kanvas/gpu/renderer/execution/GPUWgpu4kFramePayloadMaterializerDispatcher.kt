@@ -315,6 +315,11 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                 "The prepared frame payload dispatcher is one-shot and already consumed.",
             )
         }
+        if (framePlan.w6aLayerFrameV1 != null) {
+            val materializer = GPUWgpu4kW6aLayerFramePayloadMaterializer(device, queue, preparedSceneTarget)
+            delegate = materializer
+            return materializer.materializeReusable(framePlan, sourceWitness, encoderPlan, resources, generationSeal)
+        }
         val w4eRenderSteps = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
         val hasW4e = w4eRenderSteps.any { step ->
             step.drawPackets.any { packet -> packet.role == GPUDrawPacketRole.W4ePrepared }

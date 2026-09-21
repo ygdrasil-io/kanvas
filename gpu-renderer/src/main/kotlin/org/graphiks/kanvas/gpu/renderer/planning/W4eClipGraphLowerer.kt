@@ -328,12 +328,18 @@ internal class W4eClipGraphLowerer {
         resourcesById: Map<String, PlanResource>,
         consumer: GPUW4ePreparedClipConsumerAuthority?,
         preparedPath: GPUW4ePreparedClipPassAuthority.Path?,
+        nativeDataResources: org.graphiks.kanvas.gpu.plan.PlanDrawDataResources? = null,
     ): List<GPUFrameResourceUse> {
         fun use(id: String, role: GPUFrameResourceRole, usage: GPUFrameResourceUsage, write: Boolean) =
             GPUFrameResourceUse(refs.getValue(id), role, usage, GPUFrameResourceLifetime.FrameLocal, write)
         fun nativeData(resourceRole: PlanResourceRole, frameRole: GPUFrameResourceRole, usage: GPUFrameResourceUsage) =
             use(
-                requireNotNull(resourcesById.values.singleOrNull { it.role == resourceRole }) {
+                requireNotNull(nativeDataResources?.let { data -> resourcesById[when (resourceRole) {
+                    PlanResourceRole.VertexData -> data.vertex.value
+                    PlanResourceRole.IndexData -> data.index.value
+                    PlanResourceRole.UniformData -> data.uniform.value
+                    else -> error("Not W4e native data")
+                }] }?.also { require(it.role == resourceRole) } ?: resourcesById.values.singleOrNull { it.role == resourceRole }) {
                     "W4e native $resourceRole resource must be unique"
                 }.id.value,
                 frameRole,
@@ -403,7 +409,7 @@ internal class W4eClipGraphLowerer {
 
     private fun sealedRoleFor(resource: PlanResource): GPUFrameResourceRole = when (resource.role) {
             PlanResourceRole.LogicalTarget -> GPUFrameResourceRole.SceneTarget
-            PlanResourceRole.MultisampleColorTarget -> GPUFrameResourceRole.LayerTarget
+            PlanResourceRole.MultisampleColorTarget, PlanResourceRole.LayerTarget -> GPUFrameResourceRole.LayerTarget
             PlanResourceRole.ReadbackStaging -> GPUFrameResourceRole.ReadbackStaging
             PlanResourceRole.CoverageMaskDepthStencil -> GPUFrameResourceRole.ClipDepthStencil
             PlanResourceRole.DepthStencil, PlanResourceRole.PathHardEdgeDepthStencil -> GPUFrameResourceRole.PathDepthStencil

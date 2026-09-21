@@ -3,6 +3,15 @@ package org.graphiks.kanvas.gpu.plan
 /** Shared, handle-free authority for the existing rounded premultiplied blend schedules. */
 public object BlendFormulaProgramV1 {
     public const val REVISION_I32: Int = 1
+
+    /** Facts carried by the selected W5 formula, before any backend chooses a lowering. */
+    public fun finalCompositionFacts(
+        modeLabel: String,
+        readsPriorDevice: Boolean,
+        writesParentDevice: Boolean,
+    ): FinalBlendCompositionFactsV1? = selectedReturns[modeLabel]?.let { selected ->
+        FinalBlendCompositionFactsV1(readsPriorDevice, selected.affectsTransparentBlack, writesParentDevice)
+    }
     internal fun colorOperations(modeLabel: String, src: List<ColorOperationGraphV1.Scalar>,
         dst: List<ColorOperationGraphV1.Scalar>): ColorOperationGraphV1 {
         val source = requireNotNull(selectedBlendFunctionWgsl(modeLabel))
@@ -19,7 +28,7 @@ public object BlendFormulaProgramV1 {
         return buildString {
             if (modeLabel in advancedModeLabels) appendLine(advancedHelpersWgsl)
             appendLine("fn $functionName(src: vec4f, dst: vec4f) -> vec4f {")
-            appendLine("    $selectedReturn")
+            appendLine("    ${selectedReturn.wgsl}")
             appendLine("}")
         }.trim()
     }
@@ -146,35 +155,37 @@ public object BlendFormulaProgramV1 {
         "luminosity",
     )
 
+    private data class SelectedReturn(val wgsl: String, val affectsTransparentBlack: Boolean)
+
     private val selectedReturns = mapOf(
-        "clear" to "return vec4f(0.0);",
-        "src_over" to "return src + dst * (1.0 - src.a);",
-        "src" to "return src;",
-        "dst" to "return dst;",
-        "dst_over" to "return dst + src * (1.0 - dst.a);",
-        "src_in" to "return src * dst.a;",
-        "dst_in" to "return dst * src.a;",
-        "src_out" to "return src * (1.0 - dst.a);",
-        "dst_out" to "return dst * (1.0 - src.a);",
-        "src_atop" to "return src * dst.a + dst * (1.0 - src.a);",
-        "dst_atop" to "return dst * src.a + src * (1.0 - dst.a);",
-        "xor" to "return src * (1.0 - dst.a) + dst * (1.0 - src.a);",
-        "plus" to "return min(vec4f(1.0), src + dst);",
-        "modulate" to "return src * dst;",
-        "multiply" to "return kanvasBlendAdvancedPremul(src, dst, 0u);",
-        "screen" to "return kanvasBlendAdvancedPremul(src, dst, 1u);",
-        "overlay" to "return kanvasBlendAdvancedPremul(src, dst, 2u);",
-        "darken" to "return kanvasBlendAdvancedPremul(src, dst, 3u);",
-        "lighten" to "return kanvasBlendAdvancedPremul(src, dst, 4u);",
-        "color_dodge" to "return kanvasBlendAdvancedPremul(src, dst, 7u);",
-        "color_burn" to "return kanvasBlendAdvancedPremul(src, dst, 8u);",
-        "hard_light" to "return kanvasBlendAdvancedPremul(src, dst, 9u);",
-        "soft_light" to "return kanvasBlendAdvancedPremul(src, dst, 10u);",
-        "difference" to "return kanvasBlendAdvancedPremul(src, dst, 5u);",
-        "exclusion" to "return kanvasBlendAdvancedPremul(src, dst, 6u);",
-        "hue" to "return kanvasBlendAdvancedPremul(src, dst, 11u);",
-        "saturation" to "return kanvasBlendAdvancedPremul(src, dst, 12u);",
-        "color" to "return kanvasBlendAdvancedPremul(src, dst, 13u);",
-        "luminosity" to "return kanvasBlendAdvancedPremul(src, dst, 14u);",
+        "clear" to SelectedReturn("return vec4f(0.0);", true),
+        "src_over" to SelectedReturn("return src + dst * (1.0 - src.a);", false),
+        "src" to SelectedReturn("return src;", true),
+        "dst" to SelectedReturn("return dst;", false),
+        "dst_over" to SelectedReturn("return dst + src * (1.0 - dst.a);", false),
+        "src_in" to SelectedReturn("return src * dst.a;", true),
+        "dst_in" to SelectedReturn("return dst * src.a;", true),
+        "src_out" to SelectedReturn("return src * (1.0 - dst.a);", true),
+        "dst_out" to SelectedReturn("return dst * (1.0 - src.a);", false),
+        "src_atop" to SelectedReturn("return src * dst.a + dst * (1.0 - src.a);", false),
+        "dst_atop" to SelectedReturn("return dst * src.a + src * (1.0 - dst.a);", true),
+        "xor" to SelectedReturn("return src * (1.0 - dst.a) + dst * (1.0 - src.a);", false),
+        "plus" to SelectedReturn("return min(vec4f(1.0), src + dst);", false),
+        "modulate" to SelectedReturn("return src * dst;", true),
+        "multiply" to SelectedReturn("return kanvasBlendAdvancedPremul(src, dst, 0u);", false),
+        "screen" to SelectedReturn("return kanvasBlendAdvancedPremul(src, dst, 1u);", false),
+        "overlay" to SelectedReturn("return kanvasBlendAdvancedPremul(src, dst, 2u);", false),
+        "darken" to SelectedReturn("return kanvasBlendAdvancedPremul(src, dst, 3u);", false),
+        "lighten" to SelectedReturn("return kanvasBlendAdvancedPremul(src, dst, 4u);", false),
+        "color_dodge" to SelectedReturn("return kanvasBlendAdvancedPremul(src, dst, 7u);", false),
+        "color_burn" to SelectedReturn("return kanvasBlendAdvancedPremul(src, dst, 8u);", false),
+        "hard_light" to SelectedReturn("return kanvasBlendAdvancedPremul(src, dst, 9u);", false),
+        "soft_light" to SelectedReturn("return kanvasBlendAdvancedPremul(src, dst, 10u);", false),
+        "difference" to SelectedReturn("return kanvasBlendAdvancedPremul(src, dst, 5u);", false),
+        "exclusion" to SelectedReturn("return kanvasBlendAdvancedPremul(src, dst, 6u);", false),
+        "hue" to SelectedReturn("return kanvasBlendAdvancedPremul(src, dst, 11u);", false),
+        "saturation" to SelectedReturn("return kanvasBlendAdvancedPremul(src, dst, 12u);", false),
+        "color" to SelectedReturn("return kanvasBlendAdvancedPremul(src, dst, 13u);", false),
+        "luminosity" to SelectedReturn("return kanvasBlendAdvancedPremul(src, dst, 14u);", false),
     )
 }

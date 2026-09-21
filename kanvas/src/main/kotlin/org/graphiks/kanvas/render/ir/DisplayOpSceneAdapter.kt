@@ -74,7 +74,7 @@ public object DisplayOpSceneAdapter {
             // Complete the metadata pass before any operation can map stops into IR.
             CaptureContext(limits).preflightOperations(operations)
             val context = CaptureContext(limits)
-            SceneCaptureResult.Captured(SceneSnapshot.of(extent, colorSpace, captureOperations(operations, limits, context)))
+            SceneCaptureResult.Captured(SceneSnapshot.of(extent, colorSpace, captureOperations(operations, limits, context), limits.graphLimits))
         } catch (failure: CaptureFailure) {
             invalid(diagnostics, failure.code, failure.message)
         } catch (failure: IllegalArgumentException) {
@@ -191,6 +191,7 @@ public object DisplayOpSceneAdapter {
                     paint = paint,
                     blend = paint?.toBlendNode() ?: BlendNode.SrcOver,
                     compositeClip = operation.rec.compositeClip?.let(::captureClip),
+                    initWithPrevious = operation.rec.initWithPrevious,
                     backdrop = backdrop?.let { EffectStack.of(listOf(it)) } ?: EffectStack.Empty,
                     effects = paint?.toEffectStack() ?: EffectStack.Empty,
                     transform = operation.transform.checked("layer[$index].transform"),

@@ -221,6 +221,8 @@ internal fun GpuPlanCompiler.constructSourceLaneV4(candidate: GpuPlanCandidate,c
     is W4dPathStrokePlanCompiler -> constructSources(candidate,capabilities,budget)
     is W4dGeneralPathPlanCompiler -> constructSources(candidate,capabilities,budget)
     is W4eClipPlanCompiler -> constructSources(candidate,capabilities,budget)
+    is W5bPointPlanCompiler -> constructSources(candidate,capabilities,budget)
+    is W5bVerticesPlanCompiler -> constructSources(candidate,capabilities,budget)
     else -> sourceConstructionRefusalV4(W5fPlanDiagnostics.Unpromoted).failure
 }
 

@@ -5,6 +5,8 @@ import org.graphiks.math.geometry.SizeI32
 public enum class PlanResourceKind { Texture2D, Buffer }
 public enum class PlanResourceRole {
     LogicalTarget,
+    /** Single-sample RGBA8 offscreen target owned by a W6 layer occurrence. */
+    LayerTarget,
     MultisampleColorTarget,
     PathHardEdgeMask,
     PathHardEdgeDepthStencil,
@@ -21,6 +23,10 @@ public enum class PlanResourceRole {
     DestinationSnapshot,
     DecodedImageV1,
     NoiseTableData,
+    SourceUniformData,
+    ImageUploadStaging,
+    RuntimeStorageData,
+    RuntimeSampler,
 }
 public enum class PlanResourceUsage {
     RenderAttachment,

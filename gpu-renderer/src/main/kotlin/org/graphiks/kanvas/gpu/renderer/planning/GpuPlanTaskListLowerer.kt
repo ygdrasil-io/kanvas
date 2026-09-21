@@ -121,6 +121,8 @@ public class GpuPlanTaskListLowerer {
         if (request.graph.verifyW5bGeometryCompilerWitness() && request.graph.visualCommandCount == 0)
             return lowerW3(request, current)
         return when (request.graph.capabilityId) {
+            org.graphiks.kanvas.gpu.plan.W6aLayerPlanCompiler.CAPABILITY_ID ->
+                W6aLayerGraphLowerer().lower(request)
             org.graphiks.kanvas.gpu.plan.W5eImagePlanCompiler.CAPABILITY_ID -> W5eImagePlanLowerer().lower(request)
             org.graphiks.kanvas.gpu.plan.W5eImagePlanCompiler.CONSTRUCTION_CAPABILITY_ID -> lowerW3(request, current)
             W4bAnalyticRRectPlanCompiler.W5B_CAPABILITY_ID -> W5bAnalyticRRectGraphLowerer().lower(request)
@@ -402,7 +404,8 @@ public class GpuPlanTaskListLowerer {
 
     internal fun packet(draw: PlanDraw, color: ColorF32, paintOrder: Int, target: GPUPixelBounds, materialPlanTable: MaterialPlanTable?,
         prepared: org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive?,
-        packedSourceV4: org.graphiks.kanvas.gpu.plan.RawMaterialRequirementsV2? = null): GPUDrawPacket {
+        packedSourceV4: org.graphiks.kanvas.gpu.plan.RawMaterialRequirementsV2? = null,
+        frozenW6aGraph: RenderGraph? = null): GPUDrawPacket {
         val bounds = when (draw) { is SolidRectDraw -> draw.copyVisibleBounds(); is W5bPointDraw -> draw.copyBoundsI32(); else -> error("Unknown direct geometry") }
         val scissor = when (draw) { is SolidRectDraw -> draw.copyScissor(); is W5bPointDraw -> draw.copyScissorI32(); else -> error("Unknown direct geometry") }
         require(bounds.roundTripsExactlyThroughF32() && scissor.roundTripsExactlyThroughF32()) {
@@ -415,19 +418,27 @@ public class GpuPlanTaskListLowerer {
         val blend = W5bBlendPlanLowerer.lower(draw.blend)
         val analysisRecordId = "analysis.fill_rect.${draw.commandIndex}"
         val semantic = if (draw is W5bPointDraw) {
-            val authentic = requireNotNull(prepared)
-            val geometry = authentic.geometry as org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry.TriangulatedPath
-            require(authentic.hasStructuralIntegrity() && authentic.sourceFamily == GPUCorePrimitiveSourceFamily.PointLine &&
-                geometry.vertices == draw.copyVerticesF32().toList() && geometry.indices == draw.copyIndicesI32().toList() &&
-                geometry.sourceContourStarts == draw.copyContourStartsI32().toList())
+            val geometry = if (frozenW6aGraph != null) {
+                require(prepared == null && frozenW6aGraph.verifyW6aLayerCompilerWitness() &&
+                    frozenW6aGraph.passes().filterIsInstance<PlanPass.RenderPass>().flatMap { it.draws() }.any { it === draw })
+                GPUCorePrimitiveGeometryInput.TriangulatedPath(draw.copyVerticesF32().toList(), draw.copyIndicesI32().toList(),
+                    draw.copyContourStartsI32().toList(), draw.copyVerticesF32().size / 2,
+                    GPUPixelBounds(bounds.left, bounds.top, bounds.right, bounds.bottom))
+            } else {
+                val authentic = requireNotNull(prepared)
+                val captured = authentic.geometry as org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry.TriangulatedPath
+                require(authentic.hasStructuralIntegrity() && authentic.sourceFamily == GPUCorePrimitiveSourceFamily.PointLine &&
+                    captured.vertices == draw.copyVerticesF32().toList() && captured.indices == draw.copyIndicesI32().toList() &&
+                    captured.sourceContourStarts == draw.copyContourStartsI32().toList())
+                GPUCorePrimitiveGeometryInput.TriangulatedPath(captured.vertices, captured.indices, captured.sourceContourStarts,
+                    captured.sourceVertexCount, captured.coverBounds, captured.geometryMode, captured.fillRule, captured.inverseFill,
+                    captured.strokeStyle, captured.sourceAuthority)
+            }
             GPUCorePrimitivePayloadGatherer().gatherSemantic(GPUCorePrimitivePayloadInput(draw.commandIndex,
-                GPUCorePrimitiveSourceFamily.PointLine, GPUCorePrimitiveGeometryInput.TriangulatedPath(
-                    geometry.vertices, geometry.indices, geometry.sourceContourStarts, geometry.sourceVertexCount,
-                    geometry.coverBounds, geometry.geometryMode, geometry.fillRule, geometry.inverseFill,
-                    geometry.strokeStyle, geometry.sourceAuthority), listOf(color.red, color.green, color.blue, color.alpha),
+                GPUCorePrimitiveSourceFamily.PointLine, geometry, listOf(color.red, color.green, color.blue, color.alpha),
                 target, scissorBounds, clip, execution.canonicalIdentity(), blend.canonicalIdentity(),
-                GPUFrameProvenance.None, GPUCorePrimitiveCoverageMode.FullOrScissor, authentic.analysisRecordId,
-                authentic.analysisCommandFamily, material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex,packedSourceV4)))
+                GPUFrameProvenance.None, GPUCorePrimitiveCoverageMode.FullOrScissor, prepared?.analysisRecordId,
+                prepared?.analysisCommandFamily, material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex,packedSourceV4)))
         } else GPUCorePrimitivePayloadGatherer().gatherSemantic(GPUCorePrimitivePayloadInput(draw.commandIndex, GPUCorePrimitiveSourceFamily.Rect, GPUCorePrimitiveGeometryInput.Rect(rect.left, rect.top, rect.right, rect.bottom), listOf(color.red, color.green, color.blue, color.alpha), target, scissorBounds, clip, execution.canonicalIdentity(), blend.canonicalIdentity(), GPUFrameProvenance.None, GPUCorePrimitiveCoverageMode.FullOrScissor, analysisRecordId, "FillRect", GPUCorePrimitiveRectRouteAuthority.RectAxisAligned, corePrimitiveRectGeometryAuthority(rect, GPUTransformFacts.identity()), material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex,packedSourceV4)))
         val structuralKey = corePrimitiveRenderPipelineStructuralKey(
             semantic,
