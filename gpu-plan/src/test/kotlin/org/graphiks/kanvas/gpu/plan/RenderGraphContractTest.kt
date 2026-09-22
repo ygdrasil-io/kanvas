@@ -1034,6 +1034,48 @@ class RenderGraphContractTest {
     }
 
     @Test
+    fun `separable filter passes retain one bound occurrence while y reads x output`() {
+        val source = planResourceId(PlanResourceRole.LogicalTarget, 0)
+        val horizontalTarget = planResourceId(PlanResourceRole.FilterTarget, 0)
+        val verticalTarget = planResourceId(PlanResourceRole.FilterTarget, 1)
+        val deviceBounds = RectI32(0, 0, 1, 1)
+        val mapping = requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32.Origin))
+        val key = FilterEvaluationKeyV1.of(CapturedFilterNodeId(0), source, mapping, deviceBounds)
+        val bounds = FilterBoundsPlanV1(null, deviceBounds, deviceBounds, deviceBounds, Point2I32.Origin)
+        val horizontal = PlanPass.FilterPass(
+            0,
+            listOf(source),
+            horizontalTarget,
+            key,
+            FilterPassOperationV1.SeparableBlur(
+                FilterImplementationKindV1.IMAGE_BLUR_X,
+                1f,
+                FilterAxisV1.X,
+                org.graphiks.kanvas.render.ir.TileMode.CLAMP,
+                bounds,
+            ),
+        )
+        val vertical = PlanPass.FilterPass(
+            1,
+            listOf(horizontalTarget),
+            verticalTarget,
+            key,
+            FilterPassOperationV1.SeparableBlur(
+                FilterImplementationKindV1.IMAGE_BLUR_Y,
+                1f,
+                FilterAxisV1.Y,
+                org.graphiks.kanvas.render.ir.TileMode.CLAMP,
+                bounds,
+            ),
+        )
+
+        assertEquals(source, horizontal.inputs().single())
+        assertEquals(horizontalTarget, vertical.inputs().single())
+        assertEquals(source, vertical.evaluationKey.boundSourceId)
+        assertSame(horizontal.evaluationKey, vertical.evaluationKey)
+    }
+
+    @Test
     fun `path graphs reject resolve passes`() {
         assertFailsWith<IllegalArgumentException> {
             directPathGraphWithInterposedPass { resources ->

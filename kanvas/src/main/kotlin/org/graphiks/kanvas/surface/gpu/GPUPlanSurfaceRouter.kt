@@ -90,7 +90,7 @@ internal class GPUPlanSurfaceRouter(
         val scene = when (val captured = capturePort.capture(planningOperations, extent, ColorSpace.SRGB, captureLimits)) {
             is SceneCaptureResult.Captured -> captured.scene
             is SceneCaptureResult.Invalid -> {
-                if (!layerOwned && !imageOwned && captured.diagnostics.isNotEmpty() &&
+                if (!layerOwned && !w6bOwned && !imageOwned && captured.diagnostics.isNotEmpty() &&
                     captured.diagnostics.all { it.code.value in CAPTURE_LIMIT_CODES }
                 ) return legacy()
                 throw terminal(captured.diagnostics)

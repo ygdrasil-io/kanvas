@@ -77,6 +77,7 @@ internal class W6aLayerGraphConstruction(
     val budget: PlanBudget,
     occurrences: List<W6aLayerPlanCompiler.ScopeOccurrence>,
     bindings: List<W6aLayerSourceBinding>,
+    private val filterScene: org.graphiks.kanvas.render.ir.SceneSnapshot? = null,
 ) {
     private val occurrences = immutableList(occurrences)
     private val bindings = immutableList(bindings)
@@ -91,6 +92,7 @@ internal class W6aLayerGraphConstruction(
     private val rawPasses: List<PlanPass>
     private val frame: LayerFramePlanV1
     private val resources: List<PlanResource>
+    private val frozenFilters: W6bFilterGraphConstruction.FrozenGraph
     private val w4eBindings = mutableListOf<PlanW4eGeometryBindingV1>()
     private val childSnapshots = mutableSetOf<PlanResourceId>()
     val nonUniformBytesI64: Long
@@ -199,6 +201,12 @@ internal class W6aLayerGraphConstruction(
             activeByScope.getValue(target.value.substringAfter(':').toInt()).targetExtentI32()
         fun targetOriginDevice(target: PlanResourceId): Point2I32 = if (target == root) Point2I32.Origin else
             activeByScope.getValue(target.value.substringAfter(':').toInt()).mapping!!.copyLayerOriginDeviceI32()
+        fun filterSource(target: PlanResourceId): W6bFilterGraphConstruction.SourceBinding {
+            val origin = targetOriginDevice(target)
+            val mapping = if (target == root) requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), origin)) else
+                activeByScope.getValue(target.value.substringAfter(':').toInt()).mapping!!
+            return W6bFilterGraphConstruction.SourceBinding(target, targetExtent(target), origin, mapping)
+        }
         val dataByCommand = linkedMapOf<Int, PlanDrawDataResources>()
         val laneResourceIds = lanes.mapIndexed { laneI32, lane -> lane.resources().associate { row -> row.id to when (row.role) {
             PlanResourceRole.LogicalTarget -> targetFor(bindings[laneI32].scopeI32)
@@ -425,6 +433,25 @@ internal class W6aLayerGraphConstruction(
                 )
             }
         }
+        val sourcesByTopLevelCommand = linkedMapOf<Int, W6bFilterGraphConstruction.SourceBinding>()
+        bindingsByCommand.forEach { (commandIndexI32, binding) ->
+            sourcesByTopLevelCommand[commandIndexI32] = filterSource(targetFor(binding.scopeI32))
+        }
+        begins.forEach { (commandIndexI32, occurrence) ->
+            if (occurrence.idI32 in activeByScope) {
+                sourcesByTopLevelCommand[commandIndexI32] = filterSource(targetFor(occurrence.idI32))
+            }
+        }
+        frozenFilters = filterScene?.takeIf(W6bFilterGraphConstruction::owns)?.let { scene ->
+            W6bFilterGraphConstruction.freezePositiveGraph(
+                scene,
+                sourcesByTopLevelCommand::get,
+                filterSource(root),
+                firstTargetOrdinalI32 = 0,
+                firstPassOrdinalI32 = passes.size,
+            )
+        } ?: W6bFilterGraphConstruction.FrozenGraph(emptyList(), emptyList())
+        passes += frozenFilters.passes()
         passes += PlanPass.ReadbackPass(passes.size, root, staging, readbackRowBytesI64,
             Math.addExact(Math.multiplyExact(readbackRowBytesI64, (extent.height - 1).toLong()), Math.multiplyExact(extent.width.toLong(), 4L)))
         rawPasses = immutableList(passes)
@@ -443,7 +470,11 @@ internal class W6aLayerGraphConstruction(
             add(PlanResource.of(PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D,
                 PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), extent,
                 checkedTextureBytesI64(4, extent.width, extent.height, 1),
-                setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource), PlanResourceLifetime.FrameLocal, 0, passes.size))
+                buildSet {
+                    add(PlanResourceUsage.RenderAttachment)
+                    add(PlanResourceUsage.CopySource)
+                    if (frozenFilters.passes().isNotEmpty()) add(PlanResourceUsage.Sampled)
+                }, PlanResourceLifetime.FrameLocal, 0, passes.size))
             activeByScope.values.forEach { geometry ->
                 val target = targetFor(geometry.occurrence.idI32)
                 val usages = buildSet {
@@ -466,6 +497,7 @@ internal class W6aLayerGraphConstruction(
                     checkedTextureBytesI64(4, parentExtent.width, parentExtent.height, 1),
                     setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.Sampled), PlanResourceLifetime.FrameLocal, 0, passes.size))
             }
+            addAll(frozenFilters.resources())
             add(PlanResource.of(PlanResourceRole.ReadbackStaging, 0, PlanResourceKind.Buffer, null, null,
                 Math.multiplyExact(readbackRowBytesI64, extent.height.toLong()),
                 setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead), PlanResourceLifetime.FrameLocal, 0, passes.size))

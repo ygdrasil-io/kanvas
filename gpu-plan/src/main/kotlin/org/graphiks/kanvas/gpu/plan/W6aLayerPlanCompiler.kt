@@ -2,6 +2,9 @@ package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.kanvas.render.ir.LayerDescriptor
 import org.graphiks.kanvas.render.ir.EffectStack
+import org.graphiks.kanvas.render.ir.GeometryNode
+import org.graphiks.kanvas.render.ir.CapturedFilterRootV1
+import org.graphiks.kanvas.render.ir.MaskFilterNode
 import org.graphiks.kanvas.render.ir.RenderDiagnostic
 import org.graphiks.kanvas.render.ir.RenderDiagnosticCode
 import org.graphiks.kanvas.render.ir.RenderDiagnosticDomain
@@ -38,6 +41,7 @@ public class W6aLayerPlanCompiler public constructor(
 
     private class Candidate(
         val owner: W6aLayerPlanCompiler,
+        val scene: SceneSnapshot,
         override val sceneCanonicalId: org.graphiks.kanvas.render.ir.CanonicalId,
         override val target: RenderTargetDescriptor,
         val occurrences: List<ScopeOccurrence>,
@@ -95,7 +99,7 @@ public class W6aLayerPlanCompiler public constructor(
                         W6aPlanDiagnostics.DepthLimit,
                         "Layer nesting exceeds depth ${graphLimits.maxDepth}.",
                     )
-                    semanticRefusalFor(command.descriptor)?.let { (code, message) -> return invalid(code, message) }
+                    semanticRefusalFor(command.descriptor, ownsW6b)?.let { (code, message) -> return invalid(code, message) }
                     if (!hasEmptyExplicitCompositeClip(command.descriptor)) {
                         geometryRefusalFor(command.descriptor, target)?.let { (code, message) -> return invalid(code, message) }
                     }
@@ -114,7 +118,9 @@ public class W6aLayerPlanCompiler public constructor(
                 is SceneCommand.Draw -> {
                     scopeByDrawIndex[indexI32] = stack.lastOrNull()?.idI32
                     val paint = command.node.paint
-                    if (paint?.imageFilter != null || paint?.maskFilter != null || command.node.effects !is EffectStack.Empty) {
+                    if ((!ownsW6b && (paint?.imageFilter != null || paint?.maskFilter != null)) ||
+                        (command.node.effects !is EffectStack.Empty && !isW6bFilterStack(command.node.effects))
+                    ) {
                         return invalid(
                             W6aPlanDiagnostics.UnsupportedSpatialFilter,
                             "W6a does not admit image or mask filters in a layer frame.",
@@ -134,7 +140,7 @@ public class W6aLayerPlanCompiler public constructor(
             }
         }
         if (stack.isNotEmpty()) return invalid(W6aPlanDiagnostics.MalformedStack, "BeginLayer has no matching EndLayer.")
-        if (scopes.isEmpty()) return invalid(W6aPlanDiagnostics.MalformedStack, "Layer markers did not form a scope.")
+        if (scopes.isEmpty() && !ownsW6b) return invalid(W6aPlanDiagnostics.MalformedStack, "Layer markers did not form a scope.")
 
         val segments = mutableListOf<Segment>()
         val immutableScopes = scopes.map { occurrence -> ScopeOccurrence(
@@ -161,11 +167,16 @@ public class W6aLayerPlanCompiler public constructor(
             // Restore clips apply only at the typed composite.  A proven-empty one has no child
             // render work, while semantic refusal has already run at BeginLayer.
             if (isElidedByExplicitAncestor(scopeI32)) return@forEach
+            // A captured Picture carries its own immutable scene.  W6b traverses and freezes
+            // that scene directly; Task 2 must not send its public Picture draw through a W5
+            // child lane before terminalizing native execution.
+            if (ownsW6b && (commands[drawIndexI32] as SceneCommand.Draw).node.geometry is GeometryNode.Picture) {
+                return@forEach
+            }
             val draws = setOf(drawIndexI32)
             val segment = SceneSnapshot.of(scene.extent, scene.colorSpace, commands.mapIndexed { index, command ->
                 if (index in draws) {
-                    command as SceneCommand.Draw
-                    command
+                    stripW6bPayload(command as SceneCommand.Draw)
                 } else SceneCommand.Annotation.of(org.graphiks.math.geometry.RectF32(0f, 0f, 0f, 0f), "w6a.segment", index.toString())
             }, graphLimits)
             val child = CapabilityCompilerChain.of(listOf(W5bVerticesPlanCompiler(runtimeCatalog), W5bPointPlanCompiler(runtimeCatalog), W5eImagePlanCompiler(), W3SolidRectPlanCompiler(),
@@ -184,7 +195,7 @@ public class W6aLayerPlanCompiler public constructor(
                     "Layer segment is outside the admitted child geometry/source lanes.")
             }
         }
-        return GpuPlanSelection.Candidate(Candidate(this, scene.canonicalId, target, immutableScopes, segments.toList()))
+        return GpuPlanSelection.Candidate(Candidate(this, scene, scene.canonicalId, target, immutableScopes, segments.toList()))
     }
 
     override fun plan(
@@ -210,9 +221,17 @@ public class W6aLayerPlanCompiler public constructor(
                 is RenderPlanResult.InvalidScene -> return result
             }
             val frame = W6aLayerGraphConstruction(PlanId("w6a.${selected.sceneCanonicalId.value}"), org.graphiks.math.geometry.SizeI32(selected.target.extent.width, selected.target.extent.height),
-                capabilities, budget, selected.occurrences, bindings)
+                capabilities, budget, selected.occurrences, bindings, selected.scene)
             when (val layout = FrameSourceLayoutV4.layeredFrame(frame)) {
-                is SourceConstructionResultV4.Built -> layout.value.prepareAndPublish()
+                is SourceConstructionResultV4.Built -> when (val published = layout.value.prepareAndPublish()) {
+                    is RenderPlanResult.Ready -> if (W6bFilterGraphConstruction.owns(selected.scene)) {
+                        RenderPlanResult.InvalidScene(listOf(W6bFilterDiagnostics.refusal(
+                            W6bFilterDiagnostics.NativeExecutionUnimplemented,
+                            "W6b filter graph is frozen, but native execution is not implemented.",
+                        )))
+                    } else published
+                    else -> published
+                }
                 is SourceConstructionResultV4.Refused -> layout.failure
             }
         } catch (failure: W6aResourceLimitFailure) {
@@ -220,6 +239,8 @@ public class W6aLayerPlanCompiler public constructor(
         } catch (failure: W6aRestoreAdmissionFailure) {
             RenderPlanResult.GapOnPromotedScope(listOf(diagnostic(W6aPlanDiagnostics.RestoreCapability,
                 failure.message ?: "Restore bindings are unavailable on this device.")))
+        } catch (failure: W6bFilterGraphConstruction.ConstructionFailure) {
+            RenderPlanResult.InvalidScene(listOf(failure.diagnostic))
         } catch (failure: RawMaterialRequirementsV2.Refusal) {
             sourceConstructionRefusalV4(failure.code).failure
         } catch (failure: IllegalArgumentException) {
@@ -235,12 +256,12 @@ public class W6aLayerPlanCompiler public constructor(
      * Refusals determined entirely by the descriptor's requested semantics.  These must stay
      * observable even when an explicit empty composite clip later elides geometry and targets.
      */
-    private fun semanticRefusalFor(descriptor: LayerDescriptor): Pair<String, String>? {
+    private fun semanticRefusalFor(descriptor: LayerDescriptor, w6bOwned: Boolean): Pair<String, String>? {
         if (descriptor.backdrop !is EffectStack.Empty) return W6aPlanDiagnostics.UnsupportedBackdrop to
             "W6a does not admit layer backdrop filters."
         if (descriptor.paint == null && descriptor.material != null) return W6aPlanDiagnostics.UnsupportedRestore to "A restore source without its captured paint is unsupported."
         val paint = descriptor.paint ?: return null
-        if (paint.imageFilter != null || paint.maskFilter != null) return W6aPlanDiagnostics.UnsupportedSpatialFilter to
+        if (!w6bOwned && (paint.imageFilter != null || paint.maskFilter != null)) return W6aPlanDiagnostics.UnsupportedSpatialFilter to
             "W6a does not admit filters on layer restore paint."
         val colorFilter = paint.colorFilter
         if (colorFilter != null && ColorFilterPlanCompilerV1.compile(colorFilter) is ColorFilterCompileResultV1.Refused)
@@ -250,6 +271,26 @@ public class W6aLayerPlanCompiler public constructor(
             return W6aPlanDiagnostics.UnsupportedRestore to "W6a does not admit this restore blender."
         return null
     }
+
+    /**
+     * W6b binds only the captured IR payload to its frozen graph.  The W5 lane may still prove
+     * the unfiltered source draw, but never sees a public spatial-filter object or chooses a
+     * second filter route.
+     */
+    private fun stripW6bPayload(command: SceneCommand.Draw): SceneCommand.Draw {
+        val paint = command.node.paint
+        val effects = (command.node.effects as? EffectStack.Entries)?.let { entries ->
+            EffectStack.of(entries.filterNot { it is CapturedFilterRootV1 || it is MaskFilterNode })
+        } ?: command.node.effects
+        if ((paint == null || paint.imageFilter == null && paint.maskFilter == null) && effects === command.node.effects) return command
+        return command.copy(node = command.node.copy(
+            paint = paint?.copy(imageFilter = null, maskFilter = null),
+            effects = effects,
+        ))
+    }
+
+    private fun isW6bFilterStack(effects: EffectStack): Boolean = effects is EffectStack.Entries &&
+        effects.all { it is CapturedFilterRootV1 || it is MaskFilterNode }
 
     /**
      * Refusals that require a device mapping or a usable layer extent.  An explicit empty

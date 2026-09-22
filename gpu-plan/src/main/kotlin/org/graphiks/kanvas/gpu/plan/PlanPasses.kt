@@ -1049,9 +1049,6 @@ public sealed interface PlanPass {
             require(storedInputs.isNotEmpty() && output !in storedInputs) {
                 "A filter pass requires distinct input and output resources."
             }
-            require(evaluationKey.boundSourceId in storedInputs) {
-                "A filter pass must retain its bound source input."
-            }
         }
         public fun inputs(): List<PlanResourceId> = storedInputs
     }

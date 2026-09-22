@@ -5,6 +5,7 @@ import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectI32
+import org.graphiks.math.geometry.rebaseAtOriginI32OrNull
 import org.graphiks.math.geometry.roundOutToRectI32OrNull
 
 /** Immutable local/device/layer mapping sealed before a layer graph is published. */
@@ -28,9 +29,14 @@ public class LayerMappingF64 private constructor(
             boundsDeviceI32.bottom.toDouble(),
         ))?.roundOutToRectI32OrNull()
 
-    /** W6b's target-local spelling of the same sealed device-to-layer mapping. */
-    public fun mapDeviceRectToTargetI32OrNull(boundsDeviceI32: RectI32): RectI32? =
-        mapDeviceRectToLayerI32OrNull(boundsDeviceI32)
+    /**
+     * Rebases device texels at the explicit FilterTarget origin.  A target can be expanded or
+     * displaced relative to this mapping's layer origin, so the latter is deliberately unused.
+     */
+    public fun mapDeviceRectToTargetI32OrNull(
+        boundsDeviceI32: RectI32,
+        targetOriginDeviceI32: Point2I32,
+    ): RectI32? = boundsDeviceI32.rebaseAtOriginI32OrNull(targetOriginDeviceI32)
 
     /**
      * Translation of an already raster-admitted analytic shape; no second projection.

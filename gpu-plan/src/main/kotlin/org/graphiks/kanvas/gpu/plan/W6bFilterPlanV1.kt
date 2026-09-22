@@ -62,14 +62,21 @@ public class FilterBoundsPlanV1 internal constructor(
 
 /** Exact contextual identity for one captured node evaluation; equality-by-value is never a reuse proof. */
 public class FilterEvaluationKeyV1 private constructor(
-    public val capturedNodeId: CapturedFilterNodeId,
+    public val capturedNodeId: CapturedFilterNodeId?,
+    public val maskOccurrenceI32: Int?,
     public val boundSourceId: PlanResourceId,
     public val mapping: LayerMappingF64,
     desiredOutputDeviceI32: RectI32,
 ) {
     private val desiredOutputSnapshotI32 = desiredOutputDeviceI32.copy()
 
-    init { require(!desiredOutputSnapshotI32.isEmpty) { "Filter evaluation output must be non-empty." } }
+    init {
+        require(!desiredOutputSnapshotI32.isEmpty) { "Filter evaluation output must be non-empty." }
+        require((capturedNodeId == null) != (maskOccurrenceI32 == null)) {
+            "A filter evaluation is either one captured node or one mask occurrence."
+        }
+        require(maskOccurrenceI32 == null || maskOccurrenceI32 >= 0)
+    }
 
     public fun copyDesiredOutputDeviceI32(): RectI32 = desiredOutputSnapshotI32.copy()
 
@@ -81,6 +88,20 @@ public class FilterEvaluationKeyV1 private constructor(
             desiredOutputDeviceI32: RectI32,
         ): FilterEvaluationKeyV1 = FilterEvaluationKeyV1(
             capturedNodeId,
+            null,
+            boundSourceId,
+            mapping,
+            desiredOutputDeviceI32,
+        )
+
+        public fun forMaskOccurrence(
+            maskOccurrenceI32: Int,
+            boundSourceId: PlanResourceId,
+            mapping: LayerMappingF64,
+            desiredOutputDeviceI32: RectI32,
+        ): FilterEvaluationKeyV1 = FilterEvaluationKeyV1(
+            null,
+            maskOccurrenceI32,
             boundSourceId,
             mapping,
             desiredOutputDeviceI32,

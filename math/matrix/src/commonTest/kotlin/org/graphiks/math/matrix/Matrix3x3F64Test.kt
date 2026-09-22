@@ -1,5 +1,7 @@
 package org.graphiks.math.matrix
 
+import org.graphiks.math.geometry.Point2I32
+import org.graphiks.math.geometry.RectI32
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -10,6 +12,16 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 
 class Matrix3x3F64Test {
+    @Test
+    fun `target mapping rebases at its explicit origin rather than the layer origin`() {
+        val mapping = requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32(10, 20)))
+
+        assertEquals(
+            RectI32(1, 2, 6, 6),
+            mapping.mapDeviceRectToTargetI32OrNull(RectI32(13, 26, 18, 30), Point2I32(12, 24)),
+        )
+    }
+
     @Test
     fun orderedCompositionPreservesIdentityAndNonCommutativeProducts() {
         val translationF32 = Matrix3x3F32.translation(0f, -8f)
