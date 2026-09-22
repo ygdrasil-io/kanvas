@@ -34,8 +34,15 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                     pass.coverageSource?.let { produced(it, index); materialCoverageInputs += it }
                     producers[pass.target] = index
                 }
+                is PlanPass.StencilCover -> {
+                    pass.coverageSource?.let { produced(it, index); materialCoverageInputs += it }
+                    producers[pass.target] = index
+                }
                 is PlanPass.TextureCopy -> producers[pass.destination] = index
-                is PlanPass.PictureSourcePass -> producers[pass.output] = index
+                is PlanPass.PictureSourcePass -> {
+                    pass.coverageSource?.let { produced(it, index); materialCoverageInputs += it }
+                    producers[pass.output] = index
+                }
                 is PlanPass.FilterCoverageSourcePass -> {
                     require(row(pass.output).role == PlanResourceRole.CoverageSource)
                     producers[pass.output] = index
@@ -170,7 +177,15 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                     require(rows.getValue(key.boundSourceId).role == PlanResourceRole.CoverageSource && inputs.single() == key.boundSourceId)
                 is FilterPassOperationV1.MaterializedSource ->
                     require(rows.getValue(key.boundSourceId).role == PlanResourceRole.FilterSource && inputs.single() == key.boundSourceId)
-                is FilterPassOperationV1.DropShadowColorize -> occurrenceOwned(inputs.single())
+                is FilterPassOperationV1.DropShadowColorize -> {
+                    val input = inputs.single()
+                    occurrenceOwned(input)
+                    sameKey(input) { previous ->
+                        previous is FilterPassOperationV1.SeparableBlur &&
+                            previous.axis == FilterAxisV1.Y &&
+                            previous.kind == FilterImplementationKindV1.IMAGE_BLUR_Y
+                    }
+                }
                 is FilterPassOperationV1.DropShadowComposite -> {
                     sameKey(inputs[0]) { it is FilterPassOperationV1.DropShadowColorize }
                     if (operation.mode == org.graphiks.kanvas.render.ir.CapturedDropShadowModeV1.SHADOW_ONLY) {

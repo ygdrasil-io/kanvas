@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.plan
 
+import org.graphiks.kanvas.render.ir.GeometryNode
 import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
@@ -23,6 +24,7 @@ internal fun validateW6aLayerTopology(
     val commands = mutableListOf<Int>()
     val versions = mutableMapOf<PlanResourceId, Long>()
     val preparedMasks = mutableSetOf<PlanResourceId>()
+    val sealedPictureSources = mutableSetOf<PlanResourceId>()
 
     passes.forEachIndexed { indexI32, pass -> when (pass) {
         is PlanPass.ClipMaskInitialize -> {
@@ -58,9 +60,10 @@ internal fun validateW6aLayerTopology(
                 PlanResourceRole.LogicalTarget,
                 PlanResourceRole.LayerTarget,
                 PlanResourceRole.FilterSource,
+                PlanResourceRole.PictureAggregateSource,
                 PlanResourceRole.FilterTransparentBlack,
             ))
-            require(target.id !in restored && target.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages())
+            require(target.id !in restored && target.id !in sealedPictureSources && target.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages())
             val alreadyInitialized = target.id in initialized
             require(pass.load == if (alreadyInitialized) AttachmentLoadPlan.Load else AttachmentLoadPlan.ClearTransparent)
             initialized += target.id
@@ -120,6 +123,11 @@ internal fun validateW6aLayerTopology(
                     copy.destinationVersion == blend.requiredDestinationVersion && blend.requiredDestinationVersion.valueI64 == versions[pass.target])
             }
             val targetExtent = requireNotNull(byId.getValue(pass.target).copyExtent())
+            pass.coverageSource?.let { coverage ->
+                val row = byId.getValue(coverage)
+                require(row.role in setOf(PlanResourceRole.CoverageSource, PlanResourceRole.CoverageOriginal,
+                    PlanResourceRole.FilterTarget) && coverage in initialized && PlanResourceUsage.Sampled in row.usages())
+            }
             val scissor = pass.draw.copyScissorI32()
             require(scissor.left >= 0 && scissor.top >= 0 && scissor.right <= targetExtent.width && scissor.bottom <= targetExtent.height)
             commands += pass.draw.commandIndex
@@ -130,8 +138,13 @@ internal fun validateW6aLayerTopology(
         is PlanPass.LayerComposite -> {
             val source = byId.getValue(pass.source)
             val target = byId.getValue(pass.destination)
-            require(source.role == PlanResourceRole.LayerTarget && target.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget))
-            require(source.id != target.id && source.id in initialized && target.id in initialized)
+            require(source.role == PlanResourceRole.LayerTarget && target.role in setOf(
+                PlanResourceRole.LogicalTarget,
+                PlanResourceRole.LayerTarget,
+                PlanResourceRole.PictureAggregateSource,
+            ))
+            require(source.id != target.id && source.id in initialized && target.id in initialized &&
+                target.id !in sealedPictureSources)
             require(restored.add(source.id) && PlanResourceUsage.Sampled in source.usages())
             val sourceExtent = requireNotNull(source.copyExtent())
             val destinationExtent = requireNotNull(target.copyExtent())
@@ -166,6 +179,7 @@ internal fun validateW6aLayerTopology(
             require(output.role == PlanResourceRole.CoverageSource && output.kind == PlanResourceKind.Texture2D &&
                 output.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in output.usages() &&
                 PlanResourceUsage.Sampled in output.usages())
+            require(!pass.deferSourceDrawClip || pass.occurrence.sourceDraw?.geometry is GeometryNode.Picture)
             require(initialized.add(output.id))
             versions[output.id] = 0L
         }
@@ -177,6 +191,23 @@ internal fun validateW6aLayerTopology(
                 source.copyExtent() == output.copyExtent() && initialized.add(output.id))
             versions[output.id] = 0L
         }
+        is PlanPass.PictureAggregateBeginPass -> {
+            val target = byId.getValue(pass.target)
+            val parent = byId.getValue(pass.parentTarget)
+            require(target.role == PlanResourceRole.PictureAggregateSource && target.kind == PlanResourceKind.Texture2D &&
+                target.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages() &&
+                PlanResourceUsage.Sampled in target.usages() && pass.target !in initialized && pass.target !in sealedPictureSources)
+            require(parent.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget,
+                PlanResourceRole.PictureAggregateSource) && pass.parentTarget in initialized)
+            initialized += pass.target
+            versions[pass.target] = 0L
+        }
+        is PlanPass.PictureAggregateSealPass -> {
+            val source = byId.getValue(pass.sealedSource)
+            require(pass.aggregateTarget == pass.sealedSource && source.role == PlanResourceRole.PictureAggregateSource &&
+                pass.aggregateTarget in initialized && sealedPictureSources.add(pass.aggregateTarget) &&
+                versions.getValue(pass.aggregateTarget) == pass.sourceGenerationI64)
+        }
         is PlanPass.PictureSourcePass -> {
             val output = byId.getValue(pass.output)
             pass.coverageSource?.let { coverage ->
@@ -184,7 +215,27 @@ internal fun validateW6aLayerTopology(
                 require(row.role in setOf(PlanResourceRole.CoverageSource, PlanResourceRole.CoverageOriginal,
                     PlanResourceRole.FilterTarget) && coverage in initialized && PlanResourceUsage.Sampled in row.usages())
             }
-            require(output.role in setOf(PlanResourceRole.FilterSource, PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget) &&
+            pass.layerInput?.let { layerInput ->
+                val row = byId.getValue(layerInput)
+                require(row.role == PlanResourceRole.LayerTarget && layerInput in initialized &&
+                    PlanResourceUsage.Sampled in row.usages() && pass.occurrence?.layerDescriptor != null)
+            }
+            pass.parentTarget?.let { parentTarget ->
+                val row = byId.getValue(parentTarget)
+                require(parentTarget in initialized && row.role in setOf(PlanResourceRole.LogicalTarget,
+                    PlanResourceRole.LayerTarget, PlanResourceRole.PictureAggregateSource))
+            }
+            pass.graphTextureRequest?.let { request ->
+                require(request.sealedSourceId in sealedPictureSources && request.aggregateId == pass.aggregateId)
+            }
+            pass.graphTextureOperand?.let { operand ->
+                val uniform = byId.getValue(operand.uniformResource)
+                require(operand.sealedSourceId in sealedPictureSources && operand.aggregateId == pass.aggregateId &&
+                    uniform.role == PlanResourceRole.SourceUniformData && uniform.kind == PlanResourceKind.Buffer &&
+                    PlanResourceUsage.Uniform in uniform.usages())
+            }
+            require(output.role in setOf(PlanResourceRole.FilterSource, PlanResourceRole.LogicalTarget,
+                PlanResourceRole.LayerTarget, PlanResourceRole.PictureAggregateSource) &&
                 output.kind == PlanResourceKind.Texture2D &&
                 output.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in output.usages() &&
                 (output.role != PlanResourceRole.FilterSource || PlanResourceUsage.Sampled in output.usages()))
@@ -192,7 +243,7 @@ internal fun validateW6aLayerTopology(
                 require(initialized.add(output.id))
                 versions[output.id] = 0L
             } else {
-                require(output.id in initialized)
+                require(output.id in initialized && output.id !in sealedPictureSources)
                 versions[output.id] = Math.addExact(requireNotNull(versions[output.id]), 1L)
             }
         }
@@ -200,8 +251,9 @@ internal fun validateW6aLayerTopology(
             val source = byId.getValue(pass.source)
             val destination = byId.getValue(pass.destination)
             require(source.role == PlanResourceRole.FilterSource && source.id in initialized &&
-                destination.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget) &&
-                destination.id in initialized && PlanResourceUsage.Sampled in source.usages())
+                destination.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget,
+                    PlanResourceRole.PictureAggregateSource) && destination.id in initialized &&
+                destination.id !in sealedPictureSources && PlanResourceUsage.Sampled in source.usages())
             val after = Math.addExact(requireNotNull(versions[destination.id]), 1L)
             versions[destination.id] = after
             require(pass.destinationVersionAfter.valueI64 == after)
@@ -247,7 +299,8 @@ internal fun validateW6aLayerTopology(
                 PlanResourceRole.LogicalTarget,
                 PlanResourceRole.LayerTarget,
                 PlanResourceRole.FilterSource,
-            ) && destination.id in initialized && PlanResourceUsage.Sampled in source.usages())
+                PlanResourceRole.PictureAggregateSource,
+            ) && destination.id in initialized && destination.id !in sealedPictureSources && PlanResourceUsage.Sampled in source.usages())
             val sourceExtent = requireNotNull(source.copyExtent())
             val destinationExtent = requireNotNull(destination.copyExtent())
             val sourceBounds = pass.copySourceBoundsTargetI32()
@@ -287,7 +340,8 @@ internal fun validateW6aLayerTopology(
         is PlanPass.TextureCopy -> {
             val source = byId.getValue(pass.source)
             val destination = byId.getValue(pass.destination)
-            require(source.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget) &&
+            require(source.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget,
+                PlanResourceRole.PictureAggregateSource) &&
                 source.id in initialized && PlanResourceUsage.CopySource in source.usages() &&
                 PlanResourceUsage.CopyDestination in destination.usages())
             val sourceExtent = requireNotNull(source.copyExtent())

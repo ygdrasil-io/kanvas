@@ -147,7 +147,7 @@ internal fun remapSourcePassesV4(sourcePasses: List<PlanPass>,
                 pass.depthStencilAccess,pass.depthStencilLoadStore)
             is PlanPass.StencilCover -> PlanPass.StencilCover(pass.ordinal,pass.target,pass.depthStencil,
                 draw(pass.draw) as PathDraw,pass.drawDataResources,pass.atomicGroup,pass.load,pass.store,
-                pass.depthStencilAccess,pass.depthStencilLoadStore,pass.destinationVersionAfter)
+                pass.depthStencilAccess,pass.depthStencilLoadStore,pass.destinationVersionAfter,pass.coverageSource)
             is PlanPass.PathRenderPass -> PlanPass.PathRenderPass(pass.ordinal,pass.target,draw(pass.draw) as PathRenderDraw,
                 pass.phase,pass.drawDataResources,pass.atomicGroup,pass.depthStencil,pass.load,pass.store,
                 pass.depthStencilAccess,pass.depthStencilLoadStore,pass.resolveTarget)

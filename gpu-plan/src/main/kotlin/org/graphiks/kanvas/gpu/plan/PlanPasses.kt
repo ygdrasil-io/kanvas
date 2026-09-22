@@ -42,6 +42,8 @@ public enum class PlanPassRole {
     FilterSourceClear,
     FilterCoverageSource,
     FilterCoverageRetain,
+    PictureAggregateBegin,
+    PictureAggregateSeal,
     PictureSource,
     PictureComposite,
     FilterComposite,
@@ -1001,6 +1003,8 @@ public sealed interface PlanPass {
         public val depthStencilAccess: PlanDepthStencilAccess,
         public val depthStencilLoadStore: PlanDepthStencilLoadStore,
         public val destinationVersionAfter: DestinationVersionI64? = null,
+        /** Typed W6b coverage consumed by the color/cover phase, never the pre-mask stencil. */
+        public val coverageSource: PlanResourceId? = null,
     ) : PlanPass {
         override val role: PlanPassRole = PlanPassRole.StencilCover
         override val id: PlanPassId = checkedPassId(role, ordinal)
@@ -1073,6 +1077,11 @@ public sealed interface PlanPass {
         override val ordinal: Int,
         public val output: PlanResourceId,
         public val occurrence: FilterOccurrenceSourceV1,
+        /** The outer drawPicture clip is deferred until its isolated parent composite. */
+        public val deferSourceDrawClip: Boolean = false,
+        /** Frozen outer transforms/clips for raw coverage; no renderer-side Picture rediscovery. */
+        public val pictureCoordinates: PictureW5CoordinatesV1? =
+            occurrence.pictureW5CoordinatesOrNull(includeSourceDrawClip = !deferSourceDrawClip),
     ) : PlanPass {
         override val role: PlanPassRole = PlanPassRole.FilterCoverageSource
         override val id: PlanPassId = checkedPassId(role, ordinal)
@@ -1089,9 +1098,37 @@ public sealed interface PlanPass {
         override val id: PlanPassId = checkedPassId(role, ordinal)
     }
 
+    /** Opens the only mutable interval of an isolated drawPicture aggregate. */
+    public class PictureAggregateBeginPass(
+        override val ordinal: Int,
+        public val aggregateId: PictureStreamAggregateIdI32,
+        public val target: PlanResourceId,
+        public val parentTarget: PlanResourceId,
+    ) : PlanPass {
+        init { require(target != parentTarget) }
+        override val role: PlanPassRole = PlanPassRole.PictureAggregateBegin
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+    }
+
+    /** Seals the current aggregate target as one immutable, versioned premultiplied RGBA source. */
+    public class PictureAggregateSealPass(
+        override val ordinal: Int,
+        public val aggregateId: PictureStreamAggregateIdI32,
+        public val aggregateTarget: PlanResourceId,
+        public val sealedSource: PlanResourceId,
+        public val sourceGenerationI64: Long,
+    ) : PlanPass {
+        init {
+            require(aggregateTarget == sealedSource && sourceGenerationI64 >= 0L)
+        }
+        override val role: PlanPassRole = PlanPassRole.PictureAggregateSeal
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+    }
+
     /**
-     * An immutable Picture replay source at one captured occurrence.  Task 3 materializes this
-     * already ordered source; it must not substitute the frame root or rediscover the Picture.
+     * An immutable W5 source hand-off at one captured Picture or Layer occurrence.  Task 3
+     * materializes this already ordered source; it must not substitute the frame root or
+     * rediscover a Picture/layer source.
      */
     public class PictureSourcePass(
         override val ordinal: Int,
@@ -1102,12 +1139,38 @@ public sealed interface PlanPass {
         public val occurrence: FilterOccurrenceSourceV1? = null,
         /** Mask coverage that must be applied before this Picture's W5 material evaluation. */
         public val coverageSource: PlanResourceId? = null,
+        /** The sealed layer color input when this W5 source comes from a layer restore boundary. */
+        public val layerInput: PlanResourceId? = null,
+        /** Target whose coordinate domain owns this source hand-off. */
+        public val parentTarget: PlanResourceId? = null,
+        /** Ordered outer Picture transforms, clips, and paints applied to this W5 source. */
+        public val pictureCoordinates: PictureW5CoordinatesV1? = null,
+        /** Source-order identity when this hand-off is one entry of a Picture aggregate. */
+        public val pictureSourceLocator: PictureSourceLocatorV1? = null,
+        public val plannedCommandId: FramePlannedCommandIdI32? = null,
+        public val aggregateId: PictureStreamAggregateIdI32? = null,
+        /** Pre-publication graph-texture source request resolved by the one W5 frame authority. */
+        public val graphTextureRequest: GraphTextureSourceRequestV1? = null,
+        /** Published W5 material/uniform binding for [graphTextureRequest]. */
+        public val graphTextureOperand: GraphTextureSourceOperandV1? = null,
     ) : PlanPass {
         init {
             require(sourceSceneCanonicalId.isNotBlank() && sourceCommandIndexI32 >= 0) {
                 "Picture source must retain one captured scene occurrence."
             }
             require(occurrence == null || occurrence.sourceCommandIndexI32 == sourceCommandIndexI32)
+            require(layerInput == null || occurrence?.layerDescriptor != null) {
+                "A layer W5 source must retain its captured layer occurrence."
+            }
+            require((pictureSourceLocator == null) == (plannedCommandId == null)) {
+                "Picture stream source identity must retain both locator and planned command ID."
+            }
+            require(graphTextureRequest == null || graphTextureOperand == null) {
+                "A graph texture source is either pending or published, never both."
+            }
+            require(graphTextureRequest == null && graphTextureOperand == null || aggregateId != null) {
+                "A graph texture source must name its owning Picture aggregate."
+            }
         }
         override val role: PlanPassRole = PlanPassRole.PictureSource
         override val id: PlanPassId = checkedPassId(role, ordinal)

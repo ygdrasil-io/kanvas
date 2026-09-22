@@ -104,7 +104,10 @@ public class PlanPhysicalLayoutV1 private constructor(
                 ((pass.operation as? FilterPassOperationV1.MaskShader)?.materialBinding
                     as? FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned)?.uniformResource
             }.toSet()
-            require((uniforms.values.toSet() + maskShaderUniforms) == source.uniforms.values.toSet())
+            val graphTextureUniforms = graph.passes().filterIsInstance<PlanPass.PictureSourcePass>().mapNotNull { pass ->
+                pass.graphTextureOperand?.uniformResource
+            }.toSet()
+            require((uniforms.values.toSet() + maskShaderUniforms + graphTextureUniforms) == source.uniforms.values.toSet())
             val geometry = graph.passes().mapNotNull { pass ->
                 if (source.w4eGeometry.any { pass.id in it.graphPassIds() }) return@mapNotNull null
                 val data = when (pass) {

@@ -86,7 +86,11 @@ internal class FrameSourceLayoutV4 private constructor(
             val maskMaterialRoots = frame.maskMaterialSources().mapIndexed { indexI32, (occurrenceIdI32, _) ->
                 occurrenceIdI32 to roots[Math.addExact(nativeSourceCountI32, indexI32)]
             }.toMap()
-            frame.publish(table, lanes, inventory, maskMaterialRoots)
+            val graphTextureBaseI32 = Math.addExact(nativeSourceCountI32, maskMaterialRoots.size)
+            val graphTextureMaterialRoots = frame.graphTextureMaterialSources().mapIndexed { indexI32, (aggregateId, _) ->
+                aggregateId to roots[Math.addExact(graphTextureBaseI32, indexI32)]
+            }.toMap()
+            frame.publish(table, lanes, inventory, maskMaterialRoots, graphTextureMaterialRoots)
         }) {
             is SourceConstructionResultV4.Built -> org.graphiks.kanvas.render.ir.RenderPlanResult.Ready(bound.value)
             is SourceConstructionResultV4.Refused -> bound.failure
@@ -625,7 +629,9 @@ internal class FrameSourceLayoutV4 private constructor(
             require(if (layeredInput != null) preparedInput == null else (lane == null) != (preparedInput == null)) { W5fPlanDiagnostics.Schema }
             require(lane?.resources().orEmpty().none { it.role == PlanResourceRole.GradientStopData }) { W5fPlanDiagnostics.Schema }
             val sources = preparedInput?.sources ?: if (ordinaryLayout == null && layeredInput == null) requireNotNull(lane).sourceTable().sources()
-                else nativeLanes.flatMap { it.sourceTable().sources() } + layeredInput?.maskMaterialSources().orEmpty().map { it.second }
+                else nativeLanes.flatMap { it.sourceTable().sources() } +
+                    layeredInput?.maskMaterialSources().orEmpty().map { it.second } +
+                    layeredInput?.graphTextureMaterialSources().orEmpty().map { it.second }
             // Image geometry may remove every pending origin while retaining ordinary sources.
             // Those exact surviving rows still use this one interner/budget/publication owner.
             require(sources.isNotEmpty() || layeredInput != null) { W5fPlanDiagnostics.Schema }

@@ -15,6 +15,8 @@ public object W6bFilterDiagnostics {
     public const val InvalidBounds: String = "w6b.filter.invalid_bounds"
     public const val FrameBudgetExceeded: String = "w6b.filter.frame_budget_exceeded"
     public const val NativeCapability: String = "w6b.filter.native_capability"
+    /** A malformed frozen drawPicture aggregate; capture/bounds/budget retain their own codes. */
+    public const val PictureStreamInvalid: String = "w6b.picture_stream.invalid"
 
     public fun refusal(code: String, message: String): RenderDiagnostic = RenderDiagnostic(
         RenderDiagnosticCode(code), RenderDiagnosticDomain.SCENE, RenderDiagnosticSeverity.ERROR, message,

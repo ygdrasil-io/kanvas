@@ -477,3 +477,192 @@ Risques délibérément laissés à Task 3 : matérialiser les opérations nativ
 graphe d'occurrence déjà gelé. Les formats F16/HDR restent non constructibles par l'API
 publique; la frontière générique non-RGBA continue d'être couverte sans infrastructure
 artificielle.
+
+## Fix round 4 — graphe sémantique W6b complet (2026-09-22)
+
+### Base, portée et causes vérifiées
+
+- Base : `820e76c0a`.
+- Head : le commit final `fix(gpu-plan): complete w6b semantic graph`.
+- Portée : Task 2 uniquement. Le résultat reste un graphe W6a/W6b scellé puis le
+  refus terminal `w6b.filter.native_execution_unimplemented`; aucune allocation,
+  shader natif, pixel blur/mask/shadow, ni seconde autorité de planification n'a
+  été introduit.
+
+Les trois findings Important de `task-2-rereview3.md` ont été vérifiés dans le
+code avant modification puis fermés ainsi.
+
+1. **Mask coverage/material/image — corrigé.** La source colorisée directe était
+   allouée depuis le rectangle clipé brut avant `freezeMaskOccurrence`; les halos
+   de blur étaient donc perdus. `StencilCover` ne portait aucune entrée coverage,
+   et le EndLayer n'émettait ni capture coverage ni mask avant la hand-off W5.
+   La construction alloue désormais chaque `FilterSource` colorisé depuis le
+   domaine post-mask, y compris pour Picture et layer; le RenderPass général et
+   le StencilCover consomment explicitement `coverageSource`. Les occurrences de
+   layer scellent `CoverageSource → mask → PictureSourcePass(layerInput)` avant
+   l'image filter, avec les quatre régions W6a réelles conservées et un seul
+   composite/blend final. Les sources W5 de MaskShader sont filtrées après
+   construction des passes : une ligne est publiée si, et seulement si, une
+   passe MaskShader capturée correspondante la consomme. Le RED layer-MaskShader
+   a aussi révélé un invariant de binding périmé : `Planned` cherchait le préfixe
+   historique `source-uniform-data:` alors que `PlanResourceRole.SourceUniformData`
+   produit `SourceUniformData:`; il est maintenant dérivé de l'enum, sans ID
+   synthétique.
+2. **Witness occurrence/prédécesseur — corrigé.** Le witness ne comptait comme
+   consommateur matériel que RenderPass; il classait donc à tort un mask target
+   utilisé par PictureSourcePass comme terminal. `PictureSourcePass` (et le cover
+   stencil typé) utilisent maintenant le même contrôle producteur/consommateur.
+   `DropShadowColorize` exige maintenant son producteur immédiat de même clé :
+   un `SeparableBlur` Y de kind `IMAGE_BLUR_Y`; les garanties préexistantes de
+   source immutable, clé, X→Y, arité par mode, bijection terminal/composite et
+   ordre immédiat restent intactes. Les nouvelles fixtures de contrat négatives
+   refusent la coverage Picture sans producteur et la colorize sans Y blur.
+3. **Stream Picture ordonné — corrigé.** Le chemin choisissait autrefois soit le
+   SceneSnapshot entier soit les seules occurrences filtrées, en supprimant les
+   siblings non filtrés; sa pile LIFO inversait les siblings imbriqués. Une
+   récursion DFS ordonnée produit maintenant des `PictureCommandEntry` explicites
+   et la construction émet dans cet ordre des PictureSource/PictureComposite ou
+   coverage→mask→W5→filter→composite selon chaque entrée. Les transforms, clips
+   et paints des Pictures externes sont gelés dans `PictureW5CoordinatesV1` pour
+   la source W5 et composés dans le carrier de coordonnées MaskShader; les passes
+   Picture participent aussi aux `LayerExecutionStepV1` du scope parent.
+
+### RED, GREEN et fixtures
+
+Le RED ciblé après la mise en place des nouveaux chemins était :
+
+```text
+rtk ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.W6bFilterAdmissionRecoverySurfaceTest --no-daemon
+```
+
+La nouvelle méthode `layer mask shader reaches w6b terminal admission and same
+surface recovers` échouait à la publication avec `Failed requirement`. La trace
+plaçait exactement la cause dans
+`FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned` : le test de préfixe
+de `uniformResource` était en minuscule avec tirets, tandis que `planResourceId`
+utilise le nom enum `SourceUniformData`. Après la correction enum-dirigée, les
+traces temporaires ont été supprimées et le selector cible est vert (JUnit), puis
+l'exécuteur natif retourne encore 133, classé **UNKNOWN**.
+
+Les témoins ajoutés sont tous à frontière publique ou contrat de graphe :
+
+- Surface : un Picture unique mélange les children non filtrés, un sibling Picture
+  imbriqué filtré, puis un sibling final; un second témoin exécute un child
+  MaskShader sous transform, clip et paint externes. Tous vérifient le diagnostic
+  terminal, sentinelle non mutée et recovery sur la même Surface.
+- Contrat : une chaîne coverage Picture X→Y valide est reconnue comme consommée;
+  les cas sans producteur et shadow colorize sans vertical blur sont refusés.
+  Aucun fake device, reflection, mock d'infrastructure ou test source statique
+  n'a été ajouté.
+
+### Gates, exits et custody JUnit
+
+| Commande exacte | Exit process | Preuve / attribution |
+|---|---:|---|
+| `rtk proxy ./gradlew :math:geometry:compileKotlinJvm --no-daemon` | 0 | `BUILD SUCCESSFUL` |
+| `rtk proxy ./gradlew :math:matrix:compileKotlinJvm --no-daemon` | 0 | `BUILD SUCCESSFUL` |
+| `rtk ./gradlew :render-ir:compileKotlin --no-daemon` | 0 | `BUILD SUCCESSFUL` |
+| `rtk ./gradlew :gpu-plan:compileKotlin :gpu-renderer:compileKotlin :kanvas:compileKotlin --no-daemon` | 0 | `BUILD SUCCESSFUL` |
+| `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bFilterAdmissionRecoverySurfaceTest' --tests 'org.graphiks.kanvas.picture.W6bFilterPictureTest' --no-daemon` | 1, executor 133 | XML frais : Surface `11/0/0`, Picture `7/0/0`; les méthodes JUnit sont toutes vertes avant l'exit natif UNKNOWN |
+| `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6aLayerSurfacePixelTest' --tests 'org.graphiks.kanvas.surface.W6aLayerBoundsSurfacePixelTest' --no-daemon` | 1, executor 133 | XML : W6a `16/0/0`, bounds `10/0/0`; UNKNOWN natif après JUnit vert |
+| `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.GPUPlanSurfacePixelTest.W4e hard ordered rect RRect and path clips match the independent public Surface oracle' --no-daemon` | 0 | JUnit `1/0/0`, `BUILD SUCCESSFUL` |
+| `rtk ./gradlew :gpu-plan:compileTestKotlin --no-daemon` | 1 | seulement les cinq erreurs baseline : W3 `214,406`; W4d `157,703`; aucune erreur dans `RenderGraphContractTest` ni source W6b nouvelle |
+
+Custody W6b :
+`kanvas/build/test-results/test/TEST-org.graphiks.kanvas.surface.W6bFilterAdmissionRecoverySurfaceTest.xml`
+contient `tests=11, failures=0, errors=0`, et
+`kanvas/build/test-results/test/TEST-org.graphiks.kanvas.picture.W6bFilterPictureTest.xml`
+contient `tests=7, failures=0, errors=0`. Les XML W6a de la gate précédente
+enregistrent `16/0/0` et `10/0/0`; la gate W4e ultérieure peut remplacer les
+résultats Gradle standard mais son log confirme sa méthode verte et l'exit 0.
+
+### Fichiers modifiés, self-review et risques
+
+- `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/{FilterOccurrenceSourceV1,PlanPasses,RenderGraph,RenderGraphConstruction,W6aLayerGraphConstruction,W6aLayerGraphValidation,W6bFilterGraphConstruction,W6bFilterGraphWitnessV1,W6bFilterPlanV1}.kt`
+- `gpu-plan/src/test/kotlin/org/graphiks/kanvas/gpu/plan/RenderGraphContractTest.kt`
+- `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W6bFilterAdmissionRecoverySurfaceTest.kt`
+- ce rapport.
+
+La self-review finale de `820e76c..HEAD` et `rtk git diff --check` a vérifié :
+pas de réouverture des findings routing/origin/capture/W4e/diagnostic/budget déjà
+clos; pas de public filter object dans `:gpu-plan`; pas de géométrie nouvelle hors
+`:math`; lifetimes frame-local pessimistes et calculs I64 checked conservés; aucun
+fallback ou travail natif positif; et aucune trace de debug restante.
+
+Risques délibérément restants : Task 3 doit matérialiser le graphe coverage/W5/image
+et le stream Picture déjà ordonné, sans le replanifier. Les cinq erreurs de compilation
+de test W3/W4d et les exits natifs 133/134 restent hors périmètre et **UNKNOWN**;
+ils ne sont ni reclassés en succès, ni attribués à cette correction.
+
+## Fix round 4 — fermeture du stream Picture amendé (2026-09-22)
+
+### Causes vérifiées et fermeture apportée
+
+La revue de l'amendement a confirmé que le descripteur `LayerEntry` précédent ne
+référençait pas le sous-scope W6a réel : aucune cible enfant, séquence d'étapes,
+ni terminal/composite unique n'étaient publiés dans l'ordre du stream. Une telle
+description seule n'était pas exécutable par Task 3. La construction W6a réutilise
+donc maintenant son autorité existante pour créer une cible dynamique de Picture,
+un `LayerScopePlanV1` réel relié par `parentTargetResource`, ses étapes d'exécution
+et son unique `LayerComposite` ou `FilterComposite(Layer)`. Le `LayerEntry` contient
+les IDs de ce scope et de cette cible; le validateur de stream vérifie cette
+fermeture, l'ordre des terminaux et le cycle de vie begin/accumulating/seal.
+
+Les trois constats encore ouverts sont ainsi scellés dans la même fermeture :
+
+- Les sources de filtre masquées partent du domaine coverage post-mask. Les chemins
+  stencil/général consomment la coverage typée, et une occurrence layer fige
+  coverage/mask avant W5, y compris Blur/Table/Shader. Une ligne MaskShader W5 est
+  publiée seulement lorsqu'une passe correspondante la consomme.
+- Le witness reconnaît de façon identique les consommateurs coverage `RenderPass`,
+  `StencilCover` et `PictureSourcePass`; `DropShadowColorize` exige le blur vertical
+  de même clé. La production de cible de `StencilCover` est aussi enregistrée pour
+  que le chemin stencil filtré possède un prédécesseur réel.
+- Le stream Picture porte des entrées source ordonnées, filtrées et non filtrées,
+  y compris les siblings imbriqués. Il distingue inline sans paint de l'isolated
+  peint/filtré, conserve mapping, inner clip, composite clip différé, cull et demand,
+  et utilise une source RGBA prémultipliée `GraphTextureSourceOperandV1` peinte une
+  seule fois. Une correction d'audit supplémentaire évite de recomposer les
+  transforms de Pictures déjà absorbés par une cible enfant.
+
+Le diagnostic de refus reste `w6b.picture_stream.invalid`. Les nouvelles preuves
+ne rendent aucun pixel natif positif : elles exercent uniquement le contrat de
+graphe et les sentinelles/recovery publics autorisés.
+
+### Preuves finales
+
+| Commande exacte | Exit process | Résultat |
+|---|---:|---|
+| `rtk ./gradlew :gpu-plan:compileKotlin --no-daemon` | 0 | `BUILD SUCCESSFUL` |
+| `rtk proxy ./gradlew :math:geometry:compileKotlinJvm --no-daemon` | 0 | `BUILD SUCCESSFUL` |
+| `rtk proxy ./gradlew :math:matrix:compileKotlinJvm --no-daemon` | 0 | `BUILD SUCCESSFUL` |
+| `rtk ./gradlew :render-ir:compileKotlin --no-daemon` | 0 | `BUILD SUCCESSFUL` |
+| `rtk ./gradlew :kanvas:compileKotlin --no-daemon` | 0 | `BUILD SUCCESSFUL` |
+| `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bFilterAdmissionRecoverySurfaceTest' --no-daemon` | 1, executor 133 | JUnit énumère `15/0/0`; exit natif **UNKNOWN** |
+| `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6aLayerSurfacePixelTest' --no-daemon` | 1, executor 133 | JUnit énumère `16/0/0`; exit natif **UNKNOWN** |
+| `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.GPUPlanSurfacePixelTest.W4e hard ordered rect RRect and path clips match the independent public Surface oracle' --no-daemon` | 0 | JUnit `1/0/0`, `BUILD SUCCESSFUL` |
+| `rtk ./gradlew :gpu-plan:compileTestKotlin --no-daemon` | 1 | uniquement les cinq erreurs baseline W3/W4d (`214`, `406`, `157`, `703` x2); aucune erreur nouvelle dans la source de contrat W6b |
+| `rtk git diff --check 820e76c0a` | 0 | aucun défaut de whitespace |
+
+Custody fraîche : le XML produit par le dernier gate W6b,
+`kanvas/build/test-results/test/TEST-org.graphiks.kanvas.surface.W6bFilterAdmissionRecoverySurfaceTest.xml`,
+enregistre `tests=15`, `failures=0`, `errors=0` avant l'exit 133 du processus
+natif. Le dernier gate W6a a également énuméré ses 16 méthodes vertes avant le
+même exit 133; la gate W4e ultérieure, satisfaite depuis le cache Gradle, est
+sortie 0.
+
+Les fixtures ajoutées couvrent le `LayerEntry` sans vrai scope W6a (refus du
+diagnostic stable), un layer `initWithPrevious`, un layer MaskShader et des
+Pictures isolated imbriqués qui conservent chaque préfixe de transform une fois.
+Le test de contrat ne peut pas s'exécuter séparément tant que la compilation de
+tests `:gpu-plan` reste bloquée par les cinq erreurs hors périmètre ci-dessus; le
+compilateur a néanmoins attribué zéro erreur aux sources ajoutées.
+
+### Auto-revue et risque restant
+
+L'auto-revue de `820e76c0a..HEAD` plus le diff non committé a vérifié l'absence
+d'un second planner/material authority, de public filter object dans `:gpu-plan`,
+de géométrie hors `:math`, et de nouvelle exécution native. Les IDs, budgets et
+lifetimes restent frame-local, pessimistes et checked I64. Le seul risque assumé
+reste Task 3 : matérialiser ce graph fermé sans le replanifier; les sorties natives
+133/134 et la dette de compilation W3/W4d restent explicitement **UNKNOWN**.

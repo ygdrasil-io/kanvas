@@ -84,10 +84,19 @@ public class LayerScopePlanV1 internal constructor(
     public val initialization: LayerInitializationPlanV1,
     public val restore: LayerRestorePlanV1,
     public val targetResource: PlanResourceId,
+    /**
+     * A Picture-stream layer may be parented by an isolated Picture aggregate rather than by a
+     * top-level W6a layer scope.  This is an already-selected target identity, never a renderer
+     * lookup or a late routing decision.
+     */
+    public val parentTargetResource: PlanResourceId? = null,
 ) {
     private val childIds = immutableList(childIds)
     init {
         require(beginCommandIndexI32 >= 0 && endCommandIndexI32 > beginCommandIndexI32)
+        require(parentId == null || parentTargetResource == null) {
+            "A W6a scope uses either a scope parent or an explicit Picture-stream target parent."
+        }
         require(childIds.distinct().size == childIds.size) { "Layer child IDs must be distinct" }
     }
     public fun childIds(): List<LayerScopeIdI32> = childIds
@@ -117,9 +126,13 @@ public sealed interface LayerExecutionStepV1 {
 public class LayerFramePlanV1 internal constructor(
     scopes: List<LayerScopePlanV1>,
     executionSteps: List<LayerExecutionStepV1>,
+    pictureStreamAggregates: List<PictureStreamAggregateV1> = emptyList(),
 ) {
     private val scopes = immutableList(scopes)
     private val executionSteps = immutableList(executionSteps)
+    private val pictureStreamAggregates = immutableList(pictureStreamAggregates)
     public fun scopes(): List<LayerScopePlanV1> = scopes
     public fun executionSteps(): List<LayerExecutionStepV1> = executionSteps
+    /** Frozen ordered Picture scopes. Renderer code may only materialize these facts. */
+    public fun pictureStreamAggregates(): List<PictureStreamAggregateV1> = pictureStreamAggregates
 }

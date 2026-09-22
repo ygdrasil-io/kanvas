@@ -9,6 +9,8 @@ public enum class PlanResourceRole {
     LayerTarget,
     /** Immutable, single-occurrence W6b source generation before any filter operation. */
     FilterSource,
+    /** Mutable only between PictureAggregateBegin and PictureAggregateSeal, then sampled as one sealed source. */
+    PictureAggregateSource,
     /** Immutable raw coverage captured at one W6b occurrence before mask evaluation. */
     CoverageSource,
     /** Immutable original coverage retained alongside a blurred mask-coverage result. */

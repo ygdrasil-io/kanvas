@@ -41,6 +41,16 @@ class Matrix3x3F64Test {
     }
 
     @Test
+    fun checkedF64CompositionRetainsParentPrecisionAndRejectsOverflow() {
+        val parent = Matrix3x3F64(txF64 = 1.0e100)
+        val child = Matrix3x3F64(sxF64 = 2.0, tyF64 = -3.0)
+
+        assertEquals(Matrix3x3F64(sxF64 = 2.0, txF64 = 1.0e100, tyF64 = -3.0),
+            parent.timesCheckedOrNull(child))
+        assertNull(Matrix3x3F64(sxF64 = Double.MAX_VALUE).timesCheckedOrNull(Matrix3x3F64(sxF64 = 2.0)))
+    }
+
+    @Test
     fun orderedCompositionAndFiniteInverseRejectInvalidValues() {
         assertFailsWith<IllegalArgumentException> { composeInOrderF64(listOf(Matrix3x3F32(tx = Float.NaN))) }
         assertFailsWith<IllegalArgumentException> { composeInOrderF64(List(10) { Matrix3x3F32(sx = Float.MAX_VALUE) }) }

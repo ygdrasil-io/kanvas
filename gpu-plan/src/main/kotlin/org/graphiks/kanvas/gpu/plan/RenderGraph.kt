@@ -217,6 +217,9 @@ public class RenderGraph private constructor(
             packed: PackedFrameSourcesV4, source: SourcePhysicalConstructionV1): RenderGraph {
             require(construction.capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID)
             val scopes = frame.scopes()
+            // A malformed frozen Picture stream must retain its W6b diagnostic instead of being
+            // pre-empted by a generic W6a scope assertion below.
+            validatePictureStreamAggregates(frame, construction.resources(), construction.passes(), construction.dependencies())
             val byScope = scopes.associateBy { it.id }
             require(byScope.size == scopes.size)
             require(scopes.all { scope ->
@@ -226,6 +229,9 @@ public class RenderGraph private constructor(
             require(scopes.map { it.targetResource }.toSet() == construction.resources()
                 .filter { it.role == PlanResourceRole.LayerTarget }.map { it.id }.toSet())
             val rootTarget = construction.resources().single { it.role == PlanResourceRole.LogicalTarget }.id
+            fun parentTarget(scope: LayerScopePlanV1): PlanResourceId = scope.parentTargetResource
+                ?: scope.parentId?.let { byScope.getValue(it).targetResource }
+                ?: rootTarget
             val passesById = construction.passes().associateBy { it.id }
             val passOrder = construction.passes().mapIndexed { indexI32, pass -> pass.id to indexI32 }.toMap()
             val initialized = mutableSetOf<LayerScopeIdI32>()
@@ -248,7 +254,7 @@ public class RenderGraph private constructor(
                             }
                             is LayerInitializationPlanV1.PreviousCopy -> {
                                 val pass = passesById[step.passId] as? PlanPass.TextureCopy
-                                val expectedParentTarget = scope.parentId?.let { byScope.getValue(it).targetResource } ?: rootTarget
+                                val expectedParentTarget = parentTarget(scope)
                                 require(initialization.parentTarget == expectedParentTarget &&
                                     initialization.layerTarget == scope.targetResource && pass != null &&
                                     pass.source == initialization.parentTarget &&
@@ -270,18 +276,20 @@ public class RenderGraph private constructor(
                             is PlanPass.ClipMaskInitialize, is PlanPass.ClipMaskProducer, is PlanPass.ClipMaskFold ->
                                 source.w4eGeometry.any { it.target == scope.targetResource && step.passId in it.graphPassIds() }
                             is PlanPass.FilterComposite -> pass.destination == scope.targetResource &&
-                                pass.replacedLayerSource == null && pass.operation is FilterCompositeOperationV1.Draw
+                                pass.replacedLayerSource == null && (pass.operation is FilterCompositeOperationV1.Draw ||
+                                    // Picture terminals are real ordered child work, not a synthetic layer restore.
+                                    pass.operation is FilterCompositeOperationV1.Picture)
+                            is PlanPass.PictureSourcePass -> pass.parentTarget == scope.targetResource
                             is PlanPass.PictureComposite -> pass.destination == scope.targetResource
                             else -> false
                         }
                         require(scope.id in initialized && scope.id !in restored && exactChild)
                     }
                     is LayerExecutionStepV1.Restore -> {
-                        val expectedDestination = scope.parentId?.let { byScope.getValue(it).targetResource } ?: rootTarget
+                        val expectedDestination = parentTarget(scope)
                         val exactRestore = when (val pass = passesById[step.passId]) {
                             is PlanPass.LayerComposite -> pass.scopeId == scope.id && pass.source == scope.targetResource &&
-                                pass.destination == expectedDestination && (pass.destination == rootTarget) ==
-                                (scope.parentId == null) && pass.restore === scope.restore
+                                pass.destination == expectedDestination && pass.restore === scope.restore
                             is PlanPass.FilterComposite -> (pass.operation as? FilterCompositeOperationV1.Layer)?.let { operation ->
                                 pass.replacedLayerSource == scope.targetResource && pass.destination == expectedDestination &&
                                     operation.restore === scope.restore
@@ -758,13 +766,23 @@ public class RenderGraph private constructor(
                 pass.drawDataResources.index,
                 pass.drawDataResources.uniform,
                 (pass.draw.blend as? BlendPlan.DestinationReadV1)?.snapshotResource,
+                pass.coverageSource,
             )
             is PlanPass.TextureCopy -> listOf(pass.source, pass.destination)
             is PlanPass.LayerComposite -> listOf(pass.source, pass.destination)
             is PlanPass.FilterSourceClear -> listOf(pass.output, pass.boundSourceId)
             is PlanPass.FilterCoverageSourcePass -> listOf(pass.output)
             is PlanPass.FilterCoverageRetainPass -> listOf(pass.source, pass.output)
-            is PlanPass.PictureSourcePass -> listOfNotNull(pass.output, pass.coverageSource)
+            is PlanPass.PictureAggregateBeginPass -> listOf(pass.target, pass.parentTarget)
+            is PlanPass.PictureAggregateSealPass -> listOf(pass.aggregateTarget, pass.sealedSource)
+            is PlanPass.PictureSourcePass -> buildList {
+                add(pass.output)
+                pass.coverageSource?.let(::add)
+                pass.layerInput?.let(::add)
+                pass.parentTarget?.let(::add)
+                pass.graphTextureRequest?.let { add(it.sealedSourceId) }
+                pass.graphTextureOperand?.let { operand -> add(operand.sealedSourceId); add(operand.uniformResource) }
+            }
             is PlanPass.PictureComposite -> listOf(pass.source, pass.destination)
             is PlanPass.FilterPass -> buildList {
                 addAll(pass.inputs())
@@ -896,6 +914,8 @@ public class RenderGraph private constructor(
                         it is PlanPass.FilterSourceClear ||
                         it is PlanPass.FilterCoverageSourcePass ||
                         it is PlanPass.FilterCoverageRetainPass ||
+                        it is PlanPass.PictureAggregateBeginPass ||
+                        it is PlanPass.PictureAggregateSealPass ||
                         it is PlanPass.PictureSourcePass ||
                         it is PlanPass.PictureComposite ||
                         it is PlanPass.FilterComposite

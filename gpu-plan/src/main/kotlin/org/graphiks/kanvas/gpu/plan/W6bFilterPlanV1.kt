@@ -169,7 +169,7 @@ public sealed interface FilterPassOperationV1 {
         ) : MaskShaderMaterialBindingV1 {
             init {
                 require(occurrenceIdI32 >= 0)
-                require(uniformResource.value.startsWith("source-uniform-data:"))
+                require(uniformResource.value.startsWith("${PlanResourceRole.SourceUniformData.name}:"))
             }
         }
         /** Actual captured material and occurrence identity, never a canonical-string substitute. */

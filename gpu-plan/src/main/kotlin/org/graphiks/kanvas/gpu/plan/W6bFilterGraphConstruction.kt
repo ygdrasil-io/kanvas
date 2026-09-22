@@ -120,8 +120,12 @@ internal object W6bFilterGraphConstruction {
         val isLayerOccurrence: Boolean,
         val isPictureOccurrence: Boolean,
         val maskOccurrenceI32: Int,
+        picturePathI32: List<Int>,
         val source: FilterOccurrenceSourceV1,
-    )
+    ) {
+        private val picturePathSnapshot = immutableList(picturePathI32)
+        fun outerPicturePathI32(): List<Int> = picturePathSnapshot
+    }
 
     internal class FreezeCursor(
         var filterTargetOrdinalI32: Int,
@@ -186,15 +190,16 @@ internal object W6bFilterGraphConstruction {
         val result = mutableListOf<PositiveOccurrence>()
         var nextOccurrenceI32 = 0
         var nextMaskOccurrenceI32 = 0
-        visitScenes(scene) { nestedScene, command, insertionIndexI32, commandIndexI32, nested, outerPictures ->
+        visitScenes(scene) { nestedScene, command, insertionIndexI32, commandIndexI32, nested, outerPictures, picturePathI32 ->
             fun append(root: CapturedFilterRootV1?, mask: MaskFilterNode?, layer: Boolean, picture: Boolean) {
                 if (root == null && mask == null) return
                 result += PositiveOccurrence(
                     nextOccurrenceI32++, nestedScene.filterTable, root, mask, insertionIndexI32,
                     nestedScene.canonicalId.value, commandIndexI32, layer, picture || nested, nextMaskOccurrenceI32,
+                    picturePathI32,
                     FilterOccurrenceSourceV1(nestedScene, commandIndexI32,
                         (command as? SceneCommand.Draw)?.node, outerPictures,
-                        (command as? SceneCommand.BeginLayer)?.descriptor),
+                        (command as? SceneCommand.BeginLayer)?.descriptor, picturePathI32),
                 )
                 if (mask != null) nextMaskOccurrenceI32 = Math.addExact(nextMaskOccurrenceI32, 1)
             }
@@ -522,7 +527,7 @@ internal object W6bFilterGraphConstruction {
         var mask = false
         var backdrop = false
         var filteredPrevious = false
-        val bounded = visitScenes(scene) { nestedScene, command, _, _, _, _ -> when (command) {
+        val bounded = visitScenes(scene) { nestedScene, command, _, _, _, _, _ -> when (command) {
             is SceneCommand.Draw -> filterPayload(command.node.paint, command.node.effects).let { payload ->
                 payload.root?.let { roots += RootOccurrence(nestedScene.filterTable, it) }
                 mask = mask || payload.mask != null
@@ -543,28 +548,31 @@ internal object W6bFilterGraphConstruction {
 
     /** Bounded iterative traversal refuses repeated ancestral Picture scenes. */
     private fun visitScenes(root: SceneSnapshot,
-        visit: (SceneSnapshot, SceneCommand, Int, Int, Boolean, List<org.graphiks.kanvas.render.ir.DrawNode>) -> Unit): Boolean {
-        data class Visit(val scene: SceneSnapshot, val depthI32: Int, val insertionCommandIndexI32: Int?,
-            val ancestors: Set<String>, val outerPictures: List<org.graphiks.kanvas.render.ir.DrawNode>)
-        val pending = ArrayDeque<Visit>()
-        pending.addLast(Visit(root, 1, null, emptySet(), emptyList()))
+        visit: (SceneSnapshot, SceneCommand, Int, Int, Boolean, List<org.graphiks.kanvas.render.ir.DrawNode>, List<Int>) -> Unit): Boolean {
         var visitedCommandsI32 = 0
-        while (pending.isNotEmpty()) {
-            val current = pending.removeLast()
-            if (current.depthI32 > root.graphLimits.maxDepth) return true
-            val nextAncestors = current.ancestors + current.scene.canonicalId.value
-            current.scene.toList().forEachIndexed { indexI32, command ->
+        fun visitOrdered(
+            scene: SceneSnapshot,
+            depthI32: Int,
+            insertionCommandIndexI32: Int?,
+            ancestors: Set<String>,
+            outerPictures: List<org.graphiks.kanvas.render.ir.DrawNode>,
+            picturePathI32: List<Int>,
+        ): Boolean {
+            if (depthI32 > root.graphLimits.maxDepth) return true
+            val nextAncestors = ancestors + scene.canonicalId.value
+            scene.toList().forEachIndexed { indexI32, command ->
                 visitedCommandsI32 = try { Math.addExact(visitedCommandsI32, 1) } catch (_: ArithmeticException) { return true }
                 if (visitedCommandsI32 > root.graphLimits.maxNodes) return true
-                val insertion = current.insertionCommandIndexI32 ?: indexI32
-                visit(current.scene, command, insertion, indexI32, current.insertionCommandIndexI32 != null, current.outerPictures)
+                val insertion = insertionCommandIndexI32 ?: indexI32
+                visit(scene, command, insertion, indexI32, insertionCommandIndexI32 != null, outerPictures, picturePathI32)
                 val picture = (command as? SceneCommand.Draw)?.node?.geometry as? GeometryNode.Picture ?: return@forEachIndexed
                 if (picture.scene.canonicalId.value in nextAncestors) return true
-                pending.addLast(Visit(picture.scene, Math.addExact(current.depthI32, 1), insertion, nextAncestors,
-                    current.outerPictures + (command as SceneCommand.Draw).node))
+                if (visitOrdered(picture.scene, Math.addExact(depthI32, 1), insertion, nextAncestors,
+                        outerPictures + (command as SceneCommand.Draw).node, picturePathI32 + indexI32)) return true
             }
+            return false
         }
-        return false
+        return visitOrdered(root, 1, null, emptySet(), emptyList(), emptyList())
     }
 
     private class Ownership(

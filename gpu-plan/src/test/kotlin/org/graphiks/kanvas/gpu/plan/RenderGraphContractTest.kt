@@ -28,6 +28,10 @@ import org.graphiks.math.geometry.InversePathGeometryF32
 import org.graphiks.math.matrix.LayerMappingF64
 import org.graphiks.math.matrix.Matrix3x3F64
 import org.graphiks.kanvas.render.ir.CapturedFilterNodeId
+import org.graphiks.kanvas.render.ir.LayerDescriptor
+import org.graphiks.kanvas.render.ir.SceneExtent
+import org.graphiks.kanvas.render.ir.SceneSnapshot
+import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.math.geometry.preparePathFillGeometryF32
 import org.graphiks.math.geometry.prepareProjectedPathStrokeGeometryF32
 import org.junit.jupiter.api.Test
@@ -1088,6 +1092,152 @@ class RenderGraphContractTest {
                 includeOriginal = true,
             )
         }
+    }
+
+    @Test
+    fun `w6b publication witness recognizes Picture coverage as a material consumer`() {
+        val fragment = w6bPictureCoverageWitnessFragment()
+
+        assertEquals(0, W6bFilterGraphWitnessV1.seal(fragment.first, fragment.second).occurrences().size)
+    }
+
+    @Test
+    fun `w6b publication witness rejects a Picture coverage input without a producer`() {
+        val resource = w6bWitnessTexture(PlanResourceRole.FilterSource, 0)
+        val coverage = w6bWitnessTexture(PlanResourceRole.FilterTarget, 0)
+
+        assertFailsWith<IllegalArgumentException> {
+            W6bFilterGraphWitnessV1.seal(
+                listOf(resource, coverage),
+                listOf(PlanPass.PictureSourcePass(0, resource.id, "picture", 0, coverageSource = coverage.id)),
+            )
+        }
+    }
+
+    @Test
+    fun `w6b publication witness rejects shadow colorize without its matching vertical blur`() {
+        assertFailsWith<IllegalArgumentException> {
+            w6bDropShadowPublicationGraph(wrongColorizeInput = true)
+        }
+    }
+
+    @Test
+    fun `picture aggregate publication rejects an overlapping source partition with its stable diagnostic`() {
+        val root = w6bWitnessTexture(PlanResourceRole.LogicalTarget, 0)
+        val first = PlanPass.PictureSourcePass(0, root.id, "picture-source", 0)
+        val second = PlanPass.PictureSourcePass(1, root.id, "picture-source", 0)
+        val locator = PictureSourceLocatorV1(0, 0)
+        val aggregate = PictureStreamAggregateV1(
+            PictureStreamAggregateIdI32(0),
+            PictureStreamExecutionModeV1.INLINE_CURRENT_TARGET,
+            "picture-source",
+            1,
+            0,
+            FramePlannedCommandIdI32(0),
+            emptyList(),
+            requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32.Origin)),
+            org.graphiks.kanvas.render.ir.ClipStackNode.Empty,
+            org.graphiks.kanvas.render.ir.ClipStackNode.Empty,
+            RectI32(0, 0, 1, 1),
+            RectI32(0, 0, 1, 1),
+            root.id,
+            null,
+            null,
+            null,
+            PictureStreamRegionsV1(RectI32(0, 0, 1, 1), RectI32(0, 0, 1, 1), RectI32(0, 0, 1, 1), RectI32(0, 0, 1, 1)),
+            listOf(
+                PictureStreamEntryV1.Clear(PictureStreamEntryIdI32(0), locator, FramePlannedCommandIdI32(1),
+                    ColorF32.of(0f, 0f, 0f, 0f), first.id),
+                PictureStreamEntryV1.Clear(PictureStreamEntryIdI32(1), locator, FramePlannedCommandIdI32(2),
+                    ColorF32.of(0f, 0f, 0f, 0f), second.id),
+            ),
+            null,
+            null,
+            second.id,
+        )
+
+        val failure = assertFailsWith<W6bFilterGraphConstruction.ConstructionFailure> {
+            validatePictureStreamAggregates(
+                LayerFramePlanV1(emptyList(), emptyList(), listOf(aggregate)),
+                listOf(root),
+                listOf(first, second),
+                listOf(PlanPassDependency(first.id, second.id)),
+            )
+        }
+        assertEquals(W6bFilterDiagnostics.PictureStreamInvalid, failure.diagnostic.code.value)
+        assertTrue(failure.diagnostic.message.contains("aggregateIdI32=0"))
+    }
+
+    @Test
+    fun `picture aggregate publication rejects a layer descriptor without its real W6a scope`() {
+        val root = w6bWitnessTexture(PlanResourceRole.LogicalTarget, 0)
+        val layerTarget = w6bWitnessTexture(PlanResourceRole.LayerTarget, 0)
+        val restore = LayerRestorePlanV1(
+            1f,
+            null,
+            BlendPlan.SrcOver,
+            readsPriorDevice = false,
+            writesParentDevice = true,
+            restoreAffectsTransparentBlack = false,
+            parentVersionBefore = DestinationVersionI64(0),
+            parentVersionAfter = DestinationVersionI64(1),
+        )
+        val terminal = PlanPass.LayerComposite(
+            0,
+            LayerScopeIdI32(0),
+            layerTarget.id,
+            root.id,
+            RectI32(0, 0, 1, 1),
+            Point2I32.Origin,
+            restore,
+            AttachmentLoadPlan.Load,
+            AttachmentStorePlan.Store,
+            DestinationVersionI64(1),
+        )
+        val locator = PictureSourceLocatorV1(0, 0)
+        val aggregate = PictureStreamAggregateV1(
+            PictureStreamAggregateIdI32(0),
+            PictureStreamExecutionModeV1.INLINE_CURRENT_TARGET,
+            "picture-source",
+            2,
+            0,
+            FramePlannedCommandIdI32(0),
+            emptyList(),
+            requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32.Origin)),
+            org.graphiks.kanvas.render.ir.ClipStackNode.Empty,
+            org.graphiks.kanvas.render.ir.ClipStackNode.Empty,
+            RectI32(0, 0, 1, 1),
+            RectI32(0, 0, 1, 1),
+            root.id,
+            null,
+            null,
+            null,
+            PictureStreamRegionsV1(RectI32(0, 0, 1, 1), RectI32(0, 0, 1, 1), RectI32(0, 0, 1, 1), RectI32(0, 0, 1, 1)),
+            listOf(PictureStreamEntryV1.Layer(
+                PictureStreamEntryIdI32(0),
+                locator,
+                FramePlannedCommandIdI32(1),
+                1,
+                LayerScopeIdI32(0),
+                layerTarget.id,
+                emptyList(),
+                terminal.id,
+            )),
+            null,
+            null,
+            terminal.id,
+        )
+
+        val failure = assertFailsWith<W6bFilterGraphConstruction.ConstructionFailure> {
+            validatePictureStreamAggregates(
+                LayerFramePlanV1(emptyList(), emptyList(), listOf(aggregate)),
+                listOf(root, layerTarget),
+                listOf(terminal),
+                emptyList(),
+            )
+        }
+        assertEquals(W6bFilterDiagnostics.PictureStreamInvalid, failure.diagnostic.code.value)
+        assertTrue(failure.diagnostic.message.contains("Layer entry references an absent W6a scope"))
     }
 
     @Test
@@ -3015,30 +3165,65 @@ class RenderGraphContractTest {
         )
     }
 
+    /** A real sealed W6b fragment whose mask terminal is consumed by a W5 Picture source. */
+    private fun w6bPictureCoverageWitnessFragment(): Pair<List<PlanResource>, List<PlanPass>> {
+        val coverage = w6bWitnessTexture(PlanResourceRole.CoverageSource, 0)
+        val horizontal = w6bWitnessTexture(PlanResourceRole.FilterTarget, 0)
+        val vertical = w6bWitnessTexture(PlanResourceRole.FilterTarget, 1)
+        val pictureSource = w6bWitnessTexture(PlanResourceRole.FilterSource, 0)
+        val scene = SceneSnapshot.of(SceneExtent(1, 1), ColorSpace.SRGB, emptyList())
+        val occurrence = FilterOccurrenceSourceV1(scene, 0, null, emptyList(), LayerDescriptor.of())
+        val bounds = RectI32(0, 0, 1, 1)
+        val mapping = requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32.Origin))
+        val key = FilterEvaluationKeyV1.forMaskOccurrence(0, coverage.id, mapping, bounds)
+        val filterBounds = FilterBoundsPlanV1(bounds, bounds, bounds, bounds, Point2I32.Origin)
+        val passes = listOf<PlanPass>(
+            PlanPass.FilterCoverageSourcePass(0, coverage.id, occurrence),
+            PlanPass.FilterPass(1, listOf(coverage.id), horizontal.id, key,
+                FilterPassOperationV1.SeparableBlur(FilterImplementationKindV1.MASK_COVERAGE_BLUR_X, 1f,
+                    FilterAxisV1.X, org.graphiks.kanvas.render.ir.TileMode.CLAMP, filterBounds)),
+            PlanPass.FilterPass(2, listOf(horizontal.id), vertical.id, key,
+                FilterPassOperationV1.SeparableBlur(FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y, 1f,
+                    FilterAxisV1.Y, org.graphiks.kanvas.render.ir.TileMode.CLAMP, filterBounds)),
+            PlanPass.PictureSourcePass(3, pictureSource.id, scene.canonicalId.value, 0, occurrence, vertical.id),
+        )
+        return listOf(coverage, horizontal, vertical, pictureSource) to passes
+    }
+
+    private fun w6bWitnessTexture(role: PlanResourceRole, ordinal: Int): PlanResource = PlanResource.of(
+        role, ordinal, PlanResourceKind.Texture2D,
+        PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), SizeI32(1, 1), 4,
+        setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled),
+        PlanResourceLifetime.FrameLocal, 0, 4,
+    )
+
     private fun w6bDropShadowPublicationGraph(
         mode: org.graphiks.kanvas.render.ir.CapturedDropShadowModeV1 = org.graphiks.kanvas.render.ir.CapturedDropShadowModeV1.COMPOSITE,
         wrongOriginal: Boolean = false,
         includeOriginal: Boolean = mode == org.graphiks.kanvas.render.ir.CapturedDropShadowModeV1.COMPOSITE,
+        wrongColorizeInput: Boolean = false,
     ): RenderGraph {
         val root = PlanResource.of(
             PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D,
             PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), SizeI32(1, 1), 4,
             setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource, PlanResourceUsage.Sampled),
-            PlanResourceLifetime.FrameLocal, 0, 6,
+            PlanResourceLifetime.FrameLocal, 0, 9,
         )
         fun filterTexture(role: PlanResourceRole, ordinal: Int) = PlanResource.of(
             role, ordinal, PlanResourceKind.Texture2D,
             PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), SizeI32(1, 1), 4,
             setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled),
-            PlanResourceLifetime.FrameLocal, 0, 6,
+            PlanResourceLifetime.FrameLocal, 0, 9,
         )
         val source = filterTexture(PlanResourceRole.FilterSource, 0)
         val wrong = filterTexture(PlanResourceRole.FilterSource, 1)
-        val colorized = filterTexture(PlanResourceRole.FilterTarget, 0)
-        val terminal = filterTexture(PlanResourceRole.FilterTarget, 1)
+        val horizontal = filterTexture(PlanResourceRole.FilterTarget, 0)
+        val vertical = filterTexture(PlanResourceRole.FilterTarget, 1)
+        val colorized = filterTexture(PlanResourceRole.FilterTarget, 2)
+        val terminal = filterTexture(PlanResourceRole.FilterTarget, 3)
         val staging = PlanResource.of(
             PlanResourceRole.ReadbackStaging, 0, PlanResourceKind.Buffer, null, null, 256,
-            setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead), PlanResourceLifetime.FrameLocal, 0, 6,
+            setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead), PlanResourceLifetime.FrameLocal, 0, 9,
         )
         val deviceBounds = RectI32(0, 0, 1, 1)
         val mapping = requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32.Origin))
@@ -3053,16 +3238,22 @@ class RenderGraphContractTest {
                 destinationVersionAfter = DestinationVersionI64(0)),
             PlanPass.PictureSourcePass(1, source.id, "shadow-source", 0),
             PlanPass.PictureSourcePass(2, wrong.id, "wrong-shadow-source", 1),
-            PlanPass.FilterPass(3, listOf(source.id), colorized.id, key,
+            PlanPass.FilterPass(3, listOf(source.id), horizontal.id, key,
+                FilterPassOperationV1.SeparableBlur(FilterImplementationKindV1.IMAGE_BLUR_X, 1f,
+                    FilterAxisV1.X, org.graphiks.kanvas.render.ir.TileMode.CLAMP, bounds)),
+            PlanPass.FilterPass(4, listOf(horizontal.id), vertical.id, key,
+                FilterPassOperationV1.SeparableBlur(FilterImplementationKindV1.IMAGE_BLUR_Y, 1f,
+                    FilterAxisV1.Y, org.graphiks.kanvas.render.ir.TileMode.CLAMP, bounds)),
+            PlanPass.FilterPass(5, listOf(if (wrongColorizeInput) source.id else vertical.id), colorized.id, key,
                 FilterPassOperationV1.DropShadowColorize(org.graphiks.math.color.ColorARGB.of(255, 1, 2, 3),
                     org.graphiks.math.vector.Vector2F64(0.0, 0.0), bounds)),
-            PlanPass.FilterPass(4, inputs, terminal.id, key, FilterPassOperationV1.DropShadowComposite(
+            PlanPass.FilterPass(6, inputs, terminal.id, key, FilterPassOperationV1.DropShadowComposite(
                 mode, if (includeOriginal) source.id else null, bounds)),
-            PlanPass.FilterComposite(5, terminal.id, root.id, key, deviceBounds, Point2I32.Origin,
+            PlanPass.FilterComposite(7, terminal.id, root.id, key, deviceBounds, Point2I32.Origin,
                 FilterCompositeOperationV1.Draw(BlendPlan.SrcOver), destinationVersionAfter = DestinationVersionI64(1)),
-            PlanPass.ReadbackPass(6, root.id, staging.id, 256),
+            PlanPass.ReadbackPass(8, root.id, staging.id, 256),
         )
-        val resources = listOf(root, source, wrong, colorized, terminal, staging)
+        val resources = listOf(root, source, wrong, horizontal, vertical, colorized, terminal, staging)
         val budget = PlanBudget(4_096)
         return RenderGraph.of(
             PlanId("w6b-shadow-publication"), W6aLayerPlanCompiler.CAPABILITY_ID, SizeI32(1, 1),

@@ -9,8 +9,10 @@ import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.pipeline.BlurStyle
+import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.render.ir.GraphLimits
 import org.graphiks.kanvas.render.ir.SceneCaptureLimits
 import org.graphiks.math.color.ColorARGB
@@ -142,6 +144,147 @@ class W6bFilterAdmissionRecoverySurfaceTest {
     }
 
     @Test
+    fun `one Picture keeps ordered unfiltered and nested filtered children before terminal recovery`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val filtered = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(imageFilter = ImageFilter.Blur(1f, 1f)))
+        }.finishRecordingAsPicture()
+        val nested = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                drawRect(bounds, Paint(ColorARGB.White, antiAlias = false))
+                drawPicture(filtered)
+            }
+        }.finishRecordingAsPicture()
+        val outer = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                drawRect(bounds, Paint(ColorARGB.of(255, 11, 22, 33), antiAlias = false))
+                drawPicture(nested)
+                drawRect(bounds, Paint(ColorARGB.of(255, 44, 55, 66), antiAlias = false))
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 2)
+        surface.canvas { drawPicture(outer) }
+
+        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+        assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
+    }
+
+    @Test
+    fun `filtered Picture closes its recorded init-with-previous layer through one W6a scope`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                drawRect(bounds, Paint(ColorARGB.of(255, 11, 22, 33), antiAlias = false))
+                saveLayer(SaveLayerRec(initWithPrevious = true))
+                drawRect(bounds, Paint(ColorARGB.of(255, 44, 55, 66), antiAlias = false))
+                restore()
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 2)
+        surface.canvas { drawPicture(picture, Paint(imageFilter = ImageFilter.Blur(1f, 1f))) }
+
+        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+        assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
+    }
+
+    @Test
+    fun `filtered Picture closes its recorded mask layer through one W6a scope`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                saveLayer(paint = Paint(maskFilter = MaskFilter.Shader(Shader.SolidColor(ColorARGB.White))))
+                drawRect(bounds, Paint(ColorARGB.of(255, 44, 55, 66), antiAlias = false))
+                restore()
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 2)
+        surface.canvas { drawPicture(picture, Paint(imageFilter = ImageFilter.Blur(1f, 1f))) }
+
+        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+        assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
+    }
+
+    @Test
+    fun `nested isolated Pictures retain each transform prefix once before terminal recovery`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val child = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(ColorARGB.of(255, 44, 55, 66), antiAlias = false))
+        }.finishRecordingAsPicture()
+        val parent = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                translate(0.25f, 0f)
+                drawPicture(child, Paint(imageFilter = ImageFilter.Blur(1f, 1f)))
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 2)
+        surface.canvas {
+            translate(-0.25f, 0f)
+            drawPicture(parent, Paint(imageFilter = ImageFilter.Blur(1f, 1f)))
+        }
+
+        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+        assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
+    }
+
+    @Test
+    fun `nested Picture mask shader retains outer transform clip paint before terminal recovery`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val filtered = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(
+                maskFilter = MaskFilter.Shader(Shader.SolidColor(ColorARGB.White)),
+            ))
+        }.finishRecordingAsPicture()
+        val outer = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                save()
+                translate(0.25f, 0f)
+                clipRect(RectF32.ofLTRB(0f, 0f, 1.75f, 2f), ClipOp.INTERSECT, antiAlias = false)
+                drawPicture(filtered, Paint(ColorARGB.of(255, 190, 200, 210), antiAlias = false))
+                restore()
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 2)
+        surface.canvas { drawPicture(outer) }
+
+        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+        assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
+    }
+
+    @Test
+    fun `filtered Picture parent keeps its filtered child in the sealed command stream`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val filteredChild = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(imageFilter = ImageFilter.Blur(1f, 1f)))
+        }.finishRecordingAsPicture()
+        val parent = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawPicture(filteredChild, Paint(imageFilter = ImageFilter.Blur(1f, 1f)))
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 2)
+        surface.canvas { drawPicture(parent) }
+
+        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+        assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
+    }
+
+    @Test
     fun `image root followed by mask occurrence remains one terminal filtered source`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
         val surface = Surface(2, 2)
@@ -153,6 +296,23 @@ class W6bFilterAdmissionRecoverySurfaceTest {
                     maskFilter = MaskFilter.Blur(BlurStyle.OUTER, 1f),
                 ),
             )
+        }
+
+        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+        assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
+    }
+
+    @Test
+    fun `layer mask shader reaches w6b terminal admission and same surface recovers`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val surface = Surface(2, 2)
+        surface.canvas {
+            saveLayer(paint = Paint(maskFilter = MaskFilter.Shader(Shader.SolidColor(ColorARGB.White))))
+            drawRect(bounds, Paint(ColorARGB.White, antiAlias = false))
+            restore()
         }
 
         assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
