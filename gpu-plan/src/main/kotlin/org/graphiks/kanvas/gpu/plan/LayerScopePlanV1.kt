@@ -127,12 +127,17 @@ public class LayerFramePlanV1 internal constructor(
     scopes: List<LayerScopePlanV1>,
     executionSteps: List<LayerExecutionStepV1>,
     pictureStreamAggregates: List<PictureStreamAggregateV1> = emptyList(),
+    /** The compiler-published total pass order consumed verbatim by the lowerer. */
+    frozenPassSchedule: List<PlanPassId> = emptyList(),
 ) {
     private val scopes = immutableList(scopes)
     private val executionSteps = immutableList(executionSteps)
     private val pictureStreamAggregates = immutableList(pictureStreamAggregates)
+    private val frozenPassSchedule = immutableList(frozenPassSchedule)
+    init { require(frozenPassSchedule.distinct().size == frozenPassSchedule.size) }
     public fun scopes(): List<LayerScopePlanV1> = scopes
     public fun executionSteps(): List<LayerExecutionStepV1> = executionSteps
     /** Frozen ordered Picture scopes. Renderer code may only materialize these facts. */
     public fun pictureStreamAggregates(): List<PictureStreamAggregateV1> = pictureStreamAggregates
+    public fun frozenPassSchedule(): List<PlanPassId> = frozenPassSchedule
 }

@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalUnsignedTypes::class)
+
 package org.graphiks.kanvas.picture
 
 import java.nio.ByteBuffer
@@ -7,6 +9,8 @@ import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.DropShadowMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.TileMode
+import org.graphiks.kanvas.surface.Surface
+import org.graphiks.kanvas.surface.W6bImageBlurCpuOracle
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import kotlin.test.Test
@@ -111,6 +115,50 @@ class W6bFilterPictureTest {
     fun malformedSchema8FilterReferencesAndCyclesAreRejectedByPublicPictureDecode() {
         assertNull(Picture.fromByteArray(corruptedNestedBlurReference(replacement = 2)))
         assertNull(Picture.fromByteArray(corruptedNestedBlurReference(replacement = 0)))
+    }
+
+    @Test
+    fun pictureMemoryAndWireReplayKeepDistinctBlurredOccurrencesPixelEquivalent() {
+        val source = PictureRecorder().also { recorder ->
+            recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 7f, 7f)).drawRect(
+                RectF32.ofLTRB(3f, 3f, 4f, 4f), Paint(ColorARGB.White, antiAlias = false),
+            )
+        }.finishRecordingAsPicture()
+        val decoded = assertNotNull(Picture.fromByteArray(source.toByteArray()))
+        // This independent oracle has two source domains before either Picture is replayed.
+        // The same captured Picture occurs twice under different transform and paint state; the
+        // second run repeats that exact pair after public wire decode.
+        val expected = replayedOccurrencesExpected()
+
+        listOf(source, decoded).forEach { replayedPicture ->
+            val pixels = Surface(20, 7).also { surface ->
+                surface.canvas {
+                    drawPicture(replayedPicture, Paint(imageFilter = ImageFilter.Blur(1f, 1f, TileMode.DECAL)))
+                    save()
+                    translate(10f, 0f)
+                    drawPicture(replayedPicture, Paint(
+                        color = ColorARGB.of(128, 255, 255, 255),
+                        imageFilter = ImageFilter.Blur(1f, 1f, TileMode.DECAL),
+                    ))
+                    restore()
+                }
+            }.render().pixels
+            W6bImageBlurCpuOracle.assertNear(expected, pixels)
+        }
+    }
+
+    private fun replayedOccurrencesExpected(): UByteArray {
+        val first = W6bImageBlurCpuOracle.blurredAlpha(20, 7,
+            UByteArray(20 * 7).also { it[3 + 3 * 20] = 255u }, 1f, 1f, TileMode.DECAL,
+            knownRight = 7,
+        )
+        val second = W6bImageBlurCpuOracle.blurredAlpha(20, 7,
+            UByteArray(20 * 7).also { it[13 + 3 * 20] = 128u }, 1f, 1f, TileMode.DECAL,
+            knownLeft = 10, knownRight = 17,
+        )
+        return W6bImageBlurCpuOracle.toOpaqueWhiteRgba(UByteArray(first.size) { pixel ->
+            (first[pixel].toInt() + second[pixel].toInt()).coerceAtMost(255).toUByte()
+        })
     }
 
     private fun pictureWithThreeFilteredDraws(vararg filters: ImageFilter): Picture {

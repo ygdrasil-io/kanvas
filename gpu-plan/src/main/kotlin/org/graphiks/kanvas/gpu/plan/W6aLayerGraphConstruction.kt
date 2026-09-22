@@ -551,6 +551,7 @@ internal class W6aLayerGraphConstruction(
             parentTarget: PlanResourceId,
             owningLayerScope: PictureLayerExecutionScope?,
         ): Pair<PictureStreamAggregateV1, PlanPassId?> {
+            val aggregateStartPassI32 = passes.size
             val plannedDrawSources = linkedMapOf<FramePlannedCommandIdI32, Pair<PlanPassId, Int>>()
             val plannedDrawCoordinates = linkedMapOf<FramePlannedCommandIdI32, PictureDrawCoordinatesV1>()
             fun recordPictureWork(pass: PlanPass, scope: PictureLayerExecutionScope? = owningLayerScope) {
@@ -794,14 +795,27 @@ internal class W6aLayerGraphConstruction(
                     ))
                 // A graph texture is already the children’s premultiplied color.  Feed its W5
                 // paint through a neutral rect coordinate carrier, not the public Picture draw:
-                // this keeps W5 from rediscovering/replaying children or applying alpha/filter
-                // attributes a second time (those are explicit operand fields below).
+                // this keeps W5 from rediscovering/replaying children.  Its actual parent color
+                // filter remains in this W5 row solely as the authenticated byte binding that
+                // the frozen graph-texture operand names; Task 3 applies it to the graph texture
+                // exactly once rather than evaluating this carrier program.
                 val picture = original.geometry as? GeometryNode.Picture
+                val parentPaint = original.paint?.copy(
+                    color = org.graphiks.math.color.ColorARGB.White,
+                    shader = null,
+                    blendMode = BlendMode.SRC_OVER,
+                    blender = null,
+                    maskFilter = null,
+                    pathEffect = null,
+                    imageFilter = null,
+                )
                 val materialDraw = original.copy(
                     geometry = picture?.let { GeometryNode.Rect.of(it.copyCullRect()) } ?: original.geometry,
                     material = org.graphiks.kanvas.render.ir.MaterialNode.Solid(org.graphiks.math.color.ColorARGB.White),
-                    paint = null,
-                    effects = org.graphiks.kanvas.render.ir.EffectStack.Empty,
+                    paint = parentPaint,
+                    effects = parentPaint?.colorFilter?.let { filter ->
+                        org.graphiks.kanvas.render.ir.EffectStack.of(listOf(filter))
+                    } ?: org.graphiks.kanvas.render.ir.EffectStack.Empty,
                     blend = BlendNode.SrcOver,
                     origin = if (picture == null) original.origin else DrawOrigin.RECT,
                     resource = null,
@@ -1124,25 +1138,35 @@ internal class W6aLayerGraphConstruction(
                 }
             }
             val entryOrigin = filterSource(entryTarget).originDeviceI32
+            /**
+             * A terminal can initialize only the source output it actually published.  Its
+             * physical source rectangle is a demand/allocation domain and must never be
+             * promoted to Picture known content: that would let a transparent halo become a
+             * CLAMP edge for a later parent filter.
+             */
+            fun initializedCompositeOutput(source: PlanResourceId): RectI32? {
+                val produced = requireNotNull(sourceBindingsById[source]?.copyProducedOutputDeviceI32()) {
+                    "Picture aggregate terminal has no frozen produced output."
+                }
+                // The child can produce a larger offscreen halo, but this terminal initializes
+                // only the overlap it composites into its immediate aggregate target.  Preserve
+                // that published source generation and terminal target; never substitute a
+                // demand, cull, or physical source allocation for known content.
+                val initialized = intersect(produced, targetDeviceBounds(entryTarget)) ?: return null
+                return requireNotNull(filterSource(entryTarget).mapping.mapDeviceRectToTargetI32OrNull(
+                    initialized,
+                    entryOrigin,
+                ))
+            }
             var initializedContent: RectI32? = null
             passes.drop(childStartPassI32).forEach { pass ->
                 val localBounds: RectI32? = when (pass) {
                     is PlanPass.RenderPass -> if (pass.target == entryTarget) pass.draws().map(::w6aRasterBoundsI32)
                         .fold(null as RectI32?) { bounds, draw -> unionOrNull(bounds, draw) } else null
                     is PlanPass.StencilCover -> if (pass.target == entryTarget) w6aRasterBoundsI32(pass.draw) else null
-                    is PlanPass.FilterComposite -> if (pass.destination == entryTarget) pass.copyDestinationOriginParentI32().let { origin ->
-                        val rect = pass.copySourceBoundsTargetI32()
-                        RectI32(origin.x, origin.y, Math.addExact(origin.x, rect.width()), Math.addExact(origin.y, rect.height()))
-                    } else null
-                    is PlanPass.PictureComposite -> if (pass.destination == entryTarget) requireNotNull(pass.operands).let { operand ->
-                        val origin = operand.copyDestinationOriginTargetI32()
-                        val rect = operand.copySourceBoundsTargetI32()
-                        RectI32(origin.x, origin.y, Math.addExact(origin.x, rect.width()), Math.addExact(origin.y, rect.height()))
-                    } else null
-                    is PlanPass.LayerComposite -> if (pass.destination == entryTarget) pass.copyDestinationOriginParentI32().let { origin ->
-                        val rect = pass.copySourceBoundsLayerI32()
-                        RectI32(origin.x, origin.y, Math.addExact(origin.x, rect.width()), Math.addExact(origin.y, rect.height()))
-                    } else null
+                    is PlanPass.FilterComposite -> if (pass.destination == entryTarget) initializedCompositeOutput(pass.source) else null
+                    is PlanPass.PictureComposite -> if (pass.destination == entryTarget) initializedCompositeOutput(pass.source) else null
+                    is PlanPass.LayerComposite -> if (pass.destination == entryTarget) initializedCompositeOutput(pass.source) else null
                     is PlanPass.PictureSourcePass -> if (pass.output == entryTarget) filterSource(entryTarget).copyExtentI32().let {
                         RectI32(0, 0, it.width, it.height)
                     } else null
@@ -1280,6 +1304,8 @@ internal class W6aLayerGraphConstruction(
                 sealPassId,
                 terminal,
                 composeInOrderF64(draft.source.outerPictures().map { it.transform }),
+                if (draft.outerPicturePathI32().isEmpty()) draft.source.sourceCommandIndexI32 else null,
+                executionPassIds = passes.subList(aggregateStartPassI32, passes.size).map(PlanPass::id),
             )
             pictureStreamAggregates += aggregate
             return aggregate to terminal
@@ -1582,7 +1608,8 @@ internal class W6aLayerGraphConstruction(
         // IDs and semantic scope enumeration are assigned at BeginLayer in source order. Restore
         // construction is post-order, but must not leak that implementation detail into the
         // immutable plan metadata.
-        frame = LayerFramePlanV1(scopePlans.values.toList(), steps, pictureStreamAggregates)
+        frame = LayerFramePlanV1(scopePlans.values.toList(), steps, pictureStreamAggregates,
+            frozenPassSchedule = rawPasses.map(PlanPass::id))
 
         val copySources = passes.filterIsInstance<PlanPass.TextureCopy>().map { it.source }.toSet()
         val copyDestinations = passes.filterIsInstance<PlanPass.TextureCopy>().map { it.destination }.toSet()
@@ -1738,6 +1765,15 @@ internal class W6aLayerGraphConstruction(
                         identity.resolvedSource?.materialAuthority is PlanDrawMaterialAuthority.MaterialV4) {
                         RawMaterialRequirementsV2.measureV4(requireNotNull(table), material).canonicalIdentity
                     } else RawMaterialRequirementsV2.measureLegacy(requireNotNull(table), material).canonicalIdentity
+                    val parentFilterBinding = request.colorFilter?.let { filter ->
+                        val footprint = RawMaterialRequirementsV2.measureV4(requireNotNull(table), material)
+                        val bindingByteCount = maxOf(16L, filter.dynamicByteCountI64)
+                        val offset = if (filter.dynamicByteCountI64 == 0L) 0L else footprint.sourceUniformByteCountI64
+                        require(Math.addExact(offset, bindingByteCount) <= footprint.uniformByteCountI64) {
+                            "W6b graph-texture parent filter must retain its W5 source-uniform binding."
+                        }
+                        offset to footprint.uniformByteCountI64
+                    }
                     PlanPass.PictureSourcePass(
                         pass.ordinal,
                         pass.output,
@@ -1753,20 +1789,22 @@ internal class W6aLayerGraphConstruction(
                         pass.aggregateId,
                         graphTextureRequest = null,
                         graphTextureOperand = GraphTextureSourceOperandV1(
-                            request.aggregateId,
-                            request.sealedSourceId,
-                            request.sealedSourceGenerationI64,
-                            request.copyTargetOriginDeviceI32(),
-                            request.copySampleBoundsTargetI32(),
-                            request.mapping,
-                            request.deferredCompositeClip,
-                            material,
-                            source.uniforms.getValue(uniformIdentity),
-                            request.alphaF32,
-                            request.colorFilter,
-                            pictureTerminalBlends.getValue(requireNotNull(pass.plannedCommandId)),
-                            request.coverageOperation,
-                            request.copyClipToDeviceF64(),
+                            aggregateId = request.aggregateId,
+                            sealedSourceId = request.sealedSourceId,
+                            sealedSourceGenerationI64 = request.sealedSourceGenerationI64,
+                            targetOriginDeviceI32 = request.copyTargetOriginDeviceI32(),
+                            sampleBoundsTargetI32 = request.copySampleBoundsTargetI32(),
+                            mapping = request.mapping,
+                            deferredCompositeClip = request.deferredCompositeClip,
+                            material = material,
+                            uniformResource = source.uniforms.getValue(uniformIdentity),
+                            colorFilterUniformOffsetI64 = parentFilterBinding?.first,
+                            colorFilterUniformByteCountI64 = parentFilterBinding?.second,
+                            alphaF32 = request.alphaF32,
+                            colorFilter = request.colorFilter,
+                            finalBlend = pictureTerminalBlends.getValue(requireNotNull(pass.plannedCommandId)),
+                            coverageOperation = request.coverageOperation,
+                            clipToDeviceF64 = request.copyClipToDeviceF64(),
                         ),
                     )
                 }

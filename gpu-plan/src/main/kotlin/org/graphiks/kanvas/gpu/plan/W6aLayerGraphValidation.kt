@@ -263,6 +263,12 @@ internal fun validateW6aLayerTopology(
                 require(operand.sealedSourceId in sealedPictureSources && operand.aggregateId == pass.aggregateId &&
                     uniform.role == PlanResourceRole.SourceUniformData && uniform.kind == PlanResourceKind.Buffer &&
                     PlanResourceUsage.Uniform in uniform.usages())
+                operand.colorFilter?.let { filter ->
+                    val offset = requireNotNull(operand.colorFilterUniformOffsetI64)
+                    val capacity = requireNotNull(operand.colorFilterUniformByteCountI64)
+                    require(uniform.byteSize == capacity &&
+                        Math.addExact(offset, maxOf(16L, filter.dynamicByteCountI64)) <= capacity)
+                }
                 require(operand.sealedSourceGenerationI64 == versions[operand.sealedSourceId])
                 require((pass.coverageSource != null) ==
                     (operand.coverageOperation == GraphTextureCoverageOperationV1.REPLACE_ALPHA_FROM_MASK))
@@ -303,13 +309,18 @@ internal fun validateW6aLayerTopology(
                 pass.operation.bounds.copyTargetOriginDeviceI32(),
             )
             listOf(
-                targetLocal(pass.operation.bounds.copyKnownContentDeviceI32()),
-                targetLocal(pass.operation.bounds.copyDesiredOutputDeviceI32()),
-                targetLocal(pass.operation.bounds.copyRequiredInputDeviceI32()),
-                targetLocal(pass.operation.bounds.copyProducedOutputDeviceI32()),
-            ).filterNotNull().forEach { local ->
-                require(local.left >= 0 && local.top >= 0 && local.right <= targetExtent.width && local.bottom <= targetExtent.height)
-            }
+                "known content" to targetLocal(pass.operation.bounds.copyKnownContentDeviceI32()),
+                "desired output" to targetLocal(pass.operation.bounds.copyDesiredOutputDeviceI32()),
+                "produced output" to targetLocal(pass.operation.bounds.copyProducedOutputDeviceI32()),
+            ).forEach { (name, local) -> local?.let {
+                require(local.left >= 0 && local.top >= 0 && local.right <= targetExtent.width && local.bottom <= targetExtent.height) {
+                    "Frozen $name bounds $local escape $targetExtent at ${pass.operation.bounds.copyTargetOriginDeviceI32()}."
+                }
+            } }
+            // Required input belongs to the preceding source generation, not this output target.
+            // It can extend beyond a separable pass's produced output by exactly the next axis's
+            // blur support; treating it as output bounds would collapse the frozen X→Y contract.
+            require(pass.operation.bounds.copyRequiredInputDeviceI32().isEmpty.not())
             require(targetLocal(pass.operation.bounds.copyDesiredOutputDeviceI32()) ==
                 RectI32(0, 0, targetExtent.width, targetExtent.height))
             // Every typed filter output is an immutable source generation for its immediate

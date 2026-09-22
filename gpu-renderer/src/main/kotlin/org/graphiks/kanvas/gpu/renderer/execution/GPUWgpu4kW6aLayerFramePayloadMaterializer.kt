@@ -4,6 +4,13 @@ import io.ygdrasil.webgpu.*
 import org.graphiks.kanvas.gpu.plan.*
 import org.graphiks.kanvas.gpu.renderer.materials.W5fColorOperationEmitterV1
 import org.graphiks.kanvas.gpu.renderer.recording.*
+import org.graphiks.kanvas.gpu.renderer.wgsl.W6bSeparableBlurSnippet
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.render.ir.ClipStackNode
+import org.graphiks.math.geometry.RectF64
+import org.graphiks.math.geometry.RectI32
+import org.graphiks.math.geometry.roundOutToRectI32OrNull
+import org.graphiks.math.matrix.mapRectBoundsF64OrNull
 
 /** Native translation of exact W6 resources and passes behind one ordinary frame draft. */
 internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
@@ -71,6 +78,18 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 owned.own(device.createBuffer(BufferDescriptor(size = row.byteSize.toULong(),
                     usage = usage or GPUBufferUsage.CopyDst, label = "w6a.slot.${frame.physical.slot(id).slotI32}")))
             }
+            // Graph-texture Picture sources name their existing W5 parent-filter row.  Allocate
+            // precisely that published resource; no renderer-side uniform resource exists.
+            val graphTextureUniformBuffers = graph.passes().filterIsInstance<PlanPass.PictureSourcePass>()
+                .mapNotNull { it.graphTextureOperand?.takeIf { operand -> operand.colorFilter != null }?.uniformResource }
+                .distinct().associateWith { id ->
+                    val row = frame.physical.resource(id)
+                    require(row.role == PlanResourceRole.SourceUniformData && row.kind == PlanResourceKind.Buffer &&
+                        PlanResourceUsage.Uniform in row.usages())
+                    owned.own(device.createBuffer(BufferDescriptor(size = row.byteSize.toULong(),
+                        usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                        label = "w6b.parent.filter.${frame.physical.slot(id).slotI32}")))
+                }
             val uniform = owned.own(device.createBuffer(BufferDescriptor(size = geometryUniform.byteSize.toULong(),
                 usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst, label = "w6a.geometry.uniform")))
             val uniformBytes = ByteArray(Math.toIntExact(geometryUniform.byteSize))
@@ -197,7 +216,12 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 add(GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(bind, generation),
                                     if (mapped == null) emptyList() else binding.let { listOf(it.uniformOffsetI64) }))
                                 val scissor = when (draw) {
-                                    is SolidRectDraw -> draw.copyScissor()
+                                    // The W6a rect vertex shader is fullscreen; its raster domain is
+                                    // therefore the immutable visible rect intersected with the clip,
+                                    // not the clip alone.
+                                    is SolidRectDraw -> draw.copyVisibleBounds().also {
+                                        require(it.intersect(draw.copyScissor()))
+                                    }
                                     is AnalyticRectDraw -> draw.copyScissor()
                                     is AnalyticRRectDraw -> draw.copyScissor()
                                     is PathDraw -> draw.copyScissorI32()
@@ -205,6 +229,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     is W5bVerticesDraw -> draw.copyScissorI32()
                                     else -> error("Unadmitted W6 geometry")
                                 }
+                                // W6a construction already rebases non-root PlanDraws to their
+                                // frozen target; WebGPU therefore receives this texture-local scissor.
                                 add(GPUPreparedNativeRenderCommand.SetScissor(scissor.left, scissor.top, scissor.width(), scissor.height()))
                                 if (data == null) add(GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0)))
                                 else {
@@ -292,6 +318,121 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0))),
                             operationKindOverride = GPUEncoderOperationKind.LayerComposite, w6aPassV1 = pass)
                     }
+                    is PlanPass.PictureAggregateBeginPass, is PlanPass.FilterSourceClear,
+                    is PlanPass.FilterCoverageSourcePass -> {
+                        val target = when (pass) {
+                            is PlanPass.PictureAggregateBeginPass -> pass.target
+                            is PlanPass.FilterSourceClear -> pass.output
+                            is PlanPass.FilterCoverageSourcePass -> pass.output
+                        }
+                        renderOperands += emptyRender(stepIndex, views.getValue(target), generation, clear = true, pass, owned)
+                    }
+                    is PlanPass.PictureAggregateSealPass -> {
+                        renderOperands += emptyRender(stepIndex, views.getValue(pass.aggregateTarget), generation, clear = false, pass, owned)
+                    }
+                    is PlanPass.PictureSourcePass -> {
+                        val operand = requireNotNull(pass.graphTextureOperand) {
+                            "W6b Picture source must retain its published graph texture operand."
+                        }
+                        val inputOrigin = frame.targetOriginDeviceI32(operand.sealedSourceId)
+                        val outputOrigin = frame.targetOriginDeviceI32(pass.output)
+                        val extent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
+                        val filter = operand.colorFilter
+                        val filterOffset = filter?.let { requireNotNull(operand.colorFilterUniformOffsetI64) }
+                        val filterCapacity = filter?.let { requireNotNull(operand.colorFilterUniformByteCountI64) }
+                        val colorDeclaration = filter?.let { execution ->
+                            "struct W5fMaterialBlock { words: array<vec4<u32>, ${maxOf(1L, (requireNotNull(filterCapacity) + 15L) / 16L)}>, }\n" +
+                                "@group(0) @binding(1) var<uniform> w5fMaterial: W5fMaterialBlock;\n" +
+                                "fn w6b_parent_filter(input: vec4<f32>) -> vec4<f32> {\n" +
+                                W5fColorOperationEmitterV1.emit(execution.copyOperationGraph(), "input",
+                                    requireNotNull(filterOffset) / 4L) + "}\n"
+                        }.orEmpty()
+                        val filteredSource = if (filter == null) "alpha_applied" else "w6b_parent_filter(alpha_applied)"
+                        val shader = W6A_VERTEX_SHADER + """
+                            @group(0) @binding(0) var picture_source: texture_2d<f32>;
+                            $colorDeclaration
+                            @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+                                let source_position = vec2<i32>(position.xy) + vec2<i32>(${outputOrigin.x - inputOrigin.x}, ${outputOrigin.y - inputOrigin.y});
+                                let source_extent = vec2<i32>(textureDimensions(picture_source));
+                                if (source_position.x < 0 || source_position.y < 0 || source_position.x >= source_extent.x || source_position.y >= source_extent.y) {
+                                    return vec4<f32>(0.0);
+                                }
+                                let alpha_applied = textureLoad(picture_source, source_position, 0) * ${operand.alphaF32};
+                                return $filteredSource;
+                            }
+                        """
+                        val filterBuffer = filter?.let { execution ->
+                            val offset = requireNotNull(filterOffset)
+                            val capacity = requireNotNull(filterCapacity)
+                            val bindingBytes = maxOf(16L, execution.dynamicByteCountI64)
+                            require(Math.addExact(offset, bindingBytes) <= capacity)
+                            graphTextureUniformBuffers.getValue(operand.uniformResource).also { buffer ->
+                                if (execution.dynamicByteCountI64 > 0L) {
+                                    queue.writeBuffer(buffer, offset.toULong(), ArrayBuffer.of(execution.copyDynamicBytes()))
+                                }
+                            }
+                        }
+                        renderOperands += pictureSourceRender(stepIndex, views.getValue(pass.output), views.getValue(operand.sealedSourceId),
+                            filterBuffer, filterCapacity, generation, shader,
+                            0, 0, extent.width, extent.height, pass, owned)
+                    }
+                    is PlanPass.FilterPass -> {
+                        val operation = pass.operation as? FilterPassOperationV1.SeparableBlur
+                            ?: error("Task 3 only materializes frozen separable image blur operations.")
+                        require(operation.kind in setOf(
+                            FilterImplementationKindV1.IMAGE_BLUR_X,
+                            FilterImplementationKindV1.IMAGE_BLUR_Y,
+                        )) { "Task 3 cannot materialize ${operation.kind}." }
+                        require(pass.inputs().size == 1)
+                        val input = pass.inputs().single()
+                        val outputOrigin = frame.targetOriginDeviceI32(pass.output)
+                        val inputOrigin = frame.targetOriginDeviceI32(input)
+                        val outputExtent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
+                        val known = operation.bounds.copyKnownContentDeviceI32()
+                            ?: operation.bounds.copyRequiredInputDeviceI32()
+                        val shader = W6A_VERTEX_SHADER + W6bSeparableBlurSnippet.fragment(
+                            operation.axis,
+                            operation.sigmaF32,
+                            operation.tileMode,
+                            inputOrigin.x,
+                            inputOrigin.y,
+                            outputOrigin.x,
+                            outputOrigin.y,
+                            known.left,
+                            known.top,
+                            known.right,
+                            known.bottom,
+                        )
+                        renderOperands += textureRender(stepIndex, views.getValue(pass.output), views.getValue(input), generation,
+                            shader, BlendPlan.LegacySrcOverV1, 0, 0, outputExtent.width, outputExtent.height, pass, owned)
+                    }
+                    is PlanPass.PictureComposite -> {
+                        val operands = requireNotNull(pass.operands) { "W6b Picture composite needs frozen operands." }
+                        val source = operands.copySourceBoundsTargetI32()
+                        val destination = operands.copyDestinationOriginTargetI32()
+                        val shader = sampledCompositeShader(source.left - destination.x, source.top - destination.y, 1f)
+                        val scissor = pictureCompositeScissor(frame, pass.destination, source, destination, operands)
+                        renderOperands += if (scissor == null) emptyRender(stepIndex, views.getValue(pass.destination), generation,
+                            clear = false, pass, owned) else textureRender(stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
+                            shader, operands.blend, scissor.left, scissor.top, scissor.width(), scissor.height(), pass, owned)
+                    }
+                    is PlanPass.FilterComposite -> {
+                        val source = pass.copySourceBoundsTargetI32()
+                        val destination = pass.copyDestinationOriginParentI32()
+                        val alpha = (pass.operation as? FilterCompositeOperationV1.Layer)?.restore?.alphaF32 ?: 1f
+                        val blend = when (val operation = pass.operation) {
+                            is FilterCompositeOperationV1.Draw -> operation.blend
+                            is FilterCompositeOperationV1.Layer -> operation.restore.blend
+                            is FilterCompositeOperationV1.Picture -> requireNotNull(operation.terminal).blend
+                        }
+                        val shader = sampledCompositeShader(source.left - destination.x, source.top - destination.y, alpha)
+                        val terminal = (pass.operation as? FilterCompositeOperationV1.Picture)?.terminal
+                        val scissor = terminal?.let { pictureCompositeScissor(frame, pass.destination, source, destination, it) }
+                        renderOperands += if (scissor == null && terminal != null) emptyRender(stepIndex, views.getValue(pass.destination), generation,
+                            clear = false, pass, owned) else textureRender(stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
+                            shader, blend, scissor?.left ?: destination.x, scissor?.top ?: destination.y,
+                            scissor?.width() ?: source.width(), scissor?.height() ?: source.height(), pass, owned)
+                    }
                     is PlanPass.ReadbackPass -> {
                         val output = resources.outputOwnedReadbacks.single()
                         val staging = frame.physical.resource(pass.staging)
@@ -339,6 +480,168 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 "Layer native materialization failed: ${failure.message.orEmpty()}", retainedCloseOwner = retained)
         }
     }
+
+    /** Applies the typed deferred clip only at the frozen Picture terminal. */
+    private fun pictureCompositeScissor(
+        frame: GPUW6aLayerFramePlan,
+        destinationTarget: PlanResourceId,
+        source: RectI32,
+        destination: org.graphiks.math.geometry.Point2I32,
+        operands: PictureCompositeOperandsV1,
+    ): RectI32? {
+        val result = RectI32(destination.x, destination.y,
+            Math.addExact(destination.x, source.width()), Math.addExact(destination.y, source.height()))
+        val deviceClip = when (val clip = operands.deferredClip) {
+            ClipStackNode.Empty -> return result
+            is ClipStackNode.DeviceRect -> {
+                val bounds = clip.copyBounds()
+                requireNotNull(operands.copyClipToDeviceF64().mapRectBoundsF64OrNull(RectF64(
+                    bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble(),
+                ))?.roundOutToRectI32OrNull()) { "W6b Picture deferred clip cannot be projected to device texels." }
+            }
+            is ClipStackNode.Operations -> error("Task 3 requires a typed DeviceRect deferred Picture clip.")
+        }
+        val origin = frame.targetOriginDeviceI32(destinationTarget)
+        val local = RectI32(
+            Math.subtractExact(deviceClip.left, origin.x), Math.subtractExact(deviceClip.top, origin.y),
+            Math.subtractExact(deviceClip.right, origin.x), Math.subtractExact(deviceClip.bottom, origin.y),
+        )
+        return result.takeIf { it.intersect(local) }
+    }
+
+    /** Materializes one published graph-texture source and, when present, its frozen W5 filter row. */
+    private fun pictureSourceRender(
+        stepIndex: Int,
+        target: GPUTextureView,
+        source: GPUTextureView,
+        filterBuffer: GPUBuffer?,
+        filterBindingByteCountI64: Long?,
+        generation: GPUDeviceGenerationID,
+        shader: String,
+        scissorX: Int,
+        scissorY: Int,
+        scissorWidth: Int,
+        scissorHeight: Int,
+        pass: PlanPass.PictureSourcePass,
+        owned: W6aOwnedHandles,
+    ): GPUPreparedNativeScopeOperand.Render {
+        require(scissorWidth > 0 && scissorHeight > 0)
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = buildList {
+            add(BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()))
+            if (filterBindingByteCountI64 != null) add(BindGroupLayoutEntry(1u, GPUShaderStage.Fragment,
+                buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform, minBindingSize = filterBindingByteCountI64.toULong())))
+        })))
+        val pipeline = pipeline(shader, layout, w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = buildList {
+            add(BindGroupEntry(0u, source))
+            if (filterBindingByteCountI64 != null) add(BindGroupEntry(1u, BufferBinding(requireNotNull(filterBuffer),
+                0uL, filterBindingByteCountI64.toULong())))
+        })))
+        return GPUPreparedNativeScopeOperand.Render(
+            stepIndex,
+            GPUPreparedNativeRenderPassConfig(
+                GPUPreparedNativeTextureViewOperand(target, generation),
+                loadOperation = GPUPreparedNativeLoadOperation.Clear,
+                clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0),
+            ),
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+                GPUPreparedNativeRenderCommand.SetScissor(scissorX, scissorY, scissorWidth, scissorHeight),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0)),
+            ),
+            w6aPassV1 = pass,
+        )
+    }
+
+    /** Emits exactly one frozen source->target fullscreen render; no pass selection occurs here. */
+    private fun textureRender(
+        stepIndex: Int,
+        target: GPUTextureView,
+        source: GPUTextureView,
+        generation: GPUDeviceGenerationID,
+        shader: String,
+        blend: BlendPlan,
+        scissorX: Int,
+        scissorY: Int,
+        scissorWidth: Int,
+        scissorHeight: Int,
+        pass: PlanPass,
+        owned: W6aOwnedHandles,
+    ): GPUPreparedNativeScopeOperand.Render {
+        require(scissorWidth > 0 && scissorHeight > 0)
+        // A freshly allocated W6b source or filter target must begin transparent.
+        // These fullscreen shaders intentionally emit transparent pixels outside the
+        // frozen source domain; with source-over blend, loading uninitialized target
+        // memory would otherwise preserve those undefined pixels.
+        val clearTarget = pass is PlanPass.PictureSourcePass || pass is PlanPass.FilterPass
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(
+            BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
+        ))))
+        val pipeline = pipeline(shader, layout, w6aColorTarget(blend), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(
+            BindGroupEntry(0u, source),
+        ))))
+        return GPUPreparedNativeScopeOperand.Render(
+            stepIndex,
+            GPUPreparedNativeRenderPassConfig(
+                GPUPreparedNativeTextureViewOperand(target, generation),
+                loadOperation = if (clearTarget) GPUPreparedNativeLoadOperation.Clear else GPUPreparedNativeLoadOperation.Load,
+                clearColor = if (clearTarget) GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0) else null,
+            ),
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+                GPUPreparedNativeRenderCommand.SetScissor(scissorX, scissorY, scissorWidth, scissorHeight),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0)),
+            ),
+            operationKindOverride = if (pass is PlanPass.LayerComposite) GPUEncoderOperationKind.LayerComposite else null,
+            w6aPassV1 = pass,
+        )
+    }
+
+    private fun emptyRender(
+        stepIndex: Int,
+        target: GPUTextureView,
+        generation: GPUDeviceGenerationID,
+        clear: Boolean,
+        pass: PlanPass,
+        owned: W6aOwnedHandles,
+    ): GPUPreparedNativeScopeOperand.Render {
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = emptyList())))
+        val pipeline = pipeline(W6A_VERTEX_SHADER + """
+            @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+                return vec4<f32>(0.0);
+            }
+        """, layout, w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = emptyList())))
+        return GPUPreparedNativeScopeOperand.Render(
+            stepIndex,
+            GPUPreparedNativeRenderPassConfig(
+                GPUPreparedNativeTextureViewOperand(target, generation),
+                loadOperation = if (clear) GPUPreparedNativeLoadOperation.Clear else GPUPreparedNativeLoadOperation.Load,
+                clearColor = if (clear) GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0) else null,
+            ),
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0)),
+            ),
+            w6aPassV1 = pass,
+        )
+    }
+
+    private fun sampledCompositeShader(sourceOffsetX: Int, sourceOffsetY: Int, alpha: Float): String = W6A_VERTEX_SHADER + """
+        @group(0) @binding(0) var w6b_source: texture_2d<f32>;
+        @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+            let source_position = vec2<i32>(position.xy) + vec2<i32>($sourceOffsetX, $sourceOffsetY);
+            let source_extent = vec2<i32>(textureDimensions(w6b_source));
+            if (source_position.x < 0 || source_position.y < 0 || source_position.x >= source_extent.x || source_position.y >= source_extent.y) {
+                return vec4<f32>(0.0);
+            }
+            return textureLoad(w6b_source, source_position, 0) * $alpha;
+        }
+    """
 
     private fun geometryPipeline(mapped: GPUWgpu4kCorePrimitivePipelineMapping.Mapped, groupZero: GPUBindGroupLayout,
         owned: W6aOwnedHandles, template: GPUW5aGeometryHostTemplateV1?): GPURenderPipeline {

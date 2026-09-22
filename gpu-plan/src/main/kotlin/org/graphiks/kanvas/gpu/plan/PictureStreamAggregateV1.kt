@@ -138,6 +138,12 @@ public class GraphTextureSourceOperandV1 internal constructor(
     public val deferredCompositeClip: ClipStackNode,
     public val material: MaterialPlanRef,
     public val uniformResource: PlanResourceId,
+    /**
+     * Exact W5 parent-filter binding within [uniformResource].  The carrier source remains
+     * neutral; Task 3 consumes this frozen range while applying the parent filter once.
+     */
+    public val colorFilterUniformOffsetI64: Long? = null,
+    public val colorFilterUniformByteCountI64: Long? = null,
     public val alphaF32: Float,
     public val colorFilter: ColorFilterExecutionPlanV1?,
     public val finalBlend: BlendPlan,
@@ -152,6 +158,15 @@ public class GraphTextureSourceOperandV1 internal constructor(
         require(sealedSourceGenerationI64 >= 0L && alphaF32.isFinite() && alphaF32 in 0f..1f)
         require(!sampleBounds.isEmpty)
         require(uniformResource.value.startsWith("${PlanResourceRole.SourceUniformData.name}:"))
+        if (colorFilter == null) {
+            require(colorFilterUniformOffsetI64 == null && colorFilterUniformByteCountI64 == null)
+        } else {
+            val offset = requireNotNull(colorFilterUniformOffsetI64)
+            val capacity = requireNotNull(colorFilterUniformByteCountI64)
+            val binding = maxOf(16L, colorFilter.dynamicByteCountI64)
+            require(offset >= 0L && capacity >= 16L && capacity % 16L == 0L &&
+                Math.addExact(offset, binding) <= capacity)
+        }
     }
 
     public fun copyTargetOriginDeviceI32(): Point2I32 = Point2I32(origin.x, origin.y)
@@ -328,6 +343,14 @@ public class PictureStreamAggregateV1 internal constructor(
     public val sealPassId: PlanPassId?,
     public val terminalPassId: PlanPassId?,
     enclosingPictureTransformF64: Matrix3x3F64 = Matrix3x3F64(),
+    /** Root-scene placement exists only for an aggregate emitted directly into the root target. */
+    public val rootSourceCommandIndexI32: Int? = null,
+    /**
+     * One frozen, contiguous execution slice.  An isolated parent contains each child slice,
+     * then its own seal and post-seal filter/terminal work; execution never re-enumerates a
+     * captured Picture stream to recover this order.
+     */
+    executionPassIds: List<PlanPassId> = emptyList(),
 ) {
     private val enclosingPictureTransform = enclosingPictureTransformF64.copy()
     public fun copyEnclosingPictureTransformF64(): Matrix3x3F64 = enclosingPictureTransform.copy()
@@ -335,13 +358,16 @@ public class PictureStreamAggregateV1 internal constructor(
     private val cullContent = cullContentBoundDeviceI32?.copy()
     private val demand = demandRegionDeviceI32.copy()
     private val values = immutableList(entries)
+    private val executionSchedule = immutableList(executionPassIds)
 
     init {
         require(sourceSceneCanonicalId.isNotBlank() && sourceCommandCountI32 >= 0 &&
             sourcePictureOccurrenceIdI32 >= 0 && !demand.isEmpty)
+        require(rootSourceCommandIndexI32 == null || rootSourceCommandIndexI32 >= 0)
         require(outerPath.all { it >= 0 })
         require(values.map { it.id }.distinct().size == values.size)
         require(values.zipWithNext().all { (first, second) -> first.id.valueI32 < second.id.valueI32 })
+        require(executionSchedule.distinct().size == executionSchedule.size)
         when (executionMode) {
             PictureStreamExecutionModeV1.INLINE_CURRENT_TARGET ->
                 require(aggregateTargetId == null && sealedSourceId == null && sealedSourceGenerationI64 == null &&
@@ -356,6 +382,7 @@ public class PictureStreamAggregateV1 internal constructor(
     public fun copyCullContentBoundDeviceI32(): RectI32? = cullContent?.copy()
     public fun copyDemandRegionDeviceI32(): RectI32 = demand.copy()
     public fun entries(): List<PictureStreamEntryV1> = values
+    public fun executionPassIds(): List<PlanPassId> = executionSchedule
 }
 
 /** Stable structural diagnostic construction. Existing capture/bounds/budget codes stay intact. */
@@ -664,6 +691,11 @@ internal fun validatePictureStreamAggregates(
         resourceId: PlanResourceId? = null,
     ): Nothing = throw pictureStreamInvalid(aggregate.id, entry?.locator, invariant, passId, resourceId)
 
+    val frameSchedule = frame.frozenPassSchedule()
+    if (frameSchedule.isNotEmpty() && frameSchedule != passes.map(PlanPass::id)) {
+        fail(aggregates.first(), invariant = "Frozen execution schedule omits, repeats, or reorders a graph pass.")
+    }
+
     if (byAggregate.size != aggregates.size) {
         val first = aggregates.first()
         fail(first, invariant = "Aggregate ID is duplicated.")
@@ -953,6 +985,19 @@ internal fun validatePictureStreamAggregates(
             }) {
             fail(aggregate, invariant = "Picture entry terminals do not preserve source order.")
         }
+        val schedule = aggregate.executionPassIds()
+        if (schedule.isNotEmpty()) {
+            if (schedule.any { it !in passById } || !schedule.zipWithNext().all { (first, second) ->
+                    passIndex.getValue(first) < passIndex.getValue(second)
+                }) {
+                fail(aggregate, invariant = "Frozen aggregate execution schedule is not a total graph-order slice.")
+            }
+            val first = passIndex.getValue(schedule.first())
+            val last = passIndex.getValue(schedule.last())
+            if (schedule != passes.subList(first, Math.addExact(last, 1)).map(PlanPass::id)) {
+                fail(aggregate, invariant = "Frozen aggregate execution schedule omits an intervening pass.")
+            }
+        }
         when (aggregate.executionMode) {
             PictureStreamExecutionModeV1.INLINE_CURRENT_TARGET -> {
                 if (aggregate.aggregateTargetId != null || aggregate.sealedSourceId != null ||
@@ -994,6 +1039,20 @@ internal fun validatePictureStreamAggregates(
                 val beginIndex = passIndex.getValue(begin)
                 val sealIndex = passIndex.getValue(seal)
                 if (beginIndex >= sealIndex) fail(aggregate, invariant = "Picture aggregate seals before it begins.", passId = seal)
+                if (schedule.isEmpty() || schedule.first() != begin || schedule.last() != aggregate.terminalPassId) {
+                    fail(aggregate, invariant = "Isolated Picture lacks one complete frozen execution schedule.")
+                }
+                pictureEntries(entries).forEach { entry ->
+                    val child = byAggregate.getValue(entry.childAggregateId)
+                    val childSchedule = child.executionPassIds()
+                    if (child.executionMode == PictureStreamExecutionModeV1.ISOLATED_SOURCE &&
+                        (childSchedule.isEmpty() || schedule.indexOf(childSchedule.first()) < 0 ||
+                            childSchedule.indices.any { indexI32 ->
+                                schedule.getOrNull(Math.addExact(schedule.indexOf(childSchedule.first()), indexI32)) != childSchedule[indexI32]
+                            } || passIndex.getValue(requireNotNull(child.sealPassId)) >= sealIndex)) {
+                        fail(aggregate, entry, "Child filter schedule is not complete before the parent Picture seal.")
+                    }
+                }
                 fun writesTarget(pass: PlanPass): Boolean = when (pass) {
                     is PlanPass.RenderPass -> pass.target == target
                     is PlanPass.StencilGeometryProducerV3 -> pass.target == target
@@ -1072,6 +1131,22 @@ internal fun validatePictureStreamAggregates(
                     operand.copyClipToDeviceF64() != aggregate.copyEnclosingPictureTransformF64()) {
                     fail(aggregate, invariant = "Picture terminal lost its occurrence identity or enclosing clip mapping.", passId = terminal)
                 }
+                val vertical = (terminalPass as? PlanPass.FilterComposite)?.let { composite ->
+                    passes.filterIsInstance<PlanPass.FilterPass>().singleOrNull { it.output == composite.source }
+                }
+                val verticalBlur = vertical?.operation as? FilterPassOperationV1.SeparableBlur
+                if (verticalBlur?.kind == FilterImplementationKindV1.IMAGE_BLUR_Y) {
+                    val horizontal = vertical.inputs().singleOrNull()?.let { input ->
+                        passes.filterIsInstance<PlanPass.FilterPass>().singleOrNull { it.output == input }
+                    }
+                    val horizontalBlur = horizontal?.operation as? FilterPassOperationV1.SeparableBlur
+                    if (horizontalBlur?.kind != FilterImplementationKindV1.IMAGE_BLUR_X ||
+                        schedule.indexOf(horizontal.id) !in 0 until schedule.indexOf(vertical.id) ||
+                        schedule.indexOf(vertical.id) !in 0 until schedule.indexOf(terminal) ||
+                        passIndex.getValue(horizontal.id) <= sealIndex || passIndex.getValue(vertical.id) <= sealIndex) {
+                        fail(aggregate, invariant = "Frozen parent blur schedule is not seal → X → Y → terminal.", passId = terminal)
+                    }
+                }
                 val reachesParent = when (terminalPass) {
                     is PlanPass.PictureComposite -> terminalPass.destination == aggregate.parentTargetId &&
                         terminalPass.source == consumer.output &&
@@ -1097,6 +1172,38 @@ internal fun validatePictureStreamAggregates(
                 }
             }
         }
+    }
+    val rootTarget = resources.singleOrNull { it.role == PlanResourceRole.LogicalTarget }?.id
+        ?: fail(aggregates.first(), invariant = "Picture stream graph has no unique root target.")
+    data class RootCommandTerminal(val sourceCommandIndexI32: Int, val passIndexI32: Int)
+    val rootTerminals = buildList {
+        passes.forEachIndexed { passIndexI32, pass ->
+            when (pass) {
+                is PlanPass.RenderPass -> if (pass.target == rootTarget && pass.plannedCommandId == null) {
+                    pass.draws().forEach { draw -> add(RootCommandTerminal(draw.commandIndex, passIndexI32)) }
+                }
+                is PlanPass.StencilCover -> if (pass.target == rootTarget && pass.plannedCommandId == null) {
+                    add(RootCommandTerminal(pass.draw.commandIndex, passIndexI32))
+                }
+                else -> Unit
+            }
+        }
+        aggregates.filter { aggregate ->
+            aggregate.parentTargetId == rootTarget && aggregate.outerPicturePathI32().isEmpty()
+        }.forEach { aggregate ->
+            val sourceCommandIndexI32 = aggregate.rootSourceCommandIndexI32
+                ?: fail(aggregate, invariant = "Root Picture aggregate lost its root source-command index.")
+            aggregate.terminalPassId?.let { terminal ->
+                add(RootCommandTerminal(sourceCommandIndexI32, passIndex.getValue(terminal)))
+            }
+        }
+    }
+    if (rootTerminals.map { it.sourceCommandIndexI32 }.distinct().size != rootTerminals.size) {
+        fail(aggregates.first(), invariant = "Root source-command placement aliases a draw and Picture terminal.")
+    }
+    if (!rootTerminals.sortedBy(RootCommandTerminal::sourceCommandIndexI32)
+            .zipWithNext().all { (first, second) -> first.passIndexI32 < second.passIndexI32 }) {
+        fail(aggregates.first(), invariant = "Root source order does not place each Picture terminal before its later sibling.")
     }
     if (dependencies != passes.zipWithNext { first, second -> PlanPassDependency(first.id, second.id) }) {
         val first = aggregates.first()

@@ -24,6 +24,10 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
                 ?: (step as GPUFrameStep.ReadbackCopyStep).let { listOf(it.source, it.staging) }
         val labels = referenced.map { "${it::class.simpleName}:${it.value}@${requireNotNull(generations[it])}" }
         val composite = pass is PlanPass.LayerComposite
+        val fullscreen = pass is PlanPass.PictureSourcePass || pass is PlanPass.PictureComposite ||
+            pass is PlanPass.FilterPass || pass is PlanPass.FilterComposite ||
+            pass is PlanPass.PictureAggregateBeginPass || pass is PlanPass.PictureAggregateSealPass ||
+            pass is PlanPass.FilterSourceClear || pass is PlanPass.FilterCoverageSourcePass
         val kind = if (copy != null) GPUEncoderOperationKind.Copy else if (render == null) GPUEncoderOperationKind.Readback
             else if (composite) GPUEncoderOperationKind.LayerComposite else GPUEncoderOperationKind.Render
         val stream = if (kind != GPUEncoderOperationKind.Render) null else if (w4e != null)
@@ -58,7 +62,7 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
             add(key(GPUPreparedNativeOperandRole.RenderColorTarget, GPUPreparedNativeOperandKind.TextureView, "w6a.$index.target"))
             if (pass is PlanPass.StencilGeometryProducerV3 || pass is PlanPass.StencilCover)
                 add(key(GPUPreparedNativeOperandRole.RenderDepthStencilTarget, GPUPreparedNativeOperandKind.TextureView, "w6a.$index.depth-stencil"))
-            repeat(if (composite) 1 else render.drawPackets.size) { draw ->
+            repeat(if (composite || fullscreen) 1 else render.drawPackets.size) { draw ->
                 add(key(GPUPreparedNativeOperandRole.RenderPipeline, GPUPreparedNativeOperandKind.RenderPipeline, "w6a.$index.pipeline.$draw"))
                 add(key(GPUPreparedNativeOperandRole.RenderBindGroup, GPUPreparedNativeOperandKind.BindGroup, "w6a.$index.bind.$draw"))
                 if (indexedGeometry) {
@@ -69,7 +73,7 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
             }
         }
         GPUCommandEncoderScopePlan(index, kind, sourceTaskIds = step.sourceTaskIds, sourcePacketIds = render?.drawPackets.orEmpty().map { it.packetId },
-            facadeOperationClasses = stream?.commandLabels ?: if (composite) listOf("beginRenderPass", "setRenderPipeline", "setBindGroup", "draw", "endRenderPass")
+            facadeOperationClasses = stream?.commandLabels ?: if (composite || fullscreen) listOf("beginRenderPass", "setRenderPipeline", "setBindGroup", "draw", "endRenderPass")
                 else if (copy != null) List(copy.regions.size) { "copyResource" } else listOf("copyTextureToBuffer"),
             targetGeneration = targetGeneration, resourceGenerationLabels = labels, passCommandStream = stream).attachNativeOperandKeys(keys, w6aFrameV1 = this)
     }

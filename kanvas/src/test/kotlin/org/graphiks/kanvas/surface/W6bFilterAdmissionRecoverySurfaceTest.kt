@@ -3,6 +3,7 @@
 package org.graphiks.kanvas.surface
 
 import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.SaveLayerRec
@@ -111,7 +112,7 @@ class W6bFilterAdmissionRecoverySurfaceTest {
         val surface = Surface(2, 2)
         surface.canvas { drawPicture(picture) }
 
-        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+        assertImageBlurMaterializes(surface)
 
         surface.discardRecordedOperations()
         surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
@@ -137,7 +138,7 @@ class W6bFilterAdmissionRecoverySurfaceTest {
             drawPicture(filteredRecorder.finishRecordingAsPicture())
         }
 
-        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+        assertImageBlurMaterializes(surface)
 
         surface.discardRecordedOperations()
         surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
@@ -166,7 +167,7 @@ class W6bFilterAdmissionRecoverySurfaceTest {
         val surface = Surface(2, 2)
         surface.canvas { drawPicture(outer) }
 
-        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+        assertImageBlurMaterializes(surface)
 
         surface.discardRecordedOperations()
         surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
@@ -187,7 +188,7 @@ class W6bFilterAdmissionRecoverySurfaceTest {
         val surface = Surface(2, 2)
         surface.canvas { drawPicture(picture, Paint(imageFilter = ImageFilter.Blur(1f, 1f))) }
 
-        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+        assertImageBlurMaterializes(surface)
 
         surface.discardRecordedOperations()
         surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
@@ -212,7 +213,7 @@ class W6bFilterAdmissionRecoverySurfaceTest {
         }.finishRecordingAsPicture()
         val surface = Surface(2, 2)
         surface.canvas { drawPicture(parent, Paint(imageFilter = ImageFilter.Blur(1f, 1f))) }
-        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+        assertImageBlurMaterializes(surface)
         surface.discardRecordedOperations()
         surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
         assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
@@ -281,7 +282,7 @@ class W6bFilterAdmissionRecoverySurfaceTest {
         val surface = Surface(2, 2)
         surface.canvas { drawPicture(picture, Paint(imageFilter = ImageFilter.Blur(1f, 1f))) }
 
-        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+        assertImageBlurMaterializes(surface)
 
         surface.discardRecordedOperations()
         surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
@@ -326,7 +327,7 @@ class W6bFilterAdmissionRecoverySurfaceTest {
             drawPicture(parent, Paint(imageFilter = ImageFilter.Blur(1f, 1f)))
         }
 
-        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+        assertImageBlurMaterializes(surface)
 
         surface.discardRecordedOperations()
         surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
@@ -372,7 +373,7 @@ class W6bFilterAdmissionRecoverySurfaceTest {
         val surface = Surface(2, 2)
         surface.canvas { drawPicture(parent) }
 
-        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+        assertImageBlurMaterializes(surface)
 
         surface.discardRecordedOperations()
         surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
@@ -446,6 +447,11 @@ class W6bFilterAdmissionRecoverySurfaceTest {
         }
         assertTrue(failure.message?.startsWith(diagnosticPrefix) == true, failure.message ?: "missing diagnostic")
         assertContentEquals(before, sentinel)
+    }
+
+    /** Image-only W6b now returns one regular readback, even when the result is transparent. */
+    private fun assertImageBlurMaterializes(surface: Surface) {
+        assertEquals(16, surface.render().pixels.size)
     }
 
     private fun recoveryBlue2x2(): UByteArray = ubyteArrayOf(

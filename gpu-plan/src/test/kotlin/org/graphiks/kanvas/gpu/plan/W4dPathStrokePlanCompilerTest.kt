@@ -11,6 +11,11 @@ import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.render.ir.BlendMode
 import org.graphiks.kanvas.render.ir.BlendNode
 import org.graphiks.kanvas.render.ir.BlenderNode
+import org.graphiks.kanvas.render.ir.CapturedFilterInputV1
+import org.graphiks.kanvas.render.ir.CapturedFilterNodeId
+import org.graphiks.kanvas.render.ir.CapturedFilterNodeV1
+import org.graphiks.kanvas.render.ir.CapturedFilterRootV1
+import org.graphiks.kanvas.render.ir.CapturedFilterTableV1
 import org.graphiks.kanvas.render.ir.ClipStackNode
 import org.graphiks.kanvas.render.ir.ClipEntry
 import org.graphiks.kanvas.render.ir.ClipOperation
@@ -39,6 +44,7 @@ import org.graphiks.kanvas.render.ir.SceneExtent
 import org.graphiks.kanvas.render.ir.SceneSnapshot
 import org.graphiks.kanvas.render.ir.StrokeCapNode
 import org.graphiks.kanvas.render.ir.StrokeJoinNode
+import org.graphiks.kanvas.render.ir.TileMode
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.PathF32
@@ -96,6 +102,10 @@ class W4dPathStrokePlanCompilerTest {
     @Test
     fun `513 draws remain outside W4d ownership when any structural capability family is unsupported`() {
         val base = pathDraw(PaintStyleNode.STROKE).node
+        val blurRoot = CapturedFilterRootV1(CapturedFilterNodeId(0))
+        val blurTable = CapturedFilterTableV1.of(listOf(
+            CapturedFilterNodeV1.Blur(1f, 1f, TileMode.CLAMP, CapturedFilterInputV1.ImplicitSource),
+        ))
         val inversePath = PathBuilder(org.graphiks.math.geometry.FillRule.INVERSE_WINDING)
             .moveTo(2f, 2f)
             .lineTo(12f, 2f)
@@ -154,7 +164,7 @@ class W4dPathStrokePlanCompilerTest {
                 paint = requireNotNull(base.paint).copy(maskFilter = MaskFilterNode.Blur(MaskBlurStyle.NORMAL, 1f)),
             ),
             "paint image filter" to base.copy(
-                paint = requireNotNull(base.paint).copy(imageFilter = ImageFilterNode.Blur(1f, 1f)),
+                paint = requireNotNull(base.paint).copy(imageFilter = blurRoot),
             ),
             "resource" to imageDraw,
             "operation blend" to operationBlendDraw,
@@ -165,7 +175,7 @@ class W4dPathStrokePlanCompilerTest {
         )
 
         unsupportedDraws.forEach { (family, node) ->
-            val scene = sceneOf(List(512) { SceneCommand.Draw(base) } + SceneCommand.Draw(node))
+            val scene = sceneOf(List(512) { SceneCommand.Draw(base) } + SceneCommand.Draw(node), blurTable)
             assertIs<GpuPlanSelection.NotCandidate>(compiler.select(scene, target(scene)), family)
         }
 
@@ -654,9 +664,10 @@ class W4dPathStrokePlanCompilerTest {
         assertIs<GpuPlanSelection.Candidate>(compiler.select(evenOdd256, target(evenOdd256)))
     }
 
-    private fun sceneOf(draws: List<SceneCommand.Draw>): SceneSnapshot = SceneSnapshot.of(
-        SceneExtent(16, 16), ColorSpace.SRGB, draws,
-    )
+    private fun sceneOf(
+        draws: List<SceneCommand.Draw>,
+        filterTable: CapturedFilterTableV1 = CapturedFilterTableV1.Empty,
+    ): SceneSnapshot = SceneSnapshot.of(SceneExtent(16, 16), ColorSpace.SRGB, draws, filterTable = filterTable)
 
     private fun target(scene: SceneSnapshot): RenderTargetDescriptor =
         RenderTargetDescriptor(scene.extent, scene.colorSpace)
@@ -701,6 +712,7 @@ class W4dPathStrokePlanCompilerTest {
         supportedDepthStencilFormats = depthStencilFormats,
         supportedTextureSampleSupports = textureSampleSupports.filter { support ->
             when (val format = support.format) {
+                is PlanTextureFormat.ImageV1 -> true
                 is PlanTextureFormat.Color -> format.value in supportedFormats
                 is PlanTextureFormat.DepthStencil -> format.value in depthStencilFormats
                 PlanTextureFormat.CoverageMask -> true

@@ -1217,6 +1217,109 @@ class RenderGraphContractTest {
     }
 
     @Test
+    fun `root source order rejects B before the Picture terminal without comparing aggregate local indices`() {
+        val root = w6bWitnessTexture(PlanResourceRole.LogicalTarget, 0)
+        val aggregateId = PictureStreamAggregateIdI32(0)
+        val firstLocator = PictureSourceLocatorV1(0, 0)
+        val secondLocator = PictureSourceLocatorV1(0, 1)
+        val firstPlanned = FramePlannedCommandIdI32(1)
+        val secondPlanned = FramePlannedCommandIdI32(2)
+        fun rootDraw(commandIndexI32: Int) = SolidRectDraw.of(
+            commandIndexI32,
+            ColorF32.of(1f, 1f, 1f, 1f),
+            RectI32(0, 0, 1, 1),
+            RectI32(0, 0, 1, 1),
+        )
+        val drawA = PlanPass.RenderPass(0, root.id, listOf(rootDraw(0)),
+            AttachmentLoadPlan.ClearTransparent, AttachmentStorePlan.Store)
+        val pictureFirst = PlanPass.PictureSourcePass(0, root.id, "picture", 0,
+            pictureSourceLocator = firstLocator, plannedCommandId = firstPlanned, aggregateId = aggregateId)
+        val drawB = PlanPass.RenderPass(1, root.id, listOf(rootDraw(2)),
+            AttachmentLoadPlan.Load, AttachmentStorePlan.Store)
+        val pictureTerminal = PlanPass.PictureSourcePass(1, root.id, "picture", 1,
+            pictureSourceLocator = secondLocator, plannedCommandId = secondPlanned, aggregateId = aggregateId)
+        val aggregate = PictureStreamAggregateV1(
+            aggregateId,
+            PictureStreamExecutionModeV1.INLINE_CURRENT_TARGET,
+            "picture",
+            2,
+            0,
+            FramePlannedCommandIdI32(0),
+            emptyList(),
+            requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32.Origin)),
+            org.graphiks.kanvas.render.ir.ClipStackNode.Empty,
+            org.graphiks.kanvas.render.ir.ClipStackNode.Empty,
+            RectI32(0, 0, 1, 1),
+            RectI32(0, 0, 1, 1),
+            root.id,
+            null,
+            null,
+            null,
+            PictureStreamRegionsV1(RectI32(0, 0, 1, 1), RectI32(0, 0, 1, 1),
+                RectI32(0, 0, 1, 1), RectI32(0, 0, 1, 1)),
+            listOf(
+                PictureStreamEntryV1.Clear(PictureStreamEntryIdI32(0), firstLocator, firstPlanned,
+                    ColorF32.of(0f, 0f, 0f, 0f), pictureFirst.id),
+                PictureStreamEntryV1.Clear(PictureStreamEntryIdI32(1), secondLocator, secondPlanned,
+                    ColorF32.of(0f, 0f, 0f, 0f), pictureTerminal.id),
+            ),
+            null,
+            null,
+            pictureTerminal.id,
+            rootSourceCommandIndexI32 = 1,
+        )
+
+        val failure = assertFailsWith<W6bFilterGraphConstruction.ConstructionFailure> {
+            validatePictureStreamAggregates(
+                LayerFramePlanV1(emptyList(), emptyList(), listOf(aggregate)),
+                listOf(root),
+                listOf(drawA, pictureFirst, drawB, pictureTerminal),
+                listOf(
+                    PlanPassDependency(drawA.id, pictureFirst.id),
+                    PlanPassDependency(pictureFirst.id, drawB.id),
+                    PlanPassDependency(drawB.id, pictureTerminal.id),
+                ),
+            )
+        }
+
+        assertEquals(W6bFilterDiagnostics.PictureStreamInvalid, failure.diagnostic.code.value)
+        assertTrue(failure.diagnostic.message.contains("Root source order"))
+    }
+
+    @Test
+    fun `frozen Picture execution schedule rejects an omitted pass`() {
+        val root = w6bWitnessTexture(PlanResourceRole.LogicalTarget, 0)
+        val first = PlanPass.PictureSourcePass(0, root.id, "picture", 0)
+        val second = PlanPass.PictureSourcePass(1, root.id, "picture", 1)
+        val locator = PictureSourceLocatorV1(0, 0)
+        val aggregate = PictureStreamAggregateV1(
+            PictureStreamAggregateIdI32(0),
+            PictureStreamExecutionModeV1.INLINE_CURRENT_TARGET,
+            "picture", 1, 0, FramePlannedCommandIdI32(0), emptyList(),
+            requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32.Origin)),
+            org.graphiks.kanvas.render.ir.ClipStackNode.Empty,
+            org.graphiks.kanvas.render.ir.ClipStackNode.Empty,
+            RectI32(0, 0, 1, 1), RectI32(0, 0, 1, 1), root.id, null, null, null,
+            PictureStreamRegionsV1(RectI32(0, 0, 1, 1), RectI32(0, 0, 1, 1),
+                RectI32(0, 0, 1, 1), RectI32(0, 0, 1, 1)),
+            listOf(PictureStreamEntryV1.Clear(PictureStreamEntryIdI32(0), locator,
+                FramePlannedCommandIdI32(1), ColorF32.of(0f, 0f, 0f, 0f), first.id)),
+            null, null, first.id,
+            executionPassIds = listOf(first.id),
+        )
+
+        val failure = assertFailsWith<W6bFilterGraphConstruction.ConstructionFailure> {
+            validatePictureStreamAggregates(
+                LayerFramePlanV1(emptyList(), emptyList(), listOf(aggregate), frozenPassSchedule = listOf(first.id)),
+                listOf(root), listOf(first, second), listOf(PlanPassDependency(first.id, second.id)),
+            )
+        }
+
+        assertEquals(W6bFilterDiagnostics.PictureStreamInvalid, failure.diagnostic.code.value)
+        assertTrue(failure.diagnostic.message.contains("Frozen execution schedule"))
+    }
+
+    @Test
     fun `picture aggregate publication rejects a layer descriptor without its real W6a scope`() {
         val root = w6bWitnessTexture(PlanResourceRole.LogicalTarget, 0)
         val layerTarget = w6bWitnessTexture(PlanResourceRole.LayerTarget, 0)
@@ -3200,7 +3303,7 @@ class RenderGraphContractTest {
                 compositeIntermediateOutput -> 5
                 consumeTerminalOutput -> 5
                 else -> 4
-            }, root.id, staging.id, 256))
+            }, root.id, staging.id, 256, mappedBytesI64 = 4))
         }
         val resources = listOf(root, source, horizontal, vertical, staging)
         val budget = PlanBudget(4_096)
