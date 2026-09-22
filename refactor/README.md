@@ -69,6 +69,11 @@ Epoch 7 ciblée : 8/9 PASS en 27 s ; compositions6/6, Stroke/recovery et mixed R
 
 - [Plan W6a — autorité des layers](plans/2026-09-16-w6a-layer-authority-implementation-plan.md) — branche reviewée au HEAD `1ff67ec84` et publiée en [Draft PR #2403](https://github.com/ygdrasil-io/kanvas/pull/2403), empilée sur W5h. Picture13/schema7, restore/nesting/`initWithPrevious`, budgets et lanes W4/W5 ciblées sont couverts ; les 91 méthodes JUnit publiques des huit shards W6a passent. Les exits natifs133 restent `UNKNOWN`. Backdrop, filtres spatiaux, F16/HDR, device-loss, fonts/codecs et GMs restent exclus ; aucune claim ISO/globale ou Ready-to-merge.
 
+- [Plan W6b — blur, masks et shadows](plans/2026-09-22-w6b-blur-masks-shadows-implementation-plan.md)
+- [Plan W6c — DAG spatial principal](plans/2026-09-22-w6c-spatial-dag-implementation-plan.md)
+- [Plan W6d — effets avancés et backdrop](plans/2026-09-22-w6d-advanced-effects-implementation-plan.md)
+- [Plan W6e — convergence des effets](plans/2026-09-22-w6e-effects-convergence-implementation-plan.md)
+
 R36 conserve le graph/WGSL et précise la preuve des mêmes opérations Noise : phase corrélée sur FLOOR singleton, adresses floor+corner/période/permutation exactes vers le slab authentifié, fallback all256. Floor BigInteger négatif vers −∞ ; aucun epsilon, alpha supposé ou échantillonnage. Les pixels négatifs/transforms/stitch/seeds/Matrix/mutation, final4 et review Sol couvrent le risque d’over-admission. Scope inchangé39 Modify/5 Kotlin Create/21 assets/2 producteurs éphémères.
 
 R35 raccorde le preflight W3 exact au même slab Noise authentifié : l’allocation R34 est vérifiée une fois, sans preparation supplémentaire, et les guards geometry/clip/blend/readback/Gradient restent inchangés. Risque : refus direct/composite, slab contrefait ou double charge. Scope Task4 : 39 Modify, 5 Kotlin Create, 21 assets, 2 producteurs historiques éphémères ; aucun test d’infrastructure/harness.
