@@ -39,8 +39,24 @@ public enum class PlanPassRole {
     ClipMaskProducer,
     ClipMaskFold,
     LayerComposite,
+    FilterSourceClear,
+    PictureSource,
+    FilterComposite,
 }
 public enum class ClipCombineOperation { Intersect, Difference }
+
+/**
+ * The one parent-target composition selected at a W6b occurrence boundary.  It retains the
+ * previously selected W5/W6 blend or restore facts; native execution is intentionally deferred.
+ */
+public sealed interface FilterCompositeOperationV1 {
+    public data class Draw(public val blend: BlendPlan) : FilterCompositeOperationV1
+    public data class Layer(public val restore: LayerRestorePlanV1) : FilterCompositeOperationV1
+    /** The exact captured Picture occurrence owns its blend until the native replay seam. */
+    public data class Picture(public val sourceSceneCanonicalId: String, public val sourceCommandIndexI32: Int) : FilterCompositeOperationV1 {
+        init { require(sourceSceneCanonicalId.isNotBlank() && sourceCommandIndexI32 >= 0) }
+    }
+}
 
 /** The clip realization selected for one consumer draw. */
 public sealed interface ClipPlanStrategy {
@@ -1035,6 +1051,37 @@ public sealed interface PlanPass {
         override val id: PlanPassId = checkedPassId(role, ordinal)
     }
 
+    /** Produces a semantically distinct transparent-black input for one captured W6b node. */
+    public class FilterSourceClear(
+        override val ordinal: Int,
+        public val output: PlanResourceId,
+        /** The immutable occurrence generation whose transparent-black input this represents. */
+        public val boundSourceId: PlanResourceId,
+    ) : PlanPass {
+        init { require(output != boundSourceId) }
+        override val role: PlanPassRole = PlanPassRole.FilterSourceClear
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+    }
+
+    /**
+     * An immutable Picture replay source at one captured occurrence.  Task 3 materializes this
+     * already ordered source; it must not substitute the frame root or rediscover the Picture.
+     */
+    public class PictureSourcePass(
+        override val ordinal: Int,
+        public val output: PlanResourceId,
+        public val sourceSceneCanonicalId: String,
+        public val sourceCommandIndexI32: Int,
+    ) : PlanPass {
+        init {
+            require(sourceSceneCanonicalId.isNotBlank() && sourceCommandIndexI32 >= 0) {
+                "Picture source must retain one captured scene occurrence."
+            }
+        }
+        override val role: PlanPassRole = PlanPassRole.PictureSource
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+    }
+
     public class FilterPass(
         override val ordinal: Int,
         inputs: List<PlanResourceId>,
@@ -1051,6 +1098,34 @@ public sealed interface PlanPass {
             }
         }
         public fun inputs(): List<PlanResourceId> = storedInputs
+    }
+
+    /** Consumes one frozen W6b result into its immediate parent before later captured work. */
+    public class FilterComposite(
+        override val ordinal: Int,
+        public val source: PlanResourceId,
+        public val destination: PlanResourceId,
+        public val evaluationKey: FilterEvaluationKeyV1,
+        sourceBoundsTargetI32: RectI32,
+        destinationOriginParentI32: Point2I32,
+        public val operation: FilterCompositeOperationV1,
+        /** The original layer target replaced by this filtered restore, when applicable. */
+        public val replacedLayerSource: PlanResourceId? = null,
+        public val destinationVersionAfter: DestinationVersionI64,
+    ) : PlanPass {
+        private val sourceBoundsTargetSnapshotI32 = sourceBoundsTargetI32.copy()
+        private val destinationOriginParentSnapshotI32 = Point2I32(
+            destinationOriginParentI32.x,
+            destinationOriginParentI32.y,
+        )
+        init { require(!sourceBoundsTargetSnapshotI32.isEmpty) { "Filter composite source bounds must be non-empty" } }
+        public fun copySourceBoundsTargetI32(): RectI32 = sourceBoundsTargetSnapshotI32.copy()
+        public fun copyDestinationOriginParentI32(): Point2I32 = Point2I32(
+            destinationOriginParentSnapshotI32.x,
+            destinationOriginParentSnapshotI32.y,
+        )
+        override val role: PlanPassRole = PlanPassRole.FilterComposite
+        override val id: PlanPassId = checkedPassId(role, ordinal)
     }
 
     public data class ResolvePass(

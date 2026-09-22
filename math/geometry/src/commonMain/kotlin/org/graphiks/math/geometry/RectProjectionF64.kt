@@ -41,6 +41,13 @@ public fun RectI32.translateCheckedOrNull(delta: Vector2I32): RectI32? {
     )
 }
 
+/** Checked F64 translation retained until the caller chooses its outward I32 texel projection. */
+public fun RectF64.translateF64OrNull(dxF64: Double, dyF64: Double): RectF64? {
+    if (!isFinite() || isEmpty || !dxF64.isFinite() || !dyF64.isFinite()) return null
+    return RectF64(left + dxF64, top + dyF64, right + dxF64, bottom + dyF64)
+        .takeIf { it.isFinite() && !it.isEmpty }
+}
+
 /**
  * Expands finite F64 content by the finite three-sigma blur support before outward I32
  * projection.  The caller owns any later clip or target intersection.

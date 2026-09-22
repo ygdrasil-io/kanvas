@@ -6,9 +6,11 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.SaveLayerRec
+import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.picture.PictureRecorder
+import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.render.ir.GraphLimits
 import org.graphiks.kanvas.render.ir.SceneCaptureLimits
 import org.graphiks.math.color.ColorARGB
@@ -105,6 +107,53 @@ class W6bFilterAdmissionRecoverySurfaceTest {
         val picture = recorder.finishRecordingAsPicture()
         val surface = Surface(2, 2)
         surface.canvas { drawPicture(picture) }
+
+        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+        assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
+    }
+
+    @Test
+    fun `unfiltered picture sibling remains admitted before filtered picture terminal recovery`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val unfilteredRecorder = PictureRecorder()
+        unfilteredRecorder.beginRecording(bounds).drawRect(
+            bounds,
+            Paint(ColorARGB.White, antiAlias = false),
+        )
+        val filteredRecorder = PictureRecorder()
+        filteredRecorder.beginRecording(bounds).drawRect(
+            bounds,
+            Paint(imageFilter = ImageFilter.Blur(1f, 1f)),
+        )
+        val surface = Surface(2, 2)
+        surface.canvas {
+            drawPicture(unfilteredRecorder.finishRecordingAsPicture())
+            drawPicture(filteredRecorder.finishRecordingAsPicture())
+        }
+
+        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+        assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
+    }
+
+    @Test
+    fun `image root followed by mask occurrence remains one terminal filtered source`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val surface = Surface(2, 2)
+        surface.canvas {
+            drawRect(
+                bounds,
+                Paint(
+                    imageFilter = ImageFilter.Blur(1f, 1f),
+                    maskFilter = MaskFilter.Blur(BlurStyle.OUTER, 1f),
+                ),
+            )
+        }
 
         assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
 

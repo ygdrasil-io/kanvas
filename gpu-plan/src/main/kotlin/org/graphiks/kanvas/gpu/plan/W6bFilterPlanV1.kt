@@ -136,20 +136,32 @@ public sealed interface FilterPassOperationV1 {
     }
 
     public data class MaskBlurStyle(
-        public val style: MaskBlurStyle,
+        public val style: org.graphiks.kanvas.render.ir.MaskBlurStyle,
         override val bounds: FilterBoundsPlanV1,
         override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.MASK_BLUR_STYLE,
     ) : FilterPassOperationV1 {
         init { require(kind == FilterImplementationKindV1.MASK_BLUR_STYLE) }
     }
 
+    /**
+     * A real W5 material reference is deliberately disjoint from a captured/deferred identity.
+     * Task 2 cannot fabricate a table row before the owning W5 material table is published.
+     */
+    public sealed interface MaskShaderMaterialBindingV1 {
+        public data class Planned(public val material: MaterialPlanRef, public val uniformOffsetI64: Long) : MaskShaderMaterialBindingV1 {
+            init { require(uniformOffsetI64 >= 0L) }
+        }
+        public data class CapturedDeferred(public val materialCanonicalId: String) : MaskShaderMaterialBindingV1 {
+            init { require(materialCanonicalId.isNotBlank()) }
+        }
+    }
+
     public data class MaskShader(
-        public val material: MaterialPlanRef,
-        public val uniformOffsetI64: Long,
+        public val materialBinding: MaskShaderMaterialBindingV1,
         override val bounds: FilterBoundsPlanV1,
         override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.MASK_SHADER,
     ) : FilterPassOperationV1 {
-        init { require(uniformOffsetI64 >= 0L && kind == FilterImplementationKindV1.MASK_SHADER) }
+        init { require(kind == FilterImplementationKindV1.MASK_SHADER) }
     }
 
     public class MaskTable(

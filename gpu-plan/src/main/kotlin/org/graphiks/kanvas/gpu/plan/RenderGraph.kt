@@ -269,16 +269,25 @@ public class RenderGraph private constructor(
                             is PlanPass.StencilCover -> pass.target == scope.targetResource && pass.load == AttachmentLoadPlan.Load
                             is PlanPass.ClipMaskInitialize, is PlanPass.ClipMaskProducer, is PlanPass.ClipMaskFold ->
                                 source.w4eGeometry.any { it.target == scope.targetResource && step.passId in it.graphPassIds() }
+                            is PlanPass.FilterComposite -> pass.destination == scope.targetResource &&
+                                pass.replacedLayerSource == null && pass.operation is FilterCompositeOperationV1.Draw
                             else -> false
                         }
                         require(scope.id in initialized && scope.id !in restored && exactChild)
                     }
                     is LayerExecutionStepV1.Restore -> {
-                        val pass = passesById[step.passId] as? PlanPass.LayerComposite
                         val expectedDestination = scope.parentId?.let { byScope.getValue(it).targetResource } ?: rootTarget
-                        require(scope.id in initialized && restored.add(scope.id) && pass != null && pass.scopeId == scope.id &&
-                            pass.source == scope.targetResource && pass.destination == expectedDestination &&
-                            (pass.destination == rootTarget) == (scope.parentId == null) && pass.restore === scope.restore)
+                        val exactRestore = when (val pass = passesById[step.passId]) {
+                            is PlanPass.LayerComposite -> pass.scopeId == scope.id && pass.source == scope.targetResource &&
+                                pass.destination == expectedDestination && (pass.destination == rootTarget) ==
+                                (scope.parentId == null) && pass.restore === scope.restore
+                            is PlanPass.FilterComposite -> (pass.operation as? FilterCompositeOperationV1.Layer)?.let { operation ->
+                                pass.replacedLayerSource == scope.targetResource && pass.destination == expectedDestination &&
+                                    operation.restore === scope.restore
+                            } == true
+                            else -> false
+                        }
+                        require(scope.id in initialized && restored.add(scope.id) && exactRestore)
                         restoreOrder[scope.id] = stepIndexI32
                     }
                 }
@@ -291,8 +300,14 @@ public class RenderGraph private constructor(
                     scope.endCommandIndexI32 < byScope.getValue(parentId).endCommandIndexI32
             } ?: true })
             require(scopes.all { scope ->
-                val restore = construction.passes().filterIsInstance<PlanPass.LayerComposite>().singleOrNull { it.scopeId == scope.id }
-                restore?.source == scope.targetResource && restore.restore === scope.restore
+                val restorePass = construction.passes().singleOrNull { pass -> when (pass) {
+                    is PlanPass.LayerComposite -> pass.scopeId == scope.id && pass.source == scope.targetResource &&
+                        pass.restore === scope.restore
+                    is PlanPass.FilterComposite -> (pass.operation as? FilterCompositeOperationV1.Layer)?.restore === scope.restore &&
+                        pass.replacedLayerSource == scope.targetResource
+                    else -> false
+                } }
+                restorePass != null
             })
             return RenderGraph(construction.id, construction.capabilityId, construction.targetExtent,
                 construction.colorFormat, construction.capabilities, construction.budget, construction.visualCommandCount,
@@ -744,7 +759,10 @@ public class RenderGraph private constructor(
             )
             is PlanPass.TextureCopy -> listOf(pass.source, pass.destination)
             is PlanPass.LayerComposite -> listOf(pass.source, pass.destination)
+            is PlanPass.FilterSourceClear -> listOf(pass.output, pass.boundSourceId)
+            is PlanPass.PictureSourcePass -> listOf(pass.output)
             is PlanPass.FilterPass -> pass.inputs() + pass.output
+            is PlanPass.FilterComposite -> listOfNotNull(pass.source, pass.destination, pass.replacedLayerSource)
             is PlanPass.ResolvePass -> listOf(pass.source, pass.destination)
             is PlanPass.ReadbackPass -> listOf(pass.source, pass.staging)
             is PlanPass.ClipMaskInitialize -> listOf(pass.output)
@@ -859,7 +877,10 @@ public class RenderGraph private constructor(
                         it is PlanPass.StencilCover ||
                         it is PlanPass.ClipMaskInitialize ||
                         it is PlanPass.ClipMaskProducer ||
-                        it is PlanPass.ClipMaskFold
+                        it is PlanPass.ClipMaskFold ||
+                        it is PlanPass.FilterSourceClear ||
+                        it is PlanPass.PictureSourcePass ||
+                        it is PlanPass.FilterComposite
                 }
             ) {
                 require(PlanOperationCapability.RenderPass in capabilities.supportedOperations()) {

@@ -1034,45 +1034,27 @@ class RenderGraphContractTest {
     }
 
     @Test
-    fun `separable filter passes retain one bound occurrence while y reads x output`() {
-        val source = planResourceId(PlanResourceRole.LogicalTarget, 0)
-        val horizontalTarget = planResourceId(PlanResourceRole.FilterTarget, 0)
-        val verticalTarget = planResourceId(PlanResourceRole.FilterTarget, 1)
-        val deviceBounds = RectI32(0, 0, 1, 1)
-        val mapping = requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32.Origin))
-        val key = FilterEvaluationKeyV1.of(CapturedFilterNodeId(0), source, mapping, deviceBounds)
-        val bounds = FilterBoundsPlanV1(null, deviceBounds, deviceBounds, deviceBounds, Point2I32.Origin)
-        val horizontal = PlanPass.FilterPass(
-            0,
-            listOf(source),
-            horizontalTarget,
-            key,
-            FilterPassOperationV1.SeparableBlur(
-                FilterImplementationKindV1.IMAGE_BLUR_X,
-                1f,
-                FilterAxisV1.X,
-                org.graphiks.kanvas.render.ir.TileMode.CLAMP,
-                bounds,
-            ),
-        )
-        val vertical = PlanPass.FilterPass(
-            1,
-            listOf(horizontalTarget),
-            verticalTarget,
-            key,
-            FilterPassOperationV1.SeparableBlur(
-                FilterImplementationKindV1.IMAGE_BLUR_Y,
-                1f,
-                FilterAxisV1.Y,
-                org.graphiks.kanvas.render.ir.TileMode.CLAMP,
-                bounds,
-            ),
-        )
+    fun `w6b publication witness accepts an x then y chain consumed by its composite`() {
+        val graph = w6bFilterPublicationGraph()
 
-        assertEquals(source, horizontal.inputs().single())
-        assertEquals(horizontalTarget, vertical.inputs().single())
-        assertEquals(source, vertical.evaluationKey.boundSourceId)
-        assertSame(horizontal.evaluationKey, vertical.evaluationKey)
+        assertEquals(2, graph.passes().filterIsInstance<PlanPass.FilterPass>().size)
+    }
+
+    @Test
+    fun `w6b publication witness rejects a filter bound to an unrelated source`() {
+        assertFailsWith<IllegalArgumentException> {
+            w6bFilterPublicationGraph(boundSource = planResourceId(PlanResourceRole.LogicalTarget, 0))
+        }
+    }
+
+    @Test
+    fun `w6b publication witness rejects a broken x producer and an unconsumed terminal output`() {
+        assertFailsWith<IllegalArgumentException> {
+            w6bFilterPublicationGraph(verticalInput = planResourceId(PlanResourceRole.FilterTarget, 9))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            w6bFilterPublicationGraph(consumeTerminalOutput = false)
+        }
     }
 
     @Test
@@ -2920,6 +2902,62 @@ class RenderGraphContractTest {
         dependencies,
         peakFrameLocalBytes,
     )
+
+    /** Exercises W6a publication, including its immutable W6b occurrence witness. */
+    private fun w6bFilterPublicationGraph(
+        boundSource: PlanResourceId = planResourceId(PlanResourceRole.FilterSource, 0),
+        verticalInput: PlanResourceId = planResourceId(PlanResourceRole.FilterTarget, 0),
+        consumeTerminalOutput: Boolean = true,
+    ): RenderGraph {
+        val root = PlanResource.of(
+            PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D,
+            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), SizeI32(1, 1), 4,
+            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource, PlanResourceUsage.Sampled),
+            PlanResourceLifetime.FrameLocal, 0, if (consumeTerminalOutput) 6 else 5,
+        )
+        fun filterTexture(role: PlanResourceRole, ordinal: Int) = PlanResource.of(
+            role, ordinal, PlanResourceKind.Texture2D,
+            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), SizeI32(1, 1), 4,
+            setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled),
+            PlanResourceLifetime.FrameLocal, 0, if (consumeTerminalOutput) 6 else 5,
+        )
+        val source = filterTexture(PlanResourceRole.FilterSource, 0)
+        val horizontal = filterTexture(PlanResourceRole.FilterTarget, 0)
+        val vertical = filterTexture(PlanResourceRole.FilterTarget, 1)
+        val staging = PlanResource.of(
+            PlanResourceRole.ReadbackStaging, 0, PlanResourceKind.Buffer, null, null, 256,
+            setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead),
+            PlanResourceLifetime.FrameLocal, 0, if (consumeTerminalOutput) 6 else 5,
+        )
+        val deviceBounds = RectI32(0, 0, 1, 1)
+        val mapping = requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32.Origin))
+        val key = FilterEvaluationKeyV1.of(CapturedFilterNodeId(0), boundSource, mapping, deviceBounds)
+        val bounds = FilterBoundsPlanV1(deviceBounds, deviceBounds, deviceBounds, deviceBounds, Point2I32.Origin)
+        val passes = buildList<PlanPass> {
+            add(PlanPass.RenderPass(0, root.id, emptyList(), AttachmentLoadPlan.ClearTransparent, AttachmentStorePlan.Store,
+                destinationVersionAfter = DestinationVersionI64(0)))
+            add(PlanPass.PictureSourcePass(1, source.id, "captured-picture-source", 0))
+            add(PlanPass.FilterPass(2, listOf(source.id), horizontal.id, key,
+                FilterPassOperationV1.SeparableBlur(FilterImplementationKindV1.IMAGE_BLUR_X, 1f, FilterAxisV1.X,
+                    org.graphiks.kanvas.render.ir.TileMode.CLAMP, bounds)))
+            add(PlanPass.FilterPass(3, listOf(verticalInput), vertical.id, key,
+                FilterPassOperationV1.SeparableBlur(FilterImplementationKindV1.IMAGE_BLUR_Y, 1f, FilterAxisV1.Y,
+                    org.graphiks.kanvas.render.ir.TileMode.CLAMP, bounds)))
+            if (consumeTerminalOutput) add(PlanPass.FilterComposite(4, vertical.id, root.id, key,
+                deviceBounds, Point2I32.Origin, FilterCompositeOperationV1.Draw(BlendPlan.SrcOver),
+                destinationVersionAfter = DestinationVersionI64(1)))
+            add(PlanPass.ReadbackPass(if (consumeTerminalOutput) 5 else 4, root.id, staging.id, 256))
+        }
+        val resources = listOf(root, source, horizontal, vertical, staging)
+        val budget = PlanBudget(4_096)
+        return RenderGraph.of(
+            PlanId("w6b-publication"), W6aLayerPlanCompiler.CAPABILITY_ID, SizeI32(1, 1),
+            PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
+            supportedCapabilities(setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)), budget, 0,
+            resources, passes, passes.zipWithNext { before, after -> PlanPassDependency(before.id, after.id) },
+            W6aLayerPlanBudget.peak(resources, passes.size, budget),
+        )
+    }
 
     private data class AtomicResources(
         val target: PlanResource,

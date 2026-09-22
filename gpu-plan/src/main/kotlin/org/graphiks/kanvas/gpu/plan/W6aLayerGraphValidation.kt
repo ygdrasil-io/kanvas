@@ -54,7 +54,12 @@ internal fun validateW6aLayerTopology(
         }
         is PlanPass.RenderPass -> {
             val target = byId.getValue(pass.target)
-            require(target.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget))
+            require(target.role in setOf(
+                PlanResourceRole.LogicalTarget,
+                PlanResourceRole.LayerTarget,
+                PlanResourceRole.FilterSource,
+                PlanResourceRole.FilterTransparentBlack,
+            ))
             require(target.id !in restored && target.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages())
             val alreadyInitialized = target.id in initialized
             require(pass.load == if (alreadyInitialized) AttachmentLoadPlan.Load else AttachmentLoadPlan.ClearTransparent)
@@ -141,6 +146,30 @@ internal fun validateW6aLayerTopology(
             if (pass.restore.writesParentDevice) versions[target.id] = Math.addExact(requireNotNull(versions[target.id]), 1L)
             require(pass.destinationVersionAfter == pass.restore.parentVersionAfter && pass.destinationVersionAfter.valueI64 == versions[target.id])
         }
+        is PlanPass.FilterSourceClear -> {
+            val output = byId.getValue(pass.output)
+            val boundSource = byId.getValue(pass.boundSourceId)
+            require(output.role == PlanResourceRole.FilterTransparentBlack && output.kind == PlanResourceKind.Texture2D &&
+                output.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in output.usages() &&
+                PlanResourceUsage.Sampled in output.usages())
+            require(boundSource.role == PlanResourceRole.FilterSource && boundSource.id in initialized)
+            require(initialized.add(output.id))
+            versions[output.id] = 0L
+        }
+        is PlanPass.PictureSourcePass -> {
+            val output = byId.getValue(pass.output)
+            require(output.role in setOf(PlanResourceRole.FilterSource, PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget) &&
+                output.kind == PlanResourceKind.Texture2D &&
+                output.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in output.usages() &&
+                (output.role != PlanResourceRole.FilterSource || PlanResourceUsage.Sampled in output.usages()))
+            if (output.role == PlanResourceRole.FilterSource) {
+                require(initialized.add(output.id))
+                versions[output.id] = 0L
+            } else {
+                require(output.id in initialized)
+                versions[output.id] = Math.addExact(requireNotNull(versions[output.id]), 1L)
+            }
+        }
         is PlanPass.FilterPass -> {
             val output = byId.getValue(pass.output)
             val inputs = pass.inputs().map(byId::getValue)
@@ -148,7 +177,6 @@ internal fun validateW6aLayerTopology(
                 output.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in output.usages() &&
                 PlanResourceUsage.Sampled in output.usages())
             require(inputs.all { it.kind == PlanResourceKind.Texture2D && PlanResourceUsage.Sampled in it.usages() })
-            require(pass.evaluationKey.copyDesiredOutputDeviceI32() == pass.operation.bounds.copyDesiredOutputDeviceI32())
             val targetExtent = requireNotNull(output.copyExtent())
             fun targetLocal(region: RectI32?): RectI32? = region?.rebaseAtOriginI32OrNull(
                 pass.operation.bounds.copyTargetOriginDeviceI32(),
@@ -163,6 +191,50 @@ internal fun validateW6aLayerTopology(
             }
             require(targetLocal(pass.operation.bounds.copyDesiredOutputDeviceI32()) ==
                 RectI32(0, 0, targetExtent.width, targetExtent.height))
+        }
+        is PlanPass.FilterComposite -> {
+            val source = byId.getValue(pass.source)
+            val destination = byId.getValue(pass.destination)
+            require(source.role == PlanResourceRole.FilterTarget && destination.role in setOf(
+                PlanResourceRole.LogicalTarget,
+                PlanResourceRole.LayerTarget,
+                PlanResourceRole.FilterSource,
+            ) && destination.id in initialized && PlanResourceUsage.Sampled in source.usages())
+            val sourceExtent = requireNotNull(source.copyExtent())
+            val destinationExtent = requireNotNull(destination.copyExtent())
+            val sourceBounds = pass.copySourceBoundsTargetI32()
+            val destinationOrigin = pass.copyDestinationOriginParentI32()
+            require(sourceBounds.left >= 0 && sourceBounds.top >= 0 && sourceBounds.right <= sourceExtent.width &&
+                sourceBounds.bottom <= sourceExtent.height && destinationOrigin.x >= 0 && destinationOrigin.y >= 0 &&
+                destinationOrigin.x.toLong() + sourceBounds.width() <= destinationExtent.width &&
+                destinationOrigin.y.toLong() + sourceBounds.height() <= destinationExtent.height)
+            val before = requireNotNull(versions[destination.id])
+            when (val operation = pass.operation) {
+                is FilterCompositeOperationV1.Draw -> {
+                    require(operation.blend !is BlendPlan.DestinationReadV1)
+                    val after = if (operation.blend.compositionFacts.writesParentDevice) Math.addExact(before, 1L) else before
+                    versions[destination.id] = after
+                    require(pass.destinationVersionAfter.valueI64 == after)
+                    require(pass.replacedLayerSource == null)
+                }
+                is FilterCompositeOperationV1.Layer -> {
+                    val replaced = requireNotNull(pass.replacedLayerSource)
+                    require(byId.getValue(replaced).role == PlanResourceRole.LayerTarget && replaced in initialized && restored.add(replaced))
+                    val restore = operation.restore
+                    require(restore.parentVersionBefore.valueI64 == before &&
+                        restore.parentVersionAfter == pass.destinationVersionAfter &&
+                        restore.writesParentDevice == restore.blend.compositionFacts.writesParentDevice)
+                    val after = if (restore.writesParentDevice) Math.addExact(before, 1L) else before
+                    versions[destination.id] = after
+                    require(pass.destinationVersionAfter.valueI64 == after)
+                }
+                is FilterCompositeOperationV1.Picture -> {
+                    require(pass.replacedLayerSource == null)
+                    val after = Math.addExact(before, 1L)
+                    versions[destination.id] = after
+                    require(pass.destinationVersionAfter.valueI64 == after)
+                }
+            }
         }
         is PlanPass.TextureCopy -> {
             val source = byId.getValue(pass.source)
@@ -195,13 +267,19 @@ internal fun validateW6aLayerTopology(
                             require(consumer.target == source.id)
                             requireNotNull(passes.getOrNull(indexI32 + 2) as? PlanPass.StencilCover).draw.blend
                         }
+                        is PlanPass.FilterPass -> {
+                            val filtered = passes.drop(indexI32 + 1).filterIsInstance<PlanPass.FilterComposite>().singleOrNull {
+                                it.destination == source.id && (it.operation as? FilterCompositeOperationV1.Layer)?.restore?.readsPriorDevice == true
+                            } ?: error("Invalid filtered destination snapshot consumer")
+                            (filtered.operation as FilterCompositeOperationV1.Layer).restore.blend
+                        }
                         else -> error("Invalid destination snapshot consumer")
                     }
                     require(blend.compositionFacts.readsPriorDevice)
                     require(blend.destinationReadSnapshotResourceV1() == destination.id &&
                         blend.requiredDestinationVersionV1() == pass.destinationVersion)
                 }
-                PlanResourceRole.LayerTarget -> {
+                PlanResourceRole.LayerTarget, PlanResourceRole.FilterSource -> {
                     val destinationExtent = requireNotNull(destination.copyExtent())
                     require(initialized.add(destination.id))
                     require(pass.copyDestinationOriginI32() == Point2I32.Origin &&
@@ -220,6 +298,7 @@ internal fun validateW6aLayerTopology(
         }
         else -> error("w6a.layer.unsupported_child")
     } }
+    if (passes.any { it is PlanPass.FilterPass }) W6bFilterGraphWitnessV1.seal(resources, passes)
     require(restored == layers.map { it.id }.toSet())
     require(commands.size == visualCountI32 && commands.zipWithNext().all { (a, b) -> a < b })
     require(passes.filterIsInstance<PlanPass.ReadbackPass>().size == 1)
