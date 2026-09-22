@@ -145,9 +145,12 @@ W6d active onze familles : `MatrixConvolution`, `DisplacementMap`,
 
 Il livre également :
 
-- backdrop snapshoté depuis le parent au save, jamais depuis l'attachment
-  actif ;
-- `initWithPrevious` filtré au même point logique ;
+- backdrop snapshoté puis filtré depuis le parent au moment logique du save,
+  jamais depuis l'attachment actif et toujours avant les draws enfants ;
+- `initWithPrevious` copie le parent sans filtre au save ; le DAG du layer
+  s'évalue seulement après les draws enfants, avant l'alpha, le color filter et
+  le blend de restore. Un témoin public combine contenu parent et enfant
+  discriminants afin d'interdire une évaluation anticipée au save ;
 - Picture filter fondé sur une `SceneSnapshot` immuable et budgetée ;
 - catalogue runtime multi-ABI ;
 - built-in versionné `kanvas.runtime.image-opacity`, ABI `IMAGE_FILTER`, child
@@ -172,8 +175,10 @@ shards publics séquentiels :
    runtime IMAGE_FILTER ;
 5. cross-lane : 22 familles avec W4/W5, nesting, backdrop, previous, crop et
    destination-read ;
-6. budget/cache/recovery : B/B−1, cache pessimiste, leases, refus tardif,
-   sentinelle et récupération.
+6. budget/cache/recovery : B/B−1, cache pessimiste, refus tardif, sentinelle
+   et récupération observables publiquement ; la review structurelle vérifie
+   les leases, générations et l'absence de replanning sans test de source ni
+   hook privé.
 
 Les quatre premiers shards couvrent exactement 5 + 6 + 7 + 4 = 22 familles.
 Les deux derniers prouvent leurs interactions sans masquer l'attribution des
@@ -190,6 +195,8 @@ Chaque expected est calculé indépendamment avant création de la `Surface`.
 - aucune tolérance globale n'est élargie ;
 - chaque PR prouve mutation post-capture, replay mémoire/wire, bounds,
   origines, clips, B/B−1, refus terminal, sentinelle et recovery ;
+- les témoins positifs passent explicitement par les scopes publics `Render`
+  et `Readback`, afin qu'un succès par fallback ne satisfasse pas la preuve ;
 - chaque PR exécute ses shards causaux, une préservation ciblée des waves
   précédentes et les compilations séparées des modules touchés.
 
