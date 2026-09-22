@@ -46,6 +46,7 @@ Epoch 7 ciblée : 8/9 PASS en 27 s ; compositions6/6, Stroke/recovery et mixed R
 - [Material graph W5 — Solid/Opacity](specs/2026-09-09-w5-material-graph-design.md)
 - [W5e — autorité commune des images décodées](specs/2026-09-12-w5e-decoded-images-design.md)
 - [W6 — layers et effets spatiaux](specs/2026-09-16-w6-layers-effects-design.md)
+- [W6b–W6e — livraison stackée des effets spatiaux](specs/2026-09-22-w6b-w6e-stacked-delivery-design.md)
 
 ### Plans
 
