@@ -80,7 +80,13 @@ internal class FrameSourceLayoutV4 private constructor(
                     roots[nativeOffsetsI32[index] + it.indexI32]
                 }
             }
-            frame.publish(table, lanes, inventory)
+            val nativeSourceCountI32 = nativeLanes.fold(0) { countI32, lane ->
+                Math.addExact(countI32, lane.sourceTable().sources().size)
+            }
+            val maskMaterialRoots = frame.maskMaterialSources().mapIndexed { indexI32, (occurrenceIdI32, _) ->
+                occurrenceIdI32 to roots[Math.addExact(nativeSourceCountI32, indexI32)]
+            }.toMap()
+            frame.publish(table, lanes, inventory, maskMaterialRoots)
         }) {
             is SourceConstructionResultV4.Built -> org.graphiks.kanvas.render.ir.RenderPlanResult.Ready(bound.value)
             is SourceConstructionResultV4.Refused -> bound.failure
@@ -619,7 +625,7 @@ internal class FrameSourceLayoutV4 private constructor(
             require(if (layeredInput != null) preparedInput == null else (lane == null) != (preparedInput == null)) { W5fPlanDiagnostics.Schema }
             require(lane?.resources().orEmpty().none { it.role == PlanResourceRole.GradientStopData }) { W5fPlanDiagnostics.Schema }
             val sources = preparedInput?.sources ?: if (ordinaryLayout == null && layeredInput == null) requireNotNull(lane).sourceTable().sources()
-                else nativeLanes.flatMap { it.sourceTable().sources() }
+                else nativeLanes.flatMap { it.sourceTable().sources() } + layeredInput?.maskMaterialSources().orEmpty().map { it.second }
             // Image geometry may remove every pending origin while retaining ordinary sources.
             // Those exact surviving rows still use this one interner/budget/publication owner.
             require(sources.isNotEmpty() || layeredInput != null) { W5fPlanDiagnostics.Schema }
@@ -778,12 +784,12 @@ internal class FrameSourceLayoutV4 private constructor(
                 catch (_: ArithmeticException) { throw IllegalArgumentException(W5gPlanDiagnostics.Binding) }
             // Inspect every actual final draw, not the canonically deduplicated
             // source list: a shared source may have different final blend ABIs.
-            val actualSourceDraws=preparedInput?.sources?.map { Triple(it,it.blend,extent) } ?:
+            val actualSourceDraws=(preparedInput?.sources?.map { Triple(it,it.blend,extent) } ?:
                 (if(ordinaryLayout == null && layeredInput == null) listOf(requireNotNull(lane)) else nativeLanes).flatMap { actualLane ->
                 RenderGraph.visualDraws(actualLane.passes()).map { draw ->
                     Triple(actualLane.sourceTable().source(draw.materialAuthority.materialPlanRef()),draw.blend,actualLane.targetExtent)
                 }
-            }
+            }) + layeredInput?.maskMaterialSources().orEmpty().map { (_, source) -> Triple(source, source.blend, extent) }
             var noiseWork=0L
             var runtimeLeasesI64=0L
             actualSourceDraws.forEach { (source,blend,sourceExtent) -> source.composed?.layout?.let { layout ->

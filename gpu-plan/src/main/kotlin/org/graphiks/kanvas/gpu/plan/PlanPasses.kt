@@ -40,7 +40,10 @@ public enum class PlanPassRole {
     ClipMaskFold,
     LayerComposite,
     FilterSourceClear,
+    FilterCoverageSource,
+    FilterCoverageRetain,
     PictureSource,
+    PictureComposite,
     FilterComposite,
 }
 public enum class ClipCombineOperation { Intersect, Difference }
@@ -859,6 +862,8 @@ public sealed interface PlanPass {
         public val store: AttachmentStorePlan,
         public val drawDataResources: PlanDrawDataResources? = null,
         public val destinationVersionAfter: DestinationVersionI64? = null,
+        /** W6b's captured mask coverage, applied before this W5 material/color pass. */
+        public val coverageSource: PlanResourceId? = null,
     ) : PlanPass {
         override val role: PlanPassRole = PlanPassRole.MainRender
         override val id: PlanPassId = checkedPassId(role, ordinal)
@@ -1063,6 +1068,27 @@ public sealed interface PlanPass {
         override val id: PlanPassId = checkedPassId(role, ordinal)
     }
 
+    /** Captures raw geometry/path-effect coverage for one immutable W6b occurrence. */
+    public class FilterCoverageSourcePass(
+        override val ordinal: Int,
+        public val output: PlanResourceId,
+        public val occurrence: FilterOccurrenceSourceV1,
+    ) : PlanPass {
+        override val role: PlanPassRole = PlanPassRole.FilterCoverageSource
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+    }
+
+    /** Preserves original coverage when a later blur style needs both original and blurred inputs. */
+    public class FilterCoverageRetainPass(
+        override val ordinal: Int,
+        public val source: PlanResourceId,
+        public val output: PlanResourceId,
+    ) : PlanPass {
+        init { require(source != output) }
+        override val role: PlanPassRole = PlanPassRole.FilterCoverageRetain
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+    }
+
     /**
      * An immutable Picture replay source at one captured occurrence.  Task 3 materializes this
      * already ordered source; it must not substitute the frame root or rediscover the Picture.
@@ -1072,13 +1098,31 @@ public sealed interface PlanPass {
         public val output: PlanResourceId,
         public val sourceSceneCanonicalId: String,
         public val sourceCommandIndexI32: Int,
+        /** Exact immutable scene/draw/nesting source; legacy contracts may omit it. */
+        public val occurrence: FilterOccurrenceSourceV1? = null,
+        /** Mask coverage that must be applied before this Picture's W5 material evaluation. */
+        public val coverageSource: PlanResourceId? = null,
     ) : PlanPass {
         init {
             require(sourceSceneCanonicalId.isNotBlank() && sourceCommandIndexI32 >= 0) {
                 "Picture source must retain one captured scene occurrence."
             }
+            require(occurrence == null || occurrence.sourceCommandIndexI32 == sourceCommandIndexI32)
         }
         override val role: PlanPassRole = PlanPassRole.PictureSource
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+    }
+
+    /** Restores an unfiltered typed Picture source before its later siblings. */
+    public class PictureComposite(
+        override val ordinal: Int,
+        public val source: PlanResourceId,
+        public val destination: PlanResourceId,
+        public val occurrence: FilterOccurrenceSourceV1,
+        public val destinationVersionAfter: DestinationVersionI64,
+    ) : PlanPass {
+        init { require(source != destination) }
+        override val role: PlanPassRole = PlanPassRole.PictureComposite
         override val id: PlanPassId = checkedPassId(role, ordinal)
     }
 

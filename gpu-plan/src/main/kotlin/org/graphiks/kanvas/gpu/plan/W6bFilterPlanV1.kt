@@ -27,6 +27,8 @@ public enum class FilterImplementationKindV1 {
     MASK_TABLE,
     DROP_SHADOW_COLORIZE,
     DROP_SHADOW_COMPOSITE,
+    /** Typed W5 shaded source hand-off for a mask-only occurrence. */
+    W5_MATERIALIZED_SOURCE,
 }
 
 /** Immutable device-space spatial facts and the origin used to localize every filter target. */
@@ -137,22 +139,45 @@ public sealed interface FilterPassOperationV1 {
 
     public data class MaskBlurStyle(
         public val style: org.graphiks.kanvas.render.ir.MaskBlurStyle,
+        /** Immutable raw/original coverage retained for SOLID, OUTER and INNER style combination. */
+        public val originalCoverageSource: PlanResourceId?,
+        /** The preceding separable blurred coverage result. */
+        public val blurredCoverageSource: PlanResourceId,
         override val bounds: FilterBoundsPlanV1,
         override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.MASK_BLUR_STYLE,
     ) : FilterPassOperationV1 {
-        init { require(kind == FilterImplementationKindV1.MASK_BLUR_STYLE) }
+        init {
+            require(kind == FilterImplementationKindV1.MASK_BLUR_STYLE)
+            require(blurredCoverageSource != originalCoverageSource)
+            require(if (style == org.graphiks.kanvas.render.ir.MaskBlurStyle.NORMAL) originalCoverageSource == null else originalCoverageSource != null) {
+                "Mask blur styles that combine coverage require the original immutable coverage source."
+            }
+        }
     }
 
     /**
      * A real W5 material reference is deliberately disjoint from a captured/deferred identity.
-     * Task 2 cannot fabricate a table row before the owning W5 material table is published.
+     * The accompanying uniform resource is issued by the same FrameSourceLayoutV4 publication;
+     * it is never an inferred offset or a synthetic zero-sized placeholder.
      */
     public sealed interface MaskShaderMaterialBindingV1 {
-        public data class Planned(public val material: MaterialPlanRef, public val uniformOffsetI64: Long) : MaskShaderMaterialBindingV1 {
-            init { require(uniformOffsetI64 >= 0L) }
+        public data class Planned(
+            /** Retains the immutable occurrence which owns this W5 row. */
+            public val occurrenceIdI32: Int,
+            public val material: MaterialPlanRef,
+            public val uniformResource: PlanResourceId,
+        ) : MaskShaderMaterialBindingV1 {
+            init {
+                require(occurrenceIdI32 >= 0)
+                require(uniformResource.value.startsWith("source-uniform-data:"))
+            }
         }
-        public data class CapturedDeferred(public val materialCanonicalId: String) : MaskShaderMaterialBindingV1 {
-            init { require(materialCanonicalId.isNotBlank()) }
+        /** Actual captured material and occurrence identity, never a canonical-string substitute. */
+        public data class CapturedOccurrence(
+            public val occurrenceIdI32: Int,
+            public val material: org.graphiks.kanvas.render.ir.MaterialNode,
+        ) : MaskShaderMaterialBindingV1 {
+            init { require(occurrenceIdI32 >= 0) }
         }
     }
 
@@ -174,6 +199,14 @@ public sealed interface FilterPassOperationV1 {
         public fun copyTable(): ImmutableUBytes = ImmutableUBytes.copyOf(tableSnapshot.copyToUByteArray())
     }
 
+    /** Freezes the already selected W5 color/material result without inventing a native filter. */
+    public data class MaterializedSource(
+        override val bounds: FilterBoundsPlanV1,
+        override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.W5_MATERIALIZED_SOURCE,
+    ) : FilterPassOperationV1 {
+        init { require(kind == FilterImplementationKindV1.W5_MATERIALIZED_SOURCE) }
+    }
+
     public class DropShadowColorize(
         public val color: ColorARGB,
         offsetF64: Vector2F64,
@@ -190,9 +223,16 @@ public sealed interface FilterPassOperationV1 {
 
     public data class DropShadowComposite(
         public val mode: CapturedDropShadowModeV1,
+        /** Exact captured original input; SHADOW_ONLY deliberately has none. */
+        public val originalInput: PlanResourceId?,
         override val bounds: FilterBoundsPlanV1,
         override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.DROP_SHADOW_COMPOSITE,
     ) : FilterPassOperationV1 {
-        init { require(kind == FilterImplementationKindV1.DROP_SHADOW_COMPOSITE) }
+        init {
+            require(kind == FilterImplementationKindV1.DROP_SHADOW_COMPOSITE)
+            require((mode == CapturedDropShadowModeV1.SHADOW_ONLY) == (originalInput == null)) {
+                "Drop-shadow original input must match its captured mode."
+            }
+        }
     }
 }

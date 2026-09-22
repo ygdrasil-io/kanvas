@@ -100,7 +100,11 @@ public class PlanPhysicalLayoutV1 private constructor(
                 else RawMaterialRequirementsV2.measureLegacy(table, ref).canonicalIdentity
                 draw.commandIndex to source.uniforms.getValue(identity)
             }
-            require(uniforms.values.toSet() == source.uniforms.values.toSet())
+            val maskShaderUniforms = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
+                ((pass.operation as? FilterPassOperationV1.MaskShader)?.materialBinding
+                    as? FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned)?.uniformResource
+            }.toSet()
+            require((uniforms.values.toSet() + maskShaderUniforms) == source.uniforms.values.toSet())
             val geometry = graph.passes().mapNotNull { pass ->
                 if (source.w4eGeometry.any { pass.id in it.graphPassIds() }) return@mapNotNull null
                 val data = when (pass) {
@@ -152,6 +156,17 @@ public class PlanPhysicalLayoutV1 private constructor(
                 require(rows.single { it.id == lane.target }.copyExtent() == lane.copyExtentI32())
                 require(lane.graphPassIds().all { id -> graph.passes().any { it.id == id } })
                 require(lane.nativePasses().filterIsInstance<PlanPass.PathRenderPass>().all { it.target == lane.target })
+                require(lane.graphPassIds().all { id -> when (val pass = graph.passes().single { it.id == id }) {
+                    is PlanPass.RenderPass -> pass.target == lane.target
+                    is PlanPass.StencilGeometryProducerV3 -> pass.target == lane.target
+                    is PlanPass.StencilCover -> pass.target == lane.target
+                    is PlanPass.PathRenderPass -> pass.target == lane.target
+                    is PlanPass.ClipMaskInitialize,
+                    is PlanPass.ClipMaskProducer,
+                    is PlanPass.ClipMaskFold,
+                    -> true
+                    else -> false
+                } }) { "W4e native binding target must equal its semantic graph pass target." }
             }
             require(source.w4eGeometry.flatMap { it.graphPassIds() }.let { it.size == it.distinct().size })
             val layout = PlanPhysicalLayoutV1(rows, source.caches, uniforms, geometry, source.w4eGeometry)

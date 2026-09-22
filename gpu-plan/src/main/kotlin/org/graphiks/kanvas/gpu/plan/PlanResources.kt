@@ -9,6 +9,10 @@ public enum class PlanResourceRole {
     LayerTarget,
     /** Immutable, single-occurrence W6b source generation before any filter operation. */
     FilterSource,
+    /** Immutable raw coverage captured at one W6b occurrence before mask evaluation. */
+    CoverageSource,
+    /** Immutable original coverage retained alongside a blurred mask-coverage result. */
+    CoverageOriginal,
     /** Explicit transparent-black W6b input; it is never interchangeable with a draw source. */
     FilterTransparentBlack,
     /** Single-sample RGBA8 target owned only by a frozen W6b filter pass. */
@@ -183,8 +187,10 @@ public class PlanResource private constructor(
                     ) {
                         "Texture byte size must equal its checked logical size"
                     }
-                    if (role in setOf(
+                        if (role in setOf(
                             PlanResourceRole.FilterSource,
+                            PlanResourceRole.CoverageSource,
+                            PlanResourceRole.CoverageOriginal,
                             PlanResourceRole.FilterTransparentBlack,
                             PlanResourceRole.FilterTarget,
                         )) {

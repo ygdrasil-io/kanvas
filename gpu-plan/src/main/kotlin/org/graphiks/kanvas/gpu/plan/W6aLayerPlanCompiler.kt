@@ -167,10 +167,10 @@ public class W6aLayerPlanCompiler public constructor(
             // Restore clips apply only at the typed composite.  A proven-empty one has no child
             // render work, while semantic refusal has already run at BeginLayer.
             if (isElidedByExplicitAncestor(scopeI32)) return@forEach
-            // A captured Picture carries its own immutable scene.  W6b traverses and freezes
-            // that scene directly; Task 2 must not send its public Picture draw through a W5
-            // child lane before terminalizing native execution.
-            if (ownsW6b && (commands[drawIndexI32] as SceneCommand.Draw).node.geometry is GeometryNode.Picture) {
+            // Picture is a first-class W6a typed source lane, emitted in the graph with its
+            // captured scene/outer draw.  It is deliberately not erased merely because another
+            // occurrence in the frame owns W6b.
+            if ((commands[drawIndexI32] as SceneCommand.Draw).node.geometry is GeometryNode.Picture) {
                 return@forEach
             }
             val draws = setOf(drawIndexI32)
@@ -221,7 +221,7 @@ public class W6aLayerPlanCompiler public constructor(
                 is RenderPlanResult.InvalidScene -> return result
             }
             val frame = W6aLayerGraphConstruction(PlanId("w6a.${selected.sceneCanonicalId.value}"), org.graphiks.math.geometry.SizeI32(selected.target.extent.width, selected.target.extent.height),
-                capabilities, budget, selected.occurrences, bindings, selected.scene)
+                capabilities, budget, selected.occurrences, bindings, selected.scene, runtimeCatalog)
             when (val layout = FrameSourceLayoutV4.layeredFrame(frame)) {
                 is SourceConstructionResultV4.Built -> when (val published = layout.value.prepareAndPublish()) {
                     is RenderPlanResult.Ready -> if (W6bFilterGraphConstruction.owns(selected.scene)) {

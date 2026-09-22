@@ -271,6 +271,7 @@ public class RenderGraph private constructor(
                                 source.w4eGeometry.any { it.target == scope.targetResource && step.passId in it.graphPassIds() }
                             is PlanPass.FilterComposite -> pass.destination == scope.targetResource &&
                                 pass.replacedLayerSource == null && pass.operation is FilterCompositeOperationV1.Draw
+                            is PlanPass.PictureComposite -> pass.destination == scope.targetResource
                             else -> false
                         }
                         require(scope.id in initialized && scope.id !in restored && exactChild)
@@ -725,6 +726,7 @@ public class RenderGraph private constructor(
                 pass.drawDataResources.vertex, pass.drawDataResources.index, pass.drawDataResources.uniform)
             is PlanPass.RenderPass -> buildList {
                 add(pass.target)
+                pass.coverageSource?.let(::add)
                 pass.draws().mapNotNull { (it.blend as? BlendPlan.DestinationReadV1)?.snapshotResource }.forEach(::add)
                 pass.drawDataResources?.let { addAll(listOf(it.vertex, it.index, it.uniform)) }
                 pass.draws().flatMap { it.clipStrategies() }.forEach { strategy ->
@@ -760,8 +762,21 @@ public class RenderGraph private constructor(
             is PlanPass.TextureCopy -> listOf(pass.source, pass.destination)
             is PlanPass.LayerComposite -> listOf(pass.source, pass.destination)
             is PlanPass.FilterSourceClear -> listOf(pass.output, pass.boundSourceId)
-            is PlanPass.PictureSourcePass -> listOf(pass.output)
-            is PlanPass.FilterPass -> pass.inputs() + pass.output
+            is PlanPass.FilterCoverageSourcePass -> listOf(pass.output)
+            is PlanPass.FilterCoverageRetainPass -> listOf(pass.source, pass.output)
+            is PlanPass.PictureSourcePass -> listOfNotNull(pass.output, pass.coverageSource)
+            is PlanPass.PictureComposite -> listOf(pass.source, pass.destination)
+            is PlanPass.FilterPass -> buildList {
+                addAll(pass.inputs())
+                add(pass.output)
+                (pass.operation as? FilterPassOperationV1.MaskShader)
+                    ?.materialBinding
+                    ?.let { binding ->
+                        if (binding is FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned) {
+                            add(binding.uniformResource)
+                        }
+                    }
+            }
             is PlanPass.FilterComposite -> listOfNotNull(pass.source, pass.destination, pass.replacedLayerSource)
             is PlanPass.ResolvePass -> listOf(pass.source, pass.destination)
             is PlanPass.ReadbackPass -> listOf(pass.source, pass.staging)
@@ -879,7 +894,10 @@ public class RenderGraph private constructor(
                         it is PlanPass.ClipMaskProducer ||
                         it is PlanPass.ClipMaskFold ||
                         it is PlanPass.FilterSourceClear ||
+                        it is PlanPass.FilterCoverageSourcePass ||
+                        it is PlanPass.FilterCoverageRetainPass ||
                         it is PlanPass.PictureSourcePass ||
+                        it is PlanPass.PictureComposite ||
                         it is PlanPass.FilterComposite
                 }
             ) {

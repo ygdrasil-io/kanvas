@@ -65,6 +65,11 @@ internal fun validateW6aLayerTopology(
             require(pass.load == if (alreadyInitialized) AttachmentLoadPlan.Load else AttachmentLoadPlan.ClearTransparent)
             initialized += target.id
             require(pass.store == AttachmentStorePlan.Store)
+            pass.coverageSource?.let { coverage ->
+                val row = byId.getValue(coverage)
+                require(row.role in setOf(PlanResourceRole.CoverageSource, PlanResourceRole.CoverageOriginal,
+                    PlanResourceRole.FilterTarget) && coverage in initialized && PlanResourceUsage.Sampled in row.usages())
+            }
             val targetExtent = requireNotNull(target.copyExtent())
             pass.draws().forEach { draw ->
                 require((draw is SolidRectDraw || draw is AnalyticRectDraw || draw is AnalyticRRectDraw ||
@@ -156,8 +161,29 @@ internal fun validateW6aLayerTopology(
             require(initialized.add(output.id))
             versions[output.id] = 0L
         }
+        is PlanPass.FilterCoverageSourcePass -> {
+            val output = byId.getValue(pass.output)
+            require(output.role == PlanResourceRole.CoverageSource && output.kind == PlanResourceKind.Texture2D &&
+                output.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in output.usages() &&
+                PlanResourceUsage.Sampled in output.usages())
+            require(initialized.add(output.id))
+            versions[output.id] = 0L
+        }
+        is PlanPass.FilterCoverageRetainPass -> {
+            val source = byId.getValue(pass.source)
+            val output = byId.getValue(pass.output)
+            require(source.role in setOf(PlanResourceRole.CoverageSource, PlanResourceRole.FilterTarget) &&
+                source.id in initialized && output.role == PlanResourceRole.CoverageOriginal &&
+                source.copyExtent() == output.copyExtent() && initialized.add(output.id))
+            versions[output.id] = 0L
+        }
         is PlanPass.PictureSourcePass -> {
             val output = byId.getValue(pass.output)
+            pass.coverageSource?.let { coverage ->
+                val row = byId.getValue(coverage)
+                require(row.role in setOf(PlanResourceRole.CoverageSource, PlanResourceRole.CoverageOriginal,
+                    PlanResourceRole.FilterTarget) && coverage in initialized && PlanResourceUsage.Sampled in row.usages())
+            }
             require(output.role in setOf(PlanResourceRole.FilterSource, PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget) &&
                 output.kind == PlanResourceKind.Texture2D &&
                 output.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in output.usages() &&
@@ -169,6 +195,16 @@ internal fun validateW6aLayerTopology(
                 require(output.id in initialized)
                 versions[output.id] = Math.addExact(requireNotNull(versions[output.id]), 1L)
             }
+        }
+        is PlanPass.PictureComposite -> {
+            val source = byId.getValue(pass.source)
+            val destination = byId.getValue(pass.destination)
+            require(source.role == PlanResourceRole.FilterSource && source.id in initialized &&
+                destination.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget) &&
+                destination.id in initialized && PlanResourceUsage.Sampled in source.usages())
+            val after = Math.addExact(requireNotNull(versions[destination.id]), 1L)
+            versions[destination.id] = after
+            require(pass.destinationVersionAfter.valueI64 == after)
         }
         is PlanPass.FilterPass -> {
             val output = byId.getValue(pass.output)
@@ -191,6 +227,18 @@ internal fun validateW6aLayerTopology(
             }
             require(targetLocal(pass.operation.bounds.copyDesiredOutputDeviceI32()) ==
                 RectI32(0, 0, targetExtent.width, targetExtent.height))
+            // Every typed filter output is an immutable source generation for its immediate
+            // next operation, material pass, or terminal composite.  This is the same
+            // publication boundary used by raw coverage and transparent-black sources.
+            require(initialized.add(output.id))
+            versions[output.id] = 0L
+            (pass.operation as? FilterPassOperationV1.MaskShader)?.materialBinding?.let { binding ->
+                if (binding is FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned) {
+                    val uniform = byId.getValue(binding.uniformResource)
+                    require(uniform.role == PlanResourceRole.SourceUniformData && uniform.kind == PlanResourceKind.Buffer &&
+                        PlanResourceUsage.Uniform in uniform.usages())
+                }
+            }
         }
         is PlanPass.FilterComposite -> {
             val source = byId.getValue(pass.source)

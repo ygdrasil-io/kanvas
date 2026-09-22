@@ -1,15 +1,11 @@
 package org.graphiks.kanvas.gpu.plan
 
-import java.util.IdentityHashMap
-
 /**
- * Immutable publication witness for W6b occurrence ownership.  It is intentionally graph-owned:
- * individual [PlanPass.FilterPass] values cannot establish that their contextual source, immediate
- * chain, and terminal parent composite all refer to the same captured occurrence.
+ * Immutable publication witness for W6b.  It starts from terminal composites and validates
+ * immediate producer/consumer edges; grouping convenient pass contexts is not an occurrence
+ * proof.
  */
-internal class W6bFilterGraphWitnessV1 private constructor(
-    occurrences: List<Occurrence>,
-) {
+internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occurrence>) {
     internal class Occurrence(
         val boundSourceId: PlanResourceId,
         val firstPassIndexI32: Int,
@@ -17,139 +13,187 @@ internal class W6bFilterGraphWitnessV1 private constructor(
         val compositePassIndexI32: Int,
     )
 
-    private val occurrencesSnapshot = immutableList(occurrences)
-    internal fun occurrences(): List<Occurrence> = occurrencesSnapshot
+    private val values = immutableList(occurrences)
+    internal fun occurrences(): List<Occurrence> = values
 
     internal companion object {
         fun seal(resources: List<PlanResource>, passes: List<PlanPass>): W6bFilterGraphWitnessV1 {
-            val byId = resources.associateBy { it.id }
+            val rows = resources.associateBy { it.id }
             val producers = mutableMapOf<PlanResourceId, Int>()
-            val outputOwner = mutableMapOf<PlanResourceId, PlanResourceId>()
-            val contexts = IdentityHashMap<FilterEvaluationKeyV1, Context>()
-            val filterOutputs = linkedSetOf<PlanResourceId>()
-            val filterInputs = linkedSetOf<PlanResourceId>()
-            val occurrences = mutableListOf<Occurrence>()
+            val owners = mutableMapOf<PlanResourceId, PlanResourceId>()
+            val inputs = mutableSetOf<PlanResourceId>()
+            val materialCoverageInputs = mutableSetOf<PlanResourceId>()
+            val outputs = mutableSetOf<PlanResourceId>()
+            fun row(id: PlanResourceId): PlanResource = requireNotNull(rows[id]) { "W6b resource is absent." }
+            fun produced(id: PlanResourceId, before: Int): Int = requireNotNull(producers[id]) {
+                "W6b input has no immutable producer."
+            }.also { require(it < before) { "W6b input must precede its consumer." } }
 
-            fun producerFor(id: PlanResourceId, before: Int): Int {
-                val producer = requireNotNull(producers[id]) { "W6b input has no immutable producer." }
-                require(producer < before) { "W6b input must be produced before its consumer." }
-                return producer
-            }
-            fun filterArity(operation: FilterPassOperationV1): Int = when (operation) {
-                is FilterPassOperationV1.DropShadowComposite -> 2
-                is FilterPassOperationV1.SeparableBlur,
-                is FilterPassOperationV1.MaskBlurStyle,
-                is FilterPassOperationV1.MaskShader,
-                is FilterPassOperationV1.MaskTable,
-                is FilterPassOperationV1.DropShadowColorize,
-                -> 1
-            }
-
-            passes.forEachIndexed { indexI32, pass ->
-                when (pass) {
-                    is PlanPass.RenderPass -> producers[pass.target] = indexI32
-                    is PlanPass.TextureCopy -> producers[pass.destination] = indexI32
-                    is PlanPass.FilterSourceClear -> {
-                        val source = requireNotNull(byId[pass.boundSourceId]) {
-                            "W6b transparent-black input has no immutable occurrence source."
-                        }
-                        require(source.role == PlanResourceRole.FilterSource)
-                        producerFor(source.id, indexI32)
-                        producers[pass.output] = indexI32
-                        outputOwner[pass.output] = source.id
-                    }
-                    is PlanPass.PictureSourcePass -> producers[pass.output] = indexI32
-                    is PlanPass.FilterPass -> {
-                        val source = requireNotNull(byId[pass.evaluationKey.boundSourceId]) {
-                            "W6b occurrence source is absent from the published resource table."
-                        }
-                        require(source.role in setOf(PlanResourceRole.FilterSource, PlanResourceRole.LayerTarget)) {
-                            "W6b occurrence source must be one immutable source generation or layer target."
-                        }
-                        producerFor(source.id, indexI32)
-                        val inputs = pass.inputs()
-                        require(inputs.size == filterArity(pass.operation)) { "W6b filter operation input arity is invalid." }
-                        inputs.forEach { input -> producerFor(input, indexI32) }
-                        val context = contexts[pass.evaluationKey]
-                        if (context == null) {
-                            val firstInput = inputs.first()
-                            require(firstInput == source.id || outputOwner[firstInput] == source.id) {
-                                "W6b first filter input is not continuous with its occurrence source."
-                            }
-                            contexts[pass.evaluationKey] = Context(source.id, pass.output, indexI32, pass.operation)
-                        } else {
-                            require(context.boundSourceId == source.id && inputs.first() == context.lastOutput) {
-                                "W6b downstream filter input must consume the preceding same-key output."
-                            }
-                            if (pass.operation is FilterPassOperationV1.SeparableBlur &&
-                                pass.operation.axis == FilterAxisV1.Y) {
-                                val previous = context.lastOperation as? FilterPassOperationV1.SeparableBlur
-                                require(previous?.axis == FilterAxisV1.X) {
-                                    "W6b vertical blur must consume the matching horizontal blur output."
-                                }
-                            }
-                            context.lastOutput = pass.output
-                            context.lastPassIndexI32 = indexI32
-                            context.lastOperation = pass.operation
-                        }
-                        filterInputs += inputs
-                        filterOutputs += pass.output
-                        outputOwner[pass.output] = source.id
-                        producers[pass.output] = indexI32
-                    }
-                    else -> Unit
+            passes.forEachIndexed { index, pass -> when (pass) {
+                is PlanPass.RenderPass -> {
+                    pass.coverageSource?.let { produced(it, index); materialCoverageInputs += it }
+                    producers[pass.target] = index
                 }
-            }
-
-            val compositeBySource = mutableMapOf<PlanResourceId, Pair<Int, PlanPass.FilterComposite>>()
-            passes.forEachIndexed { indexI32, pass -> if (pass is PlanPass.FilterComposite) {
-                require(byId.getValue(pass.source).role == PlanResourceRole.FilterTarget &&
-                    byId.getValue(pass.destination).role in setOf(
-                        PlanResourceRole.LogicalTarget,
-                        PlanResourceRole.LayerTarget,
-                        PlanResourceRole.FilterSource,
-                    )) { "W6b composite has an invalid source or parent target." }
-                require(compositeBySource.put(pass.source, indexI32 to pass) == null) {
-                    "W6b terminal filter output has more than one parent composite."
+                is PlanPass.TextureCopy -> producers[pass.destination] = index
+                is PlanPass.PictureSourcePass -> producers[pass.output] = index
+                is PlanPass.FilterCoverageSourcePass -> {
+                    require(row(pass.output).role == PlanResourceRole.CoverageSource)
+                    producers[pass.output] = index
+                    owners[pass.output] = pass.output
                 }
+                is PlanPass.FilterCoverageRetainPass -> {
+                    require(row(pass.source).role in setOf(PlanResourceRole.CoverageSource, PlanResourceRole.FilterTarget))
+                    require(row(pass.output).role == PlanResourceRole.CoverageOriginal)
+                    produced(pass.source, index)
+                    producers[pass.output] = index
+                    owners[pass.output] = requireNotNull(owners[pass.source])
+                }
+                is PlanPass.FilterSourceClear -> {
+                    require(row(pass.boundSourceId).role == PlanResourceRole.FilterSource)
+                    require(row(pass.output).role == PlanResourceRole.FilterTransparentBlack)
+                    produced(pass.boundSourceId, index)
+                    producers[pass.output] = index
+                    owners[pass.output] = pass.boundSourceId
+                }
+                is PlanPass.FilterPass -> {
+                    val bound = row(pass.evaluationKey.boundSourceId)
+                    require(bound.role in setOf(PlanResourceRole.FilterSource, PlanResourceRole.CoverageSource)) {
+                        "W6b occurrence source must be immutable FilterSource or CoverageSource."
+                    }
+                    produced(bound.id, index)
+                    require(row(pass.output).role == PlanResourceRole.FilterTarget)
+                    require(pass.inputs().size == arity(pass.operation)) { "W6b operation input arity is invalid." }
+                    pass.inputs().forEach { input ->
+                        produced(input, index)
+                        require(owners[input] == null || owners[input] == bound.id) {
+                            "W6b input belongs to another occurrence."
+                        }
+                    }
+                    validatePass(pass, passes, producers, rows, owners)
+                    inputs += pass.inputs()
+                    outputs += pass.output
+                    producers[pass.output] = index
+                    owners[pass.output] = bound.id
+                }
+                else -> Unit
             } }
-            val terminals = filterOutputs - filterInputs
-            require(terminals.isNotEmpty() || filterOutputs.isEmpty()) { "W6b graph has no terminal filter output." }
-            terminals.forEach { terminal ->
-                val (compositeIndexI32, composite) = requireNotNull(compositeBySource[terminal]) {
-                    "W6b terminal filter output must be consumed by its typed parent composite."
-                }
-                val producerIndexI32 = requireNotNull(producers[terminal])
-                require(compositeIndexI32 == producerIndexI32 + 1 && composite.evaluationKey ===
-                    passes[producerIndexI32].let { it as PlanPass.FilterPass }.evaluationKey) {
-                    "W6b terminal filter output must composite immediately with the same occurrence key."
-                }
-            }
-            contexts.forEach { (key, context) ->
-                // An image-filter root may feed a separately keyed mask occurrence. Only the
-                // terminal value of the complete occurrence graph composites into its parent;
-                // an intermediate evaluation must instead have a real downstream use.
-                if (context.lastOutput in terminals) {
-                    val composite = requireNotNull(compositeBySource[context.lastOutput]) {
-                        "W6b occurrence terminal output is unconsumed."
-                    }
-                    occurrences += Occurrence(key.boundSourceId, context.firstPassIndexI32, context.lastPassIndexI32, composite.first)
-                } else {
-                    require(context.lastOutput in filterInputs) {
-                        "W6b non-terminal filter output is not consumed by a downstream evaluation."
-                    }
-                }
-            }
-            return W6bFilterGraphWitnessV1(occurrences)
-        }
-    }
 
-    private class Context(
-        val boundSourceId: PlanResourceId,
-        var lastOutput: PlanResourceId,
-        val firstPassIndexI32: Int,
-        var lastOperation: FilterPassOperationV1,
-    ) {
-        var lastPassIndexI32: Int = firstPassIndexI32
+            val terminals = outputs - inputs - materialCoverageInputs
+            val composites = passes.mapIndexedNotNull { index, pass ->
+                (pass as? PlanPass.FilterComposite)?.let { index to it }
+            }
+            val bySource = composites.associateBy({ it.second.source }, { it })
+            require(bySource.size == composites.size && bySource.keys == terminals) {
+                "Every and only W6b terminal filter output must have one parent composite."
+            }
+            return W6bFilterGraphWitnessV1(composites.map { (compositeIndex, composite) ->
+                val terminalIndex = produced(composite.source, compositeIndex)
+                val terminal = passes[terminalIndex] as? PlanPass.FilterPass
+                    ?: throw IllegalArgumentException("W6b composite source is not a filter output.")
+                require(terminal.evaluationKey === composite.evaluationKey && terminalIndex + 1 == compositeIndex) {
+                    "W6b terminal output must immediately composite with the exact evaluation key."
+                }
+                Occurrence(terminal.evaluationKey.boundSourceId, firstInSameKey(terminalIndex, passes, producers),
+                    terminalIndex, compositeIndex)
+            })
+        }
+
+        private fun arity(operation: FilterPassOperationV1): Int = when (operation) {
+            is FilterPassOperationV1.DropShadowComposite ->
+                if (operation.mode == org.graphiks.kanvas.render.ir.CapturedDropShadowModeV1.SHADOW_ONLY) 1 else 2
+            is FilterPassOperationV1.MaskBlurStyle -> if (operation.originalCoverageSource == null) 1 else 2
+            is FilterPassOperationV1.SeparableBlur,
+            is FilterPassOperationV1.MaskShader,
+            is FilterPassOperationV1.MaskTable,
+            is FilterPassOperationV1.MaterializedSource,
+            is FilterPassOperationV1.DropShadowColorize,
+            -> 1
+        }
+
+        private fun validatePass(
+            pass: PlanPass.FilterPass,
+            passes: List<PlanPass>,
+            producers: Map<PlanResourceId, Int>,
+            rows: Map<PlanResourceId, PlanResource>,
+            owners: Map<PlanResourceId, PlanResourceId>,
+        ) {
+            val key = pass.evaluationKey
+            val inputs = pass.inputs()
+            fun producer(id: PlanResourceId): PlanPass? = producers[id]?.let(passes::get)
+            fun owner(id: PlanResourceId): PlanResourceId? = owners[id]
+            fun sameKey(id: PlanResourceId, check: (FilterPassOperationV1) -> Boolean) {
+                val previous = producer(id) as? PlanPass.FilterPass
+                require(previous != null && previous.evaluationKey === key && check(previous.operation)) {
+                    "W6b immediate chain producer has the wrong operation or evaluation key."
+                }
+            }
+            fun occurrenceOwned(id: PlanResourceId) {
+                require(id == key.boundSourceId || owner(id) == key.boundSourceId) {
+                    "W6b input is not owned by the immutable occurrence source."
+                }
+            }
+            when (val operation = pass.operation) {
+                is FilterPassOperationV1.SeparableBlur -> {
+                    val input = inputs.single()
+                    occurrenceOwned(input)
+                    val mask = operation.kind in setOf(FilterImplementationKindV1.MASK_COVERAGE_BLUR_X,
+                        FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y)
+                    require((rows.getValue(key.boundSourceId).role == PlanResourceRole.CoverageSource) == mask) {
+                        "W6b blur family disagrees with its immutable source role."
+                    }
+                    if (operation.axis == FilterAxisV1.Y) sameKey(input) { previous ->
+                        previous is FilterPassOperationV1.SeparableBlur && previous.axis == FilterAxisV1.X &&
+                            previous.kind.name.removeSuffix("_X") == operation.kind.name.removeSuffix("_Y")
+                    } else require((producer(input) as? PlanPass.FilterPass)?.evaluationKey !== key) {
+                        "W6b X blur must be first in its exact-key chain."
+                    }
+                }
+                is FilterPassOperationV1.MaskBlurStyle -> {
+                    require(inputs[0] == operation.blurredCoverageSource)
+                    sameKey(inputs[0]) { it is FilterPassOperationV1.SeparableBlur && it.axis == FilterAxisV1.Y }
+                    operation.originalCoverageSource?.let { original ->
+                        require(inputs[1] == original && rows.getValue(original).role == PlanResourceRole.CoverageOriginal &&
+                            owner(original) == key.boundSourceId) {
+                            "W6b mask blur style lost its original occurrence coverage."
+                        }
+                    }
+                }
+                is FilterPassOperationV1.MaskShader -> {
+                    require(rows.getValue(key.boundSourceId).role == PlanResourceRole.CoverageSource && inputs.single() == key.boundSourceId)
+                    when (operation.materialBinding) {
+                        is FilterPassOperationV1.MaskShaderMaterialBindingV1.CapturedOccurrence,
+                        is FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned,
+                        -> Unit
+                    }
+                }
+                is FilterPassOperationV1.MaskTable ->
+                    require(rows.getValue(key.boundSourceId).role == PlanResourceRole.CoverageSource && inputs.single() == key.boundSourceId)
+                is FilterPassOperationV1.MaterializedSource ->
+                    require(rows.getValue(key.boundSourceId).role == PlanResourceRole.FilterSource && inputs.single() == key.boundSourceId)
+                is FilterPassOperationV1.DropShadowColorize -> occurrenceOwned(inputs.single())
+                is FilterPassOperationV1.DropShadowComposite -> {
+                    sameKey(inputs[0]) { it is FilterPassOperationV1.DropShadowColorize }
+                    if (operation.mode == org.graphiks.kanvas.render.ir.CapturedDropShadowModeV1.SHADOW_ONLY) {
+                        require(operation.originalInput == null)
+                    } else {
+                        val original = requireNotNull(operation.originalInput)
+                        require(inputs[1] == original && (original == key.boundSourceId || owner(original) == key.boundSourceId)) {
+                            "W6b drop shadow composite has the wrong immutable original input."
+                        }
+                    }
+                }
+            }
+        }
+
+        private fun firstInSameKey(index: Int, passes: List<PlanPass>, producers: Map<PlanResourceId, Int>): Int {
+            var current = index
+            val key = (passes[current] as PlanPass.FilterPass).evaluationKey
+            while (true) {
+                val previous = producers[(passes[current] as PlanPass.FilterPass).inputs().first()] ?: return current
+                val pass = passes[previous] as? PlanPass.FilterPass ?: return current
+                if (pass.evaluationKey !== key) return current
+                current = previous
+            }
+        }
     }
 }

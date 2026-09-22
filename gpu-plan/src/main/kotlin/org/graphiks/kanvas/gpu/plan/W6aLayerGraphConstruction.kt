@@ -1,10 +1,15 @@
 package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.kanvas.render.ir.BlendMode
+import org.graphiks.kanvas.render.ir.BlendNode
 import org.graphiks.kanvas.render.ir.ClipStackNode
 import org.graphiks.kanvas.render.ir.ClipOperation
 import org.graphiks.kanvas.render.ir.ClipTransformSnapshot
 import org.graphiks.kanvas.render.ir.GeometryNode
+import org.graphiks.kanvas.render.ir.MaskFilterNode
+import org.graphiks.kanvas.render.ir.CoverageRequest
+import org.graphiks.kanvas.render.ir.DrawNode
+import org.graphiks.kanvas.render.ir.DrawOrigin
 import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.RectI32
@@ -78,6 +83,7 @@ internal class W6aLayerGraphConstruction(
     occurrences: List<W6aLayerPlanCompiler.ScopeOccurrence>,
     bindings: List<W6aLayerSourceBinding>,
     private val filterScene: org.graphiks.kanvas.render.ir.SceneSnapshot? = null,
+    private val runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot = RuntimeEffectSemanticCatalogSnapshot.Unbound,
 ) {
     private val occurrences = immutableList(occurrences)
     private val bindings = immutableList(bindings)
@@ -94,6 +100,8 @@ internal class W6aLayerGraphConstruction(
     private val resources: List<PlanResource>
     private val frozenFilterResourceSpecs: List<W6bFilterGraphConstruction.ResourceSpec>
     private val filterSourceBindings: Map<PlanResourceId, W6bFilterGraphConstruction.SourceBinding>
+    /** Additional real W5 source rows used by captured MaskShader coverage evaluation. */
+    private val maskMaterialSourcesByOccurrence: Map<Int, MaterialSourceConstructionV4>
     private val w4eBindings = mutableListOf<PlanW4eGeometryBindingV1>()
     private val childSnapshots = mutableSetOf<PlanResourceId>()
     val nonUniformBytesI64: Long
@@ -211,25 +219,35 @@ internal class W6aLayerGraphConstruction(
             val origin = targetOriginDevice(target)
             val mapping = if (target == root) requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), origin)) else
                 activeByScope.getValue(target.value.substringAfter(':').toInt()).mapping!!
+            val domain = RectI32(origin.x, origin.y,
+                Math.addExact(origin.x, targetExtent(target).width), Math.addExact(origin.y, targetExtent(target).height))
+            val geometry = target.takeIf { it != root }?.let { activeByScope.getValue(it.value.substringAfter(':').toInt()) }
             val binding = W6bFilterGraphConstruction.SourceBinding(target, targetExtent(target), origin, mapping,
-                RectI32(origin.x, origin.y, Math.addExact(origin.x, targetExtent(target).width), Math.addExact(origin.y, targetExtent(target).height)))
+                geometry?.knownContentDeviceI32 ?: domain, geometry?.desiredOutputDeviceI32 ?: domain,
+                geometry?.requiredInputDeviceI32 ?: domain, geometry?.producedOutputDeviceI32 ?: geometry?.knownContentDeviceI32 ?: domain)
             return binding
         }
         fun targetDeviceBounds(target: PlanResourceId): RectI32 = filterSource(target).copyDeviceBoundsI32()
         fun allocateOccurrenceSource(
             domain: RectI32,
             parentTarget: PlanResourceId,
+            role: PlanResourceRole = PlanResourceRole.FilterSource,
             copyDestination: Boolean = false,
+            knownContentDeviceI32: RectI32? = domain,
+            desiredOutputDeviceI32: RectI32? = domain,
+            requiredInputDeviceI32: RectI32? = domain,
+            producedOutputDeviceI32: RectI32? = knownContentDeviceI32,
         ): W6bFilterGraphConstruction.SourceBinding {
             val parent = filterSource(parentTarget)
             val mapping = requireNotNull(LayerMappingF64.ofOrNull(parent.mapping.copyLocalToDeviceF64(), Point2I32(domain.left, domain.top)))
-            val id = planResourceId(PlanResourceRole.FilterSource, nextFilterSourceOrdinalI32)
+            val id = planResourceId(role, nextFilterSourceOrdinalI32)
             nextFilterSourceOrdinalI32 = Math.addExact(nextFilterSourceOrdinalI32, 1)
             val binding = W6bFilterGraphConstruction.SourceBinding(id, SizeI32(domain.width(), domain.height()),
-                Point2I32(domain.left, domain.top), mapping, domain)
+                Point2I32(domain.left, domain.top), mapping, knownContentDeviceI32,
+                desiredOutputDeviceI32, requiredInputDeviceI32, producedOutputDeviceI32)
             sourceSpecs += W6bFilterGraphConstruction.ResourceSpec(
                 id,
-                PlanResourceRole.FilterSource,
+                role,
                 binding.copyExtentI32(),
                 if (copyDestination) setOf(PlanResourceUsage.CopyDestination) else emptySet(),
             )
@@ -254,6 +272,8 @@ internal class W6aLayerGraphConstruction(
             nextOrdinal[row.role] = Math.addExact(ordinal, 1)
         } }
         val nativeByLane = linkedMapOf<Int, LinkedHashMap<PlanPassId, PlanPass>>()
+        /** A filtered path lane owns the occurrence target, never its mutable parent target. */
+        val physicalTargetByLane = mutableMapOf<Int, PlanResourceId>()
         lanes.forEachIndexed { laneI32, lane ->
             val data = lane.resources().filter { it.role in setOf(PlanResourceRole.VertexData,
                 PlanResourceRole.IndexData, PlanResourceRole.UniformData) }
@@ -265,14 +285,15 @@ internal class W6aLayerGraphConstruction(
                 RenderGraph.visualDraws(lane.passes()).forEach { dataByCommand[it.commandIndex] = binding }
             }
         }
-        fun appendRender(target: PlanResourceId, draws: List<PlanDraw>, clear: Boolean): PlanPass.RenderPass {
+        fun appendRender(target: PlanResourceId, draws: List<PlanDraw>, clear: Boolean,
+            coverageSource: PlanResourceId? = null): PlanPass.RenderPass {
             val before = versions[target] ?: 0L
             val after = Math.addExact(before, draws.size.toLong())
             versions[target] = after
             return PlanPass.RenderPass(passes.size, target, draws,
                 if (clear) AttachmentLoadPlan.ClearTransparent else AttachmentLoadPlan.Load,
                 AttachmentStorePlan.Store, drawDataResources = draws.firstOrNull()?.let { dataByCommand[it.commandIndex] },
-                destinationVersionAfter = DestinationVersionI64(after)).also(passes::add)
+                destinationVersionAfter = DestinationVersionI64(after), coverageSource = coverageSource).also(passes::add)
         }
 
         val bindingsByCommand = bindings.associateBy { it.firstCommandIndexI32 }
@@ -280,7 +301,11 @@ internal class W6aLayerGraphConstruction(
             ?.let(W6bFilterGraphConstruction::positiveOccurrences) ?: emptyList()
         val filterOccurrencesByInsertion = filterOccurrences.groupBy { it.insertionCommandIndexI32 }
         val filterLayersByBegin = filterOccurrences.filter { it.isLayerOccurrence }.associateBy { it.insertionCommandIndexI32 }
-        val directFilterSourceByCommand = linkedMapOf<Int, W6bFilterGraphConstruction.SourceBinding>()
+        data class DirectFilterSources(
+            val coverage: W6bFilterGraphConstruction.SourceBinding,
+            val shaded: W6bFilterGraphConstruction.SourceBinding,
+        )
+        val directFilterSourceByCommand = linkedMapOf<Int, DirectFilterSources>()
         filterOccurrences.filterNot { it.isLayerOccurrence || it.isPictureOccurrence }.forEach { occurrence ->
             val binding = requireNotNull(bindingsByCommand[occurrence.insertionCommandIndexI32]) {
                 "W6b direct occurrence has no W5 source generation."
@@ -288,10 +313,83 @@ internal class W6aLayerGraphConstruction(
             val draw = RenderGraph.visualDraws(binding.source.passes()).single()
             val deviceBounds = requireNotNull(intersect(w6aRasterBoundsI32(draw), w6aScissorI32(draw)))
             val clipped = requireNotNull(intersect(deviceBounds, targetDeviceBounds(targetFor(binding.scopeI32))))
-            directFilterSourceByCommand[occurrence.insertionCommandIndexI32] =
-                allocateOccurrenceSource(clipped, targetFor(binding.scopeI32))
+            directFilterSourceByCommand[occurrence.insertionCommandIndexI32] = DirectFilterSources(
+                allocateOccurrenceSource(clipped, targetFor(binding.scopeI32), PlanResourceRole.CoverageSource),
+                allocateOccurrenceSource(clipped, targetFor(binding.scopeI32), PlanResourceRole.FilterSource),
+            )
         }
-        val filterCursor = W6bFilterGraphConstruction.FreezeCursor(0, 0, passes.size)
+        /*
+         * MaskShader is not a placeholder operation: the captured MaterialNode is normalized by
+         * the same W5 source authority as the rest of the frame.  Its row is appended to this
+         * frame's one FrameSourceLayoutV4 and is bound back to the exact occurrence at publish.
+         * The synthetic Rect form is only a typed coordinate carrier for Layer/Picture coverage;
+         * it retains the exact captured layer/Picture transform, clip, cull/bounds and Material.
+         */
+        val shaderMaterialSources = linkedMapOf<Int, MaterialSourceConstructionV4>()
+        filterOccurrences.filter { it.mask is MaskFilterNode.Shader }.forEach { occurrence ->
+            val mask = occurrence.mask as MaskFilterNode.Shader
+            val target = when {
+                !occurrence.isLayerOccurrence && !occurrence.isPictureOccurrence ->
+                    requireNotNull(directFilterSourceByCommand[occurrence.insertionCommandIndexI32]).coverage.resourceId
+                occurrence.isLayerOccurrence -> targetFor(requireNotNull(occurrences.singleOrNull {
+                    it.beginCommandIndexI32 == occurrence.insertionCommandIndexI32
+                }).idI32)
+                else -> targetFor(occurrences.filter {
+                    it.beginCommandIndexI32 < occurrence.insertionCommandIndexI32 &&
+                        occurrence.insertionCommandIndexI32 < it.endCommandIndexI32
+                }.maxByOrNull { it.beginCommandIndexI32 }?.idI32)
+            }
+            val domain = targetDeviceBounds(target)
+            val original = occurrence.source.sourceDraw
+            val materialDraw: DrawNode = if (original != null) {
+                val picture = original.geometry as? GeometryNode.Picture
+                original.copy(
+                    geometry = picture?.let { GeometryNode.Rect.of(it.copyCullRect()) } ?: original.geometry,
+                    material = mask.material,
+                    paint = null,
+                    effects = org.graphiks.kanvas.render.ir.EffectStack.Empty,
+                    blend = BlendNode.SrcOver,
+                    origin = if (picture == null) original.origin else DrawOrigin.RECT,
+                    resource = null,
+                    operationBlendMode = null,
+                )
+            } else {
+                val descriptor = requireNotNull(occurrence.source.layerDescriptor)
+                val local = descriptor.copyBounds() ?: org.graphiks.math.geometry.RectF32.ofLTRB(
+                    domain.left.toFloat(), domain.top.toFloat(), domain.right.toFloat(), domain.bottom.toFloat(),
+                )
+                DrawNode(
+                    GeometryNode.Rect.of(local),
+                    mask.material,
+                    CoverageRequest.DEFAULT,
+                    descriptor.clip,
+                    BlendNode.SrcOver,
+                    org.graphiks.kanvas.render.ir.EffectStack.Empty,
+                    descriptor.transform,
+                    DrawOrigin.RECT,
+                )
+            }
+            val normalized = EffectiveMaterialPlanner.normalizeSourcesV4(
+                materialDraw,
+                PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1(),
+                domain,
+                coverage = CoveragePlan.FullOrScissor,
+                sample = SamplePlan.SingleSample,
+                legacyGradientBoundsI32 = domain,
+                runtimeCatalog = runtimeCatalog,
+            )
+            shaderMaterialSources[occurrence.idI32] = when (normalized) {
+                is EffectiveMaterialPlanner.SourceNormalizationV4.Source -> normalized.captured
+                EffectiveMaterialPlanner.SourceNormalizationV4.NoOp,
+                is EffectiveMaterialPlanner.SourceNormalizationV4.Refused,
+                -> throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                    W6bFilterDiagnostics.UnsupportedFamily,
+                    "W6b MaskShader material is outside the existing W5 MaterialSourceConstructionV4 authority.",
+                ))
+            }
+        }
+        maskMaterialSourcesByOccurrence = java.util.Collections.unmodifiableMap(LinkedHashMap(shaderMaterialSources))
+        val filterCursor = W6bFilterGraphConstruction.FreezeCursor(0, 0, 0, passes.size)
         fun appendFrozenOccurrence(
             occurrence: W6bFilterGraphConstruction.PositiveOccurrence,
             source: W6bFilterGraphConstruction.SourceBinding,
@@ -300,7 +398,9 @@ internal class W6aLayerGraphConstruction(
             replacedLayerSource: PlanResourceId? = null,
         ): PlanPass.FilterComposite {
             filterCursor.passOrdinalI32 = passes.size
-            val frozen = W6bFilterGraphConstruction.freezeOccurrence(occurrence, source, filterCursor)
+            val frozen = if (occurrence.root != null)
+                W6bFilterGraphConstruction.freezeImageOccurrence(occurrence, source, filterCursor)
+            else W6bFilterGraphConstruction.freezeMaterializedSource(occurrence, source, filterCursor)
             filterResourceSpecs += frozen.resourceSpecs()
             passes += frozen.passes()
             val outputBounds = frozen.output.copyDeviceBoundsI32()
@@ -356,11 +456,10 @@ internal class W6aLayerGraphConstruction(
             filterScene?.toList()?.lastIndex ?: -1,
         )
         val filterCommands = filterScene?.toList() ?: emptyList()
-        fun pictureParentTarget(commandIndexI32: Int): PlanResourceId {
-            val scope = occurrences.filter { it.beginCommandIndexI32 < commandIndexI32 && commandIndexI32 < it.endCommandIndexI32 }
-                .maxByOrNull { it.beginCommandIndexI32 }?.idI32
-            return targetFor(scope)
-        }
+        fun pictureParentScope(commandIndexI32: Int): Int? = occurrences
+            .filter { it.beginCommandIndexI32 < commandIndexI32 && commandIndexI32 < it.endCommandIndexI32 }
+            .maxByOrNull { it.beginCommandIndexI32 }?.idI32
+        fun pictureParentTarget(commandIndexI32: Int): PlanResourceId = targetFor(pictureParentScope(commandIndexI32))
         for (commandIndexI32 in 0..lastCommandIndexI32) {
             begins[commandIndexI32]?.let { occurrence ->
                 val geometry = activeByScope[occurrence.idI32] ?: return@let
@@ -407,12 +506,26 @@ internal class W6aLayerGraphConstruction(
                     val draws = RenderGraph.visualDraws(binding.source.passes())
                     if (draws.isNotEmpty()) {
                         val parentTarget = targetFor(binding.scopeI32)
-                        val directFilterSource = directFilterSourceByCommand[commandIndexI32]
+                        val directFilterSources = directFilterSourceByCommand[commandIndexI32]
+                        val directFilterSource = directFilterSources?.shaded
                         val target = directFilterSource?.resourceId ?: parentTarget
-                        val directFilter = directFilterSource != null
+                        val directFilter = directFilterSources != null
+                        val maskCoverage = directFilterSources?.let { sources ->
+                            val occurrence = filterOccurrencesByInsertion.getValue(commandIndexI32).single {
+                                !it.isLayerOccurrence && !it.isPictureOccurrence
+                            }
+                            filterCursor.passOrdinalI32 = passes.size
+                            passes += PlanPass.FilterCoverageSourcePass(passes.size, sources.coverage.resourceId, occurrence.source)
+                            val frozen = occurrence.mask?.let {
+                                W6bFilterGraphConstruction.freezeMaskOccurrence(occurrence, sources.coverage, filterCursor)
+                            }
+                            frozen?.let { filterResourceSpecs += it.resourceSpecs(); passes += it.passes(); it.output.resourceId }
+                                ?: sources.coverage.resourceId
+                        }
                         if (target != parentTarget) appendRender(target, emptyList(), true)
                         val selectedDraw = draws.single()
                         val laneI32 = bindings.indexOf(binding)
+                        if (directFilterSource != null) physicalTargetByLane[laneI32] = target
                         val w4e = binding.source.geometrySource?.takeIf { it.w4ePayload != null }
                         // General W4d paths retain the same already-issued native PathRenderPass
                         // authority as clipped W4e paths.  The W6 graph owns the remapped pass IDs,
@@ -424,8 +537,17 @@ internal class W6aLayerGraphConstruction(
                         }
                         val native = if (w4e == null && general == null) null else nativeByLane.getOrPut(laneI32, ::linkedMapOf)
                         val geometry = binding.scopeI32?.let(activeByScope::getValue)
-                        fun localNative(pass: PlanPass, ordinal: Int): PlanPass = pass.rebindW4eV6(ordinal,
-                            laneResourceIds[laneI32]::getValue, geometry?.mapping, geometry?.compositeDomainDeviceI32)
+                        fun localNative(pass: PlanPass, ordinal: Int): PlanPass {
+                            val physicalTarget = physicalTargetByLane[laneI32] ?: targetFor(binding.scopeI32)
+                            val sourceBinding = sourceBindingsById[physicalTarget]
+                            val logicalTarget = targetFor(binding.scopeI32)
+                            return pass.rebindW4eV6(ordinal, { original ->
+                                laneResourceIds[laneI32].getValue(original).let { rebound ->
+                                    if (rebound == logicalTarget) physicalTarget else rebound
+                                }
+                            }, sourceBinding?.mapping ?: geometry?.mapping,
+                                sourceBinding?.copyDeviceBoundsI32() ?: geometry?.compositeDomainDeviceI32)
+                        }
                         if (w4e != null) w4e.passes().filter { it is PlanPass.ClipMaskInitialize ||
                             it is PlanPass.ClipMaskProducer || it is PlanPass.ClipMaskFold }.forEach { original ->
                             val prefix = localNative(original, passes.size)
@@ -476,7 +598,7 @@ internal class W6aLayerGraphConstruction(
                                 steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(scope), cover.id)
                             }
                         } else {
-                            val pass = appendRender(target, listOf(draw), false)
+                            val pass = appendRender(target, listOf(draw), false, maskCoverage)
                             if (w4e != null) requireNotNull(native)[pass.id] = localNative((selectedDraw as W5bW4ePathDraw).nativeColorPass, pass.ordinal)
                             else if (general != null) requireNotNull(native)[pass.id] = localNative(
                                 general.passes().filterIsInstance<PlanPass.PathRenderPass>().single {
@@ -508,17 +630,39 @@ internal class W6aLayerGraphConstruction(
                     val pictureOccurrences = filterOccurrencesByInsertion[commandIndexI32].orEmpty()
                         .filter { it.isPictureOccurrence }
                     if (pictureOccurrences.isEmpty()) {
-                        val picture = PlanPass.PictureSourcePass(passes.size, parentTarget,
-                            filterScene!!.canonicalId.value, commandIndexI32)
+                        val draw = (filterCommands[commandIndexI32] as org.graphiks.kanvas.render.ir.SceneCommand.Draw).node
+                        val occurrenceSource = FilterOccurrenceSourceV1(filterScene!!, commandIndexI32, draw, emptyList())
+                        val source = allocateOccurrenceSource(targetDeviceBounds(parentTarget), parentTarget)
+                        val picture = PlanPass.PictureSourcePass(passes.size, source.resourceId,
+                            filterScene.canonicalId.value, commandIndexI32, occurrenceSource)
                         passes += picture
-                        versions[parentTarget] = Math.addExact(versions[parentTarget] ?: 0L, 1L)
+                        versions[source.resourceId] = 0L
+                        val after = DestinationVersionI64(Math.addExact(versions[parentTarget] ?: 0L, 1L))
+                        val composite = PlanPass.PictureComposite(passes.size, source.resourceId, parentTarget, occurrenceSource, after)
+                        passes += composite
+                        versions[parentTarget] = after.valueI64
+                        pictureParentScope(commandIndexI32)?.let { scope ->
+                            steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(scope), composite.id)
+                        }
                     } else pictureOccurrences.forEach { occurrence ->
                         val source = allocateOccurrenceSource(targetDeviceBounds(parentTarget), parentTarget)
+                        val coverage = allocateOccurrenceSource(targetDeviceBounds(parentTarget), parentTarget,
+                            PlanResourceRole.CoverageSource)
+                        filterCursor.passOrdinalI32 = passes.size
+                        passes += PlanPass.FilterCoverageSourcePass(passes.size, coverage.resourceId, occurrence.source)
+                        val frozenMask = occurrence.mask?.let {
+                            W6bFilterGraphConstruction.freezeMaskOccurrence(occurrence, coverage, filterCursor)
+                        }
+                        frozenMask?.let { filterResourceSpecs += it.resourceSpecs(); passes += it.passes() }
                         passes += PlanPass.PictureSourcePass(passes.size, source.resourceId,
-                            occurrence.sourceSceneCanonicalId, occurrence.sourceCommandIndexI32)
+                            occurrence.sourceSceneCanonicalId, occurrence.sourceCommandIndexI32, occurrence.source,
+                            frozenMask?.output?.resourceId ?: coverage.resourceId)
                         versions[source.resourceId] = 0L
-                        appendFrozenOccurrence(occurrence, source, parentTarget,
+                        val composite = appendFrozenOccurrence(occurrence, source, parentTarget,
                             FilterCompositeOperationV1.Picture(occurrence.sourceSceneCanonicalId, occurrence.sourceCommandIndexI32))
+                        pictureParentScope(commandIndexI32)?.let { scope ->
+                            steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(scope), composite.id)
+                        }
                     }
                 } }
             ends[commandIndexI32]?.let { occurrence ->
@@ -550,7 +694,11 @@ internal class W6aLayerGraphConstruction(
                     Math.toIntExact(Math.subtractExact(childDomain.top.toLong(), parentOrigin.y.toLong())),
                 )
                 val composite = filterLayersByBegin[occurrence.beginCommandIndexI32]?.let { filtered ->
-                    val source = allocateOccurrenceSource(targetDeviceBounds(target), target, copyDestination = true)
+                    val source = allocateOccurrenceSource(targetDeviceBounds(target), target, copyDestination = true,
+                        knownContentDeviceI32 = geometry.knownContentDeviceI32,
+                        desiredOutputDeviceI32 = geometry.desiredOutputDeviceI32,
+                        requiredInputDeviceI32 = geometry.requiredInputDeviceI32,
+                        producedOutputDeviceI32 = geometry.producedOutputDeviceI32)
                     copyLayerSource(target, source)
                     appendFrozenOccurrence(filtered, source, parentTarget,
                         FilterCompositeOperationV1.Layer(restore), target)
@@ -642,7 +790,7 @@ internal class W6aLayerGraphConstruction(
                 lane.resources().filter { it.role !in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.ReadbackStaging) }.forEach { row ->
                     val targetSized = row.kind == PlanResourceKind.Texture2D && row.role != PlanResourceRole.DestinationSnapshot
                     val boundExtent = if (targetSized)
-                        targetExtents.getValue(targetFor(bindings[laneI32].scopeI32)) else row.copyExtent()
+                        targetExtents.getValue(physicalTargetByLane[laneI32] ?: targetFor(bindings[laneI32].scopeI32)) else row.copyExtent()
                     val bytes = if (targetSized)
                         checkedTextureBytesI64(4, requireNotNull(boundExtent).width, boundExtent.height, row.sampleCountI32) else row.byteSize
                     val boundId = laneResourceIds[laneI32].getValue(row.id)
@@ -653,7 +801,7 @@ internal class W6aLayerGraphConstruction(
             }
         })
         nativeByLane.forEach { (laneI32, native) ->
-            val target = targetFor(bindings[laneI32].scopeI32)
+            val target = physicalTargetByLane[laneI32] ?: targetFor(bindings[laneI32].scopeI32)
             val targetExtent = targetExtents.getValue(target)
             val payload = requireNotNull(W4eNativePayloadPlan.fromDeferred(native.values.toList(), resources, targetExtent,
                 caps, lanes[laneI32].sourceTable())) { "w6a.layer.w4e_payload" }
@@ -666,6 +814,7 @@ internal class W6aLayerGraphConstruction(
         table: MaterialPlanTable?,
         bound: List<List<PlanPass>>,
         source: SourcePhysicalConstructionV1 = SourcePhysicalConstructionV1(),
+        maskMaterialRoots: Map<Int, MaterialPlanRef> = emptyMap(),
     ): RenderGraph {
         require(bound.size == lanes.size || bound.isEmpty() && table == null)
         val byCommand = bound.flatMap { RenderGraph.visualDraws(it) }.associateBy { it.commandIndex }
@@ -688,12 +837,39 @@ internal class W6aLayerGraphConstruction(
                 localizeLayerDraw(draw, requireNotNull(geometry.mapping), requireNotNull(geometry.compositeDomainDeviceI32))
             }
         }
+        require(maskMaterialRoots.keys == maskMaterialSourcesByOccurrence.keys)
         val passes = rawPasses.map { pass ->
             if (pass is PlanPass.RenderPass) {
                 val local = pass.draws().map { boundDraw(it.commandIndex, pass.target) }
                 PlanPass.RenderPass(pass.ordinal, pass.target, local, pass.load, pass.store,
-                    drawDataResources = pass.drawDataResources, destinationVersionAfter = pass.destinationVersionAfter)
+                    drawDataResources = pass.drawDataResources, destinationVersionAfter = pass.destinationVersionAfter,
+                    coverageSource = pass.coverageSource)
             } else when (pass) {
+                is PlanPass.FilterPass -> {
+                    val operation = (pass.operation as? FilterPassOperationV1.MaskShader)?.let { shader ->
+                        when (val binding = shader.materialBinding) {
+                            is FilterPassOperationV1.MaskShaderMaterialBindingV1.CapturedOccurrence -> {
+                                val material = maskMaterialRoots.getValue(binding.occurrenceIdI32)
+                                val identity = maskMaterialSourcesByOccurrence.getValue(binding.occurrenceIdI32)
+                                val uniformIdentity = if (identity.pending ||
+                                    identity.resolvedSource?.materialAuthority is PlanDrawMaterialAuthority.MaterialV4) {
+                                    RawMaterialRequirementsV2.measureV4(requireNotNull(table), material).canonicalIdentity
+                                } else RawMaterialRequirementsV2.measureLegacy(requireNotNull(table), material).canonicalIdentity
+                                FilterPassOperationV1.MaskShader(
+                                    FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned(
+                                        binding.occurrenceIdI32,
+                                        material,
+                                        source.uniforms.getValue(uniformIdentity),
+                                    ),
+                                    shader.bounds,
+                                )
+                            }
+                            is FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned -> shader
+                        }
+                    }
+                    if (operation == null) pass else PlanPass.FilterPass(pass.ordinal, pass.inputs(), pass.output,
+                        pass.evaluationKey, operation)
+                }
                 is PlanPass.StencilGeometryProducerV3 -> {
                     val draw = boundDraw(pass.commandIndexI32, pass.target) as PathDraw
                     PlanPass.StencilGeometryProducerV3(pass.ordinal, pass.target, pass.depthStencil, pass.commandIndexI32,
@@ -722,6 +898,10 @@ internal class W6aLayerGraphConstruction(
             packConstructedFrame(listOf(construction), table, sourceNonUniform), SourcePhysicalConstructionV1(
                 source.resources, source.uniforms, source.caches, w4eBindings.map { it.bindSources(localized) }))
     }
+
+    /** Appended after all native W5 lanes, preserving one source-table/publish authority. */
+    fun maskMaterialSources(): List<Pair<Int, MaterialSourceConstructionV4>> =
+        maskMaterialSourcesByOccurrence.entries.map { it.key to it.value }
 
     private fun sealGeometry(
         occurrence: W6aLayerPlanCompiler.ScopeOccurrence,
