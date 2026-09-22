@@ -63,7 +63,7 @@ RES = kanvas/src/test/resources/picture/
 | --- | --- |
 | `API/paint/ImageFilter.kt`, `MaskFilter.kt`, `TileMode.kt`, `Paint.kt` | Add public `DropShadowMode`; keep nullable image inputs as public implicit-source requests and preserve existing defaults/positional calls. |
 | `API/canvas/DisplayOpSnapshot.kt`, `API/render/ir/PaintSceneAdapter.kt`, `DisplayOpSceneAdapter.kt`, `SceneDisplayOpAdapter.kt` | Deep-snapshot public filter identity, convert recursion to the immutable table, and reconstruct public operations without exposing a planner. |
-| `IR/EffectNode.kt`, `SceneCommand.kt`, `SceneArchiveCodec.kt` | Own `CapturedFilterTableV1`, typed references, graph limits, canonical identity, Picture 14/schema 8 encode/decode, legacy recursive conversion, and `DropShadowMode`. |
+| `IR/EffectNode.kt`, `SceneCommand.kt`, `SceneArchiveCodec.kt` | Own `CapturedFilterTableV1`, typed references, graph limits, canonical identity, Picture 14/schema 8 encode/decode, legacy recursive conversion, and the wire-safe `CapturedDropShadowModeV1`; API adapters map it to/from public `DropShadowMode`. |
 | `API/picture/Picture.kt`, `PictureWireV8.kt` | Write version 14/schema 8; read historical v8–13 and schema 1–7, defaulting missing shadow mode to `COMPOSITE`; leave read-only historical v8 handling intact. |
 | `GEOM/RectProjectionF64.kt`, `RectI32.kt`, `MATRIX/LayerMappingF64.kt` | Reuse W6a checked outward projection/mapping and add only filter-bound expansion/translation helpers with F64 calculation and checked I32 results. |
 | `PLAN/PlanResources.kt`, `PlanPasses.kt`, `RenderGraph.kt`, `RenderGraphConstruction.kt`, `W6aLayerPlanBudget.kt` | Add typed `FilterTarget`, typed filter payloads, W6b compiler witness validation, dependencies, slots, semantic/physical lifetimes, and checked peak accounting to the existing single graph. |
@@ -104,8 +104,10 @@ public sealed interface CapturedFilterInputV1 {
     public data class Backdrop(public val id: CapturedBackdropIdI32) : CapturedFilterInputV1
 }
 
-// Imported from org.graphiks.kanvas.paint.DropShadowMode; render-ir owns its snapshot,
-// not a second public enum.
+public enum class CapturedDropShadowModeV1 {
+    COMPOSITE,
+    SHADOW_ONLY,
+}
 
 public sealed interface CapturedFilterNodeV1 {
     public val id: CapturedFilterNodeIdI32
@@ -123,7 +125,7 @@ public sealed interface CapturedFilterNodeV1 {
         public val sigmaXF32: Float,
         public val sigmaYF32: Float,
         public val color: ColorARGB,
-        public val mode: DropShadowMode,
+        public val mode: CapturedDropShadowModeV1,
         public val input: CapturedFilterInputV1,
     ) : CapturedFilterNodeV1
     // Capture-only typed variants for the remaining public ImageFilter families.
@@ -227,7 +229,7 @@ public sealed interface FilterPassOperationV1 {
         public fun copyOffsetF64(): Vector2F64 = Vector2F64(offsetSnapshotF64.x, offsetSnapshotF64.y)
     }
     public data class DropShadowComposite(
-        public val mode: DropShadowMode,
+        public val mode: CapturedDropShadowModeV1,
         override val bounds: FilterBoundsPlanV1,
         override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.DROP_SHADOW_COMPOSITE,
     ) : FilterPassOperationV1
@@ -287,7 +289,7 @@ Extend `GPUW6aLayerFramePlan`, `GPUW6aEncoderScopesV1`, and `GPUWgpu4kW6aLayerFr
 **Interfaces:**
 
 - Consumes: current recursive `ImageFilter`, `ImageFilterNode`, `MaskFilterNode`, `SceneSnapshot`, and `SceneArchiveCodec` v13/schema 7.
-- Produces: `CapturedFilterTableV1`, `CapturedFilterInputV1`, `CapturedFilterNodeV1`, `DropShadowMode`, Picture 14/schema 8. Tasks 2–6 consume only table IDs/roots, never recursive filter planning.
+- Produces: `CapturedFilterTableV1`, `CapturedFilterInputV1`, `CapturedFilterNodeV1`, public `DropShadowMode`, wire-safe `CapturedDropShadowModeV1`, Picture 14/schema 8. API adapters are the only mapping boundary between the two enums; Tasks 2–6 consume only captured table IDs/roots and captured modes, never recursive filter planning or `:kanvas` API types.
 
 - [ ] **Step 1: Add public RED tests for version, default, deep snapshot, and identity.**
 
@@ -298,9 +300,16 @@ fun picture14PreservesSharedFilterIdentityWithoutValueAliasing() {
     val equalButDistinct = ImageFilter.Blur(1f, 2f, TileMode.MIRROR)
     val picture = pictureWithThreeFilteredDraws(shared, shared, equalButDistinct)
     val bytes = picture.toByteArray()
+    val memoryFilters = filtersFromPublicPlayback(picture)
+    assertSame(memoryFilters[0], memoryFilters[1])
+    assertNotSame(memoryFilters[0], memoryFilters[2])
     assertEquals(14, ByteBuffer.wrap(bytes).getInt(4))
     assertEquals(8, ByteBuffer.wrap(bytes).getInt(28))
-    assertContentEquals(bytes, assertNotNull(Picture.fromByteArray(bytes)).toByteArray())
+    val decoded = assertNotNull(Picture.fromByteArray(bytes))
+    val wireFilters = filtersFromPublicPlayback(decoded)
+    assertSame(wireFilters[0], wireFilters[1])
+    assertNotSame(wireFilters[0], wireFilters[2])
+    assertContentEquals(bytes, decoded.toByteArray())
 }
 ```
 
@@ -339,7 +348,11 @@ private fun legacyInput(value: ImageFilterNode?): CapturedFilterInputV1 =
 - [ ] **Step 6: Reject malformed table references/cycles before Scene publication and default omitted v8–13 shadow mode to `COMPOSITE`.**
 
 ```kotlin
-val mode = if (sceneArchiveSchemaVersion >= 8) enum<DropShadowMode>() else DropShadowMode.COMPOSITE
+val mode = if (sceneArchiveSchemaVersion >= 8) {
+    enum<CapturedDropShadowModeV1>()
+} else {
+    CapturedDropShadowModeV1.COMPOSITE
+}
 ```
 
 - [ ] **Step 7: Run compile and Picture gates sequentially.**
@@ -506,8 +519,8 @@ git commit -m "feat(gpu-plan): freeze w6b filter authority"
 fun imageBlurTileModesAreDistinctAtTheSourceEdge() {
     val clamp = renderEdge(TileMode.CLAMP)
     val decal = renderEdge(TileMode.DECAL)
-    ImageBlurCpuOracle.assertNear(ImageBlurCpuOracle.edge(TileMode.CLAMP), clamp)
-    ImageBlurCpuOracle.assertNear(ImageBlurCpuOracle.edge(TileMode.DECAL), decal)
+    W6bImageBlurCpuOracle.assertNear(W6bImageBlurCpuOracle.edge(TileMode.CLAMP), clamp)
+    W6bImageBlurCpuOracle.assertNear(W6bImageBlurCpuOracle.edge(TileMode.DECAL), decal)
     assertTrue(clamp[edgeAlphaOffset] > decal[edgeAlphaOffset])
 }
 ```
@@ -699,7 +712,7 @@ fun historicalInvalidTableRefusesAtomicallyAndSameSurfaceRecovers() {
     surface.canvas { picture.playback(this) }
     assertTerminalWithoutReadbackMutation(surface, "invalid.mask_filter.table_length")
     surface.discardRecordedOperations()
-    surface.canvas { drawRect(bounds, Paint(ColorARGB.Blue, antiAlias = false)) }
+    surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
     assertContentEquals(rgba(17, 61, 211), surface.render().pixels)
 }
 ```
@@ -711,7 +724,7 @@ Run: `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bMaskSha
 - [ ] **Step 3: Validate table length only at W6b admission and seal a copy of 256 entries into a planned uniform/storage resource and physical allocation budget.**
 
 ```kotlin
-if (table.size != 256) {
+if (table.sizeI32 != 256) {
     return W6bFilterDiagnostics.refusal("invalid.mask_filter.table_length", "Mask table must contain 256 entries.")
 }
 ```
@@ -721,7 +734,6 @@ if (table.size != 256) {
 ```kotlin
 FilterPassOperationV1.MaskShader(
     material = requireNotNull(materialTable.referenceFor(maskMaterial)),
-    mapping = evaluationKey.mapping,
     bounds = bounds,
 )
 ```

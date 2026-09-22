@@ -129,7 +129,7 @@ public sealed interface FilterPassOperationV1 {
         private val offsetSnapshotF64 = Vector2F64(offsetF64.x, offsetF64.y)
         public fun copyOffsetF64(): Vector2F64 = Vector2F64(offsetSnapshotF64.x, offsetSnapshotF64.y)
     }
-    public data class DropShadowComposite(public val mode: DropShadowMode, override val bounds: FilterBoundsPlanV1, override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.DROP_SHADOW_COMPOSITE) : FilterPassOperationV1
+    public data class DropShadowComposite(public val mode: CapturedDropShadowModeV1, override val bounds: FilterBoundsPlanV1, override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.DROP_SHADOW_COMPOSITE) : FilterPassOperationV1
     public class Crop(cropDeviceF64: RectF64, public val tileMode: TileMode, override val bounds: FilterBoundsPlanV1, override val kind: FilterImplementationKindV1) : FilterPassOperationV1
     public class Offset(public val dxF64: Double, public val dyF64: Double, override val bounds: FilterBoundsPlanV1, override val kind: FilterImplementationKindV1) : FilterPassOperationV1
     public class Tile(sourceDeviceF64: RectF64, destinationDeviceF64: RectF64, override val bounds: FilterBoundsPlanV1, override val kind: FilterImplementationKindV1) : FilterPassOperationV1
