@@ -519,6 +519,34 @@ class W6bFilterAdmissionRecoverySurfaceTest {
     }
 
     @Test
+    fun `empty deferred Picture clip elides a filtered child under a finite singular transform and recovers`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val child = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(
+                ColorARGB.of(255, 221, 33, 17),
+                imageFilter = ImageFilter.Blur(1f, 1f),
+                antiAlias = false,
+            ))
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 2)
+        surface.canvas {
+            save()
+            scale(0f, 1f)
+            clipRect(RectF32.ofLTRB(1f, 1f, 1f, 1f), ClipOp.INTERSECT, antiAlias = false)
+            drawPicture(child, Paint(imageFilter = ImageFilter.Blur(1f, 1f)))
+            restore()
+        }
+
+        val readback = UByteArray(16) { 0x5au }
+        surface.readPixels(bounds, readback)
+        assertContentEquals(UByteArray(16), readback)
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+        assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
+    }
+
+    @Test
     fun `fractional hard edge deferred Picture clip refuses terminally and same surface recovers`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
         val child = PictureRecorder().also { recorder ->

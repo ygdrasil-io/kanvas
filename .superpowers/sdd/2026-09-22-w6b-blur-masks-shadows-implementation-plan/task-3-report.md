@@ -320,3 +320,96 @@ Tests :
 3. La suite Kanvas complète termine également 133; faute de preuve exhaustive
    indépendante après l'arrêt, elle est documentée comme **UNKNOWN**, pas
    comme une régression introduite par ce correctif.
+
+---
+
+## Fix round 3 — terminal empty sous matrice singulière
+
+Base de correction : `237840d26` (`fe2eb7b` ne portait que le ledger).
+
+### Correctif livré
+
+Un aggregate Picture dont le clip différé typé est un `DeviceRect` vide publie
+désormais directement son contrat vide. Pour un aggregate isolé, le plan crée
+uniquement la ressource aggregate et le cycle `PictureAggregateBeginPass →
+PictureAggregateSealPass` à génération `0`; le `seal` est le terminal no-op.
+`knownContent` et `producedOutput` restent nuls, les entrées sont vides et le
+schedule gelé contient exactement ces deux passes.
+
+Ce chemin s'exécute avant `pictureAggregateDomain`: il ne projette ni n'inverse
+donc le mapping de contenu. Il réutilise seulement le mapping parent déjà
+valide pour la ressource vide. Ainsi une matrice enfant finie singulière reste
+admissible car l'intersection vide ne possède aucun contenu.
+
+Aucune entrée visuelle n'est abaissée : Draw ordinaire ou filtré, Picture
+imbriquée, Layer, Clear et DrawColor ne créent ni source W4/W5, ni filter, ni
+material, ni graph-texture consumer. La validation de publication reconnaît ce
+contrat strict et refuse tout consumer, toute entrée ou toute passe
+intermédiaire : le schedule doit être exactement `begin → seal`.
+
+### RED → GREEN round 3
+
+| Cas | RED observé | GREEN observé |
+| --- | --- | --- |
+| Empty terminal avec enfant filtré sous matrice finie singulière | Le test public échouait par `w6b.filter.invalid_bounds: Picture cull cannot be projected to checked I32 device texels.` : le cull et l'inversion du mapping précédaient l'ancien court-circuit. | Le test lit le buffer sentinelle transparent, puis la même `Surface` récupère avec les pixels bleus attendus. Il couvre un enfant `ImageFilter.Blur` sous `scale(0, 1)` et clip `INTERSECT` vide. |
+
+Le premier GREEN a révélé seulement que le scénario de recovery laissait le
+`scale(0,1)` actif sur le Canvas. Le test a été borné par `save/restore`; le
+même RED initial restait bien celui du terminal empty, et le GREEN final est
+observé après cette correction de fixture publique.
+
+### Gates round 3
+
+Les commandes ont été exécutées séquentiellement via `rtk`.
+
+| Commande | Résultat observé |
+| --- | --- |
+| `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bFilterAdmissionRecoverySurfaceTest.empty deferred Picture clip elides a filtered child under a finite singular transform and recovers'` (RED) | 1 test, 1 failure avec `w6b.filter.invalid_bounds`. Exit 133 : **UNKNOWN**. |
+| même commande (GREEN final) | assertion publique passée : sentinelle transparente puis recovery. Exit 133 : **UNKNOWN**. |
+| `rtk ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.W6bFilterAdmissionRecoverySurfaceTest` | 25 assertions passées; exit 133 : **UNKNOWN**. |
+| `rtk ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.W6bImageBlurSurfacePixelTest` | 10 assertions passées; exit 133 : **UNKNOWN**. |
+| `rtk ./gradlew :kanvas:test --tests org.graphiks.kanvas.picture.W6bFilterPictureTest` | 9 assertions passées; exit 133 : **UNKNOWN**. Une première sélection avec le package `surface` ne trouvait aucun test; elle a été remplacée par ce FQCN exact. |
+| `rtk ./gradlew :gpu-plan:test --tests org.graphiks.kanvas.gpu.plan.RenderGraphContractTest` | BUILD SUCCESSFUL, 94 contrats verts, exit 0. |
+| `rtk ./gradlew :gpu-plan:compileKotlin` | BUILD SUCCESSFUL, exit 0. |
+| `rtk ./gradlew :gpu-renderer:compileKotlin` | BUILD SUCCESSFUL, exit 0. |
+| `rtk ./gradlew :kanvas:compileTestKotlin` | BUILD SUCCESSFUL, exit 0. |
+| `rtk ./gradlew :gpu-plan:test` | 268 tests, 28 failures W3/W4 historiques/hors scope; le gate `RenderGraphContractTest` est vert. |
+| `rtk ./gradlew :kanvas:test` | `Gradle Test Executor 19` sort 133. Les sorties du run large ne fournissent pas de preuve exhaustive indépendante : gate **UNKNOWN**, ni succès ni régression. |
+
+Après l'ajout du garde identique pour le mode inline, les quatre gates ciblés
+ont été rejoués : admission XML 25/0, image blur 10 assertions, Picture 9
+assertions (les trois sorties natives 133 restent **UNKNOWN**) et
+`RenderGraphContractTest` 94/94, BUILD SUCCESSFUL.
+
+### Fichiers round 3
+
+Production :
+
+- `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W6aLayerGraphConstruction.kt`
+- `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/PictureStreamAggregateV1.kt`
+
+Test public :
+
+- `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W6bFilterAdmissionRecoverySurfaceTest.kt`
+
+### Self-review round 3
+
+- Le chemin terminal empty ne lit pas le `SceneSnapshot` et ne redécouvre ni
+  child, filter, material ni renderer plan; il publie les faits plan-owned
+  avant toute construction de lane visuelle.
+- Le terminal est le `seal` no-op, avec `begin`, génération, resource lifetime,
+  schedule et budget de l'aggregate encore validés. Le parent ne reçoit aucune
+  écriture de contenu.
+- Le validateur exige zéro entrée, zéro graph-texture consumer et aucune passe
+  entre begin et seal; ce contrat graph suffit à prouver l'absence de travail
+  visuel sans test d'infrastructure, reflection, mock ou compteur.
+- Le test utilise la vraie `Surface`, un pixel/sentinelle indépendant et une
+  recovery observable; il ne dépend d'aucun hook test-only.
+
+### Concerns round 3
+
+1. Les suites natives ciblées passent leurs assertions mais sortent 133 : elles
+   restent **UNKNOWN** selon la règle explicite.
+2. La suite `:gpu-plan:test` complète conserve les 28 failures W3/W4
+   préexistantes/hors scope. La suite `:kanvas:test` complète atteint aussi
+   l'exit 133 et reste **UNKNOWN** sans reclassification.

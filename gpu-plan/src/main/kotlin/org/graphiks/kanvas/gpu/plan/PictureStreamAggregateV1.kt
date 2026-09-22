@@ -706,6 +706,19 @@ internal fun validatePictureStreamAggregates(
     }
     val treePlannedIds = mutableSetOf<FramePlannedCommandIdI32>()
 
+    /** A typed empty deferred clip owns only the aggregate lifecycle, never visual child work. */
+    fun isTerminallyEmptyAggregate(aggregate: PictureStreamAggregateV1): Boolean {
+        val emptyDeferredClip = (aggregate.deferredCompositeClip as? ClipStackNode.DeviceRect)
+            ?.copyBounds()?.isEmpty == true
+        val zeroContent = aggregate.bounds.copyKnownContentDeviceI32() == null &&
+            aggregate.bounds.copyProducedOutputDeviceI32() == null
+        return emptyDeferredClip && zeroContent && aggregate.entries().isEmpty() && when (aggregate.executionMode) {
+            PictureStreamExecutionModeV1.INLINE_CURRENT_TARGET -> aggregate.terminalPassId == null
+            PictureStreamExecutionModeV1.ISOLATED_SOURCE ->
+                aggregate.terminalPassId != null && aggregate.terminalPassId == aggregate.sealPassId
+        }
+    }
+
     fun subtreeTerminals(entries: List<PictureStreamEntryV1>): List<PlanPassId> = buildList {
         entries.forEach { entry ->
             entry.terminalPassId?.let(::add)
@@ -725,6 +738,10 @@ internal fun validatePictureStreamAggregates(
         lastExclusiveI32: Int,
         target: PlanResourceId,
     ) {
+        if (isTerminallyEmptyAggregate(aggregate)) {
+            if (entries.isNotEmpty()) fail(aggregate, invariant = "Empty Picture aggregate retains visual entries.")
+            return
+        }
         if (firstI32 < 0 || lastExclusiveI32 < firstI32 || lastExclusiveI32 > aggregate.sourceCommandCountI32) {
             fail(aggregate, invariant = "Picture entry interval is outside the captured source stream.")
         }
@@ -978,7 +995,9 @@ internal fun validatePictureStreamAggregates(
                 if (terminal !in passById) fail(aggregate, entry, "Entry terminal pass is absent.", terminal)
             }
         }
-        if (covered.any { !it }) fail(aggregate, invariant = "Picture source-index partition is not exhaustive.")
+        if (!isTerminallyEmptyAggregate(aggregate) && covered.any { !it }) {
+            fail(aggregate, invariant = "Picture source-index partition is not exhaustive.")
+        }
         val orderedVisualTerminals = entries.mapNotNull { it.terminalPassId }
         if (!orderedVisualTerminals.zipWithNext().all { (first, second) ->
                 passIndex.getValue(first) < passIndex.getValue(second)
@@ -1008,6 +1027,9 @@ internal fun validatePictureStreamAggregates(
                 if (aggregate.terminalPassId != expectedTerminal) {
                     fail(aggregate, invariant = "Inline Picture terminal is not its final ordered entry terminal.",
                         passId = aggregate.terminalPassId)
+                }
+                if (isTerminallyEmptyAggregate(aggregate) && schedule.isNotEmpty()) {
+                    fail(aggregate, invariant = "Empty inline Picture aggregate retains visual work.")
                 }
             }
             PictureStreamExecutionModeV1.ISOLATED_SOURCE -> {
@@ -1078,97 +1100,104 @@ internal fun validatePictureStreamAggregates(
                 val graphTextureConsumers = passes.filterIsInstance<PlanPass.PictureSourcePass>().filter { pass ->
                     pass.aggregateId == aggregate.id && (pass.graphTextureRequest != null || pass.graphTextureOperand != null)
                 }
-                if (graphTextureConsumers.size != 1) {
-                    fail(aggregate, invariant = "Isolated Picture must have exactly one graph-texture consumer.")
-                }
-                val consumer = graphTextureConsumers.single()
-                val operand = consumer.graphTextureOperand ?: fail(aggregate,
-                    invariant = "Published isolated Picture graph-texture consumer lacks its W5 operand.", passId = consumer.id)
-                if (consumer.coverageSource != null) {
-                    val alphaSources = passes.filterIsInstance<PlanPass.FilterCoverageSourcePass>().filter {
-                        it.sealedAlphaSource?.aggregateId == aggregate.id
+                if (isTerminallyEmptyAggregate(aggregate)) {
+                    if (graphTextureConsumers.isNotEmpty() || aggregate.terminalPassId != seal ||
+                        schedule != listOf(begin, seal) || passes.subList(Math.addExact(beginIndex, 1), sealIndex).isNotEmpty()) {
+                        fail(aggregate, invariant = "Empty Picture aggregate retains graph-texture or visual terminal work.")
                     }
-                    val alpha = alphaSources.singleOrNull()?.sealedAlphaSource
-                    if (alpha == null || alpha.sealedSourceId != source || alpha.sealedSourceGenerationI64 != generation ||
-                        alpha.mapping.copyLocalToLayerF64() != aggregate.outerEvaluationMappingF64.copyLocalToLayerF64() ||
-                        alpha.mapping.copyLayerOriginDeviceI32() != aggregate.outerEvaluationMappingF64.copyLayerOriginDeviceI32() ||
-                        passIndex.getValue(alphaSources.single().id) <= sealIndex) {
-                        fail(aggregate, invariant = "Parent mask lacks alpha from the exact sealed RGBA generation.", passId = consumer.id)
+                } else {
+                    if (graphTextureConsumers.size != 1) {
+                        fail(aggregate, invariant = "Isolated Picture must have exactly one graph-texture consumer.")
                     }
-                    val maskProducer = passes.filterIsInstance<PlanPass.FilterPass>().singleOrNull {
-                        it.output == consumer.coverageSource
+                    val consumer = graphTextureConsumers.single()
+                    val operand = consumer.graphTextureOperand ?: fail(aggregate,
+                        invariant = "Published isolated Picture graph-texture consumer lacks its W5 operand.", passId = consumer.id)
+                    if (consumer.coverageSource != null) {
+                        val alphaSources = passes.filterIsInstance<PlanPass.FilterCoverageSourcePass>().filter {
+                            it.sealedAlphaSource?.aggregateId == aggregate.id
+                        }
+                        val alpha = alphaSources.singleOrNull()?.sealedAlphaSource
+                        if (alpha == null || alpha.sealedSourceId != source || alpha.sealedSourceGenerationI64 != generation ||
+                            alpha.mapping.copyLocalToLayerF64() != aggregate.outerEvaluationMappingF64.copyLocalToLayerF64() ||
+                            alpha.mapping.copyLayerOriginDeviceI32() != aggregate.outerEvaluationMappingF64.copyLayerOriginDeviceI32() ||
+                            passIndex.getValue(alphaSources.single().id) <= sealIndex) {
+                            fail(aggregate, invariant = "Parent mask lacks alpha from the exact sealed RGBA generation.", passId = consumer.id)
+                        }
+                        val maskProducer = passes.filterIsInstance<PlanPass.FilterPass>().singleOrNull {
+                            it.output == consumer.coverageSource
+                        }
+                        if (maskProducer?.evaluationKey?.boundSourceId != alphaSources.single().output)
+                            fail(aggregate, invariant = "Parent mask coverage does not originate from sealed RGBA alpha.", passId = consumer.id)
                     }
-                    if (maskProducer?.evaluationKey?.boundSourceId != alphaSources.single().output)
-                        fail(aggregate, invariant = "Parent mask coverage does not originate from sealed RGBA alpha.", passId = consumer.id)
-                }
-                if (consumer.pictureSourceLocator?.pictureOccurrenceIdI32 != aggregate.sourcePictureOccurrenceIdI32 ||
-                    consumer.plannedCommandId != aggregate.sourcePlannedCommandId ||
-                    operand.aggregateId != aggregate.id || operand.sealedSourceId != source ||
-                    operand.sealedSourceGenerationI64 != generation || passIndex.getValue(consumer.id) <= sealIndex) {
-                    fail(aggregate, invariant = "Graph-texture consumer reads before seal or from the wrong source generation.",
-                        passId = consumer.id, resourceId = source)
-                }
-                val sourceExtent = requireNotNull(targetRow.copyExtent())
-                if (operand.copyTargetOriginDeviceI32() != aggregate.outerEvaluationMappingF64.copyLayerOriginDeviceI32() ||
-                    operand.copySampleBoundsTargetI32() != RectI32(0, 0, sourceExtent.width, sourceExtent.height) ||
-                    operand.mapping.copyLocalToDeviceF64() != aggregate.outerEvaluationMappingF64.copyLocalToDeviceF64() ||
-                    operand.mapping.copyLayerOriginDeviceI32() != aggregate.outerEvaluationMappingF64.copyLayerOriginDeviceI32() ||
-                    operand.deferredCompositeClip.canonicalId != aggregate.deferredCompositeClip.canonicalId) {
-                    fail(aggregate, invariant = "Graph-texture operand origin, bounds, mapping, or deferred clip diverges from the aggregate.",
-                        passId = consumer.id, resourceId = source)
-                }
-                val terminal = aggregate.terminalPassId ?: fail(aggregate, invariant = "Isolated Picture has no final composite terminal.")
-                val terminalPass = passById[terminal]
-                val terminalFacts = when (terminalPass) {
-                    is PlanPass.PictureComposite -> terminalPass.operands
-                    is PlanPass.FilterComposite -> (terminalPass.operation as? FilterCompositeOperationV1.Picture)?.terminal
-                    else -> null
-                } ?: fail(aggregate, invariant = "Picture terminal lacks its complete composite operands.", passId = terminal)
-                if (terminalFacts.plannedCommandId != aggregate.sourcePlannedCommandId ||
-                    terminalFacts.blend != operand.finalBlend ||
-                    terminalFacts.deferredClip.canonicalId != aggregate.deferredCompositeClip.canonicalId ||
-                    terminalFacts.copyClipToDeviceF64() != aggregate.copyEnclosingPictureTransformF64() ||
-                    operand.copyClipToDeviceF64() != aggregate.copyEnclosingPictureTransformF64()) {
-                    fail(aggregate, invariant = "Picture terminal lost its occurrence identity or enclosing clip mapping.", passId = terminal)
-                }
-                val vertical = (terminalPass as? PlanPass.FilterComposite)?.let { composite ->
-                    passes.filterIsInstance<PlanPass.FilterPass>().singleOrNull { it.output == composite.source }
-                }
-                val verticalBlur = vertical?.operation as? FilterPassOperationV1.SeparableBlur
-                if (verticalBlur?.kind == FilterImplementationKindV1.IMAGE_BLUR_Y) {
-                    val horizontal = vertical.inputs().singleOrNull()?.let { input ->
-                        passes.filterIsInstance<PlanPass.FilterPass>().singleOrNull { it.output == input }
+                    if (consumer.pictureSourceLocator?.pictureOccurrenceIdI32 != aggregate.sourcePictureOccurrenceIdI32 ||
+                        consumer.plannedCommandId != aggregate.sourcePlannedCommandId ||
+                        operand.aggregateId != aggregate.id || operand.sealedSourceId != source ||
+                        operand.sealedSourceGenerationI64 != generation || passIndex.getValue(consumer.id) <= sealIndex) {
+                        fail(aggregate, invariant = "Graph-texture consumer reads before seal or from the wrong source generation.",
+                            passId = consumer.id, resourceId = source)
                     }
-                    val horizontalBlur = horizontal?.operation as? FilterPassOperationV1.SeparableBlur
-                    if (horizontalBlur?.kind != FilterImplementationKindV1.IMAGE_BLUR_X ||
-                        schedule.indexOf(horizontal.id) !in 0 until schedule.indexOf(vertical.id) ||
-                        schedule.indexOf(vertical.id) !in 0 until schedule.indexOf(terminal) ||
-                        passIndex.getValue(horizontal.id) <= sealIndex || passIndex.getValue(vertical.id) <= sealIndex) {
-                        fail(aggregate, invariant = "Frozen parent blur schedule is not seal → X → Y → terminal.", passId = terminal)
+                    val sourceExtent = requireNotNull(targetRow.copyExtent())
+                    if (operand.copyTargetOriginDeviceI32() != aggregate.outerEvaluationMappingF64.copyLayerOriginDeviceI32() ||
+                        operand.copySampleBoundsTargetI32() != RectI32(0, 0, sourceExtent.width, sourceExtent.height) ||
+                        operand.mapping.copyLocalToDeviceF64() != aggregate.outerEvaluationMappingF64.copyLocalToDeviceF64() ||
+                        operand.mapping.copyLayerOriginDeviceI32() != aggregate.outerEvaluationMappingF64.copyLayerOriginDeviceI32() ||
+                        operand.deferredCompositeClip.canonicalId != aggregate.deferredCompositeClip.canonicalId) {
+                        fail(aggregate, invariant = "Graph-texture operand origin, bounds, mapping, or deferred clip diverges from the aggregate.",
+                            passId = consumer.id, resourceId = source)
                     }
-                }
-                val reachesParent = when (terminalPass) {
-                    is PlanPass.PictureComposite -> terminalPass.destination == aggregate.parentTargetId &&
-                        terminalPass.source == consumer.output &&
-                        terminalPass.occurrence.scene.canonicalId.value == consumer.sourceSceneCanonicalId &&
-                        terminalPass.occurrence.sourceCommandIndexI32 == consumer.sourceCommandIndexI32
-                    is PlanPass.FilterComposite -> {
-                        val operation = terminalPass.operation as? FilterCompositeOperationV1.Picture
-                        val producer = passes.filterIsInstance<PlanPass.FilterPass>().singleOrNull { it.output == terminalPass.source }
-                        terminalPass.destination == aggregate.parentTargetId && operation != null &&
-                            operation.sourceSceneCanonicalId == consumer.sourceSceneCanonicalId &&
-                            operation.sourceCommandIndexI32 == consumer.sourceCommandIndexI32 &&
-                            producer?.output == terminalPass.source &&
-                            producer.evaluationKey.boundSourceId == consumer.output
+                    val terminal = aggregate.terminalPassId
+                    val terminalPass = passById[terminal]
+                    val terminalFacts = when (terminalPass) {
+                        is PlanPass.PictureComposite -> terminalPass.operands
+                        is PlanPass.FilterComposite -> (terminalPass.operation as? FilterCompositeOperationV1.Picture)?.terminal
+                        else -> null
+                    } ?: fail(aggregate, invariant = "Picture terminal lacks its complete composite operands.", passId = terminal)
+                    if (terminalFacts.plannedCommandId != aggregate.sourcePlannedCommandId ||
+                        terminalFacts.blend != operand.finalBlend ||
+                        terminalFacts.deferredClip.canonicalId != aggregate.deferredCompositeClip.canonicalId ||
+                        terminalFacts.copyClipToDeviceF64() != aggregate.copyEnclosingPictureTransformF64() ||
+                        operand.copyClipToDeviceF64() != aggregate.copyEnclosingPictureTransformF64()) {
+                        fail(aggregate, invariant = "Picture terminal lost its occurrence identity or enclosing clip mapping.", passId = terminal)
                     }
-                    else -> false
-                }
-                if (!reachesParent || passIndex.getValue(terminal) <= sealIndex) {
-                    fail(aggregate, invariant = "Isolated Picture terminal does not uniquely composite to its immediate parent.", passId = terminal)
-                }
-                val lastReader = maxOf(passIndex.getValue(terminal), passIndex.getValue(consumer.id))
-                if (targetRow.firstPassIndex > beginIndex || targetRow.lastPassIndexExclusive <= lastReader) {
-                    fail(aggregate, invariant = "Sealed Picture source lifetime does not contain begin through its last reader.", resourceId = source)
+                    val vertical = (terminalPass as? PlanPass.FilterComposite)?.let { composite ->
+                        passes.filterIsInstance<PlanPass.FilterPass>().singleOrNull { it.output == composite.source }
+                    }
+                    val verticalBlur = vertical?.operation as? FilterPassOperationV1.SeparableBlur
+                    if (verticalBlur?.kind == FilterImplementationKindV1.IMAGE_BLUR_Y) {
+                        val horizontal = vertical.inputs().singleOrNull()?.let { input ->
+                            passes.filterIsInstance<PlanPass.FilterPass>().singleOrNull { it.output == input }
+                        }
+                        val horizontalBlur = horizontal?.operation as? FilterPassOperationV1.SeparableBlur
+                        if (horizontalBlur?.kind != FilterImplementationKindV1.IMAGE_BLUR_X ||
+                            schedule.indexOf(horizontal.id) !in 0 until schedule.indexOf(vertical.id) ||
+                            schedule.indexOf(vertical.id) !in 0 until schedule.indexOf(terminal) ||
+                            passIndex.getValue(horizontal.id) <= sealIndex || passIndex.getValue(vertical.id) <= sealIndex) {
+                            fail(aggregate, invariant = "Frozen parent blur schedule is not seal → X → Y → terminal.", passId = terminal)
+                        }
+                    }
+                    val reachesParent = when (terminalPass) {
+                        is PlanPass.PictureComposite -> terminalPass.destination == aggregate.parentTargetId &&
+                            terminalPass.source == consumer.output &&
+                            terminalPass.occurrence.scene.canonicalId.value == consumer.sourceSceneCanonicalId &&
+                            terminalPass.occurrence.sourceCommandIndexI32 == consumer.sourceCommandIndexI32
+                        is PlanPass.FilterComposite -> {
+                            val operation = terminalPass.operation as? FilterCompositeOperationV1.Picture
+                            val producer = passes.filterIsInstance<PlanPass.FilterPass>().singleOrNull { it.output == terminalPass.source }
+                            terminalPass.destination == aggregate.parentTargetId && operation != null &&
+                                operation.sourceSceneCanonicalId == consumer.sourceSceneCanonicalId &&
+                                operation.sourceCommandIndexI32 == consumer.sourceCommandIndexI32 &&
+                                producer?.output == terminalPass.source &&
+                                producer.evaluationKey.boundSourceId == consumer.output
+                        }
+                        else -> false
+                    }
+                    if (!reachesParent || passIndex.getValue(terminal) <= sealIndex) {
+                        fail(aggregate, invariant = "Isolated Picture terminal does not uniquely composite to its immediate parent.", passId = terminal)
+                    }
+                    val lastReader = maxOf(passIndex.getValue(terminal), passIndex.getValue(consumer.id))
+                    if (targetRow.firstPassIndex > beginIndex || targetRow.lastPassIndexExclusive <= lastReader) {
+                        fail(aggregate, invariant = "Sealed Picture source lifetime does not contain begin through its last reader.", resourceId = source)
+                    }
                 }
             }
         }

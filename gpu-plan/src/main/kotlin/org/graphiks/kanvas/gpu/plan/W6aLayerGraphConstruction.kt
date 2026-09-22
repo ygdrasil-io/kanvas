@@ -580,7 +580,6 @@ internal class W6aLayerGraphConstruction(
                 coverage: PlanResourceId? = null,
                 workScope: PictureLayerExecutionScope? = owningLayerScope,
             ): PlanPassId? {
-                if (terminallyEmptyAggregate) return null
                 val captured = requireNotNull(entry.source.sourceDraw)
                 val domain = targetDeviceBounds(target)
                 val enclosing = composeInOrderF64(entry.source.outerPictures().map { it.transform })
@@ -601,7 +600,6 @@ internal class W6aLayerGraphConstruction(
                             is org.graphiks.kanvas.render.ir.RenderPlanResult.GapNotMigrated -> result.diagnostics
                             is org.graphiks.kanvas.render.ir.RenderPlanResult.InvalidScene -> result.diagnostics
                             is org.graphiks.kanvas.render.ir.RenderPlanResult.ResourceLimitExceeded -> result.diagnostics
-                            else -> emptyList()
                         }
                         throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
                             W6aPlanDiagnostics.UnsupportedChild,
@@ -907,6 +905,75 @@ internal class W6aLayerGraphConstruction(
                         W6bFilterDiagnostics.InvalidBounds, "Picture evaluation mapping is non-invertible.",
                     ))
                 return PictureAggregateDomain(localToDevice, mapping, cull, known, demand, source)
+            }
+
+            if (terminallyEmptyAggregate) {
+                /*
+                 * A typed empty deferred clip annihilates the complete Picture stream before
+                 * any child can become observable.  Publish the isolated source lifecycle so
+                 * its begin/seal/generation ownership remains explicit, but deliberately do
+                 * not construct an occurrence mapping, W4/W5 lane, filter, material, nested
+                 * Picture, layer, clear, or drawColor pass.  In particular, use the already
+                 * valid parent mapping for the empty allocation: a singular child transform
+                 * has no content to invert.
+                 */
+                val domain = targetDeviceBounds(parentTarget)
+                val parentMapping = filterSource(parentTarget).mapping
+                val aggregateTargetBinding = if (draft.executionMode == PictureStreamExecutionModeV1.ISOLATED_SOURCE) {
+                    allocateOccurrenceSource(
+                        domain,
+                        parentTarget,
+                        PlanResourceRole.PictureAggregateSource,
+                        mappingLocalToDeviceF64 = parentMapping.copyLocalToDeviceF64(),
+                        knownContentDeviceI32 = null,
+                        desiredOutputDeviceI32 = domain,
+                        requiredInputDeviceI32 = domain,
+                        producedOutputDeviceI32 = null,
+                    ).also { binding ->
+                        passes += PlanPass.PictureAggregateBeginPass(passes.size, draft.id, binding.resourceId, parentTarget)
+                        versions[binding.resourceId] = 0L
+                    }
+                } else null
+                val seal = aggregateTargetBinding?.let { binding ->
+                    PlanPass.PictureAggregateSealPass(
+                        passes.size,
+                        draft.id,
+                        binding.resourceId,
+                        binding.resourceId,
+                        versions.getValue(binding.resourceId),
+                    ).also(passes::add)
+                }
+                val aggregate = PictureStreamAggregateV1(
+                    draft.id,
+                    draft.executionMode,
+                    draft.sourceScene.canonicalId.value,
+                    draft.sourceScene.toList().size,
+                    draft.sourcePictureOccurrenceIdI32,
+                    draft.sourcePlannedCommandId,
+                    draft.outerPicturePathI32(),
+                    parentMapping,
+                    draft.source.recordedInnerClipWithoutCull(),
+                    draft.source.recordedInnerClipWithoutCull().terminalDeferredClip(),
+                    null,
+                    domain,
+                    parentTarget,
+                    aggregateTargetBinding?.resourceId,
+                    aggregateTargetBinding?.resourceId,
+                    seal?.sourceGenerationI64,
+                    PictureStreamRegionsV1(null, domain, domain, null),
+                    emptyList(),
+                    aggregateTargetBinding?.let { binding ->
+                        (passes.first { pass -> pass is PlanPass.PictureAggregateBeginPass && pass.aggregateId == draft.id }
+                            as PlanPass.PictureAggregateBeginPass).id
+                    },
+                    seal?.id,
+                    seal?.id,
+                    Matrix3x3F64(),
+                    if (draft.outerPicturePathI32().isEmpty()) draft.source.sourceCommandIndexI32 else null,
+                    executionPassIds = passes.subList(aggregateStartPassI32, passes.size).map(PlanPass::id),
+                )
+                pictureStreamAggregates += aggregate
+                return aggregate to seal?.id
             }
 
             var aggregateDomain = pictureAggregateDomain(draft, parentTarget)
