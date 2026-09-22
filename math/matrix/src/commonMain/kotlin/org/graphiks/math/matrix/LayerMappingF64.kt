@@ -28,6 +28,10 @@ public class LayerMappingF64 private constructor(
             boundsDeviceI32.bottom.toDouble(),
         ))?.roundOutToRectI32OrNull()
 
+    /** W6b's target-local spelling of the same sealed device-to-layer mapping. */
+    public fun mapDeviceRectToTargetI32OrNull(boundsDeviceI32: RectI32): RectI32? =
+        mapDeviceRectToLayerI32OrNull(boundsDeviceI32)
+
     /**
      * Translation of an already raster-admitted analytic shape; no second projection.
      * The native ABI has frozen this shape as F32, so rebasing uses the same F32 subtraction.

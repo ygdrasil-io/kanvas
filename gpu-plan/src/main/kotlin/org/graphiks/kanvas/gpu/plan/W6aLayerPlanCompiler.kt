@@ -56,11 +56,17 @@ public class W6aLayerPlanCompiler public constructor(
 
     override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
         val commands = scene.toList()
-        if (commands.none { it is SceneCommand.BeginLayer || it is SceneCommand.EndLayer }) {
+        val ownsW6b = W6bFilterGraphConstruction.owns(scene)
+        if (commands.none { it is SceneCommand.BeginLayer || it is SceneCommand.EndLayer } && !ownsW6b) {
             return GpuPlanSelection.NotCandidate(listOf(diagnostic(W6aPlanDiagnostics.UnsupportedChild, "Scene has no layer boundary.")))
         }
         if (scene.extent != target.extent || scene.colorSpace != target.colorSpace) {
             return invalid(W6aPlanDiagnostics.UnsupportedChild, "Scene and target descriptors disagree.")
+        }
+        // W6b ownership is terminal before child-lane planning or any physical construction.
+        // Positive arms remain frozen-but-unmaterialized until Task 3 provides native execution.
+        W6bFilterGraphConstruction.admissionRefusalOrNull(scene)?.let { refusal ->
+            return GpuPlanSelection.InvalidScene(listOf(refusal))
         }
 
         // Layer occurrence limits come from the same immutable GraphLimits vocabulary used at

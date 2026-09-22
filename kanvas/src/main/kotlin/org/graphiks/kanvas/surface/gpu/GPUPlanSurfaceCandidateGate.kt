@@ -12,6 +12,31 @@ internal object GPUPlanSurfaceCandidateGate {
         it is DisplayOp.BeginLayer || it is DisplayOp.EndLayer
     }
 
+    /** Captured W6b filters select the W6 authority even for a draw without saveLayer. */
+    fun ownsW6bFilters(operations: List<DisplayOp>): Boolean = operations.any { operation ->
+        operation.paintOrNull()?.let { it.imageFilter != null || it.maskFilter != null } == true ||
+            (operation as? DisplayOp.BeginLayer)?.rec?.backdrop != null
+    }
+
+    private fun DisplayOp.paintOrNull(): org.graphiks.kanvas.paint.Paint? = when (this) {
+        is DisplayOp.DrawRect -> paint
+        is DisplayOp.DrawRRect -> paint
+        is DisplayOp.DrawPath -> paint
+        is DisplayOp.DrawImage -> paint
+        is DisplayOp.DrawText -> paint
+        is DisplayOp.BeginLayer -> rec.paint
+        is DisplayOp.DrawPoint -> paint
+        is DisplayOp.DrawPoints -> paint
+        is DisplayOp.DrawDRRect -> paint
+        is DisplayOp.DrawImageNine -> paint
+        is DisplayOp.DrawImageLattice -> paint
+        is DisplayOp.DrawPicture -> paint
+        is DisplayOp.DrawVertices -> paint
+        is DisplayOp.DrawMesh -> paint
+        is DisplayOp.DrawAtlas -> paint
+        else -> null
+    }
+
     /** Recognition routes pending composed geometry to its owned planner refusal. */
     private fun DisplayOp.hasComposedSource(): Boolean {
         var source = when (this) {

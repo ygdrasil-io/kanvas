@@ -15,7 +15,8 @@ public class CapabilityCompilerChain private constructor(
 ) : GpuPlanCompiler {
     override fun select(scene: SceneSnapshot, target: RenderTargetDescriptor): GpuPlanSelection {
         // Layer ownership precedes all geometry/source admission, including composed-source gaps.
-        if (scene.any { it is org.graphiks.kanvas.render.ir.SceneCommand.BeginLayer || it is org.graphiks.kanvas.render.ir.SceneCommand.EndLayer }) {
+        if (scene.any { it is org.graphiks.kanvas.render.ir.SceneCommand.BeginLayer || it is org.graphiks.kanvas.render.ir.SceneCommand.EndLayer } ||
+            W6bFilterGraphConstruction.owns(scene)) {
             val index = compilers.indexOfFirst { it is W6aLayerPlanCompiler }
             if (index >= 0) {
                 val compiler = compilers[index]

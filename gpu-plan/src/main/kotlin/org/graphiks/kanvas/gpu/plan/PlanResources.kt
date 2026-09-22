@@ -7,6 +7,8 @@ public enum class PlanResourceRole {
     LogicalTarget,
     /** Single-sample RGBA8 offscreen target owned by a W6 layer occurrence. */
     LayerTarget,
+    /** Single-sample RGBA8 target owned only by a frozen W6b filter pass. */
+    FilterTarget,
     MultisampleColorTarget,
     PathHardEdgeMask,
     PathHardEdgeDepthStencil,
@@ -176,6 +178,16 @@ public class PlanResource private constructor(
                         ),
                     ) {
                         "Texture byte size must equal its checked logical size"
+                    }
+                    if (role == PlanResourceRole.FilterTarget) {
+                        require(format is PlanTextureFormat.Color &&
+                            format.value == PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL &&
+                            sampleCountI32 == 1 && lifetime == PlanResourceLifetime.FrameLocal &&
+                            PlanResourceUsage.RenderAttachment in usages && PlanResourceUsage.Sampled in usages &&
+                            usages.all { it in setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled,
+                                PlanResourceUsage.CopySource, PlanResourceUsage.CopyDestination) }) {
+                            "Filter targets require the frozen single-sample RGBA8 usage subset"
+                        }
                     }
                 }
                 PlanResourceKind.Buffer -> {

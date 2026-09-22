@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.plan
 import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
+import org.graphiks.math.geometry.rebaseAtOriginI32OrNull
 
 /** Per-target initialization, ordering, attachment/sampling and restore validation at freeze. */
 internal fun validateW6aLayerTopology(
@@ -139,6 +140,29 @@ internal fun validateW6aLayerTopology(
             require(pass.restore.parentVersionBefore.valueI64 == versions[target.id])
             if (pass.restore.writesParentDevice) versions[target.id] = Math.addExact(requireNotNull(versions[target.id]), 1L)
             require(pass.destinationVersionAfter == pass.restore.parentVersionAfter && pass.destinationVersionAfter.valueI64 == versions[target.id])
+        }
+        is PlanPass.FilterPass -> {
+            val output = byId.getValue(pass.output)
+            val inputs = pass.inputs().map(byId::getValue)
+            require(output.role == PlanResourceRole.FilterTarget && output.kind == PlanResourceKind.Texture2D &&
+                output.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in output.usages() &&
+                PlanResourceUsage.Sampled in output.usages())
+            require(inputs.all { it.kind == PlanResourceKind.Texture2D && PlanResourceUsage.Sampled in it.usages() })
+            require(pass.evaluationKey.copyDesiredOutputDeviceI32() == pass.operation.bounds.copyDesiredOutputDeviceI32())
+            val targetExtent = requireNotNull(output.copyExtent())
+            fun targetLocal(region: RectI32?): RectI32? = region?.rebaseAtOriginI32OrNull(
+                pass.operation.bounds.copyTargetOriginDeviceI32(),
+            )
+            listOf(
+                targetLocal(pass.operation.bounds.copyKnownContentDeviceI32()),
+                targetLocal(pass.operation.bounds.copyDesiredOutputDeviceI32()),
+                targetLocal(pass.operation.bounds.copyRequiredInputDeviceI32()),
+                targetLocal(pass.operation.bounds.copyProducedOutputDeviceI32()),
+            ).filterNotNull().forEach { local ->
+                require(local.left >= 0 && local.top >= 0 && local.right <= targetExtent.width && local.bottom <= targetExtent.height)
+            }
+            require(targetLocal(pass.operation.bounds.copyDesiredOutputDeviceI32()) ==
+                RectI32(0, 0, targetExtent.width, targetExtent.height))
         }
         is PlanPass.TextureCopy -> {
             val source = byId.getValue(pass.source)

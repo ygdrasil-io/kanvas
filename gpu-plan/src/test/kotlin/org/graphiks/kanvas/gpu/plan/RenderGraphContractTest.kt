@@ -18,12 +18,16 @@ import org.graphiks.math.geometry.PathStrokeProjectionPointResultF64
 import org.graphiks.math.geometry.PathStrokeStyleF64
 import org.graphiks.math.geometry.PathStrokeWidthF64
 import org.graphiks.math.geometry.Point2F64
+import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
 import org.graphiks.math.geometry.ClipGeometryF32
 import org.graphiks.math.geometry.InverseInteriorCoverageF32
 import org.graphiks.math.geometry.InversePathGeometryF32
+import org.graphiks.math.matrix.LayerMappingF64
+import org.graphiks.math.matrix.Matrix3x3F64
+import org.graphiks.kanvas.render.ir.CapturedFilterNodeId
 import org.graphiks.math.geometry.preparePathFillGeometryF32
 import org.graphiks.math.geometry.prepareProjectedPathStrokeGeometryF32
 import org.junit.jupiter.api.Test
@@ -1009,7 +1013,22 @@ class RenderGraphContractTest {
     fun `path graphs reject filter passes`() {
         assertFailsWith<IllegalArgumentException> {
             directPathGraphWithInterposedPass { resources ->
-                PlanPass.FilterPass(0, listOf(resources.target.id), resources.target.id)
+                val deviceBounds = RectI32(0, 0, 1, 1)
+                val mapping = requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32.Origin))
+                val filterBounds = FilterBoundsPlanV1(null, deviceBounds, deviceBounds, deviceBounds, Point2I32.Origin)
+                PlanPass.FilterPass(
+                    0,
+                    listOf(resources.target.id),
+                    planResourceId(PlanResourceRole.FilterTarget, 0),
+                    FilterEvaluationKeyV1.of(CapturedFilterNodeId(0), resources.target.id, mapping, deviceBounds),
+                    FilterPassOperationV1.SeparableBlur(
+                        FilterImplementationKindV1.IMAGE_BLUR_X,
+                        1f,
+                        FilterAxisV1.X,
+                        org.graphiks.kanvas.render.ir.TileMode.CLAMP,
+                        filterBounds,
+                    ),
+                )
             }
         }
     }

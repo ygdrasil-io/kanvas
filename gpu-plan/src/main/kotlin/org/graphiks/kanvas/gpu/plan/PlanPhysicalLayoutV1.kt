@@ -6,7 +6,11 @@ import org.graphiks.kanvas.render.ir.PreparedVerticesUploadPayloadV1
 public class PlanPhysicalSlotV1 internal constructor(
     public val slotI32: Int,
     public val resourceId: PlanResourceId,
-)
+    /** Pessimistic reservation retained through completion, even when a cache is warm. */
+    public val reservedBytesI64: Long,
+) {
+    init { require(slotI32 >= 0 && reservedBytesI64 >= 0L) }
+}
 
 /** The request retains W5's captured identity/generation contract; IDs and slots belong to the graph. */
 public class PlanCacheBindingV1 internal constructor(
@@ -57,9 +61,14 @@ public class PlanPhysicalLayoutV1 private constructor(
     private val uniforms = java.util.Collections.unmodifiableMap(LinkedHashMap(uniformsByCommand))
     private val geometry = java.util.Collections.unmodifiableMap(LinkedHashMap(geometryByPass))
     private val w4e = immutableList(w4eGeometry)
-    private val slots = immutableList((resources.map { it.id } + caches.filter {
-        it.request is PlanCacheResourceRequest.Sampler
-    }.map { it.resourceId }).mapIndexed { index, id -> PlanPhysicalSlotV1(index, id) })
+    private val slots = immutableList(buildList {
+        resources.forEachIndexed { indexI32, resource ->
+            add(PlanPhysicalSlotV1(indexI32, resource.id, resource.byteSize))
+        }
+        caches.filter { it.request is PlanCacheResourceRequest.Sampler }.forEachIndexed { offsetI32, cache ->
+            add(PlanPhysicalSlotV1(resources.size + offsetI32, cache.resourceId, 0L))
+        }
+    })
 
     public fun slots(): List<PlanPhysicalSlotV1> = slots
     public fun cacheBindings(): List<PlanCacheBindingV1> = caches

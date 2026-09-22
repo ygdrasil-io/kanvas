@@ -511,8 +511,7 @@ public class RenderGraph private constructor(
             validatePassCapabilities(passes, capabilities)
             if (capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID) {
                 validateW6aLayerTopology(resources, passes, dependencies, targetExtent, visualCommandCount, capabilities.copyBytesPerRowAlignment)
-                require(peak(resources, passes.size) == peakFrameLocalBytes)
-                W6aLayerPlanBudget.requireWithin(peakFrameLocalBytes, budget)
+                require(W6aLayerPlanBudget.peak(resources, passes.size, budget) == peakFrameLocalBytes)
                 return
             }
             validateW5bDestinationVersions(passes)

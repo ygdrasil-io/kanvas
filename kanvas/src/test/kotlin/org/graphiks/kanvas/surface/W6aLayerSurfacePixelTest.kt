@@ -190,7 +190,7 @@ class W6aLayerSurfacePixelTest {
             restore()
         }
 
-        assertTerminalWithoutReadbackMutation(surface, "w6a.layer.unsupported_backdrop")
+        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.unsupported_backdrop")
         surface.discardRecordedOperations()
         surface.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 2f, 2f), Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
         assertPixel(surface.render().pixels, 2, 1, 1, 17, 61, 211, 255)
@@ -208,7 +208,7 @@ class W6aLayerSurfacePixelTest {
             restore()
         }
 
-        assertTerminalWithoutReadbackMutation(surface, "w6a.layer.unsupported_spatial_filter")
+        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented")
         surface.discardRecordedOperations()
         surface.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 2f, 2f), Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
         assertPixel(surface.render().pixels, 2, 1, 1, 17, 61, 211, 255)
@@ -223,7 +223,7 @@ class W6aLayerSurfacePixelTest {
             restore()
         }
 
-        assertTerminalWithoutReadbackMutation(surface, "w6a.layer.unsupported_spatial_filter")
+        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented")
         surface.discardRecordedOperations()
         surface.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 2f, 2f), Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
         assertPixel(surface.render().pixels, 2, 1, 1, 17, 61, 211, 255)

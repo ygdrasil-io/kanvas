@@ -70,13 +70,20 @@ internal class GPUPlanSurfaceRouter(
             (operation as? DisplayOp.DrawPoints)?.w5hStrokePathOrNull() ?: operation
         }
         val layerOwned = GPUPlanSurfaceCandidateGate.ownsW6aLayers(planningOperations)
-        if (layerOwned && config.gpuColorFormat != GPUColorFormat.RGBA8_UNORM_SRGB) {
+        val w6bOwned = GPUPlanSurfaceCandidateGate.ownsW6bFilters(planningOperations)
+        if (w6bOwned && config.gpuColorFormat != GPUColorFormat.RGBA8_UNORM_SRGB) {
+            throw GPUPlanSurfaceTerminalException(
+                org.graphiks.kanvas.gpu.plan.W6bFilterDiagnostics.UnsupportedTargetFormat,
+                "W6b filters require the public RGBA8_UNORM_SRGB target.",
+            )
+        }
+        if (!w6bOwned && layerOwned && config.gpuColorFormat != GPUColorFormat.RGBA8_UNORM_SRGB) {
             throw GPUPlanSurfaceTerminalException(
                 "w6a.layer.unsupported_target_format",
                 "W6a layers require the public RGBA8_UNORM_SRGB target.",
             )
         }
-        if (!layerOwned && !GPUPlanSurfaceCandidateGate.accepts(planningOperations, config)) return legacy()
+        if (!layerOwned && !w6bOwned && !GPUPlanSurfaceCandidateGate.accepts(planningOperations, config)) return legacy()
         val imageOwned = GPUPlanSurfaceCandidateGate.ownsW5eImages(planningOperations)
 
         val extent = SceneExtent(width, height)
@@ -98,7 +105,7 @@ internal class GPUPlanSurfaceRouter(
             )
         ) {
             // No compiler owns a GapNotMigrated frame. This is the final legacy boundary.
-            is GpuPlanSurfacePlanResult.GapNotMigrated -> if (layerOwned || imageOwned) throw terminal(planned.diagnostics) else legacy()
+            is GpuPlanSurfacePlanResult.GapNotMigrated -> if (layerOwned || w6bOwned || imageOwned) throw terminal(planned.diagnostics) else legacy()
             is GpuPlanSurfacePlanResult.Terminal -> throw terminal(planned.diagnostics)
             is GpuPlanSurfacePlanResult.Ready -> submitOwned(planned.token, format)
         }

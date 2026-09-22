@@ -8,7 +8,13 @@ internal class W6aResourceLimitFailure(message: String) : RuntimeException(messa
 internal object W6aLayerPlanBudget {
     fun peak(resources: List<PlanResource>, passCountI32: Int, budget: PlanBudget): Long =
         try {
-            RenderGraph.peak(resources, passCountI32).also { requireWithin(it, budget) }
+            val logicalPeakI64 = RenderGraph.peak(resources, passCountI32)
+            // A cache hit may avoid a native upload but cannot make admission cheaper: every
+            // declared physical slot remains reserved until completion or quarantine.
+            val physicalPeakI64 = resources.fold(0L) { total, resource ->
+                Math.addExact(total, resource.byteSize)
+            }
+            maxOf(logicalPeakI64, physicalPeakI64).also { requireWithin(it, budget) }
         } catch (_: ArithmeticException) {
             throw W6aResourceLimitFailure("Layer frame resource peak overflows I64.")
         }

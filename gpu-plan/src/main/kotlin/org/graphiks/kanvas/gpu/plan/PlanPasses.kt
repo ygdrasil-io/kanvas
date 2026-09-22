@@ -1039,10 +1039,20 @@ public sealed interface PlanPass {
         override val ordinal: Int,
         inputs: List<PlanResourceId>,
         public val output: PlanResourceId,
+        public val evaluationKey: FilterEvaluationKeyV1,
+        public val operation: FilterPassOperationV1,
     ) : PlanPass {
         override val role: PlanPassRole = PlanPassRole.Filter
         override val id: PlanPassId = checkedPassId(role, ordinal)
         private val storedInputs = immutableList(inputs)
+        init {
+            require(storedInputs.isNotEmpty() && output !in storedInputs) {
+                "A filter pass requires distinct input and output resources."
+            }
+            require(evaluationKey.boundSourceId in storedInputs) {
+                "A filter pass must retain its bound source input."
+            }
+        }
         public fun inputs(): List<PlanResourceId> = storedInputs
     }
 
