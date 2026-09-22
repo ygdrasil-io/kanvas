@@ -49,8 +49,8 @@
 - [x] Task 1 Sol review and bounded correction if needed
 - [x] Task 2 — W6b authority, bounds, targets, admission
 - [x] Task 2 Sol review and bounded correction if needed
-- [ ] Task 3 — image blur and tile modes
-- [ ] Task 3 Sol review and bounded correction if needed
+- [x] Task 3 — image blur and tile modes
+- [x] Task 3 Sol review and bounded correction if needed
 - [ ] Task 4 — mask blur auto-layers
 - [ ] Task 4 Sol review and bounded correction if needed
 - [ ] Task 5 — mask shader/table
@@ -100,3 +100,6 @@
 - Task 3: fix round 1/5 (3 addressed, 2 open — an unfiltered painted child `PictureComposite` in a W6b graph still loses operand alpha/color-filter and destination-read snapshot; transformed-empty clips refuse and fractional hard-edge axis-aligned clips are over-admitted then rounded outward; commits `375255f..3949165`).
 - Task 3 fix round 2 implemented as `237840d26`: unfiltered painted-child `PictureComposite` now applies frozen parent alpha/color-filter and destination snapshot exactly once; fractional hard-edge clips are refused exactly; transformed-empty and recovery fixtures were added. Targeted public shards and 94 graph contracts pass; native 133 remains `UNKNOWN`.
 - Task 3: fix round 2/5 (1 addressed, 1 open — terminally empty aggregates suppress only ordinary Draw lane construction, while filtered/nested/layer/Clear/DrawColor entries can still plan work and a finite singular mapping still refuses before the no-op terminal; commits `3949165..237840d`).
+- Task 3 fix round 3 implemented as `5df8c5228`: a terminally empty aggregate publishes a coherent begin→seal/no-op terminal with no visual entry lowering, graph-texture consumer, cull projection or mapping inversion, including a filtered child under a finite singular transform. Admission 25/25, image blur 10/10, Picture 9/9 and graph contracts 94/94 pass in JUnit; native 133 remains `UNKNOWN`.
+- Task 3: fix round 3/5 (1 addressed, 0 open; commits `237840d..5df8c52`). Scoped Sol rereview: `PASS / READY`.
+- Task 3: complete (commits `9d4c351..5df8c52`, review clean; one deferred Minor retained for final review).
