@@ -19,11 +19,11 @@ import kotlin.test.assertNotNull
 
 class W6aLayerPictureTest {
     @Test
-    fun currentWriterUsesPicture13Schema7() {
+    fun currentWriterUsesPicture14Schema8() {
         val bytes = layerPicture().toByteArray()
 
-        assertEquals(13, ByteBuffer.wrap(bytes).getInt(4))
-        assertEquals(7, ByteBuffer.wrap(bytes).getInt(28))
+        assertEquals(14, ByteBuffer.wrap(bytes).getInt(4))
+        assertEquals(8, ByteBuffer.wrap(bytes).getInt(28))
     }
 
     @Test
@@ -51,7 +51,7 @@ class W6aLayerPictureTest {
     }
 
     @Test
-    fun writer13DistinguishesPreviousFalseAndTrue() {
+    fun writer14DistinguishesPreviousFalseAndTrue() {
         val falseBytes = layerPicture(initWithPrevious = false).toByteArray()
         val trueBytes = layerPicture(initWithPrevious = true).toByteArray()
 

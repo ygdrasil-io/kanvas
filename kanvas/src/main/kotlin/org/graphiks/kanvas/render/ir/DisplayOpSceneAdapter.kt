@@ -305,6 +305,7 @@ public object DisplayOpSceneAdapter {
             val current = requireNotNull(context) { "Nested Picture effect requires scene capture context" }
             capturePicture(picture, limits, current)
         },
+        imageFilterNodes = context?.imageFilterNodes ?: IdentityHashMap(),
     )
 
     private fun capturePicture(
@@ -345,6 +346,7 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
     private val activePictures = IdentityHashMap<org.graphiks.kanvas.picture.Picture, Unit>()
     private val preflightImages = mutableListOf<org.graphiks.kanvas.image.Image>()
     private val capturedImages = mutableListOf<ImageResourceSnapshot>()
+    val imageFilterNodes = IdentityHashMap<ImageFilter, ImageFilterNode>()
     private var preflightImageBytesI64 = 0L
     private var imageBytesI64 = 0L
     private var runtimeUniformBytesI64 = 0L

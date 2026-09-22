@@ -9,6 +9,7 @@ import java.nio.CharBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
+import java.util.IdentityHashMap
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.color.Gamut
 import org.graphiks.kanvas.color.TransferFunction
@@ -30,7 +31,7 @@ import org.graphiks.math.vector.Vector2F32
 /**
  * The owner of the versioned Picture payload.
  *
- * A v8/v9/v10/v11/v12/v13 archive starts with the public `KPIC` magic, its version integer and the
+ * A v8/v9/v10/v11/v12/v13/v14 archive starts with the public `KPIC` magic, its version integer and the
  * cull rectangle.  The following negative marker occupies the old v8
  * `opCount` slot: it can therefore never be mistaken for a valid historical
  * v8 op count.  Historical Task 8 v8 streams deliberately return [LegacyV8]
@@ -38,11 +39,11 @@ import org.graphiks.math.vector.Vector2F32
  */
 public object SceneArchiveCodec {
     private val magic: ByteArray = byteArrayOf(0x4b, 0x50, 0x49, 0x43)
-    private const val pictureVersion: Int = 13
+    private const val pictureVersion: Int = 14
     private const val irMarker: Int = -1_391_019_346
-    private const val schemaVersion: Int = 7
+    private const val schemaVersion: Int = 8
 
-    /** Encodes a deeply immutable Scene IR as the sole v13 Picture writer. */
+    /** Encodes a deeply immutable Scene IR as the sole v14 Picture writer. */
     public fun encodePicture(scene: SceneSnapshot, cullRect: RectF32): ByteArray {
         requireSemanticValidity(scene)
         val writer = ArchiveWriter()
@@ -81,6 +82,7 @@ public object SceneArchiveCodec {
                 11 -> 5
                 12 -> 6
                 13 -> 7
+                14 -> 8
                 else -> 0
             }
             if (decodedSchemaVersion !in 1..maxSchema) {
@@ -144,6 +146,8 @@ private class ArchiveWriter {
     private val output = ByteArrayOutputStream()
     private val stream = DataOutputStream(output)
     private var depth = 0
+    private val imageFilterRootIds = IdentityHashMap<ImageFilterNode, Int>()
+    private var nextImageFilterRootId = 0
 
     fun finish(): ByteArray = output.toByteArray()
     fun bytes(value: ByteArray) = stream.write(value)
@@ -186,6 +190,8 @@ private class ArchiveWriter {
     }
     fun colorSpace(value: ColorSpace) { text(value.name); enum(value.transferFunction); enum(value.gamut) }
     fun <T : Enum<T>> enum(value: T) = text(value.name)
+    private fun imageFilterRootId(value: ImageFilterNode): Int = imageFilterRootIds[value]
+        ?: nextImageFilterRootId++.also { imageFilterRootIds[value] = it }
     fun <T> list(values: Collection<T>, write: (T) -> Unit) {
         require(values.size <= MAX_COLLECTION_SIZE) { "Collection exceeds archive limit" }
         i32(values.size); values.forEach(write)
@@ -241,7 +247,14 @@ private class ArchiveWriter {
         color(value.color); optional(value.shader, ::material); enum(value.blendMode)
         optional(value.blender, ::blender); optional(value.colorFilter, ::colorFilter)
         optional(value.maskFilter, ::maskFilter); optional(value.pathEffect, ::pathEffect)
-        optional(value.imageFilter, ::imageFilter); enum(value.style); f32(value.strokeWidth)
+        if (value.imageFilter == null) {
+            bool(false)
+        } else {
+            bool(true)
+            imageFilter(value.imageFilter)
+            i32(imageFilterRootId(value.imageFilter))
+        }
+        enum(value.style); f32(value.strokeWidth)
         enum(value.strokeCap); enum(value.strokeJoin); f32(value.strokeMiter); bool(value.antiAlias)
     }
 
@@ -424,7 +437,7 @@ private class ArchiveWriter {
         }
     }
     fun effects(value: EffectStack): Unit = when (value) { EffectStack.Empty -> i32(1); is EffectStack.Entries -> { i32(2); list(value.toList()) { effect(it) } } }
-    fun effect(value: EffectNode): Unit = when (value) { is ColorFilterNode -> { i32(1); colorFilter(value) }; is MaskFilterNode -> { i32(2); maskFilter(value) }; is PathEffectNode -> { i32(3); pathEffect(value) }; is ImageFilterNode -> { i32(4); imageFilter(value) } }
+    fun effect(value: EffectNode): Unit = when (value) { is ColorFilterNode -> { i32(1); colorFilter(value) }; is MaskFilterNode -> { i32(2); maskFilter(value) }; is PathEffectNode -> { i32(3); pathEffect(value) }; is ImageFilterNode -> { i32(4); imageFilter(value); i32(imageFilterRootId(value)) } }
     fun colorFilter(value: ColorFilterNode): Unit = nested { when (value) {
         is ColorFilterNode.Matrix -> { i32(1); floats(value.values.copyToFloatArray()) }; is ColorFilterNode.Blend -> { i32(2); color(value.color); enum(value.mode) }
         is ColorFilterNode.Compose -> { i32(3); colorFilter(value.outer); colorFilter(value.inner) }; is ColorFilterNode.Table -> { i32(4); ubytes(value.table.copyToUByteArray()) }
@@ -438,7 +451,7 @@ private class ArchiveWriter {
     fun imageFilter(value: ImageFilterNode): Unit = nested { when (value) {
         is ImageFilterNode.Crop -> { i32(1); rect(value.copyCrop()); enum(value.tileMode); optional(value.input, ::imageFilter) }
         is ImageFilterNode.Blur -> { i32(2); f32(value.sigmaX); f32(value.sigmaY); enum(value.tileMode); optional(value.input, ::imageFilter) }
-        is ImageFilterNode.DropShadow -> { i32(3); f32(value.dx); f32(value.dy); f32(value.sigmaX); f32(value.sigmaY); color(value.color); optional(value.input, ::imageFilter) }
+        is ImageFilterNode.DropShadow -> { i32(3); f32(value.dx); f32(value.dy); f32(value.sigmaX); f32(value.sigmaY); color(value.color); optional(value.input, ::imageFilter); enum(value.mode) }
         is ImageFilterNode.ColorFilter -> { i32(4); colorFilter(value.filter); optional(value.input, ::imageFilter) }
         is ImageFilterNode.Compose -> { i32(5); imageFilter(value.outer); imageFilter(value.inner) }; is ImageFilterNode.Blend -> { i32(6); enum(value.mode); imageFilter(value.background); imageFilter(value.foreground) }
         is ImageFilterNode.Dilate -> { i32(7); f32(value.radiusX); f32(value.radiusY); optional(value.input, ::imageFilter) }; is ImageFilterNode.Erode -> { i32(8); f32(value.radiusX); f32(value.radiusY); optional(value.input, ::imageFilter) }
@@ -462,6 +475,7 @@ private class ArchiveWriter {
 private class ArchiveReader(private val data: ByteArray) {
     private var offset: Int = 0
     private var depth = 0
+    private val imageFilterRoots = mutableMapOf<Int, ImageFilterNode>()
     var sceneArchiveSchemaVersion: Int = 1
 
     fun bytesEqual(expected: ByteArray): Boolean {
@@ -586,8 +600,24 @@ private class ArchiveReader(private val data: ByteArray) {
             initWithPrevious = initWithPrevious,
         )
     }
-    fun paint(): PaintNode = nested { PaintNode(color(), optional(::material), enum(), optional(::blender), optional(::colorFilter), optional(::maskFilter), optional(::pathEffect), optional(::imageFilter), enum(), f32(), enum(), enum(), f32(), bool()) }
+    fun paint(): PaintNode = nested {
+        val color = color()
+        val shader = optional(::material)
+        val blendMode = enum<BlendMode>()
+        val blender = optional(::blender)
+        val colorFilter = optional(::colorFilter)
+        val maskFilter = optional(::maskFilter)
+        val pathEffect = optional(::pathEffect)
+        val imageFilter = if (sceneArchiveSchemaVersion >= 8) imageFilterRootOrNull() else optional(::imageFilter)
+        PaintNode(color, shader, blendMode, blender, colorFilter, maskFilter, pathEffect, imageFilter, enum(), f32(), enum(), enum(), f32(), bool())
+    }
     fun <T> optional(read: () -> T): T? = if (bool()) read() else null
+    private fun imageFilterRootOrNull(): ImageFilterNode? {
+        if (!bool()) return null
+        val decoded = imageFilter()
+        val id = i32().nonNegative("image filter root")
+        return imageFilterRoots[id] ?: decoded.also { imageFilterRoots[id] = it }
+    }
 
     fun geometry(): GeometryNode = nested { when (i32()) {
         1 -> GeometryNode.Rect.of(rect()); 2 -> GeometryNode.RRect.of(rrect()); 3 -> GeometryNode.DoubleRRect.of(rrect(), rrect()); 4 -> GeometryNode.Path(path())
@@ -746,7 +776,7 @@ private class ArchiveReader(private val data: ByteArray) {
                         perspectiveCaptureRefusal = bool(),
                         transformClass = text(),
                     )
-                    2, 3, 4, 5, 6, 7 -> clipTransformV2()
+                    2, 3, 4, 5, 6, 7, 8 -> clipTransformV2()
                     else -> throw ArchiveFailure("unknown-schema", "Scene archive schema is not supported")
                 }
                 ClipEntry(geometry, operation, antiAlias, transform)
@@ -764,14 +794,19 @@ private class ArchiveReader(private val data: ByteArray) {
         else -> throw ArchiveFailure("unknown-clip-transform", "Archive contains an unknown clip transform tag")
     }
     fun effects(): EffectStack = when (i32()) { 1 -> EffectStack.Empty; 2 -> EffectStack.of(list(::effect)); else -> failTag("effect stack") }
-    fun effect(): EffectNode = when (i32()) { 1 -> colorFilter(); 2 -> maskFilter(); 3 -> pathEffect(); 4 -> imageFilter(); else -> failTag("effect") }
+    fun effect(): EffectNode = when (i32()) { 1 -> colorFilter(); 2 -> maskFilter(); 3 -> pathEffect(); 4 -> if (sceneArchiveSchemaVersion >= 8) imageFilterRoot() else imageFilter(); else -> failTag("effect") }
+    private fun imageFilterRoot(): ImageFilterNode {
+        val decoded = imageFilter()
+        val id = i32().nonNegative("image filter root")
+        return imageFilterRoots[id] ?: decoded.also { imageFilterRoots[id] = it }
+    }
     fun colorFilter(): ColorFilterNode = nested { when (i32()) {
         1 -> ColorFilterNode.Matrix(ImmutableFloats.copyOf(floats())); 2 -> ColorFilterNode.Blend(color(), enum()); 3 -> ColorFilterNode.Compose(colorFilter(), colorFilter()); 4 -> ColorFilterNode.Table(ImmutableUBytes.copyOf(ubytes())); 5 -> ColorFilterNode.Lighting(color(), color()); 6 -> ColorFilterNode.SRGBToLinear; 7 -> ColorFilterNode.LinearToSRGB; 8 -> ColorFilterNode.HSLAMatrix(ImmutableFloats.copyOf(floats())); 9 -> ColorFilterNode.Lerp(f32(), colorFilter(), colorFilter()); 10 -> ColorFilterNode.HighContrast; 11 -> ColorFilterNode.Luma; 12 -> ColorFilterNode.Overdraw; 13 -> ColorFilterNode.RuntimeEffect.of(descriptor(), uniforms(), list { RuntimeColorFilterChild(text(), colorFilter()) }); else -> failTag("color filter")
     } }
     fun maskFilter(): MaskFilterNode = nested { when (i32()) { 1 -> MaskFilterNode.Blur(enum(), f32()); 2 -> MaskFilterNode.Shader(material()); 3 -> MaskFilterNode.Table(ImmutableUBytes.copyOf(ubytes())); else -> failTag("mask filter") } }
     fun pathEffect(): PathEffectNode = nested { when (i32()) { 1 -> PathEffectNode.Dash(ImmutableFloats.copyOf(floats()), f32()); 2 -> PathEffectNode.Corner(f32()); 3 -> PathEffectNode.Discrete(f32(), f32()); 4 -> PathEffectNode.Path1D(path(), f32(), f32(), enum()); 5 -> PathEffectNode.Path2D(matrix(), path()); 6 -> PathEffectNode.Trim(f32(), f32()); else -> failTag("path effect") } }
     fun imageFilter(): ImageFilterNode = nested { when (i32()) {
-        1 -> ImageFilterNode.Crop.of(rect(), enum(), optional(::imageFilter)); 2 -> ImageFilterNode.Blur(f32(), f32(), enum(), optional(::imageFilter)); 3 -> ImageFilterNode.DropShadow(f32(), f32(), f32(), f32(), color(), optional(::imageFilter)); 4 -> ImageFilterNode.ColorFilter(colorFilter(), optional(::imageFilter)); 5 -> ImageFilterNode.Compose(imageFilter(), imageFilter()); 6 -> ImageFilterNode.Blend(enum(), imageFilter(), imageFilter()); 7 -> ImageFilterNode.Dilate(f32(), f32(), optional(::imageFilter)); 8 -> ImageFilterNode.Erode(f32(), f32(), optional(::imageFilter)); 9 -> ImageFilterNode.DistantLitDiffuse(f32(), f32(), color(), f32(), f32(), optional(::imageFilter)); 10 -> ImageFilterNode.PointLitDiffuse(point(), color(), f32(), f32(), optional(::imageFilter)); 11 -> ImageFilterNode.SpotLitDiffuse(point(), point(), f32(), f32(), color(), f32(), f32(), optional(::imageFilter)); 12 -> ImageFilterNode.DistantLitSpecular(f32(), f32(), color(), f32(), f32(), f32(), optional(::imageFilter)); 13 -> ImageFilterNode.PointLitSpecular(point(), color(), f32(), f32(), f32(), optional(::imageFilter)); 14 -> ImageFilterNode.SpotLitSpecular(point(), point(), f32(), f32(), color(), f32(), f32(), f32(), optional(::imageFilter)); 15 -> ImageFilterNode.Offset(f32(), f32(), optional(::imageFilter)); 16 -> ImageFilterNode.Tile.of(rect(), rect(), optional(::imageFilter)); 17 -> ImageFilterNode.Merge.of(list(::imageFilter)); 18 -> ImageFilterNode.DisplacementMap(enum(), enum(), f32(), imageFilter(), optional(::imageFilter)); 19 -> ImageFilterNode.Picture.of(scene(), rect(), optional(::rect)); 20 -> ImageFilterNode.Magnifier.of(rect(), f32(), f32(), optional(::imageFilter)); 21 -> ImageFilterNode.MatrixConvolution.of(size(), ImmutableFloats.copyOf(floats()), f32(), f32(), vector(), enum(), bool(), optional(::imageFilter)); 22 -> ImageFilterNode.RuntimeEffect.of(descriptor(), uniforms(), optional(::text), list { RuntimeImageFilterChild(text(), optional(::imageFilter)) }); else -> failTag("image filter")
+        1 -> ImageFilterNode.Crop.of(rect(), enum(), optional(::imageFilter)); 2 -> ImageFilterNode.Blur(f32(), f32(), enum(), optional(::imageFilter)); 3 -> ImageFilterNode.DropShadow(f32(), f32(), f32(), f32(), color(), optional(::imageFilter), if (sceneArchiveSchemaVersion >= 8) enum() else CapturedDropShadowModeV1.COMPOSITE); 4 -> ImageFilterNode.ColorFilter(colorFilter(), optional(::imageFilter)); 5 -> ImageFilterNode.Compose(imageFilter(), imageFilter()); 6 -> ImageFilterNode.Blend(enum(), imageFilter(), imageFilter()); 7 -> ImageFilterNode.Dilate(f32(), f32(), optional(::imageFilter)); 8 -> ImageFilterNode.Erode(f32(), f32(), optional(::imageFilter)); 9 -> ImageFilterNode.DistantLitDiffuse(f32(), f32(), color(), f32(), f32(), optional(::imageFilter)); 10 -> ImageFilterNode.PointLitDiffuse(point(), color(), f32(), f32(), optional(::imageFilter)); 11 -> ImageFilterNode.SpotLitDiffuse(point(), point(), f32(), f32(), color(), f32(), f32(), optional(::imageFilter)); 12 -> ImageFilterNode.DistantLitSpecular(f32(), f32(), color(), f32(), f32(), f32(), optional(::imageFilter)); 13 -> ImageFilterNode.PointLitSpecular(point(), color(), f32(), f32(), f32(), optional(::imageFilter)); 14 -> ImageFilterNode.SpotLitSpecular(point(), point(), f32(), f32(), color(), f32(), f32(), f32(), optional(::imageFilter)); 15 -> ImageFilterNode.Offset(f32(), f32(), optional(::imageFilter)); 16 -> ImageFilterNode.Tile.of(rect(), rect(), optional(::imageFilter)); 17 -> ImageFilterNode.Merge.of(list(::imageFilter)); 18 -> ImageFilterNode.DisplacementMap(enum(), enum(), f32(), imageFilter(), optional(::imageFilter)); 19 -> ImageFilterNode.Picture.of(scene(), rect(), optional(::rect)); 20 -> ImageFilterNode.Magnifier.of(rect(), f32(), f32(), optional(::imageFilter)); 21 -> ImageFilterNode.MatrixConvolution.of(size(), ImmutableFloats.copyOf(floats()), f32(), f32(), vector(), enum(), bool(), optional(::imageFilter)); 22 -> ImageFilterNode.RuntimeEffect.of(descriptor(), uniforms(), optional(::text), list { RuntimeImageFilterChild(text(), optional(::imageFilter)) }); else -> failTag("image filter")
     } }
     private fun Int.positive(name: String): Int = if (this > 0) this else throw ArchiveFailure("invalid-value", "$name must be positive")
     private fun Int.nonNegative(name: String): Int = if (this >= 0) this else throw ArchiveFailure("invalid-value", "$name must be non-negative")

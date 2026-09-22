@@ -66,7 +66,6 @@ internal class GeometrySnapshotContext(
             operation.snapshotGeometry(this).also { acceptPendingImages() }
         } finally {
             pendingImages = null
-            clearOperationCaches()
         }
     }
 
@@ -83,7 +82,6 @@ internal class GeometrySnapshotContext(
         } finally {
             pendingTextBlobs = null
             pendingImages = null
-            clearOperationCaches()
         }
     }
 

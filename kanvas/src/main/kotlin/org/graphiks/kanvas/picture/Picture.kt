@@ -311,6 +311,7 @@ class Picture internal constructor(
 private val MAGIC = byteArrayOf(0x4B, 0x50, 0x49, 0x43)
 private const val FORMAT_VERSION = 10
 private const val STABLE_WIRE_VERSION = 13
+private const val CURRENT_STABLE_WIRE_VERSION = 14
 private const val PREVIOUS_STABLE_WIRE_VERSION = 12
 private const val HISTORICAL_WIRE_VERSION_V8 = 8
 
@@ -1057,6 +1058,7 @@ private fun decodePicture(data: ByteArray, decodedRuntimeEffects: MutableList<Ru
         11,
         PREVIOUS_STABLE_WIRE_VERSION,
         STABLE_WIRE_VERSION,
+        CURRENT_STABLE_WIRE_VERSION,
         -> when (val decoded = SceneArchiveCodec.decodePicture(data)) {
             is SceneArchiveDecodeResult.Decoded -> try {
                 Picture(decoded.copyCullRect(), SceneDisplayOpAdapter.toDisplayOps(decoded.scene))

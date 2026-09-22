@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.render.ir
 
+import java.util.IdentityHashMap
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -26,10 +27,16 @@ import org.graphiks.kanvas.types.Vertices
 
 /** Reconstructs public display operations from their typed captured scene representation. */
 public object SceneDisplayOpAdapter {
-    public fun toDisplayOps(scene: SceneSnapshot): List<DisplayOp> = scene.map(::toDisplayOp).toList()
+    public fun toDisplayOps(scene: SceneSnapshot): List<DisplayOp> {
+        val filters = IdentityHashMap<ImageFilterNode, org.graphiks.kanvas.paint.ImageFilter>()
+        return scene.map { command -> toDisplayOp(command, filters) }.toList()
+    }
 
-    private fun toDisplayOp(command: SceneCommand): DisplayOp = when (command) {
-        is SceneCommand.Draw -> draw(command.node)
+    private fun toDisplayOp(
+        command: SceneCommand,
+        filters: IdentityHashMap<ImageFilterNode, org.graphiks.kanvas.paint.ImageFilter>,
+    ): DisplayOp = when (command) {
+        is SceneCommand.Draw -> draw(command.node, filters)
         is SceneCommand.DrawColor -> DisplayOp.DrawColor(
             command.color,
             org.graphiks.kanvas.paint.BlendMode.valueOf(command.mode.name),
@@ -42,8 +49,8 @@ public object SceneDisplayOpAdapter {
         is SceneCommand.BeginLayer -> DisplayOp.BeginLayer(
             SaveLayerRec(
                 bounds = command.descriptor.copyBounds(),
-                paint = command.descriptor.paint?.let(PaintSceneAdapter::restore),
-                backdrop = command.descriptor.backdrop.singleImageFilterOrNull()?.let(PaintSceneAdapter::restoreImageFilter),
+                paint = command.descriptor.paint?.let { restorePaint(it, filters) },
+                backdrop = command.descriptor.backdrop.singleImageFilterOrNull()?.let { restoreFilter(it, filters) },
                 compositeClip = command.descriptor.compositeClip?.toClip(),
                 initWithPrevious = command.descriptor.initWithPrevious,
             ),
@@ -55,9 +62,12 @@ public object SceneDisplayOpAdapter {
         is SceneCommand.State -> throw IllegalArgumentException("Opaque state commands are not public DisplayOps")
     }
 
-    private fun draw(node: DrawNode): DisplayOp {
+    private fun draw(
+        node: DrawNode,
+        filters: IdentityHashMap<ImageFilterNode, org.graphiks.kanvas.paint.ImageFilter>,
+    ): DisplayOp {
         val clip = node.clip.toClip()
-        val paint = node.paint?.let(PaintSceneAdapter::restore)
+        val paint = node.paint?.let { restorePaint(it, filters) }
         fun requiredPaint(): Paint = requireNotNull(paint) { "Captured public draw is missing its Paint" }
         fun image(): org.graphiks.kanvas.image.Image = ResourceSceneAdapter.toImage(
             requireNotNull(node.resource) { "Captured image draw is missing its image resource" },
@@ -170,6 +180,19 @@ public object SceneDisplayOpAdapter {
             }
         }
     }
+
+    private fun restorePaint(
+        node: PaintNode,
+        filters: IdentityHashMap<ImageFilterNode, org.graphiks.kanvas.paint.ImageFilter>,
+    ): Paint = PaintSceneAdapter.restore(node).let { restored ->
+        node.imageFilter?.let { restored.copy(imageFilter = restoreFilter(it, filters)) } ?: restored
+    }
+
+    private fun restoreFilter(
+        node: ImageFilterNode,
+        filters: IdentityHashMap<ImageFilterNode, org.graphiks.kanvas.paint.ImageFilter>,
+    ): org.graphiks.kanvas.paint.ImageFilter = filters[node]
+        ?: PaintSceneAdapter.restoreImageFilter(node).also { filters[node] = it }
 
     private fun GeometryNode.IndexedMesh.toVertices(): Vertices = Vertices(
         mode = VertexMode.valueOf(primitiveMode.name),

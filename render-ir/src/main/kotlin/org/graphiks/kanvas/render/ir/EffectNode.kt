@@ -17,6 +17,8 @@ public sealed interface EffectNode : CanonicalValue
 public enum class ColorChannel { RED, GREEN, BLUE, ALPHA }
 public enum class MaskBlurStyle { NORMAL, SOLID, OUTER, INNER }
 public enum class Path1DStyle { TRANSLATE, ROTATE, MORPH }
+/** Wire-safe counterpart of the public drop-shadow API. */
+public enum class CapturedDropShadowModeV1 { COMPOSITE, SHADOW_ONLY }
 
 /** Color-filter variants, represented without a paint or renderer dependency. */
 public sealed interface ColorFilterNode : EffectNode {
@@ -151,9 +153,11 @@ public sealed interface ImageFilterNode : EffectNode {
     }
     public data class DropShadow(
         public val dx: Float, public val dy: Float, public val sigmaX: Float, public val sigmaY: Float,
-        public val color: ColorARGB, public val input: ImageFilterNode? = null,
+        public val color: ColorARGB,
+        public val input: ImageFilterNode? = null,
+        public val mode: CapturedDropShadowModeV1 = CapturedDropShadowModeV1.COMPOSITE,
     ) : ImageFilterNode {
-        override val canonicalId: CanonicalId = canonicalId("image-filter-drop-shadow-v1", dx.canonicalBits(), dy.canonicalBits(), sigmaX.canonicalBits(), sigmaY.canonicalBits(), effectColorId(color).value, optionalEffectId(input).value)
+        override val canonicalId: CanonicalId = canonicalId("image-filter-drop-shadow-v2", dx.canonicalBits(), dy.canonicalBits(), sigmaX.canonicalBits(), sigmaY.canonicalBits(), effectColorId(color).value, optionalEffectId(input).value, mode.name)
     }
     public data class ColorFilter(public val filter: ColorFilterNode, public val input: ImageFilterNode? = null) : ImageFilterNode {
         override val canonicalId: CanonicalId = canonicalId("image-filter-color-filter-v1", filter.canonicalId.value, optionalEffectId(input).value)
