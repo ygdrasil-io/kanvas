@@ -183,7 +183,7 @@ public object SceneDisplayOpAdapter {
     private fun restorePaint(
         node: PaintNode,
         filters: FilterRestoreContext,
-    ): Paint = PaintSceneAdapter.restore(node).let { restored ->
+    ): Paint = PaintSceneAdapter.restoreNode(node).let { restored ->
         node.imageFilter?.let { restored.copy(imageFilter = restoreFilter(it, filters)) } ?: restored
     }
 
@@ -243,7 +243,7 @@ private fun EffectStack.singleImageFilterOrNull(): CapturedFilterRootV1? = when 
     }
 }
 
-private class FilterRestoreContext(private val table: CapturedFilterTableV1) {
+internal class FilterRestoreContext(private val table: CapturedFilterTableV1) {
     private val filters = mutableMapOf<CapturedFilterNodeId, org.graphiks.kanvas.paint.ImageFilter>()
 
     fun restore(root: CapturedFilterRootV1): org.graphiks.kanvas.paint.ImageFilter = node(root.id)

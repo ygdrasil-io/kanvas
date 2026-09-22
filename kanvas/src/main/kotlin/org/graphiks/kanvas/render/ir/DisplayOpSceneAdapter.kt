@@ -304,17 +304,16 @@ public object DisplayOpSceneAdapter {
     private fun capturePaint(
         paint: org.graphiks.kanvas.paint.Paint,
         limits: SceneCaptureLimits,
-        context: CaptureContext?,
+        context: CaptureContext,
         defaultMaterial: Boolean = true,
-    ): PaintNode = PaintSceneAdapter.capture(
-        paint = paint.also { context?.preflightPaint(it, defaultMaterial) },
+    ): PaintNode = PaintSceneAdapter.captureNode(
+        paint = paint.also { context.preflightPaint(it, defaultMaterial) },
         limits = limits,
-        captureImage = context?.let { it::captureImage } ?: ResourceSceneAdapter::captureImage,
+        captureImage = context::captureImage,
         capturePicture = { picture ->
-            val current = requireNotNull(context) { "Nested Picture effect requires scene capture context" }
-            capturePicture(picture, limits, current)
+            capturePicture(picture, limits, context)
         },
-        filterCapture = context?.filterCapture ?: FilterCaptureContext(),
+        filterCapture = context.filterCapture,
     )
 
     private fun capturePicture(

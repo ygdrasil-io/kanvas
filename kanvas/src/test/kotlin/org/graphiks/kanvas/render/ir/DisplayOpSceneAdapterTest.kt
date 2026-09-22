@@ -39,6 +39,25 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class DisplayOpSceneAdapterTest {
+    /** Catches standalone capture that leaves a typed filter root without its owning table. */
+    @Test
+    fun `standalone paint adapter round trip retains image filters`() {
+        val original = Paint(
+            color = ColorARGB.Blue,
+            imageFilter = ImageFilter.Offset(3f, 4f, ImageFilter.Blur(1f, 2f, TileMode.MIRROR)),
+            antiAlias = false,
+        )
+
+        val restored = PaintSceneAdapter.restore(PaintSceneAdapter.capture(original))
+
+        assertEquals(
+            ImageFilter.Offset(3f, 4f, ImageFilter.Blur(1f, 2f, TileMode.MIRROR)),
+            restored.imageFilter,
+        )
+        assertEquals(original.color, restored.color)
+        assertEquals(original.antiAlias, restored.antiAlias)
+    }
+
     @Test
     fun `W4d public adapter preserves every stroke style and dash fact`() {
         val path = Path().apply {

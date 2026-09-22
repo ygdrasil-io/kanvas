@@ -242,7 +242,7 @@ class W5hRuntimeEffectSurfacePixelTest {
             RuntimeEffectAbi.SHADER, 1, RuntimeUniformBlockV1.of(emptyList(), 0),
             listOf(RuntimeChildSlotV2("child", RuntimeChildType.SHADER, false)))
         val material = MaterialNode.RuntimeEffect.of(descriptor, emptyMap(), listOf(RuntimeMaterialChild("child", child)))
-        val paint = PaintSceneAdapter.capture(Paint(antiAlias = false)).copy(shader = material)
+        val paint = PaintSceneAdapter.capture(Paint(antiAlias = false)).paint.copy(shader = material)
         val extent = SceneExtent(1, 1)
         val scene = SceneSnapshot.of(extent, ColorSpace.SRGB, listOf(SceneCommand.Draw(DrawNode(
             GeometryNode.Rect.of(BOUNDS), material, CoverageRequest.HARD_EDGE, ClipStackNode.Empty,

@@ -22,6 +22,12 @@ import org.graphiks.math.vector.Vector2F32
 
 /** Captures complete public paint state without selecting a renderer implementation. */
 public object PaintSceneAdapter {
+    /** Complete standalone paint capture; its typed filter roots are owned by [filterTable]. */
+    public data class CapturedPaintV1(
+        public val paint: PaintNode,
+        public val filterTable: CapturedFilterTableV1,
+    )
+
     public fun capture(
         paint: Paint,
         limits: SceneCaptureLimits = SceneCaptureLimits.DEFAULT,
@@ -29,7 +35,21 @@ public object PaintSceneAdapter {
         capturePicture: (org.graphiks.kanvas.picture.Picture) -> SceneSnapshot = {
             throw CaptureFailure("picture-filter-requires-context", "Picture image filters require scene capture context")
         },
-        filterCapture: FilterCaptureContext = FilterCaptureContext(),
+    ): CapturedPaintV1 {
+        val filterCapture = FilterCaptureContext()
+        return CapturedPaintV1(
+            captureNode(paint, limits, captureImage, capturePicture, filterCapture),
+            filterCapture.build(limits.graphLimits),
+        )
+    }
+
+    /** Captures a paint into the caller-owned scene table; it must not escape as a standalone result. */
+    internal fun captureNode(
+        paint: Paint,
+        limits: SceneCaptureLimits,
+        captureImage: (Image) -> ImageResourceSnapshot,
+        capturePicture: (org.graphiks.kanvas.picture.Picture) -> SceneSnapshot,
+        filterCapture: FilterCaptureContext,
     ): PaintNode {
         ColorFilterCapturePreflight.validatePaint(paint, limits)?.let {
             throw CaptureFailure(it.code.value, it.message)
@@ -106,8 +126,14 @@ public object PaintSceneAdapter {
         else -> emptyList()
     }
 
-    /** Reconstructs every public paint component retained in [PaintNode]. */
-    public fun restore(node: PaintNode): Paint = Paint(
+    /** Reconstructs a standalone capture, resolving filter roots through its owned immutable table. */
+    public fun restore(captured: CapturedPaintV1): Paint = restoreNode(captured.paint).let { restored ->
+        captured.paint.imageFilter?.let { restored.copy(imageFilter = FilterRestoreContext(captured.filterTable).restore(it)) }
+            ?: restored
+    }
+
+    /** Reconstructs non-table paint components for scene replay. */
+    internal fun restoreNode(node: PaintNode): Paint = Paint(
         color = node.color,
         shader = node.shader?.toShader(),
         blendMode = org.graphiks.kanvas.paint.BlendMode.valueOf(node.blendMode.name),
@@ -628,7 +654,7 @@ public object PaintSceneAdapter {
 }
 
 /** Capture-local identity map retained across scene operations and discarded at scene publication. */
-public class FilterCaptureContext {
+internal class FilterCaptureContext {
     val ids: IdentityHashMap<ImageFilter, CapturedFilterNodeId> = IdentityHashMap()
     val table: CapturedFilterTableBuilderV1 = CapturedFilterTableBuilderV1()
 

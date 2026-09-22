@@ -658,7 +658,6 @@ class SceneArchiveCodecTest {
         )
         val materialChild = MaterialNode.Solid(ColorARGB.Green)
         val colorChild = ColorFilterNode.Blend(ColorARGB.Blue, BlendMode.SRC_OVER)
-        val imageChild = ImageFilterNode.Blur(1f, 2f)
         val runtimeMaterial = MaterialNode.RuntimeEffect.of(shaderDescriptor, uniforms, listOf(RuntimeMaterialChild("child", materialChild)))
         val allUniformMaterial = MaterialNode.RuntimeEffect.of(
             descriptor("all-uniforms", RuntimeEffectAbi.SHADER, RuntimeChildSlot("child", RuntimeChildType.SHADER), everyUniform),
@@ -666,21 +665,37 @@ class SceneArchiveCodecTest {
             listOf(RuntimeMaterialChild("child", materialChild)),
         )
         val runtimeColor = ColorFilterNode.RuntimeEffect.of(colorDescriptor, uniforms, listOf(RuntimeColorFilterChild("child", colorChild)))
-        val runtimeImage = ImageFilterNode.RuntimeEffect.of(imageDescriptor, uniforms, null, listOf(RuntimeImageFilterChild("child", imageChild)))
         val meshProgram = MeshProgramNode.of(shaderDescriptor, uniforms, listOf(MeshProgramChild.Shader("child", materialChild)))
-        val filters = listOf<ImageFilterNode>(
-            ImageFilterNode.Crop.of(bounds), ImageFilterNode.Blur(1f, 2f), ImageFilterNode.DropShadow(1f, 2f, 3f, 4f, ColorARGB.Red),
-            ImageFilterNode.ColorFilter(colorChild), ImageFilterNode.Compose(imageChild, ImageFilterNode.Offset(1f, 2f)),
-            ImageFilterNode.Blend(BlendMode.SCREEN, imageChild, ImageFilterNode.Offset(3f, 4f)), ImageFilterNode.Dilate(1f, 2f), ImageFilterNode.Erode(1f, 2f),
-            ImageFilterNode.DistantLitDiffuse(1f, 2f, ColorARGB.Red, 3f, 4f), ImageFilterNode.PointLitDiffuse(Point2F32(1f, 2f), ColorARGB.Red, 3f, 4f),
-            ImageFilterNode.SpotLitDiffuse(Point2F32(1f, 2f), Point2F32(3f, 4f), 5f, 6f, ColorARGB.Red, 7f, 8f),
-            ImageFilterNode.DistantLitSpecular(1f, 2f, ColorARGB.Red, 3f, 4f, 5f), ImageFilterNode.PointLitSpecular(Point2F32(1f, 2f), ColorARGB.Red, 3f, 4f, 5f),
-            ImageFilterNode.SpotLitSpecular(Point2F32(1f, 2f), Point2F32(3f, 4f), 5f, 6f, ColorARGB.Red, 7f, 8f, 9f),
-            ImageFilterNode.Offset(1f, 2f), ImageFilterNode.Tile.of(bounds, RectF32(2f, 3f, 20f, 30f)), ImageFilterNode.Merge.of(listOf(imageChild)),
-            ImageFilterNode.DisplacementMap(ColorChannel.RED, ColorChannel.GREEN, 2f, imageChild), ImageFilterNode.Picture.of(nested, bounds, RectF32(2f, 3f, 4f, 5f)),
-            ImageFilterNode.Magnifier.of(bounds, 2f, 1f), ImageFilterNode.MatrixConvolution.of(SizeF32(1f, 1f), ImmutableFloats.copyOf(floatArrayOf(1f)), 1f, 0f, Vector2F32(0f, 0f), TileMode.CLAMP, false),
-            runtimeImage,
+        val source = CapturedFilterInputV1.ImplicitSource
+        fun node(index: Int): CapturedFilterInputV1 = CapturedFilterInputV1.Node(CapturedFilterNodeId(index))
+        val filters = listOf<CapturedFilterNodeV1>(
+            CapturedFilterNodeV1.Crop(bounds, TileMode.CLAMP, source),
+            CapturedFilterNodeV1.Blur(1f, 2f, TileMode.CLAMP, source),
+            CapturedFilterNodeV1.DropShadow(1f, 2f, 3f, 4f, ColorARGB.Red, source, CapturedDropShadowModeV1.COMPOSITE),
+            CapturedFilterNodeV1.ColorFilter(colorChild, source),
+            CapturedFilterNodeV1.Compose(node(1), node(14)),
+            CapturedFilterNodeV1.Blend(BlendMode.SCREEN, node(1), node(14)),
+            CapturedFilterNodeV1.Dilate(1f, 2f, source),
+            CapturedFilterNodeV1.Erode(1f, 2f, source),
+            CapturedFilterNodeV1.DistantLitDiffuse(1f, 2f, ColorARGB.Red, 3f, 4f, source),
+            CapturedFilterNodeV1.PointLitDiffuse(Point2F32(1f, 2f), ColorARGB.Red, 3f, 4f, source),
+            CapturedFilterNodeV1.SpotLitDiffuse(Point2F32(1f, 2f), Point2F32(3f, 4f), 5f, 6f, ColorARGB.Red, 7f, 8f, source),
+            CapturedFilterNodeV1.DistantLitSpecular(1f, 2f, ColorARGB.Red, 3f, 4f, 5f, source),
+            CapturedFilterNodeV1.PointLitSpecular(Point2F32(1f, 2f), ColorARGB.Red, 3f, 4f, 5f, source),
+            CapturedFilterNodeV1.SpotLitSpecular(Point2F32(1f, 2f), Point2F32(3f, 4f), 5f, 6f, ColorARGB.Red, 7f, 8f, 9f, source),
+            CapturedFilterNodeV1.Offset(1f, 2f, source),
+            CapturedFilterNodeV1.Tile(bounds, RectF32(2f, 3f, 20f, 30f), source),
+            CapturedFilterNodeV1.Merge(listOf(node(1))),
+            CapturedFilterNodeV1.DisplacementMap(ColorChannel.RED, ColorChannel.GREEN, 2f, node(1), source),
+            CapturedFilterNodeV1.Picture(nested, bounds, RectF32(2f, 3f, 4f, 5f)),
+            CapturedFilterNodeV1.Magnifier(bounds, 2f, 1f, source),
+            CapturedFilterNodeV1.MatrixConvolution(SizeF32(1f, 1f), ImmutableFloats.copyOf(floatArrayOf(1f)), 1f, 0f, Vector2F32(0f, 0f), TileMode.CLAMP, false, source),
+            CapturedFilterNodeV1.RuntimeEffect(imageDescriptor, uniforms, null, listOf(CapturedRuntimeImageFilterChildV1("child", node(1)))),
         )
+        val filterTable = CapturedFilterTableV1.of(filters)
+        fun root(index: Int): CapturedFilterRootV1 = CapturedFilterRootV1(CapturedFilterNodeId(index))
+        val imageChild = root(1)
+        val runtimeImage = root(21)
         val allEffects = EffectStack.of(
             listOf(
                 ColorFilterNode.Matrix(ImmutableFloats.copyOf(FloatArray(20) { it.toFloat() })),
@@ -691,7 +706,7 @@ class SceneArchiveCodecTest {
                 MaskFilterNode.Blur(MaskBlurStyle.OUTER, 2f), MaskFilterNode.Shader(materialChild), MaskFilterNode.Table(ImmutableUBytes.copyOf(ubyteArrayOf(2u))),
                 PathEffectNode.Dash(ImmutableFloats.copyOf(floatArrayOf(1f, 2f)), 0.5f), PathEffectNode.Corner(2f), PathEffectNode.Discrete(3f, 4f),
                 PathEffectNode.Path1D(path, 5f, 6f, Path1DStyle.MORPH), PathEffectNode.Path2D(Matrix3x3F32.Identity, path), PathEffectNode.Trim(0.1f, 0.9f),
-            ) + filters,
+            ) + filters.indices.map(::root),
         )
         val paint = PaintNode(
             color = ColorARGB.Magenta,
@@ -865,6 +880,7 @@ class SceneArchiveCodecTest {
                 add(SceneCommand.Annotation.of(bounds, "key", "value"))
                 add(SceneCommand.Readback(ReadbackRequest.of("readback", bounds)))
             },
+            filterTable = filterTable,
         )
     }
 
