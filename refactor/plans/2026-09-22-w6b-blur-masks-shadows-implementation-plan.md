@@ -4,11 +4,11 @@
 
 **Goal:** Deliver plan-first image blur, the three public mask-filter families, and composited or shadow-only drop shadows through the W6a authority, with immutable Picture 14/schema 8 capture, atomic public recovery, and no legacy fallback after W6b admission.
 
-**Architecture:** W6b first replaces recursive image-filter capture with one immutable, identity-preserving node table and typed input references in `:render-ir`. `:gpu-plan` binds those captured nodes to a W6a layer or a draw auto-layer, computes all spatial bounds in `:math`, and freezes one extension of the existing W6a `RenderGraph` using typed `FilterPass`/`FilterTarget` resources. `:gpu-renderer` materializes only the frozen pass sequence (coverage/source → X blur → Y blur → mask/shadow/composite), never reconstructing bounds, tile modes, resources, IDs, or budgets.
+**Architecture:** W6b first replaces recursive image-filter capture with one immutable, identity-preserving node table and typed input references in `:render-ir`. `:gpu-plan` binds those captured nodes to a W6a layer or a draw auto-layer, and freezes an occurrence-owned `PictureStreamAggregateV1`: unpainted Pictures replay inline into their current target while painted Pictures own a versioned isolated source. It computes all spatial bounds in `:math` and freezes one extension of the existing W6a `RenderGraph` using typed `FilterPass`/`FilterTarget` resources. `:gpu-renderer` materializes only the frozen pass sequence (coverage/source → X blur → Y blur → mask/shadow/composite), never reconstructing bounds, tile modes, resources, IDs, or budgets.
 
 **Tech Stack:** Kotlin/JVM; `:math:geometry`, `:math:matrix`, `:render-ir`, `:gpu-plan`, `:gpu-renderer`, `:kanvas`; WebGPU/WGSL; JUnit 5; public `Surface`, `Canvas`, `Picture`, paint/filter APIs, Render, and Readback.
 
-**Spec:** `refactor/specs/2026-09-16-w6-layers-effects-design.md` sections 5–8, 10.2, and 11–16; `refactor/specs/2026-09-22-w6b-w6e-stacked-delivery-design.md` sections 1–4 and 8–10. Base: `codex/w6a-layer-authority` at `1ff67ec849e66de4c1ac2767ddb1dffce8d40631` (Draft PR #2403). Implementation branch: `codex/w6b-blur-masks-shadows`; its Draft PR targets `codex/w6a-layer-authority`.
+**Spec:** `refactor/specs/2026-09-16-w6-layers-effects-design.md` sections 5–8, 10.2, and 11–16; `refactor/specs/2026-09-22-w6b-w6e-stacked-delivery-design.md` sections 1–4 and 8–10; `refactor/specs/2026-09-22-w6b-picture-stream-aggregate-amendment.md` (normative for nested draw-Picture execution). Base: `codex/w6a-layer-authority` at `1ff67ec849e66de4c1ac2767ddb1dffce8d40631` (Draft PR #2403). Implementation branch: `codex/w6b-blur-masks-shadows`; its Draft PR targets `codex/w6a-layer-authority`.
 
 ## Global Constraints
 
@@ -19,6 +19,10 @@
 - `:math` is the sole owner of new rectangles, points, sizes, mappings, and transforms. New geometric names use `I32`, `I64`, `F32`, or `F64`; F64 computes bounds, checked outward I32 projection seals texels, and `:gpu-renderer` has no private geometric value or device↔target conversion.
 - Preserve W6a's four regions (`knownContent`, `desiredOutput`, `requiredInput`, `producedOutput`) separately per spatial occurrence. Bounds supplied to `saveLayer` remain a hint/filter region, never an implicit child clip.
 - The one W6 authority remains `Surface/Picture → immutable render-ir → :math → :gpu-plan RenderGraph → :gpu-renderer → one submit → atomic public visibility`. After W6b selection, any refusal is terminal and may not continue into `GPUPreparedSurfaceProductEntry` or another prepared/legacy route.
+- Nested draw-Picture execution is normatively governed by `PictureStreamAggregateV1`: `paint == null` means `INLINE_CURRENT_TARGET`; any captured paint means `ISOLATED_SOURCE` with one versioned sealed source and one final parent composite. The frozen stream exhaustively covers `SceneCommand`, keeps occurrence-local `PictureSourceLocatorV1` and `FramePlannedCommandIdI32`, and never gives the renderer a `SceneSnapshot` to replay.
+- Keep `recordedInnerClip`, `deferredCompositeClip`, `cullContentBound`, and `demandRegion` separate. A final outer clip is deferred until after its parent Picture filter; cull is not a final output clip; target origins and target-local rectangles are frozen through `LayerMappingF64`/`FilterBoundsPlanV1` before native preparation.
+- A sealed Picture source has explicitly defined coverage, premultiplied color, transparent-black out-of-domain sampling, material/alpha/color operation and final `BlendPlan` through `GraphTextureSourceOperandV1`. Source alpha is a replacement-alpha mask input, never multiplied into already-premultiplied child color twice.
+- `RenderGraph` production validation owns aggregate begin/seal/version/terminal/dependency/physical-binding/lifetime invariants. Its limited graph-contract selectors are allowed because they invoke production validation with real graph values; they remain forbidden from using reflection, mocks, fake devices, counters, static-source inspection, or test-infrastructure assertions.
 - `FilterPass` and `FilterTarget` in `:gpu-plan` are the only W6b spatial pass/resource authorities. Existing `GPUSeparableBlurRectFrameRecorder`, `GPUTopLevelMaskBlurFrameRecording`, `GPUPreparedFilterDAGPlanner`, `GPUPreparedMaskFilterLowerer`, `GPUDropShadow`, and `GPUSaveLayerNativeExecutor` may remain for non-W6 calls through W8 but receive no W6b semantic decision.
 - Freeze before native preparation: selected implementation kind, passes, `FilterTarget` descriptors/usages, resource/pass IDs, physical allocation slots, lifetimes, uniforms, samplers, source generations, and checked I64 budget. The renderer only translates this frozen record to native work.
 - Positive W6b format is single-sample RGBA8 inherited from W6a. Backdrop, filtered `initWithPrevious`, F16/HDR, W6c/W6d filter families, arbitrary SkSL/WGSL, and unavailable physical capabilities fail before allocation with their owner’s stable diagnostic; never substitute or approximate.
@@ -36,11 +40,11 @@
 
 ## Review Focus
 
-- `DECAL` blur of an opaque edge must fade to transparent outside the source, whereas `CLAMP` retains the edge color; Task 3: `imageBlurTileModesAreDistinctAtTheSourceEdge` uses its CPU oracle.
-- An `OUTER` mask blur must be zero inside the original coverage and an `INNER` blur must be zero outside it; Task 4: `maskBlurStylesTransformCoverageBeforeMaterialShading` pins all four styles.
+- An unpainted nested Picture using `DST_OUT` must erase the current aggregate destination, while a neighboring painted child stays isolated; Task 3: `pictureInlineDstOutAndPaintedIsolationAreDistinct` pins both modes.
+- A child outside the final outer clip must still contribute blur inside it, and a blur/shadow halo outside Picture cull must survive; Task 3: `pictureDeferredClipAndCullDoNotTruncateFilterDemand` uses a translated/negative target origin and non-commuting transform.
 - A shared public filter object must remain one captured node while two equal-but-distinct filter objects remain two nodes after memory and wire Picture replay; Task 1: `picture14PreservesSharedFilterIdentityWithoutValueAliasing` proves it through bytes and pixels.
-- A malformed historical table length must decode as Picture data but refuse with `invalid.mask_filter.table_length` without changing readback; Task 5: `historicalInvalidTableRefusesAtomicallyAndSameSurfaceRecovers` owns the behavior.
-- `SHADOW_ONLY` must not repaint the original source, including after nonzero offset and an expanded output domain; Task 6: `shadowOnlyOmitsSourceAndExpandsBounds` compares independent expected pixels.
+- Parent and descendant Picture masks must preserve semi-transparent overlap and a transparent hole, then apply alpha/color-filter/blend once; Tasks 4–5: `pictureMaskBlurPreservesAggregateAlphaBoundary` and `pictureMaskShaderTableUsesSealedAggregateSource` own the pixels.
+- `SHADOW_ONLY` must not repaint the original source, including after nonzero offset, expanded output domain, aggregate B/B−1, and a late-refusal recovery; Task 6: `shadowOnlyOmitsSourceAndExpandsBounds` and `pictureAggregateBudgetAndLateRecoveryAreAtomic` compare independent expected behavior.
 
 ---
 
@@ -66,8 +70,8 @@ RES = kanvas/src/test/resources/picture/
 | `IR/EffectNode.kt`, `SceneCommand.kt`, `SceneArchiveCodec.kt` | Own `CapturedFilterTableV1`, typed references, graph limits, canonical identity, Picture 14/schema 8 encode/decode, legacy recursive conversion, and the wire-safe `CapturedDropShadowModeV1`; API adapters map it to/from public `DropShadowMode`. |
 | `API/picture/Picture.kt`, `PictureWireV8.kt` | Write version 14/schema 8; read historical v8–13 and schema 1–7, defaulting missing shadow mode to `COMPOSITE`; leave read-only historical v8 handling intact. |
 | `GEOM/RectProjectionF64.kt`, `RectI32.kt`, `MATRIX/LayerMappingF64.kt` | Reuse W6a checked outward projection/mapping and add only filter-bound expansion/translation helpers with F64 calculation and checked I32 results. |
-| `PLAN/PlanResources.kt`, `PlanPasses.kt`, `RenderGraph.kt`, `RenderGraphConstruction.kt`, `W6aLayerPlanBudget.kt` | Add typed `FilterTarget`, typed filter payloads, W6b compiler witness validation, dependencies, slots, semantic/physical lifetimes, and checked peak accounting to the existing single graph. |
-| `PLAN/W6aLayerPlanCompiler.kt`, `W6aLayerGraphConstruction.kt`, `LayerScopePlanV1.kt`, `CapabilityCompilerChain.kt` | Upgrade the existing layer owner to recognize W6b filters, bind captured roots to source contexts, freeze auto-layer/layer filter occurrences, and preserve W4/W5 sources before publication. |
+| `PLAN/PlanResources.kt`, `PlanPasses.kt`, `RenderGraph.kt`, `RenderGraphConstruction.kt`, `W6aLayerPlanBudget.kt` | Add typed `FilterTarget`, `PictureStreamAggregateV1`, versioned sealed graph-texture operands, typed filter payloads, W6b compiler witness validation, dependencies, slots, semantic/physical lifetimes, and checked peak accounting to the existing single graph. |
+| `PLAN/W6aLayerPlanCompiler.kt`, `W6aLayerGraphConstruction.kt`, `LayerScopePlanV1.kt`, `CapabilityCompilerChain.kt` | Upgrade the existing layer owner to recognize W6b filters, bind captured roots to source contexts, freeze exhaustive Picture stream entries and auto-layer/layer filter occurrences, and preserve W4/W5 sources before publication. |
 | `PLAN/FrameSourceLayoutV4.kt`, `MaterialSourceConstructionV4.kt`, `RawMaterialRequirementsV2.kt` | Remain the only W5 material/source issuer for filtered draws and mask shaders; bind pre-publication source targets without a W6b material compiler. |
 | `GPU/planning/W6aLayerGraphLowerer.kt`, `GpuPlanTaskListLowerer.kt`, `GPU/recording/GPUW6aLayerFramePlan.kt` | Lower the sealed W6b graph and pass payloads to handle-free recorded steps; accept no new IDs, bounds, passes, or routes. |
 | `GPU/execution/GPUWgpu4kW6aLayerFramePayloadMaterializer.kt`, `GPUWgpu4kFramePayloadMaterializerDispatcher.kt`, `GPUW6aEncoderScopesV1.kt` | Reserve/materialize the frozen filter targets and execute the planned samples/renders/composites behind the existing draft → ready → submit → completion lifecycle. |
@@ -248,9 +252,63 @@ Add `PlanResourceRole.FilterTarget`. Its texture is RGBA8, single sample, `Rende
 
 `FilterBoundsPlanV1` computes expansions in F64 (including blur support) and seals outward `RectI32` only in `:math`. The filter compiler converts device rectangles to filter-target texels using already sealed target origins. `GPUW6aLayerFramePlan` receives target-local rectangles and never performs subtraction, `.toInt()`, saturation, target resize, or a new bounds calculation.
 
+### Picture stream aggregate contract in `:gpu-plan`
+
+Task 2 adds this plan-owned vocabulary to the existing graph; none of it is a
+wire/API object or a renderer replay request:
+
+```kotlin
+public enum class PictureAggregateExecutionModeV1 {
+    INLINE_CURRENT_TARGET,
+    ISOLATED_SOURCE,
+}
+
+public class PictureSourceLocatorV1 internal constructor(
+    public val pictureOccurrenceIdI32: Int,
+    public val sourceCommandIndexI32: Int,
+)
+
+@JvmInline
+public value class FramePlannedCommandIdI32(public val valueI32: Int)
+
+public class GraphTextureSourceOperandV1 internal constructor(
+    public val sealedSourceId: PlanResourceId,
+    public val sealedSourceGenerationI64: Long,
+    public val targetOriginDeviceI32: Point2I32,
+    public val sourceSampleRectTargetLocalI32: RectI32,
+    public val deferredCompositeClipTargetLocalI32: RectI32?,
+    public val mappingF64: LayerMappingF64,
+    public val material: MaterialPlanRef,
+    public val uniformResource: PlanResourceId,
+    public val finalBlend: BlendPlan,
+    public val bounds: FilterBoundsPlanV1,
+)
+```
+
+`PictureStreamAggregateV1` holds one ordered entry for every admitted visual
+command and uses `PictureSourceLocatorV1` plus `FramePlannedCommandIdI32` for
+all W4/W5/resource/pass lookup. Its frozen `recordedInnerClip`,
+`deferredCompositeClip`, `cullContentBound`, and `demandRegion` are distinct.
+`INLINE_CURRENT_TARGET` is selected exactly for `paint == null` and owns no
+transparent target or synthetic composite. `ISOLATED_SOURCE` owns an aggregate
+target with state `uninitialized → accumulating(versionI64) →
+sealed(sourceId, sourceGenerationI64)`. Begin, every child terminal, seal,
+source generation, final composite, dependencies, physical bindings and
+conservative lifetime must be validated by the production `RenderGraph` before
+publication. `GraphTextureSourceOperandV1` transforms the sealed premultiplied
+RGBA source once: its `MaterialPlanRef` and `uniformResource` are the existing
+W5 color/alpha operation, its source rect/mapping are the coordinates, and its
+`finalBlend` is the single parent blend. Alpha-derived mask coverage replaces
+alpha instead of multiplying premultiplied child color twice, and out-of-domain
+samples are transparent black.
+
+Structural violations return `w6b.picture_stream.invalid` with occurrence,
+source-index, aggregate, invariant and implicated pass/resource facts. Existing
+capture, bounds/projection and budget diagnostics retain their own codes.
+
 ### Auto-layer semantics
 
-For every admitted `SceneCommand.Draw` with a mask or image filter, `W6aLayerPlanCompiler` emits an internal `AutoLayerPlanV1` rooted at the draw’s active W6 target. It captures the raw W4 coverage and W5 source once, runs `MaskFilter` before source shading and `ImageFilter` after source construction, clips the final output, then uses the already selected `BlendPlan` once. It is not public `saveLayer`, has no restore descriptor, and does not change public Canvas save/restore depth.
+In Task 2, for every admitted `SceneCommand.Draw` with a mask or image filter, `W6aLayerPlanCompiler` emits an internal `AutoLayerPlanV1` rooted at the draw’s active W6 target. It captures the raw W4 coverage and W5 source once, runs `MaskFilter` before source shading and `ImageFilter` after source construction, clips the final output, then uses the already selected `BlendPlan` once. It is not public `saveLayer`, has no restore descriptor, and does not change public Canvas save/restore depth. Tasks 3–6 only lower/materialize these sealed operations.
 
 `MaskFilter.Table` payloads hold `ImmutableUBytes` and require `size == 256` only at W6b plan admission. `MaskFilter.Shader` payloads reference an existing `MaterialPlanTable` entry through `MaterialPlanRef` and its sealed W5 coordinate/mapping authority. The renderer sees a material reference and uniform offsets, never a public `Shader` or a newly compiled material.
 
@@ -380,13 +438,14 @@ git commit -m "feat(picture): capture w6b filter tables and shadow modes"
 
 **Agent:** Terra implementation; Sol review.
 
-**Outcome:** The existing W6a authority owns any layer or draw containing a captured W6b filter, binds roots to an immutable source context, freezes typed filter passes/targets and budgets in one graph, and refuses unimplemented W6c/W6d/backdrop/F16 inputs terminally without public output.
+**Outcome:** The existing W6a authority owns any layer or draw containing a captured W6b filter, binds roots to an immutable source context, freezes exhaustive `PictureStreamAggregateV1` structure, all typed filter passes/targets/material operands/versions and budgets in one graph, and refuses unimplemented native/W6c/W6d/backdrop/F16 inputs terminally without public output.
 
 **Files — Create:**
 
 - `PLAN/W6bFilterPlanV1.kt`
 - `PLAN/W6bFilterGraphConstruction.kt`
 - `PLAN/W6bFilterDiagnostics.kt`
+- `PLAN/PictureStreamAggregateV1.kt`
 - `TEST/surface/W6bFilterAdmissionRecoverySurfaceTest.kt`
 
 **Files — Modify:**
@@ -407,9 +466,9 @@ git commit -m "feat(picture): capture w6b filter tables and shadow modes"
 **Interfaces:**
 
 - Consumes: Task 1 `CapturedFilterTableV1` roots; W6a `LayerMappingF64`, `LayerBoundsPlanV1`, `RenderGraph`, and W5 source lanes.
-- Produces: `FilterBoundsPlanV1`, `FilterEvaluationKeyV1`, `FilterPassOperationV1`, `PlanResourceRole.FilterTarget`, and stable W6b diagnostics. Tasks 3–6 add only typed operation arms to this contract.
+- Produces: `FilterBoundsPlanV1`, `FilterEvaluationKeyV1`, `FilterPassOperationV1`, `PlanResourceRole.FilterTarget`, `PictureStreamAggregateV1`, `PictureSourceLocatorV1`, `FramePlannedCommandIdI32`, `GraphTextureSourceOperandV1`, versioned aggregate witness facts, and stable W6b diagnostics including `w6b.picture_stream.invalid`. Tasks 3–6 consume these frozen operations and may add native materialization only; they may not alter aggregate structure, identities, source generations, transforms, clips, bounds, pass topology, material ownership, slots, or budget.
 
-- [ ] **Step 1: Add public admission/recovery RED tests, including a direct no-filter W6a control.**
+- [ ] **Step 1: Add public admission/recovery RED tests, including a direct no-filter W6a control and malformed nested-Picture recovery.**
 
 ```kotlin
 @Test
@@ -417,6 +476,16 @@ fun w6cFilterRefusesTerminallyAndSameSurfaceRecovers() {
     val surface = Surface(2, 2)
     surface.canvas { drawRect(bounds, Paint(imageFilter = ImageFilter.Offset(1f, 0f))) }
     assertTerminalWithoutReadbackMutation(surface, "w6b.filter.unsupported_family")
+    surface.discardRecordedOperations()
+    surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+    assertContentEquals(rgba(17, 61, 211), surface.render().pixels)
+}
+
+@Test
+fun malformedNestedPictureRefusesTerminallyAndSameSurfaceRecovers() {
+    val surface = Surface(2, 2)
+    surface.canvas { playbackPictureWithNestedUnsupportedState(this) }
+    assertTerminalWithoutReadbackMutation(surface, "w6a.layer.unsupported_child")
     surface.discardRecordedOperations()
     surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
     assertContentEquals(rgba(17, 61, 211), surface.render().pixels)
@@ -429,25 +498,50 @@ Run: `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bFilterA
 
 Expected: FAIL with the former W6a spatial-filter refusal or wrong terminal owner.
 
-- [ ] **Step 3: Add the frozen plan types and `FilterTarget` resource role; validate every target-local rectangle and I64 byte calculation before graph publication.**
+- [ ] **Step 3: Add the frozen plan types, `FilterTarget` resource role, Picture aggregate modes/locators/graph-texture operand, and `w6b.picture_stream.invalid`; validate every target-local rectangle and I64 byte calculation before graph publication.**
 
 ```kotlin
 public enum class FilterAxisV1 { X, Y }
 
 public enum class PlanResourceRole {
-    LogicalTarget, LayerTarget, FilterTarget,
-    // existing roles remain unchanged
+    LogicalTarget,
+    LayerTarget,
+    FilterSource,
+    CoverageSource,
+    CoverageOriginal,
+    FilterTransparentBlack,
+    FilterTarget,
+    MultisampleColorTarget,
+    PathHardEdgeMask,
+    PathHardEdgeDepthStencil,
+    CoverageMaskAccumulator,
+    CoverageMaskScratch,
+    CoverageMaskMultisampleScratch,
+    CoverageMaskDepthStencil,
+    ReadbackStaging,
+    VertexData,
+    IndexData,
+    UniformData,
+    GradientStopData,
+    DepthStencil,
+    DestinationSnapshot,
+    DecodedImageV1,
+    NoiseTableData,
+    SourceUniformData,
+    ImageUploadStaging,
+    RuntimeStorageData,
+    RuntimeSampler,
 }
 ```
 
-- [ ] **Step 4: Implement F64 filter expansion and target-local conversion in `:math`, returning null/diagnostics on non-finite, horizon, subtraction, or I32 overflow.**
+- [ ] **Step 4: Implement F64 filter expansion and target-local conversion in `:math`; freeze inner/deferred clips, cull/content and reverse demand separately, returning existing bounds diagnostics on non-finite, horizon, subtraction, or I32 overflow.**
 
 ```kotlin
 public fun RectF64.expandForBlurF64OrNull(sigmaXF32: Float, sigmaYF32: Float): RectF64?
 public fun RectI32.translateCheckedOrNull(delta: Vector2I32): RectI32?
 ```
 
-- [ ] **Step 5: Teach `W6aLayerPlanCompiler` to own W6b roots before child-lane planning and have `W6bFilterGraphConstruction` append only frozen resources/passes to the existing graph.**
+- [ ] **Step 5: Teach `W6aLayerPlanCompiler` to own W6b roots before child-lane planning and have `W6bFilterGraphConstruction` append only frozen resources/passes to the existing graph. Partition every nested `SceneCommand`, assign occurrence-local planned IDs, select inline versus isolated mode from captured paint presence, and freeze every Task 3–6 operation topology with its source generation and one terminal composite.**
 
 ```kotlin
 val key = FilterEvaluationKeyV1.of(
@@ -458,7 +552,7 @@ val key = FilterEvaluationKeyV1.of(
 )
 ```
 
-- [ ] **Step 6: Make gate/router terminal after W6b ownership; preserve exact failures for backdrop, filtered previous, F16/HDR, and unimplemented W6c/W6d families.**
+- [ ] **Step 6: Publish production `RenderGraph` validation for exact source-index/layer-interval partition, balanced scopes, repeated-Picture transform/material identity separation, nested unsupported-command refusal, begin/seal/version, terminal bijection, source generation, parent target, dependencies, semantic/physical operand equality and frame-local lifetime containment. Add the permitted graph-contract selectors using only real graph values, then make gate/router terminal after W6b ownership; preserve exact failures for backdrop, filtered previous, F16/HDR, and unimplemented W6c/W6d families.**
 
 - [ ] **Step 7: Run module compilation and admission gates sequentially.**
 
@@ -468,6 +562,7 @@ rtk proxy ./gradlew :math:matrix:compileKotlinJvm
 rtk ./gradlew :render-ir:compileKotlin
 rtk ./gradlew :gpu-plan:compileKotlin
 rtk ./gradlew :kanvas:compileKotlin
+rtk ./gradlew :gpu-plan:test --tests 'org.graphiks.kanvas.gpu.plan.RenderGraphContractTest'
 rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bFilterAdmissionRecoverySurfaceTest'
 rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6aLayerSurfacePixelTest'
 ```
@@ -487,7 +582,7 @@ git commit -m "feat(gpu-plan): freeze w6b filter authority"
 
 **Agent:** Terra implementation; Sol review.
 
-**Outcome:** An admitted image blur on a layer restore or a draw auto-layer executes frozen horizontal then vertical passes using `CLAMP`, `REPEAT`, `MIRROR`, or `DECAL`, with independently-oracled pixels, correct expansion/origins, and memory/wire Picture replay.
+**Outcome:** An admitted image blur on a layer restore, draw auto-layer, or frozen Picture aggregate executes its already-planned horizontal then vertical passes using `CLAMP`, `REPEAT`, `MIRROR`, or `DECAL`, with independently-oracled pixels, correct expansion/origins, ordered nested Picture semantics, and memory/wire Picture replay.
 
 **Files — Create:**
 
@@ -497,9 +592,6 @@ git commit -m "feat(gpu-plan): freeze w6b filter authority"
 
 **Files — Modify:**
 
-- `PLAN/W6bFilterPlanV1.kt`
-- `PLAN/W6bFilterGraphConstruction.kt`
-- `PLAN/W6aLayerGraphConstruction.kt`
 - `GPU/planning/W6aLayerGraphLowerer.kt`
 - `GPU/recording/GPUW6aLayerFramePlan.kt`
 - `GPU/execution/GPUW6aEncoderScopesV1.kt`
@@ -509,10 +601,10 @@ git commit -m "feat(gpu-plan): freeze w6b filter authority"
 
 **Interfaces:**
 
-- Consumes: Task 2 `SeparableBlur` operation and frozen filter target IDs/rectangles; existing W5 material source and W6a origin mapping.
-- Produces: `IMAGE_BLUR_X`/`IMAGE_BLUR_Y` passes with exact tile mode and a native mapping keyed only by `FilterImplementationKindV1`. Tasks 4 and 6 reuse the same blur passes for coverage/shadow inputs.
+- Consumes: Task 2 `SeparableBlur` operations, `PictureStreamAggregateV1` modes/terminals, frozen source generations and filter target IDs/rectangles; existing W5 material source and W6a origin mapping.
+- Produces: native materialization of the pre-existing `IMAGE_BLUR_X`/`IMAGE_BLUR_Y` passes with exact tile mode and a native mapping keyed only by `FilterImplementationKindV1`. Tasks 4 and 6 reuse the same frozen blur passes for coverage/shadow inputs.
 
-- [ ] **Step 1: Add RED cases for impulse blur, all tile modes, nonzero origin, and Picture replay; compute expected arrays before `Surface`.**
+- [ ] **Step 1: Add RED cases for impulse blur, all tile modes, nonzero/negative origin, ordered nested filtered Pictures, inline-child `DST_OUT`, painted-child isolation, deferred outer clip/cull demand, non-commuting outer transform, parent alpha/color-filter/blend-once, and Picture replay; compute expected arrays before `Surface`.**
 
 ```kotlin
 @Test
@@ -523,21 +615,46 @@ fun imageBlurTileModesAreDistinctAtTheSourceEdge() {
     W6bImageBlurCpuOracle.assertNear(W6bImageBlurCpuOracle.edge(TileMode.DECAL), decal)
     assertTrue(clamp[edgeAlphaOffset] > decal[edgeAlphaOffset])
 }
+
+@Test
+fun pictureInlineDstOutAndPaintedIsolationAreDistinct() {
+    val inline = renderFilteredParentWithChild(paint = null, childBlend = BlendMode.DstOut)
+    val isolated = renderFilteredParentWithChild(paint = Paint(), childBlend = BlendMode.DstOut)
+    assertContentEquals(expectedInlineDstOut(), inline)
+    assertContentEquals(expectedPaintedChildIsolation(), isolated)
+}
+
+@Test
+fun pictureDeferredClipAndCullDoNotTruncateFilterDemand() {
+    val actual = renderTranslatedPictureBlurWithDeferredOuterClipAndCull()
+    W6bImageBlurCpuOracle.assertNear(
+        W6bImageBlurCpuOracle.deferredClipAndCullWithNegativeTargetOrigin(),
+        actual,
+    )
+}
+
+@Test
+fun pictureParentAlphaColorFilterAndBlendApplyOnce() {
+    val actual = renderSemiTransparentPictureParentWithColorFilterAndBlend()
+    assertContentEquals(expectedPictureParentPaintAppliedOnce(), actual)
+}
 ```
 
-- [ ] **Step 2: Run causal REDs against the Task 2 authority; confirm they fail because no positive blur operation is planned/materialized.**
+- [ ] **Step 2: Run causal REDs against the Task 2 authority; confirm they fail because frozen operations have no native materializer, not because an aggregate is re-planned or a native exit occurs.**
 
 Run: `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bImageBlurSurfacePixelTest'`
 
 Expected: FAIL with a W6b image-blur capability refusal.
 
-- [ ] **Step 3: Plan exactly two typed passes and ping-pong targets after checked bounds propagation; do not use a renderer-local blur planner.**
+- [ ] **Step 3: Consume exactly the two Task-2-frozen typed passes and ping-pong targets after asserting their checked bounds, target-local origins, input/output source generations and aggregate terminal links. Do not create, repartition, or select a pass in Task 3 and do not use a renderer-local blur planner.**
 
 ```kotlin
-passes += FilterPass(nextPass(), listOf(source), horizontal, key,
-    FilterPassOperationV1.SeparableBlur(FilterImplementationKindV1.IMAGE_BLUR_X, sigmaXF32, FilterAxisV1.X, tileMode, bounds))
-passes += FilterPass(nextPass(), listOf(horizontal), vertical, key,
-    FilterPassOperationV1.SeparableBlur(FilterImplementationKindV1.IMAGE_BLUR_Y, sigmaYF32, FilterAxisV1.Y, tileMode, bounds))
+require(frozenPasses.map { it.operation.kind } == listOf(
+    FilterImplementationKindV1.IMAGE_BLUR_X,
+    FilterImplementationKindV1.IMAGE_BLUR_Y,
+))
+require(frozenPasses.all { it.operation.bounds.copyTargetOriginDeviceI32() == frozenOrigin })
+require(frozenAggregate.terminalPassIds().contains(frozenPasses.last().id))
 ```
 
 - [ ] **Step 4: Materialize the named target views/uniforms and encode only frozen X/Y operands; map all four tile modes in WGSL without a default clamp branch.**
@@ -551,9 +668,9 @@ when (operation.tileMode) {
 }
 ```
 
-- [ ] **Step 5: Bind blur output into the existing W6a restore/auto-layer composite exactly once and retain every target lease through completion or quarantine.**
+- [ ] **Step 5: Bind blur output into the existing W6a restore/auto-layer or frozen Picture parent terminal composite exactly once and retain every target lease through completion or quarantine.**
 
-- [ ] **Step 6: Add memory/wire replay to Task 1's Picture shard and rerun the public pixels after post-capture mutation of source filter fields/arrays where applicable.**
+- [ ] **Step 6: Add memory/wire replay to Task 1's Picture shard and rerun the public pixels after post-capture mutation of source filter fields/arrays where applicable. Replay the same captured Picture twice under distinct outer transforms/paints and assert two occurrence-local source generations rather than a command-index alias.**
 
 - [ ] **Step 7: Run serial compilation and targeted public tests.**
 
@@ -566,7 +683,7 @@ rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6bFilterPicture
 rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6aLayerBoundsSurfacePixelTest'
 ```
 
-- [ ] **Step 8: Refactor duplicate X/Y target construction behind the typed `FilterAxisV1` contract only; rerun Task 3 selectors.**
+- [ ] **Step 8: Refactor duplicate X/Y native target-view wiring behind the typed `FilterAxisV1` contract only; rerun Task 3 selectors.**
 
 - [ ] **Step 9: Commit Task 3.**
 
@@ -581,22 +698,16 @@ git commit -m "feat(gpu): execute w6b image blur passes"
 
 **Agent:** Terra implementation; Sol review.
 
-**Outcome:** Filtered draws receive a W6b auto-layer and `MaskFilter.Blur` executes `NORMAL`, `SOLID`, `OUTER`, and `INNER` over raw coverage before W5 shading, without double-applying paint effects or disturbing explicit W6a layer restore order.
+**Outcome:** Filtered draws and isolated Picture parents receive their already-frozen W6b source/auto-layer operations, and `MaskFilter.Blur` executes `NORMAL`, `SOLID`, `OUTER`, and `INNER` over raw coverage before W5 shading, without double-applying paint effects or disturbing explicit W6a layer restore order.
 
 **Files — Create:**
 
-- `PLAN/W6bAutoLayerPlanV1.kt`
 - `GPU/wgsl/W6bMaskCoverageSnippet.kt`
 - `TEST/surface/W6bMaskBlurAutoLayerSurfacePixelTest.kt`
 - `TEST/surface/W6bMaskBlurCpuOracle.kt`
 
 **Files — Modify:**
 
-- `PLAN/W6bFilterPlanV1.kt`
-- `PLAN/W6bFilterGraphConstruction.kt`
-- `PLAN/W6aLayerPlanCompiler.kt`
-- `PLAN/W6aLayerGraphConstruction.kt`
-- `PLAN/FrameSourceLayoutV4.kt`
 - `GPU/planning/GpuPlanTaskListLowerer.kt`
 - `GPU/recording/GPUW6aLayerFramePlan.kt`
 - `GPU/execution/GPUWgpu4kW6aLayerFramePayloadMaterializer.kt`
@@ -604,10 +715,10 @@ git commit -m "feat(gpu): execute w6b image blur passes"
 
 **Interfaces:**
 
-- Consumes: Task 3 frozen separable blur, existing W4 raw coverage, existing W5 material table, and selected `BlendPlan`.
-- Produces: `AutoLayerPlanV1` and `MASK_COVERAGE_BLUR_X/Y` typed pass payloads. Task 5 adds shader/table coverage arms and Task 6 can use auto-layer source output for drop shadows.
+- Consumes: Task 2 frozen aggregate/auto-layer coverage plans, Task 3 native separable blur materialization, existing W4 raw coverage, existing W5 material table, and selected `BlendPlan`.
+- Produces: native materialization of the pre-existing `AutoLayerPlanV1` and `MASK_COVERAGE_BLUR_X/Y` payloads. Task 5 materializes its already-frozen shader/table coverage operations and Task 6 consumes frozen aggregate source output for shadows.
 
-- [ ] **Step 1: Add public RED tests for all four blur styles, a translated filtered draw, an explicit layer containing an auto-layer, and “blend once” over a colored destination.**
+- [ ] **Step 1: Add public RED tests for all four blur styles, a translated filtered draw, an explicit layer containing an auto-layer, “blend once” over a colored destination, and parent/descendant Picture mask blur with semi-transparent overlap plus a transparent hole.**
 
 ```kotlin
 @Test
@@ -617,6 +728,12 @@ fun maskBlurStylesTransformCoverageBeforeMaterialShading() {
         W6bMaskBlurCpuOracle.assertNear(W6bMaskBlurCpuOracle.render(style), actual)
     }
 }
+
+@Test
+fun pictureMaskBlurPreservesAggregateAlphaBoundary() {
+    val actual = renderPictureWithParentAndDescendantMaskBlur()
+    W6bMaskBlurCpuOracle.assertNear(W6bMaskBlurCpuOracle.pictureAggregateMaskBlur(), actual)
+}
 ```
 
 - [ ] **Step 2: Run the mask-auto-layer shard against unchanged production and record a behavioral RED on W6a's spatial-filter refusal.**
@@ -625,18 +742,15 @@ Run: `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bMaskBlu
 
 Expected: FAIL with `w6a.layer.unsupported_spatial_filter` or equivalent pre-W6b refusal.
 
-- [ ] **Step 3: Partition each filtered draw into raw coverage, mask transform, W5 source shading, optional image output, clip, and one selected final blend.**
+- [ ] **Step 3: Materialize the Task-2-frozen raw coverage, mask transform, W5 source shading, optional image output, deferred clip, and one selected final blend. Assert the Picture parent consumes its sealed graph-texture operand once and never re-shades child materials.**
 
 ```kotlin
-internal class AutoLayerPlanV1(
-    val coverageSource: PlanResourceId,
-    val filteredCoverage: PlanResourceId,
-    val shadedSource: PlanResourceId,
-    val finalBlend: BlendPlan,
-)
+require(frozenAutoLayer.coverageSource == frozenAggregate.coverageSource)
+require(frozenAutoLayer.finalBlend == frozenAggregate.graphTextureOperand.finalBlend)
+require(frozenAutoLayer.maskOperationIds().all { it in frozenGraph.passIds() })
 ```
 
-- [ ] **Step 4: Plan mask blur as typed coverage X/Y passes and style formulas, retaining original coverage as an explicit input for `SOLID`, `OUTER`, and `INNER`.**
+- [ ] **Step 4: Materialize the preplanned mask-blur coverage X/Y passes and style formulas, retaining original coverage as an explicit input for `SOLID`, `OUTER`, and `INNER`; do not add an operation arm, source generation, bound, or target.**
 
 ```kotlin
 val styleOutput = when (style) {
@@ -677,7 +791,7 @@ git commit -m "feat(gpu): execute w6b mask blur auto-layers"
 
 **Agent:** Terra implementation; Sol review.
 
-**Outcome:** `MaskFilter.Shader` uses the frozen W5 material alpha in the captured mapping and `MaskFilter.Table` uses an immutable 256-entry coverage LUT; malformed historical table lengths refuse atomically with the stable diagnostic and recover on the same Surface.
+**Outcome:** `MaskFilter.Shader` uses the frozen W5 material alpha in the captured mapping and `MaskFilter.Table` uses an immutable 256-entry coverage LUT for draws plus sealed parent/descendant Picture sources; malformed historical table lengths refuse atomically with the stable diagnostic and recover on the same Surface.
 
 **Files — Create:**
 
@@ -686,12 +800,6 @@ git commit -m "feat(gpu): execute w6b mask blur auto-layers"
 
 **Files — Modify:**
 
-- `PLAN/W6bFilterPlanV1.kt`
-- `PLAN/W6bFilterGraphConstruction.kt`
-- `PLAN/W6aLayerPlanCompiler.kt`
-- `PLAN/FrameSourceLayoutV4.kt`
-- `PLAN/MaterialSourceConstructionV4.kt`
-- `PLAN/W6aLayerPlanBudget.kt`
 - `GPU/recording/GPUW6aLayerFramePlan.kt`
 - `GPU/execution/GPUWgpu4kW6aLayerFramePayloadMaterializer.kt`
 - `GPU/wgsl/W6bMaskCoverageSnippet.kt`
@@ -699,10 +807,10 @@ git commit -m "feat(gpu): execute w6b mask blur auto-layers"
 
 **Interfaces:**
 
-- Consumes: Task 4 auto-layer coverage source, W5 `MaterialPlanTable`/`MaterialPlanRef` coordinates, `ImmutableUBytes`, and Task 1 historical Picture decoding.
-- Produces: typed `MASK_SHADER` and `MASK_TABLE` `FilterPassOperationV1` arms. No task after this one may inspect public masks in the renderer.
+- Consumes: Task 2 frozen aggregate graph-texture/material operands and `MASK_SHADER`/`MASK_TABLE` operations, Task 4 native coverage source materialization, W5 `MaterialPlanTable`/`MaterialPlanRef` coordinates, `ImmutableUBytes`, and Task 1 historical Picture decoding.
+- Produces: native materialization of the pre-existing typed `MASK_SHADER` and `MASK_TABLE` `FilterPassOperationV1` arms. No task after this one may inspect public masks or reconstruct Picture material state in the renderer.
 
-- [ ] **Step 1: Add public RED tests for a gradient mask shader, an invert-like 256-entry table, post-capture table mutation, and the historical invalid-length recovery case.**
+- [ ] **Step 1: Add public RED tests for a gradient mask shader, an invert-like 256-entry table, parent and descendant Picture shader/table masks, post-capture table mutation, and the historical invalid-length recovery case.**
 
 ```kotlin
 @Test
@@ -715,21 +823,27 @@ fun historicalInvalidTableRefusesAtomicallyAndSameSurfaceRecovers() {
     surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
     assertContentEquals(rgba(17, 61, 211), surface.render().pixels)
 }
+
+@Test
+fun pictureMaskShaderTableUsesSealedAggregateSource() {
+    val actual = renderPictureWithParentShaderAndDescendantTableMask()
+    assertContentEquals(expectedPictureShaderTablePixels(), actual)
+}
 ```
 
 - [ ] **Step 2: Run the shard against unchanged production and confirm REDs arise from missing W6b mask arms, while the historical fixture decodes before render.**
 
 Run: `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bMaskShaderTableSurfacePixelTest'`
 
-- [ ] **Step 3: Validate table length only at W6b admission and seal a copy of 256 entries into a planned uniform/storage resource and physical allocation budget.**
+- [ ] **Step 3: Materialize only the Task-2-admitted table resources. Preserve the admission-time 256-entry copy, its generation, and its physical budget; do not revalidate by truncating/padding or create a new resource plan.**
 
 ```kotlin
-if (table.sizeI32 != 256) {
-    return W6bFilterDiagnostics.refusal("invalid.mask_filter.table_length", "Mask table must contain 256 entries.")
-}
+val frozenTable = requireNotNull(frozenMaskTable.tableResourceId)
+require(frozenMaskTable.entryCountI32 == 256)
+require(frozenGraph.resource(frozenTable).byteSize == 256L)
 ```
 
-- [ ] **Step 4: Bind `MaskFilter.Shader` to its existing W5 material-table entry and map coordinates with the sealed auto-layer mapping; do not create a `Shader` compiler in `:gpu-plan` or renderer.**
+- [ ] **Step 4: Bind `MaskFilter.Shader` to its Task-2-frozen W5 material-table entry and map coordinates with the sealed auto-layer or `GraphTextureSourceOperandV1` mapping; do not create a `Shader` compiler, material row, source lane, or Picture authority in `:gpu-plan` or renderer.**
 
 ```kotlin
 FilterPassOperationV1.MaskShader(
@@ -773,7 +887,7 @@ git commit -m "feat(gpu): execute w6b shader and table masks"
 
 **Agent:** Terra implementation; Sol review.
 
-**Outcome:** Drop shadows execute through the frozen blur/filter graph in both public modes, auto-layer/layer bounds expand correctly, B/B−1 and late refusal are atomic, Picture replay is stable, and the W6b Draft PR is qualified against W6a without touching excluded suites.
+**Outcome:** Drop shadows execute through the frozen blur/filter graph in both public modes, including sealed Picture aggregates; auto-layer/layer/Picture bounds expand correctly, aggregate B/B−1, nested-budget and late refusal are atomic, Picture replay is stable, and the W6b Draft PR is qualified against W6a without touching excluded suites.
 
 **Files — Create:**
 
@@ -782,11 +896,6 @@ git commit -m "feat(gpu): execute w6b shader and table masks"
 
 **Files — Modify:**
 
-- `PLAN/W6bFilterPlanV1.kt`
-- `PLAN/W6bFilterGraphConstruction.kt`
-- `PLAN/W6aLayerGraphConstruction.kt`
-- `PLAN/W6aLayerPlanBudget.kt`
-- `PLAN/RenderGraph.kt`
 - `GPU/recording/GPUW6aLayerFramePlan.kt`
 - `GPU/execution/GPUW6aEncoderScopesV1.kt`
 - `GPU/execution/GPUWgpu4kW6aLayerFramePayloadMaterializer.kt`
@@ -796,10 +905,10 @@ git commit -m "feat(gpu): execute w6b shader and table masks"
 
 **Interfaces:**
 
-- Consumes: Tasks 1–5 node table, X/Y filter operation, auto-layer source, sealed W6a restore/composite/budget lifecycle.
-- Produces: `DROP_SHADOW_COLORIZE` and `DROP_SHADOW_COMPOSITE` operations; public pixel/recovery proof and the documented W6b checkpoint. W6c consumes the same table, evaluation key, `FilterPass`, and `FilterTarget` contracts unchanged.
+- Consumes: Task 2 frozen aggregate graph/source generations and shadow operations, Tasks 1–5 node table and native X/Y/mask materialization, auto-layer source, sealed W6a restore/composite/budget lifecycle.
+- Produces: native materialization of the pre-existing `DROP_SHADOW_COLORIZE` and `DROP_SHADOW_COMPOSITE` operations; public aggregate pixel/recovery proof and the documented W6b checkpoint. W6c consumes the same table, evaluation key, `FilterPass`, `FilterTarget`, and aggregate contracts unchanged.
 
-- [ ] **Step 1: Add independent-oracle RED tests for `COMPOSITE`, `SHADOW_ONLY`, translated/expanded bounds, nested explicit layer ordering, memory/wire replay, B/B−1, and late sibling recovery.**
+- [ ] **Step 1: Add independent-oracle RED tests for `COMPOSITE`, `SHADOW_ONLY`, translated/expanded Picture bounds, nested explicit layer ordering, memory/wire replay, aggregate B/B−1, nested-budget boundary, and late sibling recovery.**
 
 ```kotlin
 @Test
@@ -808,6 +917,13 @@ fun shadowOnlyOmitsSourceAndExpandsBounds() {
     val actual = renderFilteredImpulse(shadow)
     W6bDropShadowCpuOracle.assertNear(W6bDropShadowCpuOracle.shadowOnly(), actual)
     assertEquals(0u, actual[originalSourceAlphaOffset])
+}
+
+@Test
+fun pictureAggregateBudgetAndLateRecoveryAreAtomic() {
+    assertAggregateBudgetAcceptsAt(B)
+    assertAggregateBudgetRefusesAt(B - 1L, "w6b.filter.frame_budget_exceeded")
+    assertLateAggregateRefusalLeavesSentinelAndSameSurfaceRecovers()
 }
 ```
 
@@ -818,17 +934,19 @@ rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bDropShadowSur
 rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bBudgetRecoverySurfacePixelTest'
 ```
 
-- [ ] **Step 3: Plan shadow source binding, colorization, X/Y blur, offset, and mode-specific composition as typed passes; calculate required and produced bounds in F64 before checked I32 sealing.**
+- [ ] **Step 3: Materialize the Task-2-frozen shadow source binding, colorization, X/Y blur, offset, and mode-specific composition; assert required/produced F64 bounds, checked I32 sealing, aggregate source generation and terminal linkage without planning a pass, source, bound, or budget here.**
 
 ```kotlin
-val shadowOutput = appendShadowColorize(blurredCoverage, shadowColor, dxF32, dyF32, bounds)
-if (mode == DropShadowMode.COMPOSITE) appendShadowComposite(shadowOutput, originalSource, output, bounds)
-else shadowOutput
+require(frozenShadowPasses.first().operation.kind == FilterImplementationKindV1.DROP_SHADOW_COLORIZE)
+require(frozenShadowPasses.drop(1).count {
+    it.operation.kind == FilterImplementationKindV1.DROP_SHADOW_COMPOSITE
+} == if (frozenShadowMode == CapturedDropShadowModeV1.COMPOSITE) 1 else 0)
+require(frozenShadowPasses.all { it.evaluationKey.boundSourceId == frozenAggregate.sealedSourceId })
 ```
 
 - [ ] **Step 4: Materialize only the frozen shadow passes and bindings; `SHADOW_ONLY` has no original-source composite operand. Preserve one final parent blend from the auto-layer/layer plan.**
 
-- [ ] **Step 5: Charge every filter target and shadow intermediate in semantic and physical peaks; derive public B from fixture dimensions/formula, assert B accepts and B−1 returns `w6b.filter.frame_budget_exceeded` before native allocation.**
+- [ ] **Step 5: Verify that every frozen filter target and shadow intermediate remains charged in Task 2's semantic and physical peaks; derive public B from fixture dimensions/formula, assert B accepts and B−1 returns `w6b.filter.frame_budget_exceeded` before native allocation.**
 
 ```kotlin
 val physicalPeak = slots.fold(0L) { total, slot -> Math.addExact(total, slot.reservedBytesI64) }
@@ -881,10 +999,13 @@ git commit -m "feat(gpu): close w6b blur masks and shadows"
 - [ ] Picture 14/schema 8 writes the immutable filter table, roots, and `DropShadowMode`; v8–13 readers remain public-compatible and default omitted shadow mode to `COMPOSITE`.
 - [ ] Explicitly shared filter identity remains shared; equal-but-distinct recursive filters and historical recursive occurrences do not alias.
 - [ ] W6b is the single plan-first owner for admitted blur/mask/shadow layer and auto-layer scenes; no admitted path replans or falls back after freeze.
+- [ ] Nested draw-Picture streams exhaustively cover their captured commands with occurrence-local identities; unpainted children execute inline in their current target, painted children use a versioned sealed source, and no terminal composite is doubled.
+- [ ] Parent Picture coverage/color/material semantics preserve identity-mask semi-transparent overlap and transparent holes; outer clips are deferred past parent filters, cull does not truncate demand, and origins/target-local rectangles remain frozen.
 - [ ] Image blur executes typed X/Y passes for `CLAMP`, `REPEAT`, `MIRROR`, and `DECAL`, with F64 bounds and checked target-local I32 rectangles.
 - [ ] Mask blur styles, shader coverage, and 256-entry table coverage execute before source shading; malformed historical tables refuse with `invalid.mask_filter.table_length` and recover publicly.
 - [ ] `DropShadowMode.COMPOSITE` and `SHADOW_ONLY` have distinct, publicly proven source/composite behavior and correct expanded bounds.
 - [ ] Filter targets, passes, IDs, source bindings/generations, slots, semantic/physical lifetimes, pessimistic B/B−1 budget, leases, and diagnostics are frozen in `:gpu-plan` before native preparation.
+- [ ] Malformed aggregate structure returns `w6b.picture_stream.invalid` with occurrence/pass/resource facts, while capture, bounds, and budget retain their existing diagnostics.
 - [ ] Any W6b-owned refusal leaves no partial readback and same-Surface discard/re-record recovery succeeds.
 - [ ] Backdrop, filtered previous, F16/HDR, W6c/W6d families, fonts, codecs, GMs, dashboard/renders/baselines/scores, global Skia, `jpg-color-cube`, and device-loss proof remain explicit exclusions.
 - [ ] Sol task reviews and the whole-branch review leave no Critical/Important finding; only one bounded correction wave is used for the PR.
@@ -892,10 +1013,10 @@ git commit -m "feat(gpu): close w6b blur masks and shadows"
 
 ## Plan Self-Review
 
-- **Spec coverage:** Task 1 owns immutable capture, stable input references, Picture 14/schema 8, historical readers, and `DropShadowMode`; Task 2 owns the one W6 physical filter contract and terminal admission; Tasks 3–5 own blur and all three mask-filter families; Task 6 owns both shadow modes, B/B−1, atomic recovery, custody, review, and the stacked Draft PR.
+- **Spec coverage:** Task 1 owns immutable capture, stable input references, Picture 14/schema 8, historical readers, and `DropShadowMode`; Task 2 owns the one W6 physical filter contract, exhaustive versioned Picture-stream graph, diagnostics, and terminal admission; Tasks 3–5 materialize frozen image and mask operations with their positive Picture pixels; Task 6 materializes frozen shadows and owns aggregate B/B−1, atomic recovery, custody, review, and the stacked Draft PR.
 - **Placeholder scan:** no deferred-work marker or unspecified test step remains; every implementation step names concrete files, public tests, commands, interfaces, and a commit.
-- **Type consistency:** every task uses `CapturedFilterNodeIdI32`, `CapturedFilterInputV1`, `CapturedFilterTableV1`, `FilterEvaluationKeyV1`, `FilterBoundsPlanV1`, `FilterPassOperationV1`, one `FilterPass`, and one `FilterTarget` role. Picture/backdrop input forms are reserved without creating a W6d execution path.
-- **Review focus:** the five listed risks are pinned respectively in Tasks 3, 4, 1, 5, and 6 through public Surface/Picture behavior.
+- **Type consistency:** every task uses `CapturedFilterNodeIdI32`, `CapturedFilterInputV1`, `CapturedFilterTableV1`, `FilterEvaluationKeyV1`, `FilterBoundsPlanV1`, `FilterPassOperationV1`, `PictureStreamAggregateV1`, `PictureSourceLocatorV1`, `FramePlannedCommandIdI32`, `GraphTextureSourceOperandV1`, one `FilterPass`, and one `FilterTarget` role. Picture/backdrop input forms are reserved without creating a W6d execution path.
+- **Review focus:** the five listed risks are pinned respectively in Tasks 3, 3, 1, 4–5, and 6 through public Surface/Picture behavior.
 
 ## Execution Handoff
 
