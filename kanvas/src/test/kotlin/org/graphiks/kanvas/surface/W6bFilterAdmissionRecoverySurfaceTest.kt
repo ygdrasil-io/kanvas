@@ -9,6 +9,7 @@ import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.pipeline.BlurStyle
@@ -180,6 +181,100 @@ class W6bFilterAdmissionRecoverySurfaceTest {
                 drawRect(bounds, Paint(ColorARGB.of(255, 11, 22, 33), antiAlias = false))
                 saveLayer(SaveLayerRec(initWithPrevious = true))
                 drawRect(bounds, Paint(ColorARGB.of(255, 44, 55, 66), antiAlias = false))
+                restore()
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 2)
+        surface.canvas { drawPicture(picture, Paint(imageFilter = ImageFilter.Blur(1f, 1f))) }
+
+        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+        assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
+    }
+
+    @Test
+    fun `inline repeated Picture destination blends remain planned before terminal recovery`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val erase = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds,
+                Paint(ColorARGB.of(128, 255, 0, 0), blendMode = BlendMode.DST_OUT, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val parent = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                drawRect(bounds, Paint(ColorARGB.White, antiAlias = false))
+                drawPicture(erase)
+                translate(1f, 0f)
+                drawPicture(erase)
+                drawPicture(erase, Paint(blendMode = BlendMode.MULTIPLY))
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 2)
+        surface.canvas { drawPicture(parent, Paint(imageFilter = ImageFilter.Blur(1f, 1f))) }
+        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+        assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
+    }
+
+    @Test
+    fun `nested Picture noncommuting transforms retain explicit clip before terminal recovery`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val child = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                clipRect(RectF32.ofLTRB(0f, 0f, 1f, 2f), ClipOp.INTERSECT, false)
+                drawRect(bounds, Paint(ColorARGB.White, antiAlias = false))
+            }
+        }.finishRecordingAsPicture()
+        val parent = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                translate(1f, 0f)
+                clipRect(bounds, ClipOp.INTERSECT, false)
+                drawPicture(child, Paint(imageFilter = ImageFilter.Blur(1f, 1f)))
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 2)
+        surface.canvas {
+            scale(2f, 1f)
+            translate(-1f, 0f)
+            drawPicture(parent)
+        }
+        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+        assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
+    }
+
+    @Test
+    fun `Picture overlap and transparent holes feed parent mask alpha before terminal recovery`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                drawRect(bounds, Paint(ColorARGB.of(128, 255, 0, 0), antiAlias = false))
+                drawRect(RectF32.ofLTRB(0f, 0f, 1f, 2f), Paint(ColorARGB.of(128, 0, 255, 0), antiAlias = false))
+                drawRect(RectF32.ofLTRB(1f, 0f, 2f, 1f), Paint(blendMode = BlendMode.CLEAR, antiAlias = false))
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 2)
+        surface.canvas { drawPicture(picture, Paint(ColorARGB.of(128, 255, 255, 255),
+            imageFilter = ImageFilter.Blur(1f, 1f), maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1f))) }
+        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+        assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
+    }
+
+    @Test
+    fun `filtered Picture nested layer initializes from its immediate layer parent and recovers`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                saveLayer()
+                drawRect(bounds, Paint(ColorARGB.of(255, 11, 22, 33), antiAlias = false))
+                saveLayer(SaveLayerRec(initWithPrevious = true))
+                drawRect(bounds, Paint(ColorARGB.of(128, 44, 55, 66), antiAlias = false))
+                restore()
                 restore()
             }
         }.finishRecordingAsPicture()

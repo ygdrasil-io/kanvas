@@ -96,6 +96,27 @@ public class CapabilityCompilerChain private constructor(
     }
 
     /** Complete geometry validation precedes any overlay, resource capture or publication. */
+    internal fun constructSourceLanes(input: OccurrenceSourceInputV1, capabilities: PlanCapabilitySnapshot,
+        budget: PlanBudget): RenderPlanResult<List<SourceDeferredRenderConstructionV4>> {
+        val domain = input.copyDomainDeviceI32()
+        val extent = org.graphiks.kanvas.render.ir.SceneExtent(domain.width(), domain.height())
+        val carrier = input.materialCoordinateDraw()
+        val scene = SceneSnapshot.of(extent, input.captured.scene.colorSpace,
+            List(input.commandIndexI32 + 1) { index ->
+                if (index == input.commandIndexI32) org.graphiks.kanvas.render.ir.SceneCommand.Draw(carrier)
+                else org.graphiks.kanvas.render.ir.SceneCommand.Annotation.of(
+                    org.graphiks.math.geometry.RectF32(0f, 0f, 0f, 0f), "w6.occurrence", index.toString())
+            }, input.captured.scene.graphLimits)
+        return when (val selection = select(scene, RenderTargetDescriptor(extent, scene.colorSpace))) {
+            is GpuPlanSelection.Candidate -> constructSourceLanes(selection.candidate, capabilities, budget)
+            is GpuPlanSelection.InvalidScene -> RenderPlanResult.InvalidScene(selection.diagnostics())
+            is GpuPlanSelection.ResourceLimitExceeded -> RenderPlanResult.ResourceLimitExceeded(selection.diagnostics())
+            is GpuPlanSelection.MaterialOnlyRefusal -> RenderPlanResult.GapOnPromotedScope(selection.diagnostics())
+            is GpuPlanSelection.NotCandidate -> RenderPlanResult.GapOnPromotedScope(selection.diagnostics())
+        }
+    }
+
+    /** Ordinary and occurrence-local inputs share this exact source-lane authority. */
     internal fun constructSourceLanes(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,
         budget: PlanBudget): RenderPlanResult<List<SourceDeferredRenderConstructionV4>> {
         val chained = candidate as? ChainCandidate ?: return invalidCandidate()

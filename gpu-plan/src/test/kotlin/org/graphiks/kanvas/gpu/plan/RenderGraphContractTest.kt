@@ -1122,6 +1122,54 @@ class RenderGraphContractTest {
     }
 
     @Test
+    fun `Picture alpha coverage publication binds the exact sealed source generation`() {
+        val source = w6bWitnessTexture(PlanResourceRole.PictureAggregateSource, 0)
+        val coverage = w6bWitnessTexture(PlanResourceRole.CoverageSource, 0)
+        val aggregate = PictureStreamAggregateIdI32(0)
+        val mapping = requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32.Origin))
+        val scene = SceneSnapshot.of(SceneExtent(1, 1), ColorSpace.SRGB, emptyList())
+        val occurrence = FilterOccurrenceSourceV1(scene, 0, null, emptyList(), LayerDescriptor.of())
+        val seal = PlanPass.PictureAggregateSealPass(0, aggregate, source.id, source.id, 2L)
+        fun alpha(generation: Long) = PlanPass.FilterCoverageSourcePass(1, coverage.id, occurrence,
+            sealedAlphaSource = PictureAlphaSourceV1(aggregate, source.id, generation, mapping, RectI32(0, 0, 1, 1)))
+
+        assertEquals(0, W6bFilterGraphWitnessV1.seal(listOf(source, coverage), listOf(seal, alpha(2L))).occurrences().size)
+        assertFailsWith<IllegalArgumentException> {
+            W6bFilterGraphWitnessV1.seal(listOf(source, coverage), listOf(seal, alpha(1L)))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            W6bFilterGraphWitnessV1.seal(listOf(source, coverage), listOf(alpha(2L), seal))
+        }
+    }
+
+    @Test
+    fun `picture draw publication rejects captured source without a frozen W4 W5 terminal`() {
+        val root = w6bWitnessTexture(PlanResourceRole.LogicalTarget, 0)
+        val locator = PictureSourceLocatorV1(0, 0)
+        val planned = FramePlannedCommandIdI32(1)
+        val pass = PlanPass.PictureSourcePass(0, root.id, "picture-source", 0,
+            pictureSourceLocator = locator, plannedCommandId = planned,
+            aggregateId = PictureStreamAggregateIdI32(0))
+        val aggregate = PictureStreamAggregateV1(
+            PictureStreamAggregateIdI32(0), PictureStreamExecutionModeV1.INLINE_CURRENT_TARGET,
+            "picture-source", 1, 0, FramePlannedCommandIdI32(0), emptyList(),
+            requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32.Origin)),
+            org.graphiks.kanvas.render.ir.ClipStackNode.Empty,
+            org.graphiks.kanvas.render.ir.ClipStackNode.Empty,
+            RectI32(0, 0, 1, 1), RectI32(0, 0, 1, 1), root.id, null, null, null,
+            PictureStreamRegionsV1(RectI32(0, 0, 1, 1), RectI32(0, 0, 1, 1),
+                RectI32(0, 0, 1, 1), RectI32(0, 0, 1, 1)),
+            listOf(PictureStreamEntryV1.Draw(PictureStreamEntryIdI32(0), locator, planned, pass.id)),
+            null, null, pass.id,
+        )
+        val failure = assertFailsWith<W6bFilterGraphConstruction.ConstructionFailure> {
+            validatePictureStreamAggregates(LayerFramePlanV1(emptyList(), emptyList(), listOf(aggregate)),
+                listOf(root), listOf(pass), emptyList())
+        }
+        assertEquals(W6bFilterDiagnostics.PictureStreamInvalid, failure.diagnostic.code.value)
+    }
+
+    @Test
     fun `picture aggregate publication rejects an overlapping source partition with its stable diagnostic`() {
         val root = w6bWitnessTexture(PlanResourceRole.LogicalTarget, 0)
         val first = PlanPass.PictureSourcePass(0, root.id, "picture-source", 0)

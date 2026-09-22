@@ -57,8 +57,9 @@ public enum class ClipCombineOperation { Intersect, Difference }
 public sealed interface FilterCompositeOperationV1 {
     public data class Draw(public val blend: BlendPlan) : FilterCompositeOperationV1
     public data class Layer(public val restore: LayerRestorePlanV1) : FilterCompositeOperationV1
-    /** The exact captured Picture occurrence owns its blend until the native replay seam. */
-    public data class Picture(public val sourceSceneCanonicalId: String, public val sourceCommandIndexI32: Int) : FilterCompositeOperationV1 {
+    /** Captured locator is provenance; the terminal owns every executable composite operand. */
+    public data class Picture(public val sourceSceneCanonicalId: String, public val sourceCommandIndexI32: Int,
+        public val terminal: PictureCompositeOperandsV1? = null) : FilterCompositeOperationV1 {
         init { require(sourceSceneCanonicalId.isNotBlank() && sourceCommandIndexI32 >= 0) }
     }
 }
@@ -866,6 +867,7 @@ public sealed interface PlanPass {
         public val destinationVersionAfter: DestinationVersionI64? = null,
         /** W6b's captured mask coverage, applied before this W5 material/color pass. */
         public val coverageSource: PlanResourceId? = null,
+        public val plannedCommandId: FramePlannedCommandIdI32? = null,
     ) : PlanPass {
         override val role: PlanPassRole = PlanPassRole.MainRender
         override val id: PlanPassId = checkedPassId(role, ordinal)
@@ -1005,6 +1007,7 @@ public sealed interface PlanPass {
         public val destinationVersionAfter: DestinationVersionI64? = null,
         /** Typed W6b coverage consumed by the color/cover phase, never the pre-mask stencil. */
         public val coverageSource: PlanResourceId? = null,
+        public val plannedCommandId: FramePlannedCommandIdI32? = null,
     ) : PlanPass {
         override val role: PlanPassRole = PlanPassRole.StencilCover
         override val id: PlanPassId = checkedPassId(role, ordinal)
@@ -1082,6 +1085,8 @@ public sealed interface PlanPass {
         /** Frozen outer transforms/clips for raw coverage; no renderer-side Picture rediscovery. */
         public val pictureCoordinates: PictureW5CoordinatesV1? =
             occurrence.pictureW5CoordinatesOrNull(includeSourceDrawClip = !deferSourceDrawClip),
+        /** When present, coverage is a(S), never geometric/cull coverage from [occurrence]. */
+        public val sealedAlphaSource: PictureAlphaSourceV1? = null,
     ) : PlanPass {
         override val role: PlanPassRole = PlanPassRole.FilterCoverageSource
         override val id: PlanPassId = checkedPassId(role, ordinal)
@@ -1183,6 +1188,7 @@ public sealed interface PlanPass {
         public val destination: PlanResourceId,
         public val occurrence: FilterOccurrenceSourceV1,
         public val destinationVersionAfter: DestinationVersionI64,
+        public val operands: PictureCompositeOperandsV1? = null,
     ) : PlanPass {
         init { require(source != destination) }
         override val role: PlanPassRole = PlanPassRole.PictureComposite

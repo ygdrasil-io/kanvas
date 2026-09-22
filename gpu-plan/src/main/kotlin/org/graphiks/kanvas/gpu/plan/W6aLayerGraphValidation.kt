@@ -25,6 +25,27 @@ internal fun validateW6aLayerTopology(
     val versions = mutableMapOf<PlanResourceId, Long>()
     val preparedMasks = mutableSetOf<PlanResourceId>()
     val sealedPictureSources = mutableSetOf<PlanResourceId>()
+    fun validatePictureTerminal(operand: PictureCompositeOperandsV1, source: PlanResourceId,
+        destination: PlanResourceId, indexI32: Int): Long {
+        require(operand.source == source && operand.sourceGenerationI64 == versions[source] &&
+            operand.destinationVersionBefore.valueI64 == versions[destination] &&
+            operand.load == AttachmentLoadPlan.Load && operand.store == AttachmentStorePlan.Store)
+        val sourceExtent = requireNotNull(byId.getValue(source).copyExtent())
+        val targetExtent = requireNotNull(byId.getValue(destination).copyExtent())
+        val rect = operand.copySourceBoundsTargetI32()
+        val origin = operand.copyDestinationOriginTargetI32()
+        require(rect.left >= 0 && rect.top >= 0 && rect.right <= sourceExtent.width && rect.bottom <= sourceExtent.height &&
+            origin.x >= 0 && origin.y >= 0 && origin.x.toLong() + rect.width() <= targetExtent.width &&
+            origin.y.toLong() + rect.height() <= targetExtent.height)
+        (operand.blend as? BlendPlan.DestinationReadV1)?.let { blend ->
+            val copy = passes.getOrNull(indexI32 - 1) as? PlanPass.TextureCopy
+            require(copy?.source == destination && copy.destination == blend.snapshotResource &&
+                copy.destinationVersion == operand.destinationVersionBefore &&
+                blend.requiredDestinationVersion == operand.destinationVersionBefore)
+        }
+        return if (operand.blend.compositionFacts.writesParentDevice)
+            Math.addExact(operand.destinationVersionBefore.valueI64, 1L) else operand.destinationVersionBefore.valueI64
+    }
 
     passes.forEachIndexed { indexI32, pass -> when (pass) {
         is PlanPass.ClipMaskInitialize -> {
@@ -180,6 +201,15 @@ internal fun validateW6aLayerTopology(
                 output.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in output.usages() &&
                 PlanResourceUsage.Sampled in output.usages())
             require(!pass.deferSourceDrawClip || pass.occurrence.sourceDraw?.geometry is GeometryNode.Picture)
+            pass.sealedAlphaSource?.let { alpha ->
+                val source = byId.getValue(alpha.sealedSourceId)
+                require(alpha.sealedSourceId in sealedPictureSources && source.role == PlanResourceRole.PictureAggregateSource &&
+                    versions[alpha.sealedSourceId] == alpha.sealedSourceGenerationI64 &&
+                    PlanResourceUsage.Sampled in source.usages())
+                require(alpha.copySampleBoundsTargetI32() == requireNotNull(source.copyExtent()).let {
+                    RectI32(0, 0, it.width, it.height)
+                })
+            }
             require(initialized.add(output.id))
             versions[output.id] = 0L
         }
@@ -233,6 +263,9 @@ internal fun validateW6aLayerTopology(
                 require(operand.sealedSourceId in sealedPictureSources && operand.aggregateId == pass.aggregateId &&
                     uniform.role == PlanResourceRole.SourceUniformData && uniform.kind == PlanResourceKind.Buffer &&
                     PlanResourceUsage.Uniform in uniform.usages())
+                require(operand.sealedSourceGenerationI64 == versions[operand.sealedSourceId])
+                require((pass.coverageSource != null) ==
+                    (operand.coverageOperation == GraphTextureCoverageOperationV1.REPLACE_ALPHA_FROM_MASK))
             }
             require(output.role in setOf(PlanResourceRole.FilterSource, PlanResourceRole.LogicalTarget,
                 PlanResourceRole.LayerTarget, PlanResourceRole.PictureAggregateSource) &&
@@ -254,7 +287,7 @@ internal fun validateW6aLayerTopology(
                 destination.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget,
                     PlanResourceRole.PictureAggregateSource) && destination.id in initialized &&
                 destination.id !in sealedPictureSources && PlanResourceUsage.Sampled in source.usages())
-            val after = Math.addExact(requireNotNull(versions[destination.id]), 1L)
+            val after = validatePictureTerminal(requireNotNull(pass.operands), source.id, destination.id, indexI32)
             versions[destination.id] = after
             require(pass.destinationVersionAfter.valueI64 == after)
         }
@@ -331,7 +364,10 @@ internal fun validateW6aLayerTopology(
                 }
                 is FilterCompositeOperationV1.Picture -> {
                     require(pass.replacedLayerSource == null)
-                    val after = Math.addExact(before, 1L)
+                    val terminal = requireNotNull(operation.terminal)
+                    require(terminal.copySourceBoundsTargetI32() == sourceBounds &&
+                        terminal.copyDestinationOriginTargetI32() == destinationOrigin)
+                    val after = validatePictureTerminal(terminal, source.id, destination.id, indexI32)
                     versions[destination.id] = after
                     require(pass.destinationVersionAfter.valueI64 == after)
                 }
@@ -369,6 +405,14 @@ internal fun validateW6aLayerTopology(
                             require(consumer.target == source.id)
                             requireNotNull(passes.getOrNull(indexI32 + 2) as? PlanPass.StencilCover).draw.blend
                         }
+                        is PlanPass.PictureComposite -> {
+                            require(consumer.destination == source.id)
+                            requireNotNull(consumer.operands).blend
+                        }
+                        is PlanPass.FilterComposite -> {
+                            require(consumer.destination == source.id)
+                            requireNotNull((consumer.operation as? FilterCompositeOperationV1.Picture)?.terminal).blend
+                        }
                         is PlanPass.FilterPass -> {
                             val filtered = passes.drop(indexI32 + 1).filterIsInstance<PlanPass.FilterComposite>().singleOrNull {
                                 it.destination == source.id && (it.operation as? FilterCompositeOperationV1.Layer)?.restore?.readsPriorDevice == true
@@ -402,7 +446,15 @@ internal fun validateW6aLayerTopology(
     } }
     if (passes.any { it is PlanPass.FilterPass }) W6bFilterGraphWitnessV1.seal(resources, passes)
     require(restored == layers.map { it.id }.toSet())
-    require(commands.size == visualCountI32 && commands.zipWithNext().all { (a, b) -> a < b })
+    require(commands.size == visualCountI32 && commands.distinct().size == commands.size)
+    // Picture streams prove source order and occurrence ownership independently. Their W4/W5
+    // lanes use frame-unique command IDs beyond the root scene's captured command indices.
+    if (passes.none { it is PlanPass.PictureAggregateBeginPass || it is PlanPass.PictureSourcePass ||
+            it is PlanPass.RenderPass && it.plannedCommandId != null ||
+            it is PlanPass.StencilCover && it.plannedCommandId != null ||
+            it is PlanPass.FilterComposite && it.operation is FilterCompositeOperationV1.Picture }) {
+        require(commands.zipWithNext().all { (a, b) -> a < b })
+    }
     require(passes.filterIsInstance<PlanPass.ReadbackPass>().size == 1)
     require(dependencies == passes.zipWithNext { first, second -> PlanPassDependency(first.id, second.id) })
 }

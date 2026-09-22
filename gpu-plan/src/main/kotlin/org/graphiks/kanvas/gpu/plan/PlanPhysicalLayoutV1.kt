@@ -55,12 +55,14 @@ public class PlanPhysicalLayoutV1 private constructor(
     uniformsByCommand: Map<Int, PlanResourceId>,
     geometryByPass: Map<PlanPassId, PlanGeometryBufferBindingV1>,
     w4eGeometry: List<PlanW4eGeometryBindingV1>,
+    pictureComposites: Map<PlanPassId, PictureCompositeOperandsV1>,
 ) {
     private val resources = immutableList(resources)
     private val caches = immutableList(cacheBindings)
     private val uniforms = java.util.Collections.unmodifiableMap(LinkedHashMap(uniformsByCommand))
     private val geometry = java.util.Collections.unmodifiableMap(LinkedHashMap(geometryByPass))
     private val w4e = immutableList(w4eGeometry)
+    private val pictures = java.util.Collections.unmodifiableMap(LinkedHashMap(pictureComposites))
     private val slots = immutableList(buildList {
         resources.forEachIndexed { indexI32, resource ->
             add(PlanPhysicalSlotV1(indexI32, resource.id, resource.byteSize))
@@ -79,6 +81,8 @@ public class PlanPhysicalLayoutV1 private constructor(
     }
     public fun sourceUniform(commandIndexI32: Int): PlanResource = resource(uniforms.getValue(commandIndexI32))
     public fun geometryBinding(passId: PlanPassId): PlanGeometryBufferBindingV1? = geometry[passId]
+    /** The semantic terminal and physical binding share this exact sealed operand, without renderer derivation. */
+    public fun pictureCompositeBinding(passId: PlanPassId): PictureCompositeOperandsV1? = pictures[passId]
     public fun w4eGeometryBindings(): List<PlanW4eGeometryBindingV1> = w4e
     public fun w4eGeometryBinding(passId: PlanPassId): PlanW4eGeometryBindingV1? = w4e.singleOrNull { passId in it.graphPassIds() }
     public fun cacheBinding(request: PlanCacheResourceRequest): PlanCacheBindingV1 = caches.single {
@@ -172,7 +176,20 @@ public class PlanPhysicalLayoutV1 private constructor(
                 } }) { "W4e native binding target must equal its semantic graph pass target." }
             }
             require(source.w4eGeometry.flatMap { it.graphPassIds() }.let { it.size == it.distinct().size })
-            val layout = PlanPhysicalLayoutV1(rows, source.caches, uniforms, geometry, source.w4eGeometry)
+            val pictures = graph.passes().mapNotNull { pass ->
+                val operand = when (pass) {
+                    is PlanPass.PictureComposite -> requireNotNull(pass.operands)
+                    is PlanPass.FilterComposite -> (pass.operation as? FilterCompositeOperationV1.Picture)?.terminal
+                    else -> null
+                } ?: return@mapNotNull null
+                val sourceRow = rows.single { it.id == operand.source }
+                require(PlanResourceUsage.Sampled in sourceRow.usages())
+                val extent = requireNotNull(sourceRow.copyExtent())
+                val rect = operand.copySourceBoundsTargetI32()
+                require(rect.left >= 0 && rect.top >= 0 && rect.right <= extent.width && rect.bottom <= extent.height)
+                pass.id to operand
+            }.toMap()
+            val layout = PlanPhysicalLayoutV1(rows, source.caches, uniforms, geometry, source.w4eGeometry, pictures)
             require(layout.slots.map { it.resourceId }.distinct().size == layout.slots.size)
             // All reservations (including cache hits) remain live until frame completion.
             require(rows.all { it.firstPassIndex == 0 && it.lastPassIndexExclusive == graph.passes().size })

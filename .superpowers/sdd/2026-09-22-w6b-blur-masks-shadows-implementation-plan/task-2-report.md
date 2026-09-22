@@ -666,3 +666,150 @@ de géométrie hors `:math`, et de nouvelle exécution native. Les IDs, budgets 
 lifetimes restent frame-local, pessimistes et checked I64. Le seul risque assumé
 reste Task 3 : matérialiser ce graph fermé sans le replanifier; les sorties natives
 133/134 et la dette de compilation W3/W4d restent explicitement **UNKNOWN**.
+
+## Fix round 5 — fermeture des sept findings de rereview4 (2026-09-22)
+
+Base code `e25e2ea9772feb80c7caeab842515dea790a2665`; arbre initial propre à
+`a6d4f0a` (ledger seulement après la base). Aucun changement de spec, plan,
+ledger, review ou renderer dans ce round. Pas de sous-agent.
+
+### RED borné et constat causal
+
+Le nouveau selector public
+`rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bFilterAdmissionRecoverySurfaceTest.filtered Picture nested layer initializes from its immediate layer parent and recovers' --no-daemon`
+a d'abord échoué sur la production inchangée : une méthode, une assertion en
+échec (`Failed requirement` au lieu du refus `w6b.filter.native_execution_unimplemented`),
+puis executor 133. L'ajout de `CopySource` au `LayerTarget` a révélé une seconde
+cause réelle : le restore enfant était enregistré deux fois dans les étapes
+W6a, comme Restore enfant et RenderChildren du parent. Après correction des deux
+causes, le même selector énumère une méthode réussie, zéro échec; executor 133
+reste UNKNOWN. Les traces temporaires utilisées pour localiser ce require ont
+été retirées avant le commit.
+
+Le test de contrat rejetant un ancien `PictureSourcePass` brut a été ajouté avant
+le remplacement des sources ordinaires. Son exécution RED/GREEN n'est **pas**
+revendiquée : la compilation du module de tests est bloquée par la dette W3/W4d.
+Les autres nouveaux cas publics vérifient occurrences répétées/inline avec
+`DST_OUT`, parent isolé `MULTIPLY`, overlap semi-transparent et trou CLEAR sous
+mask/alpha parent, et transforms non commutatifs avec clip explicite. Ce sont des
+tests de refusal/sentinel/recovery, pas des preuves de pixels Picture positifs.
+
+Constat R10 : `PictureRecorder.beginRecording` installe `canvas.clipRect(bounds)`.
+Le clip AA 0..2 observé sur le draw enfant était le carrier initial du cull,
+pas un clip explicite ajouté par le fixture. L'adaptateur retire ce carrier
+initial des clips internes, sans convertir AA en hard. Les autres clips et leurs
+flags AA sont conservés et transformés par les autorités existantes. Le cull
+reste une information distincte du domaine source propagé par la demande.
+
+### Changements et autorité réutilisée
+
+1. `OccurrenceSourceInputV1` fournit un input privé plan-owned : planned ID,
+   locator, draw capturé de provenance, mapping `LayerMappingF64`, domaines,
+   clips inner/deferred distincts et cible directe. L'overload de
+   `CapabilityCompilerChain.constructSourceLanes` utilise les sélecteurs W4/W5
+   existants puis délègue à la même méthode de construction que la route
+   top-level. Il ne contient pas de nouveau planner de géométrie ou matériau.
+   `MaterialSourceConstructionV4` est consommé par ces lanes existantes sans
+   seconde normalisation W5. Les sources ajoutées sont réellement incluses dans
+   l'unique `FrameSourceLayoutV4`, donc dans ses rows, caches et réservations.
+2. Chaque DrawEntry ordinaire pointe maintenant vers un vrai `RenderPass` ou
+   `StencilCover`, un command index frame-unique, le même planned ID et ses
+   coordonnées F64 gelées. Inline écrit directement dans la cible courante;
+   les blends destination-read produisent leur snapshot versionné avant le
+   draw. La validation rejette le vieux hand-off `DrawNode` brut et l'alias
+   entre occurrences répétées.
+3. Les compositions et rebases sont F64 jusqu'à la conversion vérifiée à l'ABI
+   W4/W5 F32 existante. Le clip enregistré est projeté depuis son espace device
+   Picture par le seul transform englobant. Le clip différé et son transform
+   distinct sont conservés sur l'aggregate, l'operand graph-texture et le
+   terminal. La demande inverse des Blur/DropShadow emploie les opérations
+   `:math` existantes; le cull ne retranche pas le halo. Le contenu initialisé
+   est unionné depuis les enfants planifiés, et la sortie filtrée garde sa
+   région produite distincte. Les color-filter effects des draws restent W5.
+4. Le mask parent reçoit `PictureAlphaSourceV1` : source RGBA scellée, génération,
+   mapping et rectangle exacts. Le witness exige son seal avant la coverage.
+   `REPLACE_ALPHA_FROM_MASK` fige explicitement la reconstruction premultiplied
+   depuis alpha(S), avec noir transparent hors S; aucune coverage de cull ne
+   remplace les trous ou les overlaps. Le carrier matériau parent est blanc
+   neutre; alpha/color-filter explicites et blend terminal ne sont pas rejoués
+   dans ce carrier.
+5. Le planned ID relie source W4/W5, entry et terminal de l'occurrence filtrée.
+   Le source target du draw doit être exactement le boundSource de sa clé;
+   source pass et command index ne peuvent pas être empruntés à un sibling.
+6. `PictureCompositeOperandsV1` contient source/génération, source rect,
+   placement destination, clip différé/mapping, blend, load/store, version avant
+   et snapshot éventuel. Les terminaux filtrés et non filtrés utilisent ce même
+   contrat. `PlanPhysicalLayoutV1.pictureCompositeBinding` conserve l'objet
+   sémantique exact et vérifie la ressource sampled/son rectangle; la validation
+   W6a vérifie les placements, versions et copie destination immédiatement avant.
+7. Les nested LayerTarget portent CopySource et CopyDestination. Un restore
+   enfant n'a qu'une étape Restore; il ne double plus RenderChildren. Le nouveau
+   fixture couvre bien layer-in-layer, pas seulement layer-in-Picture.
+
+Les trois points déjà adressés ne sont pas supprimés : domaine source post-mask,
+coverage typée de StencilCover et consommateurs du witness, et colorize shadow
+lié au blur Y de même clé restent en place. La frontière native Task 2 reste le
+refus terminal existant; aucun wire, aucune géométrie privée ni exécution native
+W6b n'a été ajouté.
+
+Coût explicite de l'extension R11 : une lane et ses ressources physiques par
+draw occurrence, budgets/lifetimes pessimistes frame-local existants. Le petit
+carrier SceneSnapshot privé conserve les command indexes globaux via des
+annotations sans effet raster : construction CPU O(index) par lane (donc
+potentiellement quadratique sur une grande frame), sans nouvelle cache ni
+identité renderer. C'est un coût connu de l'adaptation à l'ABI des sélecteurs
+existants, pas une preuve de performance.
+
+### Gates sériels et auto-revue
+
+Commandes finales exécutées, avec `--no-daemon` :
+
+| Commande | Résultat constaté |
+|---|---|
+| `rtk proxy ./gradlew :math:geometry:compileKotlinJvm --no-daemon` | exit 0, BUILD SUCCESSFUL |
+| `rtk proxy ./gradlew :math:matrix:compileKotlinJvm --no-daemon` | exit 0, BUILD SUCCESSFUL |
+| `rtk ./gradlew :render-ir:compileKotlin --no-daemon` | exit 0, BUILD SUCCESSFUL |
+| `rtk ./gradlew :gpu-plan:compileKotlin --no-daemon` | exit 0, BUILD SUCCESSFUL; recompilé aussi par le gate kanvas |
+| `rtk ./gradlew :kanvas:compileKotlin --no-daemon` | exit 0, BUILD SUCCESSFUL |
+| `rtk ./gradlew :gpu-plan:test --tests org.graphiks.kanvas.gpu.plan.RenderGraphContractTest --no-daemon` | exit 1, compileTestKotlin bloqué avant exécution |
+| `rtk ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.W6aLayerSurfacePixelTest --no-daemon` | 16 méthodes PASSED; exit Gradle 1/executor 133, UNKNOWN |
+| `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.GPUPlanSurfacePixelTest.W4e hard ordered rect RRect and path clips match the independent public Surface oracle' --no-daemon` | 1 méthode PASSED, exit 0, BUILD SUCCESSFUL |
+| `rtk ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.W6bFilterAdmissionRecoverySurfaceTest --no-daemon` | dernier run : 19 méthodes PASSED, zéro échec; exit Gradle 1/executor 133, UNKNOWN |
+
+Les cinq erreurs de compilation de tests sont exactement celles déjà connues :
+W3SolidRectPlanCompilerTest:214 (`Blur`/`CapturedFilterRootV1?`), :406 (branche
+`MaterialOnlyRefusal`); W4dPathStrokePlanCompilerTest:157 (même type), :703
+(branche `ImageV1` et `Boolean`/`Unit`). Aucune erreur nouvelle n'est attribuée à
+RenderGraphContractTest. Ce dernier contient aussi le contrat réel de génération
+alpha : même seal accepté, génération différente et lecture avant seal refusées.
+Ces assertions restent non exécutées tant que la compilation globale des tests
+gpu-plan est bloquée; aucune réflexion, mock ou infrastructure de contournement.
+
+Les essais intermédiaires ont détecté puis corrigé les propriétés/imports de
+types math et des invariants de publication; ils ne sont pas comptés comme RED
+fonctionnels. Un chevauchement involontaire de deux invocations Gradle en milieu
+de round a produit un problème de backup incrémental Kotlin; les gates ci-dessus
+ont ensuite été rejoués **séquentiellement**. Pas de correction de dette W3/W4d.
+
+Le dernier gate a aussi détecté une régression intermédiaire réelle (19 tests,
+1 échec sur le layer MaskShader). Cause localisée dans la validation des régions
+target-local : la demande finale parent avait été transmise comme demande enfant,
+alors que son required-input était le domaine inverse élargi. Le target source
+transmet maintenant ce domaine inverse comme demande aux enfants; la demande
+finale reste séparée sur PictureStreamRegionsV1. Les traces de localisation ont
+été retirées, puis le shard complet a été relancé.
+
+Custody finale :
+`kanvas/build/test-results/test/TEST-org.graphiks.kanvas.surface.W6bFilterAdmissionRecoverySurfaceTest.xml`
+du dernier run (timestamp `2026-09-22T17:20:05.603Z`) contient `tests="19"`,
+`failures="0"`, `errors="0"`. Le dernier run recompile aussi gpu-plan,
+gpu-renderer et kanvas sans erreur. Les clips de la coverage brute suivent la
+même séparation : aucun clip d'ancêtre isolé ni carrier initial de cull ne
+devient un clip inner; les ancêtres inline restent appliqués.
+
+Auto-revue : chaîne ordonnée, source ID exact et rectangles locaux, sealed alpha
+et terminal snapshot, lifetimes et slots, absence de writes renderer/wire, et
+`rtk git diff --check` ont été contrôlés. Les tests publics ne certifient que
+l'admission jusqu'au refus natif, la sentinelle intacte et la même Surface
+récupérée. Le statut final reste DONE_WITH_CONCERNS à cause du gate de contrats
+non exécutable et des exits natifs UNKNOWN; aucune revendication de pixels W6b.

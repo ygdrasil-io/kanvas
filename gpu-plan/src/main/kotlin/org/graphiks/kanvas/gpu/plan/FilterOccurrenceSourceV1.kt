@@ -11,6 +11,11 @@ import org.graphiks.kanvas.render.ir.MaterialNode
 import org.graphiks.kanvas.render.ir.PaintNode
 import org.graphiks.kanvas.render.ir.SceneSnapshot
 import org.graphiks.math.matrix.Matrix3x3F32
+import org.graphiks.math.matrix.composeInOrderF64
+import org.graphiks.math.matrix.toFiniteMatrix3x3F32OrNull
+import org.graphiks.math.matrix.Matrix3x3F64
+import org.graphiks.math.matrix.timesCheckedOrNull
+import org.graphiks.math.matrix.toMatrix3x3F64
 
 /** Exact outer-Picture coordinate state consumed by the W5 source hand-off in Task 3. */
 public class PictureW5CoordinatesV1 internal constructor(
@@ -38,8 +43,8 @@ public class PictureClipCoordinateV1 internal constructor(
 
 /**
  * Captured provenance for one W6b coverage generation.  It retains the actual immutable scene
- * and every enclosing Picture draw; Task 3 may materialize it but must not rediscover a source
- * from the mutable root attachment.
+ * and every enclosing Picture draw for provenance. Ordinary Picture draws execute only their
+ * frozen W4/W5 entry source pass; this object is never a renderer-side planning input.
  */
 public class FilterOccurrenceSourceV1 internal constructor(
     public val scene: SceneSnapshot,
@@ -69,53 +74,38 @@ public class FilterOccurrenceSourceV1 internal constructor(
      */
     public fun pictureW5CoordinatesOrNull(includeSourceDrawClip: Boolean = true): PictureW5CoordinatesV1? {
         if (outerPicturesSnapshot.isEmpty()) return null
-        var transform = Matrix3x3F32.Identity
+        var transform = Matrix3x3F64()
         val clips = mutableListOf<PictureClipCoordinateV1>()
         val paints = mutableListOf<PaintNode?>()
-        outerPicturesSnapshot.forEach { picture ->
-            clips += PictureClipCoordinateV1(picture.clip, transform)
+        val lastIsolated = outerPicturesSnapshot.indexOfLast { it.paint != null }
+        outerPicturesSnapshot.forEachIndexed { index, picture ->
+            // A painted ancestor owns its boundary clip at its terminal, after filtering.
+            // Only inline ancestors since that boundary can clip this source's raw coverage.
+            if (index > lastIsolated) {
+                val cull = (outerPicturesSnapshot.getOrNull(index - 1)?.geometry as? GeometryNode.Picture)?.copyCullRect()
+                val clip = cull?.let { withoutPictureCull(picture.clip, it) } ?: picture.clip
+                clips += PictureClipCoordinateV1(clip, transform.toFiniteMatrix3x3F32OrNull() ?: return null)
+            }
             paints += picture.paint
-            transform *= picture.transform
+            transform = transform.timesCheckedOrNull(picture.transform.toMatrix3x3F64()) ?: return null
         }
         sourceDraw?.let { draw ->
-            if (includeSourceDrawClip) clips += PictureClipCoordinateV1(draw.clip, transform)
-            transform *= draw.transform
+            if (includeSourceDrawClip) clips += PictureClipCoordinateV1(recordedInnerClipWithoutCull(),
+                transform.toFiniteMatrix3x3F32OrNull() ?: return null)
+            transform = transform.timesCheckedOrNull(draw.transform.toMatrix3x3F64()) ?: return null
         }
-        return PictureW5CoordinatesV1(transform, clips, paints)
+        return PictureW5CoordinatesV1(transform.toFiniteMatrix3x3F32OrNull() ?: return null, clips, paints)
     }
 
-    /** Applies known outer Picture transforms/clips to MaskShader's W5 coordinate carrier. */
+    /**
+     * W5 coordinate carrier only. Coverage already owns the inner clip; the Picture terminal
+     * owns the deferred clip. Neither clip is reapplied while evaluating a shader/material.
+     * Composition stays F64 until the existing W5 input ABI is reached.
+     */
     internal fun materialCoordinateDrawOrNull(material: MaterialNode): DrawNode? {
         val draw = sourceDraw ?: return null
-        if (outerPicturesSnapshot.isEmpty()) return draw.copy(material = material)
-        var transform = Matrix3x3F32.Identity
-        val entries = mutableListOf<ClipEntry>()
-        fun appendClip(clip: ClipStackNode, coordinateTransform: Matrix3x3F32): Boolean = when (clip) {
-            ClipStackNode.Empty -> true
-            is ClipStackNode.DeviceRect -> {
-                entries += ClipEntry(
-                    GeometryNode.Rect.of(clip.copyBounds()),
-                    ClipOperation.INTERSECT,
-                    clip.antiAlias,
-                    ClipTransformSnapshot.Known.of(coordinateTransform),
-                )
-                true
-            }
-            is ClipStackNode.Operations -> clip.all { entry ->
-                val known = entry.transform as? ClipTransformSnapshot.Known ?: return@all false
-                entries += entry.copy(transform = ClipTransformSnapshot.Known.of(
-                    coordinateTransform * known.copyMatrixF32(),
-                ))
-                true
-            }
-        }
-        outerPicturesSnapshot.forEach { picture ->
-            if (!appendClip(picture.clip, transform)) return null
-            transform *= picture.transform
-        }
-        if (!appendClip(draw.clip, transform)) return null
-        transform *= draw.transform
-        val clip = if (entries.isEmpty()) ClipStackNode.Empty else ClipStackNode.Operations.of(entries)
-        return draw.copy(material = material, clip = clip, transform = transform)
+        val transform = composeInOrderF64(outerPicturesSnapshot.map { it.transform } + draw.transform)
+            .toFiniteMatrix3x3F32OrNull() ?: return null
+        return draw.copy(material = material, clip = ClipStackNode.Empty, transform = transform)
     }
 }

@@ -12,6 +12,8 @@ import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.matrix.LayerMappingF64
 import org.graphiks.math.matrix.Matrix3x3F32
+import org.graphiks.math.matrix.Matrix3x3F64
+import org.graphiks.math.matrix.isFinite
 
 /** A frame-local identity; canonical Picture identities are deliberately not execution keys. */
 @JvmInline
@@ -52,6 +54,49 @@ public class PictureSourceLocatorV1 internal constructor(
 public enum class PictureStreamExecutionModeV1 {
     INLINE_CURRENT_TARGET,
     ISOLATED_SOURCE,
+}
+
+/** Coverage is sampled from this immutable RGBA generation, including holes and overlap. */
+public class PictureAlphaSourceV1 internal constructor(
+    public val aggregateId: PictureStreamAggregateIdI32,
+    public val sealedSourceId: PlanResourceId,
+    public val sealedSourceGenerationI64: Long,
+    public val mapping: LayerMappingF64,
+    sampleBoundsTargetI32: RectI32,
+) {
+    private val bounds = sampleBoundsTargetI32.copy()
+    init { require(sealedSourceGenerationI64 >= 0 && !bounds.isEmpty) }
+    public fun copySampleBoundsTargetI32(): RectI32 = bounds.copy()
+}
+
+public enum class GraphTextureCoverageOperationV1 {
+    /** Preserve S, then apply the explicit parent alpha and color filter exactly once. */
+    PRESERVE_PREMULTIPLIED_SOURCE,
+    /** rgb = (a(S) > 0 ? rgb(S) / a(S) : 0) * M; alpha = M, including transparent-black outside S. */
+    REPLACE_ALPHA_FROM_MASK,
+}
+
+/** Exact physical and semantic contract of the one terminal Picture write. */
+public class PictureCompositeOperandsV1 internal constructor(
+    public val plannedCommandId: FramePlannedCommandIdI32,
+    public val source: PlanResourceId,
+    public val sourceGenerationI64: Long,
+    sourceBoundsTargetI32: RectI32,
+    destinationOriginTargetI32: Point2I32,
+    public val deferredClip: ClipStackNode,
+    clipToDeviceF64: Matrix3x3F64,
+    public val blend: BlendPlan,
+    public val destinationVersionBefore: DestinationVersionI64,
+    public val load: AttachmentLoadPlan = AttachmentLoadPlan.Load,
+    public val store: AttachmentStorePlan = AttachmentStorePlan.Store,
+) {
+    private val bounds = sourceBoundsTargetI32.copy()
+    private val origin = Point2I32(destinationOriginTargetI32.x, destinationOriginTargetI32.y)
+    private val clipMapping = clipToDeviceF64.copy()
+    init { require(sourceGenerationI64 >= 0 && !bounds.isEmpty && clipMapping.isFinite()) }
+    public fun copySourceBoundsTargetI32(): RectI32 = bounds.copy()
+    public fun copyDestinationOriginTargetI32(): Point2I32 = Point2I32(origin.x, origin.y)
+    public fun copyClipToDeviceF64(): Matrix3x3F64 = clipMapping.copy()
 }
 
 /** The four W6 regions stay separate even when a conservative plan gives two equal values. */
@@ -96,7 +141,10 @@ public class GraphTextureSourceOperandV1 internal constructor(
     public val alphaF32: Float,
     public val colorFilter: ColorFilterExecutionPlanV1?,
     public val finalBlend: BlendPlan,
+    public val coverageOperation: GraphTextureCoverageOperationV1 = GraphTextureCoverageOperationV1.PRESERVE_PREMULTIPLIED_SOURCE,
+    clipToDeviceF64: Matrix3x3F64 = Matrix3x3F64(),
 ) {
+    private val clipMapping = clipToDeviceF64.copy()
     private val origin = Point2I32(targetOriginDeviceI32.x, targetOriginDeviceI32.y)
     private val sampleBounds = sampleBoundsTargetI32.copy()
 
@@ -108,6 +156,7 @@ public class GraphTextureSourceOperandV1 internal constructor(
 
     public fun copyTargetOriginDeviceI32(): Point2I32 = Point2I32(origin.x, origin.y)
     public fun copySampleBoundsTargetI32(): RectI32 = sampleBounds.copy()
+    public fun copyClipToDeviceF64(): Matrix3x3F64 = clipMapping.copy()
 }
 
 /** Internal pre-publication request; FrameSourceLayoutV4 resolves it to [GraphTextureSourceOperandV1]. */
@@ -122,7 +171,10 @@ public class GraphTextureSourceRequestV1 internal constructor(
     val alphaF32: Float,
     val colorFilter: ColorFilterExecutionPlanV1?,
     val finalBlend: BlendPlan,
+    val coverageOperation: GraphTextureCoverageOperationV1 = GraphTextureCoverageOperationV1.PRESERVE_PREMULTIPLIED_SOURCE,
+    clipToDeviceF64: Matrix3x3F64 = Matrix3x3F64(),
 ) {
+    private val clipMapping = clipToDeviceF64.copy()
     private val origin = Point2I32(targetOriginDeviceI32.x, targetOriginDeviceI32.y)
     private val sampleBounds = sampleBoundsTargetI32.copy()
 
@@ -132,6 +184,7 @@ public class GraphTextureSourceRequestV1 internal constructor(
 
     fun copyTargetOriginDeviceI32(): Point2I32 = Point2I32(origin.x, origin.y)
     fun copySampleBoundsTargetI32(): RectI32 = sampleBounds.copy()
+    fun copyClipToDeviceF64(): Matrix3x3F64 = clipMapping.copy()
 }
 
 /** Explicitly consumed capture state; later entries already carry the resulting immutable state. */
@@ -142,6 +195,21 @@ public sealed interface PictureStreamConsumedStateV1 {
     }
 
     public class Clip internal constructor(public val clip: ClipStackNode) : PictureStreamConsumedStateV1
+}
+
+/** Coordinate state sealed alongside the W4/W5 operand, never a captured-draw replay input. */
+public class PictureDrawCoordinatesV1 internal constructor(
+    public val target: PlanResourceId,
+    public val mapping: LayerMappingF64,
+    public val recordedInnerClip: ClipStackNode,
+    public val deferredCompositeClip: ClipStackNode,
+    enclosingTransformF64: Matrix3x3F64,
+    demandDeviceI32: RectI32,
+) {
+    private val enclosing = enclosingTransformF64.copy()
+    private val demand = demandDeviceI32.copy()
+    public fun copyEnclosingTransformF64(): Matrix3x3F64 = enclosing.copy()
+    public fun copyDemandDeviceI32(): RectI32 = demand.copy()
 }
 
 /** A source-order partition of one captured Picture occurrence. */
@@ -156,6 +224,10 @@ public sealed interface PictureStreamEntryV1 {
         override val locator: PictureSourceLocatorV1,
         override val plannedCommandId: FramePlannedCommandIdI32,
         override val terminalPassId: PlanPassId?,
+        public val sourcePassId: PlanPassId? = null,
+        public val geometryCommandIndexI32: Int? = null,
+        public val isElided: Boolean = false,
+        public val coordinates: PictureDrawCoordinatesV1? = null,
     ) : PictureStreamEntryV1
 
     public class Picture internal constructor(
@@ -255,7 +327,10 @@ public class PictureStreamAggregateV1 internal constructor(
     public val beginPassId: PlanPassId?,
     public val sealPassId: PlanPassId?,
     public val terminalPassId: PlanPassId?,
+    enclosingPictureTransformF64: Matrix3x3F64 = Matrix3x3F64(),
 ) {
+    private val enclosingPictureTransform = enclosingPictureTransformF64.copy()
+    public fun copyEnclosingPictureTransformF64(): Matrix3x3F64 = enclosingPictureTransform.copy()
     private val outerPath = immutableList(outerPicturePathI32)
     private val cullContent = cullContentBoundDeviceI32?.copy()
     private val demand = demandRegionDeviceI32.copy()
@@ -579,6 +654,7 @@ internal fun validatePictureStreamAggregates(
     val aggregateTargets = mutableSetOf<PlanResourceId>()
     val entryIdsByAggregate = mutableMapOf<PictureStreamAggregateIdI32, MutableSet<PictureStreamEntryIdI32>>()
     val terminalIdsByAggregate = mutableMapOf<PictureStreamAggregateIdI32, MutableSet<PlanPassId>>()
+    val ownedDrawSources = mutableSetOf<PlanPassId>()
 
     fun fail(
         aggregate: PictureStreamAggregateV1,
@@ -672,13 +748,42 @@ internal fun validatePictureStreamAggregates(
             }
             when (entry) {
                 is PictureStreamEntryV1.Draw -> {
+                    if (entry.isElided) {
+                        if (entry.terminalPassId != null || entry.sourcePassId != null || entry.geometryCommandIndexI32 != null)
+                            fail(aggregate, entry, "Elided draw retains raster work.")
+                        return@forEach
+                    }
                     val (terminal, indexI32) = requireTerminal()
+                    val sourceId = entry.sourcePassId ?: fail(aggregate, entry, "Draw lacks its frozen W4/W5 source pass.")
+                    val sourcePass = passById[sourceId] ?: fail(aggregate, entry, "Draw W4/W5 source pass is absent.")
+                    val sourcePlannedId = when (sourcePass) {
+                        is PlanPass.RenderPass -> sourcePass.plannedCommandId
+                        is PlanPass.StencilCover -> sourcePass.plannedCommandId
+                        else -> null
+                    }
+                    if (sourcePlannedId != entry.plannedCommandId || !ownedDrawSources.add(sourceId))
+                        fail(aggregate, entry, "W4/W5 source identity aliases another Picture occurrence.", sourceId)
+                    val draw = when (sourcePass) {
+                        is PlanPass.RenderPass -> sourcePass.draws().singleOrNull()
+                        is PlanPass.StencilCover -> sourcePass.draw
+                        else -> null
+                    } ?: fail(aggregate, entry, "Draw source has no W4/W5 geometry and material.", sourceId)
+                    if (draw.commandIndex != entry.geometryCommandIndexI32)
+                        fail(aggregate, entry, "Occurrence ID does not bind its exact W4/W5 source.", sourceId)
+                    val sourceTarget = when (sourcePass) {
+                        is PlanPass.RenderPass -> sourcePass.target
+                        is PlanPass.StencilCover -> sourcePass.target
+                        else -> error("Unreachable W4/W5 source")
+                    }
+                    if (entry.coordinates?.target != sourceTarget)
+                        fail(aggregate, entry, "Draw has no exact occurrence-local coordinate binding.", sourceId)
                     val exact = when (val pass = passById.getValue(terminal)) {
-                        is PlanPass.PictureSourcePass -> pass.output == target && pass.pictureSourceLocator == locator &&
-                            pass.plannedCommandId == entry.plannedCommandId
+                        is PlanPass.RenderPass, is PlanPass.StencilCover -> sourceId == terminal && sourceTarget == target
                         is PlanPass.FilterComposite -> (pass.operation as? FilterCompositeOperationV1.Picture)?.let { operation ->
                             pass.destination == target && operation.sourceSceneCanonicalId == aggregate.sourceSceneCanonicalId &&
-                                operation.sourceCommandIndexI32 == locator.sourceCommandIndexI32
+                                operation.sourceCommandIndexI32 == locator.sourceCommandIndexI32 &&
+                                operation.terminal?.plannedCommandId == entry.plannedCommandId &&
+                                pass.evaluationKey.boundSourceId == sourceTarget && passIndex.getValue(sourceId) < indexI32
                         } == true
                         else -> false
                     }
@@ -790,7 +895,7 @@ internal fun validatePictureStreamAggregates(
         }
         val directTerminalOwners = mutableSetOf<PlanPassId>()
         entries.filterNot { it is PictureStreamEntryV1.Picture }.forEach { entry ->
-            val isVisual = entry is PictureStreamEntryV1.Draw || entry is PictureStreamEntryV1.Layer ||
+            val isVisual = (entry is PictureStreamEntryV1.Draw && !entry.isElided) || entry is PictureStreamEntryV1.Layer ||
                 entry is PictureStreamEntryV1.Clear || entry is PictureStreamEntryV1.DrawColor
             if (isVisual && entry.terminalPassId == null) {
                 fail(aggregate, entry, "Visual Picture entry has no effective terminal pass.")
@@ -920,6 +1025,23 @@ internal fun validatePictureStreamAggregates(
                 val consumer = graphTextureConsumers.single()
                 val operand = consumer.graphTextureOperand ?: fail(aggregate,
                     invariant = "Published isolated Picture graph-texture consumer lacks its W5 operand.", passId = consumer.id)
+                if (consumer.coverageSource != null) {
+                    val alphaSources = passes.filterIsInstance<PlanPass.FilterCoverageSourcePass>().filter {
+                        it.sealedAlphaSource?.aggregateId == aggregate.id
+                    }
+                    val alpha = alphaSources.singleOrNull()?.sealedAlphaSource
+                    if (alpha == null || alpha.sealedSourceId != source || alpha.sealedSourceGenerationI64 != generation ||
+                        alpha.mapping.copyLocalToLayerF64() != aggregate.outerEvaluationMappingF64.copyLocalToLayerF64() ||
+                        alpha.mapping.copyLayerOriginDeviceI32() != aggregate.outerEvaluationMappingF64.copyLayerOriginDeviceI32() ||
+                        passIndex.getValue(alphaSources.single().id) <= sealIndex) {
+                        fail(aggregate, invariant = "Parent mask lacks alpha from the exact sealed RGBA generation.", passId = consumer.id)
+                    }
+                    val maskProducer = passes.filterIsInstance<PlanPass.FilterPass>().singleOrNull {
+                        it.output == consumer.coverageSource
+                    }
+                    if (maskProducer?.evaluationKey?.boundSourceId != alphaSources.single().output)
+                        fail(aggregate, invariant = "Parent mask coverage does not originate from sealed RGBA alpha.", passId = consumer.id)
+                }
                 if (consumer.pictureSourceLocator?.pictureOccurrenceIdI32 != aggregate.sourcePictureOccurrenceIdI32 ||
                     consumer.plannedCommandId != aggregate.sourcePlannedCommandId ||
                     operand.aggregateId != aggregate.id || operand.sealedSourceId != source ||
@@ -938,6 +1060,18 @@ internal fun validatePictureStreamAggregates(
                 }
                 val terminal = aggregate.terminalPassId ?: fail(aggregate, invariant = "Isolated Picture has no final composite terminal.")
                 val terminalPass = passById[terminal]
+                val terminalFacts = when (terminalPass) {
+                    is PlanPass.PictureComposite -> terminalPass.operands
+                    is PlanPass.FilterComposite -> (terminalPass.operation as? FilterCompositeOperationV1.Picture)?.terminal
+                    else -> null
+                } ?: fail(aggregate, invariant = "Picture terminal lacks its complete composite operands.", passId = terminal)
+                if (terminalFacts.plannedCommandId != aggregate.sourcePlannedCommandId ||
+                    terminalFacts.blend != operand.finalBlend ||
+                    terminalFacts.deferredClip.canonicalId != aggregate.deferredCompositeClip.canonicalId ||
+                    terminalFacts.copyClipToDeviceF64() != aggregate.copyEnclosingPictureTransformF64() ||
+                    operand.copyClipToDeviceF64() != aggregate.copyEnclosingPictureTransformF64()) {
+                    fail(aggregate, invariant = "Picture terminal lost its occurrence identity or enclosing clip mapping.", passId = terminal)
+                }
                 val reachesParent = when (terminalPass) {
                     is PlanPass.PictureComposite -> terminalPass.destination == aggregate.parentTargetId &&
                         terminalPass.source == consumer.output &&
@@ -945,7 +1079,7 @@ internal fun validatePictureStreamAggregates(
                         terminalPass.occurrence.sourceCommandIndexI32 == consumer.sourceCommandIndexI32
                     is PlanPass.FilterComposite -> {
                         val operation = terminalPass.operation as? FilterCompositeOperationV1.Picture
-                        val producer = passes.getOrNull(passIndex.getValue(terminal) - 1) as? PlanPass.FilterPass
+                        val producer = passes.filterIsInstance<PlanPass.FilterPass>().singleOrNull { it.output == terminalPass.source }
                         terminalPass.destination == aggregate.parentTargetId && operation != null &&
                             operation.sourceSceneCanonicalId == consumer.sourceSceneCanonicalId &&
                             operation.sourceCommandIndexI32 == consumer.sourceCommandIndexI32 &&

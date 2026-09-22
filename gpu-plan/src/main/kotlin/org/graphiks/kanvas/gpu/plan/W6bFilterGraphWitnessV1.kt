@@ -30,6 +30,7 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
             }.also { require(it < before) { "W6b input must precede its consumer." } }
 
             passes.forEachIndexed { index, pass -> when (pass) {
+                is PlanPass.PictureAggregateSealPass -> producers[pass.sealedSource] = index
                 is PlanPass.RenderPass -> {
                     pass.coverageSource?.let { produced(it, index); materialCoverageInputs += it }
                     producers[pass.target] = index
@@ -45,6 +46,11 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                 }
                 is PlanPass.FilterCoverageSourcePass -> {
                     require(row(pass.output).role == PlanResourceRole.CoverageSource)
+                    pass.sealedAlphaSource?.let { alpha ->
+                        val seal = passes[produced(alpha.sealedSourceId, index)] as? PlanPass.PictureAggregateSealPass
+                        require(seal != null && seal.aggregateId == alpha.aggregateId &&
+                            seal.sourceGenerationI64 == alpha.sealedSourceGenerationI64)
+                    }
                     producers[pass.output] = index
                     owners[pass.output] = pass.output
                 }
@@ -97,7 +103,14 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                 val terminalIndex = produced(composite.source, compositeIndex)
                 val terminal = passes[terminalIndex] as? PlanPass.FilterPass
                     ?: throw IllegalArgumentException("W6b composite source is not a filter output.")
-                require(terminal.evaluationKey === composite.evaluationKey && terminalIndex + 1 == compositeIndex) {
+                val snapshot = passes.getOrNull(terminalIndex + 1) as? PlanPass.TextureCopy
+                val picture = (composite.operation as? FilterCompositeOperationV1.Picture)?.terminal
+                val adjacent = terminalIndex + 1 == compositeIndex ||
+                    terminalIndex + 2 == compositeIndex && snapshot != null && picture != null &&
+                        snapshot.source == composite.destination &&
+                        snapshot.destination == picture.blend.destinationReadSnapshotResourceV1() &&
+                        snapshot.destinationVersion == picture.destinationVersionBefore
+                require(terminal.evaluationKey === composite.evaluationKey && adjacent) {
                     "W6b terminal output must immediately composite with the exact evaluation key."
                 }
                 Occurrence(terminal.evaluationKey.boundSourceId, firstInSameKey(terminalIndex, passes, producers),

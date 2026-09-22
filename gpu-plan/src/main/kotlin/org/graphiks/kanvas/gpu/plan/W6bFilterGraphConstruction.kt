@@ -492,6 +492,29 @@ internal object W6bFilterGraphConstruction {
     }
 
     /** The output domain grows by blur support; it is never intersected back to the source. */
+    internal fun reverseInputDemand(occurrence: PositiveOccurrence?, desired: RectI32): RectI32 {
+        if (occurrence == null) return desired.copy()
+        fun expand(region: RectI32, x: Float, y: Float): RectI32 = requireNotNull(RectF64(
+            region.left.toDouble(), region.top.toDouble(), region.right.toDouble(), region.bottom.toDouble())
+            .expandForBlurF64OrNull(x, y)?.roundOutToRectI32OrNull()) { W6bFilterDiagnostics.InvalidBounds }
+        lateinit var inputDemand: (CapturedFilterInputV1, RectI32) -> RectI32
+        fun nodeDemand(id: CapturedFilterNodeId, output: RectI32): RectI32 = when (val node = occurrence.table.nodeAt(id)) {
+            is CapturedFilterNodeV1.Blur -> inputDemand(node.input, expand(output, node.sigmaX, node.sigmaY))
+            is CapturedFilterNodeV1.DropShadow -> {
+                val translated = requireNotNull(RectF64(output.left.toDouble(), output.top.toDouble(),
+                    output.right.toDouble(), output.bottom.toDouble()).translateF64OrNull(-node.dx.toDouble(), -node.dy.toDouble())
+                    ?.roundOutToRectI32OrNull()) { W6bFilterDiagnostics.InvalidBounds }
+                val shadow = expand(translated, node.sigmaX, node.sigmaY)
+                inputDemand(node.input, if (node.mode == CapturedDropShadowModeV1.COMPOSITE) union(output, shadow) else shadow)
+            }
+            else -> throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.UnsupportedFamily,
+                "Reverse demand requires an admitted W6b filter."))
+        }
+        inputDemand = { input, region -> if (input is CapturedFilterInputV1.Node) nodeDemand(input.id, region) else region }
+        val imageInput = occurrence.root?.let { nodeDemand(it.id, desired) } ?: desired
+        return (occurrence.mask as? MaskFilterNode.Blur)?.let { expand(imageInput, it.sigma, it.sigma) } ?: imageInput
+    }
+
     private fun blurBounds(source: SourceBinding, sigmaXF32: Float, sigmaYF32: Float): FilterBoundsPlanV1 {
         val input = source.copyDeviceBoundsI32()
         val desired = RectF64(input.left.toDouble(), input.top.toDouble(), input.right.toDouble(), input.bottom.toDouble())
