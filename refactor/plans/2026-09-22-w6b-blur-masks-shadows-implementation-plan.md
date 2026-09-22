@@ -418,7 +418,7 @@ fun w6cFilterRefusesTerminallyAndSameSurfaceRecovers() {
     surface.canvas { drawRect(bounds, Paint(imageFilter = ImageFilter.Offset(1f, 0f))) }
     assertTerminalWithoutReadbackMutation(surface, "w6b.filter.unsupported_family")
     surface.discardRecordedOperations()
-    surface.canvas { drawRect(bounds, Paint(ColorARGB.Blue, antiAlias = false)) }
+    surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
     assertContentEquals(rgba(17, 61, 211), surface.render().pixels)
 }
 ```
