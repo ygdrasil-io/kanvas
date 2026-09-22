@@ -9,7 +9,6 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.render.ir.ClipStackNode
 import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.RectI32
-import org.graphiks.math.geometry.roundOutToRectI32OrNull
 import org.graphiks.math.matrix.mapRectBoundsF64OrNull
 
 /** Native translation of exact W6 resources and passes behind one ordinary frame draft. */
@@ -404,11 +403,38 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         val operands = requireNotNull(pass.operands) { "W6b Picture composite needs frozen operands." }
                         val source = operands.copySourceBoundsTargetI32()
                         val destination = operands.copyDestinationOriginTargetI32()
-                        val shader = sampledCompositeShader(source.left - destination.x, source.top - destination.y, 1f)
                         val scissor = pictureCompositeScissor(frame, pass.destination, source, destination, operands)
+                        val operand = graphTextureOperandsBySource[pass.source]
                         renderOperands += if (scissor == null) emptyRender(stepIndex, views.getValue(pass.destination), generation,
-                            clear = false, pass, owned) else textureRender(stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
-                            shader, operands.blend, scissor.left, scissor.top, scissor.width(), scissor.height(), pass, owned)
+                            clear = false, pass, owned) else if (operand == null) {
+                            textureRender(stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
+                                sampledCompositeShader(source.left - destination.x, source.top - destination.y, 1f), operands.blend,
+                                scissor.left, scissor.top, scissor.width(), scissor.height(), pass, owned)
+                        } else {
+                            require(operand.finalBlend.canonicalLabel == operands.blend.canonicalLabel) {
+                                "W6b Picture composite blend differs from its frozen graph-texture operand."
+                            }
+                            val filter = operand.colorFilter
+                            val filterOffset = filter?.let { requireNotNull(operand.colorFilterUniformOffsetI64) }
+                            val filterCapacity = filter?.let { requireNotNull(operand.colorFilterUniformByteCountI64) }
+                            val filterBuffer = filter?.let { execution ->
+                                val offset = requireNotNull(filterOffset)
+                                val capacity = requireNotNull(filterCapacity)
+                                val bindingBytes = maxOf(16L, execution.dynamicByteCountI64)
+                                require(Math.addExact(offset, bindingBytes) <= capacity)
+                                graphTextureUniformBuffers.getValue(operand.uniformResource).also { buffer ->
+                                    if (execution.dynamicByteCountI64 > 0L)
+                                        queue.writeBuffer(buffer, offset.toULong(), ArrayBuffer.of(execution.copyDynamicBytes()))
+                                }
+                            }
+                            filteredCompositeRender(
+                                stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
+                                source, destination, operand.alphaF32, filter, filterBuffer,
+                                if (filter == null) null else 0L, filterCapacity, filterOffset?.div(4L) ?: 0L,
+                                (operands.blend as? BlendPlan.DestinationReadV1)?.snapshotResource?.let(views::get),
+                                operands.blend, pass, owned, scissor,
+                            )
+                        }
                     }
                     is PlanPass.FilterComposite -> {
                         val source = pass.copySourceBoundsTargetI32()
@@ -620,7 +646,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 if (bounds.isEmpty) return null
                 requireNotNull(operands.copyClipToDeviceF64().mapRectBoundsF64OrNull(RectF64(
                     bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble(),
-                ))?.roundOutToRectI32OrNull()) { "W6b Picture deferred clip cannot be projected to device texels." }
+                ))?.toExactDeviceRectI32OrNull()) { "W6b Picture deferred clip is not an exact device scissor." }
             }
             is ClipStackNode.Operations -> error("Task 3 requires a typed DeviceRect deferred Picture clip.")
         }
@@ -630,6 +656,18 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             Math.subtractExact(deviceClip.right, origin.x), Math.subtractExact(deviceClip.bottom, origin.y),
         )
         return result.takeIf { it.intersect(local) }
+    }
+
+    /** The plan has already admitted only integral hard-edge clips; never widen one at lowering. */
+    private fun RectF64.toExactDeviceRectI32OrNull(): RectI32? {
+        fun coordinate(value: Double): Int? = if (value.isFinite() &&
+            value >= Int.MIN_VALUE.toDouble() && value <= Int.MAX_VALUE.toDouble() &&
+            value == value.toLong().toDouble()) value.toInt() else null
+        val left = coordinate(left) ?: return null
+        val top = coordinate(top) ?: return null
+        val right = coordinate(right) ?: return null
+        val bottom = coordinate(bottom) ?: return null
+        return RectI32(left, top, right, bottom)
     }
 
     /** Materializes one published graph-texture source and, when present, its frozen W5 filter row. */

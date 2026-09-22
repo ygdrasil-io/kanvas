@@ -37,9 +37,9 @@ internal fun ClipStackNode.terminalDeferredClip(): ClipStackNode = when (this) {
     ClipStackNode.Empty, is ClipStackNode.DeviceRect -> this
     is ClipStackNode.Operations -> toList().singleOrNull()?.let { entry ->
         val rectangle = entry.geometry as? GeometryNode.Rect
-        val matrix = (entry.transform as? ClipTransformSnapshot.Known)?.copyMatrixF32()
+        val matrix = (entry.transform as? ClipTransformSnapshot.Known)?.copyMatrixF32()?.toMatrix3x3F64()
         if (entry.operation == ClipOperation.INTERSECT && rectangle?.copyBounds()?.isEmpty == true &&
-            matrix == Matrix3x3F32.Identity) {
+            matrix?.isFinite() == true) {
             ClipStackNode.DeviceRect.of(rectangle.copyBounds(), entry.antiAlias)
         } else this
     } ?: this

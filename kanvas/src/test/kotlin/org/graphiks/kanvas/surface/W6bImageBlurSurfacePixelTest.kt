@@ -143,6 +143,36 @@ class W6bImageBlurSurfacePixelTest {
     }
 
     @Test
+    fun `nested painted unfiltered Picture applies parent paint at its terminal once`() {
+        // The inner Picture has no filter of its own, but its painted terminal is within the
+        // parent's admitted blur graph.  Multiply of half-alpha blue over opaque teal is
+        // (0, 27/255, 1) in linear premultiplied space, encoded as the fixed RGBA below.
+        // Omitting the parent alpha produces no green, omitting the R/B filter leaves blue at
+        // about 187, and omitting the frozen destination snapshot produces the wrong blend.
+        val expected = halfBlueMultiplyTeal3x3()
+        val bounds = RectF32.ofLTRB(0f, 0f, 3f, 3f)
+        val child = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val parent = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                drawRect(bounds, Paint(ColorARGB.of(255, 0, 128, 255), antiAlias = false))
+                drawPicture(child, Paint(
+                    color = ColorARGB.of(128, 255, 255, 255),
+                    colorFilter = swapRedBlue(),
+                    blendMode = BlendMode.MULTIPLY,
+                    antiAlias = false,
+                ))
+            }
+        }.finishRecordingAsPicture()
+        val actual = Surface(3, 3).also { surface ->
+            surface.canvas { drawPicture(parent, Paint(imageFilter = ImageFilter.Blur(1f, 1f, TileMode.CLAMP))) }
+        }.render().pixels
+
+        W6bImageBlurCpuOracle.assertNear(expected, actual, tolerance = 3)
+    }
+
+    @Test
     fun `filtered saveLayer destination-read restore uses its frozen snapshot`() {
         // Same public source/destination oracle as the Picture terminal, but the filtered
         // saveLayer reaches FilterCompositeOperationV1.Layer instead.
@@ -301,6 +331,15 @@ class W6bImageBlurSurfacePixelTest {
 
     private fun opaqueBlack3x3(): UByteArray = UByteArray(3 * 3 * 4).also { pixels ->
         repeat(9) { pixel -> pixels[pixel * 4 + 3] = 255u }
+    }
+
+    private fun halfBlueMultiplyTeal3x3(): UByteArray = UByteArray(3 * 3 * 4).also { pixels ->
+        repeat(9) { pixel ->
+            val offset = pixel * 4
+            pixels[offset + 1] = 92u
+            pixels[offset + 2] = 255u
+            pixels[offset + 3] = 255u
+        }
     }
 
     private fun opaqueRed3x3(): UByteArray = UByteArray(3 * 3 * 4).also { pixels ->

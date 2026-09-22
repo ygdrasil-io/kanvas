@@ -552,6 +552,11 @@ internal class W6aLayerGraphConstruction(
             owningLayerScope: PictureLayerExecutionScope?,
         ): Pair<PictureStreamAggregateV1, PlanPassId?> {
             val aggregateStartPassI32 = passes.size
+            // A finite transformed empty intersect is an exact typed terminal no-op.  Its
+            // children cannot affect any aggregate generation, so retain the frozen schedule
+            // without asking W4/W5 to lower geometry that no terminal can observe.
+            val terminallyEmptyAggregate = (draft.source.recordedInnerClipWithoutCull().terminalDeferredClip()
+                as? ClipStackNode.DeviceRect)?.copyBounds()?.isEmpty == true
             val plannedDrawSources = linkedMapOf<FramePlannedCommandIdI32, Pair<PlanPassId, Int>>()
             val plannedDrawCoordinates = linkedMapOf<FramePlannedCommandIdI32, PictureDrawCoordinatesV1>()
             fun recordPictureWork(pass: PlanPass, scope: PictureLayerExecutionScope? = owningLayerScope) {
@@ -575,6 +580,7 @@ internal class W6aLayerGraphConstruction(
                 coverage: PlanResourceId? = null,
                 workScope: PictureLayerExecutionScope? = owningLayerScope,
             ): PlanPassId? {
+                if (terminallyEmptyAggregate) return null
                 val captured = requireNotNull(entry.source.sourceDraw)
                 val domain = targetDeviceBounds(target)
                 val enclosing = composeInOrderF64(entry.source.outerPictures().map { it.transform })
@@ -1145,9 +1151,7 @@ internal class W6aLayerGraphConstruction(
              * CLAMP edge for a later parent filter.
              */
             fun initializedCompositeOutput(source: PlanResourceId): RectI32? {
-                val produced = requireNotNull(sourceBindingsById[source]?.copyProducedOutputDeviceI32()) {
-                    "Picture aggregate terminal has no frozen produced output."
-                }
+                val produced = sourceBindingsById[source]?.copyProducedOutputDeviceI32() ?: return null
                 // The child can produce a larger offscreen halo, but this terminal initializes
                 // only the overlap it composites into its immediate aggregate target.  Preserve
                 // that published source generation and terminal target; never substitute a

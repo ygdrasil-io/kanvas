@@ -226,3 +226,97 @@ Tests :
    le gate ciblé `RenderGraphContractTest` est vert.
 3. Le finding Minor de nomenclature WGSL est volontairement inchangé, comme
    demandé; il reste réservé à la final review.
+
+---
+
+## Fix round 2 — deux findings importants acceptés
+
+Base de correction : `39491652d` (`f48f3c6` ne portait que le ledger).
+
+### Correctifs livrés
+
+1. `PlanPass.PictureComposite` consulte l'operand graph-texture gelé par sa
+   source. Lorsque l'operand existe, le terminal unique applique son alpha et
+   son color filter W5 une seule fois, puis utilise le snapshot de destination
+   du `BlendPlan.DestinationReadV1`. Le carrier demeure une copie RGBA neutre;
+   le chemin sans operand conserve son composite normal. Aucun état Scene ou
+   paint n'est relu par le renderer.
+2. Un `INTERSECT` vide à matrice finie devient un `DeviceRect` vide, sans
+   dépendre de l'identité. Le constructeur de graph reconnaît ce terminal
+   no-op avant de demander un lane W4/W5 pour un enfant devenu inobservable;
+   `knownContent` ne retient alors aucune sortie absente de
+   `SourceBinding.producedOutputDeviceI32`.
+3. L'admission plan-owned d'un `DeviceRect` hard-edge exige désormais une
+   matrice affine axis-aligned sans perspective et quatre bords device F64
+   intégralement représentables en I32. Le materializer consomme cette preuve
+   gelée comme scissor exact et ne fait plus de `roundOut`/AABB élargi.
+
+R12--R15, les trois findings déjà fermés et les 94 graph contracts sont
+conservés. Aucun wire, buffer ad hoc, objet géométrique privé, test
+d'infrastructure ou replanning renderer n'a été ajouté.
+
+### RED → GREEN round 2
+
+| Finding | RED observé | GREEN observé |
+| --- | --- | --- |
+| PictureComposite non filtré peint | Le pixel public nested produit R=255 là où l'oracle indépendant fixe attend R=0 : le terminal avait perdu alpha, color filter et snapshot du parent. | Le cas public alpha + swap R/B + `MULTIPLY` destination-read donne son RGBA attendu; 10/10 assertions de `W6bImageBlurSurfacePixelTest`. |
+| Empty transformé / hard-edge fractionnaire | Le clip empty sous rotation provoque `w6a.layer.unsupported_child`; le clip fractionnaire externe s'exécute au lieu d'émettre le sentinel terminal. | Le empty rotationnel donne transparent, et le hard-edge fractionnaire refuse avec sentinel inchangé puis la même `Surface` récupère; 24/24 assertions de `W6bFilterAdmissionRecoverySurfaceTest`. |
+
+### Gates round 2
+
+Les commandes ont été exécutées séquentiellement via `rtk`.
+
+| Commande | Résultat observé |
+| --- | --- |
+| `rtk ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.W6bImageBlurSurfacePixelTest` (RED) | 10 tests, 1 failure : oracle R=0 / actual R=255 au nouveau scénario. Exit 133 : le gate est **UNKNOWN**. |
+| `rtk ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.W6bFilterAdmissionRecoverySurfaceTest` (RED) | 24 tests, 2 failures : empty transformé et refusal hard-edge fractionnaire absente. Exit 133 : **UNKNOWN**. |
+| `rtk ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.W6bImageBlurSurfacePixelTest` (GREEN final) | XML JUnit 10 tests, 0 failure, 0 error; exit 133 : **UNKNOWN**. |
+| `rtk ./gradlew :kanvas:test --tests org.graphiks.kanvas.surface.W6bFilterAdmissionRecoverySurfaceTest` (GREEN) | XML JUnit 24 tests, 0 failure, 0 error; exit 133 : **UNKNOWN**. |
+| `rtk ./gradlew :kanvas:test --tests org.graphiks.kanvas.picture.W6bFilterPictureTest` | XML JUnit 9 tests, 0 failure, 0 error; exit 133 : **UNKNOWN**. |
+| `rtk ./gradlew :gpu-plan:test --tests org.graphiks.kanvas.gpu.plan.RenderGraphContractTest` | BUILD SUCCESSFUL, 94 assertions/contrats verts, exit 0. |
+| `rtk ./gradlew :gpu-plan:compileKotlin` | BUILD SUCCESSFUL, exit 0. |
+| `rtk ./gradlew :gpu-renderer:compileKotlin` | BUILD SUCCESSFUL, exit 0. |
+| `rtk ./gradlew :kanvas:compileTestKotlin` | BUILD SUCCESSFUL, exit 0. |
+| `rtk ./gradlew :gpu-plan:test` | 268 tests, 28 failures W3/W4 préexistantes/hors scope; `RenderGraphContractTest` reste vert. |
+| `rtk ./gradlew :kanvas:test` | La suite complète atteint à nouveau l'exit natif 133. Sans preuve indépendante exhaustive après cet arrêt, ce gate reste **UNKNOWN**; il n'est ni succès ni régression. |
+| `rtk git diff --check` | GREEN, aucune erreur de whitespace. |
+
+### Fichiers round 2
+
+Production :
+
+- `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/OccurrenceSourceInputV1.kt`
+- `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W6aLayerGraphConstruction.kt`
+- `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W6aLayerPlanCompiler.kt`
+- `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kW6aLayerFramePayloadMaterializer.kt`
+
+Tests :
+
+- `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W6bImageBlurSurfacePixelTest.kt`
+- `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W6bFilterAdmissionRecoverySurfaceTest.kt`
+
+### Self-review round 2
+
+- L'alpha, le color filter et le snapshot viennent exclusivement de l'operand
+  et du terminal publiés; la copie carrier est toujours neutre et le terminal
+  ne double pas les effets.
+- Le test pixel emploie un attendu fixe (teal + demi-alpha blue après swap),
+  calculé avant la `Surface`; ses mutations réalistes couvrent omission de
+  l'alpha, du filter ou du snapshot.
+- Le scissor n'est admis qu'après preuve plan-owned des quatre bords entiers;
+  l'abaisseur vérifie la même représentation exacte au lieu d'arrondir.
+- Empty sous toute matrice finie est un no-op observé publiquement, sans
+  fallback W4/W5; une sortie non initialisée n'est jamais promue en
+  `knownContent`, conformément à R14.
+- Les tests sont des pixels/sentinels publics sur la vraie `Surface`; aucun
+  mock, fake-device, reflection, compteur ou hook test-only n'est présent.
+
+### Concerns round 2
+
+1. Chaque selector natif Kanvas se termine en exit 133 après ses assertions
+   JUnit vertes : ils restent **UNKNOWN**, conformément à la règle explicite.
+2. `:gpu-plan:test` complet conserve les 28 failures W3/W4 historiques hors
+   scope; le gate contractuel Task 3 est vert (94/94).
+3. La suite Kanvas complète termine également 133; faute de preuve exhaustive
+   indépendante après l'arrêt, elle est documentée comme **UNKNOWN**, pas
+   comme une régression introduite par ce correctif.

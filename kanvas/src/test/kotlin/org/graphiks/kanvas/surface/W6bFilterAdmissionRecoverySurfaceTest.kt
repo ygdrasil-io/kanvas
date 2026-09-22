@@ -502,6 +502,41 @@ class W6bFilterAdmissionRecoverySurfaceTest {
         assertContentEquals(UByteArray(16), surface.render().pixels)
     }
 
+    @Test
+    fun `empty deferred Picture clip remains a terminal no op under a finite transform`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val child = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(ColorARGB.White, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 2)
+        surface.canvas {
+            rotate(30f)
+            clipRect(RectF32.ofLTRB(1f, 1f, 1f, 1f), ClipOp.INTERSECT, antiAlias = false)
+            drawPicture(child, Paint(imageFilter = ImageFilter.Blur(1f, 1f)))
+        }
+
+        assertContentEquals(UByteArray(16), surface.render().pixels)
+    }
+
+    @Test
+    fun `fractional hard edge deferred Picture clip refuses terminally and same surface recovers`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val child = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(ColorARGB.White, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 2)
+        surface.canvas {
+            clipRect(RectF32.ofLTRB(0.5f, 0f, 1.5f, 2f), ClipOp.INTERSECT, antiAlias = false)
+            drawPicture(child, Paint(imageFilter = ImageFilter.Blur(1f, 1f)))
+        }
+
+        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+        assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
+    }
+
     private fun assertTerminalWithoutReadbackMutation(surface: Surface, diagnosticPrefix: String) {
         val sentinel = UByteArray(16) { 0x5au }
         val before = sentinel.copyOf()

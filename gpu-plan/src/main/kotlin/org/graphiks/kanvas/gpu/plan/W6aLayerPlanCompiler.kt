@@ -285,13 +285,25 @@ public class W6aLayerPlanCompiler public constructor(
         ClipStackNode.Empty -> true
         is ClipStackNode.DeviceRect -> {
             val bounds = clip.copyBounds()
-            if (bounds.isEmpty) true else !clip.antiAlias && operands.copyClipToDeviceF64().let { mapping ->
-                mapping.kxF64 == 0.0 && mapping.kyF64 == 0.0 && mapping.persp0F64 == 0.0 &&
-                    mapping.persp1F64 == 0.0 && mapping.persp2F64 == 1.0
-            }
+            if (bounds.isEmpty) true else !clip.antiAlias && operands.copyClipToDeviceF64()
+                .integralAxisAlignedDeviceScissorFor(bounds)
         }
         is ClipStackNode.Operations -> false
     }
+
+    /** A hard-edge DeviceRect is exact only when its frozen mapped edges are device texels. */
+    private fun Matrix3x3F64.integralAxisAlignedDeviceScissorFor(bounds: org.graphiks.math.geometry.RectF32): Boolean {
+        if (kxF64 != 0.0 || kyF64 != 0.0 || persp0F64 != 0.0 || persp1F64 != 0.0 || persp2F64 != 1.0)
+            return false
+        val mapped = mapRectBoundsF64OrNull(RectF64(
+            bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble(),
+        )) ?: return false
+        return listOf(mapped.left, mapped.top, mapped.right, mapped.bottom).all(::isExactI32DeviceEdge)
+    }
+
+    private fun isExactI32DeviceEdge(value: Double): Boolean = value.isFinite() &&
+        value >= Int.MIN_VALUE.toDouble() && value <= Int.MAX_VALUE.toDouble() &&
+        value == value.toLong().toDouble()
 
     /**
      * Refusals determined entirely by the descriptor's requested semantics.  These must stay
