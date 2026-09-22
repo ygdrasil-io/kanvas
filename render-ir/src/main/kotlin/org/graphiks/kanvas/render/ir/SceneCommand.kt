@@ -79,7 +79,7 @@ public data class PaintNode(
     public val colorFilter: ColorFilterNode?,
     public val maskFilter: MaskFilterNode?,
     public val pathEffect: PathEffectNode?,
-    public val imageFilter: ImageFilterNode?,
+    public val imageFilter: CapturedFilterRootV1?,
     public val style: PaintStyleNode,
     public val strokeWidth: Float,
     public val strokeCap: StrokeCapNode,

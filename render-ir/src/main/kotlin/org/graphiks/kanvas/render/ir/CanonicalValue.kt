@@ -26,6 +26,7 @@ public object CanonicalSceneEncoder {
         scene.colorSpace.name,
         scene.colorSpace.transferFunction.name,
         scene.colorSpace.gamut.name,
+        scene.filterTable.canonicalId.value,
         canonicalSequenceId("commands", scene.map { it.canonicalId.value }).value,
     )
 }

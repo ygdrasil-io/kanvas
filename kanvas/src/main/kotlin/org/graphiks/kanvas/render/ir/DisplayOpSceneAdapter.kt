@@ -74,7 +74,16 @@ public object DisplayOpSceneAdapter {
             // Complete the metadata pass before any operation can map stops into IR.
             CaptureContext(limits).preflightOperations(operations)
             val context = CaptureContext(limits)
-            SceneCaptureResult.Captured(SceneSnapshot.of(extent, colorSpace, captureOperations(operations, limits, context), limits.graphLimits))
+            val commands = captureOperations(operations, limits, context)
+            SceneCaptureResult.Captured(
+                SceneSnapshot.of(
+                    extent,
+                    colorSpace,
+                    commands,
+                    limits.graphLimits,
+                    context.filterCapture.build(limits.graphLimits),
+                ),
+            )
         } catch (failure: CaptureFailure) {
             invalid(diagnostics, failure.code, failure.message)
         } catch (failure: IllegalArgumentException) {
@@ -305,7 +314,7 @@ public object DisplayOpSceneAdapter {
             val current = requireNotNull(context) { "Nested Picture effect requires scene capture context" }
             capturePicture(picture, limits, current)
         },
-        imageFilterNodes = context?.imageFilterNodes ?: IdentityHashMap(),
+        filterCapture = context?.filterCapture ?: FilterCaptureContext(),
     )
 
     private fun capturePicture(
@@ -315,13 +324,19 @@ public object DisplayOpSceneAdapter {
     ): SceneSnapshot {
         context.enterPicture(picture)
         val cull = picture.cullRect.checked("picture.cull")
+        val outerFilters = context.filterCapture
+        context.filterCapture = FilterCaptureContext()
         return try {
+            val commands = captureOperations(picture.ops, limits, context)
             SceneSnapshot.of(
                 SceneExtent(cull.width().pictureExtent("picture.cull.width"), cull.height().pictureExtent("picture.cull.height")),
                 ColorSpace.SRGB,
-                captureOperations(picture.ops, limits, context),
+                commands,
+                limits.graphLimits,
+                context.filterCapture.build(limits.graphLimits),
             )
         } finally {
+            context.filterCapture = outerFilters
             context.leavePicture(picture)
         }
     }
@@ -346,7 +361,7 @@ private class CaptureContext(private val limits: SceneCaptureLimits) {
     private val activePictures = IdentityHashMap<org.graphiks.kanvas.picture.Picture, Unit>()
     private val preflightImages = mutableListOf<org.graphiks.kanvas.image.Image>()
     private val capturedImages = mutableListOf<ImageResourceSnapshot>()
-    val imageFilterNodes = IdentityHashMap<ImageFilter, ImageFilterNode>()
+    var filterCapture: FilterCaptureContext = FilterCaptureContext()
     private var preflightImageBytesI64 = 0L
     private var imageBytesI64 = 0L
     private var runtimeUniformBytesI64 = 0L

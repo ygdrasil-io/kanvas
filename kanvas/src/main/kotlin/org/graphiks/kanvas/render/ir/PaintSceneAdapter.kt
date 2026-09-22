@@ -29,7 +29,7 @@ public object PaintSceneAdapter {
         capturePicture: (org.graphiks.kanvas.picture.Picture) -> SceneSnapshot = {
             throw CaptureFailure("picture-filter-requires-context", "Picture image filters require scene capture context")
         },
-        imageFilterNodes: IdentityHashMap<ImageFilter, ImageFilterNode> = IdentityHashMap(),
+        filterCapture: FilterCaptureContext = FilterCaptureContext(),
     ): PaintNode {
         ColorFilterCapturePreflight.validatePaint(paint, limits)?.let {
             throw CaptureFailure(it.code.value, it.message)
@@ -45,7 +45,7 @@ public object PaintSceneAdapter {
             colorFilter = paint.colorFilter?.toNode(captureImage),
             maskFilter = paint.maskFilter?.toNode(captureImage),
             pathEffect = paint.pathEffect?.toNode(),
-            imageFilter = paint.imageFilter?.toNode(captureImage, capturePicture, imageFilterNodes),
+            imageFilter = paint.imageFilter?.toCaptured(captureImage, capturePicture, filterCapture),
             style = PaintStyleNode.valueOf(paint.style.name),
             strokeWidth = paint.strokeWidth.checked("paint.strokeWidth"),
             strokeCap = StrokeCapNode.valueOf(paint.strokeCap.name),
@@ -57,7 +57,6 @@ public object PaintSceneAdapter {
             captured.colorFilter?.let { validateEffect(it, limits) }
             captured.maskFilter?.let { validateEffect(it, limits) }
             captured.pathEffect?.let { validateEffect(it, limits) }
-            captured.imageFilter?.let { validateEffect(it, limits) }
         }
     }
 
@@ -115,7 +114,7 @@ public object PaintSceneAdapter {
         colorFilter = node.colorFilter?.toColorFilter(),
         maskFilter = node.maskFilter?.toMaskFilter(),
         pathEffect = node.pathEffect?.toPathEffect(),
-        imageFilter = node.imageFilter?.toImageFilter(),
+        imageFilter = null,
         blender = node.blender?.toBlender(),
         style = PaintStyle.valueOf(node.style.name),
         strokeWidth = node.strokeWidth,
@@ -126,6 +125,64 @@ public object PaintSceneAdapter {
     )
 
     public fun restoreImageFilter(node: ImageFilterNode): ImageFilter = node.toImageFilter()
+
+    /** Restores a retained color filter for a captured filter-table payload. */
+    public fun restoreColorFilter(node: ColorFilterNode): ColorFilter = node.toColorFilter()
+
+    /** Restores a runtime image filter after its table-owned children have been resolved by identity. */
+    public fun restoreRuntimeImageFilter(
+        node: CapturedFilterNodeV1.RuntimeEffect,
+        children: Map<String, ImageFilter?>,
+    ): ImageFilter = ImageFilter.RuntimeEffect(
+        node.descriptor.registeredEffect(),
+        node.uniforms().toUniformBlock(),
+        node.childShaderName,
+        children,
+    )
+
+    private fun ImageFilter.toCaptured(
+        captureImage: (Image) -> ImageResourceSnapshot,
+        capturePicture: (org.graphiks.kanvas.picture.Picture) -> SceneSnapshot,
+        context: FilterCaptureContext,
+    ): CapturedFilterRootV1 {
+        context.ids[this]?.let { return CapturedFilterRootV1(it) }
+        val id = context.table.reserve()
+        context.ids[this] = id
+        fun input(value: ImageFilter?): CapturedFilterInputV1 = value
+            ?.toCaptured(captureImage, capturePicture, context)
+            ?.let { CapturedFilterInputV1.Node(it.id) }
+            ?: CapturedFilterInputV1.ImplicitSource
+        val captured = when (this) {
+            is ImageFilter.Crop -> CapturedFilterNodeV1.Crop(crop.checked("image-filter.crop"), TileMode.valueOf(tileMode.name), input(input))
+            is ImageFilter.Blur -> CapturedFilterNodeV1.Blur(sigmaX.checked("image-filter.sigma-x"), sigmaY.checked("image-filter.sigma-y"), TileMode.valueOf(tileMode.name), input(input))
+            is ImageFilter.DropShadow -> CapturedFilterNodeV1.DropShadow(dx.checked("image-filter.dx"), dy.checked("image-filter.dy"), sigmaX.checked("image-filter.sigma-x"), sigmaY.checked("image-filter.sigma-y"), color, input(input), CapturedDropShadowModeV1.valueOf(mode.name))
+            is ImageFilter.ColorFilter -> CapturedFilterNodeV1.ColorFilter(filter.toNode(captureImage), input(input))
+            is ImageFilter.Compose -> CapturedFilterNodeV1.Compose(input(outer), input(inner))
+            is ImageFilter.Blend -> CapturedFilterNodeV1.Blend(BlendMode.valueOf(mode.name), input(background), input(foreground))
+            is ImageFilter.Dilate -> CapturedFilterNodeV1.Dilate(radiusX.checked("image-filter.radius-x"), radiusY.checked("image-filter.radius-y"), input(input))
+            is ImageFilter.Erode -> CapturedFilterNodeV1.Erode(radiusX.checked("image-filter.radius-x"), radiusY.checked("image-filter.radius-y"), input(input))
+            is ImageFilter.DistantLitDiffuse -> CapturedFilterNodeV1.DistantLitDiffuse(direction.x.checked("image-filter.direction-x"), direction.y.checked("image-filter.direction-y"), lightColor, surfaceScale.checked("image-filter.surface"), kd.checked("image-filter.kd"), input(input))
+            is ImageFilter.PointLitDiffuse -> CapturedFilterNodeV1.PointLitDiffuse(location.checked("image-filter.location"), lightColor, surfaceScale.checked("image-filter.surface"), kd.checked("image-filter.kd"), input(input))
+            is ImageFilter.SpotLitDiffuse -> CapturedFilterNodeV1.SpotLitDiffuse(location.checked("image-filter.location"), target.checked("image-filter.target"), specularExponent.checked("image-filter.exponent"), cutoffAngle.checked("image-filter.cutoff"), lightColor, surfaceScale.checked("image-filter.surface"), kd.checked("image-filter.kd"), input(input))
+            is ImageFilter.DistantLitSpecular -> CapturedFilterNodeV1.DistantLitSpecular(direction.x.checked("image-filter.direction-x"), direction.y.checked("image-filter.direction-y"), lightColor, surfaceScale.checked("image-filter.surface"), ks.checked("image-filter.ks"), shininess.checked("image-filter.shininess"), input(input))
+            is ImageFilter.PointLitSpecular -> CapturedFilterNodeV1.PointLitSpecular(location.checked("image-filter.location"), lightColor, surfaceScale.checked("image-filter.surface"), ks.checked("image-filter.ks"), shininess.checked("image-filter.shininess"), input(input))
+            is ImageFilter.SpotLitSpecular -> CapturedFilterNodeV1.SpotLitSpecular(location.checked("image-filter.location"), target.checked("image-filter.target"), specularExponent.checked("image-filter.exponent"), cutoffAngle.checked("image-filter.cutoff"), lightColor, surfaceScale.checked("image-filter.surface"), ks.checked("image-filter.ks"), shininess.checked("image-filter.shininess"), input(input))
+            is ImageFilter.Offset -> CapturedFilterNodeV1.Offset(dx.checked("image-filter.dx"), dy.checked("image-filter.dy"), input(input))
+            is ImageFilter.Tile -> CapturedFilterNodeV1.Tile(src.checked("image-filter.src"), dst.checked("image-filter.dst"), input(input))
+            is ImageFilter.Merge -> CapturedFilterNodeV1.Merge(inputs.map(::input))
+            is ImageFilter.DisplacementMap -> CapturedFilterNodeV1.DisplacementMap(ColorChannel.valueOf(xChannelSelector.name.replace("R", "RED").replace("G", "GREEN").replace("B", "BLUE").replace("A", "ALPHA")), ColorChannel.valueOf(yChannelSelector.name.replace("R", "RED").replace("G", "GREEN").replace("B", "BLUE").replace("A", "ALPHA")), scale.checked("image-filter.scale"), input(displacement), input(input))
+            is ImageFilter.Picture -> CapturedFilterNodeV1.Picture(capturePicture(picture), picture.cullRect.checked("image-filter.picture-cull"), src?.checked("image-filter.picture-src"))
+            is ImageFilter.Magnifier -> CapturedFilterNodeV1.Magnifier(src.checked("image-filter.src"), zoom.checked("image-filter.zoom"), inset.checked("image-filter.inset"), input(input))
+            is ImageFilter.MatrixConvolution -> CapturedFilterNodeV1.MatrixConvolution(kernelSize.checked("image-filter.kernel-size"), ImmutableFloats.copyOf(kernel.checked("image-filter.kernel")), gain.checked("image-filter.gain"), bias.checked("image-filter.bias"), kernelOffset.checked("image-filter.kernel-offset"), TileMode.valueOf(tileMode.name), convolveAlpha, input(input))
+            is ImageFilter.RuntimeEffect -> CapturedFilterNodeV1.RuntimeEffect(
+                effect.toDescriptor(RuntimeEffectAbi.IMAGE_FILTER, childImageFilters.keys.map { RuntimeChildSlot(it, RuntimeChildType.IMAGE_FILTER) } + listOfNotNull(childShaderName?.let { RuntimeChildSlot(it, RuntimeChildType.SHADER) })),
+                uniforms.toRuntimeUniforms(), childShaderName,
+                childImageFilters.map { (name, child) -> CapturedRuntimeImageFilterChildV1(name, input(child)) },
+            )
+        }
+        context.table.put(id, captured)
+        return CapturedFilterRootV1(id)
+    }
 
     public fun captureMeshProgram(
         program: org.graphiks.kanvas.paint.MeshProgram,
@@ -568,6 +625,14 @@ public object PaintSceneAdapter {
             is RuntimeEffectResourceBindingV1.SampledTexture -> org.graphiks.kanvas.pipeline.RuntimeEffectResourceBinding.SampledTexture(ResourceSceneAdapter.toImage(binding.image))
             is RuntimeEffectResourceBindingV1.Sampler -> org.graphiks.kanvas.pipeline.RuntimeEffectResourceBinding.Sampler(binding.type)
         } })
+}
+
+/** Capture-local identity map retained across scene operations and discarded at scene publication. */
+public class FilterCaptureContext {
+    val ids: IdentityHashMap<ImageFilter, CapturedFilterNodeId> = IdentityHashMap()
+    val table: CapturedFilterTableBuilderV1 = CapturedFilterTableBuilderV1()
+
+    fun build(limits: GraphLimits): CapturedFilterTableV1 = table.build(limits)
 }
 
 private fun FloatArray.checked(field: String): FloatArray { forEach { it.checked(field) }; return copyOf() }

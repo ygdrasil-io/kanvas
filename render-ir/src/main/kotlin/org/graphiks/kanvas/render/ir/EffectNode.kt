@@ -488,12 +488,12 @@ private fun validateSceneCommands(scene: SceneSnapshot): SceneSemanticValidation
     var layerDepth = 0
     scene.forEach { command ->
         when (command) {
-            is SceneCommand.Draw -> validateDraw(command.node)?.let { return it }
+            is SceneCommand.Draw -> validateDraw(command.node, scene.filterTable)?.let { return it }
             is SceneCommand.DrawColor -> validateClip(command.clip)?.let { return it }
             is SceneCommand.SetClip -> validateClip(command.clip)?.let { return it }
             is SceneCommand.BeginLayer -> {
                 layerDepth += 1
-                validateLayer(command.descriptor)?.let { return it }
+                validateLayer(command.descriptor, scene.filterTable)?.let { return it }
             }
             SceneCommand.EndLayer -> {
                 if (layerDepth == 0) return invalidScene("invalid-layer-balance", "Scene ends a layer that was not begun")
@@ -510,20 +510,25 @@ private fun validateSceneCommands(scene: SceneSnapshot): SceneSemanticValidation
     return if (layerDepth == 0) null else invalidScene("invalid-layer-balance", "Scene has an unterminated layer")
 }
 
-private fun validateLayer(value: LayerDescriptor): SceneSemanticValidationResult.Invalid? {
+private fun validateLayer(value: LayerDescriptor, table: CapturedFilterTableV1): SceneSemanticValidationResult.Invalid? {
     validateClip(value.clip)?.let { return it }
     value.compositeClip?.let(::validateClip)?.let { return it }
     when (val backdrop = value.backdrop) {
         EffectStack.Empty -> Unit
-        is EffectStack.Entries -> if (backdrop.effectCount != 1 || backdrop.effectAt(0) !is ImageFilterNode) {
+    is EffectStack.Entries -> if (backdrop.effectCount != 1 || backdrop.effectAt(0) !is CapturedFilterRootV1) {
             return invalidScene("invalid-layer-backdrop", "Layer backdrop must be exactly one image filter")
         }
     }
+    validateFilterRoots(value.effects, table)?.let { return it }
+    validateFilterRoots(value.backdrop, table)?.let { return it }
+    value.paint?.imageFilter?.let { validateFilterRoot(it, table) }?.let { return it }
     return null
 }
 
-private fun validateDraw(value: DrawNode): SceneSemanticValidationResult.Invalid? {
+private fun validateDraw(value: DrawNode, table: CapturedFilterTableV1): SceneSemanticValidationResult.Invalid? {
     validateClip(value.clip)?.let { return it }
+    validateFilterRoots(value.effects, table)?.let { return it }
+    value.paint?.imageFilter?.let { validateFilterRoot(it, table) }?.let { return it }
     fun requiresPaint(): SceneSemanticValidationResult.Invalid? =
         if (value.paint == null) invalidScene("invalid-draw-paint", "${value.origin} draw requires paint") else null
     fun requiresImage(expected: Class<out GeometryNode>): SceneSemanticValidationResult.Invalid? {
@@ -614,6 +619,20 @@ private fun validateDraw(value: DrawNode): SceneSemanticValidationResult.Invalid
     return null
 }
 
+private fun validateFilterRoots(value: EffectStack, table: CapturedFilterTableV1): SceneSemanticValidationResult.Invalid? = when (value) {
+    EffectStack.Empty -> null
+    is EffectStack.Entries -> value.mapNotNull { effect ->
+        (effect as? CapturedFilterRootV1)?.let { root -> validateFilterRoot(root, table) }
+    }.firstOrNull()
+}
+
+private fun validateFilterRoot(value: CapturedFilterRootV1, table: CapturedFilterTableV1): SceneSemanticValidationResult.Invalid? = try {
+    table.nodeAt(value.id)
+    null
+} catch (_: IllegalArgumentException) {
+    invalidScene("invalid-filter-root", "Scene references a missing captured filter node")
+}
+
 private fun validateClip(value: ClipStackNode): SceneSemanticValidationResult.Invalid? = when (value) {
     ClipStackNode.Empty,
     is ClipStackNode.DeviceRect,
@@ -674,6 +693,7 @@ private fun materialChildren(
 }
 
 private fun effectChildren(value: EffectNode, depth: Int): List<GraphWork> = when (value) {
+    is CapturedFilterRootV1 -> emptyList()
     is ColorFilterNode.Compose -> listOf(GraphWork.Effect(value.outer, depth), GraphWork.Effect(value.inner, depth))
     is ColorFilterNode.Lerp -> listOf(GraphWork.Effect(value.dst, depth), GraphWork.Effect(value.src, depth))
     is ColorFilterNode.RuntimeEffect -> value.map { GraphWork.Effect(it.filter, depth) }
