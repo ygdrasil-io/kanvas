@@ -37,11 +37,9 @@ internal object W6bSeparableBlurSnippet {
         return """
             @group(0) @binding(0) var w6b_input: texture_2d<f32>;
             fn w6b_mirror(coordinate: i32, extent: i32) -> i32 {
-                if (extent <= 1) { return 0; }
-                let period = 2 * extent - 2;
+                let period = 2 * extent;
                 let folded = ((coordinate % period) + period) % period;
-                if (folded < extent) { return folded; }
-                return period - folded;
+                return min(folded, period - 1 - folded);
             }
             fn w6b_address(coordinate: i32, lower: i32, extent: i32) -> i32 { return $tileAddress; }
             @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {

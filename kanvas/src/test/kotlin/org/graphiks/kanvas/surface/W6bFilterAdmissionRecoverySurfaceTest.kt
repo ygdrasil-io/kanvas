@@ -439,6 +439,69 @@ class W6bFilterAdmissionRecoverySurfaceTest {
         assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
     }
 
+    @Test
+    fun `non axis aligned deferred Picture clip refuses terminally and same surface recovers`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val child = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(ColorARGB.White, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                rotate(30f)
+                clipRect(bounds, ClipOp.INTERSECT, antiAlias = false)
+                drawPicture(child, Paint(imageFilter = ImageFilter.Blur(1f, 1f)))
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 2)
+        surface.canvas { drawPicture(picture) }
+
+        assertTerminalWithoutReadbackMutation(surface, "w6a.layer.unsupported_child:")
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+        assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
+    }
+
+    @Test
+    fun `antialiased deferred Picture clip refuses terminally and same surface recovers`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val child = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(ColorARGB.White, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                clipRect(bounds, ClipOp.INTERSECT, antiAlias = true)
+                drawPicture(child, Paint(imageFilter = ImageFilter.Blur(1f, 1f)))
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 2)
+        surface.canvas { drawPicture(picture) }
+
+        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+        assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
+    }
+
+    @Test
+    fun `empty deferred Picture clip is a terminal no op`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val child = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(ColorARGB.White, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                clipRect(RectF32.ofLTRB(1f, 1f, 1f, 1f), ClipOp.INTERSECT, antiAlias = false)
+                drawPicture(child, Paint(imageFilter = ImageFilter.Blur(1f, 1f)))
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 2)
+        surface.canvas { drawPicture(picture) }
+
+        assertContentEquals(UByteArray(16), surface.render().pixels)
+    }
+
     private fun assertTerminalWithoutReadbackMutation(surface: Surface, diagnosticPrefix: String) {
         val sentinel = UByteArray(16) { 0x5au }
         val before = sentinel.copyOf()

@@ -121,3 +121,108 @@ Tests :
 3. Step 10 (review Sol) n'est pas dispatché : l'instruction de cette tâche
    interdit explicitement les sous-agents. Une review indépendante doit être
    orchestrée par le contrôleur si elle reste requise.
+
+---
+
+## Fix round 1 — cinq findings importants acceptés
+
+Base de correction : `375255fec` (`7164e48` ne portait que le ledger).
+
+### Correctifs livrés
+
+1. L'admission native Task 3 ne ré-explore plus `SceneSnapshot`, les tables de
+   filtres ou les clips capturés. `W6aLayerPlanCompiler` publie et valide d'abord
+   le graph Task 2, puis admet seulement le sous-ensemble gelé : kinds
+   `IMAGE_BLUR_X/Y`, schedule total, terminaux et operands de terminal. Les
+   opérations absentes du sous-ensemble gardent le refus stable
+   `w6b.native_execution_unimplemented`.
+2. L'adressage `MIRROR` WGSL et l'oracle indépendant suivent exactement le
+   contrat W5e : période `2 * dimension`, repli `min(p, 2 * dimension - 1 - p)`.
+   La fixture publique utilise désormais trois texels RGB asymétriques :
+   `CLAMP`, `REPEAT`, `MIRROR` et `DECAL` ont quatre sorties distinctes.
+3. Les `FilterCompositeOperationV1.Layer` et les terminaux Picture abaissent
+   désormais les bindings W5 gelés : alpha, color filter, `BlendPlan` et,
+   lorsqu'il existe, le snapshot de destination. Le carrier graph-texture reste
+   neutre. Les sources Picture internes qui n'ont pas de
+   `GraphTextureSourceOperandV1` restent abaissées depuis leur terminal gelé
+   (blend/snapshot), sans chercher un operand parent inexistant. Cela ferme aussi
+   le RED trouvé sur les Pictures filtrées imbriquées.
+4. L'admission des clips `DeviceRect` différés est plan-owned et bornée aux
+   rectangles non-AA, non vides et à mapping axis-aligned; les formes
+   non-représentables refusent de manière terminale et un rectangle vide est un
+   terminal no-op. Le materializer n'élargit plus silencieusement un clip vide
+   en AABB.
+5. Le contrat public de `W6bFilterPictureTest` capture deux relectures de la
+   même `Picture`, compile le vrai graph de production, et prouve deux paires
+   distinctes `(sealedSourceId, sealedSourceGenerationI64)` ainsi que le lien de
+   chaque paire vers son `PictureSourcePass` puis son `FilterComposite` exact.
+   Le replay pixel mémoire/wire existant reste exécuté.
+
+R13/R14/R15 sont conservés : aucune nouvelle ressource uniforme, aucun wire,
+aucun replanning renderer, et aucune promotion de demand/cull/halo vers
+`knownContent`.
+
+### RED → GREEN round 1
+
+| Finding | RED observé | GREEN observé |
+| --- | --- | --- |
+| Admission gelée | L'ancien admission helper re-traversait les occurrences et `CapturedFilterNodeV1` avant publication. | Le helper est supprimé; les recovery contracts W6b observent les refus/récupérations depuis le graph publié. |
+| MIRROR | L'ancien shader/oracle employait le repli `2 * extent - 2`; l'oracle public signalait le mismatch du texel miroir (137 contre 199 attendu). | Le test public quatre modes passe avec source multi-texel asymétrique et oracle qui ne réemploie pas le shader. |
+| Layer/Picture parent terminal | Les REDs publics donnaient une Picture destination-read rouge au lieu de noir, un saveLayer color-filter sans filtre et `Invalid destination snapshot consumer`. | Les trois pixels publics (Picture destination-read, restore destination-read et color-filter) passent; le snapshot est validé par son binding gelé. |
+| Picture filtrées imbriquées | Après l'abaissement des operands parent, le test obligatoire échouait avec `W6b Picture terminal is missing its frozen graph-texture operand for FilterSource:2`; cette source interne n'est pas un aggregate parent. | Le terminal interne est abaissé depuis son blend/snapshot gelé, le terminal aggregate consomme l'operand W5 gelé; le scénario nested passe. |
+| DeviceRect différé | Les REDs publics de clip AA/non-axis-aligned exposaient l'absence de coverage exacte derrière l'ancien AABB scissor. | Refus public stable + recovery pour AA/non-axis, et pixel transparent/no-op pour empty, passent. |
+| Occurrences répétées | Le nouveau contrat a d'abord reçu `unsupported.material.gradient.storage-capability` car son snapshot de capacités de production était incomplet. | Avec l'inventory de capacités requis, la capture publique produit le graph et prouve les deux paires/consumers distincts. Aucune correction de production n'était nécessaire pour cet invariant déjà publié. |
+
+### Gates round 1
+
+Les commandes suivantes ont été lancées séquentiellement via `rtk`.
+
+| Commande | Preuve |
+| --- | --- |
+| `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bImageBlurSurfacePixelTest'` | JUnit XML : 9 tests, 0 failure, 0 error. Gradle exit 133 : **UNKNOWN**. |
+| `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6bFilterPictureTest'` | JUnit XML : 9 tests, 0 failure, 0 error, incluant replay mémoire/wire et contrat source-generation. Exit 133 : **UNKNOWN**. |
+| `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bFilterAdmissionRecoverySurfaceTest'` | JUnit XML : 22 tests, 0 failure, 0 error. Exit 133 : **UNKNOWN**. |
+| `rtk ./gradlew :gpu-plan:test --tests 'org.graphiks.kanvas.gpu.plan.RenderGraphContractTest'` | BUILD SUCCESSFUL, exit 0; les contrats graph restent verts. |
+| `rtk ./gradlew :gpu-plan:test` | 268 tests, 28 failures W3/W4 préexistantes/hors scope; `RenderGraphContractTest` reste vert. |
+| `rtk ./gradlew :kanvas:test` | Le run complet atteint l'exit natif 133; statut du gate **UNKNOWN**. Les sorties de tests ne reclassifient ni ce 133 ni les suites non terminées en succès ou régression. |
+| `rtk git diff --check` | GREEN, aucune erreur whitespace. |
+
+### Fichiers round 1
+
+Production :
+
+- `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/OccurrenceSourceInputV1.kt`
+- `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W6aLayerGraphConstruction.kt`
+- `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W6aLayerGraphValidation.kt`
+- `gpu-plan/src/main/kotlin/org/graphiks/kanvas/gpu/plan/W6aLayerPlanCompiler.kt`
+- `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kW6aLayerFramePayloadMaterializer.kt`
+- `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/wgsl/W6bSeparableBlurSnippet.kt`
+
+Tests :
+
+- `kanvas/src/test/kotlin/org/graphiks/kanvas/picture/W6bFilterPictureTest.kt`
+- `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W6bFilterAdmissionRecoverySurfaceTest.kt`
+- `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W6bImageBlurCpuOracle.kt`
+- `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W6bImageBlurSurfacePixelTest.kt`
+
+### Self-review round 1
+
+- Le renderer lit uniquement les operands, schedules, bounds, generations et
+  snapshots publiés. Il ne parcourt ni `SceneSnapshot` ni filtres capturés et
+  ne crée aucun pass, buffer ad hoc ou wire.
+- Les quatre tile modes ont un dispatch exhaustif; l'oracle pixel est
+  indépendant de la formule WGSL.
+- Chaque destination-read est lié à la ressource snapshot et à la version
+  gelées; la validation accepte le consumer Layer filtré qui peut être séparé
+  de la `TextureCopy` par coverage/source/X/Y publiés.
+- Les tests ajoutés sont publics et pixel/graph contractuels; aucun mock, fake
+  device, reflection, hook, compteur ou test d'infrastructure n'a été ajouté.
+
+### Concerns round 1
+
+1. Les exits 133 des suites `:kanvas:test` restent **UNKNOWN** conformément à
+   la règle explicite; les XML JUnit ne changent pas le statut du processus.
+2. `:gpu-plan:test` complet conserve les 28 échecs W3/W4, hors scope de Task 3;
+   le gate ciblé `RenderGraphContractTest` est vert.
+3. Le finding Minor de nomenclature WGSL est volontairement inchangé, comme
+   demandé; il reste réservé à la final review.

@@ -4,9 +4,6 @@ import org.graphiks.kanvas.render.ir.LayerDescriptor
 import org.graphiks.kanvas.render.ir.EffectStack
 import org.graphiks.kanvas.render.ir.GeometryNode
 import org.graphiks.kanvas.render.ir.CapturedFilterRootV1
-import org.graphiks.kanvas.render.ir.CapturedFilterInputV1
-import org.graphiks.kanvas.render.ir.CapturedFilterNodeId
-import org.graphiks.kanvas.render.ir.CapturedFilterNodeV1
 import org.graphiks.kanvas.render.ir.ClipStackNode
 import org.graphiks.kanvas.render.ir.ColorFilterNode
 import org.graphiks.kanvas.render.ir.MaskFilterNode
@@ -213,16 +210,6 @@ public class W6aLayerPlanCompiler public constructor(
             return RenderPlanResult.InvalidScene(listOf(diagnostic(W6aPlanDiagnostics.UnsupportedChild, "Foreign W6a candidate.")))
         }
         return try {
-            // Task 3 is deliberately the first native arm: it consumes only an already
-            // frozen chain of image blurs.  Mask and shadow operations remain terminal here
-            // until their own materializers arrive; this is selection-time admission, not a
-            // renderer-local reconstruction of a W6b graph.
-            if (W6bFilterGraphConstruction.owns(selected.scene) && !hasOnlyNativeImageBlurOccurrences(selected.scene)) {
-                return RenderPlanResult.InvalidScene(listOf(W6bFilterDiagnostics.refusal(
-                    W6bFilterDiagnostics.NativeExecutionUnimplemented,
-                    "W6b filter graph is frozen, but this native operation is not implemented.",
-                )))
-            }
             val bindings = mutableListOf<W6aLayerSourceBinding>()
             for (segment in selected.segments) when (val result = segment.compiler.constructSourceLanes(segment.candidate, capabilities, budget)) {
                 is RenderPlanResult.Ready -> result.plan.forEach { bindings += W6aLayerSourceBinding(
@@ -238,9 +225,16 @@ public class W6aLayerPlanCompiler public constructor(
             val frame = W6aLayerGraphConstruction(PlanId("w6a.${selected.sceneCanonicalId.value}"), org.graphiks.math.geometry.SizeI32(selected.target.extent.width, selected.target.extent.height),
                 capabilities, budget, selected.occurrences, bindings, selected.scene, runtimeCatalog)
             when (val layout = FrameSourceLayoutV4.layeredFrame(frame)) {
-                // W6b construction has already frozen every source, pass, target and terminal.
-                // The renderer consumes this published graph directly; it does not re-plan it.
-                is SourceConstructionResultV4.Built -> layout.value.prepareAndPublish()
+                // Task 2 has now published (and therefore validated) the one graph authority.
+                // Native admission reads only those frozen operation kinds, schedule, terminals
+                // and terminal operands; it never revisits SceneSnapshot or captured filters.
+                is SourceConstructionResultV4.Built -> when (val published = layout.value.prepareAndPublish()) {
+                    is RenderPlanResult.Ready -> frozenW6bNativeAdmission(published.plan) ?: published
+                    is RenderPlanResult.ResourceLimitExceeded -> published
+                    is RenderPlanResult.GapNotMigrated -> published
+                    is RenderPlanResult.GapOnPromotedScope -> published
+                    is RenderPlanResult.InvalidScene -> published
+                }
                 is SourceConstructionResultV4.Refused -> layout.failure
             }
         } catch (failure: W6aResourceLimitFailure) {
@@ -261,38 +255,43 @@ public class W6aLayerPlanCompiler public constructor(
         }
     }
 
-    /**
-     * This admission boundary intentionally reads only capture-time facts.  The Task 2 graph
-     * still owns occurrence discovery and pass selection; Task 3 merely declares which frozen
-     * operation family it can materialize today.
-     */
-    private fun hasOnlyNativeImageBlurOccurrences(scene: SceneSnapshot): Boolean =
-        W6bFilterGraphConstruction.positiveOccurrences(scene).all { occurrence ->
-            // The Task 3 terminal materializer consumes Empty and DeviceRect deferred Picture
-            // clips.  A general operation stream has no frozen native terminal yet, so retain
-            // the established terminal refusal rather than letting the renderer rediscover it.
-            (!occurrence.isPictureOccurrence || occurrence.source.recordedInnerClipWithoutCull().let {
-                it is ClipStackNode.Empty || it is ClipStackNode.DeviceRect
-            }) && occurrence.mask == null && occurrence.root?.let { root ->
-                val seen = mutableSetOf<CapturedFilterNodeId>()
-                fun isBlurChain(nodeId: CapturedFilterNodeId): Boolean {
-                    if (!seen.add(nodeId)) return true
-                    return when (val node = occurrence.table.nodeAt(nodeId)) {
-                        is CapturedFilterNodeV1.Blur -> when (val input = node.input) {
-                            CapturedFilterInputV1.ImplicitSource,
-                            CapturedFilterInputV1.TransparentBlack,
-                            -> true
-                            is CapturedFilterInputV1.Node -> isBlurChain(input.id)
-                            is CapturedFilterInputV1.Picture,
-                            is CapturedFilterInputV1.Backdrop,
-                            -> false
-                        }
-                        else -> false
-                    }
-                }
-                isBlurChain(root.id)
-            } == true
+    /** The W6b native arm admits exactly the Task-2-published image blur graph subset. */
+    private fun frozenW6bNativeAdmission(graph: RenderGraph): RenderPlanResult<RenderGraph>? {
+        val filters = graph.passes().filterIsInstance<PlanPass.FilterPass>()
+        if (filters.isEmpty()) return null
+        val schedule = graph.layerFramePlanOrNull()?.frozenPassSchedule()
+        val kinds = filters.mapNotNull { (it.operation as? FilterPassOperationV1.SeparableBlur)?.kind }
+        val imageBlurKinds = setOf(FilterImplementationKindV1.IMAGE_BLUR_X, FilterImplementationKindV1.IMAGE_BLUR_Y)
+        val terminals = graph.passes().filterIsInstance<PlanPass.FilterComposite>()
+        val emptyNoOp = terminals.isEmpty() && filters.all { pass ->
+            (pass.operation as? FilterPassOperationV1.SeparableBlur)
+                ?.bounds?.copyProducedOutputDeviceI32() == null
         }
+        val clips = buildList {
+            graph.passes().filterIsInstance<PlanPass.PictureComposite>().forEach { add(requireNotNull(it.operands)) }
+            terminals.mapNotNull { (it.operation as? FilterCompositeOperationV1.Picture)?.terminal }.forEach(::add)
+        }
+        val admitted = kinds.size == filters.size && kinds.all { it in imageBlurKinds } &&
+            schedule != null && schedule == graph.passes().map(PlanPass::id) && (terminals.isNotEmpty() || emptyNoOp) &&
+            clips.all(::supportsFrozenDeferredPictureClip)
+        return if (admitted) null else RenderPlanResult.InvalidScene(listOf(W6bFilterDiagnostics.refusal(
+            W6bFilterDiagnostics.NativeExecutionUnimplemented,
+            "W6b filter graph is frozen, but this native operation is not implemented.",
+        )))
+    }
+
+    /** Exact coverage is unavailable in Task 3: accept only a frozen scissor-equivalent clip. */
+    private fun supportsFrozenDeferredPictureClip(operands: PictureCompositeOperandsV1): Boolean = when (val clip = operands.deferredClip) {
+        ClipStackNode.Empty -> true
+        is ClipStackNode.DeviceRect -> {
+            val bounds = clip.copyBounds()
+            if (bounds.isEmpty) true else !clip.antiAlias && operands.copyClipToDeviceF64().let { mapping ->
+                mapping.kxF64 == 0.0 && mapping.kyF64 == 0.0 && mapping.persp0F64 == 0.0 &&
+                    mapping.persp1F64 == 0.0 && mapping.persp2F64 == 1.0
+            }
+        }
+        is ClipStackNode.Operations -> false
+    }
 
     /**
      * Refusals determined entirely by the descriptor's requested semantics.  These must stay

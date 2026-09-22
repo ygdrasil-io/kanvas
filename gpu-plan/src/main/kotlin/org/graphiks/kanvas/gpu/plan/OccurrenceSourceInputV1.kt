@@ -27,6 +27,24 @@ internal fun withoutPictureCull(clip: ClipStackNode, cull: org.graphiks.math.geo
     }
 }
 
+/**
+ * The capture representation preserves an explicit clipRect as a one-entry operation stream.
+ * An empty intersect is terminally a no-op under every finite mapping, so publish that exact
+ * rectangle as a DeviceRect.  Non-empty operation streams remain opaque: Task 3 never turns
+ * a complex clip into a scissor or an AABB.
+ */
+internal fun ClipStackNode.terminalDeferredClip(): ClipStackNode = when (this) {
+    ClipStackNode.Empty, is ClipStackNode.DeviceRect -> this
+    is ClipStackNode.Operations -> toList().singleOrNull()?.let { entry ->
+        val rectangle = entry.geometry as? GeometryNode.Rect
+        val matrix = (entry.transform as? ClipTransformSnapshot.Known)?.copyMatrixF32()
+        if (entry.operation == ClipOperation.INTERSECT && rectangle?.copyBounds()?.isEmpty == true &&
+            matrix == Matrix3x3F32.Identity) {
+            ClipStackNode.DeviceRect.of(rectangle.copyBounds(), entry.antiAlias)
+        } else this
+    } ?: this
+}
+
 /** Pre-publication input to the existing W4/W5 authorities; never a renderer replay recipe. */
 internal class OccurrenceSourceInputV1(
     val plannedCommandId: FramePlannedCommandIdI32,

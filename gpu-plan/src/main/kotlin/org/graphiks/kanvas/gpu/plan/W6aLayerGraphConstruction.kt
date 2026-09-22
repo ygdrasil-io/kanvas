@@ -1232,7 +1232,7 @@ internal class W6aLayerGraphConstruction(
                     aggregateTargetBinding.originDeviceI32,
                     aggregateBounds,
                     aggregateTargetBinding.mapping,
-                    draft.source.recordedInnerClipWithoutCull(),
+                    draft.source.recordedInnerClipWithoutCull().terminalDeferredClip(),
                     draft.draw.paint?.color?.alphaNormalized ?: 1f,
                     pictureColorFilter(draft.draw),
                     pictureBlend(draft.draw),
@@ -1248,7 +1248,7 @@ internal class W6aLayerGraphConstruction(
                     appendFrozenOccurrence(occurrence, source, parentTarget,
                         FilterCompositeOperationV1.Picture(draft.source.scene.canonicalId.value, draft.source.sourceCommandIndexI32),
                         pictureTerminal = { output, rect, origin -> freezePictureTerminal(draft.sourcePlannedCommandId,
-                            output, parentTarget, rect, origin, draft.source.recordedInnerClipWithoutCull(),
+                            output, parentTarget, rect, origin, draft.source.recordedInnerClipWithoutCull().terminalDeferredClip(),
                             composeInOrderF64(draft.source.outerPictures().map { it.transform }), pictureBlend(draft.draw)) }
                     ).also(::recordPictureWork).id
                 } else {
@@ -1256,7 +1256,7 @@ internal class W6aLayerGraphConstruction(
                     val rect = requireNotNull(source.mapping.mapDeviceRectToLayerI32OrNull(domain))
                     val origin = requireNotNull(filterSource(parentTarget).mapping.mapDeviceRectToLayerI32OrNull(domain))
                     val operands = freezePictureTerminal(draft.sourcePlannedCommandId, source, parentTarget, rect,
-                        Point2I32(origin.left, origin.top), draft.source.recordedInnerClipWithoutCull(),
+                        Point2I32(origin.left, origin.top), draft.source.recordedInnerClipWithoutCull().terminalDeferredClip(),
                         composeInOrderF64(draft.source.outerPictures().map { it.transform }), pictureBlend(draft.draw))
                     val after = DestinationVersionI64(if (operands.blend.compositionFacts.writesParentDevice)
                         Math.addExact(versions[parentTarget] ?: 0L, 1L) else versions[parentTarget] ?: 0L)
@@ -1286,7 +1286,7 @@ internal class W6aLayerGraphConstruction(
                 draft.outerPicturePathI32(),
                 aggregateDomain.mapping,
                 draft.source.recordedInnerClipWithoutCull(),
-                draft.source.recordedInnerClipWithoutCull(),
+                draft.source.recordedInnerClipWithoutCull().terminalDeferredClip(),
                 aggregateDomain.cullContentDeviceI32,
                 aggregateDomain.demandDeviceI32,
                 parentTarget,

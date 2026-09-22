@@ -90,12 +90,20 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
                         label = "w6b.parent.filter.${frame.physical.slot(id).slotI32}")))
                 }
+            val graphTextureOperandsBySource = graph.passes().filterIsInstance<PlanPass.PictureSourcePass>()
+                .mapNotNull { pass -> pass.graphTextureOperand?.let { operand -> pass.output to operand } }
+                .toMap()
             val uniform = owned.own(device.createBuffer(BufferDescriptor(size = geometryUniform.byteSize.toULong(),
                 usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst, label = "w6a.geometry.uniform")))
             val uniformBytes = ByteArray(Math.toIntExact(geometryUniform.byteSize))
-            graph.passes().filterIsInstance<PlanPass.LayerComposite>().forEach { composite ->
-                val filter = composite.restore.colorFilter ?: return@forEach
-                val offset = requireNotNull(composite.restore.colorFilterUniformOffsetI64)
+            graph.passes().forEach { pass ->
+                val restore = when (pass) {
+                    is PlanPass.LayerComposite -> pass.restore
+                    is PlanPass.FilterComposite -> (pass.operation as? FilterCompositeOperationV1.Layer)?.restore
+                    else -> null
+                } ?: return@forEach
+                val filter = restore.colorFilter ?: return@forEach
+                val offset = requireNotNull(restore.colorFilterUniformOffsetI64)
                 val data = filter.copyDynamicBytes()
                 data.copyInto(uniformBytes, Math.toIntExact(offset))
             }
@@ -331,50 +339,36 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         renderOperands += emptyRender(stepIndex, views.getValue(pass.aggregateTarget), generation, clear = false, pass, owned)
                     }
                     is PlanPass.PictureSourcePass -> {
-                        val operand = requireNotNull(pass.graphTextureOperand) {
-                            "W6b Picture source must retain its published graph texture operand."
-                        }
-                        val inputOrigin = frame.targetOriginDeviceI32(operand.sealedSourceId)
-                        val outputOrigin = frame.targetOriginDeviceI32(pass.output)
-                        val extent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
-                        val filter = operand.colorFilter
-                        val filterOffset = filter?.let { requireNotNull(operand.colorFilterUniformOffsetI64) }
-                        val filterCapacity = filter?.let { requireNotNull(operand.colorFilterUniformByteCountI64) }
-                        val colorDeclaration = filter?.let { execution ->
-                            "struct W5fMaterialBlock { words: array<vec4<u32>, ${maxOf(1L, (requireNotNull(filterCapacity) + 15L) / 16L)}>, }\n" +
-                                "@group(0) @binding(1) var<uniform> w5fMaterial: W5fMaterialBlock;\n" +
-                                "fn w6b_parent_filter(input: vec4<f32>) -> vec4<f32> {\n" +
-                                W5fColorOperationEmitterV1.emit(execution.copyOperationGraph(), "input",
-                                    requireNotNull(filterOffset) / 4L) + "}\n"
-                        }.orEmpty()
-                        val filteredSource = if (filter == null) "alpha_applied" else "w6b_parent_filter(alpha_applied)"
-                        val shader = W6A_VERTEX_SHADER + """
-                            @group(0) @binding(0) var picture_source: texture_2d<f32>;
-                            $colorDeclaration
-                            @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
-                                let source_position = vec2<i32>(position.xy) + vec2<i32>(${outputOrigin.x - inputOrigin.x}, ${outputOrigin.y - inputOrigin.y});
-                                let source_extent = vec2<i32>(textureDimensions(picture_source));
-                                if (source_position.x < 0 || source_position.y < 0 || source_position.x >= source_extent.x || source_position.y >= source_extent.y) {
-                                    return vec4<f32>(0.0);
-                                }
-                                let alpha_applied = textureLoad(picture_source, source_position, 0) * ${operand.alphaF32};
-                                return $filteredSource;
+                        val operand = pass.graphTextureOperand
+                        if (operand == null) {
+                            val layerInput = requireNotNull(pass.layerInput) {
+                                "W6b non-graph Picture source must retain its frozen layer input."
                             }
-                        """
-                        val filterBuffer = filter?.let { execution ->
-                            val offset = requireNotNull(filterOffset)
-                            val capacity = requireNotNull(filterCapacity)
-                            val bindingBytes = maxOf(16L, execution.dynamicByteCountI64)
-                            require(Math.addExact(offset, bindingBytes) <= capacity)
-                            graphTextureUniformBuffers.getValue(operand.uniformResource).also { buffer ->
-                                if (execution.dynamicByteCountI64 > 0L) {
-                                    queue.writeBuffer(buffer, offset.toULong(), ArrayBuffer.of(execution.copyDynamicBytes()))
+                            val inputOrigin = frame.targetOriginDeviceI32(layerInput)
+                            val outputOrigin = frame.targetOriginDeviceI32(pass.output)
+                            val extent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
+                            renderOperands += textureRender(stepIndex, views.getValue(pass.output), views.getValue(layerInput), generation,
+                                sampledCompositeShader(outputOrigin.x - inputOrigin.x, outputOrigin.y - inputOrigin.y, 1f),
+                                BlendPlan.LegacySrcOverV1, 0, 0, extent.width, extent.height, pass, owned)
+                        } else {
+                            val inputOrigin = frame.targetOriginDeviceI32(operand.sealedSourceId)
+                            val outputOrigin = frame.targetOriginDeviceI32(pass.output)
+                            val extent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
+                            val shader = W6A_VERTEX_SHADER + """
+                                @group(0) @binding(0) var picture_source: texture_2d<f32>;
+                                @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+                                    let source_position = vec2<i32>(position.xy) + vec2<i32>(${outputOrigin.x - inputOrigin.x}, ${outputOrigin.y - inputOrigin.y});
+                                    let source_extent = vec2<i32>(textureDimensions(picture_source));
+                                    if (source_position.x < 0 || source_position.y < 0 || source_position.x >= source_extent.x || source_position.y >= source_extent.y) {
+                                        return vec4<f32>(0.0);
+                                    }
+                                    return textureLoad(picture_source, source_position, 0);
                                 }
-                            }
+                            """
+                            renderOperands += pictureSourceRender(stepIndex, views.getValue(pass.output), views.getValue(operand.sealedSourceId),
+                                null, null, generation, shader,
+                                0, 0, extent.width, extent.height, pass, owned)
                         }
-                        renderOperands += pictureSourceRender(stepIndex, views.getValue(pass.output), views.getValue(operand.sealedSourceId),
-                            filterBuffer, filterCapacity, generation, shader,
-                            0, 0, extent.width, extent.height, pass, owned)
                     }
                     is PlanPass.FilterPass -> {
                         val operation = pass.operation as? FilterPassOperationV1.SeparableBlur
@@ -419,19 +413,66 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     is PlanPass.FilterComposite -> {
                         val source = pass.copySourceBoundsTargetI32()
                         val destination = pass.copyDestinationOriginParentI32()
-                        val alpha = (pass.operation as? FilterCompositeOperationV1.Layer)?.restore?.alphaF32 ?: 1f
-                        val blend = when (val operation = pass.operation) {
-                            is FilterCompositeOperationV1.Draw -> operation.blend
-                            is FilterCompositeOperationV1.Layer -> operation.restore.blend
-                            is FilterCompositeOperationV1.Picture -> requireNotNull(operation.terminal).blend
+                        when (val operation = pass.operation) {
+                            is FilterCompositeOperationV1.Draw -> renderOperands += textureRender(
+                                stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
+                                sampledCompositeShader(source.left - destination.x, source.top - destination.y, 1f), operation.blend,
+                                destination.x, destination.y, source.width(), source.height(), pass, owned,
+                            )
+                            is FilterCompositeOperationV1.Layer -> {
+                                val restore = operation.restore
+                                val destinationRead = restore.blend as? BlendPlan.DestinationReadV1
+                                renderOperands += filteredCompositeRender(
+                                    stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation, source, destination,
+                                    restore.alphaF32, restore.colorFilter, uniform, restore.colorFilterUniformOffsetI64,
+                                    restore.colorFilter?.let { maxOf(16L, it.dynamicByteCountI64) }, 0L,
+                                    destinationRead?.snapshotResource?.let(views::get), restore.blend, pass, owned,
+                                )
+                            }
+                            is FilterCompositeOperationV1.Picture -> {
+                                val terminal = requireNotNull(operation.terminal)
+                                val scissor = pictureCompositeScissor(frame, pass.destination, source, destination, terminal)
+                                val operand = graphTextureOperandsBySource[pass.evaluationKey.boundSourceId]
+                                renderOperands += if (scissor == null) {
+                                    emptyRender(stepIndex, views.getValue(pass.destination), generation, clear = false, pass, owned)
+                                } else if (operand == null) {
+                                    // Inner Picture draws already carry their W5 material in the
+                                    // filter source.  They have no parent graph-texture operand,
+                                    // but their frozen terminal still owns a destination snapshot
+                                    // and exact blend.
+                                    filteredCompositeRender(
+                                        stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
+                                        source, destination, 1f, null, null, null, null, 0L,
+                                        (terminal.blend as? BlendPlan.DestinationReadV1)?.snapshotResource?.let(views::get),
+                                        terminal.blend, pass, owned, scissor,
+                                    )
+                                } else {
+                                    require(operand.finalBlend.canonicalLabel == terminal.blend.canonicalLabel) {
+                                        "W6b Picture terminal blend differs from its frozen graph-texture operand."
+                                    }
+                                    val filter = operand.colorFilter
+                                    val filterOffset = filter?.let { requireNotNull(operand.colorFilterUniformOffsetI64) }
+                                    val filterCapacity = filter?.let { requireNotNull(operand.colorFilterUniformByteCountI64) }
+                                    val filterBuffer = filter?.let { execution ->
+                                        val offset = requireNotNull(filterOffset)
+                                        val capacity = requireNotNull(filterCapacity)
+                                        val bindingBytes = maxOf(16L, execution.dynamicByteCountI64)
+                                        require(Math.addExact(offset, bindingBytes) <= capacity)
+                                        graphTextureUniformBuffers.getValue(operand.uniformResource).also { buffer ->
+                                            if (execution.dynamicByteCountI64 > 0L)
+                                                queue.writeBuffer(buffer, offset.toULong(), ArrayBuffer.of(execution.copyDynamicBytes()))
+                                        }
+                                    }
+                                    filteredCompositeRender(
+                                        stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation, source, destination,
+                                        operand.alphaF32, filter, filterBuffer, if (filter == null) null else 0L, filterCapacity,
+                                        filterOffset?.div(4L) ?: 0L,
+                                        (terminal.blend as? BlendPlan.DestinationReadV1)?.snapshotResource?.let(views::get), terminal.blend,
+                                        pass, owned, scissor,
+                                    )
+                                }
+                            }
                         }
-                        val shader = sampledCompositeShader(source.left - destination.x, source.top - destination.y, alpha)
-                        val terminal = (pass.operation as? FilterCompositeOperationV1.Picture)?.terminal
-                        val scissor = terminal?.let { pictureCompositeScissor(frame, pass.destination, source, destination, it) }
-                        renderOperands += if (scissor == null && terminal != null) emptyRender(stepIndex, views.getValue(pass.destination), generation,
-                            clear = false, pass, owned) else textureRender(stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
-                            shader, blend, scissor?.left ?: destination.x, scissor?.top ?: destination.y,
-                            scissor?.width() ?: source.width(), scissor?.height() ?: source.height(), pass, owned)
                     }
                     is PlanPass.ReadbackPass -> {
                         val output = resources.outputOwnedReadbacks.single()
@@ -481,6 +522,87 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         }
     }
 
+    /**
+     * Consumes a sealed terminal source.  The caller provides only plan-published alpha,
+     * color-filter binding, blend and destination snapshot facts; this lowers no scene state.
+     */
+    private fun filteredCompositeRender(
+        stepIndex: Int,
+        target: GPUTextureView,
+        sourceTexture: GPUTextureView,
+        generation: GPUDeviceGenerationID,
+        source: RectI32,
+        destination: org.graphiks.math.geometry.Point2I32,
+        alpha: Float,
+        filter: ColorFilterExecutionPlanV1?,
+        filterBuffer: GPUBuffer?,
+        filterBufferOffsetI64: Long?,
+        filterBindingByteCountI64: Long?,
+        filterWordOffsetI64: Long,
+        destinationSnapshot: GPUTextureView?,
+        blend: BlendPlan,
+        pass: PlanPass,
+        owned: W6aOwnedHandles,
+        scissorOverride: RectI32? = null,
+    ): GPUPreparedNativeScopeOperand.Render {
+        val destinationRead = blend as? BlendPlan.DestinationReadV1
+        require((destinationRead != null) == (destinationSnapshot != null))
+        val entries = buildList {
+            add(BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()))
+            if (filter != null) add(BindGroupLayoutEntry(1u, GPUShaderStage.Fragment,
+                buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform,
+                    minBindingSize = requireNotNull(filterBindingByteCountI64).toULong())))
+            if (destinationRead != null) add(BindGroupLayoutEntry(2u, GPUShaderStage.Fragment, texture = TextureBindingLayout()))
+        }
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = entries)))
+        val colorDeclaration = filter?.let { execution ->
+            "struct W5fMaterialBlock { words: array<vec4<u32>, ${maxOf(1L, (requireNotNull(filterBindingByteCountI64) + 15L) / 16L)}>, }\n" +
+                "@group(0) @binding(1) var<uniform> w5fMaterial: W5fMaterialBlock;\n" +
+                "fn w6b_terminal_filter(input: vec4<f32>) -> vec4<f32> {\n" +
+                W5fColorOperationEmitterV1.emit(execution.copyOperationGraph(), "input", filterWordOffsetI64) + "}\n"
+        }.orEmpty()
+        val formula = destinationRead?.let { selected ->
+            requireNotNull(BlendFormulaProgramV1.selectedBlendFunctionWgsl(selected.mode.name.lowercase(), "w6b_terminal_blend"))
+        }.orEmpty()
+        val filtered = if (filter == null) "alpha_applied" else "w6b_terminal_filter(alpha_applied)"
+        val output = if (destinationRead == null) filtered else
+            "w6b_terminal_blend($filtered, textureLoad(destination_snapshot, vec2<i32>(position.xy), 0))"
+        val snapshotDeclaration = if (destinationRead == null) "" else
+            "@group(0) @binding(2) var destination_snapshot: texture_2d<f32>;"
+        val shader = W6A_VERTEX_SHADER + """
+            @group(0) @binding(0) var terminal_source: texture_2d<f32>;
+            $colorDeclaration
+            $snapshotDeclaration
+            $formula
+            @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+                let alpha_applied = textureLoad(terminal_source,
+                    vec2<i32>(position.xy) - vec2<i32>(${destination.x}, ${destination.y}) + vec2<i32>(${source.left}, ${source.top}), 0) * $alpha;
+                return $output;
+            }
+        """
+        val pipeline = pipeline(shader, layout, w6aColorTarget(blend), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = buildList {
+            add(BindGroupEntry(0u, sourceTexture))
+            if (filter != null) add(BindGroupEntry(1u, BufferBinding(requireNotNull(filterBuffer),
+                requireNotNull(filterBufferOffsetI64).toULong(), requireNotNull(filterBindingByteCountI64).toULong())))
+            if (destinationRead != null) add(BindGroupEntry(2u, requireNotNull(destinationSnapshot)))
+        })))
+        val scissor = scissorOverride ?: RectI32(destination.x, destination.y,
+            Math.addExact(destination.x, source.width()), Math.addExact(destination.y, source.height()))
+        return GPUPreparedNativeScopeOperand.Render(
+            stepIndex,
+            GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation)),
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+                GPUPreparedNativeRenderCommand.SetScissor(scissor.left, scissor.top, scissor.width(), scissor.height()),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0)),
+            ),
+            operationKindOverride = if (pass is PlanPass.LayerComposite) GPUEncoderOperationKind.LayerComposite else null,
+            w6aPassV1 = pass,
+        )
+    }
+
     /** Applies the typed deferred clip only at the frozen Picture terminal. */
     private fun pictureCompositeScissor(
         frame: GPUW6aLayerFramePlan,
@@ -495,6 +617,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             ClipStackNode.Empty -> return result
             is ClipStackNode.DeviceRect -> {
                 val bounds = clip.copyBounds()
+                if (bounds.isEmpty) return null
                 requireNotNull(operands.copyClipToDeviceF64().mapRectBoundsF64OrNull(RectF64(
                     bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble(),
                 ))?.roundOutToRectI32OrNull()) { "W6b Picture deferred clip cannot be projected to device texels." }

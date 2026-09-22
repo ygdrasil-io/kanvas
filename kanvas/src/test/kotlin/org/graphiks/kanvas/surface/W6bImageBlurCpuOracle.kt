@@ -70,6 +70,21 @@ internal object W6bImageBlurCpuOracle {
         }
     }
 
+    /** Encodes three independently blurred linear primary planes over opaque alpha. */
+    fun toRgba(red: UByteArray, green: UByteArray, blue: UByteArray, alpha: UByteArray): UByteArray {
+        require(red.size == green.size && green.size == blue.size && blue.size == alpha.size)
+        fun encode(value: UByte): UByte = (value.toInt() / 255f).pow(1f / 2.2f).times(255f).roundToInt().toUByte()
+        return UByteArray(red.size * 4).also { pixels ->
+            red.indices.forEach { pixel ->
+                val offset = pixel * 4
+                pixels[offset] = encode(red[pixel])
+                pixels[offset + 1] = encode(green[pixel])
+                pixels[offset + 2] = encode(blue[pixel])
+                pixels[offset + 3] = alpha[pixel]
+            }
+        }
+    }
+
     private fun convolve(
         source: Plane,
         sigma: Float,
@@ -118,10 +133,12 @@ internal object W6bImageBlurCpuOracle {
         TileMode.CLAMP -> value.coerceIn(lower, lower + size - 1)
         TileMode.DECAL -> value.takeIf { it in lower until lower + size }
         TileMode.REPEAT -> lower + Math.floorMod(value - lower, size)
-        TileMode.MIRROR -> if (size == 1) lower else {
-            val period = 2 * size - 2
+        // W5e's frozen image address graph duplicates its edge texels: this is deliberately
+        // expressed from the public tile-mode contract, not borrowed from the W6b shader.
+        TileMode.MIRROR -> {
+            val period = 2 * size
             val folded = Math.floorMod(value - lower, period)
-            lower + if (folded < size) folded else period - folded
+            lower + minOf(folded, period - 1 - folded)
         }
     }
 

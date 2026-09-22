@@ -5,10 +5,26 @@ package org.graphiks.kanvas.picture
 import java.nio.ByteBuffer
 import java.util.Base64
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.kanvas.gpu.plan.FilterCompositeOperationV1
+import org.graphiks.kanvas.gpu.plan.PlanBudget
+import org.graphiks.kanvas.gpu.plan.PlanBufferAllocationPolicy
+import org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot
+import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
+import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
+import org.graphiks.kanvas.gpu.plan.PlanPass
+import org.graphiks.kanvas.gpu.plan.RenderGraph
+import org.graphiks.kanvas.gpu.plan.RuntimeEffectSemanticCatalog
+import org.graphiks.kanvas.gpu.plan.W6aLayerPlanCompiler
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.DropShadowMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.TileMode
+import org.graphiks.kanvas.render.ir.DisplayOpSceneAdapter
+import org.graphiks.kanvas.render.ir.RenderPlanResult
+import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
+import org.graphiks.kanvas.render.ir.SceneCaptureResult
+import org.graphiks.kanvas.render.ir.SceneExtent
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.surface.W6bImageBlurCpuOracle
 import org.graphiks.math.color.ColorARGB
@@ -20,6 +36,8 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNotSame
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
+import kotlin.test.assertIs
 
 class W6bFilterPictureTest {
     /**
@@ -144,6 +162,88 @@ class W6bFilterPictureTest {
                 }
             }.render().pixels
             W6bImageBlurCpuOracle.assertNear(expected, pixels)
+        }
+    }
+
+    @Test
+    fun `publicly captured repeated Picture occurrences seal distinct graph sources and exact consumers`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 7f, 7f)
+        val source = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(RectF32.ofLTRB(3f, 3f, 4f, 4f),
+                Paint(ColorARGB.White, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val publicCapture = Surface(20, 7).also { surface ->
+            surface.canvas {
+                drawPicture(source, Paint(imageFilter = ImageFilter.Blur(1f, 1f, TileMode.DECAL)))
+                save()
+                translate(10f, 0f)
+                drawPicture(source, Paint(imageFilter = ImageFilter.Blur(1f, 1f, TileMode.DECAL)))
+                restore()
+            }
+        }
+        val scene = assertIs<SceneCaptureResult.Captured>(DisplayOpSceneAdapter.capture(
+            publicCapture.snapshotOps(), SceneExtent(20, 7), ColorSpace.SRGB,
+        )).scene
+        val compiler = W6aLayerPlanCompiler(RuntimeEffectSemanticCatalog.builtinSnapshot())
+        val candidate = assertIs<org.graphiks.kanvas.gpu.plan.GpuPlanSelection.Candidate>(
+            compiler.select(scene, RenderTargetDescriptor(scene.extent, scene.colorSpace)),
+        ).candidate
+        val planned = compiler.plan(candidate,
+            PlanCapabilitySnapshot.of(
+                deviceGeneration = 0L,
+                maxTextureDimension2D = 1_024,
+                maxBufferSizeBytes = 1L shl 20,
+                copyBytesPerRowAlignment = 256,
+                supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                minUniformBufferOffsetAlignment = 256,
+                maxDynamicUniformBuffersPerPipelineLayout = 4,
+                supportedOperations = PlanOperationCapability.entries.toSet(),
+                bufferAllocationPolicy = PlanBufferAllocationPolicy.of(1L shl 20, 1L shl 20, 1L shl 20),
+                maxUniformBufferBindingSizeBytesI64 = 1L shl 20,
+                maxStorageBufferBindingSizeBytesI64 = 1L shl 20,
+                maxStorageBuffersPerShaderStageI32 = 8,
+                maxUniformBuffersPerShaderStageI32 = 8,
+                maxSampledTexturesPerShaderStageI32 = 8,
+                maxSamplersPerShaderStageI32 = 8,
+                maxBindingsPerBindGroupI32 = 8,
+                maxBindGroupsI32 = 4,
+            ),
+            PlanBudget(1L shl 22),
+        )
+        if (planned !is RenderPlanResult.Ready<RenderGraph>) {
+            val diagnostics = when (planned) {
+                is RenderPlanResult.GapNotMigrated -> planned.diagnostics
+                is RenderPlanResult.GapOnPromotedScope -> planned.diagnostics
+                is RenderPlanResult.InvalidScene -> planned.diagnostics
+                is RenderPlanResult.ResourceLimitExceeded -> planned.diagnostics
+                is RenderPlanResult.Ready -> error("Ready plan has no refusal diagnostics")
+            }
+            error(diagnostics.joinToString { "${it.code.value}: ${it.message}" })
+        }
+        val graph = planned.plan
+
+        val sourcePasses = graph.passes().filterIsInstance<PlanPass.PictureSourcePass>()
+        val terminals = graph.passes().filterIsInstance<PlanPass.FilterComposite>().filter {
+            it.operation is FilterCompositeOperationV1.Picture
+        }
+        assertEquals(2, terminals.size)
+        val consumers = terminals.map { terminal ->
+            val sourcePass = sourcePasses.single { it.output == terminal.evaluationKey.boundSourceId }
+            terminal.id to requireNotNull(sourcePass.graphTextureOperand)
+        }
+        val sealedPairs = consumers.map { (_, operand) ->
+            operand.sealedSourceId to operand.sealedSourceGenerationI64
+        }
+        assertEquals(2, sealedPairs.distinct().size)
+        consumers.forEach { (terminalId, operand) ->
+            val exactSourceConsumer = sourcePasses.single { it.graphTextureOperand === operand }
+            assertEquals(terminalId, terminals.single {
+                it.evaluationKey.boundSourceId == exactSourceConsumer.output
+            }.id)
+            assertTrue(graph.passes().filterIsInstance<PlanPass.PictureAggregateSealPass>().any {
+                it.sealedSource == operand.sealedSourceId &&
+                    it.sourceGenerationI64 == operand.sealedSourceGenerationI64
+            })
         }
     }
 

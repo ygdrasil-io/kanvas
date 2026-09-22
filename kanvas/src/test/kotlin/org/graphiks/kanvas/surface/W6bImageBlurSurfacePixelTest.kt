@@ -3,6 +3,7 @@
 package org.graphiks.kanvas.surface
 
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.ImageFilter
@@ -29,13 +30,15 @@ class W6bImageBlurSurfacePixelTest {
     @Test
     fun `image blur honors all four frozen tile modes`() {
         val pixelsByTileMode = TileMode.entries.associateWith { tileMode ->
-            val expected = edgeImpulseExpected(tileMode)
+            val expected = asymmetricEdgeExpected(tileMode)
 
-            val surface = blurredEdgeImpulseSurface(tileMode)
+            val surface = blurredAsymmetricEdgeSurface(tileMode)
 
             surface.render().pixels.also { actual -> W6bImageBlurCpuOracle.assertNear(expected, actual) }
         }
-        assertTrue(pixelsByTileMode.getValue(TileMode.CLAMP)[3] > pixelsByTileMode.getValue(TileMode.DECAL)[3])
+        // The left-edge sample observes -1 in the frozen blur kernel.  The asymmetric three
+        // texel source makes the four public addressing modes observably distinct there.
+        assertTrue(pixelsByTileMode.values.map { it.joinToString() }.toSet().size == TileMode.entries.size)
     }
 
     @Test
@@ -88,6 +91,73 @@ class W6bImageBlurSurfacePixelTest {
                     blendMode = BlendMode.SRC,
                     antiAlias = false,
                 ))
+            }
+        }
+
+        W6bImageBlurCpuOracle.assertNear(expected, surface.render().pixels, tolerance = 3)
+    }
+
+    @Test
+    fun `filtered saveLayer applies its frozen color filter exactly once`() {
+        // This expected blue is computed before Surface: the opaque red child goes through one
+        // red/blue matrix at restore; a second application would incorrectly return red.
+        val expected = opaqueBlue3x3()
+        val bounds = RectF32.ofLTRB(0f, 0f, 3f, 3f)
+        val surface = Surface(3, 3).also { target ->
+            target.canvas {
+                saveLayer(SaveLayerRec(paint = Paint(
+                    colorFilter = swapRedBlue(),
+                    imageFilter = ImageFilter.Blur(1f, 1f, TileMode.CLAMP),
+                    blendMode = BlendMode.SRC,
+                    antiAlias = false,
+                )))
+                drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false))
+                restore()
+            }
+        }
+
+        W6bImageBlurCpuOracle.assertNear(expected, surface.render().pixels, tolerance = 3)
+    }
+
+    @Test
+    fun `filtered Picture destination-read blend uses its frozen snapshot`() {
+        // Premultiplied multiply of opaque red over opaque green is opaque black.  The value is
+        // independent of the GPU blend shader and makes an omitted destination snapshot visible.
+        val expected = opaqueBlack3x3()
+        val bounds = RectF32.ofLTRB(0f, 0f, 3f, 3f)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val surface = Surface(3, 3).also { target ->
+            target.canvas {
+                drawRect(bounds, Paint(ColorARGB.Green, antiAlias = false))
+                drawPicture(picture, Paint(
+                    imageFilter = ImageFilter.Blur(1f, 1f, TileMode.CLAMP),
+                    blendMode = BlendMode.MULTIPLY,
+                    antiAlias = false,
+                ))
+            }
+        }
+
+        W6bImageBlurCpuOracle.assertNear(expected, surface.render().pixels, tolerance = 3)
+    }
+
+    @Test
+    fun `filtered saveLayer destination-read restore uses its frozen snapshot`() {
+        // Same public source/destination oracle as the Picture terminal, but the filtered
+        // saveLayer reaches FilterCompositeOperationV1.Layer instead.
+        val expected = opaqueBlack3x3()
+        val bounds = RectF32.ofLTRB(0f, 0f, 3f, 3f)
+        val surface = Surface(3, 3).also { target ->
+            target.canvas {
+                drawRect(bounds, Paint(ColorARGB.Green, antiAlias = false))
+                saveLayer(SaveLayerRec(paint = Paint(
+                    imageFilter = ImageFilter.Blur(1f, 1f, TileMode.CLAMP),
+                    blendMode = BlendMode.MULTIPLY,
+                    antiAlias = false,
+                )))
+                drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false))
+                restore()
             }
         }
 
@@ -155,12 +225,13 @@ class W6bImageBlurSurfacePixelTest {
         }
     }
 
-    private fun blurredEdgeImpulseSurface(tileMode: TileMode): Surface {
+    private fun blurredAsymmetricEdgeSurface(tileMode: TileMode): Surface {
         val picture = PictureRecorder().also { recorder ->
-            recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 7f, 7f)).drawRect(
-                RectF32.ofLTRB(0f, 0f, 1f, 1f),
-                Paint(ColorARGB.White, antiAlias = false),
-            )
+            recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 7f, 7f)).apply {
+                drawRect(RectF32.ofLTRB(0f, 0f, 1f, 7f), Paint(ColorARGB.Red, antiAlias = false))
+                drawRect(RectF32.ofLTRB(1f, 0f, 2f, 7f), Paint(ColorARGB.Green, antiAlias = false))
+                drawRect(RectF32.ofLTRB(2f, 0f, 3f, 7f), Paint(ColorARGB.Blue, antiAlias = false))
+            }
         }.finishRecordingAsPicture()
         return Surface(7, 7).also { surface ->
             surface.canvas { drawPicture(picture, Paint(imageFilter = ImageFilter.Blur(1f, 1f, tileMode))) }
@@ -171,10 +242,18 @@ class W6bImageBlurSurfacePixelTest {
         W6bImageBlurCpuOracle.blurredAlpha(7, 7, UByteArray(49).also { it[3 + 3 * 7] = 255u }, 1f, 1f, tileMode),
     )
 
-    private fun edgeImpulseExpected(tileMode: TileMode): UByteArray = W6bImageBlurCpuOracle.toOpaqueWhiteRgba(
-        W6bImageBlurCpuOracle.blurredAlpha(7, 7, UByteArray(49).also { it[0] = 255u }, 1f, 1f, tileMode,
-            knownRight = 1, knownBottom = 1),
-    )
+    private fun asymmetricEdgeExpected(tileMode: TileMode): UByteArray {
+        fun plane(columnI32: Int): UByteArray = UByteArray(49).also { values ->
+            repeat(7) { y -> values[y * 7 + columnI32] = 255u }
+        }
+        fun blur(values: UByteArray): UByteArray = W6bImageBlurCpuOracle.blurredAlpha(
+            7, 7, values, 1f, 1f, tileMode, knownRight = 3,
+        )
+        val alpha = UByteArray(49).also { values ->
+            repeat(7) { y -> repeat(3) { x -> values[y * 7 + x] = 255u } }
+        }
+        return W6bImageBlurCpuOracle.toRgba(blur(plane(0)), blur(plane(1)), blur(plane(2)), blur(alpha))
+    }
 
     private fun deferredClipCullTransformExpected(): UByteArray {
         val blurred = W6bImageBlurCpuOracle.blurredAlpha(
@@ -203,6 +282,25 @@ class W6bImageBlurSurfacePixelTest {
             pixels[offset + 2] = 188u
             pixels[offset + 3] = 128u
         }
+    }
+
+    private fun swapRedBlue(): ColorFilter = ColorFilter.Matrix(ColorMatrixF32.of(floatArrayOf(
+        0f, 0f, 1f, 0f, 0f,
+        0f, 1f, 0f, 0f, 0f,
+        1f, 0f, 0f, 0f, 0f,
+        0f, 0f, 0f, 1f, 0f,
+    )))
+
+    private fun opaqueBlue3x3(): UByteArray = UByteArray(3 * 3 * 4).also { pixels ->
+        repeat(9) { pixel ->
+            val offset = pixel * 4
+            pixels[offset + 2] = 255u
+            pixels[offset + 3] = 255u
+        }
+    }
+
+    private fun opaqueBlack3x3(): UByteArray = UByteArray(3 * 3 * 4).also { pixels ->
+        repeat(9) { pixel -> pixels[pixel * 4 + 3] = 255u }
     }
 
     private fun opaqueRed3x3(): UByteArray = UByteArray(3 * 3 * 4).also { pixels ->

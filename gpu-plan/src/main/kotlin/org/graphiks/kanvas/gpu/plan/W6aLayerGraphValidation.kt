@@ -402,6 +402,22 @@ internal fun validateW6aLayerTopology(
                     require(pass.copyDestinationOriginI32() == Point2I32.Origin &&
                         destinationExtent.width >= sourceBounds.width() && destinationExtent.height >= sourceBounds.height())
                     val consumer = passes.getOrNull(indexI32 + 1)
+                    // A filtered restore has to materialize its coverage/source and X/Y passes
+                    // between this frozen snapshot and its FilterComposite.  Its consumer is
+                    // therefore not necessarily the adjacent pass; link it by the immutable
+                    // snapshot resource rather than letting a lowerer rediscover the blend.
+                    val filteredLayerBlend = passes.drop(indexI32 + 1)
+                        .filterIsInstance<PlanPass.FilterComposite>()
+                        .mapNotNull { composite ->
+                            val layer = composite.operation as? FilterCompositeOperationV1.Layer
+                                ?: return@mapNotNull null
+                            layer.restore.blend.takeIf {
+                                composite.destination == source.id &&
+                                    it.destinationReadSnapshotResourceV1() == destination.id &&
+                                    it.requiredDestinationVersionV1() == pass.destinationVersion
+                            }
+                        }
+                        .singleOrNull()
                     val blend = when (consumer) {
                         is PlanPass.LayerComposite -> {
                             require(consumer.destination == source.id && sourceBounds == RectI32(0, 0, sourceExtent.width, sourceExtent.height) &&
@@ -422,15 +438,13 @@ internal fun validateW6aLayerTopology(
                         }
                         is PlanPass.FilterComposite -> {
                             require(consumer.destination == source.id)
-                            requireNotNull((consumer.operation as? FilterCompositeOperationV1.Picture)?.terminal).blend
+                            when (val operation = consumer.operation) {
+                                is FilterCompositeOperationV1.Picture -> requireNotNull(operation.terminal).blend
+                                is FilterCompositeOperationV1.Layer -> operation.restore.blend
+                                else -> error("Invalid destination snapshot consumer")
+                            }
                         }
-                        is PlanPass.FilterPass -> {
-                            val filtered = passes.drop(indexI32 + 1).filterIsInstance<PlanPass.FilterComposite>().singleOrNull {
-                                it.destination == source.id && (it.operation as? FilterCompositeOperationV1.Layer)?.restore?.readsPriorDevice == true
-                            } ?: error("Invalid filtered destination snapshot consumer")
-                            (filtered.operation as FilterCompositeOperationV1.Layer).restore.blend
-                        }
-                        else -> error("Invalid destination snapshot consumer")
+                        else -> filteredLayerBlend ?: error("Invalid destination snapshot consumer")
                     }
                     require(blend.compositionFacts.readsPriorDevice)
                     require(blend.destinationReadSnapshotResourceV1() == destination.id &&
