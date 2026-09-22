@@ -248,7 +248,7 @@ class W6bFilterAdmissionRecoverySurfaceTest {
     }
 
     @Test
-    fun `Picture overlap and transparent holes feed parent mask alpha before terminal recovery`() {
+    fun `Picture overlap and transparent holes feed parent mask alpha and surface recovers`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
         val picture = PictureRecorder().also { recorder ->
             recorder.beginRecording(bounds).apply {
@@ -260,7 +260,10 @@ class W6bFilterAdmissionRecoverySurfaceTest {
         val surface = Surface(2, 2)
         surface.canvas { drawPicture(picture, Paint(ColorARGB.of(128, 255, 255, 255),
             imageFilter = ImageFilter.Blur(1f, 1f), maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1f))) }
-        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+        val pixels = surface.render().pixels
+        // The cleared upper-right source texel is still reached by both frozen blurs, but
+        // retains less alpha than its opaque neighbours rather than becoming a white fill.
+        assertTrue(pixels[7] < pixels[3] && pixels[7] < pixels[11])
         surface.discardRecordedOperations()
         surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
         assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
@@ -381,7 +384,7 @@ class W6bFilterAdmissionRecoverySurfaceTest {
     }
 
     @Test
-    fun `image root followed by mask occurrence remains one terminal filtered source`() {
+    fun `image root followed by mask occurrence materializes one frozen filtered source`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
         val surface = Surface(2, 2)
         surface.canvas {
@@ -394,7 +397,10 @@ class W6bFilterAdmissionRecoverySurfaceTest {
             )
         }
 
-        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+        val pixels = surface.render().pixels
+        // OUTER coverage is transparent black with an alpha fringe at the clipped source edge.
+        assertTrue(pixels.indices.filter { it.rem(4) != 3 }.all { pixels[it] == 0.toUByte() })
+        assertTrue((3 until pixels.size step 4).all { pixels[it] > 0.toUByte() })
 
         surface.discardRecordedOperations()
         surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }

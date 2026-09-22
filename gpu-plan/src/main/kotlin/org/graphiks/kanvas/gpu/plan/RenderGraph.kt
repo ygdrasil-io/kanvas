@@ -771,7 +771,13 @@ public class RenderGraph private constructor(
             is PlanPass.TextureCopy -> listOf(pass.source, pass.destination)
             is PlanPass.LayerComposite -> listOf(pass.source, pass.destination)
             is PlanPass.FilterSourceClear -> listOf(pass.output, pass.boundSourceId)
-            is PlanPass.FilterCoverageSourcePass -> listOf(pass.output)
+            is PlanPass.FilterCoverageSourcePass -> buildList {
+                add(pass.output)
+                // A sealed Picture alpha source is sampled by the already-frozen coverage
+                // pass.  Retain this producer/consumer edge for physical lifetime planning;
+                // the renderer receives the published resource ID and never discovers it.
+                pass.sealedAlphaSource?.let { add(it.sealedSourceId) }
+            }
             is PlanPass.FilterCoverageRetainPass -> listOf(pass.source, pass.output)
             is PlanPass.PictureAggregateBeginPass -> listOf(pass.target, pass.parentTarget)
             is PlanPass.PictureAggregateSealPass -> listOf(pass.aggregateTarget, pass.sealedSource)

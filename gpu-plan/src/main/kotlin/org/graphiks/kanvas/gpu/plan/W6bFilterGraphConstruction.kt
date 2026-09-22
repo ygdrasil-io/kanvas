@@ -466,6 +466,7 @@ internal object W6bFilterGraphConstruction {
     internal fun freezeMaterializedSource(
         occurrence: PositiveOccurrence,
         materialSource: SourceBinding,
+        coverageSource: SourceBinding,
         cursor: FreezeCursor,
     ): FrozenOccurrence {
         val bounds = identityBounds(materialSource)
@@ -477,7 +478,10 @@ internal object W6bFilterGraphConstruction {
             bounds.copyDesiredOutputDeviceI32(), bounds.copyRequiredInputDeviceI32(), bounds.copyProducedOutputDeviceI32())
         val key = FilterEvaluationKeyV1.forMaskOccurrence(occurrence.maskOccurrenceI32, materialSource.resourceId,
             materialSource.mapping, bounds.copyDesiredOutputDeviceI32())
-        val pass = PlanPass.FilterPass(cursor.passOrdinalI32, listOf(materialSource.resourceId), output.resourceId, key,
+        // The styled coverage is an existing frozen producer.  Publish it as a true filter
+        // input rather than asking the renderer to rediscover a producer-side association.
+        val pass = PlanPass.FilterPass(cursor.passOrdinalI32,
+            listOf(materialSource.resourceId, coverageSource.resourceId), output.resourceId, key,
             FilterPassOperationV1.MaterializedSource(bounds))
         cursor.passOrdinalI32 = Math.addExact(cursor.passOrdinalI32, 1)
         return FrozenOccurrence(listOf(ResourceSpec(id, PlanResourceRole.FilterTarget, output.copyExtentI32())),

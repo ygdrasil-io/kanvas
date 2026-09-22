@@ -4,6 +4,7 @@ import io.ygdrasil.webgpu.*
 import org.graphiks.kanvas.gpu.plan.*
 import org.graphiks.kanvas.gpu.renderer.materials.W5fColorOperationEmitterV1
 import org.graphiks.kanvas.gpu.renderer.recording.*
+import org.graphiks.kanvas.gpu.renderer.wgsl.W6bMaskCoverageSnippet
 import org.graphiks.kanvas.gpu.renderer.wgsl.W6bSeparableBlurSnippet
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.render.ir.ClipStackNode
@@ -33,6 +34,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         var readbackBuffer: GPUBuffer? = null
         try {
             val graph = frame.graph
+            val maskCoverageInputs = frozenMaskCoverageInputs(graph)
+            val materialSourceAlphaReplacement = frozenMaterialSourceAlphaReplacement(graph)
             val generation = generationSeal.deviceGeneration
             val root = frame.physical.resource(graph.resources().single { it.role == PlanResourceRole.LogicalTarget }.id)
             require(rootTarget.width == root.copyExtent()?.width && rootTarget.height == root.copyExtent()?.height &&
@@ -168,9 +171,13 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 val template = frame.template(packet)
                                 val binding = frame.physical.geometryBinding(pass.id)
                                 val mapped = binding?.let { frame.geometryPipeline(packet) }
-                                val layout = owned.own(device.createBindGroupLayout(if (mapped != null)
-                                    corePrimitiveBindGroupLayoutDescriptor(mapped.componentIdentity)
-                                    else requireNotNull(template).groupZeroLayout.nativeDescriptorV1("w6a.rect.group0")))
+                                val frozenCoverage = (pass as? PlanPass.RenderPass)?.coverageSource
+                                val executableMaskCoverage = frozenCoverage != null && frozenCoverage in maskCoverageInputs
+                                require(!executableMaskCoverage || (draw is SolidRectDraw && mapped == null)) {
+                                    "W6b mask source must use its already frozen solid-rect W4 lane."
+                                }
+                                val layout = owned.own(device.createBindGroupLayout(if (mapped != null) corePrimitiveBindGroupLayoutDescriptor(mapped.componentIdentity)
+                                else requireNotNull(template).groupZeroLayout.nativeDescriptorV1("w6a.rect.group0")))
                                 val data = binding?.data
                                 val verticesSemantic = packet.semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.Vertices
                                 val pipeline = if (mapped == null) pipeline(requireNotNull(template).sourceWgsl, layout, w6aColorTarget(draw.blend), owned, template,
@@ -222,7 +229,10 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)))
                                 add(GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(bind, generation),
                                     if (mapped == null) emptyList() else binding.let { listOf(it.uniformOffsetI64) }))
-                                val scissor = when (draw) {
+                                val scissor = if (executableMaskCoverage) {
+                                    val extent = requireNotNull(graph.resources().single { it.id == targetId }.copyExtent())
+                                    RectI32(0, 0, extent.width, extent.height)
+                                } else when (draw) {
                                     // The W6a rect vertex shader is fullscreen; its raster domain is
                                     // therefore the immutable visible rect intersected with the clip,
                                     // not the clip alone.
@@ -325,14 +335,46 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0))),
                             operationKindOverride = GPUEncoderOperationKind.LayerComposite, w6aPassV1 = pass)
                     }
-                    is PlanPass.PictureAggregateBeginPass, is PlanPass.FilterSourceClear,
-                    is PlanPass.FilterCoverageSourcePass -> {
+                    is PlanPass.PictureAggregateBeginPass, is PlanPass.FilterSourceClear -> {
                         val target = when (pass) {
                             is PlanPass.PictureAggregateBeginPass -> pass.target
                             is PlanPass.FilterSourceClear -> pass.output
-                            is PlanPass.FilterCoverageSourcePass -> pass.output
                         }
                         renderOperands += emptyRender(stepIndex, views.getValue(target), generation, clear = true, pass, owned)
+                    }
+                    is PlanPass.FilterCoverageSourcePass -> {
+                        val input = maskCoverageInputs[pass.output]
+                        if (input == null) {
+                            // Task 3's image-only coverage witness is deliberately not an
+                            // executable source.  It has no mask consumer and must remain
+                            // transparent so its short physical lease cannot alter a sealed
+                            // Picture source that is sampled later in the frozen schedule.
+                            renderOperands += emptyRender(stepIndex, views.getValue(pass.output), generation, clear = true, pass, owned)
+                            return@forEachIndexed
+                        }
+                        val outputOrigin = frame.targetOriginDeviceI32(pass.output)
+                        val extent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
+                        when (input) {
+                            is FrozenMaskCoverageInputV1.SolidRect -> {
+                                renderOperands += coverageSolidRectRender(stepIndex, views.getValue(pass.output), generation,
+                                    extent.width, extent.height, pass, owned)
+                            }
+                            is FrozenMaskCoverageInputV1.AlphaTexture -> {
+                                val inputOrigin = frame.targetOriginDeviceI32(input.source)
+                                renderOperands += textureRender(stepIndex, views.getValue(pass.output), views.getValue(input.source), generation,
+                                    W6A_VERTEX_SHADER + W6bMaskCoverageSnippet.alphaCoverageFragment(
+                                        inputOrigin.x, inputOrigin.y, outputOrigin.x, outputOrigin.y,
+                                    ), BlendPlan.LegacySrcOverV1, 0, 0, extent.width, extent.height, pass, owned)
+                            }
+                        }
+                    }
+                    is PlanPass.FilterCoverageRetainPass -> {
+                        val inputOrigin = frame.targetOriginDeviceI32(pass.source)
+                        val outputOrigin = frame.targetOriginDeviceI32(pass.output)
+                        val extent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
+                        renderOperands += textureRender(stepIndex, views.getValue(pass.output), views.getValue(pass.source), generation,
+                            sampledCompositeShader(outputOrigin.x - inputOrigin.x, outputOrigin.y - inputOrigin.y, 1f),
+                            BlendPlan.LegacySrcOverV1, 0, 0, extent.width, extent.height, pass, owned)
                     }
                     is PlanPass.PictureAggregateSealPass -> {
                         renderOperands += emptyRender(stepIndex, views.getValue(pass.aggregateTarget), generation, clear = false, pass, owned)
@@ -365,39 +407,68 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 }
                             """
                             renderOperands += pictureSourceRender(stepIndex, views.getValue(pass.output), views.getValue(operand.sealedSourceId),
-                                null, null, generation, shader,
-                                0, 0, extent.width, extent.height, pass, owned)
+                                null, null, generation, shader, 0, 0, extent.width, extent.height, pass, owned)
                         }
                     }
                     is PlanPass.FilterPass -> {
-                        val operation = pass.operation as? FilterPassOperationV1.SeparableBlur
-                            ?: error("Task 3 only materializes frozen separable image blur operations.")
-                        require(operation.kind in setOf(
-                            FilterImplementationKindV1.IMAGE_BLUR_X,
-                            FilterImplementationKindV1.IMAGE_BLUR_Y,
-                        )) { "Task 3 cannot materialize ${operation.kind}." }
-                        require(pass.inputs().size == 1)
-                        val input = pass.inputs().single()
                         val outputOrigin = frame.targetOriginDeviceI32(pass.output)
-                        val inputOrigin = frame.targetOriginDeviceI32(input)
                         val outputExtent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
-                        val known = operation.bounds.copyKnownContentDeviceI32()
-                            ?: operation.bounds.copyRequiredInputDeviceI32()
-                        val shader = W6A_VERTEX_SHADER + W6bSeparableBlurSnippet.fragment(
-                            operation.axis,
-                            operation.sigmaF32,
-                            operation.tileMode,
-                            inputOrigin.x,
-                            inputOrigin.y,
-                            outputOrigin.x,
-                            outputOrigin.y,
-                            known.left,
-                            known.top,
-                            known.right,
-                            known.bottom,
-                        )
-                        renderOperands += textureRender(stepIndex, views.getValue(pass.output), views.getValue(input), generation,
-                            shader, BlendPlan.LegacySrcOverV1, 0, 0, outputExtent.width, outputExtent.height, pass, owned)
+                        when (val operation = pass.operation) {
+                            is FilterPassOperationV1.SeparableBlur -> {
+                                require(operation.kind in setOf(
+                                    FilterImplementationKindV1.IMAGE_BLUR_X,
+                                    FilterImplementationKindV1.IMAGE_BLUR_Y,
+                                    FilterImplementationKindV1.MASK_COVERAGE_BLUR_X,
+                                    FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y,
+                                )) { "W6b cannot materialize ${operation.kind}." }
+                                require(pass.inputs().size == 1)
+                                val input = pass.inputs().single()
+                                val inputOrigin = frame.targetOriginDeviceI32(input)
+                                val known = operation.bounds.copyKnownContentDeviceI32()
+                                    ?: operation.bounds.copyRequiredInputDeviceI32()
+                                val shader = W6A_VERTEX_SHADER + W6bSeparableBlurSnippet.fragment(
+                                    operation.axis,
+                                    operation.sigmaF32,
+                                    operation.tileMode,
+                                    inputOrigin.x,
+                                    inputOrigin.y,
+                                    outputOrigin.x,
+                                    outputOrigin.y,
+                                    known.left,
+                                    known.top,
+                                    known.right,
+                                    known.bottom,
+                                    transparentOutsideSource = operation.kind in setOf(
+                                        FilterImplementationKindV1.MASK_COVERAGE_BLUR_X,
+                                        FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y,
+                                    ),
+                                )
+                                renderOperands += textureRender(stepIndex, views.getValue(pass.output), views.getValue(input), generation,
+                                    shader, BlendPlan.LegacySrcOverV1, 0, 0, outputExtent.width, outputExtent.height, pass, owned)
+                            }
+                            is FilterPassOperationV1.MaskBlurStyle -> {
+                                val blurredOrigin = frame.targetOriginDeviceI32(operation.blurredCoverageSource)
+                                val original = operation.originalCoverageSource
+                                renderOperands += maskStyleRender(stepIndex, views.getValue(pass.output),
+                                    views.getValue(operation.blurredCoverageSource), original?.let(views::get), generation,
+                                    operation.style, blurredOrigin.x, blurredOrigin.y, outputOrigin.x, outputOrigin.y,
+                                    original?.let(frame::targetOriginDeviceI32)?.x, original?.let(frame::targetOriginDeviceI32)?.y,
+                                    outputExtent.width, outputExtent.height, pass, owned)
+                            }
+                            is FilterPassOperationV1.MaterializedSource -> {
+                                require(pass.inputs().size == 2)
+                                val input = pass.inputs().first()
+                                val inputOrigin = frame.targetOriginDeviceI32(input)
+                                val coverage = pass.inputs().last()
+                                val coverageOrigin = frame.targetOriginDeviceI32(coverage)
+                                renderOperands += maskedMaterialSourceRender(stepIndex, views.getValue(pass.output), views.getValue(input),
+                                    views.getValue(coverage), generation, inputOrigin.x, inputOrigin.y, coverageOrigin.x,
+                                    coverageOrigin.y, outputOrigin.x, outputOrigin.y,
+                                    materialSourceAlphaReplacement.getValue(input),
+                                    outputExtent.width, outputExtent.height, pass, owned)
+                            }
+                            else -> error("W6b Task 4 materializes only frozen mask blur and W5 source operations.")
+                        }
                     }
                     is PlanPass.PictureComposite -> {
                         val operands = requireNotNull(pass.operands) { "W6b Picture composite needs frozen operands." }
@@ -715,6 +786,127 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         )
     }
 
+    /** Rasterizes an already-issued W4 solid-rect lane as raw, unshaded coverage. */
+    private fun coverageSolidRectRender(
+        stepIndex: Int,
+        target: GPUTextureView,
+        generation: GPUDeviceGenerationID,
+        widthI32: Int,
+        heightI32: Int,
+        pass: PlanPass,
+        owned: W6aOwnedHandles,
+    ): GPUPreparedNativeScopeOperand.Render {
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = emptyList())))
+        val pipeline = pipeline(W6A_VERTEX_SHADER + W6bMaskCoverageSnippet.solidRectCoverageFragment(), layout,
+            w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = emptyList())))
+        return GPUPreparedNativeScopeOperand.Render(
+            stepIndex,
+            GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation),
+                loadOperation = GPUPreparedNativeLoadOperation.Clear,
+                clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)),
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+                GPUPreparedNativeRenderCommand.SetScissor(0, 0, widthI32, heightI32),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0)),
+            ),
+            w6aPassV1 = pass,
+        )
+    }
+
+    /** Applies one frozen mask style to its blurred input and optional original coverage. */
+    private fun maskStyleRender(
+        stepIndex: Int,
+        target: GPUTextureView,
+        blurred: GPUTextureView,
+        original: GPUTextureView?,
+        generation: GPUDeviceGenerationID,
+        style: org.graphiks.kanvas.render.ir.MaskBlurStyle,
+        blurredOriginDeviceXI32: Int,
+        blurredOriginDeviceYI32: Int,
+        outputOriginDeviceXI32: Int,
+        outputOriginDeviceYI32: Int,
+        originalOriginDeviceXI32: Int?,
+        originalOriginDeviceYI32: Int?,
+        widthI32: Int,
+        heightI32: Int,
+        pass: PlanPass,
+        owned: W6aOwnedHandles,
+    ): GPUPreparedNativeScopeOperand.Render {
+        require((style == org.graphiks.kanvas.render.ir.MaskBlurStyle.NORMAL) == (original == null))
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = buildList {
+            add(BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()))
+            if (original != null) add(BindGroupLayoutEntry(1u, GPUShaderStage.Fragment, texture = TextureBindingLayout()))
+        })))
+        val pipeline = pipeline(W6A_VERTEX_SHADER + W6bMaskCoverageSnippet.maskStyleFragment(
+            style, blurredOriginDeviceXI32, blurredOriginDeviceYI32, outputOriginDeviceXI32, outputOriginDeviceYI32,
+            originalOriginDeviceXI32, originalOriginDeviceYI32,
+        ), layout, w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = buildList {
+            add(BindGroupEntry(0u, blurred))
+            original?.let { add(BindGroupEntry(1u, it)) }
+        })))
+        return GPUPreparedNativeScopeOperand.Render(
+            stepIndex,
+            GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation),
+                loadOperation = GPUPreparedNativeLoadOperation.Clear,
+                clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)),
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+                GPUPreparedNativeRenderCommand.SetScissor(0, 0, widthI32, heightI32),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0)),
+            ),
+            w6aPassV1 = pass,
+        )
+    }
+
+    /** Applies exactly one frozen mask to an already materialized source texture. */
+    private fun maskedMaterialSourceRender(
+        stepIndex: Int,
+        target: GPUTextureView,
+        source: GPUTextureView,
+        coverage: GPUTextureView,
+        generation: GPUDeviceGenerationID,
+        sourceOriginDeviceXI32: Int,
+        sourceOriginDeviceYI32: Int,
+        coverageOriginDeviceXI32: Int,
+        coverageOriginDeviceYI32: Int,
+        outputOriginDeviceXI32: Int,
+        outputOriginDeviceYI32: Int,
+        replacesSourceAlpha: Boolean,
+        widthI32: Int,
+        heightI32: Int,
+        pass: PlanPass,
+        owned: W6aOwnedHandles,
+    ): GPUPreparedNativeScopeOperand.Render {
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(
+            BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
+            BindGroupLayoutEntry(1u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
+        ))))
+        val pipeline = pipeline(W6A_VERTEX_SHADER + W6bMaskCoverageSnippet.maskedMaterialSourceFragment(
+            sourceOriginDeviceXI32, sourceOriginDeviceYI32, coverageOriginDeviceXI32, coverageOriginDeviceYI32,
+            outputOriginDeviceXI32, outputOriginDeviceYI32, replacesSourceAlpha,
+        ), layout, w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(
+            BindGroupEntry(0u, source), BindGroupEntry(1u, coverage),
+        ))))
+        return GPUPreparedNativeScopeOperand.Render(
+            stepIndex,
+            GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation),
+                loadOperation = GPUPreparedNativeLoadOperation.Clear,
+                clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)),
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+                GPUPreparedNativeRenderCommand.SetScissor(0, 0, widthI32, heightI32),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0)),
+            ),
+            w6aPassV1 = pass,
+        )
+    }
+
     /** Emits exactly one frozen source->target fullscreen render; no pass selection occurs here. */
     private fun textureRender(
         stepIndex: Int,
@@ -849,3 +1041,90 @@ private class W6aOwnedHandles : AutoCloseable, GPUW5aGeometryPipelineTemplatePro
         failure?.let { throw it }
     }
 }
+
+/** A direct view of the compiler-issued raw-coverage input; it creates no renderer plan. */
+private sealed interface FrozenMaskCoverageInputV1 {
+    /** The direct W6b coverage target was frozen exactly to its clipped solid-rect domain. */
+    data object SolidRect : FrozenMaskCoverageInputV1
+
+    data class AlphaTexture(val source: PlanResourceId) : FrozenMaskCoverageInputV1
+}
+
+/** Resolves only existing graph edges from raw coverage to its already-frozen W4/W5 producer. */
+private fun frozenMaskCoverageInputs(graph: RenderGraph): Map<PlanResourceId, FrozenMaskCoverageInputV1> {
+    val passes = graph.passes()
+    val producerByOutput = buildMap<PlanResourceId, PlanPass> {
+        passes.forEach { pass -> when (pass) {
+            is PlanPass.FilterCoverageSourcePass -> put(pass.output, pass)
+            is PlanPass.FilterCoverageRetainPass -> put(pass.output, pass)
+            is PlanPass.FilterPass -> put(pass.output, pass)
+            else -> Unit
+        } }
+    }
+    fun rawCoverageSource(resource: PlanResourceId): PlanResourceId? {
+        val producer = producerByOutput[resource] ?: return null
+        return when (producer) {
+            is PlanPass.FilterCoverageSourcePass -> producer.output
+            is PlanPass.FilterCoverageRetainPass -> rawCoverageSource(producer.source)
+            is PlanPass.FilterPass -> rawCoverageSource(producer.inputs().first())
+            else -> null
+        }
+    }
+    val directSources = linkedMapOf<PlanResourceId, FrozenMaskCoverageInputV1.SolidRect>()
+    val layerSources = linkedMapOf<PlanResourceId, FrozenMaskCoverageInputV1.AlphaTexture>()
+    passes.forEach { pass -> when (pass) {
+        is PlanPass.RenderPass -> pass.coverageSource?.let { coverage ->
+            rawCoverageSource(coverage)?.let { raw ->
+                require(pass.draws().singleOrNull() is SolidRectDraw) {
+                    "W6b mask coverage has no frozen solid-rect W4 source."
+                }
+                directSources[raw] = FrozenMaskCoverageInputV1.SolidRect
+            }
+        }
+        is PlanPass.PictureSourcePass -> pass.coverageSource?.let { coverage ->
+            pass.layerInput?.let { layer -> rawCoverageSource(coverage)?.let { raw ->
+                layerSources[raw] = FrozenMaskCoverageInputV1.AlphaTexture(layer)
+            } }
+        }
+        else -> Unit
+    } }
+    // Coverage witnesses are also emitted for Task 3 image filters.  Only roots that reach an
+    // already-frozen W6b mask operation are executable coverage producers here; the rest stay
+    // clear and have no renderer-side meaning.
+    val maskCoverageRoots = buildSet {
+        passes.filterIsInstance<PlanPass.FilterPass>().forEach { pass -> when (val operation = pass.operation) {
+            is FilterPassOperationV1.MaskBlurStyle -> {
+                rawCoverageSource(operation.blurredCoverageSource)?.let(::add)
+                operation.originalCoverageSource?.let(::rawCoverageSource)?.let(::add)
+            }
+            is FilterPassOperationV1.MaterializedSource ->
+                rawCoverageSource(pass.inputs().last())?.let(::add)
+            else -> Unit
+        } }
+    }
+    return producerByOutput.keys.mapNotNull { resource ->
+        val root = rawCoverageSource(resource) ?: return@mapNotNull null
+        if (root !in maskCoverageRoots) return@mapNotNull null
+        val sourcePass = producerByOutput[root] as? PlanPass.FilterCoverageSourcePass
+            ?: error("W6b mask coverage root must be a frozen coverage source pass.")
+        val input = sourcePass.sealedAlphaSource?.let { FrozenMaskCoverageInputV1.AlphaTexture(it.sealedSourceId) }
+            ?: directSources[root]
+            ?: layerSources[root]
+            ?: error("W6b mask coverage source is absent from the frozen graph.")
+        resource to input
+    }.toMap()
+}
+
+/** Whether the W5 source stage sealed alpha from the graph-texture coverage edge. */
+private fun frozenMaterialSourceAlphaReplacement(graph: RenderGraph): Map<PlanResourceId, Boolean> =
+    buildMap {
+        graph.passes().forEach { pass -> when (pass) {
+            is PlanPass.RenderPass -> pass.coverageSource?.let {
+                put(pass.target, false)
+            }
+            is PlanPass.PictureSourcePass -> pass.coverageSource?.let {
+                put(pass.output, true)
+            }
+            else -> Unit
+        } }
+    }

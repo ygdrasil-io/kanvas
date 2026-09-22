@@ -23,17 +23,18 @@ internal object W6bSeparableBlurSnippet {
         knownTop: Int,
         knownRight: Int,
         knownBottom: Int,
+        transparentOutsideSource: Boolean = false,
     ): String {
         require(sigmaF32.isFinite() && sigmaF32 >= 0f)
         val axisX = if (axis == FilterAxisV1.X) "1" else "0"
         val axisY = if (axis == FilterAxisV1.Y) "1" else "0"
-        val tileAddress = when (tileMode) {
+        val tileAddress = if (transparentOutsideSource) "coordinate" else when (tileMode) {
             TileMode.CLAMP -> "clamp(coordinate, lower, lower + extent - 1)"
             TileMode.REPEAT -> "lower + (((coordinate - lower) % extent) + extent) % extent"
             TileMode.MIRROR -> "lower + w6b_mirror(coordinate - lower, extent)"
             TileMode.DECAL -> "coordinate"
         }
-        val decal = tileMode == TileMode.DECAL
+        val decal = transparentOutsideSource || tileMode == TileMode.DECAL
         return """
             @group(0) @binding(0) var w6b_input: texture_2d<f32>;
             fn w6b_mirror(coordinate: i32, extent: i32) -> i32 {

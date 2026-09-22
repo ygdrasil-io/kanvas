@@ -70,15 +70,19 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                 }
                 is PlanPass.FilterPass -> {
                     val bound = row(pass.evaluationKey.boundSourceId)
-                    require(bound.role in setOf(PlanResourceRole.FilterSource, PlanResourceRole.CoverageSource)) {
+                    val materializedImageInput = isMaterializedImageInput(pass, passes, producers, rows)
+                    require(bound.role in setOf(PlanResourceRole.FilterSource, PlanResourceRole.CoverageSource) ||
+                        materializedImageInput) {
                         "W6b occurrence source must be immutable FilterSource or CoverageSource."
                     }
                     produced(bound.id, index)
                     require(row(pass.output).role == PlanResourceRole.FilterTarget)
                     require(pass.inputs().size == arity(pass.operation)) { "W6b operation input arity is invalid." }
-                    pass.inputs().forEach { input ->
+                    pass.inputs().forEachIndexed { inputIndex, input ->
                         produced(input, index)
-                        require(owners[input] == null || owners[input] == bound.id) {
+                        val materialCoverage = pass.operation is FilterPassOperationV1.MaterializedSource && inputIndex == 1
+                        val materializedImageSource = materializedImageInput && inputIndex == 0 && input == bound.id
+                        require(materialCoverage || materializedImageSource || owners[input] == null || owners[input] == bound.id) {
                             "W6b input belongs to another occurrence."
                         }
                     }
@@ -125,9 +129,36 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
             is FilterPassOperationV1.SeparableBlur,
             is FilterPassOperationV1.MaskShader,
             is FilterPassOperationV1.MaskTable,
-            is FilterPassOperationV1.MaterializedSource,
             is FilterPassOperationV1.DropShadowColorize,
             -> 1
+            is FilterPassOperationV1.MaterializedSource -> 2
+        }
+
+        /**
+         * A combined W6b occurrence first freezes mask coverage into a materialized source,
+         * then uses that typed filter target as the immutable entry point for the captured
+         * image-filter chain.  This is still a producer edge in the sealed graph, not a
+         * renderer-side source rediscovery.
+         */
+        private fun isMaterializedImageInput(
+            pass: PlanPass.FilterPass,
+            passes: List<PlanPass>,
+            producers: Map<PlanResourceId, Int>,
+            rows: Map<PlanResourceId, PlanResource>,
+        ): Boolean {
+            val blur = pass.operation as? FilterPassOperationV1.SeparableBlur ?: return false
+            val boundSource = pass.evaluationKey.boundSourceId
+            if (rows.getValue(boundSource).role != PlanResourceRole.FilterTarget) return false
+            return when (blur.kind) {
+                FilterImplementationKindV1.IMAGE_BLUR_X ->
+                    blur.axis == FilterAxisV1.X && pass.inputs().singleOrNull() == boundSource
+                FilterImplementationKindV1.IMAGE_BLUR_Y -> {
+                    val previous = pass.inputs().singleOrNull()?.let { producers[it] }?.let(passes::get) as? PlanPass.FilterPass
+                    previous?.evaluationKey === pass.evaluationKey &&
+                        (previous.operation as? FilterPassOperationV1.SeparableBlur)?.kind == FilterImplementationKindV1.IMAGE_BLUR_X
+                }
+                else -> false
+            }
         }
 
         private fun validatePass(
@@ -155,11 +186,18 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
             when (val operation = pass.operation) {
                 is FilterPassOperationV1.SeparableBlur -> {
                     val input = inputs.single()
-                    occurrenceOwned(input)
                     val mask = operation.kind in setOf(FilterImplementationKindV1.MASK_COVERAGE_BLUR_X,
                         FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y)
-                    require((rows.getValue(key.boundSourceId).role == PlanResourceRole.CoverageSource) == mask) {
+                    val materializedImageInput = isMaterializedImageInput(pass, passes, producers, rows)
+                    if (!materializedImageInput) occurrenceOwned(input)
+                    val sourceRole = rows.getValue(key.boundSourceId).role
+                    require((sourceRole == PlanResourceRole.CoverageSource) == mask &&
+                        (sourceRole != PlanResourceRole.FilterTarget || materializedImageInput)) {
                         "W6b blur family disagrees with its immutable source role."
+                    }
+                    if (materializedImageInput && operation.axis == FilterAxisV1.X) require((producer(input) as? PlanPass.FilterPass)?.operation
+                        is FilterPassOperationV1.MaterializedSource) {
+                        "W6b image blur must begin from the preceding materialized source."
                     }
                     if (operation.axis == FilterAxisV1.Y) sameKey(input) { previous ->
                         previous is FilterPassOperationV1.SeparableBlur && previous.axis == FilterAxisV1.X &&
@@ -188,8 +226,19 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                 }
                 is FilterPassOperationV1.MaskTable ->
                     require(rows.getValue(key.boundSourceId).role == PlanResourceRole.CoverageSource && inputs.single() == key.boundSourceId)
-                is FilterPassOperationV1.MaterializedSource ->
-                    require(rows.getValue(key.boundSourceId).role == PlanResourceRole.FilterSource && inputs.single() == key.boundSourceId)
+                is FilterPassOperationV1.MaterializedSource -> {
+                    require(rows.getValue(key.boundSourceId).role == PlanResourceRole.FilterSource &&
+                        inputs.first() == key.boundSourceId)
+                    val coverage = inputs.last()
+                    val coverageOperation = (producer(coverage) as? PlanPass.FilterPass)?.operation
+                    require(rows.getValue(coverage).role == PlanResourceRole.FilterTarget && (
+                        coverageOperation is FilterPassOperationV1.MaskBlurStyle ||
+                            coverageOperation is FilterPassOperationV1.MaskShader ||
+                            coverageOperation is FilterPassOperationV1.MaskTable
+                        )) {
+                        "W6b materialized source must consume the frozen mask coverage output."
+                    }
+                }
                 is FilterPassOperationV1.DropShadowColorize -> {
                     val input = inputs.single()
                     occurrenceOwned(input)

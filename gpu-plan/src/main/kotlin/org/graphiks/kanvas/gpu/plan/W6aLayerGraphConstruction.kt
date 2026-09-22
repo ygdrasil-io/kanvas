@@ -143,12 +143,32 @@ internal class W6aLayerGraphConstruction(
         val restoreFactsByScope = occurrences.associate { occurrence ->
             occurrence.idI32 to sealRestoreFacts(occurrence)
         }
+        // Direct mask auto-layers need their frozen halo while deriving an explicit W6a
+        // target.  Preserve Task 3's error priority, though: a traversal refusal is deferred
+        // to the former discovery point, after ordinary W6a command-limit admission.
+        var deferredFilterFailure: W6bFilterGraphConstruction.ConstructionFailure? = null
+        val filterOccurrences = try {
+            filterScene?.takeIf(W6bFilterGraphConstruction::owns)
+                ?.let(W6bFilterGraphConstruction::positiveOccurrences) ?: emptyList()
+        } catch (failure: W6bFilterGraphConstruction.ConstructionFailure) {
+            deferredFilterFailure = failure
+            emptyList()
+        }
+        // A direct mask blur inside an explicit W6a layer composites its frozen auto-layer
+        // back into that layer before the ordinary restore.  Reserve its already-frozen halo
+        // in the parent target now; otherwise the W6a content-sized target clips the terminal.
+        val directBlurByCommand = filterOccurrences.filter { occurrence ->
+            !occurrence.isLayerOccurrence && !occurrence.isPictureOccurrence && occurrence.mask is MaskFilterNode.Blur
+        }.associateBy { occurrence -> occurrence.insertionCommandIndexI32 }
         val directKnownByScope = arrayOfNulls<RectI32>(occurrences.size)
         bindings.forEach { binding ->
             val scopeIdI32 = binding.scopeI32 ?: return@forEach
             RenderGraph.visualDraws(binding.source.passes()).forEach { draw ->
                 intersect(w6aRasterBoundsI32(draw), w6aScissorI32(draw))?.let { bounds ->
-                    directKnownByScope[scopeIdI32] = unionOrNull(directKnownByScope[scopeIdI32], bounds)
+                    val frozenAutoLayerBounds = directBlurByCommand[draw.commandIndex]?.let { occurrence ->
+                        W6bFilterGraphConstruction.reverseInputDemand(occurrence, bounds)
+                    } ?: bounds
+                    directKnownByScope[scopeIdI32] = unionOrNull(directKnownByScope[scopeIdI32], frozenAutoLayerBounds)
                 }
             }
         }
@@ -318,7 +338,11 @@ internal class W6aLayerGraphConstruction(
                 mappingLocalToDeviceF64 = coverage.mapping.copyLocalToDeviceF64(),
                 knownContentDeviceI32 = coverage.copyKnownContentDeviceI32(),
                 desiredOutputDeviceI32 = coverage.copyDesiredOutputDeviceI32() ?: domain,
-                requiredInputDeviceI32 = coverage.copyRequiredInputDeviceI32() ?: domain,
+                // The W5 source stage is evaluated over the styled coverage's whole
+                // published output domain.  Retaining the preceding blur pass's input
+                // demand here would rebase this material texture at the unexpanded
+                // raw-coverage origin and drop the leading halo on materialization.
+                requiredInputDeviceI32 = domain,
                 producedOutputDeviceI32 = coverage.copyProducedOutputDeviceI32(),
             )
         }
@@ -366,8 +390,7 @@ internal class W6aLayerGraphConstruction(
         }
 
         val bindingsByCommand = bindings.associateBy { it.firstCommandIndexI32 }
-        val filterOccurrences = filterScene?.takeIf(W6bFilterGraphConstruction::owns)
-            ?.let(W6bFilterGraphConstruction::positiveOccurrences) ?: emptyList()
+        deferredFilterFailure?.let { throw it }
         val filterOccurrencesByInsertion = filterOccurrences.groupBy { it.insertionCommandIndexI32 }
         // One ordered, occurrence-local aggregate discovery owns nested Picture structure.  It
         // intentionally replaces the earlier leaf flattening: a filtered parent retains every
@@ -507,13 +530,26 @@ internal class W6aLayerGraphConstruction(
             source: W6bFilterGraphConstruction.SourceBinding,
             destination: PlanResourceId,
             operation: FilterCompositeOperationV1,
+            materialCoverage: W6bFilterGraphConstruction.SourceBinding? = null,
             replacedLayerSource: PlanResourceId? = null,
             pictureTerminal: ((W6bFilterGraphConstruction.SourceBinding, RectI32, Point2I32) -> PictureCompositeOperandsV1)? = null,
         ): PlanPass.FilterComposite {
             filterCursor.passOrdinalI32 = passes.size
-            val frozen = if (occurrence.root != null)
-                W6bFilterGraphConstruction.freezeImageOccurrence(occurrence, source, filterCursor)
-            else W6bFilterGraphConstruction.freezeMaterializedSource(occurrence, source, filterCursor)
+            val materialized = occurrence.mask?.let {
+                W6bFilterGraphConstruction.freezeMaterializedSource(occurrence, source,
+                    requireNotNull(materialCoverage) { "W6b materialized source requires its frozen styled coverage." }, filterCursor)
+            }
+            // A combined image+mask occurrence has both frozen stages: coverage is first
+            // materialized through the W5 source once, then the existing image graph samples
+            // that output.  Neither stage rediscovers scene state or invents an operation.
+            val frozen = if (occurrence.root != null) {
+                materialized?.let { material ->
+                    filterResourceSpecs += material.resourceSpecs()
+                    passes += material.passes()
+                    sourceBindingsById[material.output.resourceId] = material.output
+                }
+                W6bFilterGraphConstruction.freezeImageOccurrence(occurrence, materialized?.output ?: source, filterCursor)
+            } else requireNotNull(materialized) { "W6b mask occurrence needs its materialized W5 source." }
             filterResourceSpecs += frozen.resourceSpecs()
             passes += frozen.passes()
             sourceBindingsById[frozen.output.resourceId] = frozen.output
@@ -1060,7 +1096,7 @@ internal class W6aLayerGraphConstruction(
                         coverage = masked.resourceId, layerInput = layerTarget, parentCoordinateTarget = layerTarget,
                         workScope = layerScope)
                     val composite = appendFrozenOccurrence(occurrence, source, layerParentTarget,
-                        FilterCompositeOperationV1.Layer(restore), layerTarget)
+                        FilterCompositeOperationV1.Layer(restore), masked, layerTarget)
                     // Restore is this pass's sole execution step, including when it writes
                     // another layer. A second parent RenderChildren step would execute it twice.
                     steps += LayerExecutionStepV1.Restore(layerScope.id, composite.id)
@@ -1117,7 +1153,7 @@ internal class W6aLayerGraphConstruction(
                             appendPlannedDraw(entry, source.resourceId, masked.resourceId, workScope)
                             appendFrozenOccurrence(occurrence, source, target,
                                 FilterCompositeOperationV1.Picture(entry.source.scene.canonicalId.value,
-                                    entry.source.sourceCommandIndexI32), pictureTerminal = { output, rect, origin ->
+                                    entry.source.sourceCommandIndexI32), masked, pictureTerminal = { output, rect, origin ->
                                     freezePictureTerminal(entry.plannedCommandId, output, target, rect, origin,
                                         ClipStackNode.Empty, Matrix3x3F64(), pictureBlend(requireNotNull(entry.source.sourceDraw)))
                                 }).also { composite ->
@@ -1169,6 +1205,7 @@ internal class W6aLayerGraphConstruction(
                         appendPlannedDraw(entry, source.resourceId, masked.resourceId)
                         val composite = appendFrozenOccurrence(occurrence, source, entryTarget,
                             FilterCompositeOperationV1.Picture(entry.source.scene.canonicalId.value, entry.source.sourceCommandIndexI32),
+                            masked,
                             pictureTerminal = { output, rect, origin -> freezePictureTerminal(entry.plannedCommandId,
                                 output, entryTarget, rect, origin, ClipStackNode.Empty, Matrix3x3F64(),
                                 pictureBlend(requireNotNull(entry.source.sourceDraw))) })
@@ -1318,6 +1355,7 @@ internal class W6aLayerGraphConstruction(
                 terminal = if (occurrence != null) {
                     appendFrozenOccurrence(occurrence, source, parentTarget,
                         FilterCompositeOperationV1.Picture(draft.source.scene.canonicalId.value, draft.source.sourceCommandIndexI32),
+                        maskedCoverage,
                         pictureTerminal = { output, rect, origin -> freezePictureTerminal(draft.sourcePlannedCommandId,
                             output, parentTarget, rect, origin, draft.source.recordedInnerClipWithoutCull().terminalDeferredClip(),
                             composeInOrderF64(draft.source.outerPictures().map { it.transform }), pictureBlend(draft.draw)) }
@@ -1539,7 +1577,11 @@ internal class W6aLayerGraphConstruction(
                                 steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(scope), cover.id)
                             }
                         } else {
-                            val pass = appendRender(target, listOf(draw), false, maskCoverage)
+                            // The auto-layer source is transparent, so its W5 source-stage write
+                            // stays SRC_OVER. The captured parent blend remains on FilterComposite.
+                            val autoLayerSourceDraw = if (directOccurrence?.mask is MaskFilterNode.Blur)
+                                draw.withFinalBlendV1(BlendPlan.LegacySrcOverV1) else draw
+                            val pass = appendRender(target, listOf(autoLayerSourceDraw), false, maskCoverage)
                             if (w4e != null) requireNotNull(native)[pass.id] = localNative((selectedDraw as W5bW4ePathDraw).nativeColorPass, pass.ordinal)
                             else if (general != null) requireNotNull(native)[pass.id] = localNative(
                                 general.passes().filterIsInstance<PlanPass.PathRenderPass>().single {
@@ -1555,7 +1597,7 @@ internal class W6aLayerGraphConstruction(
                         directFilterSource?.let { source ->
                             val occurrence = requireNotNull(directOccurrence)
                             val composite = appendFrozenOccurrence(occurrence, source, parentTarget,
-                                FilterCompositeOperationV1.Draw(selectedDraw.blend))
+                                FilterCompositeOperationV1.Draw(selectedDraw.blend), materialCoverage)
                             binding.scopeI32?.let {
                                 steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(it), composite.id)
                             }
@@ -1629,7 +1671,7 @@ internal class W6aLayerGraphConstruction(
                     versions[source.resourceId] = 0L
                     steps += LayerExecutionStepV1.RenderChildren(scopeId, layerSource.id)
                     appendFrozenOccurrence(filtered, source, parentTarget,
-                        FilterCompositeOperationV1.Layer(restore), target)
+                        FilterCompositeOperationV1.Layer(restore), frozenMask?.output ?: coverage, target)
                 } ?: PlanPass.LayerComposite(passes.size, scopeId, target, parentTarget,
                     RectI32(0, 0, childDomain.width(), childDomain.height()), destinationOrigin, restore,
                     AttachmentLoadPlan.Load, AttachmentStorePlan.Store, after).also {
@@ -1764,12 +1806,19 @@ internal class W6aLayerGraphConstruction(
         val geometryByTarget = geometries.filterNot(W6aScopeGeometry::isElided).associateBy {
             planResourceId(PlanResourceRole.LayerTarget, it.occurrence.idI32)
         }
-        val localized = linkedMapOf<Int, PlanDraw>()
+        // A captured command may appear in its retained raw W5 lane and again in a nested
+        // Picture aggregate.  Its target-local raster coordinates are therefore a function
+        // of both identities; caching by command alone leaks the first target's origin into
+        // the later sealed aggregate.
+        val localized = linkedMapOf<Pair<Int, PlanResourceId>, PlanDraw>()
         val finalBlends = RenderGraph.visualDraws(rawPasses).associate { it.commandIndex to it.blend }
-        fun boundDraw(command: Int, target: PlanResourceId): PlanDraw = localized.getOrPut(command) {
+        fun boundDraw(command: Int, target: PlanResourceId): PlanDraw = localized.getOrPut(command to target) {
             val bound = byCommand.getValue(command)
-            val draw = if (finalBlends.getValue(command) is BlendPlan.DestinationReadV1)
-                bound.withFinalBlendV1(finalBlends.getValue(command)) else bound
+            // rawPasses owns the source-stage blend selected by the frozen schedule.  In
+            // particular, a transparent mask auto-layer shades with SRC_OVER while its
+            // captured DST_OUT (or other parent blend) is applied exactly once later by
+            // FilterComposite.
+            val draw = bound.withFinalBlendV1(finalBlends.getValue(command))
             if (draw is W5bW4ePathDraw) {
                 val native = w4eBindings.flatMap { it.nativePasses() }.filterIsInstance<PlanPass.PathRenderPass>()
                     .single { it.draw.commandIndex == command && it.phase != PathRenderPhase.SingleSampleStencilProducer }
@@ -1897,7 +1946,9 @@ internal class W6aLayerGraphConstruction(
             source.resources.filter { it.role == PlanResourceRole.SourceUniformData }.fold(0L) { bytes, row -> Math.addExact(bytes, row.byteSize) })
         return RenderGraph.publishW6a(construction, frame,
             packConstructedFrame(listOf(construction), table, sourceNonUniform), SourcePhysicalConstructionV1(
-                source.resources, source.uniforms, source.caches, w4eBindings.map { it.bindSources(localized) }))
+                source.resources, source.uniforms, source.caches, w4eBindings.map { binding ->
+                    binding.bindSources(localized.entries.associate { (key, draw) -> key.first to draw })
+                }))
     }
 
     /** Appended after all native W5 lanes, preserving one source-table/publish authority. */

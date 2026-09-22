@@ -197,7 +197,7 @@ class W6aLayerSurfacePixelTest {
     }
 
     @Test
-    fun `unsupportedSpatialFilterRefusesTerminallyAndRecovers`() {
+    fun `filtered layer materializes its frozen image blur`() {
         val surface = Surface(2, 2)
         surface.canvas {
             saveLayer(RectF32.ofLTRB(0f, 0f, 2f, 2f))
@@ -208,14 +208,11 @@ class W6aLayerSurfacePixelTest {
             restore()
         }
 
-        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented")
-        surface.discardRecordedOperations()
-        surface.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 2f, 2f), Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
-        assertPixel(surface.render().pixels, 2, 1, 1, 17, 61, 211, 255)
+        assertPixel(surface.render().pixels, 2, 1, 1, 255, 255, 255, 255)
     }
 
     @Test
-    fun `restoreMaskFilterRefusesTerminallyAndRecovers`() {
+    fun `layer restore materializes its frozen mask blur`() {
         val surface = Surface(2, 2)
         surface.canvas {
             saveLayer(paint = Paint(maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1f), antiAlias = false))
@@ -223,10 +220,9 @@ class W6aLayerSurfacePixelTest {
             restore()
         }
 
-        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented")
-        surface.discardRecordedOperations()
-        surface.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 2f, 2f), Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
-        assertPixel(surface.render().pixels, 2, 1, 1, 17, 61, 211, 255)
+        // Two transparent-outside Gaussian passes attenuate the 2×2 edge; this fixed
+        // premultiplied-sRGB sample is the public pixel contract, not a renderer oracle.
+        assertPixel(surface.render().pixels, 2, 1, 1, 171, 171, 171, 104)
     }
 
     @Test

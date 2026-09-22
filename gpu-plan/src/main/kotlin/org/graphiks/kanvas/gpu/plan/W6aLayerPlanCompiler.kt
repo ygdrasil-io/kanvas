@@ -255,13 +255,24 @@ public class W6aLayerPlanCompiler public constructor(
         }
     }
 
-    /** The W6b native arm admits exactly the Task-2-published image blur graph subset. */
+    /** The W6b native arm admits only the already-published Task 3/4 image and mask-blur subset. */
     private fun frozenW6bNativeAdmission(graph: RenderGraph): RenderPlanResult<RenderGraph>? {
         val filters = graph.passes().filterIsInstance<PlanPass.FilterPass>()
         if (filters.isEmpty()) return null
         val schedule = graph.layerFramePlanOrNull()?.frozenPassSchedule()
-        val kinds = filters.mapNotNull { (it.operation as? FilterPassOperationV1.SeparableBlur)?.kind }
-        val imageBlurKinds = setOf(FilterImplementationKindV1.IMAGE_BLUR_X, FilterImplementationKindV1.IMAGE_BLUR_Y)
+        val nativeBlurKinds = setOf(
+            FilterImplementationKindV1.IMAGE_BLUR_X,
+            FilterImplementationKindV1.IMAGE_BLUR_Y,
+            FilterImplementationKindV1.MASK_COVERAGE_BLUR_X,
+            FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y,
+        )
+        val materialized = filters.all { pass -> when (val operation = pass.operation) {
+            is FilterPassOperationV1.SeparableBlur -> operation.kind in nativeBlurKinds
+            is FilterPassOperationV1.MaskBlurStyle,
+            is FilterPassOperationV1.MaterializedSource,
+            -> true
+            else -> false
+        } }
         val terminals = graph.passes().filterIsInstance<PlanPass.FilterComposite>()
         val emptyNoOp = terminals.isEmpty() && filters.all { pass ->
             (pass.operation as? FilterPassOperationV1.SeparableBlur)
@@ -271,7 +282,7 @@ public class W6aLayerPlanCompiler public constructor(
             graph.passes().filterIsInstance<PlanPass.PictureComposite>().forEach { add(requireNotNull(it.operands)) }
             terminals.mapNotNull { (it.operation as? FilterCompositeOperationV1.Picture)?.terminal }.forEach(::add)
         }
-        val admitted = kinds.size == filters.size && kinds.all { it in imageBlurKinds } &&
+        val admitted = materialized &&
             schedule != null && schedule == graph.passes().map(PlanPass::id) && (terminals.isNotEmpty() || emptyNoOp) &&
             clips.all(::supportsFrozenDeferredPictureClip)
         return if (admitted) null else RenderPlanResult.InvalidScene(listOf(W6bFilterDiagnostics.refusal(

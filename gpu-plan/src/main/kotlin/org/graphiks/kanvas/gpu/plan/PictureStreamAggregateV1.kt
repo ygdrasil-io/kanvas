@@ -1183,11 +1183,21 @@ internal fun validatePictureStreamAggregates(
                         is PlanPass.FilterComposite -> {
                             val operation = terminalPass.operation as? FilterCompositeOperationV1.Picture
                             val producer = passes.filterIsInstance<PlanPass.FilterPass>().singleOrNull { it.output == terminalPass.source }
+                            // A combined W6b image+mask occurrence materializes the sealed
+                            // Picture source through its frozen coverage before its image X/Y
+                            // chain.  Follow that already-published MaterializedSource edge;
+                            // it remains the sole immutable source of this terminal.
+                            val sourceMaterialization = producer?.evaluationKey?.boundSourceId?.let { input ->
+                                passes.filterIsInstance<PlanPass.FilterPass>().singleOrNull { it.output == input }
+                            }?.takeIf { it.operation is FilterPassOperationV1.MaterializedSource }
+                            val reachesConsumerSource = producer?.evaluationKey?.boundSourceId == consumer.output ||
+                                (sourceMaterialization?.evaluationKey?.boundSourceId == consumer.output &&
+                                    sourceMaterialization.inputs().firstOrNull() == consumer.output)
                             terminalPass.destination == aggregate.parentTargetId && operation != null &&
                                 operation.sourceSceneCanonicalId == consumer.sourceSceneCanonicalId &&
                                 operation.sourceCommandIndexI32 == consumer.sourceCommandIndexI32 &&
                                 producer?.output == terminalPass.source &&
-                                producer.evaluationKey.boundSourceId == consumer.output
+                                reachesConsumerSource
                         }
                         else -> false
                     }

@@ -38,6 +38,7 @@ internal fun w6aRenderPacketsMatch(pass: PlanPass, packets: List<GPUDrawPacket>)
     is PlanPass.FilterComposite,
     is PlanPass.FilterSourceClear,
     is PlanPass.FilterCoverageSourcePass,
+    is PlanPass.FilterCoverageRetainPass,
     -> packets.isEmpty()
     else -> false
 }
@@ -79,17 +80,30 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
         graph.passes().filterIsInstance<PlanPass.PictureSourcePass>().forEach { pass ->
             pass.graphTextureOperand?.let { operand -> put(pass.output, operand.copyTargetOriginDeviceI32()) }
         }
+        // The filter graph owns every source/output origin.  A mask style has two inputs
+        // (blurred plus retained original), so only its output origin is introduced here;
+        // the retained source inherits its exact already-published origin below.
         graph.passes().filterIsInstance<PlanPass.FilterPass>().forEach { pass ->
             val bounds = pass.operation.bounds
-            // The frozen filter bounds own its input allocation's physical origin.
-            // A PictureSource operand identifies the sealed aggregate it samples,
-            // so its provisional origin yields to this exact graph-contract value.
-            // This is origin consumption, never renderer-side bounds planning.
-            put(pass.inputs().single(), Point2I32(
+            val boundedInput = when (pass.operation) {
+                is FilterPassOperationV1.MaterializedSource -> pass.inputs().first()
+                is FilterPassOperationV1.MaskBlurStyle -> null
+                else -> pass.inputs().single()
+            }
+            // A MaskBlurStyle samples the preceding blurred target at its own published
+            // origin.  All other single-input filters retain the historical input-origin
+            // contract: the bounds' required input deliberately supersedes a provisional
+            // Picture-source origin.
+            boundedInput?.let { input -> put(input, Point2I32(
                 bounds.copyRequiredInputDeviceI32().left,
                 bounds.copyRequiredInputDeviceI32().top,
-            ))
+            )) }
             put(pass.output, bounds.copyTargetOriginDeviceI32())
+        }
+        graph.passes().filterIsInstance<PlanPass.FilterCoverageRetainPass>().forEach { pass ->
+            put(pass.output, requireNotNull(get(pass.source)) {
+                "A frozen retained coverage source needs its published input origin."
+            })
         }
         // Task 3 clears image-only coverage witnesses but does not sample them: their source
         // W5 draw is already frozen in the following FilterSource pass.  Keep an explicit
@@ -204,7 +218,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                     is PlanPass.PictureAggregateBeginPass, is PlanPass.PictureAggregateSealPass,
                     is PlanPass.PictureSourcePass, is PlanPass.PictureComposite,
                     is PlanPass.FilterPass, is PlanPass.FilterComposite, is PlanPass.FilterSourceClear,
-                    is PlanPass.FilterCoverageSourcePass -> {
+                    is PlanPass.FilterCoverageSourcePass, is PlanPass.FilterCoverageRetainPass -> {
                         val render = pass as? PlanPass.RenderPass
                         val targetId = when (pass) {
                             is PlanPass.RenderPass -> pass.target
@@ -219,6 +233,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                             is PlanPass.FilterComposite -> pass.destination
                             is PlanPass.FilterSourceClear -> pass.output
                             is PlanPass.FilterCoverageSourcePass -> pass.output
+                            is PlanPass.FilterCoverageRetainPass -> pass.output
                         }
                         val depthId = when (pass) {
                             is PlanPass.StencilGeometryProducerV3 -> pass.depthStencil
@@ -300,6 +315,12 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                             is PlanPass.FilterPass -> pass.inputs().map { input -> GPUFrameResourceUse(refs.getValue(input),
                                 GPUFrameResourceRole.FilterTarget, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false) }
                             is PlanPass.FilterComposite -> listOf(GPUFrameResourceUse(refs.getValue(pass.source),
+                                GPUFrameResourceRole.FilterTarget, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false))
+                            is PlanPass.FilterCoverageSourcePass -> pass.sealedAlphaSource?.let { alpha -> listOf(
+                                GPUFrameResourceUse(refs.getValue(alpha.sealedSourceId), GPUFrameResourceRole.FilterTarget,
+                                    GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false),
+                            ) }.orEmpty()
+                            is PlanPass.FilterCoverageRetainPass -> listOf(GPUFrameResourceUse(refs.getValue(pass.source),
                                 GPUFrameResourceRole.FilterTarget, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false))
                             else -> depthId?.let { listOf(GPUFrameResourceUse(refs.getValue(it), GPUFrameResourceRole.PathDepthStencil,
                                 GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceLifetime.FrameLocal, true)) }.orEmpty()

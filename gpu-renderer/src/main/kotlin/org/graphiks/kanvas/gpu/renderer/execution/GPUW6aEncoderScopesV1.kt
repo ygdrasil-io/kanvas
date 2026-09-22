@@ -27,7 +27,8 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
         val fullscreen = pass is PlanPass.PictureSourcePass || pass is PlanPass.PictureComposite ||
             pass is PlanPass.FilterPass || pass is PlanPass.FilterComposite ||
             pass is PlanPass.PictureAggregateBeginPass || pass is PlanPass.PictureAggregateSealPass ||
-            pass is PlanPass.FilterSourceClear || pass is PlanPass.FilterCoverageSourcePass
+            pass is PlanPass.FilterSourceClear || pass is PlanPass.FilterCoverageSourcePass ||
+            pass is PlanPass.FilterCoverageRetainPass
         val kind = if (copy != null) GPUEncoderOperationKind.Copy else if (render == null) GPUEncoderOperationKind.Readback
             else if (composite) GPUEncoderOperationKind.LayerComposite else GPUEncoderOperationKind.Render
         val stream = if (kind != GPUEncoderOperationKind.Render) null else if (w4e != null)
