@@ -2,6 +2,11 @@
 
 ## Statut
 
+La relecture Sol ciblée du dernier correctif W6c (`ae26bdbc49301f9ac6b962c766a39508231dd506`)
+ne conserve aucun Critical/Important. La Draft PR empilée sur W6b reste le seul gate
+de publication de ce checkpoint ; W6d puis W6e demeurent à réaliser. Les sorties
+natives 133 restent **UNKNOWN** malgré les assertions XML et les compilations ci-dessous.
+
 ### Quatrième correction W6c — conservation du domaine imbriqué chevauchant
 
 La relecture Sol de `b09ed9d145c079f6351b6823dd31ca84708477e7` a retenu un
@@ -183,9 +188,10 @@ codecs, GMs, dashboard/renders/références/baselines/scores/rebaseline, Skia
 global et `jpg-color-cube`. Ce checkpoint ne formule aucune claim ISO ou
 globale; la santé native demeure **UNKNOWN**.
 
-Les gates Task 7 encore ouverts sont la review Sol whole-branch contre la base
-W6b exacte, puis la Draft PR empilée vers `codex/w6b-blur-masks-shadows`; ce
-checkpoint documentaire ne les remplace pas et ne clôt pas W6c seul.
+À la date de ce checkpoint Task 7 initial, les gates encore ouverts étaient la
+review Sol whole-branch contre la base W6b exacte, puis la Draft PR empilée
+vers `codex/w6b-blur-masks-shadows`. Les corrections et relectures ultérieures
+sont consignées en tête du présent document ; la Draft PR reste à publier.
 
 ## Checkpoint W6b / correction whole-branch round 4 — autorité producteur scissor Picture
 
