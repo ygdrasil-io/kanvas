@@ -10,6 +10,10 @@ import org.graphiks.kanvas.render.ir.MaskFilterNode
 import org.graphiks.kanvas.render.ir.CoverageRequest
 import org.graphiks.kanvas.render.ir.DrawNode
 import org.graphiks.kanvas.render.ir.DrawOrigin
+import org.graphiks.kanvas.render.ir.PaintNode
+import org.graphiks.kanvas.render.ir.PaintStyleNode
+import org.graphiks.kanvas.render.ir.StrokeCapNode
+import org.graphiks.kanvas.render.ir.StrokeJoinNode
 import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.RectI32
@@ -452,6 +456,30 @@ internal class W6aLayerGraphConstruction(
             val mask = occurrence.mask as MaskFilterNode.Shader
             val domain = targetDeviceBounds(target)
             val original = occurrence.source.materialCoordinateDrawOrNull(mask.material)
+            // A saveLayer has no original draw to carry its material coordinates.  This is the
+            // same neutral W5 capture paint used by the direct fallback: it carries no second
+            // material authority, and leaves the already-frozen mask material as the only source.
+            val capturePaint = original?.paint?.copy(
+                color = org.graphiks.math.color.ColorARGB.White,
+                shader = mask.material,
+                blendMode = BlendMode.SRC_OVER,
+                blender = null,
+                colorFilter = null,
+                maskFilter = null,
+                pathEffect = null,
+                imageFilter = null,
+            ) ?: PaintNode(
+                org.graphiks.math.color.ColorARGB.White,
+                mask.material,
+                BlendMode.SRC_OVER,
+                null, null, null, null, null,
+                PaintStyleNode.FILL,
+                0f,
+                StrokeCapNode.BUTT,
+                StrokeJoinNode.MITER,
+                4f,
+                false,
+            )
             val materialDraw: DrawNode = if (original != null) {
                 val picture = original.geometry as? GeometryNode.Picture
                 original.copy(
@@ -483,6 +511,7 @@ internal class W6aLayerGraphConstruction(
                     org.graphiks.kanvas.render.ir.EffectStack.Empty,
                     descriptor.transform,
                     DrawOrigin.RECT,
+                    paint = capturePaint,
                 )
             }
             val normalized = EffectiveMaterialPlanner.normalizeSourcesV4(
@@ -503,16 +532,7 @@ internal class W6aLayerGraphConstruction(
                     ))
                 is EffectiveMaterialPlanner.SourceNormalizationV4.Refused -> when (val captured =
                     MaterialSourceConstructionV4.capture(
-                        materialDraw.copy(paint = original?.paint?.copy(
-                            color = org.graphiks.math.color.ColorARGB.White,
-                            shader = mask.material,
-                            blendMode = BlendMode.SRC_OVER,
-                            blender = null,
-                            colorFilter = null,
-                            maskFilter = null,
-                            pathEffect = null,
-                            imageFilter = null,
-                        )),
+                        materialDraw.copy(paint = capturePaint),
                         SourceCoordinatesV4.None,
                         org.graphiks.math.geometry.RectF32.ofLTRB(
                             domain.left.toFloat(), domain.top.toFloat(), domain.right.toFloat(), domain.bottom.toFloat(),
@@ -707,6 +727,9 @@ internal class W6aLayerGraphConstruction(
                     }
                 } }.toMutableMap()
                 laneResourceIds += ids
+                // Dynamic Picture lanes are appended after the initial data-ordinal reservation.
+                // Reserve their V/I/uniform triplet before a W6b coverage copy claims an ordinal.
+                nextDataOrdinalI32 = maxOf(nextDataOrdinalI32, Math.addExact(laneI32, 2))
                 val laneData = lane.resources().filter { it.role in setOf(PlanResourceRole.VertexData,
                     PlanResourceRole.IndexData, PlanResourceRole.UniformData) }
                 if (laneData.isNotEmpty()) {

@@ -293,7 +293,7 @@ class W6bFilterAdmissionRecoverySurfaceTest {
     }
 
     @Test
-    fun `filtered Picture closes its recorded mask layer through one W6a scope`() {
+    fun `filtered Picture materializes its recorded mask layer through one W6a scope`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
         val picture = PictureRecorder().also { recorder ->
             recorder.beginRecording(bounds).apply {
@@ -305,7 +305,7 @@ class W6bFilterAdmissionRecoverySurfaceTest {
         val surface = Surface(2, 2)
         surface.canvas { drawPicture(picture, Paint(imageFilter = ImageFilter.Blur(1f, 1f))) }
 
-        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+        assertContentEquals(UByteArray(16), surface.render().pixels)
 
         surface.discardRecordedOperations()
         surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
@@ -408,7 +408,7 @@ class W6bFilterAdmissionRecoverySurfaceTest {
     }
 
     @Test
-    fun `layer mask shader reaches w6b terminal admission and same surface recovers`() {
+    fun `layer mask shader materializes and same surface recovers`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
         val surface = Surface(2, 2)
         surface.canvas {
@@ -417,7 +417,7 @@ class W6bFilterAdmissionRecoverySurfaceTest {
             restore()
         }
 
-        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.native_execution_unimplemented:")
+        assertContentEquals(opaqueWhite2x2(), surface.render().pixels)
 
         surface.discardRecordedOperations()
         surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
@@ -592,4 +592,6 @@ class W6bFilterAdmissionRecoverySurfaceTest {
         17u, 61u, 211u, 255u,
         17u, 61u, 211u, 255u,
     )
+
+    private fun opaqueWhite2x2(): UByteArray = UByteArray(16) { 255u }
 }

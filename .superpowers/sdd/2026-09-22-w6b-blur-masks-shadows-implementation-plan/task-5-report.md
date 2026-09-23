@@ -46,6 +46,22 @@ terminaisons natives 133, qui restent `UNKNOWN` sans attribution).
    natives sont groupés et validés par `PlanResourceId` avant allocation; un
    même uniform, storage, texture ou sampler est donc réutilisé par tous ses
    consommateurs MaskShader et graph-texture.
+8. Correction R2 (re-revue P1) : le RED public `saveLayer` avec
+   `MaskFilter.Shader(Image)` échouait avant publication du manifest W5, car
+   son carrier rectangulaire synthétique n’avait aucun `PaintNode FILL`.
+   GREEN : le carrier sans draw original reçoit le paint neutre plan-owned
+   blanc / `FILL` / `SRC_OVER` déjà utilisé par le fallback direct, puis passe
+   dans l’unique `MaterialSourceConstructionV4.capture(composedV6 = true)`.
+   Le shader demeure uniquement le material gelé W5 : aucune interprétation
+   renderer, row, compiler ou source lane supplémentaire.
+9. Pendant le contrôle Picture, un RED distinct a exposé une collision
+   `VertexData`/`IndexData`/`UniformData` lorsqu’une lane Picture dynamique et
+   sa copie de coverage recevaient le même ordinal. GREEN : l’ajout de lane
+   réserve son triplet avant l’allocation de coverage. Les deux anciens tests
+   d’admission Shader désormais exécutables vérifient des pixels publics et
+   leur réutilisation de Surface ; le scénario à clip non intégral conserve son
+   refus terminal réel Task3, puisque son admission élargirait les clips exacts
+   hors périmètre.
 
 ## Correction d'autorité R16
 
@@ -90,7 +106,8 @@ La correction requise par le ruling R16 est exclusivement plan-owned :
 | `rtk ./gradlew :render-ir:compileKotlin` | GREEN, exit 0 |
 | `rtk ./gradlew :gpu-plan:compileKotlin` | GREEN, exit 0 |
 | `rtk ./gradlew :gpu-renderer:compileKotlin` | GREEN, exit 0 |
-| `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bMaskShaderTableSurfacePixelTest'` | 11 assertions `PASSED`, puis exit natif 133 : **UNKNOWN** |
+| `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bMaskShaderTableSurfacePixelTest'` | 12 assertions `PASSED`, puis exit natif 133 : **UNKNOWN** |
+| `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bFilterAdmissionRecoverySurfaceTest'` | 25 assertions `PASSED`, puis exit natif 133 : **UNKNOWN** |
 | `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6bFilterPictureTest'` | XML JUnit 10/0, puis exit natif 133 : **UNKNOWN** |
 | `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W5fColorFilterSurfacePixelTest'` | méthodes observées `PASSED`, puis exit natif 133 : **UNKNOWN** |
 | `rtk ./gradlew :gpu-plan:test --tests 'org.graphiks.kanvas.gpu.plan.RenderGraphContractTest'` | GREEN, exit 0 |

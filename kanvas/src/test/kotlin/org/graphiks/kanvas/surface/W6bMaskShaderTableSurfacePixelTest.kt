@@ -73,6 +73,20 @@ class W6bMaskShaderTableSurfacePixelTest {
     }
 
     @Test
+    fun `image-backed mask shader on saveLayer consumes its frozen W5 resource`() {
+        val alphaResource = Image.fromPixels(1, 1, byteArrayOf(-1, -1, -1, -1), alphaType = AlphaType.PREMUL)
+        val actual = Surface(1, 1).also { surface ->
+            surface.canvas {
+                saveLayer(paint = Paint(maskFilter = MaskFilter.Shader(Shader.Image(alphaResource))))
+                drawRect(bounds1x1, Paint(ColorARGB.Red, antiAlias = false))
+                restore()
+            }
+        }.render().pixels
+
+        assertContentEquals(red1x1, actual)
+    }
+
+    @Test
     fun `shader mask applies DST_OUT only at the final composite`() {
         val actual = destinationColoredMaskSurface(
             MaskFilter.Shader(Shader.SolidColor(ColorARGB.White)),
