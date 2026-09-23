@@ -1,6 +1,103 @@
-# W06 — layers et effets : checkpoints W6a/W6b
+# W06 — layers et effets : checkpoints W6a/W6b/W6c
 
 ## Statut
+
+## Checkpoint W6c — DAG spatial principal, qualification Task 7
+
+La branche d'implémentation est `codex/w6c-spatial-dag`. Sa base W6b revue est
+`b6412bc161ccb99f1361886ec80a9d96c0f3637f`; la source qualifiée avant le
+commit documentaire est `23b7a82b029a8f1668a4dea58848bc4514e0e58e`.
+Les bornes de commits sont : Task 1
+`b6412bc161ccb99f1361886ec80a9d96c0f3637f..f3478f13ce8172373c7221f614b394dab2b56a6e`,
+Task 2 `f3478f13ce8172373c7221f614b394dab2b56a6e..a0cb854e8b1ec564e7adf7b78bf85efa16dcc99c`,
+Task 3 `a0cb854e8b1ec564e7adf7b78bf85efa16dcc99c..b51da58b0936fcece89c6e8a7ee81092992b8a8c`,
+Task 4 `b51da58b0936fcece89c6e8a7ee81092992b8a8c..fb648006853bfacd18e61a1675269346cb74910a`,
+Task 5 `fb648006853bfacd18e61a1675269346cb74910a..a61db01b06f7f795f3c48c77c40ce33e7ab0eb43`,
+et Task 6 `a61db01b06f7f795f3c48c77c40ce33e7ab0eb43..23b7a82b029a8f1668a4dea58848bc4514e0e58e`.
+
+Les neuf familles admises sont `Crop`, `Offset`, `Tile`, `ColorFilter`,
+`Compose`, `Merge`, `Blend`, `Dilate` et `Erode`. Elles passent toutes par la
+table capturée W6b, la clé d'occurrence contextuelle, les quatre régions F64
+projetées une fois en I32, puis les mêmes `FilterPass`/`FilterTarget` gelés.
+`Compose` lie inner puis outer; `Merge`/`Blend` gardent l'ordre et les doublons;
+`ColorFilter` et `Blend` réemploient respectivement les autorités W5f et W5.
+Le cache spatial conserve les faits sémantiques/générations, reste budgeté à
+froid comme à chaud et lease ses ressources jusqu'à completion ou quarantine.
+
+### Custody de convergence
+
+Les commandes ont été exécutées séquentiellement depuis cette worktree. Les
+XML sont dans `kanvas/build/test-results/test/`. Sauf exception explicitement
+notée, `Gradle=1` est exclusivement l'exit du worker natif `133` après la
+clôture JUnit : il est **UNKNOWN**, jamais GREEN natif.
+
+| Selector | XML PASS/F/E/S | Gradle | Native / observation |
+| --- | ---: | ---: | --- |
+| `W6cSpatialDagAdmissionSurfaceTest` | 2/0/0/0 | 1 | 133/UNKNOWN |
+| `W6cSpatialBoundsSurfaceTest` | 6/0/0/0 | 1 | 133/UNKNOWN |
+| `W6cComposeSurfaceTest` | 3/0/0/0 | 1 | 133/UNKNOWN |
+| `W6cMultiInputSurfaceTest` | 5/0/0/0 | 1 | 133/UNKNOWN |
+| `W6cMorphologySurfaceTest` | 6/0/0/0 | 1 | 133/UNKNOWN |
+| `W6cSpatialCacheRecoverySurfaceTest` | 6/0/0/0 | 1 | 133/UNKNOWN |
+| `W6cSpatialDagPictureTest` | 2/0/0/0 | 1 | 133/UNKNOWN |
+| `W6aLayerSurfacePixelTest` | 16/0/0/0 | 1 | 133/UNKNOWN |
+| `W6aLayerBoundsSurfacePixelTest` | 10/0/0/0 | 1 | 133/UNKNOWN |
+| `W6aLayerBudgetRecoverySurfacePixelTest` | 10/0/0/0 | 1 | 133/UNKNOWN |
+| `W5fColorFilterSurfacePixelTest` | 44/0/0/0 | 1 | 133/UNKNOWN |
+| `W5bBlendSurfacePixelTest` | 50/0/0/0 | 0 | `FROM-CACHE`; aucun nouveau worker natif observé |
+| `W6bFilterPictureTest` | 12/0/0/0 | 1 | 133/UNKNOWN |
+| `W6bFilterAdmissionRecoverySurfaceTest` | 27/0/0/0 | 1 | 133/UNKNOWN |
+| `W6bImageBlurSurfacePixelTest` | 10/0/0/0 | 1 | 133/UNKNOWN |
+| `W6bMaskBlurAutoLayerSurfacePixelTest` | 10/0/0/0 | 1 | 133/UNKNOWN |
+| `W6bMaskShaderTableSurfacePixelTest` | 13/0/0/0 | 1 | 133/UNKNOWN |
+| `W6bDropShadowSurfacePixelTest` | 6/0/0/0 | 1 | 133/UNKNOWN |
+| `W6bBudgetRecoverySurfacePixelTest` | 2/0/0/0 | 1 | 133/UNKNOWN |
+
+Les sept shards W6c font 30/0/0/0; les contrôles W6a/W5/W6b listés font
+210/0/0/0. Les compilations séquentielles
+`:math:geometry:compileKotlinJvm`, `:math:matrix:compileKotlinJvm`,
+`:render-ir:compileKotlin`, `:gpu-plan:compileKotlin`,
+`:gpu-renderer:compileKotlin`, `:kanvas:compileKotlin` et
+`:kanvas:compileTestKotlin` sortent toutes 0. Aucun nouveau failure/error JUnit
+ni échec de compilation n'a été observé. L'exit `134` fait partie de la règle
+de custody **UNKNOWN**, mais n'a pas été observé dans cette passe finale.
+
+### Audit d'autorité W6c et limites connues
+
+L'audit de production, sans test statique ajouté, trouve les créations
+`PlanPass`/`PlanResource` dans `W6bFilterGraphConstruction` et
+`W6aLayerGraphConstruction`, donc avant gel/publication. Le materializer W6
+lit le graphe, les resources, les origins et les samplings gelés; il ne crée ni
+pass/resource de plan ni conversion renderer-local device→target ou F64→I32.
+Ses `outputExtent` et scissor sont les valeurs de resources/payloads déjà
+scellées. `GPUPlanSurfaceRouter` terminalise toute frame W6b-owned : elle ne
+peut rejoindre `legacy()` après admission.
+
+`GPUImageFilterPlan`, `GPUMorphology`, `GPUFilterTile`,
+`copyTargetToOffscreenTexture` et `GPUPreparedCompositeLowerer` existent encore
+dans les chemins prepared/filters historiques. Ils ne sont pas référencés par
+la route W6c `FilterPass` du materializer et restent un risque explicite de
+retrait legacy W8, non une autorité ou fallback W6c.
+
+La preuve publique couvre mutations, replay mémoire/wire, bounds/origins/clips,
+B/B−1, refus terminal/sentinel et recovery sur la même `Surface`. Elle ne peut
+pas observer directement le nombre de `FilterPass` supprimés sur un cache hit,
+ni créer sans infrastructure une soumission GPU concurrente : cette limite
+d'observation de cache est documentée et l'owner/leases gelés restent objet de
+review de code. La rotation est également une lacune de couverture antérieure
+à W6c : les routes publiques `saveLayer`/`drawPicture` sont refusées en amont
+par `w6a.layer.unsupported_child`; W6c ne promeut pas W4/W5 pour fabriquer ce
+témoin.
+
+Restent exclus : backdrop, `initWithPrevious` filtré, Picture/runtime image
+filters, displacement, convolution, magnifier, lighting, F16/HDR, fonts,
+codecs, GMs, dashboard/renders/références/baselines/scores/rebaseline, Skia
+global et `jpg-color-cube`. Ce checkpoint ne formule aucune claim ISO ou
+globale; la santé native demeure **UNKNOWN**.
+
+Les gates Task 7 encore ouverts sont la review Sol whole-branch contre la base
+W6b exacte, puis la Draft PR empilée vers `codex/w6b-blur-masks-shadows`; ce
+checkpoint documentaire ne les remplace pas et ne clôt pas W6c seul.
 
 ## Checkpoint W6b / correction whole-branch round 4 — autorité producteur scissor Picture
 

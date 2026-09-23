@@ -443,7 +443,7 @@ rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6cSpatialDagPic
 
 **Produces:** W6c custody/status, one Sol whole-branch review, one bounded correction wave at most, and a Draft PR stacked on W6b without merge.
 
-- [ ] **Step 1: Run all W6c public shards sequentially**:
+- [x] **Step 1: Run all W6c public shards sequentially**:
 
 ```sh
 rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6cSpatialDagAdmissionSurfaceTest'
@@ -455,7 +455,7 @@ rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6cSpatialCacheR
 rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6cSpatialDagPictureTest'
 ```
 
-- [ ] **Step 2: Run targeted preservation sequentially**:
+- [x] **Step 2: Run targeted preservation sequentially**:
 
 ```sh
 rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6aLayerSurfacePixelTest'
@@ -472,7 +472,7 @@ rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bDropShadowSur
 rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bBudgetRecoverySurfacePixelTest'
 ```
 
-- [ ] **Step 3: Compile touched modules sequentially**:
+- [x] **Step 3: Compile touched modules sequentially**:
 
 ```sh
 rtk proxy ./gradlew :math:geometry:compileKotlinJvm
@@ -484,9 +484,9 @@ rtk ./gradlew :kanvas:compileKotlin
 rtk ./gradlew :kanvas:compileTestKotlin
 ```
 
-- [ ] **Step 4: Audit production paths manually** for `GPUImageFilterPlan`, `GPUMorphology`, `GPUFilterTile`, `copyTargetToOffscreenTexture`, post-freeze `PlanPass`/`PlanResource` creation, renderer bounds conversion, and legacy prepared composite route. Classify any legitimate W8 reference in status; do not add a static test.
-- [ ] **Step 5: Update durable status** with exact source/base hashes, tests/XML PASS/failure/error/skip counts, Gradle/native exits, nine admitted families, cache/B/B−1/recovery coverage, explicit W6d exclusions, and no ISO/global claim.
-- [ ] **Step 6: Commit documentation** with `git add refactor && git commit -m 'docs(refactor): record w6c spatial dag status'`.
+- [x] **Step 4: Audit production paths manually** for `GPUImageFilterPlan`, `GPUMorphology`, `GPUFilterTile`, `copyTargetToOffscreenTexture`, post-freeze `PlanPass`/`PlanResource` creation, renderer bounds conversion, and legacy prepared composite route. Classify any legitimate W8 reference in status; do not add a static test.
+- [x] **Step 5: Update durable status** with exact source/base hashes, tests/XML PASS/failure/error/skip counts, Gradle/native exits, nine admitted families, cache/B/B−1/recovery coverage, explicit W6d exclusions, and no ISO/global claim.
+- [x] **Step 6: Commit documentation** with `git add refactor && git commit -m 'docs(refactor): record w6c spatial dag status'`.
 - [ ] **Step 7: Request Sol whole-branch review** against the exact reviewed W6b base, covering capture/wire preservation, occurrence bindings, F64 bounds, pass/resource freeze, cache generations/leases, native ordering, public evidence, and fallback risk. If Critical/Important findings exist, apply one non-Sol bounded correction commit, rerun only causal selectors plus preservation, and request one scoped Sol re-review.
 - [ ] **Step 8: Verify stack and publish** with `rtk git status --short` and `rtk git log --oneline codex/w6b-blur-masks-shadows..HEAD`; push `codex/w6c-spatial-dag` and create/update a Draft PR targeting `codex/w6b-blur-masks-shadows`, describing exact base, commits, gates, exclusions, and native 133/134 `UNKNOWN`. Do not merge.
 
