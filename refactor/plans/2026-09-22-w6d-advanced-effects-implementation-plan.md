@@ -435,26 +435,24 @@ git commit -m "feat(gpu): execute w6d advanced sampling filters"
 
 Review the sampled edge/oracle maths, input ordering, F64-to-I32 projection, RGBA8-only admission, target/lease accounting, and renderer non-replanning.
 
-### Task 3: 3D Lighting Contract, Wire, and Six Executable Families
+### Task 3: 3D Lighting Contract, Wire, and Math Mapping
 
-**Agent:** Terra implementation; Sol review. This task has a contract checkpoint and a render checkpoint because the breaking 3D API must compile before a meaningful public pixel RED can run. Neither checkpoint claims a compile failure as causal RED evidence.
+**Agent:** Terra implementation; Sol review. The breaking API and historical wire fixture must compile before a meaningful public pixel RED can run. A compile failure is not causal RED evidence.
 
-**Outcome:** The public 2D lighting signatures disappear; six 3D variants capture, round-trip and render through frozen W6 `FilterPass` operations. Independent public CPU oracles pin Skia-compatible non-degenerate pixels and the explicitly bounded Kanvas degeneracy convention.
+**Outcome:** The public 2D lighting signatures disappear; six 3D variants capture and round-trip through Picture 15/schema 9; `:math` provides checked affine 3D mapping. The render route belongs to Tasks 31–32 below.
 
 **Files:**
 
 - Modify: `API/paint/ImageFilter.kt`, `API/render/ir/PaintSceneAdapter.kt`, `API/render/ir/SceneDisplayOpAdapter.kt`, `API/picture/Picture.kt`
 - Modify: `IR/EffectNode.kt`, `IR/CapturedFilterTableV1.kt`, `IR/SceneArchiveCodec.kt`
 - Modify: `MATRIX/LayerMappingF64.kt` (F64 computations, checked 3D F32 math outputs)
-- Modify: `PLAN/W6bFilterPlanV1.kt`, `PLAN/W6aLayerGraphConstruction.kt`, `PLAN/W6aPlanDiagnostics.kt`, `PLAN/W6dSamplingProgramV1.kt`, `PLAN/PlanPasses.kt`
-- Modify: `GPU/filters/GPULighting.kt`, `GPU/execution/GPUWgpu4kW6aLayerFramePayloadMaterializer.kt`, `GPU/execution/GPUW6aEncoderScopesV1.kt`
-- Create: `TEST/surface/W6dLightingSurfacePixelTest.kt`, `TEST/surface/W6dLightingCpuOracle.kt`, `TEST/picture/W6dLightingPictureTest.kt`
+- Create: `TEST/picture/W6dLightingPictureTest.kt`
 - Migrate public-call fixtures to 3D: `TEST/paint/EffectsExpansionTest.kt`, `TEST/render/ir/DisplayOpSceneAdapterTest.kt`, `TEST/surface/gpu/GPUImageFilterPlanTest.kt`, `TEST/picture/PictureTest.kt`, `TEST/picture/W6bFilterPictureTest.kt`, `render-ir/src/test/kotlin/org/graphiks/kanvas/render/ir/ResourceSnapshotTest.kt`, `render-ir/src/test/kotlin/org/graphiks/kanvas/render/ir/SceneArchiveCodecTest.kt`. The out-of-scope `integration-tests/skia` GM sources are not changed or used as a W6d gate; record any source-compatibility fallout for their later migration.
 
 **Interfaces:**
 
-- Consumes: existing `Point3F32`/`Vector3F32` from `:math`, `LayerMappingF64`, `FilterPassOperationV1.Lighting`, `LightingFamilyV1`, `PlanPass.FilterPass`, W6c bound inputs, Task 1 `FilterTarget` and Task 2 frozen-program recipe/binding precedent.
-- Produces: six public 3D constructors; 3D `ImageFilterNode` and `CapturedFilterNodeV1` identities; Picture 15/schema 9 writer and fail-closed old 2D lighting readers; checked affine 3D mapping in `:math`; one preselected lighting recipe/binding per pass and public pixel/replay evidence.
+- Consumes: existing `Point3F32`/`Vector3F32` and `LayerMappingF64` from `:math`, W6c captured node table, and old Picture readers.
+- Produces: six public 3D constructors; 3D `ImageFilterNode` and `CapturedFilterNodeV1` identities; Picture 15/schema 9 writer and fail-closed old 2D lighting readers; checked affine 3D mapping in `:math` consumed by Tasks 31–32.
 
 - [ ] **Step 1: Change the six public/captured signatures and canonical identities.**
 
@@ -495,48 +493,65 @@ private const val schemaVersion = 9
 // Schema <= 8 or historical v1..v8 tag for 2D lighting: Invalid("unsupported-2d-lighting", ...).
 ```
 
-Branch on schema before reading old tag payloads in both table and recursive codecs. Keep decoding old non-lighting scenes and explicit DAG sharing. Update `Picture.kt` version dispatch, including the historical reader's 2D lighting tags. `W6dLightingPictureTest` writes a 3D light, round-trips memory and wire, compares public `Picture.ops` and wire bytes for two different Z values, checks an old non-lighting fixture still reads, and checks the Step 1 v14 2D-lighting fixture returns decode failure without a partial `Picture`. Do not synthesize that fixture from the new writer. Update `PictureTest`'s writer-version expectation from 14 to 15. Run `rtk ./gradlew :render-ir:compileKotlin`, then `rtk ./gradlew :kanvas:compileTestKotlin`, then `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6dLightingPictureTest'` for the wire-only methods; run its pixel/replay method only after Step 6. Commit this contract checkpoint as `feat(ir): capture and serialize w6d 3d lighting`.
+Branch on schema before reading old tag payloads in both table and recursive codecs. Keep decoding old non-lighting scenes and explicit DAG sharing. Update `Picture.kt` version dispatch, including the historical reader's 2D lighting tags. `W6dLightingPictureTest` writes a 3D light, round-trips memory and wire, compares public `Picture.ops` and wire bytes for two different Z values, checks an old non-lighting fixture still reads, and checks the Step 1 v14 2D-lighting fixture returns decode failure without a partial `Picture`. Do not synthesize that fixture from the new writer. Update `PictureTest`'s writer-version expectation from 14 to 15. Run `rtk ./gradlew :render-ir:compileKotlin`, then `rtk ./gradlew :kanvas:compileTestKotlin`, then `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6dLightingPictureTest'` for the wire-only methods; run its pixel/replay method only in Task 32 Step 3. Commit this contract checkpoint as `feat(ir): capture and serialize w6d 3d lighting`.
 
-- [ ] **Step 4: Add independent public lighting pixel witnesses, then run causal RED.**
+- [ ] **Step 4: Verify the contract and math checkpoint.** Run `rtk proxy ./gradlew :math:matrix:compileKotlinJvm`, `rtk ./gradlew :render-ir:compileKotlin`, `rtk ./gradlew :kanvas:compileTestKotlin`, and `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6dLightingPictureTest'` sequentially. Require 2/0/0/0 XML for the public wire selector; report each Gradle exit and any native status separately.
 
-```kotlin
-@Test fun `six lighting families handle flat alpha and spot cutoff with family oracles`() {
-    val cases = W6dLightingCpuOracle.sixCasesWithExpectedPixels() // computed before Surface
-    cases.forEach { case ->
-        val surface = Surface(case.width, case.height)
-        surface.canvas { drawFilteredSource(case.filter) }
-        val result = surface.render()
-        assertFamilyNear(case.expected, result.pixels, case.maxChannelDelta)
-        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
-    }
-}
-```
+- [ ] **Step 5: Commit and request Sol review.** Commit the contract and math mapping as separate commits if that makes the causal boundary clearer. Sol reviews the 3D-only API, canonical Z identity, old 2D wire refusal, non-lighting old-reader preservation, mapping F64 arithmetic and checked F32 narrowing. Neither positive lighting pixels nor native admission are claimed by this task.
 
-Add separately named public cases for same XY/different Z (`location=(1,0,1)` versus `(1,0,100)`); signed `surfaceScale=-1`; finite exponents `0.5` and `129` outside `[1,128]`; nonuniform affine `A=diag(2,3)` with translation `(5,7)` (so `mapZ(z)=2.5z`); child touching output edge versus child strictly inside it; visible lighting of transparent black; and the zero-vector/coincident-light/undefined-power convention. Each expected image is calculated independently before `Surface` creation. Add negative `kd/ks=-0.1`, non-finite, and unsupported-perspective refusal/sentinel/recovery on the same public `Surface`. Run `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dLightingSurfacePixelTest'`. Expected causal RED: unchanged W6c lighting-family refusal, not compilation or fixture failure.
+### Task 31: Distant Diffuse Lighting Vertical Slice
 
-- [ ] **Step 5: Freeze exact lighting geometry, bounds, and admission before native work.**
+**Agent:** Fresh Terra implementation; Sol task review. Execute after Task 3 review, before Task 32 or Task 4.
 
-```kotlin
-val operation = FilterPassOperationV1.Lighting(
-    family = LightingFamilyV1.SPOT_SPECULAR,
-    parameters = LightingParametersV1.Spot(mappedLocation3F32, mappedDirection3F32,
-        exponentF32, cutoffCosF32, lightColor, mappedSurfaceDepthF32, ksF32, shininessF32),
-    bounds = bounds, kind = FilterImplementationKindV1.SPOT_SPECULAR,
-)
-passes += PlanPass.FilterPass(passes.size, listOf(inputTarget), outputTarget, evaluationKey, operation)
-```
+**Outcome:** One 3D distant-diffuse light produces public RGBA8 pixels through W6c's single frozen `FilterPass` path. This establishes reusable normal sampling, unbounded output demand, mapping, per-edge policy, and recipe selection without claiming the other five families.
 
-Change `LightingParametersV1` from XY-only F64 to immutable mapped 3D `:math` values plus finite scalars; freeze the spot direction `target-location` and cosine in the plan. Reject only non-finite fields, negative `kd/ks`, mapping/capability failures and checked budget failures. `surfaceScale` may be negative; spot and shininess exponents have no `[1,128]` gate. `requiredInput = desiredOutput.outset(1px)` and produced output is unbounded before terminal intersection. Freeze per-edge clamp/decal selection from child/output bounds, RGBA8 target, one source input, family/program ID and every resource/usage/lifetime. Do not call legacy `GPULightingFilter.execute` as an admission authority.
+**Files:**
 
-- [ ] **Step 6: Materialize the frozen recipe and match the family oracle.**
+- Create: `TEST/surface/W6dLightingCpuOracle.kt`, `TEST/surface/W6dLightingSurfacePixelTest.kt`
+- Modify: `PLAN/W6bFilterPlanV1.kt`, `PLAN/W6aLayerGraphConstruction.kt`, `PLAN/W6aPlanDiagnostics.kt`, `PLAN/W6dSamplingProgramV1.kt`, `PLAN/PlanPasses.kt`
+- Modify: `GPU/filters/GPULighting.kt`, `GPU/execution/GPUWgpu4kW6aLayerFramePayloadMaterializer.kt`, `GPU/execution/GPUW6aEncoderScopesV1.kt`
 
-Extend the Task 2 `W6dSamplingProgramV1` recipe/binding with the six selected lighting IDs and a typed immutable 3D parameter block. The materializer may translate that recipe to WGSL, but may not derive a different family/program, reinterpret public nodes, allocate an unplanned target, or change bounds. Sobel alpha uses `0.25*(1,2,1)` weights and the frozen per-side edge mode. Diffuse RGB is saturated `kd * lightRGB * dot(normal, light)` with alpha 1; specular uses the Skia half-vector `(surfaceToLight + (0,0,1))`, exponent `shininess`, saturated RGB and alpha=`max(R,G,B)`; spot applies cosine cutoff, falloff and Skia's `0.016` cone-edge ramp. Apply the spec's zero-contribution convention before undefined normalization/power reaches WGSL. Keep RGB premultiplied and light color unconverted.
+**Interfaces:**
 
-- [ ] **Step 7: Run GREEN, preservation and commit.**
+- Consumes: Task 3 `Vector3F32` captured direction and `LayerMappingF64.mapLightingVectorToLayerF32OrNull`/`mapLightingZToLayerF32OrNull`; Task 2 `W6dFrozenProgramBindingV1` on the existing `PlanPass.FilterPass`.
+- Produces: `W6dSamplingProgramIdV1.DISTANT_DIFFUSE_RGBA8_V1` and immutable lighting recipe selected before graph freeze, one source `FilterTarget` and one output `FilterTarget`, public distant-diffuse CPU oracle and pixel witness. Other five families keep precise pre-publication refusal until Task 32.
 
-Run sequentially: `rtk proxy ./gradlew :math:matrix:compileKotlinJvm`; `rtk ./gradlew :render-ir:compileKotlin`; `rtk ./gradlew :gpu-plan:compileKotlin`; `rtk ./gradlew :gpu-renderer:compileKotlin`; `rtk ./gradlew :kanvas:compileTestKotlin`; `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dLightingSurfacePixelTest'`; `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6dLightingPictureTest'`; `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6aLayerRestoreSurfacePixelTest'`. Record XML methods/F/E/S and any native exit separately. Commit as `feat(gpu): execute w6d 3d lighting filter families`.
+- [ ] **Step 1: Add the public distant-diffuse RED and independent oracle.** Use `ImageFilter.DistantLitDiffuse(Vector3F32(1f,0f,1f), ColorARGB.White, 1f, 1f)` over a 3×3 alpha fixture. Calculate expected alpha-derived normals and saturated `kd*lightRGB*dot(normal, normalizedDirection)` with opaque output alpha **before** creating `Surface`; assert each RGBA8 channel to family-local tolerance and `nativeEvidenceScopeKinds` contains both `Render` and `Readback`. Compare a second direction `(1,0,100)` with the same XY to prove Z changes public pixels. Add another child-output fixture with an interior edge and a distant light visible on transparent black. Run `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dLightingSurfacePixelTest'`; causal RED must reach the existing lighting-family refusal, not compilation or a test fixture error.
 
-- [ ] **Step 8: Request Sol task review before Task 4.** Review both checkpoint commits for six family formulas, F64 mapping and F32 narrowing, public/wire Z identity, old-data fail-closed behavior, per-edge Sobel/bounds, non-finite/degenerate policy, independent oracle, RGBA8 premultiplication, frozen program/resource/budget, and no late planning or legacy fallback. Resolve all Critical/Important findings through the task's fix/re-review loop before advancing.
+- [ ] **Step 2: Freeze mapping, admission and bounds for distant diffuse.** Map public direction and `surfaceScale` with the Task 3 math functions; allow finite signed scale, require finite `kd≥0` and finite mapped uniforms; refuse perspective/overflow with a stable W6 diagnostic. The output is unbounded before `desiredOutput`/clip/target intersection, `requiredInput=desiredOutput.outset(1px)`, and each of four edge modes is frozen from child-output versus demanded-output bounds. Form exactly one `FilterPassOperationV1.Lighting(family=DISTANT_DIFFUSE, parameters=LightingParametersV1.Distant(mappedDirection3F32, lightColor, mappedSurfaceDepthF32, kd, null), bounds, kind=DISTANT_DIFFUSE)` and its existing target/budget/lease resources. An unsupported family is a W6 terminal refusal; do not invoke `GPULightingFilter.execute`.
+
+- [ ] **Step 3: Freeze then materialize one program recipe.** Add the one-input `DISTANT_DIFFUSE_RGBA8_V1` ID and an immutable lighting recipe with mapped 3D direction, mapped depth, coefficient/color, per-edge Sobel bounds/modes and exact input/output IDs to `W6dSamplingProgramV1`/`W6dFrozenProgramBindingV1`. Select it during `PlanPass.FilterPass` construction; the renderer may only translate this frozen recipe to WGSL and encode its frozen bindings. Sobel uses alpha and `0.25*(1,2,1)` weights; its normal is `normalize((-depth*dx,-depth*dy,1))`. Zero distant direction gives zero contribution and opaque black, not NaN. No new graph, target role, allocator, late specialization, active-attachment sampling, or hidden color conversion.
+
+- [ ] **Step 4: Run GREEN and preservation sequentially.** Run `rtk ./gradlew :gpu-plan:compileKotlin`, `rtk ./gradlew :gpu-renderer:compileKotlin`, `rtk ./gradlew :kanvas:compileTestKotlin`, `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dLightingSurfacePixelTest'`, then `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6aLayerRestoreSurfacePixelTest'`. Record XML methods/F/E/S and native exit separately; 133/134 is UNKNOWN, never GREEN. Commit `feat(gpu): execute w6d distant diffuse lighting`.
+
+- [ ] **Step 5: Request Sol review.** Review public oracle independence, same-XY/different-Z capability, signed depth mapping, halo and both edge modes, transparent-black output, all frozen program/resource facts, terminal unsupported-family refusal, budget and no renderer-side plan choice. Resolve Critical/Important findings before Task 32.
+
+### Task 32: Point/Spot and Specular Lighting Completion
+
+**Agent:** Fresh Terra implementation; Sol task review. Execute after Task 31 review, before Task 4.
+
+**Outcome:** The five remaining 3D families join the same frozen lighting path; all six have independent public pixel/oracle, invalid-input/refusal/recovery and Picture replay evidence.
+
+**Files:**
+
+- Modify: `TEST/surface/W6dLightingCpuOracle.kt`, `TEST/surface/W6dLightingSurfacePixelTest.kt`, `TEST/picture/W6dLightingPictureTest.kt`
+- Modify: `PLAN/W6bFilterPlanV1.kt`, `PLAN/W6aLayerGraphConstruction.kt`, `PLAN/W6aPlanDiagnostics.kt`, `PLAN/W6dSamplingProgramV1.kt`, `PLAN/PlanPasses.kt`
+- Modify: `GPU/filters/GPULighting.kt`, `GPU/execution/GPUWgpu4kW6aLayerFramePayloadMaterializer.kt`, `GPU/execution/GPUW6aEncoderScopesV1.kt`
+
+**Interfaces:**
+
+- Consumes: Task 31's selected lighting recipe, Sobel normal source/edge policy and FilterPass/FilterTarget path; Task 3's 3D point/vector math and Picture 15/schema 9.
+- Produces: the five further immutable IDs `POINT_DIFFUSE_RGBA8_V1`, `SPOT_DIFFUSE_RGBA8_V1`, `DISTANT_SPECULAR_RGBA8_V1`, `POINT_SPECULAR_RGBA8_V1`, `SPOT_SPECULAR_RGBA8_V1`; mapped 3D point/spot parameter arms; full six-family public evidence.
+
+- [ ] **Step 1: Add five-family public REDs with independent expected pixels.** Extend the oracle's per-pixel formula with point/spot `surfaceToLight=normalize(location-(x,y,alpha*mappedDepth))`, spot direction=`normalize(mappedTarget-mappedLocation)`, cutoff cosine in degrees, falloff, Skia's `0.016` cone-edge ramp, specular half-vector `normalize(surfaceToLight+(0,0,1))`, exponent `shininess`, RGB saturation and output alpha=`max(R,G,B)`; diffuse stays opaque. Before `Surface` creation calculate cases for each family, point lights at `(1,0,1)` versus `(1,0,100)`, affine `diag(2,3)+(5,7)` (mapped Z=`2.5*z`), alpha flat/height variation, spot cutoff and premultiplication. Run the focused `W6dLightingSurfacePixelTest`; causal RED must be the current exact refusal of the five unsupported families.
+
+- [ ] **Step 2: Freeze all five family recipes and execute them.** Map location/target as checked `Point3F32`, compute mapped spot direction and cosine in the planner, freeze all scalars/geometry and selected program IDs before graph validation, then materialize only those recipes through the existing Task 31 WGSL/bindings. Require finite coordinates, cutoff and exponents, `kd/ks≥0`, but allow negative `surfaceScale` and exponents outside `[1,128]`. Never route through legacy `GPULightingFilter.execute` or add an unplanned resource. Apply the lighting spec's explicit zero-contribution convention for zero distant/spot direction, point light on the surface, zero specular half-vector, undefined `pow` and non-finite intermediates; diffuse zero contribution is opaque black, specular zero contribution transparent black.
+
+- [ ] **Step 3: Pin admission, edge and replay variants publicly.** Add named cases for signed `surfaceScale=-1`, finite exponents `0.5`/`129`, negative `kd/ks=-0.1` refusal, non-finite refusal, unsupported perspective refusal, child touching output edge versus child strictly inside, lighting of transparent black, zero vectors/coincident point/spot/half-vector and `pow(0,0)`/undefined powers. For each refusal assert unchanged readback sentinel and same-`Surface` recovery through public `discardRecordedOperations()`. Extend `W6dLightingPictureTest` to replay a 3D lighting Picture from memory and wire and show that changing only Z changes public pixels. No mocks, static-source or private tests.
+
+- [ ] **Step 4: Run GREEN and preservation sequentially.** Run `rtk ./gradlew :gpu-plan:compileKotlin`, `rtk ./gradlew :gpu-renderer:compileKotlin`, `rtk ./gradlew :kanvas:compileTestKotlin`, `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dLightingSurfacePixelTest'`, `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6dLightingPictureTest'`, then `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6aLayerRestoreSurfacePixelTest'`. Record XML methods/F/E/S and native exit separately. Commit `feat(gpu): complete w6d six-family lighting`.
+
+- [ ] **Step 5: Request Sol review.** Review the five new family formulas, mapped Z and spotlight cutoff, finite-domain acceptance, degenerate convention, public oracles and replay, RGBA8 premultiplication, exact source/output bounds, frozen resources/budgets and no late planning. Resolve Critical/Important findings before Task 4.
 
 ### Task 4: Picture Filter as Immutable SceneSnapshot
 
