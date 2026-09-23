@@ -410,9 +410,9 @@ internal fun validateW6aLayerTopology(
             val before = requireNotNull(versions[destination.id])
             when (val operation = pass.operation) {
                 is FilterCompositeOperationV1.Draw -> {
-                    require(scissor == sourceInDestination)
+                    require((operation.noOp && scissor == null) || (!operation.noOp && scissor == sourceInDestination))
                     require(operation.blend !is BlendPlan.DestinationReadV1)
-                    val after = if (operation.blend.compositionFacts.writesParentDevice) Math.addExact(before, 1L) else before
+                    val after = if (!operation.noOp && operation.blend.compositionFacts.writesParentDevice) Math.addExact(before, 1L) else before
                     versions[destination.id] = after
                     require(pass.destinationVersionAfter.valueI64 == after)
                     require(pass.replacedLayerSource == null)

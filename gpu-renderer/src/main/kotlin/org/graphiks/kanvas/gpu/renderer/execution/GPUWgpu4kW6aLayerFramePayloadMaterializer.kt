@@ -796,12 +796,15 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         val scissor = pass.copyCompositeScissorTargetLocalI32()
                         when (val operation = pass.operation) {
                             is FilterCompositeOperationV1.Draw -> {
-                                val finalScissor = requireNotNull(scissor) { "W6b Draw composite has no sealed scissor." }
-                                renderOperands += textureRender(
-                                    stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
-                                    sampledCompositeShader(sampleOffset.x, sampleOffset.y, 1f), operation.blend,
-                                    finalScissor.left, finalScissor.top, finalScissor.width(), finalScissor.height(), pass, owned,
-                                )
+                                renderOperands += if (operation.noOp) emptyRender(stepIndex, views.getValue(pass.destination), generation,
+                                    clear = false, pass, owned) else {
+                                    val finalScissor = requireNotNull(scissor) { "W6b Draw composite has no sealed scissor." }
+                                    textureRender(
+                                        stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
+                                        sampledCompositeShader(sampleOffset.x, sampleOffset.y, 1f), operation.blend,
+                                        finalScissor.left, finalScissor.top, finalScissor.width(), finalScissor.height(), pass, owned,
+                                    )
+                                }
                             }
                             is FilterCompositeOperationV1.Layer -> {
                                 val restore = operation.restore

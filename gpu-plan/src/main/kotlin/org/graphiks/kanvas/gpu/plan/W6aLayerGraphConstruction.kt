@@ -437,6 +437,18 @@ internal class W6aLayerGraphConstruction(
         data class DirectFilterSources(
             val coverage: W6bFilterGraphConstruction.SourceBinding,
         )
+        fun directTerminalClip(occurrence: W6bFilterGraphConstruction.PositiveOccurrence): RectI32? = when (
+            val clip = occurrence.source.recordedInnerClipWithoutCull().terminalDeferredClip()
+        ) {
+            ClipStackNode.Empty, is ClipStackNode.Operations -> null
+            is ClipStackNode.DeviceRect -> clip.copyBounds().let { bounds ->
+                RectF64(bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble())
+                    .roundOutToRectI32OrNull() ?: throw W6bFilterGraphConstruction.ConstructionFailure(
+                    W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                        "W6b direct terminal clip cannot be rounded into I32 texels."),
+                )
+            }
+        }
         val directFilterSourceByCommand = linkedMapOf<Int, DirectFilterSources>()
         filterOccurrences.filterNot { it.isLayerOccurrence || it.isPictureOccurrence }.forEach { occurrence ->
             val binding = requireNotNull(bindingsByCommand[occurrence.insertionCommandIndexI32]) {
@@ -704,7 +716,8 @@ internal class W6aLayerGraphConstruction(
             val compositeDeviceBounds = intersect(outputBounds, terminalClipDeviceI32 ?: outputBounds)?.let { clipped ->
                 intersect(clipped, targetDeviceBounds(destination))
             }
-            val sealedNoOp = compositeDeviceBounds == null && operation is FilterCompositeOperationV1.Layer
+            val sealedNoOp = compositeDeviceBounds == null &&
+                (operation is FilterCompositeOperationV1.Layer || operation is FilterCompositeOperationV1.Draw)
             if (compositeDeviceBounds == null && !sealedNoOp) throw W6bFilterGraphConstruction.ConstructionFailure(
                 W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds, "W6b filter composite has no visible terminal domain."),
             )
@@ -745,7 +758,11 @@ internal class W6aLayerGraphConstruction(
             val before = DestinationVersionI64(versions[destination] ?: 0L)
             val terminalAdmission = if (operation is FilterCompositeOperationV1.Picture && pictureTerminal != null)
                 pictureTerminal(frozen.output, sourceBounds, destinationLocal) else null
-            val finalOperation = if (sealedNoOp) (operation as FilterCompositeOperationV1.Layer).copy(noOp = true)
+            val finalOperation = if (sealedNoOp) when (operation) {
+                is FilterCompositeOperationV1.Draw -> operation.copy(noOp = true)
+                is FilterCompositeOperationV1.Layer -> operation.copy(noOp = true)
+                is FilterCompositeOperationV1.Picture -> error("Picture terminal no-op is admitted by its own sealed authority.")
+            }
             else if (operation is FilterCompositeOperationV1.Picture)
                 operation.copy(terminal = terminalAdmission?.operands ?: operation.terminal) else operation
             val terminal = (finalOperation as? FilterCompositeOperationV1.Picture)?.terminal
@@ -758,7 +775,7 @@ internal class W6aLayerGraphConstruction(
             val after = when (finalOperation) {
                 is FilterCompositeOperationV1.Draw -> {
                     require(finalOperation.blend !is BlendPlan.DestinationReadV1) { "W6b filtered destination-read blend is not planned." }
-                    DestinationVersionI64(if (finalOperation.blend.compositionFacts.writesParentDevice)
+                    DestinationVersionI64(if (!finalOperation.noOp && finalOperation.blend.compositionFacts.writesParentDevice)
                         Math.addExact(before.valueI64, 1L) else before.valueI64)
                 }
                 is FilterCompositeOperationV1.Layer -> if (finalOperation.noOp) before else finalOperation.restore.parentVersionAfter
@@ -1876,7 +1893,8 @@ internal class W6aLayerGraphConstruction(
                         directFilterSource?.let { source ->
                             val occurrence = requireNotNull(directOccurrence)
                             val composite = appendFrozenOccurrence(occurrence, source, parentTarget,
-                                FilterCompositeOperationV1.Draw(selectedDraw.blend), materialCoverage)
+                                FilterCompositeOperationV1.Draw(selectedDraw.blend), materialCoverage,
+                                terminalClipDeviceI32 = directTerminalClip(occurrence))
                             binding.scopeI32?.let {
                                 steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(it), composite.id)
                             }

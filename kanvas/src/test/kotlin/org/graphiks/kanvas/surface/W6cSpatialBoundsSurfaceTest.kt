@@ -130,6 +130,24 @@ class W6cSpatialBoundsSurfaceTest {
     }
 
     @Test
+    fun `direct filtered draw outside its clipped terminal is a no-op and surface recovers`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val sentinel = UByteArray(3 * 4) { 0x5au }
+        val surface = Surface(3, 1)
+        surface.canvas {
+            clipRect(bounds, antiAlias = false)
+            drawRect(bounds, Paint(ColorARGB.Blue, imageFilter = ImageFilter.Offset(2f, 0f), antiAlias = false))
+        }
+
+        assertTrue(surface.readPixels(RectF32.ofLTRB(0f, 0f, 3f, 1f), sentinel))
+        assertContentEquals(bytes(0, 0, 0), sentinel)
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false)) }
+        assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u), surface.render().pixels)
+    }
+
+    @Test
     fun `huge Crop and Tile domains are bounded by the downstream clip before allocation`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
         val huge = RectF32.ofLTRB(0f, 0f, 1_000_000_000f, 1f)
@@ -145,6 +163,30 @@ class W6cSpatialBoundsSurfaceTest {
                 drawRect(bounds, Paint(ColorARGB.Blue, imageFilter = filter, antiAlias = false))
             }
             assertContentEquals(expected, surface.render().pixels)
+        }
+    }
+
+    @Test
+    fun `huge disjoint Crop and Tile domains are terminal no-ops and recover`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val disjointHuge = RectF32.ofLTRB(1f, 0f, 1_000_000_000f, 1f)
+
+        listOf(
+            ImageFilter.Crop(disjointHuge, TileMode.DECAL),
+            ImageFilter.Tile(bounds, disjointHuge),
+        ).forEach { filter ->
+            val surface = Surface(1, 1)
+            val sentinel = UByteArray(4) { 0x5au }
+            surface.canvas {
+                clipRect(bounds, antiAlias = false)
+                drawRect(bounds, Paint(ColorARGB.Blue, imageFilter = filter, antiAlias = false))
+            }
+            assertTrue(surface.readPixels(bounds, sentinel))
+            assertContentEquals(bytes(0), sentinel)
+
+            surface.discardRecordedOperations()
+            surface.canvas { drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false)) }
+            assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u), surface.render().pixels)
         }
     }
 

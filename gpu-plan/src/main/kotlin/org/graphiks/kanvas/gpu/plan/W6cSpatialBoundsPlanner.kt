@@ -101,7 +101,12 @@ internal object W6cSpatialBoundsPlanner {
     }
     /** The public region is semantic, but target allocation is bounded by the already sealed consumer demand. */
     private fun boundToConsumer(publicDomain: RectI32, source: W6bFilterGraphConstruction.SourceBinding): RectI32 =
-        source.copyDesiredOutputDeviceI32()?.let { consumer -> intersect(publicDomain, consumer) ?: publicDomain } ?: publicDomain
+        source.copyDesiredOutputDeviceI32()?.let { consumer ->
+            intersect(publicDomain, consumer) ?: terminalNoOpTexel(publicDomain)
+        } ?: publicDomain
+    /** A disjoint public domain still needs immutable non-empty FilterBounds, but never a huge target. */
+    private fun terminalNoOpTexel(domain: RectI32): RectI32 = RectI32(domain.left, domain.top,
+        Math.addExact(domain.left, 1), Math.addExact(domain.top, 1))
     private fun map(rect: org.graphiks.math.geometry.RectF32, mapping: LayerMappingF64): RectF64? =
         mapping.mapLocalRectToDeviceF64OrNull(RectF64(rect.left.toDouble(), rect.top.toDouble(), rect.right.toDouble(), rect.bottom.toDouble()))
     private fun seal(rect: RectF64): RectI32 = rect.roundOutToRectI32OrNull()

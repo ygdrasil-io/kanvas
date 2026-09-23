@@ -55,7 +55,8 @@ public enum class ClipCombineOperation { Intersect, Difference }
  * previously selected W5/W6 blend or restore facts; native execution is intentionally deferred.
  */
 public sealed interface FilterCompositeOperationV1 {
-    public data class Draw(public val blend: BlendPlan) : FilterCompositeOperationV1
+    /** A null composite scissor with [noOp] is a sealed terminal clip decision, not a renderer fallback. */
+    public data class Draw(public val blend: BlendPlan, public val noOp: Boolean = false) : FilterCompositeOperationV1
     /** A null composite scissor with [noOp] is a sealed terminal clip decision, not a renderer fallback. */
     public data class Layer(public val restore: LayerRestorePlanV1, public val noOp: Boolean = false) : FilterCompositeOperationV1
     /** Captured locator is provenance; the terminal owns every executable composite operand. */
