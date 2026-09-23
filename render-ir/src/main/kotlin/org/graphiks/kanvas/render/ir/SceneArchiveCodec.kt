@@ -20,12 +20,14 @@ import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.PathF32
 import org.graphiks.math.geometry.PathSegmentF32
 import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.geometry.Point3F32
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.SizeF32
 import org.graphiks.math.geometry.SizeI32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.vector.Vector2F32
+import org.graphiks.math.vector.Vector3F32
 
 /**
  * The owner of the versioned Picture payload.
@@ -38,9 +40,9 @@ import org.graphiks.math.vector.Vector2F32
  */
 public object SceneArchiveCodec {
     private val magic: ByteArray = byteArrayOf(0x4b, 0x50, 0x49, 0x43)
-    private const val pictureVersion: Int = 14
+    private const val pictureVersion: Int = 15
     private const val irMarker: Int = -1_391_019_346
-    private const val schemaVersion: Int = 8
+    private const val schemaVersion: Int = 9
 
     /** Encodes a deeply immutable Scene IR as the sole v14 Picture writer. */
     public fun encodePicture(scene: SceneSnapshot, cullRect: RectF32): ByteArray {
@@ -82,6 +84,7 @@ public object SceneArchiveCodec {
                 12 -> 6
                 13 -> 7
                 14 -> 8
+                15 -> 9
                 else -> 0
             }
             if (decodedSchemaVersion !in 1..maxSchema) {
@@ -174,6 +177,8 @@ private class ArchiveWriter {
     fun colorF32(value: ColorF32) { f32(value.red); f32(value.green); f32(value.blue); f32(value.alpha) }
     fun point(value: Point2F32) { f32(value.x); f32(value.y) }
     fun vector(value: Vector2F32) { f32(value.x); f32(value.y) }
+    fun point3(value: Point3F32) { f32(value.x); f32(value.y); f32(value.z) }
+    fun vector3(value: Vector3F32) { f32(value.x); f32(value.y); f32(value.z) }
     fun size(value: SizeF32) { f32(value.width); f32(value.height) }
     fun noiseTile(value: SizeI32) { i32(value.width); i32(value.height) }
     fun rect(value: RectF32) { f32(value.left); f32(value.top); f32(value.right); f32(value.bottom) }
@@ -456,12 +461,12 @@ private class ArchiveWriter {
         is CapturedFilterNodeV1.Blend -> { i32(6); enum(value.mode); filterInput(value.background); filterInput(value.foreground) }
         is CapturedFilterNodeV1.Dilate -> { i32(7); f32(value.radiusX); f32(value.radiusY); filterInput(value.input) }
         is CapturedFilterNodeV1.Erode -> { i32(8); f32(value.radiusX); f32(value.radiusY); filterInput(value.input) }
-        is CapturedFilterNodeV1.DistantLitDiffuse -> { i32(9); f32(value.directionX); f32(value.directionY); color(value.lightColor); f32(value.surfaceScale); f32(value.kd); filterInput(value.input) }
-        is CapturedFilterNodeV1.PointLitDiffuse -> { i32(10); point(value.location); color(value.lightColor); f32(value.surfaceScale); f32(value.kd); filterInput(value.input) }
-        is CapturedFilterNodeV1.SpotLitDiffuse -> { i32(11); point(value.location); point(value.target); f32(value.specularExponent); f32(value.cutoffAngle); color(value.lightColor); f32(value.surfaceScale); f32(value.kd); filterInput(value.input) }
-        is CapturedFilterNodeV1.DistantLitSpecular -> { i32(12); f32(value.directionX); f32(value.directionY); color(value.lightColor); f32(value.surfaceScale); f32(value.ks); f32(value.shininess); filterInput(value.input) }
-        is CapturedFilterNodeV1.PointLitSpecular -> { i32(13); point(value.location); color(value.lightColor); f32(value.surfaceScale); f32(value.ks); f32(value.shininess); filterInput(value.input) }
-        is CapturedFilterNodeV1.SpotLitSpecular -> { i32(14); point(value.location); point(value.target); f32(value.specularExponent); f32(value.cutoffAngle); color(value.lightColor); f32(value.surfaceScale); f32(value.ks); f32(value.shininess); filterInput(value.input) }
+        is CapturedFilterNodeV1.DistantLitDiffuse -> { i32(9); vector3(value.direction); color(value.lightColor); f32(value.surfaceScale); f32(value.kd); filterInput(value.input) }
+        is CapturedFilterNodeV1.PointLitDiffuse -> { i32(10); point3(value.location); color(value.lightColor); f32(value.surfaceScale); f32(value.kd); filterInput(value.input) }
+        is CapturedFilterNodeV1.SpotLitDiffuse -> { i32(11); point3(value.location); point3(value.target); f32(value.specularExponent); f32(value.cutoffAngle); color(value.lightColor); f32(value.surfaceScale); f32(value.kd); filterInput(value.input) }
+        is CapturedFilterNodeV1.DistantLitSpecular -> { i32(12); vector3(value.direction); color(value.lightColor); f32(value.surfaceScale); f32(value.ks); f32(value.shininess); filterInput(value.input) }
+        is CapturedFilterNodeV1.PointLitSpecular -> { i32(13); point3(value.location); color(value.lightColor); f32(value.surfaceScale); f32(value.ks); f32(value.shininess); filterInput(value.input) }
+        is CapturedFilterNodeV1.SpotLitSpecular -> { i32(14); point3(value.location); point3(value.target); f32(value.specularExponent); f32(value.cutoffAngle); color(value.lightColor); f32(value.surfaceScale); f32(value.ks); f32(value.shininess); filterInput(value.input) }
         is CapturedFilterNodeV1.Offset -> { i32(15); f32(value.dx); f32(value.dy); filterInput(value.input) }
         is CapturedFilterNodeV1.Tile -> { i32(16); rect(value.src); rect(value.dst); filterInput(value.input) }
         is CapturedFilterNodeV1.Merge -> { i32(17); list(value.toList(), ::filterInput) }
@@ -478,12 +483,12 @@ private class ArchiveWriter {
         is ImageFilterNode.ColorFilter -> { i32(4); colorFilter(value.filter); optional(value.input, ::imageFilter) }
         is ImageFilterNode.Compose -> { i32(5); imageFilter(value.outer); imageFilter(value.inner) }; is ImageFilterNode.Blend -> { i32(6); enum(value.mode); imageFilter(value.background); imageFilter(value.foreground) }
         is ImageFilterNode.Dilate -> { i32(7); f32(value.radiusX); f32(value.radiusY); optional(value.input, ::imageFilter) }; is ImageFilterNode.Erode -> { i32(8); f32(value.radiusX); f32(value.radiusY); optional(value.input, ::imageFilter) }
-        is ImageFilterNode.DistantLitDiffuse -> { i32(9); f32(value.directionX); f32(value.directionY); color(value.lightColor); f32(value.surfaceScale); f32(value.kd); optional(value.input, ::imageFilter) }
-        is ImageFilterNode.PointLitDiffuse -> { i32(10); point(value.location); color(value.lightColor); f32(value.surfaceScale); f32(value.kd); optional(value.input, ::imageFilter) }
-        is ImageFilterNode.SpotLitDiffuse -> { i32(11); point(value.location); point(value.target); f32(value.specularExponent); f32(value.cutoffAngle); color(value.lightColor); f32(value.surfaceScale); f32(value.kd); optional(value.input, ::imageFilter) }
-        is ImageFilterNode.DistantLitSpecular -> { i32(12); f32(value.directionX); f32(value.directionY); color(value.lightColor); f32(value.surfaceScale); f32(value.ks); f32(value.shininess); optional(value.input, ::imageFilter) }
-        is ImageFilterNode.PointLitSpecular -> { i32(13); point(value.location); color(value.lightColor); f32(value.surfaceScale); f32(value.ks); f32(value.shininess); optional(value.input, ::imageFilter) }
-        is ImageFilterNode.SpotLitSpecular -> { i32(14); point(value.location); point(value.target); f32(value.specularExponent); f32(value.cutoffAngle); color(value.lightColor); f32(value.surfaceScale); f32(value.ks); f32(value.shininess); optional(value.input, ::imageFilter) }
+        is ImageFilterNode.DistantLitDiffuse -> { i32(9); vector3(value.direction); color(value.lightColor); f32(value.surfaceScale); f32(value.kd); optional(value.input, ::imageFilter) }
+        is ImageFilterNode.PointLitDiffuse -> { i32(10); point3(value.location); color(value.lightColor); f32(value.surfaceScale); f32(value.kd); optional(value.input, ::imageFilter) }
+        is ImageFilterNode.SpotLitDiffuse -> { i32(11); point3(value.location); point3(value.target); f32(value.specularExponent); f32(value.cutoffAngle); color(value.lightColor); f32(value.surfaceScale); f32(value.kd); optional(value.input, ::imageFilter) }
+        is ImageFilterNode.DistantLitSpecular -> { i32(12); vector3(value.direction); color(value.lightColor); f32(value.surfaceScale); f32(value.ks); f32(value.shininess); optional(value.input, ::imageFilter) }
+        is ImageFilterNode.PointLitSpecular -> { i32(13); point3(value.location); color(value.lightColor); f32(value.surfaceScale); f32(value.ks); f32(value.shininess); optional(value.input, ::imageFilter) }
+        is ImageFilterNode.SpotLitSpecular -> { i32(14); point3(value.location); point3(value.target); f32(value.specularExponent); f32(value.cutoffAngle); color(value.lightColor); f32(value.surfaceScale); f32(value.ks); f32(value.shininess); optional(value.input, ::imageFilter) }
         is ImageFilterNode.Offset -> { i32(15); f32(value.dx); f32(value.dy); optional(value.input, ::imageFilter) }
         is ImageFilterNode.Tile -> { i32(16); rect(value.copySource()); rect(value.copyDestination()); optional(value.input, ::imageFilter) }
         is ImageFilterNode.Merge -> { i32(17); list(value.toList()) { imageFilter(it) } }
@@ -531,6 +536,8 @@ private class ArchiveReader(private val data: ByteArray) {
     fun colorF32(): ColorF32 = ColorF32.of(f32(), f32(), f32(), f32())
     fun point(): Point2F32 = Point2F32(f32(), f32())
     fun vector(): Vector2F32 = Vector2F32(f32(), f32())
+    fun point3(): Point3F32 = Point3F32(f32(), f32(), f32())
+    fun vector3(): Vector3F32 = Vector3F32(f32(), f32(), f32())
     fun size(): SizeF32 = SizeF32(f32(), f32())
     fun noiseTile(): SizeI32 = if (sceneArchiveSchemaVersion >= 5) {
         val result = SizeI32(i32(), i32())
@@ -854,12 +861,12 @@ private class ArchiveReader(private val data: ByteArray) {
         6 -> CapturedFilterNodeV1.Blend(enum(), filterInput(), filterInput())
         7 -> CapturedFilterNodeV1.Dilate(f32(), f32(), filterInput())
         8 -> CapturedFilterNodeV1.Erode(f32(), f32(), filterInput())
-        9 -> CapturedFilterNodeV1.DistantLitDiffuse(f32(), f32(), color(), f32(), f32(), filterInput())
-        10 -> CapturedFilterNodeV1.PointLitDiffuse(point(), color(), f32(), f32(), filterInput())
-        11 -> CapturedFilterNodeV1.SpotLitDiffuse(point(), point(), f32(), f32(), color(), f32(), f32(), filterInput())
-        12 -> CapturedFilterNodeV1.DistantLitSpecular(f32(), f32(), color(), f32(), f32(), f32(), filterInput())
-        13 -> CapturedFilterNodeV1.PointLitSpecular(point(), color(), f32(), f32(), f32(), filterInput())
-        14 -> CapturedFilterNodeV1.SpotLitSpecular(point(), point(), f32(), f32(), color(), f32(), f32(), f32(), filterInput())
+        9 -> if (sceneArchiveSchemaVersion >= 9) CapturedFilterNodeV1.DistantLitDiffuse(vector3(), color(), f32(), f32(), filterInput()) else unsupportedTwoDimensionalLighting()
+        10 -> if (sceneArchiveSchemaVersion >= 9) CapturedFilterNodeV1.PointLitDiffuse(point3(), color(), f32(), f32(), filterInput()) else unsupportedTwoDimensionalLighting()
+        11 -> if (sceneArchiveSchemaVersion >= 9) CapturedFilterNodeV1.SpotLitDiffuse(point3(), point3(), f32(), f32(), color(), f32(), f32(), filterInput()) else unsupportedTwoDimensionalLighting()
+        12 -> if (sceneArchiveSchemaVersion >= 9) CapturedFilterNodeV1.DistantLitSpecular(vector3(), color(), f32(), f32(), f32(), filterInput()) else unsupportedTwoDimensionalLighting()
+        13 -> if (sceneArchiveSchemaVersion >= 9) CapturedFilterNodeV1.PointLitSpecular(point3(), color(), f32(), f32(), f32(), filterInput()) else unsupportedTwoDimensionalLighting()
+        14 -> if (sceneArchiveSchemaVersion >= 9) CapturedFilterNodeV1.SpotLitSpecular(point3(), point3(), f32(), f32(), color(), f32(), f32(), f32(), filterInput()) else unsupportedTwoDimensionalLighting()
         15 -> CapturedFilterNodeV1.Offset(f32(), f32(), filterInput())
         16 -> CapturedFilterNodeV1.Tile(rect(), rect(), filterInput())
         17 -> CapturedFilterNodeV1.Merge(filterInputs())
@@ -878,9 +885,12 @@ private class ArchiveReader(private val data: ByteArray) {
     }
     private fun legacyFilterRoot(): CapturedFilterRootV1 = requireNotNull(legacyFilterTable) { "Legacy filter root is outside a scene" }.appendLegacyOccurrence(imageFilter())
     fun imageFilter(): ImageFilterNode = nested { when (i32()) {
-        1 -> ImageFilterNode.Crop.of(rect(), enum(), optional(::imageFilter)); 2 -> ImageFilterNode.Blur(f32(), f32(), enum(), optional(::imageFilter)); 3 -> ImageFilterNode.DropShadow(f32(), f32(), f32(), f32(), color(), optional(::imageFilter), if (sceneArchiveSchemaVersion >= 8) enum() else CapturedDropShadowModeV1.COMPOSITE); 4 -> ImageFilterNode.ColorFilter(colorFilter(), optional(::imageFilter)); 5 -> ImageFilterNode.Compose(imageFilter(), imageFilter()); 6 -> ImageFilterNode.Blend(enum(), imageFilter(), imageFilter()); 7 -> ImageFilterNode.Dilate(f32(), f32(), optional(::imageFilter)); 8 -> ImageFilterNode.Erode(f32(), f32(), optional(::imageFilter)); 9 -> ImageFilterNode.DistantLitDiffuse(f32(), f32(), color(), f32(), f32(), optional(::imageFilter)); 10 -> ImageFilterNode.PointLitDiffuse(point(), color(), f32(), f32(), optional(::imageFilter)); 11 -> ImageFilterNode.SpotLitDiffuse(point(), point(), f32(), f32(), color(), f32(), f32(), optional(::imageFilter)); 12 -> ImageFilterNode.DistantLitSpecular(f32(), f32(), color(), f32(), f32(), f32(), optional(::imageFilter)); 13 -> ImageFilterNode.PointLitSpecular(point(), color(), f32(), f32(), f32(), optional(::imageFilter)); 14 -> ImageFilterNode.SpotLitSpecular(point(), point(), f32(), f32(), color(), f32(), f32(), f32(), optional(::imageFilter)); 15 -> ImageFilterNode.Offset(f32(), f32(), optional(::imageFilter)); 16 -> ImageFilterNode.Tile.of(rect(), rect(), optional(::imageFilter)); 17 -> ImageFilterNode.Merge.of(list(::imageFilter)); 18 -> ImageFilterNode.DisplacementMap(enum(), enum(), f32(), imageFilter(), optional(::imageFilter)); 19 -> ImageFilterNode.Picture.of(scene(), rect(), optional(::rect)); 20 -> ImageFilterNode.Magnifier.of(rect(), f32(), f32(), optional(::imageFilter)); 21 -> ImageFilterNode.MatrixConvolution.of(size(), ImmutableFloats.copyOf(floats()), f32(), f32(), vector(), enum(), bool(), optional(::imageFilter)); 22 -> ImageFilterNode.RuntimeEffect.of(descriptor(), uniforms(), optional(::text), list { RuntimeImageFilterChild(text(), optional(::imageFilter)) }); else -> failTag("image filter")
+        1 -> ImageFilterNode.Crop.of(rect(), enum(), optional(::imageFilter)); 2 -> ImageFilterNode.Blur(f32(), f32(), enum(), optional(::imageFilter)); 3 -> ImageFilterNode.DropShadow(f32(), f32(), f32(), f32(), color(), optional(::imageFilter), if (sceneArchiveSchemaVersion >= 8) enum() else CapturedDropShadowModeV1.COMPOSITE); 4 -> ImageFilterNode.ColorFilter(colorFilter(), optional(::imageFilter)); 5 -> ImageFilterNode.Compose(imageFilter(), imageFilter()); 6 -> ImageFilterNode.Blend(enum(), imageFilter(), imageFilter()); 7 -> ImageFilterNode.Dilate(f32(), f32(), optional(::imageFilter)); 8 -> ImageFilterNode.Erode(f32(), f32(), optional(::imageFilter)); 9 -> unsupportedTwoDimensionalLighting(); 10 -> unsupportedTwoDimensionalLighting(); 11 -> unsupportedTwoDimensionalLighting(); 12 -> unsupportedTwoDimensionalLighting(); 13 -> unsupportedTwoDimensionalLighting(); 14 -> unsupportedTwoDimensionalLighting(); 15 -> ImageFilterNode.Offset(f32(), f32(), optional(::imageFilter)); 16 -> ImageFilterNode.Tile.of(rect(), rect(), optional(::imageFilter)); 17 -> ImageFilterNode.Merge.of(list(::imageFilter)); 18 -> ImageFilterNode.DisplacementMap(enum(), enum(), f32(), imageFilter(), optional(::imageFilter)); 19 -> ImageFilterNode.Picture.of(scene(), rect(), optional(::rect)); 20 -> ImageFilterNode.Magnifier.of(rect(), f32(), f32(), optional(::imageFilter)); 21 -> ImageFilterNode.MatrixConvolution.of(size(), ImmutableFloats.copyOf(floats()), f32(), f32(), vector(), enum(), bool(), optional(::imageFilter)); 22 -> ImageFilterNode.RuntimeEffect.of(descriptor(), uniforms(), optional(::text), list { RuntimeImageFilterChild(text(), optional(::imageFilter)) }); else -> failTag("image filter")
     } }
     private fun Int.positive(name: String): Int = if (this > 0) this else throw ArchiveFailure("invalid-value", "$name must be positive")
     private fun Int.nonNegative(name: String): Int = if (this >= 0) this else throw ArchiveFailure("invalid-value", "$name must be non-negative")
     private fun <T> failTag(type: String): T = throw ArchiveFailure("unknown-$type", "Archive contains an unknown $type tag")
+    private fun unsupportedTwoDimensionalLighting(): Nothing = throw ArchiveFailure(
+        "unsupported-2d-lighting", "Historical two-dimensional lighting is not supported by the 3D-only API",
+    )
 }

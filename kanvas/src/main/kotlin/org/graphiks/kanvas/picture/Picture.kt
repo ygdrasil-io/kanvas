@@ -310,9 +310,9 @@ class Picture internal constructor(
 
 private val MAGIC = byteArrayOf(0x4B, 0x50, 0x49, 0x43)
 private const val FORMAT_VERSION = 10
-private const val STABLE_WIRE_VERSION = 13
-private const val CURRENT_STABLE_WIRE_VERSION = 14
-private const val PREVIOUS_STABLE_WIRE_VERSION = 12
+private const val STABLE_WIRE_VERSION = 14
+private const val CURRENT_STABLE_WIRE_VERSION = 15
+private const val PREVIOUS_STABLE_WIRE_VERSION = 13
 private const val HISTORICAL_WIRE_VERSION_V8 = 8
 
 // type discriminators
@@ -692,12 +692,7 @@ private class Reader(
             4 -> ImageFilter.Blend(blendMode(), imageFilter()!!, imageFilter()!!)
             5 -> ImageFilter.Dilate(float(), float(), imageFilter())
             6 -> ImageFilter.Erode(float(), float(), imageFilter())
-            7 -> ImageFilter.DistantLitDiffuse(vector2(), color(), float(), float(), imageFilter())
-            8 -> ImageFilter.PointLitDiffuse(point2(), color(), float(), float(), imageFilter())
-            9 -> ImageFilter.SpotLitDiffuse(point2(), point2(), float(), float(), color(), float(), float(), imageFilter())
-            10 -> ImageFilter.DistantLitSpecular(vector2(), color(), float(), float(), float(), imageFilter())
-            11 -> ImageFilter.PointLitSpecular(point2(), color(), float(), float(), float(), imageFilter())
-            12 -> ImageFilter.SpotLitSpecular(point2(), point2(), float(), float(), color(), float(), float(), float(), imageFilter())
+            7, 8, 9, 10, 11, 12 -> { valid = false; null }
             13 -> ImageFilter.Offset(float(), float(), imageFilter())
             14 -> ImageFilter.Tile(rect(), rect(), imageFilter())
             15 -> ImageFilter.Merge(List(int()) { imageFilter()!! })
@@ -1056,6 +1051,7 @@ private fun decodePicture(data: ByteArray, decodedRuntimeEffects: MutableList<Ru
         9,
         10,
         11,
+        12,
         PREVIOUS_STABLE_WIRE_VERSION,
         STABLE_WIRE_VERSION,
         CURRENT_STABLE_WIRE_VERSION,

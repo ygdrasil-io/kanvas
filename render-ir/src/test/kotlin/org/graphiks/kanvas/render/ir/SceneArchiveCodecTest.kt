@@ -14,10 +14,12 @@ import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.geometry.Point3F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.SizeF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.vector.Vector2F32
+import org.graphiks.math.vector.Vector3F32
 
 class SceneArchiveCodecTest {
     @Test
@@ -677,12 +679,12 @@ class SceneArchiveCodecTest {
             CapturedFilterNodeV1.Blend(BlendMode.SCREEN, node(1), node(14)),
             CapturedFilterNodeV1.Dilate(1f, 2f, source),
             CapturedFilterNodeV1.Erode(1f, 2f, source),
-            CapturedFilterNodeV1.DistantLitDiffuse(1f, 2f, ColorARGB.Red, 3f, 4f, source),
-            CapturedFilterNodeV1.PointLitDiffuse(Point2F32(1f, 2f), ColorARGB.Red, 3f, 4f, source),
-            CapturedFilterNodeV1.SpotLitDiffuse(Point2F32(1f, 2f), Point2F32(3f, 4f), 5f, 6f, ColorARGB.Red, 7f, 8f, source),
-            CapturedFilterNodeV1.DistantLitSpecular(1f, 2f, ColorARGB.Red, 3f, 4f, 5f, source),
-            CapturedFilterNodeV1.PointLitSpecular(Point2F32(1f, 2f), ColorARGB.Red, 3f, 4f, 5f, source),
-            CapturedFilterNodeV1.SpotLitSpecular(Point2F32(1f, 2f), Point2F32(3f, 4f), 5f, 6f, ColorARGB.Red, 7f, 8f, 9f, source),
+            CapturedFilterNodeV1.DistantLitDiffuse(Vector3F32(1f, 2f, 3f), ColorARGB.Red, 3f, 4f, source),
+            CapturedFilterNodeV1.PointLitDiffuse(Point3F32(1f, 2f, 3f), ColorARGB.Red, 3f, 4f, source),
+            CapturedFilterNodeV1.SpotLitDiffuse(Point3F32(1f, 2f, 3f), Point3F32(3f, 4f, 5f), 5f, 6f, ColorARGB.Red, 7f, 8f, source),
+            CapturedFilterNodeV1.DistantLitSpecular(Vector3F32(1f, 2f, 3f), ColorARGB.Red, 3f, 4f, 5f, source),
+            CapturedFilterNodeV1.PointLitSpecular(Point3F32(1f, 2f, 3f), ColorARGB.Red, 3f, 4f, 5f, source),
+            CapturedFilterNodeV1.SpotLitSpecular(Point3F32(1f, 2f, 3f), Point3F32(3f, 4f, 5f), 5f, 6f, ColorARGB.Red, 7f, 8f, 9f, source),
             CapturedFilterNodeV1.Offset(1f, 2f, source),
             CapturedFilterNodeV1.Tile(bounds, RectF32(2f, 3f, 20f, 30f), source),
             CapturedFilterNodeV1.Merge(listOf(node(1))),
