@@ -25,6 +25,8 @@ public enum class FilterImplementationKindV1 {
     OFFSET,
     /** W6c periodic source sampling constrained to a destination domain. */
     TILE,
+    /** W6c image color filter using the already sealed W5f numeric graph. */
+    COLOR_FILTER,
     IMAGE_BLUR_X,
     IMAGE_BLUR_Y,
     MASK_COVERAGE_BLUR_X,
@@ -264,6 +266,31 @@ public sealed interface FilterPassOperationV1 {
         private val sourceSnapshotInputTargetLocalI32 = sourceInputTargetLocalI32.copy()
         init { require(kind == FilterImplementationKindV1.TILE && !sourceSnapshotInputTargetLocalI32.isEmpty) }
         public fun copySourceInputTargetLocalI32(): RectI32 = sourceSnapshotInputTargetLocalI32.copy()
+    }
+
+    /**
+     * The W5f execution and its sole FrameSourceLayoutV4 uniform row are frozen together.  This
+     * is deliberately a texture consumer, not a second color-filter evaluator.
+     */
+    public class ColorFilter(
+        public val execution: ColorFilterExecutionPlanV1,
+        public val uniformResource: PlanResourceId?,
+        public val uniformCapacityBytesI64: Long?,
+        override val bounds: FilterBoundsPlanV1,
+        public val sampling: FilterInputSamplingV1,
+        override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.COLOR_FILTER,
+    ) : FilterPassOperationV1 {
+        init {
+            require(kind == FilterImplementationKindV1.COLOR_FILTER)
+            require((uniformResource == null) == (uniformCapacityBytesI64 == null))
+            uniformCapacityBytesI64?.let { capacity ->
+                require(uniformResource!!.value.startsWith("${PlanResourceRole.SourceUniformData.name}:"))
+                require(capacity >= maxOf(16L, execution.dynamicByteCountI64))
+            }
+        }
+
+        internal fun withUniformResource(resource: PlanResourceId, capacityBytesI64: Long): ColorFilter =
+            ColorFilter(execution, resource, capacityBytesI64, bounds, sampling)
     }
 
     public data class MaskBlurStyle(

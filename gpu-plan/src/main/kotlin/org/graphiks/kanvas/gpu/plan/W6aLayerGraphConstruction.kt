@@ -2185,8 +2185,8 @@ internal class W6aLayerGraphConstruction(
                     materialDeviceOriginI32 = pass.copyMaterialDeviceOriginI32() ?: targetOriginDevice(pass.target))
             } else when (pass) {
                 is PlanPass.FilterPass -> {
-                    val operation = (pass.operation as? FilterPassOperationV1.MaskShader)?.let { shader ->
-                        when (val binding = shader.materialBinding) {
+                    val operation: FilterPassOperationV1 = when (val original = pass.operation) {
+                        is FilterPassOperationV1.MaskShader -> when (val binding = original.materialBinding) {
                             is FilterPassOperationV1.MaskShaderMaterialBindingV1.CapturedOccurrence -> {
                                 val material = maskMaterialRoots.getValue(binding.occurrenceIdI32)
                                 val captured = maskMaterialSourcesByOccurrence.getValue(binding.occurrenceIdI32)
@@ -2207,15 +2207,22 @@ internal class W6aLayerGraphConstruction(
                                         pass.evaluationKey.mapping,
                                         pass.evaluationKey.mapping.copyLayerOriginDeviceI32(),
                                     ),
-                                    shader.bounds,
-                                    shader.sampling,
+                                    original.bounds,
+                                    original.sampling,
                                 )
                             }
-                            is FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned -> shader
+                            is FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned -> original
                         }
+                        else -> original
                     }
-                    if (operation == null) pass else PlanPass.FilterPass(pass.ordinal, pass.inputs(), pass.output,
-                        pass.evaluationKey, operation)
+                    val resolved = when (operation) {
+                        is FilterPassOperationV1.ColorFilter -> {
+                            val uniform = source.uniforms.getValue(W6cComposePlanner.colorUniformIdentity(operation.execution))
+                            operation.withUniformResource(uniform, source.resources.single { it.id == uniform }.byteSize)
+                        }
+                        else -> operation
+                    }
+                    PlanPass.FilterPass(pass.ordinal, pass.inputs(), pass.output, pass.evaluationKey, resolved)
                 }
                 is PlanPass.StencilGeometryProducerV3 -> {
                     val draw = boundDraw(pass.commandIndexI32, pass.target) as PathDraw
@@ -2325,6 +2332,12 @@ internal class W6aLayerGraphConstruction(
     /** One W5 source row per isolated Picture paint, resolved beside MaskShader rows. */
     fun graphTextureMaterialSources(): List<Pair<PictureStreamAggregateIdI32, MaterialSourceConstructionV4>> =
         graphTextureMaterialSourcesByAggregate.entries.map { it.key to it.value }
+
+    /** Every W6c image ColorFilter is compiled by W5f before the sole source layout issues rows. */
+    fun imageColorFilterExecutions(): List<ColorFilterExecutionPlanV1> = rawPasses
+        .filterIsInstance<PlanPass.FilterPass>()
+        .mapNotNull { (it.operation as? FilterPassOperationV1.ColorFilter)?.execution }
+        .distinctBy { it.canonicalIdentity }
 
     private fun sealGeometry(
         occurrence: W6aLayerPlanCompiler.ScopeOccurrence,

@@ -220,6 +220,18 @@ internal object W6bFilterGraphConstruction {
 
     internal class ConstructionFailure(val diagnostic: RenderDiagnostic) : IllegalArgumentException(diagnostic.message)
 
+    /**
+     * Contextual evaluation never returns a resource without the bounds that produced it.  The
+     * binding remains the sole carrier of target-local origin and known-content facts.
+     */
+    private class ContextualFilterResult(
+        val source: SourceBinding,
+        val bounds: FilterBoundsPlanV1,
+        val evaluationKey: FilterEvaluationKeyV1?,
+    ) {
+        val resourceId: PlanResourceId get() = source.resourceId
+    }
+
     internal fun owns(scene: SceneSnapshot): Boolean = ownership(scene).isOwned
 
     /** Unsupported W6c/W6d/backdrop/filtered-previous cases stop before source allocation. */
@@ -336,10 +348,10 @@ internal object W6bFilterGraphConstruction {
             append(PlanPass.FilterSourceClear(cursor.passOrdinalI32, id, source.resourceId))
             return source.withResource(id, knownContentDeviceI32 = null)
         }
-        fun keyFor(nodeId: CapturedFilterNodeIdI32?, maskOccurrenceI32: Int?, desired: RectI32): FilterEvaluationKeyV1 = when {
-            nodeId != null -> FilterEvaluationKeyV1.of(nodeId, occurrenceSource.resourceId, occurrenceSource.mapping, desired)
+        fun keyFor(nodeId: CapturedFilterNodeIdI32?, maskOccurrenceI32: Int?, boundSource: SourceBinding, desired: RectI32): FilterEvaluationKeyV1 = when {
+            nodeId != null -> FilterEvaluationKeyV1.of(nodeId, boundSource.resourceId, boundSource.mapping, desired)
             maskOccurrenceI32 != null -> FilterEvaluationKeyV1.forMaskOccurrence(
-                maskOccurrenceI32, occurrenceSource.resourceId, occurrenceSource.mapping, desired,
+                maskOccurrenceI32, boundSource.resourceId, boundSource.mapping, desired,
             )
             else -> error("W6b occurrence key is missing its captured identity.")
         }
@@ -351,7 +363,7 @@ internal object W6bFilterGraphConstruction {
             horizontalKind: FilterImplementationKindV1,
             verticalKind: FilterImplementationKindV1,
             key: FilterEvaluationKeyV1,
-        ): SourceBinding {
+        ): ContextualFilterResult {
             val horizontalBounds = blurBounds(source, sigmaXF32, 0f)
             val horizontal = allocateTarget(horizontalBounds)
             append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(source.resourceId), horizontal.resourceId, key,
@@ -362,60 +374,64 @@ internal object W6bFilterGraphConstruction {
             append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(horizontal.resourceId), vertical.resourceId, key,
                 FilterPassOperationV1.SeparableBlur(verticalKind, sigmaYF32, FilterAxisV1.Y, tileMode,
                     verticalBounds, filterInputSampling(horizontal, verticalBounds))))
-            return vertical
+            return ContextualFilterResult(vertical, verticalBounds, key)
         }
-        lateinit var materializeNode: (CapturedFilterNodeIdI32) -> Pair<SourceBinding, FilterEvaluationKeyV1>
-        fun materializeInput(input: CapturedFilterInputV1): SourceBinding = when (input) {
-            CapturedFilterInputV1.ImplicitSource -> occurrenceSource
-            CapturedFilterInputV1.TransparentBlack -> transparentBlack(occurrenceSource)
-            is CapturedFilterInputV1.Node -> materializeNode(input.id).first
+        lateinit var materializeNode: (CapturedFilterNodeIdI32, SourceBinding) -> ContextualFilterResult
+        fun bindInput(input: CapturedFilterInputV1, currentSource: SourceBinding): ContextualFilterResult = when (input) {
+            CapturedFilterInputV1.ImplicitSource -> ContextualFilterResult(currentSource, identityBounds(currentSource), null)
+            CapturedFilterInputV1.TransparentBlack -> transparentBlack(currentSource).let { transparent ->
+                ContextualFilterResult(transparent, identityBounds(transparent), null)
+            }
+            is CapturedFilterInputV1.Node -> materializeNode(input.id, currentSource)
             is CapturedFilterInputV1.Picture, is CapturedFilterInputV1.Backdrop -> throw ConstructionFailure(
                 W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.UnsupportedFamily, "The captured filter input belongs to W6d."),
             )
         }
-        materializeNode = { id -> when (val node = occurrence.table.nodeAt(id)) {
+        fun materializeInput(input: CapturedFilterInputV1, currentSource: SourceBinding): SourceBinding =
+            bindInput(input, currentSource).source
+        materializeNode = { id, currentSource -> when (val node = occurrence.table.nodeAt(id)) {
             is CapturedFilterNodeV1.Crop -> {
-                val input = materializeInput(node.input)
+                val input = materializeInput(node.input, currentSource)
                 val planned = W6cSpatialBoundsPlanner.crop(input, node)
                 val bounds = planned.bounds
-                val key = keyFor(id, null, bounds.copyDesiredOutputDeviceI32())
+                val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
                 val output = allocateTarget(bounds)
                 append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
                     FilterPassOperationV1.Crop(planned.cropInputTargetLocalI32, node.tileMode, bounds,
                         spatialSampling(input, bounds, planned.clipOutputTargetLocalF64, 0.0, 0.0))))
-                output to key
+                ContextualFilterResult(output, bounds, key)
             }
             is CapturedFilterNodeV1.Offset -> {
-                val input = materializeInput(node.input)
+                val input = materializeInput(node.input, currentSource)
                 val planned = W6cSpatialBoundsPlanner.offset(input, node)
                 val bounds = planned.bounds
-                val key = keyFor(id, null, bounds.copyDesiredOutputDeviceI32())
+                val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
                 val output = allocateTarget(bounds)
                 append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
                     FilterPassOperationV1.Offset(Vector2F64(planned.offsetDeviceF64X, planned.offsetDeviceF64Y), bounds,
                         spatialSampling(input, bounds, fullClip(bounds), -planned.offsetDeviceF64X, -planned.offsetDeviceF64Y))))
-                output to key
+                ContextualFilterResult(output, bounds, key)
             }
             is CapturedFilterNodeV1.Tile -> {
-                val input = materializeInput(node.input)
+                val input = materializeInput(node.input, currentSource)
                 val planned = W6cSpatialBoundsPlanner.tile(input, node)
                 val bounds = planned.bounds
-                val key = keyFor(id, null, bounds.copyDesiredOutputDeviceI32())
+                val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
                 val output = allocateTarget(bounds)
                 append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
                     FilterPassOperationV1.Tile(planned.sourceInputTargetLocalI32, bounds,
                         spatialSampling(input, bounds, planned.clipOutputTargetLocalF64, 0.0, 0.0))))
-                output to key
+                ContextualFilterResult(output, bounds, key)
             }
             is CapturedFilterNodeV1.Blur -> {
-                val input = materializeInput(node.input)
+                val input = materializeInput(node.input, currentSource)
                 val full = blurBounds(input, node.sigmaX, node.sigmaY)
-                val key = keyFor(id, null, full.copyDesiredOutputDeviceI32())
+                val key = keyFor(id, null, currentSource, full.copyDesiredOutputDeviceI32())
                 appendBlur(input, node.sigmaX, node.sigmaY, node.tileMode,
-                    FilterImplementationKindV1.IMAGE_BLUR_X, FilterImplementationKindV1.IMAGE_BLUR_Y, key) to key
+                    FilterImplementationKindV1.IMAGE_BLUR_X, FilterImplementationKindV1.IMAGE_BLUR_Y, key)
             }
             is CapturedFilterNodeV1.DropShadow -> {
-                val input = materializeInput(node.input)
+                val input = materializeInput(node.input, currentSource)
                 val blurredBounds = blurBounds(input, node.sigmaX, node.sigmaY)
                 val predictedBlur = SourceBinding(occurrenceSource.resourceId,
                     SizeI32(blurredBounds.copyDesiredOutputDeviceI32().width(), blurredBounds.copyDesiredOutputDeviceI32().height()),
@@ -424,28 +440,51 @@ internal object W6bFilterGraphConstruction {
                 val predictedShadow = predictedBlur.withResource(predictedBlur.resourceId,
                     SizeI32(predictedShadowBounds.copyDesiredOutputDeviceI32().width(), predictedShadowBounds.copyDesiredOutputDeviceI32().height()),
                     predictedShadowBounds.copyTargetOriginDeviceI32(), predictedShadowBounds.copyProducedOutputDeviceI32())
-                val key = keyFor(id, null, dropShadowCompositeBounds(input, predictedShadow, node.mode).copyDesiredOutputDeviceI32())
+                val key = keyFor(id, null, currentSource, dropShadowCompositeBounds(input, predictedShadow, node.mode).copyDesiredOutputDeviceI32())
                 // DropShadow does not expose a public tile mode.  Skia defines its internal
                 // Blur through the overload whose default is transparent DECAL sampling.
                 val blurred = appendBlur(input, node.sigmaX, node.sigmaY, TileMode.DECAL,
                     FilterImplementationKindV1.IMAGE_BLUR_X, FilterImplementationKindV1.IMAGE_BLUR_Y, key)
-                val colorBounds = translatedBounds(blurred, node.dx.toDouble(), node.dy.toDouble())
+                val colorBounds = translatedBounds(blurred.source, node.dx.toDouble(), node.dy.toDouble())
                 val colorized = allocateTarget(colorBounds)
                 append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(blurred.resourceId), colorized.resourceId, key,
                     FilterPassOperationV1.DropShadowColorize(node.color, Vector2F64(node.dx.toDouble(), node.dy.toDouble()), colorBounds,
-                        dropShadowLinearSampling(blurred, colorBounds, node.dx.toDouble(), node.dy.toDouble()))))
+                        dropShadowLinearSampling(blurred.source, colorBounds, node.dx.toDouble(), node.dy.toDouble()))))
                 if (node.mode == CapturedDropShadowModeV1.SHADOW_ONLY) {
                     // The colored target is the terminal: there is no identity composite, target,
                     // slot, or lifetime to charge in SHADOW_ONLY.
-                    colorized to key
+                    ContextualFilterResult(colorized, colorBounds, key)
                 } else {
                     val compositeBounds = dropShadowCompositeBounds(input, colorized, node.mode)
                     val composite = allocateTarget(compositeBounds)
                     append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(colorized.resourceId, input.resourceId), composite.resourceId, key,
                         FilterPassOperationV1.DropShadowComposite(node.mode, input.resourceId, compositeBounds,
                             targetLocalSampleOffset(colorized, compositeBounds), targetLocalSampleOffset(input, compositeBounds))))
-                    composite to key
+                    ContextualFilterResult(composite, compositeBounds, key)
                 }
+            }
+            is CapturedFilterNodeV1.ColorFilter -> {
+                val input = materializeInput(node.input, currentSource)
+                val execution = when (val compiled = ColorFilterPlanCompilerV1.compile(node.filter)) {
+                    is ColorFilterCompileResultV1.Ready -> compiled.execution
+                    is ColorFilterCompileResultV1.Refused -> throw ConstructionFailure(W6bFilterDiagnostics.refusal(
+                        compiled.diagnosticCode, "W6c ColorFilter could not reuse the W5f numeric graph."))
+                }
+                val bounds = identityBounds(input)
+                val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
+                val output = allocateTarget(bounds)
+                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
+                    FilterPassOperationV1.ColorFilter(execution, null, null, bounds, filterInputSampling(input, bounds))))
+                ContextualFilterResult(output, bounds, key)
+            }
+            is CapturedFilterNodeV1.Compose -> {
+                // Skia Compose binds inner to the current source, then binds outer to inner's
+                // concrete result. This pair keeps result and bounds inseparable through recursion.
+                val inner = bindInput(node.inner, currentSource)
+                val outer = bindInput(node.outer, inner.source)
+                ContextualFilterResult(outer.source, outer.bounds, requireNotNull(outer.evaluationKey) {
+                    "W6c Compose requires a materialized outer filter result."
+                })
             }
             else -> throw ConstructionFailure(W6bFilterDiagnostics.refusal(
                 W6bFilterDiagnostics.UnsupportedFamily, "The captured image-filter family belongs to W6c or W6d.",
@@ -454,9 +493,9 @@ internal object W6bFilterGraphConstruction {
         fun materializeMask(mask: MaskFilterNode, input: SourceBinding): Pair<SourceBinding, FilterEvaluationKeyV1> = when (mask) {
             is MaskFilterNode.Blur -> {
                 val full = blurBounds(input, mask.sigma, mask.sigma)
-                val key = keyFor(null, occurrence.maskOccurrenceI32, full.copyDesiredOutputDeviceI32())
+                val key = keyFor(null, occurrence.maskOccurrenceI32, input, full.copyDesiredOutputDeviceI32())
                 val blurred = appendBlur(input, mask.sigma, mask.sigma, TileMode.CLAMP,
-                    FilterImplementationKindV1.MASK_COVERAGE_BLUR_X, FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y, key)
+                    FilterImplementationKindV1.MASK_COVERAGE_BLUR_X, FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y, key).source
                 val styleBounds = identityBounds(blurred)
                 val styled = allocateTarget(styleBounds)
                 val original = input.resourceId.takeIf { mask.style != org.graphiks.kanvas.render.ir.MaskBlurStyle.NORMAL }
@@ -471,7 +510,7 @@ internal object W6bFilterGraphConstruction {
             }
             is MaskFilterNode.Shader -> {
                 val bounds = identityBounds(input)
-                val key = keyFor(null, occurrence.maskOccurrenceI32, bounds.copyDesiredOutputDeviceI32())
+                val key = keyFor(null, occurrence.maskOccurrenceI32, input, bounds.copyDesiredOutputDeviceI32())
                 val target = allocateTarget(bounds)
                 append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), target.resourceId, key,
                     FilterPassOperationV1.MaskShader(
@@ -481,7 +520,7 @@ internal object W6bFilterGraphConstruction {
             }
             is MaskFilterNode.Table -> {
                 val bounds = identityBounds(input)
-                val key = keyFor(null, occurrence.maskOccurrenceI32, bounds.copyDesiredOutputDeviceI32())
+                val key = keyFor(null, occurrence.maskOccurrenceI32, input, bounds.copyDesiredOutputDeviceI32())
                 val target = allocateTarget(bounds)
                 val tableResource = maskTableResource()
                 append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), target.resourceId, key,
@@ -491,9 +530,9 @@ internal object W6bFilterGraphConstruction {
             }
         }
 
-        val terminal = occurrence.root?.let { materializeNode(it.id) }
+        val terminal = occurrence.root?.let { materializeNode(it.id, occurrenceSource) }
             ?: error("W6b image freeze requires one captured image-filter root.")
-        return FrozenOccurrence(resources, passes, terminal.first, terminal.second)
+        return FrozenOccurrence(resources, passes, terminal.source, requireNotNull(terminal.evaluationKey))
     }
 
     /** Freezes raw-coverage mask work before W5 material/color evaluation. */
@@ -896,6 +935,11 @@ internal object W6bFilterGraphConstruction {
                     is CapturedFilterNodeV1.Tile -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
                     is CapturedFilterNodeV1.Blur -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
                     is CapturedFilterNodeV1.DropShadow -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.ColorFilter -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.Compose -> {
+                        node.inner.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                        node.outer.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    }
                     else -> return if (isW6cVariant(node)) "W6c" else "W6d"
                 }
             }

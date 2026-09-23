@@ -111,7 +111,22 @@ public class PlanPhysicalLayoutV1 private constructor(
             val graphTextureUniforms = graph.passes().filterIsInstance<PlanPass.PictureSourcePass>().mapNotNull { pass ->
                 pass.graphTextureOperand?.uniformResource
             }.toSet()
-            require((uniforms.values.toSet() + maskShaderUniforms + graphTextureUniforms) == source.uniforms.values.toSet())
+            val colorFilterUniforms = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
+                (pass.operation as? FilterPassOperationV1.ColorFilter)?.uniformResource
+            }.toSet()
+            graph.passes().filterIsInstance<PlanPass.FilterPass>().forEach { pass ->
+                val operation = pass.operation as? FilterPassOperationV1.ColorFilter ?: return@forEach
+                val uniform = requireNotNull(operation.uniformResource) {
+                    "W6c ColorFilter must publish its W5f uniform before the physical layout seals."
+                }
+                val capacity = requireNotNull(operation.uniformCapacityBytesI64)
+                val row = rows.single { it.id == uniform }
+                require(row.role == PlanResourceRole.SourceUniformData && row.byteSize == capacity &&
+                    capacity >= maxOf(16L, operation.execution.dynamicByteCountI64))
+                require(source.uniforms.getValue(W6cComposePlanner.colorUniformIdentity(operation.execution)) == uniform)
+            }
+            require((uniforms.values.toSet() + maskShaderUniforms + graphTextureUniforms + colorFilterUniforms) ==
+                source.uniforms.values.toSet())
             val geometry = graph.passes().mapNotNull { pass ->
                 if (source.w4eGeometry.any { pass.id in it.graphPassIds() }) return@mapNotNull null
                 val data = when (pass) {

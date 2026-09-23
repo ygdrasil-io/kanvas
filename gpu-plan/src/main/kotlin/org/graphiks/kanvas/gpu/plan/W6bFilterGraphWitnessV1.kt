@@ -89,8 +89,9 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                 is PlanPass.FilterPass -> {
                     val bound = row(pass.evaluationKey.boundSourceId)
                     val materializedImageInput = isMaterializedImageInput(pass, passes, producers, rows)
+                    val contextualImageInput = materializedImageInput || isContextualImageInput(pass, passes, producers, rows)
                     require(bound.role in setOf(PlanResourceRole.FilterSource, PlanResourceRole.CoverageSource) ||
-                        materializedImageInput) {
+                        contextualImageInput) {
                         "W6b occurrence source must be immutable FilterSource or CoverageSource."
                     }
                     produced(bound.id, index)
@@ -100,7 +101,7 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                     pass.inputs().forEachIndexed { inputIndex, input ->
                         produced(input, index)
                         val materialCoverage = pass.operation is FilterPassOperationV1.MaterializedSource && inputIndex == 1
-                        val materializedImageSource = materializedImageInput && inputIndex == 0 && input == bound.id
+                        val materializedImageSource = contextualImageInput && inputIndex == 0 && input == bound.id
                         require(materialCoverage || materializedImageSource || owners[input] == null || owners[input] == bound.id) {
                             "W6b input belongs to another occurrence."
                         }
@@ -148,6 +149,7 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
             is FilterPassOperationV1.Crop,
             is FilterPassOperationV1.Offset,
             is FilterPassOperationV1.Tile,
+            is FilterPassOperationV1.ColorFilter,
             is FilterPassOperationV1.MaskShader,
             is FilterPassOperationV1.MaskTable,
             is FilterPassOperationV1.DropShadowColorize,
@@ -162,6 +164,9 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                 is FilterPassOperationV1.Crop -> require(operation.sampling.copySourceInputTargetLocalI32().isEmpty.not())
                 is FilterPassOperationV1.Offset -> require(operation.sampling.copySourceInputTargetLocalI32().isEmpty.not())
                 is FilterPassOperationV1.Tile -> require(operation.sampling.copySourceInputTargetLocalI32().isEmpty.not())
+                // ColorFilter's W5f material row is issued by FrameSourceLayoutV4 after this
+                // provisional graph witness runs.  PlanPhysicalLayoutV1 seals that final binding.
+                is FilterPassOperationV1.ColorFilter -> Unit
                 is FilterPassOperationV1.MaskBlurStyle -> {
                     require(operation.blurredSampling != null)
                     require((operation.originalCoverageSource == null) == (operation.originalSampling == null))
@@ -203,6 +208,19 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
             }
         }
 
+        /** Compose binds the outer node to the immutable FilterTarget published by its inner node. */
+        private fun isContextualImageInput(
+            pass: PlanPass.FilterPass,
+            passes: List<PlanPass>,
+            producers: Map<PlanResourceId, Int>,
+            rows: Map<PlanResourceId, PlanResource>,
+        ): Boolean {
+            val boundSource = pass.evaluationKey.boundSourceId
+            if (rows.getValue(boundSource).role != PlanResourceRole.FilterTarget || pass.inputs().firstOrNull() != boundSource) return false
+            val producerIndex = producers[boundSource] ?: return false
+            return producerIndex < passes.indexOf(pass) && passes[producerIndex] is PlanPass.FilterPass
+        }
+
         private fun validatePass(
             pass: PlanPass.FilterPass,
             passes: List<PlanPass>,
@@ -237,11 +255,15 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                     occurrenceOwned(inputs.single())
                     require(!operation.copySourceInputTargetLocalI32().isEmpty)
                 }
+                is FilterPassOperationV1.ColorFilter -> {
+                    occurrenceOwned(inputs.single())
+                }
                 is FilterPassOperationV1.SeparableBlur -> {
                     val input = inputs.single()
                     val mask = operation.kind in setOf(FilterImplementationKindV1.MASK_COVERAGE_BLUR_X,
                         FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y)
-                    val materializedImageInput = isMaterializedImageInput(pass, passes, producers, rows)
+                    val materializedImageInput = isMaterializedImageInput(pass, passes, producers, rows) ||
+                        isContextualImageInput(pass, passes, producers, rows)
                     if (!materializedImageInput) occurrenceOwned(input)
                     val sourceRole = rows.getValue(key.boundSourceId).role
                     require((sourceRole == PlanResourceRole.CoverageSource) == mask &&

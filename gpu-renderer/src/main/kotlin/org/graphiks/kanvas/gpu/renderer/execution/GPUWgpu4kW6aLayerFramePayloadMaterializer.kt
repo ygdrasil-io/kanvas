@@ -104,12 +104,19 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             val graphTextureUniformIds = graph.passes().filterIsInstance<PlanPass.PictureSourcePass>()
                 .mapNotNull { it.graphTextureOperand?.uniformResource }.distinct()
             val maskMaterialsByUniform = maskShaderMaterials.values.groupBy { it.binding.uniformResource }
-            val sourceUniformBuffers = (graphTextureUniformIds + maskMaterialsByUniform.keys).distinct().associateWith { id ->
+            val colorFiltersByUniform = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
+                (pass.operation as? FilterPassOperationV1.ColorFilter)?.let { operation ->
+                    requireNotNull(operation.uniformResource) to operation
+                }
+            }.groupBy({ it.first }, { it.second })
+            val sourceUniformBuffers = (graphTextureUniformIds + maskMaterialsByUniform.keys + colorFiltersByUniform.keys).distinct().associateWith { id ->
                 val resource = frame.physical.resource(id)
                 require(resource.role == PlanResourceRole.SourceUniformData && resource.kind == PlanResourceKind.Buffer &&
                     resource.usages() == setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination))
                 val materials = maskMaterialsByUniform[id].orEmpty()
-                val canonicalBytes = materials.firstOrNull()?.stage?.uniformBytes
+                val canonicalBytes = materials.firstOrNull()?.stage?.uniformBytes ?: colorFiltersByUniform[id]?.firstOrNull()?.let { operation ->
+                    ByteArray(Math.toIntExact(resource.byteSize)).also { bytes -> operation.execution.copyDynamicBytes().copyInto(bytes) }
+                }
                 materials.forEach { material ->
                     require(material.binding.uniformOffsetBytesI64 == 0L &&
                         material.binding.uniformCapacityBytesI64 == resource.byteSize &&
@@ -123,6 +130,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 }
             }
             val graphTextureUniformBuffers = graphTextureUniformIds.associateWith(sourceUniformBuffers::getValue)
+            val colorFilterUniformBuffers = colorFiltersByUniform.keys.associateWith(sourceUniformBuffers::getValue)
             val storageBuffers = linkedMapOf<PlanResourceId, GPUW6bMaskShaderResourceV1.Buffer>()
             val imageLeases = linkedMapOf<PlanResourceId, GPUW5eDecodedImageSessionCache.Lease>()
             val runtimeLeases = linkedMapOf<PlanResourceId, GPUW5hRuntimeResourceSessionCache.Lease>()
@@ -588,6 +596,13 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     views.getValue(pass.inputs().single()), generation,
                                     W6A_VERTEX_SHADER + GPUW6cSpatialSamplingPass.fragment(operation), BlendPlan.LegacySrcOverV1,
                                     0, 0, outputExtent.width, outputExtent.height, pass, owned)
+                            }
+                            is FilterPassOperationV1.ColorFilter -> {
+                                require(pass.inputs().size == 1)
+                                val uniform = colorFilterUniformBuffers.getValue(requireNotNull(operation.uniformResource))
+                                renderOperands += colorFilterRender(stepIndex, views.getValue(pass.output),
+                                    views.getValue(pass.inputs().single()), uniform, generation, operation,
+                                    outputExtent.width, outputExtent.height, pass, owned)
                             }
                             is FilterPassOperationV1.SeparableBlur -> {
                                 require(operation.kind in setOf(
@@ -1328,6 +1343,56 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
     }
 
     /** Emits exactly one frozen source->target fullscreen render; no pass selection occurs here. */
+    private fun colorFilterRender(
+        stepIndex: Int,
+        target: GPUTextureView,
+        source: GPUTextureView,
+        uniform: GPUBuffer,
+        generation: GPUDeviceGenerationID,
+        operation: FilterPassOperationV1.ColorFilter,
+        widthI32: Int,
+        heightI32: Int,
+        pass: PlanPass,
+        owned: W6aOwnedHandles,
+    ): GPUPreparedNativeScopeOperand.Render {
+        val offset = operation.sampling.copyOutputToInputOffsetTargetLocalI32()
+        val wordsI32 = Math.toIntExact(maxOf(16L, operation.execution.dynamicByteCountI64) / 16L)
+        val shader = W6A_VERTEX_SHADER + """
+            @group(0) @binding(0) var w6c_color_source: texture_2d<f32>;
+            struct W5fMaterial { words: array<vec4<u32>, $wordsI32>, }
+            @group(0) @binding(1) var<uniform> w5fMaterial: W5fMaterial;
+            @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+                let source_position = vec2<i32>(position.xy) + vec2<i32>(${offset.x}, ${offset.y});
+                let source_extent = vec2<i32>(textureDimensions(w6c_color_source));
+                if (source_position.x < 0 || source_position.y < 0 || source_position.x >= source_extent.x || source_position.y >= source_extent.y) {
+                    return vec4<f32>(0.0);
+                }
+                let input = textureLoad(w6c_color_source, source_position, 0);
+                ${W5fColorOperationEmitterV1.emit(operation.execution.copyOperationGraph(), "input", 0L)}
+            }
+        """
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(
+            BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
+            BindGroupLayoutEntry(1u, GPUShaderStage.Fragment, buffer = BufferBindingLayout(
+                type = GPUBufferBindingType.Uniform, minBindingSize = requireNotNull(operation.uniformCapacityBytesI64).toULong())),
+        ))))
+        val pipeline = pipeline(shader, layout, w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(
+            BindGroupEntry(0u, source), BindGroupEntry(1u, BufferBinding(uniform, 0uL,
+                requireNotNull(operation.uniformCapacityBytesI64).toULong())),
+        ))))
+        return GPUPreparedNativeScopeOperand.Render(stepIndex,
+            GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation),
+                loadOperation = GPUPreparedNativeLoadOperation.Clear,
+                clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)),
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+                GPUPreparedNativeRenderCommand.SetScissor(0, 0, widthI32, heightI32),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0)),
+            ), w6aPassV1 = pass)
+    }
+
     private fun textureRender(
         stepIndex: Int,
         target: GPUTextureView,
