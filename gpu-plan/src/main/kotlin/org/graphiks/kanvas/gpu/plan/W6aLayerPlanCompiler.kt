@@ -260,7 +260,7 @@ public class W6aLayerPlanCompiler public constructor(
         }
     }
 
-    /** The W6b native arm admits only the frozen Task 3–6 image, mask, and shadow operations. */
+    /** The W6 native arm admits only frozen W6b operations and the Task 1 W6c Crop witness. */
     private fun frozenW6bNativeAdmission(graph: RenderGraph): RenderPlanResult<RenderGraph>? {
         val filters = graph.passes().filterIsInstance<PlanPass.FilterPass>()
         if (filters.isEmpty()) return null
