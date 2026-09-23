@@ -1,0 +1,155 @@
+# SDD ledger — plan: refactor/plans/2026-09-22-w6d-advanced-effects-implementation-plan.md
+
+Base W6c reviewed: `01295d15d986be3fbc8898ba80287c9a3c86d24c`; branch `codex/w6d-advanced-effects` created clean from it. Specs read: `2026-09-16-w6-layers-effects-design.md` and `2026-09-22-w6b-w6e-stacked-delivery-design.md`. Seven tasks remain, sequential Terra implementation and Sol task review; GPU-native 133/134 means UNKNOWN.
+
+## Preflight scan — cross-task dependencies
+
+| Tasks | Producer → consumer / shared owner | Finding |
+| --- | --- | --- |
+| 1→2 | F64 helpers, FilterPass arms, lowerer → sampling families | Ordered; W6c graph is sole physical owner. |
+| 1→3 | Lighting arm and immutable parameters → six lighting families | Ordered; no second operation hierarchy. |
+| 1→4 | Picture arm/target contract → SceneSnapshot execution | Ordered; wire identity stays with render-ir. |
+| 1→5 | Multi-ABI catalog/RuntimeImageOpacity arm → built-in execution | Ordered; W5h hash must remain unchanged. |
+| 1→6 | FilterPass/target contract → backdrop and filtered previous | Ordered; copy/snapshot reuse W6 graph. |
+| 1→7 | Frozen contracts/resources → budget and stack gate | Ordered; B/B−1 must include all later additions. |
+| 2→3 | `EffectNode`, W6 graph/materializer → lighting | Sequential edits; avoid duplicate materializer authority. |
+| 2→4 | `EffectNode`, capture, W6 graph/materializer → Picture | Sequential edits; same occurrence binding. |
+| 2→5 | W6 graph/materializer → RuntimeImageOpacity | Sequential edits; same FilterPass type. |
+| 2→6 | `W6aLayerGraphConstruction`/materializer → save ordering | Sequential edits; source sampling does not reorder children. |
+| 2→7 | Resource/target accounting → final budget gate | Task 7 audits all sampling resources. |
+| 3→4 | `EffectNode` and filter graph → Picture | Sequential; SceneSnapshot is not a lighting input. |
+| 3→5 | `EffectNode` and filter graph → runtime | Sequential; distinct operation arms. |
+| 3→6 | Graph/materializer → backdrop ordering | Sequential; lighting may consume backdrop result. |
+| 3→7 | Lighting uniforms/targets → final accounting | Task 7 includes six families. |
+| 4→5 | Picture tests, `EffectNode`, archive/catalog path → runtime wire | Task 5 extends Task 4's Picture witness, not another schema. |
+| 4→6 | Picture replay + W6 layer graph → backdrop/previous wire | Task 6 extends Task 4 witness; snapshot identities preserved. |
+| 4→7 | Picture source/leases → final budget/wire gate | Task 7 charges recursive scene resources. |
+| 5→6 | RuntimeImageOpacity input + W6 layer graph → filtered backdrop/previous | Task 6 may use Task 5 built-in as discriminating filter. |
+| 5→7 | Runtime program/uniform resources → final budget | Task 7 includes catalog ABI/hash preservation. |
+| 6→7 | Snapshot/copy passes, layer scopes → final budget/recovery | Task 7 validates save-time order and atomicity. |
+
+## Preflight scan — each task against itself
+
+| Task | Tests vs implementation / files vs later touches | Finding |
+| --- | --- | --- |
+| 1 | Catalogue public test, pure math, operation arms, graph validation; later Tasks 2–6 execute arms | `RectF64.translateF64OrNull` and `.intersectF64OrNull` already exist in `RectProjectionF64.kt`; duplicate signatures in illustrative Task 1 snippet would not compile. |
+| 2 | Public sampling/oracles precede capture-plan-native; later Task 7 re-runs shard | Coherent; independent oracle must remain test-only. |
+| 3 | Six lighting public cases and oracle precede graph/native; Task 7 re-runs | Coherent; no hidden color-space conversion. |
+| 4 | Picture filter memory/wire + mutation evidence precede scene snapshot graph | Coherent; Task 5 later extends its test file. |
+| 5 | Additive registered IMAGE_FILTER and W5h preservation | Coherent; descriptor key must include ABI hash. |
+| 6 | Backdrop/previous save order public witness before graph/native | Coherent; Task 7 later budgets snapshots. |
+| 7 | B/B−1, F16 refusal, preservation, final review and PR | Coherent; native UNKNOWN is documented separately from XML. |
+
+Ruling: Reuse existing `RectF64.translateF64OrNull` and `RectF64.intersectF64OrNull` in `math/geometry/.../RectProjectionF64.kt`; add only missing pure F64 helpers. — The spec requires math ownership, not duplicate extension declarations, and Kotlin signatures already exist. — If wrong, Task 2 may need an overload or semantic change, which must be reviewed against the existing callers.
+
+Ruling: Task 1 adds immutable operation contracts and multi-ABI catalog but does not claim positive advanced rendering until Tasks 2–6; any temporarily non-executable operation arm must fail precisely before publication, never route to legacy or create a second graph. — The spec mandates vertical slices and one authority while later tasks own execution. — If wrong, Task 1's public API could expose a non-executable registered effect before Task 5; task review must check this boundary.
+
+Task 1: implementer DONE at `ffe7e3d8b` from base `01295d15d`; public catalogue RED→GREEN 1/1, W5h catalogue 6/6, math/render-ir/gpu-plan/gpu-renderer compilation success. Native not exercised (UNKNOWN). Sol task review pending on `review-01295d15d..ffe7e3d8b.diff`.
+
+Task 1: Sol task review ❌ Important — `Lighting` family/parameter validation uses `||` on mismatched cases and can accept a wrong pair (`DISTANT_DIFFUSE` + `Point`). Fix round 1/5 requested from original Terra implementer; base `ffe7e3d8b`.
+
+Task 1: fix round 1/5 (1 addressed, 0 open — Lighting family/type exact match; commit `a48d5c36b`). Sol scoped re-review clean; no new breakage.
+Task 1: complete (commits `01295d15d..a48d5c36b`, review clean). Public W6d catalogue 1/1, W5h catalogue 6/6, relevant module compiles 0; no native W6d work yet, UNKNOWN.
+
+Task 2: implementer DONE_WITH_CONCERNS at `ba7e7e6c8` from base `a48d5c36b`. Three public REDs were W6c unsupported-family refusals; GREEN XML advanced sampling 3/3 and W6a bounds preservation 10/10, gpu-plan/gpu-renderer compiles 0. Both GPU workers exit 133 after assertions, native UNKNOWN. Magnifier mismatch traced to pixel-center tie; agent changed fixture without widening oracle tolerance. Sol task review pending on `review-a48d5c36b..ba7e7e6c8.diff`.
+
+Task 2: Sol review ❌ Important ×3 — MatrixConvolution ignores frozen tileMode at edges; Magnifier witness does not discriminate inset; shader WGSL/program chosen in materializer after graph freeze. Fix round 1/5 requested from original Terra implementer, base `ba7e7e6c8`. Program-freeze issue is load-bearing for later W6d tasks.
+
+Task 2: Ruling: Extend the existing W6 operation with a backend-neutral frozen program/binding descriptor (stable program/recipe ID, arity, specialization facts and uniform resource/offset/budget where needed), then let the renderer only materialize that descriptor into native WGSL and bind the frozen operands. Do not put WGSL in `:gpu-plan` or add a second graph/allocator. — The spec requires both backend-neutral planning and program choice before freeze; raw WGSL in the planner violates the former, materializer choosing by live operation values violates the latter. — If wrong, this descriptor may need a later Task 7 ABI/resource migration and a wider shader-catalog refactor.
+
+Task 2: Terra fix attempt BLOCKED before commit: a strict per-family uniform-buffer design would span ResourceSpec/lifetime/budget/layout/upload. RED public tile-mode and inset-discriminating witness are left as five dirty task files; no destructive cleanup. Ruling: Escalate only the frozen-program binding subproblem to a fresh Astra implementer; allow a backend-neutral immutable specialization recipe/ID consumed deterministically by renderer, without a new uniform buffer if all parameters and bindings are frozen and budgeted. — This preserves one graph while bounding Task 2; if wrong, Task 7 must refactor program accounting or the final review will block the branch.
+
+Task 2: Astra fix commit `f930cdfdb` from `ba7e7e6c8`: typed frozen recipe/program ID/binding on existing FilterPass, four convolution tile modes, inset-discriminating public witness. W6d XML 5/5 and W6a preservation 10/10; gpu-plan/gpu-renderer compiles 0; native workers exit 133 UNKNOWN. Sol scoped re-review pending on `review-ba7e7e6c8..f930cdfdb.diff`.
+
+Task 2: fix round 1/5 (3 addressed, 0 open — tileMode, frozen program binding, inset witness; commit `f930cdfdb`). Sol scoped re-review clean; no new breakage.
+Task 2: complete (commits `a48d5c36b..f930cdfdb`, review clean). Exact W6d sampling XML 5/5, W6a bounds XML 10/10, module compiles 0, native UNKNOWN.
+
+Task 3: Terra implementer BLOCKED before code or test, base `f930cdfdb`: public/captured lighting API is 2D but Skia's six lighting families require 3D light/target vectors, alpha-derived normals, and specified diffuse/specular/spot equations. Existing `GPULighting.kt` is legacy and not a W6 authority. Report `task-3-report.md`. No RED/GREEN claim. This is an architectural scope upgrade: public API/IR/wire and numerical semantics require an approved design amendment before implementation; Task 4 is not dispatched while Task 3 remains load-bearing.
+
+Task 3 design resumed: user approved breaking 3D-only API, explicitly rejected a retained 2D overload, requested an Astra review and execution after correction. Spec `refactor/specs/2026-09-23-w6d-lighting-3d-design.md` committed at `49254f8`, Astra review found four Important ambiguities (Z/surfaceScale mapping, finite admission domains, undefined normalization/power, per-edge Sobel bounds), all independently checked against pinned Skia sources and corrected at `0edbe98`. Existing plan amended at `e5ce423`; Task 3 now has a contract checkpoint before causal pixel RED and Task 4 consumes Picture 15/schema 9.
+
+## Task 3 amended preflight
+
+| Tasks | Producer → consumer / shared owner | Finding |
+| --- | --- | --- |
+| 2→3 | Frozen W6d sampling recipe/binding → lighting recipe | Same `FilterPass` and target graph; Task 3 extends typed recipe, not materializer selection. |
+| 3→4 | Picture 15/schema 9, 3D IR/archive → Picture filter replay | Ordered; Task 4 explicitly consumes new writer and old non-lighting readers. |
+| 3→5 | 3D archive and filter graph → runtime image opacity | Distinct node tags/arms; no W5h descriptor/hash change. |
+| 3→6 | Lighting graph/materializer → backdrop and previous | Same save/restore order; no second attachment sampling. |
+| 3→7 | Lighting program/target resources → final budget/recovery | Task 7 must count all frozen recipe resources. |
+| 3 self | Public 3D API, math mapping, schema 9, pixel oracle, then task review | Contract migration compiles before causal RED; no compile failure mislabeled as RED. Historical v14 lighting fixture must be captured before changing the constructor. GM source migration stays out of scope. |
+| 4 self | SceneSnapshot wire test and filter execution | Old Picture 14/schema 8 wording replaced by 15/schema 9 after Task 3. |
+
+Ruling: Task 3 changes the six lighting signatures to `Point3F32`/`Vector3F32` without source-level 2D compatibility; old 2D lighting wire tags are explicitly rejected, while non-lighting old scenes remain decodable. — User authorized breaking changes in incubation and the spec forbids invented Z. — If wrong, external incubating callers and old lighting Pictures require explicit migration rather than silent replay.
+
+Ruling: Keep `integration-tests/skia` GM sources outside the W6d patch even if the breaking API leaves their separate module's compile gate pending; record that migration as an integration follow-up, with no GM runs or score changes. — The W6 scope explicitly excludes GMs. — If wrong, a future full-repo compile may remain blocked until the separately scoped GM source migration.
+
+Task 3: resumed with fresh Terra implementer `/root/w6d_task3_3d_lighting_terra`, BASE `e5ce423ab9d18987610b5b7021dbb02745f5e729`, brief `task-3-brief.md`, report `task-3-report.md`; no parallel implementation task is dispatched.
+
+Task 3: partial contract checkpoint `cf57e09d2` from BASE `e5ce423ab` — public 3D API, 3D IR/canonical IDs, Picture 15/schema 9, old 2D-lighting fail-closed, public Picture selector XML 2/0/0/0, render-ir and kanvas test compiles 0. No lighting pixel/renderer claim. Implementer returned `PARTIAL` outside the status contract; resumed the same Terra agent with explicit remaining Steps 2 and 4–7. Its report also notes `:render-ir:compileTestKotlin` failure at unchanged `MaterialNodeTest.kt:132`; this does not block the listed Kanvas/gpu-plan/gpu-renderer selectors, and has not been claimed green.
+
+Task 3: Terra math checkpoint `e39fd6c2b` adds checked affine 3D point/vector/Z mapping in `:math`; `:math:matrix:compileKotlinJvm` exit 0. The original six-family Task 3 remained too large and was reported BLOCKED after these two completed commits. No positive lighting pixel or renderer gate is claimed.
+
+Ruling: Split the original Task 3 after its two code checkpoints into revised Task 3 (contract/wire/math), Task 31 (distant-diffuse public vertical pixel path), and Task 32 (other five lighting families, edge/refusal/replay variants), then resume Task 4. — The user authorized continuous W6d execution after Astra correction; the Terra implementer identified task size, not an unresolved design decision, as the block. Each slice has its own causal RED, GREEN and Sol review gate, while the single W6 FilterPass graph remains the only authority. — If wrong, a family interaction discovered in Task 32 may force Task 31's recipe/program interface to be revised and reviewed again. Plan amendment commit `77c12f8`.
+
+## Amended Task 3/31/32 preflight
+
+| Tasks | Producer → consumer / shared owner | Finding |
+| --- | --- | --- |
+| 3→31 | Public 3D nodes, Picture 15/schema 9, `LayerMappingF64` helpers → distant diffuse | Ordered; Task 3 has no positive pixel claim, so Task 31 owns causal RED and first frozen lighting recipe. |
+| 3→32 | Point/spot 3D capture and mapped Z → five more families and Picture replay | Ordered; Task 32's pixel/replay selector cannot be required by Task 3's wire-only gate. |
+| 31→32 | Distant recipe, Sobel sampling and one FilterPass path → five family recipes | Sequential edits to the same planner/materializer; Task 32 must not introduce a second graph. |
+| 31/32→4 | Picture 15/schema 9 and lighting FilterPass → SceneSnapshot filter | Ordered; Task 4 consumes the finalized wire and renderer route. |
+| 31/32→7 | Program IDs, targets, halos and uniforms → final budget | Task 7 audits all six families after Task 32. |
+| 3 self | Historical fixture, 3D contract, mapping and wire-only tests | Coherent under revised outcome; positive pixels deferred explicitly. |
+| 31 self | Distant public oracle RED, plan freeze, materializer GREEN, review | Second same-XY/different-Z distant witness added; both halo edge modes and transparent-black output named. |
+| 32 self | Five-family RED, full oracle and admission/replay variants | Coherent; consumes the Task 31 path and adds no second FilterPass. |
+
+Task 3: Sol review ❌ Important — `W6dLightingPictureTest` lacks public `Picture.ops` comparison for two Z values and a historical non-lighting Picture decode fixture. Fix round 1/5 requested from original Terra implementer; review HEAD `e39fd6c2b`. Reviewer ⚠️ cannot verify explicit DAG sharing and old non-lighting reader preservation from the diff/report; resolve via focused existing tests or the new historical fixture before completion. Deferred minors: focused math behavior for shear/perspective/singular/overflow not yet tested; stale v14 comments in SceneArchiveCodec; existing Gradle warning noise.
+
+Task 3: fix round 1/5 (historical non-lighting fixture addressed; two-Z public `Picture.ops` distinction still open; commit `5721fc680`). Scoped Sol re-review found no new breakage but NOT ADDRESSED overall: test compares `first.ops` to decoded `first.ops`, and Z difference only in wire bytes. W6b explicit DAG-sharing selector XML 2/0/0/0 and W6d Picture XML 2/0/0/0; this resolves the previous ⚠️ custody. Fix round 2/5 requested.
+
+Task 3: fix round 2/5 (1 addressed, 0 open — distinct public `Picture.ops` for distinct Z; commit `5048d9c9d`). Scoped Sol re-review clean, no new breakage. W6d Picture XML 2/0/0/0; native not run/UNKNOWN. Task 3: complete (code commits `e5ce423ab..e39fd6c2b`, test fixes `5721fc680` and `5048d9c9d`, review clean). Deferred minors remain for final whole-branch triage; no GPU lighting claim.
+
+Task 31: fresh Terra implementer `/root/w6d_task31_distant_terra` dispatched from BASE `5048d9c9d0025ed266c9850bb6e1014507493bac`; brief `task-31-brief.md`, report `task-31-report.md`. Task 32 and Task 4 remain undispatched until Task 31 Sol review is clean.
+
+Ruling: Task 31 may modify `gpu-plan/.../W6bFilterGraphConstruction.kt` in addition to the illustrative file list, to extend `freezeImageOccurrence`, the existing sole FilterPass construction hook; the four Sobel edge modes belong in the existing typed W6d frozen recipe. — `W6aLayerGraphConstruction` delegates image occurrences to that hook, so excluding it would keep lighting refused or force a parallel planning authority. — If wrong, Task 32 may need to reorganize where the shared recipe is constructed, but no second graph or renderer-side decision is authorized.
+
+Task 31: Terra implementer DONE_WITH_CONCERNS at `ea4e13dab` from BASE `5048d9c9d`, with doc-only plan correction `40671cab1` in range. Public RED 3/3 failures were prior W6b `unsupported_family` semantic refusals; GREEN XML distant lighting 3/0/0/0 and W6a restore preservation 9/0/0/0. `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin`, `:kanvas:compileTestKotlin` exits 0. Both native workers exited 133: UNKNOWN, not full green. Sol task review pending on `review-5048d9c9d..ea4e13dab.diff`.
+
+Task 31: Sol review ❌ Important ×2 — `DistantLitDiffuse(Crop(...))` uses child desiredOutput instead of consumer demand, losing unbounded transparent-black output; direct lighting computes but discards terminal clip before freezing desiredOutput, overallocating a full parent target. Fix round 1/5 requested from original Terra implementer, review HEAD `ea4e13dab`. Reviewer ⚠️ unchanged global budget/lifetime validation cannot be established from task diff; controller will verify a focused path after the fix. Native 133 stays UNKNOWN.
+
+Ruling: `PlanPasses.kt` and `GPUW6aEncoderScopesV1.kt` were listed as modify files in the Task 31 brief, but their existing generic `FilterPass` code already selects a frozen binding and encodes it without a new hunk; inspect them as dependencies rather than make no-op changes. — The architectural spec binds the behavior, not gratuitous edits, and the reviewer confirmed the existing paths at `PlanPasses.kt:1267` and `GPUW6aEncoderScopesV1.kt:35`. — If wrong, a later family may require a real encoder or validation change in Task 32, which must then be tested and reviewed.
+
+Task 31: controller resolved review ⚠️ about unchanged global resource validation via focused read-only path: `W6bFilterGraphConstruction.resource(FilterTarget)` creates specs; `W6aLayerGraphConstruction.kt:2102–2124` seals every frozen filter spec as a frame-local resource and calls `W6aLayerPlanBudget.peak`; that budget compares both `RenderGraph.peak` and the checked physical sum to `maxFrameLocalBytes`; `W6aLayerGraphValidation.kt:334–360` validates FilterPass output role, render/sample usages, extent and publication; `RenderGraph.kt:538–571,634` validates resource lifetimes and peak. No separate unbudgeted W6d target path found. The two geometry findings are still a real risk until scoped re-review passes.
+
+Task 31: Terra fix round 1/5 commit `60597a695` from review HEAD `ea4e13dab`; public RED 2/5 (Crop output pixel and clip/budget refusal), GREEN XML W6d 5/0/0/0, W6a preservation 9/0/0/0, gpu-plan and kanvas-test compiles 0. Native exits 133 UNKNOWN. Scoped Sol re-review pending on `review-ea4e13dab..60597a695.diff`.
+
+Task 31: scoped Sol re-review round 1/5 — consumer demand NOT ADDRESSED for `Compose(inner=Crop, outer=DistantLitDiffuse)`; direct clip budget finding ADDRESSED; new Important ×2: clipping physical source removes Sobel halo outside output clip, and null clip intersections now reject an occurrence that should become `sealedNoOp`. Fix round 2/5 requested from original Terra implementer; no Task 32 dispatch. Native remains UNKNOWN.
+
+Task 31: fix round 2/5 (3 addressed, 0 open — Compose consumer, Sobel halo outside terminal clip, disjoint clip sealedNoOp; commit `fe0e3c739`). Public RED 3/8 failures, GREEN W6d XML 8/0/0/0 and W6a restore XML 9/0/0/0; gpu-plan/kanvas-test compiles 0. Scoped Sol re-review clean, no new breakage. Task 31: complete (commits `5048d9c9d..fe0e3c739`, review clean). Native exits 133 remain UNKNOWN.
+
+Ruling: Carry the Sol out-of-scope observation about `ColorFilter(DistantLitDiffuse(...))` terminal demand into Task 32 as a named public composition witness and planner correction, rather than reopen a clean scoped Task 31 fix diff. — `hasDistantDiffuseTerminal` currently traverses Compose but not ColorFilter, so a wrapping ColorFilter can still re-bound lighting on transparent black; Task 32 already extends the same shared planner for all six families and must make consumer demand compositional. — If wrong, the added test may show a different ColorFilter alpha contract or require a deeper W6 bounds refactor, which would be reviewed before Task 4.
+
+Task 32: fresh Terra implementer `/root/w6d_task32_lighting_terra` dispatched from BASE `51536252662a4cf2d5a5a5ac58964c07dc59987b` (plan addendum commit); brief `task-32-brief.md`, report `task-32-report.md`. No Task 4 implementation concurrently.
+
+Task 32: Terra implementer BLOCKED before commit. Public five-family RED was prior W6b `unsupported_family` refusal; prototype extends the existing frozen FilterPass/recipe and compiles `:gpu-plan:compileKotlin` and `:gpu-renderer:compileKotlin`, but public XML remains red `channel 0 expected=175 actual=121` during the five-family oracle loop, native exit 133 UNKNOWN. Remaining unstarted: admission/refusal/recovery variants, ColorFilter demand, Picture replay. Dirty prototype preserved (10 task files, no destructive cleanup). Do not dispatch Task 4 or claim Task 32 done. Controller begins systematic root-cause investigation and will split the oversized task after identifying the numeric mismatch.
+
+Task 32 root cause (systematic debugging, read-only Terra diagnostic `/root/w6d_task32_spot_root_cause`): the first `175/121` mismatch is `DISTANT_SPECULAR` pixel (0,0), not spot. The independent oracle incorrectly applies point `location−surface` to all families; the planner/shader correctly use distant direction. For fixture N≈(-.514496,-.514496,.685994), L=normalize(1,0,1), H≈(.382683,0,.923880), dot(N,H)^2≈.190870364 → sRGB R≈121, linear alpha≈49. Oracle also encodes specular alpha in sRGB, incorrectly expecting 121 rather than 49. Separately, pinned Skia `SkKnownRuntimeEffects.cpp` uses `pow(cosAngle,falloff) * edgeRamp`; both current oracle and WGSL use `pow(edgeRamp,falloff)`, so spot diffuse fixture should be ~180, not 197. No code changed during diagnosis; prototype remains dirty. This closes the numeric ambiguity, not the Task 32 implementation.
+
+Ruling: Split blocked original Task 32 into revised Task 32 (five-family numeric core, mapped geometry, independent pixels) and new Task 33 (finite-domain/degenerate/refusal/recovery, ColorFilter composition, Picture replay); both require separate Sol review before Task 4. Preserve the uncommitted prototype and resume its original Terra implementer for Task 32 with the identified causes, then use a fresh Terra for Task 33. — The prototype compiles and the blocker was a false-red oracle plus a separate spot-equation defect, while the original task also bundled a large acceptance/replay gate. Isolating numeric correctness prevents incorrect pixels being hidden by later tests. — If wrong, Task 33 may reveal a validation/edge interaction requiring revision and re-review of the Task 32 shader or planner. Plan amendment pending commit.
+
+## Task 32/33 amended preflight
+
+| Tasks | Producer → consumer / shared owner | Finding |
+| --- | --- | --- |
+| 31→32 | Distant recipe/Sobel/FilterPass → five mapped light recipes | Ordered; one target graph and materializer, no second authority. |
+| 32→33 | Six-family numeric pixels/program IDs → boundary/recovery/wire | Ordered; public oracle baseline must be correct before admission/replay variants. |
+| 33→4 | Picture 15/schema 9 lighting replay → Picture filter SceneSnapshot | Ordered; Task 4 sees stable wire and renderer behavior. |
+| 32/33→7 | Six lighting resources/targets/refusals → final budget | Task 7 audits B/B−1 after all family resources. |
+| 32 self | One named public witness per new family, distant/point distinction, spot falloff and linear alpha | Corrects false RED and adds causal spot RED before shader fix; no full admission claim. |
+| 33 self | Signed/exponent/degenerate/admission tests plus wrapper demand and Picture replay | Tests precede smallest production correction, preserves old readers and same-surface recovery. |
+
+Task 32 amended plan commit `06cf9c2de`; refreshed briefs `task-32-brief.md` (25 lines) and `task-33-brief.md` (24 lines). Original Terra implementer `/root/w6d_task32_lighting_terra` resumed with the root-cause details and narrower numeric-only Task 32; dirty prototype retained as intentional in-scope work. Task 33 is not dispatched until Task 32 Sol review passes.
+
+Task 32 affine continuation on HEAD `1bc176d30`: added a separately named public Render+Readback point-diffuse witness using `Canvas.setMatrix(diag(2,3)+(5,7))`. The affine maps `(1,0,1)` to device `(7,7,2.5)` and `surfaceScale=1` to `2.5`; the source layer origin is `(5,7)`, so the oracle correctly uses layer coordinates `(2,0,2.5)`. Initial oracle mixed device and layer coordinates (pixel channel 0 `expected=140 actual=237`); rebasing the oracle corrected this false RED without a production change. Separate oracle discriminants for mapped XY, light Z and surfaceScale all differ from their unmapped variants; the affine witness passes. Final sequential gates: gpu-plan compile 0, gpu-renderer compile 0, kanvas test compile 0. W6d console lists all 15 methods PASS, but its class XML is absent after worker exit 133; aggregate XML is `tests=1 failures=1 errors=0 skipped=0` for that process failure. W6a restore class XML is `tests=9 failures=0 errors=0 skipped=0`; aggregate XML likewise reports the worker exit 133 (`tests=1 failures=1 errors=0 skipped=0`). Native status is `UNKNOWN`, separate from method assertions. Task32 remains subject to Sol review; Task33 was not started.

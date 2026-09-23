@@ -13,6 +13,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point3F32
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.vector.Vector3F32
 import org.junit.jupiter.api.Test
 
@@ -34,6 +35,51 @@ class W6dLightingSurfacePixelTest {
         assertFalse(near.contentEquals(far), "The independent point-light oracle must distinguish Z at fixed XY.")
         assertPointFamilyNear(near, Point3F32(1f, 0f, 1f))
         assertPointFamilyNear(far, Point3F32(1f, 0f, 100f))
+    }
+
+    @Test
+    fun `point diffuse maps location Z and surface scale through affine canvas matrix`() {
+        // The affine maps the parameter point to device (7,7,2.5). The source layer starts
+        // at device (5,7), so the frozen layer-space oracle location is rebased to (2,0,2.5).
+        val alpha = FloatArray(15 * 16)
+        listOf(7 to 7, 5 to 10, 7 to 10, 7 to 13).forEach { (left, top) ->
+            for (y in top until top + 3) for (x in left until left + 2) alpha[y * 15 + x] = 1f
+        }
+        val expected = W6dLightingCpuOracle.remainingFamilyRgba8(
+            W6dLightingCpuOracle.Family.POINT_DIFFUSE, 15, 16, alpha,
+            locationX = 2f, locationY = 0f, locationZ = 2.5f,
+            surfaceDepth = 2.5f, coefficient = 1f,
+        )
+        val unmapped = W6dLightingCpuOracle.remainingFamilyRgba8(
+            W6dLightingCpuOracle.Family.POINT_DIFFUSE, 15, 16, alpha,
+            locationX = 1f, locationY = 0f, locationZ = 1f,
+            surfaceDepth = 1f, coefficient = 1f,
+        )
+        val withoutMappedZ = W6dLightingCpuOracle.remainingFamilyRgba8(
+            W6dLightingCpuOracle.Family.POINT_DIFFUSE, 15, 16, alpha,
+            locationX = 2f, locationY = 0f, locationZ = 1f,
+            surfaceDepth = 1f, coefficient = 1f,
+        )
+        val withoutMappedXY = W6dLightingCpuOracle.remainingFamilyRgba8(
+            W6dLightingCpuOracle.Family.POINT_DIFFUSE, 15, 16, alpha,
+            locationX = 1f, locationY = 0f, locationZ = 2.5f,
+            surfaceDepth = 2.5f, coefficient = 1f,
+        )
+        assertFalse(expected.contentEquals(unmapped), "The fixture must distinguish mapped parameters and surface depth.")
+        assertFalse(expected.contentEquals(withoutMappedZ), "The fixture must distinguish mapped light Z and surfaceScale.")
+        assertFalse(expected.contentEquals(withoutMappedXY), "The fixture must distinguish mapped light XY.")
+
+        val surface = Surface(15, 16)
+        surface.canvas {
+            setMatrix(Matrix3x3F32(sx = 2f, sy = 3f, tx = 5f, ty = 7f))
+            saveLayer(SaveLayerRec(paint = Paint(imageFilter = ImageFilter.PointLitDiffuse(
+                Point3F32(1f, 0f, 1f), ColorARGB.White, 1f, 1f), antiAlias = false)))
+            listOf(1 to 0, 0 to 1, 1 to 1, 1 to 2).forEach { (x, y) ->
+                drawRect(RectF32.ofLTRB(x.toFloat(), y.toFloat(), x + 1f, y + 1f), Paint(ColorARGB.White, antiAlias = false))
+            }
+            restore()
+        }
+        assertFamilyNear(expected, surface.render(), maxChannelDelta = 2)
     }
 
     @Test
