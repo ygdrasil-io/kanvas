@@ -2,6 +2,31 @@
 
 ## Statut
 
+### Quatrième correction W6c — conservation du domaine imbriqué chevauchant
+
+La relecture Sol de `b09ed9d145c079f6351b6823dd31ca84708477e7` a retenu un
+dernier variant Important : le bornage d'un `Tile` imbriqué encore chevauchant
+pouvait tronquer la demande nécessaire à son parent `Compose`. La correction
+`164b8ad2c518431ba74bfa512f558a21bc1f6cb2` réserve donc strictement le
+bornage par consumer (et le texel no-op) au root terminal de l'occurrence. Les
+nœuds non-root `Crop`/`Tile`/`Offset` conservent leur domaine public complet ;
+le root garde le bornage et le no-op scellé déjà qualifiés. Cette règle ferme
+également le cas `Compose(Offset(-500), Tile([0,1), [0,501)))`, qui doit
+produire le bleu et non une transparence tronquée.
+
+Le RED public isolé était ce witness chevauchant, transparent avant la
+correction, ainsi que sa variante `[0,1e9)` qui ne refusait plus au budget. Le
+GREEN XML frais `W6cSpatialBoundsSurfaceTest` est 15/0/0/0 : le petit witness
+lit le bleu, le grand refuse avant mutation avec
+`w6b.filter.frame_budget_exceeded`, préserve le sentinel et recouvre sur la
+même `Surface`. Les compilations `:gpu-plan:compileKotlin`,
+`:gpu-renderer:compileKotlin` et `:kanvas:compileTestKotlin` sortent 0. Les
+préservations console Compose 4/4 et Picture 3/3 passent, mais leurs workers
+natives quittent ensuite en 133 : elles restent **UNKNOWN**, sans claim
+native, ISO ou globale. La conclusion antérieure de conservation complète des
+nœuds imbriqués est donc remplacée par cette fermeture explicite du variant
+chevauchant.
+
 ### Troisième correction W6c — fermeture nested bounds et clip terminal complexe
 
 La relecture Sol de `59feb52bb2750d94fd7394ce933699876a994e71` a identifié deux
