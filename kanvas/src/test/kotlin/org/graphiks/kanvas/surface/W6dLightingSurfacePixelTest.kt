@@ -11,12 +11,44 @@ import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.Point3F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.vector.Vector3F32
 import org.junit.jupiter.api.Test
 
 /** Public Render+Readback witnesses for the first executable W6d lighting slice. */
 class W6dLightingSurfacePixelTest {
+    @Test
+    fun `point diffuse matches independent oracle`() = assertRemainingFamily(
+        W6dLightingCpuOracle.Family.POINT_DIFFUSE,
+        ImageFilter.PointLitDiffuse(Point3F32(1f, 0f, 1f), ColorARGB.White, 1f, 1f),
+    )
+
+    @Test
+    fun `spot diffuse uses Skia falloff before cone edge ramp`() = assertRemainingFamily(
+        W6dLightingCpuOracle.Family.SPOT_DIFFUSE,
+        ImageFilter.SpotLitDiffuse(Point3F32(1f, 0f, 1f), Point3F32(1f, 0f, 0f), 1f, 90f, ColorARGB.White, 1f, 1f),
+    )
+
+    @Test
+    fun `distant specular uses distant direction and linear alpha`() = assertRemainingFamily(
+        W6dLightingCpuOracle.Family.DISTANT_SPECULAR,
+        ImageFilter.DistantLitSpecular(Vector3F32(1f, 0f, 1f), ColorARGB.White, 1f, 1f, 2f),
+        expectedTopLeft = ubyteArrayOf(121u, 121u, 121u, 49u),
+    )
+
+    @Test
+    fun `point specular matches independent oracle`() = assertRemainingFamily(
+        W6dLightingCpuOracle.Family.POINT_SPECULAR,
+        ImageFilter.PointLitSpecular(Point3F32(1f, 0f, 1f), ColorARGB.White, 1f, 1f, 2f),
+    )
+
+    @Test
+    fun `spot specular matches independent oracle`() = assertRemainingFamily(
+        W6dLightingCpuOracle.Family.SPOT_SPECULAR,
+        ImageFilter.SpotLitSpecular(Point3F32(1f, 0f, 1f), Point3F32(1f, 0f, 0f), 1f, 90f, ColorARGB.White, 1f, 1f, 2f),
+    )
+
     @Test
     fun `distant diffuse matches independent alpha-normal oracle and preserves Z`() {
         val alpha = floatArrayOf(
@@ -172,6 +204,27 @@ class W6dLightingSurfacePixelTest {
             restore()
         }
         return surface.render()
+    }
+
+    private fun assertRemainingFamily(
+        family: W6dLightingCpuOracle.Family,
+        filter: ImageFilter,
+        expectedTopLeft: UByteArray? = null,
+    ) {
+        val alpha = floatArrayOf(0f, 1f, 0f, 1f, 1f, 0f, 0f, 1f, 0f)
+        val expected = W6dLightingCpuOracle.remainingFamilyRgba8(family, 3, 3, alpha,
+            locationX = 1f, locationY = 0f, locationZ = 1f, targetX = 1f, targetY = 0f, targetZ = 0f,
+            surfaceDepth = 1f, coefficient = 1f, shininess = 2f, specularExponent = 1f, cutoffDegrees = 90f)
+        expectedTopLeft?.let { assertContentEquals(it, expected.copyOfRange(0, 4)) }
+        val surface = Surface(3, 3)
+        surface.canvas {
+            saveLayer(SaveLayerRec(paint = Paint(imageFilter = filter, antiAlias = false)))
+            listOf(1 to 0, 0 to 1, 1 to 1, 1 to 2).forEach { (x, y) ->
+                drawRect(RectF32.ofLTRB(x.toFloat(), y.toFloat(), x + 1f, y + 1f), Paint(ColorARGB.White, antiAlias = false))
+            }
+            restore()
+        }
+        assertFamilyNear(expected, surface.render(), maxChannelDelta = 2)
     }
 
     private fun assertFamilyNear(expected: UByteArray, actual: RenderResult, maxChannelDelta: Int) {

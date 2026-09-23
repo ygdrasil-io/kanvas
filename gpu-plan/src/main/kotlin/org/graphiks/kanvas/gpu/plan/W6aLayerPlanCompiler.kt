@@ -306,8 +306,16 @@ public class W6aLayerPlanCompiler public constructor(
             is FilterPassOperationV1.DisplacementMap,
             is FilterPassOperationV1.Magnifier,
             -> true
-            is FilterPassOperationV1.Lighting -> operation.family == LightingFamilyV1.DISTANT_DIFFUSE &&
-                pass.frozenSamplingProgram?.program?.programId == W6dSamplingProgramIdV1.DISTANT_DIFFUSE_RGBA8_V1
+            is FilterPassOperationV1.Lighting -> pass.frozenSamplingProgram?.program?.let { program ->
+                when (operation.family) {
+                    LightingFamilyV1.DISTANT_DIFFUSE -> program.programId == W6dSamplingProgramIdV1.DISTANT_DIFFUSE_RGBA8_V1
+                    LightingFamilyV1.POINT_DIFFUSE -> program.programId == W6dSamplingProgramIdV1.POINT_DIFFUSE_RGBA8_V1
+                    LightingFamilyV1.SPOT_DIFFUSE -> program.programId == W6dSamplingProgramIdV1.SPOT_DIFFUSE_RGBA8_V1
+                    LightingFamilyV1.DISTANT_SPECULAR -> program.programId == W6dSamplingProgramIdV1.DISTANT_SPECULAR_RGBA8_V1
+                    LightingFamilyV1.POINT_SPECULAR -> program.programId == W6dSamplingProgramIdV1.POINT_SPECULAR_RGBA8_V1
+                    LightingFamilyV1.SPOT_SPECULAR -> program.programId == W6dSamplingProgramIdV1.SPOT_SPECULAR_RGBA8_V1
+                }
+            } == true
             is FilterPassOperationV1.Picture,
             is FilterPassOperationV1.RuntimeImageOpacity,
             -> false

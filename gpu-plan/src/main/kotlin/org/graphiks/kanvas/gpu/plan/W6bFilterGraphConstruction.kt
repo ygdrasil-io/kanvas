@@ -24,6 +24,7 @@ import org.graphiks.math.geometry.roundOutToRectI32OrNull
 import org.graphiks.math.geometry.translateF64OrNull
 import org.graphiks.math.matrix.LayerMappingF64
 import org.graphiks.math.vector.Vector2F64
+import org.graphiks.math.vector.Vector3F32
 
 /** W6b's single captured-filter authority; it publishes planning facts but never native work. */
 internal object W6bFilterGraphConstruction {
@@ -244,7 +245,7 @@ internal object W6bFilterGraphConstruction {
 
     internal fun owns(scene: SceneSnapshot): Boolean = ownership(scene).isOwned
 
-    /** True when the terminal side of a Compose chain is this slice's unbounded distant light. */
+    /** True when a transparent-black-producing lighting terminal survives public wrappers. */
     internal fun hasDistantDiffuseTerminal(occurrence: PositiveOccurrence): Boolean {
         lateinit var nodeHasDistant: (CapturedFilterNodeIdI32) -> Boolean
         fun inputHasDistant(input: CapturedFilterInputV1): Boolean = when (input) {
@@ -252,8 +253,14 @@ internal object W6bFilterGraphConstruction {
             else -> false
         }
         nodeHasDistant = { id -> when (val node = occurrence.table.nodeAt(id)) {
-            is CapturedFilterNodeV1.DistantLitDiffuse -> true
+            is CapturedFilterNodeV1.DistantLitDiffuse,
+            is CapturedFilterNodeV1.PointLitDiffuse,
+            is CapturedFilterNodeV1.SpotLitDiffuse,
+            is CapturedFilterNodeV1.DistantLitSpecular,
+            is CapturedFilterNodeV1.PointLitSpecular,
+            is CapturedFilterNodeV1.SpotLitSpecular -> true
             is CapturedFilterNodeV1.Compose -> inputHasDistant(node.outer)
+            is CapturedFilterNodeV1.ColorFilter -> inputHasDistant(node.input)
             else -> false
         } }
         return occurrence.root?.let { nodeHasDistant(it.id) } == true
@@ -458,6 +465,35 @@ internal object W6bFilterGraphConstruction {
             return ContextualFilterResult(vertical, W6cMorphologyPlanner.bounds(horizontal, morphologyKind,
                 FilterAxisV1.Y, radii.radiusYF64), key)
         }
+        fun appendLighting(
+            id: CapturedFilterNodeIdI32,
+            input: SourceBinding,
+            sourceForKey: SourceBinding,
+            family: LightingFamilyV1,
+            parameters: LightingParametersV1,
+        ): ContextualFilterResult {
+            // Every lighting family can synthesize opaque/visible output from transparent black.
+            // Its output therefore belongs to the consumer, while its source stays the Sobel domain.
+            val bounds = distantDiffuseBounds(input, sourceForKey.copyDesiredOutputDeviceI32())
+            val key = keyFor(id, null, sourceForKey, bounds.copyDesiredOutputDeviceI32())
+            val output = allocateTarget(bounds)
+            append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
+                FilterPassOperationV1.Lighting(family, parameters, bounds, when (family) {
+                    LightingFamilyV1.DISTANT_DIFFUSE -> FilterImplementationKindV1.DISTANT_DIFFUSE
+                    LightingFamilyV1.POINT_DIFFUSE -> FilterImplementationKindV1.POINT_DIFFUSE
+                    LightingFamilyV1.SPOT_DIFFUSE -> FilterImplementationKindV1.SPOT_DIFFUSE
+                    LightingFamilyV1.DISTANT_SPECULAR -> FilterImplementationKindV1.DISTANT_SPECULAR
+                    LightingFamilyV1.POINT_SPECULAR -> FilterImplementationKindV1.POINT_SPECULAR
+                    LightingFamilyV1.SPOT_SPECULAR -> FilterImplementationKindV1.SPOT_SPECULAR
+                }, distantDiffuseSobelSampling(input, bounds))))
+            return ContextualFilterResult(output, bounds, key)
+        }
+        fun mappedSpotDirection(location: org.graphiks.math.geometry.Point3F32, target: org.graphiks.math.geometry.Point3F32): Vector3F32 {
+            val x = target.x - location.x; val y = target.y - location.y; val z = target.z - location.z
+            val length = kotlin.math.sqrt(x * x + y * y + z * z)
+            // A zero vector is a valid admitted degenerate with zero contribution in the shader.
+            return if (length == 0f) Vector3F32(0f, 0f, 0f) else Vector3F32(x / length, y / length, z / length)
+        }
         lateinit var materializeNode: (CapturedFilterNodeIdI32, SourceBinding) -> ContextualFilterResult
         fun bindInput(input: CapturedFilterInputV1, currentSource: SourceBinding): ContextualFilterResult = when (input) {
             CapturedFilterInputV1.ImplicitSource -> ContextualFilterResult(currentSource, identityBounds(currentSource), null)
@@ -477,8 +513,14 @@ internal object W6bFilterGraphConstruction {
             else -> false
         }
         nodeHasDistantTerminal = { id -> when (val node = occurrence.table.nodeAt(id)) {
-            is CapturedFilterNodeV1.DistantLitDiffuse -> true
+            is CapturedFilterNodeV1.DistantLitDiffuse,
+            is CapturedFilterNodeV1.PointLitDiffuse,
+            is CapturedFilterNodeV1.SpotLitDiffuse,
+            is CapturedFilterNodeV1.DistantLitSpecular,
+            is CapturedFilterNodeV1.PointLitSpecular,
+            is CapturedFilterNodeV1.SpotLitSpecular -> true
             is CapturedFilterNodeV1.Compose -> inputHasDistantTerminal(node.outer)
+            is CapturedFilterNodeV1.ColorFilter -> inputHasDistantTerminal(node.input)
             else -> false
         } }
         materializeNode = { id, currentSource -> when (val node = occurrence.table.nodeAt(id)) {
@@ -646,16 +688,62 @@ internal object W6bFilterGraphConstruction {
                     W6bFilterDiagnostics.refusal(W6aPlanDiagnostics.UnsupportedLightingMapping,
                         "W6d distant diffuse surface depth cannot be represented by the sealed layer mapping."),
                 )
-                // Lighting's unbounded output belongs to its consumer, not to a bounded child
-                // such as Crop. The child remains the frozen Sobel sampling domain below.
-                val bounds = distantDiffuseBounds(input, currentSource.copyDesiredOutputDeviceI32())
-                val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
-                val output = allocateTarget(bounds)
-                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
-                    FilterPassOperationV1.Lighting(LightingFamilyV1.DISTANT_DIFFUSE,
-                        LightingParametersV1.Distant(mappedDirection, node.lightColor, mappedSurfaceDepth, node.kd), bounds,
-                        FilterImplementationKindV1.DISTANT_DIFFUSE, distantDiffuseSobelSampling(input, bounds))))
-                ContextualFilterResult(output, bounds, key)
+                appendLighting(id, input, currentSource, LightingFamilyV1.DISTANT_DIFFUSE,
+                    LightingParametersV1.Distant(mappedDirection, node.lightColor, mappedSurfaceDepth, node.kd))
+            }
+            is CapturedFilterNodeV1.PointLitDiffuse, is CapturedFilterNodeV1.PointLitSpecular -> {
+                val location = if (node is CapturedFilterNodeV1.PointLitDiffuse) node.location else (node as CapturedFilterNodeV1.PointLitSpecular).location
+                val surfaceScale = if (node is CapturedFilterNodeV1.PointLitDiffuse) node.surfaceScale else (node as CapturedFilterNodeV1.PointLitSpecular).surfaceScale
+                val coefficient = if (node is CapturedFilterNodeV1.PointLitDiffuse) node.kd else (node as CapturedFilterNodeV1.PointLitSpecular).ks
+                val shininess = (node as? CapturedFilterNodeV1.PointLitSpecular)?.shininess
+                if (!surfaceScale.isFinite() || !coefficient.isFinite() || coefficient < 0f || shininess?.isFinite() == false) throw ConstructionFailure(
+                    W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds, "W6d point lighting requires finite geometry, scale, coefficient >= 0 and exponent."))
+                val input = materializeInput(if (node is CapturedFilterNodeV1.PointLitDiffuse) node.input else (node as CapturedFilterNodeV1.PointLitSpecular).input, currentSource)
+                val mappedLocation = input.mapping.mapLightingPointToLayerF32OrNull(location) ?: throw ConstructionFailure(
+                    W6bFilterDiagnostics.refusal(W6aPlanDiagnostics.UnsupportedLightingMapping, "W6d point lighting requires a finite affine layer mapping."))
+                val mappedDepth = input.mapping.mapLightingZToLayerF32OrNull(surfaceScale) ?: throw ConstructionFailure(
+                    W6bFilterDiagnostics.refusal(W6aPlanDiagnostics.UnsupportedLightingMapping, "W6d point lighting surface depth cannot be represented."))
+                appendLighting(id, input, currentSource, if (shininess == null) LightingFamilyV1.POINT_DIFFUSE else LightingFamilyV1.POINT_SPECULAR,
+                    LightingParametersV1.Point(mappedLocation, if (node is CapturedFilterNodeV1.PointLitDiffuse) node.lightColor else (node as CapturedFilterNodeV1.PointLitSpecular).lightColor,
+                        mappedDepth, coefficient, shininess))
+            }
+            is CapturedFilterNodeV1.SpotLitDiffuse, is CapturedFilterNodeV1.SpotLitSpecular -> {
+                val diffuse = node as? CapturedFilterNodeV1.SpotLitDiffuse
+                val specular = node as? CapturedFilterNodeV1.SpotLitSpecular
+                val location = diffuse?.location ?: requireNotNull(specular).location
+                val target = diffuse?.target ?: requireNotNull(specular).target
+                val scale = diffuse?.surfaceScale ?: requireNotNull(specular).surfaceScale
+                val coefficient = diffuse?.kd ?: requireNotNull(specular).ks
+                val exponent = diffuse?.specularExponent ?: requireNotNull(specular).specularExponent
+                val cutoff = diffuse?.cutoffAngle ?: requireNotNull(specular).cutoffAngle
+                val shininess = specular?.shininess
+                if (!listOf(scale, coefficient, exponent, cutoff).all(Float::isFinite) || coefficient < 0f || shininess?.isFinite() == false) throw ConstructionFailure(
+                    W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds, "W6d spot lighting requires finite geometry, scale, coefficients and exponents."))
+                val input = materializeInput(diffuse?.input ?: requireNotNull(specular).input, currentSource)
+                val mappedLocation = input.mapping.mapLightingPointToLayerF32OrNull(location) ?: throw ConstructionFailure(
+                    W6bFilterDiagnostics.refusal(W6aPlanDiagnostics.UnsupportedLightingMapping, "W6d spot location requires a finite affine layer mapping."))
+                val mappedTarget = input.mapping.mapLightingPointToLayerF32OrNull(target) ?: throw ConstructionFailure(
+                    W6bFilterDiagnostics.refusal(W6aPlanDiagnostics.UnsupportedLightingMapping, "W6d spot target requires a finite affine layer mapping."))
+                val mappedDepth = input.mapping.mapLightingZToLayerF32OrNull(scale) ?: throw ConstructionFailure(
+                    W6bFilterDiagnostics.refusal(W6aPlanDiagnostics.UnsupportedLightingMapping, "W6d spot surface depth cannot be represented."))
+                val cutoffCosine = kotlin.math.cos(Math.toRadians(cutoff.toDouble())).toFloat()
+                if (!cutoffCosine.isFinite()) throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                    "W6d spot cutoff cosine is not finite."))
+                appendLighting(id, input, currentSource, if (specular == null) LightingFamilyV1.SPOT_DIFFUSE else LightingFamilyV1.SPOT_SPECULAR,
+                    LightingParametersV1.Spot(mappedLocation, mappedTarget, mappedSpotDirection(mappedLocation, mappedTarget), exponent,
+                        cutoffCosine, diffuse?.lightColor ?: requireNotNull(specular).lightColor, mappedDepth, coefficient, shininess))
+            }
+            is CapturedFilterNodeV1.DistantLitSpecular -> {
+                val input = materializeInput(node.input, currentSource)
+                if (!node.direction.x.isFinite() || !node.direction.y.isFinite() || !node.direction.z.isFinite() ||
+                    !node.surfaceScale.isFinite() || !node.ks.isFinite() || node.ks < 0f || !node.shininess.isFinite()) throw ConstructionFailure(
+                    W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds, "W6d distant specular requires finite parameters and ks >= 0."))
+                val direction = input.mapping.mapLightingVectorToLayerF32OrNull(node.direction) ?: throw ConstructionFailure(
+                    W6bFilterDiagnostics.refusal(W6aPlanDiagnostics.UnsupportedLightingMapping, "W6d distant specular requires a finite affine layer mapping."))
+                val depth = input.mapping.mapLightingZToLayerF32OrNull(node.surfaceScale) ?: throw ConstructionFailure(
+                    W6bFilterDiagnostics.refusal(W6aPlanDiagnostics.UnsupportedLightingMapping, "W6d distant specular surface depth cannot be represented."))
+                appendLighting(id, input, currentSource, LightingFamilyV1.DISTANT_SPECULAR,
+                    LightingParametersV1.Distant(direction, node.lightColor, depth, node.ks, node.shininess))
             }
             is CapturedFilterNodeV1.MatrixConvolution -> {
                 val input = materializeInput(node.input, currentSource)
@@ -1006,6 +1094,11 @@ internal object W6bFilterGraphConstruction {
             is CapturedFilterNodeV1.DisplacementMap -> unionInputDemands(listOf(node.displacement, node.input), output)
             is CapturedFilterNodeV1.Magnifier -> inputDemand(node.input, output)
             is CapturedFilterNodeV1.DistantLitDiffuse -> inputDemand(node.input, sobelRequiredInput(output))
+            is CapturedFilterNodeV1.PointLitDiffuse -> inputDemand(node.input, sobelRequiredInput(output))
+            is CapturedFilterNodeV1.SpotLitDiffuse -> inputDemand(node.input, sobelRequiredInput(output))
+            is CapturedFilterNodeV1.DistantLitSpecular -> inputDemand(node.input, sobelRequiredInput(output))
+            is CapturedFilterNodeV1.PointLitSpecular -> inputDemand(node.input, sobelRequiredInput(output))
+            is CapturedFilterNodeV1.SpotLitSpecular -> inputDemand(node.input, sobelRequiredInput(output))
             else -> throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.UnsupportedFamily,
                 "Reverse demand requires an admitted W6b filter."))
         }
@@ -1266,6 +1359,11 @@ internal object W6bFilterGraphConstruction {
                     }
                     is CapturedFilterNodeV1.Magnifier -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
                     is CapturedFilterNodeV1.DistantLitDiffuse -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.PointLitDiffuse -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.SpotLitDiffuse -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.DistantLitSpecular -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.PointLitSpecular -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.SpotLitSpecular -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
                     else -> return if (isW6cVariant(node)) "W6c" else "W6d"
                 }
             }

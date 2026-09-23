@@ -14,6 +14,7 @@ import org.graphiks.kanvas.render.ir.SceneSnapshot
 import org.graphiks.kanvas.render.ir.TileMode
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2I32
+import org.graphiks.math.geometry.Point3F32
 import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
@@ -94,43 +95,49 @@ public sealed interface LightingParametersV1 {
     }
 
     public class Point(
-        locationF64: Vector2F64,
+        location3F32: Point3F32,
         public val lightColor: ColorARGB,
         public val surfaceScaleF32: Float,
         public val coefficientF32: Float,
         public val shininessF32: Float? = null,
     ) : LightingParametersV1 {
-        private val locationSnapshotF64 = Vector2F64(locationF64.x, locationF64.y)
+        private val locationSnapshot3F32 = Point3F32(location3F32.x, location3F32.y, location3F32.z)
         init {
-            require(locationSnapshotF64.x.isFinite() && locationSnapshotF64.y.isFinite() &&
-                surfaceScaleF32.isFinite() && coefficientF32.isFinite() &&
+            require(locationSnapshot3F32.x.isFinite() && locationSnapshot3F32.y.isFinite() && locationSnapshot3F32.z.isFinite() &&
+                surfaceScaleF32.isFinite() && coefficientF32.isFinite() && coefficientF32 >= 0f &&
                 (shininessF32 == null || shininessF32.isFinite()))
         }
-        public fun copyLocationF64(): Vector2F64 = Vector2F64(locationSnapshotF64.x, locationSnapshotF64.y)
-        override fun copy(): LightingParametersV1 = Point(copyLocationF64(), lightColor, surfaceScaleF32, coefficientF32, shininessF32)
+        public fun copyLocation3F32(): Point3F32 = Point3F32(locationSnapshot3F32.x, locationSnapshot3F32.y, locationSnapshot3F32.z)
+        override fun copy(): LightingParametersV1 = Point(copyLocation3F32(), lightColor, surfaceScaleF32, coefficientF32, shininessF32)
     }
 
     public class Spot(
-        locationF64: Vector2F64,
-        targetF64: Vector2F64,
+        location3F32: Point3F32,
+        target3F32: Point3F32,
+        direction3F32: Vector3F32,
         public val specularExponentF32: Float,
-        public val cutoffAngleF32: Float,
+        public val cutoffCosineF32: Float,
         public val lightColor: ColorARGB,
         public val surfaceScaleF32: Float,
         public val coefficientF32: Float,
         public val shininessF32: Float? = null,
     ) : LightingParametersV1 {
-        private val locationSnapshotF64 = Vector2F64(locationF64.x, locationF64.y)
-        private val targetSnapshotF64 = Vector2F64(targetF64.x, targetF64.y)
+        private val locationSnapshot3F32 = Point3F32(location3F32.x, location3F32.y, location3F32.z)
+        private val targetSnapshot3F32 = Point3F32(target3F32.x, target3F32.y, target3F32.z)
+        private val directionSnapshot3F32 = Vector3F32(direction3F32.x, direction3F32.y, direction3F32.z)
         init {
-            require(listOf(locationSnapshotF64.x, locationSnapshotF64.y, targetSnapshotF64.x, targetSnapshotF64.y).all(Double::isFinite) &&
-                listOf(specularExponentF32, cutoffAngleF32, surfaceScaleF32, coefficientF32).all(Float::isFinite) &&
+            require(listOf(locationSnapshot3F32.x, locationSnapshot3F32.y, locationSnapshot3F32.z,
+                targetSnapshot3F32.x, targetSnapshot3F32.y, targetSnapshot3F32.z,
+                directionSnapshot3F32.x, directionSnapshot3F32.y, directionSnapshot3F32.z).all(Float::isFinite) &&
+                listOf(specularExponentF32, cutoffCosineF32, surfaceScaleF32, coefficientF32).all(Float::isFinite) &&
+                cutoffCosineF32 in -1f..1f && coefficientF32 >= 0f &&
                 (shininessF32 == null || shininessF32.isFinite()))
         }
-        public fun copyLocationF64(): Vector2F64 = Vector2F64(locationSnapshotF64.x, locationSnapshotF64.y)
-        public fun copyTargetF64(): Vector2F64 = Vector2F64(targetSnapshotF64.x, targetSnapshotF64.y)
-        override fun copy(): LightingParametersV1 = Spot(copyLocationF64(), copyTargetF64(), specularExponentF32,
-            cutoffAngleF32, lightColor, surfaceScaleF32, coefficientF32, shininessF32)
+        public fun copyLocation3F32(): Point3F32 = Point3F32(locationSnapshot3F32.x, locationSnapshot3F32.y, locationSnapshot3F32.z)
+        public fun copyTarget3F32(): Point3F32 = Point3F32(targetSnapshot3F32.x, targetSnapshot3F32.y, targetSnapshot3F32.z)
+        public fun copyDirection3F32(): Vector3F32 = Vector3F32(directionSnapshot3F32.x, directionSnapshot3F32.y, directionSnapshot3F32.z)
+        override fun copy(): LightingParametersV1 = Spot(copyLocation3F32(), copyTarget3F32(), copyDirection3F32(), specularExponentF32,
+            cutoffCosineF32, lightColor, surfaceScaleF32, coefficientF32, shininessF32)
     }
 }
 
@@ -413,8 +420,8 @@ public sealed interface FilterPassOperationV1 {
                 LightingFamilyV1.SPOT_SPECULAR,
                 -> parametersSnapshot is LightingParametersV1.Spot
             })
-            require((family == LightingFamilyV1.DISTANT_DIFFUSE) == (sobelSamplingSnapshot != null)) {
-                "Only the admitted distant-diffuse slice carries its frozen Sobel sampling recipe."
+            require(sobelSamplingSnapshot != null) {
+                "Every W6d lighting family carries its frozen Sobel sampling recipe."
             }
         }
         public fun copyParameters(): LightingParametersV1 = parametersSnapshot.copy()

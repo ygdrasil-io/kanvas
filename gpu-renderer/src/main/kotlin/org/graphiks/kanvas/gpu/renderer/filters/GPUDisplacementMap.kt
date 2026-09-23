@@ -13,7 +13,12 @@ internal object GPUW6dAdvancedSamplingPass {
         W6dSamplingProgramIdV1.MATRIX_DECAL_RGBA8_V1 -> matrixConvolutionFragment(program as W6dSamplingProgramV1.Convolution)
         W6dSamplingProgramIdV1.DISPLACEMENT_NEAREST_CLAMP_RGBA8_V1 -> displacementFragment(program as W6dSamplingProgramV1.Displacement)
         W6dSamplingProgramIdV1.MAGNIFIER_NEAREST_CLAMP_RGBA8_V1 -> magnifierFragment(program as W6dSamplingProgramV1.Magnifier)
-        W6dSamplingProgramIdV1.DISTANT_DIFFUSE_RGBA8_V1 -> error("Distant diffuse has its dedicated frozen lighting translator.")
+        W6dSamplingProgramIdV1.DISTANT_DIFFUSE_RGBA8_V1,
+        W6dSamplingProgramIdV1.POINT_DIFFUSE_RGBA8_V1,
+        W6dSamplingProgramIdV1.SPOT_DIFFUSE_RGBA8_V1,
+        W6dSamplingProgramIdV1.DISTANT_SPECULAR_RGBA8_V1,
+        W6dSamplingProgramIdV1.POINT_SPECULAR_RGBA8_V1,
+        W6dSamplingProgramIdV1.SPOT_SPECULAR_RGBA8_V1 -> error("Lighting has a dedicated frozen translator.")
     }
 
     private fun matrixConvolutionFragment(program: W6dSamplingProgramV1.Convolution): String {
