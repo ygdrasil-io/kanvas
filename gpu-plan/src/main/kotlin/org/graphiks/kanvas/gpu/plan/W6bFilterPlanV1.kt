@@ -9,6 +9,7 @@ import org.graphiks.kanvas.render.ir.MaskBlurStyle
 import org.graphiks.kanvas.render.ir.TileMode
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2I32
+import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.matrix.LayerMappingF64
 import org.graphiks.math.vector.Vector2F64
@@ -18,8 +19,12 @@ public enum class FilterAxisV1 { X, Y }
 
 /** The complete W6b implementation vocabulary; later tasks add execution, not another pass kind. */
 public enum class FilterImplementationKindV1 {
-    /** The W6c Task 1 full-domain 1x1 Crop vertical slice. */
+    /** W6c source-domain Crop. */
     CROP,
+    /** W6c source translation. */
+    OFFSET,
+    /** W6c periodic source sampling constrained to a destination domain. */
+    TILE,
     IMAGE_BLUR_X,
     IMAGE_BLUR_Y,
     MASK_COVERAGE_BLUR_X,
@@ -58,6 +63,27 @@ public class FilterInputSamplingV1 internal constructor(
         offsetSnapshotTargetLocalI32.y,
     )
     public fun copyKnownContentInputTargetLocalI32(): RectI32 = knownSnapshotInputTargetLocalI32.copy()
+}
+
+/** A target-local spatial sampler sealed by planning, retaining fractional F64 clips. */
+public class SpatialSamplingV1 internal constructor(
+    sourceInputTargetLocalI32: RectI32,
+    clipOutputTargetLocalF64: RectF64,
+    outputToInputOffsetTargetLocalF64: Vector2F64,
+) {
+    private val sourceSnapshot = sourceInputTargetLocalI32.copy()
+    private val clipSnapshot = clipOutputTargetLocalF64.copy()
+    private val offsetSnapshot = Vector2F64(outputToInputOffsetTargetLocalF64.x, outputToInputOffsetTargetLocalF64.y)
+
+    init {
+        require(!sourceSnapshot.isEmpty && !clipSnapshot.isEmpty && clipSnapshot.isFinite() &&
+            offsetSnapshot.x.isFinite() && offsetSnapshot.y.isFinite())
+    }
+
+    public fun copySourceInputTargetLocalI32(): RectI32 = sourceSnapshot.copy()
+    public fun copyClipOutputTargetLocalF64(): RectF64 = clipSnapshot.copy()
+    public fun copyOutputToInputOffsetTargetLocalF64(): Vector2F64 =
+        Vector2F64(offsetSnapshot.x, offsetSnapshot.y)
 }
 
 /** Immutable device-space spatial facts and the origin used to localize every filter target. */
@@ -201,27 +227,43 @@ public sealed interface FilterPassOperationV1 {
         }
     }
 
-    /**
-     * The initial W6c Crop arm carries only the sealed 1x1 full-domain witness.  Later W6c
-     * tasks extend its bounds semantics without asking native lowering to recover public crop
-     * geometry or source origins.
-     */
     public class Crop(
         cropInputTargetLocalI32: RectI32,
         public val tileMode: TileMode,
         override val bounds: FilterBoundsPlanV1,
-        public val sampling: FilterInputSamplingV1,
+        public val sampling: SpatialSamplingV1,
         override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.CROP,
     ) : FilterPassOperationV1 {
         private val cropSnapshotInputTargetLocalI32 = cropInputTargetLocalI32.copy()
 
         init {
             require(kind == FilterImplementationKindV1.CROP)
-            require(tileMode == TileMode.CLAMP)
-            require(cropSnapshotInputTargetLocalI32 == RectI32(0, 0, 1, 1))
+            require(!cropSnapshotInputTargetLocalI32.isEmpty)
         }
 
         public fun copyCropInputTargetLocalI32(): RectI32 = cropSnapshotInputTargetLocalI32.copy()
+    }
+
+    public class Offset(
+        offsetF64: Vector2F64,
+        override val bounds: FilterBoundsPlanV1,
+        public val sampling: SpatialSamplingV1,
+        override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.OFFSET,
+    ) : FilterPassOperationV1 {
+        private val offsetSnapshotF64 = Vector2F64(offsetF64.x, offsetF64.y)
+        init { require(kind == FilterImplementationKindV1.OFFSET && offsetSnapshotF64.x.isFinite() && offsetSnapshotF64.y.isFinite()) }
+        public fun copyOffsetF64(): Vector2F64 = Vector2F64(offsetSnapshotF64.x, offsetSnapshotF64.y)
+    }
+
+    public class Tile(
+        sourceInputTargetLocalI32: RectI32,
+        override val bounds: FilterBoundsPlanV1,
+        public val sampling: SpatialSamplingV1,
+        override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.TILE,
+    ) : FilterPassOperationV1 {
+        private val sourceSnapshotInputTargetLocalI32 = sourceInputTargetLocalI32.copy()
+        init { require(kind == FilterImplementationKindV1.TILE && !sourceSnapshotInputTargetLocalI32.isEmpty) }
+        public fun copySourceInputTargetLocalI32(): RectI32 = sourceSnapshotInputTargetLocalI32.copy()
     }
 
     public data class MaskBlurStyle(

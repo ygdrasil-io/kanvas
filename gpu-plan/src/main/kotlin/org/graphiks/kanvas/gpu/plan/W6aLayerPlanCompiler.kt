@@ -273,6 +273,8 @@ public class W6aLayerPlanCompiler public constructor(
         )
         val materialized = filters.all { pass -> when (val operation = pass.operation) {
             is FilterPassOperationV1.Crop -> true
+            is FilterPassOperationV1.Offset -> true
+            is FilterPassOperationV1.Tile -> true
             is FilterPassOperationV1.SeparableBlur -> operation.kind in nativeBlurKinds
             is FilterPassOperationV1.MaskBlurStyle,
             is FilterPassOperationV1.MaskShader,

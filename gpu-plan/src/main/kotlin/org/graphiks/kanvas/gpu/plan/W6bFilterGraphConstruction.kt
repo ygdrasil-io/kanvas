@@ -376,16 +376,35 @@ internal object W6bFilterGraphConstruction {
         materializeNode = { id -> when (val node = occurrence.table.nodeAt(id)) {
             is CapturedFilterNodeV1.Crop -> {
                 val input = materializeInput(node.input)
-                if (!isFullDomainCropWitness(node, input)) throw ConstructionFailure(W6bFilterDiagnostics.refusal(
-                    W6bFilterDiagnostics.UnsupportedFamily,
-                    "W6c Crop currently admits only the frozen 1x1 RGBA8 full-domain witness.",
-                ))
-                val bounds = identityBounds(input)
+                val planned = W6cSpatialBoundsPlanner.crop(input, node)
+                val bounds = planned.bounds
                 val key = keyFor(id, null, bounds.copyDesiredOutputDeviceI32())
                 val output = allocateTarget(bounds)
                 append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
-                    FilterPassOperationV1.Crop(RectI32(0, 0, 1, 1), node.tileMode, bounds,
-                        filterInputSampling(input, bounds))))
+                    FilterPassOperationV1.Crop(planned.cropInputTargetLocalI32, node.tileMode, bounds,
+                        spatialSampling(input, bounds, planned.clipOutputTargetLocalF64, 0.0, 0.0))))
+                output to key
+            }
+            is CapturedFilterNodeV1.Offset -> {
+                val input = materializeInput(node.input)
+                val planned = W6cSpatialBoundsPlanner.offset(input, node)
+                val bounds = planned.bounds
+                val key = keyFor(id, null, bounds.copyDesiredOutputDeviceI32())
+                val output = allocateTarget(bounds)
+                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
+                    FilterPassOperationV1.Offset(Vector2F64(planned.offsetF64X, planned.offsetF64Y), bounds,
+                        spatialSampling(input, bounds, fullClip(bounds), -planned.offsetF64X, -planned.offsetF64Y))))
+                output to key
+            }
+            is CapturedFilterNodeV1.Tile -> {
+                val input = materializeInput(node.input)
+                val planned = W6cSpatialBoundsPlanner.tile(input, node)
+                val bounds = planned.bounds
+                val key = keyFor(id, null, bounds.copyDesiredOutputDeviceI32())
+                val output = allocateTarget(bounds)
+                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
+                    FilterPassOperationV1.Tile(planned.sourceInputTargetLocalI32, bounds,
+                        spatialSampling(input, bounds, planned.clipOutputTargetLocalF64, 0.0, 0.0))))
                 output to key
             }
             is CapturedFilterNodeV1.Blur -> {
@@ -620,6 +639,14 @@ internal object W6bFilterGraphConstruction {
         lateinit var inputDemand: (CapturedFilterInputV1, RectI32) -> RectI32
         fun nodeDemand(id: CapturedFilterNodeIdI32, output: RectI32): RectI32 = when (val node = occurrence.table.nodeAt(id)) {
             is CapturedFilterNodeV1.Crop -> inputDemand(node.input, output)
+            is CapturedFilterNodeV1.Offset -> {
+                val required = RectF64(output.left.toDouble(), output.top.toDouble(), output.right.toDouble(), output.bottom.toDouble())
+                    .translateF64OrNull(-node.dx.toDouble(), -node.dy.toDouble())?.roundOutToRectI32OrNull()
+                    ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                        "W6c reverse offset demand cannot be represented in checked I32 texels."))
+                inputDemand(node.input, required)
+            }
+            is CapturedFilterNodeV1.Tile -> inputDemand(node.input, output)
             is CapturedFilterNodeV1.Blur -> inputDemand(node.input, expand(output, node.sigmaX, node.sigmaY))
             is CapturedFilterNodeV1.DropShadow -> {
                 val translated = RectF64(output.left.toDouble(), output.top.toDouble(),
@@ -728,6 +755,44 @@ internal object W6bFilterGraphConstruction {
         return FilterInputSamplingV1(targetLocalSampleOffset(input, outputBounds), knownTargetLocal)
     }
 
+    /** Seals F64 spatial sampling in resource coordinates; renderer receives neither device origins nor mapping. */
+    private fun spatialSampling(
+        input: SourceBinding,
+        outputBounds: FilterBoundsPlanV1,
+        clipOutputTargetLocalF64: RectF64,
+        extraOffsetXF64: Double,
+        extraOffsetYF64: Double,
+    ): SpatialSamplingV1 {
+        val inputDomain = input.copyDeviceBoundsI32()
+        val sourceLocal = try {
+            RectI32(
+                Math.subtractExact(inputDomain.left, input.originDeviceI32.x),
+                Math.subtractExact(inputDomain.top, input.originDeviceI32.y),
+                Math.subtractExact(inputDomain.right, input.originDeviceI32.x),
+                Math.subtractExact(inputDomain.bottom, input.originDeviceI32.y),
+            )
+        } catch (_: ArithmeticException) {
+            throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                "W6c source sampling rectangle cannot be represented in target-local I32 texels."))
+        }
+        val outputOrigin = outputBounds.copyTargetOriginDeviceI32()
+        val offset = try {
+            Vector2F64(
+                Math.subtractExact(outputOrigin.x, input.originDeviceI32.x).toDouble() + extraOffsetXF64,
+                Math.subtractExact(outputOrigin.y, input.originDeviceI32.y).toDouble() + extraOffsetYF64,
+            )
+        } catch (_: ArithmeticException) {
+            throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                "W6c source sampling origin overflows I32."))
+        }
+        return SpatialSamplingV1(sourceLocal, clipOutputTargetLocalF64, offset)
+    }
+
+    private fun fullClip(bounds: FilterBoundsPlanV1): RectF64 {
+        val desired = bounds.copyDesiredOutputDeviceI32()
+        return RectF64(0.0, 0.0, desired.width().toDouble(), desired.height().toDouble())
+    }
+
     private fun dropShadowCompositeBounds(input: SourceBinding, shadow: SourceBinding, mode: CapturedDropShadowModeV1): FilterBoundsPlanV1 {
         val inputDomain = input.copyDeviceBoundsI32()
         val shadowDomain = shadow.copyDeviceBoundsI32()
@@ -822,6 +887,8 @@ internal object W6bFilterGraphConstruction {
                 seen[id.valueI32] = true
                 when (val node = root.table.nodeAt(id)) {
                     is CapturedFilterNodeV1.Crop -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.Offset -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.Tile -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
                     is CapturedFilterNodeV1.Blur -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
                     is CapturedFilterNodeV1.DropShadow -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
                     else -> return if (isW6cVariant(node)) "W6c" else "W6d"
@@ -834,15 +901,7 @@ internal object W6bFilterGraphConstruction {
 
     private data class RootOccurrence(val table: CapturedFilterTableV1, val root: CapturedFilterRootV1)
 
-    /** This intentionally narrow arm prevents Task 1 from exposing Crop bounds/tile semantics early. */
-    private fun isFullDomainCropWitness(node: CapturedFilterNodeV1.Crop, input: SourceBinding): Boolean {
-        val crop = node.copyCrop()
-        val extent = input.copyExtentI32()
-        return node.tileMode == TileMode.CLAMP && extent.width == 1 && extent.height == 1 &&
-            crop.left == 0f && crop.top == 0f && crop.right == 1f && crop.bottom == 1f
-    }
-
-    /** W6c owns these roots even while this Task 1 slice keeps all but Crop terminal. */
+    /** W6c owns these roots and this slice admits Crop, Offset and Tile only. */
     private fun isW6cVariant(node: CapturedFilterNodeV1): Boolean = node is CapturedFilterNodeV1.Crop ||
         node is CapturedFilterNodeV1.Offset || node is CapturedFilterNodeV1.Tile ||
         node is CapturedFilterNodeV1.ColorFilter || node is CapturedFilterNodeV1.Compose ||

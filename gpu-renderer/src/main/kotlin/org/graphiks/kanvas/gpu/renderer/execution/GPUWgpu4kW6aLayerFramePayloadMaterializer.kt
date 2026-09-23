@@ -8,6 +8,7 @@ import java.nio.ByteOrder
 import org.graphiks.kanvas.gpu.plan.*
 import org.graphiks.kanvas.gpu.renderer.materials.W5fColorOperationEmitterV1
 import org.graphiks.kanvas.gpu.renderer.materials.W5aMaterialSourceStage
+import org.graphiks.kanvas.gpu.renderer.filters.GPUW6cSpatialSamplingPass
 import org.graphiks.kanvas.gpu.renderer.recording.*
 import org.graphiks.kanvas.gpu.renderer.wgsl.W6bMaskCoverageSnippet
 import org.graphiks.kanvas.gpu.renderer.wgsl.W6bSeparableBlurSnippet
@@ -574,16 +575,19 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         when (val operation = pass.operation) {
                             is FilterPassOperationV1.Crop -> {
                                 require(pass.inputs().size == 1)
-                                require(operation.copyCropInputTargetLocalI32() == RectI32(0, 0, 1, 1) &&
-                                    operation.tileMode == org.graphiks.kanvas.render.ir.TileMode.CLAMP &&
-                                    outputExtent.width == 1 && outputExtent.height == 1) {
-                                    "W6c Crop requires the frozen full-domain 1x1 witness."
-                                }
-                                val offset = operation.sampling.copyOutputToInputOffsetTargetLocalI32()
                                 renderOperands += textureRender(stepIndex, views.getValue(pass.output),
                                     views.getValue(pass.inputs().single()), generation,
-                                    sampledCompositeShader(offset.x, offset.y, 1f), BlendPlan.LegacySrcOverV1,
-                                    0, 0, 1, 1, pass, owned)
+                                    W6A_VERTEX_SHADER + GPUW6cSpatialSamplingPass.fragment(operation), BlendPlan.LegacySrcOverV1,
+                                    0, 0, outputExtent.width, outputExtent.height, pass, owned)
+                            }
+                            is FilterPassOperationV1.Offset,
+                            is FilterPassOperationV1.Tile,
+                            -> {
+                                require(pass.inputs().size == 1)
+                                renderOperands += textureRender(stepIndex, views.getValue(pass.output),
+                                    views.getValue(pass.inputs().single()), generation,
+                                    W6A_VERTEX_SHADER + GPUW6cSpatialSamplingPass.fragment(operation), BlendPlan.LegacySrcOverV1,
+                                    0, 0, outputExtent.width, outputExtent.height, pass, owned)
                             }
                             is FilterPassOperationV1.SeparableBlur -> {
                                 require(operation.kind in setOf(

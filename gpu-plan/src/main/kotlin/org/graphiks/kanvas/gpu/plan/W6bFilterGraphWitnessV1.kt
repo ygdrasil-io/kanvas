@@ -146,6 +146,8 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
             is FilterPassOperationV1.MaskBlurStyle -> if (operation.originalCoverageSource == null) 1 else 2
             is FilterPassOperationV1.SeparableBlur,
             is FilterPassOperationV1.Crop,
+            is FilterPassOperationV1.Offset,
+            is FilterPassOperationV1.Tile,
             is FilterPassOperationV1.MaskShader,
             is FilterPassOperationV1.MaskTable,
             is FilterPassOperationV1.DropShadowColorize,
@@ -157,7 +159,9 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
         private fun requirePublishedTargetLocalSampling(operation: FilterPassOperationV1) {
             when (operation) {
                 is FilterPassOperationV1.SeparableBlur -> require(operation.sampling != null)
-                is FilterPassOperationV1.Crop -> Unit
+                is FilterPassOperationV1.Crop -> require(operation.sampling.copySourceInputTargetLocalI32().isEmpty.not())
+                is FilterPassOperationV1.Offset -> require(operation.sampling.copySourceInputTargetLocalI32().isEmpty.not())
+                is FilterPassOperationV1.Tile -> require(operation.sampling.copySourceInputTargetLocalI32().isEmpty.not())
                 is FilterPassOperationV1.MaskBlurStyle -> {
                     require(operation.blurredSampling != null)
                     require((operation.originalCoverageSource == null) == (operation.originalSampling == null))
@@ -223,14 +227,15 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
             }
             when (val operation = pass.operation) {
                 is FilterPassOperationV1.Crop -> {
-                    require(rows.getValue(key.boundSourceId).role == PlanResourceRole.FilterSource &&
-                        inputs.single() == key.boundSourceId)
-                    require(operation.tileMode == org.graphiks.kanvas.render.ir.TileMode.CLAMP &&
-                        operation.copyCropInputTargetLocalI32() == RectI32(0, 0, 1, 1))
-                    val inputExtent = requireNotNull(rows.getValue(inputs.single()).copyExtent())
-                    val outputExtent = requireNotNull(rows.getValue(pass.output).copyExtent())
-                    require(inputExtent.width == 1 && inputExtent.height == 1 &&
-                        outputExtent.width == 1 && outputExtent.height == 1)
+                    occurrenceOwned(inputs.single())
+                    require(!operation.copyCropInputTargetLocalI32().isEmpty)
+                }
+                is FilterPassOperationV1.Offset -> {
+                    occurrenceOwned(inputs.single())
+                }
+                is FilterPassOperationV1.Tile -> {
+                    occurrenceOwned(inputs.single())
+                    require(!operation.copySourceInputTargetLocalI32().isEmpty)
                 }
                 is FilterPassOperationV1.SeparableBlur -> {
                     val input = inputs.single()

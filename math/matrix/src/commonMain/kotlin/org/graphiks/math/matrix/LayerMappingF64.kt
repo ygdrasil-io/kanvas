@@ -38,6 +38,14 @@ public class LayerMappingF64 private constructor(
         targetOriginDeviceI32: Point2I32,
     ): RectI32? = boundsDeviceI32.rebaseAtOriginI32OrNull(targetOriginDeviceI32)
 
+    /** One checked F64 local-to-device projection boundary for spatial filter planning. */
+    public fun mapLocalRectToDeviceF64OrNull(boundsLocalF64: RectF64): RectF64? =
+        localToDeviceF64.mapRectBoundsF64OrNull(boundsLocalF64)
+
+    /** Outward texel sealing is deliberately separate from the F64 projection boundary. */
+    public fun mapLocalRectToDeviceI32OrNull(boundsLocalF64: RectF64): RectI32? =
+        mapLocalRectToDeviceF64OrNull(boundsLocalF64)?.roundOutToRectI32OrNull()
+
     /**
      * Translation of an already raster-admitted analytic shape; no second projection.
      * The native ABI has frozen this shape as F32, so rebasing uses the same F32 subtraction.

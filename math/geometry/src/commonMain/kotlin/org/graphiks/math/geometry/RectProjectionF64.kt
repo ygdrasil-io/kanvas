@@ -48,6 +48,17 @@ public fun RectF64.translateF64OrNull(dxF64: Double, dyF64: Double): RectF64? {
         .takeIf { it.isFinite() && !it.isEmpty }
 }
 
+/** Finite, non-empty intersection retained in F64 until its owner seals texels. */
+public fun RectF64.intersectF64OrNull(other: RectF64): RectF64? {
+    if (!isFinite() || !other.isFinite() || isEmpty || other.isEmpty) return null
+    return RectF64(
+        maxOf(left, other.left),
+        maxOf(top, other.top),
+        minOf(right, other.right),
+        minOf(bottom, other.bottom),
+    ).takeUnless { it.isEmpty || !it.isFinite() }
+}
+
 /**
  * Expands finite F64 content by the finite three-sigma blur support before outward I32
  * projection.  The caller owns any later clip or target intersection.
