@@ -152,7 +152,7 @@ public class FilterPass(
 }
 ```
 
-`PlanResourceRole.FilterTarget` is added exactly once by W6b and remains the role for W6c results, ping-pong targets and cacheable filter output. Its resources use RGBA8, single sample, `RenderAttachment + Sampled + CopySource` (and `CopyDestination` only when an exact frozen pass needs it). `FilterPass.inputs()` is ordered and preserves duplicates. `RenderGraph` remains the sole physical resource/pass DAG; its validator proves every input’s producing pass precedes the consumer and forbids sampling an active attachment.
+`PlanResourceRole.FilterTarget` is added exactly once by W6b and remains the role for W6c results, ping-pong targets and cacheable filter output. W6c's retained spatial-cache texture uses RGBA8, single sample, `RenderAttachment + Sampled`; it has no `CopySource` consumer. A frozen `FilterTarget` may carry `CopySource` (and `CopyDestination`) only when its exact planned pass requires it. `FilterPass.inputs()` is ordered and preserves duplicates. `RenderGraph` remains the sole physical resource/pass DAG; its validator proves every input’s producing pass precedes the consumer and forbids sampling an active attachment.
 
 The cache key is a frozen planner value, not a renderer string:
 

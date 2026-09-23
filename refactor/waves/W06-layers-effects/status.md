@@ -2,6 +2,25 @@
 
 ## Statut
 
+### Correction whole-branch W6c après review Sol
+
+La correction bornée `2ffdae4afaef0780e2f47bb7a091c1b09f9fd49e`, sur la source
+`cb93adb28f076636e6d26a254ed91a85a2b6387b`, ferme les cinq constats de la
+review whole-branch : reverse demand externe pour `ColorFilter`/`Compose`/
+`Merge`/`Blend`, terminal `Layer` scellé no-op lorsque le clip est vide,
+allocation `Crop`/`Tile` bornée par le consumer, limites W5f pré-publication
+des uniforms `ColorFilter`, et retrait de `CopySrc` du cache spatial sans
+consumer. La décision no-op est portée par le `FilterCompositeOperationV1.Layer`
+gelé (scissor nul), et partagée par construction, validation et materializer.
+
+La vérification publique ciblée sur cette source donne 15/0/0/0 XML :
+`W6cSpatialBoundsSurfaceTest` 8/0/0/0, `W6cComposeSurfaceTest` 4/0/0/0 et
+`W6cSpatialDagPictureTest` 3/0/0/0. Les compilations
+`:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin` et
+`:kanvas:compileTestKotlin` sortent 0. Le worker natif quitte encore en 133
+après les assertions JUnit ; cette observation reste **UNKNOWN**, sans claim
+native, ISO ou globale.
+
 ## Checkpoint W6c — DAG spatial principal, qualification Task 7
 
 La branche d'implémentation est `codex/w6c-spatial-dag`. Sa base W6b revue est
