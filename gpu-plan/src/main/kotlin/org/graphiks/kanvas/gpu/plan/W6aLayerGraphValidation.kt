@@ -89,6 +89,9 @@ internal fun validateW6aLayerTopology(
             require(pass.load == if (alreadyInitialized) AttachmentLoadPlan.Load else AttachmentLoadPlan.ClearTransparent)
             initialized += target.id
             require(pass.store == AttachmentStorePlan.Store)
+            if (pass.w6bMaskSourceBinding != null) {
+                require(pass.draws().all { it.blend == BlendPlan.LegacySrcOverV1 })
+            }
             pass.coverageSource?.let { coverage ->
                 val row = byId.getValue(coverage)
                 require(row.role in setOf(PlanResourceRole.CoverageSource, PlanResourceRole.CoverageOriginal,
@@ -138,6 +141,7 @@ internal fun validateW6aLayerTopology(
                 pass.depthStencilLoadStore == PlanDepthStencilLoadStore.LoadStoreTestReset &&
                 pass.draw.strategy == PathFillStrategy.StencilCover && pass.draw.sample == SamplePlan.SingleSample &&
                 pass.draw.blend != BlendPlan.NoOpV1)
+            if (pass.coverageSource != null) require(pass.draw.blend == BlendPlan.LegacySrcOverV1)
             (pass.draw.blend as? BlendPlan.DestinationReadV1)?.let { blend ->
                 val copy = passes.getOrNull(indexI32 - 2) as? PlanPass.TextureCopy
                 require(copy != null && copy.source == pass.target && copy.destination == blend.snapshotResource &&

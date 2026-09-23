@@ -496,12 +496,38 @@ internal class W6aLayerGraphConstruction(
             )
             shaderMaterialSources[occurrence.idI32] = when (normalized) {
                 is EffectiveMaterialPlanner.SourceNormalizationV4.Source -> normalized.captured
-                EffectiveMaterialPlanner.SourceNormalizationV4.NoOp,
-                is EffectiveMaterialPlanner.SourceNormalizationV4.Refused,
-                -> throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                    W6bFilterDiagnostics.UnsupportedFamily,
-                    "W6b MaskShader material is outside the existing W5 MaterialSourceConstructionV4 authority.",
-                ))
+                EffectiveMaterialPlanner.SourceNormalizationV4.NoOp ->
+                    throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                        W6bFilterDiagnostics.UnsupportedFamily,
+                        "W6b MaskShader material is outside the existing W5 MaterialSourceConstructionV4 authority.",
+                    ))
+                is EffectiveMaterialPlanner.SourceNormalizationV4.Refused -> when (val captured =
+                    MaterialSourceConstructionV4.capture(
+                        materialDraw.copy(paint = original?.paint?.copy(
+                            color = org.graphiks.math.color.ColorARGB.White,
+                            shader = mask.material,
+                            blendMode = BlendMode.SRC_OVER,
+                            blender = null,
+                            colorFilter = null,
+                            maskFilter = null,
+                            pathEffect = null,
+                            imageFilter = null,
+                        )),
+                        SourceCoordinatesV4.None,
+                        org.graphiks.math.geometry.RectF32.ofLTRB(
+                            domain.left.toFloat(), domain.top.toFloat(), domain.right.toFloat(), domain.bottom.toFloat(),
+                        ),
+                        BlendPlan.LegacySrcOverV1,
+                        runtimeCatalog = runtimeCatalog,
+                        composedV6 = true,
+                    )) {
+                    is SourceConstructionResultV4.Built -> captured.value
+                    is SourceConstructionResultV4.Refused ->
+                        throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                            W6bFilterDiagnostics.UnsupportedFamily,
+                            "W6b MaskShader material is outside the existing W5 MaterialSourceConstructionV4 authority: ${captured.diagnosticCode}",
+                        ))
+                }
             }
         }
         filterOccurrences.filter { it.mask is MaskFilterNode.Shader }.forEach { occurrence ->
@@ -1637,7 +1663,9 @@ internal class W6aLayerGraphConstruction(
                             versions[target] = after.valueI64
                             // The isolated source is transparent: the selected parent blend is
                             // applied only by FilterComposite after mask materialization.
-                            val autoLayerSourceDraw = if (directOccurrence?.mask is MaskFilterNode.Blur)
+                            val autoLayerSourceDraw = if (directOccurrence?.mask is MaskFilterNode.Blur ||
+                                directOccurrence?.mask is MaskFilterNode.Shader ||
+                                directOccurrence?.mask is MaskFilterNode.Table)
                                 draw.withFinalBlendV1(BlendPlan.LegacySrcOverV1) as PathDraw else draw
                             val cover = PlanPass.StencilCover(passes.size, target, depth, autoLayerSourceDraw, data, group,
                                 AttachmentLoadPlan.Load, AttachmentStorePlan.Store, PlanDepthStencilAccess.ReadWrite,
@@ -1662,7 +1690,9 @@ internal class W6aLayerGraphConstruction(
                         } else {
                             // The auto-layer source is transparent, so its W5 source-stage write
                             // stays SRC_OVER. The captured parent blend remains on FilterComposite.
-                            val autoLayerSourceDraw = if (directOccurrence?.mask is MaskFilterNode.Blur)
+                            val autoLayerSourceDraw = if (directOccurrence?.mask is MaskFilterNode.Blur ||
+                                directOccurrence?.mask is MaskFilterNode.Shader ||
+                                directOccurrence?.mask is MaskFilterNode.Table)
                                 draw.withFinalBlendV1(BlendPlan.LegacySrcOverV1) else draw
                             val pass = appendRender(target, listOf(autoLayerSourceDraw), false, maskCoverage,
                                 rasterBinding)
@@ -2104,8 +2134,20 @@ internal class W6aLayerGraphConstruction(
             passes.zipWithNext { first, second -> PlanPassDependency(first.id, second.id) }, peak, table)
         val sourceNonUniform = Math.subtractExact(construction.peakFrameLocalBytes,
             source.resources.filter { it.role == PlanResourceRole.SourceUniformData }.fold(0L) { bytes, row -> Math.addExact(bytes, row.byteSize) })
+        val frozenMaterialRows = buildList {
+            maskMaterialRoots.forEach { (occurrenceIdI32, material) ->
+                val source = maskMaterialSourcesByOccurrence.getValue(occurrenceIdI32)
+                if (source.pending || source.resolvedSource?.materialAuthority is PlanDrawMaterialAuthority.MaterialV4)
+                    add(material to source.coordinates)
+            }
+            graphTextureMaterialRoots.forEach { (aggregateId, material) ->
+                val source = graphTextureMaterialSourcesByAggregate.getValue(aggregateId)
+                if (source.pending || source.resolvedSource?.materialAuthority is PlanDrawMaterialAuthority.MaterialV4)
+                    add(material to source.coordinates)
+            }
+        }
         return RenderGraph.publishW6a(construction, frame,
-            packConstructedFrame(listOf(construction), table, sourceNonUniform), SourcePhysicalConstructionV1(
+            packConstructedFrame(listOf(construction), table, sourceNonUniform, frozenMaterialRows), SourcePhysicalConstructionV1(
                 source.resources, source.uniforms, source.caches, w4eBindings.map { binding ->
                     binding.bindSources(localized.entries.associate { (key, draw) -> key.first to draw })
                 }))

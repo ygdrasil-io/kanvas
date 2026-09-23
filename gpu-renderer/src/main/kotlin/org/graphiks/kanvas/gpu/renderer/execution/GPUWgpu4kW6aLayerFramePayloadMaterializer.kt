@@ -7,6 +7,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.graphiks.kanvas.gpu.plan.*
 import org.graphiks.kanvas.gpu.renderer.materials.W5fColorOperationEmitterV1
+import org.graphiks.kanvas.gpu.renderer.materials.W5aMaterialSourceStage
 import org.graphiks.kanvas.gpu.renderer.recording.*
 import org.graphiks.kanvas.gpu.renderer.wgsl.W6bMaskCoverageSnippet
 import org.graphiks.kanvas.gpu.renderer.wgsl.W6bSeparableBlurSnippet
@@ -16,11 +17,20 @@ import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.matrix.mapRectBoundsF64OrNull
 
+/** Native handles for one binding in an already-published W5 source manifest. */
+private sealed interface GPUW6bMaskShaderResourceV1 {
+    class Buffer(val value: GPUBuffer, val byteSizeI64: Long) : GPUW6bMaskShaderResourceV1
+    class Image(val lease: GPUW5eDecodedImageSessionCache.Lease) : GPUW6bMaskShaderResourceV1
+    class Runtime(val lease: GPUW5hRuntimeResourceSessionCache.Lease) : GPUW6bMaskShaderResourceV1
+}
+
 /** Native translation of exact W6 resources and passes behind one ordinary frame draft. */
 internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
     private val device: GPUDevice,
     private val queue: GPUQueue,
     private val rootTarget: GPUWgpu4kPreparedSceneTarget,
+    private val decodedImageCache: GPUW5eDecodedImageSessionCache? = null,
+    private val runtimeResourceCache: GPUW5hRuntimeResourceSessionCache? = null,
 ) : GPUPreparedNativeFramePayloadMaterializer {
     private var consumed = false
 
@@ -83,63 +93,112 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 owned.own(device.createBuffer(BufferDescriptor(size = row.byteSize.toULong(),
                     usage = usage or GPUBufferUsage.CopyDst, label = "w6a.slot.${frame.physical.slot(id).slotI32}")))
             }
-            // Graph-texture Picture sources name their existing W5 parent-filter row.  Allocate
-            // precisely that published resource; no renderer-side uniform resource exists.
-            val graphTextureUniformBuffers = graph.passes().filterIsInstance<PlanPass.PictureSourcePass>()
-                .mapNotNull { it.graphTextureOperand?.takeIf { operand -> operand.colorFilter != null }?.uniformResource }
-                .distinct().associateWith { id ->
-                    val row = frame.physical.resource(id)
-                    require(row.role == PlanResourceRole.SourceUniformData && row.kind == PlanResourceKind.Buffer &&
-                        PlanResourceUsage.Uniform in row.usages())
-                    owned.own(device.createBuffer(BufferDescriptor(size = row.byteSize.toULong(),
-                        usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
-                        label = "w6b.parent.filter.${frame.physical.slot(id).slotI32}")))
-                }
-            // `MASK_SHADER` names rows already packed by FrameSourceLayoutV4.  Allocate only
-            // those published SourceUniformData resources, preserving the plan's generation and
-            // physical slot instead of issuing a renderer-local material row.
+            // All consumers group by the compiler-issued physical ID before native allocation.
+            // In particular, an identical W5 row shared by MaskShader and a graph-texture
+            // parent gets one buffer/cache lease, never an allocate-then-map overwrite.
             val maskShaderMaterials = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
                 (pass.operation as? FilterPassOperationV1.MaskShader)?.materialBinding
                     as? FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned
             }.distinctBy { it.occurrenceIdI32 }.associateWith(frame::maskShaderMaterial)
-            val maskShaderUniformBuffers = maskShaderMaterials.values.associate { material ->
-                val resource = frame.physical.resource(material.binding.uniformResource)
-                val bytes = material.stage.uniformBytes
+            val graphTextureUniformIds = graph.passes().filterIsInstance<PlanPass.PictureSourcePass>()
+                .mapNotNull { it.graphTextureOperand?.uniformResource }.distinct()
+            val maskMaterialsByUniform = maskShaderMaterials.values.groupBy { it.binding.uniformResource }
+            val sourceUniformBuffers = (graphTextureUniformIds + maskMaterialsByUniform.keys).distinct().associateWith { id ->
+                val resource = frame.physical.resource(id)
                 require(resource.role == PlanResourceRole.SourceUniformData && resource.kind == PlanResourceKind.Buffer &&
-                    material.binding.uniformOffsetBytesI64 == 0L &&
-                    material.binding.uniformCapacityBytesI64 == resource.byteSize &&
-                    Math.addExact(material.binding.uniformOffsetBytesI64, bytes.size.toLong()) <=
-                    material.binding.uniformCapacityBytesI64 &&
                     resource.usages() == setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination))
-                material.binding.uniformResource to owned.own(device.createBuffer(BufferDescriptor(
-                    size = resource.byteSize.toULong(), usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
-                    label = "w6b.mask.shader.${frame.physical.slot(resource.id).slotI32}"))).also { buffer ->
-                    queue.writeBuffer(buffer, material.binding.uniformOffsetBytesI64.toULong(), ArrayBuffer.of(bytes),
-                        0uL, bytes.size.toULong())
+                val materials = maskMaterialsByUniform[id].orEmpty()
+                val canonicalBytes = materials.firstOrNull()?.stage?.uniformBytes
+                materials.forEach { material ->
+                    require(material.binding.uniformOffsetBytesI64 == 0L &&
+                        material.binding.uniformCapacityBytesI64 == resource.byteSize &&
+                        Math.addExact(material.binding.uniformOffsetBytesI64, material.stage.uniformByteCountI64) <= resource.byteSize &&
+                        canonicalBytes!!.contentEquals(material.stage.uniformBytes))
+                }
+                owned.own(device.createBuffer(BufferDescriptor(size = resource.byteSize.toULong(),
+                    usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                    label = "w6b.source.uniform.${frame.physical.slot(id).slotI32}"))).also { buffer ->
+                    canonicalBytes?.let { bytes -> queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(bytes), 0uL, bytes.size.toULong()) }
                 }
             }
-            val maskShaderGradientSlab = maskShaderMaterials.values.mapNotNull { it.stage.gradientStopSlab }
-                .distinctBy { it.canonicalIdentity }.singleOrNull()
-            require(maskShaderMaterials.values.mapNotNull { it.stage.gradientStopSlab }
-                .distinctBy { it.canonicalIdentity }.size <= 1)
-            val maskShaderGradientBuffer = maskShaderGradientSlab?.let { slab ->
-                val resource = frame.physical.resource(graph.resources().single {
-                    it.role == PlanResourceRole.GradientStopData
-                }.id)
+            val graphTextureUniformBuffers = graphTextureUniformIds.associateWith(sourceUniformBuffers::getValue)
+            val storageBuffers = linkedMapOf<PlanResourceId, GPUW6bMaskShaderResourceV1.Buffer>()
+            val imageLeases = linkedMapOf<PlanResourceId, GPUW5eDecodedImageSessionCache.Lease>()
+            val runtimeLeases = linkedMapOf<PlanResourceId, GPUW5hRuntimeResourceSessionCache.Lease>()
+            fun gradientBuffer(slab: GradientStopSlabPlanV1): GPUW6bMaskShaderResourceV1.Buffer {
+                val resource = frame.physical.resource(graph.resources().single { it.role == PlanResourceRole.GradientStopData }.id)
                 require(resource.byteSize == slab.byteSizeI64 &&
                     resource.usages() == setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination))
-                val bytes = ByteBuffer.allocate(Math.toIntExact(slab.byteSizeI64)).order(ByteOrder.LITTLE_ENDIAN).also { sink ->
-                    slab.copyStops().forEach { stop ->
-                        sink.putFloat(stop.positionF32)
-                        repeat(3) { sink.putFloat(0f) }
-                        val color = stop.preparedTupleF32
-                        listOf(color.red, color.green, color.blue, color.alpha).forEach(sink::putFloat)
+                return storageBuffers.getOrPut(resource.id) {
+                    val bytes = ByteBuffer.allocate(Math.toIntExact(slab.byteSizeI64)).order(ByteOrder.LITTLE_ENDIAN).also { sink ->
+                        slab.copyStops().forEach { stop ->
+                            sink.putFloat(stop.positionF32)
+                            repeat(3) { sink.putFloat(0f) }
+                            val color = stop.preparedTupleF32
+                            listOf(color.red, color.green, color.blue, color.alpha).forEach(sink::putFloat)
+                        }
+                    }.array()
+                    GPUW6bMaskShaderResourceV1.Buffer(owned.own(device.createBuffer(BufferDescriptor(
+                        size = resource.byteSize.toULong(), usage = GPUBufferUsage.Storage or GPUBufferUsage.CopyDst,
+                        label = "w6b.source.storage.${frame.physical.slot(resource.id).slotI32}"))).also { buffer ->
+                        queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(bytes), 0uL, bytes.size.toULong())
+                    }, resource.byteSize)
+                }
+            }
+            fun noiseBuffer(slab: NoiseTableSlabV1): GPUW6bMaskShaderResourceV1.Buffer {
+                val resource = frame.physical.resource(graph.resources().single { it.role == PlanResourceRole.NoiseTableData }.id)
+                require(resource.byteSize == slab.byteCountI64 &&
+                    resource.usages() == setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination))
+                return storageBuffers.getOrPut(resource.id) {
+                    val bytes = ByteArray(slab.bytes.sizeI32) { slab.bytes[it].toByte() }
+                    GPUW6bMaskShaderResourceV1.Buffer(owned.own(device.createBuffer(BufferDescriptor(
+                        size = resource.byteSize.toULong(), usage = GPUBufferUsage.Storage or GPUBufferUsage.CopyDst,
+                        label = "w6b.source.storage.${frame.physical.slot(resource.id).slotI32}"))).also { buffer ->
+                        queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(bytes), 0uL, bytes.size.toULong())
+                    }, resource.byteSize)
+                }
+            }
+            fun imageLease(request: PlanCacheResourceRequest.Texture): GPUW6bMaskShaderResourceV1.Image {
+                val planned = frame.physical.cacheBinding(request)
+                val issued = planned.request as? PlanCacheResourceRequest.Texture
+                    ?: error("W6b MaskShader image binding is not a frozen W5 texture request.")
+                return GPUW6bMaskShaderResourceV1.Image(imageLeases.getOrPut(planned.resourceId) {
+                    owned.own(GPUW5eImageNativeV1.acquire(requireNotNull(decodedImageCache), issued, generation.value, frame.physical))
+                })
+            }
+            fun runtimeLease(request: PlanCacheResourceRequest): GPUW6bMaskShaderResourceV1.Runtime {
+                val planned = frame.physical.cacheBinding(request)
+                require(planned.request is PlanCacheResourceRequest.Storage || planned.request is PlanCacheResourceRequest.Sampler)
+                return GPUW6bMaskShaderResourceV1.Runtime(runtimeLeases.getOrPut(planned.resourceId) {
+                    owned.own(requireNotNull(runtimeResourceCache).acquire(planned.request, generation.value))
+                })
+            }
+            fun resourceFor(material: GPUW6bMaskShaderMaterialV1, binding: W5aMaterialSourceStage.Binding):
+                GPUW6bMaskShaderResourceV1 {
+                val stage = material.stage
+                val proof = stage.composedProof
+                val composed = binding.composedResource
+                return when (binding.resourceKind) {
+                    "storageBuffer" -> when (composed?.buffer?.storageKind) {
+                        ComposedBindingLayoutV1.StorageKind.GRADIENT_STOPS -> gradientBuffer(requireNotNull(stage.gradientStopSlab))
+                        ComposedBindingLayoutV1.StorageKind.NOISE_U32 -> noiseBuffer(requireNotNull(stage.noiseTableSlab))
+                        ComposedBindingLayoutV1.StorageKind.RUNTIME_READ -> runtimeLease(requireNotNull(proof).runtimeResources
+                            .single { it.resource === composed }.cacheRequest)
+                        null -> gradientBuffer(requireNotNull(stage.gradientStopSlab))
                     }
-                }.array()
-                owned.own(device.createBuffer(BufferDescriptor(size = resource.byteSize.toULong(),
-                    usage = GPUBufferUsage.Storage or GPUBufferUsage.CopyDst,
-                    label = "w6b.mask.shader.stops.${frame.physical.slot(resource.id).slotI32}"))).also { buffer ->
-                    queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(bytes), 0uL, bytes.size.toULong())
+                    "sampledTexture" -> proof?.composedImageResources?.singleOrNull { it.resource === composed }?.let {
+                        imageLease(it.upload.cacheRequest)
+                    } ?: proof?.runtimeResources?.singleOrNull { it.resource === composed }?.let {
+                        imageLease(it.cacheRequest as? PlanCacheResourceRequest.Texture
+                            ?: error("W6b MaskShader texture binding lost its frozen W5 texture request."))
+                    } ?: imageLease(requireNotNull(stage.imageV3).cacheRequest)
+                    "sampler" -> runtimeLease(requireNotNull(proof).runtimeResources.single { it.resource === composed }.cacheRequest)
+                    else -> error("W6b MaskShader has an unadmitted frozen W5 resource kind ${binding.resourceKind}.")
+                }
+            }
+            val maskShaderResources = maskShaderMaterials.values.associateWith { material ->
+                material.stage.bindingManifest.filter { it.resourceKind != "uniformBuffer" }.associate { binding ->
+                    binding.bindingI32 to resourceFor(material, binding)
                 }
             }
             // MASK_TABLE owns both its immutable captured bytes and its physical StorageRead
@@ -147,7 +206,14 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             // renderer-local LUT, padding, or generated fallback is permitted.
             val maskTableBuffers = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
                 (pass.operation as? FilterPassOperationV1.MaskTable)?.let { table -> table.tableResourceId to table }
-            }.associate { (id, operation) ->
+            }.groupBy({ it.first }, { it.second }).mapValues { (id, operations) ->
+                val operation = operations.first()
+                require(operations.all { candidate ->
+                    candidate.entryCountI32 == operation.entryCountI32 &&
+                        candidate.generationI64 == operation.generationI64 &&
+                        candidate.ownerMaskOccurrenceI32 == operation.ownerMaskOccurrenceI32 &&
+                        candidate.copyTable().copyToUByteArray().contentEquals(operation.copyTable().copyToUByteArray())
+                })
                 val resource = frame.physical.resource(id)
                 val bytes = operation.copyTable().copyToUByteArray()
                 require(operation.entryCountI32 == 256 && bytes.size == operation.entryCountI32 &&
@@ -159,7 +225,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     label = "w6b.mask.table.${frame.physical.slot(id).slotI32}"))).also { buffer ->
                     queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(ByteArray(bytes.size) { index -> bytes[index].toByte() }))
                 }
-            }
+            }.mapValues { it.value.second }
             val graphTextureOperandsBySource = graph.passes().filterIsInstance<PlanPass.PictureSourcePass>()
                 .mapNotNull { pass -> pass.graphTextureOperand?.let { operand -> pass.output to operand } }
                 .toMap()
@@ -551,8 +617,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 val input = pass.inputs().single()
                                 val inputOrigin = frame.targetOriginDeviceI32(input)
                                 maskShaderCoverageRender(stepIndex, views.getValue(pass.output), views.getValue(input), generation,
-                                    frame.maskShaderMaterial(binding), maskShaderUniformBuffers.getValue(binding.uniformResource),
-                                    maskShaderGradientBuffer, inputOrigin.x, inputOrigin.y, outputOrigin.x, outputOrigin.y,
+                                    frame.maskShaderMaterial(binding), sourceUniformBuffers.getValue(binding.uniformResource),
+                                    maskShaderResources.getValue(frame.maskShaderMaterial(binding)), inputOrigin.x, inputOrigin.y, outputOrigin.x, outputOrigin.y,
                                     outputExtent.width, outputExtent.height, pass, owned).also(renderOperands::add)
                             }
                             is FilterPassOperationV1.MaskTable -> {
@@ -1093,7 +1159,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         generation: GPUDeviceGenerationID,
         material: GPUW6bMaskShaderMaterialV1,
         uniform: GPUBuffer,
-        gradientStops: GPUBuffer?,
+        resources: Map<Int, GPUW6bMaskShaderResourceV1>,
         inputOriginDeviceXI32: Int,
         inputOriginDeviceYI32: Int,
         outputOriginDeviceXI32: Int,
@@ -1112,8 +1178,19 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         minBindingSize = stage.uniformByteCountI64.toULong()))
                 "storageBuffer" -> BindGroupLayoutEntry((binding.bindingI32 + 1).toUInt(), GPUShaderStage.Fragment,
                     buffer = BufferBindingLayout(type = GPUBufferBindingType.ReadOnlyStorage,
-                        minBindingSize = requireNotNull(stage.gradientStopSlab).byteSizeI64.toULong()))
-                else -> error("W6b MaskShader requires an unsupported W5 resource kind ${binding.resourceKind}.")
+                        minBindingSize = when (val resource = resources.getValue(binding.bindingI32)) {
+                            is GPUW6bMaskShaderResourceV1.Buffer -> resource.byteSizeI64.toULong()
+                            is GPUW6bMaskShaderResourceV1.Runtime -> requireNotNull(binding.composedResource?.buffer)
+                                .minBindingSizeBytesI64.toULong()
+                            else -> error("W6b MaskShader storage binding is not backed by its frozen W5 resource.")
+                        }))
+                "sampledTexture" -> BindGroupLayoutEntry((binding.bindingI32 + 1).toUInt(), GPUShaderStage.Fragment,
+                    texture = TextureBindingLayout(sampleType = GPUTextureSampleType.Float,
+                        viewDimension = GPUTextureViewDimension.TwoD, multisampled = false))
+                "sampler" -> BindGroupLayoutEntry((binding.bindingI32 + 1).toUInt(), GPUShaderStage.Fragment,
+                    sampler = SamplerBindingLayout(type = if (requireNotNull(binding.composedResource?.sampler).samplerTypeTagU32 == 1u)
+                        GPUSamplerBindingType.Filtering else GPUSamplerBindingType.NonFiltering))
+                else -> error("W6b MaskShader has an unadmitted frozen W5 resource kind ${binding.resourceKind}.")
             } })))
         val pipeline = pipeline(W6A_VERTEX_SHADER + W6bMaskCoverageSnippet.maskShaderCoverageFragment(
             stage.bindingManifest.fold(stage.declarationsWgsl) { declarations, binding ->
@@ -1127,9 +1204,20 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 "uniformBuffer" -> BindGroupEntry((binding.bindingI32 + 1).toUInt(), BufferBinding(uniform,
                     material.binding.uniformOffsetBytesI64.toULong(),
                     stage.uniformByteCountI64.toULong()))
-                "storageBuffer" -> BindGroupEntry((binding.bindingI32 + 1).toUInt(), BufferBinding(requireNotNull(gradientStops),
-                    0uL, requireNotNull(stage.gradientStopSlab).byteSizeI64.toULong()))
-                else -> error("W6b MaskShader requires an unsupported W5 resource kind ${binding.resourceKind}.")
+                "storageBuffer" -> when (val resource = resources.getValue(binding.bindingI32)) {
+                    is GPUW6bMaskShaderResourceV1.Buffer -> BindGroupEntry((binding.bindingI32 + 1).toUInt(),
+                        BufferBinding(resource.value, 0uL, resource.byteSizeI64.toULong()))
+                    is GPUW6bMaskShaderResourceV1.Runtime -> resource.lease.binding(binding.bindingI32 + 1)
+                    else -> error("W6b MaskShader storage binding is not backed by its frozen W5 resource.")
+                }
+                "sampledTexture" -> GPUW5eImageNativeV1.binding((resources.getValue(binding.bindingI32)
+                    as? GPUW6bMaskShaderResourceV1.Image)?.lease
+                    ?: error("W6b MaskShader texture binding is not backed by its frozen W5 image."),
+                    (binding.bindingI32 + 1).toUInt())
+                "sampler" -> (resources.getValue(binding.bindingI32) as? GPUW6bMaskShaderResourceV1.Runtime)
+                    ?.lease?.binding(binding.bindingI32 + 1)
+                    ?: error("W6b MaskShader sampler binding is not backed by its frozen W5 sampler.")
+                else -> error("W6b MaskShader has an unadmitted frozen W5 resource kind ${binding.resourceKind}.")
             } })))
         return GPUPreparedNativeScopeOperand.Render(
             stepIndex,

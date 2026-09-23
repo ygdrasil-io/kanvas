@@ -438,9 +438,10 @@ public class RenderGraph private constructor(
             }
             // The logical inventory and native upload refer to the same issued frame slab.
             // A role name alone is never authority to add an unreferenced storage buffer.
-            val noiseSlabs = materialPlanTable?.let { table -> visualDraws(passes).mapNotNull { draw ->
-                val coordinates = draw.materialAuthority.colorSourceCoordinatesV4() ?: return@mapNotNull null
-                val root = draw.materialAuthority.materialPlanRef()
+            val sourceAuthorities = visualDraws(passes).map { it.materialAuthority } + maskShaderBindings.map { it.materialAuthority }
+            val noiseSlabs = materialPlanTable?.let { table -> sourceAuthorities.mapNotNull { authority ->
+                val coordinates = authority.colorSourceCoordinatesV4() ?: return@mapNotNull null
+                val root = authority.materialPlanRef()
                 val proof = table.colorSourceProofV4(root)
                 val slab = proof.noiseTableSlab ?: return@mapNotNull null
                 val definition = requireNotNull(proof.composedDefinition) { W5gPlanDiagnostics.Schema }

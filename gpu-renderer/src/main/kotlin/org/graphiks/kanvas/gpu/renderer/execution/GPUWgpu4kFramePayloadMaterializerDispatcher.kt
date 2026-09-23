@@ -316,7 +316,8 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
             )
         }
         if (framePlan.w6aLayerFrameV1 != null) {
-            val materializer = GPUWgpu4kW6aLayerFramePayloadMaterializer(device, queue, preparedSceneTarget)
+            val materializer = GPUWgpu4kW6aLayerFramePayloadMaterializer(device, queue, preparedSceneTarget,
+                decodedImageCache, runtimeResourceCache)
             delegate = materializer
             return materializer.materializeReusable(framePlan, sourceWitness, encoderPlan, resources, generationSeal)
         }

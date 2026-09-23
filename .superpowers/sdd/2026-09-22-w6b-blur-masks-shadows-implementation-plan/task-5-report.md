@@ -27,7 +27,7 @@ terminaisons natives 133, qui restent `UNKNOWN` sans attribution).
 4. Le RED historique utilise un fixture format 13 créé via l'API de capture et
    de sérialisation du dépôt, avec une table invalide de 255 entrées. Il se
    décode réellement, renvoie le diagnostic stable
-   `w6b.filter.invalid_mask_filter.table_length`, ne modifie pas le sentinel
+   `invalid.mask_filter.table_length`, ne modifie pas le sentinel
    de lecture et permet ensuite une nouvelle surface saine : refus atomique et
    recovery, sans decodeur parallèle, troncature, padding ou validation tardive.
 5. GREEN final : le test shader/table exécute 7 assertions pixels publiques
@@ -35,6 +35,17 @@ terminaisons natives 133, qui restent `UNKNOWN` sans attribution).
    post-capture, historique/recovery) et le test Picture 10 assertions
    (mémoire + wire replay). La mutation de la table après capture ne change pas
    les pixels : le snapshot planifié reste immuable.
+6. Correction R1 (revue Sol) : les sources directes `Blur`, `Shader` et
+   `Table` sont toutes gelées en `LegacySrcOverV1`; seul `FilterComposite`
+   reçoit le blend capturé. Le contrat de graphe refuse désormais une source
+   W6b directe qui ne respecte pas cette règle. Les contrôles publics sur une
+   destination colorée vérifient `DST_OUT` pour shader et table.
+7. Correction R1 ressources : un shader image-backed atteint le manifest W5
+   gelé complet (uniform, storage, texture/sampler et runtime le cas échéant),
+   sans inspection du shader public ni compilation/lane parallèle. Les handles
+   natives sont groupés et validés par `PlanResourceId` avant allocation; un
+   même uniform, storage, texture ou sampler est donc réutilisé par tous ses
+   consommateurs MaskShader et graph-texture.
 
 ## Correction d'autorité R16
 
@@ -64,6 +75,9 @@ La correction requise par le ruling R16 est exclusivement plan-owned :
 - Les uniforms shader et les gradient stops réutilisent l'inventaire/resource
   mapping W5 gelé. Les coordonnées, mapping, extent stylé W5, clips exacts,
   schedule et terminaux Task 3/4 demeurent plan-owned.
+- Toute row W5 non-visuelle employée par un operand W6b traverse le même pack
+  de frame avant publication. Elle conserve ainsi son manifest, ses leases et
+  son budget; le renderer reçoit seulement les ressources déjà gelées.
 - Les tests utilisent uniquement les APIs publiques (`Surface`, `Canvas`,
   `Picture`, `MaskFilter`) et les pixels RGBA8 sRGB prémultipliés. Aucun mock,
   fake device, reflection, compteur ou assertion de source statique n'a été
@@ -76,9 +90,10 @@ La correction requise par le ruling R16 est exclusivement plan-owned :
 | `rtk ./gradlew :render-ir:compileKotlin` | GREEN, exit 0 |
 | `rtk ./gradlew :gpu-plan:compileKotlin` | GREEN, exit 0 |
 | `rtk ./gradlew :gpu-renderer:compileKotlin` | GREEN, exit 0 |
-| `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bMaskShaderTableSurfacePixelTest'` | 7 assertions `PASSED`, puis exit natif 133 : **UNKNOWN** |
+| `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bMaskShaderTableSurfacePixelTest'` | 11 assertions `PASSED`, puis exit natif 133 : **UNKNOWN** |
 | `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6bFilterPictureTest'` | XML JUnit 10/0, puis exit natif 133 : **UNKNOWN** |
 | `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W5fColorFilterSurfacePixelTest'` | méthodes observées `PASSED`, puis exit natif 133 : **UNKNOWN** |
+| `rtk ./gradlew :gpu-plan:test --tests 'org.graphiks.kanvas.gpu.plan.RenderGraphContractTest'` | GREEN, exit 0 |
 | `rtk git diff --check` | GREEN |
 
 Les 133/134 sont conservés comme **UNKNOWN** conformément au brief, sans les

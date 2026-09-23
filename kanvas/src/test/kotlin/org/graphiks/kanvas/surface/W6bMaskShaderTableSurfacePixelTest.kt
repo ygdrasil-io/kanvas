@@ -10,6 +10,9 @@ import kotlin.test.assertTrue
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.math.color.ColorARGB
@@ -51,6 +54,58 @@ class W6bMaskShaderTableSurfacePixelTest {
         }.render().pixels
 
         assertContentEquals(gradientMaskedRedPixels, actual)
+    }
+
+    @Test
+    fun `image-backed mask shader consumes its frozen W5 resource`() {
+        val alphaResource = Image.fromPixels(1, 1, byteArrayOf(-1, -1, -1, -1), alphaType = AlphaType.PREMUL)
+        val actual = Surface(1, 1).also { surface ->
+            surface.canvas {
+                drawRect(bounds1x1, Paint(
+                    ColorARGB.Red,
+                    maskFilter = MaskFilter.Shader(Shader.Image(alphaResource)),
+                    antiAlias = false,
+                ))
+            }
+        }.render().pixels
+
+        assertContentEquals(red1x1, actual)
+    }
+
+    @Test
+    fun `shader mask applies DST_OUT only at the final composite`() {
+        val actual = destinationColoredMaskSurface(
+            MaskFilter.Shader(Shader.SolidColor(ColorARGB.White)),
+        )
+
+        assertContentEquals(UByteArray(4), actual)
+    }
+
+    @Test
+    fun `table mask applies DST_OUT only at the final composite`() {
+        val actual = destinationColoredMaskSurface(
+            MaskFilter.Table(UByteArray(256) { indexI32 -> indexI32.toUByte() }),
+        )
+
+        assertContentEquals(UByteArray(4), actual)
+    }
+
+    @Test
+    fun `repeated identical image mask shaders preserve both draws`() {
+        val alphaResource = Image.fromPixels(1, 1, byteArrayOf(-1, -1, -1, -1), alphaType = AlphaType.PREMUL)
+        val shader = Shader.Image(alphaResource)
+        val actual = Surface(2, 1).also { surface ->
+            surface.canvas {
+                drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(
+                    ColorARGB.Red, maskFilter = MaskFilter.Shader(shader), antiAlias = false,
+                ))
+                drawRect(RectF32.ofLTRB(1f, 0f, 2f, 1f), Paint(
+                    ColorARGB.Red, maskFilter = MaskFilter.Shader(shader), antiAlias = false,
+                ))
+            }
+        }.render().pixels
+
+        assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u, 255u, 0u, 0u, 255u), actual)
     }
 
     @Test
@@ -160,6 +215,18 @@ class W6bMaskShaderTableSurfacePixelTest {
         assertContentEquals(before, sentinel)
     }
 
+    private fun destinationColoredMaskSurface(maskFilter: MaskFilter): UByteArray = Surface(1, 1).also { surface ->
+        surface.canvas {
+            drawRect(bounds1x1, Paint(ColorARGB.Blue, blendMode = BlendMode.SRC, antiAlias = false))
+            drawRect(bounds1x1, Paint(
+                ColorARGB.Red,
+                blendMode = BlendMode.DST_OUT,
+                maskFilter = maskFilter,
+                antiAlias = false,
+            ))
+        }
+    }.render().pixels
+
     private fun fixture(name: String): ByteArray = Base64.getDecoder().decode(
         requireNotNull(javaClass.getResource("/picture/$name")).readText().trim(),
     )
@@ -167,6 +234,8 @@ class W6bMaskShaderTableSurfacePixelTest {
     private companion object {
         val bounds3x1: RectF32 = RectF32.ofLTRB(0f, 0f, 3f, 1f)
         val bounds2x2: RectF32 = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val bounds1x1: RectF32 = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val red1x1: UByteArray = ubyteArrayOf(255u, 0u, 0u, 255u)
         val recoveryBlue2x2: UByteArray = ubyteArrayOf(
             17u, 61u, 211u, 255u,
             17u, 61u, 211u, 255u,
