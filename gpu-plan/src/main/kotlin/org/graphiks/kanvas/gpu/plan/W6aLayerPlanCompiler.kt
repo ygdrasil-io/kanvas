@@ -209,6 +209,9 @@ public class W6aLayerPlanCompiler public constructor(
         if (selected == null || selected.owner !== this) {
             return RenderPlanResult.InvalidScene(listOf(diagnostic(W6aPlanDiagnostics.UnsupportedChild, "Foreign W6a candidate.")))
         }
+        W6bFilterGraphConstruction.nativeCapabilityRefusalOrNull(selected.scene, capabilities)?.let { refusal ->
+            return RenderPlanResult.InvalidScene(listOf(refusal))
+        }
         return try {
             val bindings = mutableListOf<W6aLayerSourceBinding>()
             for (segment in selected.segments) when (val result = segment.compiler.constructSourceLanes(segment.candidate, capabilities, budget)) {

@@ -261,6 +261,30 @@ internal object W6bFilterGraphConstruction {
         return null
     }
 
+    /**
+     * Checks the positional Merge ABI against the immutable device facts before child lanes,
+     * targets, or a RenderGraph can be published.  Native lowering has one sampled-texture and
+     * one bind-group binding per retained input position.
+     */
+    internal fun nativeCapabilityRefusalOrNull(
+        scene: SceneSnapshot,
+        capabilities: PlanCapabilitySnapshot,
+    ): RenderDiagnostic? {
+        val ownership = ownership(scene)
+        if (!ownership.isOwned) return null
+        val inputCount = ownership.firstMergeInputCountExceeding(
+            capabilities.maxSampledTexturesPerShaderStageI32,
+            capabilities.maxBindingsPerBindGroupI32,
+        ) ?: return null
+        val sampledLimit = capabilities.maxSampledTexturesPerShaderStageI32?.toString() ?: "unknown"
+        val bindingLimit = capabilities.maxBindingsPerBindGroupI32?.toString() ?: "unknown"
+        return W6bFilterDiagnostics.refusal(
+            W6bFilterDiagnostics.NativeCapability,
+            "W6c Merge requires $inputCount sampled textures and bindings; " +
+                "device limits are sampledTextures=$sampledLimit, bindings=$bindingLimit.",
+        )
+    }
+
     /** Sealed occurrence discovery is shared by W6a event ordering and W6b graph freezing. */
     internal fun positiveOccurrences(scene: SceneSnapshot): List<PositiveOccurrence> {
         admissionRefusalOrNull(scene)?.let { throw ConstructionFailure(it) }
@@ -985,6 +1009,43 @@ internal object W6bFilterGraphConstruction {
                     else -> return if (isW6cVariant(node)) "W6c" else "W6d"
                 }
             }
+            }
+            return null
+        }
+
+        fun firstMergeInputCountExceeding(sampledTextureLimit: Int?, bindGroupBindingLimit: Int?): Int? {
+            roots.forEach { root ->
+                val pending = ArrayDeque<CapturedFilterNodeIdI32>()
+                pending.addLast(root.root.id)
+                val seen = BooleanArray(root.table.nodeCount)
+                while (pending.isNotEmpty()) {
+                    val id = pending.removeLast()
+                    if (id.valueI32 !in seen.indices || seen[id.valueI32]) continue
+                    seen[id.valueI32] = true
+                    when (val node = root.table.nodeAt(id)) {
+                        is CapturedFilterNodeV1.Crop -> node.input.enqueueNodeOrUnsupported(pending)
+                        is CapturedFilterNodeV1.Offset -> node.input.enqueueNodeOrUnsupported(pending)
+                        is CapturedFilterNodeV1.Tile -> node.input.enqueueNodeOrUnsupported(pending)
+                        is CapturedFilterNodeV1.Blur -> node.input.enqueueNodeOrUnsupported(pending)
+                        is CapturedFilterNodeV1.DropShadow -> node.input.enqueueNodeOrUnsupported(pending)
+                        is CapturedFilterNodeV1.ColorFilter -> node.input.enqueueNodeOrUnsupported(pending)
+                        is CapturedFilterNodeV1.Compose -> {
+                            node.inner.enqueueNodeOrUnsupported(pending)
+                            node.outer.enqueueNodeOrUnsupported(pending)
+                        }
+                        is CapturedFilterNodeV1.Merge -> {
+                            if (sampledTextureLimit == null || bindGroupBindingLimit == null ||
+                                node.inputCount > sampledTextureLimit || node.inputCount > bindGroupBindingLimit
+                            ) return node.inputCount
+                            node.forEach { input -> input.enqueueNodeOrUnsupported(pending) }
+                        }
+                        is CapturedFilterNodeV1.Blend -> {
+                            node.background.enqueueNodeOrUnsupported(pending)
+                            node.foreground.enqueueNodeOrUnsupported(pending)
+                        }
+                        else -> Unit
+                    }
+                }
             }
             return null
         }

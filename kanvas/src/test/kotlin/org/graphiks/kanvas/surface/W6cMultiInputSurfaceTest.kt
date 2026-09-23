@@ -3,7 +3,9 @@
 package org.graphiks.kanvas.surface
 
 import kotlin.test.assertContentEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.ImageFilter
@@ -18,11 +20,12 @@ import org.junit.jupiter.api.Test
 class W6cMultiInputSurfaceTest {
     @Test
     fun mergePreservesDuplicateInputOrder() {
-        // Three luma(red) layers are source-overed in this order.  Each starts at alpha 54;
-        // the independent 8-bit source-over recurrence yields alpha 130 after three inputs.
-        val expected = ubyteArrayOf(0u, 0u, 0u, 130u)
-        val shared = ImageFilter.ColorFilter(ColorFilter.Luma)
-        val filter = ImageFilter.Merge(listOf(shared, shared, shared))
+        // Source-over ends with blue for red, blue, blue.  The repeated blue is intentional:
+        // reversing this ordered public list would end with red instead.
+        val expected = ubyteArrayOf(0u, 0u, 255u, 255u)
+        val red = ImageFilter.ColorFilter(ColorFilter.Blend(ColorARGB.Red, BlendMode.SRC))
+        val repeatedBlue = ImageFilter.ColorFilter(ColorFilter.Blend(ColorARGB.Blue, BlendMode.SRC))
+        val filter = ImageFilter.Merge(listOf(red, repeatedBlue, repeatedBlue))
 
         val surface = Surface(1, 1)
         surface.canvas {
@@ -30,6 +33,30 @@ class W6cMultiInputSurfaceTest {
         }
 
         assertContentEquals(expected, surface.render().pixels)
+    }
+
+    @Test
+    fun mergeBeyondSampledTextureCapabilityRefusesBeforeMutationAndSameSurfaceRecovers() {
+        // This is deliberately larger than the supported native sampled-texture stage limit.
+        // A planner refusal must occur before renderer bind-group construction can mutate output.
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val sentinel = UByteArray(4) { 0x5au }
+        val before = sentinel.copyOf()
+        val shared = ImageFilter.ColorFilter(ColorFilter.Luma)
+        val filter = ImageFilter.Merge(List(256) { shared })
+        val surface = Surface(1, 1)
+        surface.canvas {
+            drawRect(bounds, Paint(ColorARGB.Red, imageFilter = filter, antiAlias = false))
+        }
+
+        val failure = assertFailsWith<IllegalStateException> { surface.readPixels(bounds, sentinel) }
+        assertTrue(failure.message?.startsWith("w6b.filter.native_capability:") == true,
+            failure.message ?: "missing sampled-texture capability diagnostic")
+        assertContentEquals(before, sentinel)
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.Blue, antiAlias = false)) }
+        assertContentEquals(ubyteArrayOf(0u, 0u, 255u, 255u), surface.render().pixels)
     }
 
     @Test
