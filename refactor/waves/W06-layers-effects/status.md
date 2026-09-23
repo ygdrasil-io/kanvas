@@ -3,8 +3,9 @@
 ## Statut
 
 La relecture Sol ciblée du dernier correctif W6c (`ae26bdbc49301f9ac6b962c766a39508231dd506`)
-ne conserve aucun Critical/Important. La Draft PR empilée sur W6b reste le seul gate
-de publication de ce checkpoint ; W6d puis W6e demeurent à réaliser. Les sorties
+ne conserve aucun Critical/Important. La Draft PR W6c [#2405](https://github.com/ygdrasil-io/kanvas/pull/2405)
+est empilée sur W6b [#2404](https://github.com/ygdrasil-io/kanvas/pull/2404), sans merge.
+W6d puis W6e demeurent à réaliser. Les sorties
 natives 133 restent **UNKNOWN** malgré les assertions XML et les compilations ci-dessous.
 
 ### Quatrième correction W6c — conservation du domaine imbriqué chevauchant
@@ -190,8 +191,8 @@ globale; la santé native demeure **UNKNOWN**.
 
 À la date de ce checkpoint Task 7 initial, les gates encore ouverts étaient la
 review Sol whole-branch contre la base W6b exacte, puis la Draft PR empilée
-vers `codex/w6b-blur-masks-shadows`. Les corrections et relectures ultérieures
-sont consignées en tête du présent document ; la Draft PR reste à publier.
+vers `codex/w6b-blur-masks-shadows`. Les corrections, relectures et la PR
+ultérieures sont consignées en tête du présent document.
 
 ## Checkpoint W6b / correction whole-branch round 4 — autorité producteur scissor Picture
 
