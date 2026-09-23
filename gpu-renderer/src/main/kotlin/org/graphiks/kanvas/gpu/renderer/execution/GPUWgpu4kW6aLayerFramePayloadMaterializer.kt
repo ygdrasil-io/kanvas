@@ -173,8 +173,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 // W6b has already selected this source pass and its target.  Its
                                 // source stage is transparent and must never consume the final
                                 // draw blend; that one belongs exclusively to FilterComposite.
-                                val maskMaterialSource = (pass as? PlanPass.RenderPass)
-                                    ?.w6bMaskSourceBinding != null
+                                val maskMaterialSource = pass.materializesW6bMaskSourceV1()
                                 val layout = owned.own(device.createBindGroupLayout(if (mapped != null) corePrimitiveBindGroupLayoutDescriptor(mapped.componentIdentity)
                                 else requireNotNull(template).groupZeroLayout.nativeDescriptorV1("w6a.rect.group0")))
                                 val data = binding?.data
@@ -183,7 +182,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     w6aColorTarget(if (maskMaterialSource) BlendPlan.LegacySrcOverV1 else draw.blend), owned, template,
                                     verticesSemantic?.artifact)
                                     else geometryPipeline(mapped, layout, owned, template,
-                                        if (maskMaterialSource) BlendPlan.LegacySrcOverV1 else null)
+                                        if (maskMaterialSource) BlendPlan.LegacySrcOverV1 else null,
+                                        maskMaterialSource && pass is PlanPass.StencilCover)
                                 val uniformPayload = binding?.let { frame.analyticUniform(packet) }
                                 val nativeUniform = data?.let { geometryBuffers.getValue(it.uniform) } ?: uniform
                                 if (data != null) {
@@ -210,18 +210,27 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                         // the original shape coverage independently.
                                         is AnalyticRectDraw -> packW4RasterGeometry(listOf(sourceBounds ?: draw.copyRasterBounds())).let { it.vertices to it.indices }
                                         is AnalyticRRectDraw -> packW4RasterGeometry(listOf(sourceBounds ?: draw.copyRasterBounds())).let { it.vertices to it.indices }
-                                        is W5bPointDraw -> draw.copyVerticesF32() to draw.copyIndicesI32()
+                                        is W5bPointDraw -> sourceBounds?.let { bounds ->
+                                            fullMaskMaterialPointGeometry(draw, bounds)
+                                        } ?: (draw.copyVerticesF32() to draw.copyIndicesI32())
                                         is PathDraw -> {
-                                            val fill = when (val geometry = draw.copyPathGeometry()) {
-                                                is PathDrawGeometry.Fill -> geometry.valueF32
-                                                is PathDrawGeometry.Stroke -> geometry.valueF32.copyFillGeometryF32()
-                                                else -> error("Unadmitted W6 path geometry")
-                                            }
-                                            when (pass) {
-                                                is PlanPass.StencilGeometryProducerV3 -> requireNotNull(fill.copyStencilEdgeFanF32OrNull()).let {
-                                                    it.copyVerticesF32() to it.copyIndicesI32() }
-                                                is PlanPass.StencilCover -> packW4RasterGeometry(listOf(draw.copyScissorI32())).let { it.vertices to it.indices }
-                                                else -> requireNotNull(fill.copyDirectTriangleF32OrNull()).let { it.copyVerticesF32() to it.copyIndicesI32() }
+                                            sourceBounds?.let { bounds ->
+                                                if (pass is PlanPass.StencilCover) {
+                                                    packW4RasterGeometry(listOf(bounds)).let { it.vertices to it.indices }
+                                                } else fullMaskMaterialTriangleGeometry(bounds,
+                                                    binding.vertexCountI32, binding.indexCountI32)
+                                            } ?: run {
+                                                val fill = when (val geometry = draw.copyPathGeometry()) {
+                                                    is PathDrawGeometry.Fill -> geometry.valueF32
+                                                    is PathDrawGeometry.Stroke -> geometry.valueF32.copyFillGeometryF32()
+                                                    else -> error("Unadmitted W6 path geometry")
+                                                }
+                                                when (pass) {
+                                                    is PlanPass.StencilGeometryProducerV3 -> requireNotNull(fill.copyStencilEdgeFanF32OrNull()).let {
+                                                        it.copyVerticesF32() to it.copyIndicesI32() }
+                                                    is PlanPass.StencilCover -> packW4RasterGeometry(listOf(draw.copyScissorI32())).let { it.vertices to it.indices }
+                                                    else -> requireNotNull(fill.copyDirectTriangleF32OrNull()).let { it.copyVerticesF32() to it.copyIndicesI32() }
+                                                }
                                             }
                                         }
                                         else -> error("Unadmitted W6 geometry data")
@@ -1128,12 +1137,66 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         }
     """
 
+    private fun PlanPass.materializesW6bMaskSourceV1(): Boolean = when (this) {
+        is PlanPass.RenderPass -> w6bMaskSourceBinding != null
+        is PlanPass.StencilCover -> coverageSource != null
+        else -> false
+    }
+
+    private fun fullMaskMaterialPointGeometry(draw: W5bPointDraw, bounds: RectI32): Pair<FloatArray, IntArray> {
+        val vertices = draw.copyVerticesF32()
+        require(vertices.size % 8 == 0)
+        val left = bounds.left.toFloat()
+        val top = bounds.top.toFloat()
+        val right = bounds.right.toFloat()
+        val bottom = bounds.bottom.toFloat()
+        for (offsetI32 in vertices.indices step 8) {
+            vertices[offsetI32] = left
+            vertices[offsetI32 + 1] = top
+            vertices[offsetI32 + 2] = right
+            vertices[offsetI32 + 3] = top
+            vertices[offsetI32 + 4] = right
+            vertices[offsetI32 + 5] = bottom
+            vertices[offsetI32 + 6] = left
+            vertices[offsetI32 + 7] = bottom
+        }
+        return vertices to draw.copyIndicesI32()
+    }
+
+    /** Reuses the frozen direct-path binding capacity while covering its published source extent. */
+    private fun fullMaskMaterialTriangleGeometry(bounds: RectI32, vertexCountI32: Int,
+        indexCountI32: Int): Pair<FloatArray, IntArray> {
+        require(vertexCountI32 >= 3 && indexCountI32 >= 3 && indexCountI32 % 3 == 0)
+        val left = bounds.left.toFloat()
+        val top = bounds.top.toFloat()
+        val right = bounds.right.toFloat()
+        val bottom = bounds.bottom.toFloat()
+        val vertices = FloatArray(Math.multiplyExact(vertexCountI32, 2))
+        vertices[0] = left
+        vertices[1] = top
+        vertices[2] = right * 2f - left
+        vertices[3] = top
+        vertices[4] = left
+        vertices[5] = bottom * 2f - top
+        for (offsetI32 in 6 until vertices.size step 2) {
+            vertices[offsetI32] = left
+            vertices[offsetI32 + 1] = top
+        }
+        return vertices to IntArray(indexCountI32) { indexI32 -> indexI32 % 3 }
+    }
+
     private fun geometryPipeline(mapped: GPUWgpu4kCorePrimitivePipelineMapping.Mapped, groupZero: GPUBindGroupLayout,
-        owned: W6aOwnedHandles, template: GPUW5aGeometryHostTemplateV1?, sourceBlend: BlendPlan? = null): GPURenderPipeline {
+        owned: W6aOwnedHandles, template: GPUW5aGeometryHostTemplateV1?, sourceBlend: BlendPlan? = null,
+        sourceIgnoresDepthStencil: Boolean = false): GPURenderPipeline {
+        require(!sourceIgnoresDepthStencil || sourceBlend != null)
         val module = owned.own(device.createShaderModule(ShaderModuleDescriptor(code =
             requireNotNull(corePrimitiveMaterialGeometryWgslV1(mapped.componentIdentity)))))
         val layout = owned.own(device.createPipelineLayout(PipelineLayoutDescriptor(bindGroupLayouts = listOf(groupZero))))
-        val descriptor = corePrimitiveWgpu4kRenderPipelineDescriptor(mapped.identity, module, layout).let { descriptor ->
+        val sourceIdentity = if (sourceIgnoresDepthStencil) mapped.identity.copy(
+            program = GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOverWithPathDepthStencil,
+            blendProgram = GPUWgpu4kCorePrimitiveBlendProgram.PremulSrcOver,
+        ) else mapped.identity
+        val descriptor = corePrimitiveWgpu4kRenderPipelineDescriptor(sourceIdentity, module, layout).let { descriptor ->
             sourceBlend?.let { blend ->
                 val fragment = requireNotNull(descriptor.fragment)
                 RenderPipelineDescriptor(

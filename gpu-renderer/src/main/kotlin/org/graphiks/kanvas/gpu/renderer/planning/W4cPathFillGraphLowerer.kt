@@ -140,9 +140,11 @@ internal class W4cPathFillGraphLowerer {
     internal fun w6bCoveragePacket(passId: String, draw: PathFillDraw, producer: Boolean,
         table: MaterialPlanTable, bounds: GPUPixelBounds, graph: RenderGraph): W4cBuiltPass {
         val clip = clipFor(draw, bounds)
+        val stencil = draw.strategy == PathFillStrategy.StencilCover
         return packet(draw, 0, passId,
-            if (producer) GPUDrawPacketRole.PathStencilProducer else GPUDrawPacketRole.PathStencilCover,
-            GPUCorePrimitiveCoverageMode.Stencil1x,
+            if (producer) GPUDrawPacketRole.PathStencilProducer else if (stencil)
+                GPUDrawPacketRole.PathStencilCover else GPUDrawPacketRole.Shading,
+            if (stencil) GPUCorePrimitiveCoverageMode.Stencil1x else GPUCorePrimitiveCoverageMode.FullOrScissor,
             if (producer) GPUClipCoveragePlan.NoClip else clip.coverage,
             if (producer) GPUClipExecutionPlan.NoClip else clip.execution, table, bounds, graph,
             packetSuffix = ".w6b.$passId", coverageOnly = true)

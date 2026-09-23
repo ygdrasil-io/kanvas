@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.*
 import org.graphiks.kanvas.gpu.plan.BlendPlan
+import org.graphiks.kanvas.gpu.plan.PlanPass
 import org.graphiks.kanvas.gpu.plan.PlanResourceRole
 import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorWgslValidation
@@ -125,8 +126,7 @@ internal fun validatesW5aSourcePartitionV2(framePlan: GPUFramePlan, payload: GPU
     val owners = payload.auxiliaryOwnedHandles.mapNotNull { it.handle as? GPUW5aSourceOwnedHandlesV2 }
     return payload.scopeOperands.all { operand ->
         if (operand !is GPUPreparedNativeScopeOperand.Render) return@all true
-        val materializesW6bMaskSource = (operand.w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass)
-            ?.w6bMaskSourceBinding != null
+        val materializesW6bMaskSource = operand.w6aPassV1.materializesW6bMaskSourceV1()
         val render = framePlan.steps.getOrNull(operand.sourceStepIndex) as? GPUFrameStep.RenderPassStep
             ?: return@all operand.w5aSourceBindingsV2.isEmpty()
         if (operand.w5bInitialClearV3 !== render.w5bInitialClearV3) return@all false
@@ -173,6 +173,13 @@ private fun nativeSourcePacketV3(packets: List<org.graphiks.kanvas.gpu.renderer.
         packet.w5bFinalFrameWitnessV3?.w4eLane?.owns(packet) == true &&
             packet.materialSourcePartitionV3() === source && packet.w4ePreparedFrameAuthority != null
     } ?: packets.getOrNull(ordinalI32)
+
+/** The frozen W6b source owns W5 material; FilterCoverage owns raw W4 geometry separately. */
+private fun PlanPass?.materializesW6bMaskSourceV1(): Boolean = when (this) {
+    is PlanPass.RenderPass -> w6bMaskSourceBinding != null
+    is PlanPass.StencilCover -> coverageSource != null
+    else -> false
+}
 
 /** W4e inverse-domain packets seal an atomic stencil prefix plus one final color draw. */
 private fun sourceDrawsV2(
@@ -488,8 +495,7 @@ internal fun materializeW5aSourcePartitionV2(
             if (operand !is GPUPreparedNativeScopeOperand.Render) return@map operand
             val packets = renders.getValue(operand.sourceStepIndex).drawPackets
             if (packets.none { it.materialSourcePartitionV3() != null }) return@map operand
-            val materializesW6bMaskSource = (operand.w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass)
-                ?.w6bMaskSourceBinding != null
+            val materializesW6bMaskSource = operand.w6aPassV1.materializesW6bMaskSourceV1()
             val sources = sourceDrawsV2(renders.getValue(operand.sourceStepIndex), operand)
             var currentPipeline: GPUPreparedNativeRenderPipelineOperand? = null
             var drawOrdinalI32 = 0

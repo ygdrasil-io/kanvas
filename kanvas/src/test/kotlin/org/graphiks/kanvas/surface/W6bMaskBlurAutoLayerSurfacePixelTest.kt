@@ -127,6 +127,26 @@ class W6bMaskBlurAutoLayerSurfacePixelTest {
     }
 
     @Test
+    fun `convex direct path mask blurs its frozen coverage with red material`() {
+        val path = Path()
+            .moveTo(2f, 2f)
+            .lineTo(8f, 2f)
+            .lineTo(2f, 7f)
+            .close()
+        val actual = Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
+            surface.canvas {
+                drawPath(path, Paint(
+                    ColorARGB.Red,
+                    maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1f),
+                    antiAlias = false,
+                ))
+            }
+        }.render().pixels
+
+        W6bMaskBlurCpuOracle.assertNear(W6bMaskBlurCpuOracle.renderDirectTriangleMaskSourceOver(), actual)
+    }
+
+    @Test
     fun `stencil path mask applies DST_OUT only at the parent composite`() {
         val path = Path()
             .moveTo(2f, 2f)
@@ -148,6 +168,28 @@ class W6bMaskBlurAutoLayerSurfacePixelTest {
         }.render().pixels
 
         W6bMaskBlurCpuOracle.assertNear(W6bMaskBlurCpuOracle.renderStencilPathDstOutOverGreen(), actual)
+    }
+
+    @Test
+    fun `stencil path mask shades red material across its blurred coverage`() {
+        val path = Path()
+            .moveTo(2f, 2f)
+            .lineTo(8f, 2f)
+            .lineTo(8f, 6f)
+            .lineTo(5f, 4f)
+            .lineTo(2f, 6f)
+            .close()
+        val actual = Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
+            surface.canvas {
+                drawPath(path, Paint(
+                    ColorARGB.Red,
+                    maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1f),
+                    antiAlias = false,
+                ))
+            }
+        }.render().pixels
+
+        W6bMaskBlurCpuOracle.assertNear(W6bMaskBlurCpuOracle.renderStencilPathMaskSourceOver(), actual)
     }
 
     private fun renderTranslatedMaskedRect(style: BlurStyle): UByteArray =

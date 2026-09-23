@@ -91,3 +91,48 @@ Les shards `:kanvas:test` écrivent les résultats JUnit verts ci-dessus puis le
 - Les ressources et l'ordre de passes restent gelés dans W6a/W4 : le renderer ne traverse ni capture IR ni graphe pour replanifier/retouver une coverage source.
 - Les deux nouveaux tests restent des tests pixels publics avec oracle CPU ; aucun mock, fake device, reflection, compteur ou test de source statique n'a été introduit.
 - Les contrôles Task 3 passaient avant commit : nested command-limit, restore mask blur, terminal-empty/layer et W4/W5 sont tous à 0 failure dans leurs XML JUnit.
+
+## Fix round 2 — re-revue P1
+
+Base de correction : `0e85abda1` (`66d3a44` est uniquement le ledger de revue).
+
+### RED → GREEN
+
+1. RED causal du direct path : le nouveau témoin public d'un triangle convexe était admis puis refusé avec `w6a.layer.invalid_plan: Path stencil structural authority requires stencil edge-fan geometry`. La cause était le packet W4c/W4d toujours publié comme `PathStencilCover` / `Stencil1x` sans ressource depth/stencil. Après la correction à `Shading` / `FullOrScissor`, le même témoin a atteint les pixels et a exposé le second RED : `expected RGBA=205,0,0,157`, `actual=0,0,0,86` (halo noir).
+2. RED causal stencil : le témoin public concave `SRC_OVER` a échoué avec la même alpha mais RGB noir : `expected=177,0,0,115`, `actual=0,0,0,115`. Cela prouve que la couverture était produite, mais que W5 restait limité à la géométrie d'origine.
+3. GREEN : `W5bPointDraw` et les paths directs réécrivent seulement le contenu de leur binding V/I gelé existant pour couvrir l'étendue source W6b publiée ; aucun buffer, source, target, bounds ni opération n'est créé. Les packets de la coverage W4 restent inchangés dans leur pass `FilterCoverageSourcePass` séparé. Un path stencil consomme le même binding `coverageSource` explicite dans son `StencilCover`, évalue W5 sur le rectangle de l'étendue source, et garde un état D24S8 neutre (compatible avec le render pass, sans test ni écriture stencil).
+4. GREEN : W5 reconnaît `StencilCover.coverageSource` comme source W6b, retire uniquement la multiplication coverage déjà gelée, force `LegacySrcOverV1` au stade offscreen et conserve le blend sélectionné exclusivement dans `FilterComposite`. La règle Picture scellée transparent-black reste le chemin distinct de `MaterializedSource`.
+5. La première version du triangle test utilisait une diagonale passant exactement par un centre de pixel. Son écart résiduel était une ambiguïté de règle de rasterisation au bord, non le halo. Le fixture est maintenant un triangle direct dont aucune arête ne traverse un centre de pixel, tout en restant calculé indépendamment par l'oracle CPU.
+
+### Fichiers modifiés par ce correctif
+
+- `gpu-renderer/.../planning/W4cPathFillGraphLowerer.kt`
+- `gpu-renderer/.../planning/W4dPathStrokeGraphLowerer.kt`
+- `gpu-renderer/.../execution/GPUW5aSourceStageNativeV2.kt`
+- `gpu-renderer/.../execution/GPUWgpu4kW6aLayerFramePayloadMaterializer.kt`
+- `kanvas/.../W6bMaskBlurAutoLayerSurfacePixelTest.kt`
+- `kanvas/.../W6bMaskBlurCpuOracle.kt`
+
+### Gates de correction
+
+| Commande | Résultat vérifié |
+| --- | --- |
+| `rtk ./gradlew --quiet :gpu-plan:compileKotlin` | GREEN, exit 0 |
+| `rtk ./gradlew --quiet :gpu-renderer:compileKotlin` | GREEN, exit 0 |
+| `rtk ./gradlew --quiet :kanvas:compileKotlin` | GREEN, exit 0 |
+| `rtk ./gradlew --quiet :gpu-plan:test --tests '*RenderGraphContractTest'` | GREEN, JUnit 94/0 |
+| `rtk ./gradlew --quiet :kanvas:test --tests '*W6bMaskBlurAutoLayerSurfacePixelTest'` | JUnit 9/0 (les 7 témoins précédents plus direct et stencil RGB) |
+| `rtk ./gradlew --quiet :kanvas:test --tests '*W6bFilterAdmissionRecoverySurfaceTest'` | JUnit 25/0 |
+| `rtk ./gradlew --quiet :kanvas:test --tests '*W6bImageBlurSurfacePixelTest.nested filtered Pictures run the child blur before the sealed parent blur'` | Task 3 JUnit 1/0 |
+| `rtk ./gradlew --quiet :kanvas:test --tests '*W6aNestedLayerSurfacePixelTest' --tests '*W6aLayerRestoreSurfacePixelTest' --tests '*W6aLayerSurfacePixelTest' --tests '*W6aLayerW4W5SurfacePixelTest'` | JUnit 10/0 + 9/0 + 16/0 + 19/0 |
+| `rtk git diff --check` | GREEN |
+
+Les invocations `:kanvas:test` ont toutes écrit les XML JUnit complets puis quitté avec 133. La seule exécution 134 rencontrée pendant ce round a été un diagnostic indépendant et causal WGPU : un pipeline source stencil sans state D24S8 était incompatible avec le render pass. Elle est corrigée par le pipeline `DirectSrcOverWithPathDepthStencil` neutre ; les deux témoins path sont ensuite JUnit GREEN. Les exits natifs 133 (et 134 hors de ce diagnostic corrigé) restent **UNKNOWN** sans preuve indépendante.
+
+### Self-review / concerns
+
+- Aucun nouveau `PlanPass`, arm d'opération, `SourceBinding`, bounds ou target : le correctif consomme les bindings W4/W5 et les passes déjà gelés. Il n'y a ni scan renderer, ni traversal de capture IR, ni replanification.
+- La séparation buffer source/coverage de round 1 est conservée : les bytes W5 pleine étendue ne remplacent jamais les bytes de la raster coverage W4 avant la soumission.
+- Le stencil garde ses deux packets W4 producer/cover pour `FilterCoverage`; seul son source material W5 réutilise le cover avec state stencil neutre, donc sans transformer cette source en `PathStencilCover` coverage ou changer l'ordre gelé.
+- Aucun mock/fake device/reflection/counter/test de source statique, GM/render/baseline/dashboard, font/codec ou `jpg-color-cube` n'a été ajouté. Les routes legacy `GPUTopLevelMaskBlurFrameRecording` et `GPUPreparedMaskFilterLowerer` ne sont pas appelées.
+- `:gpu-plan:test` complet n'a pas été lancé : ses 28 dettes W3/W4 documentées restent inchangées et non reclassées. Le statut 133 reste UNKNOWN.

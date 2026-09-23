@@ -42,7 +42,11 @@ internal object W6bMaskBlurCpuOracle {
 
     fun renderClippedRoundedRectMask(): UByteArray = opaqueSource(styled(BlurStyle.NORMAL, clippedRoundedRectCoverage()))
 
+    fun renderDirectTriangleMaskSourceOver(): UByteArray = opaqueSource(styled(BlurStyle.NORMAL, directTriangleCoverage()))
+
     fun renderStencilPathDstOutOverGreen(): UByteArray = dstOutGreen(styled(BlurStyle.NORMAL, stencilPathCoverage()))
+
+    fun renderStencilPathMaskSourceOver(): UByteArray = opaqueSource(styled(BlurStyle.NORMAL, stencilPathCoverage()))
 
     fun renderLayerOverBlue(): UByteArray = sourceOverBlue(opaqueSourceAlpha(styled(BlurStyle.NORMAL, translatedRectCoverage())))
 
@@ -102,6 +106,26 @@ internal object W6bMaskBlurCpuOracle {
                 if (crosses && xF32 < (end[0] - start[0]) * (yF32 - start[1]) / (end[1] - start[1]) + start[0]) inside = !inside
             }
             if (inside) coverage[yI32 * widthI32 + xI32] = 1f
+        }
+    }
+
+    private fun directTriangleCoverage(): FloatArray = FloatArray(widthI32 * heightI32).also { coverage ->
+        val vertices = arrayOf(
+            floatArrayOf(2f, 2f),
+            floatArrayOf(8f, 2f),
+            floatArrayOf(2f, 7f),
+        )
+        for (yI32 in 0 until heightI32) for (xI32 in 0 until widthI32) {
+            val xF32 = xI32 + .5f
+            val yF32 = yI32 + .5f
+            val cross0 = (vertices[1][0] - vertices[0][0]) * (yF32 - vertices[0][1]) -
+                (vertices[1][1] - vertices[0][1]) * (xF32 - vertices[0][0])
+            val cross1 = (vertices[2][0] - vertices[1][0]) * (yF32 - vertices[1][1]) -
+                (vertices[2][1] - vertices[1][1]) * (xF32 - vertices[1][0])
+            val cross2 = (vertices[0][0] - vertices[2][0]) * (yF32 - vertices[2][1]) -
+                (vertices[0][1] - vertices[2][1]) * (xF32 - vertices[2][0])
+            if ((cross0 >= 0f && cross1 >= 0f && cross2 >= 0f) ||
+                (cross0 <= 0f && cross1 <= 0f && cross2 <= 0f)) coverage[yI32 * widthI32 + xI32] = 1f
         }
     }
 
