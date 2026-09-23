@@ -51,8 +51,8 @@
 - [x] Task 2 Sol review and bounded correction if needed
 - [x] Task 3 — image blur and tile modes
 - [x] Task 3 Sol review and bounded correction if needed
-- [ ] Task 4 — mask blur auto-layers
-- [ ] Task 4 Sol review and bounded correction if needed
+- [x] Task 4 — mask blur auto-layers
+- [x] Task 4 Sol review and bounded correction if needed
 - [ ] Task 5 — mask shader/table
 - [ ] Task 5 Sol review and bounded correction if needed
 - [ ] Task 6 — shadows, budget, convergence
@@ -107,3 +107,6 @@
 - Task 4 Sol review: `REQUEST_CHANGES` with two Important findings — native admission accepts analytic/stencil/non-rect W4 coverage while the materializer rediscovers and requires `SolidRect`; and stencil-cover auto-layer sources retain the selected blend before the same blend is applied again at the final composite.
 - Task 4 fix round 1 implemented as `0e85abda1`: explicit `W6bRasterCoverageBindingV1` replaces renderer pass scanning, RRect/clip and stencil path coverage are planned resources, and every offscreen W6b source stage uses `SRC_OVER` before the selected final blend. Task 4 7/7, admission 25/25, graph contracts and Task 3/W6a controls pass in JUnit; native 133 remains `UNKNOWN`.
 - Task 4: fix round 1/5 (1 original finding addressed, 1 partially addressed, 2 Important gaps open — direct-triangle paths without depth-stencil still receive a stencil-cover packet; path/point W5 material remains clipped to original geometry instead of covering the styled mask domain, producing black color halos; commits `8d3899f..0e85abd`).
+- Task 4 fix round 2 implemented as `0a0359cc3`: direct paths use `Shading`/`FullOrScissor`, stencil retains its two-packet coverage path, and W5 material for point/direct/stencil evaluates across the full styled-coverage extent while raw W4 coverage remains separate. Task 4 9/9, admission 25/25, graph contracts 94/94 and 54 W6a controls pass in JUnit; native 133 remains `UNKNOWN`.
+- Task 4: fix round 2/5 (2 addressed, 0 open; commits `0e85abd..0a0359c`). Scoped Sol rereview: `PASS / READY`.
+- Task 4: complete (commits `3fde179..0a0359c`, review clean).
