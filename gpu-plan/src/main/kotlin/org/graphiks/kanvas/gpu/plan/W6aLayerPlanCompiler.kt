@@ -282,6 +282,7 @@ public class W6aLayerPlanCompiler public constructor(
                 operation.uniformCapacityBytesI64 != null
             is FilterPassOperationV1.Merge,
             is FilterPassOperationV1.Blend,
+            is FilterPassOperationV1.Morphology,
             -> true
             is FilterPassOperationV1.SeparableBlur -> operation.kind in nativeBlurKinds
             is FilterPassOperationV1.MaskBlurStyle,

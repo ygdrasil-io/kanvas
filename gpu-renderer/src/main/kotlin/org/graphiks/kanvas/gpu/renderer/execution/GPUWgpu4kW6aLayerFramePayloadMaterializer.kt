@@ -8,6 +8,7 @@ import java.nio.ByteOrder
 import org.graphiks.kanvas.gpu.plan.*
 import org.graphiks.kanvas.gpu.renderer.materials.W5fColorOperationEmitterV1
 import org.graphiks.kanvas.gpu.renderer.materials.W5aMaterialSourceStage
+import org.graphiks.kanvas.gpu.renderer.filters.GPUW6cMorphologyPass
 import org.graphiks.kanvas.gpu.renderer.filters.GPUW6cMultiInputPass
 import org.graphiks.kanvas.gpu.renderer.filters.GPUW6cSpatialSamplingPass
 import org.graphiks.kanvas.gpu.renderer.recording.*
@@ -629,6 +630,13 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     pass.inputs().map(views::getValue), generation,
                                     W6A_VERTEX_SHADER + GPUW6cMultiInputPass.blendFragment(operation),
                                     outputExtent.width, outputExtent.height, pass, owned)
+                            }
+                            is FilterPassOperationV1.Morphology -> {
+                                require(pass.inputs().size == 1)
+                                renderOperands += textureRender(stepIndex, views.getValue(pass.output),
+                                    views.getValue(pass.inputs().single()), generation,
+                                    W6A_VERTEX_SHADER + GPUW6cMorphologyPass.fragment(operation), BlendPlan.LegacySrcOverV1,
+                                    0, 0, outputExtent.width, outputExtent.height, pass, owned)
                             }
                             is FilterPassOperationV1.SeparableBlur -> {
                                 require(operation.kind in setOf(

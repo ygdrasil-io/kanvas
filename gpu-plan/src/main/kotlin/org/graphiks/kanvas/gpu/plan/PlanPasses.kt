@@ -1271,6 +1271,9 @@ public sealed interface PlanPass {
                 is FilterPassOperationV1.Blend -> require(storedInputs.size == 2) {
                     "Blend requires frozen background then foreground inputs."
                 }
+                is FilterPassOperationV1.Morphology -> require(storedInputs.size == 1) {
+                    "Morphology requires one frozen source input."
+                }
                 else -> Unit
             }
         }

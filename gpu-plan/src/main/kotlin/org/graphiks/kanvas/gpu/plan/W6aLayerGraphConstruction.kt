@@ -678,6 +678,7 @@ internal class W6aLayerGraphConstruction(
             operation: FilterCompositeOperationV1,
             materialCoverage: W6bFilterGraphConstruction.SourceBinding? = null,
             replacedLayerSource: PlanResourceId? = null,
+            terminalClipDeviceI32: RectI32? = null,
             pictureTerminal: ((W6bFilterGraphConstruction.SourceBinding, RectI32, Point2I32) -> PictureTerminalAdmissionV1)? = null,
         ): PlanPass.FilterComposite {
             filterCursor.passOrdinalI32 = passes.size
@@ -700,7 +701,9 @@ internal class W6aLayerGraphConstruction(
             passes += frozen.passes()
             sourceBindingsById[frozen.output.resourceId] = frozen.output
             val outputBounds = frozen.output.copyDeviceBoundsI32()
-            val compositeDeviceBounds = requireNotNull(intersect(outputBounds, targetDeviceBounds(destination)))
+            val compositeDeviceBounds = requireNotNull(intersect(
+                requireNotNull(intersect(outputBounds, terminalClipDeviceI32 ?: outputBounds)), targetDeviceBounds(destination),
+            ))
             val sourceBounds = requireNotNull(frozen.output.mapping.mapDeviceRectToTargetI32OrNull(
                 compositeDeviceBounds, frozen.output.originDeviceI32,
             ))
@@ -1947,7 +1950,8 @@ internal class W6aLayerGraphConstruction(
                     versions[source.resourceId] = 0L
                     steps += LayerExecutionStepV1.RenderChildren(scopeId, layerSource.id)
                     appendFrozenOccurrence(filtered, source, parentTarget,
-                        FilterCompositeOperationV1.Layer(restore), frozenMask?.output ?: coverage, target)
+                        FilterCompositeOperationV1.Layer(restore), frozenMask?.output ?: coverage, target,
+                        terminalClipDeviceI32 = geometry.desiredOutputDeviceI32)
                 } ?: PlanPass.LayerComposite(passes.size, scopeId, target, parentTarget,
                     RectI32(0, 0, childDomain.width(), childDomain.height()), destinationOrigin, restore,
                     AttachmentLoadPlan.Load, AttachmentStorePlan.Store, after).also {

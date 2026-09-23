@@ -400,6 +400,30 @@ internal object W6bFilterGraphConstruction {
                     verticalBounds, filterInputSampling(horizontal, verticalBounds))))
             return ContextualFilterResult(vertical, verticalBounds, key)
         }
+        fun appendMorphology(
+            source: SourceBinding,
+            morphologyKind: FilterPassOperationV1.Morphology.Kind,
+            radiusXF64: Double,
+            radiusYF64: Double,
+            key: FilterEvaluationKeyV1,
+        ): ContextualFilterResult {
+            val radii = W6cMorphologyPlanner.deviceRadii(radiusXF64, radiusYF64, source.mapping)
+            fun appendAxis(input: SourceBinding, axis: FilterAxisV1): SourceBinding {
+                val radius = if (axis == FilterAxisV1.X) radii.radiusXF64 else radii.radiusYF64
+                val bounds = W6cMorphologyPlanner.bounds(input, morphologyKind, axis, radius)
+                val output = allocateTarget(bounds)
+                val kind = if (axis == FilterAxisV1.X) FilterImplementationKindV1.MORPHOLOGY_X else FilterImplementationKindV1.MORPHOLOGY_Y
+                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
+                    FilterPassOperationV1.Morphology(morphologyKind, radii.radiusXF64, radii.radiusYF64,
+                        radii.radiusXTexelsI32, radii.radiusYTexelsI32, axis, bounds,
+                        filterInputSampling(input, bounds), kind)))
+                return output
+            }
+            val horizontal = appendAxis(source, FilterAxisV1.X)
+            val vertical = appendAxis(horizontal, FilterAxisV1.Y)
+            return ContextualFilterResult(vertical, W6cMorphologyPlanner.bounds(horizontal, morphologyKind,
+                FilterAxisV1.Y, radii.radiusYF64), key)
+        }
         lateinit var materializeNode: (CapturedFilterNodeIdI32, SourceBinding) -> ContextualFilterResult
         fun bindInput(input: CapturedFilterInputV1, currentSource: SourceBinding): ContextualFilterResult = when (input) {
             CapturedFilterInputV1.ImplicitSource -> ContextualFilterResult(currentSource, identityBounds(currentSource), null)
@@ -544,6 +568,18 @@ internal object W6bFilterGraphConstruction {
                     FilterPassOperationV1.Blend(blend, filterInputSampling(background.source, bounds),
                         filterInputSampling(foreground.source, bounds), bounds)))
                 ContextualFilterResult(output, bounds, key)
+            }
+            is CapturedFilterNodeV1.Dilate -> {
+                val input = materializeInput(node.input, currentSource)
+                val key = keyFor(id, null, currentSource, input.copyDeviceBoundsI32())
+                appendMorphology(input, FilterPassOperationV1.Morphology.Kind.DILATE,
+                    node.radiusX.toDouble(), node.radiusY.toDouble(), key)
+            }
+            is CapturedFilterNodeV1.Erode -> {
+                val input = materializeInput(node.input, currentSource)
+                val key = keyFor(id, null, currentSource, input.copyDeviceBoundsI32())
+                appendMorphology(input, FilterPassOperationV1.Morphology.Kind.ERODE,
+                    node.radiusX.toDouble(), node.radiusY.toDouble(), key)
             }
             else -> throw ConstructionFailure(W6bFilterDiagnostics.refusal(
                 W6bFilterDiagnostics.UnsupportedFamily, "The captured image-filter family belongs to W6c or W6d.",
@@ -748,6 +784,14 @@ internal object W6bFilterGraphConstruction {
             is CapturedFilterNodeV1.Crop -> spatialDemand(node, output)?.let { required -> inputDemand(node.input, required) }
             is CapturedFilterNodeV1.Offset -> spatialDemand(node, output)?.let { required -> inputDemand(node.input, required) }
             is CapturedFilterNodeV1.Tile -> spatialDemand(node, output)?.let { required -> inputDemand(node.input, required) }
+            is CapturedFilterNodeV1.Dilate -> inputDemand(node.input,
+                W6cMorphologyPlanner.requiredInputBounds(node.radiusX.toDouble(), node.radiusY.toDouble(), output,
+                    mapping ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                        "W6c reverse demand has no sealed local-to-device mapping."))))
+            is CapturedFilterNodeV1.Erode -> inputDemand(node.input,
+                W6cMorphologyPlanner.requiredInputBounds(node.radiusX.toDouble(), node.radiusY.toDouble(), output,
+                    mapping ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                        "W6c reverse demand has no sealed local-to-device mapping."))))
             is CapturedFilterNodeV1.Blur -> inputDemand(node.input, expand(output, node.sigmaX, node.sigmaY))
             is CapturedFilterNodeV1.DropShadow -> {
                 val translated = RectF64(output.left.toDouble(), output.top.toDouble(),
@@ -1006,6 +1050,8 @@ internal object W6bFilterGraphConstruction {
                         node.background.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
                         node.foreground.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
                     }
+                    is CapturedFilterNodeV1.Dilate -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.Erode -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
                     else -> return if (isW6cVariant(node)) "W6c" else "W6d"
                 }
             }

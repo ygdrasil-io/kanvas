@@ -155,6 +155,7 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
             is FilterPassOperationV1.DropShadowComposite -> 2
             is FilterPassOperationV1.MaskBlurStyle -> if (operation.originalCoverageSource == null) 1 else 2
             is FilterPassOperationV1.SeparableBlur,
+            is FilterPassOperationV1.Morphology,
             is FilterPassOperationV1.Crop,
             is FilterPassOperationV1.Offset,
             is FilterPassOperationV1.Tile,
@@ -172,6 +173,7 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
         private fun requirePublishedTargetLocalSampling(operation: FilterPassOperationV1) {
             when (operation) {
                 is FilterPassOperationV1.SeparableBlur -> require(operation.sampling != null)
+                is FilterPassOperationV1.Morphology -> require(!operation.sampling.copyKnownContentInputTargetLocalI32().isEmpty)
                 is FilterPassOperationV1.Crop -> require(operation.sampling.copySourceInputTargetLocalI32().isEmpty.not())
                 is FilterPassOperationV1.Offset -> require(operation.sampling.copySourceInputTargetLocalI32().isEmpty.not())
                 is FilterPassOperationV1.Tile -> require(operation.sampling.copySourceInputTargetLocalI32().isEmpty.not())
@@ -319,6 +321,21 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                 is FilterPassOperationV1.Blend -> {
                     contextuallyOwned(inputs[0])
                     contextuallyOwned(inputs[1])
+                }
+                is FilterPassOperationV1.Morphology -> {
+                    val input = inputs.single()
+                    contextuallyOwned(input)
+                    if (operation.axis == FilterAxisV1.X) {
+                        require((producer(input) as? PlanPass.FilterPass)?.evaluationKey !== key) {
+                            "W6c morphology X must be first in its exact-key chain."
+                        }
+                    } else {
+                        sameKey(input) { previous ->
+                            previous is FilterPassOperationV1.Morphology && previous.axis == FilterAxisV1.X &&
+                                previous.morphologyKind == operation.morphologyKind &&
+                                previous.kind == FilterImplementationKindV1.MORPHOLOGY_X
+                        }
+                    }
                 }
                 is FilterPassOperationV1.SeparableBlur -> {
                     val input = inputs.single()

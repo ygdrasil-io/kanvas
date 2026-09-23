@@ -31,6 +31,10 @@ public enum class FilterImplementationKindV1 {
     MERGE_COMPOSITE,
     /** W6c ordered background/foreground composition using a frozen W5 BlendPlan. */
     BLEND_COMPOSITE,
+    /** W6c frozen horizontal morphology extrema pass. */
+    MORPHOLOGY_X,
+    /** W6c frozen vertical morphology extrema pass. */
+    MORPHOLOGY_Y,
     IMAGE_BLUR_X,
     IMAGE_BLUR_Y,
     MASK_COVERAGE_BLUR_X,
@@ -339,6 +343,33 @@ public sealed interface FilterPassOperationV1 {
 
         public fun backgroundSampling(): FilterInputSamplingV1 = backgroundSamplingSnapshot
         public fun foregroundSampling(): FilterInputSamplingV1 = foregroundSamplingSnapshot
+    }
+
+    /**
+     * One axis of a frozen two-pass morphology evaluation.  Both the mapped F64 support and
+     * its checked I32 tap count are selected in :gpu-plan; native lowering only consumes them.
+     */
+    public class Morphology(
+        public val morphologyKind: Kind,
+        public val radiusXF64: Double,
+        public val radiusYF64: Double,
+        public val radiusXTexelsI32: Int,
+        public val radiusYTexelsI32: Int,
+        public val axis: FilterAxisV1,
+        override val bounds: FilterBoundsPlanV1,
+        public val sampling: FilterInputSamplingV1,
+        override val kind: FilterImplementationKindV1,
+    ) : FilterPassOperationV1 {
+        public enum class Kind { DILATE, ERODE }
+
+        init {
+            require(radiusXF64.isFinite() && radiusYF64.isFinite() && radiusXF64 >= 0.0 && radiusYF64 >= 0.0)
+            require(radiusXTexelsI32 >= 0 && radiusYTexelsI32 >= 0)
+            require((kind == FilterImplementationKindV1.MORPHOLOGY_X) == (axis == FilterAxisV1.X) &&
+                (kind == FilterImplementationKindV1.MORPHOLOGY_Y) == (axis == FilterAxisV1.Y)) {
+                "Morphology kind and axis must agree."
+            }
+        }
     }
 
     public data class MaskBlurStyle(
