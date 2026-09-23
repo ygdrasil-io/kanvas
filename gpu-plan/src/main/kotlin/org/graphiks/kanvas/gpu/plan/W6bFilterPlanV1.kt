@@ -288,8 +288,8 @@ public sealed interface FilterPassOperationV1 {
                 (uniformResource == null) == (uniformCapacityBytesI64 == null))
             uniformCapacityBytesI64?.let { capacity ->
                 require(uniformResource!!.value.startsWith("${PlanResourceRole.SourceUniformData.name}:"))
-                val offset = requireNotNull(uniformOffsetBytesI64)
-                require(offset >= 0L && Math.addExact(offset, maxOf(16L, execution.dynamicByteCountI64)) <= capacity)
+                requireW6cColorUniformWindow(requireNotNull(uniformOffsetBytesI64), capacity,
+                    execution.dynamicByteCountI64)
             }
         }
 

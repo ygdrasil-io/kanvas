@@ -1367,7 +1367,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         owned: W6aOwnedHandles,
     ): GPUPreparedNativeScopeOperand.Render {
         val offset = operation.sampling.copyOutputToInputOffsetTargetLocalI32()
-        val wordsI32 = Math.toIntExact(maxOf(16L, operation.execution.dynamicByteCountI64) / 16L)
+        val wordsI32 = Math.toIntExact(requireNotNull(operation.uniformCapacityBytesI64) / 16L)
         val shader = W6A_VERTEX_SHADER + """
             @group(0) @binding(0) var w6c_color_source: texture_2d<f32>;
             struct W5fMaterial { words: array<vec4<u32>, $wordsI32>, }

@@ -29,13 +29,21 @@ internal class SourcePhysicalConstructionV1(
     val w4eGeometry: List<PlanW4eGeometryBindingV1> = emptyList(),
 )
 
+internal fun requireW6cColorUniformWindow(offsetBytesI64: Long, capacityBytesI64: Long, dynamicBytesI64: Long) {
+    require(dynamicBytesI64 >= 0L)
+    require(offsetBytesI64 >= 0L && offsetBytesI64 % 4L == 0L)
+    require(capacityBytesI64 >= 16L && capacityBytesI64 % 16L == 0L)
+    require(Math.addExact(offsetBytesI64, maxOf(16L, dynamicBytesI64)) <= capacityBytesI64)
+    require(capacityBytesI64 / 4L <= UInt.MAX_VALUE.toLong() + 1L)
+}
+
 /** The only FrameSourceLayoutV4-issued W6c byte window; renderers never derive it. */
 internal class W6cColorUniformBindingV1(
     val resourceId: PlanResourceId,
     val offsetBytesI64: Long,
     val capacityBytesI64: Long,
 ) {
-    init { require(offsetBytesI64 >= 0L && capacityBytesI64 > 0L && offsetBytesI64 < capacityBytesI64) }
+    init { requireW6cColorUniformWindow(offsetBytesI64, capacityBytesI64, 0L) }
 }
 
 /** Exact W4 upload/draw ranges within graph-owned physical buffers, fixed before publication. */
@@ -132,8 +140,8 @@ public class PlanPhysicalLayoutV1 private constructor(
                 val capacity = requireNotNull(operation.uniformCapacityBytesI64)
                 val offset = requireNotNull(operation.uniformOffsetBytesI64)
                 val row = rows.single { it.id == uniform }
-                require(row.role == PlanResourceRole.SourceUniformData && row.byteSize == capacity &&
-                    Math.addExact(offset, maxOf(16L, operation.execution.dynamicByteCountI64)) <= capacity)
+                require(row.role == PlanResourceRole.SourceUniformData && row.byteSize == capacity)
+                requireW6cColorUniformWindow(offset, capacity, operation.execution.dynamicByteCountI64)
                 val identity = W6cComposePlanner.colorUniformIdentity(operation.execution)
                 require(source.uniforms.getValue(identity) == uniform)
                 val binding = source.w6cColorUniformBindings.getValue(identity)
