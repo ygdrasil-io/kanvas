@@ -615,7 +615,9 @@ internal object W6bFilterGraphConstruction {
                     W6bFilterDiagnostics.refusal(W6aPlanDiagnostics.UnsupportedLightingMapping,
                         "W6d distant diffuse surface depth cannot be represented by the sealed layer mapping."),
                 )
-                val bounds = distantDiffuseBounds(input)
+                // Lighting's unbounded output belongs to its consumer, not to a bounded child
+                // such as Crop. The child remains the frozen Sobel sampling domain below.
+                val bounds = distantDiffuseBounds(input, currentSource.copyDesiredOutputDeviceI32())
                 val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
                 val output = allocateTarget(bounds)
                 append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
@@ -870,8 +872,8 @@ internal object W6bFilterGraphConstruction {
     }
 
     /** Lighting affects transparent black, so its desired domain is never narrowed to source content. */
-    private fun distantDiffuseBounds(source: SourceBinding): FilterBoundsPlanV1 {
-        val desired = source.copyDesiredOutputDeviceI32() ?: source.copyDeviceBoundsI32()
+    private fun distantDiffuseBounds(source: SourceBinding, consumerDemand: RectI32?): FilterBoundsPlanV1 {
+        val desired = consumerDemand ?: source.copyDesiredOutputDeviceI32() ?: source.copyDeviceBoundsI32()
         val required = RectF64(desired.left.toDouble(), desired.top.toDouble(), desired.right.toDouble(), desired.bottom.toDouble())
             .expandSamplingHaloF64OrNull(1.0, 1.0, 1.0, 1.0)?.roundOutToRectI32OrNull()
             ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,

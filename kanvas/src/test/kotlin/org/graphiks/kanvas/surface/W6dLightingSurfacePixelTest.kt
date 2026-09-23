@@ -3,6 +3,7 @@
 package org.graphiks.kanvas.surface
 
 import kotlin.math.abs
+import kotlin.test.assertContentEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.Canvas
@@ -47,6 +48,44 @@ class W6dLightingSurfacePixelTest {
 
         assertTrue(expected[0].toInt() > 0, "The fixture must make lighting visible on transparent black.")
         assertFamilyNear(expected, surface.render(), maxChannelDelta = 2)
+    }
+
+    @Test
+    fun `distant diffuse retains consumer demand outside a cropped child`() {
+        val alpha = FloatArray(25).also { it[2 * 5 + 2] = 1f }
+        val expected = W6dLightingCpuOracle.distantDiffuseRgba8(5, 5, alpha, 2, 2, 3, 3,
+            directionX = 1f, directionY = 0f, directionZ = 1f, surfaceDepth = 1f, kd = 1f)
+        val filter = ImageFilter.DistantLitDiffuse(
+            Vector3F32(1f, 0f, 1f), ColorARGB.White, 1f, 1f,
+            ImageFilter.Crop(RectF32.ofLTRB(2f, 2f, 3f, 3f)),
+        )
+        val surface = Surface(5, 5)
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(2f, 2f, 3f, 3f), Paint(ColorARGB.White, imageFilter = filter, antiAlias = false))
+        }
+
+        assertTrue(expected[0].toInt() > 0, "The cropped-child fixture must light transparent black outside the crop.")
+        assertFamilyNear(expected, surface.render(), maxChannelDelta = 2)
+    }
+
+    @Test
+    fun `direct distant diffuse intersects its unbounded demand with terminal clip before allocation`() {
+        val center = W6dLightingCpuOracle.distantDiffuseRgba8(1, 1, floatArrayOf(1f), 0, 0, 1, 1,
+            directionX = 1f, directionY = 0f, directionZ = 1f, surfaceDepth = 1f, kd = 1f)
+        val expected = UByteArray(512 * 4).also { pixels ->
+            center.copyInto(pixels, destinationOffset = 256 * 4)
+        }
+        val surface = Surface(512, 1, config = RenderConfig(frameLocalBudgetBytes = 5_000L))
+        surface.canvas {
+            clipRect(RectF32.ofLTRB(256f, 0f, 257f, 1f), antiAlias = false)
+            drawRect(RectF32.ofLTRB(256f, 0f, 257f, 1f), Paint(ColorARGB.White,
+                imageFilter = ImageFilter.DistantLitDiffuse(Vector3F32(1f, 0f, 1f), ColorARGB.White, 1f, 1f),
+                antiAlias = false))
+        }
+
+        val actual = surface.render()
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), actual.nativeEvidenceScopeKinds.toString())
+        assertContentEquals(expected, actual.pixels)
     }
 
     @Test

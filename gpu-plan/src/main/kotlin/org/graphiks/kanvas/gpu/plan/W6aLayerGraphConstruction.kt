@@ -457,19 +457,23 @@ internal class W6aLayerGraphConstruction(
         filterOccurrences.filterNot { it.isLayerOccurrence || it.isPictureOccurrence }.forEach { occurrence ->
             // Reject an opaque terminal clip before allocating any direct filter source; W4e
             // retains ownership of complex clips on non-filtered routes.
-            directTerminalClip(occurrence)
+            val terminalClip = directTerminalClip(occurrence)
             val binding = requireNotNull(bindingsByCommand[occurrence.insertionCommandIndexI32]) {
                 "W6b direct occurrence has no W5 source generation."
             }
             val draw = RenderGraph.visualDraws(binding.source.passes()).single()
             val deviceBounds = requireNotNull(intersect(w6aRasterBoundsI32(draw), w6aScissorI32(draw)))
-            val clipped = requireNotNull(intersect(deviceBounds, targetDeviceBounds(targetFor(binding.scopeI32))))
+            val targetBounds = targetDeviceBounds(targetFor(binding.scopeI32))
+            // A direct occurrence's terminal clip is its downstream consumer.  Seal that
+            // intersection before allocating coverage or freezing an unbounded lighting pass.
+            val consumerDomain = terminalClip?.let { requireNotNull(intersect(targetBounds, it)) } ?: targetBounds
+            val clipped = requireNotNull(intersect(deviceBounds, consumerDomain))
             // The admitted distant-diffuse slice affects transparent black.  Its physical child
-            // remains tightly rasterized, while its semantic demand is the frozen parent target;
+            // remains tightly rasterized, while its semantic demand is the frozen terminal consumer;
             // all other families retain their existing content-sized direct source contract.
             val desired = occurrence.root?.let { root ->
                 (occurrence.table.nodeAt(root.id) as? org.graphiks.kanvas.render.ir.CapturedFilterNodeV1.DistantLitDiffuse)
-                    ?.let { targetDeviceBounds(targetFor(binding.scopeI32)) }
+                    ?.let { consumerDomain }
             } ?: clipped
             directFilterSourceByCommand[occurrence.insertionCommandIndexI32] = DirectFilterSources(
                 allocateOccurrenceSource(clipped, targetFor(binding.scopeI32), PlanResourceRole.CoverageSource,
