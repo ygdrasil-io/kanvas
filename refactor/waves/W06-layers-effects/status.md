@@ -21,6 +21,12 @@ La vérification publique ciblée sur cette source donne 15/0/0/0 XML :
 après les assertions JUnit ; cette observation reste **UNKNOWN**, sans claim
 native, ISO ou globale.
 
+Les préservations relancées séparément donnent aussi des XML frais
+`W6aLayerSurfacePixelTest` 16/0/0/0, `W6bFilterPictureTest` 12/0/0/0 et
+`W6bFilterAdmissionRecoverySurfaceTest` 27/0/0/0. Le sélecteur W5f a atteint
+des assertions console PASS puis a quitté en 133 avant d'écrire son XML : il
+reste **UNKNOWN** et n'entre dans aucun total de cette correction.
+
 ## Checkpoint W6c — DAG spatial principal, qualification Task 7
 
 La branche d'implémentation est `codex/w6c-spatial-dag`. Sa base W6b revue est
