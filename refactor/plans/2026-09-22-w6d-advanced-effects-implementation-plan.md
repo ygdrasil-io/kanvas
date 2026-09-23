@@ -508,8 +508,9 @@ Branch on schema before reading old tag payloads in both table and recursive cod
 **Files:**
 
 - Create: `TEST/surface/W6dLightingCpuOracle.kt`, `TEST/surface/W6dLightingSurfacePixelTest.kt`
-- Modify: `PLAN/W6bFilterPlanV1.kt`, `PLAN/W6bFilterGraphConstruction.kt`, `PLAN/W6aLayerGraphConstruction.kt`, `PLAN/W6aPlanDiagnostics.kt`, `PLAN/W6dSamplingProgramV1.kt`, `PLAN/PlanPasses.kt`
-- Modify: `GPU/filters/GPULighting.kt`, `GPU/execution/GPUWgpu4kW6aLayerFramePayloadMaterializer.kt`, `GPU/execution/GPUW6aEncoderScopesV1.kt`
+- Modify: `PLAN/W6bFilterPlanV1.kt`, `PLAN/W6bFilterGraphConstruction.kt`, `PLAN/W6aLayerGraphConstruction.kt`, `PLAN/W6aPlanDiagnostics.kt`, `PLAN/W6dSamplingProgramV1.kt`
+- Modify: `GPU/filters/GPULighting.kt`, `GPU/execution/GPUWgpu4kW6aLayerFramePayloadMaterializer.kt`
+- Inspect, modify only if the generic FilterPass contract actually requires it: `PLAN/PlanPasses.kt`, `GPU/execution/GPUW6aEncoderScopesV1.kt`
 
 **Interfaces:**
 
