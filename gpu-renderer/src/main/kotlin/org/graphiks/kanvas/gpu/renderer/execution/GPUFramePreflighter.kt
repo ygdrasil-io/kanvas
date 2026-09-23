@@ -5,6 +5,7 @@ import org.graphiks.kanvas.gpu.renderer.materials.w5aCombinedMemoryBudgetV2
 
 import io.ygdrasil.webgpu.GPUTextureFormat
 import org.graphiks.kanvas.gpu.plan.PlanResourceId
+import org.graphiks.kanvas.gpu.plan.PlanPass
 import org.graphiks.kanvas.gpu.plan.W4dPathStrokePlanCompiler
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSupport
@@ -240,6 +241,7 @@ internal class GPUFramePreflighter(
     private val readbackLayoutPlanner: GPUReadbackLayoutPlanner = GPUReadbackLayoutPlanner(),
     private val nativeBoundary: GPUPreparedNativeFrameBoundary? = null,
     private val nominalEncoderScopeObserver: ((List<GPUCommandEncoderScopePlan>) -> Unit)? = null,
+    private val spatialFilterCache: GPUW6cSpatialFilterSessionCache? = null,
 ) {
     private val capabilities: GPUCapabilities = capabilities.preflightSnapshot()
 
@@ -1100,10 +1102,17 @@ internal class GPUFramePreflighter(
 
         var nativeDraft: GPUPreparedNativeFrameDraft? = null
         var nativeOwnership: GPUPreparedNativeFrameOwnership? = null
+        // The single W6c policy decision is adjacent to native materialization, after every
+        // earlier terminal check. Its immutable binding is therefore either adopted by the
+        // payload lifecycle or discarded before Ready publication.
+        if (nativeBoundary != null && w6a != null && w6a.physical.spatialCachePlans().isNotEmpty() &&
+            spatialFilterCache?.prepare(framePlan) != true) return refuseWithRollback(
+            rollback, true, diagnostic("w6c.spatial_cache.preflight", "Spatial cache reservation failed before native publication."))
         nativeBoundary?.let { boundary ->
             val materialization = try {
                 boundary.materializeReusable(framePlan, sourceWitness, encoderPlan, resources, generationSeal)
             } catch (failure: Throwable) {
+                spatialFilterCache?.discardPrepared(framePlan)
                 return refuseWithRollback(
                     rollback,
                     true,
@@ -1121,6 +1130,7 @@ internal class GPUFramePreflighter(
             nativeDraft = when (materialization) {
                 is GPUPreparedNativeFramePayloadMaterialization.Materialized -> materialization.draft
                 is GPUPreparedNativeFramePayloadMaterialization.Refused -> {
+                    spatialFilterCache?.discardPrepared(framePlan)
                     materialization.retainedDraft?.let(boundary::terminalizeCallerRetainedDraft)
                     return refuseWithRollback(
                         rollback,
@@ -8711,9 +8721,10 @@ internal class GPUFramePreflighter(
     ): GPUDiagnostic? {
         framePlan.steps.forEachIndexed { sourceStepIndex, step ->
             if (step !is GPUFrameStep.RenderPassStep) return@forEachIndexed
-            val renderOperand = draft.payload.scopeOperands
-                .singleOrNull { it.sourceStepIndex == sourceStepIndex } as? GPUPreparedNativeScopeOperand.Render
-                ?: return diagnostic(
+            val operand = draft.payload.scopeOperands.singleOrNull { it.sourceStepIndex == sourceStepIndex }
+            if (operand is GPUPreparedNativeScopeOperand.NoOp && step.w6aPassV1 is PlanPass.FilterPass &&
+                step.drawPackets.isEmpty()) return@forEachIndexed
+            val renderOperand = operand as? GPUPreparedNativeScopeOperand.Render ?: return diagnostic(
                     "invalid.preflight.native_render_semantic_payloads",
                     "Native render scope is missing for semantic payload validation.",
                 )

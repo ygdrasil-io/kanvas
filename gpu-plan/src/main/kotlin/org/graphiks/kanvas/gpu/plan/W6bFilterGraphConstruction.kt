@@ -35,6 +35,8 @@ internal object W6bFilterGraphConstruction {
         desiredOutputDeviceI32: RectI32? = null,
         requiredInputDeviceI32: RectI32? = null,
         producedOutputDeviceI32: RectI32? = null,
+        /** Exact immutable SceneSnapshot revision for cache admission, if known. */
+        val sourceRevisionIdentity: String? = null,
     ) {
         private val extentSnapshotI32 = extent.copy()
         private val knownContentSnapshotI32 = knownContentDeviceI32?.copy()
@@ -78,7 +80,14 @@ internal object W6bFilterGraphConstruction {
             desiredOutputDeviceI32,
             requiredInputDeviceI32,
             producedOutputDeviceI32,
+            sourceRevisionIdentity,
         )
+
+        fun withSourceRevision(identity: String): SourceBinding {
+            require(identity.isNotBlank())
+            return SourceBinding(resourceId, extentSnapshotI32, Point2I32(originDeviceI32.x, originDeviceI32.y), mapping,
+                knownContentSnapshotI32, desiredOutputSnapshotI32, requiredInputSnapshotI32, producedOutputSnapshotI32, identity)
+        }
 
         /** Seals a source-to-output local sampling transform before native lowering. */
         fun samplingFor(output: SourceBinding): FilterInputSamplingV1 {
@@ -321,9 +330,16 @@ internal object W6bFilterGraphConstruction {
     /** Freezes only the post-material captured image-filter chain. */
     internal fun freezeImageOccurrence(
         occurrence: PositiveOccurrence,
-        occurrenceSource: SourceBinding,
+        sourceBinding: SourceBinding,
         cursor: FreezeCursor,
     ): FrozenOccurrence {
+        // The source scene's canonical id is an immutable content revision.  It is deliberately
+        // captured here, where the occurrence still owns the SceneSnapshot, and carried through
+        // every derived binding; later plan/native stages cannot rediscover it.
+        val occurrenceSource = sourceBinding.withSourceRevision(
+            "${occurrence.source.scene.canonicalId.value}:${occurrence.source.sourceCommandIndexI32}:" +
+                occurrence.source.picturePathI32().joinToString(","),
+        )
         val resources = mutableListOf<ResourceSpec>()
         val passes = mutableListOf<PlanPass>()
         fun append(pass: PlanPass) {
@@ -373,9 +389,11 @@ internal object W6bFilterGraphConstruction {
             return source.withResource(id, knownContentDeviceI32 = null)
         }
         fun keyFor(nodeId: CapturedFilterNodeIdI32?, maskOccurrenceI32: Int?, boundSource: SourceBinding, desired: RectI32): FilterEvaluationKeyV1 = when {
-            nodeId != null -> FilterEvaluationKeyV1.of(nodeId, boundSource.resourceId, boundSource.mapping, desired)
+            nodeId != null -> FilterEvaluationKeyV1.of(nodeId, boundSource.resourceId, boundSource.mapping, desired,
+                sourceRevisionIdentity = boundSource.sourceRevisionIdentity)
             maskOccurrenceI32 != null -> FilterEvaluationKeyV1.forMaskOccurrence(
                 maskOccurrenceI32, boundSource.resourceId, boundSource.mapping, desired,
+                sourceRevisionIdentity = boundSource.sourceRevisionIdentity,
             )
             else -> error("W6b occurrence key is missing its captured identity.")
         }

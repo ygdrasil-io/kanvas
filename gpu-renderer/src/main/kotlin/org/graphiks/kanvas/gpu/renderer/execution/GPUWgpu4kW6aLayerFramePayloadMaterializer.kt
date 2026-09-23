@@ -34,6 +34,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
     private val rootTarget: GPUWgpu4kPreparedSceneTarget,
     private val decodedImageCache: GPUW5eDecodedImageSessionCache? = null,
     private val runtimeResourceCache: GPUW5hRuntimeResourceSessionCache? = null,
+    private val spatialFilterCache: GPUW6cSpatialFilterSessionCache? = null,
 ) : GPUPreparedNativeFramePayloadMaterializer {
     private var consumed = false
 
@@ -49,8 +50,11 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         consumed = true
         val owned = W6aOwnedHandles()
         var readbackBuffer: GPUBuffer? = null
+        var spatialBinding: GPUW6cSpatialFilterSessionCache.Binding? = null
         try {
             val graph = frame.graph
+            spatialBinding = if (frame.physical.spatialCachePlans().isEmpty()) null else
+                requireNotNull(spatialFilterCache?.consume(framePlan)) { "W6c cache binding was not selected by preflight." }
             val materialSourceAlphaReplacement = frozenMaterialSourceAlphaReplacement(graph)
             val generation = generationSeal.deviceGeneration
             val root = frame.physical.resource(graph.resources().single { it.role == PlanResourceRole.LogicalTarget }.id)
@@ -60,6 +64,11 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             val views = linkedMapOf(root.id to rootView)
             val textures = linkedMapOf(root.id to rootTexture)
             graph.resources().filter { it.kind == PlanResourceKind.Texture2D && it.lifetime == PlanResourceLifetime.FrameLocal && it.id != root.id }.forEach { resource ->
+                if (spatialBinding?.usesCachedTarget(resource.id) == true) {
+                    views[resource.id] = spatialBinding.view(resource.id)
+                    textures[resource.id] = spatialBinding.texture(resource.id)
+                    return@forEach
+                }
                 val slot = frame.physical.slot(resource.id)
                 val extent = requireNotNull(resource.copyExtent())
                 val format = when (resource.format) {
@@ -302,6 +311,11 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             graph.passes().forEachIndexed { ordinal, pass ->
                 val stepIndex = ordinal + 1
                 val step = framePlan.steps[stepIndex]
+                if (pass is PlanPass.FilterPass && spatialBinding?.skipsFilterPass(pass.output) == true) {
+                    renderOperands += GPUPreparedNativeScopeOperand.NoOp(stepIndex, GPUEncoderOperationKind.Render,
+                        encoderPlan.scopes.single { it.sourceStepIndex == stepIndex }.nativeOperandKeys)
+                    return@forEachIndexed
+                }
                 w4eOperands[stepIndex]?.let { renderOperands += it; return@forEachIndexed }
                 when (pass) {
                     is PlanPass.RenderPass, is PlanPass.StencilGeometryProducerV3, is PlanPass.StencilCover -> {
@@ -879,9 +893,13 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         .mapNotNull { frame.destinationCopy(it) }.distinct().map { copy ->
                             GPUPreparedNativeAuxiliaryHandle(GPUW6aDestinationNativeV1(frame, copy, views.getValue(copy.destination)),
                                 GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion) },
+                leaseLifecycle = spatialBinding,
                 pathDepthStencilViewAuthority = pathViews)
             return GPUPreparedNativeFramePayloadMaterialization.Materialized(GPUPreparedNativeFrameDraft(payload))
         } catch (failure: Throwable) {
+            // If no payload was returned, the preflight binding has not reached the registry;
+            // it must release its consumer lease and destroy unsubmitted misses now.
+            runCatching { spatialFilterCache?.discardPrepared(framePlan) }
             val cleanup = AutoCloseable {
                 owned.close()
                 readbackBuffer?.close()

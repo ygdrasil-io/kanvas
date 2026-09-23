@@ -378,6 +378,7 @@ internal class GPUWgpu4kFrameEncodingBackend(
                 error("A native render-pass segment cannot be interrupted by ${operand.operationKind}")
             }
             when (operand) {
+                is GPUPreparedNativeScopeOperand.NoOp -> Unit
                 is GPUPreparedNativeScopeOperand.Render -> encodeRender(operand)
                 is GPUPreparedNativeScopeOperand.TextureUpload ->
                     encodePreparedImageTextureUpload(

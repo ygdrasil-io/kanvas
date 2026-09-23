@@ -1014,6 +1014,16 @@ internal sealed interface GPUPreparedNativeScopeOperand {
     val exactOperandKeys: List<GPUPreparedNativeOperandKey>
         get() = emptyList()
 
+    /** A preflight-projected omission of one frozen semantic scope; it has no native operands. */
+    class NoOp(
+        override val sourceStepIndex: Int,
+        override val operationKind: GPUEncoderOperationKind,
+        expectedOperandKeys: List<GPUPreparedNativeOperandKey>,
+    ) : GPUPreparedNativeScopeOperand {
+        override val operands: List<GPUPreparedNativeOperand> = emptyList()
+        val expectedOperandKeys: List<GPUPreparedNativeOperandKey> = immutableList(expectedOperandKeys)
+    }
+
     /**
      * Explicit native render-pass grouping for semantic scopes that must share one WebGPU pass.
      *
@@ -2009,6 +2019,7 @@ internal class GPUPreparedNativeFramePayload(
 private fun GPUPreparedNativeScopeOperand.declaredOperandDescriptors(): List<
     Pair<GPUPreparedNativeOperandKind, GPUPreparedNativeOperandOwnership>,
 > = when (this) {
+    is GPUPreparedNativeScopeOperand.NoOp -> expectedOperandKeys.map { it.kind to it.ownership }
     is GPUPreparedNativeScopeOperand.TextureUpload -> listOf(
         data.key.kind to data.key.ownership,
         destination.nativeKind() to destination.ownership,

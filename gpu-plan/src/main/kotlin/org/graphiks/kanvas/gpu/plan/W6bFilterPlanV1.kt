@@ -165,6 +165,12 @@ public class FilterEvaluationKeyV1 private constructor(
     public val capturedNodeId: CapturedFilterNodeIdI32?,
     public val maskOccurrenceI32: Int?,
     public val boundSourceId: PlanResourceId,
+    /**
+     * Immutable source revision captured with this occurrence.  Null deliberately means that
+     * this evaluation is not cacheable across frames: a renderer must never guess a source
+     * generation from a physical resource id.
+     */
+    public val sourceRevisionIdentity: String?,
     public val mapping: LayerMappingF64,
     desiredOutputDeviceI32: RectI32,
 ) {
@@ -186,10 +192,12 @@ public class FilterEvaluationKeyV1 private constructor(
             boundSourceId: PlanResourceId,
             mapping: LayerMappingF64,
             desiredOutputDeviceI32: RectI32,
+            sourceRevisionIdentity: String? = null,
         ): FilterEvaluationKeyV1 = FilterEvaluationKeyV1(
             capturedNodeId,
             null,
             boundSourceId,
+            sourceRevisionIdentity,
             mapping,
             desiredOutputDeviceI32,
         )
@@ -199,10 +207,12 @@ public class FilterEvaluationKeyV1 private constructor(
             boundSourceId: PlanResourceId,
             mapping: LayerMappingF64,
             desiredOutputDeviceI32: RectI32,
+            sourceRevisionIdentity: String? = null,
         ): FilterEvaluationKeyV1 = FilterEvaluationKeyV1(
             null,
             maskOccurrenceI32,
             boundSourceId,
+            sourceRevisionIdentity,
             mapping,
             desiredOutputDeviceI32,
         )

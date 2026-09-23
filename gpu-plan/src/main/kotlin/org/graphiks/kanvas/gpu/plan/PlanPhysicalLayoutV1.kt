@@ -74,6 +74,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     geometryByPass: Map<PlanPassId, PlanGeometryBufferBindingV1>,
     w4eGeometry: List<PlanW4eGeometryBindingV1>,
     pictureComposites: Map<PlanPassId, PictureCompositeOperandsV1>,
+    spatialCaches: List<SpatialFilterCachePlanV1>,
 ) {
     private val resources = immutableList(resources)
     private val caches = immutableList(cacheBindings)
@@ -81,6 +82,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     private val geometry = java.util.Collections.unmodifiableMap(LinkedHashMap(geometryByPass))
     private val w4e = immutableList(w4eGeometry)
     private val pictures = java.util.Collections.unmodifiableMap(LinkedHashMap(pictureComposites))
+    private val spatialCaches = immutableList(spatialCaches)
     private val slots = immutableList(buildList {
         resources.forEachIndexed { indexI32, resource ->
             add(PlanPhysicalSlotV1(indexI32, resource.id, resource.byteSize))
@@ -92,6 +94,10 @@ public class PlanPhysicalLayoutV1 private constructor(
 
     public fun slots(): List<PlanPhysicalSlotV1> = slots
     public fun cacheBindings(): List<PlanCacheBindingV1> = caches
+    /** Planner-selected spatial cache requests; native code receives a preflight binding for these values only. */
+    public fun spatialCachePlans(): List<SpatialFilterCachePlanV1> = spatialCaches
+    public fun spatialCachePlan(outputResourceId: PlanResourceId): SpatialFilterCachePlanV1 =
+        spatialCaches.single { it.outputResourceId == outputResourceId }
     public fun slot(resourceId: PlanResourceId): PlanPhysicalSlotV1 = slots.single { it.resourceId == resourceId }
     public fun resource(resourceId: PlanResourceId): PlanResource {
         slot(resourceId)
@@ -229,7 +235,43 @@ public class PlanPhysicalLayoutV1 private constructor(
                 require(rect.left >= 0 && rect.top >= 0 && rect.right <= extent.width && rect.bottom <= extent.height)
                 pass.id to operand
             }.toMap()
-            val layout = PlanPhysicalLayoutV1(rows, source.caches, uniforms, geometry, source.w4eGeometry, pictures)
+            val spatialCaches = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
+                // A physical id is frame-local and cannot establish cache provenance.  Only an
+                // immutable captured SceneSnapshot revision authorizes cross-frame reuse.
+                val sourceRevision = pass.evaluationKey.sourceRevisionIdentity ?: return@mapNotNull null
+                val output = rows.single { it.id == pass.output }
+                val operation = pass.operation
+                val orderedInputs = pass.inputs().map { input ->
+                    val row = rows.single { it.id == input }
+                    val sourceIdentity = "$sourceRevision:${input.value}:${row.role}:${row.ordinal}"
+                    SpatialFilterInputGenerationV1(
+                        sourceIdentity = sourceIdentity,
+                        generationI64 = spatialCacheGenerationV1(sourceIdentity),
+                        subsetDeviceI32 = when (input) {
+                            pass.evaluationKey.boundSourceId -> pass.evaluationKey.copyDesiredOutputDeviceI32()
+                            else -> operation.bounds.copyRequiredInputDeviceI32()
+                        },
+                    )
+                }
+                SpatialFilterCachePlanV1(
+                    outputResourceId = pass.output,
+                    key = SpatialFilterCacheKeyV1(
+                        passIdentity = pass.id.value,
+                        evaluationKey = pass.evaluationKey,
+                        bounds = operation.bounds,
+                        format = (output.format as PlanTextureFormat.Color).value,
+                        colorSpaceIdentity = "rgba8-srgb-linear-premul",
+                        sampleCountI32 = output.sampleCountI32,
+                        capabilityGenerationI64 = graph.capabilities.deviceGeneration,
+                        backendGenerationI64 = graph.capabilities.deviceGeneration,
+                        semanticVersionI32 = 1,
+                        inputGenerations = orderedInputs,
+                    ),
+                    reservedBytesI64 = output.byteSize,
+                )
+            }
+            require(spatialCaches.map { it.outputResourceId }.distinct().size == spatialCaches.size)
+            val layout = PlanPhysicalLayoutV1(rows, source.caches, uniforms, geometry, source.w4eGeometry, pictures, spatialCaches)
             require(layout.slots.map { it.resourceId }.distinct().size == layout.slots.size)
             // All reservations (including cache hits) remain live until frame completion.
             require(rows.all { it.firstPassIndex == 0 && it.lastPassIndexExclusive == graph.passes().size })
@@ -256,4 +298,13 @@ public class PlanPhysicalLayoutV1 private constructor(
             return layout
         }
     }
+}
+
+/** Stable non-cryptographic generation tag for an already immutable canonical source revision. */
+private fun spatialCacheGenerationV1(identity: String): Long {
+    var value = -3750763034362895579L // FNV-1a offset basis
+    identity.encodeToByteArray().forEach { byte ->
+        value = (value xor (byte.toLong() and 0xffL)) * 1099511628211L
+    }
+    return value and Long.MAX_VALUE
 }
