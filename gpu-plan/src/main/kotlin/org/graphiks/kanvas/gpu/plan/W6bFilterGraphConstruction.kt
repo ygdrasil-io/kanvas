@@ -392,8 +392,8 @@ internal object W6bFilterGraphConstruction {
                 val key = keyFor(id, null, bounds.copyDesiredOutputDeviceI32())
                 val output = allocateTarget(bounds)
                 append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
-                    FilterPassOperationV1.Offset(Vector2F64(planned.offsetF64X, planned.offsetF64Y), bounds,
-                        spatialSampling(input, bounds, fullClip(bounds), -planned.offsetF64X, -planned.offsetF64Y))))
+                    FilterPassOperationV1.Offset(Vector2F64(planned.offsetDeviceF64X, planned.offsetDeviceF64Y), bounds,
+                        spatialSampling(input, bounds, fullClip(bounds), -planned.offsetDeviceF64X, -planned.offsetDeviceF64Y))))
                 output to key
             }
             is CapturedFilterNodeV1.Tile -> {
@@ -627,7 +627,11 @@ internal object W6bFilterGraphConstruction {
     }
 
     /** The output domain grows by blur support; it is never intersected back to the source. */
-    internal fun reverseInputDemand(occurrence: PositiveOccurrence?, desired: RectI32): RectI32 {
+    internal fun reverseInputDemand(
+        occurrence: PositiveOccurrence?,
+        desired: RectI32,
+        mapping: LayerMappingF64? = null,
+    ): RectI32? {
         if (occurrence == null) return desired.copy()
         fun expand(region: RectI32, x: Float, y: Float): RectI32 = RectF64(
             region.left.toDouble(), region.top.toDouble(), region.right.toDouble(), region.bottom.toDouble())
@@ -636,17 +640,16 @@ internal object W6bFilterGraphConstruction {
                 W6bFilterDiagnostics.InvalidBounds,
                 "W6b reverse blur demand cannot be represented in checked I32 texels.",
             ))
-        lateinit var inputDemand: (CapturedFilterInputV1, RectI32) -> RectI32
-        fun nodeDemand(id: CapturedFilterNodeIdI32, output: RectI32): RectI32 = when (val node = occurrence.table.nodeAt(id)) {
-            is CapturedFilterNodeV1.Crop -> inputDemand(node.input, output)
-            is CapturedFilterNodeV1.Offset -> {
-                val required = RectF64(output.left.toDouble(), output.top.toDouble(), output.right.toDouble(), output.bottom.toDouble())
-                    .translateF64OrNull(-node.dx.toDouble(), -node.dy.toDouble())?.roundOutToRectI32OrNull()
-                    ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
-                        "W6c reverse offset demand cannot be represented in checked I32 texels."))
-                inputDemand(node.input, required)
-            }
-            is CapturedFilterNodeV1.Tile -> inputDemand(node.input, output)
+        fun spatialDemand(node: CapturedFilterNodeV1, output: RectI32): RectI32? =
+            W6cSpatialBoundsPlanner.requiredInputBounds(node, output, mapping ?: throw ConstructionFailure(
+                W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                    "W6c reverse demand has no sealed local-to-device mapping."),
+            ))
+        lateinit var inputDemand: (CapturedFilterInputV1, RectI32) -> RectI32?
+        fun nodeDemand(id: CapturedFilterNodeIdI32, output: RectI32): RectI32? = when (val node = occurrence.table.nodeAt(id)) {
+            is CapturedFilterNodeV1.Crop -> spatialDemand(node, output)?.let { required -> inputDemand(node.input, required) }
+            is CapturedFilterNodeV1.Offset -> spatialDemand(node, output)?.let { required -> inputDemand(node.input, required) }
+            is CapturedFilterNodeV1.Tile -> spatialDemand(node, output)?.let { required -> inputDemand(node.input, required) }
             is CapturedFilterNodeV1.Blur -> inputDemand(node.input, expand(output, node.sigmaX, node.sigmaY))
             is CapturedFilterNodeV1.DropShadow -> {
                 val translated = RectF64(output.left.toDouble(), output.top.toDouble(),
@@ -663,7 +666,9 @@ internal object W6bFilterGraphConstruction {
         }
         inputDemand = { input, region -> if (input is CapturedFilterInputV1.Node) nodeDemand(input.id, region) else region }
         val imageInput = occurrence.root?.let { nodeDemand(it.id, desired) } ?: desired
-        return (occurrence.mask as? MaskFilterNode.Blur)?.let { expand(imageInput, it.sigma, it.sigma) } ?: imageInput
+        return imageInput?.let { input ->
+            (occurrence.mask as? MaskFilterNode.Blur)?.let { expand(input, it.sigma, it.sigma) } ?: input
+        }
     }
 
     private fun blurBounds(source: SourceBinding, sigmaXF32: Float, sigmaYF32: Float): FilterBoundsPlanV1 {

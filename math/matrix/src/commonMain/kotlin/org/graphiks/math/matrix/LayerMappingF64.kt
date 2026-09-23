@@ -7,6 +7,7 @@ import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.rebaseAtOriginI32OrNull
 import org.graphiks.math.geometry.roundOutToRectI32OrNull
+import org.graphiks.math.vector.Vector2F64
 
 /** Immutable local/device/layer mapping sealed before a layer graph is published. */
 public class LayerMappingF64 private constructor(
@@ -45,6 +46,16 @@ public class LayerMappingF64 private constructor(
     /** Outward texel sealing is deliberately separate from the F64 projection boundary. */
     public fun mapLocalRectToDeviceI32OrNull(boundsLocalF64: RectF64): RectI32? =
         mapLocalRectToDeviceF64OrNull(boundsLocalF64)?.roundOutToRectI32OrNull()
+
+    /** Maps an affine local displacement without applying the mapping translation. */
+    public fun mapLocalVectorToDeviceF64OrNull(vectorLocalF64: Vector2F64): Vector2F64? {
+        if (!vectorLocalF64.x.isFinite() || !vectorLocalF64.y.isFinite() ||
+            localToDeviceF64.persp0F64 != 0.0 || localToDeviceF64.persp1F64 != 0.0 ||
+            localToDeviceF64.persp2F64 != 1.0) return null
+        val xF64 = localToDeviceF64.sxF64 * vectorLocalF64.x + localToDeviceF64.kxF64 * vectorLocalF64.y
+        val yF64 = localToDeviceF64.kyF64 * vectorLocalF64.x + localToDeviceF64.syF64 * vectorLocalF64.y
+        return Vector2F64(xF64, yF64).takeIf { it.x.isFinite() && it.y.isFinite() }
+    }
 
     /**
      * Translation of an already raster-admitted analytic shape; no second projection.

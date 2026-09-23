@@ -42,6 +42,20 @@ class W6cSpatialBoundsSurfaceTest {
     }
 
     @Test
+    fun `offset maps its local displacement through scale`() {
+        val expected = bytes(0, 0, 255, 255, 0)
+        val surface = Surface(5, 1)
+        surface.canvas {
+            scale(2f, 1f)
+            saveLayer(SaveLayerRec(paint = Paint(imageFilter = ImageFilter.Offset(1f, 0f))))
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.Blue, antiAlias = false))
+            restore()
+        }
+
+        assertContentEquals(expected, surface.render().pixels)
+    }
+
+    @Test
     fun `tile repeats only inside destination`() {
         val expected = bytes(0, 255, 255, 0)
         val surface = Surface(4, 1)
@@ -49,6 +63,22 @@ class W6cSpatialBoundsSurfaceTest {
             saveLayer(SaveLayerRec(paint = Paint(imageFilter = ImageFilter.Tile(
                 RectF32.ofLTRB(0f, 0f, 1f, 1f),
                 RectF32.ofLTRB(1f, 0f, 3f, 1f),
+            ))))
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.Blue, antiAlias = false))
+            restore()
+        }
+
+        assertContentEquals(expected, surface.render().pixels)
+    }
+
+    @Test
+    fun `tile with a source outside physical input stays transparent`() {
+        val expected = bytes(0, 0, 0, 0)
+        val surface = Surface(4, 1)
+        surface.canvas {
+            saveLayer(SaveLayerRec(paint = Paint(imageFilter = ImageFilter.Tile(
+                RectF32.ofLTRB(2f, 0f, 3f, 1f),
+                RectF32.ofLTRB(0f, 0f, 4f, 1f),
             ))))
             drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.Blue, antiAlias = false))
             restore()

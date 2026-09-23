@@ -179,7 +179,7 @@ internal class W6aLayerGraphConstruction(
             RenderGraph.visualDraws(binding.source.passes()).forEach { draw ->
                 intersect(w6aRasterBoundsI32(draw), w6aScissorI32(draw))?.let { bounds ->
                     val frozenAutoLayerBounds = directBlurByCommand[draw.commandIndex]?.let { occurrence ->
-                        W6bFilterGraphConstruction.reverseInputDemand(occurrence, bounds)
+                        W6bFilterGraphConstruction.reverseInputDemand(occurrence, bounds, binding.occurrenceInput?.mapping) ?: bounds
                     } ?: bounds
                     directKnownByScope[scopeIdI32] = unionOrNull(directKnownByScope[scopeIdI32], frozenAutoLayerBounds)
                 }
@@ -1156,7 +1156,14 @@ internal class W6aLayerGraphConstruction(
                 // An empty clip is a later terminal no-op.  Keeping its source demand conservative
                 // is intentional until Task 3 materializes the typed deferred clip.
                 val demand = deferredDemand ?: parentDomain.copy()
-                val source = W6bFilterGraphConstruction.reverseInputDemand(aggregate.filterOccurrence, demand)
+                val reverseMapping = LayerMappingF64.ofOrNull(localToDevice, Point2I32(demand.left, demand.top))
+                    ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                        W6bFilterDiagnostics.InvalidBounds, "Picture reverse-demand mapping is non-invertible.",
+                    ))
+                // A spatial no-op requests no source texels.  The aggregate still needs a non-empty
+                // transaction target, so retain its cull rectangle without turning null into demand.
+                val source = W6bFilterGraphConstruction.reverseInputDemand(aggregate.filterOccurrence, demand, reverseMapping)
+                    ?: cull
                 val known = intersect(cull, source)
                 val mapping = LayerMappingF64.ofOrNull(localToDevice, Point2I32(source.left, source.top))
                     ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
