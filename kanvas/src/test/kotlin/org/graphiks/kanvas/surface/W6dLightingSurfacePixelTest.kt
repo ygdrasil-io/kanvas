@@ -9,6 +9,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.canvas.SaveLayerRec
+import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.math.color.ColorARGB
@@ -149,6 +150,15 @@ class W6dLightingSurfacePixelTest {
     }
 
     @Test
+    fun `distant diffuse child touching output edge clamps its Sobel source`() {
+        val alpha = alphaFixture()
+        val expected = W6dLightingCpuOracle.distantDiffuseRgba8(3, 3, alpha, 0, 0, 3, 3,
+            directionX = 1f, directionY = 0f, directionZ = 1f, surfaceDepth = 1f, kd = 1f)
+        assertTrue(expected[0].toInt() > 0, "The edge-clamp fixture must have a visible independent witness.")
+        assertFamilyNear(expected, renderLayerAlphaFixture(Vector3F32(1f, 0f, 1f)), maxChannelDelta = 2)
+    }
+
+    @Test
     fun `distant diffuse uses decal at an interior child edge and lights transparent black`() {
         val alpha = FloatArray(25).also { it[2 * 5 + 2] = 1f }
         val expected = W6dLightingCpuOracle.distantDiffuseRgba8(5, 5, alpha, 2, 2, 3, 3,
@@ -197,6 +207,27 @@ class W6dLightingSurfacePixelTest {
         }
 
         assertTrue(expected[0].toInt() > 0, "The Compose fixture must light transparent black outside the crop.")
+        assertFamilyNear(expected, surface.render(), maxChannelDelta = 2)
+    }
+
+    @Test
+    fun `color filter around distant diffuse retains consumer demand outside cropped child`() {
+        val alpha = FloatArray(25).also { it[2 * 5 + 2] = 1f }
+        val expected = W6dLightingCpuOracle.distantDiffuseRgba8(5, 5, alpha, 2, 2, 3, 3,
+            directionX = 1f, directionY = 0f, directionZ = 1f, surfaceDepth = 1f, kd = 1f)
+        val filter = ImageFilter.ColorFilter(
+            ColorFilter.Matrix(org.graphiks.math.color.ColorMatrixF32.ofIdentity()),
+            ImageFilter.DistantLitDiffuse(
+                Vector3F32(1f, 0f, 1f), ColorARGB.White, 1f, 1f,
+                ImageFilter.Crop(RectF32.ofLTRB(2f, 2f, 3f, 3f)),
+            ),
+        )
+        val surface = Surface(5, 5)
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(2f, 2f, 3f, 3f), Paint(ColorARGB.White, imageFilter = filter, antiAlias = false))
+        }
+
+        assertTrue(expected[0].toInt() > 0, "The ColorFilter wrapper must not re-bound transparent-black lighting.")
         assertFamilyNear(expected, surface.render(), maxChannelDelta = 2)
     }
 
@@ -274,6 +305,65 @@ class W6dLightingSurfacePixelTest {
 
         assertFamilyNear(expected, surface.render(), maxChannelDelta = 0)
     }
+
+    @Test
+    fun `zero spot direction produces opaque black`() = assertRemainingFamily(
+        W6dLightingCpuOracle.Family.SPOT_DIFFUSE,
+        ImageFilter.SpotLitDiffuse(Point3F32(1f, 0f, 1f), Point3F32(1f, 0f, 1f), 1f, 90f,
+            ColorARGB.White, 1f, 1f),
+        expectedTopLeft = ubyteArrayOf(0u, 0u, 0u, 255u),
+        location = Point3F32(1f, 0f, 1f),
+        target = Point3F32(1f, 0f, 1f),
+    )
+
+    @Test
+    fun `coincident point light and surface produces opaque black`() = assertRemainingFamily(
+        W6dLightingCpuOracle.Family.POINT_DIFFUSE,
+        ImageFilter.PointLitDiffuse(Point3F32(.5f, .5f, 0f), ColorARGB.White, 1f, 1f),
+        expectedTopLeft = ubyteArrayOf(0u, 0u, 0u, 255u),
+        location = Point3F32(.5f, .5f, 0f),
+    )
+
+    @Test
+    fun `zero specular half vector produces transparent black`() = assertRemainingFamily(
+        W6dLightingCpuOracle.Family.DISTANT_SPECULAR,
+        ImageFilter.DistantLitSpecular(Vector3F32(0f, 0f, -1f), ColorARGB.White, 1f, 1f, 2f),
+        expectedTopLeft = ubyteArrayOf(0u, 0u, 0u, 0u),
+        location = Point3F32(0f, 0f, -1f),
+    )
+
+    @Test
+    fun `spot pow zero zero follows the Kanvas one convention`() {
+        val alpha = FloatArray(1) { 1f }
+        val expected = W6dLightingCpuOracle.remainingFamilyRgba8(
+            W6dLightingCpuOracle.Family.SPOT_DIFFUSE, 1, 1, alpha,
+            locationX = .5f, locationY = .5f, locationZ = 2f,
+            targetX = 1.5f, targetY = .5f, targetZ = 2f,
+            surfaceDepth = 1f, coefficient = 1f, specularExponent = 0f, cutoffDegrees = 91f,
+        )
+        assertContentEquals(ubyteArrayOf(255u, 255u, 255u, 255u), expected)
+        val surface = Surface(1, 1)
+        surface.canvas {
+            saveLayer(SaveLayerRec(paint = Paint(imageFilter = ImageFilter.SpotLitDiffuse(
+                Point3F32(.5f, .5f, 2f), Point3F32(1.5f, .5f, 2f), 0f, 91f,
+                ColorARGB.White, 1f, 1f), antiAlias = false)))
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.White, antiAlias = false))
+            restore()
+        }
+        assertFamilyNear(expected, surface.render(), maxChannelDelta = 0)
+    }
+
+    @Test
+    fun `finite extreme spot coordinates retain their normalized diffuse contribution`() = assertRemainingFamily(
+        W6dLightingCpuOracle.Family.SPOT_DIFFUSE,
+        ImageFilter.SpotLitDiffuse(
+            Point3F32(-1.8e38f, -1.8e38f, 1f), Point3F32(1.8e38f, 1.8e38f, 1f),
+            1f, 90f, ColorARGB.White, 1f, 1f,
+        ),
+        expectedTopLeft = ubyteArrayOf(222u, 222u, 222u, 255u),
+        location = Point3F32(-1.8e38f, -1.8e38f, 1f),
+        target = Point3F32(1.8e38f, 1.8e38f, 1f),
+    )
 
     @Test
     fun `distant diffuse accepts signed surface scale minus one`() {

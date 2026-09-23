@@ -129,10 +129,19 @@ internal object GPUW6dLightingPass {
         val parameters = program.copyParameters()
         val isSpecular = program.family in setOf(LightingFamilyV1.DISTANT_SPECULAR, LightingFamilyV1.POINT_SPECULAR, LightingFamilyV1.SPOT_SPECULAR)
         val isSpot = program.family in setOf(LightingFamilyV1.SPOT_DIFFUSE, LightingFamilyV1.SPOT_SPECULAR)
+        fun wgslF32(value: Float): String = value.toString().replace('E', 'e') + "f"
+        fun pointLightVector(x: Float, y: Float, z: Float): String {
+            // This is an algebraic rewrite of location - surface before normalization.
+            // The same frozen recipe shape is emitted for every finite point/spot location.
+            val scale = maxOf(1f, kotlin.math.abs(x), kotlin.math.abs(y), kotlin.math.abs(z))
+            return "vec3<f32>(${wgslF32(x / scale)}, ${wgslF32(y / scale)}, ${wgslF32(z / scale)}) - surface * ${wgslF32(1f / scale)}"
+        }
         val lightVector = when (parameters) {
-            is LightingParametersV1.Distant -> parameters.copyDirection3F32().let { "vec3<f32>(${it.x}f, ${it.y}f, ${it.z}f)" }
-            is LightingParametersV1.Point -> parameters.copyLocation3F32().let { "vec3<f32>(${it.x}f, ${it.y}f, ${it.z}f) - surface" }
-            is LightingParametersV1.Spot -> parameters.copyLocation3F32().let { "vec3<f32>(${it.x}f, ${it.y}f, ${it.z}f) - surface" }
+            is LightingParametersV1.Distant -> parameters.copyDirection3F32().let {
+                "vec3<f32>(${wgslF32(it.x)}, ${wgslF32(it.y)}, ${wgslF32(it.z)})"
+            }
+            is LightingParametersV1.Point -> parameters.copyLocation3F32().let { pointLightVector(it.x, it.y, it.z) }
+            is LightingParametersV1.Spot -> parameters.copyLocation3F32().let { pointLightVector(it.x, it.y, it.z) }
         }
         val surfaceDepth = when (parameters) {
             is LightingParametersV1.Distant -> parameters.surfaceDepthF32
