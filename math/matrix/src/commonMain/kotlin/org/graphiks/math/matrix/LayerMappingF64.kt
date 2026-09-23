@@ -1,6 +1,6 @@
 package org.graphiks.math.matrix
 
-import kotlin.math.abs
+import kotlin.math.sqrt
 import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.RectF32
@@ -58,16 +58,14 @@ public class LayerMappingF64 private constructor(
         return Vector2F64(xF64, yF64).takeIf { it.x.isFinite() && it.y.isFinite() }
     }
 
-    /**
-     * Maps an axis-aligned local morphology support to its conservative device-space support.
-     * The returned components are F64 extents, still awaiting the planner's outward I32 seal.
-     */
+    /** Maps each local morphology axis to its affine device-space F64 length. */
     public fun mapLocalMorphologyRadiiToDeviceF64OrNull(radiiLocalF64: Vector2F64): Vector2F64? {
         if (!radiiLocalF64.x.isFinite() || !radiiLocalF64.y.isFinite() ||
             radiiLocalF64.x < 0.0 || radiiLocalF64.y < 0.0) return null
         val xAxis = mapLocalVectorToDeviceF64OrNull(Vector2F64(radiiLocalF64.x, 0.0)) ?: return null
         val yAxis = mapLocalVectorToDeviceF64OrNull(Vector2F64(0.0, radiiLocalF64.y)) ?: return null
-        return Vector2F64(abs(xAxis.x) + abs(yAxis.x), abs(xAxis.y) + abs(yAxis.y))
+        fun lengthF64(vector: Vector2F64): Double = sqrt(vector.x * vector.x + vector.y * vector.y)
+        return Vector2F64(lengthF64(xAxis), lengthF64(yAxis))
             .takeIf { it.x.isFinite() && it.y.isFinite() }
     }
 

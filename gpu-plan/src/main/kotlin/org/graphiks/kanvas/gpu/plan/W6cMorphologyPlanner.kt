@@ -17,9 +17,12 @@ internal object W6cMorphologyPlanner {
     internal fun deviceRadii(radiusXF64: Double, radiusYF64: Double, mapping: LayerMappingF64): DeviceRadii {
         val device = mapping.mapLocalMorphologyRadiiToDeviceF64OrNull(Vector2F64(radiusXF64, radiusYF64))
             ?: refuse("Morphology radii require a finite affine local-to-device mapping.")
-        return DeviceRadii(device.x, device.y,
-            morphologyRadiusTexelsI32OrNull(device.x) ?: refuse("Morphology X radius overflows I32 texels."),
-            morphologyRadiusTexelsI32OrNull(device.y) ?: refuse("Morphology Y radius overflows I32 texels."))
+        val radiusXTexelsI32 = morphologyRadiusTexelsI32OrNull(device.x)
+            ?: refuse("Morphology X radius cannot be quantized to Skia texels.")
+        val radiusYTexelsI32 = morphologyRadiusTexelsI32OrNull(device.y)
+            ?: refuse("Morphology Y radius cannot be quantized to Skia texels.")
+        return DeviceRadii(radiusXTexelsI32.toDouble(), radiusYTexelsI32.toDouble(),
+            radiusXTexelsI32, radiusYTexelsI32)
     }
 
     internal fun bounds(

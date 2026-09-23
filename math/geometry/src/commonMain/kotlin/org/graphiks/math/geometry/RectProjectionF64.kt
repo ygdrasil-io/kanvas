@@ -93,11 +93,13 @@ public fun RectF64.insetForMorphologyF64OrNull(radiusXF64: Double, radiusYF64: D
         .takeIf { it.isFinite() && !it.isEmpty }
 }
 
-/** Seals one finite morphology radius to the exact integer tap extent used by a frozen pass. */
+/** Skia's maximum morphology kernel radius after nearest-integer device quantization. */
+public const val MORPHOLOGY_MAX_RADIUS_TEXELS_I32: Int = 256
+
+/** Seals one finite morphology radius to Skia's nearest, capped integer tap extent. */
 public fun morphologyRadiusTexelsI32OrNull(radiusF64: Double): Int? {
     if (!radiusF64.isFinite() || radiusF64 < 0.0) return null
-    val roundedF64 = ceil(radiusF64)
-    return roundedF64.takeIf { it <= Int.MAX_VALUE.toDouble() }?.toInt()
+    return minOf(floor(radiusF64 + 0.5), MORPHOLOGY_MAX_RADIUS_TEXELS_I32.toDouble()).toInt()
 }
 
 /** Rebase device texels at a target origin through finite F64 subtraction and checked I32 seal. */
