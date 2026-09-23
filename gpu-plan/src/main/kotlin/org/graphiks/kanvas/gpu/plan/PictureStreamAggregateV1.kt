@@ -121,6 +121,22 @@ public class PictureTerminalScissorAuthorityV1 internal constructor(
     public fun copyCompositeScissorTargetLocalI32(): RectI32? = scissor?.copy()
 }
 
+/**
+ * The construction-time hand-off from Picture terminal admission to its terminal operands.
+ * [authority] is created directly from admission inputs before [operands] or a terminal pass
+ * exists; the operands then snapshot that already-frozen fact for execution.
+ */
+internal class PictureTerminalAdmissionV1(
+    val authority: PictureTerminalScissorAuthorityV1,
+    val operands: PictureCompositeOperandsV1,
+) {
+    init {
+        require(operands.compositeScissorAdmitted == authority.compositeScissorAdmitted)
+        require(operands.copyCompositeScissorTargetLocalI32() == authority.copyCompositeScissorTargetLocalI32())
+        require((operands.copyCompositeScissorTargetLocalI32() == null) == authority.terminalIsEmpty)
+    }
+}
+
 /** The four W6 regions stay separate even when a conservative plan gives two equal values. */
 public class PictureStreamRegionsV1 internal constructor(
     knownContentDeviceI32: RectI32?,
@@ -407,11 +423,6 @@ public class PictureStreamAggregateV1 internal constructor(
     public fun copyDemandRegionDeviceI32(): RectI32 = demand.copy()
     public fun entries(): List<PictureStreamEntryV1> = values
     public fun executionPassIds(): List<PlanPassId> = executionSchedule
-}
-
-internal fun PictureCompositeOperandsV1.toTerminalScissorAuthority(): PictureTerminalScissorAuthorityV1 {
-    val scissor = copyCompositeScissorTargetLocalI32()
-    return PictureTerminalScissorAuthorityV1(scissor, compositeScissorAdmitted, scissor == null)
 }
 
 /** Stable structural diagnostic construction. Existing capture/bounds/budget codes stay intact. */

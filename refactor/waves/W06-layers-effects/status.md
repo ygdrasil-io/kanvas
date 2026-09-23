@@ -2,14 +2,21 @@
 
 ## Statut
 
-## Checkpoint W6b / correction whole-branch round 3 — admission scissor Picture
+## Checkpoint W6b / correction whole-branch round 4 — autorité producteur scissor Picture
 
 La première vague de correction, basée sur `2bf3d52`, a fermé I2–I4, I6,
 M1 et M2. Sa re-review a laissé I1, I5 et I7 ouverts. La seconde vague,
 basée sur `a1aabe6`, a fermé R21, I5 et le shard Picture I7, mais sa re-review
 a laissé l'authentification indépendante du scissor terminal Picture et deux
 imports Render IR dans le shard admission. La troisième vague, basée sur
-`6453b06`, ferme ces deux écarts sous R22 sans étendre les exclusions W6b.
+`6453b06`, a ajouté les mutants de validation R22, mais sa re-review a
+conservé un finding : `PictureTerminalScissorAuthorityV1` copiait encore le
+terminal/les operands déjà construits. La quatrième vague, basée sur
+`b37bf29`, ferme seulement R23 sans étendre les exclusions W6b : l'autorité
+est créée directement depuis le clip différé, le domaine composite admis et la
+décision vide/non-vide, avant tout terminal, operands ou pass. Ceux-ci
+reçoivent ensuite une copie du même fait immutable ; aucun ne peut plus le
+produire.
 
 Task 6 matérialise uniquement les opérations déjà gelées
 `DROP_SHADOW_COLORIZE` et `DROP_SHADOW_COMPOSITE`. La route native consomme
@@ -41,7 +48,7 @@ linéaire, conformément au contrat W3 RGBA8 sRGB prémultiplié.
 - Les sept shards W6b ciblés totalisent 80/80 assertions XML PASS : Picture
   12, admission/recovery 27, image blur 10, mask blur 10, mask shader/table
   13, DropShadow 6 et budget/recovery 2. Les compilations ciblées
-  `:gpu-plan:test` (100 contrats), `:gpu-renderer:compileKotlin` et
+  `:gpu-plan:test` (102 contrats), `:gpu-renderer:compileKotlin` et
   `:kanvas:compileTestKotlin` sortent 0. Aucun shard public W6b n'importe
   `GraphLimits` ni `SceneCaptureLimits` : les archives oversize et leur
   recovery passent par `Picture` public et bytes.
@@ -57,10 +64,14 @@ La projection W6b passe seulement par `GPUW6aLayerFramePlan`,
 Le plan scelle, avec math checked, chaque scissor, sample rectangle et offset
 W6b en I32 target-local. Chaque `FilterComposite` publie aussi son offset
 d'échantillonnage et son scissor terminaux. L'aggregate Picture porte un
-snapshot d'admission distinct (scissor optionnel, admis et vide/non-vide) ; la
-validation compare ce fait au terminal et au `FilterComposite`, ce qui refuse
-un sous-rectangle contenu mais faux et un `null` forgé. Draw/Layer/Picture/
-GraphTexture consomment les operands verbatim, sans recalcul device→target.
+snapshot d'admission distinct (scissor optionnel, admis et vide/non-vide),
+produit par `admitPictureTerminalScissor` directement depuis les inputs
+d'admission, avant les operands et les pass. La validation compare ce fait au
+terminal et au `FilterComposite`, qui en sont tous deux des consommateurs ;
+elle refuse un sous-rectangle contenu mais faux et un `null` forgé. Le contrat
+exerce aussi un vrai compilateur W6a sur une Picture filtrée, et une mutation
+temporaire du helper producteur échoue. Draw/Layer/Picture/GraphTexture
+consomment les operands verbatim, sans recalcul device→target.
 Les mutants de publication offset/scissor et le cas
 public Picture à origin F32 très grande mais I32 target-local rendable couvrent
 cette frontière, y compris la recovery de la même surface. Aucun operand/pass W6b ne consulte

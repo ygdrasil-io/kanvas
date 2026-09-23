@@ -582,27 +582,13 @@ internal class W6aLayerGraphConstruction(
         // admission fact, before the corresponding pass is published.
         val pictureTerminalScissorAuthorityByPassId = linkedMapOf<PlanPassId, PictureTerminalScissorAuthorityV1>()
         var nextPictureSnapshotI32 = Math.addExact(occurrences.size, filterScene?.graphLimits?.maxNodes ?: bindings.size)
-        fun freezePictureTerminal(
-            planned: FramePlannedCommandIdI32,
-            source: W6bFilterGraphConstruction.SourceBinding,
-            destination: PlanResourceId,
+        fun admitPictureTerminalScissor(
             sourceBounds: RectI32,
             destinationOrigin: Point2I32,
+            destination: PlanResourceId,
             clip: ClipStackNode,
             clipMapping: Matrix3x3F64,
-            selectedBlend: BlendPlan,
-        ): PictureCompositeOperandsV1 {
-            val before = DestinationVersionI64(versions[destination] ?: 0L)
-            val blend = if (selectedBlend is BlendPlan.DestinationReadV1) {
-                val extent = filterSource(destination).copyExtentI32()
-                val snapshot = planResourceId(PlanResourceRole.DestinationSnapshot, nextPictureSnapshotI32)
-                nextPictureSnapshotI32 = Math.addExact(nextPictureSnapshotI32, 1)
-                sourceSpecs += W6bFilterGraphConstruction.ResourceSpec(snapshot, PlanResourceRole.DestinationSnapshot,
-                    extent, setOf(PlanResourceUsage.CopyDestination))
-                passes += PlanPass.TextureCopy(passes.size, destination, snapshot, before,
-                    RectI32(0, 0, extent.width, extent.height), Point2I32.Origin, Math.multiplyExact(extent.width.toLong(), 4L))
-                selectedBlend.bindDestinationReadV1(before, snapshot)
-            } else selectedBlend
+        ): PictureTerminalScissorAuthorityV1 {
             val sourceInDestination = try {
                 RectI32(
                     destinationOrigin.x,
@@ -643,6 +629,32 @@ internal class W6aLayerGraphConstruction(
                 }
                 is ClipStackNode.Operations -> sourceInDestination to false
             }
+            return PictureTerminalScissorAuthorityV1(scissor, scissorAdmitted, scissor == null)
+        }
+        fun freezePictureTerminal(
+            planned: FramePlannedCommandIdI32,
+            source: W6bFilterGraphConstruction.SourceBinding,
+            destination: PlanResourceId,
+            sourceBounds: RectI32,
+            destinationOrigin: Point2I32,
+            clip: ClipStackNode,
+            clipMapping: Matrix3x3F64,
+            selectedBlend: BlendPlan,
+        ): PictureTerminalAdmissionV1 {
+            // This is intentionally first: a destination snapshot may append a pass below, but
+            // the aggregate's terminal admission has already frozen its causal fact.
+            val authority = admitPictureTerminalScissor(sourceBounds, destinationOrigin, destination, clip, clipMapping)
+            val before = DestinationVersionI64(versions[destination] ?: 0L)
+            val blend = if (selectedBlend is BlendPlan.DestinationReadV1) {
+                val extent = filterSource(destination).copyExtentI32()
+                val snapshot = planResourceId(PlanResourceRole.DestinationSnapshot, nextPictureSnapshotI32)
+                nextPictureSnapshotI32 = Math.addExact(nextPictureSnapshotI32, 1)
+                sourceSpecs += W6bFilterGraphConstruction.ResourceSpec(snapshot, PlanResourceRole.DestinationSnapshot,
+                    extent, setOf(PlanResourceUsage.CopyDestination))
+                passes += PlanPass.TextureCopy(passes.size, destination, snapshot, before,
+                    RectI32(0, 0, extent.width, extent.height), Point2I32.Origin, Math.multiplyExact(extent.width.toLong(), 4L))
+                selectedBlend.bindDestinationReadV1(before, snapshot)
+            } else selectedBlend
             val sourceSampleOffset = try {
                 Point2I32(
                     Math.subtractExact(sourceBounds.left, destinationOrigin.x),
@@ -654,8 +666,10 @@ internal class W6aLayerGraphConstruction(
                     "W6b Picture terminal sample offset overflows target-local I32 texels.",
                 ))
             }
-            return PictureCompositeOperandsV1(planned, source.resourceId, 0L, sourceBounds,
-                destinationOrigin, scissor, sourceSampleOffset, blend, before, scissorAdmitted)
+            val operands = PictureCompositeOperandsV1(planned, source.resourceId, 0L, sourceBounds,
+                destinationOrigin, authority.copyCompositeScissorTargetLocalI32(), sourceSampleOffset, blend,
+                before, authority.compositeScissorAdmitted)
+            return PictureTerminalAdmissionV1(authority, operands)
         }
         fun appendFrozenOccurrence(
             occurrence: W6bFilterGraphConstruction.PositiveOccurrence,
@@ -664,7 +678,7 @@ internal class W6aLayerGraphConstruction(
             operation: FilterCompositeOperationV1,
             materialCoverage: W6bFilterGraphConstruction.SourceBinding? = null,
             replacedLayerSource: PlanResourceId? = null,
-            pictureTerminal: ((W6bFilterGraphConstruction.SourceBinding, RectI32, Point2I32) -> PictureCompositeOperandsV1)? = null,
+            pictureTerminal: ((W6bFilterGraphConstruction.SourceBinding, RectI32, Point2I32) -> PictureTerminalAdmissionV1)? = null,
         ): PlanPass.FilterComposite {
             filterCursor.passOrdinalI32 = passes.size
             val materialized = occurrence.mask?.let {
@@ -720,15 +734,17 @@ internal class W6aLayerGraphConstruction(
                 ))
             }
             val before = DestinationVersionI64(versions[destination] ?: 0L)
-            val finalOperation = if (operation is FilterCompositeOperationV1.Picture && pictureTerminal != null)
-                operation.copy(terminal = pictureTerminal(frozen.output, sourceBounds, destinationLocal)) else operation
+            val terminalAdmission = if (operation is FilterCompositeOperationV1.Picture && pictureTerminal != null)
+                pictureTerminal(frozen.output, sourceBounds, destinationLocal) else null
+            val finalOperation = if (operation is FilterCompositeOperationV1.Picture)
+                operation.copy(terminal = terminalAdmission?.operands ?: operation.terminal) else operation
             val terminal = (finalOperation as? FilterCompositeOperationV1.Picture)?.terminal
-            val terminalScissorAuthority = terminal?.toTerminalScissorAuthority()
+            val terminalScissorAuthority = terminalAdmission?.authority
             val finalSampleOffset = terminal?.copySourceSampleOffsetTargetLocalI32() ?: sourceSampleOffset
             // A Picture terminal's null scissor is a sealed no-op/non-admission fact, not a
             // missing value that may be replaced by the generic composite rectangle.
-            val finalScissor = if (terminal != null)
-                terminal.copyCompositeScissorTargetLocalI32() else compositeScissor
+            val finalScissor = if (terminalScissorAuthority != null)
+                terminalScissorAuthority.copyCompositeScissorTargetLocalI32() else compositeScissor
             val after = when (finalOperation) {
                 is FilterCompositeOperationV1.Draw -> {
                     require(finalOperation.blend !is BlendPlan.DestinationReadV1) { "W6b filtered destination-read blend is not planned." }
@@ -1159,6 +1175,7 @@ internal class W6aLayerGraphConstruction(
                  * valid parent mapping for the empty allocation: a singular child transform
                  * has no content to invert.
                  */
+                val terminalScissorAuthority = PictureTerminalScissorAuthorityV1(null, true, true)
                 val domain = targetDeviceBounds(parentTarget)
                 val parentMapping = filterSource(parentTarget).mapping
                 val aggregateTargetBinding = if (draft.executionMode == PictureStreamExecutionModeV1.ISOLATED_SOURCE) {
@@ -1213,7 +1230,7 @@ internal class W6aLayerGraphConstruction(
                     Matrix3x3F64(),
                     if (draft.outerPicturePathI32().isEmpty()) draft.source.sourceCommandIndexI32 else null,
                     executionPassIds = passes.subList(aggregateStartPassI32, passes.size).map(PlanPass::id),
-                    terminalCompositeScissorAuthority = PictureTerminalScissorAuthorityV1(null, true, true),
+                    terminalCompositeScissorAuthority = terminalScissorAuthority,
                 )
                 pictureStreamAggregates += aggregate
                 return aggregate to seal?.id
@@ -1574,15 +1591,15 @@ internal class W6aLayerGraphConstruction(
                     val domain = requireNotNull(intersect(source.copyDeviceBoundsI32(), targetDeviceBounds(parentTarget)))
                     val rect = requireNotNull(source.mapping.mapDeviceRectToLayerI32OrNull(domain))
                     val origin = requireNotNull(filterSource(parentTarget).mapping.mapDeviceRectToLayerI32OrNull(domain))
-                    val operands = freezePictureTerminal(draft.sourcePlannedCommandId, source, parentTarget, rect,
+                    val terminalAdmission = freezePictureTerminal(draft.sourcePlannedCommandId, source, parentTarget, rect,
                         Point2I32(origin.left, origin.top), draft.source.recordedInnerClipWithoutCull().terminalDeferredClip(),
                         composeInOrderF64(draft.source.outerPictures().map { it.transform }), pictureBlend(draft.draw))
-                    val terminalScissorAuthority = operands.toTerminalScissorAuthority()
+                    val operands = terminalAdmission.operands
                     val after = DestinationVersionI64(if (operands.blend.compositionFacts.writesParentDevice)
                         Math.addExact(versions[parentTarget] ?: 0L, 1L) else versions[parentTarget] ?: 0L)
                     val composite = PlanPass.PictureComposite(passes.size, source.resourceId, parentTarget, draft.source, after, operands)
                     passes += composite
-                    pictureTerminalScissorAuthorityByPassId[composite.id] = terminalScissorAuthority
+                    pictureTerminalScissorAuthorityByPassId[composite.id] = terminalAdmission.authority
                     versions[parentTarget] = after.valueI64
                     recordPictureWork(composite)
                     composite.id

@@ -26,13 +26,35 @@ import org.graphiks.math.geometry.ClipGeometryF32
 import org.graphiks.math.geometry.InverseInteriorCoverageF32
 import org.graphiks.math.geometry.InversePathGeometryF32
 import org.graphiks.math.matrix.LayerMappingF64
+import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.matrix.Matrix3x3F64
+import org.graphiks.kanvas.render.ir.CapturedFilterInputV1
 import org.graphiks.kanvas.render.ir.CapturedFilterNodeIdI32
+import org.graphiks.kanvas.render.ir.CapturedFilterNodeV1
+import org.graphiks.kanvas.render.ir.CapturedFilterRootV1
+import org.graphiks.kanvas.render.ir.CapturedFilterTableV1
+import org.graphiks.kanvas.render.ir.BlendMode
+import org.graphiks.kanvas.render.ir.BlendNode
 import org.graphiks.kanvas.render.ir.ClipStackNode
+import org.graphiks.kanvas.render.ir.CoverageRequest
+import org.graphiks.kanvas.render.ir.DrawNode
+import org.graphiks.kanvas.render.ir.DrawOrigin
+import org.graphiks.kanvas.render.ir.EffectStack
+import org.graphiks.kanvas.render.ir.GeometryNode
 import org.graphiks.kanvas.render.ir.LayerDescriptor
+import org.graphiks.kanvas.render.ir.MaterialNode
+import org.graphiks.kanvas.render.ir.PaintNode
+import org.graphiks.kanvas.render.ir.PaintStyleNode
+import org.graphiks.kanvas.render.ir.RenderPlanResult
+import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
+import org.graphiks.kanvas.render.ir.SceneCommand
 import org.graphiks.kanvas.render.ir.SceneExtent
 import org.graphiks.kanvas.render.ir.SceneSnapshot
+import org.graphiks.kanvas.render.ir.StrokeCapNode
+import org.graphiks.kanvas.render.ir.StrokeJoinNode
+import org.graphiks.kanvas.render.ir.TileMode
 import org.graphiks.kanvas.color.ColorSpace
+import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.preparePathFillGeometryF32
 import org.graphiks.math.geometry.prepareProjectedPathStrokeGeometryF32
 import org.junit.jupiter.api.Test
@@ -1064,6 +1086,35 @@ class RenderGraphContractTest {
         assertFailsWith<IllegalArgumentException> {
             w6bFilterPublicationGraph(forgeCompositeTargetLocalScissor = true)
         }
+    }
+
+    @Test
+    fun `Picture composite publication admits a nonempty scissor baseline`() {
+        val admittedScissor = RectI32(0, 0, 4, 4)
+
+        validatePictureCompositeScissorPublication(
+            terminalScissor = admittedScissor,
+            admittedScissor = admittedScissor,
+            admittedEmpty = false,
+        )
+    }
+
+    @Test
+    fun `production Picture terminal producer snapshots admission before terminal copies`() {
+        val graph = productionPictureTerminalGraph()
+        val aggregate = requireNotNull(graph.layerFramePlanOrNull()).pictureStreamAggregates().single()
+        val authority = requireNotNull(aggregate.terminalCompositeScissorAuthority)
+        val terminal = assertIs<PlanPass.FilterComposite>(
+            graph.passes().single { it.id == requireNotNull(aggregate.terminalPassId) },
+        )
+        val operands = requireNotNull(assertIs<FilterCompositeOperationV1.Picture>(terminal.operation).terminal)
+
+        assertEquals(RectI32(0, 0, 4, 4), authority.copyCompositeScissorTargetLocalI32())
+        assertEquals(true, authority.compositeScissorAdmitted)
+        assertEquals(false, authority.terminalIsEmpty)
+        assertEquals(authority.copyCompositeScissorTargetLocalI32(), operands.copyCompositeScissorTargetLocalI32())
+        assertEquals(authority.compositeScissorAdmitted, operands.compositeScissorAdmitted)
+        assertEquals(authority.copyCompositeScissorTargetLocalI32(), terminal.copyCompositeScissorTargetLocalI32())
     }
 
     @Test
@@ -3294,6 +3345,103 @@ class RenderGraphContractTest {
         peakFrameLocalBytes,
     )
 
+    private fun productionPictureTerminalGraph(): RenderGraph {
+        val child = SceneSnapshot.of(
+            SceneExtent(4, 4),
+            ColorSpace.SRGB,
+            listOf(SceneCommand.Draw(DrawNode(
+                geometry = GeometryNode.Rect.of(RectF32(0f, 0f, 4f, 4f)),
+                material = MaterialNode.Solid(ColorARGB.White),
+                coverage = CoverageRequest.HARD_EDGE,
+                clip = ClipStackNode.Empty,
+                blend = BlendNode.SrcOver,
+                effects = EffectStack.Empty,
+                transform = Matrix3x3F32.Identity,
+                origin = DrawOrigin.RECT,
+                paint = picturePaint(),
+            ))),
+        )
+        val blurRoot = CapturedFilterRootV1(CapturedFilterNodeIdI32(0))
+        val scene = SceneSnapshot.of(
+            SceneExtent(4, 4),
+            ColorSpace.SRGB,
+            listOf(
+                SceneCommand.BeginLayer(LayerDescriptor.of(bounds = RectF32(0f, 0f, 4f, 4f))),
+                SceneCommand.Draw(DrawNode(
+                    geometry = GeometryNode.Picture.of(child, RectF32(0f, 0f, 4f, 4f)),
+                    material = MaterialNode.Solid(ColorARGB.White),
+                    coverage = CoverageRequest.HARD_EDGE,
+                    clip = ClipStackNode.Empty,
+                    blend = BlendNode.SrcOver,
+                    effects = EffectStack.Empty,
+                    transform = Matrix3x3F32.Identity,
+                    origin = DrawOrigin.PICTURE,
+                    paint = picturePaint(blurRoot),
+                )),
+                SceneCommand.EndLayer,
+            ),
+            filterTable = CapturedFilterTableV1.of(listOf(
+                CapturedFilterNodeV1.Blur(1f, 1f, TileMode.CLAMP, CapturedFilterInputV1.ImplicitSource),
+            )),
+        )
+        val compiler = W6aLayerPlanCompiler()
+        val candidate = assertIs<GpuPlanSelection.Candidate>(
+            compiler.select(scene, RenderTargetDescriptor(scene.extent, scene.colorSpace)),
+        ).candidate
+
+        return when (val result = compiler.plan(
+            candidate,
+            productionPictureTerminalCapabilities(),
+            PlanBudget(4_096),
+        )) {
+            is RenderPlanResult.Ready -> result.plan
+            is RenderPlanResult.GapOnPromotedScope -> error(
+                "Production Picture terminal fixture was not admitted: ${result.diagnostics}",
+            )
+            else -> error("Production Picture terminal fixture was not admitted: $result")
+        }
+    }
+
+    private fun productionPictureTerminalCapabilities(): PlanCapabilitySnapshot = PlanCapabilitySnapshot.of(
+        deviceGeneration = 0,
+        maxTextureDimension2D = 1024,
+        maxBufferSizeBytes = 16_384,
+        copyBytesPerRowAlignment = 256,
+        supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+        minUniformBufferOffsetAlignment = 256,
+        maxDynamicUniformBuffersPerPipelineLayout = 4,
+        supportedOperations = setOf(
+            PlanOperationCapability.RenderPass,
+            PlanOperationCapability.CopyUpload,
+            PlanOperationCapability.UniformBuffer,
+            PlanOperationCapability.Readback,
+        ),
+        bufferAllocationPolicy = PlanBufferAllocationPolicy.of(16_384, 4_096, 4_096),
+        maxUniformBufferBindingSizeBytesI64 = 4_096,
+        maxUniformBuffersPerShaderStageI32 = 4,
+        maxSampledTexturesPerShaderStageI32 = 4,
+        maxSamplersPerShaderStageI32 = 4,
+        maxBindingsPerBindGroupI32 = 16,
+        maxBindGroupsI32 = 4,
+    )
+
+    private fun picturePaint(imageFilter: CapturedFilterRootV1? = null): PaintNode = PaintNode(
+        color = ColorARGB.White,
+        shader = null,
+        blendMode = BlendMode.SRC_OVER,
+        blender = null,
+        colorFilter = null,
+        maskFilter = null,
+        pathEffect = null,
+        imageFilter = imageFilter,
+        style = PaintStyleNode.FILL,
+        strokeWidth = 0f,
+        strokeCap = StrokeCapNode.BUTT,
+        strokeJoin = StrokeJoinNode.MITER,
+        strokeMiter = 4f,
+        antiAlias = false,
+    )
+
     /** Exercises W6a publication, including its immutable W6b occurrence witness. */
     private fun w6bFilterPublicationGraph(
         boundSource: PlanResourceId = planResourceId(PlanResourceRole.FilterSource, 0),
@@ -3444,6 +3592,7 @@ class RenderGraphContractTest {
             4, listOf(source.id), filtered.id, key,
             FilterPassOperationV1.MaterializedSource(FilterBoundsPlanV1(domain, domain, domain, domain, Point2I32.Origin)),
         )
+        val authority = PictureTerminalScissorAuthorityV1(admittedScissor, true, admittedEmpty)
         val terminalOperands = PictureCompositeOperandsV1(planned, filtered.id, 0L, domain, Point2I32.Origin,
             terminalScissor, Point2I32.Origin, BlendPlan.SrcOver, DestinationVersionI64(0))
         val terminal = PlanPass.FilterComposite(
@@ -3460,7 +3609,7 @@ class RenderGraphContractTest {
             listOf(PictureStreamEntryV1.Clear(PictureStreamEntryIdI32(0), locator, planned, ColorF32.Transparent, entryTerminal.id)),
             begin.id, seal.id, terminal.id, rootSourceCommandIndexI32 = 0,
             executionPassIds = passes.map(PlanPass::id),
-            terminalCompositeScissorAuthority = PictureTerminalScissorAuthorityV1(admittedScissor, true, admittedEmpty),
+            terminalCompositeScissorAuthority = authority,
         )
         validatePictureStreamAggregates(
             LayerFramePlanV1(emptyList(), emptyList(), listOf(aggregate), frozenPassSchedule = passes.map(PlanPass::id)),
