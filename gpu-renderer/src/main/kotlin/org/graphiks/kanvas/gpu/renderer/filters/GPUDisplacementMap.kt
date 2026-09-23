@@ -1,38 +1,51 @@
 package org.graphiks.kanvas.gpu.renderer.filters
 
 import kotlin.math.roundToInt
-import org.graphiks.kanvas.gpu.plan.FilterPassOperationV1
+import org.graphiks.kanvas.gpu.plan.W6dSamplingProgramV1
+import org.graphiks.kanvas.gpu.plan.W6dSamplingProgramIdV1
 
-/** WGSL for the immutable W6d sampling payloads.  It receives no public filter object. */
+/** Deterministic backend translation of a selected recipe; never consumes semantic operations. */
 internal object GPUW6dAdvancedSamplingPass {
-    fun matrixConvolutionFragment(operation: FilterPassOperationV1.MatrixConvolution): String {
-        val size = operation.copyKernelSizeI32()
-        val kernel = operation.copyKernel().copyToFloatArray()
-        val offset = operation.copyKernelOffsetF64()
+    fun fragment(program: W6dSamplingProgramV1): String = when (program.programId) {
+        W6dSamplingProgramIdV1.MATRIX_CLAMP_RGBA8_V1,
+        W6dSamplingProgramIdV1.MATRIX_REPEAT_RGBA8_V1,
+        W6dSamplingProgramIdV1.MATRIX_MIRROR_RGBA8_V1,
+        W6dSamplingProgramIdV1.MATRIX_DECAL_RGBA8_V1 -> matrixConvolutionFragment(program as W6dSamplingProgramV1.Convolution)
+        W6dSamplingProgramIdV1.DISPLACEMENT_NEAREST_CLAMP_RGBA8_V1 -> displacementFragment(program as W6dSamplingProgramV1.Displacement)
+        W6dSamplingProgramIdV1.MAGNIFIER_NEAREST_CLAMP_RGBA8_V1 -> magnifierFragment(program as W6dSamplingProgramV1.Magnifier)
+    }
+
+    private fun matrixConvolutionFragment(program: W6dSamplingProgramV1.Convolution): String {
         val terms = buildString {
-            for (y in 0 until size.height) for (x in 0 until size.width) {
-                append("value += w6d_matrix_sample(vec2<i32>(round(vec2<f32>(base) + vec2<f32>(${x - offset.x}f, ${y - offset.y}f)))) * ${kernel[y * size.width + x]}f;\n")
+            for (tap in program.taps()) {
+                append("value += w6d_matrix_sample(vec2<i32>(round(vec2<f32>(base) + vec2<f32>(${tap.offsetXF64}f, ${tap.offsetYF64}f)))) * ${tap.weightF32}f;\n")
             }
+        }
+        val sampler = when (program.programId) {
+            W6dSamplingProgramIdV1.MATRIX_CLAMP_RGBA8_V1 -> "return textureLoad(w6d_matrix_source, clamp(coord, vec2<i32>(0), extent - vec2<i32>(1)), 0);"
+            W6dSamplingProgramIdV1.MATRIX_REPEAT_RGBA8_V1 -> "return textureLoad(w6d_matrix_source, vec2<i32>((coord.x % extent.x + extent.x) % extent.x, (coord.y % extent.y + extent.y) % extent.y), 0);"
+            W6dSamplingProgramIdV1.MATRIX_MIRROR_RGBA8_V1 -> "let period = extent * 2; let p = vec2<i32>((coord.x % period.x + period.x) % period.x, (coord.y % period.y + period.y) % period.y); return textureLoad(w6d_matrix_source, min(p, period - vec2<i32>(1) - p), 0);"
+            W6dSamplingProgramIdV1.MATRIX_DECAL_RGBA8_V1 -> "if (any(coord < vec2<i32>(0)) || any(coord >= extent)) { return vec4<f32>(0.0); } return textureLoad(w6d_matrix_source, coord, 0);"
+            else -> error("Unfrozen W6d matrix tile mode")
         }
         return """
             @group(0) @binding(0) var w6d_matrix_source: texture_2d<f32>;
             fn w6d_matrix_sample(coord: vec2<i32>) -> vec4<f32> {
                 let extent = vec2<i32>(textureDimensions(w6d_matrix_source));
-                return textureLoad(w6d_matrix_source, clamp(coord, vec2<i32>(0), extent - vec2<i32>(1)), 0);
+                $sampler
             }
             @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
                 let base = vec2<i32>(position.xy);
                 var value = vec4<f32>(0.0);
                 $terms
-                let rgb = clamp(value.rgb * ${operation.gainF32}f + vec3<f32>(${operation.biasF32 / 255f}f), vec3<f32>(0.0), vec3<f32>(1.0));
-                let alpha = ${if (operation.convolveAlpha) "clamp(value.a * ${operation.gainF32}f + ${operation.biasF32 / 255f}f, 0.0, 1.0)" else "w6d_matrix_sample(base).a"};
+                let rgb = clamp(value.rgb * ${program.gainF32}f + vec3<f32>(${program.normalizedBiasF32}f), vec3<f32>(0.0), vec3<f32>(1.0));
+                let alpha = ${if (program.convolveAlpha) "clamp(value.a * ${program.gainF32}f + ${program.normalizedBiasF32}f, 0.0, 1.0)" else "w6d_matrix_sample(base).a"};
                 return vec4<f32>(rgb, alpha);
             }
         """
     }
 
-    fun displacementFragment(operation: FilterPassOperationV1.DisplacementMap): String {
-        fun channel(name: String): String = when (name) { "RED" -> "r"; "GREEN" -> "g"; "BLUE" -> "b"; else -> "a" }
+    private fun displacementFragment(program: W6dSamplingProgramV1.Displacement): String {
         return """
             @group(0) @binding(0) var w6d_displacement: texture_2d<f32>;
             @group(0) @binding(1) var w6d_source: texture_2d<f32>;
@@ -41,23 +54,20 @@ internal object GPUW6dAdvancedSamplingPass {
                 let map_extent = vec2<i32>(textureDimensions(w6d_displacement));
                 let map = textureLoad(w6d_displacement, clamp(base, vec2<i32>(0), map_extent - vec2<i32>(1)), 0);
                 let source_extent = vec2<i32>(textureDimensions(w6d_source));
-                let coordinate = vec2<i32>(round(vec2<f32>(base) + vec2<f32>(map.${channel(operation.xChannel.name)}, map.${channel(operation.yChannel.name)}) * ${operation.scaleF32}f));
+                let coordinate = vec2<i32>(round(vec2<f32>(base) + vec2<f32>(map[${program.xComponentI32}], map[${program.yComponentI32}]) * ${program.scaleF32}f));
                 return textureLoad(w6d_source, clamp(coordinate, vec2<i32>(0), source_extent - vec2<i32>(1)), 0);
             }
         """
     }
 
-    fun magnifierFragment(operation: FilterPassOperationV1.Magnifier): String {
-        val source = operation.copySourceF64()
-        val centerX = (source.left + source.right) / 2.0
-        val centerY = (source.top + source.bottom) / 2.0
+    private fun magnifierFragment(program: W6dSamplingProgramV1.Magnifier): String {
         return """
             @group(0) @binding(0) var w6d_magnifier_source: texture_2d<f32>;
             @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
                 let point = position.xy;
-                let inside = point.x >= ${source.left + operation.insetF32}f && point.x <= ${source.right - operation.insetF32}f &&
-                    point.y >= ${source.top + operation.insetF32}f && point.y <= ${source.bottom - operation.insetF32}f;
-                let sampled = select(point, vec2<f32>(${centerX}f, ${centerY}f) + (point - vec2<f32>(${centerX}f, ${centerY}f)) / ${operation.zoomF32}f, inside);
+                let inside = point.x >= ${program.innerLeftF64}f && point.x <= ${program.innerRightF64}f &&
+                    point.y >= ${program.innerTopF64}f && point.y <= ${program.innerBottomF64}f;
+                let sampled = select(point, vec2<f32>(${program.centerXF64}f, ${program.centerYF64}f) + (point - vec2<f32>(${program.centerXF64}f, ${program.centerYF64}f)) / ${program.zoomF32}f, inside);
                 let extent = vec2<i32>(textureDimensions(w6d_magnifier_source));
                 return textureLoad(w6d_magnifier_source, clamp(vec2<i32>(round(sampled - vec2<f32>(0.5))), vec2<i32>(0), extent - vec2<i32>(1)), 0);
             }

@@ -35,6 +35,22 @@ class W6dAdvancedSamplingSurfacePixelTest {
     }
 
     @Test
+    fun `convolution honors frozen tile mode at edges`() {
+        val source = sourcePixels()
+        val kernel = floatArrayOf(1f, 0f, 0f)
+        listOf(TileMode.CLAMP, TileMode.REPEAT, TileMode.MIRROR, TileMode.DECAL).forEach { mode ->
+            val expected = W6dAdvancedSamplingCpuOracle.convolution3x1(source, kernel, offsetX = 2, tileMode = mode.name)
+            val surface = Surface(3, 1)
+            surface.canvas {
+                drawSource(this, ImageFilter.MatrixConvolution(
+                    SizeF32.of(3f, 1f), kernel, 1f, 0f, Vector2F32(2f, 0f), mode, true,
+                ))
+            }
+            assertFamilyNear(expected, surface.render(), maxChannelDelta = 1)
+        }
+    }
+
+    @Test
     fun `displacement uses selected channels and implicit source`() {
         val source = sourcePixels()
         val expected = W6dAdvancedSamplingCpuOracle.displacementRedNearestClamp(source, scale = 1f)
@@ -59,6 +75,22 @@ class W6dAdvancedSamplingSurfacePixelTest {
         }
 
         assertFamilyNear(expected, surface.render(), maxChannelDelta = 1)
+    }
+
+    @Test
+    fun `magnifier inset excludes a lens edge pixel`() {
+        val source = sourcePixels()
+        val expected = W6dAdvancedSamplingCpuOracle.magnifierNearestClamp(source, -1f, 3f, zoom = 2f, inset = 1f)
+        val withoutInset = W6dAdvancedSamplingCpuOracle.magnifierNearestClamp(source, -1f, 3f, zoom = 2f, inset = 0f)
+        assertTrue(!expected.contentEquals(withoutInset), "The lens-edge fixture must discriminate inset.")
+        listOf(1f to expected, 0f to withoutInset).forEach { (inset, pixels) ->
+            val surface = Surface(3, 1)
+            surface.canvas {
+                // Keep the vertical coordinate inside the lens for both insets.
+                drawSource(this, ImageFilter.Magnifier(RectF32.ofLTRB(-1f, -2f, 3f, 3f), zoom = 2f, inset = inset))
+            }
+            assertFamilyNear(pixels, surface.render(), maxChannelDelta = 1)
+        }
     }
 
     private fun sourcePixels(): UByteArray = ubyteArrayOf(

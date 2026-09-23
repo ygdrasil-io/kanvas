@@ -7,14 +7,29 @@ import kotlin.math.roundToInt
 /** Independent RGBA8 reference calculations for the W6d sampling witnesses. */
 internal object W6dAdvancedSamplingCpuOracle {
     fun convolution3x1Clamp(source: UByteArray, kernel: FloatArray, offsetX: Int): UByteArray {
+        return convolution3x1(source, kernel, offsetX, tileMode = "CLAMP")
+    }
+
+    fun convolution3x1(source: UByteArray, kernel: FloatArray, offsetX: Int, tileMode: String): UByteArray {
         require(source.size % 4 == 0 && kernel.size == 3)
         val width = source.size / 4
         return UByteArray(source.size).also { output ->
             for (x in 0 until width) for (channel in 0 until 4) {
                 var value = 0f
                 for (kernelX in kernel.indices) {
-                    val sampleX = (x + kernelX - offsetX).coerceIn(0, width - 1)
-                    value += source[sampleX * 4 + channel].toInt() * kernel[kernelX]
+                    val coordinate = x + kernelX - offsetX
+                    val sampleX = when (tileMode) {
+                        "CLAMP" -> coordinate.coerceIn(0, width - 1)
+                        "REPEAT" -> ((coordinate % width) + width) % width
+                        "MIRROR" -> {
+                            val period = 2 * width
+                            val repeated = ((coordinate % period) + period) % period
+                            if (repeated < width) repeated else period - 1 - repeated
+                        }
+                        "DECAL" -> coordinate.takeIf { it in 0 until width }
+                        else -> error("Unknown tile mode $tileMode")
+                    }
+                    if (sampleX != null) value += source[sampleX * 4 + channel].toInt() * kernel[kernelX]
                 }
                 output[x * 4 + channel] = value.roundToInt().coerceIn(0, 255).toUByte()
             }

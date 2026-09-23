@@ -754,23 +754,16 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     views.getValue(original), generation, operation, outputExtent.width, outputExtent.height,
                                     pass, owned)
                             }
-                            is FilterPassOperationV1.MatrixConvolution -> {
-                                require(pass.inputs().size == 1)
-                                renderOperands += textureRender(stepIndex, views.getValue(pass.output), views.getValue(pass.inputs().single()), generation,
-                                    W6A_VERTEX_SHADER + GPUW6dAdvancedSamplingPass.matrixConvolutionFragment(operation),
-                                    BlendPlan.LegacySrcOverV1, 0, 0, outputExtent.width, outputExtent.height, pass, owned)
-                            }
-                            is FilterPassOperationV1.DisplacementMap -> {
-                                require(pass.inputs().size == 2)
-                                renderOperands += multiInputRender(stepIndex, views.getValue(pass.output), pass.inputs().map(views::getValue), generation,
-                                    W6A_VERTEX_SHADER + GPUW6dAdvancedSamplingPass.displacementFragment(operation),
-                                    outputExtent.width, outputExtent.height, pass, owned)
-                            }
+                            is FilterPassOperationV1.MatrixConvolution,
+                            is FilterPassOperationV1.DisplacementMap,
                             is FilterPassOperationV1.Magnifier -> {
-                                require(pass.inputs().size == 1)
-                                renderOperands += textureRender(stepIndex, views.getValue(pass.output), views.getValue(pass.inputs().single()), generation,
-                                    W6A_VERTEX_SHADER + GPUW6dAdvancedSamplingPass.magnifierFragment(operation),
-                                    BlendPlan.LegacySrcOverV1, 0, 0, outputExtent.width, outputExtent.height, pass, owned)
+                                val binding = requireNotNull(pass.frozenSamplingProgram) {
+                                    "W6d sampling pass lost its frozen program/binding contract."
+                                }
+                                require(binding.inputs() == pass.inputs() && binding.output == pass.output)
+                                renderOperands += multiInputRender(stepIndex, views.getValue(binding.output), binding.inputs().map(views::getValue), generation,
+                                    W6A_VERTEX_SHADER + GPUW6dAdvancedSamplingPass.fragment(binding.program),
+                                    outputExtent.width, outputExtent.height, pass, owned)
                             }
                             is FilterPassOperationV1.Lighting,
                             is FilterPassOperationV1.Picture,
