@@ -53,8 +53,8 @@
 - [x] Task 3 Sol review and bounded correction if needed
 - [x] Task 4 — mask blur auto-layers
 - [x] Task 4 Sol review and bounded correction if needed
-- [ ] Task 5 — mask shader/table
-- [ ] Task 5 Sol review and bounded correction if needed
+- [x] Task 5 — mask shader/table
+- [x] Task 5 Sol review and bounded correction if needed
 - [ ] Task 6 — shadows, budget, convergence
 - [ ] Task 6 Sol review and bounded correction if needed
 - [ ] Whole-branch Sol review and bounded correction if needed
@@ -115,3 +115,6 @@
 - Task 5 Sol review: `REQUEST_CHANGES` with three findings — direct Shader/Table sources retain destination-sensitive blend in the graph and rely on a backend override; native MaskShader binding rejects resource-bearing W5 rows that planning admits; repeated canonical MaskShader rows allocate duplicate native uniform buffers despite one physical resource. Report diagnostic spelling must also be corrected to `invalid.mask_filter.table_length`.
 - Task 5 fix round 1 implemented as `32f573eb9`: all direct mask sources freeze `SRC_OVER`, full W5 manifests bind uniforms/storage/textures/samplers, native allocations are grouped by `PlanResourceId`, and public image-backed/repeated/non-SrcOver witnesses pass. Task 5 11/11, Picture 10/10 and graph contracts pass in JUnit; native 133 remains `UNKNOWN`.
 - Task 5: fix round 1/5 (2 addressed, 1 partially addressed, 1 Important gap open — a resource-backed `MaskShader` on a synthetic saveLayer carrier still lacks the plan-owned white FILL/SRC_OVER paint required to publish its W5 manifest; commits `e729c88..32f573e`).
+- Task 5 fix round 2 implemented as `2d683b286`: synthetic saveLayer carriers receive the neutral plan-owned white FILL/SRC_OVER paint, publish the full resource-backed W5 manifest, and render an in-memory image MaskShader. Admission 25/25, Task 5 12/12, Picture 10/10 and graph contracts pass in JUnit; fractional deferred clips retain the exact Task 3 refusal; native 133 remains `UNKNOWN`.
+- Task 5: fix round 2/5 (1 addressed, 0 open; commits `32f573e..2d683b2`). Scoped Sol rereview: `PASS / READY`.
+- Task 5: complete (commits `b7058de..2d683b2`, review clean).
