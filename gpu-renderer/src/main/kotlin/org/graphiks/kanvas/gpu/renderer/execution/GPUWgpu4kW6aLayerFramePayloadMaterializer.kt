@@ -641,6 +641,24 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     materialSourceAlphaReplacement.getValue(input),
                                     outputExtent.width, outputExtent.height, pass, owned)
                             }
+                            is FilterPassOperationV1.DropShadowColorize -> {
+                                require(pass.inputs().size == 1)
+                                val input = pass.inputs().single()
+                                val inputOrigin = frame.targetOriginDeviceI32(input)
+                                renderOperands += textureRender(stepIndex, views.getValue(pass.output), views.getValue(input), generation,
+                                    dropShadowColorizeShader(operation, inputOrigin.x, inputOrigin.y, outputOrigin.x, outputOrigin.y),
+                                    BlendPlan.LegacySrcOverV1, 0, 0, outputExtent.width, outputExtent.height, pass, owned)
+                            }
+                            is FilterPassOperationV1.DropShadowComposite -> {
+                                require(pass.inputs().isNotEmpty())
+                                val shadow = pass.inputs().first()
+                                val original = operation.originalInput
+                                require((original == null) == (pass.inputs().size == 1))
+                                renderOperands += dropShadowCompositeRender(stepIndex, views.getValue(pass.output), views.getValue(shadow),
+                                    original?.let(views::get), generation, frame.targetOriginDeviceI32(shadow),
+                                    original?.let(frame::targetOriginDeviceI32), outputOrigin, outputExtent.width, outputExtent.height,
+                                    pass, owned)
+                            }
                             else -> error("W6b native operation is not implemented.")
                         }
                     }
@@ -1414,6 +1432,101 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             return textureLoad(w6b_source, source_position, 0) * $alpha;
         }
     """
+
+    /** Colors the already-blurred alpha using only the frozen offset/color payload. */
+    private fun dropShadowColorizeShader(
+        operation: FilterPassOperationV1.DropShadowColorize,
+        inputOriginXI32: Int,
+        inputOriginYI32: Int,
+        outputOriginXI32: Int,
+        outputOriginYI32: Int,
+    ): String {
+        val offset = operation.copyOffsetF64()
+        val color = operation.color
+        return W6A_VERTEX_SHADER + """
+            @group(0) @binding(0) var w6b_shadow_blur: texture_2d<f32>;
+            @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+                let source_position = vec2<i32>(floor(position.xy +
+                    vec2<f32>(${outputOriginXI32 - inputOriginXI32}.0, ${outputOriginYI32 - inputOriginYI32}.0) -
+                    vec2<f32>(${offset.x}f, ${offset.y}f)));
+                let source_extent = vec2<i32>(textureDimensions(w6b_shadow_blur));
+                if (source_position.x < 0 || source_position.y < 0 ||
+                    source_position.x >= source_extent.x || source_position.y >= source_extent.y) {
+                    return vec4<f32>(0.0);
+                }
+                let alpha = textureLoad(w6b_shadow_blur, source_position, 0).a * ${color.alpha / 255f}f;
+                let color_encoded = vec3<f32>(${color.red / 255f}f, ${color.green / 255f}f, ${color.blue / 255f}f);
+                let color_linear = select(
+                    pow((color_encoded + vec3<f32>(0.055)) / vec3<f32>(1.055), vec3<f32>(2.4)),
+                    color_encoded / vec3<f32>(12.92),
+                    color_encoded <= vec3<f32>(0.04045));
+                return vec4<f32>(color_linear * alpha, alpha);
+            }
+        """
+    }
+
+    /** Composites the planned shadow and optional original lane without a renderer-created pass. */
+    private fun dropShadowCompositeRender(
+        stepIndex: Int,
+        target: GPUTextureView,
+        shadow: GPUTextureView,
+        original: GPUTextureView?,
+        generation: GPUDeviceGenerationID,
+        shadowOriginDeviceI32: org.graphiks.math.geometry.Point2I32,
+        originalOriginDeviceI32: org.graphiks.math.geometry.Point2I32?,
+        outputOriginDeviceI32: org.graphiks.math.geometry.Point2I32,
+        widthI32: Int,
+        heightI32: Int,
+        pass: PlanPass.FilterPass,
+        owned: W6aOwnedHandles,
+    ): GPUPreparedNativeScopeOperand.Render {
+        val originalDeclaration = if (original == null) "" else "@group(0) @binding(1) var w6b_shadow_original: texture_2d<f32>;"
+        val originalSample = if (original == null) "vec4<f32>(0.0)" else """
+            w6b_shadow_sample(w6b_shadow_original, vec2<i32>(position.xy) +
+                vec2<i32>(${outputOriginDeviceI32.x - requireNotNull(originalOriginDeviceI32).x},
+                    ${outputOriginDeviceI32.y - requireNotNull(originalOriginDeviceI32).y}) )
+        """.trimIndent()
+        val shader = W6A_VERTEX_SHADER + """
+            @group(0) @binding(0) var w6b_shadow_color: texture_2d<f32>;
+            $originalDeclaration
+            fn w6b_shadow_sample(source: texture_2d<f32>, coordinate: vec2<i32>) -> vec4<f32> {
+                let extent = vec2<i32>(textureDimensions(source));
+                if (coordinate.x < 0 || coordinate.y < 0 || coordinate.x >= extent.x || coordinate.y >= extent.y) {
+                    return vec4<f32>(0.0);
+                }
+                return textureLoad(source, coordinate, 0);
+            }
+            @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+                let colored = w6b_shadow_sample(w6b_shadow_color, vec2<i32>(position.xy) +
+                    vec2<i32>(${outputOriginDeviceI32.x - shadowOriginDeviceI32.x},
+                        ${outputOriginDeviceI32.y - shadowOriginDeviceI32.y}));
+                let source = $originalSample;
+                return source + colored * (1.0 - source.a);
+            }
+        """
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = buildList {
+            add(BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()))
+            if (original != null) add(BindGroupLayoutEntry(1u, GPUShaderStage.Fragment, texture = TextureBindingLayout()))
+        })))
+        val pipeline = pipeline(shader, layout, w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = buildList {
+            add(BindGroupEntry(0u, shadow))
+            if (original != null) add(BindGroupEntry(1u, original))
+        })))
+        return GPUPreparedNativeScopeOperand.Render(
+            stepIndex,
+            GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation),
+                loadOperation = GPUPreparedNativeLoadOperation.Clear,
+                clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)),
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+                GPUPreparedNativeRenderCommand.SetScissor(0, 0, widthI32, heightI32),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0)),
+            ),
+            w6aPassV1 = pass,
+        )
+    }
 
     private fun PlanPass.materializesW6bMaskSourceV1(): Boolean = when (this) {
         is PlanPass.RenderPass -> w6bMaskSourceBinding != null

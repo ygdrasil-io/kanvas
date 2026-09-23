@@ -112,6 +112,31 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
         require(schedule.isNotEmpty() && schedule == graph.passes().map(PlanPass::id))
         schedule.map(byId::getValue)
     }
+    /**
+     * Native lowering may only consume this pre-existing terminal chain.  The graph witness
+     * owns all source generations, F64 planning and checked I32 target sealing; this projection
+     * merely rejects an altered frozen payload before any native handle is created.
+     */
+    private val frozenShadowPasses: List<PlanPass.FilterPass> = scheduledPasses.filterIsInstance<PlanPass.FilterPass>()
+        .filter { pass -> pass.operation.kind in setOf(
+            FilterImplementationKindV1.DROP_SHADOW_COLORIZE,
+            FilterImplementationKindV1.DROP_SHADOW_COMPOSITE,
+        ) }.also { passes ->
+            passes.forEach { pass ->
+                val bounds = pass.operation.bounds
+                require(!bounds.copyRequiredInputDeviceI32().isEmpty && !bounds.copyDesiredOutputDeviceI32().isEmpty &&
+                    bounds.copyProducedOutputDeviceI32()?.isEmpty == false) { "W6b shadow has no sealed bounds." }
+                when (val operation = pass.operation) {
+                    is FilterPassOperationV1.DropShadowColorize -> require(pass.inputs().size == 1)
+                    is FilterPassOperationV1.DropShadowComposite -> {
+                        require(pass.inputs().firstOrNull() != null)
+                        if (operation.originalInput == null) require(pass.inputs().size == 1)
+                        else require(pass.inputs().size == 2 && pass.inputs().last() == operation.originalInput)
+                    }
+                    else -> error("Unreachable frozen shadow operation.")
+                }
+            }
+        }
     private val templates = mutableMapOf<GPUDrawPacketID, GPUW5aGeometryHostTemplateV1>()
     private val analyticUniforms = mutableMapOf<GPUDrawPacketID, ByteArray>()
     private val geometryPipelines = mutableMapOf<GPUDrawPacketID, GPUWgpu4kCorePrimitivePipelineMapping.Mapped>()
@@ -134,6 +159,9 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
             val boundedInput = when (pass.operation) {
                 is FilterPassOperationV1.MaterializedSource -> pass.inputs().first()
                 is FilterPassOperationV1.MaskBlurStyle -> null
+                // The composite has two frozen source lanes with independent origins.  Its
+                // target origin is published below; neither input can be rewritten here.
+                is FilterPassOperationV1.DropShadowComposite -> null
                 else -> pass.inputs().single()
             }
             // A MaskBlurStyle samples the preceding blurred target at its own published

@@ -105,8 +105,10 @@ class W6bFilterPictureTest {
         val picture = pictureWithThreeFilteredDraws(shadow)
 
         assertEquals(DropShadowMode.SHADOW_ONLY, (filtersFromPublicTraversal(picture).single() as ImageFilter.DropShadow).mode)
-        val decoded = assertNotNull(Picture.fromByteArray(picture.toByteArray()))
+        val bytes = picture.toByteArray()
+        val decoded = assertNotNull(Picture.fromByteArray(bytes))
         assertEquals(DropShadowMode.SHADOW_ONLY, (filtersFromPublicTraversal(decoded).single() as ImageFilter.DropShadow).mode)
+        assertContentEquals(bytes, decoded.toByteArray())
     }
 
     @Test

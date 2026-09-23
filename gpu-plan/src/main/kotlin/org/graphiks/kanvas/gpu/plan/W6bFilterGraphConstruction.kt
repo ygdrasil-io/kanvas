@@ -364,7 +364,9 @@ internal object W6bFilterGraphConstruction {
                     SizeI32(predictedShadowBounds.copyDesiredOutputDeviceI32().width(), predictedShadowBounds.copyDesiredOutputDeviceI32().height()),
                     predictedShadowBounds.copyTargetOriginDeviceI32(), predictedShadowBounds.copyProducedOutputDeviceI32())
                 val key = keyFor(id, null, dropShadowCompositeBounds(input, predictedShadow, node.mode).copyDesiredOutputDeviceI32())
-                val blurred = appendBlur(input, node.sigmaX, node.sigmaY, TileMode.CLAMP,
+                // DropShadow does not expose a public tile mode.  Skia defines its internal
+                // Blur through the overload whose default is transparent DECAL sampling.
+                val blurred = appendBlur(input, node.sigmaX, node.sigmaY, TileMode.DECAL,
                     FilterImplementationKindV1.IMAGE_BLUR_X, FilterImplementationKindV1.IMAGE_BLUR_Y, key)
                 val colorBounds = translatedBounds(blurred, node.dx.toDouble(), node.dy.toDouble())
                 val colorized = allocateTarget(colorBounds)

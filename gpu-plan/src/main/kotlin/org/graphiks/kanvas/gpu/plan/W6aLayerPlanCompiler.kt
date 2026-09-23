@@ -238,7 +238,12 @@ public class W6aLayerPlanCompiler public constructor(
                 is SourceConstructionResultV4.Refused -> layout.failure
             }
         } catch (failure: W6aResourceLimitFailure) {
-            W6aLayerPlanBudget.refusal(failure.message ?: "Layer frame budget exceeded.")
+            val message = failure.message ?: "Layer frame budget exceeded."
+            if (W6bFilterGraphConstruction.owns(selected.scene)) {
+                RenderPlanResult.ResourceLimitExceeded(listOf(W6bFilterDiagnostics.budgetRefusal(message)))
+            } else {
+                W6aLayerPlanBudget.refusal(message)
+            }
         } catch (failure: W6aRestoreAdmissionFailure) {
             RenderPlanResult.GapOnPromotedScope(listOf(diagnostic(W6aPlanDiagnostics.RestoreCapability,
                 failure.message ?: "Restore bindings are unavailable on this device.")))
@@ -255,7 +260,7 @@ public class W6aLayerPlanCompiler public constructor(
         }
     }
 
-    /** The W6b native arm admits only the already-published Task 3/4 image and mask-blur subset. */
+    /** The W6b native arm admits only the frozen Task 3–6 image, mask, and shadow operations. */
     private fun frozenW6bNativeAdmission(graph: RenderGraph): RenderPlanResult<RenderGraph>? {
         val filters = graph.passes().filterIsInstance<PlanPass.FilterPass>()
         if (filters.isEmpty()) return null
@@ -272,6 +277,8 @@ public class W6aLayerPlanCompiler public constructor(
             is FilterPassOperationV1.MaskShader,
             is FilterPassOperationV1.MaskTable,
             is FilterPassOperationV1.MaterializedSource,
+            is FilterPassOperationV1.DropShadowColorize,
+            is FilterPassOperationV1.DropShadowComposite,
             -> true
             else -> false
         } }

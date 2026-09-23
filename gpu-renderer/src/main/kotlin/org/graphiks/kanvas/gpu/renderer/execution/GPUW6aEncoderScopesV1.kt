@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.plan.FilterImplementationKindV1
 import org.graphiks.kanvas.gpu.plan.PlanPass
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.passes.*
@@ -35,6 +36,13 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
             pass is PlanPass.PictureAggregateBeginPass || pass is PlanPass.PictureAggregateSealPass ||
             pass is PlanPass.FilterSourceClear || pass is PlanPass.FilterCoverageSourcePass ||
             pass is PlanPass.FilterCoverageRetainPass
+        val frozenShadow = (pass as? PlanPass.FilterPass)?.operation?.kind in setOf(
+            FilterImplementationKindV1.DROP_SHADOW_COLORIZE,
+            FilterImplementationKindV1.DROP_SHADOW_COMPOSITE,
+        )
+        require(!frozenShadow || render != null && render.drawPackets.isEmpty()) {
+            "W6b shadow lowering accepts only its frozen fullscreen pass."
+        }
         val kind = if (copy != null) GPUEncoderOperationKind.Copy else if (render == null) GPUEncoderOperationKind.Readback
             else if (composite) GPUEncoderOperationKind.LayerComposite else GPUEncoderOperationKind.Render
         val stream = if (kind != GPUEncoderOperationKind.Render) null else if (w4e != null)

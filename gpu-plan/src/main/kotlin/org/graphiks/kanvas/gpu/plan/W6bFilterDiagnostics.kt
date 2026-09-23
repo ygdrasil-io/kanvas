@@ -23,4 +23,9 @@ public object W6bFilterDiagnostics {
     public fun refusal(code: String, message: String): RenderDiagnostic = RenderDiagnostic(
         RenderDiagnosticCode(code), RenderDiagnosticDomain.SCENE, RenderDiagnosticSeverity.ERROR, message,
     )
+
+    /** A W6b-owned physical peak must retain the filter owner instead of leaking W6a's code. */
+    public fun budgetRefusal(message: String): RenderDiagnostic = RenderDiagnostic(
+        RenderDiagnosticCode(FrameBudgetExceeded), RenderDiagnosticDomain.RESOURCE, RenderDiagnosticSeverity.ERROR, message,
+    )
 }
