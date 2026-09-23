@@ -899,6 +899,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         } catch (failure: Throwable) {
             // If no payload was returned, the preflight binding has not reached the registry;
             // it must release its consumer lease and destroy unsubmitted misses now.
+            runCatching { spatialBinding?.releaseBeforeSubmit() }
             runCatching { spatialFilterCache?.discardPrepared(framePlan) }
             val cleanup = AutoCloseable {
                 owned.close()

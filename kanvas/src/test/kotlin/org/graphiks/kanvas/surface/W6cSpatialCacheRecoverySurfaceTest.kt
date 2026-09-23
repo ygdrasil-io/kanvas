@@ -7,7 +7,9 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.paint.ImageFilter
+import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.math.color.ColorARGB
@@ -53,12 +55,38 @@ class W6cSpatialCacheRecoverySurfaceTest {
     fun changedDesiredOutputOrClipMissesSpatialCache() {
         val surface = Surface(2, 1)
         surface.canvas {
+            saveLayer(SaveLayerRec(paint = Paint(imageFilter = ImageFilter.Crop(RectF32.ofLTRB(0f, 0f, 2f, 1f)))))
+            drawRect(RectF32.ofLTRB(0f, 0f, 2f, 1f), Paint(ColorARGB.Red, antiAlias = false))
+            restore()
+        }
+        // Warm the old unclipped key first.  The second recording changes the sealed desired
+        // output/clip and must therefore be a fresh result, not a stale cache reuse.
+        assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u, 255u, 0u, 0u, 255u), surface.render().pixels)
+        surface.discardRecordedOperations()
+        surface.canvas {
             clipRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), antiAlias = false)
             saveLayer(SaveLayerRec(paint = Paint(imageFilter = ImageFilter.Crop(RectF32.ofLTRB(0f, 0f, 2f, 1f)))))
             drawRect(RectF32.ofLTRB(0f, 0f, 2f, 1f), Paint(ColorARGB.Red, antiAlias = false))
             restore()
         }
         assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u, 0u, 0u, 0u, 0u), surface.render().pixels)
+    }
+
+    @Test
+    fun mixedImageAndMaskFiltersRemainColdAndRecover() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val surface = Surface(1, 1)
+        fun record(color: ColorARGB) = surface.canvas {
+            drawRect(bounds, Paint(color,
+                imageFilter = ImageFilter.Crop(bounds),
+                maskFilter = MaskFilter.Shader(Shader.SolidColor(ColorARGB.White)),
+                antiAlias = false))
+        }
+        record(ColorARGB.Red)
+        assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u), surface.render().pixels)
+        surface.discardRecordedOperations()
+        record(ColorARGB.Blue)
+        assertContentEquals(ubyteArrayOf(0u, 0u, 255u, 255u), surface.render().pixels)
     }
 
     @Test

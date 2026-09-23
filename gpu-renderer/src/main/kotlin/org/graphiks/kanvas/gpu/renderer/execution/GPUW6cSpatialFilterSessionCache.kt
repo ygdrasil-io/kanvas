@@ -4,19 +4,26 @@ import io.ygdrasil.webgpu.*
 import org.graphiks.kanvas.gpu.plan.*
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 
-/** Session-scoped W6c target residency; preflight is its only policy decision point. */
+/** Session-scoped, bounded W6c residency. Preflight is its sole cache policy point. */
 internal class GPUW6cSpatialFilterSessionCache(
     private val device: GPUDevice,
     private val generationI64: Long,
+    private val maxEntriesI32: Int = 128,
+    private val maxBytesI64: Long = 64L * 1024L * 1024L,
 ) : AutoCloseable {
-    internal class Entry(val key: SpatialFilterCacheKeyV1, val texture: GPUTexture, val view: GPUTextureView) {
+    internal class Entry(
+        val key: SpatialFilterCacheKeyV1,
+        val byteSizeI64: Long,
+        val texture: GPUTexture,
+        val view: GPUTextureView,
+    ) {
         var consumersI32 = 0
         var reusable = false
         var quarantined = false
         fun close() { view.close(); texture.close() }
     }
 
-    /** Immutable full-chain projection consumed by materialization without cache policy. */
+    /** Immutable per-frame mapping and schedule projection; no downstream cache choice exists. */
     internal class Binding internal constructor(
         private val owner: GPUW6cSpatialFilterSessionCache,
         private val entries: Map<PlanResourceId, Entry>,
@@ -25,9 +32,10 @@ internal class GPUW6cSpatialFilterSessionCache(
     ) : GPUPreparedNativeFrameLeaseLifecycle {
         private enum class State { CheckedOut, Submitted, Terminal }
         private var state = State.CheckedOut
-        fun view(output: PlanResourceId): GPUTextureView = synchronized(owner) { entries.getValue(output).view }
-        fun texture(output: PlanResourceId): GPUTexture = synchronized(owner) { entries.getValue(output).texture }
+        fun view(output: PlanResourceId): GPUTextureView = synchronized(owner) { checkLive(); entries.getValue(output).view }
+        fun texture(output: PlanResourceId): GPUTexture = synchronized(owner) { checkLive(); entries.getValue(output).texture }
         fun usesCachedTarget(output: PlanResourceId): Boolean = output in entries
+        /** True only for a dependency-closed reusable subgraph. */
         fun skipsFilterPass(output: PlanResourceId): Boolean = output in reuseOutputs
         @Synchronized override fun releaseBeforeSubmit(): GPUPreparedNativeFrameLeaseTransition {
             if (state != State.CheckedOut) return refused()
@@ -37,12 +45,12 @@ internal class GPUW6cSpatialFilterSessionCache(
             return GPUPreparedNativeFrameLeaseTransition.Applied
         }
         @Synchronized override fun markSubmitted(): GPUPreparedNativeFrameLeaseTransition {
-            if (state != State.CheckedOut) return refused()
+            if (state != State.CheckedOut || !owner.bindingLive(entries.values)) return refused()
             state = State.Submitted
             return GPUPreparedNativeFrameLeaseTransition.Applied
         }
         @Synchronized override fun releaseAfterCompletion(): GPUPreparedNativeFrameLeaseTransition {
-            if (state != State.Submitted) return refused()
+            if (state != State.Submitted || !owner.bindingLive(entries.values)) return refused()
             owner.promote(entries.filterKeys { it in missOutputs }.values)
             owner.release(entries.values)
             state = State.Terminal
@@ -50,44 +58,66 @@ internal class GPUW6cSpatialFilterSessionCache(
         }
         @Synchronized override fun quarantineUncertain(): GPUPreparedNativeFrameLeaseTransition {
             if (state == State.Terminal) return refused()
-            owner.quarantine(entries.filterKeys { it in missOutputs }.values)
+            owner.quarantine(entries.values)
             owner.release(entries.values)
             state = State.Terminal
             return GPUPreparedNativeFrameLeaseTransition.Applied
         }
+        private fun checkLive() { check(state == State.CheckedOut && owner.bindingLive(entries.values)) }
         private fun refused() = GPUPreparedNativeFrameLeaseTransition.Refused("invalid-w6c-spatial-binding-state:$state")
     }
 
-    private val entries = LinkedHashMap<SpatialFilterCacheKeyV1, Entry>()
-    /** Invalid targets cannot be reused, but stay session-owned after an uncertain submit. */
-    private val quarantinedEntries = linkedSetOf<Entry>()
+    private val entries = LinkedHashMap<SpatialFilterCacheKeyV1, Entry>(16, .75f, true)
+    /** Quarantined entries retain capacity/ownership until teardown and can never be hits. */
+    private val quarantine = linkedSetOf<Entry>()
     private val prepared = mutableMapOf<Long, Binding>()
     private var closed = false
     private var retired = false
     val isClosed: Boolean get() = closed
 
-    /** A partial hit becomes a full cold chain; that preserves producer dependency closure. */
+    init { require(maxEntriesI32 > 0 && maxBytesI64 > 0L && generationI64 >= 0L) }
+
+    /**
+     * Projects reusable cacheable passes only. Non-cacheable W6b filters remain ordinary cold
+     * work; a cacheable pass may skip only if its filter-producing ancestors also skip.
+     */
     @Synchronized fun prepare(framePlan: GPUFramePlan): Boolean {
         if (closed || retired || framePlan.capabilitySeal.deviceGeneration.value != generationI64) return false
         val frame = framePlan.w6aLayerFrameV1 ?: return true
         val plans = frame.physical.spatialCachePlans()
         if (plans.isEmpty()) return true
         if (prepared.containsKey(framePlan.frameId.value)) return false
-        val filterOutputs = frame.graph.passes().filterIsInstance<PlanPass.FilterPass>().map { it.output }.toSet()
-        if (plans.map(SpatialFilterCachePlanV1::outputResourceId).toSet() != filterOutputs) return false
-        val existing = plans.mapNotNull { entries[it.key] }
-        if (existing.any { !it.reusable && it.consumersI32 > 0 }) return false
-        val fullHit = existing.size == plans.size && existing.all { it.reusable && !it.quarantined }
+        val passesByOutput = frame.graph.passes().filterIsInstance<PlanPass.FilterPass>().associateBy { it.output }
+        val plansByOutput = plans.associateBy(SpatialFilterCachePlanV1::outputResourceId)
+        if (plansByOutput.size != plans.size || !plansByOutput.keys.all { it in passesByOutput }) return false
         val selected = linkedMapOf<PlanResourceId, Entry>()
         try {
             plans.forEach { plan ->
-                val entry = entries[plan.key] ?: create(plan, frame).also { entries[plan.key] = it }
+                val entry = entries[plan.key] ?: createBounded(plan, frame).also { entries[plan.key] = it }
                 if (entry.quarantined) return false
                 entry.consumersI32 = Math.addExact(entry.consumersI32, 1)
                 selected[plan.outputResourceId] = entry
             }
-            prepared[framePlan.frameId.value] = Binding(this, selected,
-                if (fullHit) emptySet() else selected.keys, if (fullHit) selected.keys else emptySet())
+            // A pass is a hit only where its entire filter dependency closure is itself a hit.
+            val reusable = mutableSetOf<PlanResourceId>()
+            fun reusableClosure(output: PlanResourceId): Boolean {
+                if (output in reusable) return true
+                val entry = selected[output] ?: return false
+                if (!entry.reusable || entry.quarantined) return false
+                val pass = passesByOutput.getValue(output)
+                val safe = pass.inputs().all { input ->
+                    val producer = passesByOutput[input]
+                    producer == null || (input in plansByOutput && reusableClosure(input))
+                }
+                if (safe) reusable += output
+                return safe
+            }
+            selected.keys.forEach(::reusableClosure)
+            val misses = selected.keys - reusable
+            // A previously valid entry that must recompute is busy immediately; no concurrent
+            // frame can publish it as a hit while this frame overwrites its stable target.
+            misses.forEach { selected.getValue(it).reusable = false }
+            prepared[framePlan.frameId.value] = Binding(this, selected, misses, reusable)
             return true
         } catch (_: Throwable) {
             release(selected.values)
@@ -96,19 +126,32 @@ internal class GPUW6cSpatialFilterSessionCache(
         }
     }
 
-    /** Consumes the preflight projection; no key reconstruction or allocation occurs downstream. */
-    @Synchronized fun consume(framePlan: GPUFramePlan): Binding? = prepared.remove(framePlan.frameId.value)
+    /** Consumes the preflight projection; retired/quarantined entries can never reach a NoOp. */
+    @Synchronized fun consume(framePlan: GPUFramePlan): Binding? =
+        if (retired || closed) null else prepared.remove(framePlan.frameId.value)
     @Synchronized fun discardPrepared(framePlan: GPUFramePlan) { prepared.remove(framePlan.frameId.value)?.releaseBeforeSubmit() }
 
-    /** Device/queue loss invalidates residency but never closes a target that may still be in flight. */
+    /** Queue loss terminalizes every not-yet-submitted binding and quarantines in-flight targets. */
     @Synchronized fun retireGeneration() {
         if (closed || retired) return
         retired = true
-        entries.values.forEach { entry -> entry.reusable = false; entry.quarantined = true; quarantinedEntries += entry }
-        entries.clear()
+        prepared.values.toList().forEach { it.quarantineUncertain() }
+        prepared.clear()
+        quarantine(entries.values)
     }
 
-    private fun create(plan: SpatialFilterCachePlanV1, frame: org.graphiks.kanvas.gpu.renderer.recording.GPUW6aLayerFramePlan): Entry {
+    private fun createBounded(plan: SpatialFilterCachePlanV1,
+        frame: org.graphiks.kanvas.gpu.renderer.recording.GPUW6aLayerFramePlan): Entry {
+        require(plan.reservedBytesI64 <= maxBytesI64) { "w6c.spatial.cache-budget" }
+        while (entries.size + quarantine.size >= maxEntriesI32 ||
+            Math.addExact(residentBytesI64(), plan.reservedBytesI64) > maxBytesI64) {
+            val victim = entries.entries.firstOrNull { it.value.consumersI32 == 0 }
+                ?: throw IllegalStateException("w6c.spatial.cache-budget")
+            try { victim.value.close() } catch (failure: Throwable) {
+                entries.remove(victim.key); quarantine += victim.value; throw failure
+            }
+            entries.remove(victim.key)
+        }
         val row = frame.physical.resource(plan.outputResourceId)
         val extent = requireNotNull(row.copyExtent())
         require(row.byteSize == plan.reservedBytesI64 && row.sampleCountI32 == 1)
@@ -119,21 +162,35 @@ internal class GPUW6cSpatialFilterSessionCache(
         val texture = device.createTexture(TextureDescriptor(size = Extent3D(extent.width.toUInt(), extent.height.toUInt()),
             format = format, usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding or GPUTextureUsage.CopySrc,
             sampleCount = 1u, label = "w6c.spatial.cache"))
-        return try { Entry(plan.key, texture, texture.createView()) } catch (failure: Throwable) { texture.close(); throw failure }
+        return try { Entry(plan.key, plan.reservedBytesI64, texture, texture.createView()) }
+        catch (failure: Throwable) { texture.close(); throw failure }
     }
-    @Synchronized private fun release(values: Collection<Entry>) { values.forEach { it.consumersI32-- } }
+
+    @Synchronized private fun bindingLive(values: Collection<Entry>): Boolean = !retired && !closed && values.none(Entry::quarantined)
+    @Synchronized private fun residentBytesI64(): Long = (entries.values + quarantine).fold(0L) { total, entry ->
+        Math.addExact(total, entry.byteSizeI64)
+    }
+    @Synchronized private fun release(values: Collection<Entry>) { values.forEach { check(it.consumersI32 > 0); it.consumersI32-- } }
     @Synchronized private fun promote(values: Collection<Entry>) { values.forEach { require(!it.quarantined); it.reusable = true } }
     @Synchronized private fun discardUnsubmitted(values: Collection<Entry>) { values.forEach { entry ->
-        if (entry.consumersI32 == 0 && !entry.reusable) { entries.remove(entry.key); entry.close() }
+        if (entry.consumersI32 == 0 && !entry.reusable) {
+            try { entry.close() } catch (failure: Throwable) {
+                // A partially closed target is never a future hit and still consumes capacity
+                // until session teardown can retry it, exactly like the W5 cache quarantine.
+                entries.remove(entry.key); quarantine += entry; throw failure
+            }
+            entries.remove(entry.key)
+        }
     } }
     @Synchronized private fun quarantine(values: Collection<Entry>) { values.forEach { entry ->
-        entry.reusable = false; entry.quarantined = true; entries.remove(entry.key); quarantinedEntries += entry
+        entry.reusable = false; entry.quarantined = true; entries.remove(entry.key); quarantine += entry
     } }
     @Synchronized override fun close() {
         if (!closed) {
             check(prepared.isEmpty())
-            (entries.values + quarantinedEntries).forEach(Entry::close)
-            entries.clear(); quarantinedEntries.clear(); closed = true
+            check(entries.values.all { it.consumersI32 == 0 } && quarantine.all { it.consumersI32 == 0 })
+            (entries.values + quarantine).forEach(Entry::close)
+            entries.clear(); quarantine.clear(); closed = true
         }
     }
 }
