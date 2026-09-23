@@ -486,6 +486,41 @@ internal object W6bFilterGraphConstruction {
                     "W6c Compose requires a materialized outer filter result."
                 })
             }
+            is CapturedFilterNodeV1.Merge -> {
+                // List traversal is deliberately positional: repeated and value-equal nodes are
+                // evaluated as separate occurrences unless their complete evaluation facts match
+                // at a future explicit cache boundary.
+                val inputs = node.map { input -> bindInput(input, currentSource) }.toList()
+                if (inputs.isEmpty()) throw ConstructionFailure(W6bFilterDiagnostics.refusal(
+                    W6bFilterDiagnostics.UnsupportedFamily, "W6c Merge requires at least one captured input."))
+                val sources = inputs.map(ContextualFilterResult::source)
+                val bounds = W6cMultiInputPlanner.bounds(sources)
+                val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
+                val output = allocateTarget(bounds)
+                append(PlanPass.FilterPass(cursor.passOrdinalI32, inputs.map(ContextualFilterResult::resourceId), output.resourceId, key,
+                    FilterPassOperationV1.Merge(sources.map { input -> filterInputSampling(input, bounds) }, bounds)))
+                ContextualFilterResult(output, bounds, key)
+            }
+            is CapturedFilterNodeV1.Blend -> {
+                // The public order is background then foreground.  FinalBlendPlanner freezes the
+                // exact W5 numeric/blend authority before any native materialization occurs.
+                val background = bindInput(node.background, currentSource)
+                val foreground = bindInput(node.foreground, currentSource)
+                val bounds = W6cMultiInputPlanner.bounds(listOf(background.source, foreground.source))
+                val blend = requireNotNull(FinalBlendPlanner.plan(
+                    org.graphiks.kanvas.render.ir.BlendNode.Mode(node.mode),
+                    CoveragePlan.FullOrScissor,
+                    SamplePlan.SingleSample,
+                    PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1(),
+                )) { "W6c Blend cannot freeze the selected W5 BlendPlan." }
+                val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
+                val output = allocateTarget(bounds)
+                append(PlanPass.FilterPass(cursor.passOrdinalI32,
+                    listOf(background.resourceId, foreground.resourceId), output.resourceId, key,
+                    FilterPassOperationV1.Blend(blend, filterInputSampling(background.source, bounds),
+                        filterInputSampling(foreground.source, bounds), bounds)))
+                ContextualFilterResult(output, bounds, key)
+            }
             else -> throw ConstructionFailure(W6bFilterDiagnostics.refusal(
                 W6bFilterDiagnostics.UnsupportedFamily, "The captured image-filter family belongs to W6c or W6d.",
             ))
@@ -939,6 +974,13 @@ internal object W6bFilterGraphConstruction {
                     is CapturedFilterNodeV1.Compose -> {
                         node.inner.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
                         node.outer.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    }
+                    is CapturedFilterNodeV1.Merge -> node.forEach { input ->
+                        input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    }
+                    is CapturedFilterNodeV1.Blend -> {
+                        node.background.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                        node.foreground.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
                     }
                     else -> return if (isW6cVariant(node)) "W6c" else "W6d"
                 }

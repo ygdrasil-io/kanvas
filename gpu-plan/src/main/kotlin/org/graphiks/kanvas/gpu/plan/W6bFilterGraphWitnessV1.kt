@@ -27,6 +27,13 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
             val materialCoverageInputs = mutableSetOf<PlanResourceId>()
             val outputs = mutableSetOf<PlanResourceId>()
             fun row(id: PlanResourceId): PlanResource = requireNotNull(rows[id]) { "W6b resource is absent." }
+            /** Contextual Compose may nest filter-target owners; walk only that frozen chain. */
+            fun belongsToBoundSource(id: PlanResourceId, boundSource: PlanResourceId): Boolean {
+                if (id == boundSource) return true
+                var owner = owners[id] ?: return true
+                while (owner != boundSource) owner = owners[owner] ?: return false
+                return true
+            }
             fun produced(id: PlanResourceId, before: Int): Int = requireNotNull(producers[id]) {
                 "W6b input has no immutable producer."
             }.also { require(it < before) { "W6b input must precede its consumer." } }
@@ -104,7 +111,7 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                         produced(input, index)
                         val materialCoverage = pass.operation is FilterPassOperationV1.MaterializedSource && inputIndex == 1
                         val materializedImageSource = filterTargetInput && inputIndex == 0 && input == bound.id
-                        require(materialCoverage || materializedImageSource || owners[input] == null || owners[input] == bound.id) {
+                        require(materialCoverage || materializedImageSource || belongsToBoundSource(input, bound.id)) {
                             "W6b input belongs to another occurrence."
                         }
                     }
@@ -157,6 +164,8 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
             is FilterPassOperationV1.DropShadowColorize,
             -> 1
             is FilterPassOperationV1.MaterializedSource -> 2
+            is FilterPassOperationV1.Merge -> operation.inputSamplings().size
+            is FilterPassOperationV1.Blend -> 2
         }
 
         /** Every W6b texture read has a plan-sealed local offset; the renderer owns no origin map. */
@@ -169,6 +178,13 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                 // ColorFilter's W5f material row is issued by FrameSourceLayoutV4 after this
                 // provisional graph witness runs.  PlanPhysicalLayoutV1 seals that final binding.
                 is FilterPassOperationV1.ColorFilter -> Unit
+                is FilterPassOperationV1.Merge -> require(operation.inputSamplings().all { sampling ->
+                    !sampling.copyKnownContentInputTargetLocalI32().isEmpty
+                })
+                is FilterPassOperationV1.Blend -> require(
+                    !operation.backgroundSampling().copyKnownContentInputTargetLocalI32().isEmpty &&
+                        !operation.foregroundSampling().copyKnownContentInputTargetLocalI32().isEmpty,
+                )
                 is FilterPassOperationV1.MaskBlurStyle -> {
                     require(operation.blurredSampling != null)
                     require((operation.originalCoverageSource == null) == (operation.originalSampling == null))
@@ -273,6 +289,14 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                     "W6b input is not owned by the immutable occurrence source."
                 }
             }
+            fun contextuallyOwned(id: PlanResourceId) {
+                if (id == key.boundSourceId) return
+                var source = owner(id)
+                while (source != null && source != key.boundSourceId) source = owner(source)
+                require(source == key.boundSourceId) {
+                    "W6b contextual input is not rooted at the immutable occurrence source."
+                }
+            }
             when (val operation = pass.operation) {
                 is FilterPassOperationV1.Crop -> {
                     occurrenceOwned(inputs.single())
@@ -287,6 +311,14 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                 }
                 is FilterPassOperationV1.ColorFilter -> {
                     occurrenceOwned(inputs.single())
+                }
+                is FilterPassOperationV1.Merge -> {
+                    require(inputs.size == operation.inputSamplings().size)
+                    inputs.forEach(::contextuallyOwned)
+                }
+                is FilterPassOperationV1.Blend -> {
+                    contextuallyOwned(inputs[0])
+                    contextuallyOwned(inputs[1])
                 }
                 is FilterPassOperationV1.SeparableBlur -> {
                     val input = inputs.single()

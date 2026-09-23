@@ -1264,6 +1264,15 @@ public sealed interface PlanPass {
             require(storedInputs.isNotEmpty() && output !in storedInputs) {
                 "A filter pass requires distinct input and output resources."
             }
+            when (operation) {
+                is FilterPassOperationV1.Merge -> require(storedInputs.size == operation.inputSamplings().size) {
+                    "Merge inputs and frozen sampling rows must have identical ordered cardinality."
+                }
+                is FilterPassOperationV1.Blend -> require(storedInputs.size == 2) {
+                    "Blend requires frozen background then foreground inputs."
+                }
+                else -> Unit
+            }
         }
         public fun inputs(): List<PlanResourceId> = storedInputs
     }

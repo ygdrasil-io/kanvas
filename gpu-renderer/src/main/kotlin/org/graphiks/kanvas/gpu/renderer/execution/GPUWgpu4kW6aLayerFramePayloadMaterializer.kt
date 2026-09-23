@@ -8,6 +8,7 @@ import java.nio.ByteOrder
 import org.graphiks.kanvas.gpu.plan.*
 import org.graphiks.kanvas.gpu.renderer.materials.W5fColorOperationEmitterV1
 import org.graphiks.kanvas.gpu.renderer.materials.W5aMaterialSourceStage
+import org.graphiks.kanvas.gpu.renderer.filters.GPUW6cMultiInputPass
 import org.graphiks.kanvas.gpu.renderer.filters.GPUW6cSpatialSamplingPass
 import org.graphiks.kanvas.gpu.renderer.recording.*
 import org.graphiks.kanvas.gpu.renderer.wgsl.W6bMaskCoverageSnippet
@@ -613,6 +614,20 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 val uniform = colorFilterUniformBuffers.getValue(requireNotNull(operation.uniformResource))
                                 renderOperands += colorFilterRender(stepIndex, views.getValue(pass.output),
                                     views.getValue(pass.inputs().single()), uniform, generation, operation,
+                                    outputExtent.width, outputExtent.height, pass, owned)
+                            }
+                            is FilterPassOperationV1.Merge -> {
+                                require(pass.inputs().size == operation.inputSamplings().size)
+                                renderOperands += multiInputRender(stepIndex, views.getValue(pass.output),
+                                    pass.inputs().map(views::getValue), generation,
+                                    W6A_VERTEX_SHADER + GPUW6cMultiInputPass.mergeFragment(operation),
+                                    outputExtent.width, outputExtent.height, pass, owned)
+                            }
+                            is FilterPassOperationV1.Blend -> {
+                                require(pass.inputs().size == 2)
+                                renderOperands += multiInputRender(stepIndex, views.getValue(pass.output),
+                                    pass.inputs().map(views::getValue), generation,
+                                    W6A_VERTEX_SHADER + GPUW6cMultiInputPass.blendFragment(operation),
                                     outputExtent.width, outputExtent.height, pass, owned)
                             }
                             is FilterPassOperationV1.SeparableBlur -> {
@@ -1448,6 +1463,38 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             operationKindOverride = if (pass is PlanPass.LayerComposite) GPUEncoderOperationKind.LayerComposite else null,
             w6aPassV1 = pass,
         )
+    }
+
+    /** Binds the FilterPass input list positionally; each W6c shader consumes that frozen order. */
+    private fun multiInputRender(
+        stepIndex: Int,
+        target: GPUTextureView,
+        sources: List<GPUTextureView>,
+        generation: GPUDeviceGenerationID,
+        shader: String,
+        widthI32: Int,
+        heightI32: Int,
+        pass: PlanPass.FilterPass,
+        owned: W6aOwnedHandles,
+    ): GPUPreparedNativeScopeOperand.Render {
+        require(sources.isNotEmpty())
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = sources.indices.map { indexI32 ->
+            BindGroupLayoutEntry(indexI32.toUInt(), GPUShaderStage.Fragment, texture = TextureBindingLayout())
+        })))
+        val pipeline = pipeline(shader, layout, w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = sources.mapIndexed { indexI32, source ->
+            BindGroupEntry(indexI32.toUInt(), source)
+        })))
+        return GPUPreparedNativeScopeOperand.Render(stepIndex,
+            GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation),
+                loadOperation = GPUPreparedNativeLoadOperation.Clear,
+                clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)),
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+                GPUPreparedNativeRenderCommand.SetScissor(0, 0, widthI32, heightI32),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0)),
+            ), w6aPassV1 = pass)
     }
 
     private fun emptyRender(

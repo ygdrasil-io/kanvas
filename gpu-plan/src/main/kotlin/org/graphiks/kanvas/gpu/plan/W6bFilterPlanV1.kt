@@ -27,6 +27,10 @@ public enum class FilterImplementationKindV1 {
     TILE,
     /** W6c image color filter using the already sealed W5f numeric graph. */
     COLOR_FILTER,
+    /** W6c ordered source-over composition of every frozen Merge input. */
+    MERGE_COMPOSITE,
+    /** W6c ordered background/foreground composition using a frozen W5 BlendPlan. */
+    BLEND_COMPOSITE,
     IMAGE_BLUR_X,
     IMAGE_BLUR_Y,
     MASK_COVERAGE_BLUR_X,
@@ -295,6 +299,46 @@ public sealed interface FilterPassOperationV1 {
 
         internal fun withUniformBinding(binding: W6cColorUniformBindingV1): ColorFilter =
             ColorFilter(execution, binding.resourceId, binding.offsetBytesI64, binding.capacityBytesI64, bounds, sampling)
+    }
+
+    /**
+     * Merge preserves every captured input occurrence, including duplicates.  The sampling rows
+     * are positional: index N describes [PlanPass.FilterPass.inputs]' index N and are never a
+     * canonical-key lookup.
+     */
+    public class Merge(
+        inputSamplings: List<FilterInputSamplingV1>,
+        override val bounds: FilterBoundsPlanV1,
+        override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.MERGE_COMPOSITE,
+    ) : FilterPassOperationV1 {
+        private val samplingSnapshot = immutableList(inputSamplings)
+
+        init {
+            require(kind == FilterImplementationKindV1.MERGE_COMPOSITE)
+            require(samplingSnapshot.isNotEmpty())
+        }
+
+        public fun inputSamplings(): List<FilterInputSamplingV1> = samplingSnapshot
+    }
+
+    /**
+     * Background and foreground keep their public positions.  [blend] is issued by W5 before
+     * publication; renderer materialization receives no public BlendMode or replanning input.
+     */
+    public class Blend(
+        public val blend: BlendPlan,
+        backgroundSampling: FilterInputSamplingV1,
+        foregroundSampling: FilterInputSamplingV1,
+        override val bounds: FilterBoundsPlanV1,
+        override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.BLEND_COMPOSITE,
+    ) : FilterPassOperationV1 {
+        private val backgroundSamplingSnapshot = backgroundSampling
+        private val foregroundSamplingSnapshot = foregroundSampling
+
+        init { require(kind == FilterImplementationKindV1.BLEND_COMPOSITE) }
+
+        public fun backgroundSampling(): FilterInputSamplingV1 = backgroundSamplingSnapshot
+        public fun foregroundSampling(): FilterInputSamplingV1 = foregroundSamplingSnapshot
     }
 
     public data class MaskBlurStyle(
