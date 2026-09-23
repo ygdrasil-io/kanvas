@@ -29,6 +29,8 @@ internal class GPUW6cSpatialFilterSessionCache(
         private val entries: Map<PlanResourceId, Entry>,
         private val missOutputs: Set<PlanResourceId>,
         private val reuseOutputs: Set<PlanResourceId>,
+        /** Cold duplicate targets prevent concurrent frames from writing one stable entry. */
+        private val transientEntries: Set<Entry>,
     ) : GPUPreparedNativeFrameLeaseLifecycle {
         private enum class State { CheckedOut, Submitted, Terminal }
         private var state = State.CheckedOut
@@ -40,7 +42,8 @@ internal class GPUW6cSpatialFilterSessionCache(
         @Synchronized override fun releaseBeforeSubmit(): GPUPreparedNativeFrameLeaseTransition {
             if (state != State.CheckedOut) return refused()
             owner.release(entries.values)
-            owner.discardUnsubmitted(entries.filterKeys { it in missOutputs }.values)
+            owner.discardUnsubmitted(entries.filterKeys { it in missOutputs }.values.filterNot { it in transientEntries })
+            owner.discardUnsubmitted(transientEntries)
             state = State.Terminal
             return GPUPreparedNativeFrameLeaseTransition.Applied
         }
@@ -51,8 +54,9 @@ internal class GPUW6cSpatialFilterSessionCache(
         }
         @Synchronized override fun releaseAfterCompletion(): GPUPreparedNativeFrameLeaseTransition {
             if (state != State.Submitted || !owner.bindingLive(entries.values)) return refused()
-            owner.promote(entries.filterKeys { it in missOutputs }.values)
+            owner.promote(entries.filterKeys { it in missOutputs }.values.filterNot { it in transientEntries })
             owner.release(entries.values)
+            owner.discardUnsubmitted(transientEntries)
             state = State.Terminal
             return GPUPreparedNativeFrameLeaseTransition.Applied
         }
@@ -68,6 +72,8 @@ internal class GPUW6cSpatialFilterSessionCache(
     }
 
     private val entries = LinkedHashMap<SpatialFilterCacheKeyV1, Entry>(16, .75f, true)
+    /** Per-binding cold targets: charged residents, never future hits, and closed on completion. */
+    private val transientEntries = linkedSetOf<Entry>()
     /** Quarantined entries retain capacity/ownership until teardown and can never be hits. */
     private val quarantine = linkedSetOf<Entry>()
     private val prepared = mutableMapOf<Long, Binding>()
@@ -91,9 +97,15 @@ internal class GPUW6cSpatialFilterSessionCache(
         val plansByOutput = plans.associateBy(SpatialFilterCachePlanV1::outputResourceId)
         if (plansByOutput.size != plans.size || !plansByOutput.keys.all { it in passesByOutput }) return false
         val selected = linkedMapOf<PlanResourceId, Entry>()
+        val transientForBinding = linkedSetOf<Entry>()
         try {
             plans.forEach { plan ->
-                val entry = entries[plan.key] ?: createBounded(plan, frame).also { entries[plan.key] = it }
+                val resident = entries[plan.key]
+                // A non-reusable resident is a target being written. A second frame gets a
+                // separately owned cold target rather than racing that write.
+                val entry = if (resident != null && !resident.reusable && resident.consumersI32 > 0) {
+                    createBounded(plan, frame).also { transientEntries += it; transientForBinding += it }
+                } else resident ?: createBounded(plan, frame).also { entries[plan.key] = it }
                 if (entry.quarantined) return false
                 entry.consumersI32 = Math.addExact(entry.consumersI32, 1)
                 selected[plan.outputResourceId] = entry
@@ -114,10 +126,22 @@ internal class GPUW6cSpatialFilterSessionCache(
             }
             selected.keys.forEach(::reusableClosure)
             val misses = selected.keys - reusable
-            // A previously valid entry that must recompute is busy immediately; no concurrent
-            // frame can publish it as a hit while this frame overwrites its stable target.
-            misses.forEach { selected.getValue(it).reusable = false }
-            prepared[framePlan.frameId.value] = Binding(this, selected, misses, reusable)
+            misses.forEach { output ->
+                val entry = selected.getValue(output)
+                // A valid resident may be a hit for an older frame yet require recomputation
+                // here because this frame's dependency closure is cold. Do not overwrite it.
+                if (entry.reusable && entry.consumersI32 > 1) {
+                    release(listOf(entry))
+                    val plan = plansByOutput.getValue(output)
+                    val replacement = createBounded(plan, frame)
+                    transientEntries += replacement
+                    transientForBinding += replacement
+                    replacement.consumersI32 = 1
+                    selected[output] = replacement
+                }
+                selected.getValue(output).reusable = false
+            }
+            prepared[framePlan.frameId.value] = Binding(this, selected, misses, reusable, transientForBinding)
             return true
         } catch (_: Throwable) {
             release(selected.values)
@@ -137,13 +161,14 @@ internal class GPUW6cSpatialFilterSessionCache(
         retired = true
         prepared.values.toList().forEach { it.quarantineUncertain() }
         prepared.clear()
-        quarantine(entries.values)
+        quarantine(entries.values.toList())
+        quarantine(transientEntries.toList())
     }
 
     private fun createBounded(plan: SpatialFilterCachePlanV1,
         frame: org.graphiks.kanvas.gpu.renderer.recording.GPUW6aLayerFramePlan): Entry {
         require(plan.reservedBytesI64 <= maxBytesI64) { "w6c.spatial.cache-budget" }
-        while (entries.size + quarantine.size >= maxEntriesI32 ||
+        while (entries.size + transientEntries.size + quarantine.size >= maxEntriesI32 ||
             Math.addExact(residentBytesI64(), plan.reservedBytesI64) > maxBytesI64) {
             val victim = entries.entries.firstOrNull { it.value.consumersI32 == 0 }
                 ?: throw IllegalStateException("w6c.spatial.cache-budget")
@@ -167,7 +192,7 @@ internal class GPUW6cSpatialFilterSessionCache(
     }
 
     @Synchronized private fun bindingLive(values: Collection<Entry>): Boolean = !retired && !closed && values.none(Entry::quarantined)
-    @Synchronized private fun residentBytesI64(): Long = (entries.values + quarantine).fold(0L) { total, entry ->
+    @Synchronized private fun residentBytesI64(): Long = (entries.values + transientEntries + quarantine).fold(0L) { total, entry ->
         Math.addExact(total, entry.byteSizeI64)
     }
     @Synchronized private fun release(values: Collection<Entry>) { values.forEach { check(it.consumersI32 > 0); it.consumersI32-- } }
@@ -177,20 +202,27 @@ internal class GPUW6cSpatialFilterSessionCache(
             try { entry.close() } catch (failure: Throwable) {
                 // A partially closed target is never a future hit and still consumes capacity
                 // until session teardown can retry it, exactly like the W5 cache quarantine.
-                entries.remove(entry.key); quarantine += entry; throw failure
+                detach(entry); quarantine += entry; throw failure
             }
-            entries.remove(entry.key)
+            detach(entry)
         }
     } }
     @Synchronized private fun quarantine(values: Collection<Entry>) { values.forEach { entry ->
-        entry.reusable = false; entry.quarantined = true; entries.remove(entry.key); quarantine += entry
+        entry.reusable = false; entry.quarantined = true; detach(entry); quarantine += entry
     } }
     @Synchronized override fun close() {
         if (!closed) {
             check(prepared.isEmpty())
-            check(entries.values.all { it.consumersI32 == 0 } && quarantine.all { it.consumersI32 == 0 })
-            (entries.values + quarantine).forEach(Entry::close)
-            entries.clear(); quarantine.clear(); closed = true
+            check(entries.values.all { it.consumersI32 == 0 } &&
+                transientEntries.all { it.consumersI32 == 0 } && quarantine.all { it.consumersI32 == 0 })
+            (entries.values + transientEntries + quarantine).forEach(Entry::close)
+            entries.clear(); transientEntries.clear(); quarantine.clear(); closed = true
         }
+    }
+
+    /** Remove by identity: a transient may intentionally have the same cache key as a resident. */
+    private fun detach(entry: Entry) {
+        if (entries[entry.key] === entry) entries.remove(entry.key)
+        transientEntries.remove(entry)
     }
 }
