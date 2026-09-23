@@ -458,7 +458,7 @@ internal object W6bFilterGraphConstruction {
         materializeNode = { id, currentSource -> when (val node = occurrence.table.nodeAt(id)) {
             is CapturedFilterNodeV1.Crop -> {
                 val input = materializeInput(node.input, currentSource)
-                val planned = W6cSpatialBoundsPlanner.crop(input, node)
+                val planned = W6cSpatialBoundsPlanner.crop(input, node, id == occurrence.root?.id)
                 val bounds = planned.bounds
                 val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
                 val output = allocateTarget(bounds)
@@ -480,7 +480,7 @@ internal object W6bFilterGraphConstruction {
             }
             is CapturedFilterNodeV1.Tile -> {
                 val input = materializeInput(node.input, currentSource)
-                val planned = W6cSpatialBoundsPlanner.tile(input, node)
+                val planned = W6cSpatialBoundsPlanner.tile(input, node, id == occurrence.root?.id)
                 val bounds = planned.bounds
                 val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
                 val output = allocateTarget(bounds)

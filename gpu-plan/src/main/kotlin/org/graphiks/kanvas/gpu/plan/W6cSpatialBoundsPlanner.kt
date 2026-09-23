@@ -22,9 +22,10 @@ internal object W6cSpatialBoundsPlanner {
     internal data class TilePlan(val bounds: FilterBoundsPlanV1, val sourceInputTargetLocalI32: RectI32,
         val clipOutputTargetLocalF64: RectF64)
 
-    internal fun crop(source: W6bFilterGraphConstruction.SourceBinding, node: CapturedFilterNodeV1.Crop): CropPlan {
+    internal fun crop(source: W6bFilterGraphConstruction.SourceBinding, node: CapturedFilterNodeV1.Crop,
+        terminalRootNoOp: Boolean = false): CropPlan {
         val cropDeviceF64 = map(node.copyCrop(), source.mapping) ?: refuse("Crop bounds cannot be mapped through the sealed layer transform.")
-        val desired = boundToConsumer(seal(cropDeviceF64), source)
+        val desired = boundToConsumer(seal(cropDeviceF64), source, terminalRootNoOp)
         val sourceDomain = source.copyDeviceBoundsI32()
         val cropLocal = rebase(desired, source.originDeviceI32)
         val produced = producedOutputBounds(node, source.copyKnownContentDeviceI32(), source.mapping)
@@ -38,15 +39,16 @@ internal object W6cSpatialBoundsPlanner {
         val input = source.copyDeviceBoundsI32()
         val translated = rectF64(input).translateF64OrNull(offsetDevice.x, offsetDevice.y)
             ?: refuse("Offset bounds are non-finite.")
-        val desired = boundToConsumer(seal(translated), source)
+        val desired = boundToConsumer(seal(translated), source, terminalRootNoOp = false)
         val produced = producedOutputBounds(node, source.copyKnownContentDeviceI32(), source.mapping)
         return OffsetPlan(bounds(source, desired, input, produced), offsetDevice.x, offsetDevice.y)
     }
 
-    internal fun tile(source: W6bFilterGraphConstruction.SourceBinding, node: CapturedFilterNodeV1.Tile): TilePlan {
+    internal fun tile(source: W6bFilterGraphConstruction.SourceBinding, node: CapturedFilterNodeV1.Tile,
+        terminalRootNoOp: Boolean = false): TilePlan {
         val sourceDevice = map(node.copySource(), source.mapping) ?: refuse("Tile source bounds cannot be mapped through the sealed layer transform.")
         val destinationDevice = map(node.copyDestination(), source.mapping) ?: refuse("Tile destination bounds cannot be mapped through the sealed layer transform.")
-        val desired = boundToConsumer(seal(destinationDevice), source)
+        val desired = boundToConsumer(seal(destinationDevice), source, terminalRootNoOp)
         val sourceLocal = rebase(seal(sourceDevice), source.originDeviceI32)
         // A Tile only produces inside dst.  Its required source is the frozen src period, even
         // when a consumer asks for only one repeated cell.
@@ -100,9 +102,10 @@ internal object W6cSpatialBoundsPlanner {
             Point2I32(desired.left, desired.top))
     }
     /** The public region is semantic, but target allocation is bounded by the already sealed consumer demand. */
-    private fun boundToConsumer(publicDomain: RectI32, source: W6bFilterGraphConstruction.SourceBinding): RectI32 =
+    private fun boundToConsumer(publicDomain: RectI32, source: W6bFilterGraphConstruction.SourceBinding,
+        terminalRootNoOp: Boolean): RectI32 =
         source.copyDesiredOutputDeviceI32()?.let { consumer ->
-            intersect(publicDomain, consumer) ?: terminalNoOpTexel(publicDomain)
+            intersect(publicDomain, consumer) ?: if (terminalRootNoOp) terminalNoOpTexel(publicDomain) else publicDomain
         } ?: publicDomain
     /** A disjoint public domain still needs immutable non-empty FilterBounds, but never a huge target. */
     private fun terminalNoOpTexel(domain: RectI32): RectI32 = RectI32(domain.left, domain.top,

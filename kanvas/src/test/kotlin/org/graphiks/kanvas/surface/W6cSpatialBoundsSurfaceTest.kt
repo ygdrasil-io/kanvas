@@ -3,8 +3,10 @@
 package org.graphiks.kanvas.surface
 
 import kotlin.test.assertContentEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.SaveLayerRec
+import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.TileMode
@@ -188,6 +190,62 @@ class W6cSpatialBoundsSurfaceTest {
             surface.canvas { drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false)) }
             assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u), surface.render().pixels)
         }
+    }
+
+    @Test
+    fun `nested Compose retains demanded Tile output beyond terminal clip`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val filter = ImageFilter.Compose(
+            ImageFilter.Offset(-500f, 0f),
+            ImageFilter.Tile(bounds, RectF32.ofLTRB(1f, 0f, 501f, 1f)),
+        )
+        val surface = Surface(1, 1)
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.Blue, imageFilter = filter, antiAlias = false)) }
+
+        assertContentEquals(bytes(255), surface.render().pixels)
+    }
+
+    @Test
+    fun `huge nested Compose Tile refuses before readback mutation and recovers`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val filter = ImageFilter.Compose(
+            ImageFilter.Offset(-500f, 0f),
+            ImageFilter.Tile(bounds, RectF32.ofLTRB(1f, 0f, 1_000_000_000f, 1f)),
+        )
+        val surface = Surface(1, 1)
+        val sentinel = UByteArray(4) { 0x5au }
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.Blue, imageFilter = filter, antiAlias = false)) }
+
+        val failure = assertFailsWith<IllegalStateException> { surface.readPixels(bounds, sentinel) }
+        assertTrue(failure.message?.startsWith("w6b.filter.frame_budget_exceeded:") == true,
+            failure.message ?: "missing nested Tile budget refusal")
+        assertContentEquals(UByteArray(4) { 0x5au }, sentinel)
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false)) }
+        assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u), surface.render().pixels)
+    }
+
+    @Test
+    fun `direct filtered complex terminal clip refuses and same surface recovers`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val surface = Surface(3, 1)
+        val sentinel = UByteArray(3 * 4) { 0x5au }
+        surface.canvas {
+            clipPath(Path().apply { addRect(bounds) }, antiAlias = false)
+            drawRect(bounds, Paint(ColorARGB.Blue, imageFilter = ImageFilter.Offset(2f, 0f), antiAlias = false))
+        }
+
+        val failure = assertFailsWith<IllegalStateException> {
+            surface.readPixels(RectF32.ofLTRB(0f, 0f, 3f, 1f), sentinel)
+        }
+        assertTrue(failure.message?.startsWith("w6b.filter.direct_terminal_clip:") == true,
+            failure.message ?: "missing direct complex-clip refusal")
+        assertContentEquals(UByteArray(3 * 4) { 0x5au }, sentinel)
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false)) }
+        assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u), surface.render().pixels)
     }
 
     /** Literal RGBA8 output; each entry is one opaque-blue texel or transparent black. */

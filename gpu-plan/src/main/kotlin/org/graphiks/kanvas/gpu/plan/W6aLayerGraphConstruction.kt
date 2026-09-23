@@ -440,7 +440,11 @@ internal class W6aLayerGraphConstruction(
         fun directTerminalClip(occurrence: W6bFilterGraphConstruction.PositiveOccurrence): RectI32? = when (
             val clip = occurrence.source.recordedInnerClipWithoutCull().terminalDeferredClip()
         ) {
-            ClipStackNode.Empty, is ClipStackNode.Operations -> null
+            ClipStackNode.Empty -> null
+            is ClipStackNode.Operations -> throw W6bFilterGraphConstruction.ConstructionFailure(
+                W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.DirectTerminalClip,
+                    "W6c direct filtered terminal requires an exact DeviceRect clip."),
+            )
             is ClipStackNode.DeviceRect -> clip.copyBounds().let { bounds ->
                 RectF64(bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble())
                     .roundOutToRectI32OrNull() ?: throw W6bFilterGraphConstruction.ConstructionFailure(
@@ -451,6 +455,9 @@ internal class W6aLayerGraphConstruction(
         }
         val directFilterSourceByCommand = linkedMapOf<Int, DirectFilterSources>()
         filterOccurrences.filterNot { it.isLayerOccurrence || it.isPictureOccurrence }.forEach { occurrence ->
+            // Reject an opaque terminal clip before allocating any direct filter source; W4e
+            // retains ownership of complex clips on non-filtered routes.
+            directTerminalClip(occurrence)
             val binding = requireNotNull(bindingsByCommand[occurrence.insertionCommandIndexI32]) {
                 "W6b direct occurrence has no W5 source generation."
             }
