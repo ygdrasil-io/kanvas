@@ -1,6 +1,9 @@
-# Rapport de correction whole-branch W6b
+# Rapport de correction whole-branch W6b — round 1 (historique)
 
 Base de correction : `2bf3d52`.
+
+> La re-review a constaté que ce round ne fermait pas encore I1, I5 et I7.
+> Le statut final et les preuves R21 sont dans `whole-branch-fix2-report.md`.
 
 Cette vague est bornée aux findings I1–I7 et M1–M3 de
 `whole-branch-review.md`. Aucun chemin W6c–W6e, GM, dashboard, render,
@@ -11,16 +14,16 @@ exécuté.
 
 | Finding | RED constaté | GREEN livré | Preuve ciblée |
 | --- | --- | --- | --- |
-| I1 | Le renderer reprojetait clips/origins et reconstituait des offsets W6b. | `FilterInputSamplingV1` et `PictureCompositeOperandsV1` portent les faits I32 target-local, calculés checked dans `W6aLayerGraphConstruction`/`W6bFilterGraphConstruction`. La map `targetOriginsDeviceI32` est supprimée; le bridge W4e lit l'origin déjà scellée du `RenderPass`. | `RenderGraphContractTest.w6b publication witness rejects renderer-local source sampling`; scan production sans `targetOriginsDeviceI32` ni projection clip W6b. |
+| I1 | Le renderer reprojetait clips/origins et reconstituait des offsets W6b. | Partiel : les operands d'entrée et Picture étaient scellés, mais `FilterComposite` recalculait encore l'offset côté native. Fermé seulement au round 2. | Re-review R21 puis `whole-branch-fix2-report.md`. |
 | I2 | Table appliquait `coverage * LUT[coverage]`, qui mettait une AA identity au carré. | Le fragment retourne directement `LUT[coverage]`. | `W6bMaskShaderTableSurfacePixelTest.identity 256 entry table preserves fractional anti aliased coverage`. |
 | I3 | `SOLID`/`OUTER`/`INNER` utilisaient `max`/soustraction/min, et l'oracle recopiait ces formules. | WGSL et oracle indépendant utilisent Porter-Duff : `o+b*(1-o)`, `b*(1-o)`, `b*o`. | `W6bMaskBlurAutoLayerSurfacePixelTest.fractional anti aliased coverage uses Porter Duff mask blur styles`. |
 | I4 | Un sigma ou offset fini non représentable levait une exception générique et perdait `w6b.filter.invalid_bounds`. | La reverse-demand transforme ce cas en `ConstructionFailure(InvalidBounds)` avant publication; le sentinel et le recovery sont conservés. | Les deux cas `finite huge ... refuses with stable bounds diagnostic and same surface recovers` dans `W6bFilterAdmissionRecoverySurfaceTest`. |
-| I5 | Decode schema 8 et Merge pouvaient allouer/copier au-delà de `GraphLimits.maxNodes` avant refus. | `SceneArchiveCodec` rejette compte table/fanout avant liste; builder/réserve sont bornés et la table validée n'est plus recopiée deux fois. | Les cas publics Picture `oversized schema 8 filter table ...` et `oversized schema 8 Merge fanout ...`, puis replay/recovery. |
-| I6 | Les `RectF32` des nodes restaient mutables à l'entrée et via `nodeAt`. | Crop/Tile/Picture/Magnifier snapshotent à l'entrée, stockent des copies et n'exposent que des copies; canonical/wire restent stables. | `captured filter table snapshots mutable rectangle input and node exposure`. |
-| I7 | `W6bFilterPictureTest` inspectait adapter/compiler/graph, hors gate public. | Le test ne garde que Picture bytes/memory/wire/replay public; le test direct de l'adapter W6b est retiré. Le seul invariant de publication est dans `RenderGraphContractTest`. | `W6bFilterPictureTest` (12 cas publics), plus le contrat I1. |
+| I5 | Decode schema 8 et Merge pouvaient allouer/copier au-delà de `GraphLimits.maxNodes` avant refus. | Partiel : les limites et `reserve()` étaient bornés, mais les listes privées fraîches restaient recopiées une seconde fois. Fermé seulement au round 2. | Re-review R21 puis `whole-branch-fix2-report.md`. |
+| I6 | Les `RectF32` des nodes restaient mutables à l'entrée et via `nodeAt`. | Crop/Tile/Picture/Magnifier snapshotent à l'entrée, stockent des copies et n'exposent que des copies; canonical/wire restent stables. | La preuve a été ramenée au capture/bytes/replay Picture public au round 2. |
+| I7 | `W6bFilterPictureTest` inspectait adapter/compiler/graph, hors gate public. | Partiel : l'adapter direct avait été retiré, mais le shard gardait table/codec/`SceneSnapshot` directs. Fermé seulement au round 2. | Re-review R21 puis `whole-branch-fix2-report.md`. |
 | M1 | IDs et paramètres W6b I32 avaient des noms ambigus. | `CapturedFilterNodeIdI32`, `CapturedPictureIdI32`, `CapturedBackdropIdI32`, `valueI32` et les paramètres/offsets W6b sont renommés sans modifier canonical ou wire. | Compilation `render-ir` transitive, `gpu-plan`, `gpu-renderer`, `kanvas`. |
 | M2 | Le baseline négatif DropShadow était invalide avant sa mutation annoncée. | Le helper publie un baseline complet (sampling linéaire et offsets); chaque cas ne mute qu'un fait. | `RenderGraphContractTest.w6b publication witness validates drop shadow original ownership and mode arity`. |
-| M3 | Status, base et comptes étaient contradictoires. | Ledger : base W6a exacte et vague finale `2bf3d52`; status/README : B=336, nested=344, shadow 6, sept shards 80. | Relecture des documents et XML frais ci-dessous. |
+| M3 | Status, base et comptes étaient contradictoires. | Partiel : les comptes du round 1 étaient exacts, mais la fermeture I1/I5/I7 était sur-déclarée. Fermé seulement au round 2. | Re-review R21 puis `whole-branch-fix2-report.md`. |
 
 ## Fichiers de production principaux
 
@@ -43,12 +46,14 @@ exécuté.
    0 failure/error/skip. Après les assertions, `Gradle Test Executor 80` est
    sorti 133 : statut native **UNKNOWN**, jamais GREEN.
 
-## Autorité et risques restants
+## Autorité et risques restants (état round 1)
 
-Les scissors, sample rectangles et offsets W6b sont désormais les valeurs
-target-local I32 scellées par le plan. Aucun operand/pass W6b ne consulte une
-map d'origins. `MaskShader` peut encore recevoir l'origin device requise par
-un matériau W5 déjà scellé, et `GraphTexture` son mapping déjà émis par son
-autorité antérieure; aucun des deux ne recalcule device→target, scissor ou
-offset W6b. Le native exit 133 reste le seul état non qualifié. Les exclusions
-W6b et les domaines W6c–W6e restent inchangés.
+Les operands d'entrée et les terminaux Picture étaient target-local I32
+scellés, et aucun operand/pass W6b ne consultait une map d'origins.
+`MaskShader` pouvait encore recevoir l'origin device requise par un matériau
+W5 déjà scellé, et `GraphTexture` son mapping déjà émis par son autorité
+antérieure; aucun des deux ne recalculait device→target, scissor ou offset
+W6b. Restait néanmoins la dérivation des composites et la validation I1, la
+seconde copie privée I5 et les appels IR directs I7. Ces écarts, ainsi que le
+native exit 133 **UNKNOWN**, sont traités/qualifiés dans le rapport round 2;
+les exclusions W6b et les domaines W6c–W6e restent inchangés.

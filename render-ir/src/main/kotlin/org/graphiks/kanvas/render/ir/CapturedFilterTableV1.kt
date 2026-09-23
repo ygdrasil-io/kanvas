@@ -159,7 +159,7 @@ public data class CapturedRuntimeImageFilterChildV1(public val name: String, pub
 
 /** Immutable table shared by every command in one [SceneSnapshot]. */
 public class CapturedFilterTableV1 private constructor(
-    /** Already copied by [of]; retaining it avoids a second unbounded copy. */
+    /** Owned by [of] or one of the bounded internal construction paths. */
     private val values: List<CapturedFilterNodeV1>,
 ) : CanonicalValue {
     public val nodeCount: Int get() = values.size
@@ -175,7 +175,21 @@ public class CapturedFilterTableV1 private constructor(
             require(nodes.size <= limits.maxNodes) { "Captured filter table exceeds node limit" }
             // Check before copying: archive input and capture callers must never duplicate an
             // attacker-controlled graph that is already outside the W6b budget.
-            return CapturedFilterTableV1(ArrayList(nodes)).also { it.validate(limits) }
+            return fromOwnedNodes(ArrayList(nodes), limits)
+        }
+
+        /**
+         * Retains a fresh, private, already-bounded list without a second copy.
+         *
+         * This is deliberately internal: every public caller continues through [of], which
+         * takes its defensive snapshot before a table can become immutable.
+         */
+        internal fun fromOwnedNodes(
+            nodes: ArrayList<CapturedFilterNodeV1>,
+            limits: GraphLimits = GraphLimits(),
+        ): CapturedFilterTableV1 {
+            require(nodes.size <= limits.maxNodes) { "Captured filter table exceeds node limit" }
+            return CapturedFilterTableV1(nodes).also { it.validate(limits) }
         }
     }
 
@@ -236,7 +250,7 @@ public class CapturedFilterTableBuilderV1(private val limits: GraphLimits = Grap
         require(values.size <= limits.maxNodes) { "Captured filter table exceeds node limit" }
         val completed = ArrayList<CapturedFilterNodeV1>(values.size)
         values.forEach { completed += requireNotNull(it) { "Captured filter table contains an unfinished node" } }
-        return CapturedFilterTableV1.of(completed, limits)
+        return CapturedFilterTableV1.fromOwnedNodes(completed, limits)
     }
 }
 

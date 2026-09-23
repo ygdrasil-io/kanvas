@@ -678,8 +678,6 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     }
                     is PlanPass.PictureComposite -> {
                         val operands = requireNotNull(pass.operands) { "W6b Picture composite needs frozen operands." }
-                        val source = operands.copySourceBoundsTargetI32()
-                        val destination = operands.copyDestinationOriginTargetI32()
                         val scissor = operands.copyCompositeScissorTargetLocalI32()
                         val sampleOffset = operands.copySourceSampleOffsetTargetLocalI32()
                         val operand = graphTextureOperandsBySource[pass.source]
@@ -707,27 +705,31 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             }
                             filteredCompositeRender(
                                 stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
-                                source, destination, operand.alphaF32, filter, filterBuffer,
+                                sampleOffset, requireNotNull(scissor), operand.alphaF32, filter, filterBuffer,
                                 if (filter == null) null else 0L, filterCapacity, filterOffset?.div(4L) ?: 0L,
                                 (operands.blend as? BlendPlan.DestinationReadV1)?.snapshotResource?.let(views::get),
-                                operands.blend, pass, owned, scissor,
+                                operands.blend, pass, owned,
                             )
                         }
                     }
                     is PlanPass.FilterComposite -> {
-                        val source = pass.copySourceBoundsTargetI32()
-                        val destination = pass.copyDestinationOriginParentI32()
+                        val sampleOffset = pass.copySourceSampleOffsetTargetLocalI32()
+                        val scissor = pass.copyCompositeScissorTargetLocalI32()
                         when (val operation = pass.operation) {
-                            is FilterCompositeOperationV1.Draw -> renderOperands += textureRender(
-                                stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
-                                sampledCompositeShader(source.left - destination.x, source.top - destination.y, 1f), operation.blend,
-                                destination.x, destination.y, source.width(), source.height(), pass, owned,
-                            )
+                            is FilterCompositeOperationV1.Draw -> {
+                                val finalScissor = requireNotNull(scissor) { "W6b Draw composite has no sealed scissor." }
+                                renderOperands += textureRender(
+                                    stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
+                                    sampledCompositeShader(sampleOffset.x, sampleOffset.y, 1f), operation.blend,
+                                    finalScissor.left, finalScissor.top, finalScissor.width(), finalScissor.height(), pass, owned,
+                                )
+                            }
                             is FilterCompositeOperationV1.Layer -> {
                                 val restore = operation.restore
                                 val destinationRead = restore.blend as? BlendPlan.DestinationReadV1
                                 renderOperands += filteredCompositeRender(
-                                    stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation, source, destination,
+                                    stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
+                                    sampleOffset, requireNotNull(scissor) { "W6b Layer composite has no sealed scissor." },
                                     restore.alphaF32, restore.colorFilter, uniform, restore.colorFilterUniformOffsetI64,
                                     restore.colorFilter?.let { maxOf(16L, it.dynamicByteCountI64) }, 0L,
                                     destinationRead?.snapshotResource?.let(views::get), restore.blend, pass, owned,
@@ -735,7 +737,6 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             }
                             is FilterCompositeOperationV1.Picture -> {
                                 val terminal = requireNotNull(operation.terminal)
-                                val scissor = terminal.copyCompositeScissorTargetLocalI32()
                                 val operand = graphTextureOperandsBySource[pass.evaluationKey.boundSourceId]
                                 renderOperands += if (scissor == null) {
                                     emptyRender(stepIndex, views.getValue(pass.destination), generation, clear = false, pass, owned)
@@ -746,9 +747,9 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     // and exact blend.
                                     filteredCompositeRender(
                                         stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
-                                        source, destination, 1f, null, null, null, null, 0L,
+                                        sampleOffset, scissor, 1f, null, null, null, null, 0L,
                                         (terminal.blend as? BlendPlan.DestinationReadV1)?.snapshotResource?.let(views::get),
-                                        terminal.blend, pass, owned, scissor,
+                                        terminal.blend, pass, owned,
                                     )
                                 } else {
                                     require(operand.finalBlend.canonicalLabel == terminal.blend.canonicalLabel) {
@@ -768,11 +769,12 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                         }
                                     }
                                     filteredCompositeRender(
-                                        stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation, source, destination,
+                                        stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
+                                        sampleOffset, scissor,
                                         operand.alphaF32, filter, filterBuffer, if (filter == null) null else 0L, filterCapacity,
                                         filterOffset?.div(4L) ?: 0L,
                                         (terminal.blend as? BlendPlan.DestinationReadV1)?.snapshotResource?.let(views::get), terminal.blend,
-                                        pass, owned, scissor,
+                                        pass, owned,
                                     )
                                 }
                             }
@@ -835,8 +837,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         target: GPUTextureView,
         sourceTexture: GPUTextureView,
         generation: GPUDeviceGenerationID,
-        source: RectI32,
-        destination: org.graphiks.math.geometry.Point2I32,
+        sourceSampleOffsetTargetLocalI32: org.graphiks.math.geometry.Point2I32,
+        compositeScissorTargetLocalI32: RectI32,
         alpha: Float,
         filter: ColorFilterExecutionPlanV1?,
         filterBuffer: GPUBuffer?,
@@ -847,7 +849,6 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         blend: BlendPlan,
         pass: PlanPass,
         owned: W6aOwnedHandles,
-        scissorOverride: RectI32? = null,
     ): GPUPreparedNativeScopeOperand.Render {
         val destinationRead = blend as? BlendPlan.DestinationReadV1
         require((destinationRead != null) == (destinationSnapshot != null))
@@ -880,7 +881,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             $formula
             @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
                 let alpha_applied = textureLoad(terminal_source,
-                    vec2<i32>(position.xy) - vec2<i32>(${destination.x}, ${destination.y}) + vec2<i32>(${source.left}, ${source.top}), 0) * $alpha;
+                    vec2<i32>(position.xy) + vec2<i32>(${sourceSampleOffsetTargetLocalI32.x}, ${sourceSampleOffsetTargetLocalI32.y}), 0) * $alpha;
                 return $output;
             }
         """
@@ -891,15 +892,14 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 requireNotNull(filterBufferOffsetI64).toULong(), requireNotNull(filterBindingByteCountI64).toULong())))
             if (destinationRead != null) add(BindGroupEntry(2u, requireNotNull(destinationSnapshot)))
         })))
-        val scissor = scissorOverride ?: RectI32(destination.x, destination.y,
-            Math.addExact(destination.x, source.width()), Math.addExact(destination.y, source.height()))
         return GPUPreparedNativeScopeOperand.Render(
             stepIndex,
             GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation)),
             listOf(
                 GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
                 GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
-                GPUPreparedNativeRenderCommand.SetScissor(scissor.left, scissor.top, scissor.width(), scissor.height()),
+                GPUPreparedNativeRenderCommand.SetScissor(compositeScissorTargetLocalI32.left, compositeScissorTargetLocalI32.top,
+                    compositeScissorTargetLocalI32.width(), compositeScissorTargetLocalI32.height()),
                 GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0)),
             ),
             operationKindOverride = if (pass is PlanPass.LayerComposite) GPUEncoderOperationKind.LayerComposite else null,

@@ -2,10 +2,12 @@
 
 ## Statut
 
-## Checkpoint W6b / correction whole-branch — shadows et budgets
+## Checkpoint W6b / correction whole-branch round 2 — shadows et budgets
 
-La vague de correction bornée issue de la revue whole-branch est basée sur
-`2bf3d52`. Elle ferme I1–I7 et M1–M3 sans étendre les exclusions W6b.
+La première vague de correction, basée sur `2bf3d52`, a fermé I2–I4, I6,
+M1 et M2. Sa re-review a laissé I1, I5 et I7 ouverts. La seconde vague,
+basée sur `a1aabe6`, ferme ces trois findings et M3 sous R21, sans étendre les
+exclusions W6b.
 
 Task 6 matérialise uniquement les opérations déjà gelées
 `DROP_SHADOW_COLORIZE` et `DROP_SHADOW_COMPOSITE`. La route native consomme
@@ -34,8 +36,8 @@ linéaire, conformément au contrat W3 RGBA8 sRGB prémultiplié.
   et B imbriqué=344; B accepte, B−1 refuse avant allocation
   avec `w6b.filter.frame_budget_exceeded`, et le sibling tardif conserve le
   sentinel avant `discardRecordedOperations`/recovery : 2/2 XML PASS.
-- Les sept shards W6b ciblés totalisent 80/80 assertions XML PASS : Picture
-  12, admission/recovery 27, image blur 10, mask blur 10, mask shader/table
+- Les sept shards W6b ciblés totalisent 81/81 assertions XML PASS : Picture
+  12, admission/recovery 28, image blur 10, mask blur 10, mask shader/table
   13, DropShadow 6 et budget/recovery 2. Les compilations ciblées
   `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin` et
   `:kanvas:compileTestKotlin` sortent 0.
@@ -49,8 +51,12 @@ l'environnement; il n'est pas compté comme GREEN natif.
 La projection W6b passe seulement par `GPUW6aLayerFramePlan`,
 `GPUW6aEncoderScopesV1` et `GPUWgpu4kW6aLayerFramePayloadMaterializer`.
 Le plan scelle, avec math checked, chaque scissor, sample rectangle et offset
-W6b en I32 target-local; native valide et matérialise ces valeurs sans
-recalcul device→target. Aucun operand/pass W6b ne consulte
+W6b en I32 target-local. Chaque `FilterComposite` publie aussi son offset
+d'échantillonnage et son scissor terminaux; la validation authentifie leurs
+relations et Draw/Layer/Picture/GraphTexture les consomment verbatim, sans
+recalcul device→target. Les mutants de publication offset/scissor et le cas
+public Picture à origin F32 très grande mais I32 target-local rendable couvrent
+cette frontière, y compris la recovery de la même surface. Aucun operand/pass W6b ne consulte
 `targetOriginsDeviceI32` : la map a été retirée. Le seul bridge de position
 restant est l'origin device W5/W4e déjà figée sur le `RenderPass` pour un
 matériau legacy, et `MaskShader`/`GraphTexture` conservent uniquement leurs

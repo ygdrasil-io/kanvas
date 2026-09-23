@@ -143,6 +143,34 @@ class W6bFilterAdmissionRecoverySurfaceTest {
     }
 
     @Test
+    fun `finite large Picture origin keeps filtered pixels target local and same surface recovers`() {
+        // The F32 spacing at this magnitude is 128, so the 256-wide cull and the
+        // 128-wide source stay distinct while all final target-local I32 coordinates fit.
+        val extremeOriginF32 = 2_000_000_000f
+        val localPicture = filteredOriginPicture(0f)
+        val extremePicture = filteredOriginPicture(extremeOriginF32)
+        val reference = Surface(2, 2).also { surface ->
+            surface.canvas {
+                drawPicture(localPicture, Paint(imageFilter = ImageFilter.Blur(1f, 1f)))
+            }
+        }.render().pixels
+        val surface = Surface(2, 2)
+        surface.canvas {
+            save()
+            translate(-extremeOriginF32, 0f)
+            drawPicture(extremePicture, Paint(imageFilter = ImageFilter.Blur(1f, 1f)))
+            restore()
+        }
+
+        assertContentEquals(reference, surface.render().pixels)
+
+        surface.discardRecordedOperations()
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+        assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
+    }
+
+    @Test
     fun `nested picture filter refuses terminally and same surface recovers`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
         val recorder = PictureRecorder()
@@ -627,6 +655,14 @@ class W6bFilterAdmissionRecoverySurfaceTest {
     private fun assertImageBlurMaterializes(surface: Surface) {
         assertEquals(16, surface.render().pixels.size)
     }
+
+    private fun filteredOriginPicture(originX: Float) = PictureRecorder().also { recorder ->
+        val cull = RectF32.ofLTRB(originX, 0f, originX + 256f, 2f)
+        recorder.beginRecording(cull).drawRect(
+            RectF32.ofLTRB(originX, 0f, originX + 128f, 2f),
+            Paint(ColorARGB.White, antiAlias = false),
+        )
+    }.finishRecordingAsPicture()
 
     private fun recoveryBlue2x2(): UByteArray = ubyteArrayOf(
         17u, 61u, 211u, 255u,

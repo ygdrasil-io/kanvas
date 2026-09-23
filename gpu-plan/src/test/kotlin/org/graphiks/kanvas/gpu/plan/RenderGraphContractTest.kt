@@ -1052,6 +1052,20 @@ class RenderGraphContractTest {
     }
 
     @Test
+    fun `w6b publication rejects forged target local terminal sampling`() {
+        assertFailsWith<IllegalArgumentException> {
+            w6bFilterPublicationGraph(forgeCompositeTargetLocalSampling = true)
+        }
+    }
+
+    @Test
+    fun `w6b publication rejects forged target local terminal scissor`() {
+        assertFailsWith<IllegalArgumentException> {
+            w6bFilterPublicationGraph(forgeCompositeTargetLocalScissor = true)
+        }
+    }
+
+    @Test
     fun `w6b publication witness rejects a filter bound to an unrelated source`() {
         assertFailsWith<IllegalArgumentException> {
             w6bFilterPublicationGraph(boundSource = planResourceId(PlanResourceRole.LogicalTarget, 0))
@@ -3258,6 +3272,8 @@ class RenderGraphContractTest {
         sourceRole: PlanResourceRole = PlanResourceRole.FilterSource,
         compositeIntermediateOutput: Boolean = false,
         publishTargetLocalSampling: Boolean = true,
+        forgeCompositeTargetLocalSampling: Boolean = false,
+        forgeCompositeTargetLocalScissor: Boolean = false,
     ): RenderGraph {
         val passCountI32 = when {
             compositeIntermediateOutput && consumeTerminalOutput -> 7
@@ -3265,15 +3281,16 @@ class RenderGraphContractTest {
             consumeTerminalOutput -> 6
             else -> 5
         }
+        val textureExtent = SizeI32(1, 1)
         val root = PlanResource.of(
             PlanResourceRole.LogicalTarget, 0, PlanResourceKind.Texture2D,
-            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), SizeI32(1, 1), 4,
+            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), textureExtent, 4,
             setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.CopySource, PlanResourceUsage.Sampled),
             PlanResourceLifetime.FrameLocal, 0, passCountI32,
         )
         fun filterTexture(role: PlanResourceRole, ordinal: Int) = PlanResource.of(
             role, ordinal, PlanResourceKind.Texture2D,
-            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), SizeI32(1, 1), 4,
+            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL), textureExtent, 4,
             setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled),
             PlanResourceLifetime.FrameLocal, 0, passCountI32,
         )
@@ -3293,6 +3310,8 @@ class RenderGraphContractTest {
             FilterEvaluationKeyV1.of(CapturedFilterNodeIdI32(0), actualBoundSource, mapping, deviceBounds) else key
         val bounds = FilterBoundsPlanV1(deviceBounds, deviceBounds, deviceBounds, deviceBounds, Point2I32.Origin)
         val sampling = FilterInputSamplingV1(Point2I32.Origin, deviceBounds)
+        val compositeSampleOffset = if (forgeCompositeTargetLocalSampling) Point2I32(1, 0) else Point2I32.Origin
+        val compositeScissor = if (forgeCompositeTargetLocalScissor) RectI32(1, 0, 2, 1) else deviceBounds
         val passes = buildList<PlanPass> {
             add(PlanPass.RenderPass(0, root.id, emptyList(), AttachmentLoadPlan.ClearTransparent, AttachmentStorePlan.Store,
                 destinationVersionAfter = DestinationVersionI64(0)))
@@ -3304,14 +3323,14 @@ class RenderGraphContractTest {
                     org.graphiks.kanvas.render.ir.TileMode.CLAMP, bounds,
                     sampling.takeIf { publishTargetLocalSampling })))
             if (compositeIntermediateOutput) add(PlanPass.FilterComposite(3, horizontal.id, root.id, key,
-                deviceBounds, Point2I32.Origin, FilterCompositeOperationV1.Draw(BlendPlan.SrcOver),
+                deviceBounds, Point2I32.Origin, compositeSampleOffset, compositeScissor, FilterCompositeOperationV1.Draw(BlendPlan.SrcOver),
                 destinationVersionAfter = DestinationVersionI64(1)))
             add(PlanPass.FilterPass(if (compositeIntermediateOutput) 4 else 3, listOf(verticalInput), vertical.id, verticalKey,
                 FilterPassOperationV1.SeparableBlur(FilterImplementationKindV1.IMAGE_BLUR_Y, 1f, FilterAxisV1.Y,
                     org.graphiks.kanvas.render.ir.TileMode.CLAMP, bounds,
                     sampling.takeIf { publishTargetLocalSampling })))
             if (consumeTerminalOutput) add(PlanPass.FilterComposite(if (compositeIntermediateOutput) 5 else 4, vertical.id, root.id, verticalKey,
-                deviceBounds, Point2I32.Origin, FilterCompositeOperationV1.Draw(BlendPlan.SrcOver),
+                deviceBounds, Point2I32.Origin, compositeSampleOffset, compositeScissor, FilterCompositeOperationV1.Draw(BlendPlan.SrcOver),
                 destinationVersionAfter = DestinationVersionI64(if (compositeIntermediateOutput) 2 else 1)))
             add(PlanPass.ReadbackPass(when {
                 compositeIntermediateOutput && consumeTerminalOutput -> 6
@@ -3323,7 +3342,7 @@ class RenderGraphContractTest {
         val resources = listOf(root, source, horizontal, vertical, staging)
         val budget = PlanBudget(4_096)
         return RenderGraph.of(
-            PlanId("w6b-publication"), W6aLayerPlanCompiler.CAPABILITY_ID, SizeI32(1, 1),
+            PlanId("w6b-publication"), W6aLayerPlanCompiler.CAPABILITY_ID, textureExtent,
             PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL,
             supportedCapabilities(setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)), budget, 0,
             resources, passes, passes.zipWithNext { before, after -> PlanPassDependency(before.id, after.id) },
@@ -3422,6 +3441,7 @@ class RenderGraphContractTest {
                 mode, if (includeOriginal) source.id else null, bounds,
                 Point2I32.Origin, Point2I32.Origin)),
             PlanPass.FilterComposite(7, terminal.id, root.id, key, deviceBounds, Point2I32.Origin,
+                Point2I32.Origin, deviceBounds,
                 FilterCompositeOperationV1.Draw(BlendPlan.SrcOver), destinationVersionAfter = DestinationVersionI64(1)),
             PlanPass.ReadbackPass(8, root.id, staging.id, 256, mappedBytesI64 = 4),
         )

@@ -5,22 +5,12 @@ package org.graphiks.kanvas.picture
 import java.nio.ByteBuffer
 import java.util.Base64
 import org.graphiks.kanvas.canvas.DisplayOp
-import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.DropShadowMode
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.render.ir.CapturedFilterInputV1
-import org.graphiks.kanvas.render.ir.CapturedFilterNodeIdI32
-import org.graphiks.kanvas.render.ir.CapturedFilterNodeV1
-import org.graphiks.kanvas.render.ir.CapturedFilterTableV1
-import org.graphiks.kanvas.render.ir.SceneArchiveCodec
-import org.graphiks.kanvas.render.ir.SceneArchiveDecodeResult
-import org.graphiks.kanvas.render.ir.SceneCommand
-import org.graphiks.kanvas.render.ir.SceneExtent
-import org.graphiks.kanvas.render.ir.SceneSnapshot
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.surface.W6bImageBlurCpuOracle
 import org.graphiks.math.color.ColorARGB
@@ -33,7 +23,6 @@ import kotlin.test.assertNotSame
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
-import kotlin.test.assertIs
 
 class W6bFilterPictureTest {
     /**
@@ -192,44 +181,37 @@ class W6bFilterPictureTest {
     }
 
     @Test
-    fun `captured filter table snapshots mutable rectangle input and node exposure`() {
+    fun `Picture capture snapshots mutable crop before bytes replay`() {
         val supplied = RectF32.ofLTRB(1f, 2f, 3f, 4f)
-        val table = CapturedFilterTableV1.of(listOf(
-            CapturedFilterNodeV1.Crop(supplied, org.graphiks.kanvas.render.ir.TileMode.CLAMP,
-                CapturedFilterInputV1.ImplicitSource),
-        ))
-        val canonical = table.canonicalId
-        val wire = filterTableWire(table)
+        val picture = pictureWithThreeFilteredDraws(ImageFilter.Crop(supplied, TileMode.CLAMP))
+        val wire = picture.toByteArray()
 
         supplied.left = -100f
-        val exposed = (table.nodeAt(CapturedFilterNodeIdI32(0)) as CapturedFilterNodeV1.Crop).crop
-        exposed.right = 100f
+        assertContentEquals(wire, picture.toByteArray())
 
-        val retained = (table.nodeAt(CapturedFilterNodeIdI32(0)) as CapturedFilterNodeV1.Crop).crop
-        assertEquals(1f, retained.left)
-        assertEquals(3f, retained.right)
-        assertEquals(canonical, table.canonicalId)
-        assertContentEquals(wire, filterTableWire(table))
+        val replay = assertNotNull(Picture.fromByteArray(wire))
+        assertContentEquals(wire, replay.toByteArray())
+        assertPlaybackRenders(replay)
     }
 
     @Test
     fun `oversized schema 8 filter table is rejected before Picture publication`() {
         val archive = oversizedFilterTableArchive()
 
-        val invalid = assertIs<SceneArchiveDecodeResult.Invalid>(SceneArchiveCodec.decodePicture(archive))
-        assertEquals("invalid-length", invalid.code)
         assertNull(Picture.fromByteArray(archive))
-        assertNotNull(Picture.fromByteArray(pictureWithThreeFilteredDraws(ImageFilter.Blur(1f, 1f)).toByteArray()))
+        assertPlaybackRenders(assertNotNull(Picture.fromByteArray(
+            pictureWithThreeFilteredDraws(ImageFilter.Blur(1f, 1f)).toByteArray(),
+        )))
     }
 
     @Test
     fun `oversized schema 8 Merge fanout is rejected before Picture publication`() {
         val archive = oversizedMergeFanoutArchive()
 
-        val invalid = assertIs<SceneArchiveDecodeResult.Invalid>(SceneArchiveCodec.decodePicture(archive))
-        assertEquals("invalid-length", invalid.code)
         assertNull(Picture.fromByteArray(archive))
-        assertNotNull(Picture.fromByteArray(pictureWithThreeFilteredDraws(ImageFilter.Blur(1f, 1f)).toByteArray()))
+        assertPlaybackRenders(assertNotNull(Picture.fromByteArray(
+            pictureWithThreeFilteredDraws(ImageFilter.Blur(1f, 1f)).toByteArray(),
+        )))
     }
 
     private fun replayedOccurrencesExpected(): UByteArray {
@@ -287,17 +269,6 @@ class W6bFilterPictureTest {
         val recorder = PictureRecorder()
         picture.playback(recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 8f, 8f)))
         assertNotNull(Picture.fromByteArray(recorder.finishRecordingAsPicture().toByteArray()))
-    }
-
-    private fun filterTableWire(table: CapturedFilterTableV1): ByteArray {
-        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
-        val scene = SceneSnapshot.of(
-            SceneExtent(2, 2),
-            ColorSpace.SRGB,
-            listOf(SceneCommand.Annotation.of(bounds, "filter-table", "snapshot")),
-            filterTable = table,
-        )
-        return SceneArchiveCodec.encodePicture(scene, bounds)
     }
 
     private fun oversizedFilterTableArchive(): ByteArray {

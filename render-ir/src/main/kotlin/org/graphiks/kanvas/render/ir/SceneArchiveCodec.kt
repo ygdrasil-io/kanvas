@@ -835,7 +835,7 @@ private class ArchiveReader(private val data: ByteArray) {
         val count = length(MAX_CAPTURED_FILTER_GRAPH_NODES, "captured filter table")
         val nodes = ArrayList<CapturedFilterNodeV1>(count)
         repeat(count) { nodes += filterNode() }
-        return CapturedFilterTableV1.of(nodes)
+        return CapturedFilterTableV1.fromOwnedNodes(nodes)
     }
     fun filterInput(): CapturedFilterInputV1 = when (i32()) {
         1 -> CapturedFilterInputV1.ImplicitSource

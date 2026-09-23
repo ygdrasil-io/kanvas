@@ -692,9 +692,39 @@ internal class W6aLayerGraphConstruction(
                 Math.toIntExact(Math.subtractExact(compositeDeviceBounds.left.toLong(), destinationOrigin.x.toLong())),
                 Math.toIntExact(Math.subtractExact(compositeDeviceBounds.top.toLong(), destinationOrigin.y.toLong())),
             )
+            val sourceSampleOffset = try {
+                Point2I32(
+                    Math.subtractExact(sourceBounds.left, destinationLocal.x),
+                    Math.subtractExact(sourceBounds.top, destinationLocal.y),
+                )
+            } catch (_: ArithmeticException) {
+                throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                    W6bFilterDiagnostics.InvalidBounds,
+                    "W6b filter composite sample offset overflows target-local I32 texels.",
+                ))
+            }
+            val compositeScissor = try {
+                RectI32(
+                    destinationLocal.x,
+                    destinationLocal.y,
+                    Math.addExact(destinationLocal.x, sourceBounds.width()),
+                    Math.addExact(destinationLocal.y, sourceBounds.height()),
+                )
+            } catch (_: ArithmeticException) {
+                throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                    W6bFilterDiagnostics.InvalidBounds,
+                    "W6b filter composite scissor overflows target-local I32 texels.",
+                ))
+            }
             val before = DestinationVersionI64(versions[destination] ?: 0L)
             val finalOperation = if (operation is FilterCompositeOperationV1.Picture && pictureTerminal != null)
                 operation.copy(terminal = pictureTerminal(frozen.output, sourceBounds, destinationLocal)) else operation
+            val terminal = (finalOperation as? FilterCompositeOperationV1.Picture)?.terminal
+            val finalSampleOffset = terminal?.copySourceSampleOffsetTargetLocalI32() ?: sourceSampleOffset
+            // A Picture terminal's null scissor is a sealed no-op/non-admission fact, not a
+            // missing value that may be replaced by the generic composite rectangle.
+            val finalScissor = if (terminal != null)
+                terminal.copyCompositeScissorTargetLocalI32() else compositeScissor
             val after = when (finalOperation) {
                 is FilterCompositeOperationV1.Draw -> {
                     require(finalOperation.blend !is BlendPlan.DestinationReadV1) { "W6b filtered destination-read blend is not planned." }
@@ -708,7 +738,8 @@ internal class W6aLayerGraphConstruction(
             require(operation !is FilterCompositeOperationV1.Layer || operation.restore.parentVersionBefore == before)
             versions[destination] = after.valueI64
             return PlanPass.FilterComposite(passes.size, frozen.output.resourceId, destination, frozen.terminalKey,
-                sourceBounds, destinationLocal, finalOperation, replacedLayerSource, after).also(passes::add)
+                sourceBounds, destinationLocal, finalSampleOffset, finalScissor, finalOperation,
+                replacedLayerSource, after).also(passes::add)
         }
         /** Emits one frozen aggregate without turning a nested SceneSnapshot into renderer work. */
         fun appendPictureAggregate(

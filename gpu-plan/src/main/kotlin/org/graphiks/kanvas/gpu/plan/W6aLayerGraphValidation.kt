@@ -37,6 +37,18 @@ internal fun validateW6aLayerTopology(
         require(rect.left >= 0 && rect.top >= 0 && rect.right <= sourceExtent.width && rect.bottom <= sourceExtent.height &&
             origin.x >= 0 && origin.y >= 0 && origin.x.toLong() + rect.width() <= targetExtent.width &&
             origin.y.toLong() + rect.height() <= targetExtent.height)
+        val sourceSampleOffset = operand.copySourceSampleOffsetTargetLocalI32()
+        require(sourceSampleOffset == Point2I32(
+            Math.subtractExact(rect.left, origin.x),
+            Math.subtractExact(rect.top, origin.y),
+        ))
+        val sourceInDestination = RectI32(origin.x, origin.y,
+            Math.addExact(origin.x, rect.width()), Math.addExact(origin.y, rect.height()))
+        operand.copyCompositeScissorTargetLocalI32()?.let { scissor ->
+            require(scissor.left >= sourceInDestination.left && scissor.top >= sourceInDestination.top &&
+                scissor.right <= sourceInDestination.right && scissor.bottom <= sourceInDestination.bottom &&
+                scissor.left >= 0 && scissor.top >= 0 && scissor.right <= targetExtent.width && scissor.bottom <= targetExtent.height)
+        }
         (operand.blend as? BlendPlan.DestinationReadV1)?.let { blend ->
             val copy = passes.getOrNull(indexI32 - 1) as? PlanPass.TextureCopy
             require(copy?.source == destination && copy.destination == blend.snapshotResource &&
@@ -383,9 +395,22 @@ internal fun validateW6aLayerTopology(
                 sourceBounds.bottom <= sourceExtent.height && destinationOrigin.x >= 0 && destinationOrigin.y >= 0 &&
                 destinationOrigin.x.toLong() + sourceBounds.width() <= destinationExtent.width &&
                 destinationOrigin.y.toLong() + sourceBounds.height() <= destinationExtent.height)
+            val expectedOffset = Point2I32(
+                Math.subtractExact(sourceBounds.left, destinationOrigin.x),
+                Math.subtractExact(sourceBounds.top, destinationOrigin.y),
+            )
+            require(pass.copySourceSampleOffsetTargetLocalI32() == expectedOffset)
+            val sourceInDestination = RectI32(destinationOrigin.x, destinationOrigin.y,
+                Math.addExact(destinationOrigin.x, sourceBounds.width()),
+                Math.addExact(destinationOrigin.y, sourceBounds.height()))
+            val scissor = pass.copyCompositeScissorTargetLocalI32()
+            require(scissor == null || scissor.left >= sourceInDestination.left && scissor.top >= sourceInDestination.top &&
+                scissor.right <= sourceInDestination.right && scissor.bottom <= sourceInDestination.bottom &&
+                scissor.left >= 0 && scissor.top >= 0 && scissor.right <= destinationExtent.width && scissor.bottom <= destinationExtent.height)
             val before = requireNotNull(versions[destination.id])
             when (val operation = pass.operation) {
                 is FilterCompositeOperationV1.Draw -> {
+                    require(scissor == sourceInDestination)
                     require(operation.blend !is BlendPlan.DestinationReadV1)
                     val after = if (operation.blend.compositionFacts.writesParentDevice) Math.addExact(before, 1L) else before
                     versions[destination.id] = after
@@ -393,6 +418,7 @@ internal fun validateW6aLayerTopology(
                     require(pass.replacedLayerSource == null)
                 }
                 is FilterCompositeOperationV1.Layer -> {
+                    require(scissor == sourceInDestination)
                     val replaced = requireNotNull(pass.replacedLayerSource)
                     require(byId.getValue(replaced).role == PlanResourceRole.LayerTarget && replaced in initialized && restored.add(replaced))
                     val restore = operation.restore
@@ -407,7 +433,9 @@ internal fun validateW6aLayerTopology(
                     require(pass.replacedLayerSource == null)
                     val terminal = requireNotNull(operation.terminal)
                     require(terminal.copySourceBoundsTargetI32() == sourceBounds &&
-                        terminal.copyDestinationOriginTargetI32() == destinationOrigin)
+                        terminal.copyDestinationOriginTargetI32() == destinationOrigin &&
+                        terminal.copySourceSampleOffsetTargetLocalI32() == pass.copySourceSampleOffsetTargetLocalI32() &&
+                        terminal.copyCompositeScissorTargetLocalI32() == scissor)
                     val after = validatePictureTerminal(terminal, source.id, destination.id, indexI32)
                     versions[destination.id] = after
                     require(pass.destinationVersionAfter.valueI64 == after)
