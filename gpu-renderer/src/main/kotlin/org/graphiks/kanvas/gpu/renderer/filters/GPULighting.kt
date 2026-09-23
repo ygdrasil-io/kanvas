@@ -136,6 +136,15 @@ internal object GPUW6dLightingPass {
             val scale = maxOf(1f, kotlin.math.abs(x), kotlin.math.abs(y), kotlin.math.abs(z))
             return "vec3<f32>(${wgslF32(x / scale)}, ${wgslF32(y / scale)}, ${wgslF32(z / scale)}) - surface * ${wgslF32(1f / scale)}"
         }
+        val pointLocation = when (parameters) {
+            is LightingParametersV1.Point -> parameters.copyLocation3F32().let {
+                "vec3<f32>(${wgslF32(it.x)}, ${wgslF32(it.y)}, ${wgslF32(it.z)})"
+            }
+            is LightingParametersV1.Spot -> parameters.copyLocation3F32().let {
+                "vec3<f32>(${wgslF32(it.x)}, ${wgslF32(it.y)}, ${wgslF32(it.z)})"
+            }
+            is LightingParametersV1.Distant -> null
+        }
         val lightVector = when (parameters) {
             is LightingParametersV1.Distant -> parameters.copyDirection3F32().let {
                 "vec3<f32>(${wgslF32(it.x)}, ${wgslF32(it.y)}, ${wgslF32(it.z)})"
@@ -214,7 +223,8 @@ internal object GPUW6dLightingPass {
                 let dy = 0.25 * ((w6d_lighting_alpha(base + vec2<i32>(-1, 1)) + 2.0 * w6d_lighting_alpha(base + vec2<i32>(0, 1)) + w6d_lighting_alpha(base + vec2<i32>(1, 1))) - (w6d_lighting_alpha(base + vec2<i32>(-1, -1)) + 2.0 * w6d_lighting_alpha(base + vec2<i32>(0, -1)) + w6d_lighting_alpha(base + vec2<i32>(1, -1))));
                 let normal = w6d_normalize_or_zero(vec3<f32>(${-surfaceDepth}f * dx, ${-surfaceDepth}f * dy, 1.0));
                 let surface = vec3<f32>(position.xy, w6d_lighting_alpha(base) * ${surfaceDepth}f);
-                let surfaceToLight = w6d_normalize_or_zero($lightVector);
+                var surfaceToLight = w6d_normalize_or_zero($lightVector);
+                ${pointLocation?.let { "if (all($it == surface)) { surfaceToLight = vec3<f32>(0.0); }" } ?: ""}
                 $cone
                 $contribution
                 let rgb = clamp(vec3<f32>(${color.r}f, ${color.g}f, ${color.b}f) * ${coefficient}f * contribution, vec3<f32>(0.0), vec3<f32>(1.0));

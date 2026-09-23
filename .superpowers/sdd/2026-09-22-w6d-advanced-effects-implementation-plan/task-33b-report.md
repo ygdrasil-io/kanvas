@@ -67,3 +67,31 @@ subnormal, so the reciprocal cannot underflow to zero.  The exact
   dashboard, or global Skia test was added.
 - Remaining concern: native test process exit 133 persists after all XML
   methods complete, so native execution is UNKNOWN rather than claimed green.
+
+## Fix round 1 — exact scaled coincidence
+
+Sol review identified that the extreme-coordinate rewrite could separately
+round `location/scale` and `surface*(1/scale)`, turning an exact public
+point-light/surface coincidence into a nonzero vector. The new public
+`Surface` witness anchors the child domain at `(0,0)` and places the
+coincident pixel at `(5.5,4.5,1)`. These finite F32 values deliberately
+discriminate the two roundings: for scale `5.5`, the Y component has
+`fl(4.5/5.5) != fl(4.5*fl(1/5.5))`. Its independent CPU oracle is opaque
+black at the pixel before `Surface` is created and the witness asserts
+`Render` plus `Readback`.
+
+A controlled removal of the WGSL equality guard produced the causal RED;
+the expected opaque black pixel became lit. Restoring the guard makes the
+point/spot `surfaceToLight` zero only when the finite frozen location equals
+the sampled surface exactly. This is the specified zero-contribution case,
+not a proximity tolerance. The guard is an unconditional part of the same
+point/spot WGSL program shape and does not select a family, recipe ID, graph,
+target, or allocator. The finite extreme spot witness remains green.
+
+| Command | Result |
+| --- | --- |
+| controlled no-guard focused coincidence selector | XML method RED; native exit 133, UNKNOWN |
+| focused coincidence selector with guard | JUnit method PASS; native exit 133, UNKNOWN |
+| focused finite extreme spot selector | JUnit method PASS; native exit 133, UNKNOWN |
+| W6d class selector | XML `29/0/0/0`; native exit 133, UNKNOWN |
+| W6a restore selector | XML `9/0/0/0`; native exit 133, UNKNOWN |

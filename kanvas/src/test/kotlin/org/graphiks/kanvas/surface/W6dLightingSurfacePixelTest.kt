@@ -325,6 +325,32 @@ class W6dLightingSurfacePixelTest {
     )
 
     @Test
+    fun `scaled coincident point light and surface produces opaque black`() {
+        val alpha = FloatArray(6 * 6).also {
+            it[0] = 1f
+            it[4 * 6 + 5] = 1f
+        }
+        val expected = W6dLightingCpuOracle.remainingFamilyRgba8(
+            W6dLightingCpuOracle.Family.POINT_DIFFUSE, 6, 6, alpha,
+            locationX = 5.5f, locationY = 4.5f, locationZ = 1f,
+            surfaceDepth = 1f, coefficient = 1f,
+        )
+        val index = (4 * 6 + 5) * 4
+        assertContentEquals(ubyteArrayOf(0u, 0u, 0u, 255u), expected.copyOfRange(index, index + 4))
+        val surface = Surface(6, 6)
+        surface.canvas {
+            saveLayer(SaveLayerRec(paint = Paint(imageFilter = ImageFilter.PointLitDiffuse(
+                Point3F32(5.5f, 4.5f, 1f), ColorARGB.White, 1f, 1f), antiAlias = false)))
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.White, antiAlias = false))
+            drawRect(RectF32.ofLTRB(5f, 4f, 6f, 5f), Paint(ColorARGB.White, antiAlias = false))
+            restore()
+        }
+        val actual = surface.render()
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), actual.nativeEvidenceScopeKinds.toString())
+        assertContentEquals(expected.copyOfRange(index, index + 4), actual.pixels.copyOfRange(index, index + 4))
+    }
+
+    @Test
     fun `zero specular half vector produces transparent black`() = assertRemainingFamily(
         W6dLightingCpuOracle.Family.DISTANT_SPECULAR,
         ImageFilter.DistantLitSpecular(Vector3F32(0f, 0f, -1f), ColorARGB.White, 1f, 1f, 2f),
