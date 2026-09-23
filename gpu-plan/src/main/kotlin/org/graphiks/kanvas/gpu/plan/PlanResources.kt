@@ -17,7 +17,7 @@ public enum class PlanResourceRole {
     CoverageOriginal,
     /** Explicit transparent-black W6b input; it is never interchangeable with a draw source. */
     FilterTransparentBlack,
-    /** Single-sample RGBA8 target owned only by a frozen W6b filter pass. */
+    /** Single-sample RGBA8 target owned only by a frozen W6 FilterPass. */
     FilterTarget,
     MultisampleColorTarget,
     PathHardEdgeMask,

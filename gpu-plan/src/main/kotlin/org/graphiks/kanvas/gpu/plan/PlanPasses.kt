@@ -1276,6 +1276,15 @@ public sealed interface PlanPass {
                 is FilterPassOperationV1.Morphology -> require(storedInputs.size == 1) {
                     "Morphology requires one frozen source input."
                 }
+                is FilterPassOperationV1.MatrixConvolution,
+                is FilterPassOperationV1.Magnifier,
+                is FilterPassOperationV1.Lighting,
+                is FilterPassOperationV1.Picture,
+                is FilterPassOperationV1.RuntimeImageOpacity,
+                -> require(storedInputs.size == 1) { "W6d single-input operation requires one frozen source input." }
+                is FilterPassOperationV1.DisplacementMap -> require(storedInputs.size == 2) {
+                    "Displacement map requires frozen displacement then source inputs."
+                }
                 else -> Unit
             }
         }

@@ -60,3 +60,21 @@ public object ChildOpacityCpuEvaluatorV1 : RuntimeEffectCpuEvaluatorV1 {
         return out
     }
 }
+
+/** Same-pixel IMAGE_FILTER evaluator; absent public children are bound to the W6 implicit source. */
+public object ImageOpacityCpuEvaluatorV1 : RuntimeEffectCpuEvaluatorV1 {
+    override val id: String = "kanvas.runtime.image-opacity.cpu-v1"
+    override val evaluatorVersionI32: Int = 1
+    override fun evaluate(inputs: RuntimeEffectCpuInputsV1): RuntimeEffectCpuColorF32 {
+        require(inputs.children.size == 1 && inputs.children[0] != null) { "invalid.material.runtime_effect.cpu_children" }
+        require(inputs.uniforms.size == 1) { "invalid.material.runtime_effect.cpu_uniforms" }
+        val alpha = inputs.uniforms[0] as? RuntimeEffectCpuUniformV1.FloatValue
+            ?: throw IllegalArgumentException("invalid.material.runtime_effect.cpu_uniforms")
+        require(alpha.name == "alpha" && alpha.valueF32.isFinite() && alpha.valueF32 in 0f..1f) {
+            "invalid.material.runtime_effect.cpu_uniforms"
+        }
+        val input = requireNotNull(inputs.children[0])
+        return RuntimeEffectCpuColorF32(input.rF32 * alpha.valueF32, input.gF32 * alpha.valueF32,
+            input.bF32 * alpha.valueF32, input.aF32 * alpha.valueF32)
+    }
+}

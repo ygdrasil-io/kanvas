@@ -77,13 +77,13 @@ internal fun RuntimeUniformType.tagU32(): Long = when (this) {
 internal fun RuntimeChildType.tagU32(legacy: Boolean): Long = when (this) {
     RuntimeChildType.SHADER -> 1L
     RuntimeChildType.COLOR_FILTER -> 2L
-    RuntimeChildType.IMAGE_FILTER -> { require(legacy); 3L }
+    RuntimeChildType.IMAGE_FILTER -> if (legacy) 3L else 4L
     RuntimeChildType.BLENDER -> if (legacy) 4L else 3L
 }
 internal fun RuntimeEffectAbi.tagU32(legacy: Boolean): Long = when (this) {
     RuntimeEffectAbi.SHADER -> 1L
     RuntimeEffectAbi.COLOR_FILTER -> 2L
-    RuntimeEffectAbi.IMAGE_FILTER -> { require(legacy); 3L }
+    RuntimeEffectAbi.IMAGE_FILTER -> if (legacy) 3L else 4L
     RuntimeEffectAbi.BLENDER -> if (legacy) 4L else 3L
 }
 internal fun RuntimeSamplerTypeV1.tagU32(): Long = when (this) {

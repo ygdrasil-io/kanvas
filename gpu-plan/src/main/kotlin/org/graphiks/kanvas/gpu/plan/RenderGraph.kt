@@ -359,6 +359,25 @@ public class RenderGraph private constructor(
             w5bW4eSource: RenderGraph? = null,
             w5bW4eFacts: W4eGeometryFactsV6? = null,
         ): RenderGraphConstruction {
+            val resourcesById = resources.associateBy(PlanResource::id)
+            passes.filterIsInstance<PlanPass.FilterPass>().forEach { pass ->
+                when (pass.operation) {
+                    is FilterPassOperationV1.MatrixConvolution,
+                    is FilterPassOperationV1.DisplacementMap,
+                    is FilterPassOperationV1.Magnifier,
+                    is FilterPassOperationV1.Lighting,
+                    is FilterPassOperationV1.Picture,
+                    is FilterPassOperationV1.RuntimeImageOpacity,
+                    -> {
+                        require(resourcesById.getValue(pass.output).role == PlanResourceRole.FilterTarget)
+                        require(pass.inputs().all { input -> resourcesById.getValue(input).role in setOf(
+                            PlanResourceRole.FilterTarget, PlanResourceRole.FilterSource,
+                            PlanResourceRole.FilterTransparentBlack,
+                        ) })
+                    }
+                    else -> Unit
+                }
+            }
             val stopSlab = materialPlanTable?.gradientStopSlab
             val maskShaderBindings = passes.filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
                 ((pass.operation as? FilterPassOperationV1.MaskShader)?.materialBinding as?

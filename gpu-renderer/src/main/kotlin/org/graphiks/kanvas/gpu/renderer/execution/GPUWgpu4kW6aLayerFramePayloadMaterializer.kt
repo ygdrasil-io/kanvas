@@ -753,6 +753,13 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     views.getValue(original), generation, operation, outputExtent.width, outputExtent.height,
                                     pass, owned)
                             }
+                            is FilterPassOperationV1.MatrixConvolution,
+                            is FilterPassOperationV1.DisplacementMap,
+                            is FilterPassOperationV1.Magnifier,
+                            is FilterPassOperationV1.Lighting,
+                            is FilterPassOperationV1.Picture,
+                            is FilterPassOperationV1.RuntimeImageOpacity,
+                            -> error("W6d frozen operation ${operation.kind} reached materialization before its owning slice.")
                         }
                     }
                     is PlanPass.PictureComposite -> {

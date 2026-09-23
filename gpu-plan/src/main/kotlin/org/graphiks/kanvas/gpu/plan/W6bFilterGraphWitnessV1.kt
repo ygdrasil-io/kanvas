@@ -163,7 +163,13 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
             is FilterPassOperationV1.MaskShader,
             is FilterPassOperationV1.MaskTable,
             is FilterPassOperationV1.DropShadowColorize,
+            is FilterPassOperationV1.MatrixConvolution,
+            is FilterPassOperationV1.Magnifier,
+            is FilterPassOperationV1.Lighting,
+            is FilterPassOperationV1.Picture,
+            is FilterPassOperationV1.RuntimeImageOpacity,
             -> 1
+            is FilterPassOperationV1.DisplacementMap -> 2
             is FilterPassOperationV1.MaterializedSource -> 2
             is FilterPassOperationV1.Merge -> operation.inputSamplings().size
             is FilterPassOperationV1.Blend -> 2
@@ -197,6 +203,12 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                     require(operation.sourceSampling != null && operation.coverageSampling != null)
                 is FilterPassOperationV1.DropShadowColorize,
                 is FilterPassOperationV1.DropShadowComposite,
+                is FilterPassOperationV1.MatrixConvolution,
+                is FilterPassOperationV1.DisplacementMap,
+                is FilterPassOperationV1.Magnifier,
+                is FilterPassOperationV1.Lighting,
+                is FilterPassOperationV1.Picture,
+                is FilterPassOperationV1.RuntimeImageOpacity,
                 -> Unit
             }
         }
@@ -441,6 +453,15 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                         "W6b drop shadow composite must consume plan-sealed target-local coordinates."
                     }
                 }
+                // The W6d graph vocabulary is frozen before its execution slices add an
+                // occurrence chain.  Native admission rejects these arms until then.
+                is FilterPassOperationV1.MatrixConvolution,
+                is FilterPassOperationV1.DisplacementMap,
+                is FilterPassOperationV1.Magnifier,
+                is FilterPassOperationV1.Lighting,
+                is FilterPassOperationV1.Picture,
+                is FilterPassOperationV1.RuntimeImageOpacity,
+                -> inputs.forEach(::contextuallyOwned)
             }
         }
 

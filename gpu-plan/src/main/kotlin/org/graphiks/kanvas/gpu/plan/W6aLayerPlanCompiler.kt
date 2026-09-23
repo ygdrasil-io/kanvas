@@ -292,6 +292,14 @@ public class W6aLayerPlanCompiler public constructor(
             is FilterPassOperationV1.DropShadowColorize,
             is FilterPassOperationV1.DropShadowComposite,
             -> true
+            // Task 1 freezes W6d payloads; Tasks 2–6 add their selected native encoders.
+            is FilterPassOperationV1.MatrixConvolution,
+            is FilterPassOperationV1.DisplacementMap,
+            is FilterPassOperationV1.Magnifier,
+            is FilterPassOperationV1.Lighting,
+            is FilterPassOperationV1.Picture,
+            is FilterPassOperationV1.RuntimeImageOpacity,
+            -> false
         } }
         val terminals = graph.passes().filterIsInstance<PlanPass.FilterComposite>()
         // W6b consumes a typed frozen W4 producer for direct mask coverage.  Do not admit a

@@ -4,13 +4,19 @@ package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.kanvas.render.ir.CapturedDropShadowModeV1
 import org.graphiks.kanvas.render.ir.CapturedFilterNodeIdI32
+import org.graphiks.kanvas.render.ir.ColorChannel
 import org.graphiks.kanvas.render.ir.ImmutableUBytes
+import org.graphiks.kanvas.render.ir.ImmutableFloats
 import org.graphiks.kanvas.render.ir.MaskBlurStyle
+import org.graphiks.kanvas.render.ir.RuntimeEffectAbi
+import org.graphiks.kanvas.render.ir.RuntimeEffectDescriptor
+import org.graphiks.kanvas.render.ir.SceneSnapshot
 import org.graphiks.kanvas.render.ir.TileMode
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.RectI32
+import org.graphiks.math.geometry.SizeI32
 import org.graphiks.math.matrix.LayerMappingF64
 import org.graphiks.math.vector.Vector2F64
 
@@ -46,6 +52,85 @@ public enum class FilterImplementationKindV1 {
     DROP_SHADOW_COMPOSITE,
     /** Typed W5 shaded source hand-off for a mask-only occurrence. */
     W5_MATERIALIZED_SOURCE,
+    MATRIX_CONVOLUTION,
+    DISPLACEMENT_MAP,
+    MAGNIFIER,
+    DISTANT_DIFFUSE,
+    POINT_DIFFUSE,
+    SPOT_DIFFUSE,
+    DISTANT_SPECULAR,
+    POINT_SPECULAR,
+    SPOT_SPECULAR,
+    PICTURE,
+    RUNTIME_IMAGE_OPACITY,
+}
+
+/** The six W6d lighting variants remain one frozen FilterPass operation family. */
+public enum class LightingFamilyV1 {
+    DISTANT_DIFFUSE, POINT_DIFFUSE, SPOT_DIFFUSE,
+    DISTANT_SPECULAR, POINT_SPECULAR, SPOT_SPECULAR,
+}
+
+/** Immutable F64 light geometry selected by planning; renderers receive no public filter node. */
+public sealed interface LightingParametersV1 {
+    public fun copy(): LightingParametersV1
+
+    public class Distant(
+        directionF64: Vector2F64,
+        public val lightColor: ColorARGB,
+        public val surfaceScaleF32: Float,
+        public val coefficientF32: Float,
+        public val shininessF32: Float? = null,
+    ) : LightingParametersV1 {
+        private val directionSnapshotF64 = Vector2F64(directionF64.x, directionF64.y)
+        init {
+            require(directionSnapshotF64.x.isFinite() && directionSnapshotF64.y.isFinite() &&
+                surfaceScaleF32.isFinite() && coefficientF32.isFinite() &&
+                (shininessF32 == null || shininessF32.isFinite()))
+        }
+        public fun copyDirectionF64(): Vector2F64 = Vector2F64(directionSnapshotF64.x, directionSnapshotF64.y)
+        override fun copy(): LightingParametersV1 = Distant(copyDirectionF64(), lightColor, surfaceScaleF32, coefficientF32, shininessF32)
+    }
+
+    public class Point(
+        locationF64: Vector2F64,
+        public val lightColor: ColorARGB,
+        public val surfaceScaleF32: Float,
+        public val coefficientF32: Float,
+        public val shininessF32: Float? = null,
+    ) : LightingParametersV1 {
+        private val locationSnapshotF64 = Vector2F64(locationF64.x, locationF64.y)
+        init {
+            require(locationSnapshotF64.x.isFinite() && locationSnapshotF64.y.isFinite() &&
+                surfaceScaleF32.isFinite() && coefficientF32.isFinite() &&
+                (shininessF32 == null || shininessF32.isFinite()))
+        }
+        public fun copyLocationF64(): Vector2F64 = Vector2F64(locationSnapshotF64.x, locationSnapshotF64.y)
+        override fun copy(): LightingParametersV1 = Point(copyLocationF64(), lightColor, surfaceScaleF32, coefficientF32, shininessF32)
+    }
+
+    public class Spot(
+        locationF64: Vector2F64,
+        targetF64: Vector2F64,
+        public val specularExponentF32: Float,
+        public val cutoffAngleF32: Float,
+        public val lightColor: ColorARGB,
+        public val surfaceScaleF32: Float,
+        public val coefficientF32: Float,
+        public val shininessF32: Float? = null,
+    ) : LightingParametersV1 {
+        private val locationSnapshotF64 = Vector2F64(locationF64.x, locationF64.y)
+        private val targetSnapshotF64 = Vector2F64(targetF64.x, targetF64.y)
+        init {
+            require(listOf(locationSnapshotF64.x, locationSnapshotF64.y, targetSnapshotF64.x, targetSnapshotF64.y).all(Double::isFinite) &&
+                listOf(specularExponentF32, cutoffAngleF32, surfaceScaleF32, coefficientF32).all(Float::isFinite) &&
+                (shininessF32 == null || shininessF32.isFinite()))
+        }
+        public fun copyLocationF64(): Vector2F64 = Vector2F64(locationSnapshotF64.x, locationSnapshotF64.y)
+        public fun copyTargetF64(): Vector2F64 = Vector2F64(targetSnapshotF64.x, targetSnapshotF64.y)
+        override fun copy(): LightingParametersV1 = Spot(copyLocationF64(), copyTargetF64(), specularExponentF32,
+            cutoffAngleF32, lightColor, surfaceScaleF32, coefficientF32, shininessF32)
+    }
 }
 
 /**
@@ -223,6 +308,103 @@ public class FilterEvaluationKeyV1 private constructor(
 public sealed interface FilterPassOperationV1 {
     public val kind: FilterImplementationKindV1
     public val bounds: FilterBoundsPlanV1
+
+    public class MatrixConvolution(
+        kernelSizeI32: SizeI32,
+        kernel: ImmutableFloats,
+        public val gainF32: Float,
+        public val biasF32: Float,
+        kernelOffsetF64: Vector2F64,
+        public val tileMode: TileMode,
+        public val convolveAlpha: Boolean,
+        override val bounds: FilterBoundsPlanV1,
+        override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.MATRIX_CONVOLUTION,
+    ) : FilterPassOperationV1 {
+        private val kernelSizeSnapshotI32 = kernelSizeI32.copy()
+        private val kernelSnapshot = ImmutableFloats.copyOf(kernel.copyToFloatArray())
+        private val kernelOffsetSnapshotF64 = Vector2F64(kernelOffsetF64.x, kernelOffsetF64.y)
+        init {
+            require(kind == FilterImplementationKindV1.MATRIX_CONVOLUTION && gainF32.isFinite() && biasF32.isFinite() &&
+                kernelOffsetSnapshotF64.x.isFinite() && kernelOffsetSnapshotF64.y.isFinite())
+            require(kernelSizeSnapshotI32.width > 0 && kernelSizeSnapshotI32.height > 0 &&
+                kernelSnapshot.sizeI32 == Math.multiplyExact(kernelSizeSnapshotI32.width, kernelSizeSnapshotI32.height) &&
+                kernelSnapshot.copyToFloatArray().all(Float::isFinite))
+        }
+        public fun copyKernelSizeI32(): SizeI32 = kernelSizeSnapshotI32.copy()
+        public fun copyKernel(): ImmutableFloats = ImmutableFloats.copyOf(kernelSnapshot.copyToFloatArray())
+        public fun copyKernelOffsetF64(): Vector2F64 = Vector2F64(kernelOffsetSnapshotF64.x, kernelOffsetSnapshotF64.y)
+    }
+
+    public class DisplacementMap(
+        public val xChannel: ColorChannel,
+        public val yChannel: ColorChannel,
+        public val scaleF32: Float,
+        override val bounds: FilterBoundsPlanV1,
+        override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.DISPLACEMENT_MAP,
+    ) : FilterPassOperationV1 {
+        init { require(kind == FilterImplementationKindV1.DISPLACEMENT_MAP && scaleF32.isFinite()) }
+    }
+
+    public class Magnifier(
+        sourceF64: RectF64,
+        public val zoomF32: Float,
+        public val insetF32: Float,
+        override val bounds: FilterBoundsPlanV1,
+        override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.MAGNIFIER,
+    ) : FilterPassOperationV1 {
+        private val sourceSnapshotF64 = sourceF64.copy()
+        init { require(kind == FilterImplementationKindV1.MAGNIFIER && sourceSnapshotF64.isFinite() && !sourceSnapshotF64.isEmpty &&
+            zoomF32.isFinite() && zoomF32 > 0f && insetF32.isFinite() && insetF32 >= 0f) }
+        public fun copySourceF64(): RectF64 = sourceSnapshotF64.copy()
+    }
+
+    public class Lighting(
+        public val family: LightingFamilyV1,
+        parameters: LightingParametersV1,
+        override val bounds: FilterBoundsPlanV1,
+        override val kind: FilterImplementationKindV1,
+    ) : FilterPassOperationV1 {
+        private val parametersSnapshot = parameters.copy()
+        init {
+            require(kind == when (family) {
+                LightingFamilyV1.DISTANT_DIFFUSE -> FilterImplementationKindV1.DISTANT_DIFFUSE
+                LightingFamilyV1.POINT_DIFFUSE -> FilterImplementationKindV1.POINT_DIFFUSE
+                LightingFamilyV1.SPOT_DIFFUSE -> FilterImplementationKindV1.SPOT_DIFFUSE
+                LightingFamilyV1.DISTANT_SPECULAR -> FilterImplementationKindV1.DISTANT_SPECULAR
+                LightingFamilyV1.POINT_SPECULAR -> FilterImplementationKindV1.POINT_SPECULAR
+                LightingFamilyV1.SPOT_SPECULAR -> FilterImplementationKindV1.SPOT_SPECULAR
+            })
+            require((family.name.startsWith("DISTANT")) == (parametersSnapshot is LightingParametersV1.Distant) ||
+                (family.name.startsWith("POINT")) == (parametersSnapshot is LightingParametersV1.Point) ||
+                (family.name.startsWith("SPOT")) == (parametersSnapshot is LightingParametersV1.Spot))
+        }
+        public fun copyParameters(): LightingParametersV1 = parametersSnapshot.copy()
+    }
+
+    public class Picture(
+        public val scene: SceneSnapshot,
+        cullRectF64: RectF64,
+        sourceRectF64: RectF64?,
+        override val bounds: FilterBoundsPlanV1,
+        override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.PICTURE,
+    ) : FilterPassOperationV1 {
+        private val cullRectSnapshotF64 = cullRectF64.copy()
+        private val sourceRectSnapshotF64 = sourceRectF64?.copy()
+        init { require(kind == FilterImplementationKindV1.PICTURE && cullRectSnapshotF64.isFinite() && !cullRectSnapshotF64.isEmpty &&
+            (sourceRectSnapshotF64 == null || sourceRectSnapshotF64.isFinite() && !sourceRectSnapshotF64.isEmpty)) }
+        public fun copyCullRectF64(): RectF64 = cullRectSnapshotF64.copy()
+        public fun copySourceRectF64(): RectF64? = sourceRectSnapshotF64?.copy()
+    }
+
+    public class RuntimeImageOpacity(
+        public val effect: RuntimeEffectDescriptor,
+        public val alphaF32: Float,
+        override val bounds: FilterBoundsPlanV1,
+        override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.RUNTIME_IMAGE_OPACITY,
+    ) : FilterPassOperationV1 {
+        init { require(kind == FilterImplementationKindV1.RUNTIME_IMAGE_OPACITY && effect.id.value == "kanvas.runtime.image-opacity" &&
+            effect.semanticVersionI32 == 1 && effect.abi == RuntimeEffectAbi.IMAGE_FILTER && alphaF32.isFinite() && alphaF32 in 0f..1f) }
+    }
 
     public data class SeparableBlur(
         override val kind: FilterImplementationKindV1,
