@@ -90,6 +90,16 @@ class W6dLightingSurfacePixelTest {
     )
 
     @Test
+    fun `spot diffuse multiplies exponentiated cosine by a nontrivial edge ramp`() = assertRemainingFamily(
+        W6dLightingCpuOracle.Family.SPOT_DIFFUSE,
+        ImageFilter.SpotLitDiffuse(Point3F32(1f, 0f, 1f), Point3F32(1f, 0f, 0f), 2f, 36f,
+            ColorARGB.White, 1f, 1f),
+        expectedTopLeft = ubyteArrayOf(116u, 116u, 116u, 255u),
+        specularExponent = 2f,
+        cutoffDegrees = 36f,
+    )
+
+    @Test
     fun `spot diffuse treats negative fractional-power bases as zero contribution`() = assertRemainingFamily(
         W6dLightingCpuOracle.Family.SPOT_DIFFUSE,
         ImageFilter.SpotLitDiffuse(Point3F32(1f, 0f, 1f), Point3F32(1f, 0f, 2f), .5f, 180f,
