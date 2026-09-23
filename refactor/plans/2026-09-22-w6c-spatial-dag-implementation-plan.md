@@ -223,7 +223,7 @@ rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6aLayerSurfaceP
 **Files:**
 
 - Create: `PLAN/W6cSpatialBoundsPlanner.kt`, `GPU/filters/GPUW6cSpatialSamplingPass.kt`, `TEST/surface/W6cSpatialBoundsSurfaceTest.kt`
-- Modify: `GEOM/RectProjectionF64.kt`, `MATRIX/LayerMappingF64.kt`, W6b `PLAN/SpatialFilterDagPlanV1.kt`, `PLAN/PlanPasses.kt`, `PLAN/PlanResources.kt`, `PLAN/W6aLayerGraphConstruction.kt`, W6b spatial lowerer/materializer.
+- Modify: `GEOM/RectProjectionF64.kt`, `MATRIX/LayerMappingF64.kt`, W6b `PLAN/W6bFilterGraphConstruction.kt`, `PLAN/W6bFilterPlanV1.kt`, `PLAN/W6bFilterGraphWitnessV1.kt`, `PLAN/W6aLayerGraphConstruction.kt`, and the W6b materializer. Consume the existing generic `PlanPass.FilterPass` and `FilterTarget` resource contracts without cosmetic edits to `PlanPasses.kt` or `PlanResources.kt`; change those files only if a concrete validator/resource gap is demonstrated.
 
 **Consumes:** W6b `FilterEvaluationKeyV1`, `FilterBoundsPlanV1`, W6a four regions/mapping, `roundOutToRectI32OrNull`, and frozen W6b filter target allocation.
 
