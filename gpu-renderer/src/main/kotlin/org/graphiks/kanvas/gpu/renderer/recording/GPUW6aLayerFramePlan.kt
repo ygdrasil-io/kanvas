@@ -447,10 +447,9 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                 packet.attachW4ePreparedFrameAuthority(frameAuthority)
                 if (packet.materialSourcePartitionV3() != null) {
                     // W4e's old material-coordinate bridge consumes the exact origin already
-                    // frozen on its RenderPass.  In particular, no W6b operand/pass can look
+                    // frozen in its W6a geometry binding.  In particular, no W6b operand/pass can look
                     // up a target origin or convert device coordinates back to target-local.
-                    val origin = requireNotNull((render.w6aPassV1 as? PlanPass.RenderPass)
-                        ?.copyMaterialDeviceOriginI32()) { "Missing sealed W4e material origin." }
+                    val origin = binding.copyMaterialDeviceOriginI32()
                     val template = requireNotNull(sealW4eMaterialGeometryHostV1(packet, commonFinalSource = true))
                     templates[packet.packetId] = template.copy(materialDevicePointWgsl =
                         "${requireNotNull(template.materialCoordinateSlot).devicePointWgsl} + vec2<f32>(${origin.x}.0, ${origin.y}.0)")

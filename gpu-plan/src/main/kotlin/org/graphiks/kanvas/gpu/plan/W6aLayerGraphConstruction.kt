@@ -2076,7 +2076,7 @@ internal class W6aLayerGraphConstruction(
             val targetExtent = targetExtents.getValue(target)
             val payload = requireNotNull(W4eNativePayloadPlan.fromDeferred(native.values.toList(), resources, targetExtent,
                 caps, lanes[laneI32].sourceTable())) { "w6a.layer.w4e_payload" }
-            w4eBindings += PlanW4eGeometryBindingV1(target, targetExtent, native, payload)
+            w4eBindings += PlanW4eGeometryBindingV1(target, targetExtent, native, payload, targetOriginDevice(target))
         }
         nonUniformBytesI64 = W6aLayerPlanBudget.peak(resources, passes.size, budget)
     }
@@ -2093,6 +2093,9 @@ internal class W6aLayerGraphConstruction(
         val geometryByTarget = geometries.filterNot(W6aScopeGeometry::isElided).associateBy {
             planResourceId(PlanResourceRole.LayerTarget, it.occurrence.idI32)
         }
+        fun targetOriginDevice(target: PlanResourceId): Point2I32 = filterSourceBindings[target]?.originDeviceI32
+            ?: if (target == root) Point2I32.Origin else
+                requireNotNull(geometryByTarget[target]?.mapping).copyLayerOriginDeviceI32()
         // A captured command may appear in its retained raw W5 lane and again in a nested
         // Picture aggregate.  Its target-local raster coordinates are therefore a function
         // of both identities; caching by command alone leaks the first target's origin into
@@ -2172,7 +2175,7 @@ internal class W6aLayerGraphConstruction(
                     drawDataResources = pass.drawDataResources, destinationVersionAfter = pass.destinationVersionAfter,
                     coverageSource = pass.coverageSource, w6bMaskSourceBinding = pass.w6bMaskSourceBinding,
                     plannedCommandId = pass.plannedCommandId,
-                    materialDeviceOriginI32 = pass.copyMaterialDeviceOriginI32())
+                    materialDeviceOriginI32 = pass.copyMaterialDeviceOriginI32() ?: targetOriginDevice(pass.target))
             } else when (pass) {
                 is PlanPass.FilterPass -> {
                     val operation = (pass.operation as? FilterPassOperationV1.MaskShader)?.let { shader ->
