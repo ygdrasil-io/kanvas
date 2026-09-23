@@ -55,8 +55,8 @@
 - [x] Task 4 Sol review and bounded correction if needed
 - [x] Task 5 — mask shader/table
 - [x] Task 5 Sol review and bounded correction if needed
-- [ ] Task 6 — shadows, budget, convergence
-- [ ] Task 6 Sol review and bounded correction if needed
+- [x] Task 6 — shadows, budget, convergence
+- [x] Task 6 Sol review and bounded correction if needed
 - [ ] Whole-branch Sol review and bounded correction if needed
 - [ ] Verification, push, stacked Draft PR, artifact attachment
 
@@ -122,3 +122,7 @@
 - Task 6 Sol review: `NEEDS_FIXES` with three Important findings — fractional offsets use nearest/floor sampling and renderer-local origin subtraction instead of a frozen linear transform; SHADOW_ONLY retains an unnecessary DropShadowComposite pass/target and therefore the wrong lifetime/budget; public proof omits discriminating SHADOW_ONLY budget/recovery, fractional-origin, translucent composition, sibling-order and both-mode replay cases.
 - **R17 — frozen shadow offset and mode topology:** DropShadow offset is a plan-owned target-local linear-sampling transform, including its sampling footprint in desired/required/produced bounds; `:gpu-renderer` consumes sealed coordinates without subtracting origins. `SHADOW_ONLY` terminates directly at the colorized shadow resource and owns no internal composite pass/target; `COMPOSITE` alone owns the source+shadow composite. Cost if wrong: fractional public offsets are quantized, renderer geometry becomes a second authority, and SHADOW_ONLY budgets/lifetimes over-count a non-existent Skia operation.
 - Task 6: fix round 1/5 opened (3 Important findings; implementation base `0a7939ba4`).
+- Task 6 fix round 1 implemented as `0307b33d8`: plan-owned F64 target-local linear DECAL sampling/footprints, direct SHADOW_ONLY colorized terminal with no internal composite, exact B=336/B−1/nested/late-recovery proof, translucent SrcOver, sibling order, and both-mode Picture memory/wire replay. W6b 74/74, W6a preservation 39/39 and graph contracts pass; native 133 remains `UNKNOWN`.
+- Task 6: fix round 1/5 (3 addressed, 0 Critical/Important open; commits `0a7939b..0307b33`). Scoped Sol rereview: `PASS / READY`.
+- Task 6 minor (deferred to final branch review): two pre-existing negative `RenderGraphContractTest` fixtures at lines 3398–3402 now omit required sampling/offset payloads and therefore pass vacuously before reaching their announced mutation invariant.
+- Task 6: complete (commits `8e4dd83..0307b33`, review clean at blocking severities; one explicit Minor retained for final review).
