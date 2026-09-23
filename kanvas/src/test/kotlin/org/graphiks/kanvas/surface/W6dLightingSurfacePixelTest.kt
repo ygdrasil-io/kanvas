@@ -321,6 +321,7 @@ class W6dLightingSurfacePixelTest {
 
     @Test
     fun `perspective lighting mapping refuses without readback mutation then recovers`() {
+        val expectedRecovery = recoveryRed2x2()
         val surface = Surface(2, 2)
         surface.canvas {
             setMatrix(Matrix3x3F32(persp0 = .25f))
@@ -330,7 +331,7 @@ class W6dLightingSurfacePixelTest {
             drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.White, antiAlias = false))
             restore()
         }
-        assertLightingRefusalAndRecovery(surface, "w6a.layer.unsupported_lighting_mapping:")
+        assertLightingRefusalAndRecovery(surface, "w6a.layer.unsupported_lighting_mapping:", expectedRecovery)
     }
 
     private fun renderLayerAlphaFixture(direction: Vector3F32): RenderResult {
@@ -409,14 +410,15 @@ class W6dLightingSurfacePixelTest {
     }
 
     private fun assertLightingRefusesAndSurfaceRecovers(filter: ImageFilter, diagnosticPrefix: String) {
+        val expectedRecovery = recoveryRed2x2()
         val surface = Surface(2, 2)
         surface.canvas {
             drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.White, imageFilter = filter, antiAlias = false))
         }
-        assertLightingRefusalAndRecovery(surface, diagnosticPrefix)
+        assertLightingRefusalAndRecovery(surface, diagnosticPrefix, expectedRecovery)
     }
 
-    private fun assertLightingRefusalAndRecovery(surface: Surface, diagnosticPrefix: String) {
+    private fun assertLightingRefusalAndRecovery(surface: Surface, diagnosticPrefix: String, expectedRecovery: UByteArray) {
         val sentinel = UByteArray(16) { 0x5au }
         val before = sentinel.copyOf()
         val failure = assertFailsWith<IllegalStateException> {
@@ -429,7 +431,15 @@ class W6dLightingSurfacePixelTest {
             resetMatrix()
             drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.Red, antiAlias = false))
         }
-        assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u),
-            surface.render().pixels)
+        val recovery = surface.render()
+        assertTrue(recovery.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), recovery.nativeEvidenceScopeKinds.toString())
+        assertContentEquals(expectedRecovery, recovery.pixels)
     }
+
+    private fun recoveryRed2x2(): UByteArray = ubyteArrayOf(
+        255u, 0u, 0u, 255u,
+        0u, 0u, 0u, 0u,
+        0u, 0u, 0u, 0u,
+        0u, 0u, 0u, 0u,
+    )
 }
