@@ -9,6 +9,8 @@ public object W6aPlanDiagnostics {
     public const val NonFiniteTransform: String = "w6a.layer.non_finite_transform"
     public const val MappingHorizon: String = "w6a.layer.mapping_horizon"
     public const val MappingOverflow: String = "w6a.layer.mapping_overflow"
+    /** Lighting only admits the sealed finite affine layer mapping; no renderer approximation exists. */
+    public const val UnsupportedLightingMapping: String = "w6a.layer.unsupported_lighting_mapping"
     public const val UnsupportedRestore: String = "w6a.layer.unsupported_restore"
     public const val RestoreCapability: String = "w6a.layer.restore_capability"
     /** The frozen complete-frame physical allocation peak exceeds the admitted W6a budget. */

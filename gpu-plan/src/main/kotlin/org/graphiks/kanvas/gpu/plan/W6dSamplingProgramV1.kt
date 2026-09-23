@@ -2,6 +2,8 @@ package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.kanvas.render.ir.ColorChannel
 import org.graphiks.kanvas.render.ir.TileMode
+import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.vector.Vector3F32
 
 /** Versioned backend-neutral recipes. Constants are specialized at graph construction,
  * so these programs require only sampled textures: no uniform buffer or sampler allocation.
@@ -11,6 +13,7 @@ public enum class W6dSamplingProgramIdV1(public val inputArityI32: Int) {
     MATRIX_CLAMP_RGBA8_V1(1), MATRIX_REPEAT_RGBA8_V1(1),
     MATRIX_MIRROR_RGBA8_V1(1), MATRIX_DECAL_RGBA8_V1(1),
     DISPLACEMENT_NEAREST_CLAMP_RGBA8_V1(2), MAGNIFIER_NEAREST_CLAMP_RGBA8_V1(1),
+    DISTANT_DIFFUSE_RGBA8_V1(1),
 }
 
 public sealed class W6dSamplingProgramV1(public val programId: W6dSamplingProgramIdV1) {
@@ -46,6 +49,22 @@ public sealed class W6dSamplingProgramV1(public val programId: W6dSamplingProgra
         public val innerBottomF64: Double,
         public val zoomF32: Float,
     ) : W6dSamplingProgramV1(W6dSamplingProgramIdV1.MAGNIFIER_NEAREST_CLAMP_RGBA8_V1)
+
+    /** Immutable lighting recipe, including mapped 3D facts and the four Sobel edge decisions. */
+    public class DistantDiffuse internal constructor(
+        direction3F32: Vector3F32,
+        public val lightColor: ColorARGB,
+        public val mappedSurfaceDepthF32: Float,
+        public val kdF32: Float,
+        public val sobelSampling: W6dSobelSamplingV1,
+    ) : W6dSamplingProgramV1(W6dSamplingProgramIdV1.DISTANT_DIFFUSE_RGBA8_V1) {
+        private val directionSnapshot3F32 = Vector3F32(direction3F32.x, direction3F32.y, direction3F32.z)
+        init {
+            require(directionSnapshot3F32.x.isFinite() && directionSnapshot3F32.y.isFinite() && directionSnapshot3F32.z.isFinite() &&
+                mappedSurfaceDepthF32.isFinite() && kdF32.isFinite() && kdF32 >= 0f)
+        }
+        public fun copyDirection3F32(): Vector3F32 = Vector3F32(directionSnapshot3F32.x, directionSnapshot3F32.y, directionSnapshot3F32.z)
+    }
 }
 
 /** The exact resources of this FilterPass, not a second graph or allocation authority. */
@@ -90,6 +109,14 @@ internal fun selectW6dSamplingProgram(
                 (source.left + source.right) / 2.0, (source.top + source.bottom) / 2.0,
                 source.left + operation.insetF32, source.top + operation.insetF32,
                 source.right - operation.insetF32, source.bottom - operation.insetF32, operation.zoomF32,
+            )
+        }
+        is FilterPassOperationV1.Lighting -> {
+            if (operation.family != LightingFamilyV1.DISTANT_DIFFUSE) return null
+            val parameters = operation.copyParameters() as LightingParametersV1.Distant
+            W6dSamplingProgramV1.DistantDiffuse(
+                parameters.copyDirection3F32(), parameters.lightColor, parameters.surfaceDepthF32,
+                parameters.coefficientF32, requireNotNull(operation.copySobelSamplingOrNull()),
             )
         }
         else -> return null

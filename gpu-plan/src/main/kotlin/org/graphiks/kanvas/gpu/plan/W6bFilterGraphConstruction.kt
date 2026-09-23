@@ -600,6 +600,30 @@ internal object W6bFilterGraphConstruction {
                 appendMorphology(input, FilterPassOperationV1.Morphology.Kind.ERODE,
                     node.radiusX.toDouble(), node.radiusY.toDouble(), key)
             }
+            is CapturedFilterNodeV1.DistantLitDiffuse -> {
+                val input = materializeInput(node.input, currentSource)
+                if (!node.direction.x.isFinite() || !node.direction.y.isFinite() || !node.direction.z.isFinite() ||
+                    !node.surfaceScale.isFinite() || !node.kd.isFinite() || node.kd < 0f) {
+                    throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                        "W6d distant diffuse requires finite direction and surface scale plus finite kd >= 0."))
+                }
+                val mappedDirection = input.mapping.mapLightingVectorToLayerF32OrNull(node.direction) ?: throw ConstructionFailure(
+                    W6bFilterDiagnostics.refusal(W6aPlanDiagnostics.UnsupportedLightingMapping,
+                        "W6d distant diffuse requires a finite affine layer mapping for its direction."),
+                )
+                val mappedSurfaceDepth = input.mapping.mapLightingZToLayerF32OrNull(node.surfaceScale) ?: throw ConstructionFailure(
+                    W6bFilterDiagnostics.refusal(W6aPlanDiagnostics.UnsupportedLightingMapping,
+                        "W6d distant diffuse surface depth cannot be represented by the sealed layer mapping."),
+                )
+                val bounds = distantDiffuseBounds(input)
+                val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
+                val output = allocateTarget(bounds)
+                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
+                    FilterPassOperationV1.Lighting(LightingFamilyV1.DISTANT_DIFFUSE,
+                        LightingParametersV1.Distant(mappedDirection, node.lightColor, mappedSurfaceDepth, node.kd), bounds,
+                        FilterImplementationKindV1.DISTANT_DIFFUSE, distantDiffuseSobelSampling(input, bounds))))
+                ContextualFilterResult(output, bounds, key)
+            }
             is CapturedFilterNodeV1.MatrixConvolution -> {
                 val input = materializeInput(node.input, currentSource)
                 val width = exactPositiveI32(node.kernelSize.width, "matrix kernel width")
@@ -845,6 +869,43 @@ internal object W6bFilterGraphConstruction {
             source.copyProducedOutputDeviceI32() ?: source.copyKnownContentDeviceI32(), source.originDeviceI32)
     }
 
+    /** Lighting affects transparent black, so its desired domain is never narrowed to source content. */
+    private fun distantDiffuseBounds(source: SourceBinding): FilterBoundsPlanV1 {
+        val desired = source.copyDesiredOutputDeviceI32() ?: source.copyDeviceBoundsI32()
+        val required = RectF64(desired.left.toDouble(), desired.top.toDouble(), desired.right.toDouble(), desired.bottom.toDouble())
+            .expandSamplingHaloF64OrNull(1.0, 1.0, 1.0, 1.0)?.roundOutToRectI32OrNull()
+            ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                "W6d distant diffuse Sobel halo cannot be represented in checked I32 texels."))
+        return FilterBoundsPlanV1(source.copyKnownContentDeviceI32(), desired, required, desired.copy(),
+            Point2I32(desired.left, desired.top))
+    }
+
+    /** All origin transforms and edge decisions are published before the renderer sees a pass. */
+    private fun distantDiffuseSobelSampling(input: SourceBinding, bounds: FilterBoundsPlanV1): W6dSobelSamplingV1 {
+        val output = bounds.copyDesiredOutputDeviceI32()
+        val child = input.copyDeviceBoundsI32()
+        fun local(region: RectI32, label: String): RectI32 = try {
+            RectI32(
+                Math.subtractExact(region.left, output.left), Math.subtractExact(region.top, output.top),
+                Math.subtractExact(region.right, output.left), Math.subtractExact(region.bottom, output.top),
+            )
+        } catch (_: ArithmeticException) {
+            throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                "W6d distant diffuse $label cannot be represented in output-local I32 texels."))
+        }
+        val offset = try {
+            Point2I32(Math.subtractExact(output.left, input.originDeviceI32.x), Math.subtractExact(output.top, input.originDeviceI32.y))
+        } catch (_: ArithmeticException) {
+            throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                "W6d distant diffuse input offset cannot be represented in output-local I32 texels."))
+        }
+        return W6dSobelSamplingV1(offset, local(child, "child bounds"), local(bounds.copyRequiredInputDeviceI32(), "required input"),
+            if (child.left == output.left) W6dSobelEdgeModeV1.CLAMP else W6dSobelEdgeModeV1.DECAL,
+            if (child.top == output.top) W6dSobelEdgeModeV1.CLAMP else W6dSobelEdgeModeV1.DECAL,
+            if (child.right == output.right) W6dSobelEdgeModeV1.CLAMP else W6dSobelEdgeModeV1.DECAL,
+            if (child.bottom == output.bottom) W6dSobelEdgeModeV1.CLAMP else W6dSobelEdgeModeV1.DECAL)
+    }
+
     /** The output domain grows by blur support; it is never intersected back to the source. */
     internal fun reverseInputDemand(
         occurrence: PositiveOccurrence?,
@@ -909,6 +970,7 @@ internal object W6bFilterGraphConstruction {
             is CapturedFilterNodeV1.MatrixConvolution -> inputDemand(node.input, output)
             is CapturedFilterNodeV1.DisplacementMap -> unionInputDemands(listOf(node.displacement, node.input), output)
             is CapturedFilterNodeV1.Magnifier -> inputDemand(node.input, output)
+            is CapturedFilterNodeV1.DistantLitDiffuse -> inputDemand(node.input, sobelRequiredInput(output))
             else -> throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.UnsupportedFamily,
                 "Reverse demand requires an admitted W6b filter."))
         }
@@ -916,6 +978,12 @@ internal object W6bFilterGraphConstruction {
         val imageInput = occurrence.root?.let { nodeDemand(it.id, desired) } ?: desired
         return (occurrence.mask as? MaskFilterNode.Blur)?.let { expand(imageInput, it.sigma, it.sigma) } ?: imageInput
     }
+
+    private fun sobelRequiredInput(output: RectI32): RectI32 = RectF64(
+        output.left.toDouble(), output.top.toDouble(), output.right.toDouble(), output.bottom.toDouble(),
+    ).expandSamplingHaloF64OrNull(1.0, 1.0, 1.0, 1.0)?.roundOutToRectI32OrNull()
+        ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+            "W6d distant diffuse reverse Sobel demand cannot be represented in checked I32 texels."))
 
     private fun blurBounds(source: SourceBinding, sigmaXF32: Float, sigmaYF32: Float): FilterBoundsPlanV1 {
         val input = source.copyDeviceBoundsI32()
@@ -1162,6 +1230,7 @@ internal object W6bFilterGraphConstruction {
                         node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
                     }
                     is CapturedFilterNodeV1.Magnifier -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.DistantLitDiffuse -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
                     else -> return if (isW6cVariant(node)) "W6c" else "W6d"
                 }
             }

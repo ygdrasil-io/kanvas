@@ -296,7 +296,8 @@ public class W6aLayerPlanCompiler public constructor(
             is FilterPassOperationV1.DisplacementMap,
             is FilterPassOperationV1.Magnifier,
             -> true
-            is FilterPassOperationV1.Lighting,
+            is FilterPassOperationV1.Lighting -> operation.family == LightingFamilyV1.DISTANT_DIFFUSE &&
+                pass.frozenSamplingProgram?.program?.programId == W6dSamplingProgramIdV1.DISTANT_DIFFUSE_RGBA8_V1
             is FilterPassOperationV1.Picture,
             is FilterPassOperationV1.RuntimeImageOpacity,
             -> false

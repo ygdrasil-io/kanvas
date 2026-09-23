@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.planning
 
 import org.graphiks.kanvas.gpu.renderer.recording.GPUW6aLayerFramePlan
 import org.graphiks.kanvas.gpu.plan.FilterPassOperationV1
+import org.graphiks.kanvas.gpu.plan.LightingFamilyV1
 import org.graphiks.kanvas.gpu.plan.PlanPass
 import org.graphiks.kanvas.render.ir.*
 
@@ -14,7 +15,9 @@ internal class W6aLayerGraphLowerer {
                 is FilterPassOperationV1.DisplacementMap,
                 is FilterPassOperationV1.Magnifier,
                 -> Unit
-                is FilterPassOperationV1.Lighting,
+                is FilterPassOperationV1.Lighting -> if (operation.family != LightingFamilyV1.DISTANT_DIFFUSE) {
+                    throw IllegalArgumentException("W6d frozen operation ${operation.kind} is not executable until its owning slice.")
+                }
                 is FilterPassOperationV1.Picture,
                 is FilterPassOperationV1.RuntimeImageOpacity,
                 -> throw IllegalArgumentException("W6d frozen operation ${operation.kind} is not executable until its owning slice.")

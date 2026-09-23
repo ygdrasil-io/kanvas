@@ -464,8 +464,16 @@ internal class W6aLayerGraphConstruction(
             val draw = RenderGraph.visualDraws(binding.source.passes()).single()
             val deviceBounds = requireNotNull(intersect(w6aRasterBoundsI32(draw), w6aScissorI32(draw)))
             val clipped = requireNotNull(intersect(deviceBounds, targetDeviceBounds(targetFor(binding.scopeI32))))
+            // The admitted distant-diffuse slice affects transparent black.  Its physical child
+            // remains tightly rasterized, while its semantic demand is the frozen parent target;
+            // all other families retain their existing content-sized direct source contract.
+            val desired = occurrence.root?.let { root ->
+                (occurrence.table.nodeAt(root.id) as? org.graphiks.kanvas.render.ir.CapturedFilterNodeV1.DistantLitDiffuse)
+                    ?.let { targetDeviceBounds(targetFor(binding.scopeI32)) }
+            } ?: clipped
             directFilterSourceByCommand[occurrence.insertionCommandIndexI32] = DirectFilterSources(
-                allocateOccurrenceSource(clipped, targetFor(binding.scopeI32), PlanResourceRole.CoverageSource),
+                allocateOccurrenceSource(clipped, targetFor(binding.scopeI32), PlanResourceRole.CoverageSource,
+                    desiredOutputDeviceI32 = desired, requiredInputDeviceI32 = clipped),
             )
         }
         /*

@@ -19,6 +19,7 @@ import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
 import org.graphiks.math.matrix.LayerMappingF64
 import org.graphiks.math.vector.Vector2F64
+import org.graphiks.math.vector.Vector3F32
 
 /** Axis is explicit so a frozen separable operation cannot be reselected by the renderer. */
 public enum class FilterAxisV1 { X, Y }
@@ -71,25 +72,25 @@ public enum class LightingFamilyV1 {
     DISTANT_SPECULAR, POINT_SPECULAR, SPOT_SPECULAR,
 }
 
-/** Immutable F64 light geometry selected by planning; renderers receive no public filter node. */
+/** Immutable mapped light geometry selected by planning; renderers receive no public filter node. */
 public sealed interface LightingParametersV1 {
     public fun copy(): LightingParametersV1
 
     public class Distant(
-        directionF64: Vector2F64,
+        direction3F32: Vector3F32,
         public val lightColor: ColorARGB,
-        public val surfaceScaleF32: Float,
+        public val surfaceDepthF32: Float,
         public val coefficientF32: Float,
         public val shininessF32: Float? = null,
     ) : LightingParametersV1 {
-        private val directionSnapshotF64 = Vector2F64(directionF64.x, directionF64.y)
+        private val directionSnapshot3F32 = Vector3F32(direction3F32.x, direction3F32.y, direction3F32.z)
         init {
-            require(directionSnapshotF64.x.isFinite() && directionSnapshotF64.y.isFinite() &&
-                surfaceScaleF32.isFinite() && coefficientF32.isFinite() &&
+            require(directionSnapshot3F32.x.isFinite() && directionSnapshot3F32.y.isFinite() && directionSnapshot3F32.z.isFinite() &&
+                surfaceDepthF32.isFinite() && coefficientF32.isFinite() && coefficientF32 >= 0f &&
                 (shininessF32 == null || shininessF32.isFinite()))
         }
-        public fun copyDirectionF64(): Vector2F64 = Vector2F64(directionSnapshotF64.x, directionSnapshotF64.y)
-        override fun copy(): LightingParametersV1 = Distant(copyDirectionF64(), lightColor, surfaceScaleF32, coefficientF32, shininessF32)
+        public fun copyDirection3F32(): Vector3F32 = Vector3F32(directionSnapshot3F32.x, directionSnapshot3F32.y, directionSnapshot3F32.z)
+        override fun copy(): LightingParametersV1 = Distant(copyDirection3F32(), lightColor, surfaceDepthF32, coefficientF32, shininessF32)
     }
 
     public class Point(
@@ -131,6 +132,31 @@ public sealed interface LightingParametersV1 {
         override fun copy(): LightingParametersV1 = Spot(copyLocationF64(), copyTargetF64(), specularExponentF32,
             cutoffAngleF32, lightColor, surfaceScaleF32, coefficientF32, shininessF32)
     }
+}
+
+/** Per-edge alpha-Sobel sampling is frozen with the lighting pass, never inferred from an attachment. */
+public enum class W6dSobelEdgeModeV1 { CLAMP, DECAL }
+
+public class W6dSobelSamplingV1 internal constructor(
+    outputToInputOffsetTargetLocalI32: Point2I32,
+    childOutputTargetLocalI32: RectI32,
+    requiredInputTargetLocalI32: RectI32,
+    public val leftMode: W6dSobelEdgeModeV1,
+    public val topMode: W6dSobelEdgeModeV1,
+    public val rightMode: W6dSobelEdgeModeV1,
+    public val bottomMode: W6dSobelEdgeModeV1,
+) {
+    private val offsetSnapshot = Point2I32(outputToInputOffsetTargetLocalI32.x, outputToInputOffsetTargetLocalI32.y)
+    private val childSnapshot = childOutputTargetLocalI32.copy()
+    private val requiredSnapshot = requiredInputTargetLocalI32.copy()
+
+    init {
+        require(!childSnapshot.isEmpty && !requiredSnapshot.isEmpty)
+    }
+
+    public fun copyOutputToInputOffsetTargetLocalI32(): Point2I32 = Point2I32(offsetSnapshot.x, offsetSnapshot.y)
+    public fun copyChildOutputTargetLocalI32(): RectI32 = childSnapshot.copy()
+    public fun copyRequiredInputTargetLocalI32(): RectI32 = requiredSnapshot.copy()
 }
 
 /**
@@ -363,8 +389,10 @@ public sealed interface FilterPassOperationV1 {
         parameters: LightingParametersV1,
         override val bounds: FilterBoundsPlanV1,
         override val kind: FilterImplementationKindV1,
+        sobelSampling: W6dSobelSamplingV1? = null,
     ) : FilterPassOperationV1 {
         private val parametersSnapshot = parameters.copy()
+        private val sobelSamplingSnapshot = sobelSampling
         init {
             require(kind == when (family) {
                 LightingFamilyV1.DISTANT_DIFFUSE -> FilterImplementationKindV1.DISTANT_DIFFUSE
@@ -385,8 +413,12 @@ public sealed interface FilterPassOperationV1 {
                 LightingFamilyV1.SPOT_SPECULAR,
                 -> parametersSnapshot is LightingParametersV1.Spot
             })
+            require((family == LightingFamilyV1.DISTANT_DIFFUSE) == (sobelSamplingSnapshot != null)) {
+                "Only the admitted distant-diffuse slice carries its frozen Sobel sampling recipe."
+            }
         }
         public fun copyParameters(): LightingParametersV1 = parametersSnapshot.copy()
+        public fun copySobelSamplingOrNull(): W6dSobelSamplingV1? = sobelSamplingSnapshot
     }
 
     public class Picture(

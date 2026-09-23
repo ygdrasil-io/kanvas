@@ -12,6 +12,7 @@ import org.graphiks.kanvas.gpu.renderer.filters.GPUW6cMorphologyPass
 import org.graphiks.kanvas.gpu.renderer.filters.GPUW6cMultiInputPass
 import org.graphiks.kanvas.gpu.renderer.filters.GPUW6cSpatialSamplingPass
 import org.graphiks.kanvas.gpu.renderer.filters.GPUW6dAdvancedSamplingPass
+import org.graphiks.kanvas.gpu.renderer.filters.GPUW6dDistantDiffusePass
 import org.graphiks.kanvas.gpu.renderer.recording.*
 import org.graphiks.kanvas.gpu.renderer.wgsl.W6bMaskCoverageSnippet
 import org.graphiks.kanvas.gpu.renderer.wgsl.W6bSeparableBlurSnippet
@@ -765,7 +766,20 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     W6A_VERTEX_SHADER + GPUW6dAdvancedSamplingPass.fragment(binding.program),
                                     outputExtent.width, outputExtent.height, pass, owned)
                             }
-                            is FilterPassOperationV1.Lighting,
+                            is FilterPassOperationV1.Lighting -> {
+                                require(operation.family == LightingFamilyV1.DISTANT_DIFFUSE) {
+                                    "Unsupported W6d lighting family reached native materialization."
+                                }
+                                val binding = requireNotNull(pass.frozenSamplingProgram) {
+                                    "W6d distant diffuse lost its frozen program/binding contract."
+                                }
+                                require(binding.inputs() == pass.inputs() && binding.output == pass.output)
+                                val program = binding.program as? W6dSamplingProgramV1.DistantDiffuse
+                                    ?: error("W6d distant diffuse received a non-lighting frozen recipe.")
+                                renderOperands += multiInputRender(stepIndex, views.getValue(binding.output), binding.inputs().map(views::getValue), generation,
+                                    W6A_VERTEX_SHADER + GPUW6dDistantDiffusePass.fragment(program),
+                                    outputExtent.width, outputExtent.height, pass, owned)
+                            }
                             is FilterPassOperationV1.Picture,
                             is FilterPassOperationV1.RuntimeImageOpacity,
                             -> error("W6d frozen operation ${operation.kind} reached materialization before its owning slice.")
