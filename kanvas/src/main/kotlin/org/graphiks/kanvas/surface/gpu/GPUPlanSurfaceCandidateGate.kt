@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
+import java.util.ArrayDeque
+import java.util.IdentityHashMap
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.canvas.DrawPathSourceOperation
 import org.graphiks.kanvas.surface.GPUColorFormat
@@ -10,6 +12,54 @@ internal object GPUPlanSurfaceCandidateGate {
     /** Layers have their own terminal planner ownership before any format or effect filtering. */
     fun ownsW6aLayers(operations: List<DisplayOp>): Boolean = operations.any {
         it is DisplayOp.BeginLayer || it is DisplayOp.EndLayer
+    }
+
+    /**
+     * Captured W6b filters select W6 even when they are recorded inside a nested Picture.
+     * Repeated picture instances are inspected once by identity and the traversal fails closed
+     * at the same bounded graph scale as capture, rather than risking a legacy continuation.
+     */
+    fun ownsW6bFilters(operations: List<DisplayOp>): Boolean {
+        val pending = ArrayDeque<List<DisplayOp>>()
+        pending.addLast(operations)
+        val seenPictures = IdentityHashMap<org.graphiks.kanvas.picture.Picture, Boolean>()
+        var inspectedI32 = 0
+        while (pending.isNotEmpty()) {
+            pending.removeLast().forEach { operation ->
+                inspectedI32 = try {
+                    Math.addExact(inspectedI32, 1)
+                } catch (_: ArithmeticException) {
+                    return true
+                }
+                if (inspectedI32 > W6B_PICTURE_VISIT_LIMIT_I32) return true
+                if (operation.paintOrNull()?.let { it.imageFilter != null || it.maskFilter != null } == true ||
+                    (operation as? DisplayOp.BeginLayer)?.rec?.backdrop != null
+                ) return true
+                if (operation is DisplayOp.DrawPicture && seenPictures.put(operation.picture, true) == null) {
+                    pending.addLast(operation.picture.ops)
+                }
+            }
+        }
+        return false
+    }
+
+    private fun DisplayOp.paintOrNull(): org.graphiks.kanvas.paint.Paint? = when (this) {
+        is DisplayOp.DrawRect -> paint
+        is DisplayOp.DrawRRect -> paint
+        is DisplayOp.DrawPath -> paint
+        is DisplayOp.DrawImage -> paint
+        is DisplayOp.DrawText -> paint
+        is DisplayOp.BeginLayer -> rec.paint
+        is DisplayOp.DrawPoint -> paint
+        is DisplayOp.DrawPoints -> paint
+        is DisplayOp.DrawDRRect -> paint
+        is DisplayOp.DrawImageNine -> paint
+        is DisplayOp.DrawImageLattice -> paint
+        is DisplayOp.DrawPicture -> paint
+        is DisplayOp.DrawVertices -> paint
+        is DisplayOp.DrawMesh -> paint
+        is DisplayOp.DrawAtlas -> paint
+        else -> null
     }
 
     /** Recognition routes pending composed geometry to its owned planner refusal. */
@@ -143,4 +193,6 @@ internal object GPUPlanSurfaceCandidateGate {
                     operation is DisplayOp.SetClip ||
                     operation is DisplayOp.Annotation
             })
+
+    private const val W6B_PICTURE_VISIT_LIMIT_I32: Int = 4_096
 }

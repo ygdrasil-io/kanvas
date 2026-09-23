@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.plan.FilterImplementationKindV1
 import org.graphiks.kanvas.gpu.plan.PlanPass
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.passes.*
@@ -18,12 +19,30 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
         val pass = graph.passes()[index - 1]
         val geometryBinding = physical.geometryBinding(pass.id)
         val indexedGeometry = geometryBinding != null
-        val w4e = physical.w4eGeometryBinding(pass.id)?.let { requireNotNull(render).drawPackets.single() }
+        // A FilterCoverage source with a frozen stencil producer replays the producer and
+        // cover in this one W6b scope.  It cannot use the single-packet W4e stream shell.
+        val stencilCoverage = (pass as? PlanPass.FilterCoverageSourcePass)
+            ?.rasterBinding?.depthStencil != null
+        val w4e = physical.w4eGeometryBinding(pass.id)
+            ?.takeUnless { stencilCoverage }
+            ?.let { requireNotNull(render).drawPackets.single() }
         val referenced = if (render != null) listOf(render.target) + render.resourceUses.map { it.resource }
             else copy?.let { listOf(it.source, it.destination) }
                 ?: (step as GPUFrameStep.ReadbackCopyStep).let { listOf(it.source, it.staging) }
         val labels = referenced.map { "${it::class.simpleName}:${it.value}@${requireNotNull(generations[it])}" }
         val composite = pass is PlanPass.LayerComposite
+        val fullscreen = pass is PlanPass.PictureSourcePass || pass is PlanPass.PictureComposite ||
+            pass is PlanPass.FilterPass || pass is PlanPass.FilterComposite ||
+            pass is PlanPass.PictureAggregateBeginPass || pass is PlanPass.PictureAggregateSealPass ||
+            pass is PlanPass.FilterSourceClear || pass is PlanPass.FilterCoverageSourcePass ||
+            pass is PlanPass.FilterCoverageRetainPass
+        val frozenShadow = (pass as? PlanPass.FilterPass)?.operation?.kind in setOf(
+            FilterImplementationKindV1.DROP_SHADOW_COLORIZE,
+            FilterImplementationKindV1.DROP_SHADOW_COMPOSITE,
+        )
+        require(!frozenShadow || render != null && render.drawPackets.isEmpty()) {
+            "W6b shadow lowering accepts only its frozen fullscreen pass."
+        }
         val kind = if (copy != null) GPUEncoderOperationKind.Copy else if (render == null) GPUEncoderOperationKind.Readback
             else if (composite) GPUEncoderOperationKind.LayerComposite else GPUEncoderOperationKind.Render
         val stream = if (kind != GPUEncoderOperationKind.Render) null else if (w4e != null)
@@ -48,7 +67,26 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
                 }
                 add(GPUPassCommand.EndRenderPass(pass.id.value))
             })
-        val keys = if (w4e != null) w4eNativeOperandKeysV6(w4e, commonSource = true) else if (copy != null) listOf(
+        // A frozen stencil-cover FilterCoverage source replays its existing W4 producer and
+        // cover packets into the coverage target.  That is one sealed W6b pass with two
+        // command groups, so its operand contract must describe both groups rather than the
+        // ordinary single fullscreen FilterCoverage shell.
+        val keys = if (stencilCoverage) buildList {
+            add(key(GPUPreparedNativeOperandRole.RenderColorTarget, GPUPreparedNativeOperandKind.TextureView,
+                "w6a.$index.coverage.target"))
+            add(key(GPUPreparedNativeOperandRole.RenderDepthStencilTarget, GPUPreparedNativeOperandKind.TextureView,
+                "w6a.$index.coverage.depth-stencil"))
+            repeat(2) { packet ->
+                add(key(GPUPreparedNativeOperandRole.RenderPipeline, GPUPreparedNativeOperandKind.RenderPipeline,
+                    "w6a.$index.coverage.pipeline.$packet"))
+                add(key(GPUPreparedNativeOperandRole.RenderBindGroup, GPUPreparedNativeOperandKind.BindGroup,
+                    "w6a.$index.coverage.bind.$packet"))
+                add(key(GPUPreparedNativeOperandRole.RenderVertexBuffer, GPUPreparedNativeOperandKind.Buffer,
+                    "w6a.$index.coverage.vertex.$packet"))
+                add(key(GPUPreparedNativeOperandRole.RenderIndexBuffer, GPUPreparedNativeOperandKind.Buffer,
+                    "w6a.$index.coverage.index.$packet"))
+            }
+        } else if (w4e != null) w4eNativeOperandKeysV6(w4e, commonSource = true) else if (copy != null) listOf(
             key(GPUPreparedNativeOperandRole.CopySource, GPUPreparedNativeOperandKind.Texture, "w6a.$index.copy.source"),
             key(GPUPreparedNativeOperandRole.CopyDestination, GPUPreparedNativeOperandKind.Texture, "w6a.$index.copy.destination"),
         ) else if (render == null) listOf(
@@ -58,7 +96,7 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
             add(key(GPUPreparedNativeOperandRole.RenderColorTarget, GPUPreparedNativeOperandKind.TextureView, "w6a.$index.target"))
             if (pass is PlanPass.StencilGeometryProducerV3 || pass is PlanPass.StencilCover)
                 add(key(GPUPreparedNativeOperandRole.RenderDepthStencilTarget, GPUPreparedNativeOperandKind.TextureView, "w6a.$index.depth-stencil"))
-            repeat(if (composite) 1 else render.drawPackets.size) { draw ->
+            repeat(if (composite || fullscreen) 1 else render.drawPackets.size) { draw ->
                 add(key(GPUPreparedNativeOperandRole.RenderPipeline, GPUPreparedNativeOperandKind.RenderPipeline, "w6a.$index.pipeline.$draw"))
                 add(key(GPUPreparedNativeOperandRole.RenderBindGroup, GPUPreparedNativeOperandKind.BindGroup, "w6a.$index.bind.$draw"))
                 if (indexedGeometry) {
@@ -69,7 +107,7 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
             }
         }
         GPUCommandEncoderScopePlan(index, kind, sourceTaskIds = step.sourceTaskIds, sourcePacketIds = render?.drawPackets.orEmpty().map { it.packetId },
-            facadeOperationClasses = stream?.commandLabels ?: if (composite) listOf("beginRenderPass", "setRenderPipeline", "setBindGroup", "draw", "endRenderPass")
+            facadeOperationClasses = stream?.commandLabels ?: if (composite || fullscreen) listOf("beginRenderPass", "setRenderPipeline", "setBindGroup", "draw", "endRenderPass")
                 else if (copy != null) List(copy.regions.size) { "copyResource" } else listOf("copyTextureToBuffer"),
             targetGeneration = targetGeneration, resourceGenerationLabels = labels, passCommandStream = stream).attachNativeOperandKeys(keys, w6aFrameV1 = this)
     }

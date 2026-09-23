@@ -217,6 +217,9 @@ public class RenderGraph private constructor(
             packed: PackedFrameSourcesV4, source: SourcePhysicalConstructionV1): RenderGraph {
             require(construction.capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID)
             val scopes = frame.scopes()
+            // A malformed frozen Picture stream must retain its W6b diagnostic instead of being
+            // pre-empted by a generic W6a scope assertion below.
+            validatePictureStreamAggregates(frame, construction.resources(), construction.passes(), construction.dependencies())
             val byScope = scopes.associateBy { it.id }
             require(byScope.size == scopes.size)
             require(scopes.all { scope ->
@@ -226,6 +229,9 @@ public class RenderGraph private constructor(
             require(scopes.map { it.targetResource }.toSet() == construction.resources()
                 .filter { it.role == PlanResourceRole.LayerTarget }.map { it.id }.toSet())
             val rootTarget = construction.resources().single { it.role == PlanResourceRole.LogicalTarget }.id
+            fun parentTarget(scope: LayerScopePlanV1): PlanResourceId = scope.parentTargetResource
+                ?: scope.parentId?.let { byScope.getValue(it).targetResource }
+                ?: rootTarget
             val passesById = construction.passes().associateBy { it.id }
             val passOrder = construction.passes().mapIndexed { indexI32, pass -> pass.id to indexI32 }.toMap()
             val initialized = mutableSetOf<LayerScopeIdI32>()
@@ -248,7 +254,7 @@ public class RenderGraph private constructor(
                             }
                             is LayerInitializationPlanV1.PreviousCopy -> {
                                 val pass = passesById[step.passId] as? PlanPass.TextureCopy
-                                val expectedParentTarget = scope.parentId?.let { byScope.getValue(it).targetResource } ?: rootTarget
+                                val expectedParentTarget = parentTarget(scope)
                                 require(initialization.parentTarget == expectedParentTarget &&
                                     initialization.layerTarget == scope.targetResource && pass != null &&
                                     pass.source == initialization.parentTarget &&
@@ -269,16 +275,28 @@ public class RenderGraph private constructor(
                             is PlanPass.StencilCover -> pass.target == scope.targetResource && pass.load == AttachmentLoadPlan.Load
                             is PlanPass.ClipMaskInitialize, is PlanPass.ClipMaskProducer, is PlanPass.ClipMaskFold ->
                                 source.w4eGeometry.any { it.target == scope.targetResource && step.passId in it.graphPassIds() }
+                            is PlanPass.FilterComposite -> pass.destination == scope.targetResource &&
+                                pass.replacedLayerSource == null && (pass.operation is FilterCompositeOperationV1.Draw ||
+                                    // Picture terminals are real ordered child work, not a synthetic layer restore.
+                                    pass.operation is FilterCompositeOperationV1.Picture)
+                            is PlanPass.PictureSourcePass -> pass.parentTarget == scope.targetResource
+                            is PlanPass.PictureComposite -> pass.destination == scope.targetResource
                             else -> false
                         }
                         require(scope.id in initialized && scope.id !in restored && exactChild)
                     }
                     is LayerExecutionStepV1.Restore -> {
-                        val pass = passesById[step.passId] as? PlanPass.LayerComposite
-                        val expectedDestination = scope.parentId?.let { byScope.getValue(it).targetResource } ?: rootTarget
-                        require(scope.id in initialized && restored.add(scope.id) && pass != null && pass.scopeId == scope.id &&
-                            pass.source == scope.targetResource && pass.destination == expectedDestination &&
-                            (pass.destination == rootTarget) == (scope.parentId == null) && pass.restore === scope.restore)
+                        val expectedDestination = parentTarget(scope)
+                        val exactRestore = when (val pass = passesById[step.passId]) {
+                            is PlanPass.LayerComposite -> pass.scopeId == scope.id && pass.source == scope.targetResource &&
+                                pass.destination == expectedDestination && pass.restore === scope.restore
+                            is PlanPass.FilterComposite -> (pass.operation as? FilterCompositeOperationV1.Layer)?.let { operation ->
+                                pass.replacedLayerSource == scope.targetResource && pass.destination == expectedDestination &&
+                                    operation.restore === scope.restore
+                            } == true
+                            else -> false
+                        }
+                        require(scope.id in initialized && restored.add(scope.id) && exactRestore)
                         restoreOrder[scope.id] = stepIndexI32
                     }
                 }
@@ -291,8 +309,14 @@ public class RenderGraph private constructor(
                     scope.endCommandIndexI32 < byScope.getValue(parentId).endCommandIndexI32
             } ?: true })
             require(scopes.all { scope ->
-                val restore = construction.passes().filterIsInstance<PlanPass.LayerComposite>().singleOrNull { it.scopeId == scope.id }
-                restore?.source == scope.targetResource && restore.restore === scope.restore
+                val restorePass = construction.passes().singleOrNull { pass -> when (pass) {
+                    is PlanPass.LayerComposite -> pass.scopeId == scope.id && pass.source == scope.targetResource &&
+                        pass.restore === scope.restore
+                    is PlanPass.FilterComposite -> (pass.operation as? FilterCompositeOperationV1.Layer)?.restore === scope.restore &&
+                        pass.replacedLayerSource == scope.targetResource
+                    else -> false
+                } }
+                restorePass != null
             })
             return RenderGraph(construction.id, construction.capabilityId, construction.targetExtent,
                 construction.colorFormat, construction.capabilities, construction.budget, construction.visualCommandCount,
@@ -336,6 +360,10 @@ public class RenderGraph private constructor(
             w5bW4eFacts: W4eGeometryFactsV6? = null,
         ): RenderGraphConstruction {
             val stopSlab = materialPlanTable?.gradientStopSlab
+            val maskShaderBindings = passes.filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
+                ((pass.operation as? FilterPassOperationV1.MaskShader)?.materialBinding as?
+                    FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned)
+            }
             if (stopSlab != null) {
                 visualDraws(passes).forEach { draw ->
                     val authority = draw.materialAuthority
@@ -362,15 +390,37 @@ public class RenderGraph private constructor(
                             stopSlab, requireNotNull(authority.coordinates))) { W5cPlanDiagnostics.NumericDomainUnbounded }
                     }
                 }
+                // A W6b MaskShader has no visual draw packet, but its MaterialV1/V2 authority
+                // was issued by the same W5 row and must receive the identical stop slab.
+                // Validate that frozen projection here rather than asking native lowering to
+                // recover a private coordinate field from the material table.
+                maskShaderBindings.forEach { binding ->
+                    val authority = binding.materialAuthority
+                    var indexI32 = authority.materialPlanRef().indexI32
+                    while (materialPlanTable.entry(MaterialPlanRef(indexI32)).bindings is MaterialBindingPlan.OpacityF32V1) indexI32--
+                    val entry = materialPlanTable.entry(MaterialPlanRef(indexI32))
+                    if (entry.bindings is MaterialBindingPlan.GradientV2) {
+                        require(authority is PlanDrawMaterialAuthority.MaterialV2 &&
+                            entry.program is GradientAddressingProgramV2 && entry.bindings.numericAuthority.authenticates(
+                                entry.program, entry.bindings, stopSlab, authority.coordinates)) {
+                            W5dPlanDiagnostics.CoordinatePlanSchema
+                        }
+                    }
+                    if (entry.bindings is MaterialBindingPlan.GradientV1) {
+                        require(authority is PlanDrawMaterialAuthority.MaterialV1 && authority.coordinates != null &&
+                            entry.bindings.numericAuthority.authenticates(entry.program, entry.bindings,
+                                stopSlab, authority.coordinates)) { W5cPlanDiagnostics.NumericDomainUnbounded }
+                    }
+                }
             }
-            if (stopSlab != null && visualDraws(passes).any {
-                    materialPlanTable.sourceUsesGradientStopSlab(it.materialAuthority.materialPlanRef())
+            if (stopSlab != null && (visualDraws(passes).map { it.materialAuthority.materialPlanRef() } +
+                    maskShaderBindings.map { it.material }).any {
+                    materialPlanTable.sourceUsesGradientStopSlab(it)
                 } && resources.none { it.role == PlanResourceRole.GradientStopData }) {
                 stopSlab.requireStorageCapabilities(capabilities)
-                val sourceRequirements = visualDraws(passes).filter {
-                    it.materialAuthority.colorSourceCoordinatesV4() == null
-                }.map { draw ->
-                    val authority = draw.materialAuthority
+                val sourceRequirements = visualDraws(passes).map { it.materialAuthority } +
+                    maskShaderBindings.map { it.materialAuthority }
+                val nonV4Requirements = sourceRequirements.filter { it.colorSourceCoordinatesV4() == null }.map { authority ->
                     val source = RawMaterialRequirementsV2.of(materialPlanTable, authority.materialPlanRef())
                     require(source.fitsUniformBinding(capabilities)) {
                         if (authority is PlanDrawMaterialAuthority.MaterialV2) W5dPlanDiagnostics.CoordinateUniformBudget else W5cPlanDiagnostics.StorageUnavailable
@@ -379,7 +429,7 @@ public class RenderGraph private constructor(
                 }
                 val peakI64 = Math.addExact(peakFrameLocalBytes, stopSlab.byteSizeI64)
                 if (capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID) W6aLayerPlanBudget.requireWithin(peakI64, budget)
-                else RawMaterialRequirementsV2.requireFrameBudget(sourceRequirements, peakI64, budget, W5cPlanDiagnostics.StopBudget)
+                else RawMaterialRequirementsV2.requireFrameBudget(nonV4Requirements, peakI64, budget, W5cPlanDiagnostics.StopBudget)
                 val stopResource = PlanResource.of(PlanResourceRole.GradientStopData, 0, PlanResourceKind.Buffer,
                     null, null, stopSlab.byteSizeI64, setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination),
                     PlanResourceLifetime.FrameLocal, 0, passes.size)
@@ -388,9 +438,10 @@ public class RenderGraph private constructor(
             }
             // The logical inventory and native upload refer to the same issued frame slab.
             // A role name alone is never authority to add an unreferenced storage buffer.
-            val noiseSlabs = materialPlanTable?.let { table -> visualDraws(passes).mapNotNull { draw ->
-                val coordinates = draw.materialAuthority.colorSourceCoordinatesV4() ?: return@mapNotNull null
-                val root = draw.materialAuthority.materialPlanRef()
+            val sourceAuthorities = visualDraws(passes).map { it.materialAuthority } + maskShaderBindings.map { it.materialAuthority }
+            val noiseSlabs = materialPlanTable?.let { table -> sourceAuthorities.mapNotNull { authority ->
+                val coordinates = authority.colorSourceCoordinatesV4() ?: return@mapNotNull null
+                val root = authority.materialPlanRef()
                 val proof = table.colorSourceProofV4(root)
                 val slab = proof.noiseTableSlab ?: return@mapNotNull null
                 val definition = requireNotNull(proof.composedDefinition) { W5gPlanDiagnostics.Schema }
@@ -511,8 +562,7 @@ public class RenderGraph private constructor(
             validatePassCapabilities(passes, capabilities)
             if (capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID) {
                 validateW6aLayerTopology(resources, passes, dependencies, targetExtent, visualCommandCount, capabilities.copyBytesPerRowAlignment)
-                require(peak(resources, passes.size) == peakFrameLocalBytes)
-                W6aLayerPlanBudget.requireWithin(peakFrameLocalBytes, budget)
+                require(W6aLayerPlanBudget.peak(resources, passes.size, budget) == peakFrameLocalBytes)
                 return
             }
             validateW5bDestinationVersions(passes)
@@ -711,6 +761,7 @@ public class RenderGraph private constructor(
                 pass.drawDataResources.vertex, pass.drawDataResources.index, pass.drawDataResources.uniform)
             is PlanPass.RenderPass -> buildList {
                 add(pass.target)
+                pass.coverageSource?.let(::add)
                 pass.draws().mapNotNull { (it.blend as? BlendPlan.DestinationReadV1)?.snapshotResource }.forEach(::add)
                 pass.drawDataResources?.let { addAll(listOf(it.vertex, it.index, it.uniform)) }
                 pass.draws().flatMap { it.clipStrategies() }.forEach { strategy ->
@@ -742,10 +793,53 @@ public class RenderGraph private constructor(
                 pass.drawDataResources.index,
                 pass.drawDataResources.uniform,
                 (pass.draw.blend as? BlendPlan.DestinationReadV1)?.snapshotResource,
+                pass.coverageSource,
             )
             is PlanPass.TextureCopy -> listOf(pass.source, pass.destination)
             is PlanPass.LayerComposite -> listOf(pass.source, pass.destination)
-            is PlanPass.FilterPass -> pass.inputs() + pass.output
+            is PlanPass.FilterSourceClear -> listOf(pass.output, pass.boundSourceId)
+            is PlanPass.FilterCoverageSourcePass -> buildList {
+                add(pass.output)
+                // A sealed Picture alpha source is sampled by the already-frozen coverage
+                // pass.  Retain this producer/consumer edge for physical lifetime planning;
+                // the renderer receives the published resource ID and never discovers it.
+                pass.sealedAlphaSource?.let { add(it.sealedSourceId) }
+                pass.rasterBinding?.let { binding ->
+                    binding.drawDataResources?.let { data ->
+                        add(data.vertex)
+                        add(data.index)
+                        add(data.uniform)
+                    }
+                    binding.depthStencil?.let(::add)
+                }
+            }
+            is PlanPass.FilterCoverageRetainPass -> listOf(pass.source, pass.output)
+            is PlanPass.PictureAggregateBeginPass -> listOf(pass.target, pass.parentTarget)
+            is PlanPass.PictureAggregateSealPass -> listOf(pass.aggregateTarget, pass.sealedSource)
+            is PlanPass.PictureSourcePass -> buildList {
+                add(pass.output)
+                pass.coverageSource?.let(::add)
+                pass.layerInput?.let(::add)
+                pass.parentTarget?.let(::add)
+                pass.graphTextureRequest?.let { add(it.sealedSourceId) }
+                pass.graphTextureOperand?.let { operand -> add(operand.sealedSourceId); add(operand.uniformResource) }
+            }
+            is PlanPass.PictureComposite -> listOf(pass.source, pass.destination)
+            is PlanPass.FilterPass -> buildList {
+                addAll(pass.inputs())
+                add(pass.output)
+                (pass.operation as? FilterPassOperationV1.MaskShader)
+                    ?.materialBinding
+                    ?.let { binding ->
+                        if (binding is FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned) {
+                            add(binding.uniformResource)
+                        }
+                    }
+                (pass.operation as? FilterPassOperationV1.MaskTable)?.let { table ->
+                    add(table.tableResourceId)
+                }
+            }
+            is PlanPass.FilterComposite -> listOfNotNull(pass.source, pass.destination, pass.replacedLayerSource)
             is PlanPass.ResolvePass -> listOf(pass.source, pass.destination)
             is PlanPass.ReadbackPass -> listOf(pass.source, pass.staging)
             is PlanPass.ClipMaskInitialize -> listOf(pass.output)
@@ -860,7 +954,15 @@ public class RenderGraph private constructor(
                         it is PlanPass.StencilCover ||
                         it is PlanPass.ClipMaskInitialize ||
                         it is PlanPass.ClipMaskProducer ||
-                        it is PlanPass.ClipMaskFold
+                        it is PlanPass.ClipMaskFold ||
+                        it is PlanPass.FilterSourceClear ||
+                        it is PlanPass.FilterCoverageSourcePass ||
+                        it is PlanPass.FilterCoverageRetainPass ||
+                        it is PlanPass.PictureAggregateBeginPass ||
+                        it is PlanPass.PictureAggregateSealPass ||
+                        it is PlanPass.PictureSourcePass ||
+                        it is PlanPass.PictureComposite ||
+                        it is PlanPass.FilterComposite
                 }
             ) {
                 require(PlanOperationCapability.RenderPass in capabilities.supportedOperations()) {

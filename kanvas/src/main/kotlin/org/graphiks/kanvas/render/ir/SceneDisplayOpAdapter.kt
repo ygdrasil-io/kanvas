@@ -26,10 +26,16 @@ import org.graphiks.kanvas.types.Vertices
 
 /** Reconstructs public display operations from their typed captured scene representation. */
 public object SceneDisplayOpAdapter {
-    public fun toDisplayOps(scene: SceneSnapshot): List<DisplayOp> = scene.map(::toDisplayOp).toList()
+    public fun toDisplayOps(scene: SceneSnapshot): List<DisplayOp> {
+        val filters = FilterRestoreContext(scene.filterTable)
+        return scene.map { command -> toDisplayOp(command, filters) }.toList()
+    }
 
-    private fun toDisplayOp(command: SceneCommand): DisplayOp = when (command) {
-        is SceneCommand.Draw -> draw(command.node)
+    private fun toDisplayOp(
+        command: SceneCommand,
+        filters: FilterRestoreContext,
+    ): DisplayOp = when (command) {
+        is SceneCommand.Draw -> draw(command.node, filters)
         is SceneCommand.DrawColor -> DisplayOp.DrawColor(
             command.color,
             org.graphiks.kanvas.paint.BlendMode.valueOf(command.mode.name),
@@ -42,8 +48,8 @@ public object SceneDisplayOpAdapter {
         is SceneCommand.BeginLayer -> DisplayOp.BeginLayer(
             SaveLayerRec(
                 bounds = command.descriptor.copyBounds(),
-                paint = command.descriptor.paint?.let(PaintSceneAdapter::restore),
-                backdrop = command.descriptor.backdrop.singleImageFilterOrNull()?.let(PaintSceneAdapter::restoreImageFilter),
+                paint = command.descriptor.paint?.let { restorePaint(it, filters) },
+                backdrop = command.descriptor.backdrop.singleImageFilterOrNull()?.let { restoreFilter(it, filters) },
                 compositeClip = command.descriptor.compositeClip?.toClip(),
                 initWithPrevious = command.descriptor.initWithPrevious,
             ),
@@ -55,9 +61,12 @@ public object SceneDisplayOpAdapter {
         is SceneCommand.State -> throw IllegalArgumentException("Opaque state commands are not public DisplayOps")
     }
 
-    private fun draw(node: DrawNode): DisplayOp {
+    private fun draw(
+        node: DrawNode,
+        filters: FilterRestoreContext,
+    ): DisplayOp {
         val clip = node.clip.toClip()
-        val paint = node.paint?.let(PaintSceneAdapter::restore)
+        val paint = node.paint?.let { restorePaint(it, filters) }
         fun requiredPaint(): Paint = requireNotNull(paint) { "Captured public draw is missing its Paint" }
         fun image(): org.graphiks.kanvas.image.Image = ResourceSceneAdapter.toImage(
             requireNotNull(node.resource) { "Captured image draw is missing its image resource" },
@@ -171,6 +180,18 @@ public object SceneDisplayOpAdapter {
         }
     }
 
+    private fun restorePaint(
+        node: PaintNode,
+        filters: FilterRestoreContext,
+    ): Paint = PaintSceneAdapter.restoreNode(node).let { restored ->
+        node.imageFilter?.let { restored.copy(imageFilter = restoreFilter(it, filters)) } ?: restored
+    }
+
+    private fun restoreFilter(
+        node: CapturedFilterRootV1,
+        filters: FilterRestoreContext,
+    ): org.graphiks.kanvas.paint.ImageFilter = filters.restore(node)
+
     private fun GeometryNode.IndexedMesh.toVertices(): Vertices = Vertices(
         mode = VertexMode.valueOf(primitiveMode.name),
         positions = (0 until vertexCount).map(::vertexAt),
@@ -214,10 +235,53 @@ public object SceneDisplayOpAdapter {
     }
 }
 
-private fun EffectStack.singleImageFilterOrNull(): ImageFilterNode? = when (this) {
+private fun EffectStack.singleImageFilterOrNull(): CapturedFilterRootV1? = when (this) {
     EffectStack.Empty -> null
     is EffectStack.Entries -> {
-        require(effectCount == 1 && effectAt(0) is ImageFilterNode) { "Layer backdrop is not a single ImageFilter" }
-        effectAt(0) as ImageFilterNode
+        require(effectCount == 1 && effectAt(0) is CapturedFilterRootV1) { "Layer backdrop is not a single ImageFilter" }
+        effectAt(0) as CapturedFilterRootV1
     }
+}
+
+internal class FilterRestoreContext(private val table: CapturedFilterTableV1) {
+    private val filters = mutableMapOf<CapturedFilterNodeIdI32, org.graphiks.kanvas.paint.ImageFilter>()
+
+    fun restore(root: CapturedFilterRootV1): org.graphiks.kanvas.paint.ImageFilter = node(root.id)
+
+    private fun input(value: CapturedFilterInputV1): org.graphiks.kanvas.paint.ImageFilter? = when (value) {
+        CapturedFilterInputV1.ImplicitSource -> null
+        is CapturedFilterInputV1.Node -> node(value.id)
+        CapturedFilterInputV1.TransparentBlack,
+        is CapturedFilterInputV1.Picture,
+        is CapturedFilterInputV1.Backdrop,
+        -> throw IllegalArgumentException("Captured filter input is not public-replayable in W6b")
+    }
+
+    private fun node(id: CapturedFilterNodeIdI32): org.graphiks.kanvas.paint.ImageFilter = filters[id] ?: when (val value = table.nodeAt(id)) {
+        is CapturedFilterNodeV1.Crop -> org.graphiks.kanvas.paint.ImageFilter.Crop(value.crop.copy(), org.graphiks.kanvas.paint.TileMode.valueOf(value.tileMode.name), input(value.input))
+        is CapturedFilterNodeV1.Blur -> org.graphiks.kanvas.paint.ImageFilter.Blur(value.sigmaX, value.sigmaY, org.graphiks.kanvas.paint.TileMode.valueOf(value.tileMode.name), input(value.input))
+        is CapturedFilterNodeV1.DropShadow -> org.graphiks.kanvas.paint.ImageFilter.DropShadow(value.dx, value.dy, value.sigmaX, value.sigmaY, value.color, input(value.input), org.graphiks.kanvas.paint.DropShadowMode.valueOf(value.mode.name))
+        is CapturedFilterNodeV1.ColorFilter -> org.graphiks.kanvas.paint.ImageFilter.ColorFilter(PaintSceneAdapter.restoreColorFilter(value.filter), input(value.input))
+        is CapturedFilterNodeV1.Compose -> org.graphiks.kanvas.paint.ImageFilter.Compose(requireNotNull(input(value.outer)), requireNotNull(input(value.inner)))
+        is CapturedFilterNodeV1.Blend -> org.graphiks.kanvas.paint.ImageFilter.Blend(org.graphiks.kanvas.paint.BlendMode.valueOf(value.mode.name), requireNotNull(input(value.background)), requireNotNull(input(value.foreground)))
+        is CapturedFilterNodeV1.Dilate -> org.graphiks.kanvas.paint.ImageFilter.Dilate(value.radiusX, value.radiusY, input(value.input))
+        is CapturedFilterNodeV1.Erode -> org.graphiks.kanvas.paint.ImageFilter.Erode(value.radiusX, value.radiusY, input(value.input))
+        is CapturedFilterNodeV1.DistantLitDiffuse -> org.graphiks.kanvas.paint.ImageFilter.DistantLitDiffuse(org.graphiks.math.vector.Vector2F32(value.directionX, value.directionY), value.lightColor, value.surfaceScale, value.kd, input(value.input))
+        is CapturedFilterNodeV1.PointLitDiffuse -> org.graphiks.kanvas.paint.ImageFilter.PointLitDiffuse(value.location, value.lightColor, value.surfaceScale, value.kd, input(value.input))
+        is CapturedFilterNodeV1.SpotLitDiffuse -> org.graphiks.kanvas.paint.ImageFilter.SpotLitDiffuse(value.location, value.target, value.specularExponent, value.cutoffAngle, value.lightColor, value.surfaceScale, value.kd, input(value.input))
+        is CapturedFilterNodeV1.DistantLitSpecular -> org.graphiks.kanvas.paint.ImageFilter.DistantLitSpecular(org.graphiks.math.vector.Vector2F32(value.directionX, value.directionY), value.lightColor, value.surfaceScale, value.ks, value.shininess, input(value.input))
+        is CapturedFilterNodeV1.PointLitSpecular -> org.graphiks.kanvas.paint.ImageFilter.PointLitSpecular(value.location, value.lightColor, value.surfaceScale, value.ks, value.shininess, input(value.input))
+        is CapturedFilterNodeV1.SpotLitSpecular -> org.graphiks.kanvas.paint.ImageFilter.SpotLitSpecular(value.location, value.target, value.specularExponent, value.cutoffAngle, value.lightColor, value.surfaceScale, value.ks, value.shininess, input(value.input))
+        is CapturedFilterNodeV1.Offset -> org.graphiks.kanvas.paint.ImageFilter.Offset(value.dx, value.dy, input(value.input))
+        is CapturedFilterNodeV1.Tile -> org.graphiks.kanvas.paint.ImageFilter.Tile(value.src.copy(), value.dst.copy(), input(value.input))
+        is CapturedFilterNodeV1.Merge -> org.graphiks.kanvas.paint.ImageFilter.Merge(value.map { requireNotNull(input(it)) })
+        is CapturedFilterNodeV1.DisplacementMap -> org.graphiks.kanvas.paint.ImageFilter.DisplacementMap(org.graphiks.kanvas.paint.ColorChannel.valueOf(value.xChannelSelector.name.first().toString()), org.graphiks.kanvas.paint.ColorChannel.valueOf(value.yChannelSelector.name.first().toString()), value.scale, requireNotNull(input(value.displacement)), input(value.input))
+        is CapturedFilterNodeV1.Picture -> org.graphiks.kanvas.paint.ImageFilter.Picture(Picture(value.cullRect.copy(), SceneDisplayOpAdapter.toDisplayOps(value.scene)), value.src?.copy())
+        is CapturedFilterNodeV1.Magnifier -> org.graphiks.kanvas.paint.ImageFilter.Magnifier(value.src.copy(), value.zoom, value.inset, input(value.input))
+        is CapturedFilterNodeV1.MatrixConvolution -> org.graphiks.kanvas.paint.ImageFilter.MatrixConvolution(value.kernelSize, value.kernel.copyToFloatArray(), value.gain, value.bias, value.kernelOffset, org.graphiks.kanvas.paint.TileMode.valueOf(value.tileMode.name), value.convolveAlpha, input(value.input))
+        is CapturedFilterNodeV1.RuntimeEffect -> PaintSceneAdapter.restoreRuntimeImageFilter(
+            value,
+            value.associate { child -> child.name to input(child.input) },
+        )
+    }.also { filters[id] = it }
 }

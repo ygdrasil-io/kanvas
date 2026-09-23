@@ -39,6 +39,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class DisplayOpSceneAdapterTest {
+
     @Test
     fun `W4d public adapter preserves every stroke style and dash fact`() {
         val path = Path().apply {

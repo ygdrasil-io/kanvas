@@ -30,7 +30,7 @@ import org.graphiks.math.vector.Vector2F32
 /**
  * The owner of the versioned Picture payload.
  *
- * A v8/v9/v10/v11/v12/v13 archive starts with the public `KPIC` magic, its version integer and the
+ * A v8/v9/v10/v11/v12/v13/v14 archive starts with the public `KPIC` magic, its version integer and the
  * cull rectangle.  The following negative marker occupies the old v8
  * `opCount` slot: it can therefore never be mistaken for a valid historical
  * v8 op count.  Historical Task 8 v8 streams deliberately return [LegacyV8]
@@ -38,11 +38,11 @@ import org.graphiks.math.vector.Vector2F32
  */
 public object SceneArchiveCodec {
     private val magic: ByteArray = byteArrayOf(0x4b, 0x50, 0x49, 0x43)
-    private const val pictureVersion: Int = 13
+    private const val pictureVersion: Int = 14
     private const val irMarker: Int = -1_391_019_346
-    private const val schemaVersion: Int = 7
+    private const val schemaVersion: Int = 8
 
-    /** Encodes a deeply immutable Scene IR as the sole v13 Picture writer. */
+    /** Encodes a deeply immutable Scene IR as the sole v14 Picture writer. */
     public fun encodePicture(scene: SceneSnapshot, cullRect: RectF32): ByteArray {
         requireSemanticValidity(scene)
         val writer = ArchiveWriter()
@@ -81,6 +81,7 @@ public object SceneArchiveCodec {
                 11 -> 5
                 12 -> 6
                 13 -> 7
+                14 -> 8
                 else -> 0
             }
             if (decodedSchemaVersion !in 1..maxSchema) {
@@ -129,6 +130,7 @@ public sealed interface SceneArchiveDecodeResult {
 }
 
 private const val MAX_COLLECTION_SIZE = 1_000_000
+private const val MAX_CAPTURED_FILTER_GRAPH_NODES = 4_096
 private const val MAX_BINARY_SIZE = 64 * 1024 * 1024
 /*
  * Wire frames are more granular than semantic graph edges: a Picture scene
@@ -205,6 +207,7 @@ private class ArchiveWriter {
 
     fun scene(scene: SceneSnapshot): Unit = nested {
         i32(scene.extent.width); i32(scene.extent.height); colorSpace(scene.colorSpace)
+        filterTable(scene.filterTable)
         list(scene.toList()) { command(it) }
     }
 
@@ -241,7 +244,8 @@ private class ArchiveWriter {
         color(value.color); optional(value.shader, ::material); enum(value.blendMode)
         optional(value.blender, ::blender); optional(value.colorFilter, ::colorFilter)
         optional(value.maskFilter, ::maskFilter); optional(value.pathEffect, ::pathEffect)
-        optional(value.imageFilter, ::imageFilter); enum(value.style); f32(value.strokeWidth)
+        optional(value.imageFilter) { i32(it.id.valueI32) }
+        enum(value.style); f32(value.strokeWidth)
         enum(value.strokeCap); enum(value.strokeJoin); f32(value.strokeMiter); bool(value.antiAlias)
     }
 
@@ -424,7 +428,7 @@ private class ArchiveWriter {
         }
     }
     fun effects(value: EffectStack): Unit = when (value) { EffectStack.Empty -> i32(1); is EffectStack.Entries -> { i32(2); list(value.toList()) { effect(it) } } }
-    fun effect(value: EffectNode): Unit = when (value) { is ColorFilterNode -> { i32(1); colorFilter(value) }; is MaskFilterNode -> { i32(2); maskFilter(value) }; is PathEffectNode -> { i32(3); pathEffect(value) }; is ImageFilterNode -> { i32(4); imageFilter(value) } }
+    fun effect(value: EffectNode): Unit = when (value) { is ColorFilterNode -> { i32(1); colorFilter(value) }; is MaskFilterNode -> { i32(2); maskFilter(value) }; is PathEffectNode -> { i32(3); pathEffect(value) }; is CapturedFilterRootV1 -> { i32(4); i32(value.id.valueI32) }; is ImageFilterNode -> throw IllegalArgumentException("Recursive image filters are legacy-only") }
     fun colorFilter(value: ColorFilterNode): Unit = nested { when (value) {
         is ColorFilterNode.Matrix -> { i32(1); floats(value.values.copyToFloatArray()) }; is ColorFilterNode.Blend -> { i32(2); color(value.color); enum(value.mode) }
         is ColorFilterNode.Compose -> { i32(3); colorFilter(value.outer); colorFilter(value.inner) }; is ColorFilterNode.Table -> { i32(4); ubytes(value.table.copyToUByteArray()) }
@@ -435,10 +439,42 @@ private class ArchiveWriter {
     } }
     fun maskFilter(value: MaskFilterNode): Unit = nested { when (value) { is MaskFilterNode.Blur -> { i32(1); enum(value.style); f32(value.sigma) }; is MaskFilterNode.Shader -> { i32(2); material(value.material) }; is MaskFilterNode.Table -> { i32(3); ubytes(value.table.copyToUByteArray()) } } }
     fun pathEffect(value: PathEffectNode): Unit = nested { when (value) { is PathEffectNode.Dash -> { i32(1); floats(value.intervals.copyToFloatArray()); f32(value.phase) }; is PathEffectNode.Corner -> { i32(2); f32(value.radius) }; is PathEffectNode.Discrete -> { i32(3); f32(value.segmentLength); f32(value.deviation) }; is PathEffectNode.Path1D -> { i32(4); path(value.path); f32(value.advance); f32(value.phase); enum(value.style) }; is PathEffectNode.Path2D -> { i32(5); matrix(value.matrix); path(value.path) }; is PathEffectNode.Trim -> { i32(6); f32(value.start); f32(value.stop) } } }
+    fun filterTable(value: CapturedFilterTableV1) = list((0 until value.nodeCount).map { value.nodeAt(CapturedFilterNodeIdI32(it)) }, ::filterNode)
+    fun filterInput(value: CapturedFilterInputV1): Unit = when (value) {
+        CapturedFilterInputV1.ImplicitSource -> i32(1)
+        CapturedFilterInputV1.TransparentBlack -> i32(2)
+        is CapturedFilterInputV1.Node -> { i32(3); i32(value.id.valueI32) }
+        is CapturedFilterInputV1.Picture -> { i32(4); i32(value.id.valueI32) }
+        is CapturedFilterInputV1.Backdrop -> { i32(5); i32(value.id.valueI32) }
+    }
+    fun filterNode(value: CapturedFilterNodeV1): Unit = nested { when (value) {
+        is CapturedFilterNodeV1.Crop -> { i32(1); rect(value.crop); enum(value.tileMode); filterInput(value.input) }
+        is CapturedFilterNodeV1.Blur -> { i32(2); f32(value.sigmaX); f32(value.sigmaY); enum(value.tileMode); filterInput(value.input) }
+        is CapturedFilterNodeV1.DropShadow -> { i32(3); f32(value.dx); f32(value.dy); f32(value.sigmaX); f32(value.sigmaY); color(value.color); filterInput(value.input); enum(value.mode) }
+        is CapturedFilterNodeV1.ColorFilter -> { i32(4); colorFilter(value.filter); filterInput(value.input) }
+        is CapturedFilterNodeV1.Compose -> { i32(5); filterInput(value.outer); filterInput(value.inner) }
+        is CapturedFilterNodeV1.Blend -> { i32(6); enum(value.mode); filterInput(value.background); filterInput(value.foreground) }
+        is CapturedFilterNodeV1.Dilate -> { i32(7); f32(value.radiusX); f32(value.radiusY); filterInput(value.input) }
+        is CapturedFilterNodeV1.Erode -> { i32(8); f32(value.radiusX); f32(value.radiusY); filterInput(value.input) }
+        is CapturedFilterNodeV1.DistantLitDiffuse -> { i32(9); f32(value.directionX); f32(value.directionY); color(value.lightColor); f32(value.surfaceScale); f32(value.kd); filterInput(value.input) }
+        is CapturedFilterNodeV1.PointLitDiffuse -> { i32(10); point(value.location); color(value.lightColor); f32(value.surfaceScale); f32(value.kd); filterInput(value.input) }
+        is CapturedFilterNodeV1.SpotLitDiffuse -> { i32(11); point(value.location); point(value.target); f32(value.specularExponent); f32(value.cutoffAngle); color(value.lightColor); f32(value.surfaceScale); f32(value.kd); filterInput(value.input) }
+        is CapturedFilterNodeV1.DistantLitSpecular -> { i32(12); f32(value.directionX); f32(value.directionY); color(value.lightColor); f32(value.surfaceScale); f32(value.ks); f32(value.shininess); filterInput(value.input) }
+        is CapturedFilterNodeV1.PointLitSpecular -> { i32(13); point(value.location); color(value.lightColor); f32(value.surfaceScale); f32(value.ks); f32(value.shininess); filterInput(value.input) }
+        is CapturedFilterNodeV1.SpotLitSpecular -> { i32(14); point(value.location); point(value.target); f32(value.specularExponent); f32(value.cutoffAngle); color(value.lightColor); f32(value.surfaceScale); f32(value.ks); f32(value.shininess); filterInput(value.input) }
+        is CapturedFilterNodeV1.Offset -> { i32(15); f32(value.dx); f32(value.dy); filterInput(value.input) }
+        is CapturedFilterNodeV1.Tile -> { i32(16); rect(value.src); rect(value.dst); filterInput(value.input) }
+        is CapturedFilterNodeV1.Merge -> { i32(17); list(value.toList(), ::filterInput) }
+        is CapturedFilterNodeV1.DisplacementMap -> { i32(18); enum(value.xChannelSelector); enum(value.yChannelSelector); f32(value.scale); filterInput(value.displacement); filterInput(value.input) }
+        is CapturedFilterNodeV1.Picture -> { i32(19); scene(value.scene); rect(value.cullRect); optional(value.src, ::rect) }
+        is CapturedFilterNodeV1.Magnifier -> { i32(20); rect(value.src); f32(value.zoom); f32(value.inset); filterInput(value.input) }
+        is CapturedFilterNodeV1.MatrixConvolution -> { i32(21); size(value.kernelSize); floats(value.kernel.copyToFloatArray()); f32(value.gain); f32(value.bias); vector(value.kernelOffset); enum(value.tileMode); bool(value.convolveAlpha); filterInput(value.input) }
+        is CapturedFilterNodeV1.RuntimeEffect -> { i32(22); descriptor(value.descriptor); uniforms(value.uniforms()); optional(value.childShaderName, ::text); list(value.toList()) { text(it.name); filterInput(it.input) } }
+    } }
     fun imageFilter(value: ImageFilterNode): Unit = nested { when (value) {
         is ImageFilterNode.Crop -> { i32(1); rect(value.copyCrop()); enum(value.tileMode); optional(value.input, ::imageFilter) }
         is ImageFilterNode.Blur -> { i32(2); f32(value.sigmaX); f32(value.sigmaY); enum(value.tileMode); optional(value.input, ::imageFilter) }
-        is ImageFilterNode.DropShadow -> { i32(3); f32(value.dx); f32(value.dy); f32(value.sigmaX); f32(value.sigmaY); color(value.color); optional(value.input, ::imageFilter) }
+        is ImageFilterNode.DropShadow -> { i32(3); f32(value.dx); f32(value.dy); f32(value.sigmaX); f32(value.sigmaY); color(value.color); optional(value.input, ::imageFilter); enum(value.mode) }
         is ImageFilterNode.ColorFilter -> { i32(4); colorFilter(value.filter); optional(value.input, ::imageFilter) }
         is ImageFilterNode.Compose -> { i32(5); imageFilter(value.outer); imageFilter(value.inner) }; is ImageFilterNode.Blend -> { i32(6); enum(value.mode); imageFilter(value.background); imageFilter(value.foreground) }
         is ImageFilterNode.Dilate -> { i32(7); f32(value.radiusX); f32(value.radiusY); optional(value.input, ::imageFilter) }; is ImageFilterNode.Erode -> { i32(8); f32(value.radiusX); f32(value.radiusY); optional(value.input, ::imageFilter) }
@@ -462,6 +498,8 @@ private class ArchiveWriter {
 private class ArchiveReader(private val data: ByteArray) {
     private var offset: Int = 0
     private var depth = 0
+    private var currentFilterTable: CapturedFilterTableV1 = CapturedFilterTableV1.Empty
+    private var legacyFilterTable: CapturedFilterTableBuilderV1? = null
     var sceneArchiveSchemaVersion: Int = 1
 
     fun bytesEqual(expected: ByteArray): Boolean {
@@ -532,7 +570,19 @@ private class ArchiveReader(private val data: ByteArray) {
 
     fun scene(): SceneSnapshot = nested {
         val extent = SceneExtent(i32().positive("extent width"), i32().positive("extent height"))
-        SceneSnapshot.of(extent, colorSpace(), list(::command))
+        val colorSpace = colorSpace()
+        val outerTable = currentFilterTable
+        val outerLegacy = legacyFilterTable
+        currentFilterTable = if (sceneArchiveSchemaVersion >= 8) filterTable() else CapturedFilterTableV1.Empty
+        legacyFilterTable = if (sceneArchiveSchemaVersion >= 8) null else CapturedFilterTableBuilderV1()
+        try {
+            val commands = list(::command)
+            val table = if (sceneArchiveSchemaVersion >= 8) currentFilterTable else requireNotNull(legacyFilterTable).build()
+            SceneSnapshot.of(extent, colorSpace, commands, filterTable = table)
+        } finally {
+            currentFilterTable = outerTable
+            legacyFilterTable = outerLegacy
+        }
     }
     fun command(): SceneCommand = nested { when (i32()) {
         1 -> SceneCommand.Draw(draw()); 2 -> SceneCommand.Clear(colorF32()); 3 -> SceneCommand.DrawColor(color(), enum(), matrix(), clip())
@@ -586,8 +636,19 @@ private class ArchiveReader(private val data: ByteArray) {
             initWithPrevious = initWithPrevious,
         )
     }
-    fun paint(): PaintNode = nested { PaintNode(color(), optional(::material), enum(), optional(::blender), optional(::colorFilter), optional(::maskFilter), optional(::pathEffect), optional(::imageFilter), enum(), f32(), enum(), enum(), f32(), bool()) }
+    fun paint(): PaintNode = nested {
+        val color = color()
+        val shader = optional(::material)
+        val blendMode = enum<BlendMode>()
+        val blender = optional(::blender)
+        val colorFilter = optional(::colorFilter)
+        val maskFilter = optional(::maskFilter)
+        val pathEffect = optional(::pathEffect)
+        val imageFilter = if (sceneArchiveSchemaVersion >= 8) optional(::filterRoot) else optional(::legacyFilterRoot)
+        PaintNode(color, shader, blendMode, blender, colorFilter, maskFilter, pathEffect, imageFilter, enum(), f32(), enum(), enum(), f32(), bool())
+    }
     fun <T> optional(read: () -> T): T? = if (bool()) read() else null
+    private fun filterRoot(): CapturedFilterRootV1 = CapturedFilterRootV1(CapturedFilterNodeIdI32(i32().nonNegative("image filter root")))
 
     fun geometry(): GeometryNode = nested { when (i32()) {
         1 -> GeometryNode.Rect.of(rect()); 2 -> GeometryNode.RRect.of(rrect()); 3 -> GeometryNode.DoubleRRect.of(rrect(), rrect()); 4 -> GeometryNode.Path(path())
@@ -746,7 +807,7 @@ private class ArchiveReader(private val data: ByteArray) {
                         perspectiveCaptureRefusal = bool(),
                         transformClass = text(),
                     )
-                    2, 3, 4, 5, 6, 7 -> clipTransformV2()
+                    2, 3, 4, 5, 6, 7, 8 -> clipTransformV2()
                     else -> throw ArchiveFailure("unknown-schema", "Scene archive schema is not supported")
                 }
                 ClipEntry(geometry, operation, antiAlias, transform)
@@ -764,14 +825,60 @@ private class ArchiveReader(private val data: ByteArray) {
         else -> throw ArchiveFailure("unknown-clip-transform", "Archive contains an unknown clip transform tag")
     }
     fun effects(): EffectStack = when (i32()) { 1 -> EffectStack.Empty; 2 -> EffectStack.of(list(::effect)); else -> failTag("effect stack") }
-    fun effect(): EffectNode = when (i32()) { 1 -> colorFilter(); 2 -> maskFilter(); 3 -> pathEffect(); 4 -> imageFilter(); else -> failTag("effect") }
+    fun effect(): EffectNode = when (i32()) { 1 -> colorFilter(); 2 -> maskFilter(); 3 -> pathEffect(); 4 -> if (sceneArchiveSchemaVersion >= 8) filterRoot() else legacyFilterRoot(); else -> failTag("effect") }
     fun colorFilter(): ColorFilterNode = nested { when (i32()) {
         1 -> ColorFilterNode.Matrix(ImmutableFloats.copyOf(floats())); 2 -> ColorFilterNode.Blend(color(), enum()); 3 -> ColorFilterNode.Compose(colorFilter(), colorFilter()); 4 -> ColorFilterNode.Table(ImmutableUBytes.copyOf(ubytes())); 5 -> ColorFilterNode.Lighting(color(), color()); 6 -> ColorFilterNode.SRGBToLinear; 7 -> ColorFilterNode.LinearToSRGB; 8 -> ColorFilterNode.HSLAMatrix(ImmutableFloats.copyOf(floats())); 9 -> ColorFilterNode.Lerp(f32(), colorFilter(), colorFilter()); 10 -> ColorFilterNode.HighContrast; 11 -> ColorFilterNode.Luma; 12 -> ColorFilterNode.Overdraw; 13 -> ColorFilterNode.RuntimeEffect.of(descriptor(), uniforms(), list { RuntimeColorFilterChild(text(), colorFilter()) }); else -> failTag("color filter")
     } }
     fun maskFilter(): MaskFilterNode = nested { when (i32()) { 1 -> MaskFilterNode.Blur(enum(), f32()); 2 -> MaskFilterNode.Shader(material()); 3 -> MaskFilterNode.Table(ImmutableUBytes.copyOf(ubytes())); else -> failTag("mask filter") } }
     fun pathEffect(): PathEffectNode = nested { when (i32()) { 1 -> PathEffectNode.Dash(ImmutableFloats.copyOf(floats()), f32()); 2 -> PathEffectNode.Corner(f32()); 3 -> PathEffectNode.Discrete(f32(), f32()); 4 -> PathEffectNode.Path1D(path(), f32(), f32(), enum()); 5 -> PathEffectNode.Path2D(matrix(), path()); 6 -> PathEffectNode.Trim(f32(), f32()); else -> failTag("path effect") } }
+    fun filterTable(): CapturedFilterTableV1 {
+        val count = length(MAX_CAPTURED_FILTER_GRAPH_NODES, "captured filter table")
+        val nodes = ArrayList<CapturedFilterNodeV1>(count)
+        repeat(count) { nodes += filterNode() }
+        return CapturedFilterTableV1.fromOwnedNodes(nodes)
+    }
+    fun filterInput(): CapturedFilterInputV1 = when (i32()) {
+        1 -> CapturedFilterInputV1.ImplicitSource
+        2 -> CapturedFilterInputV1.TransparentBlack
+        3 -> CapturedFilterInputV1.Node(CapturedFilterNodeIdI32(i32().nonNegative("filter input node")))
+        4 -> CapturedFilterInputV1.Picture(CapturedPictureIdI32(i32().nonNegative("filter input picture")))
+        5 -> CapturedFilterInputV1.Backdrop(CapturedBackdropIdI32(i32().nonNegative("filter input backdrop")))
+        else -> failTag("filter input")
+    }
+    fun filterNode(): CapturedFilterNodeV1 = nested { when (i32()) {
+        1 -> CapturedFilterNodeV1.Crop(rect(), enum(), filterInput())
+        2 -> CapturedFilterNodeV1.Blur(f32(), f32(), enum(), filterInput())
+        3 -> CapturedFilterNodeV1.DropShadow(f32(), f32(), f32(), f32(), color(), filterInput(), enum())
+        4 -> CapturedFilterNodeV1.ColorFilter(colorFilter(), filterInput())
+        5 -> CapturedFilterNodeV1.Compose(filterInput(), filterInput())
+        6 -> CapturedFilterNodeV1.Blend(enum(), filterInput(), filterInput())
+        7 -> CapturedFilterNodeV1.Dilate(f32(), f32(), filterInput())
+        8 -> CapturedFilterNodeV1.Erode(f32(), f32(), filterInput())
+        9 -> CapturedFilterNodeV1.DistantLitDiffuse(f32(), f32(), color(), f32(), f32(), filterInput())
+        10 -> CapturedFilterNodeV1.PointLitDiffuse(point(), color(), f32(), f32(), filterInput())
+        11 -> CapturedFilterNodeV1.SpotLitDiffuse(point(), point(), f32(), f32(), color(), f32(), f32(), filterInput())
+        12 -> CapturedFilterNodeV1.DistantLitSpecular(f32(), f32(), color(), f32(), f32(), f32(), filterInput())
+        13 -> CapturedFilterNodeV1.PointLitSpecular(point(), color(), f32(), f32(), f32(), filterInput())
+        14 -> CapturedFilterNodeV1.SpotLitSpecular(point(), point(), f32(), f32(), color(), f32(), f32(), f32(), filterInput())
+        15 -> CapturedFilterNodeV1.Offset(f32(), f32(), filterInput())
+        16 -> CapturedFilterNodeV1.Tile(rect(), rect(), filterInput())
+        17 -> CapturedFilterNodeV1.Merge(filterInputs())
+        18 -> CapturedFilterNodeV1.DisplacementMap(enum(), enum(), f32(), filterInput(), filterInput())
+        19 -> CapturedFilterNodeV1.Picture(scene(), rect(), optional(::rect))
+        20 -> CapturedFilterNodeV1.Magnifier(rect(), f32(), f32(), filterInput())
+        21 -> CapturedFilterNodeV1.MatrixConvolution(size(), ImmutableFloats.copyOf(floats()), f32(), f32(), vector(), enum(), bool(), filterInput())
+        22 -> CapturedFilterNodeV1.RuntimeEffect(descriptor(), uniforms(), optional(::text), list { CapturedRuntimeImageFilterChildV1(text(), filterInput()) })
+        else -> failTag("captured filter node")
+    } }
+    private fun filterInputs(): List<CapturedFilterInputV1> {
+        val count = length(MAX_CAPTURED_FILTER_GRAPH_NODES, "captured filter Merge inputs")
+        val inputs = ArrayList<CapturedFilterInputV1>(count)
+        repeat(count) { inputs += filterInput() }
+        return inputs
+    }
+    private fun legacyFilterRoot(): CapturedFilterRootV1 = requireNotNull(legacyFilterTable) { "Legacy filter root is outside a scene" }.appendLegacyOccurrence(imageFilter())
     fun imageFilter(): ImageFilterNode = nested { when (i32()) {
-        1 -> ImageFilterNode.Crop.of(rect(), enum(), optional(::imageFilter)); 2 -> ImageFilterNode.Blur(f32(), f32(), enum(), optional(::imageFilter)); 3 -> ImageFilterNode.DropShadow(f32(), f32(), f32(), f32(), color(), optional(::imageFilter)); 4 -> ImageFilterNode.ColorFilter(colorFilter(), optional(::imageFilter)); 5 -> ImageFilterNode.Compose(imageFilter(), imageFilter()); 6 -> ImageFilterNode.Blend(enum(), imageFilter(), imageFilter()); 7 -> ImageFilterNode.Dilate(f32(), f32(), optional(::imageFilter)); 8 -> ImageFilterNode.Erode(f32(), f32(), optional(::imageFilter)); 9 -> ImageFilterNode.DistantLitDiffuse(f32(), f32(), color(), f32(), f32(), optional(::imageFilter)); 10 -> ImageFilterNode.PointLitDiffuse(point(), color(), f32(), f32(), optional(::imageFilter)); 11 -> ImageFilterNode.SpotLitDiffuse(point(), point(), f32(), f32(), color(), f32(), f32(), optional(::imageFilter)); 12 -> ImageFilterNode.DistantLitSpecular(f32(), f32(), color(), f32(), f32(), f32(), optional(::imageFilter)); 13 -> ImageFilterNode.PointLitSpecular(point(), color(), f32(), f32(), f32(), optional(::imageFilter)); 14 -> ImageFilterNode.SpotLitSpecular(point(), point(), f32(), f32(), color(), f32(), f32(), f32(), optional(::imageFilter)); 15 -> ImageFilterNode.Offset(f32(), f32(), optional(::imageFilter)); 16 -> ImageFilterNode.Tile.of(rect(), rect(), optional(::imageFilter)); 17 -> ImageFilterNode.Merge.of(list(::imageFilter)); 18 -> ImageFilterNode.DisplacementMap(enum(), enum(), f32(), imageFilter(), optional(::imageFilter)); 19 -> ImageFilterNode.Picture.of(scene(), rect(), optional(::rect)); 20 -> ImageFilterNode.Magnifier.of(rect(), f32(), f32(), optional(::imageFilter)); 21 -> ImageFilterNode.MatrixConvolution.of(size(), ImmutableFloats.copyOf(floats()), f32(), f32(), vector(), enum(), bool(), optional(::imageFilter)); 22 -> ImageFilterNode.RuntimeEffect.of(descriptor(), uniforms(), optional(::text), list { RuntimeImageFilterChild(text(), optional(::imageFilter)) }); else -> failTag("image filter")
+        1 -> ImageFilterNode.Crop.of(rect(), enum(), optional(::imageFilter)); 2 -> ImageFilterNode.Blur(f32(), f32(), enum(), optional(::imageFilter)); 3 -> ImageFilterNode.DropShadow(f32(), f32(), f32(), f32(), color(), optional(::imageFilter), if (sceneArchiveSchemaVersion >= 8) enum() else CapturedDropShadowModeV1.COMPOSITE); 4 -> ImageFilterNode.ColorFilter(colorFilter(), optional(::imageFilter)); 5 -> ImageFilterNode.Compose(imageFilter(), imageFilter()); 6 -> ImageFilterNode.Blend(enum(), imageFilter(), imageFilter()); 7 -> ImageFilterNode.Dilate(f32(), f32(), optional(::imageFilter)); 8 -> ImageFilterNode.Erode(f32(), f32(), optional(::imageFilter)); 9 -> ImageFilterNode.DistantLitDiffuse(f32(), f32(), color(), f32(), f32(), optional(::imageFilter)); 10 -> ImageFilterNode.PointLitDiffuse(point(), color(), f32(), f32(), optional(::imageFilter)); 11 -> ImageFilterNode.SpotLitDiffuse(point(), point(), f32(), f32(), color(), f32(), f32(), optional(::imageFilter)); 12 -> ImageFilterNode.DistantLitSpecular(f32(), f32(), color(), f32(), f32(), f32(), optional(::imageFilter)); 13 -> ImageFilterNode.PointLitSpecular(point(), color(), f32(), f32(), f32(), optional(::imageFilter)); 14 -> ImageFilterNode.SpotLitSpecular(point(), point(), f32(), f32(), color(), f32(), f32(), f32(), optional(::imageFilter)); 15 -> ImageFilterNode.Offset(f32(), f32(), optional(::imageFilter)); 16 -> ImageFilterNode.Tile.of(rect(), rect(), optional(::imageFilter)); 17 -> ImageFilterNode.Merge.of(list(::imageFilter)); 18 -> ImageFilterNode.DisplacementMap(enum(), enum(), f32(), imageFilter(), optional(::imageFilter)); 19 -> ImageFilterNode.Picture.of(scene(), rect(), optional(::rect)); 20 -> ImageFilterNode.Magnifier.of(rect(), f32(), f32(), optional(::imageFilter)); 21 -> ImageFilterNode.MatrixConvolution.of(size(), ImmutableFloats.copyOf(floats()), f32(), f32(), vector(), enum(), bool(), optional(::imageFilter)); 22 -> ImageFilterNode.RuntimeEffect.of(descriptor(), uniforms(), optional(::text), list { RuntimeImageFilterChild(text(), optional(::imageFilter)) }); else -> failTag("image filter")
     } }
     private fun Int.positive(name: String): Int = if (this > 0) this else throw ArchiveFailure("invalid-value", "$name must be positive")
     private fun Int.nonNegative(name: String): Int = if (this >= 0) this else throw ArchiveFailure("invalid-value", "$name must be non-negative")

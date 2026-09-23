@@ -21,6 +21,8 @@ public class SceneSnapshot private constructor(
     public val colorSpace: ColorSpace,
     /** Immutable capture limit carried to selection; it never belongs to renderer-local state. */
     public val graphLimits: GraphLimits,
+    /** Immutable table shared by all typed image-filter roots in this scene. */
+    public val filterTable: CapturedFilterTableV1,
     commands: Collection<SceneCommand>,
 ) : Iterable<SceneCommand>, CanonicalValue {
     private val values: List<SceneCommand> = immutableList(commands)
@@ -39,6 +41,7 @@ public class SceneSnapshot private constructor(
             colorSpace: ColorSpace,
             commands: Collection<SceneCommand>,
             graphLimits: GraphLimits = GraphLimits(),
-        ): SceneSnapshot = SceneSnapshot(extent, colorSpace, graphLimits, commands)
+            filterTable: CapturedFilterTableV1 = CapturedFilterTableV1.Empty,
+        ): SceneSnapshot = SceneSnapshot(extent, colorSpace, graphLimits, filterTable, commands)
     }
 }

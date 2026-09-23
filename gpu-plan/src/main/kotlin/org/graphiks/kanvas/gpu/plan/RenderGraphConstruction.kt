@@ -141,13 +141,15 @@ internal fun remapSourcePassesV4(sourcePasses: List<PlanPass>,
         }
         return sourcePasses.map { pass -> when (pass) {
             is PlanPass.RenderPass -> PlanPass.RenderPass(pass.ordinal,pass.target,pass.draws().map(::draw),
-                pass.load,pass.store,pass.drawDataResources,pass.destinationVersionAfter)
+                pass.load,pass.store,pass.drawDataResources,pass.destinationVersionAfter,
+                coverageSource = pass.coverageSource, w6bMaskSourceBinding = pass.w6bMaskSourceBinding,
+                plannedCommandId = pass.plannedCommandId)
             is PlanPass.StencilProducer -> PlanPass.StencilProducer(pass.ordinal,pass.target,pass.depthStencil,
                 draw(pass.draw) as PathDraw,pass.drawDataResources,pass.atomicGroup,pass.load,pass.store,
                 pass.depthStencilAccess,pass.depthStencilLoadStore)
             is PlanPass.StencilCover -> PlanPass.StencilCover(pass.ordinal,pass.target,pass.depthStencil,
                 draw(pass.draw) as PathDraw,pass.drawDataResources,pass.atomicGroup,pass.load,pass.store,
-                pass.depthStencilAccess,pass.depthStencilLoadStore,pass.destinationVersionAfter)
+                pass.depthStencilAccess,pass.depthStencilLoadStore,pass.destinationVersionAfter,pass.coverageSource)
             is PlanPass.PathRenderPass -> PlanPass.PathRenderPass(pass.ordinal,pass.target,draw(pass.draw) as PathRenderDraw,
                 pass.phase,pass.drawDataResources,pass.atomicGroup,pass.depthStencil,pass.load,pass.store,
                 pass.depthStencilAccess,pass.depthStencilLoadStore,pass.resolveTarget)
@@ -157,7 +159,14 @@ internal fun remapSourcePassesV4(sourcePasses: List<PlanPass>,
 
 
 internal fun packConstructedFrame(constructions: List<RenderGraphConstruction>, materialTable: MaterialPlanTable?,
-    peakFrameLocalBytes: Long): PackedFrameSourcesV4 = PackedFrameSourcesV4.issue(constructions,materialTable,peakFrameLocalBytes)
+    peakFrameLocalBytes: Long,
+    additionalFrozenSourcesV4: List<Pair<MaterialPlanRef, SourceCoordinatesV4>> = emptyList(),
+): PackedFrameSourcesV4 = PackedFrameSourcesV4.issue(
+    constructions,
+    materialTable,
+    peakFrameLocalBytes,
+    additionalFrozenSourcesV4,
+)
 
 /** Opaque final-frame packing handoff; callers cannot supply or replace its payload map. */
 internal class PackedFrameSourcesV4 private constructor(private val table: MaterialPlanTable?,
@@ -189,15 +198,21 @@ internal class PackedFrameSourcesV4 private constructor(private val table: Mater
                 selected[footprint.canonicalIdentity] = requireNotNull(sources[footprint.canonicalIdentity])
             }
         }
-        return java.util.Collections.unmodifiableMap(selected)
+        // A W6b operand has no visual PlanDraw, yet it was admitted through this exact
+        // frame pack before graph publication.  Preserve every packed row rather than
+        // rebuilding the map from visual draws and silently dropping that frozen operand.
+        require(selected.keys.all { it in sources }) { W5fPlanDiagnostics.Schema }
+        return sources
     }
     companion object {
         fun issue(constructions: List<RenderGraphConstruction>, table: MaterialPlanTable?,
-            nonUniformBytesI64: Long): PackedFrameSourcesV4 {
+            nonUniformBytesI64: Long,
+            additionalFrozenSourcesV4: List<Pair<MaterialPlanRef, SourceCoordinatesV4>> = emptyList(),
+        ): PackedFrameSourcesV4 {
             val first = constructions.first()
             require(constructions.all { it.materialTable === table && it.capabilities == first.capabilities && it.budget == first.budget })
             val draws = constructions.flatMap { visualSources(it.passes()) }
-            val footprints = draws.mapNotNull { draw ->
+            val visualFootprints = draws.mapNotNull { draw ->
                 draw.materialAuthority.colorSourceCoordinatesV4()?.let { coordinates ->
                     val ref = draw.materialAuthority.materialPlanRef()
                     require(draw is SolidRectDraw || draw is AnalyticRectDraw || draw is PathFillDraw ||
@@ -212,6 +227,15 @@ internal class PackedFrameSourcesV4 private constructor(private val table: Mater
                     }
                 }
             }
+            // W6b operands are frozen W5 rows but are not visual PlanDraws.  They cross this
+            // same packing permit before publication, so a renderer cannot synthesize a second
+            // material binding or defer its resource/budget decision.
+            val frozenOperandFootprints = additionalFrozenSourcesV4.map { (ref, coordinates) ->
+                RawMaterialRequirementsV2.measureV4(requireNotNull(table), ref).also {
+                    require(it.proof.authenticates(table, ref, coordinates)) { W5fPlanDiagnostics.Schema }
+                }
+            }
+            val footprints = visualFootprints + frozenOperandFootprints
             // Legacy standalone/native issuers already own their historical budget
             // checks. Do not add a new refusal boundary to the V1–V3 public wrapper.
             if (footprints.isEmpty() && constructions.size == 1)

@@ -1,5 +1,7 @@
 package org.graphiks.math.matrix
 
+import org.graphiks.math.geometry.Point2I32
+import org.graphiks.math.geometry.RectI32
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -10,6 +12,16 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 
 class Matrix3x3F64Test {
+    @Test
+    fun `target mapping rebases at its explicit origin rather than the layer origin`() {
+        val mapping = requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32(10, 20)))
+
+        assertEquals(
+            RectI32(1, 2, 6, 6),
+            mapping.mapDeviceRectToTargetI32OrNull(RectI32(13, 26, 18, 30), Point2I32(12, 24)),
+        )
+    }
+
     @Test
     fun orderedCompositionPreservesIdentityAndNonCommutativeProducts() {
         val translationF32 = Matrix3x3F32.translation(0f, -8f)
@@ -26,6 +38,16 @@ class Matrix3x3F64Test {
         assertNotEquals(translationThenRotationF64, rotationThenTranslationF64)
         assertEquals(Matrix3x3F32(sx = 0f, kx = 1f, tx = 8f, ky = -1f, sy = 0f),
             translationThenRotationF64.invertFiniteOrNull()?.toFiniteMatrix3x3F32OrNull())
+    }
+
+    @Test
+    fun checkedF64CompositionRetainsParentPrecisionAndRejectsOverflow() {
+        val parent = Matrix3x3F64(txF64 = 1.0e100)
+        val child = Matrix3x3F64(sxF64 = 2.0, tyF64 = -3.0)
+
+        assertEquals(Matrix3x3F64(sxF64 = 2.0, txF64 = 1.0e100, tyF64 = -3.0),
+            parent.timesCheckedOrNull(child))
+        assertNull(Matrix3x3F64(sxF64 = Double.MAX_VALUE).timesCheckedOrNull(Matrix3x3F64(sxF64 = 2.0)))
     }
 
     @Test

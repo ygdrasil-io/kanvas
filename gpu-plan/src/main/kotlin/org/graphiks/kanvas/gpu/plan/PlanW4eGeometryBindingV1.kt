@@ -9,17 +9,23 @@ public class PlanW4eGeometryBindingV1 internal constructor(
     extent: SizeI32,
     nativePassesByGraphPass: Map<PlanPassId, PlanPass>,
     public val payload: W4eNativePayloadPlan,
+    materialDeviceOriginI32: Point2I32,
 ) {
     private val extent = extent.copy()
     private val native = java.util.Collections.unmodifiableMap(LinkedHashMap(nativePassesByGraphPass))
+    private val materialDeviceOriginSnapshotI32 = Point2I32(materialDeviceOriginI32.x, materialDeviceOriginI32.y)
     public fun copyExtentI32(): SizeI32 = extent.copy()
+    public fun copyMaterialDeviceOriginI32(): Point2I32 = Point2I32(
+        materialDeviceOriginSnapshotI32.x,
+        materialDeviceOriginSnapshotI32.y,
+    )
     public fun nativePasses(): List<PlanPass> = immutableList(native.values.toList())
     public fun graphPassIds(): Set<PlanPassId> = immutableSet(native.keys)
     public fun nativePass(graphPassId: PlanPassId): PlanPass? = native[graphPassId]
     internal fun bindSources(draws: Map<Int, PlanDraw>): PlanW4eGeometryBindingV1 = PlanW4eGeometryBindingV1(target, extent,
         native.mapValues { (_, pass) -> if (pass is PlanPass.PathRenderPass)
             pass.rebindW4eV6(pass.ordinal, { it }, null, null, draws.getValue(pass.draw.commandIndex).materialAuthority)
-            else pass }, payload)
+            else pass }, payload, materialDeviceOriginSnapshotI32)
 }
 
 /** Rebind only identity, target coordinates and issued source; W4e's selected strategy is retained. */

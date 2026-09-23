@@ -178,6 +178,8 @@ class GPUCommandEncoderScopePlan internal constructor(
         val w6aNative = w6aPass?.let { w6aFrameV1?.physical?.w4eGeometryBinding(it.id)?.nativePass(it.id) }
         val w6aStencil = w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3 ||
             w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover ||
+            w6aPass is org.graphiks.kanvas.gpu.plan.PlanPass.FilterCoverageSourcePass &&
+                w6aPass.rasterBinding?.depthStencil != null ||
             w6aNative is org.graphiks.kanvas.gpu.plan.PlanPass.ClipMaskProducer && w6aNative.depthStencil != null ||
             w6aNative is org.graphiks.kanvas.gpu.plan.PlanPass.PathRenderPass && w6aNative.depthStencil != null
         val pathSealed = corePrimitivePathStencilNativeRouteSeal is
@@ -1576,6 +1578,13 @@ internal class PreparedGPUFrame(
                 }
                 val w6aPath = sealedW6a && !sealedW4e && (step.w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3 ||
                     step.w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover)
+                // W6b replays the already-selected W4 producer and cover together when
+                // materializing a stencil-backed mask coverage source.  It is intentionally
+                // not a new path route: the two packets and the borrowed stencil attachment
+                // are the frozen W4 authority carried by the typed source binding.
+                val w6bStencilCoverage = sealedW6a && !sealedW4e &&
+                    (step.w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.FilterCoverageSourcePass)
+                        ?.rasterBinding?.depthStencil != null
                 val pathSealed = w6aPath || scope.corePrimitivePathStencilNativeRouteSeal is
                     GPUCorePrimitivePathStencilNativeRouteSeal.Pairs ||
                     scope.corePrimitivePathStencilNativeRouteSeal is
@@ -1691,7 +1700,20 @@ internal class PreparedGPUFrame(
                 val depthStencilKeys = scope.nativeOperandKeys.filter {
                     it.role == GPUPreparedNativeOperandRole.RenderDepthStencilTarget
                 }
-                require(w4dGeneralScope || (
+                val w6bStencilCoverageContract = w6bStencilCoverage &&
+                    pathUses.size == 1 &&
+                    pathUses.single().usage == GPUFrameResourceUsage.RenderAttachment &&
+                    pathUses.single().write &&
+                    step.depthStencilLoadStore ==
+                    org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan.WritableStencil(
+                        org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Clear,
+                        org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+                        0u,
+                    ) &&
+                    depthStencilKeys.size == 1 &&
+                    depthStencilKeys.single().kind == GPUPreparedNativeOperandKind.TextureView &&
+                    depthStencilKeys.single().ownership == GPUPreparedNativeOperandOwnership.Borrowed
+                require(w4dGeneralScope || w6bStencilCoverageContract || (
                     pathSealed == unifiedContainsPath &&
                         pathSealed == (pathUses.size == 1) &&
                         pathSealed == hasPathStencilLoadStore &&
@@ -2228,6 +2250,8 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFac
                 val clipStencilPrefix = scope.allowsClipStencilPrefixDepthStencil
                 if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
                     (w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass)?.drawDataResources != null ||
+                    (w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.FilterCoverageSourcePass)
+                        ?.rasterBinding?.drawDataResources != null ||
                     w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3 ||
                     w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover ||
                     verticesSemantic != null ||
@@ -2293,6 +2317,8 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassS
         if (verticesSemantic != null && verticesSemantic.material.commonSource == null) add(packet.packetId)
         if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
             (w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass)?.drawDataResources != null ||
+            (w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.FilterCoverageSourcePass)
+                ?.rasterBinding?.drawDataResources != null ||
             w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.StencilGeometryProducerV3 ||
             w6aPassV1 is org.graphiks.kanvas.gpu.plan.PlanPass.StencilCover ||
             verticesSemantic != null ||

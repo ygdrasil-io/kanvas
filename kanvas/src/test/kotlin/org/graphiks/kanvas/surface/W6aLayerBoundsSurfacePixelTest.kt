@@ -135,7 +135,7 @@ class W6aLayerBoundsSurfacePixelTest {
             restore()
             restore()
         }
-        assertTerminalWithoutReadbackMutation(surface, "w6a.layer.unsupported_backdrop")
+        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.unsupported_backdrop")
 
         surface.discardRecordedOperations()
         surface.canvas {

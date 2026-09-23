@@ -7,6 +7,18 @@ public enum class PlanResourceRole {
     LogicalTarget,
     /** Single-sample RGBA8 offscreen target owned by a W6 layer occurrence. */
     LayerTarget,
+    /** Immutable, single-occurrence W6b source generation before any filter operation. */
+    FilterSource,
+    /** Mutable only between PictureAggregateBegin and PictureAggregateSeal, then sampled as one sealed source. */
+    PictureAggregateSource,
+    /** Immutable raw coverage captured at one W6b occurrence before mask evaluation. */
+    CoverageSource,
+    /** Immutable original coverage retained alongside a blurred mask-coverage result. */
+    CoverageOriginal,
+    /** Explicit transparent-black W6b input; it is never interchangeable with a draw source. */
+    FilterTransparentBlack,
+    /** Single-sample RGBA8 target owned only by a frozen W6b filter pass. */
+    FilterTarget,
     MultisampleColorTarget,
     PathHardEdgeMask,
     PathHardEdgeDepthStencil,
@@ -23,6 +35,8 @@ public enum class PlanResourceRole {
     DestinationSnapshot,
     DecodedImageV1,
     NoiseTableData,
+    /** Immutable 256-entry U8 lookup table captured by one W6b MaskFilter.Table occurrence. */
+    MaskTableData,
     SourceUniformData,
     ImageUploadStaging,
     RuntimeStorageData,
@@ -176,6 +190,22 @@ public class PlanResource private constructor(
                         ),
                     ) {
                         "Texture byte size must equal its checked logical size"
+                    }
+                        if (role in setOf(
+                            PlanResourceRole.FilterSource,
+                            PlanResourceRole.CoverageSource,
+                            PlanResourceRole.CoverageOriginal,
+                            PlanResourceRole.FilterTransparentBlack,
+                            PlanResourceRole.FilterTarget,
+                        )) {
+                        require(format is PlanTextureFormat.Color &&
+                            format.value == PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL &&
+                            sampleCountI32 == 1 && lifetime == PlanResourceLifetime.FrameLocal &&
+                            PlanResourceUsage.RenderAttachment in usages && PlanResourceUsage.Sampled in usages &&
+                            usages.all { it in setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled,
+                                PlanResourceUsage.CopySource, PlanResourceUsage.CopyDestination) }) {
+                            "W6b source and filter targets require the frozen single-sample RGBA8 usage subset"
+                        }
                     }
                 }
                 PlanResourceKind.Buffer -> {

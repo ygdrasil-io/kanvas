@@ -40,3 +40,37 @@ public fun RectI32.translateCheckedOrNull(delta: Vector2I32): RectI32? {
         translated(bottom, delta.y) ?: return null,
     )
 }
+
+/** Checked F64 translation retained until the caller chooses its outward I32 texel projection. */
+public fun RectF64.translateF64OrNull(dxF64: Double, dyF64: Double): RectF64? {
+    if (!isFinite() || isEmpty || !dxF64.isFinite() || !dyF64.isFinite()) return null
+    return RectF64(left + dxF64, top + dyF64, right + dxF64, bottom + dyF64)
+        .takeIf { it.isFinite() && !it.isEmpty }
+}
+
+/**
+ * Expands finite F64 content by the finite three-sigma blur support before outward I32
+ * projection.  The caller owns any later clip or target intersection.
+ */
+public fun RectF64.expandForBlurF64OrNull(sigmaXF32: Float, sigmaYF32: Float): RectF64? {
+    if (!isFinite() || isEmpty || !sigmaXF32.isFinite() || !sigmaYF32.isFinite() ||
+        sigmaXF32 < 0f || sigmaYF32 < 0f) return null
+    val supportXF64 = sigmaXF32.toDouble() * 3.0
+    val supportYF64 = sigmaYF32.toDouble() * 3.0
+    if (!supportXF64.isFinite() || !supportYF64.isFinite()) return null
+    return RectF64(
+        left - supportXF64,
+        top - supportYF64,
+        right + supportXF64,
+        bottom + supportYF64,
+    ).takeIf { it.isFinite() && !it.isEmpty }
+}
+
+/** Rebase device texels at a target origin through finite F64 subtraction and checked I32 seal. */
+public fun RectI32.rebaseAtOriginI32OrNull(originDeviceI32: Point2I32): RectI32? =
+    RectF64(
+        left.toDouble() - originDeviceI32.x.toDouble(),
+        top.toDouble() - originDeviceI32.y.toDouble(),
+        right.toDouble() - originDeviceI32.x.toDouble(),
+        bottom.toDouble() - originDeviceI32.y.toDouble(),
+    ).roundOutToRectI32OrNull()

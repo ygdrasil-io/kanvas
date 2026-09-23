@@ -1,6 +1,94 @@
-# W06 — layers et effets : checkpoint W6a
+# W06 — layers et effets : checkpoints W6a/W6b
 
 ## Statut
+
+## Checkpoint W6b / correction whole-branch round 4 — autorité producteur scissor Picture
+
+La première vague de correction, basée sur `2bf3d52`, a fermé I2–I4, I6,
+M1 et M2. Sa re-review a laissé I1, I5 et I7 ouverts. La seconde vague,
+basée sur `a1aabe6`, a fermé R21, I5 et le shard Picture I7, mais sa re-review
+a laissé l'authentification indépendante du scissor terminal Picture et deux
+imports Render IR dans le shard admission. La troisième vague, basée sur
+`6453b06`, a ajouté les mutants de validation R22, mais sa re-review a
+conservé un finding : `PictureTerminalScissorAuthorityV1` copiait encore le
+terminal/les operands déjà construits. La quatrième vague, basée sur
+`b37bf29`, ferme seulement R23 sans étendre les exclusions W6b : l'autorité
+est créée directement depuis le clip différé, le domaine composite admis et la
+décision vide/non-vide, avant tout terminal, operands ou pass. Ceux-ci
+reçoivent ensuite une copie du même fait immutable ; aucun ne peut plus le
+produire.
+
+Task 6 matérialise uniquement les opérations déjà gelées
+`DROP_SHADOW_COLORIZE` et `DROP_SHADOW_COMPOSITE`. La route native consomme
+le schedule, les `FilterPass`, les `FilterTarget`, les origins, les générations
+de sources et les terminaux publiés par `:gpu-plan`; elle ne recrée ni pass,
+source, bounds, slot ni budget. `COMPOSITE` lie la source originale exactement
+une fois au composite interne puis laisse le blend parent gelé s'exécuter une
+fois; `SHADOW_ONLY` ne lie aucune source originale.
+
+Le contrat compact a été vérifié indépendamment avant toute modification de
+l'oracle : `ImageFilter.DropShadow` n'expose aucun `TileMode`, tandis que Skia
+construit `SkImageFilters::Blur(sigma, input)` dans
+`SkDropShadowImageFilter.cpp`; la surcharge sans mode a `kDecal` par défaut.
+Le `TileMode.CLAMP` antérieur dans le graphe W6b était donc une divergence de
+la sémantique publique, pas une convention d'implémentation. La planification
+gelée emploie désormais `DECAL`; l'oracle public modèle un domaine transparent
+étendu, afin de ne pas tronquer le halo avant l'offset. La conversion de la
+couleur encode également la couleur sRGB après la multiplication alpha en
+linéaire, conformément au contrat W3 RGBA8 sRGB prémultiplié.
+
+- `W6bDropShadowSurfacePixelTest` prouve `SHADOW_ONLY` sans source, halo
+  étendu/translaté, `COMPOSITE`, layer explicite imbriqué et replay Picture
+  mémoire/wire : 6/6 XML PASS.
+- `W6bBudgetRecoverySurfacePixelTest` dérive publiquement B=336
+  (`root 8 + aggregate/source 8 + X/Y/color 12 + uniforms 52 + readback 256`)
+  et B imbriqué=344; B accepte, B−1 refuse avant allocation
+  avec `w6b.filter.frame_budget_exceeded`, et le sibling tardif conserve le
+  sentinel avant `discardRecordedOperations`/recovery : 2/2 XML PASS.
+- Les sept shards W6b ciblés totalisent 80/80 assertions XML PASS : Picture
+  12, admission/recovery 27, image blur 10, mask blur 10, mask shader/table
+  13, DropShadow 6 et budget/recovery 2. Les compilations ciblées
+  `:gpu-plan:test` (102 contrats), `:gpu-renderer:compileKotlin` et
+  `:kanvas:compileTestKotlin` sortent 0. Aucun shard public W6b n'importe
+  `GraphLimits` ni `SceneCaptureLimits` : les archives oversize et leur
+  recovery passent par `Picture` public et bytes.
+
+Chaque shard GPU a ensuite reçu exit natif 133 après ses assertions. Cet état
+reste **UNKNOWN**, sans attribution au changement W6b, au test ou à
+l'environnement; il n'est pas compté comme GREEN natif.
+
+## Audit Task 6
+
+La projection W6b passe seulement par `GPUW6aLayerFramePlan`,
+`GPUW6aEncoderScopesV1` et `GPUWgpu4kW6aLayerFramePayloadMaterializer`.
+Le plan scelle, avec math checked, chaque scissor, sample rectangle et offset
+W6b en I32 target-local. Chaque `FilterComposite` publie aussi son offset
+d'échantillonnage et son scissor terminaux. L'aggregate Picture porte un
+snapshot d'admission distinct (scissor optionnel, admis et vide/non-vide),
+produit par `admitPictureTerminalScissor` directement depuis les inputs
+d'admission, avant les operands et les pass. La validation compare ce fait au
+terminal et au `FilterComposite`, qui en sont tous deux des consommateurs ;
+elle refuse un sous-rectangle contenu mais faux et un `null` forgé. Le contrat
+exerce aussi un vrai compilateur W6a sur une Picture filtrée, et une mutation
+temporaire du helper producteur échoue. Draw/Layer/Picture/GraphTexture
+consomment les operands verbatim, sans recalcul device→target.
+Les mutants de publication offset/scissor et le cas
+public Picture à origin F32 très grande mais I32 target-local rendable couvrent
+cette frontière, y compris la recovery de la même surface. Aucun operand/pass W6b ne consulte
+`targetOriginsDeviceI32` : la map a été retirée. Le seul bridge de position
+restant est l'origin device W5/W4e déjà figée sur le `RenderPass` pour un
+matériau legacy, et `MaskShader`/`GraphTexture` conservent uniquement leurs
+mappings émis par l'autorité antérieure, sans scissor ni offset W6b tardif.
+Il n'y a ni création post-freeze de `PlanPass`/`PlanResource`, ni budget ou
+bounds renderer-local. Les références `GPUSeparableBlurRectFrameRecorder`,
+`GPUPreparedFilterDAGPlanner`, `GPUPreparedMaskFilterLowerer` et
+`GPUDropShadow` restent des définitions de voies legacy/W8 sans appel depuis
+la route W6b. Aucun test de forme/source, fake device ou compteur interne n'a
+été ajouté.
+
+W6c reçoit sans modification la table capturée, les evaluation keys, les
+`FilterPass`/`FilterTarget`, le schedule, les lifetimes et les terminaux
+scellés par Tasks 1–6.
 
 Checkpoint de convergence W6a effectué sur la source immuable
 `cdacd0b8e94534b87543fecfceb48d3a67fe6e5a` (avant la correction bornée
@@ -80,8 +168,8 @@ La route W6a passe par `W6aLayerGraphLowerer`, `GPUW6aLayerFramePlan` et
 `GPUWgpu4kW6aLayerFramePayloadMaterializer`. Elle itère le graphe et le layout
 physique scellés; les créations natives de textures/buffers sont la
 matérialisation des `PlanResource` déjà gelées, non une création de resource ou
-pass de plan après freeze. Aucun `.toInt()` de bornes renderer-local n'est
-présent dans ces fichiers W6a.
+pass de plan après freeze. Les operands W6b ne font aucun `.toInt()` de
+bornes, projection de clip ou conversion device→target renderer-local.
 
 Les références interdites restent hors route W6a et sont conservées comme
 legacy/W8 : `GPULayerSaveRecord` et `GPUPreparedCompositeLowerer` dans la
@@ -93,11 +181,11 @@ une autorité de fallback après sélection W6a.
 
 ## Exclusions et limites
 
-- Backdrop et tous les image/mask/spatial filters : refus W6 précis, aucune
-  approximation positive.
-- F16/HDR : capability gap explicite; RGBA8 est le seul target positif W6a.
-- Fonts, codecs, GMs, dashboard, renders/références/scores, suite Skia globale
-  et `jpg-color-cube` : non exécutés.
+- Backdrop et `initWithPrevious` filtré restent refusés; W6c/W6d et les
+  familles spatiales hors blur/mask/shadow W6b ne sont pas admis.
+- F16/HDR : capability gap explicite; RGBA8 est le seul target positif W6.
+- Fonts, codecs, GMs, dashboard, renders/références/baselines/scores, suite
+  Skia globale et `jpg-color-cube` : non exécutés.
 - Device-loss/visibilité native : non prouvés. Les exits 133 restent UNKNOWN.
 - Les voies legacy prepared et travaux W8 restent conservés et suivis; ce
   checkpoint ne réclame ni couverture ISO ni convergence globale.
@@ -116,7 +204,8 @@ shards publics W6a exécutés ensemble totalisent 91/91 assertions JUnit PASS.
 Le worker natif sort encore 133 après ces assertions : le statut natif reste
 **UNKNOWN**.
 
-Draft PR stackée directement sur `codex/w5h-registered-runtime-effects` :
+Draft PR W6a directement sur `codex/w5h-registered-runtime-effects` :
 [#2403](https://github.com/ygdrasil-io/kanvas/pull/2403). W6a est clôturée dans
-les limites explicites ci-dessus; W6b est l'étape suivante pour les effets et
-capabilities exclus, sans réouvrir une autorité renderer-local.
+les limites explicites ci-dessus. Task 6 ferme W6b dans son périmètre borné;
+W6c est l'étape suivante pour les familles et capabilities exclues, sans
+réouvrir les operands target-local scellés de W6b.

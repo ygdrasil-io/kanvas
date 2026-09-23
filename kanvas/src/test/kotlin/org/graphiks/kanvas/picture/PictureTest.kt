@@ -95,7 +95,7 @@ class PictureTest {
     }
 
     @Test
-    fun `writer emits version 13 schema 7 pictures`() {
+    fun `writer emits version 14 schema 8 pictures`() {
         val picture = Picture(
             RectF32.ofLTRB(0f, 0f, 8f, 8f),
             listOf(
@@ -110,7 +110,7 @@ class PictureTest {
 
         val bytes = picture.toByteArray()
 
-        assertEquals(13, bytes.readBigEndianInt(offset = 4))
+        assertEquals(14, bytes.readBigEndianInt(offset = 4))
         assertIs<SceneArchiveDecodeResult.Decoded>(SceneArchiveCodec.decodePicture(bytes))
         assertEquals(picture.ops, requireNotNull(Picture.fromByteArray(bytes)).ops)
     }
@@ -436,7 +436,7 @@ class PictureTest {
         val original = Picture(RectF32.ofLTRB(0f, 0f, 8f, 8f), listOf(path))
 
         val encoded = original.toByteArray()
-        assertEquals(13, encoded.readBigEndianInt(offset = 4))
+        assertEquals(14, encoded.readBigEndianInt(offset = 4))
         val restored = requireNotNull(Picture.fromByteArray(encoded))
         assertEquals("text-expanded", assertIs<DisplayOp.DrawPath>(restored.ops.single()).sourceOperation)
 
@@ -778,7 +778,7 @@ class PictureTest {
         val encoded = Picture(
             RectF32.ofLTRB(0f, 0f, 1f, 1f),
             listOf(DisplayOp.Clear(ColorARGB.Transparent)),
-        ).toByteArray().also { it.writeBigEndianInt(offset = 4, value = 14) }
+        ).toByteArray().also { it.writeBigEndianInt(offset = 4, value = 15) }
 
         assertNull(Picture.fromByteArray(encoded))
     }

@@ -39,8 +39,30 @@ public enum class PlanPassRole {
     ClipMaskProducer,
     ClipMaskFold,
     LayerComposite,
+    FilterSourceClear,
+    FilterCoverageSource,
+    FilterCoverageRetain,
+    PictureAggregateBegin,
+    PictureAggregateSeal,
+    PictureSource,
+    PictureComposite,
+    FilterComposite,
 }
 public enum class ClipCombineOperation { Intersect, Difference }
+
+/**
+ * The one parent-target composition selected at a W6b occurrence boundary.  It retains the
+ * previously selected W5/W6 blend or restore facts; native execution is intentionally deferred.
+ */
+public sealed interface FilterCompositeOperationV1 {
+    public data class Draw(public val blend: BlendPlan) : FilterCompositeOperationV1
+    public data class Layer(public val restore: LayerRestorePlanV1) : FilterCompositeOperationV1
+    /** Captured locator is provenance; the terminal owns every executable composite operand. */
+    public data class Picture(public val sourceSceneCanonicalId: String, public val sourceCommandIndexI32: Int,
+        public val terminal: PictureCompositeOperandsV1? = null) : FilterCompositeOperationV1 {
+        init { require(sourceSceneCanonicalId.isNotBlank() && sourceCommandIndexI32 >= 0) }
+    }
+}
 
 /** The clip realization selected for one consumer draw. */
 public sealed interface ClipPlanStrategy {
@@ -843,11 +865,25 @@ public sealed interface PlanPass {
         public val store: AttachmentStorePlan,
         public val drawDataResources: PlanDrawDataResources? = null,
         public val destinationVersionAfter: DestinationVersionI64? = null,
+        /** W6b's captured mask coverage, applied before this W5 material/color pass. */
+        public val coverageSource: PlanResourceId? = null,
+        /** The typed frozen producer whose mask can expand this transparent source stage. */
+        public val w6bMaskSourceBinding: W6bRasterCoverageBindingV1? = null,
+        public val plannedCommandId: FramePlannedCommandIdI32? = null,
+        /**
+         * W5 material-coordinate bridge sealed by W6a construction.  Filter/Picture source
+         * renders consume this exact device origin rather than asking the renderer to recover
+         * one from a target map.
+         */
+        materialDeviceOriginI32: Point2I32? = null,
     ) : PlanPass {
+        private val materialDeviceOriginSnapshotI32 = materialDeviceOriginI32?.let { Point2I32(it.x, it.y) }
+        init { require(w6bMaskSourceBinding == null || coverageSource != null) }
         override val role: PlanPassRole = PlanPassRole.MainRender
         override val id: PlanPassId = checkedPassId(role, ordinal)
         private val storedDraws = immutableList(draws)
         public fun draws(): List<PlanDraw> = storedDraws
+        public fun copyMaterialDeviceOriginI32(): Point2I32? = materialDeviceOriginSnapshotI32?.let { Point2I32(it.x, it.y) }
     }
 
     /** Clears one single-sample hard-edge coverage mask before its atomic producer sequence. */
@@ -980,6 +1016,9 @@ public sealed interface PlanPass {
         public val depthStencilAccess: PlanDepthStencilAccess,
         public val depthStencilLoadStore: PlanDepthStencilLoadStore,
         public val destinationVersionAfter: DestinationVersionI64? = null,
+        /** Typed W6b coverage consumed by the color/cover phase, never the pre-mask stencil. */
+        public val coverageSource: PlanResourceId? = null,
+        public val plannedCommandId: FramePlannedCommandIdI32? = null,
     ) : PlanPass {
         override val role: PlanPassRole = PlanPassRole.StencilCover
         override val id: PlanPassId = checkedPassId(role, ordinal)
@@ -1035,15 +1074,245 @@ public sealed interface PlanPass {
         override val id: PlanPassId = checkedPassId(role, ordinal)
     }
 
+    /** Produces a semantically distinct transparent-black input for one captured W6b node. */
+    public class FilterSourceClear(
+        override val ordinal: Int,
+        public val output: PlanResourceId,
+        /** The immutable occurrence generation whose transparent-black input this represents. */
+        public val boundSourceId: PlanResourceId,
+    ) : PlanPass {
+        init { require(output != boundSourceId) }
+        override val role: PlanPassRole = PlanPassRole.FilterSourceClear
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+    }
+
+    /**
+     * The existing W4 raster authority used to write one W6b raw-coverage texture.
+     *
+     * This is deliberately a typed dependency, not a new draw operation: [draw] and its W4
+     * buffers already belong to the frozen source lane.  A stencil-cover draw causes the
+     * coverage pass to replay its existing producer/cover pair in its own target.
+     */
+    public class W6bRasterCoverageBindingV1(
+        public val draw: PlanDraw,
+        public val drawDataResources: PlanDrawDataResources?,
+        public val depthStencil: PlanResourceId? = null,
+    ) {
+        init {
+            val stencil = draw is PathDraw && draw.strategy == PathFillStrategy.StencilCover
+            require(stencil == (depthStencil != null)) {
+                "Only a frozen stencil-cover draw may bind W6b coverage depth-stencil state."
+            }
+            require(draw is SolidRectDraw || drawDataResources != null) {
+                "A frozen non-rect W6b coverage draw needs its existing W4 buffers."
+            }
+        }
+
+        public fun withDraw(draw: PlanDraw): W6bRasterCoverageBindingV1 =
+            W6bRasterCoverageBindingV1(draw, drawDataResources, depthStencil)
+    }
+
+    /** Captures raw geometry/path-effect coverage for one immutable W6b occurrence. */
+    public class FilterCoverageSourcePass(
+        override val ordinal: Int,
+        public val output: PlanResourceId,
+        public val occurrence: FilterOccurrenceSourceV1,
+        /** The outer drawPicture clip is deferred until its isolated parent composite. */
+        public val deferSourceDrawClip: Boolean = false,
+        /** Frozen outer transforms/clips for raw coverage; no renderer-side Picture rediscovery. */
+        public val pictureCoordinates: PictureW5CoordinatesV1? =
+            occurrence.pictureW5CoordinatesOrNull(includeSourceDrawClip = !deferSourceDrawClip),
+        /** When present, coverage is a(S), never geometric/cull coverage from [occurrence]. */
+        public val sealedAlphaSource: PictureAlphaSourceV1? = null,
+        /** Precomputed source-to-output texel transform for [sealedAlphaSource]. */
+        public val sealedAlphaSampling: FilterInputSamplingV1? = null,
+        /** Exact W4 geometry producer for a direct W6b mask blur, when one is admitted. */
+        public val rasterBinding: W6bRasterCoverageBindingV1? = null,
+    ) : PlanPass {
+        init {
+            require(sealedAlphaSource == null || rasterBinding == null)
+            require((sealedAlphaSource == null) == (sealedAlphaSampling == null))
+        }
+        override val role: PlanPassRole = PlanPassRole.FilterCoverageSource
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+
+        /** Attaches the existing W4 producer before the graph becomes immutable. */
+        public fun withRasterBinding(binding: W6bRasterCoverageBindingV1): FilterCoverageSourcePass {
+            require(sealedAlphaSource == null && rasterBinding == null)
+            return FilterCoverageSourcePass(ordinal, output, occurrence, deferSourceDrawClip, pictureCoordinates,
+                sealedAlphaSource, sealedAlphaSampling, binding)
+        }
+    }
+
+    /** Preserves original coverage when a later blur style needs both original and blurred inputs. */
+    public class FilterCoverageRetainPass(
+        override val ordinal: Int,
+        public val source: PlanResourceId,
+        public val output: PlanResourceId,
+        public val sampling: FilterInputSamplingV1? = null,
+    ) : PlanPass {
+        init { require(source != output) }
+        override val role: PlanPassRole = PlanPassRole.FilterCoverageRetain
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+    }
+
+    /** Opens the only mutable interval of an isolated drawPicture aggregate. */
+    public class PictureAggregateBeginPass(
+        override val ordinal: Int,
+        public val aggregateId: PictureStreamAggregateIdI32,
+        public val target: PlanResourceId,
+        public val parentTarget: PlanResourceId,
+    ) : PlanPass {
+        init { require(target != parentTarget) }
+        override val role: PlanPassRole = PlanPassRole.PictureAggregateBegin
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+    }
+
+    /** Seals the current aggregate target as one immutable, versioned premultiplied RGBA source. */
+    public class PictureAggregateSealPass(
+        override val ordinal: Int,
+        public val aggregateId: PictureStreamAggregateIdI32,
+        public val aggregateTarget: PlanResourceId,
+        public val sealedSource: PlanResourceId,
+        public val sourceGenerationI64: Long,
+    ) : PlanPass {
+        init {
+            require(aggregateTarget == sealedSource && sourceGenerationI64 >= 0L)
+        }
+        override val role: PlanPassRole = PlanPassRole.PictureAggregateSeal
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+    }
+
+    /**
+     * An immutable W5 source hand-off at one captured Picture or Layer occurrence.  Task 3
+     * materializes this already ordered source; it must not substitute the frame root or
+     * rediscover a Picture/layer source.
+     */
+    public class PictureSourcePass(
+        override val ordinal: Int,
+        public val output: PlanResourceId,
+        public val sourceSceneCanonicalId: String,
+        public val sourceCommandIndexI32: Int,
+        /** Exact immutable scene/draw/nesting source; legacy contracts may omit it. */
+        public val occurrence: FilterOccurrenceSourceV1? = null,
+        /** Mask coverage that must be applied before this Picture's W5 material evaluation. */
+        public val coverageSource: PlanResourceId? = null,
+        /** The sealed layer color input when this W5 source comes from a layer restore boundary. */
+        public val layerInput: PlanResourceId? = null,
+        /** Target whose coordinate domain owns this source hand-off. */
+        public val parentTarget: PlanResourceId? = null,
+        /** Ordered outer Picture transforms, clips, and paints applied to this W5 source. */
+        public val pictureCoordinates: PictureW5CoordinatesV1? = null,
+        /** Source-order identity when this hand-off is one entry of a Picture aggregate. */
+        public val pictureSourceLocator: PictureSourceLocatorV1? = null,
+        public val plannedCommandId: FramePlannedCommandIdI32? = null,
+        public val aggregateId: PictureStreamAggregateIdI32? = null,
+        /** Pre-publication graph-texture source request resolved by the one W5 frame authority. */
+        public val graphTextureRequest: GraphTextureSourceRequestV1? = null,
+        /** Published W5 material/uniform binding for [graphTextureRequest]. */
+        public val graphTextureOperand: GraphTextureSourceOperandV1? = null,
+        /** Frozen source-to-output local sampling for layer and graph-texture hand-offs. */
+        public val sourceSampling: FilterInputSamplingV1? = null,
+    ) : PlanPass {
+        init {
+            require(sourceSceneCanonicalId.isNotBlank() && sourceCommandIndexI32 >= 0) {
+                "Picture source must retain one captured scene occurrence."
+            }
+            require(occurrence == null || occurrence.sourceCommandIndexI32 == sourceCommandIndexI32)
+            require(layerInput == null || occurrence?.layerDescriptor != null) {
+                "A layer W5 source must retain its captured layer occurrence."
+            }
+            require((pictureSourceLocator == null) == (plannedCommandId == null)) {
+                "Picture stream source identity must retain both locator and planned command ID."
+            }
+            require(graphTextureRequest == null || graphTextureOperand == null) {
+                "A graph texture source is either pending or published, never both."
+            }
+            require(graphTextureRequest == null && graphTextureOperand == null || aggregateId != null) {
+                "A graph texture source must name its owning Picture aggregate."
+            }
+        }
+        override val role: PlanPassRole = PlanPassRole.PictureSource
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+    }
+
+    /** Restores an unfiltered typed Picture source before its later siblings. */
+    public class PictureComposite(
+        override val ordinal: Int,
+        public val source: PlanResourceId,
+        public val destination: PlanResourceId,
+        public val occurrence: FilterOccurrenceSourceV1,
+        public val destinationVersionAfter: DestinationVersionI64,
+        public val operands: PictureCompositeOperandsV1? = null,
+    ) : PlanPass {
+        init { require(source != destination) }
+        override val role: PlanPassRole = PlanPassRole.PictureComposite
+        override val id: PlanPassId = checkedPassId(role, ordinal)
+    }
+
     public class FilterPass(
         override val ordinal: Int,
         inputs: List<PlanResourceId>,
         public val output: PlanResourceId,
+        public val evaluationKey: FilterEvaluationKeyV1,
+        public val operation: FilterPassOperationV1,
     ) : PlanPass {
         override val role: PlanPassRole = PlanPassRole.Filter
         override val id: PlanPassId = checkedPassId(role, ordinal)
         private val storedInputs = immutableList(inputs)
+        init {
+            require(storedInputs.isNotEmpty() && output !in storedInputs) {
+                "A filter pass requires distinct input and output resources."
+            }
+        }
         public fun inputs(): List<PlanResourceId> = storedInputs
+    }
+
+    /** Consumes one frozen W6b result into its immediate parent before later captured work. */
+    public class FilterComposite(
+        override val ordinal: Int,
+        public val source: PlanResourceId,
+        public val destination: PlanResourceId,
+        public val evaluationKey: FilterEvaluationKeyV1,
+        sourceBoundsTargetI32: RectI32,
+        destinationOriginParentI32: Point2I32,
+        sourceSampleOffsetTargetLocalI32: Point2I32,
+        compositeScissorTargetLocalI32: RectI32?,
+        public val operation: FilterCompositeOperationV1,
+        /** The original layer target replaced by this filtered restore, when applicable. */
+        public val replacedLayerSource: PlanResourceId? = null,
+        public val destinationVersionAfter: DestinationVersionI64,
+    ) : PlanPass {
+        private val sourceBoundsTargetSnapshotI32 = sourceBoundsTargetI32.copy()
+        private val destinationOriginParentSnapshotI32 = Point2I32(
+            destinationOriginParentI32.x,
+            destinationOriginParentI32.y,
+        )
+        private val sourceSampleOffsetSnapshotTargetLocalI32 = Point2I32(
+            sourceSampleOffsetTargetLocalI32.x,
+            sourceSampleOffsetTargetLocalI32.y,
+        )
+        private val compositeScissorSnapshotTargetLocalI32 = compositeScissorTargetLocalI32?.copy()
+        init {
+            require(!sourceBoundsTargetSnapshotI32.isEmpty) { "Filter composite source bounds must be non-empty" }
+            require(compositeScissorSnapshotTargetLocalI32?.isEmpty != true) {
+                "Filter composite scissor must be non-empty when present"
+            }
+        }
+        public fun copySourceBoundsTargetI32(): RectI32 = sourceBoundsTargetSnapshotI32.copy()
+        public fun copyDestinationOriginParentI32(): Point2I32 = Point2I32(
+            destinationOriginParentSnapshotI32.x,
+            destinationOriginParentSnapshotI32.y,
+        )
+        /** Final target-local texel relation; native lowering must consume it verbatim. */
+        public fun copySourceSampleOffsetTargetLocalI32(): Point2I32 = Point2I32(
+            sourceSampleOffsetSnapshotTargetLocalI32.x,
+            sourceSampleOffsetSnapshotTargetLocalI32.y,
+        )
+        /** Null is the plan-sealed no-op terminal; native must not re-evaluate its clip. */
+        public fun copyCompositeScissorTargetLocalI32(): RectI32? = compositeScissorSnapshotTargetLocalI32?.copy()
+        override val role: PlanPassRole = PlanPassRole.FilterComposite
+        override val id: PlanPassId = checkedPassId(role, ordinal)
     }
 
     public data class ResolvePass(

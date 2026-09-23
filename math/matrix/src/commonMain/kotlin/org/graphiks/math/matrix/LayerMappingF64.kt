@@ -5,6 +5,7 @@ import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectI32
+import org.graphiks.math.geometry.rebaseAtOriginI32OrNull
 import org.graphiks.math.geometry.roundOutToRectI32OrNull
 
 /** Immutable local/device/layer mapping sealed before a layer graph is published. */
@@ -27,6 +28,15 @@ public class LayerMappingF64 private constructor(
             boundsDeviceI32.right.toDouble(),
             boundsDeviceI32.bottom.toDouble(),
         ))?.roundOutToRectI32OrNull()
+
+    /**
+     * Rebases device texels at the explicit FilterTarget origin.  A target can be expanded or
+     * displaced relative to this mapping's layer origin, so the latter is deliberately unused.
+     */
+    public fun mapDeviceRectToTargetI32OrNull(
+        boundsDeviceI32: RectI32,
+        targetOriginDeviceI32: Point2I32,
+    ): RectI32? = boundsDeviceI32.rebaseAtOriginI32OrNull(targetOriginDeviceI32)
 
     /**
      * Translation of an already raster-admitted analytic shape; no second projection.
@@ -108,7 +118,12 @@ public fun Matrix3x3F64.mapRectBoundsF64OrNull(boundsF64: RectF64): RectF64? {
     ).takeUnless { it.isEmpty }
 }
 
-private fun Matrix3x3F64.timesCheckedOrNull(other: Matrix3x3F64): Matrix3x3F64? {
+/**
+ * Multiplies two immutable F64 transforms without narrowing through F32.  A null result means
+ * a non-finite coefficient appeared, so planning callers can retain their existing refusal
+ * path instead of inventing a local geometry representation.
+ */
+public fun Matrix3x3F64.timesCheckedOrNull(other: Matrix3x3F64): Matrix3x3F64? {
     val left = doubleArrayOf(sxF64, kxF64, txF64, kyF64, syF64, tyF64, persp0F64, persp1F64, persp2F64)
     val right = doubleArrayOf(other.sxF64, other.kxF64, other.txF64, other.kyF64, other.syF64, other.tyF64,
         other.persp0F64, other.persp1F64, other.persp2F64)

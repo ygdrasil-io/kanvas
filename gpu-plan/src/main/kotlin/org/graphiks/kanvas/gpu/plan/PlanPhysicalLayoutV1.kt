@@ -6,7 +6,11 @@ import org.graphiks.kanvas.render.ir.PreparedVerticesUploadPayloadV1
 public class PlanPhysicalSlotV1 internal constructor(
     public val slotI32: Int,
     public val resourceId: PlanResourceId,
-)
+    /** Pessimistic reservation retained through completion, even when a cache is warm. */
+    public val reservedBytesI64: Long,
+) {
+    init { require(slotI32 >= 0 && reservedBytesI64 >= 0L) }
+}
 
 /** The request retains W5's captured identity/generation contract; IDs and slots belong to the graph. */
 public class PlanCacheBindingV1 internal constructor(
@@ -51,15 +55,22 @@ public class PlanPhysicalLayoutV1 private constructor(
     uniformsByCommand: Map<Int, PlanResourceId>,
     geometryByPass: Map<PlanPassId, PlanGeometryBufferBindingV1>,
     w4eGeometry: List<PlanW4eGeometryBindingV1>,
+    pictureComposites: Map<PlanPassId, PictureCompositeOperandsV1>,
 ) {
     private val resources = immutableList(resources)
     private val caches = immutableList(cacheBindings)
     private val uniforms = java.util.Collections.unmodifiableMap(LinkedHashMap(uniformsByCommand))
     private val geometry = java.util.Collections.unmodifiableMap(LinkedHashMap(geometryByPass))
     private val w4e = immutableList(w4eGeometry)
-    private val slots = immutableList((resources.map { it.id } + caches.filter {
-        it.request is PlanCacheResourceRequest.Sampler
-    }.map { it.resourceId }).mapIndexed { index, id -> PlanPhysicalSlotV1(index, id) })
+    private val pictures = java.util.Collections.unmodifiableMap(LinkedHashMap(pictureComposites))
+    private val slots = immutableList(buildList {
+        resources.forEachIndexed { indexI32, resource ->
+            add(PlanPhysicalSlotV1(indexI32, resource.id, resource.byteSize))
+        }
+        caches.filter { it.request is PlanCacheResourceRequest.Sampler }.forEachIndexed { offsetI32, cache ->
+            add(PlanPhysicalSlotV1(resources.size + offsetI32, cache.resourceId, 0L))
+        }
+    })
 
     public fun slots(): List<PlanPhysicalSlotV1> = slots
     public fun cacheBindings(): List<PlanCacheBindingV1> = caches
@@ -70,6 +81,8 @@ public class PlanPhysicalLayoutV1 private constructor(
     }
     public fun sourceUniform(commandIndexI32: Int): PlanResource = resource(uniforms.getValue(commandIndexI32))
     public fun geometryBinding(passId: PlanPassId): PlanGeometryBufferBindingV1? = geometry[passId]
+    /** The semantic terminal and physical binding share this exact sealed operand, without renderer derivation. */
+    public fun pictureCompositeBinding(passId: PlanPassId): PictureCompositeOperandsV1? = pictures[passId]
     public fun w4eGeometryBindings(): List<PlanW4eGeometryBindingV1> = w4e
     public fun w4eGeometryBinding(passId: PlanPassId): PlanW4eGeometryBindingV1? = w4e.singleOrNull { passId in it.graphPassIds() }
     public fun cacheBinding(request: PlanCacheResourceRequest): PlanCacheBindingV1 = caches.single {
@@ -91,13 +104,21 @@ public class PlanPhysicalLayoutV1 private constructor(
                 else RawMaterialRequirementsV2.measureLegacy(table, ref).canonicalIdentity
                 draw.commandIndex to source.uniforms.getValue(identity)
             }
-            require(uniforms.values.toSet() == source.uniforms.values.toSet())
+            val maskShaderUniforms = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
+                ((pass.operation as? FilterPassOperationV1.MaskShader)?.materialBinding
+                    as? FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned)?.uniformResource
+            }.toSet()
+            val graphTextureUniforms = graph.passes().filterIsInstance<PlanPass.PictureSourcePass>().mapNotNull { pass ->
+                pass.graphTextureOperand?.uniformResource
+            }.toSet()
+            require((uniforms.values.toSet() + maskShaderUniforms + graphTextureUniforms) == source.uniforms.values.toSet())
             val geometry = graph.passes().mapNotNull { pass ->
                 if (source.w4eGeometry.any { pass.id in it.graphPassIds() }) return@mapNotNull null
                 val data = when (pass) {
                     is PlanPass.RenderPass -> pass.drawDataResources
                     is PlanPass.StencilGeometryProducerV3 -> pass.drawDataResources
                     is PlanPass.StencilCover -> pass.drawDataResources
+                    is PlanPass.FilterCoverageSourcePass -> pass.rasterBinding?.drawDataResources
                     else -> null
                 } ?: return@mapNotNull null
                 val draw = when (pass) {
@@ -105,6 +126,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                     is PlanPass.StencilCover -> pass.draw
                     is PlanPass.StencilGeometryProducerV3 -> graph.passes().filterIsInstance<PlanPass.StencilCover>()
                         .single { it.draw.commandIndex == pass.commandIndexI32 }.draw
+                    is PlanPass.FilterCoverageSourcePass -> requireNotNull(pass.rasterBinding).draw
                     else -> error("Unreachable data binding")
                 }
                 val fill = (draw as? PathDraw)?.copyPathGeometry()?.let { shape -> when (shape) {
@@ -115,7 +137,8 @@ public class PlanPhysicalLayoutV1 private constructor(
                 val fan = fill?.copyStencilEdgeFanF32OrNull()
                 val direct = fill?.copyDirectTriangleF32OrNull()
                 val producer = pass is PlanPass.StencilGeometryProducerV3
-                val cover = pass is PlanPass.StencilCover
+                val cover = pass is PlanPass.StencilCover || pass is PlanPass.FilterCoverageSourcePass &&
+                    draw is PathDraw && draw.strategy == PathFillStrategy.StencilCover
                 val binding = if (draw is W5bVerticesDraw) {
                     val upload = requireNotNull(draw.sealedUploadPayloadOrNull())
                     require(upload.vertexCountI32 == draw.geometryF32.vertexCountI32 &&
@@ -143,9 +166,33 @@ public class PlanPhysicalLayoutV1 private constructor(
                 require(rows.single { it.id == lane.target }.copyExtent() == lane.copyExtentI32())
                 require(lane.graphPassIds().all { id -> graph.passes().any { it.id == id } })
                 require(lane.nativePasses().filterIsInstance<PlanPass.PathRenderPass>().all { it.target == lane.target })
+                require(lane.graphPassIds().all { id -> when (val pass = graph.passes().single { it.id == id }) {
+                    is PlanPass.RenderPass -> pass.target == lane.target
+                    is PlanPass.StencilGeometryProducerV3 -> pass.target == lane.target
+                    is PlanPass.StencilCover -> pass.target == lane.target
+                    is PlanPass.PathRenderPass -> pass.target == lane.target
+                    is PlanPass.ClipMaskInitialize,
+                    is PlanPass.ClipMaskProducer,
+                    is PlanPass.ClipMaskFold,
+                    -> true
+                    else -> false
+                } }) { "W4e native binding target must equal its semantic graph pass target." }
             }
             require(source.w4eGeometry.flatMap { it.graphPassIds() }.let { it.size == it.distinct().size })
-            val layout = PlanPhysicalLayoutV1(rows, source.caches, uniforms, geometry, source.w4eGeometry)
+            val pictures = graph.passes().mapNotNull { pass ->
+                val operand = when (pass) {
+                    is PlanPass.PictureComposite -> requireNotNull(pass.operands)
+                    is PlanPass.FilterComposite -> (pass.operation as? FilterCompositeOperationV1.Picture)?.terminal
+                    else -> null
+                } ?: return@mapNotNull null
+                val sourceRow = rows.single { it.id == operand.source }
+                require(PlanResourceUsage.Sampled in sourceRow.usages())
+                val extent = requireNotNull(sourceRow.copyExtent())
+                val rect = operand.copySourceBoundsTargetI32()
+                require(rect.left >= 0 && rect.top >= 0 && rect.right <= extent.width && rect.bottom <= extent.height)
+                pass.id to operand
+            }.toMap()
+            val layout = PlanPhysicalLayoutV1(rows, source.caches, uniforms, geometry, source.w4eGeometry, pictures)
             require(layout.slots.map { it.resourceId }.distinct().size == layout.slots.size)
             // All reservations (including cache hits) remain live until frame completion.
             require(rows.all { it.firstPassIndex == 0 && it.lastPassIndexExclusive == graph.passes().size })

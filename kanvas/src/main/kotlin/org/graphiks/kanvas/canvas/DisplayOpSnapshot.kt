@@ -92,11 +92,8 @@ internal class GeometrySnapshotContext(
         shaders.clear()
         colorFilters.clear()
         maskFilters.clear()
-        imageFilters.clear()
         shaderRuntimeChildren.clear()
         colorRuntimeChildren.clear()
-        imageRuntimeChildren.clear()
-        mergeInputs.clear()
     }
 
     private fun preflightPaints(operation: DisplayOp) {

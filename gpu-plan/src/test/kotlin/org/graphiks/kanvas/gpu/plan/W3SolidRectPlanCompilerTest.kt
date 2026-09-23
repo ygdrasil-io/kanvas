@@ -3,6 +3,11 @@ package org.graphiks.kanvas.gpu.plan
 import org.graphiks.kanvas.color.ColorSpace
 import org.graphiks.kanvas.render.ir.BlendMode
 import org.graphiks.kanvas.render.ir.BlendNode
+import org.graphiks.kanvas.render.ir.CapturedFilterInputV1
+import org.graphiks.kanvas.render.ir.CapturedFilterNodeIdI32
+import org.graphiks.kanvas.render.ir.CapturedFilterNodeV1
+import org.graphiks.kanvas.render.ir.CapturedFilterRootV1
+import org.graphiks.kanvas.render.ir.CapturedFilterTableV1
 import org.graphiks.kanvas.render.ir.ClipStackNode
 import org.graphiks.kanvas.render.ir.CoverageRequest
 import org.graphiks.kanvas.render.ir.DrawNode
@@ -20,6 +25,7 @@ import org.graphiks.kanvas.render.ir.SceneExtent
 import org.graphiks.kanvas.render.ir.SceneSnapshot
 import org.graphiks.kanvas.render.ir.StrokeCapNode
 import org.graphiks.kanvas.render.ir.StrokeJoinNode
+import org.graphiks.kanvas.render.ir.TileMode
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RectI32
@@ -207,16 +213,20 @@ class W3SolidRectPlanCompilerTest {
     @Test
     fun `each unsupported paint filter and effect remains a semantic gap`() {
         val draw = solidDrawNode()
+        val blurRoot = CapturedFilterRootV1(CapturedFilterNodeIdI32(0))
+        val blurTable = CapturedFilterTableV1.of(listOf(
+            CapturedFilterNodeV1.Blur(1f, 1f, TileMode.CLAMP, CapturedFilterInputV1.ImplicitSource),
+        ))
         val invalids = listOf(
             draw.copy(paint = w3Paint().copy(colorFilter = org.graphiks.kanvas.render.ir.ColorFilterNode.Luma)),
             draw.copy(paint = w3Paint().copy(maskFilter = org.graphiks.kanvas.render.ir.MaskFilterNode.Blur(org.graphiks.kanvas.render.ir.MaskBlurStyle.NORMAL, 1f))),
             draw.copy(paint = w3Paint().copy(pathEffect = org.graphiks.kanvas.render.ir.PathEffectNode.Corner(1f))),
-            draw.copy(paint = w3Paint().copy(imageFilter = org.graphiks.kanvas.render.ir.ImageFilterNode.Blur(1f, 1f))),
+            draw.copy(paint = w3Paint().copy(imageFilter = blurRoot)),
             draw.copy(effects = EffectStack.of(listOf(org.graphiks.kanvas.render.ir.ColorFilterNode.Luma))),
         )
 
         invalids.forEach { drawNode ->
-            assertEquals("w3.command.not_migrated", diagnosticCode(plan(sceneOf(SceneCommand.Draw(drawNode)), target(4, 4), supportedCapabilities(), PlanBudget(4096))))
+            assertEquals("w3.command.not_migrated", diagnosticCode(plan(sceneOf(SceneCommand.Draw(drawNode), filterTable = blurTable), target(4, 4), supportedCapabilities(), PlanBudget(4096))))
         }
     }
 
@@ -405,6 +415,7 @@ class W3SolidRectPlanCompilerTest {
         budget: PlanBudget,
     ): RenderPlanResult<RenderGraph> = when (val selected = compiler.select(scene, target)) {
         is GpuPlanSelection.Candidate -> compiler.plan(selected.candidate, capabilities, budget)
+        is GpuPlanSelection.MaterialOnlyRefusal -> RenderPlanResult.GapOnPromotedScope(selected.diagnostics())
         is GpuPlanSelection.NotCandidate -> RenderPlanResult.GapNotMigrated(selected.diagnostics())
         is GpuPlanSelection.InvalidScene -> RenderPlanResult.InvalidScene(selected.diagnostics())
         is GpuPlanSelection.ResourceLimitExceeded -> RenderPlanResult.ResourceLimitExceeded(selected.diagnostics())
@@ -421,8 +432,10 @@ class W3SolidRectPlanCompilerTest {
         .draws()
         .let { draws -> assertIs<SolidRectDraw>(draws.first()) }
 
-    private fun sceneOf(vararg commands: SceneCommand): SceneSnapshot =
-        SceneSnapshot.of(SceneExtent(4, 4), ColorSpace.SRGB, commands.toList())
+    private fun sceneOf(
+        vararg commands: SceneCommand,
+        filterTable: CapturedFilterTableV1 = CapturedFilterTableV1.Empty,
+    ): SceneSnapshot = SceneSnapshot.of(SceneExtent(4, 4), ColorSpace.SRGB, commands.toList(), filterTable = filterTable)
 
     private fun sceneWithTotalCommands(count: Int): SceneSnapshot = SceneSnapshot.of(
         SceneExtent(4, 4),
