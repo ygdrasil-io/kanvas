@@ -84,27 +84,61 @@ internal object W6bFilterGraphConstruction {
     internal class ResourceSpec(
         val id: PlanResourceId,
         val role: PlanResourceRole,
-        extent: SizeI32,
+        extent: SizeI32? = null,
         private val additionalUsages: Set<PlanResourceUsage> = emptySet(),
+        private val bufferByteSizeI64: Long? = null,
     ) {
-        private val extentSnapshotI32 = extent.copy()
-        fun copyExtentI32(): SizeI32 = extentSnapshotI32.copy()
-        fun seal(lastPassIndexExclusiveI32: Int): PlanResource = PlanResource.of(
-            role,
-            id.value.substringAfter(':').toInt(),
-            PlanResourceKind.Texture2D,
-            PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
-            extentSnapshotI32,
-            checkedTextureBytesI64(4, extentSnapshotI32.width, extentSnapshotI32.height, 1),
-            buildSet {
-                add(PlanResourceUsage.RenderAttachment)
-                add(PlanResourceUsage.Sampled)
-                addAll(additionalUsages)
-            },
-            PlanResourceLifetime.FrameLocal,
-            0,
-            lastPassIndexExclusiveI32,
-        )
+        private val extentSnapshotI32 = extent?.copy()
+
+        init {
+            require((extentSnapshotI32 != null) != (bufferByteSizeI64 != null))
+            if (bufferByteSizeI64 != null) {
+                require(role == PlanResourceRole.MaskTableData && bufferByteSizeI64 == 256L &&
+                    additionalUsages.isEmpty())
+            }
+        }
+
+        fun copyExtentI32(): SizeI32 = requireNotNull(extentSnapshotI32).copy()
+        fun seal(lastPassIndexExclusiveI32: Int): PlanResource = if (bufferByteSizeI64 != null) {
+            PlanResource.of(
+                role,
+                id.value.substringAfter(':').toInt(),
+                PlanResourceKind.Buffer,
+                null,
+                null,
+                bufferByteSizeI64,
+                setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination),
+                PlanResourceLifetime.FrameLocal,
+                0,
+                lastPassIndexExclusiveI32,
+            )
+        } else {
+            val textureExtent = requireNotNull(extentSnapshotI32)
+            PlanResource.of(
+                role,
+                id.value.substringAfter(':').toInt(),
+                PlanResourceKind.Texture2D,
+                PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
+                textureExtent,
+                checkedTextureBytesI64(4, textureExtent.width, textureExtent.height, 1),
+                buildSet {
+                    add(PlanResourceUsage.RenderAttachment)
+                    add(PlanResourceUsage.Sampled)
+                    addAll(additionalUsages)
+                },
+                PlanResourceLifetime.FrameLocal,
+                0,
+                lastPassIndexExclusiveI32,
+            )
+        }
+
+        companion object {
+            fun maskTable(id: PlanResourceId): ResourceSpec = ResourceSpec(
+                id = id,
+                role = PlanResourceRole.MaskTableData,
+                bufferByteSizeI64 = 256L,
+            )
+        }
     }
 
     internal class PositiveOccurrence internal constructor(
@@ -131,6 +165,7 @@ internal object W6bFilterGraphConstruction {
         var filterTargetOrdinalI32: Int,
         var transparentBlackOrdinalI32: Int,
         var coverageOriginalOrdinalI32: Int,
+        var maskTableOrdinalI32: Int,
         var passOrdinalI32: Int,
     )
 
@@ -169,6 +204,10 @@ internal object W6bFilterGraphConstruction {
             W6bFilterDiagnostics.InvalidBounds,
             "W6b picture traversal exceeded its sealed capture bound.",
         )
+        ownership.invalidMaskTableLengthI32?.let { lengthI32 -> return W6bFilterDiagnostics.refusal(
+            W6bFilterDiagnostics.InvalidMaskTableLength,
+            "MaskFilter.Table requires exactly 256 entries; captured $lengthI32.",
+        ) }
         if (ownership.hasBackdrop) return W6bFilterDiagnostics.refusal(
             W6bFilterDiagnostics.UnsupportedBackdrop,
             "W6b does not admit backdrop filters.",
@@ -246,6 +285,14 @@ internal object W6bFilterGraphConstruction {
             val id = planResourceId(role, ordinal)
             resources += ResourceSpec(id, role, extent)
             return id
+        }
+        fun maskTableResource(): PlanResourceId {
+            val ordinal = cursor.maskTableOrdinalI32.also {
+                cursor.maskTableOrdinalI32 = Math.addExact(it, 1)
+            }
+            return planResourceId(PlanResourceRole.MaskTableData, ordinal).also { id ->
+                resources += ResourceSpec.maskTable(id)
+            }
         }
         fun bindOutput(id: PlanResourceId, bounds: FilterBoundsPlanV1): SourceBinding {
             val desired = bounds.copyDesiredOutputDeviceI32()
@@ -368,8 +415,10 @@ internal object W6bFilterGraphConstruction {
                 val bounds = identityBounds(input)
                 val key = keyFor(null, occurrence.maskOccurrenceI32, bounds.copyDesiredOutputDeviceI32())
                 val target = allocateTarget(bounds)
+                val tableResource = maskTableResource()
                 append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), target.resourceId, key,
-                    FilterPassOperationV1.MaskTable(mask.table, bounds)))
+                    FilterPassOperationV1.MaskTable(mask.table, tableResource, 256, 0L,
+                        occurrence.maskOccurrenceI32, bounds)))
                 target to key
             }
         }
@@ -402,6 +451,14 @@ internal object W6bFilterGraphConstruction {
                 SizeI32(bounds.copyDesiredOutputDeviceI32().width(), bounds.copyDesiredOutputDeviceI32().height()),
                 bounds.copyTargetOriginDeviceI32(), bounds.copyProducedOutputDeviceI32(),
                 bounds.copyDesiredOutputDeviceI32(), bounds.copyRequiredInputDeviceI32(), bounds.copyProducedOutputDeviceI32())
+        }
+        fun maskTableResource(): PlanResourceId {
+            val ordinal = cursor.maskTableOrdinalI32.also {
+                cursor.maskTableOrdinalI32 = Math.addExact(it, 1)
+            }
+            return planResourceId(PlanResourceRole.MaskTableData, ordinal).also { id ->
+                resources += ResourceSpec.maskTable(id)
+            }
         }
         fun key(desired: RectI32): FilterEvaluationKeyV1 = FilterEvaluationKeyV1.forMaskOccurrence(
             occurrence.maskOccurrenceI32, coverageSource.resourceId, coverageSource.mapping, desired,
@@ -454,8 +511,10 @@ internal object W6bFilterGraphConstruction {
                 val bounds = identityBounds(coverageSource)
                 val evaluationKey = key(bounds.copyDesiredOutputDeviceI32())
                 val output = target(bounds)
+                val tableResource = maskTableResource()
                 append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(coverageSource.resourceId), output.resourceId, evaluationKey,
-                    FilterPassOperationV1.MaskTable(mask.table, bounds)))
+                    FilterPassOperationV1.MaskTable(mask.table, tableResource, 256, 0L,
+                        occurrence.maskOccurrenceI32, bounds)))
                 output
             }
         }
@@ -554,14 +613,23 @@ internal object W6bFilterGraphConstruction {
         var mask = false
         var backdrop = false
         var filteredPrevious = false
+        var invalidMaskTableLengthI32: Int? = null
         val bounded = visitScenes(scene) { nestedScene, command, _, _, _, _, _ -> when (command) {
             is SceneCommand.Draw -> filterPayload(command.node.paint, command.node.effects).let { payload ->
                 payload.root?.let { roots += RootOccurrence(nestedScene.filterTable, it) }
                 mask = mask || payload.mask != null
+                (payload.mask as? MaskFilterNode.Table)?.let { table ->
+                    if (table.table.sizeI32 != 256 && invalidMaskTableLengthI32 == null)
+                        invalidMaskTableLengthI32 = table.table.sizeI32
+                }
             }
             is SceneCommand.BeginLayer -> filterPayload(command.descriptor.paint, command.descriptor.effects).let { payload ->
                 payload.root?.let { roots += RootOccurrence(nestedScene.filterTable, it) }
                 mask = mask || payload.mask != null
+                (payload.mask as? MaskFilterNode.Table)?.let { table ->
+                    if (table.table.sizeI32 != 256 && invalidMaskTableLengthI32 == null)
+                        invalidMaskTableLengthI32 = table.table.sizeI32
+                }
                 if (command.descriptor.backdrop !is EffectStack.Empty) {
                     backdrop = true
                     filterPayload(null, command.descriptor.backdrop).root?.let { roots += RootOccurrence(nestedScene.filterTable, it) }
@@ -570,7 +638,7 @@ internal object W6bFilterGraphConstruction {
             }
             else -> Unit
         } }
-        return Ownership(roots, mask, backdrop, filteredPrevious, bounded)
+        return Ownership(roots, mask, backdrop, filteredPrevious, bounded, invalidMaskTableLengthI32)
     }
 
     /** Bounded iterative traversal refuses repeated ancestral Picture scenes. */
@@ -608,6 +676,7 @@ internal object W6bFilterGraphConstruction {
         val hasBackdrop: Boolean,
         val hasFilteredPrevious: Boolean,
         val traversalBounded: Boolean,
+        val invalidMaskTableLengthI32: Int?,
     ) {
         // Traversal bounds diagnose an owned W6b filter occurrence; a filter-free scene must
         // retain its existing W6a command-limit admission rather than becoming W6b-owned only

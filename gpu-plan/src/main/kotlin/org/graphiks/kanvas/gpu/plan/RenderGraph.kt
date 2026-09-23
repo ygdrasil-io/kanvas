@@ -360,6 +360,10 @@ public class RenderGraph private constructor(
             w5bW4eFacts: W4eGeometryFactsV6? = null,
         ): RenderGraphConstruction {
             val stopSlab = materialPlanTable?.gradientStopSlab
+            val maskShaderBindings = passes.filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
+                ((pass.operation as? FilterPassOperationV1.MaskShader)?.materialBinding as?
+                    FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned)
+            }
             if (stopSlab != null) {
                 visualDraws(passes).forEach { draw ->
                     val authority = draw.materialAuthority
@@ -386,15 +390,37 @@ public class RenderGraph private constructor(
                             stopSlab, requireNotNull(authority.coordinates))) { W5cPlanDiagnostics.NumericDomainUnbounded }
                     }
                 }
+                // A W6b MaskShader has no visual draw packet, but its MaterialV1/V2 authority
+                // was issued by the same W5 row and must receive the identical stop slab.
+                // Validate that frozen projection here rather than asking native lowering to
+                // recover a private coordinate field from the material table.
+                maskShaderBindings.forEach { binding ->
+                    val authority = binding.materialAuthority
+                    var indexI32 = authority.materialPlanRef().indexI32
+                    while (materialPlanTable.entry(MaterialPlanRef(indexI32)).bindings is MaterialBindingPlan.OpacityF32V1) indexI32--
+                    val entry = materialPlanTable.entry(MaterialPlanRef(indexI32))
+                    if (entry.bindings is MaterialBindingPlan.GradientV2) {
+                        require(authority is PlanDrawMaterialAuthority.MaterialV2 &&
+                            entry.program is GradientAddressingProgramV2 && entry.bindings.numericAuthority.authenticates(
+                                entry.program, entry.bindings, stopSlab, authority.coordinates)) {
+                            W5dPlanDiagnostics.CoordinatePlanSchema
+                        }
+                    }
+                    if (entry.bindings is MaterialBindingPlan.GradientV1) {
+                        require(authority is PlanDrawMaterialAuthority.MaterialV1 && authority.coordinates != null &&
+                            entry.bindings.numericAuthority.authenticates(entry.program, entry.bindings,
+                                stopSlab, authority.coordinates)) { W5cPlanDiagnostics.NumericDomainUnbounded }
+                    }
+                }
             }
-            if (stopSlab != null && visualDraws(passes).any {
-                    materialPlanTable.sourceUsesGradientStopSlab(it.materialAuthority.materialPlanRef())
+            if (stopSlab != null && (visualDraws(passes).map { it.materialAuthority.materialPlanRef() } +
+                    maskShaderBindings.map { it.material }).any {
+                    materialPlanTable.sourceUsesGradientStopSlab(it)
                 } && resources.none { it.role == PlanResourceRole.GradientStopData }) {
                 stopSlab.requireStorageCapabilities(capabilities)
-                val sourceRequirements = visualDraws(passes).filter {
-                    it.materialAuthority.colorSourceCoordinatesV4() == null
-                }.map { draw ->
-                    val authority = draw.materialAuthority
+                val sourceRequirements = visualDraws(passes).map { it.materialAuthority } +
+                    maskShaderBindings.map { it.materialAuthority }
+                val nonV4Requirements = sourceRequirements.filter { it.colorSourceCoordinatesV4() == null }.map { authority ->
                     val source = RawMaterialRequirementsV2.of(materialPlanTable, authority.materialPlanRef())
                     require(source.fitsUniformBinding(capabilities)) {
                         if (authority is PlanDrawMaterialAuthority.MaterialV2) W5dPlanDiagnostics.CoordinateUniformBudget else W5cPlanDiagnostics.StorageUnavailable
@@ -403,7 +429,7 @@ public class RenderGraph private constructor(
                 }
                 val peakI64 = Math.addExact(peakFrameLocalBytes, stopSlab.byteSizeI64)
                 if (capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID) W6aLayerPlanBudget.requireWithin(peakI64, budget)
-                else RawMaterialRequirementsV2.requireFrameBudget(sourceRequirements, peakI64, budget, W5cPlanDiagnostics.StopBudget)
+                else RawMaterialRequirementsV2.requireFrameBudget(nonV4Requirements, peakI64, budget, W5cPlanDiagnostics.StopBudget)
                 val stopResource = PlanResource.of(PlanResourceRole.GradientStopData, 0, PlanResourceKind.Buffer,
                     null, null, stopSlab.byteSizeI64, setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination),
                     PlanResourceLifetime.FrameLocal, 0, passes.size)
@@ -808,6 +834,9 @@ public class RenderGraph private constructor(
                             add(binding.uniformResource)
                         }
                     }
+                (pass.operation as? FilterPassOperationV1.MaskTable)?.let { table ->
+                    add(table.tableResourceId)
+                }
             }
             is PlanPass.FilterComposite -> listOfNotNull(pass.source, pass.destination, pass.replacedLayerSource)
             is PlanPass.ResolvePass -> listOf(pass.source, pass.destination)

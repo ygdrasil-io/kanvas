@@ -35,6 +35,8 @@ public enum class PlanResourceRole {
     DestinationSnapshot,
     DecodedImageV1,
     NoiseTableData,
+    /** Immutable 256-entry U8 lookup table captured by one W6b MaskFilter.Table occurrence. */
+    MaskTableData,
     SourceUniformData,
     ImageUploadStaging,
     RuntimeStorageData,

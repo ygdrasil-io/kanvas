@@ -224,13 +224,28 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                 is FilterPassOperationV1.MaskShader -> {
                     require(rows.getValue(key.boundSourceId).role == PlanResourceRole.CoverageSource && inputs.single() == key.boundSourceId)
                     when (operation.materialBinding) {
-                        is FilterPassOperationV1.MaskShaderMaterialBindingV1.CapturedOccurrence,
-                        is FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned,
-                        -> Unit
+                        is FilterPassOperationV1.MaskShaderMaterialBindingV1.CapturedOccurrence -> Unit
+                        is FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned -> {
+                            val uniform = rows.getValue(operation.materialBinding.uniformResource)
+                            require(uniform.role == PlanResourceRole.SourceUniformData &&
+                                uniform.kind == PlanResourceKind.Buffer &&
+                                operation.materialBinding.uniformOffsetBytesI64 == 0L &&
+                                operation.materialBinding.uniformCapacityBytesI64 == uniform.byteSize &&
+                                operation.materialBinding.materialAuthority.materialPlanRef() ==
+                                operation.materialBinding.material)
+                        }
                     }
                 }
-                is FilterPassOperationV1.MaskTable ->
+                is FilterPassOperationV1.MaskTable -> {
                     require(rows.getValue(key.boundSourceId).role == PlanResourceRole.CoverageSource && inputs.single() == key.boundSourceId)
+                    val table = rows.getValue(operation.tableResourceId)
+                    require(operation.entryCountI32 == 256 && operation.copyTable().sizeI32 == 256 &&
+                        operation.generationI64 == 0L && operation.ownerMaskOccurrenceI32 == key.maskOccurrenceI32 &&
+                        table.role == PlanResourceRole.MaskTableData && table.kind == PlanResourceKind.Buffer &&
+                        table.byteSize == 256L && table.usages() ==
+                        setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination) &&
+                        table.lifetime == PlanResourceLifetime.FrameLocal)
+                }
                 is FilterPassOperationV1.MaterializedSource -> {
                     require(rows.getValue(key.boundSourceId).role == PlanResourceRole.FilterSource &&
                         inputs.first() == key.boundSourceId)

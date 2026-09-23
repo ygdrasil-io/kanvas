@@ -166,10 +166,20 @@ public sealed interface FilterPassOperationV1 {
             public val occurrenceIdI32: Int,
             public val material: MaterialPlanRef,
             public val uniformResource: PlanResourceId,
+            /** Exact byte window in the W5-issued uniform resource; never a renderer inference. */
+            public val uniformOffsetBytesI64: Long,
+            public val uniformCapacityBytesI64: Long,
+            /** Existing W5 coordinate authority, projected at graph publication without exposing V1 internals. */
+            public val materialAuthority: PlanDrawMaterialAuthority,
+            /** The occurrence-local F64 mapping already sealed by the filter evaluation. */
+            public val evaluationMappingF64: LayerMappingF64,
         ) : MaskShaderMaterialBindingV1 {
             init {
                 require(occurrenceIdI32 >= 0)
                 require(uniformResource.value.startsWith("${PlanResourceRole.SourceUniformData.name}:"))
+                require(uniformOffsetBytesI64 >= 0L && uniformCapacityBytesI64 > 0L &&
+                    uniformOffsetBytesI64 < uniformCapacityBytesI64)
+                require(materialAuthority.materialPlanRef() == material)
             }
         }
         /** Actual captured material and occurrence identity, never a canonical-string substitute. */
@@ -191,11 +201,24 @@ public sealed interface FilterPassOperationV1 {
 
     public class MaskTable(
         table: ImmutableUBytes,
+        /** Immutable storage row allocated by the W6b graph, never by native materialization. */
+        public val tableResourceId: PlanResourceId,
+        /** Explicitly seals the public 256-entry Table contract before graph publication. */
+        public val entryCountI32: Int,
+        /** One immutable captured generation per occurrence-local table resource. */
+        public val generationI64: Long,
+        /** Prevents identical content from being treated as a cross-occurrence resource authority. */
+        public val ownerMaskOccurrenceI32: Int,
         override val bounds: FilterBoundsPlanV1,
         override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.MASK_TABLE,
     ) : FilterPassOperationV1 {
         private val tableSnapshot = ImmutableUBytes.copyOf(table.copyToUByteArray())
-        init { require(kind == FilterImplementationKindV1.MASK_TABLE) }
+        init {
+            require(kind == FilterImplementationKindV1.MASK_TABLE)
+            require(tableResourceId.value.startsWith("${PlanResourceRole.MaskTableData.name}:"))
+            require(entryCountI32 == 256 && tableSnapshot.sizeI32 == entryCountI32)
+            require(generationI64 >= 0L && ownerMaskOccurrenceI32 >= 0)
+        }
         public fun copyTable(): ImmutableUBytes = ImmutableUBytes.copyOf(tableSnapshot.copyToUByteArray())
     }
 

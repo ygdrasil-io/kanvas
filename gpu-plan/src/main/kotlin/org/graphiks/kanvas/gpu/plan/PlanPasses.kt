@@ -1122,6 +1122,13 @@ public sealed interface PlanPass {
         init { require(sealedAlphaSource == null || rasterBinding == null) }
         override val role: PlanPassRole = PlanPassRole.FilterCoverageSource
         override val id: PlanPassId = checkedPassId(role, ordinal)
+
+        /** Attaches the existing W4 producer before the graph becomes immutable. */
+        public fun withRasterBinding(binding: W6bRasterCoverageBindingV1): FilterCoverageSourcePass {
+            require(sealedAlphaSource == null && rasterBinding == null)
+            return FilterCoverageSourcePass(ordinal, output, occurrence, deferSourceDrawClip, pictureCoordinates,
+                sealedAlphaSource, binding)
+        }
     }
 
     /** Preserves original coverage when a later blur style needs both original and blurred inputs. */

@@ -1,6 +1,10 @@
+@file:OptIn(ExperimentalUnsignedTypes::class)
+
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.*
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import org.graphiks.kanvas.gpu.plan.*
 import org.graphiks.kanvas.gpu.renderer.materials.W5fColorOperationEmitterV1
 import org.graphiks.kanvas.gpu.renderer.recording.*
@@ -91,6 +95,71 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
                         label = "w6b.parent.filter.${frame.physical.slot(id).slotI32}")))
                 }
+            // `MASK_SHADER` names rows already packed by FrameSourceLayoutV4.  Allocate only
+            // those published SourceUniformData resources, preserving the plan's generation and
+            // physical slot instead of issuing a renderer-local material row.
+            val maskShaderMaterials = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
+                (pass.operation as? FilterPassOperationV1.MaskShader)?.materialBinding
+                    as? FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned
+            }.distinctBy { it.occurrenceIdI32 }.associateWith(frame::maskShaderMaterial)
+            val maskShaderUniformBuffers = maskShaderMaterials.values.associate { material ->
+                val resource = frame.physical.resource(material.binding.uniformResource)
+                val bytes = material.stage.uniformBytes
+                require(resource.role == PlanResourceRole.SourceUniformData && resource.kind == PlanResourceKind.Buffer &&
+                    material.binding.uniformOffsetBytesI64 == 0L &&
+                    material.binding.uniformCapacityBytesI64 == resource.byteSize &&
+                    Math.addExact(material.binding.uniformOffsetBytesI64, bytes.size.toLong()) <=
+                    material.binding.uniformCapacityBytesI64 &&
+                    resource.usages() == setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination))
+                material.binding.uniformResource to owned.own(device.createBuffer(BufferDescriptor(
+                    size = resource.byteSize.toULong(), usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                    label = "w6b.mask.shader.${frame.physical.slot(resource.id).slotI32}"))).also { buffer ->
+                    queue.writeBuffer(buffer, material.binding.uniformOffsetBytesI64.toULong(), ArrayBuffer.of(bytes),
+                        0uL, bytes.size.toULong())
+                }
+            }
+            val maskShaderGradientSlab = maskShaderMaterials.values.mapNotNull { it.stage.gradientStopSlab }
+                .distinctBy { it.canonicalIdentity }.singleOrNull()
+            require(maskShaderMaterials.values.mapNotNull { it.stage.gradientStopSlab }
+                .distinctBy { it.canonicalIdentity }.size <= 1)
+            val maskShaderGradientBuffer = maskShaderGradientSlab?.let { slab ->
+                val resource = frame.physical.resource(graph.resources().single {
+                    it.role == PlanResourceRole.GradientStopData
+                }.id)
+                require(resource.byteSize == slab.byteSizeI64 &&
+                    resource.usages() == setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination))
+                val bytes = ByteBuffer.allocate(Math.toIntExact(slab.byteSizeI64)).order(ByteOrder.LITTLE_ENDIAN).also { sink ->
+                    slab.copyStops().forEach { stop ->
+                        sink.putFloat(stop.positionF32)
+                        repeat(3) { sink.putFloat(0f) }
+                        val color = stop.preparedTupleF32
+                        listOf(color.red, color.green, color.blue, color.alpha).forEach(sink::putFloat)
+                    }
+                }.array()
+                owned.own(device.createBuffer(BufferDescriptor(size = resource.byteSize.toULong(),
+                    usage = GPUBufferUsage.Storage or GPUBufferUsage.CopyDst,
+                    label = "w6b.mask.shader.stops.${frame.physical.slot(resource.id).slotI32}"))).also { buffer ->
+                    queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(bytes), 0uL, bytes.size.toULong())
+                }
+            }
+            // MASK_TABLE owns both its immutable captured bytes and its physical StorageRead
+            // row in the published graph.  Upload that exact snapshot to that exact row; no
+            // renderer-local LUT, padding, or generated fallback is permitted.
+            val maskTableBuffers = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
+                (pass.operation as? FilterPassOperationV1.MaskTable)?.let { table -> table.tableResourceId to table }
+            }.associate { (id, operation) ->
+                val resource = frame.physical.resource(id)
+                val bytes = operation.copyTable().copyToUByteArray()
+                require(operation.entryCountI32 == 256 && bytes.size == operation.entryCountI32 &&
+                    resource.role == PlanResourceRole.MaskTableData && resource.kind == PlanResourceKind.Buffer &&
+                    resource.byteSize == 256L && resource.usages() ==
+                    setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination))
+                id to owned.own(device.createBuffer(BufferDescriptor(size = resource.byteSize.toULong(),
+                    usage = GPUBufferUsage.Storage or GPUBufferUsage.CopyDst,
+                    label = "w6b.mask.table.${frame.physical.slot(id).slotI32}"))).also { buffer ->
+                    queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(ByteArray(bytes.size) { index -> bytes[index].toByte() }))
+                }
+            }
             val graphTextureOperandsBySource = graph.passes().filterIsInstance<PlanPass.PictureSourcePass>()
                 .mapNotNull { pass -> pass.graphTextureOperand?.let { operand -> pass.output to operand } }
                 .toMap()
@@ -475,6 +544,25 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     original?.let(frame::targetOriginDeviceI32)?.x, original?.let(frame::targetOriginDeviceI32)?.y,
                                     outputExtent.width, outputExtent.height, pass, owned)
                             }
+                            is FilterPassOperationV1.MaskShader -> {
+                                require(pass.inputs().size == 1)
+                                val binding = operation.materialBinding as? FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned
+                                    ?: error("W6b mask shader lost its frozen W5 material binding.")
+                                val input = pass.inputs().single()
+                                val inputOrigin = frame.targetOriginDeviceI32(input)
+                                maskShaderCoverageRender(stepIndex, views.getValue(pass.output), views.getValue(input), generation,
+                                    frame.maskShaderMaterial(binding), maskShaderUniformBuffers.getValue(binding.uniformResource),
+                                    maskShaderGradientBuffer, inputOrigin.x, inputOrigin.y, outputOrigin.x, outputOrigin.y,
+                                    outputExtent.width, outputExtent.height, pass, owned).also(renderOperands::add)
+                            }
+                            is FilterPassOperationV1.MaskTable -> {
+                                require(pass.inputs().size == 1)
+                                val input = pass.inputs().single()
+                                val inputOrigin = frame.targetOriginDeviceI32(input)
+                                renderOperands += maskTableCoverageRender(stepIndex, views.getValue(pass.output), views.getValue(input),
+                                    maskTableBuffers.getValue(operation.tableResourceId), generation, inputOrigin.x, inputOrigin.y,
+                                    outputOrigin.x, outputOrigin.y, outputExtent.width, outputExtent.height, pass, owned)
+                            }
                             is FilterPassOperationV1.MaterializedSource -> {
                                 require(pass.inputs().size == 2)
                                 val input = pass.inputs().first()
@@ -487,7 +575,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     materialSourceAlphaReplacement.getValue(input),
                                     outputExtent.width, outputExtent.height, pass, owned)
                             }
-                            else -> error("W6b Task 4 materializes only frozen mask blur and W5 source operations.")
+                            else -> error("W6b native operation is not implemented.")
                         }
                     }
                     is PlanPass.PictureComposite -> {
@@ -956,6 +1044,108 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         )
     }
 
+    /** Applies the plan-owned 256-byte LUT before material/source blending. */
+    private fun maskTableCoverageRender(
+        stepIndex: Int,
+        target: GPUTextureView,
+        coverage: GPUTextureView,
+        table: GPUBuffer,
+        generation: GPUDeviceGenerationID,
+        inputOriginDeviceXI32: Int,
+        inputOriginDeviceYI32: Int,
+        outputOriginDeviceXI32: Int,
+        outputOriginDeviceYI32: Int,
+        widthI32: Int,
+        heightI32: Int,
+        pass: PlanPass,
+        owned: W6aOwnedHandles,
+    ): GPUPreparedNativeScopeOperand.Render {
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(
+            BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
+            BindGroupLayoutEntry(1u, GPUShaderStage.Fragment, buffer = BufferBindingLayout(
+                type = GPUBufferBindingType.ReadOnlyStorage, minBindingSize = 256uL)),
+        ))))
+        val pipeline = pipeline(W6A_VERTEX_SHADER + W6bMaskCoverageSnippet.maskTableCoverageFragment(
+            inputOriginDeviceXI32, inputOriginDeviceYI32, outputOriginDeviceXI32, outputOriginDeviceYI32,
+        ), layout, w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout,
+            entries = listOf(BindGroupEntry(0u, coverage), BindGroupEntry(1u, BufferBinding(table, 0uL, 256uL))))))
+        return GPUPreparedNativeScopeOperand.Render(
+            stepIndex,
+            GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation),
+                loadOperation = GPUPreparedNativeLoadOperation.Clear,
+                clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)),
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+                GPUPreparedNativeRenderCommand.SetScissor(0, 0, widthI32, heightI32),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0)),
+            ),
+            w6aPassV1 = pass,
+        )
+    }
+
+    /** Multiplies frozen raw coverage by the alpha of its already-issued W5 material row. */
+    private fun maskShaderCoverageRender(
+        stepIndex: Int,
+        target: GPUTextureView,
+        coverage: GPUTextureView,
+        generation: GPUDeviceGenerationID,
+        material: GPUW6bMaskShaderMaterialV1,
+        uniform: GPUBuffer,
+        gradientStops: GPUBuffer?,
+        inputOriginDeviceXI32: Int,
+        inputOriginDeviceYI32: Int,
+        outputOriginDeviceXI32: Int,
+        outputOriginDeviceYI32: Int,
+        widthI32: Int,
+        heightI32: Int,
+        pass: PlanPass,
+        owned: W6aOwnedHandles,
+    ): GPUPreparedNativeScopeOperand.Render {
+        val stage = material.stage
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries =
+            listOf(BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout())) +
+            stage.bindingManifest.map { binding -> when (binding.resourceKind) {
+                "uniformBuffer" -> BindGroupLayoutEntry((binding.bindingI32 + 1).toUInt(), GPUShaderStage.Fragment,
+                    buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform,
+                        minBindingSize = stage.uniformByteCountI64.toULong()))
+                "storageBuffer" -> BindGroupLayoutEntry((binding.bindingI32 + 1).toUInt(), GPUShaderStage.Fragment,
+                    buffer = BufferBindingLayout(type = GPUBufferBindingType.ReadOnlyStorage,
+                        minBindingSize = requireNotNull(stage.gradientStopSlab).byteSizeI64.toULong()))
+                else -> error("W6b MaskShader requires an unsupported W5 resource kind ${binding.resourceKind}.")
+            } })))
+        val pipeline = pipeline(W6A_VERTEX_SHADER + W6bMaskCoverageSnippet.maskShaderCoverageFragment(
+            stage.bindingManifest.fold(stage.declarationsWgsl) { declarations, binding ->
+                declarations.replace("@group(1) @binding(${binding.bindingI32})",
+                    "@group(0) @binding(${binding.bindingI32 + 1})")
+            }, material.sourceInputWgsl, inputOriginDeviceXI32, inputOriginDeviceYI32,
+            outputOriginDeviceXI32, outputOriginDeviceYI32,
+        ), layout, w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout,
+            entries = listOf(BindGroupEntry(0u, coverage)) + stage.bindingManifest.map { binding -> when (binding.resourceKind) {
+                "uniformBuffer" -> BindGroupEntry((binding.bindingI32 + 1).toUInt(), BufferBinding(uniform,
+                    material.binding.uniformOffsetBytesI64.toULong(),
+                    stage.uniformByteCountI64.toULong()))
+                "storageBuffer" -> BindGroupEntry((binding.bindingI32 + 1).toUInt(), BufferBinding(requireNotNull(gradientStops),
+                    0uL, requireNotNull(stage.gradientStopSlab).byteSizeI64.toULong()))
+                else -> error("W6b MaskShader requires an unsupported W5 resource kind ${binding.resourceKind}.")
+            } })))
+        return GPUPreparedNativeScopeOperand.Render(
+            stepIndex,
+            GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation),
+                loadOperation = GPUPreparedNativeLoadOperation.Clear,
+                clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)),
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+                GPUPreparedNativeRenderCommand.SetScissor(0, 0, widthI32, heightI32),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0)),
+            ),
+            w6aPassV1 = pass,
+        )
+    }
+
     /** Applies one frozen mask style to its blurred input and optional original coverage. */
     private fun maskStyleRender(
         stepIndex: Int,
@@ -1240,6 +1430,17 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             owned.templates[pipeline] = GPUW5aGeometryPipelineTemplate(it.pipelineRecipeId, descriptor, groupZero,
                 materialCoordinateSlot = it.materialCoordinateSlot)
         } }
+    }
+
+    /** Fullscreen W6b coverage filters may consume a frozen W5 row in group 1. */
+    private fun pipeline(shader: String, bindGroups: List<GPUBindGroupLayout>, target: ColorTargetState,
+        owned: W6aOwnedHandles): GPURenderPipeline {
+        val module = owned.own(device.createShaderModule(ShaderModuleDescriptor(code = shader)))
+        val layout = owned.own(device.createPipelineLayout(PipelineLayoutDescriptor(bindGroupLayouts = bindGroups)))
+        return owned.own(device.createRenderPipeline(RenderPipelineDescriptor(layout = layout,
+            vertex = VertexState(module, entryPoint = "vs_main"),
+            fragment = FragmentState(module = module, targets = listOf(target), entryPoint = "fs_main"),
+            primitive = PrimitiveState(topology = GPUPrimitiveTopology.TriangleList))))
     }
 }
 

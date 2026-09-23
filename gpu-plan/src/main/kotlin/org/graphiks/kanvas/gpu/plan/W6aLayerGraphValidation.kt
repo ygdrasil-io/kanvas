@@ -347,8 +347,19 @@ internal fun validateW6aLayerTopology(
                 if (binding is FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned) {
                     val uniform = byId.getValue(binding.uniformResource)
                     require(uniform.role == PlanResourceRole.SourceUniformData && uniform.kind == PlanResourceKind.Buffer &&
-                        PlanResourceUsage.Uniform in uniform.usages())
+                        PlanResourceUsage.Uniform in uniform.usages() && binding.uniformOffsetBytesI64 == 0L &&
+                        binding.uniformCapacityBytesI64 == uniform.byteSize &&
+                        binding.materialAuthority.materialPlanRef() == binding.material)
                 }
+            }
+            (pass.operation as? FilterPassOperationV1.MaskTable)?.let { table ->
+                val resource = byId.getValue(table.tableResourceId)
+                require(table.entryCountI32 == 256 && table.copyTable().sizeI32 == 256 &&
+                    table.generationI64 == 0L && pass.evaluationKey.maskOccurrenceI32 == table.ownerMaskOccurrenceI32 &&
+                    resource.role == PlanResourceRole.MaskTableData && resource.kind == PlanResourceKind.Buffer &&
+                    resource.byteSize == 256L && resource.usages() ==
+                    setOf(PlanResourceUsage.StorageRead, PlanResourceUsage.CopyDestination) &&
+                    resource.lifetime == PlanResourceLifetime.FrameLocal)
             }
         }
         is PlanPass.FilterComposite -> {

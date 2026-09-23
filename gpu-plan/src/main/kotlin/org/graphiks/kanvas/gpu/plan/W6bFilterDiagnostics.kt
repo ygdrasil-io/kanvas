@@ -12,6 +12,8 @@ public object W6bFilterDiagnostics {
     public const val FilteredPrevious: String = "w6b.filter.filtered_previous"
     public const val UnsupportedTargetFormat: String = "w6b.filter.unsupported_target_format"
     public const val NativeExecutionUnimplemented: String = "w6b.filter.native_execution_unimplemented"
+    /** Historical Picture payloads may decode a table that no longer has the W6b ABI length. */
+    public const val InvalidMaskTableLength: String = "invalid.mask_filter.table_length"
     public const val InvalidBounds: String = "w6b.filter.invalid_bounds"
     public const val FrameBudgetExceeded: String = "w6b.filter.frame_budget_exceeded"
     public const val NativeCapability: String = "w6b.filter.native_capability"

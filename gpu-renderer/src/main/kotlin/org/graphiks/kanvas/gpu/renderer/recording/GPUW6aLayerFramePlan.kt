@@ -11,6 +11,7 @@ import org.graphiks.math.color.ColorF32
 import org.graphiks.math.geometry.Point2I32
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.execution.*
+import org.graphiks.kanvas.gpu.renderer.materials.W5aMaterialSourceStage
 
 internal fun w6aRenderPacketsMatch(pass: PlanPass, packets: List<GPUDrawPacket>): Boolean {
     val w4e = packets.singleOrNull()?.takeIf { it.role == GPUDrawPacketRole.W4ePrepared }
@@ -49,11 +50,51 @@ internal fun w6aRenderPacketsMatch(pass: PlanPass, packets: List<GPUDrawPacket>)
 }
 }
 
+/** Native-only view of a W5 row already sealed into a `MASK_SHADER` operation. */
+internal data class GPUW6bMaskShaderMaterialV1(
+    val binding: FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned,
+    val stage: W5aMaterialSourceStage,
+    val sourceInputWgsl: String,
+)
+
 /** Exact handle-free projection of a compiler-authenticated frame, including empty clear scopes. */
 class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLoweringRequest) {
     internal val graph: RenderGraph = request.graph
     private val framePlan = requireNotNull(graph.layerFramePlanOrNull())
     internal val physical = requireNotNull(graph.physicalLayoutOrNull())
+    /**
+     * The graph has already issued each mask occurrence's W5 row and uniform resource.  This
+     * is a handle-free native projection of that exact row; it neither compiles a public Shader
+     * nor adds a material/source/Picture authority to the graph.
+     */
+    private val maskShaderMaterialsByOccurrenceI32: Map<Int, GPUW6bMaskShaderMaterialV1> = graph.passes()
+        .filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
+            val binding = (pass.operation as? FilterPassOperationV1.MaskShader)?.materialBinding
+                as? FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned ?: return@mapNotNull null
+            val table = requireNotNull(graph.materialPlanTableOrNull())
+            require(binding.materialAuthority.materialPlanRef() == binding.material)
+            val stage = when (val authority = binding.materialAuthority) {
+                is PlanDrawMaterialAuthority.MaterialV5,
+                is PlanDrawMaterialAuthority.MaterialV4,
+                -> requireNotNull(W5aMaterialSourceStage.colorV4(
+                    table,
+                    authority,
+                    graph.packedMaterialSourceV4(authority),
+                ))
+                is PlanDrawMaterialAuthority.MaterialV1 -> requireNotNull(W5aMaterialSourceStage.lower(
+                    table, authority.ref, authority.coordinates))
+                is PlanDrawMaterialAuthority.MaterialV2 -> requireNotNull(W5aMaterialSourceStage.lower(
+                    table, authority.ref, authority.coordinates))
+                else -> error("W6b MaskShader has no frozen W5 material authority.")
+            }
+            binding.occurrenceIdI32 to GPUW6bMaskShaderMaterialV1(binding, stage,
+                if (stage.consumesDevicePositionF32)
+                    "${stage.coordinateFunctionName}(device_position)" else "vec2<f32>(0.0)")
+        }.toMap().also { rows ->
+            require(rows.size == graph.passes().count { pass ->
+                (pass as? PlanPass.FilterPass)?.operation is FilterPassOperationV1.MaskShader
+            })
+        }
     internal val w4eAuthorities = physical.w4eGeometryBindings().associateWith { GPUPlanW4ePreparedAuthority.issueLayered(graph, it) }
     private val seal = GPUFrameCapabilitySeal.capture(request.frameId, request.deviceGeneration, request.capabilities)
     private val recording = GPURecordingSeal(request.recordingId, 0L, graph.id.value, graph.id.value, seal.sealHash)
@@ -120,6 +161,12 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     internal fun targetOriginDeviceI32(resource: PlanResourceId): Point2I32 =
         targetOriginsDeviceI32[resource]?.let { Point2I32(it.x, it.y) }
             ?: error("Missing frozen W6 target origin for ${resource.value}")
+    internal fun maskShaderMaterial(binding: FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned):
+        GPUW6bMaskShaderMaterialV1 = requireNotNull(maskShaderMaterialsByOccurrenceI32[binding.occurrenceIdI32]) {
+            "Missing frozen W6b mask-shader W5 row."
+        }.also { issued ->
+            require(issued.binding == binding) { "W6b mask-shader binding changed after graph publication." }
+        }
     internal val memory: GPUFrameMemoryBudgetPlan
     internal val steps: List<GPUFrameStep>
     private val tasks: List<GPUTask>
@@ -142,7 +189,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
         require(memory.diagnostic == null && memory.targetResidentBytes + memory.peakFrameTransientBytes ==
             graph.peakFrameLocalBytes)
         val preparations = graph.resources().filter { it.kind == PlanResourceKind.Texture2D && it.lifetime == PlanResourceLifetime.FrameLocal ||
-            it.role == PlanResourceRole.ReadbackStaging || physical.w4eGeometryBindings().any { binding ->
+            it.role in setOf(PlanResourceRole.ReadbackStaging, PlanResourceRole.MaskTableData) || physical.w4eGeometryBindings().any { binding ->
                 it.id in setOf(binding.payload.vertexResourceId, binding.payload.indexResourceId, binding.payload.uniformResourceId) } }
             .map { resource -> GPUResourcePreparationRequest(refs.getValue(resource.id),
                 resource.copyExtent()?.let { GPUFrameTextureDescriptor(GPUPixelBounds(0, 0, it.width, it.height),
@@ -165,6 +212,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                     PlanResourceRole.VertexData -> GPUFrameResourceRole.VertexData
                     PlanResourceRole.IndexData -> GPUFrameResourceRole.IndexData
                     PlanResourceRole.UniformData -> GPUFrameResourceRole.UniformData
+                    PlanResourceRole.MaskTableData -> GPUFrameResourceRole.StorageData
                     else -> GPUFrameResourceRole.ReadbackStaging
                 }, resource.usages().map { usage -> when (usage) {
                     PlanResourceUsage.RenderAttachment, PlanResourceUsage.DepthStencilAttachment -> GPUFrameResourceUsage.RenderAttachment
@@ -175,7 +223,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                     PlanResourceUsage.Vertex -> GPUFrameResourceUsage.Vertex
                     PlanResourceUsage.Index -> GPUFrameResourceUsage.Index
                     PlanResourceUsage.Uniform -> GPUFrameResourceUsage.Uniform
-                    else -> error("Unsupported W6 target usage")
+                    PlanResourceUsage.StorageRead -> GPUFrameResourceUsage.Storage
                 } }.toSet(), GPUFrameResourceLifetime.FrameLocal, resource.byteSize, refs.getValue(resource.id).value) }
         steps = java.util.Collections.unmodifiableList(buildList {
             add(GPUFrameStep.PrepareResourcesStep(preparations, listOf(GPUTaskID("w6a.prepare"))))

@@ -18,7 +18,9 @@ import org.graphiks.kanvas.gpu.plan.RuntimeEffectSemanticCatalog
 import org.graphiks.kanvas.gpu.plan.W6aLayerPlanCompiler
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.DropShadowMode
+import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.render.ir.DisplayOpSceneAdapter
 import org.graphiks.kanvas.render.ir.RenderPlanResult
@@ -166,6 +168,34 @@ class W6bFilterPictureTest {
     }
 
     @Test
+    fun maskShaderAndTableSurvivePictureMemoryAndWireReplay() {
+        val table = UByteArray(256)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 2f, 1f)).apply {
+                drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(
+                    ColorARGB.Red,
+                    maskFilter = MaskFilter.Shader(Shader.SolidColor(ColorARGB.White)),
+                    antiAlias = false,
+                ))
+                drawRect(RectF32.ofLTRB(1f, 0f, 2f, 1f), Paint(
+                    ColorARGB.Red,
+                    maskFilter = MaskFilter.Table(table),
+                    antiAlias = false,
+                ))
+            }
+        }.finishRecordingAsPicture()
+        table.fill(255u)
+
+        listOf(picture, assertNotNull(Picture.fromByteArray(picture.toByteArray()))).forEach { replay ->
+            val filters = replayMaskFilters(replay)
+            assertTrue(filters[0] is MaskFilter.Shader)
+            assertContentEquals(UByteArray(256), (filters[1] as MaskFilter.Table).table)
+            val pixels = Surface(2, 1).also { surface -> surface.canvas { replay.playback(this) } }.render().pixels
+            assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u, 0u, 0u, 0u, 0u), pixels)
+        }
+    }
+
+    @Test
     fun `publicly captured repeated Picture occurrences seal distinct graph sources and exact consumers`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 7f, 7f)
         val source = PictureRecorder().also { recorder ->
@@ -277,6 +307,13 @@ class W6bFilterPictureTest {
         picture.forEachOp { operation ->
             val draw = operation as? DisplayOp.DrawRect ?: return@forEachOp
             draw.paint.imageFilter?.let(::add)
+        }
+    }
+
+    private fun replayMaskFilters(picture: Picture): List<MaskFilter> = buildList {
+        picture.forEachOp { operation ->
+            val draw = operation as? DisplayOp.DrawRect ?: return@forEachOp
+            draw.paint.maskFilter?.let(::add)
         }
     }
 

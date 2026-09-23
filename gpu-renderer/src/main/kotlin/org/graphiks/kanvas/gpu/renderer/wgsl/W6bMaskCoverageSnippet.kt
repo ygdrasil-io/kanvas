@@ -34,6 +34,61 @@ internal object W6bMaskCoverageSnippet {
         }
     """
 
+    /**
+     * Samples only the alpha of the W5 row already issued for this mask occurrence.  The
+     * caller supplies the row's declarations verbatim; this is a coverage consumer, not a
+     * second public-Shader compiler.
+     */
+    fun maskShaderCoverageFragment(
+        materialDeclarationsWgsl: String,
+        materialInputWgsl: String,
+        inputOriginDeviceXI32: Int,
+        inputOriginDeviceYI32: Int,
+        outputOriginDeviceXI32: Int,
+        outputOriginDeviceYI32: Int,
+    ): String = """
+        @group(0) @binding(0) var w6b_shader_coverage: texture_2d<f32>;
+        $materialDeclarationsWgsl
+        @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+            let local = vec2<i32>(position.xy);
+            let input_position = local + vec2<i32>($outputOriginDeviceXI32 - $inputOriginDeviceXI32,
+                $outputOriginDeviceYI32 - $inputOriginDeviceYI32);
+            let input_extent = vec2<i32>(textureDimensions(w6b_shader_coverage));
+            if (input_position.x < 0 || input_position.y < 0 || input_position.x >= input_extent.x || input_position.y >= input_extent.y) {
+                return vec4<f32>(0.0);
+            }
+            let coverage = textureLoad(w6b_shader_coverage, input_position, 0).a;
+            let device_position = position.xy + vec2<f32>($outputOriginDeviceXI32.0, $outputOriginDeviceYI32.0);
+            let shader_alpha = kanvas_material_source($materialInputWgsl).a;
+            return vec4<f32>(coverage * shader_alpha);
+        }
+    """
+
+    /** Reads the plan-owned 256-byte LUT as 64 packed little-endian U32 storage words. */
+    fun maskTableCoverageFragment(
+        inputOriginDeviceXI32: Int,
+        inputOriginDeviceYI32: Int,
+        outputOriginDeviceXI32: Int,
+        outputOriginDeviceYI32: Int,
+    ): String = """
+            @group(0) @binding(0) var w6b_table_coverage: texture_2d<f32>;
+            @group(0) @binding(1) var<storage, read> w6b_mask_table_words: array<u32, 64>;
+            @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+                let input_position = vec2<i32>(position.xy) + vec2<i32>($outputOriginDeviceXI32 - $inputOriginDeviceXI32,
+                    $outputOriginDeviceYI32 - $inputOriginDeviceYI32);
+                let input_extent = vec2<i32>(textureDimensions(w6b_table_coverage));
+                if (input_position.x < 0 || input_position.y < 0 || input_position.x >= input_extent.x || input_position.y >= input_extent.y) {
+                    return vec4<f32>(0.0);
+                }
+                let coverage = textureLoad(w6b_table_coverage, input_position, 0).a;
+                let table_index = u32(round(clamp(coverage, 0.0, 1.0) * 255.0));
+                let packed_word = w6b_mask_table_words[table_index / 4u];
+                let shift = (table_index % 4u) * 8u;
+                let table_alpha = f32((packed_word >> shift) & 0xffu) / 255.0;
+                return vec4<f32>(coverage * table_alpha);
+            }
+        """
+
     fun maskStyleFragment(
         style: MaskBlurStyle,
         blurredOriginDeviceXI32: Int,
