@@ -25,6 +25,18 @@ class W6dLightingSurfacePixelTest {
     )
 
     @Test
+    fun `point diffuse preserves Z when XY is unchanged`() {
+        val alpha = alphaFixture()
+        val near = W6dLightingCpuOracle.remainingFamilyRgba8(W6dLightingCpuOracle.Family.POINT_DIFFUSE, 3, 3, alpha,
+            1f, 0f, 1f, surfaceDepth = 1f, coefficient = 1f)
+        val far = W6dLightingCpuOracle.remainingFamilyRgba8(W6dLightingCpuOracle.Family.POINT_DIFFUSE, 3, 3, alpha,
+            1f, 0f, 100f, surfaceDepth = 1f, coefficient = 1f)
+        assertFalse(near.contentEquals(far), "The independent point-light oracle must distinguish Z at fixed XY.")
+        assertPointFamilyNear(near, Point3F32(1f, 0f, 1f))
+        assertPointFamilyNear(far, Point3F32(1f, 0f, 100f))
+    }
+
+    @Test
     fun `spot diffuse uses Skia falloff before cone edge ramp`() = assertRemainingFamily(
         W6dLightingCpuOracle.Family.SPOT_DIFFUSE,
         ImageFilter.SpotLitDiffuse(Point3F32(1f, 0f, 1f), Point3F32(1f, 0f, 0f), 1f, 90f, ColorARGB.White, 1f, 1f),
@@ -211,7 +223,7 @@ class W6dLightingSurfacePixelTest {
         filter: ImageFilter,
         expectedTopLeft: UByteArray? = null,
     ) {
-        val alpha = floatArrayOf(0f, 1f, 0f, 1f, 1f, 0f, 0f, 1f, 0f)
+        val alpha = alphaFixture()
         val expected = W6dLightingCpuOracle.remainingFamilyRgba8(family, 3, 3, alpha,
             locationX = 1f, locationY = 0f, locationZ = 1f, targetX = 1f, targetY = 0f, targetZ = 0f,
             surfaceDepth = 1f, coefficient = 1f, shininess = 2f, specularExponent = 1f, cutoffDegrees = 90f)
@@ -219,6 +231,20 @@ class W6dLightingSurfacePixelTest {
         val surface = Surface(3, 3)
         surface.canvas {
             saveLayer(SaveLayerRec(paint = Paint(imageFilter = filter, antiAlias = false)))
+            listOf(1 to 0, 0 to 1, 1 to 1, 1 to 2).forEach { (x, y) ->
+                drawRect(RectF32.ofLTRB(x.toFloat(), y.toFloat(), x + 1f, y + 1f), Paint(ColorARGB.White, antiAlias = false))
+            }
+            restore()
+        }
+        assertFamilyNear(expected, surface.render(), maxChannelDelta = 2)
+    }
+
+    private fun alphaFixture(): FloatArray = floatArrayOf(0f, 1f, 0f, 1f, 1f, 0f, 0f, 1f, 0f)
+
+    private fun assertPointFamilyNear(expected: UByteArray, location: Point3F32) {
+        val surface = Surface(3, 3)
+        surface.canvas {
+            saveLayer(SaveLayerRec(paint = Paint(imageFilter = ImageFilter.PointLitDiffuse(location, ColorARGB.White, 1f, 1f), antiAlias = false)))
             listOf(1 to 0, 0 to 1, 1 to 1, 1 to 2).forEach { (x, y) ->
                 drawRect(RectF32.ofLTRB(x.toFloat(), y.toFloat(), x + 1f, y + 1f), Paint(ColorARGB.White, antiAlias = false))
             }
