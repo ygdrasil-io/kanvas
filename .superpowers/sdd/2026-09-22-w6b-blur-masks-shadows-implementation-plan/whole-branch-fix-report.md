@@ -3,7 +3,8 @@
 Base de correction : `2bf3d52`.
 
 > La re-review a constaté que ce round ne fermait pas encore I1, I5 et I7.
-> Le statut final et les preuves R21 sont dans `whole-branch-fix2-report.md`.
+> Les preuves historiques R21 sont dans `whole-branch-fix2-report.md`; le
+> statut final R22 est dans `whole-branch-fix3-report.md`.
 
 Cette vague est bornée aux findings I1–I7 et M1–M3 de
 `whole-branch-review.md`. Aucun chemin W6c–W6e, GM, dashboard, render,

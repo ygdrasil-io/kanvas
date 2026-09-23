@@ -105,6 +105,22 @@ public class PictureCompositeOperandsV1 internal constructor(
     public fun copySourceSampleOffsetTargetLocalI32(): Point2I32 = Point2I32(sourceSampleOffset.x, sourceSampleOffset.y)
 }
 
+/**
+ * Aggregate-owned admission for the one final Picture composite. It deliberately has a separate
+ * lifetime from the terminal operands and FilterComposite snapshots it authenticates.
+ */
+public class PictureTerminalScissorAuthorityV1 internal constructor(
+    compositeScissorTargetLocalI32: RectI32?,
+    public val compositeScissorAdmitted: Boolean,
+    public val terminalIsEmpty: Boolean,
+) {
+    private val scissor = compositeScissorTargetLocalI32?.copy()
+
+    init { require((scissor == null) == terminalIsEmpty) }
+
+    public fun copyCompositeScissorTargetLocalI32(): RectI32? = scissor?.copy()
+}
+
 /** The four W6 regions stay separate even when a conservative plan gives two equal values. */
 public class PictureStreamRegionsV1 internal constructor(
     knownContentDeviceI32: RectI32?,
@@ -357,6 +373,8 @@ public class PictureStreamAggregateV1 internal constructor(
      * captured Picture stream to recover this order.
      */
     executionPassIds: List<PlanPassId> = emptyList(),
+    /** Absent only when this aggregate has no final Picture terminal to authenticate. */
+    public val terminalCompositeScissorAuthority: PictureTerminalScissorAuthorityV1? = null,
 ) {
     private val enclosingPictureTransform = enclosingPictureTransformF64.copy()
     public fun copyEnclosingPictureTransformF64(): Matrix3x3F64 = enclosingPictureTransform.copy()
@@ -389,6 +407,11 @@ public class PictureStreamAggregateV1 internal constructor(
     public fun copyDemandRegionDeviceI32(): RectI32 = demand.copy()
     public fun entries(): List<PictureStreamEntryV1> = values
     public fun executionPassIds(): List<PlanPassId> = executionSchedule
+}
+
+internal fun PictureCompositeOperandsV1.toTerminalScissorAuthority(): PictureTerminalScissorAuthorityV1 {
+    val scissor = copyCompositeScissorTargetLocalI32()
+    return PictureTerminalScissorAuthorityV1(scissor, compositeScissorAdmitted, scissor == null)
 }
 
 /** Stable structural diagnostic construction. Existing capture/bounds/budget codes stay intact. */
@@ -1034,8 +1057,16 @@ internal fun validatePictureStreamAggregates(
                     fail(aggregate, invariant = "Inline Picture terminal is not its final ordered entry terminal.",
                         passId = aggregate.terminalPassId)
                 }
-                if (isTerminallyEmptyAggregate(aggregate) && schedule.isNotEmpty()) {
-                    fail(aggregate, invariant = "Empty inline Picture aggregate retains visual work.")
+                if (isTerminallyEmptyAggregate(aggregate)) {
+                    val authority = aggregate.terminalCompositeScissorAuthority
+                        ?: fail(aggregate, invariant = "Empty inline Picture aggregate lost its final scissor admission.")
+                    if (!authority.compositeScissorAdmitted || !authority.terminalIsEmpty ||
+                        authority.copyCompositeScissorTargetLocalI32() != null) {
+                        fail(aggregate, invariant = "Empty inline Picture aggregate has a non-empty final scissor admission.")
+                    }
+                    if (schedule.isNotEmpty()) {
+                        fail(aggregate, invariant = "Empty inline Picture aggregate retains visual work.")
+                    }
                 }
             }
             PictureStreamExecutionModeV1.ISOLATED_SOURCE -> {
@@ -1107,6 +1138,12 @@ internal fun validatePictureStreamAggregates(
                     pass.aggregateId == aggregate.id && (pass.graphTextureRequest != null || pass.graphTextureOperand != null)
                 }
                 if (isTerminallyEmptyAggregate(aggregate)) {
+                    val authority = aggregate.terminalCompositeScissorAuthority
+                        ?: fail(aggregate, invariant = "Empty Picture aggregate lost its final scissor admission.")
+                    if (!authority.compositeScissorAdmitted || !authority.terminalIsEmpty ||
+                        authority.copyCompositeScissorTargetLocalI32() != null) {
+                        fail(aggregate, invariant = "Empty Picture aggregate has a non-empty final scissor admission.")
+                    }
                     if (graphTextureConsumers.isNotEmpty() || aggregate.terminalPassId != seal ||
                         schedule != listOf(begin, seal) || passes.subList(Math.addExact(beginIndex, 1), sealIndex).isNotEmpty()) {
                         fail(aggregate, invariant = "Empty Picture aggregate retains graph-texture or visual terminal work.")
@@ -1162,6 +1199,21 @@ internal fun validatePictureStreamAggregates(
                         terminalFacts.blend != operand.finalBlend ||
                         terminalFacts.copySourceBoundsTargetI32().isEmpty) {
                         fail(aggregate, invariant = "Picture terminal lost its occurrence identity or sealed target-local geometry.", passId = terminal)
+                    }
+                    val authority = aggregate.terminalCompositeScissorAuthority
+                        ?: fail(aggregate, invariant = "Picture terminal lost its independent final scissor admission.", passId = terminal)
+                    fun authenticates(operands: PictureCompositeOperandsV1): Boolean =
+                        operands.compositeScissorAdmitted == authority.compositeScissorAdmitted &&
+                            operands.copyCompositeScissorTargetLocalI32() == authority.copyCompositeScissorTargetLocalI32() &&
+                            (operands.copyCompositeScissorTargetLocalI32() == null) == authority.terminalIsEmpty
+                    if (!authenticates(terminalFacts)) {
+                        fail(aggregate, invariant = "Picture terminal scissor diverges from its aggregate admission.", passId = terminal)
+                    }
+                    (terminalPass as? PlanPass.FilterComposite)?.let { composite ->
+                        if (composite.copyCompositeScissorTargetLocalI32() != authority.copyCompositeScissorTargetLocalI32() ||
+                            (composite.copyCompositeScissorTargetLocalI32() == null) != authority.terminalIsEmpty) {
+                            fail(aggregate, invariant = "Picture FilterComposite scissor diverges from its aggregate admission.", passId = terminal)
+                        }
                     }
                     val vertical = (terminalPass as? PlanPass.FilterComposite)?.let { composite ->
                         passes.filterIsInstance<PlanPass.FilterPass>().singleOrNull { it.output == composite.source }

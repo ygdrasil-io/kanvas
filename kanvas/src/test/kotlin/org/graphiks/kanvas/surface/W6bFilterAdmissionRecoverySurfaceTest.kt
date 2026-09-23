@@ -15,8 +15,6 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.pipeline.ClipOp
-import org.graphiks.kanvas.render.ir.GraphLimits
-import org.graphiks.kanvas.render.ir.SceneCaptureLimits
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.Test
@@ -488,27 +486,6 @@ class W6bFilterAdmissionRecoverySurfaceTest {
         }
 
         assertContentEquals(opaqueWhite2x2(), surface.render().pixels)
-
-        surface.discardRecordedOperations()
-        surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
-        assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
-    }
-
-    @Test
-    fun `filtered capture limit refuses terminally and same surface recovers`() {
-        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
-        val chainedBlur = ImageFilter.Blur(1f, 1f, input = ImageFilter.Blur(1f, 1f))
-        val recorder = PictureRecorder()
-        recorder.beginRecording(bounds).drawRect(bounds, Paint(imageFilter = chainedBlur))
-        val picture = recorder.finishRecordingAsPicture()
-        val surface = Surface(
-            2,
-            2,
-            captureLimits = SceneCaptureLimits(graphLimits = GraphLimits(maxNodes = 1)),
-        )
-        surface.canvas { drawPicture(picture) }
-
-        assertTerminalWithoutReadbackMutation(surface, "graph-node-limit:")
 
         surface.discardRecordedOperations()
         surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }

@@ -2,6 +2,12 @@
 
 Base de correction : `a1aabe6`.
 
+> Historique, remplacé comme statut final par `whole-branch-fix3-report.md`.
+> La re-review R22 a confirmé R21/I5, mais a trouvé que l'I1 terminal Picture
+> restait auto-référentiel et que le shard admission importait encore deux
+> types Render IR. Les claims I1/I7/M3 ci-dessous décrivent donc uniquement
+> l'état observé à la fin du round 2, pas une fermeture finale.
+
 Cette vague est bornée à R21 : I1 et I7 Important, la copie privée bornée I5
 Minor et les claims M3. I2–I4, I6 et M1–M2 ne sont pas rouverts. Aucun chemin
 W6c–W6e, GM, dashboard, render, baseline, score, `jpg-color-cube` ni suite
@@ -11,8 +17,8 @@ Skia globale n'a été modifié ni exécuté.
 
 | Finding | RED constaté | GREEN livré | Preuve ciblée |
 | --- | --- | --- | --- |
-| I1 / R21 | `FilterComposite` ne publiait pas son offset/scissor final; Draw et `filteredCompositeRender` redérivaient `source - destination` dans le renderer. Le mutant de contrat ne pouvait d'abord pas fournir ces operands. | Le pass porte snapshots I32 target-local d'offset et scissor. `W6aLayerGraphConstruction` les calcule avec `Math.*Exact`; la validation authentifie offset, étendue et relation terminal Picture. Draw/Layer/Picture/GraphTexture et WGSL les consomment verbatim. Un scissor Picture `null` reste un fait terminal scellé, jamais remplacé par le fallback générique. | `RenderGraphContractTest` : mutants offset et scissor séparés, 97/97. `W6bFilterAdmissionRecoverySurfaceTest` : pixels équivalents pour grande origin, recovery et clip fractionnaire de régression. |
-| I7 | Trois assertions du shard Picture construisaient/inspectaient table, snapshot ou codec Render IR directement. | Le shard n'utilise que `Picture`, bytes, traversal/replay public et `Picture.fromByteArray`. Les bytes mutés prouvent refus oversize/cycle et la capture+bytes+replay prouve l'isolation de mutation; aucun adapter/compiler/codec direct ne reste. | `W6bFilterPictureTest`, 12/12 XML PASS. |
+| I1 / R21 | `FilterComposite` ne publiait pas son offset/scissor final; Draw et `filteredCompositeRender` redérivaient `source - destination` dans le renderer. Le mutant de contrat ne pouvait d'abord pas fournir ces operands. | R21 ferme la dérivation renderer-local et fige les snapshots I32. R22 a ensuite exigé l'autorité aggregate indépendante du terminal/pass ; voir le rapport round 3. | `RenderGraphContractTest` : 97/97 à ce round; la preuve R22 est dans le rapport round 3. |
+| I7 | Trois assertions du shard Picture construisaient/inspectaient table, snapshot ou codec Render IR directement. | Le shard Picture a été rendu public, mais R22 a trouvé deux imports Render IR dans le shard admission ; leur retrait est documenté au round 3. | `W6bFilterPictureTest`, 12/12 XML PASS à ce round. |
 | I5 | Decoder et builder avaient une seconde copie, certes bornée, de listes fraîches qu'ils possédaient déjà. | `fromOwnedNodes` valide puis prend possession de la liste privée fraîche; `SceneArchiveCodec` et le builder l'emploient. `of(Collection)` conserve sa copie défensive pour les callers publics. | Les refus/recovery Picture table et fanout oversize restent dans le shard public Picture. |
 | M3 | Les rapports du round 1 déclaraient I1/I5/I7 fermés prématurément. | Status, README, ledger et rapport round 1 distinguent désormais le résultat historique de la fermeture R21; les comptes sont 97 contrat et 81 W6b. | XML et commandes ci-dessous. |
 

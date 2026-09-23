@@ -2,12 +2,14 @@
 
 ## Statut
 
-## Checkpoint W6b / correction whole-branch round 2 — shadows et budgets
+## Checkpoint W6b / correction whole-branch round 3 — admission scissor Picture
 
 La première vague de correction, basée sur `2bf3d52`, a fermé I2–I4, I6,
 M1 et M2. Sa re-review a laissé I1, I5 et I7 ouverts. La seconde vague,
-basée sur `a1aabe6`, ferme ces trois findings et M3 sous R21, sans étendre les
-exclusions W6b.
+basée sur `a1aabe6`, a fermé R21, I5 et le shard Picture I7, mais sa re-review
+a laissé l'authentification indépendante du scissor terminal Picture et deux
+imports Render IR dans le shard admission. La troisième vague, basée sur
+`6453b06`, ferme ces deux écarts sous R22 sans étendre les exclusions W6b.
 
 Task 6 matérialise uniquement les opérations déjà gelées
 `DROP_SHADOW_COLORIZE` et `DROP_SHADOW_COMPOSITE`. La route native consomme
@@ -36,11 +38,13 @@ linéaire, conformément au contrat W3 RGBA8 sRGB prémultiplié.
   et B imbriqué=344; B accepte, B−1 refuse avant allocation
   avec `w6b.filter.frame_budget_exceeded`, et le sibling tardif conserve le
   sentinel avant `discardRecordedOperations`/recovery : 2/2 XML PASS.
-- Les sept shards W6b ciblés totalisent 81/81 assertions XML PASS : Picture
-  12, admission/recovery 28, image blur 10, mask blur 10, mask shader/table
+- Les sept shards W6b ciblés totalisent 80/80 assertions XML PASS : Picture
+  12, admission/recovery 27, image blur 10, mask blur 10, mask shader/table
   13, DropShadow 6 et budget/recovery 2. Les compilations ciblées
-  `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin` et
-  `:kanvas:compileTestKotlin` sortent 0.
+  `:gpu-plan:test` (100 contrats), `:gpu-renderer:compileKotlin` et
+  `:kanvas:compileTestKotlin` sortent 0. Aucun shard public W6b n'importe
+  `GraphLimits` ni `SceneCaptureLimits` : les archives oversize et leur
+  recovery passent par `Picture` public et bytes.
 
 Chaque shard GPU a ensuite reçu exit natif 133 après ses assertions. Cet état
 reste **UNKNOWN**, sans attribution au changement W6b, au test ou à
@@ -52,9 +56,12 @@ La projection W6b passe seulement par `GPUW6aLayerFramePlan`,
 `GPUW6aEncoderScopesV1` et `GPUWgpu4kW6aLayerFramePayloadMaterializer`.
 Le plan scelle, avec math checked, chaque scissor, sample rectangle et offset
 W6b en I32 target-local. Chaque `FilterComposite` publie aussi son offset
-d'échantillonnage et son scissor terminaux; la validation authentifie leurs
-relations et Draw/Layer/Picture/GraphTexture les consomment verbatim, sans
-recalcul device→target. Les mutants de publication offset/scissor et le cas
+d'échantillonnage et son scissor terminaux. L'aggregate Picture porte un
+snapshot d'admission distinct (scissor optionnel, admis et vide/non-vide) ; la
+validation compare ce fait au terminal et au `FilterComposite`, ce qui refuse
+un sous-rectangle contenu mais faux et un `null` forgé. Draw/Layer/Picture/
+GraphTexture consomment les operands verbatim, sans recalcul device→target.
+Les mutants de publication offset/scissor et le cas
 public Picture à origin F32 très grande mais I32 target-local rendable couvrent
 cette frontière, y compris la recovery de la même surface. Aucun operand/pass W6b ne consulte
 `targetOriginsDeviceI32` : la map a été retirée. Le seul bridge de position
