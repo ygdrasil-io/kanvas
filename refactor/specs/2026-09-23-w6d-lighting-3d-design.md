@@ -48,27 +48,69 @@ net est plus lisible et plus sûr pendant l'incubation.
 
 ## Sémantique d'éclairage
 
-La révision Skia de référence utilise des positions/directions 3D, applique
-le mapping XY de l'espace des paramètres vers celui du layer et met Z à
-l'échelle par la moyenne des facteurs XY. La hauteur de surface provient de
-l'alpha multiplié par `surfaceScale`; la normale est calculée par Sobel, avec
-un halo d'entrée d'un pixel et un traitement défini aux bords. Pour un spot,
-la direction est `target - location` en 3D et l'angle de coupure est en
-degrés. Diffuse, specular, falloff, couleur et prémultiplication suivent les
-six branches de la référence épinglée, sans conversion colorimétrique cachée.
+La révision Skia de référence utilise des positions/directions 3D. W6d
+n'admet ici qu'un mapping **affine, fini et inversible** de l'espace des
+paramètres vers celui du layer, déjà gelé par W6 ; une perspective ou un
+mapping non représentable est refusé avant publication avec un diagnostic
+de capacité précis, sans approximation affine tardive. Pour sa partie
+linéaire `A = [[sx,kx],[ky,sy]]` et sa translation `t`, une location ou
+target `(x,y,z)` devient `(A·(x,y)+t, mapZ(z))` ; une direction devient
+`(A·(x,y), mapZ(z))`, sans translation. La règle Skia exacte est
+`mapZ(z) = ((A·(z,z)).x + (A·(z,z)).y) / 2`. Elle s'applique **aussi**
+à `surfaceScale` avant de calculer hauteur et normales ; Z n'est pas
+simplement multiplié par une moyenne des longueurs d'axes. Les résultats
+doivent être finis et représentables dans les uniforms gelés.
+
+La hauteur de surface est `alpha * mapZ(surfaceScale)` ; la normale est
+calculée par Sobel sur l'alpha en texels de layer. Le plan demande un halo
+d'entrée d'un pixel autour de `desiredOutput`. Pour chaque bord
+gauche/haut/droit/bas séparément, si le bord réel du child output coïncide
+avec celui de `desiredOutput`, l'échantillonnage hors child est `clamp` à ce
+bord ; sinon le bord reste celui de `requiredInput` et les texels hors child
+suivent `decal` (transparent). L'oracle et le programme gelé utilisent la
+même sélection par bord, sans échantillonner l'attachment active.
+
+Pour un spot, la direction est `target - location` **après** le mapping 3D ;
+`cutoffAngle` est exprimé en degrés, transformé en cosinus pour le programme.
+Diffuse, specular, falloff, couleur et prémultiplication suivent les six
+branches de la référence épinglée, sans conversion colorimétrique cachée.
 
 Références primaires :
 [SkLightingImageFilter.cpp](https://skia.googlesource.com/skia/+/263308ea4386/src/effects/imagefilters/SkLightingImageFilter.cpp)
 et [SkKnownRuntimeEffects.cpp](https://skia.googlesource.com/skia/+/93912d50850d/src/core/SkKnownRuntimeEffects.cpp).
 
-Le filtre peut affecter le noir transparent : son domaine de sortie ne doit
-pas être réduit par les seules bounds du contenu source. `requiredInput`
-inclut le halo Sobel autour de la sortie demandée ; clip, crop explicite,
-target et budgets bornent l'exécution. Un paramètre non fini, une géométrie
-impossible, une ressource insuffisante ou une capacité absente sont refusés
-avant publication, avec préservation du readback et récupération sur la même
-`Surface`. Les cas dégénérés finis suivent une règle explicite compatible
-avec la référence, jamais une normalisation produisant NaN.
+Le filtre affecte le noir transparent : ses `producedOutputBounds` sont
+non bornées avant intersection avec `desiredOutput`, le clip, un Crop
+explicite, le target et les budgets. Les seules bounds du contenu source
+ne peuvent pas limiter la sortie. `requiredInput` inclut le halo Sobel.
+
+L'admission des six familles suit ce domaine, vérifié avant publication :
+
+| Paramètre | Domaine |
+| --- | --- |
+| X/Y/Z des locations, targets et directions ; `surfaceScale` | F32 finis ; `surfaceScale` peut être négatif |
+| `kd` ou `ks` | F32 fini et ≥ 0 |
+| `shininess` specular ; `specularExponent` spot | F32 finis, sans ancienne limite `[1,128]` |
+| `cutoffAngle` spot | F32 fini en degrés ; cosinus calculé fini dans `[-1,1]` |
+| Paramètres après mapping, halos, ressources et uniforms | finis, représentables et dans les budgets W6 |
+
+Les restrictions legacy de `GPULighting.kt` sur `surfaceScale < 0` et les
+exposants hors `[1,128]` ne deviennent pas une seconde admission W6d.
+Une géométrie impossible, une capacité absente ou un budget insuffisant
+refusent avant publication, avec préservation du readback et récupération
+sur la même `Surface`.
+
+Skia ne promet pas de résultat portable pour toutes les expressions GPU
+dégénérées. W6d fixe ici une convention **Kanvas**, limitée à ces entrées :
+une direction distante nulle, un spot avec `target == location`, une lumière
+ponctuelle située exactement sur le point de surface, ou un demi-vecteur
+specular nul donnent une contribution lumineuse nulle. Un `pow` de base
+négative, ou de base zéro avec exposant négatif, donne également une
+contribution nulle ; `pow(0,0)` vaut 1. Après cette convention, le diffuse
+émet un noir opaque et le specular un noir transparent lorsque la
+contribution est nulle. Tout autre intermédiaire non fini donne aussi une
+contribution nulle ; aucun NaN ne passe au readback. Cette convention
+est une divergence bornée, **pas** une revendication ISO sur ces cas.
 
 ## Picture et compatibilité binaire
 
@@ -90,10 +132,15 @@ filtres et le partage explicite du DAG gardent leurs règles de lecture.
 La tâche 3 W6d sera amendée avant reprise de l'implémentation. Ses tests
 publics couvriront les six familles avec un oracle CPU indépendant, deux
 lumières ayant les mêmes XY mais des Z différents, alpha plat et variations
-de hauteur, bords Sobel, spot cutoff, sorties prémultipliées, refus des
-paramètres invalides, sentinel et récupération. La préservation `Picture`
-vérifiera aller-retour mémoire/wire version 15, rejet d'un ancien éclairage
-2D et lecture d'une ancienne scène sans éclairage. Aucun test privé,
+de hauteur, une échelle non uniforme avec origine décalée et `surfaceScale`
+mappé, les deux règles de bord Sobel (child bordant `desiredOutput` et child
+strictement intérieur), un éclairage visible sur noir transparent, spot
+cutoff, cas dégénérés ci-dessus, sorties prémultipliées, acceptation de
+`surfaceScale` négatif et d'exposants hors `[1,128]`, refus de `kd/ks`
+négatifs et des valeurs non finies, sentinel et récupération. La
+préservation `Picture` vérifiera aller-retour mémoire/wire version 15,
+rejet d'un ancien éclairage 2D et lecture d'une ancienne scène sans
+éclairage. Aucun test privé,
 reflection, fake device, mock backend ou test statique d'infrastructure ne
 sera ajouté.
 
