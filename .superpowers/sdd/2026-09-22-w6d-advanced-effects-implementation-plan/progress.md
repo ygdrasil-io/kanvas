@@ -167,3 +167,21 @@ Task 32: fix round 2/5 pending re-review — added a public, numerically pinned 
 Ruling: the attempted public Surface fixture at finite spot endpoints `±1.8e38` is not retained: F32 subtraction previously failed admission, while the F64 planner route reached the backend but produced black instead of its `[222,222,222,255]` oracle. It conflates the planner overflow with extreme WGSL literal behavior, so the isolated public math regression remains the truthful causal proof. — Task 32 must not extend this into backend extreme-coordinate work; the numeric spot-edge witness is the finite public pixel discriminator for this round. — If a later acceptance task requires full extreme-coordinate rendering, it needs its own shader-coordinate investigation and review.
 
 Task 32: final controller reconciliation after fix rounds 1–2 — complete (commits `06cf9c2de..a5b8a1a32`, scoped Sol re-review clean). The pending re-review lines above are historical checkpoints, not open gates. The finite extreme spot pixel gap is explicitly assigned to Task 33's admission investigation by the ruling above and the amended durable plan; native exit 133 remains UNKNOWN.
+
+Task 33 original: Terra `/root/w6d_task33_admission_terra` returned NEEDS_CONTEXT before commit. The direct perspective draw was rejected by W6a source-lane admission (`w6a.layer.unsupported_child`) before lighting mapping. A public `saveLayer` captured under perspective with child draw after `resetMatrix()` reached the existing precise `w6a.layer.unsupported_lighting_mapping` refusal; sentinel and same-Surface recovery passed once recovery also reset CTM. Focused XML 1/0/0/0, native exit 133 UNKNOWN. The pre-existing ColorFilter wrapper witness was already green, so it is characterization, not a causal production RED.
+
+Ruling: Split oversized Task 33 into 33a (admission/refusal/recovery), 33b (degenerates, compositional demand and finite extreme backend), 33c (Picture memory/wire pixels), each with its own Sol review gate before Task 4. — The original task couples three independent public evidence domains and the perspective blocker was a fixture geometry issue, not a missing hook. Smaller sequential slices preserve one W6 graph and allow exact numerical causes to be reviewed before Picture. — If wrong, 33b or 33c may expose a cross-domain interaction requiring an earlier slice's scoped fix and re-review. Durable plan amended; no Task 4 dispatch.
+
+## Task 33a/33b/33c preflight
+
+| Tasks | Producer → consumer / shared owner | Finding |
+| --- | --- | --- |
+| 32→33a | Frozen six-family recipes → admission and refusal | Ordered; positive ordinary-range pixels remain stable. |
+| 33a→33b | Finite domain and frame-terminal recovery → degenerate and extreme pixel work | Ordered; 33b cannot silently narrow admitted finite parameters. |
+| 33b→33c | Deterministic output and demand propagation → Picture replay | Ordered; same W6 FilterPass and target graph. |
+| 33c→4 | Picture 15/schema 9 lighting replay → SceneSnapshot filter | Ordered; Task 4 consumes reviewed wire behavior. |
+| 33a self | Positive signed/exponent evidence and negative/perspective refusal | Isolated perspective fixture avoids unrelated W6a source-lane failure; all refusals need sentinel/recovery. |
+| 33b self | Degenerate, edge, wrapper and extreme pixels | Public oracles before Surface; ColorFilter already passing is a preservation witness, not claimed causal RED. |
+| 33c self | Memory/wire two-Z pixels and old-reader behavior | Reuses Task 3 archive; no second Picture authority. |
+
+Ruling: Do not add a duplicate W6a preflight solely to turn a direct perspective *draw* refusal into a lighting-mapping diagnostic. — The isolated public layer fixture reaches the existing mapping check and produces the required precise W6 diagnostic; the direct draw independently violates the source-lane contract. — If wrong, a future valid lighting occurrence may still be rejected too early and would require an admission-order fix with a causal public test.

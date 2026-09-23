@@ -552,29 +552,59 @@ Branch on schema before reading old tag payloads in both table and recursive cod
 
 - [ ] **Step 4: Request Sol review.** Review Skia family equations, public oracle independence, mapped Z and surface depth, sRGB-versus-linear alpha, spot falloff and cutoff, zero-contribution guards, source/output bounds, frozen program IDs/bindings and absence of renderer planning. Resolve Critical/Important findings before Task 33.
 
-### Task 33: Lighting Admission, Composition, and Picture Replay
+### Task 33a: Lighting Admission and Recovery
 
-**Agent:** Fresh Terra implementation; Sol task review. Execute only after Task 32 review, before Task 4.
+**Agent:** Fresh Terra implementation; Sol task review. Execute after Task 32 review, before Task 33b.
 
-**Outcome:** All six lighting families have the remaining finite-domain, degenerate, edge, refusal/recovery and Picture memory/wire replay witnesses required by the 3D lighting spec.
+**Outcome:** All six lighting families have public finite-domain acceptance and frame-terminal refusal/recovery evidence.
 
 **Files:**
 
-- Modify: `TEST/surface/W6dLightingCpuOracle.kt`, `TEST/surface/W6dLightingSurfacePixelTest.kt`, `TEST/picture/W6dLightingPictureTest.kt`
-- Modify as needed: `PLAN/W6bFilterGraphConstruction.kt`, `PLAN/W6aLayerGraphConstruction.kt`, `PLAN/W6aLayerPlanCompiler.kt`, `PLAN/W6aPlanDiagnostics.kt`, `GPU/filters/GPULighting.kt`
+- Modify: `TEST/surface/W6dLightingSurfacePixelTest.kt`
+- Modify as needed: `PLAN/W6bFilterGraphConstruction.kt`, `PLAN/W6aLayerGraphConstruction.kt`, `PLAN/W6aLayerPlanCompiler.kt`, `PLAN/W6aPlanDiagnostics.kt`
 
-**Interfaces:**
+**Interfaces:** Consumes Task 32's frozen six-family recipes; produces only admission/refusal/recovery behavior, with no second graph/target/allocator. Task 33b owns degenerates, edge demand and extreme finite arithmetic; Task 33c owns Picture.
 
-- Consumes: Task 32's six-family frozen lighting recipes and public pixel baseline; Task 3's Picture 15/schema 9 writer and old non-lighting reader.
-- Produces: public admission/recovery and wire/pixel replay proof, including compositional demand through ColorFilter; no new graph/target/allocator.
+- [ ] **Step 1: Public REDs.** Add named cases for accepted signed `surfaceScale=-1`, finite exponents `0.5`/`129`, rejected `kd/ks=-0.1`, non-finite parameters, and unsupported perspective lighting mapping. For every W6-owned refusal, assert an unchanged readback sentinel and recovery on the same `Surface` after `discardRecordedOperations()`. Expected pixels are computed before `Surface` creation. Isolate the perspective mapping from an independently unsupported perspective source draw (for example, a layer captured under perspective with its child drawn under identity); if the mapping still cannot be reached, document exact admission-order evidence before changing the single W6a/W6b path. No private, mock, reflection, fake-device, static-source or infrastructure test.
+- [ ] **Step 2: Smallest causal corrections.** Admit finite coordinates/scalars, signed `surfaceScale`, finite exponents outside `[1,128]`, checked invertible affine mappings and budget; reject negative `kd/ks`, non-finite values and unsupported perspective with precise W6 diagnostics before native publication. Keep refusal frame-terminal and recoverable. Do not duplicate W6b filter validation in an earlier W6a preflight merely to change a test diagnostic; fix the existing admission order only if a valid public lighting occurrence cannot otherwise reach its mapping check.
+- [ ] **Step 3: GREEN and preservation.** Run sequentially `rtk ./gradlew :gpu-plan:compileKotlin`, `rtk ./gradlew :gpu-renderer:compileKotlin`, `rtk ./gradlew :kanvas:compileTestKotlin`, `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dLightingSurfacePixelTest'`, then `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6aLayerRestoreSurfacePixelTest'`. Record XML method/F/E/S and native exit separately; 133/134 remains UNKNOWN. Commit `test(gpu): prove w6d lighting admission and recovery`.
+- [ ] **Step 4: Sol review.** Review all accepted/refused domains, exact diagnostics, sentinel and same-surface recovery, public-pixel oracle independence, and absence of duplicate planner authority. Resolve Critical/Important findings before Task 33b.
 
-- [ ] **Step 1: Add public REDs for boundary behavior.** Add named cases for finite signed `surfaceScale=-1`, finite exponents `0.5`/`129`, negative `kd/ks=-0.1` and non-finite refusal, unsupported perspective refusal, child touching output edge versus child strictly inside, light visible on transparent black, zero distant/spot direction, coincident point light/surface, zero specular half-vector, `pow(0,0)` and other undefined-power zero contribution. Investigate the Task 32 follow-up in the ledger: a finite extreme spot Surface probe at `±1.8e38` reached the shader but returned black rather than the oracle's `[222,222,222,255]`; establish whether the fixture is valid and, if so, a public causal pixel RED before correcting backend arithmetic or recording an explicit spec conflict. For every W6-owned refusal, assert unchanged readback sentinel plus same-`Surface` recovery via public `discardRecordedOperations()`. Include `ColorFilter(DistantLitDiffuse(...))` over a bounded child: unlike the current root-type special case, the wrapper must preserve the light's unbounded consumer demand outside child alpha. Add a 3D lighting Picture memory/wire pixel replay with different Z changing output. Every expected pixel/oracle precedes Surface/PictureRecorder; no private, mock, reflection, fake-device or static-source test.
+### Task 33b: Lighting Degenerates and Compositional Demand
 
-- [ ] **Step 2: Implement the smallest corrections each RED proves.** Admission requires finite coordinates/scalars, `kd/ks≥0`, checked affine mapping and budget; it accepts signed `surfaceScale` and finite exponents outside `[1,128]`. Freeze all per-side Sobel modes, one-texel halo and unbounded lighting output before demand/clip/target intersection. Make demand propagation compositional through ColorFilter/Compose without a renderer fallback. Apply the lighting spec's bounded Kanvas zero-contribution convention before undefined normalization/power reaches WGSL: diffuse zero is opaque black; specular zero is transparent black. Preserve old 2D-lighting wire refusal and old non-lighting Picture readability.
+**Agent:** Fresh Terra implementation; Sol task review. Execute after Task 33a review, before Task 33c.
 
-- [ ] **Step 3: Run GREEN and preservation sequentially.** Run `rtk ./gradlew :gpu-plan:compileKotlin`, `rtk ./gradlew :gpu-renderer:compileKotlin`, `rtk ./gradlew :kanvas:compileTestKotlin`, `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dLightingSurfacePixelTest'`, `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6dLightingPictureTest'`, then `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6aLayerRestoreSurfacePixelTest'`. Record XML methods/F/E/S and native exit separately. Commit `test(gpu): prove w6d lighting admission and replay` (with any production fix in the same causal slice).
+**Outcome:** Degenerate lighting remains deterministic, Sobel source/output demand composes through wrappers, and the finite extreme spot gap is resolved or explicitly ruled against the spec.
 
-- [ ] **Step 4: Request Sol review.** Review every finite-domain acceptance/refusal, sentinel and same-surface recovery, composition demand and halo, degenerate outputs, public oracle independence, Picture 15/schema 9 replay and old-reader preservation, and frozen resource/budget behavior. Resolve Critical/Important findings before Task 4.
+**Files:**
+
+- Modify: `TEST/surface/W6dLightingCpuOracle.kt`, `TEST/surface/W6dLightingSurfacePixelTest.kt`
+- Modify as needed: `PLAN/W6bFilterGraphConstruction.kt`, `PLAN/W6aLayerGraphConstruction.kt`, `GPU/filters/GPULighting.kt`, `MATH/matrix/LayerMappingF64.kt`
+
+**Interfaces:** Consumes Task 33a's admission gate and Task 32's numeric oracle; produces deterministic public pixels and compositional demand, without a renderer fallback or new graph/target.
+
+- [ ] **Step 1: Public REDs.** Add named cases for child touching output edge versus strictly inside, light visible on transparent black, zero distant/spot direction, coincident point light/surface, zero specular half-vector, `pow(0,0)` and other undefined-power zero contribution. Add `ColorFilter(DistantLitDiffuse(...))` over a bounded child: unlike the current root-type special case, the wrapper must preserve the light's unbounded consumer demand outside child alpha. Investigate the Task 32 finite extreme spot Surface probe at `±1.8e38` which reached the shader but returned black rather than oracle `[222,222,222,255]`: first validate the fixture and oracle independently, then retain a public causal pixel RED if the behavior is wrong; never mask it with a permissive tolerance or a non-finite refusal. Expected pixels/oracles precede `Surface` creation, and positive witnesses assert `Render`+`Readback`.
+- [ ] **Step 2: Smallest causal corrections.** Freeze all per-side Sobel modes, one-texel halo and unbounded lighting output before demand/clip/target intersection. Make demand propagation compositional through ColorFilter/Compose. Apply the lighting spec's bounded Kanvas zero-contribution convention before undefined normalization/power reaches WGSL: diffuse zero is opaque black; specular zero is transparent black. If the extreme fixture is valid, correct backend arithmetic while preserving finite admission; if it is invalid or the approved spec conflicts, record the precise evidence and ruling before Task 33c.
+- [ ] **Step 3: GREEN and preservation.** Run sequentially `rtk ./gradlew :gpu-plan:compileKotlin`, `rtk ./gradlew :gpu-renderer:compileKotlin`, `rtk ./gradlew :kanvas:compileTestKotlin`, `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dLightingSurfacePixelTest'`, then `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6aLayerRestoreSurfacePixelTest'`. Record XML method/F/E/S and native exit separately; 133/134 remains UNKNOWN. Commit `test(gpu): prove w6d lighting bounds and degenerates`.
+- [ ] **Step 4: Sol review.** Review degenerate outputs, public oracle independence, finite extreme ruling, ColorFilter/Compose demand, Sobel halo/edge modes and frozen resource/budget behavior. Resolve Critical/Important findings before Task 33c.
+
+### Task 33c: Lighting Picture Memory and Wire Replay
+
+**Agent:** Fresh Terra implementation; Sol task review. Execute after Task 33b review, before Task 4.
+
+**Outcome:** 3D lighting Pictures replay the same visible pixels in memory and after wire decode, with Z retained in identity and old-wire behavior preserved.
+
+**Files:**
+
+- Modify: `TEST/picture/W6dLightingPictureTest.kt`, `TEST/surface/W6dLightingSurfacePixelTest.kt`
+- Modify as needed: `PLAN/W6bFilterGraphConstruction.kt`, `PLAN/W6aLayerGraphConstruction.kt`, `PLAN/W6aLayerPlanCompiler.kt`
+
+**Interfaces:** Consumes Task 3's Picture 15/schema 9 writer and historical non-lighting reader, plus reviewed Task 33a/b lighting execution; produces Picture memory/wire public pixel evidence without a second archive or graph authority.
+
+- [ ] **Step 1: Public RED.** Add a 3D lighting Picture memory/wire pixel replay where different Z values produce different visible pixels. Compute the oracle before `PictureRecorder`, compare memory and decoded replay, and assert public `Render`+`Readback`. Keep old 2D-lighting wire records fail-closed while historical non-lighting Picture remains readable; use real serialized fixtures, not private/reflection/static-source tests.
+- [ ] **Step 2: Smallest causal correction.** Carry frozen 3D parameters and source graph identities through the existing Picture 15/schema 9 path; preserve old-reader rejection/readability without a second replay authority, graph, target or allocator.
+- [ ] **Step 3: GREEN and preservation.** Run sequentially `rtk ./gradlew :gpu-plan:compileKotlin`, `rtk ./gradlew :gpu-renderer:compileKotlin`, `rtk ./gradlew :kanvas:compileTestKotlin`, `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dLightingSurfacePixelTest'`, `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6dLightingPictureTest'`, then `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6aLayerRestoreSurfacePixelTest'`. Record XML method/F/E/S and native exit separately; 133/134 remains UNKNOWN. Commit `test(gpu): prove w6d lighting picture replay`.
+- [ ] **Step 4: Sol review.** Review Picture 15/schema 9 memory/wire pixel replay, old 2D-lighting refusal, historical non-lighting readability, Z-sensitive canonical identity, and frozen resource/budget behavior. Resolve Critical/Important findings before Task 4.
 
 ### Task 4: Picture Filter as Immutable SceneSnapshot
 
