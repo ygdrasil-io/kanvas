@@ -24,7 +24,7 @@ internal object W6cSpatialBoundsPlanner {
 
     internal fun crop(source: W6bFilterGraphConstruction.SourceBinding, node: CapturedFilterNodeV1.Crop): CropPlan {
         val cropDeviceF64 = map(node.copyCrop(), source.mapping) ?: refuse("Crop bounds cannot be mapped through the sealed layer transform.")
-        val desired = seal(cropDeviceF64)
+        val desired = boundToConsumer(seal(cropDeviceF64), source)
         val sourceDomain = source.copyDeviceBoundsI32()
         val cropLocal = rebase(desired, source.originDeviceI32)
         val produced = producedOutputBounds(node, source.copyKnownContentDeviceI32(), source.mapping)
@@ -38,7 +38,7 @@ internal object W6cSpatialBoundsPlanner {
         val input = source.copyDeviceBoundsI32()
         val translated = rectF64(input).translateF64OrNull(offsetDevice.x, offsetDevice.y)
             ?: refuse("Offset bounds are non-finite.")
-        val desired = seal(translated)
+        val desired = boundToConsumer(seal(translated), source)
         val produced = producedOutputBounds(node, source.copyKnownContentDeviceI32(), source.mapping)
         return OffsetPlan(bounds(source, desired, input, produced), offsetDevice.x, offsetDevice.y)
     }
@@ -46,7 +46,7 @@ internal object W6cSpatialBoundsPlanner {
     internal fun tile(source: W6bFilterGraphConstruction.SourceBinding, node: CapturedFilterNodeV1.Tile): TilePlan {
         val sourceDevice = map(node.copySource(), source.mapping) ?: refuse("Tile source bounds cannot be mapped through the sealed layer transform.")
         val destinationDevice = map(node.copyDestination(), source.mapping) ?: refuse("Tile destination bounds cannot be mapped through the sealed layer transform.")
-        val desired = seal(destinationDevice)
+        val desired = boundToConsumer(seal(destinationDevice), source)
         val sourceLocal = rebase(seal(sourceDevice), source.originDeviceI32)
         // A Tile only produces inside dst.  Its required source is the frozen src period, even
         // when a consumer asks for only one repeated cell.
@@ -91,8 +91,17 @@ internal object W6cSpatialBoundsPlanner {
     } }
 
     private fun bounds(source: W6bFilterGraphConstruction.SourceBinding, desired: RectI32, required: RectI32,
-        produced: RectI32?): FilterBoundsPlanV1 = FilterBoundsPlanV1(produced, desired, required,
-        produced, Point2I32(desired.left, desired.top))
+        produced: RectI32?): FilterBoundsPlanV1 {
+        // The result texture only represents desiredOutput. Retain the separate produced fact,
+        // but restrict its materialized subset so known/produced coordinates remain valid for
+        // this target instead of allocating the full public rectangle.
+        val materializedProduced = produced?.let { intersect(it, desired) }
+        return FilterBoundsPlanV1(materializedProduced, desired, required, materializedProduced,
+            Point2I32(desired.left, desired.top))
+    }
+    /** The public region is semantic, but target allocation is bounded by the already sealed consumer demand. */
+    private fun boundToConsumer(publicDomain: RectI32, source: W6bFilterGraphConstruction.SourceBinding): RectI32 =
+        source.copyDesiredOutputDeviceI32()?.let { consumer -> intersect(publicDomain, consumer) ?: publicDomain } ?: publicDomain
     private fun map(rect: org.graphiks.math.geometry.RectF32, mapping: LayerMappingF64): RectF64? =
         mapping.mapLocalRectToDeviceF64OrNull(RectF64(rect.left.toDouble(), rect.top.toDouble(), rect.right.toDouble(), rect.bottom.toDouble()))
     private fun seal(rect: RectF64): RectI32 = rect.roundOutToRectI32OrNull()

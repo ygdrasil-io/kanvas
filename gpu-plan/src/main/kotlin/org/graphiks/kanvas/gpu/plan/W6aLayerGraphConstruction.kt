@@ -701,17 +701,23 @@ internal class W6aLayerGraphConstruction(
             passes += frozen.passes()
             sourceBindingsById[frozen.output.resourceId] = frozen.output
             val outputBounds = frozen.output.copyDeviceBoundsI32()
-            val compositeDeviceBounds = requireNotNull(intersect(
-                requireNotNull(intersect(outputBounds, terminalClipDeviceI32 ?: outputBounds)), targetDeviceBounds(destination),
-            ))
-            val sourceBounds = requireNotNull(frozen.output.mapping.mapDeviceRectToTargetI32OrNull(
-                compositeDeviceBounds, frozen.output.originDeviceI32,
-            ))
-            val destinationOrigin = targetOriginDevice(destination)
-            val destinationLocal = Point2I32(
-                Math.toIntExact(Math.subtractExact(compositeDeviceBounds.left.toLong(), destinationOrigin.x.toLong())),
-                Math.toIntExact(Math.subtractExact(compositeDeviceBounds.top.toLong(), destinationOrigin.y.toLong())),
+            val compositeDeviceBounds = intersect(outputBounds, terminalClipDeviceI32 ?: outputBounds)?.let { clipped ->
+                intersect(clipped, targetDeviceBounds(destination))
+            }
+            val sealedNoOp = compositeDeviceBounds == null && operation is FilterCompositeOperationV1.Layer
+            if (compositeDeviceBounds == null && !sealedNoOp) throw W6bFilterGraphConstruction.ConstructionFailure(
+                W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds, "W6b filter composite has no visible terminal domain."),
             )
+            // A no-op retains a valid, unused one-texel source relation. The null scissor is the
+            // authoritative terminal fact shared by construction, validation and materialization.
+            val sourceBounds = compositeDeviceBounds?.let { bounds -> requireNotNull(frozen.output.mapping.mapDeviceRectToTargetI32OrNull(
+                bounds, frozen.output.originDeviceI32,
+            )) } ?: RectI32(0, 0, 1, 1)
+            val destinationOrigin = targetOriginDevice(destination)
+            val destinationLocal = compositeDeviceBounds?.let { bounds -> Point2I32(
+                Math.toIntExact(Math.subtractExact(bounds.left.toLong(), destinationOrigin.x.toLong())),
+                Math.toIntExact(Math.subtractExact(bounds.top.toLong(), destinationOrigin.y.toLong())),
+            ) } ?: Point2I32.Origin
             val sourceSampleOffset = try {
                 Point2I32(
                     Math.subtractExact(sourceBounds.left, destinationLocal.x),
@@ -739,14 +745,15 @@ internal class W6aLayerGraphConstruction(
             val before = DestinationVersionI64(versions[destination] ?: 0L)
             val terminalAdmission = if (operation is FilterCompositeOperationV1.Picture && pictureTerminal != null)
                 pictureTerminal(frozen.output, sourceBounds, destinationLocal) else null
-            val finalOperation = if (operation is FilterCompositeOperationV1.Picture)
+            val finalOperation = if (sealedNoOp) (operation as FilterCompositeOperationV1.Layer).copy(noOp = true)
+            else if (operation is FilterCompositeOperationV1.Picture)
                 operation.copy(terminal = terminalAdmission?.operands ?: operation.terminal) else operation
             val terminal = (finalOperation as? FilterCompositeOperationV1.Picture)?.terminal
             val terminalScissorAuthority = terminalAdmission?.authority
             val finalSampleOffset = terminal?.copySourceSampleOffsetTargetLocalI32() ?: sourceSampleOffset
             // A Picture terminal's null scissor is a sealed no-op/non-admission fact, not a
             // missing value that may be replaced by the generic composite rectangle.
-            val finalScissor = if (terminalScissorAuthority != null)
+            val finalScissor = if (sealedNoOp) null else if (terminalScissorAuthority != null)
                 terminalScissorAuthority.copyCompositeScissorTargetLocalI32() else compositeScissor
             val after = when (finalOperation) {
                 is FilterCompositeOperationV1.Draw -> {
@@ -754,7 +761,7 @@ internal class W6aLayerGraphConstruction(
                     DestinationVersionI64(if (finalOperation.blend.compositionFacts.writesParentDevice)
                         Math.addExact(before.valueI64, 1L) else before.valueI64)
                 }
-                is FilterCompositeOperationV1.Layer -> finalOperation.restore.parentVersionAfter
+                is FilterCompositeOperationV1.Layer -> if (finalOperation.noOp) before else finalOperation.restore.parentVersionAfter
                 is FilterCompositeOperationV1.Picture -> DestinationVersionI64(if (finalOperation.terminal?.blend?.compositionFacts?.writesParentDevice != false)
                     Math.addExact(before.valueI64, 1L) else before.valueI64)
             }

@@ -806,7 +806,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             is FilterCompositeOperationV1.Layer -> {
                                 val restore = operation.restore
                                 val destinationRead = restore.blend as? BlendPlan.DestinationReadV1
-                                renderOperands += filteredCompositeRender(
+                                renderOperands += if (operation.noOp) emptyRender(stepIndex, views.getValue(pass.destination), generation,
+                                    clear = false, pass, owned) else filteredCompositeRender(
                                     stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
                                     sampleOffset, requireNotNull(scissor) { "W6b Layer composite has no sealed scissor." },
                                     restore.alphaF32, restore.colorFilter, uniform, restore.colorFilterUniformOffsetI64,

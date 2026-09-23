@@ -315,6 +315,11 @@ internal class FrameSourceLayoutV4 private constructor(
             val w6cColorUniformBindings = linkedMapOf<String, W6cColorUniformBindingV1>()
             val caches = mutableListOf<PlanCacheBindingV1>()
             val w6cColorFilters = layeredInput.imageColorFilterExecutions()
+            // The W6c pass has one sampled input and one W5f uniform binding. Apply the same
+            // pre-publication W5f limits as ordinary material rows before issuing any resource.
+            w6cColorFilters.forEach { execution ->
+                requireColorUniformBindingV4(maxOf(16L, execution.dynamicByteCountI64), capabilities, bindingCountI32 = 2)
+            }
             fun buffer(role: PlanResourceRole, ordinal: Int, bytes: Long, usage: PlanResourceUsage,
                 lifetime: PlanResourceLifetime = PlanResourceLifetime.FrameLocal): PlanResourceId =
                 PlanResource.of(role, ordinal, PlanResourceKind.Buffer, null, null, bytes,

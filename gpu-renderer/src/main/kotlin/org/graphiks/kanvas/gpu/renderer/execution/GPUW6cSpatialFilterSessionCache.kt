@@ -190,7 +190,7 @@ internal class GPUW6cSpatialFilterSessionCache(
             else -> error("W6c spatial cache requires frozen RGBA8 target")
         }
         val texture = device.createTexture(TextureDescriptor(size = Extent3D(extent.width.toUInt(), extent.height.toUInt()),
-            format = format, usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding or GPUTextureUsage.CopySrc,
+            format = format, usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
             sampleCount = 1u, label = "w6c.spatial.cache"))
         return try { Entry(plan.key, plan.reservedBytesI64, texture, texture.createView()) }
         catch (failure: Throwable) { texture.close(); throw failure }

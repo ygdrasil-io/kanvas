@@ -796,8 +796,16 @@ internal object W6bFilterGraphConstruction {
             W6cSpatialBoundsPlanner.requiredInputBounds(node, output, mapping ?: throw ConstructionFailure(
                 W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
                     "W6c reverse demand has no sealed local-to-device mapping."),
-            ))
+        ))
         lateinit var inputDemand: (CapturedFilterInputV1, RectI32) -> RectI32?
+        fun unionInputDemands(inputs: Iterable<CapturedFilterInputV1>, output: RectI32): RectI32? {
+            var demand: RectI32? = null
+            for (input in inputs) {
+                val required = inputDemand(input, output) ?: continue
+                demand = demand?.let { union(it, required) } ?: required
+            }
+            return demand
+        }
         fun nodeDemand(id: CapturedFilterNodeIdI32, output: RectI32): RectI32? = when (val node = occurrence.table.nodeAt(id)) {
             is CapturedFilterNodeV1.Crop -> spatialDemand(node, output)?.let { required -> inputDemand(node.input, required) }
             is CapturedFilterNodeV1.Offset -> spatialDemand(node, output)?.let { required -> inputDemand(node.input, required) }
@@ -821,14 +829,22 @@ internal object W6bFilterGraphConstruction {
                 val shadow = expand(translated, node.sigmaX, node.sigmaY)
                 inputDemand(node.input, if (node.mode == CapturedDropShadowModeV1.COMPOSITE) union(output, shadow) else shadow)
             }
+            // These nodes do not alter their input's spatial demand.  Compose is contextual:
+            // outer consumes the inner result, so its reverse demand must flow into inner.
+            is CapturedFilterNodeV1.ColorFilter -> inputDemand(node.input, output)
+            is CapturedFilterNodeV1.Compose -> inputDemand(node.outer, output)?.let { outerDemand ->
+                inputDemand(node.inner, outerDemand)
+            }
+            // Keep the captured public order while forming a geometric union.  A Set here would
+            // erase repeated inputs before their individual source demand is accounted for.
+            is CapturedFilterNodeV1.Merge -> unionInputDemands(node, output)
+            is CapturedFilterNodeV1.Blend -> unionInputDemands(listOf(node.background, node.foreground), output)
             else -> throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.UnsupportedFamily,
                 "Reverse demand requires an admitted W6b filter."))
         }
         inputDemand = { input, region -> if (input is CapturedFilterInputV1.Node) nodeDemand(input.id, region) else region }
         val imageInput = occurrence.root?.let { nodeDemand(it.id, desired) } ?: desired
-        return imageInput?.let { input ->
-            (occurrence.mask as? MaskFilterNode.Blur)?.let { expand(input, it.sigma, it.sigma) } ?: input
-        }
+        return (occurrence.mask as? MaskFilterNode.Blur)?.let { expand(imageInput, it.sigma, it.sigma) } ?: imageInput
     }
 
     private fun blurBounds(source: SourceBinding, sigmaXF32: Float, sigmaYF32: Float): FilterBoundsPlanV1 {
