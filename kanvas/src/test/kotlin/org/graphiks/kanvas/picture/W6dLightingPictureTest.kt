@@ -11,6 +11,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 
 class W6dLightingPictureTest {
@@ -31,6 +32,7 @@ class W6dLightingPictureTest {
         assertEquals(9, ByteBuffer.wrap(firstBytes).getInt(28))
         val decoded = assertNotNull(Picture.fromByteArray(firstBytes))
         assertEquals(first.ops, decoded.ops)
+        assertNotEquals(first.ops, second.ops)
         assertContentEquals(firstBytes, decoded.toByteArray())
         assert(!firstBytes.contentEquals(second.toByteArray()))
     }
