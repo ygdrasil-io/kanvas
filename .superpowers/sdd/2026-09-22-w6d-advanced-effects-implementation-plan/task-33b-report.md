@@ -95,3 +95,37 @@ target, or allocator. The finite extreme spot witness remains green.
 | focused finite extreme spot selector | JUnit method PASS; native exit 133, UNKNOWN |
 | W6d class selector | XML `29/0/0/0`; native exit 133, UNKNOWN |
 | W6a restore selector | XML `9/0/0/0`; native exit 133, UNKNOWN |
+
+### Fix round 1 command custody
+
+The exact public selector used for both the controlled RED and the restored
+GREEN was:
+
+`rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dLightingSurfacePixelTest.scaled coincident point light and surface produces opaque black'`
+
+With the guard temporarily removed, that command completed one JUnit method
+as a failure at `W6dLightingSurfacePixelTest.kt:350`; the native worker then
+exited 133, independently UNKNOWN. Its XML was subsequently overwritten by
+the required restored-GREEN and class runs, and the retained command output
+does not include the assertion's exact channel `expected/actual` payload.
+That payload is therefore unavailable and is not reconstructed here.
+
+With the guard restored, the same full command printed
+`scaled coincident point light and surface produces opaque black() PASSED`.
+It then had native exit 133, independently UNKNOWN. The exact extreme
+preservation selector was:
+
+`rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dLightingSurfacePixelTest.finite extreme spot coordinates retain their normalized diffuse contribution'`
+
+It printed `finite extreme spot coordinates retain their normalized diffuse contribution() PASSED`, followed by the same native exit 133, UNKNOWN.
+
+The sequential class gates were:
+
+`rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dLightingSurfacePixelTest'`
+
+`rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6aLayerRestoreSurfacePixelTest'`
+
+Their retained class XML summaries are respectively `tests=29 failures=0
+errors=0 skipped=0` and `tests=9 failures=0 errors=0 skipped=0`. Both Gradle
+invocations ended with native worker exit 133, so those native results remain
+UNKNOWN rather than green claims.
