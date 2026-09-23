@@ -24,7 +24,6 @@ import org.graphiks.math.geometry.roundOutToRectI32OrNull
 import org.graphiks.math.geometry.translateF64OrNull
 import org.graphiks.math.matrix.LayerMappingF64
 import org.graphiks.math.vector.Vector2F64
-import org.graphiks.math.vector.Vector3F32
 
 /** W6b's single captured-filter authority; it publishes planning facts but never native work. */
 internal object W6bFilterGraphConstruction {
@@ -488,12 +487,6 @@ internal object W6bFilterGraphConstruction {
                 }, distantDiffuseSobelSampling(input, bounds))))
             return ContextualFilterResult(output, bounds, key)
         }
-        fun mappedSpotDirection(location: org.graphiks.math.geometry.Point3F32, target: org.graphiks.math.geometry.Point3F32): Vector3F32 {
-            val x = target.x - location.x; val y = target.y - location.y; val z = target.z - location.z
-            val length = kotlin.math.sqrt(x * x + y * y + z * z)
-            // A zero vector is a valid admitted degenerate with zero contribution in the shader.
-            return if (length == 0f) Vector3F32(0f, 0f, 0f) else Vector3F32(x / length, y / length, z / length)
-        }
         lateinit var materializeNode: (CapturedFilterNodeIdI32, SourceBinding) -> ContextualFilterResult
         fun bindInput(input: CapturedFilterInputV1, currentSource: SourceBinding): ContextualFilterResult = when (input) {
             CapturedFilterInputV1.ImplicitSource -> ContextualFilterResult(currentSource, identityBounds(currentSource), null)
@@ -730,7 +723,11 @@ internal object W6bFilterGraphConstruction {
                 if (!cutoffCosine.isFinite()) throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
                     "W6d spot cutoff cosine is not finite."))
                 appendLighting(id, input, currentSource, if (specular == null) LightingFamilyV1.SPOT_DIFFUSE else LightingFamilyV1.SPOT_SPECULAR,
-                    LightingParametersV1.Spot(mappedLocation, mappedTarget, mappedSpotDirection(mappedLocation, mappedTarget), exponent,
+                    LightingParametersV1.Spot(mappedLocation, mappedTarget,
+                        input.mapping.normalizedLightingDirectionF32OrNull(mappedLocation, mappedTarget) ?: throw ConstructionFailure(
+                            W6bFilterDiagnostics.refusal(W6aPlanDiagnostics.UnsupportedLightingMapping,
+                                "W6d spot direction cannot be represented by the sealed layer mapping."),
+                        ), exponent,
                         cutoffCosine, diffuse?.lightColor ?: requireNotNull(specular).lightColor, mappedDepth, coefficient, shininess))
             }
             is CapturedFilterNodeV1.DistantLitSpecular -> {

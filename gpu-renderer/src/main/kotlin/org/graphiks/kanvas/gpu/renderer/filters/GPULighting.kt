@@ -160,9 +160,13 @@ internal object GPUW6dLightingPass {
             """
                 let spotDirection = vec3<f32>(${direction.x}f, ${direction.y}f, ${direction.z}f);
                 let spotCosine = dot(-surfaceToLight, spotDirection);
-                let cone = select(0.0,
-                    pow(spotCosine, ${spot.specularExponentF32}f) * clamp((spotCosine - ${spot.cutoffCosineF32}f) / 0.016, 0.0, 1.0),
-                    spotCosine >= ${spot.cutoffCosineF32}f);
+                var cone = 0.0;
+                if (spotCosine >= 0.0 && spotCosine >= ${spot.cutoffCosineF32}f) {
+                    let powered = pow(spotCosine, ${spot.specularExponentF32}f);
+                    if (powered == powered && abs(powered) <= 3.402823e38) {
+                        cone = powered * clamp((spotCosine - ${spot.cutoffCosineF32}f) / 0.016, 0.0, 1.0);
+                    }
+                }
             """
         } else "let cone = 1.0;"
         val contribution = if (isSpecular) """

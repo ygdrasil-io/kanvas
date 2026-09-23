@@ -34,6 +34,25 @@ public class LayerMappingF64 private constructor(
     /** Skia-compatible affine depth scaling: average of A·(z,z). */
     public fun mapLightingZToLayerF32OrNull(value: Float): Float? = mapLighting(0f, 0f, value, false)?.z
 
+    /** Freezes a spot axis after mapping without overflowing finite F32 endpoints. */
+    public fun normalizedLightingDirectionF32OrNull(location: Point3F32, target: Point3F32): Vector3F32? {
+        if (!location.isFinite() || !target.isFinite()) return null
+        val dx = target.x.toDouble() - location.x.toDouble()
+        val dy = target.y.toDouble() - location.y.toDouble()
+        val dz = target.z.toDouble() - location.z.toDouble()
+        val scale = maxOf(kotlin.math.abs(dx), kotlin.math.abs(dy), kotlin.math.abs(dz))
+        if (!scale.isFinite()) return null
+        if (scale == 0.0) return Vector3F32.Zero
+        val unitLength = sqrt((dx / scale) * (dx / scale) + (dy / scale) * (dy / scale) + (dz / scale) * (dz / scale))
+        if (!unitLength.isFinite() || unitLength == 0.0) return null
+        fun narrow(value: Double): Float? = value.takeIf { it.isFinite() && it >= -Float.MAX_VALUE && it <= Float.MAX_VALUE }?.toFloat()
+        return Vector3F32(
+            narrow(dx / scale / unitLength) ?: return null,
+            narrow(dy / scale / unitLength) ?: return null,
+            narrow(dz / scale / unitLength) ?: return null,
+        )
+    }
+
     private fun mapLighting(xF32: Float, yF32: Float, zF32: Float, translate: Boolean): Point3F32? {
         if (!xF32.isFinite() || !yF32.isFinite() || !zF32.isFinite() ||
             localToLayerF64.persp0F64 != 0.0 || localToLayerF64.persp1F64 != 0.0 || localToLayerF64.persp2F64 != 1.0) return null

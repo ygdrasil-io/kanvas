@@ -50,3 +50,13 @@ Le premier essai attendait `140` au channel 0 et recevait `237`; l’inspection 
 Gates finaux séquentiels : `:gpu-plan:compileKotlin` exit 0; `:gpu-renderer:compileKotlin` exit 0; `:kanvas:compileTestKotlin` exit 0. Pour W6d, la sortie Gradle liste les 15 méthodes en PASS, dont le témoin affine, mais le worker natif termine avec exit 133 avant l’écriture du XML de classe. Le XML agrégé Gradle donne `tests=1 failures=1 errors=0 skipped=0` pour l’échec de processus, pas pour une méthode JUnit; statut natif `UNKNOWN`. Pour W6a restore, le XML de classe donne `tests=9 failures=0 errors=0 skipped=0`; le XML agrégé note séparément `tests=1 failures=1 errors=0 skipped=0` pour le worker exit 133; statut natif `UNKNOWN`.
 
 Préoccupations restantes : Task 33 reste propriétaire des refus/recovery, du wrapper ColorFilter et du replay Picture. La revue Sol Task32 reste un gate distinct avant Task33/Task4.
+
+## Fix round 1/5 — revue Sol
+
+Les trois constats numériques ont été traités sans ajouter de graphe, target, ID ou binding :
+
+- Le cône WGSL n’évalue désormais `pow` que pour `spotCosine >= 0` et dans le cutoff ; un résultat `NaN` ou hors plage F32 donne une contribution nulle. L’oracle indépendant applique la même convention. Le témoin public nommé avec `cutoff=180°`, `exponent=0.5` épingle `[0,0,0,255]`; sur ce backend le résultat était déjà noir avant la garde, donc il prouve la convention de sortie mais ne distingue pas causalement l’implémentation de la garde.
+- Le témoin spot normal `falloff=1`, `cutoff=90°` est maintenant épinglé explicitement à `[180,180,180,255]`.
+- La normalisation `target-location` est déplacée dans `:math` : soustraction, échelle et longueur en F64, puis narrowing F32 fini contrôlé avant le recipe gelé. Le planner ne possède plus de helper géométrique local. RED : la variante F32 de la soustraction rendait les extrêmes finis `±1.8e38` non représentables ; le test math public échoue alors, et passe avec la voie F64.
+
+Vérifications séquentielles : `:gpu-plan:compileKotlin` exit 0 ; `:gpu-renderer:compileKotlin` exit 0 ; `:kanvas:compileTestKotlin` exit 0 ; `:math:matrix:jvmTest` ciblé 1/0/0/0. Le XML W6d de `W6dLightingSurfacePixelTest` est 16/0/0/0 et le XML W6a restore est 9/0/0/0. Les deux lancements `:kanvas:test` terminent néanmoins par exit natif 133 après les assertions ; statut natif `UNKNOWN`, sans échec JUnit dans ces XML.

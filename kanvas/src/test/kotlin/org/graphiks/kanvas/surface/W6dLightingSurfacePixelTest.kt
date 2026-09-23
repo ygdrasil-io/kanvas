@@ -86,6 +86,19 @@ class W6dLightingSurfacePixelTest {
     fun `spot diffuse uses Skia falloff before cone edge ramp`() = assertRemainingFamily(
         W6dLightingCpuOracle.Family.SPOT_DIFFUSE,
         ImageFilter.SpotLitDiffuse(Point3F32(1f, 0f, 1f), Point3F32(1f, 0f, 0f), 1f, 90f, ColorARGB.White, 1f, 1f),
+        expectedTopLeft = ubyteArrayOf(180u, 180u, 180u, 255u),
+    )
+
+    @Test
+    fun `spot diffuse treats negative fractional-power bases as zero contribution`() = assertRemainingFamily(
+        W6dLightingCpuOracle.Family.SPOT_DIFFUSE,
+        ImageFilter.SpotLitDiffuse(Point3F32(1f, 0f, 1f), Point3F32(1f, 0f, 2f), .5f, 180f,
+            ColorARGB.White, 1f, 1f),
+        expectedTopLeft = ubyteArrayOf(0u, 0u, 0u, 255u),
+        specularExponent = .5f,
+        cutoffDegrees = 180f,
+        location = Point3F32(1f, 0f, 1f),
+        target = Point3F32(1f, 0f, 2f),
     )
 
     @Test
@@ -268,11 +281,16 @@ class W6dLightingSurfacePixelTest {
         family: W6dLightingCpuOracle.Family,
         filter: ImageFilter,
         expectedTopLeft: UByteArray? = null,
+        specularExponent: Float = 1f,
+        cutoffDegrees: Float = 90f,
+        location: Point3F32 = Point3F32(1f, 0f, 1f),
+        target: Point3F32 = Point3F32(1f, 0f, 0f),
     ) {
         val alpha = alphaFixture()
         val expected = W6dLightingCpuOracle.remainingFamilyRgba8(family, 3, 3, alpha,
-            locationX = 1f, locationY = 0f, locationZ = 1f, targetX = 1f, targetY = 0f, targetZ = 0f,
-            surfaceDepth = 1f, coefficient = 1f, shininess = 2f, specularExponent = 1f, cutoffDegrees = 90f)
+            locationX = location.x, locationY = location.y, locationZ = location.z,
+            targetX = target.x, targetY = target.y, targetZ = target.z,
+            surfaceDepth = 1f, coefficient = 1f, shininess = 2f, specularExponent = specularExponent, cutoffDegrees = cutoffDegrees)
         expectedTopLeft?.let { assertContentEquals(it, expected.copyOfRange(0, 4)) }
         val surface = Surface(3, 3)
         surface.canvas {

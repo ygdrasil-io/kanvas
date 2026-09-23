@@ -37,11 +37,28 @@ object W6dLightingCpuOracle {
     ): UByteArray {
         require(width > 0 && height > 0 && alpha.size == width * height)
         fun normalized(x: Float, y: Float, z: Float): Triple<Float, Float, Float>? {
-            val length = sqrt(x * x + y * y + z * z)
-            return if (!length.isFinite() || length == 0f) null else Triple(x / length, y / length, z / length)
+            val dx = x.toDouble()
+            val dy = y.toDouble()
+            val dz = z.toDouble()
+            val scale = maxOf(kotlin.math.abs(dx), kotlin.math.abs(dy), kotlin.math.abs(dz))
+            if (!scale.isFinite() || scale == 0.0) return null
+            val length = sqrt((dx / scale) * (dx / scale) + (dy / scale) * (dy / scale) + (dz / scale) * (dz / scale))
+            return if (!length.isFinite()) null else Triple((dx / scale / length).toFloat(), (dy / scale / length).toFloat(), (dz / scale / length).toFloat())
+        }
+        fun normalizedDifference(
+            targetX: Float, targetY: Float, targetZ: Float,
+            locationX: Float, locationY: Float, locationZ: Float,
+        ): Triple<Float, Float, Float>? {
+            val dx = targetX.toDouble() - locationX.toDouble()
+            val dy = targetY.toDouble() - locationY.toDouble()
+            val dz = targetZ.toDouble() - locationZ.toDouble()
+            val scale = maxOf(kotlin.math.abs(dx), kotlin.math.abs(dy), kotlin.math.abs(dz))
+            if (!scale.isFinite() || scale == 0.0) return null
+            val length = sqrt((dx / scale) * (dx / scale) + (dy / scale) * (dy / scale) + (dz / scale) * (dz / scale))
+            return if (!length.isFinite()) null else Triple((dx / scale / length).toFloat(), (dy / scale / length).toFloat(), (dz / scale / length).toFloat())
         }
         fun sample(x: Int, y: Int): Float = alpha[y.coerceIn(0, height - 1) * width + x.coerceIn(0, width - 1)]
-        val spotAxis = normalized(targetX - locationX, targetY - locationY, targetZ - locationZ)
+        val spotAxis = normalizedDifference(targetX, targetY, targetZ, locationX, locationY, locationZ)
         val cutoff = kotlin.math.cos(Math.toRadians(cutoffDegrees.toDouble())).toFloat()
         return UByteArray(width * height * 4).also { output ->
             for (y in 0 until height) for (x in 0 until width) {
@@ -59,7 +76,11 @@ object W6dLightingCpuOracle {
                         val axis = spotAxis
                         if (axis == null) 0f else {
                             val cosAngle = -(surfaceToLight.first * axis.first + surfaceToLight.second * axis.second + surfaceToLight.third * axis.third)
-                            if (cosAngle < cutoff) 0f else cosAngle.pow(specularExponent) * min(1f, (cosAngle - cutoff) / .016f)
+                            if (cosAngle < cutoff || cosAngle < 0f) 0f
+                            else {
+                                val powered = cosAngle.pow(specularExponent)
+                                if (powered.isFinite()) powered * min(1f, (cosAngle - cutoff) / .016f) else 0f
+                            }
                         }
                     } else 1f
                     val diffuse = max(0f, normal.first * surfaceToLight.first + normal.second * surfaceToLight.second + normal.third * surfaceToLight.third)

@@ -1,6 +1,7 @@
 package org.graphiks.math.matrix
 
 import org.graphiks.math.geometry.Point2I32
+import org.graphiks.math.geometry.Point3F32
 import org.graphiks.math.geometry.RectI32
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -12,6 +13,21 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 
 class Matrix3x3F64Test {
+    @Test
+    fun `spot direction normalizes finite endpoints whose F32 difference overflows`() {
+        val mapping = requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32.Origin))
+
+        val direction = requireNotNull(mapping.normalizedLightingDirectionF32OrNull(
+            Point3F32(-1.8e38f, -1.8e38f, 1f),
+            Point3F32(1.8e38f, 1.8e38f, 1f),
+        ))
+
+        assertTrue(direction.x.isFinite() && direction.y.isFinite() && direction.z.isFinite())
+        assertEquals(0.70710677f, direction.x)
+        assertEquals(0.70710677f, direction.y)
+        assertEquals(0f, direction.z)
+    }
+
     @Test
     fun `target mapping rebases at its explicit origin rather than the layer origin`() {
         val mapping = requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32(10, 20)))
