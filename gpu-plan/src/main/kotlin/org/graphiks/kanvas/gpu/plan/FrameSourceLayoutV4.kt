@@ -312,6 +312,7 @@ internal class FrameSourceLayoutV4 private constructor(
         val inventory = if (layeredInput == null) SourcePhysicalConstructionV1() else {
             val resources = mutableListOf<PlanResource>()
             val uniforms = linkedMapOf<String, PlanResourceId>()
+            val w6cColorUniformBindings = linkedMapOf<String, W6cColorUniformBindingV1>()
             val caches = mutableListOf<PlanCacheBindingV1>()
             val w6cColorFilters = layeredInput.imageColorFilterExecutions()
             fun buffer(role: PlanResourceRole, ordinal: Int, bytes: Long, usage: PlanResourceUsage,
@@ -324,10 +325,14 @@ internal class FrameSourceLayoutV4 private constructor(
                 uniforms[identity] = buffer(PlanResourceRole.SourceUniformData, uniforms.size, bytes, PlanResourceUsage.Uniform)
             }
             w6cColorFilters.forEach { execution ->
-                uniforms[W6cComposePlanner.colorUniformIdentity(execution)] = buffer(
+                val identity = W6cComposePlanner.colorUniformIdentity(execution)
+                val capacity = maxOf(16L, execution.dynamicByteCountI64)
+                val resource = buffer(
                     PlanResourceRole.SourceUniformData, uniforms.size,
-                    maxOf(16L, execution.dynamicByteCountI64), PlanResourceUsage.Uniform,
+                    capacity, PlanResourceUsage.Uniform,
                 )
+                uniforms[identity] = resource
+                w6cColorUniformBindings[identity] = W6cColorUniformBindingV1(resource, 0L, capacity)
             }
             imageInventory.forEachIndexed { index, allocation ->
                 val request = prepared.uploads.getValue(allocation.pixels).cacheRequest
@@ -356,7 +361,7 @@ internal class FrameSourceLayoutV4 private constructor(
             val extra = resources.filterNot { it.role == PlanResourceRole.SourceUniformData }.fold(0L) { bytes, row -> Math.addExact(bytes, row.byteSize) }
             require(Math.addExact(layeredInput.nonUniformBytesI64, Math.addExact(extra, noiseBytesI64)) ==
                 nonUniformBytesI64)
-            SourcePhysicalConstructionV1(resources, uniforms, caches)
+            SourcePhysicalConstructionV1(resources, uniforms, caches, w6cColorUniformBindings)
         }
         SourceConstructionResultV4.Built(finish(table,roots,inventory))
     } catch (failure: RawMaterialRequirementsV2.Refusal) {

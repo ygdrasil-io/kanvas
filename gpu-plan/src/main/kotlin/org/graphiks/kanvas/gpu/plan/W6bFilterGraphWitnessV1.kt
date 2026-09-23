@@ -89,9 +89,11 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                 is PlanPass.FilterPass -> {
                     val bound = row(pass.evaluationKey.boundSourceId)
                     val materializedImageInput = isMaterializedImageInput(pass, passes, producers, rows)
-                    val contextualImageInput = materializedImageInput || isContextualImageInput(pass, passes, producers, rows)
+                    val contextualFilterTargetInput = isContextualFilterTargetInput(pass, passes, producers, rows)
+                    val contextualImageInput = isContextualImageInput(pass, passes, producers, rows)
+                    val filterTargetInput = materializedImageInput || contextualFilterTargetInput || contextualImageInput
                     require(bound.role in setOf(PlanResourceRole.FilterSource, PlanResourceRole.CoverageSource) ||
-                        contextualImageInput) {
+                        filterTargetInput) {
                         "W6b occurrence source must be immutable FilterSource or CoverageSource."
                     }
                     produced(bound.id, index)
@@ -101,7 +103,7 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                     pass.inputs().forEachIndexed { inputIndex, input ->
                         produced(input, index)
                         val materialCoverage = pass.operation is FilterPassOperationV1.MaterializedSource && inputIndex == 1
-                        val materializedImageSource = contextualImageInput && inputIndex == 0 && input == bound.id
+                        val materializedImageSource = filterTargetInput && inputIndex == 0 && input == bound.id
                         require(materialCoverage || materializedImageSource || owners[input] == null || owners[input] == bound.id) {
                             "W6b input belongs to another occurrence."
                         }
@@ -185,7 +187,8 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
          * A combined W6b occurrence first freezes mask coverage into a materialized source,
          * then uses that typed filter target as the immutable entry point for the captured
          * image-filter chain.  This is still a producer edge in the sealed graph, not a
-         * renderer-side source rediscovery.
+         * renderer-side source rediscovery.  A contextual Compose result is deliberately not
+         * admitted here: it has the same FilterTarget role, but a different producer contract.
          */
         private fun isMaterializedImageInput(
             pass: PlanPass.FilterPass,
@@ -197,19 +200,24 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
             val boundSource = pass.evaluationKey.boundSourceId
             if (rows.getValue(boundSource).role != PlanResourceRole.FilterTarget) return false
             return when (blur.kind) {
-                FilterImplementationKindV1.IMAGE_BLUR_X ->
-                    blur.axis == FilterAxisV1.X && pass.inputs().singleOrNull() == boundSource
+                FilterImplementationKindV1.IMAGE_BLUR_X -> {
+                    val input = pass.inputs().singleOrNull()
+                    blur.axis == FilterAxisV1.X && input == boundSource &&
+                        ((producers[input]?.let(passes::get) as? PlanPass.FilterPass)?.operation
+                            is FilterPassOperationV1.MaterializedSource)
+                }
                 FilterImplementationKindV1.IMAGE_BLUR_Y -> {
                     val previous = pass.inputs().singleOrNull()?.let { producers[it] }?.let(passes::get) as? PlanPass.FilterPass
                     previous?.evaluationKey === pass.evaluationKey &&
-                        (previous.operation as? FilterPassOperationV1.SeparableBlur)?.kind == FilterImplementationKindV1.IMAGE_BLUR_X
+                        (previous.operation as? FilterPassOperationV1.SeparableBlur)?.kind == FilterImplementationKindV1.IMAGE_BLUR_X &&
+                        isMaterializedImageInput(previous, passes, producers, rows)
                 }
                 else -> false
             }
         }
 
         /** Compose binds the outer node to the immutable FilterTarget published by its inner node. */
-        private fun isContextualImageInput(
+        private fun isContextualFilterTargetInput(
             pass: PlanPass.FilterPass,
             passes: List<PlanPass>,
             producers: Map<PlanResourceId, Int>,
@@ -219,6 +227,28 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
             if (rows.getValue(boundSource).role != PlanResourceRole.FilterTarget || pass.inputs().firstOrNull() != boundSource) return false
             val producerIndex = producers[boundSource] ?: return false
             return producerIndex < passes.indexOf(pass) && passes[producerIndex] is PlanPass.FilterPass
+        }
+
+        /** The second blur pass inherits the contextual (rather than mask-materialized) X input. */
+        private fun isContextualImageInput(
+            pass: PlanPass.FilterPass,
+            passes: List<PlanPass>,
+            producers: Map<PlanResourceId, Int>,
+            rows: Map<PlanResourceId, PlanResource>,
+        ): Boolean {
+            val blur = pass.operation as? FilterPassOperationV1.SeparableBlur ?: return false
+            return when (blur.kind) {
+                FilterImplementationKindV1.IMAGE_BLUR_X ->
+                    blur.axis == FilterAxisV1.X && isContextualFilterTargetInput(pass, passes, producers, rows) &&
+                        !isMaterializedImageInput(pass, passes, producers, rows)
+                FilterImplementationKindV1.IMAGE_BLUR_Y -> {
+                    val previous = pass.inputs().singleOrNull()?.let { producers[it] }?.let(passes::get) as? PlanPass.FilterPass
+                    previous?.evaluationKey === pass.evaluationKey &&
+                        (previous.operation as? FilterPassOperationV1.SeparableBlur)?.kind == FilterImplementationKindV1.IMAGE_BLUR_X &&
+                        isContextualImageInput(previous, passes, producers, rows)
+                }
+                else -> false
+            }
         }
 
         private fun validatePass(
@@ -262,15 +292,16 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                     val input = inputs.single()
                     val mask = operation.kind in setOf(FilterImplementationKindV1.MASK_COVERAGE_BLUR_X,
                         FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y)
-                    val materializedImageInput = isMaterializedImageInput(pass, passes, producers, rows) ||
-                        isContextualImageInput(pass, passes, producers, rows)
-                    if (!materializedImageInput) occurrenceOwned(input)
+                    val materializedSourceInput = isMaterializedImageInput(pass, passes, producers, rows)
+                    val contextualImageInput = isContextualImageInput(pass, passes, producers, rows)
+                    val filterTargetInput = materializedSourceInput || contextualImageInput
+                    if (!filterTargetInput) occurrenceOwned(input)
                     val sourceRole = rows.getValue(key.boundSourceId).role
                     require((sourceRole == PlanResourceRole.CoverageSource) == mask &&
-                        (sourceRole != PlanResourceRole.FilterTarget || materializedImageInput)) {
+                        (sourceRole != PlanResourceRole.FilterTarget || filterTargetInput)) {
                         "W6b blur family disagrees with its immutable source role."
                     }
-                    if (materializedImageInput && operation.axis == FilterAxisV1.X) require((producer(input) as? PlanPass.FilterPass)?.operation
+                    if (materializedSourceInput && operation.axis == FilterAxisV1.X) require((producer(input) as? PlanPass.FilterPass)?.operation
                         is FilterPassOperationV1.MaterializedSource) {
                         "W6b image blur must begin from the preceding materialized source."
                     }

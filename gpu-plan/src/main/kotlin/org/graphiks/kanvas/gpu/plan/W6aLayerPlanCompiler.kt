@@ -275,7 +275,8 @@ public class W6aLayerPlanCompiler public constructor(
             is FilterPassOperationV1.Crop -> true
             is FilterPassOperationV1.Offset -> true
             is FilterPassOperationV1.Tile -> true
-            is FilterPassOperationV1.ColorFilter -> operation.uniformResource != null && operation.uniformCapacityBytesI64 != null
+            is FilterPassOperationV1.ColorFilter -> operation.uniformResource != null && operation.uniformOffsetBytesI64 != null &&
+                operation.uniformCapacityBytesI64 != null
             is FilterPassOperationV1.SeparableBlur -> operation.kind in nativeBlurKinds
             is FilterPassOperationV1.MaskBlurStyle,
             is FilterPassOperationV1.MaskShader,

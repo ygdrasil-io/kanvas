@@ -25,8 +25,18 @@ internal class SourcePhysicalConstructionV1(
     val resources: List<PlanResource> = emptyList(),
     val uniforms: Map<String, PlanResourceId> = emptyMap(),
     val caches: List<PlanCacheBindingV1> = emptyList(),
+    val w6cColorUniformBindings: Map<String, W6cColorUniformBindingV1> = emptyMap(),
     val w4eGeometry: List<PlanW4eGeometryBindingV1> = emptyList(),
 )
+
+/** The only FrameSourceLayoutV4-issued W6c byte window; renderers never derive it. */
+internal class W6cColorUniformBindingV1(
+    val resourceId: PlanResourceId,
+    val offsetBytesI64: Long,
+    val capacityBytesI64: Long,
+) {
+    init { require(offsetBytesI64 >= 0L && capacityBytesI64 > 0L && offsetBytesI64 < capacityBytesI64) }
+}
 
 /** Exact W4 upload/draw ranges within graph-owned physical buffers, fixed before publication. */
 public class PlanGeometryBufferBindingV1 internal constructor(
@@ -120,10 +130,14 @@ public class PlanPhysicalLayoutV1 private constructor(
                     "W6c ColorFilter must publish its W5f uniform before the physical layout seals."
                 }
                 val capacity = requireNotNull(operation.uniformCapacityBytesI64)
+                val offset = requireNotNull(operation.uniformOffsetBytesI64)
                 val row = rows.single { it.id == uniform }
                 require(row.role == PlanResourceRole.SourceUniformData && row.byteSize == capacity &&
-                    capacity >= maxOf(16L, operation.execution.dynamicByteCountI64))
-                require(source.uniforms.getValue(W6cComposePlanner.colorUniformIdentity(operation.execution)) == uniform)
+                    Math.addExact(offset, maxOf(16L, operation.execution.dynamicByteCountI64)) <= capacity)
+                val identity = W6cComposePlanner.colorUniformIdentity(operation.execution)
+                require(source.uniforms.getValue(identity) == uniform)
+                val binding = source.w6cColorUniformBindings.getValue(identity)
+                require(binding.resourceId == uniform && binding.offsetBytesI64 == offset && binding.capacityBytesI64 == capacity)
             }
             require((uniforms.values.toSet() + maskShaderUniforms + graphTextureUniforms + colorFilterUniforms) ==
                 source.uniforms.values.toSet())

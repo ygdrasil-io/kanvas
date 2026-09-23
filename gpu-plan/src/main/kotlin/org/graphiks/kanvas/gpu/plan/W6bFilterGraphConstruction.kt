@@ -474,7 +474,7 @@ internal object W6bFilterGraphConstruction {
                 val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
                 val output = allocateTarget(bounds)
                 append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
-                    FilterPassOperationV1.ColorFilter(execution, null, null, bounds, filterInputSampling(input, bounds))))
+                    FilterPassOperationV1.ColorFilter(execution, null, null, null, bounds, filterInputSampling(input, bounds))))
                 ContextualFilterResult(output, bounds, key)
             }
             is CapturedFilterNodeV1.Compose -> {

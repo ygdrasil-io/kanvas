@@ -48,4 +48,18 @@ class W6cComposeSurfaceTest {
 
         assertContentEquals(expectedColorFilterBytes, surface.render().pixels)
     }
+
+    /** A contextual FilterTarget may feed the outer blur; it is not a mask materialization. */
+    @Test
+    fun composeAllowsBlurAfterOffsetResult() {
+        // A zero-sigma blur is the identity, so Offset(1) moves the opaque red texel to x=1.
+        val expectedComposeBytes = ubyteArrayOf(0u, 0u, 0u, 0u, 255u, 0u, 0u, 255u)
+        val filter = ImageFilter.Compose(ImageFilter.Blur(0f, 0f), ImageFilter.Offset(1f, 0f))
+        val surface = Surface(2, 1)
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.Red, imageFilter = filter, antiAlias = false))
+        }
+
+        assertContentEquals(expectedComposeBytes, surface.render().pixels)
+    }
 }

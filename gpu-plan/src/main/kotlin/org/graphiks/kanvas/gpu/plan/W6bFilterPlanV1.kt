@@ -275,6 +275,8 @@ public sealed interface FilterPassOperationV1 {
     public class ColorFilter(
         public val execution: ColorFilterExecutionPlanV1,
         public val uniformResource: PlanResourceId?,
+        /** Exact W5f byte-window start in [uniformResource], published by FrameSourceLayoutV4. */
+        public val uniformOffsetBytesI64: Long?,
         public val uniformCapacityBytesI64: Long?,
         override val bounds: FilterBoundsPlanV1,
         public val sampling: FilterInputSamplingV1,
@@ -282,15 +284,17 @@ public sealed interface FilterPassOperationV1 {
     ) : FilterPassOperationV1 {
         init {
             require(kind == FilterImplementationKindV1.COLOR_FILTER)
-            require((uniformResource == null) == (uniformCapacityBytesI64 == null))
+            require((uniformResource == null) == (uniformOffsetBytesI64 == null) &&
+                (uniformResource == null) == (uniformCapacityBytesI64 == null))
             uniformCapacityBytesI64?.let { capacity ->
                 require(uniformResource!!.value.startsWith("${PlanResourceRole.SourceUniformData.name}:"))
-                require(capacity >= maxOf(16L, execution.dynamicByteCountI64))
+                val offset = requireNotNull(uniformOffsetBytesI64)
+                require(offset >= 0L && Math.addExact(offset, maxOf(16L, execution.dynamicByteCountI64)) <= capacity)
             }
         }
 
-        internal fun withUniformResource(resource: PlanResourceId, capacityBytesI64: Long): ColorFilter =
-            ColorFilter(execution, resource, capacityBytesI64, bounds, sampling)
+        internal fun withUniformBinding(binding: W6cColorUniformBindingV1): ColorFilter =
+            ColorFilter(execution, binding.resourceId, binding.offsetBytesI64, binding.capacityBytesI64, bounds, sampling)
     }
 
     public data class MaskBlurStyle(

@@ -115,13 +115,24 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     resource.usages() == setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination))
                 val materials = maskMaterialsByUniform[id].orEmpty()
                 val canonicalBytes = materials.firstOrNull()?.stage?.uniformBytes ?: colorFiltersByUniform[id]?.firstOrNull()?.let { operation ->
-                    ByteArray(Math.toIntExact(resource.byteSize)).also { bytes -> operation.execution.copyDynamicBytes().copyInto(bytes) }
+                    val offset = requireNotNull(operation.uniformOffsetBytesI64)
+                    ByteArray(Math.toIntExact(resource.byteSize)).also { bytes ->
+                        operation.execution.copyDynamicBytes().copyInto(bytes, Math.toIntExact(offset))
+                    }
                 }
                 materials.forEach { material ->
                     require(material.binding.uniformOffsetBytesI64 == 0L &&
                         material.binding.uniformCapacityBytesI64 == resource.byteSize &&
                         Math.addExact(material.binding.uniformOffsetBytesI64, material.stage.uniformByteCountI64) <= resource.byteSize &&
                         canonicalBytes!!.contentEquals(material.stage.uniformBytes))
+                }
+                colorFiltersByUniform[id].orEmpty().forEach { operation ->
+                    val offset = requireNotNull(operation.uniformOffsetBytesI64)
+                    val capacity = requireNotNull(operation.uniformCapacityBytesI64)
+                    require(capacity == resource.byteSize &&
+                        Math.addExact(offset, maxOf(16L, operation.execution.dynamicByteCountI64)) <= capacity &&
+                        canonicalBytes!!.copyOfRange(Math.toIntExact(offset), Math.toIntExact(Math.addExact(offset,
+                            operation.execution.dynamicByteCountI64))).contentEquals(operation.execution.copyDynamicBytes()))
                 }
                 owned.own(device.createBuffer(BufferDescriptor(size = resource.byteSize.toULong(),
                     usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
@@ -1368,7 +1379,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     return vec4<f32>(0.0);
                 }
                 let input = textureLoad(w6c_color_source, source_position, 0);
-                ${W5fColorOperationEmitterV1.emit(operation.execution.copyOperationGraph(), "input", 0L)}
+                ${W5fColorOperationEmitterV1.emit(operation.execution.copyOperationGraph(), "input",
+                    requireNotNull(operation.uniformOffsetBytesI64) / 4L)}
             }
         """
         val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(
@@ -1378,7 +1390,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         ))))
         val pipeline = pipeline(shader, layout, w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
         val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(
-            BindGroupEntry(0u, source), BindGroupEntry(1u, BufferBinding(uniform, 0uL,
+            BindGroupEntry(0u, source), BindGroupEntry(1u, BufferBinding(uniform, requireNotNull(operation.uniformOffsetBytesI64).toULong(),
                 requireNotNull(operation.uniformCapacityBytesI64).toULong())),
         ))))
         return GPUPreparedNativeScopeOperand.Render(stepIndex,

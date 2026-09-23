@@ -2217,8 +2217,9 @@ internal class W6aLayerGraphConstruction(
                     }
                     val resolved = when (operation) {
                         is FilterPassOperationV1.ColorFilter -> {
-                            val uniform = source.uniforms.getValue(W6cComposePlanner.colorUniformIdentity(operation.execution))
-                            operation.withUniformResource(uniform, source.resources.single { it.id == uniform }.byteSize)
+                            operation.withUniformBinding(source.w6cColorUniformBindings.getValue(
+                                W6cComposePlanner.colorUniformIdentity(operation.execution),
+                            ))
                         }
                         else -> operation
                     }
@@ -2320,9 +2321,14 @@ internal class W6aLayerGraphConstruction(
         }
         return RenderGraph.publishW6a(construction, frame,
             packConstructedFrame(listOf(construction), table, sourceNonUniform, frozenMaterialRows), SourcePhysicalConstructionV1(
-                source.resources, source.uniforms, source.caches, w4eBindings.map { binding ->
+                resources = source.resources,
+                uniforms = source.uniforms,
+                caches = source.caches,
+                w6cColorUniformBindings = source.w6cColorUniformBindings,
+                w4eGeometry = w4eBindings.map { binding ->
                     binding.bindSources(localized.entries.associate { (key, draw) -> key.first to draw })
-                }))
+                },
+            ))
     }
 
     /** Appended after all native W5 lanes, preserving one source-table/publish authority. */
