@@ -374,9 +374,17 @@ public sealed interface FilterPassOperationV1 {
                 LightingFamilyV1.POINT_SPECULAR -> FilterImplementationKindV1.POINT_SPECULAR
                 LightingFamilyV1.SPOT_SPECULAR -> FilterImplementationKindV1.SPOT_SPECULAR
             })
-            require((family.name.startsWith("DISTANT")) == (parametersSnapshot is LightingParametersV1.Distant) ||
-                (family.name.startsWith("POINT")) == (parametersSnapshot is LightingParametersV1.Point) ||
-                (family.name.startsWith("SPOT")) == (parametersSnapshot is LightingParametersV1.Spot))
+            require(when (family) {
+                LightingFamilyV1.DISTANT_DIFFUSE,
+                LightingFamilyV1.DISTANT_SPECULAR,
+                -> parametersSnapshot is LightingParametersV1.Distant
+                LightingFamilyV1.POINT_DIFFUSE,
+                LightingFamilyV1.POINT_SPECULAR,
+                -> parametersSnapshot is LightingParametersV1.Point
+                LightingFamilyV1.SPOT_DIFFUSE,
+                LightingFamilyV1.SPOT_SPECULAR,
+                -> parametersSnapshot is LightingParametersV1.Spot
+            })
         }
         public fun copyParameters(): LightingParametersV1 = parametersSnapshot.copy()
     }
