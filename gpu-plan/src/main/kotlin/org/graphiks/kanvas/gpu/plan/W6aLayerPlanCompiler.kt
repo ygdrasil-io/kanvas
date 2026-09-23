@@ -74,6 +74,16 @@ public class W6aLayerPlanCompiler public constructor(
         W6bFilterGraphConstruction.admissionRefusalOrNull(scene)?.let { refusal ->
             return GpuPlanSelection.InvalidScene(listOf(refusal))
         }
+        // A direct distant-diffuse source must reach the frozen Sobel pass before its terminal
+        // clip.  Keep that clip in the immutable W6b occurrence for FilterComposite, while the
+        // existing W5 lane receives the un-clipped geometry it must rasterize.
+        val directDistantDiffuseCommands = if (ownsW6b) W6bFilterGraphConstruction.positiveOccurrences(scene)
+            .asSequence()
+            .filter { occurrence -> !occurrence.isLayerOccurrence && !occurrence.isPictureOccurrence &&
+                W6bFilterGraphConstruction.hasDistantDiffuseTerminal(occurrence) }
+            .map { occurrence -> occurrence.insertionCommandIndexI32 }
+            .toSet()
+        else emptySet()
 
         // Layer occurrence limits come from the same immutable GraphLimits vocabulary used at
         // capture.  W6 owns the resulting terminal refusal before it can issue a resource or
@@ -178,7 +188,7 @@ public class W6aLayerPlanCompiler public constructor(
             val draws = setOf(drawIndexI32)
             val segment = SceneSnapshot.of(scene.extent, scene.colorSpace, commands.mapIndexed { index, command ->
                 if (index in draws) {
-                    stripW6bPayload(command as SceneCommand.Draw)
+                    stripW6bPayload(command as SceneCommand.Draw, drawIndexI32 in directDistantDiffuseCommands)
                 } else SceneCommand.Annotation.of(org.graphiks.math.geometry.RectF32(0f, 0f, 0f, 0f), "w6a.segment", index.toString())
             }, graphLimits)
             val child = CapabilityCompilerChain.of(listOf(W5bVerticesPlanCompiler(runtimeCatalog), W5bPointPlanCompiler(runtimeCatalog), W5eImagePlanCompiler(), W3SolidRectPlanCompiler(),
@@ -370,15 +380,17 @@ public class W6aLayerPlanCompiler public constructor(
      * the unfiltered source draw, but never sees a public spatial-filter object or chooses a
      * second filter route.
      */
-    private fun stripW6bPayload(command: SceneCommand.Draw): SceneCommand.Draw {
+    private fun stripW6bPayload(command: SceneCommand.Draw, deferTerminalClip: Boolean = false): SceneCommand.Draw {
         val paint = command.node.paint
         val effects = (command.node.effects as? EffectStack.Entries)?.let { entries ->
             EffectStack.of(entries.filterNot { it is CapturedFilterRootV1 || it is MaskFilterNode })
         } ?: command.node.effects
-        if ((paint == null || paint.imageFilter == null && paint.maskFilter == null) && effects === command.node.effects) return command
+        if ((paint == null || paint.imageFilter == null && paint.maskFilter == null) && effects === command.node.effects &&
+            !deferTerminalClip) return command
         return command.copy(node = command.node.copy(
             paint = paint?.copy(imageFilter = null, maskFilter = null),
             effects = effects,
+            clip = if (deferTerminalClip) ClipStackNode.Empty else command.node.clip,
         ))
     }
 

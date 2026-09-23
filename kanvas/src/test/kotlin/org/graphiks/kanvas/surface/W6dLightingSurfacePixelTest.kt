@@ -69,6 +69,62 @@ class W6dLightingSurfacePixelTest {
     }
 
     @Test
+    fun `compose outer distant diffuse retains consumer demand outside cropped inner`() {
+        val alpha = FloatArray(25).also { it[2 * 5 + 2] = 1f }
+        val expected = W6dLightingCpuOracle.distantDiffuseRgba8(5, 5, alpha, 2, 2, 3, 3,
+            directionX = 1f, directionY = 0f, directionZ = 1f, surfaceDepth = 1f, kd = 1f)
+        val filter = ImageFilter.Compose(
+            ImageFilter.DistantLitDiffuse(Vector3F32(1f, 0f, 1f), ColorARGB.White, 1f, 1f),
+            ImageFilter.Crop(RectF32.ofLTRB(2f, 2f, 3f, 3f)),
+        )
+        val surface = Surface(5, 5)
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(2f, 2f, 3f, 3f), Paint(ColorARGB.White, imageFilter = filter, antiAlias = false))
+        }
+
+        assertTrue(expected[0].toInt() > 0, "The Compose fixture must light transparent black outside the crop.")
+        assertFamilyNear(expected, surface.render(), maxChannelDelta = 2)
+    }
+
+    @Test
+    fun `direct terminal clip retains Sobel halo outside visible output`() {
+        val alpha = floatArrayOf(1f, 0f, 0f)
+        val expectedFull = W6dLightingCpuOracle.distantDiffuseRgba8(3, 1, alpha, 0, 0, 1, 1,
+            directionX = 1f, directionY = 0f, directionZ = 0f, surfaceDepth = 1f, kd = 1f)
+        val expected = UByteArray(3 * 4).also { pixels ->
+            expectedFull.copyInto(pixels, destinationOffset = 4, startIndex = 4, endIndex = 8)
+        }
+        val surface = Surface(3, 1)
+        surface.canvas {
+            clipRect(RectF32.ofLTRB(1f, 0f, 2f, 1f), antiAlias = false)
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.White,
+                imageFilter = ImageFilter.DistantLitDiffuse(Vector3F32(1f, 0f, 0f), ColorARGB.White, 1f, 1f),
+                antiAlias = false))
+        }
+
+        assertTrue(expected[4].toInt() > 0, "The clipped pixel must retain the alpha halo at x=0.")
+        assertFamilyNear(expected, surface.render(), maxChannelDelta = 2)
+    }
+
+    @Test
+    fun `disjoint direct terminal clip is a no op and surface recovers`() {
+        val surface = Surface(3, 1)
+        surface.canvas {
+            save()
+            clipRect(RectF32.ofLTRB(4f, 0f, 5f, 1f), antiAlias = false)
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.White,
+                imageFilter = ImageFilter.DistantLitDiffuse(Vector3F32(1f, 0f, 1f), ColorARGB.White, 1f, 1f),
+                antiAlias = false))
+            restore()
+        }
+
+        assertContentEquals(UByteArray(3 * 4), surface.render().pixels)
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.Red, antiAlias = false)) }
+        assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u), surface.render().pixels)
+    }
+
+    @Test
     fun `direct distant diffuse intersects its unbounded demand with terminal clip before allocation`() {
         val center = W6dLightingCpuOracle.distantDiffuseRgba8(1, 1, floatArrayOf(1f), 0, 0, 1, 1,
             directionX = 1f, directionY = 0f, directionZ = 1f, surfaceDepth = 1f, kd = 1f)

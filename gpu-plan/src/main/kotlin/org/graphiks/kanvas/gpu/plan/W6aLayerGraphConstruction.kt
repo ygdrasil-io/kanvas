@@ -119,6 +119,8 @@ internal class W6aLayerGraphConstruction(
     private val resources: List<PlanResource>
     private val frozenFilterResourceSpecs: List<W6bFilterGraphConstruction.ResourceSpec>
     private val filterSourceBindings: Map<PlanResourceId, W6bFilterGraphConstruction.SourceBinding>
+    /** Direct distant-diffuse sources defer their terminal hard clip until FilterComposite. */
+    private val directDistantDiffuseCommands: Set<Int>
     /** Additional real W5 source rows used by captured MaskShader coverage evaluation. */
     private val maskMaterialSourcesByOccurrence: Map<Int, MaterialSourceConstructionV4>
     /** One W5 row per isolated Picture paint; it samples a sealed graph texture, never a SceneSnapshot. */
@@ -147,9 +149,13 @@ internal class W6aLayerGraphConstruction(
             pass is PlanPass.PathRenderPass && pass.draw is GeneralPathDraw && pass.draw.sample == SamplePlan.SingleSample &&
                 pass.phase in setOf(PathRenderPhase.SingleSampleDirectColor, PathRenderPhase.SingleSampleStencilProducer,
                     PathRenderPhase.SingleSampleStencilColorCover) } &&
-            RenderGraph.visualDraws(source.passes()).all { (it is SolidRectDraw || it is AnalyticRectDraw ||
-                it is AnalyticRRectDraw || it is PathFillDraw || it is PathStrokeDraw || it is GeneralPathDraw ||
-                    it is W5bPointDraw || it is W5bVerticesDraw || it is W5bW4ePathDraw) } }) {
+            RenderGraph.visualDraws(source.passes()).all { draw ->
+                var sourceDraw = draw
+                while (sourceDraw is ClippedPlanDraw) sourceDraw = sourceDraw.source
+                sourceDraw is SolidRectDraw || sourceDraw is AnalyticRectDraw || sourceDraw is AnalyticRRectDraw ||
+                    sourceDraw is PathFillDraw || sourceDraw is PathStrokeDraw || sourceDraw is GeneralPathDraw ||
+                    sourceDraw is W5bPointDraw || sourceDraw is W5bVerticesDraw || sourceDraw is W5bW4ePathDraw
+            } }) {
             "w6a.layer.unsupported_child"
         }
 
@@ -454,6 +460,7 @@ internal class W6aLayerGraphConstruction(
             }
         }
         val directFilterSourceByCommand = linkedMapOf<Int, DirectFilterSources>()
+        val directDistantDiffuseCommands = linkedSetOf<Int>()
         filterOccurrences.filterNot { it.isLayerOccurrence || it.isPictureOccurrence }.forEach { occurrence ->
             // Reject an opaque terminal clip before allocating any direct filter source; W4e
             // retains ownership of complex clips on non-filtered routes.
@@ -462,24 +469,40 @@ internal class W6aLayerGraphConstruction(
                 "W6b direct occurrence has no W5 source generation."
             }
             val draw = RenderGraph.visualDraws(binding.source.passes()).single()
-            val deviceBounds = requireNotNull(intersect(w6aRasterBoundsI32(draw), w6aScissorI32(draw)))
-            val targetBounds = targetDeviceBounds(targetFor(binding.scopeI32))
+            val parentTarget = targetFor(binding.scopeI32)
+            val targetBounds = targetDeviceBounds(parentTarget)
             // A direct occurrence's terminal clip is its downstream consumer.  Seal that
             // intersection before allocating coverage or freezing an unbounded lighting pass.
-            val consumerDomain = terminalClip?.let { requireNotNull(intersect(targetBounds, it)) } ?: targetBounds
-            val clipped = requireNotNull(intersect(deviceBounds, consumerDomain))
+            val clippedConsumer = terminalClip?.let { intersect(targetBounds, it) }
+            val terminalNoOp = terminalClip != null && clippedConsumer == null
+            val consumerDomain = clippedConsumer ?: targetBounds
+            val noOpDomain = RectI32(targetBounds.left, targetBounds.top,
+                Math.addExact(targetBounds.left, 1), Math.addExact(targetBounds.top, 1))
+            val distantDiffuse = W6bFilterGraphConstruction.hasDistantDiffuseTerminal(occurrence)
+            if (distantDiffuse) directDistantDiffuseCommands += occurrence.insertionCommandIndexI32
+            // The W5 wrapper represents the terminal consumer clip.  Distant diffuse instead
+            // rasterizes its pre-clip source so Sobel can sample the one-texel halo.
+            val sourceGeometryDraw = if (distantDiffuse) draw.withoutW6aTerminalClip() else draw
+            val rasterInTarget = intersect(w6aRasterBoundsI32(sourceGeometryDraw), targetBounds)
+            // Distant diffuse keeps only the texels demanded by its frozen Sobel halo, not the
+            // terminal clip/scissor itself. A null terminal domain is a legal sealed no-op.
+            val sourceDomain = when {
+                terminalNoOp -> noOpDomain
+                distantDiffuse -> W6bFilterGraphConstruction.reverseInputDemand(
+                    occurrence, consumerDomain, filterSource(parentTarget).mapping,
+                )?.let { demand -> rasterInTarget?.let { raster -> intersect(raster, demand) } } ?: noOpDomain
+                else -> rasterInTarget?.let { raster -> intersect(raster, w6aScissorI32(draw)) } ?: noOpDomain
+            }
             // The admitted distant-diffuse slice affects transparent black.  Its physical child
             // remains tightly rasterized, while its semantic demand is the frozen terminal consumer;
             // all other families retain their existing content-sized direct source contract.
-            val desired = occurrence.root?.let { root ->
-                (occurrence.table.nodeAt(root.id) as? org.graphiks.kanvas.render.ir.CapturedFilterNodeV1.DistantLitDiffuse)
-                    ?.let { consumerDomain }
-            } ?: clipped
+            val desired = if (distantDiffuse && !terminalNoOp) consumerDomain else sourceDomain
             directFilterSourceByCommand[occurrence.insertionCommandIndexI32] = DirectFilterSources(
-                allocateOccurrenceSource(clipped, targetFor(binding.scopeI32), PlanResourceRole.CoverageSource,
-                    desiredOutputDeviceI32 = desired, requiredInputDeviceI32 = clipped),
+                allocateOccurrenceSource(sourceDomain, parentTarget, PlanResourceRole.CoverageSource,
+                    desiredOutputDeviceI32 = desired, requiredInputDeviceI32 = sourceDomain),
             )
         }
+        this.directDistantDiffuseCommands = directDistantDiffuseCommands
         /*
          * MaskShader is not a placeholder operation: the captured MaterialNode is normalized by
          * the same W5 source authority as the rest of the frame.  Its row is appended to this
@@ -2164,14 +2187,18 @@ internal class W6aLayerGraphConstruction(
             // captured DST_OUT (or other parent blend) is applied exactly once later by
             // FilterComposite.
             val draw = bound.withFinalBlendV1(finalBlends.getValue(command))
-            if (draw is W5bW4ePathDraw) {
+            // Lighting's Sobel neighborhood is evaluated before its terminal clip.  The
+            // matching terminal FilterComposite remains the sole owner of that hard clip.
+            val sourceDraw = if (command in directDistantDiffuseCommands && target in filterSourceBindings)
+                draw.withoutW6aTerminalClip() else draw
+            if (sourceDraw is W5bW4ePathDraw) {
                 val native = w4eBindings.flatMap { it.nativePasses() }.filterIsInstance<PlanPass.PathRenderPass>()
                     .single { it.draw.commandIndex == command && it.phase != PathRenderPhase.SingleSampleStencilProducer }
-                W5bW4ePathDraw(native.rebindW4eV6(native.ordinal, { it }, null, null, draw.materialAuthority) as PlanPass.PathRenderPass, draw.blend)
-            } else if (target == root || bindings.any { it.occurrenceInput?.commandIndexI32 == command }) draw else filterSourceBindings[target]?.let { sourceBinding ->
-                localizeLayerDraw(draw, sourceBinding.mapping, sourceBinding.copyDeviceBoundsI32())
+                W5bW4ePathDraw(native.rebindW4eV6(native.ordinal, { it }, null, null, sourceDraw.materialAuthority) as PlanPass.PathRenderPass, sourceDraw.blend)
+            } else if (target == root || bindings.any { it.occurrenceInput?.commandIndexI32 == command }) sourceDraw else filterSourceBindings[target]?.let { sourceBinding ->
+                localizeLayerDraw(sourceDraw, sourceBinding.mapping, sourceBinding.copyDeviceBoundsI32())
             } ?: geometryByTarget.getValue(target).let { geometry ->
-                localizeLayerDraw(draw, requireNotNull(geometry.mapping), requireNotNull(geometry.compositeDomainDeviceI32))
+                localizeLayerDraw(sourceDraw, requireNotNull(geometry.mapping), requireNotNull(geometry.compositeDomainDeviceI32))
             }
         }
         // Direct W6b coverage is already selected by W4, but its independent source texture
@@ -2609,6 +2636,13 @@ internal class W6aLayerGraphConstruction(
                 (authority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates, authority is PlanDrawMaterialAuthority.MaterialV5,
             )
         }
+    }
+
+    /** Removes only the deferred direct-filter clip wrappers; geometry remains W5-owned. */
+    private fun PlanDraw.withoutW6aTerminalClip(): PlanDraw {
+        var source = this
+        while (source is ClippedPlanDraw) source = source.source
+        return source
     }
 
     /** Bakes an already-admitted hard clip into the existing W4 draw; no renderer clip planning occurs. */

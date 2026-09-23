@@ -244,6 +244,21 @@ internal object W6bFilterGraphConstruction {
 
     internal fun owns(scene: SceneSnapshot): Boolean = ownership(scene).isOwned
 
+    /** True when the terminal side of a Compose chain is this slice's unbounded distant light. */
+    internal fun hasDistantDiffuseTerminal(occurrence: PositiveOccurrence): Boolean {
+        lateinit var nodeHasDistant: (CapturedFilterNodeIdI32) -> Boolean
+        fun inputHasDistant(input: CapturedFilterInputV1): Boolean = when (input) {
+            is CapturedFilterInputV1.Node -> nodeHasDistant(input.id)
+            else -> false
+        }
+        nodeHasDistant = { id -> when (val node = occurrence.table.nodeAt(id)) {
+            is CapturedFilterNodeV1.DistantLitDiffuse -> true
+            is CapturedFilterNodeV1.Compose -> inputHasDistant(node.outer)
+            else -> false
+        } }
+        return occurrence.root?.let { nodeHasDistant(it.id) } == true
+    }
+
     /** Unsupported W6c/W6d/backdrop/filtered-previous cases stop before source allocation. */
     internal fun admissionRefusalOrNull(scene: SceneSnapshot): RenderDiagnostic? {
         val ownership = ownership(scene)
@@ -456,6 +471,16 @@ internal object W6bFilterGraphConstruction {
         }
         fun materializeInput(input: CapturedFilterInputV1, currentSource: SourceBinding): SourceBinding =
             bindInput(input, currentSource).source
+        lateinit var nodeHasDistantTerminal: (CapturedFilterNodeIdI32) -> Boolean
+        fun inputHasDistantTerminal(input: CapturedFilterInputV1): Boolean = when (input) {
+            is CapturedFilterInputV1.Node -> nodeHasDistantTerminal(input.id)
+            else -> false
+        }
+        nodeHasDistantTerminal = { id -> when (val node = occurrence.table.nodeAt(id)) {
+            is CapturedFilterNodeV1.DistantLitDiffuse -> true
+            is CapturedFilterNodeV1.Compose -> inputHasDistantTerminal(node.outer)
+            else -> false
+        } }
         materializeNode = { id, currentSource -> when (val node = occurrence.table.nodeAt(id)) {
             is CapturedFilterNodeV1.Crop -> {
                 val input = materializeInput(node.input, currentSource)
@@ -548,7 +573,13 @@ internal object W6bFilterGraphConstruction {
                 // Skia Compose binds inner to the current source, then binds outer to inner's
                 // concrete result. This pair keeps result and bounds inseparable through recursion.
                 val inner = bindInput(node.inner, currentSource)
-                val outer = bindInput(node.outer, inner.source)
+                // An outer distant light consumes this Compose's terminal demand, not the
+                // bounded concrete target just produced by its inner child (for example Crop).
+                val outerSource = if (inputHasDistantTerminal(node.outer)) inner.source.withResource(
+                    inner.source.resourceId,
+                    desiredOutputDeviceI32 = currentSource.copyDesiredOutputDeviceI32(),
+                ) else inner.source
+                val outer = bindInput(node.outer, outerSource)
                 ContextualFilterResult(outer.source, outer.bounds, requireNotNull(outer.evaluationKey) {
                     "W6c Compose requires a materialized outer filter result."
                 })
@@ -878,7 +909,9 @@ internal object W6bFilterGraphConstruction {
             .expandSamplingHaloF64OrNull(1.0, 1.0, 1.0, 1.0)?.roundOutToRectI32OrNull()
             ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
                 "W6d distant diffuse Sobel halo cannot be represented in checked I32 texels."))
-        return FilterBoundsPlanV1(source.copyKnownContentDeviceI32(), desired, required, desired.copy(),
+        // The diffuse pass can light transparent-black output; its emitted known content is
+        // therefore the terminal consumer, even when the Sobel input lies wholly in its halo.
+        return FilterBoundsPlanV1(desired.copy(), desired, required, desired.copy(),
             Point2I32(desired.left, desired.top))
     }
 
