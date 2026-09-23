@@ -131,21 +131,26 @@ internal class GPUW6cSpatialFilterSessionCache(
                 // A valid resident may be a hit for an older frame yet require recomputation
                 // here because this frame's dependency closure is cold. Do not overwrite it.
                 if (entry.reusable && entry.consumersI32 > 1) {
-                    release(listOf(entry))
                     val plan = plansByOutput.getValue(output)
                     val replacement = createBounded(plan, frame)
-                    transientEntries += replacement
-                    transientForBinding += replacement
                     replacement.consumersI32 = 1
+                    // Register before replacing the selected map so any later failure rolls
+                    // this target back without touching the older frame's resident lease.
+                    transientForBinding += replacement
+                    transientEntries += replacement
                     selected[output] = replacement
+                    release(listOf(entry))
                 }
                 selected.getValue(output).reusable = false
             }
             prepared[framePlan.frameId.value] = Binding(this, selected, misses, reusable, transientForBinding)
             return true
         } catch (_: Throwable) {
-            release(selected.values)
-            discardUnsubmitted(selected.values.filter { !it.reusable })
+            val rollbackLeases = selected.values.toMutableList()
+            transientForBinding.filter { transient -> selected.values.none { it === transient } }
+                .forEach(rollbackLeases::add)
+            release(rollbackLeases)
+            discardUnsubmitted(rollbackLeases.distinct().filter { !it.reusable })
             return false
         }
     }
