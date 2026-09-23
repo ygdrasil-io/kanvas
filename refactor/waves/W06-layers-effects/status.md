@@ -2,6 +2,25 @@
 
 ## Statut
 
+### Troisième correction W6c — fermeture nested bounds et clip terminal complexe
+
+La relecture Sol de `59feb52bb2750d94fd7394ce933699876a994e71` a identifié deux
+variants Important, fermés par `b09ed9d145c079f6351b6823dd31ca84708477e7`.
+Le texel no-op Crop/Tile est désormais réservé strictement à l'ID root de
+l'occurrence : un nœud interne conserve son domaine sémantique et ne peut plus
+devenir transparent silencieusement sous `Compose`/`Merge`/`Blend`. Le cas
+imbriqué immense refuse avant publication avec le budget W6b et conserve le
+sentinel. Propager une demande contextuelle précise par nœud jusqu'aux
+allocations intermédiaires reste un gap explicitement reporté à W6e.
+
+Une route directe filtrée à `ClipStackNode.Operations` refuse désormais avant
+l'allocation de source avec `w6b.filter.direct_terminal_clip`; aucune AABB ou
+approximation de clip n'est admise. Les routes W4e complexes non filtrées ne
+sont pas modifiées. Le shard public frais `W6cSpatialBoundsSurfaceTest` donne
+13/0/0/0 XML, y compris Compose positif, refus budget/sentinel/recovery et
+refus de clipPath/sentinel/recovery. Native133 reste **UNKNOWN**, sans claim
+native, ISO ou globale.
+
 ### Seconde correction W6c — variants hors domaine de la relecture Sol
 
 La relecture suivante du correctif `2ffdae4afaef0780e2f47bb7a091c1b09f9fd49e`
