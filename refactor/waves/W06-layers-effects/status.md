@@ -2,6 +2,25 @@
 
 ## Statut
 
+### Seconde correction W6c — variants hors domaine de la relecture Sol
+
+La relecture suivante du correctif `2ffdae4afaef0780e2f47bb7a091c1b09f9fd49e`
+n'a retenu que deux variants hors domaine, fermés par
+`59feb52bb2750d94fd7394ce933699876a994e71`. Un draw direct filtré reçoit
+maintenant l'autorité du clip terminal Canvas (et non le scissor de sa source),
+puis publie le même no-op scellé `Draw`/scissor nul que les Layers. Les
+Crop/Tile entièrement disjoints de leur consumer publient un texel terminal
+borné plutôt que le rectangle public immense ; son terminal est le no-op
+scellé. Construction, validation et materializer consomment tous ce fait sans
+fallback renderer.
+
+Le shard public frais `W6cSpatialBoundsSurfaceTest` donne 10/0/0/0 XML, dont
+le draw direct Offset hors clip et Crop/Tile disjoints jusqu'à 1e9, chacun avec
+sentinel et recovery même `Surface`. Les compilations
+`:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin` et
+`:kanvas:compileTestKotlin` sortent 0. Gradle quitte ensuite sur native133 :
+**UNKNOWN**, sans claim native, ISO ou globale.
+
 ### Correction whole-branch W6c après review Sol
 
 La correction bornée `2ffdae4afaef0780e2f47bb7a091c1b09f9fd49e`, sur la source
