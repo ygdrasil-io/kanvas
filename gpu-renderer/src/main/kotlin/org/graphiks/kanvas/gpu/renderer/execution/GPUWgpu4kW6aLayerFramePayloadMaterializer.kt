@@ -34,7 +34,6 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         var readbackBuffer: GPUBuffer? = null
         try {
             val graph = frame.graph
-            val maskCoverageInputs = frozenMaskCoverageInputs(graph)
             val materialSourceAlphaReplacement = frozenMaterialSourceAlphaReplacement(graph)
             val generation = generationSeal.deviceGeneration
             val root = frame.physical.resource(graph.resources().single { it.role == PlanResourceRole.LogicalTarget }.id)
@@ -171,18 +170,20 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 val template = frame.template(packet)
                                 val binding = frame.physical.geometryBinding(pass.id)
                                 val mapped = binding?.let { frame.geometryPipeline(packet) }
-                                val frozenCoverage = (pass as? PlanPass.RenderPass)?.coverageSource
-                                val executableMaskCoverage = frozenCoverage != null && frozenCoverage in maskCoverageInputs
-                                require(!executableMaskCoverage || (draw is SolidRectDraw && mapped == null)) {
-                                    "W6b mask source must use its already frozen solid-rect W4 lane."
-                                }
+                                // W6b has already selected this source pass and its target.  Its
+                                // source stage is transparent and must never consume the final
+                                // draw blend; that one belongs exclusively to FilterComposite.
+                                val maskMaterialSource = (pass as? PlanPass.RenderPass)
+                                    ?.w6bMaskSourceBinding != null
                                 val layout = owned.own(device.createBindGroupLayout(if (mapped != null) corePrimitiveBindGroupLayoutDescriptor(mapped.componentIdentity)
                                 else requireNotNull(template).groupZeroLayout.nativeDescriptorV1("w6a.rect.group0")))
                                 val data = binding?.data
                                 val verticesSemantic = packet.semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.Vertices
-                                val pipeline = if (mapped == null) pipeline(requireNotNull(template).sourceWgsl, layout, w6aColorTarget(draw.blend), owned, template,
+                                val pipeline = if (mapped == null) pipeline(requireNotNull(template).sourceWgsl, layout,
+                                    w6aColorTarget(if (maskMaterialSource) BlendPlan.LegacySrcOverV1 else draw.blend), owned, template,
                                     verticesSemantic?.artifact)
-                                    else geometryPipeline(mapped, layout, owned, template)
+                                    else geometryPipeline(mapped, layout, owned, template,
+                                        if (maskMaterialSource) BlendPlan.LegacySrcOverV1 else null)
                                 val uniformPayload = binding?.let { frame.analyticUniform(packet) }
                                 val nativeUniform = data?.let { geometryBuffers.getValue(it.uniform) } ?: uniform
                                 if (data != null) {
@@ -197,9 +198,18 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                         if (indices != null) queue.writeBuffer(geometryBuffers.getValue(data.index), binding.indexOffsetI64.toULong(),
                                             ArrayBuffer.of(indices.copyOf(Math.toIntExact(binding.indexUploadBytesI64))))
                                     } else {
+                                    val sourceBounds = if (maskMaterialSource) {
+                                        requireNotNull(graph.resources().single { it.id == targetId }.copyExtent()).let { extent ->
+                                            RectI32(0, 0, extent.width, extent.height)
+                                        }
+                                    } else null
                                     val (vertices, indices) = when (draw) {
-                                        is AnalyticRectDraw -> packW4RasterGeometry(listOf(draw.copyRasterBounds())).let { it.vertices to it.indices }
-                                        is AnalyticRRectDraw -> packW4RasterGeometry(listOf(draw.copyRasterBounds())).let { it.vertices to it.indices }
+                                        // The source target is published by the frozen W6b pass.
+                                        // Expand only this existing source draw to that target; W5
+                                        // then shades the material once while FilterCoverage owns
+                                        // the original shape coverage independently.
+                                        is AnalyticRectDraw -> packW4RasterGeometry(listOf(sourceBounds ?: draw.copyRasterBounds())).let { it.vertices to it.indices }
+                                        is AnalyticRRectDraw -> packW4RasterGeometry(listOf(sourceBounds ?: draw.copyRasterBounds())).let { it.vertices to it.indices }
                                         is W5bPointDraw -> draw.copyVerticesF32() to draw.copyIndicesI32()
                                         is PathDraw -> {
                                             val fill = when (val geometry = draw.copyPathGeometry()) {
@@ -229,7 +239,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)))
                                 add(GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(bind, generation),
                                     if (mapped == null) emptyList() else binding.let { listOf(it.uniformOffsetI64) }))
-                                val scissor = if (executableMaskCoverage) {
+                                val scissor = if (maskMaterialSource) {
                                     val extent = requireNotNull(graph.resources().single { it.id == targetId }.copyExtent())
                                     RectI32(0, 0, extent.width, extent.height)
                                 } else when (draw) {
@@ -343,28 +353,29 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         renderOperands += emptyRender(stepIndex, views.getValue(target), generation, clear = true, pass, owned)
                     }
                     is PlanPass.FilterCoverageSourcePass -> {
-                        val input = maskCoverageInputs[pass.output]
-                        if (input == null) {
-                            // Task 3's image-only coverage witness is deliberately not an
-                            // executable source.  It has no mask consumer and must remain
-                            // transparent so its short physical lease cannot alter a sealed
-                            // Picture source that is sampled later in the frozen schedule.
-                            renderOperands += emptyRender(stepIndex, views.getValue(pass.output), generation, clear = true, pass, owned)
-                            return@forEachIndexed
-                        }
                         val outputOrigin = frame.targetOriginDeviceI32(pass.output)
                         val extent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
-                        when (input) {
-                            is FrozenMaskCoverageInputV1.SolidRect -> {
-                                renderOperands += coverageSolidRectRender(stepIndex, views.getValue(pass.output), generation,
-                                    extent.width, extent.height, pass, owned)
-                            }
-                            is FrozenMaskCoverageInputV1.AlphaTexture -> {
-                                val inputOrigin = frame.targetOriginDeviceI32(input.source)
-                                renderOperands += textureRender(stepIndex, views.getValue(pass.output), views.getValue(input.source), generation,
+                        when (val binding = pass.rasterBinding) {
+                            null -> pass.sealedAlphaSource?.let { alpha ->
+                                val inputOrigin = frame.targetOriginDeviceI32(alpha.sealedSourceId)
+                                renderOperands += textureRender(stepIndex, views.getValue(pass.output), views.getValue(alpha.sealedSourceId), generation,
                                     W6A_VERTEX_SHADER + W6bMaskCoverageSnippet.alphaCoverageFragment(
                                         inputOrigin.x, inputOrigin.y, outputOrigin.x, outputOrigin.y,
                                     ), BlendPlan.LegacySrcOverV1, 0, 0, extent.width, extent.height, pass, owned)
+                            } ?: run {
+                                // Task 3's image-only witness owns no mask producer and remains
+                                // transparent.  This is plan-published absence, not discovery.
+                                renderOperands += emptyRender(stepIndex, views.getValue(pass.output), generation, clear = true, pass, owned)
+                            }
+                            else -> when (binding.draw) {
+                                is SolidRectDraw -> {
+                                renderOperands += coverageSolidRectRender(stepIndex, views.getValue(pass.output), generation,
+                                    extent.width, extent.height, pass, owned)
+                                }
+                                else -> renderOperands += coverageRasterRender(stepIndex, views.getValue(pass.output),
+                                    binding.depthStencil?.let(views::get), generation, frame, step as? GPUFrameStep.RenderPassStep
+                                        ?: error("W6b coverage requires its frozen render step"), pass, binding,
+                                    geometryBuffers, uniform, owned)
                             }
                         }
                     }
@@ -815,6 +826,127 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         )
     }
 
+    /** Emits the exact frozen W4 geometry as raw coverage, never as a reconstructed source draw. */
+    private fun coverageRasterRender(
+        stepIndex: Int,
+        target: GPUTextureView,
+        depthStencil: GPUTextureView?,
+        generation: GPUDeviceGenerationID,
+        frame: GPUW6aLayerFramePlan,
+        render: GPUFrameStep.RenderPassStep,
+        pass: PlanPass.FilterCoverageSourcePass,
+        coverageBinding: PlanPass.W6bRasterCoverageBindingV1,
+        geometryBuffers: Map<PlanResourceId, GPUBuffer>,
+        fallbackUniform: GPUBuffer,
+        owned: W6aOwnedHandles,
+    ): GPUPreparedNativeScopeOperand.Render {
+        val draw = coverageBinding.draw
+        require(draw !is SolidRectDraw && draw !is W5bVerticesDraw) {
+            "W6b coverage raster requires one admitted W4 analytic or path producer."
+        }
+        val data = requireNotNull(coverageBinding.drawDataResources)
+        val coverBinding = requireNotNull(frame.physical.geometryBinding(pass.id))
+        val packets = render.drawPackets
+        val stencil = coverageBinding.depthStencil != null
+        require(packets.size == if (stencil) 2 else 1)
+        val commands = buildList {
+            packets.forEachIndexed { packetIndexI32, packet ->
+                val producer = stencil && packetIndexI32 == 0
+                val mapped = requireNotNull(frame.geometryPipeline(packet)) {
+                    "W6b coverage raster requires a mapped frozen W4 pipeline."
+                }
+                val template = frame.template(packet)
+                val layout = owned.own(device.createBindGroupLayout(
+                    corePrimitiveBindGroupLayoutDescriptor(mapped.componentIdentity),
+                ))
+                val pipeline = if (producer) geometryPipeline(mapped, layout, owned, template)
+                    else coverageGeometryPipeline(mapped, layout, requireNotNull(template), owned)
+                val uniformPayload = frame.analyticUniform(packet)
+                val nativeUniform = geometryBuffers[data.uniform] ?: fallbackUniform
+                val fill = (draw as? PathDraw)?.copyPathGeometry()?.let { geometry -> when (geometry) {
+                    is PathDrawGeometry.Fill -> geometry.valueF32
+                    is PathDrawGeometry.Stroke -> geometry.valueF32.copyFillGeometryF32()
+                    else -> error("Unadmitted W6b coverage path geometry")
+                } }
+                val packed: W6bPackedGeometry = when (draw) {
+                    is AnalyticRectDraw -> packW4RasterGeometry(listOf(draw.copyRasterBounds())).let {
+                        W6bPackedGeometry(it.vertices, it.indices)
+                    }
+                    is AnalyticRRectDraw -> packW4RasterGeometry(listOf(draw.copyRasterBounds())).let {
+                        W6bPackedGeometry(it.vertices, it.indices)
+                    }
+                    is W5bPointDraw -> W6bPackedGeometry(draw.copyVerticesF32(), draw.copyIndicesI32())
+                    is PathDraw -> when {
+                        producer -> requireNotNull(fill).copyStencilEdgeFanF32OrNull()?.let { fan ->
+                            W6bPackedGeometry(fan.copyVerticesF32(), fan.copyIndicesI32())
+                        } ?: error("W6b coverage stencil producer lacks its frozen edge fan")
+                        stencil -> packW4RasterGeometry(listOf(draw.copyScissorI32())).let {
+                            W6bPackedGeometry(it.vertices, it.indices)
+                        }
+                        else -> requireNotNull(fill).copyDirectTriangleF32OrNull()?.let { direct ->
+                            W6bPackedGeometry(direct.copyVerticesF32(), direct.copyIndicesI32())
+                        } ?: error("W6b coverage path lacks its frozen direct triangles")
+                    }
+                    else -> error("Unadmitted W6b coverage geometry")
+                }
+                val vertexOffset = if (producer) 0L else coverBinding.vertexOffsetI64
+                val indexOffset = if (producer) 0L else coverBinding.indexOffsetI64
+                val uniformOffset = if (producer) 0L else coverBinding.uniformOffsetI64
+                val vertexBytes = Math.multiplyExact(packed.vertices.size.toLong(), 4L)
+                val indexBytes = Math.multiplyExact(packed.indices.size.toLong(), 4L)
+                require(Math.addExact(vertexOffset, vertexBytes) <= frame.physical.resource(data.vertex).byteSize &&
+                    Math.addExact(indexOffset, indexBytes) <= frame.physical.resource(data.index).byteSize &&
+                    Math.addExact(uniformOffset, uniformPayload.size.toLong()) <= frame.physical.resource(data.uniform).byteSize)
+                queue.writeBuffer(geometryBuffers.getValue(data.vertex), vertexOffset.toULong(), ArrayBuffer.of(packed.vertices))
+                queue.writeBuffer(geometryBuffers.getValue(data.index), indexOffset.toULong(), ArrayBuffer.of(packed.indices))
+                queue.writeBuffer(nativeUniform, uniformOffset.toULong(), ArrayBuffer.of(uniformPayload))
+                val bind = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(
+                    BindGroupEntry(0u, BufferBinding(nativeUniform, 0uL, uniformPayload.size.toULong())),
+                ))))
+                val scissor = when (draw) {
+                    is AnalyticRectDraw -> draw.copyScissor()
+                    is AnalyticRRectDraw -> draw.copyScissor()
+                    is W5bPointDraw -> draw.copyScissorI32()
+                    is PathDraw -> draw.copyScissorI32()
+                    else -> error("Unadmitted W6b coverage scissor")
+                }
+                add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)))
+                add(GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(bind, generation),
+                    listOf(uniformOffset)))
+                add(GPUPreparedNativeRenderCommand.SetVertexBuffer(0,
+                    GPUPreparedNativeBufferOperand(geometryBuffers.getValue(data.vertex), generation), vertexOffset, vertexBytes, 8L))
+                add(GPUPreparedNativeRenderCommand.SetIndexBuffer(
+                    GPUPreparedNativeBufferOperand(geometryBuffers.getValue(data.index), generation),
+                    GPUPreparedNativeIndexFormat.Uint32, indexOffset, indexBytes))
+                add(GPUPreparedNativeRenderCommand.SetScissor(scissor.left, scissor.top, scissor.width(), scissor.height()))
+                add(GPUPreparedNativeRenderCommand.DrawIndexed(GPUPreparedNativeDrawCall.DrawIndexed(
+                    indexCount = packed.indices.size, firstIndex = 0, baseVertex = 0,
+                    vertexCount = packed.vertices.size / 2, maxLocalIndex = packed.indices.max(),
+                )))
+            }
+        }
+        return GPUPreparedNativeScopeOperand.Render(
+            stepIndex,
+            GPUPreparedNativeRenderPassConfig(
+                GPUPreparedNativeTextureViewOperand(target, generation),
+                depthStencilTarget = depthStencil?.let { GPUPreparedNativeTextureViewOperand(it, generation) },
+                loadOperation = GPUPreparedNativeLoadOperation.Clear,
+                clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0),
+                depthReadOnly = true,
+                stencilReadOnly = depthStencil == null,
+                stencilClearValue = if (depthStencil == null) null else 0u,
+                stencilLoadOperation = depthStencil?.let { GPUPreparedNativeLoadOperation.Clear },
+                stencilStoreOperation = depthStencil?.let { GPUPreparedNativeStoreOperation.Store },
+            ),
+            commands,
+            // These are the published W4 packets that the coverage operand consumes.
+            // Retain the exact instances so prepared-surface validation observes the
+            // same packet order as the frozen plan rather than a renderer-side proxy.
+            render.drawPackets.map { requireNotNull(it.semanticPayload) },
+            w6aPassV1 = pass,
+        )
+    }
+
     /** Applies one frozen mask style to its blurred input and optional original coverage. */
     private fun maskStyleRender(
         stepIndex: Int,
@@ -997,15 +1129,36 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
     """
 
     private fun geometryPipeline(mapped: GPUWgpu4kCorePrimitivePipelineMapping.Mapped, groupZero: GPUBindGroupLayout,
-        owned: W6aOwnedHandles, template: GPUW5aGeometryHostTemplateV1?): GPURenderPipeline {
+        owned: W6aOwnedHandles, template: GPUW5aGeometryHostTemplateV1?, sourceBlend: BlendPlan? = null): GPURenderPipeline {
         val module = owned.own(device.createShaderModule(ShaderModuleDescriptor(code =
             requireNotNull(corePrimitiveMaterialGeometryWgslV1(mapped.componentIdentity)))))
         val layout = owned.own(device.createPipelineLayout(PipelineLayoutDescriptor(bindGroupLayouts = listOf(groupZero))))
-        val descriptor = corePrimitiveWgpu4kRenderPipelineDescriptor(mapped.identity, module, layout)
+        val descriptor = corePrimitiveWgpu4kRenderPipelineDescriptor(mapped.identity, module, layout).let { descriptor ->
+            sourceBlend?.let { blend ->
+                val fragment = requireNotNull(descriptor.fragment)
+                RenderPipelineDescriptor(
+                    label = descriptor.label,
+                    layout = descriptor.layout,
+                    vertex = descriptor.vertex,
+                    primitive = descriptor.primitive,
+                    depthStencil = descriptor.depthStencil,
+                    multisample = descriptor.multisample,
+                    fragment = FragmentState(module = fragment.module, entryPoint = fragment.entryPoint,
+                        targets = listOf(w6aColorTarget(blend)), constants = fragment.constants),
+                )
+            } ?: descriptor
+        }
         return owned.own(device.createRenderPipeline(descriptor)).also { pipeline -> template?.let {
             owned.templates[pipeline] = GPUW5aGeometryPipelineTemplate(it.pipelineRecipeId, descriptor, groupZero,
                 materialCoordinateSlot = it.materialCoordinateSlot)
         } }
+    }
+
+    private fun coverageGeometryPipeline(mapped: GPUWgpu4kCorePrimitivePipelineMapping.Mapped,
+        groupZero: GPUBindGroupLayout, template: GPUW5aGeometryHostTemplateV1, owned: W6aOwnedHandles): GPURenderPipeline {
+        val module = owned.own(device.createShaderModule(ShaderModuleDescriptor(code = composeW5aHostCoverageV1(template))))
+        val layout = owned.own(device.createPipelineLayout(PipelineLayoutDescriptor(bindGroupLayouts = listOf(groupZero))))
+        return owned.own(device.createRenderPipeline(corePrimitiveWgpu4kRenderPipelineDescriptor(mapped.identity, module, layout)))
     }
 
     private fun pipeline(shader: String, groupZero: GPUBindGroupLayout, target: ColorTargetState,
@@ -1027,6 +1180,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
     }
 }
 
+private data class W6bPackedGeometry(val vertices: FloatArray, val indices: IntArray)
+
 private class W6aOwnedHandles : AutoCloseable, GPUW5aGeometryPipelineTemplateProvider {
     private val handles = mutableListOf<AutoCloseable>()
     val templates = java.util.IdentityHashMap<GPURenderPipeline, GPUW5aGeometryPipelineTemplate>()
@@ -1042,85 +1197,20 @@ private class W6aOwnedHandles : AutoCloseable, GPUW5aGeometryPipelineTemplatePro
     }
 }
 
-/** A direct view of the compiler-issued raw-coverage input; it creates no renderer plan. */
-private sealed interface FrozenMaskCoverageInputV1 {
-    /** The direct W6b coverage target was frozen exactly to its clipped solid-rect domain. */
-    data object SolidRect : FrozenMaskCoverageInputV1
-
-    data class AlphaTexture(val source: PlanResourceId) : FrozenMaskCoverageInputV1
-}
-
-/** Resolves only existing graph edges from raw coverage to its already-frozen W4/W5 producer. */
-private fun frozenMaskCoverageInputs(graph: RenderGraph): Map<PlanResourceId, FrozenMaskCoverageInputV1> {
-    val passes = graph.passes()
-    val producerByOutput = buildMap<PlanResourceId, PlanPass> {
-        passes.forEach { pass -> when (pass) {
-            is PlanPass.FilterCoverageSourcePass -> put(pass.output, pass)
-            is PlanPass.FilterCoverageRetainPass -> put(pass.output, pass)
-            is PlanPass.FilterPass -> put(pass.output, pass)
-            else -> Unit
-        } }
-    }
-    fun rawCoverageSource(resource: PlanResourceId): PlanResourceId? {
-        val producer = producerByOutput[resource] ?: return null
-        return when (producer) {
-            is PlanPass.FilterCoverageSourcePass -> producer.output
-            is PlanPass.FilterCoverageRetainPass -> rawCoverageSource(producer.source)
-            is PlanPass.FilterPass -> rawCoverageSource(producer.inputs().first())
-            else -> null
-        }
-    }
-    val directSources = linkedMapOf<PlanResourceId, FrozenMaskCoverageInputV1.SolidRect>()
-    val layerSources = linkedMapOf<PlanResourceId, FrozenMaskCoverageInputV1.AlphaTexture>()
-    passes.forEach { pass -> when (pass) {
-        is PlanPass.RenderPass -> pass.coverageSource?.let { coverage ->
-            rawCoverageSource(coverage)?.let { raw ->
-                require(pass.draws().singleOrNull() is SolidRectDraw) {
-                    "W6b mask coverage has no frozen solid-rect W4 source."
-                }
-                directSources[raw] = FrozenMaskCoverageInputV1.SolidRect
-            }
-        }
-        is PlanPass.PictureSourcePass -> pass.coverageSource?.let { coverage ->
-            pass.layerInput?.let { layer -> rawCoverageSource(coverage)?.let { raw ->
-                layerSources[raw] = FrozenMaskCoverageInputV1.AlphaTexture(layer)
-            } }
-        }
-        else -> Unit
-    } }
-    // Coverage witnesses are also emitted for Task 3 image filters.  Only roots that reach an
-    // already-frozen W6b mask operation are executable coverage producers here; the rest stay
-    // clear and have no renderer-side meaning.
-    val maskCoverageRoots = buildSet {
-        passes.filterIsInstance<PlanPass.FilterPass>().forEach { pass -> when (val operation = pass.operation) {
-            is FilterPassOperationV1.MaskBlurStyle -> {
-                rawCoverageSource(operation.blurredCoverageSource)?.let(::add)
-                operation.originalCoverageSource?.let(::rawCoverageSource)?.let(::add)
-            }
-            is FilterPassOperationV1.MaterializedSource ->
-                rawCoverageSource(pass.inputs().last())?.let(::add)
-            else -> Unit
-        } }
-    }
-    return producerByOutput.keys.mapNotNull { resource ->
-        val root = rawCoverageSource(resource) ?: return@mapNotNull null
-        if (root !in maskCoverageRoots) return@mapNotNull null
-        val sourcePass = producerByOutput[root] as? PlanPass.FilterCoverageSourcePass
-            ?: error("W6b mask coverage root must be a frozen coverage source pass.")
-        val input = sourcePass.sealedAlphaSource?.let { FrozenMaskCoverageInputV1.AlphaTexture(it.sealedSourceId) }
-            ?: directSources[root]
-            ?: layerSources[root]
-            ?: error("W6b mask coverage source is absent from the frozen graph.")
-        resource to input
-    }.toMap()
-}
-
 /** Whether the W5 source stage sealed alpha from the graph-texture coverage edge. */
 private fun frozenMaterialSourceAlphaReplacement(graph: RenderGraph): Map<PlanResourceId, Boolean> =
     buildMap {
         graph.passes().forEach { pass -> when (pass) {
             is PlanPass.RenderPass -> pass.coverageSource?.let {
-                put(pass.target, false)
+                // A draw-owned W6b coverage edge is the explicit, frozen replacement
+                // for the source shape alpha.  Retaining the source raster alpha here
+                // would multiply the shape coverage twice before FilterComposite.
+                put(pass.target, pass.w6bMaskSourceBinding != null)
+            }
+            is PlanPass.StencilCover -> pass.coverageSource?.let {
+                // The paired stencil source is the same transparent W6b auto-layer
+                // contract as RenderPass.  Its W4 producer supplies coverage separately.
+                put(pass.target, true)
             }
             is PlanPass.PictureSourcePass -> pass.coverageSource?.let {
                 put(pass.output, true)

@@ -3,6 +3,7 @@
 package org.graphiks.kanvas.surface
 
 import org.graphiks.kanvas.canvas.SaveLayerRec
+import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.MaskFilter
@@ -10,7 +11,9 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.geometry.RRectF32
 import org.junit.jupiter.api.Test
 
 /** Public Surface contract for frozen W6b mask coverage and auto-layer materialization. */
@@ -101,6 +104,50 @@ class W6bMaskBlurAutoLayerSurfacePixelTest {
         }.render().pixels
 
         W6bMaskBlurCpuOracle.assertNear(W6bMaskBlurCpuOracle.renderNestedPictureMaskBlur(), actual, toleranceI32 = 18)
+    }
+
+    @Test
+    fun `clipped rounded rect mask blur preserves its frozen analytic coverage`() {
+        val actual = Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
+            surface.canvas {
+                clipRect(RectF32.ofLTRB(3f, 2f, 8f, 7f), antiAlias = false)
+                val radius = CornerRadiiF32.of(2f, 2f)
+                drawRRect(
+                    RRectF32.of(RectF32.ofLTRB(2f, 2f, 8f, 7f), radius, radius, radius, radius),
+                    Paint(
+                        ColorARGB.Red,
+                        maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1f),
+                        antiAlias = true,
+                    ),
+                )
+            }
+        }.render().pixels
+
+        W6bMaskBlurCpuOracle.assertNear(W6bMaskBlurCpuOracle.renderClippedRoundedRectMask(), actual)
+    }
+
+    @Test
+    fun `stencil path mask applies DST_OUT only at the parent composite`() {
+        val path = Path()
+            .moveTo(2f, 2f)
+            .lineTo(8f, 2f)
+            .lineTo(8f, 6f)
+            .lineTo(5f, 4f)
+            .lineTo(2f, 6f)
+            .close()
+        val actual = Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
+            surface.canvas {
+                drawRect(fullBounds(), Paint(ColorARGB.Green, antiAlias = false))
+                drawPath(path, Paint(
+                    ColorARGB.Red,
+                    maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1f),
+                    blendMode = BlendMode.DST_OUT,
+                    antiAlias = false,
+                ))
+            }
+        }.render().pixels
+
+        W6bMaskBlurCpuOracle.assertNear(W6bMaskBlurCpuOracle.renderStencilPathDstOutOverGreen(), actual)
     }
 
     private fun renderTranslatedMaskedRect(style: BlurStyle): UByteArray =

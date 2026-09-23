@@ -53,3 +53,41 @@ Modifiés : graphes/W6a planification, witness W6b, contrat Picture stream, fram
 - `:gpu-plan:test` n'a pas été lancé : ses 28 dettes W3/W4 connues n'ont été ni corrigées ni reclassées.
 - La seule failure `W6aNestedLayerSurfacePixelTest` est identique au worktree temporaire sur le base commit : `command limit refuses before readback and same surface recovers()` attend `w6a.layer.command_limit`, reçoit `w6b.filter.invalid_bounds: W6b picture traversal exceeded its sealed capture bound.` Elle est inchangée et non reclassée.
 - La revue Sol demandée par le brief n'a pas été lancée : l'instruction de tâche interdit les sous-agents. Une revue humaine/Sol reste la seule étape non effectuée avant livraison.
+
+## Fix round 1 — revue P1
+
+Base de correction : `8d3899f9d` (`c75a421` est uniquement le ledger de revue).
+
+### RED → GREEN
+
+1. RED causal : un `RRect` clippé et un path stencil étaient admis mais la matérialisation cherchait ensuite une forme `SolidRect` à partir d'un scan renderer. Le path échouait également sur le contrat de deux packets stencil. Les nouveaux tests publics/oracles indépendants ont d'abord exercé ces pixels.
+2. GREEN : le plan porte désormais le binding typé `W6bRasterCoverageBindingV1` depuis l'autorité W4 gelée vers `FilterCoverageSourcePass`. Les buffers vertex/index/uniform de coverage sont des allocations plan-owned distinctes, pour que les écritures différées du source W5 ne remplacent pas les bytes W4 avant la soumission. Le renderer consomme uniquement ce binding publié ; `frozenMaskCoverageInputs` et son prérequis `SolidRect` sont supprimés.
+3. RED causal : le source stage W5 d'un auto-layer rectangulaire supposait qu'un module contenait toujours une queue `* coverage`; les sources W6a rect sont déjà W5-only. Un `DST_OUT` pouvait aussi conserver son destination-read/blend au source stage.
+4. GREEN : une queue coverage authentifiée est retirée lorsqu'elle existe, sinon le module W5-only est conservé. Toute source W6b force `LegacySrcOverV1` dans les branches analytic et stencil, désactive le destination-read source et laisse le blend sélectionné exclusivement à `FilterComposite`.
+5. Régression Task 3 trouvée et restaurée : une scène sans filtre dépassant `maxNodes` était revendiquée par W6b avant le refus `w6a.layer.command_limit`; le bornage ne rend plus W6b owner sans occurrence W6b. Un layer-mask avait aussi perdu son alpha après retrait du scan : le même binding `sealedAlphaSource` existant publie maintenant explicitement la génération RGBA du `LayerTarget` (mapping, bounds et génération exacts), sans nouvelle passe, source, cible ni opération.
+
+### Fichiers complémentaires modifiés
+
+- `gpu-plan/.../W6aLayerPlanCompiler.kt` : refuse de façon stable l'admission native des producteurs W4 sans packet raw-coverage exécutable (vertices/W4e), au lieu d'accepter puis échouer côté renderer.
+- `gpu-plan/.../PictureStreamAggregateV1.kt`, `W6aLayerGraphValidation.kt`, `W6bFilterGraphWitnessV1.kt` : le binding alpha existant distingue le Picture aggregate scellé du `LayerTarget` courant gelé et valide les deux générations explicitement.
+- `gpu-renderer/.../GPUW6aEncoderScopesV1.kt` et `PreparedGPUFrame.kt` : le coverage stencil conserve le seul pass W6b et ses deux groupes de commandes W4 gelés, avec depth/stencil emprunté validé.
+- `kanvas/.../W6bMaskBlurAutoLayerSurfacePixelTest.kt`, `W6bMaskBlurCpuOracle.kt` : ajout des pixels publics RRect+clip et path stencil `DST_OUT` contre l'oracle CPU.
+
+### Gates de correction
+
+| Commande | Résultat vérifié |
+| --- | --- |
+| `rtk ./gradlew --quiet :gpu-plan:compileKotlin` | GREEN, exit 0 |
+| `rtk ./gradlew --quiet :gpu-renderer:compileKotlin` | GREEN, exit 0 |
+| `rtk ./gradlew --quiet :kanvas:compileKotlin` | GREEN, exit 0 |
+| `rtk ./gradlew --quiet :gpu-plan:test --tests '*RenderGraphContractTest'` | GREEN, exit 0 |
+| `rtk ./gradlew --quiet :kanvas:test --tests '*W6bMaskBlurAutoLayerSurfacePixelTest' --tests '*W6bFilterAdmissionRecoverySurfaceTest'` | JUnit 7/0 + 25/0 |
+| `rtk ./gradlew --quiet :kanvas:test --tests '*W6aNestedLayerSurfacePixelTest' --tests '*W6aLayerRestoreSurfacePixelTest' --tests '*W6aLayerSurfacePixelTest' --tests '*W6aLayerW4W5SurfacePixelTest'` | JUnit 10/0 + 9/0 + 16/0 + 19/0 |
+
+Les shards `:kanvas:test` écrivent les résultats JUnit verts ci-dessus puis le process natif termine avec 133. Sans preuve indépendante que ce code signifie succès ou échec, 133 (et 134 s'il réapparaît) demeure **UNKNOWN**. `:gpu-plan:test` complet contient toujours les 28 dettes W3/W4 déjà documentées ; il n'a pas été relancé, corrigé ni reclassé. Aucun travail GM/render/baseline/dashboard, font/codec, `jpg-color-cube`, route legacy `GPUTopLevelMaskBlurFrameRecording` ou `GPUPreparedMaskFilterLowerer` n'a été ajouté.
+
+### Self-review
+
+- Les ressources et l'ordre de passes restent gelés dans W6a/W4 : le renderer ne traverse ni capture IR ni graphe pour replanifier/retouver une coverage source.
+- Les deux nouveaux tests restent des tests pixels publics avec oracle CPU ; aucun mock, fake device, reflection, compteur ou test de source statique n'a été introduit.
+- Les contrôles Task 3 passaient avant commit : nested command-limit, restore mask blur, terminal-empty/layer et W4/W5 sont tous à 0 failure dans leurs XML JUnit.

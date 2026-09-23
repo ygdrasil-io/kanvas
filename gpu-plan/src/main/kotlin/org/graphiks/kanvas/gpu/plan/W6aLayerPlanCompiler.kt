@@ -274,6 +274,13 @@ public class W6aLayerPlanCompiler public constructor(
             else -> false
         } }
         val terminals = graph.passes().filterIsInstance<PlanPass.FilterComposite>()
+        // W6b consumes a typed frozen W4 producer for direct mask coverage.  Do not admit a
+        // lane merely because its filter operations are supported: an arbitrary vertices/W4e
+        // producer has no executable raw-coverage packet in this frozen contract yet.
+        val executableCoverage = graph.passes().filterIsInstance<PlanPass.FilterCoverageSourcePass>()
+            .mapNotNull { it.rasterBinding?.draw }
+            .all { draw -> draw is SolidRectDraw || draw is AnalyticRectDraw ||
+                draw is AnalyticRRectDraw || draw is PathDraw || draw is W5bPointDraw }
         val emptyNoOp = terminals.isEmpty() && filters.all { pass ->
             (pass.operation as? FilterPassOperationV1.SeparableBlur)
                 ?.bounds?.copyProducedOutputDeviceI32() == null
@@ -282,7 +289,7 @@ public class W6aLayerPlanCompiler public constructor(
             graph.passes().filterIsInstance<PlanPass.PictureComposite>().forEach { add(requireNotNull(it.operands)) }
             terminals.mapNotNull { (it.operation as? FilterCompositeOperationV1.Picture)?.terminal }.forEach(::add)
         }
-        val admitted = materialized &&
+        val admitted = materialized && executableCoverage &&
             schedule != null && schedule == graph.passes().map(PlanPass::id) && (terminals.isNotEmpty() || emptyNoOp) &&
             clips.all(::supportsFrozenDeferredPictureClip)
         return if (admitted) null else RenderPlanResult.InvalidScene(listOf(W6bFilterDiagnostics.refusal(

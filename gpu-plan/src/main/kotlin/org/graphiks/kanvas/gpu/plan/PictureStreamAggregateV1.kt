@@ -58,7 +58,8 @@ public enum class PictureStreamExecutionModeV1 {
 
 /** Coverage is sampled from this immutable RGBA generation, including holes and overlap. */
 public class PictureAlphaSourceV1 internal constructor(
-    public val aggregateId: PictureStreamAggregateIdI32,
+    /** Null identifies the immutable current LayerTarget generation. */
+    public val aggregateId: PictureStreamAggregateIdI32?,
     public val sealedSourceId: PlanResourceId,
     public val sealedSourceGenerationI64: Long,
     public val mapping: LayerMappingF64,

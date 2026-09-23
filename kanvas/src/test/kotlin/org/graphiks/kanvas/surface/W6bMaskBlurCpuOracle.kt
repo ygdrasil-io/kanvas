@@ -40,6 +40,10 @@ internal object W6bMaskBlurCpuOracle {
 
     fun renderDstOutOverGreen(): UByteArray = dstOutGreen(styled(BlurStyle.NORMAL, translatedRectCoverage()))
 
+    fun renderClippedRoundedRectMask(): UByteArray = opaqueSource(styled(BlurStyle.NORMAL, clippedRoundedRectCoverage()))
+
+    fun renderStencilPathDstOutOverGreen(): UByteArray = dstOutGreen(styled(BlurStyle.NORMAL, stencilPathCoverage()))
+
     fun renderLayerOverBlue(): UByteArray = sourceOverBlue(opaqueSourceAlpha(styled(BlurStyle.NORMAL, translatedRectCoverage())))
 
     fun renderMaskedThenImageBlur(): UByteArray = opaqueWhiteSource(blur(styled(BlurStyle.NORMAL, translatedRectCoverage())))
@@ -64,6 +68,41 @@ internal object W6bMaskBlurCpuOracle {
     private fun translatedRectCoverage(): FloatArray = FloatArray(widthI32 * heightI32).also { coverage ->
         // The public draw is local [3,6)×[3,6) after translate(1, 0).
         fillRect(coverage, 4, 3, 7, 6, 1f)
+    }
+
+    private fun clippedRoundedRectCoverage(): FloatArray = FloatArray(widthI32 * heightI32).also { coverage ->
+        for (yI32 in 0 until heightI32) for (xI32 in 0 until widthI32) {
+            val xF32 = xI32 + .5f
+            val yF32 = yI32 + .5f
+            val clip = xF32 >= 3f && xF32 < 8f && yF32 >= 2f && yF32 < 7f
+            val nearestX = xF32.coerceIn(4f, 6f)
+            val nearestY = yF32.coerceIn(4f, 5f)
+            val dxF32 = xF32 - nearestX
+            val dyF32 = yF32 - nearestY
+            if (clip && dxF32 * dxF32 + dyF32 * dyF32 <= 4f) coverage[yI32 * widthI32 + xI32] = 1f
+        }
+    }
+
+    private fun stencilPathCoverage(): FloatArray = FloatArray(widthI32 * heightI32).also { coverage ->
+        val vertices = arrayOf(
+            floatArrayOf(2f, 2f),
+            floatArrayOf(8f, 2f),
+            floatArrayOf(8f, 6f),
+            floatArrayOf(5f, 4f),
+            floatArrayOf(2f, 6f),
+        )
+        for (yI32 in 0 until heightI32) for (xI32 in 0 until widthI32) {
+            val xF32 = xI32 + .5f
+            val yF32 = yI32 + .5f
+            var inside = false
+            for (indexI32 in vertices.indices) {
+                val start = vertices[indexI32]
+                val end = vertices[(indexI32 + 1).rem(vertices.size)]
+                val crosses = (start[1] > yF32) != (end[1] > yF32)
+                if (crosses && xF32 < (end[0] - start[0]) * (yF32 - start[1]) / (end[1] - start[1]) + start[0]) inside = !inside
+            }
+            if (inside) coverage[yI32 * widthI32 + xI32] = 1f
+        }
     }
 
     private fun styled(style: BlurStyle, original: FloatArray): FloatArray {

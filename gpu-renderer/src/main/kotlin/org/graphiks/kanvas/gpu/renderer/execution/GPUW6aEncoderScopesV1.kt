@@ -18,7 +18,13 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
         val pass = graph.passes()[index - 1]
         val geometryBinding = physical.geometryBinding(pass.id)
         val indexedGeometry = geometryBinding != null
-        val w4e = physical.w4eGeometryBinding(pass.id)?.let { requireNotNull(render).drawPackets.single() }
+        // A FilterCoverage source with a frozen stencil producer replays the producer and
+        // cover in this one W6b scope.  It cannot use the single-packet W4e stream shell.
+        val stencilCoverage = (pass as? PlanPass.FilterCoverageSourcePass)
+            ?.rasterBinding?.depthStencil != null
+        val w4e = physical.w4eGeometryBinding(pass.id)
+            ?.takeUnless { stencilCoverage }
+            ?.let { requireNotNull(render).drawPackets.single() }
         val referenced = if (render != null) listOf(render.target) + render.resourceUses.map { it.resource }
             else copy?.let { listOf(it.source, it.destination) }
                 ?: (step as GPUFrameStep.ReadbackCopyStep).let { listOf(it.source, it.staging) }
@@ -53,7 +59,26 @@ internal fun GPUW6aLayerFramePlan.encoderScopes(frame: GPUFramePlan, generations
                 }
                 add(GPUPassCommand.EndRenderPass(pass.id.value))
             })
-        val keys = if (w4e != null) w4eNativeOperandKeysV6(w4e, commonSource = true) else if (copy != null) listOf(
+        // A frozen stencil-cover FilterCoverage source replays its existing W4 producer and
+        // cover packets into the coverage target.  That is one sealed W6b pass with two
+        // command groups, so its operand contract must describe both groups rather than the
+        // ordinary single fullscreen FilterCoverage shell.
+        val keys = if (stencilCoverage) buildList {
+            add(key(GPUPreparedNativeOperandRole.RenderColorTarget, GPUPreparedNativeOperandKind.TextureView,
+                "w6a.$index.coverage.target"))
+            add(key(GPUPreparedNativeOperandRole.RenderDepthStencilTarget, GPUPreparedNativeOperandKind.TextureView,
+                "w6a.$index.coverage.depth-stencil"))
+            repeat(2) { packet ->
+                add(key(GPUPreparedNativeOperandRole.RenderPipeline, GPUPreparedNativeOperandKind.RenderPipeline,
+                    "w6a.$index.coverage.pipeline.$packet"))
+                add(key(GPUPreparedNativeOperandRole.RenderBindGroup, GPUPreparedNativeOperandKind.BindGroup,
+                    "w6a.$index.coverage.bind.$packet"))
+                add(key(GPUPreparedNativeOperandRole.RenderVertexBuffer, GPUPreparedNativeOperandKind.Buffer,
+                    "w6a.$index.coverage.vertex.$packet"))
+                add(key(GPUPreparedNativeOperandRole.RenderIndexBuffer, GPUPreparedNativeOperandKind.Buffer,
+                    "w6a.$index.coverage.index.$packet"))
+            }
+        } else if (w4e != null) w4eNativeOperandKeysV6(w4e, commonSource = true) else if (copy != null) listOf(
             key(GPUPreparedNativeOperandRole.CopySource, GPUPreparedNativeOperandKind.Texture, "w6a.$index.copy.source"),
             key(GPUPreparedNativeOperandRole.CopyDestination, GPUPreparedNativeOperandKind.Texture, "w6a.$index.copy.destination"),
         ) else if (render == null) listOf(

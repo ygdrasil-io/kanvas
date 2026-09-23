@@ -118,6 +118,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                     is PlanPass.RenderPass -> pass.drawDataResources
                     is PlanPass.StencilGeometryProducerV3 -> pass.drawDataResources
                     is PlanPass.StencilCover -> pass.drawDataResources
+                    is PlanPass.FilterCoverageSourcePass -> pass.rasterBinding?.drawDataResources
                     else -> null
                 } ?: return@mapNotNull null
                 val draw = when (pass) {
@@ -125,6 +126,7 @@ public class PlanPhysicalLayoutV1 private constructor(
                     is PlanPass.StencilCover -> pass.draw
                     is PlanPass.StencilGeometryProducerV3 -> graph.passes().filterIsInstance<PlanPass.StencilCover>()
                         .single { it.draw.commandIndex == pass.commandIndexI32 }.draw
+                    is PlanPass.FilterCoverageSourcePass -> requireNotNull(pass.rasterBinding).draw
                     else -> error("Unreachable data binding")
                 }
                 val fill = (draw as? PathDraw)?.copyPathGeometry()?.let { shape -> when (shape) {
@@ -135,7 +137,8 @@ public class PlanPhysicalLayoutV1 private constructor(
                 val fan = fill?.copyStencilEdgeFanF32OrNull()
                 val direct = fill?.copyDirectTriangleF32OrNull()
                 val producer = pass is PlanPass.StencilGeometryProducerV3
-                val cover = pass is PlanPass.StencilCover
+                val cover = pass is PlanPass.StencilCover || pass is PlanPass.FilterCoverageSourcePass &&
+                    draw is PathDraw && draw.strategy == PathFillStrategy.StencilCover
                 val binding = if (draw is W5bVerticesDraw) {
                     val upload = requireNotNull(draw.sealedUploadPayloadOrNull())
                     require(upload.vertexCountI32 == draw.geometryF32.vertexCountI32 &&

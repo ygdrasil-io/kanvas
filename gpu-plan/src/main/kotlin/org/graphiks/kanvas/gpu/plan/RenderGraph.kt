@@ -777,6 +777,14 @@ public class RenderGraph private constructor(
                 // pass.  Retain this producer/consumer edge for physical lifetime planning;
                 // the renderer receives the published resource ID and never discovers it.
                 pass.sealedAlphaSource?.let { add(it.sealedSourceId) }
+                pass.rasterBinding?.let { binding ->
+                    binding.drawDataResources?.let { data ->
+                        add(data.vertex)
+                        add(data.index)
+                        add(data.uniform)
+                    }
+                    binding.depthStencil?.let(::add)
+                }
             }
             is PlanPass.FilterCoverageRetainPass -> listOf(pass.source, pass.output)
             is PlanPass.PictureAggregateBeginPass -> listOf(pass.target, pass.parentTarget)

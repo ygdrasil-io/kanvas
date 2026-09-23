@@ -505,12 +505,14 @@ internal class W4bAnalyticRRectGraphLowerer {
         materialPlanTable: MaterialPlanTable?,
         w5b: Boolean = false,
         packedSourceV4: org.graphiks.kanvas.gpu.plan.RawMaterialRequirementsV2? = null,
+        packetSuffix: String = "",
+        coverageOnly: Boolean = false,
     ): W4bBuiltPacket {
         val lane = if (w5b) "w5b.w4b" else "w4b"
         val shape = draw.copyDeviceShape()
         val raster = draw.copyRasterBounds()
         val scissor = draw.copyScissor()
-        val packetId = GPUDrawPacketID("packet.$lane.${draw.commandIndex}")
+        val packetId = GPUDrawPacketID("packet.$lane.${draw.commandIndex}$packetSuffix")
         val plannedScissor = GPUPixelBounds(scissor.left, scissor.top, scissor.right, scissor.bottom)
         val scratchDraw = W4bSessionScratchDrawV1(
             packetId,
@@ -546,7 +548,8 @@ internal class W4bAnalyticRRectGraphLowerer {
                 sourceFamily = GPUCorePrimitiveSourceFamily.RRect,
                 geometry = plannedAuthority.geometryInput,
                 premultipliedRgba = listOf(color.red, color.green, color.blue, color.alpha),
-                material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex,packedSourceV4),
+                material = if (coverageOnly) null else W5aMaterialPlanLowerer().material(
+                    materialPlanTable, draw.materialAuthority, draw.commandIndex, packedSourceV4),
                 targetBounds = target,
                 scissorBounds = plannedScissor,
                 clipCoveragePlan = plannedClip,

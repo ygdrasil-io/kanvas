@@ -867,8 +867,11 @@ public sealed interface PlanPass {
         public val destinationVersionAfter: DestinationVersionI64? = null,
         /** W6b's captured mask coverage, applied before this W5 material/color pass. */
         public val coverageSource: PlanResourceId? = null,
+        /** The typed frozen producer whose mask can expand this transparent source stage. */
+        public val w6bMaskSourceBinding: W6bRasterCoverageBindingV1? = null,
         public val plannedCommandId: FramePlannedCommandIdI32? = null,
     ) : PlanPass {
+        init { require(w6bMaskSourceBinding == null || coverageSource != null) }
         override val role: PlanPassRole = PlanPassRole.MainRender
         override val id: PlanPassId = checkedPassId(role, ordinal)
         private val storedDraws = immutableList(draws)
@@ -1075,6 +1078,32 @@ public sealed interface PlanPass {
         override val id: PlanPassId = checkedPassId(role, ordinal)
     }
 
+    /**
+     * The existing W4 raster authority used to write one W6b raw-coverage texture.
+     *
+     * This is deliberately a typed dependency, not a new draw operation: [draw] and its W4
+     * buffers already belong to the frozen source lane.  A stencil-cover draw causes the
+     * coverage pass to replay its existing producer/cover pair in its own target.
+     */
+    public class W6bRasterCoverageBindingV1(
+        public val draw: PlanDraw,
+        public val drawDataResources: PlanDrawDataResources?,
+        public val depthStencil: PlanResourceId? = null,
+    ) {
+        init {
+            val stencil = draw is PathDraw && draw.strategy == PathFillStrategy.StencilCover
+            require(stencil == (depthStencil != null)) {
+                "Only a frozen stencil-cover draw may bind W6b coverage depth-stencil state."
+            }
+            require(draw is SolidRectDraw || drawDataResources != null) {
+                "A frozen non-rect W6b coverage draw needs its existing W4 buffers."
+            }
+        }
+
+        public fun withDraw(draw: PlanDraw): W6bRasterCoverageBindingV1 =
+            W6bRasterCoverageBindingV1(draw, drawDataResources, depthStencil)
+    }
+
     /** Captures raw geometry/path-effect coverage for one immutable W6b occurrence. */
     public class FilterCoverageSourcePass(
         override val ordinal: Int,
@@ -1087,7 +1116,10 @@ public sealed interface PlanPass {
             occurrence.pictureW5CoordinatesOrNull(includeSourceDrawClip = !deferSourceDrawClip),
         /** When present, coverage is a(S), never geometric/cull coverage from [occurrence]. */
         public val sealedAlphaSource: PictureAlphaSourceV1? = null,
+        /** Exact W4 geometry producer for a direct W6b mask blur, when one is admitted. */
+        public val rasterBinding: W6bRasterCoverageBindingV1? = null,
     ) : PlanPass {
+        init { require(sealedAlphaSource == null || rasterBinding == null) }
         override val role: PlanPassRole = PlanPassRole.FilterCoverageSource
         override val id: PlanPassId = checkedPassId(role, ordinal)
     }

@@ -51,7 +51,9 @@ internal class W5hFrameSourceValidationWitnessV1 private constructor(
             return try {
             val packets = frame.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
                 .flatMap { it.drawPackets }.filter { it.materialSourcePartitionV3() != null }
-            require(packets.map { it.packetId.value }.distinct().size == packets.size)
+            require(packets.map { it.packetId.value }.distinct().size == packets.size) {
+                "W5h source packet IDs must be unique"
+            }
             require(frame.w5aGeometryHostTemplatesV1.map { it.packetId }.toSet() == packets.map { it.packetId.value }.toSet()) {
                 "Every material packet must have its sealed geometry host template"
             }

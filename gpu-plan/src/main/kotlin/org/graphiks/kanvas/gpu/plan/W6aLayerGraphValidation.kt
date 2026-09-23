@@ -203,12 +203,27 @@ internal fun validateW6aLayerTopology(
             require(!pass.deferSourceDrawClip || pass.occurrence.sourceDraw?.geometry is GeometryNode.Picture)
             pass.sealedAlphaSource?.let { alpha ->
                 val source = byId.getValue(alpha.sealedSourceId)
-                require(alpha.sealedSourceId in sealedPictureSources && source.role == PlanResourceRole.PictureAggregateSource &&
-                    versions[alpha.sealedSourceId] == alpha.sealedSourceGenerationI64 &&
+                require(if (alpha.aggregateId != null) {
+                    alpha.sealedSourceId in sealedPictureSources && source.role == PlanResourceRole.PictureAggregateSource
+                } else {
+                    source.role == PlanResourceRole.LayerTarget && alpha.sealedSourceId in initialized &&
+                        alpha.sealedSourceId !in restored
+                })
+                require(versions[alpha.sealedSourceId] == alpha.sealedSourceGenerationI64 &&
                     PlanResourceUsage.Sampled in source.usages())
                 require(alpha.copySampleBoundsTargetI32() == requireNotNull(source.copyExtent()).let {
                     RectI32(0, 0, it.width, it.height)
                 })
+            }
+            pass.rasterBinding?.let { binding ->
+                if (binding.draw !is SolidRectDraw) {
+                    val data = requireNotNull(binding.drawDataResources)
+                    require(listOf(data.vertex, data.index, data.uniform).all { it in byId })
+                }
+                binding.depthStencil?.let { depthId ->
+                    val depth = byId.getValue(depthId)
+                    require(depth.role == PlanResourceRole.DepthStencil && depth.copyExtent() == output.copyExtent())
+                }
             }
             require(initialized.add(output.id))
             versions[output.id] = 0L

@@ -141,7 +141,9 @@ internal fun remapSourcePassesV4(sourcePasses: List<PlanPass>,
         }
         return sourcePasses.map { pass -> when (pass) {
             is PlanPass.RenderPass -> PlanPass.RenderPass(pass.ordinal,pass.target,pass.draws().map(::draw),
-                pass.load,pass.store,pass.drawDataResources,pass.destinationVersionAfter,pass.coverageSource)
+                pass.load,pass.store,pass.drawDataResources,pass.destinationVersionAfter,
+                coverageSource = pass.coverageSource, w6bMaskSourceBinding = pass.w6bMaskSourceBinding,
+                plannedCommandId = pass.plannedCommandId)
             is PlanPass.StencilProducer -> PlanPass.StencilProducer(pass.ordinal,pass.target,pass.depthStencil,
                 draw(pass.draw) as PathDraw,pass.drawDataResources,pass.atomicGroup,pass.load,pass.store,
                 pass.depthStencilAccess,pass.depthStencilLoadStore)

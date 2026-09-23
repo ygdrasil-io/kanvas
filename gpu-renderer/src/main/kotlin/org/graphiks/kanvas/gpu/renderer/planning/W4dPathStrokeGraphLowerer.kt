@@ -140,6 +140,18 @@ internal class W4dPathStrokeGraphLowerer {
             if (producer) GPUClipExecutionPlan.NoClip else clip.execution, table, bounds,graph)
     }
 
+    /** Lowers the already-bound W4 path coverage held by one W6b source pass. */
+    internal fun w6bCoveragePacket(passId: String, draw: PathStrokeDraw, producer: Boolean,
+        table: MaterialPlanTable, bounds: GPUPixelBounds, graph: RenderGraph): W4dBuiltPass {
+        val clip = clipFor(draw, bounds)
+        return packet(draw, 0, passId,
+            if (producer) GPUDrawPacketRole.PathStencilProducer else GPUDrawPacketRole.PathStencilCover,
+            GPUCorePrimitiveCoverageMode.Stencil1x,
+            if (producer) GPUClipCoveragePlan.NoClip else clip.coverage,
+            if (producer) GPUClipExecutionPlan.NoClip else clip.execution, table, bounds, graph,
+            packetSuffix = ".w6b.$passId", coverageOnly = true)
+    }
+
     fun lower(request: GpuPlanLoweringRequest): GpuPlanLoweringResult = try {
         if (!(W4dPathStrokePlanCompiler.isHistoricalCapabilityId(request.graph.capabilityId) ||
                 W4dPathStrokePlanCompiler.isW5aMaterialCapabilityId(request.graph.capabilityId))) {
@@ -675,6 +687,8 @@ internal class W4dPathStrokeGraphLowerer {
         materialPlanTable: MaterialPlanTable?,
         targetBounds: GPUPixelBounds,
         graph: RenderGraph? = null,
+        packetSuffix: String = "",
+        coverageOnly: Boolean = false,
     ): W4dBuiltPass {
         val geometry = draw.copyFillGeometryF32()
         val scissor = draw.copyScissorI32()
@@ -701,7 +715,7 @@ internal class W4dPathStrokeGraphLowerer {
                 sourceFamily = GPUCorePrimitiveSourceFamily.Path,
                 geometry = geometryInput(geometry, plannedScissor, draw.strategy),
                 premultipliedRgba = listOf(color.red, color.green, color.blue, color.alpha),
-                material = if (role == GPUDrawPacketRole.PathStencilProducer) null else
+                material = if (coverageOnly || role == GPUDrawPacketRole.PathStencilProducer) null else
                     W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex,
                         draw.materialAuthority.takeIf { it.colorSourceCoordinatesV4() != null }?.let {
                             requireNotNull(graph).packedMaterialSourceV4(it) }),
@@ -748,7 +762,7 @@ internal class W4dPathStrokeGraphLowerer {
         val analysisRecordId = "analysis.w4d_path_draw.${draw.commandIndex}"
         return W4dBuiltPass(
             packet = GPUDrawPacket(
-                packetId = GPUDrawPacketID("packet.w4d.${draw.commandIndex}.$roleLabel"),
+                packetId = GPUDrawPacketID("packet.w4d.${draw.commandIndex}.$roleLabel$packetSuffix"),
                 commandIdValue = draw.commandIndex,
                 analysisRecordId = analysisRecordId,
                 passId = passId,

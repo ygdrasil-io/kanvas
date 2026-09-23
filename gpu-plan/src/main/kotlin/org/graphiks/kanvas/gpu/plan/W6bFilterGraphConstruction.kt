@@ -609,7 +609,10 @@ internal object W6bFilterGraphConstruction {
         val hasFilteredPrevious: Boolean,
         val traversalBounded: Boolean,
     ) {
-        val isOwned: Boolean get() = roots.isNotEmpty() || hasMask || hasBackdrop || traversalBounded
+        // Traversal bounds diagnose an owned W6b filter occurrence; a filter-free scene must
+        // retain its existing W6a command-limit admission rather than becoming W6b-owned only
+        // because the generic scene walk reached maxNodes.
+        val isOwned: Boolean get() = roots.isNotEmpty() || hasMask || hasBackdrop
         fun hasUnsupportedImageFamily(): Boolean = roots.any { root ->
             val pending = ArrayDeque<CapturedFilterNodeId>()
             pending.addLast(root.root.id)

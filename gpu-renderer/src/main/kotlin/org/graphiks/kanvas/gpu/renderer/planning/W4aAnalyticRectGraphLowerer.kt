@@ -464,6 +464,8 @@ internal class W4aAnalyticRectGraphLowerer {
         materialPlanTable: MaterialPlanTable?,
         w5b: Boolean = false,
         packedSourceV4: org.graphiks.kanvas.gpu.plan.RawMaterialRequirementsV2? = null,
+        packetSuffix: String = "",
+        coverageOnly: Boolean = false,
     ): W4aBuiltPacket {
         val lane = if (w5b) "w5b.w4a" else "w4a"
         val device = draw.copyDeviceBounds()
@@ -501,7 +503,8 @@ internal class W4aAnalyticRectGraphLowerer {
                     deviceRect.bottom,
                 ),
                 premultipliedRgba = listOf(color.red, color.green, color.blue, color.alpha),
-                material = W5aMaterialPlanLowerer().material(materialPlanTable, draw.materialAuthority, draw.commandIndex,packedSourceV4),
+                material = if (coverageOnly) null else W5aMaterialPlanLowerer().material(
+                    materialPlanTable, draw.materialAuthority, draw.commandIndex, packedSourceV4),
                 targetBounds = target,
                 scissorBounds = plannedScissor,
                 clipCoveragePlan = plannedClip,
@@ -526,7 +529,7 @@ internal class W4aAnalyticRectGraphLowerer {
             colorFormat = GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat(),
         )
         val packet = GPUDrawPacket(
-            packetId = GPUDrawPacketID("packet.$lane.${draw.commandIndex}"),
+            packetId = GPUDrawPacketID("packet.$lane.${draw.commandIndex}$packetSuffix"),
             commandIdValue = draw.commandIndex,
             analysisRecordId = analysisRecordId,
             passId = "pass.$lane.main",

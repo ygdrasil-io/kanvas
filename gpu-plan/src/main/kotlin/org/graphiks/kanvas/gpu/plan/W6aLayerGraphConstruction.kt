@@ -228,6 +228,8 @@ internal class W6aLayerGraphConstruction(
 
         val passes = mutableListOf<PlanPass>()
         val filterResourceSpecs = mutableListOf<W6bFilterGraphConstruction.ResourceSpec>()
+        val coverageDepthExtents = linkedMapOf<PlanResourceId, SizeI32>()
+        var nextCoverageDepthOrdinalI32 = lanes.size + 1
         val steps = mutableListOf<LayerExecutionStepV1>()
         val scopePlans = linkedMapOf<Int, LayerScopePlanV1>()
         /** Picture-local layers share the existing W6a target/restore authority, never a replay VM. */
@@ -347,6 +349,13 @@ internal class W6aLayerGraphConstruction(
             )
         }
         val dataByCommand = linkedMapOf<Int, PlanDrawDataResources>()
+        // A FilterCoverage source and its subsequent W5 source draw execute in one submitted
+        // frame.  They therefore cannot share an upload allocation: queue writes are performed
+        // before that submission, not between the two render passes.  These are still the same
+        // frozen W4 producer bytes, merely separate plan-owned buffer allocations.
+        val dataRowsById = linkedMapOf<PlanResourceId, PlanResource>()
+        val coverageRasterData = mutableListOf<Pair<PlanDrawDataResources, PlanDrawDataResources>>()
+        var nextDataOrdinalI32 = Math.addExact(lanes.size, 1)
         val laneResourceIds = lanes.mapIndexed { laneI32, lane -> lane.resources().associate { row -> row.id to when (row.role) {
             PlanResourceRole.LogicalTarget -> targetFor(bindings[laneI32].scopeI32)
             PlanResourceRole.ReadbackStaging -> staging
@@ -374,11 +383,24 @@ internal class W6aLayerGraphConstruction(
                 val binding = PlanDrawDataResources(planResourceId(PlanResourceRole.VertexData, laneI32 + 1),
                     planResourceId(PlanResourceRole.IndexData, laneI32 + 1),
                     planResourceId(PlanResourceRole.UniformData, laneI32 + 1))
+                dataRowsById[binding.vertex] = data.single { it.role == PlanResourceRole.VertexData }
+                dataRowsById[binding.index] = data.single { it.role == PlanResourceRole.IndexData }
+                dataRowsById[binding.uniform] = data.single { it.role == PlanResourceRole.UniformData }
                 RenderGraph.visualDraws(lane.passes()).forEach { dataByCommand[it.commandIndex] = binding }
             }
         }
+        fun allocateCoverageRasterData(source: PlanDrawDataResources?): PlanDrawDataResources? = source?.let { original ->
+            val ordinal = nextDataOrdinalI32.also { nextDataOrdinalI32 = Math.addExact(it, 1) }
+            require(listOf(original.vertex, original.index, original.uniform).all(dataRowsById::containsKey))
+            PlanDrawDataResources(
+                planResourceId(PlanResourceRole.VertexData, ordinal),
+                planResourceId(PlanResourceRole.IndexData, ordinal),
+                planResourceId(PlanResourceRole.UniformData, ordinal),
+            ).also { coverageRasterData += it to original }
+        }
         fun appendRender(target: PlanResourceId, draws: List<PlanDraw>, clear: Boolean,
-            coverageSource: PlanResourceId? = null, plannedCommandId: FramePlannedCommandIdI32? = null): PlanPass.RenderPass {
+            coverageSource: PlanResourceId? = null, w6bMaskSourceBinding: PlanPass.W6bRasterCoverageBindingV1? = null,
+            plannedCommandId: FramePlannedCommandIdI32? = null): PlanPass.RenderPass {
             val before = versions[target] ?: 0L
             val after = Math.addExact(before, draws.size.toLong())
             versions[target] = after
@@ -386,7 +408,7 @@ internal class W6aLayerGraphConstruction(
                 if (clear) AttachmentLoadPlan.ClearTransparent else AttachmentLoadPlan.Load,
                 AttachmentStorePlan.Store, drawDataResources = draws.firstOrNull()?.let { dataByCommand[it.commandIndex] },
                 destinationVersionAfter = DestinationVersionI64(after), coverageSource = coverageSource,
-                plannedCommandId = plannedCommandId).also(passes::add)
+                w6bMaskSourceBinding = w6bMaskSourceBinding, plannedCommandId = plannedCommandId).also(passes::add)
         }
 
         val bindingsByCommand = bindings.associateBy { it.firstCommandIndexI32 }
@@ -706,7 +728,8 @@ internal class W6aLayerGraphConstruction(
                                 it.phase == PathRenderPhase.SingleSampleStencilColorCover }, pass.ordinal)
                         }
                     }
-                } else appendRender(target, listOf(draw), false, coverage, entry.plannedCommandId).also { pass ->
+                } else appendRender(target, listOf(draw), false, coverage,
+                    plannedCommandId = entry.plannedCommandId).also { pass ->
                     geometry?.passes()?.filterIsInstance<PlanPass.PathRenderPass>()?.singleOrNull {
                         it.phase == PathRenderPhase.SingleSampleDirectColor
                     }?.let { requireNotNull(native)[pass.id] = nativePass(it, pass.ordinal) }
@@ -1486,10 +1509,32 @@ internal class W6aLayerGraphConstruction(
                                 !occurrence.isLayerOccurrence && !occurrence.isPictureOccurrence
                             }
                         }
+                        val selectedDraw = draws.single()
+                        val sourceDepth = selectedDraw.takeIf { draw ->
+                            draw is PathDraw && draw.strategy == PathFillStrategy.StencilCover
+                        }?.let { planResourceId(PlanResourceRole.DepthStencil, bindings.indexOf(binding) + 1) }
+                        var coverageDepth: PlanResourceId? = null
+                        var rasterBinding: PlanPass.W6bRasterCoverageBindingV1? = null
                         val materialCoverage = directFilterSources?.let { sources ->
                             val occurrence = requireNotNull(directOccurrence)
                             filterCursor.passOrdinalI32 = passes.size
-                            passes += PlanPass.FilterCoverageSourcePass(passes.size, sources.coverage.resourceId, occurrence.source)
+                            rasterBinding = if (occurrence.mask is MaskFilterNode.Blur) {
+                                coverageDepth = selectedDraw.takeIf { draw ->
+                                    draw is PathDraw && draw.strategy == PathFillStrategy.StencilCover
+                                }?.let {
+                                    planResourceId(PlanResourceRole.DepthStencil,
+                                        nextCoverageDepthOrdinalI32.also { ordinal ->
+                                            nextCoverageDepthOrdinalI32 = Math.addExact(ordinal, 1)
+                                        }).also { depth -> coverageDepthExtents[depth] = sources.coverage.copyExtentI32() }
+                                }
+                                PlanPass.W6bRasterCoverageBindingV1(
+                                    selectedDraw.withFinalBlendV1(BlendPlan.LegacySrcOverV1),
+                                    allocateCoverageRasterData(dataByCommand[selectedDraw.commandIndex]),
+                                    coverageDepth,
+                                )
+                            } else null
+                            passes += PlanPass.FilterCoverageSourcePass(passes.size, sources.coverage.resourceId,
+                                occurrence.source, rasterBinding = rasterBinding)
                             val frozen = occurrence.mask?.let {
                                 W6bFilterGraphConstruction.freezeMaskOccurrence(occurrence, sources.coverage, filterCursor)
                             }
@@ -1502,7 +1547,6 @@ internal class W6aLayerGraphConstruction(
                         val target = directFilterSource?.resourceId ?: parentTarget
                         val maskCoverage = materialCoverage?.resourceId
                         if (target != parentTarget) appendRender(target, emptyList(), true)
-                        val selectedDraw = draws.single()
                         val laneI32 = bindings.indexOf(binding)
                         if (directFilterSource != null) physicalTargetByLane[laneI32] = target
                         val w4e = binding.source.geometrySource?.takeIf { it.w4ePayload != null }
@@ -1548,7 +1592,7 @@ internal class W6aLayerGraphConstruction(
                         } else selectedDraw.also { require(selectedCopy == null) }
                         if (draw is PathDraw && draw.strategy == PathFillStrategy.StencilCover) {
                             val data = dataByCommand.getValue(draw.commandIndex)
-                            val depth = planResourceId(PlanResourceRole.DepthStencil, bindings.indexOf(binding) + 1)
+                            val depth = requireNotNull(sourceDepth)
                             val group = canonicalPathAtomicGroup(draw)
                             val producer = PlanPass.StencilGeometryProducerV3(passes.size, target, depth, draw.commandIndex,
                                 draw.copyPathGeometry(), draw.copyScissorI32(), data, group,
@@ -1556,7 +1600,11 @@ internal class W6aLayerGraphConstruction(
                             passes += producer
                             val after = DestinationVersionI64(Math.addExact(versions.getValue(target), 1L))
                             versions[target] = after.valueI64
-                            val cover = PlanPass.StencilCover(passes.size, target, depth, draw, data, group,
+                            // The isolated source is transparent: the selected parent blend is
+                            // applied only by FilterComposite after mask materialization.
+                            val autoLayerSourceDraw = if (directOccurrence?.mask is MaskFilterNode.Blur)
+                                draw.withFinalBlendV1(BlendPlan.LegacySrcOverV1) as PathDraw else draw
+                            val cover = PlanPass.StencilCover(passes.size, target, depth, autoLayerSourceDraw, data, group,
                                 AttachmentLoadPlan.Load, AttachmentStorePlan.Store, PlanDepthStencilAccess.ReadWrite,
                                 PlanDepthStencilLoadStore.LoadStoreTestReset, after, maskCoverage)
                             passes += cover
@@ -1581,7 +1629,8 @@ internal class W6aLayerGraphConstruction(
                             // stays SRC_OVER. The captured parent blend remains on FilterComposite.
                             val autoLayerSourceDraw = if (directOccurrence?.mask is MaskFilterNode.Blur)
                                 draw.withFinalBlendV1(BlendPlan.LegacySrcOverV1) else draw
-                            val pass = appendRender(target, listOf(autoLayerSourceDraw), false, maskCoverage)
+                            val pass = appendRender(target, listOf(autoLayerSourceDraw), false, maskCoverage,
+                                rasterBinding)
                             if (w4e != null) requireNotNull(native)[pass.id] = localNative((selectedDraw as W5bW4ePathDraw).nativeColorPass, pass.ordinal)
                             else if (general != null) requireNotNull(native)[pass.id] = localNative(
                                 general.passes().filterIsInstance<PlanPass.PathRenderPass>().single {
@@ -1650,7 +1699,11 @@ internal class W6aLayerGraphConstruction(
                         requiredInputDeviceI32 = geometry.requiredInputDeviceI32,
                         producedOutputDeviceI32 = geometry.producedOutputDeviceI32)
                     filterCursor.passOrdinalI32 = passes.size
-                    passes += PlanPass.FilterCoverageSourcePass(passes.size, coverage.resourceId, filtered.source)
+                    passes += PlanPass.FilterCoverageSourcePass(passes.size, coverage.resourceId, filtered.source,
+                        sealedAlphaSource = PictureAlphaSourceV1(null, target, versions.getValue(target),
+                            requireNotNull(geometry.mapping), targetExtent(target).let { extent ->
+                                RectI32(0, 0, extent.width, extent.height)
+                            }))
                     val frozenMask = filtered.mask?.let {
                         W6bFilterGraphConstruction.freezeMaskOccurrence(filtered, coverage, filterCursor)
                     }
@@ -1764,11 +1817,29 @@ internal class W6aLayerGraphConstruction(
             }
             sourceSpecs.forEach { spec -> add(spec.seal(passes.size)) }
             frozenFilterResourceSpecs.forEach { spec -> add(spec.seal(passes.size)) }
+            coverageDepthExtents.forEach { (id, depthExtent) ->
+                add(PlanResource.of(PlanResourceRole.DepthStencil, id.value.substringAfter(':').toInt(),
+                    PlanResourceKind.Texture2D, PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8), depthExtent,
+                    checkedTextureBytesI64(4, depthExtent.width, depthExtent.height, 1),
+                    setOf(PlanResourceUsage.DepthStencilAttachment), PlanResourceLifetime.FrameLocal, 0, passes.size))
+            }
             add(PlanResource.of(PlanResourceRole.ReadbackStaging, 0, PlanResourceKind.Buffer, null, null,
                 Math.multiplyExact(readbackRowBytesI64, extent.height.toLong()),
                 setOf(PlanResourceUsage.CopyDestination, PlanResourceUsage.MapRead), PlanResourceLifetime.FrameLocal, 0, passes.size))
             add(PlanResource.of(PlanResourceRole.UniformData, 0, PlanResourceKind.Buffer, null, null, uniformCursorI64,
                 setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination), PlanResourceLifetime.FrameLocal, 0, passes.size))
+            coverageRasterData.forEach { (coverage, original) ->
+                listOf(
+                    coverage.vertex to original.vertex,
+                    coverage.index to original.index,
+                    coverage.uniform to original.uniform,
+                ).forEach { (coverageId, originalId) ->
+                    val sourceRow = dataRowsById.getValue(originalId)
+                    add(PlanResource.of(sourceRow.role, coverageId.value.substringAfter(':').toInt(), sourceRow.kind,
+                        sourceRow.format, sourceRow.copyExtent(), sourceRow.byteSize, sourceRow.usages(), sourceRow.lifetime,
+                        0, passes.size, sourceRow.sampleCountI32))
+                }
+            }
             lanes.forEachIndexed { laneI32, lane ->
                 if (bindings[laneI32].scopeI32 != null && bindings[laneI32].scopeI32 !in activeByScope) return@forEachIndexed
                 lane.resources().filter { it.role !in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.ReadbackStaging) }.forEach { row ->
@@ -1829,6 +1900,16 @@ internal class W6aLayerGraphConstruction(
                 localizeLayerDraw(draw, requireNotNull(geometry.mapping), requireNotNull(geometry.compositeDomainDeviceI32))
             }
         }
+        // Direct W6b coverage is already selected by W4, but its independent source texture
+        // has its own frozen origin.  Bind that producer to the published coverage target here;
+        // renderer materialization receives only the target-local W4 operand.
+        fun localizedCoverageDraw(binding: PlanPass.W6bRasterCoverageBindingV1, target: PlanResourceId): PlanDraw {
+            val selected = byCommand.getValue(binding.draw.commandIndex).withFinalBlendV1(binding.draw.blend)
+            val source = requireNotNull(filterSourceBindings[target]) {
+                "A raster W6b coverage binding requires its published source mapping."
+            }
+            return localizeLayerDraw(selected, source.mapping, source.copyDeviceBoundsI32())
+        }
         require(maskMaterialRoots.keys == maskMaterialSourcesByOccurrence.keys)
         require(graphTextureMaterialRoots.keys == graphTextureMaterialSourcesByAggregate.keys)
         val pictureTerminalBlends = rawPasses.mapNotNull { pass -> when (pass) {
@@ -1841,7 +1922,8 @@ internal class W6aLayerGraphConstruction(
                 val local = pass.draws().map { boundDraw(it.commandIndex, pass.target) }
                 PlanPass.RenderPass(pass.ordinal, pass.target, local, pass.load, pass.store,
                     drawDataResources = pass.drawDataResources, destinationVersionAfter = pass.destinationVersionAfter,
-                    coverageSource = pass.coverageSource, plannedCommandId = pass.plannedCommandId)
+                    coverageSource = pass.coverageSource, w6bMaskSourceBinding = pass.w6bMaskSourceBinding,
+                    plannedCommandId = pass.plannedCommandId)
             } else when (pass) {
                 is PlanPass.FilterPass -> {
                     val operation = (pass.operation as? FilterPassOperationV1.MaskShader)?.let { shader ->
@@ -1877,6 +1959,11 @@ internal class W6aLayerGraphConstruction(
                     boundDraw(pass.draw.commandIndex, pass.target) as PathDraw, pass.drawDataResources, pass.atomicGroup,
                     pass.load, pass.store, pass.depthStencilAccess, pass.depthStencilLoadStore, pass.destinationVersionAfter,
                     pass.coverageSource, pass.plannedCommandId)
+                is PlanPass.FilterCoverageSourcePass -> pass.rasterBinding?.let { binding ->
+                    PlanPass.FilterCoverageSourcePass(pass.ordinal, pass.output, pass.occurrence,
+                        pass.deferSourceDrawClip, pass.pictureCoordinates, pass.sealedAlphaSource,
+                        binding.withDraw(localizedCoverageDraw(binding, pass.output)))
+                } ?: pass
                 is PlanPass.PictureSourcePass -> {
                     val request = pass.graphTextureRequest ?: return@map pass
                     val material = graphTextureMaterialRoots.getValue(request.aggregateId)
@@ -2076,6 +2163,23 @@ internal class W6aLayerGraphConstruction(
     }
 
     private fun localizeLayerDraw(draw: PlanDraw, mapping: LayerMappingF64, targetDomainDeviceI32: RectI32): PlanDraw {
+        if (draw is ClippedPlanDraw) {
+            fun localScissor(strategy: ClipPlanStrategy): RectI32 = when (strategy) {
+                is ClipPlanStrategy.Scissor -> {
+                    val current = requireNotNull(mapping.mapDeviceRectToLayerI32OrNull(strategy.copyDomainI32()))
+                    strategy.child?.let { child -> requireNotNull(intersect(current, localScissor(child))) } ?: current
+                }
+                // W6b's direct mask source can retain only the already-admitted exact
+                // hard scissor here.  Resource-backed clips continue through their W4e lane.
+                is ClipPlanStrategy.Stencil,
+                is ClipPlanStrategy.Mask,
+                is ClipPlanStrategy.InverseMask,
+                is ClipPlanStrategy.InverseDomain,
+                -> throw IllegalArgumentException("${W6aPlanDiagnostics.UnsupportedChild}: non-scissor clipped source")
+            }
+            val local = localizeLayerDraw(draw.source, mapping, targetDomainDeviceI32)
+            return local.withLocalizedScissorV6(requireNotNull(intersect(local.copyScissorV6(), localScissor(draw.strategy))))
+        }
         if (draw is W5bVerticesDraw) return W5bVerticesDraw(draw.commandIndex, draw.materialAuthority, draw.geometryF32,
             draw.copyColorsRgba8(), requireNotNull(draw.transformF32.relativeToOriginI32OrNull(mapping.copyLayerOriginDeviceI32())),
             requireNotNull(mapping.mapDeviceRectToLayerI32OrNull(requireNotNull(intersect(draw.copyBoundsI32(), targetDomainDeviceI32)))),
@@ -2157,6 +2261,40 @@ internal class W6aLayerGraphConstruction(
                 solid.blend, solid.materialCoordinates, solid.materialCoordinatesV2,
                 (authority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates, authority is PlanDrawMaterialAuthority.MaterialV5,
             )
+        }
+    }
+
+    /** Bakes an already-admitted hard clip into the existing W4 draw; no renderer clip planning occurs. */
+    private fun PlanDraw.copyScissorV6(): RectI32 = when (this) {
+        is SolidRectDraw -> copyScissor()
+        is AnalyticRectDraw -> copyScissor()
+        is AnalyticRRectDraw -> copyScissor()
+        is PathDraw -> copyScissorI32()
+        is W5bPointDraw -> copyScissorI32()
+        is W5bVerticesDraw -> copyScissorI32()
+        else -> error("${W6aPlanDiagnostics.UnsupportedChild}: clipped source geometry")
+    }
+
+    private fun PlanDraw.withLocalizedScissorV6(scissor: RectI32): PlanDraw {
+        val ref = materialAuthority.materialPlanRef()
+        val v4 = (materialAuthority as? PlanDrawMaterialAuthority.MaterialV4)?.coordinates
+        val composed = materialAuthority is PlanDrawMaterialAuthority.MaterialV5
+        return when (this) {
+            is SolidRectDraw -> SolidRectDraw.ofMaterial(commandIndex, ref, copyVisibleBounds(), scissor,
+                coverage, sample, blend, materialCoordinates, materialCoordinatesV2, v4, composed)
+            is AnalyticRectDraw -> AnalyticRectDraw.ofMaterial(commandIndex, ref, copyDeviceBounds(), copyRasterBounds(),
+                scissor, blend, materialCoordinates, materialCoordinatesV2, v4, composed)
+            is AnalyticRRectDraw -> if (v4 != null) AnalyticRRectDraw.ofMaterialV4(commandIndex, ref, origin,
+                copyDeviceShape(), copyRasterBounds(), scissor, blend, v4)
+                else AnalyticRRectDraw.ofMaterial(commandIndex, ref, origin, copyDeviceShape(), copyRasterBounds(),
+                    scissor, blend, materialCoordinates, materialCoordinatesV2, composed)
+            is PathFillDraw -> PathFillDraw.ofMaterial(commandIndex, ref, copyGeometryF32(), strategy, scissor,
+                blend, materialCoordinates, materialCoordinatesV2, v4, composed)
+            is PathStrokeDraw -> if (v4 != null) PathStrokeDraw.ofMaterialV4(commandIndex, ref, copyGeometryF32(), scissor,
+                mode, styleF64, blend, v4) else PathStrokeDraw.ofMaterial(commandIndex, ref, copyGeometryF32(), scissor,
+                mode, styleF64, blend, materialCoordinates, materialCoordinatesV2, composed)
+            is GeneralPathDraw -> rebindGeometryV6(copyPathGeometry(), scissor)
+            else -> error("${W6aPlanDiagnostics.UnsupportedChild}: clipped source geometry")
         }
     }
 

@@ -47,9 +47,14 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                 is PlanPass.FilterCoverageSourcePass -> {
                     require(row(pass.output).role == PlanResourceRole.CoverageSource)
                     pass.sealedAlphaSource?.let { alpha ->
-                        val seal = passes[produced(alpha.sealedSourceId, index)] as? PlanPass.PictureAggregateSealPass
-                        require(seal != null && seal.aggregateId == alpha.aggregateId &&
-                            seal.sourceGenerationI64 == alpha.sealedSourceGenerationI64)
+                        if (alpha.aggregateId != null) {
+                            val seal = passes[produced(alpha.sealedSourceId, index)] as? PlanPass.PictureAggregateSealPass
+                            require(seal != null && seal.aggregateId == alpha.aggregateId &&
+                                seal.sourceGenerationI64 == alpha.sealedSourceGenerationI64)
+                        } else {
+                            require(row(alpha.sealedSourceId).role == PlanResourceRole.LayerTarget)
+                            produced(alpha.sealedSourceId, index)
+                        }
                     }
                     producers[pass.output] = index
                     owners[pass.output] = pass.output

@@ -37,9 +37,14 @@ internal fun w6aRenderPacketsMatch(pass: PlanPass, packets: List<GPUDrawPacket>)
     is PlanPass.FilterPass,
     is PlanPass.FilterComposite,
     is PlanPass.FilterSourceClear,
-    is PlanPass.FilterCoverageSourcePass,
     is PlanPass.FilterCoverageRetainPass,
     -> packets.isEmpty()
+    is PlanPass.FilterCoverageSourcePass -> pass.rasterBinding?.let { binding -> when {
+        binding.draw is SolidRectDraw -> packets.isEmpty()
+        binding.depthStencil == null -> packets.size == 1 && packets.single().role == GPUDrawPacketRole.Shading
+        else -> packets.size == 2 && packets[0].role == GPUDrawPacketRole.PathStencilProducer &&
+            packets[1].role == GPUDrawPacketRole.PathStencilCover
+    } } ?: packets.isEmpty()
     else -> false
 }
 }
@@ -238,6 +243,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                         val depthId = when (pass) {
                             is PlanPass.StencilGeometryProducerV3 -> pass.depthStencil
                             is PlanPass.StencilCover -> pass.depthStencil
+                            is PlanPass.FilterCoverageSourcePass -> pass.rasterBinding?.depthStencil
                             else -> null
                         }
                         val draws = when (pass) {
@@ -247,10 +253,24 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                             is PlanPass.StencilCover -> listOf(pass.draw)
                             else -> emptyList()
                         }
+                        val packetInputs: List<Triple<PlanPass?, PlanDraw, Boolean>> = when (pass) {
+                            is PlanPass.FilterCoverageSourcePass -> pass.rasterBinding?.let { binding -> when {
+                                binding.draw is SolidRectDraw -> emptyList()
+                                binding.depthStencil == null -> listOf(Triple(null, binding.draw, false))
+                                else -> {
+                                    val path = binding.draw as PathDraw
+                                    listOf(
+                                        Triple(null, path, true),
+                                        Triple(null, path, false),
+                                    )
+                                }
+                            } }.orEmpty()
+                            else -> draws.map { Triple(pass, it, false) }
+                        }
                         val targetExtent = requireNotNull(graph.resources().single { it.id == targetId }.copyExtent())
                         val targetBounds = GPUPixelBounds(0, 0, targetExtent.width, targetExtent.height)
                         val targetOrigin = targetOriginsDeviceI32.getValue(targetId)
-                        val packets = draws.map { draw ->
+                        val packets = packetInputs.map { (packetPass, draw, coverageProducer) ->
                             val table = requireNotNull(graph.materialPlanTableOrNull())
                             val packed = draw.materialAuthority.colorSourceCoordinatesV4()?.let { graph.packedMaterialSourceV4(draw.materialAuthority) }
                             val packet = when (draw) {
@@ -261,11 +281,21 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                                 is W5bPointDraw -> GpuPlanTaskListLowerer().packet(draw, ColorF32.Transparent,
                                     draw.commandIndex, targetBounds, table, null, packed, graph)
                                 is AnalyticRectDraw -> W4aAnalyticRectGraphLowerer().packet(draw, ColorF32.Transparent,
-                                    draw.commandIndex, targetBounds, table, w5b = true, packedSourceV4 = packed).packet
+                                    draw.commandIndex, targetBounds, table, w5b = true, packedSourceV4 = packed,
+                                    packetSuffix = if (pass is PlanPass.FilterCoverageSourcePass) ".w6b.${pass.id.value}" else "",
+                                    coverageOnly = pass is PlanPass.FilterCoverageSourcePass).packet
                                 is AnalyticRRectDraw -> W4bAnalyticRRectGraphLowerer().packet(draw, ColorF32.Transparent,
-                                    draw.commandIndex, targetBounds, table, w5b = true, packedSourceV4 = packed).packet
-                                is PathFillDraw -> W4cPathFillGraphLowerer().w5bPacket(pass, listOf(draw), table, targetBounds, graph).packet
-                                is PathStrokeDraw -> W4dPathStrokeGraphLowerer().w5bPacket(pass, listOf(draw), table, targetBounds, graph).packet
+                                    draw.commandIndex, targetBounds, table, w5b = true, packedSourceV4 = packed,
+                                    packetSuffix = if (pass is PlanPass.FilterCoverageSourcePass) ".w6b.${pass.id.value}" else "",
+                                    coverageOnly = pass is PlanPass.FilterCoverageSourcePass).packet
+                                is PathFillDraw -> if (packetPass == null)
+                                    W4cPathFillGraphLowerer().w6bCoveragePacket("${pass.id.value}.coverage", draw,
+                                        coverageProducer, table, targetBounds, graph).packet
+                                    else W4cPathFillGraphLowerer().w5bPacket(packetPass, listOf(draw), table, targetBounds, graph).packet
+                                is PathStrokeDraw -> if (packetPass == null)
+                                    W4dPathStrokeGraphLowerer().w6bCoveragePacket("${pass.id.value}.coverage", draw,
+                                        coverageProducer, table, targetBounds, graph).packet
+                                    else W4dPathStrokeGraphLowerer().w5bPacket(packetPass, listOf(draw), table, targetBounds, graph).packet
                                 else -> error("Unadmitted W6 geometry")
                             }
                             if (draw is SolidRectDraw) templates[packet.packetId] = w6aGeometryTemplate(packet, draw.blend, targetOrigin)
@@ -277,8 +307,14 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                             }
                             else {
                                 val semantic = packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive
-                                val key = if (draw is PathFillDraw) W4cPathFillGraphLowerer().w5bPacket(pass, listOf(draw), table, targetBounds, graph).structuralPipelineKey
-                                    else if (draw is PathStrokeDraw) W4dPathStrokeGraphLowerer().w5bPacket(pass, listOf(draw), table, targetBounds, graph).structuralPipelineKey
+                                val key = if (draw is PathFillDraw) if (packetPass == null)
+                                    W4cPathFillGraphLowerer().w6bCoveragePacket("${pass.id.value}.coverage", draw,
+                                        coverageProducer, table, targetBounds, graph).structuralPipelineKey
+                                    else W4cPathFillGraphLowerer().w5bPacket(packetPass, listOf(draw), table, targetBounds, graph).structuralPipelineKey
+                                    else if (draw is PathStrokeDraw) if (packetPass == null)
+                                        W4dPathStrokeGraphLowerer().w6bCoveragePacket("${pass.id.value}.coverage", draw,
+                                            coverageProducer, table, targetBounds, graph).structuralPipelineKey
+                                        else W4dPathStrokeGraphLowerer().w5bPacket(packetPass, listOf(draw), table, targetBounds, graph).structuralPipelineKey
                                     else corePrimitiveRenderPipelineStructuralKey(semantic, requireNotNull(packet.clipExecutionPlan),
                                         requireNotNull(packet.blendPlan), 1, GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat())
                                 val mapping = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key)
@@ -316,10 +352,13 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                                 GPUFrameResourceRole.FilterTarget, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false) }
                             is PlanPass.FilterComposite -> listOf(GPUFrameResourceUse(refs.getValue(pass.source),
                                 GPUFrameResourceRole.FilterTarget, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false))
-                            is PlanPass.FilterCoverageSourcePass -> pass.sealedAlphaSource?.let { alpha -> listOf(
-                                GPUFrameResourceUse(refs.getValue(alpha.sealedSourceId), GPUFrameResourceRole.FilterTarget,
-                                    GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false),
-                            ) }.orEmpty()
+                            is PlanPass.FilterCoverageSourcePass -> buildList {
+                                pass.sealedAlphaSource?.let { alpha -> add(GPUFrameResourceUse(refs.getValue(alpha.sealedSourceId),
+                                    GPUFrameResourceRole.FilterTarget, GPUFrameResourceUsage.TextureBinding,
+                                    GPUFrameResourceLifetime.FrameLocal, false)) }
+                                depthId?.let { add(GPUFrameResourceUse(refs.getValue(it), GPUFrameResourceRole.PathDepthStencil,
+                                    GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceLifetime.FrameLocal, true)) }
+                            }
                             is PlanPass.FilterCoverageRetainPass -> listOf(GPUFrameResourceUse(refs.getValue(pass.source),
                                 GPUFrameResourceRole.FilterTarget, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false))
                             else -> depthId?.let { listOf(GPUFrameResourceUse(refs.getValue(it), GPUFrameResourceRole.PathDepthStencil,
@@ -332,8 +371,10 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                             drawPackets = packets, sourceTaskIds = task,
                             batches = if (packets.isEmpty()) emptyList() else listOf(GPUFrameRenderBatch("w6a.${pass.id.value}", GPUPassBatchKind.Isolated, packets, task)),
                             depthStencilLoadStore = depthId?.let { GPUDepthStencilLoadStorePlan.WritableStencil(
-                                if (pass is PlanPass.StencilGeometryProducerV3) GPUStencilLoadOperation.Clear else GPUStencilLoadOperation.Load,
-                                GPUStorePlan.Store, if (pass is PlanPass.StencilGeometryProducerV3) 0u else null) }, w6aPassV1 = pass))
+                                if (pass is PlanPass.StencilGeometryProducerV3 || pass is PlanPass.FilterCoverageSourcePass)
+                                    GPUStencilLoadOperation.Clear else GPUStencilLoadOperation.Load,
+                                GPUStorePlan.Store, if (pass is PlanPass.StencilGeometryProducerV3 ||
+                                    pass is PlanPass.FilterCoverageSourcePass) 0u else null) }, w6aPassV1 = pass))
                     }
                     is PlanPass.ReadbackPass -> add(GPUFrameStep.ReadbackCopyStep(refs.getValue(pass.source) as GPUFrameTargetRef,
                         refs.getValue(pass.staging) as GPUFrameBufferRef, readback, task))

@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.*
+import org.graphiks.kanvas.gpu.plan.BlendPlan
 import org.graphiks.kanvas.gpu.plan.PlanResourceRole
 import org.graphiks.kanvas.gpu.plan.PlanResourceUsage
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorWgslValidation
@@ -13,6 +14,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUW5aGeometryHostTemplateV1
 import org.graphiks.kanvas.gpu.renderer.recording.GPUW5aHostBindingLayoutV1
 import org.graphiks.kanvas.gpu.renderer.recording.nativeDescriptorV1
 import org.graphiks.kanvas.gpu.renderer.recording.hostTargetV1
+import org.graphiks.kanvas.gpu.renderer.recording.w6aColorTarget
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.materialSourcePartitionV3
@@ -123,6 +125,8 @@ internal fun validatesW5aSourcePartitionV2(framePlan: GPUFramePlan, payload: GPU
     val owners = payload.auxiliaryOwnedHandles.mapNotNull { it.handle as? GPUW5aSourceOwnedHandlesV2 }
     return payload.scopeOperands.all { operand ->
         if (operand !is GPUPreparedNativeScopeOperand.Render) return@all true
+        val materializesW6bMaskSource = (operand.w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass)
+            ?.w6bMaskSourceBinding != null
         val render = framePlan.steps.getOrNull(operand.sourceStepIndex) as? GPUFrameStep.RenderPassStep
             ?: return@all operand.w5aSourceBindingsV2.isEmpty()
         if (operand.w5bInitialClearV3 !== render.w5bInitialClearV3) return@all false
@@ -131,8 +135,8 @@ internal fun validatesW5aSourcePartitionV2(framePlan: GPUFramePlan, payload: GPU
         } }.getOrNull() ?: return@all false
         operand.w5aSourceBindingsV2.size == expected.size &&
             operand.w5aSourceBindingsV2.zip(expected).all { (binding, source) ->
-                val destination = nativeSourcePacketV3(render.drawPackets, source.first, source.second)?.blendPlan
-                    as? GPUBlendPlan.ShaderBlendWithDstRead
+                val destination = (nativeSourcePacketV3(render.drawPackets, source.first, source.second)?.blendPlan
+                    as? GPUBlendPlan.ShaderBlendWithDstRead).takeUnless { materializesW6bMaskSource }
                 (destination == null || destination.sealedW5b != null) &&
                     binding.drawOrdinalI32 == source.first && binding.source === source.second &&
                     (binding.destinationGroupV3 != null) == (destination != null) &&
@@ -353,6 +357,33 @@ internal fun composeW5aHostSourceV1(template: GPUW5aGeometryHostTemplateV1, sour
     return result
 }
 
+/**
+ * Keeps the authenticated W4 geometry and clip equation while replacing only W5 source shading
+ * with opaque white.  The existing scalar coverage multiplication remains in the W4 fragment,
+ * so this is raw coverage rather than material alpha.
+ */
+internal fun composeW5aHostCoverageV1(template: GPUW5aGeometryHostTemplateV1): String {
+    var geometry = template.sourceWgsl.replace(Regex("\\bvec([234])([fiu])\\b")) {
+        "vec${it.groupValues[1]}<${it.groupValues[2]}32>"
+    }
+    val original = (validateColorWgsl("w6b-coverage-geometry", geometry) as? GPUColorWgslValidation.Validated)
+        ?.reflection?.report ?: error("W6b coverage requires parser-backed W4 geometry")
+    require(original.entryPoints.any { it.name == template.vertexEntryPoint && it.stage == "vertex" } &&
+        original.entryPoints.any { it.name == template.fragmentEntryPoint && it.stage == "fragment" })
+    require(original.bindings.size == template.groupZeroLayout.entries.size && template.groupZeroLayout.entries.all { entry ->
+        original.bindings.any { it.group == 0 && it.binding == entry.bindingI32 }
+    }) { "W6b coverage geometry layout disagrees with its frozen W4 template" }
+    val slots = listOf("core.premul_rgba", "analytic.premul_rgba", "drrect.premul_rgba",
+        "consumer.premul_rgba", "consumer.color", "vec4<f32>(input.localPosition, 0.0, 0.0)")
+    require(slots.any(geometry::contains) && !geometry.contains("@group(1)")) {
+        "W6b coverage requires a frozen W4 color-writing geometry shader"
+    }
+    slots.forEach { slot -> geometry = geometry.replace(slot, "vec4<f32>(1.0)") }
+    require((validateColorWgsl("w6b-coverage-composed", geometry) as? GPUColorWgslValidation.Validated)
+        ?.reflection?.report?.validation?.success == true) { "W6b coverage shader validation failed" }
+    return geometry
+}
+
 /** Called once by the native dispatcher, after authentic geometry materialization, before Ready. */
 internal fun materializeW5aSourcePartitionV2(
     device: GPUDevice,
@@ -404,6 +435,7 @@ internal fun materializeW5aSourcePartitionV2(
             val compositionAbiI32: Int,
             val destinationKey: org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupKey?,
             val destinationBounds: org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds?,
+            val materializesW6bMaskSource: Boolean,
         )
         val pipelines = mutableMapOf<SourcePipelineKey, Pair<GPUPreparedNativeRenderPipelineOperand, GPUBindGroupLayout>>()
         val buffers = mutableMapOf<String, GPUBuffer>()
@@ -456,6 +488,8 @@ internal fun materializeW5aSourcePartitionV2(
             if (operand !is GPUPreparedNativeScopeOperand.Render) return@map operand
             val packets = renders.getValue(operand.sourceStepIndex).drawPackets
             if (packets.none { it.materialSourcePartitionV3() != null }) return@map operand
+            val materializesW6bMaskSource = (operand.w6aPassV1 as? org.graphiks.kanvas.gpu.plan.PlanPass.RenderPass)
+                ?.w6bMaskSourceBinding != null
             val sources = sourceDrawsV2(renders.getValue(operand.sourceStepIndex), operand)
             var currentPipeline: GPUPreparedNativeRenderPipelineOperand? = null
             var drawOrdinalI32 = 0
@@ -469,6 +503,7 @@ internal fun materializeW5aSourcePartitionV2(
                 val validated = sourceWitness.packet(framePlan, requireNotNull(sourcePacket))
                 val destination = (sourcePacket?.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead)
                     ?.also { requireNotNull(it.sealedW5b) { "W5 destination-read source lost its sealed final blend" } }
+                    .takeUnless { materializesW6bMaskSource }
                 val layeredCopy = destination?.let { framePlan.w6aLayerFrameV1?.destinationCopy(requireNotNull(sourcePacket)) }
                 val destinationCopy = destination?.takeIf { layeredCopy == null }?.let { framePlan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>()
                     .single { copy -> copy.consumers.any { it.packetId == sourcePacket?.packetId } } }
@@ -479,7 +514,7 @@ internal fun materializeW5aSourcePartitionV2(
                 require(!scalar || coverageGroup != null && packets[ordinalI32].corePrimitivePreparedAuthority?.w5bFrameWitnessV3 === coverage?.witness)
                 val base = requireNotNull(currentPipeline)
                 val key = SourcePipelineKey(generation.value, validated.structuralId, base.pipeline, destination?.sealedW5b?.compositionAbiI32 ?: 2,
-                    destinationCopy?.sourceKey, destinationCopy?.logicalBounds)
+                    destinationCopy?.sourceKey, destinationCopy?.logicalBounds, materializesW6bMaskSource)
                 val (pipeline, materialLayout) = pipelines.getOrPut(key) {
                     val template = templates.sourceTemplate(base.pipeline)
                         ?: old.auxiliaryOwnedHandles.asSequence().mapNotNull { it.handle as? GPUW5aGeometryPipelineTemplateProvider }
@@ -492,7 +527,13 @@ internal fun materializeW5aSourcePartitionV2(
                     val layout = owned.own(device.createBindGroupLayout(validated.materialLayout.nativeDescriptorV1(
                         "Kanvas.w5a.source-v2.${validated.structuralId}")))
                     val shader = owned.own(device.createShaderModule(ShaderModuleDescriptor(
-                        label = "Kanvas.w5a.source-v2.${source.stage.structuralId}", code = validated.assembledModule)))
+                        label = "Kanvas.w5a.source-v2.${source.stage.structuralId}",
+                        code = if (materializesW6bMaskSource) {
+                            // W6b's separately materialized FilterCoverage consumes the frozen
+                            // shape coverage.  The auto-layer source keeps only W5 material, so
+                            // the coverage factor cannot be applied a second time here.
+                            w6bSourceModuleWithoutFrozenCoverage(composeW5aHostSourceV1(validated.template, source))
+                        } else validated.assembledModule)))
                     val pipelineLayout = owned.own(device.createPipelineLayout(PipelineLayoutDescriptor(
                         label = "Kanvas.composed-abi-v${destination?.sealedW5b?.compositionAbiI32 ?: 2}",
                         bindGroupLayouts = listOf(template.groupZero, layout) +
@@ -505,7 +546,11 @@ internal fun materializeW5aSourcePartitionV2(
                         vertex = VertexState(module = shader, buffers = descriptor.vertex.buffers,
                             entryPoint = descriptor.vertex.entryPoint, constants = descriptor.vertex.constants),
                         fragment = requireNotNull(descriptor.fragment).let { fragment -> FragmentState(
-                            module = shader, targets = if (destination == null) fragment.targets else fragment.targets.map {
+                            module = shader, targets = if (materializesW6bMaskSource) fragment.targets.map {
+                                ColorTargetState(format = it.format,
+                                    blend = w6aColorTarget(BlendPlan.LegacySrcOverV1).blend,
+                                    writeMask = it.writeMask)
+                            } else if (destination == null) fragment.targets else fragment.targets.map {
                                 ColorTargetState(format = it.format, blend = null, writeMask = it.writeMask)
                             }, entryPoint = fragment.entryPoint,
                             constants = fragment.constants) },
@@ -600,4 +645,13 @@ internal fun materializeW5aSourcePartitionV2(
         return GPUPreparedNativeFramePayloadMaterialization.Refused("failed.native-w5a.source-stage-v2",
             "W5a fragment source materialization failed: ${failure.message.orEmpty()}", requireNotNull(replacement))
     }
+}
+
+/** Removes the optional authenticated analytic coverage tail for a W6b source stage. */
+private fun w6bSourceModuleWithoutFrozenCoverage(module: String): String {
+    val tail = Regex("return (kanvas_material_source\\([^\\n;]+\\)) \\* coverage;")
+    val matches = tail.findAll(module).toList()
+    require(matches.size <= 1) { "W6b source stage may have only one W5 analytic coverage tail" }
+    if (matches.isEmpty()) return module
+    return module.replace(tail) { result -> "return ${result.groupValues[1]};" }
 }
