@@ -19,6 +19,7 @@ class W6dLightingPictureTest {
         assertNull(Picture.fromByteArray(Base64.getDecoder().decode(
             "S1BJQwAAAA4AAAAAAAAAAEAAAAA/gAAArRa6rgAAAAgAAAACAAAAAQAAAARzUkdCAAAABFNSR0IAAAAEU1JHQgAAAAEAAAAKP4AAAAAAAAD/////P4AAAD+AAAAAAAABAAAAAgAAAAUAAAACAAAAAAAAAABAAAAAP4AAAAEAAAABAAAAAQAAAAAAAAAAQAAAAD+AAAAAAAAC/////wAAAAlIQVJEX0VER0UAAAACAAAAAAAAAABAAAAAP4AAAAEAAAAEAAAACFNSQ19PVkVSAAAAAAIAAAABAAAABAAAAAA/gAAAAAAAAAAAAAAAAAAAP4AAAAAAAAAAAAAAAAAAAD+AAAAAAAAEUkVDVAH/////AAAAAAhTUkNfT1ZFUgAAAAABAAAAAAAAAARGSUxMAAAAAAAAAARCVVRUAAAABU1JVEVSQIAAAAAAAA==",
         )))
+        assertNotNull(Picture.fromByteArray(historicalNonLightingFixture()))
     }
 
     @Test
@@ -29,6 +30,7 @@ class W6dLightingPictureTest {
         assertEquals(15, ByteBuffer.wrap(firstBytes).getInt(4))
         assertEquals(9, ByteBuffer.wrap(firstBytes).getInt(28))
         val decoded = assertNotNull(Picture.fromByteArray(firstBytes))
+        assertEquals(first.ops, decoded.ops)
         assertContentEquals(firstBytes, decoded.toByteArray())
         assert(!firstBytes.contentEquals(second.toByteArray()))
     }
@@ -39,4 +41,13 @@ class W6dLightingPictureTest {
             Paint(color = ColorARGB.White, imageFilter = ImageFilter.PointLitDiffuse(location, ColorARGB.White, 1f, 1f), antiAlias = false),
         )
     }.finishRecordingAsPicture()
+
+    private fun historicalNonLightingFixture(): ByteArray = ByteBuffer.allocate(33)
+        .put("KPIC".encodeToByteArray())
+        .putInt(8)
+        .putFloat(0f).putFloat(0f).putFloat(8f).putFloat(8f)
+        .putInt(1)
+        .put(14)
+        .putInt(ColorARGB.Blue.toPackedInt())
+        .array()
 }
