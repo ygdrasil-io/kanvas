@@ -13,6 +13,7 @@ internal class W6aLayerGraphLowerer {
                 is FilterPassOperationV1.MatrixConvolution,
                 is FilterPassOperationV1.DisplacementMap,
                 is FilterPassOperationV1.Magnifier,
+                -> Unit
                 is FilterPassOperationV1.Lighting,
                 is FilterPassOperationV1.Picture,
                 is FilterPassOperationV1.RuntimeImageOpacity,

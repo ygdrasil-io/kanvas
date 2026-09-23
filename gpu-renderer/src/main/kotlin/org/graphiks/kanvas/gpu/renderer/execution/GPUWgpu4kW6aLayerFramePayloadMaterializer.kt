@@ -11,6 +11,7 @@ import org.graphiks.kanvas.gpu.renderer.materials.W5aMaterialSourceStage
 import org.graphiks.kanvas.gpu.renderer.filters.GPUW6cMorphologyPass
 import org.graphiks.kanvas.gpu.renderer.filters.GPUW6cMultiInputPass
 import org.graphiks.kanvas.gpu.renderer.filters.GPUW6cSpatialSamplingPass
+import org.graphiks.kanvas.gpu.renderer.filters.GPUW6dAdvancedSamplingPass
 import org.graphiks.kanvas.gpu.renderer.recording.*
 import org.graphiks.kanvas.gpu.renderer.wgsl.W6bMaskCoverageSnippet
 import org.graphiks.kanvas.gpu.renderer.wgsl.W6bSeparableBlurSnippet
@@ -753,9 +754,24 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     views.getValue(original), generation, operation, outputExtent.width, outputExtent.height,
                                     pass, owned)
                             }
-                            is FilterPassOperationV1.MatrixConvolution,
-                            is FilterPassOperationV1.DisplacementMap,
-                            is FilterPassOperationV1.Magnifier,
+                            is FilterPassOperationV1.MatrixConvolution -> {
+                                require(pass.inputs().size == 1)
+                                renderOperands += textureRender(stepIndex, views.getValue(pass.output), views.getValue(pass.inputs().single()), generation,
+                                    W6A_VERTEX_SHADER + GPUW6dAdvancedSamplingPass.matrixConvolutionFragment(operation),
+                                    BlendPlan.LegacySrcOverV1, 0, 0, outputExtent.width, outputExtent.height, pass, owned)
+                            }
+                            is FilterPassOperationV1.DisplacementMap -> {
+                                require(pass.inputs().size == 2)
+                                renderOperands += multiInputRender(stepIndex, views.getValue(pass.output), pass.inputs().map(views::getValue), generation,
+                                    W6A_VERTEX_SHADER + GPUW6dAdvancedSamplingPass.displacementFragment(operation),
+                                    outputExtent.width, outputExtent.height, pass, owned)
+                            }
+                            is FilterPassOperationV1.Magnifier -> {
+                                require(pass.inputs().size == 1)
+                                renderOperands += textureRender(stepIndex, views.getValue(pass.output), views.getValue(pass.inputs().single()), generation,
+                                    W6A_VERTEX_SHADER + GPUW6dAdvancedSamplingPass.magnifierFragment(operation),
+                                    BlendPlan.LegacySrcOverV1, 0, 0, outputExtent.width, outputExtent.height, pass, owned)
+                            }
                             is FilterPassOperationV1.Lighting,
                             is FilterPassOperationV1.Picture,
                             is FilterPassOperationV1.RuntimeImageOpacity,

@@ -1,6 +1,69 @@
 package org.graphiks.kanvas.gpu.renderer.filters
 
 import kotlin.math.roundToInt
+import org.graphiks.kanvas.gpu.plan.FilterPassOperationV1
+
+/** WGSL for the immutable W6d sampling payloads.  It receives no public filter object. */
+internal object GPUW6dAdvancedSamplingPass {
+    fun matrixConvolutionFragment(operation: FilterPassOperationV1.MatrixConvolution): String {
+        val size = operation.copyKernelSizeI32()
+        val kernel = operation.copyKernel().copyToFloatArray()
+        val offset = operation.copyKernelOffsetF64()
+        val terms = buildString {
+            for (y in 0 until size.height) for (x in 0 until size.width) {
+                append("value += w6d_matrix_sample(vec2<i32>(round(vec2<f32>(base) + vec2<f32>(${x - offset.x}f, ${y - offset.y}f)))) * ${kernel[y * size.width + x]}f;\n")
+            }
+        }
+        return """
+            @group(0) @binding(0) var w6d_matrix_source: texture_2d<f32>;
+            fn w6d_matrix_sample(coord: vec2<i32>) -> vec4<f32> {
+                let extent = vec2<i32>(textureDimensions(w6d_matrix_source));
+                return textureLoad(w6d_matrix_source, clamp(coord, vec2<i32>(0), extent - vec2<i32>(1)), 0);
+            }
+            @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+                let base = vec2<i32>(position.xy);
+                var value = vec4<f32>(0.0);
+                $terms
+                let rgb = clamp(value.rgb * ${operation.gainF32}f + vec3<f32>(${operation.biasF32 / 255f}f), vec3<f32>(0.0), vec3<f32>(1.0));
+                let alpha = ${if (operation.convolveAlpha) "clamp(value.a * ${operation.gainF32}f + ${operation.biasF32 / 255f}f, 0.0, 1.0)" else "w6d_matrix_sample(base).a"};
+                return vec4<f32>(rgb, alpha);
+            }
+        """
+    }
+
+    fun displacementFragment(operation: FilterPassOperationV1.DisplacementMap): String {
+        fun channel(name: String): String = when (name) { "RED" -> "r"; "GREEN" -> "g"; "BLUE" -> "b"; else -> "a" }
+        return """
+            @group(0) @binding(0) var w6d_displacement: texture_2d<f32>;
+            @group(0) @binding(1) var w6d_source: texture_2d<f32>;
+            @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+                let base = vec2<i32>(position.xy);
+                let map_extent = vec2<i32>(textureDimensions(w6d_displacement));
+                let map = textureLoad(w6d_displacement, clamp(base, vec2<i32>(0), map_extent - vec2<i32>(1)), 0);
+                let source_extent = vec2<i32>(textureDimensions(w6d_source));
+                let coordinate = vec2<i32>(round(vec2<f32>(base) + vec2<f32>(map.${channel(operation.xChannel.name)}, map.${channel(operation.yChannel.name)}) * ${operation.scaleF32}f));
+                return textureLoad(w6d_source, clamp(coordinate, vec2<i32>(0), source_extent - vec2<i32>(1)), 0);
+            }
+        """
+    }
+
+    fun magnifierFragment(operation: FilterPassOperationV1.Magnifier): String {
+        val source = operation.copySourceF64()
+        val centerX = (source.left + source.right) / 2.0
+        val centerY = (source.top + source.bottom) / 2.0
+        return """
+            @group(0) @binding(0) var w6d_magnifier_source: texture_2d<f32>;
+            @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+                let point = position.xy;
+                let inside = point.x >= ${source.left + operation.insetF32}f && point.x <= ${source.right - operation.insetF32}f &&
+                    point.y >= ${source.top + operation.insetF32}f && point.y <= ${source.bottom - operation.insetF32}f;
+                let sampled = select(point, vec2<f32>(${centerX}f, ${centerY}f) + (point - vec2<f32>(${centerX}f, ${centerY}f)) / ${operation.zoomF32}f, inside);
+                let extent = vec2<i32>(textureDimensions(w6d_magnifier_source));
+                return textureLoad(w6d_magnifier_source, clamp(vec2<i32>(round(sampled - vec2<f32>(0.5))), vec2<i32>(0), extent - vec2<i32>(1)), 0);
+            }
+        """
+    }
+}
 
 /** Color channel selector for displacement map sampling. */
 enum class GPUColorChannel { R, G, B, A }

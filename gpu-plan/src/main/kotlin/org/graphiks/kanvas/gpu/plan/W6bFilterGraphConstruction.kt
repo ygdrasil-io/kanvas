@@ -19,6 +19,7 @@ import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
 import org.graphiks.math.geometry.expandForBlurF64OrNull
+import org.graphiks.math.geometry.expandSamplingHaloF64OrNull
 import org.graphiks.math.geometry.roundOutToRectI32OrNull
 import org.graphiks.math.geometry.translateF64OrNull
 import org.graphiks.math.matrix.LayerMappingF64
@@ -599,6 +600,52 @@ internal object W6bFilterGraphConstruction {
                 appendMorphology(input, FilterPassOperationV1.Morphology.Kind.ERODE,
                     node.radiusX.toDouble(), node.radiusY.toDouble(), key)
             }
+            is CapturedFilterNodeV1.MatrixConvolution -> {
+                val input = materializeInput(node.input, currentSource)
+                val width = exactPositiveI32(node.kernelSize.width, "matrix kernel width")
+                val height = exactPositiveI32(node.kernelSize.height, "matrix kernel height")
+                if (node.kernel.sizeI32 != Math.multiplyExact(width, height)) throw ConstructionFailure(
+                    W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds, "W6d matrix kernel count is inconsistent."))
+                val offsetX = node.kernelOffset.x.toDouble()
+                val offsetY = node.kernelOffset.y.toDouble()
+                if (!offsetX.isFinite() || !offsetY.isFinite()) throw ConstructionFailure(
+                    W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds, "W6d matrix kernel offset is non-finite."))
+                val bounds = matrixBounds(input, width, height, offsetX, offsetY)
+                val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
+                val output = allocateTarget(bounds)
+                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
+                    FilterPassOperationV1.MatrixConvolution(SizeI32(width, height), node.kernel, node.gain, node.bias,
+                        Vector2F64(offsetX, offsetY), node.tileMode, node.convolveAlpha, bounds)))
+                ContextualFilterResult(output, bounds, key)
+            }
+            is CapturedFilterNodeV1.DisplacementMap -> {
+                val displacement = materializeInput(node.displacement, currentSource)
+                val input = materializeInput(node.input, currentSource)
+                if (!node.scale.isFinite()) throw ConstructionFailure(W6bFilterDiagnostics.refusal(
+                    W6bFilterDiagnostics.InvalidBounds, "W6d displacement scale is non-finite."))
+                val bounds = identityBounds(input)
+                val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
+                val output = allocateTarget(bounds)
+                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(displacement.resourceId, input.resourceId), output.resourceId, key,
+                    FilterPassOperationV1.DisplacementMap(node.xChannelSelector, node.yChannelSelector, node.scale, bounds)))
+                ContextualFilterResult(output, bounds, key)
+            }
+            is CapturedFilterNodeV1.Magnifier -> {
+                val input = materializeInput(node.input, currentSource)
+                val source = node.copySource()
+                if (!node.zoom.isFinite() || node.zoom <= 0f || !node.inset.isFinite() || node.inset < 0f ||
+                    !source.left.isFinite() || !source.top.isFinite() || !source.right.isFinite() || !source.bottom.isFinite() || source.isEmpty) {
+                    throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                        "W6d magnifier has invalid lens geometry."))
+                }
+                val bounds = identityBounds(input)
+                val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
+                val output = allocateTarget(bounds)
+                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
+                    FilterPassOperationV1.Magnifier(RectF64(source.left.toDouble(), source.top.toDouble(), source.right.toDouble(), source.bottom.toDouble()),
+                        node.zoom, node.inset, bounds)))
+                ContextualFilterResult(output, bounds, key)
+            }
             else -> throw ConstructionFailure(W6bFilterDiagnostics.refusal(
                 W6bFilterDiagnostics.UnsupportedFamily, "The captured image-filter family belongs to W6c or W6d.",
             ))
@@ -778,6 +825,26 @@ internal object W6bFilterGraphConstruction {
             source.copyProducedOutputDeviceI32() ?: source.copyKnownContentDeviceI32(), source.originDeviceI32)
     }
 
+    private fun exactPositiveI32(value: Float, label: String): Int {
+        if (!value.isFinite() || value <= 0f || value != value.toLong().toFloat()) throw ConstructionFailure(
+            W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds, "W6d $label is not a positive integral F32."))
+        return try { Math.toIntExact(value.toLong()) } catch (_: ArithmeticException) {
+            throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                "W6d $label overflows I32."))
+        }
+    }
+
+    private fun matrixBounds(source: SourceBinding, width: Int, height: Int, offsetX: Double, offsetY: Double): FilterBoundsPlanV1 {
+        val desired = source.copyDeviceBoundsI32()
+        val required = RectF64(desired.left.toDouble(), desired.top.toDouble(), desired.right.toDouble(), desired.bottom.toDouble())
+            .expandSamplingHaloF64OrNull(offsetX.coerceAtLeast(0.0), offsetY.coerceAtLeast(0.0),
+                (width - 1.0 - offsetX).coerceAtLeast(0.0), (height - 1.0 - offsetY).coerceAtLeast(0.0))
+            ?.roundOutToRectI32OrNull() ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(
+                W6bFilterDiagnostics.InvalidBounds, "W6d matrix sampling halo cannot be represented in checked I32 texels."))
+        return FilterBoundsPlanV1(source.copyKnownContentDeviceI32(), desired, required,
+            source.copyProducedOutputDeviceI32() ?: source.copyKnownContentDeviceI32(), source.originDeviceI32)
+    }
+
     /** The output domain grows by blur support; it is never intersected back to the source. */
     internal fun reverseInputDemand(
         occurrence: PositiveOccurrence?,
@@ -839,6 +906,9 @@ internal object W6bFilterGraphConstruction {
             // erase repeated inputs before their individual source demand is accounted for.
             is CapturedFilterNodeV1.Merge -> unionInputDemands(node, output)
             is CapturedFilterNodeV1.Blend -> unionInputDemands(listOf(node.background, node.foreground), output)
+            is CapturedFilterNodeV1.MatrixConvolution -> inputDemand(node.input, output)
+            is CapturedFilterNodeV1.DisplacementMap -> unionInputDemands(listOf(node.displacement, node.input), output)
+            is CapturedFilterNodeV1.Magnifier -> inputDemand(node.input, output)
             else -> throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.UnsupportedFamily,
                 "Reverse demand requires an admitted W6b filter."))
         }
@@ -1086,6 +1156,12 @@ internal object W6bFilterGraphConstruction {
                     }
                     is CapturedFilterNodeV1.Dilate -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
                     is CapturedFilterNodeV1.Erode -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.MatrixConvolution -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.DisplacementMap -> {
+                        node.displacement.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                        node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    }
+                    is CapturedFilterNodeV1.Magnifier -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
                     else -> return if (isW6cVariant(node)) "W6c" else "W6d"
                 }
             }
