@@ -572,6 +572,19 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     is PlanPass.FilterPass -> {
                         val outputExtent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
                         when (val operation = pass.operation) {
+                            is FilterPassOperationV1.Crop -> {
+                                require(pass.inputs().size == 1)
+                                require(operation.copyCropInputTargetLocalI32() == RectI32(0, 0, 1, 1) &&
+                                    operation.tileMode == org.graphiks.kanvas.render.ir.TileMode.CLAMP &&
+                                    outputExtent.width == 1 && outputExtent.height == 1) {
+                                    "W6c Crop requires the frozen full-domain 1x1 witness."
+                                }
+                                val offset = operation.sampling.copyOutputToInputOffsetTargetLocalI32()
+                                renderOperands += textureRender(stepIndex, views.getValue(pass.output),
+                                    views.getValue(pass.inputs().single()), generation,
+                                    sampledCompositeShader(offset.x, offset.y, 1f), BlendPlan.LegacySrcOverV1,
+                                    0, 0, 1, 1, pass, owned)
+                            }
                             is FilterPassOperationV1.SeparableBlur -> {
                                 require(operation.kind in setOf(
                                     FilterImplementationKindV1.IMAGE_BLUR_X,
@@ -673,7 +686,6 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     views.getValue(original), generation, operation, outputExtent.width, outputExtent.height,
                                     pass, owned)
                             }
-                            else -> error("W6b native operation is not implemented.")
                         }
                     }
                     is PlanPass.PictureComposite -> {
@@ -1063,7 +1075,6 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     is AnalyticRRectDraw -> draw.copyScissor()
                     is W5bPointDraw -> draw.copyScissorI32()
                     is PathDraw -> draw.copyScissorI32()
-                    else -> error("Unadmitted W6b coverage scissor")
                 }
                 add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)))
                 add(GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(bind, generation),

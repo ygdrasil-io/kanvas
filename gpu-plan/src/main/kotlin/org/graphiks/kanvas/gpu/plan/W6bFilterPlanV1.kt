@@ -18,6 +18,8 @@ public enum class FilterAxisV1 { X, Y }
 
 /** The complete W6b implementation vocabulary; later tasks add execution, not another pass kind. */
 public enum class FilterImplementationKindV1 {
+    /** The W6c Task 1 full-domain 1x1 Crop vertical slice. */
+    CROP,
     IMAGE_BLUR_X,
     IMAGE_BLUR_Y,
     MASK_COVERAGE_BLUR_X,
@@ -197,6 +199,29 @@ public sealed interface FilterPassOperationV1 {
                 "Separable blur kind and axis must agree."
             }
         }
+    }
+
+    /**
+     * The initial W6c Crop arm carries only the sealed 1x1 full-domain witness.  Later W6c
+     * tasks extend its bounds semantics without asking native lowering to recover public crop
+     * geometry or source origins.
+     */
+    public class Crop(
+        cropInputTargetLocalI32: RectI32,
+        public val tileMode: TileMode,
+        override val bounds: FilterBoundsPlanV1,
+        public val sampling: FilterInputSamplingV1,
+        override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.CROP,
+    ) : FilterPassOperationV1 {
+        private val cropSnapshotInputTargetLocalI32 = cropInputTargetLocalI32.copy()
+
+        init {
+            require(kind == FilterImplementationKindV1.CROP)
+            require(tileMode == TileMode.CLAMP)
+            require(cropSnapshotInputTargetLocalI32 == RectI32(0, 0, 1, 1))
+        }
+
+        public fun copyCropInputTargetLocalI32(): RectI32 = cropSnapshotInputTargetLocalI32.copy()
     }
 
     public data class MaskBlurStyle(

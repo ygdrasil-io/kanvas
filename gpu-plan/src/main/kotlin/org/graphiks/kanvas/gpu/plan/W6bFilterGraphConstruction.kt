@@ -242,10 +242,10 @@ internal object W6bFilterGraphConstruction {
             W6bFilterDiagnostics.FilteredPrevious,
             "W6b does not admit initWithPrevious combined with a spatial filter.",
         )
-        if (ownership.hasUnsupportedImageFamily()) return W6bFilterDiagnostics.refusal(
+        ownership.unsupportedImageFamilyOwnerOrNull()?.let { owner -> return W6bFilterDiagnostics.refusal(
             W6bFilterDiagnostics.UnsupportedFamily,
-            "The captured image-filter family belongs to W6c or W6d.",
-        )
+            "The captured image-filter family belongs to $owner.",
+        ) }
         return null
     }
 
@@ -374,6 +374,20 @@ internal object W6bFilterGraphConstruction {
             )
         }
         materializeNode = { id -> when (val node = occurrence.table.nodeAt(id)) {
+            is CapturedFilterNodeV1.Crop -> {
+                val input = materializeInput(node.input)
+                if (!isFullDomainCropWitness(node, input)) throw ConstructionFailure(W6bFilterDiagnostics.refusal(
+                    W6bFilterDiagnostics.UnsupportedFamily,
+                    "W6c Crop currently admits only the frozen 1x1 RGBA8 full-domain witness.",
+                ))
+                val bounds = identityBounds(input)
+                val key = keyFor(id, null, bounds.copyDesiredOutputDeviceI32())
+                val output = allocateTarget(bounds)
+                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
+                    FilterPassOperationV1.Crop(RectI32(0, 0, 1, 1), node.tileMode, bounds,
+                        filterInputSampling(input, bounds))))
+                output to key
+            }
             is CapturedFilterNodeV1.Blur -> {
                 val input = materializeInput(node.input)
                 val full = blurBounds(input, node.sigmaX, node.sigmaY)
@@ -605,6 +619,7 @@ internal object W6bFilterGraphConstruction {
             ))
         lateinit var inputDemand: (CapturedFilterInputV1, RectI32) -> RectI32
         fun nodeDemand(id: CapturedFilterNodeIdI32, output: RectI32): RectI32 = when (val node = occurrence.table.nodeAt(id)) {
+            is CapturedFilterNodeV1.Crop -> inputDemand(node.input, output)
             is CapturedFilterNodeV1.Blur -> inputDemand(node.input, expand(output, node.sigmaX, node.sigmaY))
             is CapturedFilterNodeV1.DropShadow -> {
                 val translated = RectF64(output.left.toDouble(), output.top.toDouble(),
@@ -777,7 +792,7 @@ internal object W6bFilterGraphConstruction {
                 val picture = (command as? SceneCommand.Draw)?.node?.geometry as? GeometryNode.Picture ?: return@forEachIndexed
                 if (picture.scene.canonicalId.value in nextAncestors) return true
                 if (visitOrdered(picture.scene, Math.addExact(depthI32, 1), insertion, nextAncestors,
-                        outerPictures + (command as SceneCommand.Draw).node, picturePathI32 + indexI32)) return true
+                        outerPictures + command.node, picturePathI32 + indexI32)) return true
             }
             return false
         }
@@ -796,7 +811,8 @@ internal object W6bFilterGraphConstruction {
         // retain its existing W6a command-limit admission rather than becoming W6b-owned only
         // because the generic scene walk reached maxNodes.
         val isOwned: Boolean get() = roots.isNotEmpty() || hasMask || hasBackdrop
-        fun hasUnsupportedImageFamily(): Boolean = roots.any { root ->
+        fun unsupportedImageFamilyOwnerOrNull(): String? {
+            roots.forEach { root ->
             val pending = ArrayDeque<CapturedFilterNodeIdI32>()
             pending.addLast(root.root.id)
             val seen = BooleanArray(root.table.nodeCount)
@@ -805,16 +821,33 @@ internal object W6bFilterGraphConstruction {
                 if (id.valueI32 !in seen.indices || seen[id.valueI32]) continue
                 seen[id.valueI32] = true
                 when (val node = root.table.nodeAt(id)) {
-                    is CapturedFilterNodeV1.Blur -> node.input.enqueueNodeOrUnsupported(pending)?.let { return true }
-                    is CapturedFilterNodeV1.DropShadow -> node.input.enqueueNodeOrUnsupported(pending)?.let { return true }
-                    else -> return true
+                    is CapturedFilterNodeV1.Crop -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.Blur -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.DropShadow -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    else -> return if (isW6cVariant(node)) "W6c" else "W6d"
                 }
             }
-            false
+            }
+            return null
         }
     }
 
     private data class RootOccurrence(val table: CapturedFilterTableV1, val root: CapturedFilterRootV1)
+
+    /** This intentionally narrow arm prevents Task 1 from exposing Crop bounds/tile semantics early. */
+    private fun isFullDomainCropWitness(node: CapturedFilterNodeV1.Crop, input: SourceBinding): Boolean {
+        val crop = node.copyCrop()
+        val extent = input.copyExtentI32()
+        return node.tileMode == TileMode.CLAMP && extent.width == 1 && extent.height == 1 &&
+            crop.left == 0f && crop.top == 0f && crop.right == 1f && crop.bottom == 1f
+    }
+
+    /** W6c owns these roots even while this Task 1 slice keeps all but Crop terminal. */
+    private fun isW6cVariant(node: CapturedFilterNodeV1): Boolean = node is CapturedFilterNodeV1.Crop ||
+        node is CapturedFilterNodeV1.Offset || node is CapturedFilterNodeV1.Tile ||
+        node is CapturedFilterNodeV1.ColorFilter || node is CapturedFilterNodeV1.Compose ||
+        node is CapturedFilterNodeV1.Merge || node is CapturedFilterNodeV1.Blend ||
+        node is CapturedFilterNodeV1.Dilate || node is CapturedFilterNodeV1.Erode
     private data class FilterPayload(val root: CapturedFilterRootV1?, val mask: MaskFilterNode?)
 
     private fun filterPayload(paint: org.graphiks.kanvas.render.ir.PaintNode?, effects: EffectStack): FilterPayload {

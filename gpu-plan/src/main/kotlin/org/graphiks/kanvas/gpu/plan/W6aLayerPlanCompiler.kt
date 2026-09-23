@@ -272,6 +272,7 @@ public class W6aLayerPlanCompiler public constructor(
             FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y,
         )
         val materialized = filters.all { pass -> when (val operation = pass.operation) {
+            is FilterPassOperationV1.Crop -> true
             is FilterPassOperationV1.SeparableBlur -> operation.kind in nativeBlurKinds
             is FilterPassOperationV1.MaskBlurStyle,
             is FilterPassOperationV1.MaskShader,
@@ -280,7 +281,6 @@ public class W6aLayerPlanCompiler public constructor(
             is FilterPassOperationV1.DropShadowColorize,
             is FilterPassOperationV1.DropShadowComposite,
             -> true
-            else -> false
         } }
         val terminals = graph.passes().filterIsInstance<PlanPass.FilterComposite>()
         // W6b consumes a typed frozen W4 producer for direct mask coverage.  Do not admit a
