@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.plan
 
+import org.graphiks.math.geometry.RectI32
+
 /**
  * Immutable publication witness for W6b.  It starts from terminal composites and validates
  * immediate producer/consumer edges; grouping convenient pass contexts is not an occurrence
@@ -128,8 +130,7 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
         }
 
         private fun arity(operation: FilterPassOperationV1): Int = when (operation) {
-            is FilterPassOperationV1.DropShadowComposite ->
-                if (operation.mode == org.graphiks.kanvas.render.ir.CapturedDropShadowModeV1.SHADOW_ONLY) 1 else 2
+            is FilterPassOperationV1.DropShadowComposite -> 2
             is FilterPassOperationV1.MaskBlurStyle -> if (operation.originalCoverageSource == null) 1 else 2
             is FilterPassOperationV1.SeparableBlur,
             is FilterPassOperationV1.MaskShader,
@@ -267,16 +268,28 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                             previous.axis == FilterAxisV1.Y &&
                             previous.kind == FilterImplementationKindV1.IMAGE_BLUR_Y
                     }
+                    val sampling = requireNotNull(operation.linearSampling) {
+                        "W6b shadow linear sampling must be sealed before publication."
+                    }
+                    val inputExtent = requireNotNull(rows.getValue(input).copyExtent())
+                    val outputExtent = requireNotNull(rows.getValue(pass.output).copyExtent())
+                    require(sampling.copySourceFootprintTargetLocalI32() == RectI32(0, 0, inputExtent.width, inputExtent.height) &&
+                        sampling.copyOutputFootprintTargetLocalI32() == RectI32(0, 0, outputExtent.width, outputExtent.height)) {
+                        "W6b shadow linear sampling footprint disagrees with its sealed targets."
+                    }
                 }
                 is FilterPassOperationV1.DropShadowComposite -> {
+                    require(operation.mode == org.graphiks.kanvas.render.ir.CapturedDropShadowModeV1.COMPOSITE) {
+                        "SHADOW_ONLY must terminate at DropShadowColorize."
+                    }
                     sameKey(inputs[0]) { it is FilterPassOperationV1.DropShadowColorize }
-                    if (operation.mode == org.graphiks.kanvas.render.ir.CapturedDropShadowModeV1.SHADOW_ONLY) {
-                        require(operation.originalInput == null)
-                    } else {
-                        val original = requireNotNull(operation.originalInput)
-                        require(inputs[1] == original && (original == key.boundSourceId || owner(original) == key.boundSourceId)) {
-                            "W6b drop shadow composite has the wrong immutable original input."
-                        }
+                    val original = requireNotNull(operation.originalInput)
+                    require(inputs[1] == original && (original == key.boundSourceId || owner(original) == key.boundSourceId)) {
+                        "W6b drop shadow composite has the wrong immutable original input."
+                    }
+                    require(operation.copyShadowSampleOffsetTargetLocalI32() != null &&
+                        operation.copyOriginalSampleOffsetTargetLocalI32() != null) {
+                        "W6b drop shadow composite must consume plan-sealed target-local coordinates."
                     }
                 }
             }

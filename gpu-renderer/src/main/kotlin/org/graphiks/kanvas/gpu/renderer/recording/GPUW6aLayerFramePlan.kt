@@ -127,11 +127,12 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                 require(!bounds.copyRequiredInputDeviceI32().isEmpty && !bounds.copyDesiredOutputDeviceI32().isEmpty &&
                     bounds.copyProducedOutputDeviceI32()?.isEmpty == false) { "W6b shadow has no sealed bounds." }
                 when (val operation = pass.operation) {
-                    is FilterPassOperationV1.DropShadowColorize -> require(pass.inputs().size == 1)
+                    is FilterPassOperationV1.DropShadowColorize -> require(pass.inputs().size == 1 && operation.linearSampling != null)
                     is FilterPassOperationV1.DropShadowComposite -> {
-                        require(pass.inputs().firstOrNull() != null)
-                        if (operation.originalInput == null) require(pass.inputs().size == 1)
-                        else require(pass.inputs().size == 2 && pass.inputs().last() == operation.originalInput)
+                        require(operation.mode == org.graphiks.kanvas.render.ir.CapturedDropShadowModeV1.COMPOSITE)
+                        require(pass.inputs().size == 2 && pass.inputs().last() == operation.originalInput &&
+                            operation.copyShadowSampleOffsetTargetLocalI32() != null &&
+                            operation.copyOriginalSampleOffsetTargetLocalI32() != null)
                     }
                     else -> error("Unreachable frozen shadow operation.")
                 }

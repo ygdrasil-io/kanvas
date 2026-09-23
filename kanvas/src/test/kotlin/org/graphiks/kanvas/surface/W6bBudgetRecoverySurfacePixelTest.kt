@@ -15,12 +15,12 @@ import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
 import org.junit.jupiter.api.Test
 
-/** Public B/B-1 and terminal-recovery proof for a sealed W6b Picture aggregate. */
+/** Public B/B-1 and terminal-recovery proof for a sealed SHADOW_ONLY W6b Picture aggregate. */
 class W6bBudgetRecoverySurfacePixelTest {
     @Test
     fun pictureAggregateBudgetAcceptsBAndRefusesBMinusOne() {
         val admitted = shadowSurface(frameLocalBudgetBytes = aggregateBudgetB)
-        assertContentEquals(compositeFixturePixels(), admitted.render().pixels)
+        assertShadowOnlyFixture(admitted.render().pixels)
 
         val refused = shadowSurface(frameLocalBudgetBytes = aggregateBudgetB - 1L)
         assertBudgetRefusalKeepsSentinel(refused)
@@ -29,7 +29,7 @@ class W6bBudgetRecoverySurfacePixelTest {
     @Test
     fun nestedBudgetBoundaryAndLateSiblingRefusalAreAtomic() {
         val nested = nestedShadowSurface(frameLocalBudgetBytes = nestedAggregateBudgetB)
-        assertContentEquals(compositeFixturePixels(), nested.render().pixels)
+        assertShadowOnlyFixture(nested.render().pixels)
 
         val lateSibling = Surface(2, 1, config = RenderConfig(frameLocalBudgetBytes = aggregateBudgetB))
         lateSibling.canvas {
@@ -66,13 +66,12 @@ class W6bBudgetRecoverySurfacePixelTest {
     }.finishRecordingAsPicture()
 
     private fun fixtureShadow(): ImageFilter = ImageFilter.DropShadow(
-        1f, 0f, 0f, 0f, ColorARGB.of(255, 17, 61, 211), mode = DropShadowMode.COMPOSITE,
+        1f, 0f, 0f, 0f, ColorARGB.of(255, 17, 61, 211), mode = DropShadowMode.SHADOW_ONLY,
     )
 
-    private fun compositeFixturePixels(): UByteArray = ubyteArrayOf(
-        255u, 255u, 255u, 255u,
-        17u, 61u, 211u, 255u,
-    )
+    private fun assertShadowOnlyFixture(pixels: UByteArray) {
+        assertContentEquals(ubyteArrayOf(0u, 0u, 0u, 0u, 17u, 61u, 211u, 255u), pixels)
+    }
 
     private fun assertBudgetRefusalKeepsSentinel(surface: Surface) {
         val sentinel = ubyteArrayOf(0x5au, 0x5au, 0x5au, 0x5au, 0x5au, 0x5au, 0x5au, 0x5au)
@@ -85,11 +84,12 @@ class W6bBudgetRecoverySurfacePixelTest {
     }
 
     private companion object {
-        // 2x1 root (8), one 1x1 sealed Picture aggregate and one 1x1 FilterSource
-        // (2 × 4), X/Y/color filter targets (3 × 4), 2x1 terminal composite (8), five
-        // sealed 16-byte W5/W6 uniform slots, and the 256-byte RGBA8 readback row.  This is
-        // public fixture arithmetic; it neither reads planner peaks nor queries native state.
-        const val aggregateBudgetB: Long = 8L + 2L * 4L + 3L * 4L + 8L + 5L * 16L + 256L
+        // 2x1 root (8), one 1x1 sealed Picture aggregate and one 1x1 FilterSource (2 × 4),
+        // X/Y/color filter targets (3 × 4), the fixture's single sealed 52-byte W5 material
+        // uniform payload, and one aligned RGBA8 readback row (256): 8 + 8 + 12 + 52 + 256 = 336.
+        // SHADOW_ONLY has no terminal DropShadowComposite target.  This public arithmetic
+        // intentionally derives B from the fixture, never from a planner peak or native state.
+        const val aggregateBudgetB: Long = 336L
         // The same aggregate runs in a 2x1 explicit W6a child target (+8).
         const val nestedAggregateBudgetB: Long = aggregateBudgetB + 8L
     }

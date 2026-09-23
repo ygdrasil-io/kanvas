@@ -371,17 +371,20 @@ internal object W6bFilterGraphConstruction {
                 val colorBounds = translatedBounds(blurred, node.dx.toDouble(), node.dy.toDouble())
                 val colorized = allocateTarget(colorBounds)
                 append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(blurred.resourceId), colorized.resourceId, key,
-                    FilterPassOperationV1.DropShadowColorize(node.color, Vector2F64(node.dx.toDouble(), node.dy.toDouble()), colorBounds)))
-                val compositeBounds = dropShadowCompositeBounds(input, colorized, node.mode)
-                val composite = allocateTarget(compositeBounds)
-                val compositeInputs = buildList {
-                    add(colorized.resourceId)
-                    if (node.mode != CapturedDropShadowModeV1.SHADOW_ONLY) add(input.resourceId)
+                    FilterPassOperationV1.DropShadowColorize(node.color, Vector2F64(node.dx.toDouble(), node.dy.toDouble()), colorBounds,
+                        dropShadowLinearSampling(blurred, colorBounds, node.dx.toDouble(), node.dy.toDouble()))))
+                if (node.mode == CapturedDropShadowModeV1.SHADOW_ONLY) {
+                    // The colored target is the terminal: there is no identity composite, target,
+                    // slot, or lifetime to charge in SHADOW_ONLY.
+                    colorized to key
+                } else {
+                    val compositeBounds = dropShadowCompositeBounds(input, colorized, node.mode)
+                    val composite = allocateTarget(compositeBounds)
+                    append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(colorized.resourceId, input.resourceId), composite.resourceId, key,
+                        FilterPassOperationV1.DropShadowComposite(node.mode, input.resourceId, compositeBounds,
+                            targetLocalSampleOffset(colorized, compositeBounds), targetLocalSampleOffset(input, compositeBounds))))
+                    composite to key
                 }
-                append(PlanPass.FilterPass(cursor.passOrdinalI32, compositeInputs, composite.resourceId, key,
-                    FilterPassOperationV1.DropShadowComposite(node.mode,
-                        input.resourceId.takeIf { node.mode != CapturedDropShadowModeV1.SHADOW_ONLY }, compositeBounds)))
-                composite to key
             }
             else -> throw ConstructionFailure(W6bFilterDiagnostics.refusal(
                 W6bFilterDiagnostics.UnsupportedFamily, "The captured image-filter family belongs to W6c or W6d.",
@@ -599,6 +602,54 @@ internal object W6bFilterGraphConstruction {
         val desired = translate(input)
         return FilterBoundsPlanV1(source.copyKnownContentDeviceI32()?.let(::translate), desired, input,
             source.copyKnownContentDeviceI32()?.let(::translate), Point2I32(desired.left, desired.top))
+    }
+
+    /**
+     * Freezes the MatrixTransform-equivalent source coordinate and both linear-sampling
+     * footprints in target-local texels.  `roundOut` of the translated F64 domain includes the
+     * outer transparent half-texel at fractional offsets; required input remains the exact
+     * sampled source domain and DECAL supplies transparent taps beyond it.
+     */
+    private fun dropShadowLinearSampling(
+        input: SourceBinding,
+        outputBounds: FilterBoundsPlanV1,
+        dxF64: Double,
+        dyF64: Double,
+    ): DropShadowLinearSamplingV1 {
+        val inputDomain = input.copyDeviceBoundsI32()
+        val outputDomain = outputBounds.copyDesiredOutputDeviceI32()
+        val inputOrigin = input.originDeviceI32
+        val outputOrigin = outputBounds.copyTargetOriginDeviceI32()
+        val sourceOffset = try {
+            Vector2F64(
+                Math.subtractExact(outputOrigin.x, inputOrigin.x).toDouble() - dxF64 - .5,
+                Math.subtractExact(outputOrigin.y, inputOrigin.y).toDouble() - dyF64 - .5,
+            )
+        } catch (_: ArithmeticException) {
+            throw ConstructionFailure(W6bFilterDiagnostics.refusal(
+                W6bFilterDiagnostics.InvalidBounds, "W6b shadow linear-sampling origin overflows I32.",
+            ))
+        }
+        return DropShadowLinearSamplingV1(
+            sourceOffset,
+            RectI32(0, 0, inputDomain.width(), inputDomain.height()),
+            RectI32(0, 0, outputDomain.width(), outputDomain.height()),
+        )
+    }
+
+    /** A COMPOSITE pass receives only plan-frozen target-local source coordinates. */
+    private fun targetLocalSampleOffset(input: SourceBinding, outputBounds: FilterBoundsPlanV1): Point2I32 {
+        val outputOrigin = outputBounds.copyTargetOriginDeviceI32()
+        return try {
+            Point2I32(
+                Math.subtractExact(outputOrigin.x, input.originDeviceI32.x),
+                Math.subtractExact(outputOrigin.y, input.originDeviceI32.y),
+            )
+        } catch (_: ArithmeticException) {
+            throw ConstructionFailure(W6bFilterDiagnostics.refusal(
+                W6bFilterDiagnostics.InvalidBounds, "W6b shadow target-local sample offset overflows I32.",
+            ))
+        }
     }
 
     private fun dropShadowCompositeBounds(input: SourceBinding, shadow: SourceBinding, mode: CapturedDropShadowModeV1): FilterBoundsPlanV1 {

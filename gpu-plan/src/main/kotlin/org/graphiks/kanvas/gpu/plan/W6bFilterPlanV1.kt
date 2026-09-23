@@ -62,6 +62,39 @@ public class FilterBoundsPlanV1 internal constructor(
         Point2I32(targetOriginSnapshotDeviceI32.x, targetOriginSnapshotDeviceI32.y)
 }
 
+/**
+ * Sealed local coordinates for DropShadow's internal MatrixTransform-equivalent sampling.
+ * The renderer receives no device origins: a fragment-local position plus this F64 vector is
+ * the input texel-index coordinate used by the required linear DECAL sample.
+ */
+public class DropShadowLinearSamplingV1 internal constructor(
+    sourceCoordinateOffsetTargetLocalF64: Vector2F64,
+    sourceFootprintTargetLocalI32: RectI32,
+    outputFootprintTargetLocalI32: RectI32,
+) {
+    private val sourceCoordinateOffsetSnapshotF64 = Vector2F64(
+        sourceCoordinateOffsetTargetLocalF64.x,
+        sourceCoordinateOffsetTargetLocalF64.y,
+    )
+    private val sourceFootprintSnapshotTargetLocalI32 = sourceFootprintTargetLocalI32.copy()
+    private val outputFootprintSnapshotTargetLocalI32 = outputFootprintTargetLocalI32.copy()
+
+    init {
+        require(sourceCoordinateOffsetSnapshotF64.x.isFinite() && sourceCoordinateOffsetSnapshotF64.y.isFinite())
+        require(!sourceFootprintSnapshotTargetLocalI32.isEmpty && !outputFootprintSnapshotTargetLocalI32.isEmpty)
+        require(sourceFootprintSnapshotTargetLocalI32.left == 0 && sourceFootprintSnapshotTargetLocalI32.top == 0)
+        require(outputFootprintSnapshotTargetLocalI32.left == 0 && outputFootprintSnapshotTargetLocalI32.top == 0)
+    }
+
+    public fun copySourceCoordinateOffsetTargetLocalF64(): Vector2F64 = Vector2F64(
+        sourceCoordinateOffsetSnapshotF64.x,
+        sourceCoordinateOffsetSnapshotF64.y,
+    )
+
+    public fun copySourceFootprintTargetLocalI32(): RectI32 = sourceFootprintSnapshotTargetLocalI32.copy()
+    public fun copyOutputFootprintTargetLocalI32(): RectI32 = outputFootprintSnapshotTargetLocalI32.copy()
+}
+
 /** Exact contextual identity for one captured node evaluation; equality-by-value is never a reuse proof. */
 public class FilterEvaluationKeyV1 private constructor(
     public val capturedNodeId: CapturedFilterNodeId?,
@@ -234,6 +267,8 @@ public sealed interface FilterPassOperationV1 {
         public val color: ColorARGB,
         offsetF64: Vector2F64,
         override val bounds: FilterBoundsPlanV1,
+        /** Required for an admitted shadow; retained nullable only for old malformed-graph tests. */
+        public val linearSampling: DropShadowLinearSamplingV1? = null,
         override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.DROP_SHADOW_COLORIZE,
     ) : FilterPassOperationV1 {
         private val offsetSnapshotF64 = Vector2F64(offsetF64.x, offsetF64.y)
@@ -244,18 +279,28 @@ public sealed interface FilterPassOperationV1 {
         public fun copyOffsetF64(): Vector2F64 = Vector2F64(offsetSnapshotF64.x, offsetSnapshotF64.y)
     }
 
-    public data class DropShadowComposite(
+    public class DropShadowComposite(
         public val mode: CapturedDropShadowModeV1,
         /** Exact captured original input; SHADOW_ONLY deliberately has none. */
         public val originalInput: PlanResourceId?,
         override val bounds: FilterBoundsPlanV1,
+        /** Frozen output-local to shadow-local texel offset; native lowering must never derive it. */
+        shadowSampleOffsetTargetLocalI32: Point2I32? = null,
+        /** Frozen output-local to original-local texel offset for COMPOSITE. */
+        originalSampleOffsetTargetLocalI32: Point2I32? = null,
         override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.DROP_SHADOW_COMPOSITE,
     ) : FilterPassOperationV1 {
+        private val shadowSampleOffsetSnapshotTargetLocalI32 = shadowSampleOffsetTargetLocalI32?.let { Point2I32(it.x, it.y) }
+        private val originalSampleOffsetSnapshotTargetLocalI32 = originalSampleOffsetTargetLocalI32?.let { Point2I32(it.x, it.y) }
         init {
             require(kind == FilterImplementationKindV1.DROP_SHADOW_COMPOSITE)
             require((mode == CapturedDropShadowModeV1.SHADOW_ONLY) == (originalInput == null)) {
                 "Drop-shadow original input must match its captured mode."
             }
         }
+        public fun copyShadowSampleOffsetTargetLocalI32(): Point2I32? =
+            shadowSampleOffsetSnapshotTargetLocalI32?.let { Point2I32(it.x, it.y) }
+        public fun copyOriginalSampleOffsetTargetLocalI32(): Point2I32? =
+            originalSampleOffsetSnapshotTargetLocalI32?.let { Point2I32(it.x, it.y) }
     }
 }
