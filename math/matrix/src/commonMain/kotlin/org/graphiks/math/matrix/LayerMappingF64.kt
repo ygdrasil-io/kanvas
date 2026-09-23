@@ -1,5 +1,6 @@
 package org.graphiks.math.matrix
 
+import kotlin.math.sqrt
 import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.RectF32
@@ -7,6 +8,7 @@ import org.graphiks.math.geometry.RRectF32
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.rebaseAtOriginI32OrNull
 import org.graphiks.math.geometry.roundOutToRectI32OrNull
+import org.graphiks.math.vector.Vector2F64
 
 /** Immutable local/device/layer mapping sealed before a layer graph is published. */
 public class LayerMappingF64 private constructor(
@@ -37,6 +39,35 @@ public class LayerMappingF64 private constructor(
         boundsDeviceI32: RectI32,
         targetOriginDeviceI32: Point2I32,
     ): RectI32? = boundsDeviceI32.rebaseAtOriginI32OrNull(targetOriginDeviceI32)
+
+    /** One checked F64 local-to-device projection boundary for spatial filter planning. */
+    public fun mapLocalRectToDeviceF64OrNull(boundsLocalF64: RectF64): RectF64? =
+        localToDeviceF64.mapRectBoundsF64OrNull(boundsLocalF64)
+
+    /** Outward texel sealing is deliberately separate from the F64 projection boundary. */
+    public fun mapLocalRectToDeviceI32OrNull(boundsLocalF64: RectF64): RectI32? =
+        mapLocalRectToDeviceF64OrNull(boundsLocalF64)?.roundOutToRectI32OrNull()
+
+    /** Maps an affine local displacement without applying the mapping translation. */
+    public fun mapLocalVectorToDeviceF64OrNull(vectorLocalF64: Vector2F64): Vector2F64? {
+        if (!vectorLocalF64.x.isFinite() || !vectorLocalF64.y.isFinite() ||
+            localToDeviceF64.persp0F64 != 0.0 || localToDeviceF64.persp1F64 != 0.0 ||
+            localToDeviceF64.persp2F64 != 1.0) return null
+        val xF64 = localToDeviceF64.sxF64 * vectorLocalF64.x + localToDeviceF64.kxF64 * vectorLocalF64.y
+        val yF64 = localToDeviceF64.kyF64 * vectorLocalF64.x + localToDeviceF64.syF64 * vectorLocalF64.y
+        return Vector2F64(xF64, yF64).takeIf { it.x.isFinite() && it.y.isFinite() }
+    }
+
+    /** Maps each local morphology axis to its affine device-space F64 length. */
+    public fun mapLocalMorphologyRadiiToDeviceF64OrNull(radiiLocalF64: Vector2F64): Vector2F64? {
+        if (!radiiLocalF64.x.isFinite() || !radiiLocalF64.y.isFinite() ||
+            radiiLocalF64.x < 0.0 || radiiLocalF64.y < 0.0) return null
+        val xAxis = mapLocalVectorToDeviceF64OrNull(Vector2F64(radiiLocalF64.x, 0.0)) ?: return null
+        val yAxis = mapLocalVectorToDeviceF64OrNull(Vector2F64(0.0, radiiLocalF64.y)) ?: return null
+        fun lengthF64(vector: Vector2F64): Double = sqrt(vector.x * vector.x + vector.y * vector.y)
+        return Vector2F64(lengthF64(xAxis), lengthF64(yAxis))
+            .takeIf { it.x.isFinite() && it.y.isFinite() }
+    }
 
     /**
      * Translation of an already raster-admitted analytic shape; no second projection.

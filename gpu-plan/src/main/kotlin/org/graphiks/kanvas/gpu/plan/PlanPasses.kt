@@ -55,8 +55,10 @@ public enum class ClipCombineOperation { Intersect, Difference }
  * previously selected W5/W6 blend or restore facts; native execution is intentionally deferred.
  */
 public sealed interface FilterCompositeOperationV1 {
-    public data class Draw(public val blend: BlendPlan) : FilterCompositeOperationV1
-    public data class Layer(public val restore: LayerRestorePlanV1) : FilterCompositeOperationV1
+    /** A null composite scissor with [noOp] is a sealed terminal clip decision, not a renderer fallback. */
+    public data class Draw(public val blend: BlendPlan, public val noOp: Boolean = false) : FilterCompositeOperationV1
+    /** A null composite scissor with [noOp] is a sealed terminal clip decision, not a renderer fallback. */
+    public data class Layer(public val restore: LayerRestorePlanV1, public val noOp: Boolean = false) : FilterCompositeOperationV1
     /** Captured locator is provenance; the terminal owns every executable composite operand. */
     public data class Picture(public val sourceSceneCanonicalId: String, public val sourceCommandIndexI32: Int,
         public val terminal: PictureCompositeOperandsV1? = null) : FilterCompositeOperationV1 {
@@ -1263,6 +1265,18 @@ public sealed interface PlanPass {
         init {
             require(storedInputs.isNotEmpty() && output !in storedInputs) {
                 "A filter pass requires distinct input and output resources."
+            }
+            when (operation) {
+                is FilterPassOperationV1.Merge -> require(storedInputs.size == operation.inputSamplings().size) {
+                    "Merge inputs and frozen sampling rows must have identical ordered cardinality."
+                }
+                is FilterPassOperationV1.Blend -> require(storedInputs.size == 2) {
+                    "Blend requires frozen background then foreground inputs."
+                }
+                is FilterPassOperationV1.Morphology -> require(storedInputs.size == 1) {
+                    "Morphology requires one frozen source input."
+                }
+                else -> Unit
             }
         }
         public fun inputs(): List<PlanResourceId> = storedInputs

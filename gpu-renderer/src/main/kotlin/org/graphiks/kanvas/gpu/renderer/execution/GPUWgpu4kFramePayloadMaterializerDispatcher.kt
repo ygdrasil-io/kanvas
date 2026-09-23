@@ -271,6 +271,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
     private val onDestinationSnapshotCreated: () -> Unit = {},
     private val decodedImageCache: GPUW5eDecodedImageSessionCache? = null,
     private val runtimeResourceCache: GPUW5hRuntimeResourceSessionCache? = null,
+    private val spatialFilterCache: GPUW6cSpatialFilterSessionCache? = null,
 ) : GPUPreparedNativeFramePayloadMaterializer, AutoCloseable {
     private val preparedSurfaceMixedAvailable =
         preparedSurfaceMixedMaterializer?.capabilities?.contains(
@@ -286,6 +287,8 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
 
     private var delegate: GPUPreparedNativeFramePayloadMaterializer? = null
     private var closed = false
+
+    internal fun spatialFilterCacheOrNull(): GPUW6cSpatialFilterSessionCache? = spatialFilterCache
 
     @Synchronized
     override fun materializeReusable(
@@ -317,7 +320,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
         }
         if (framePlan.w6aLayerFrameV1 != null) {
             val materializer = GPUWgpu4kW6aLayerFramePayloadMaterializer(device, queue, preparedSceneTarget,
-                decodedImageCache, runtimeResourceCache)
+                decodedImageCache, runtimeResourceCache, spatialFilterCache)
             delegate = materializer
             return materializer.materializeReusable(framePlan, sourceWitness, encoderPlan, resources, generationSeal)
         }

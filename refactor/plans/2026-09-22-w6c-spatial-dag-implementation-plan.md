@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Base branch: the reviewed delivery HEAD of `codex/w6b-blur-masks-shadows`; implementation branch: `codex/w6c-spatial-dag`; the W6c Draft PR targets `codex/w6b-blur-masks-shadows`, never W6a, W5h, or `main`.
-- At plan-writing time the local `codex/w6b-blur-masks-shadows` HEAD is `d4fdbabf0`, which contains the stacked-design commits but not the promised W6b DAG/pass implementation. Do not start W6c until a reviewed W6b HEAD supplies the contracts named below; record its exact commit in Task 1 before any code change.
+- The reviewed W6b base is `b6412bc161ccb99f1361886ec80a9d96c0f3637f`. It supplies the single captured table, `PlanPass.FilterPass`, `FilterTarget`, and occurrence authority under their actual W6b names. Record and recheck this commit before Task 1 code changes.
 - Read both approved specs and the W6a plan before every task. A mismatch with W6b reality stops that task and is reported as a base-contract gap; it never authorizes a second scene graph, allocator, submit path, cache, or planner.
 - Use vertical RED → GREEN → refactor work. Each RED is a behavioral public `Surface` or `Picture` failure on unchanged production, never a compilation, fixture, capability-injection, or test-harness failure.
 - Tests use only public `Surface`, `Canvas`, `Picture`, `ImageFilter`, `Paint`, public bytes, public diagnostics, public render/readback scopes, discard/re-record, and same-Surface recovery. No private tests, reflection, mocks, fake devices/backends, counters, static-source assertions, or test infrastructure.
@@ -69,7 +69,7 @@ Legacy `GPU/layers/*`, `GPUPreparedCompositeLowerer.kt`, `GPUPreparedSurface*`, 
 
 ## Frozen W6c Interfaces
 
-W6b must provide these exact owners before Task 1. If its reviewed implementation names differ, update this plan and the reviewed W6b owner together before starting; never duplicate the contract in W6c:
+W6b must provide these semantic owners before Task 1. The reviewed implementation names are `CapturedFilterTableV1.nodeAt`, `PlanPass.FilterPass`, `PlanResourceRole.FilterTarget`, `FilterEvaluationKeyV1`, and `W6bFilterGraphConstruction`. The illustrative API below predates W6b's final naming; W6c adapts to the reviewed owners and never duplicates their contract:
 
 ```kotlin
 @JvmInline
@@ -152,7 +152,7 @@ public class FilterPass(
 }
 ```
 
-`PlanResourceRole.FilterTarget` is added exactly once by W6b and remains the role for W6c results, ping-pong targets and cacheable filter output. Its resources use RGBA8, single sample, `RenderAttachment + Sampled + CopySource` (and `CopyDestination` only when an exact frozen pass needs it). `FilterPass.inputs()` is ordered and preserves duplicates. `RenderGraph` remains the sole physical resource/pass DAG; its validator proves every input’s producing pass precedes the consumer and forbids sampling an active attachment.
+`PlanResourceRole.FilterTarget` is added exactly once by W6b and remains the role for W6c results, ping-pong targets and cacheable filter output. W6c's retained spatial-cache texture uses RGBA8, single sample, `RenderAttachment + Sampled`; it has no `CopySource` consumer. A frozen `FilterTarget` may carry `CopySource` (and `CopyDestination`) only when its exact planned pass requires it. `FilterPass.inputs()` is ordered and preserves duplicates. `RenderGraph` remains the sole physical resource/pass DAG; its validator proves every input’s producing pass precedes the consumer and forbids sampling an active attachment.
 
 The cache key is a frozen planner value, not a renderer string:
 
@@ -179,11 +179,11 @@ It enters the existing `PlanPhysicalLayoutV1`/renderer cache binding and exact l
 **Files:**
 
 - Create: `TEST/surface/W6cSpatialDagAdmissionSurfaceTest.kt`
-- Modify: `PLAN/W6aLayerPlanCompiler.kt`, `PLAN/CapabilityCompilerChain.kt`, W6b `PLAN/SpatialFilterDagPlanV1.kt`, `API/surface/gpu/GPUPlanSurfaceCandidateGate.kt`, `API/surface/gpu/GPUPlanSurfaceRouter.kt`
+- Modify: `PLAN/W6aLayerPlanCompiler.kt`, `PLAN/CapabilityCompilerChain.kt`, W6b `PLAN/W6bFilterGraphConstruction.kt`, `PLAN/W6bFilterPlanV1.kt`, the existing W6b graph validation/lowerer/materializer, and `API/surface/gpu/GPUPlanSurfaceCandidateGate.kt` / `GPUPlanSurfaceRouter.kt` only if the current ownership route requires it.
 
 **Consumes:** W6b `CapturedFilterTableV1`, `CapturedFilterInputV1`, one extensible `PlanPass.FilterPass`, `PlanResourceRole.FilterTarget`, and W6a terminal layer routing.
 
-**Produces:** `W6cSpatialDagPlanner.planRoot(scope: LayerScopePlanV1, root: CapturedFilterNodeIdI32): RenderPlanResult<SpatialFilterRootPlanV1>`; W6c-owned `Crop`, `Offset`, `Tile`, `ColorFilter`, `Compose`, `Merge`, `Blend`, `Dilate`, and `Erode` are selected before legacy routing. W6d-only nodes remain exact pre-publication refusals.
+**Produces:** W6c root recognition on W6b's single graph owner, with a minimal frozen and natively materialized `Crop` pass sufficient for the public 1×1 positive witness. `Offset`, `Tile`, `ColorFilter`, `Compose`, `Merge`, `Blend`, `Dilate`, and `Erode` remain W6-owned terminal refusals until their later tasks activate their frozen passes. W6d-only nodes remain exact pre-publication refusals.
 
 - [ ] **Step 1: Record the reviewed W6b base contract** — run `rtk git rev-parse codex/w6b-blur-masks-shadows`, inspect the W6b DAG/pass classes, and add the exact hash plus their actual names to this task’s commit message body; stop if table roots, typed inputs, one `FilterPass`, or `FilterTarget` are absent.
 - [ ] **Step 2: Write public failing admission/recovery tests** in `W6cSpatialDagAdmissionSurfaceTest.kt` using explicit `Surface.render()` and a sentinel `readPixels` buffer:
@@ -201,19 +201,20 @@ It enters the existing `PlanPhysicalLayoutV1`/renderer cache binding and exact l
 ```
 
 - [ ] **Step 3: Run the new selector before production edits** with `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6cSpatialDagAdmissionSurfaceTest'`; record a behavioral W6b refusal or wrong route and retain a no-filter W6a GREEN control.
-- [ ] **Step 4: Implement root recognition** so `W6aLayerPlanCompiler` delegates only W6c variants to `W6cSpatialDagPlanner`, preserving W6a’s ownership-first terminal result and W6d diagnostics for every other variant.
+- [ ] **Step 4: Implement root recognition and the minimal Crop vertical slice** in the existing W6b graph: admit the 1×1 RGBA8 full-domain Crop witness through a frozen `PlanPass.FilterPass`/`FilterTarget`, materialize only its sealed sampling operands in the W6 renderer, and keep the other W6c variants terminal until Tasks 2–5. Preserve W6a’s ownership-first result and W6d diagnostics. Do not introduce a second planner, pass graph, allocation path, or legacy fallback.
 - [ ] **Step 5: Refactor selection names only after GREEN** by extracting the W6c variant predicate from `semanticRefusalFor`; retain exactly one candidate/router outcome for a layered scene.
 - [ ] **Step 6: Run serialized verification**:
 
 ```sh
 rtk ./gradlew :render-ir:compileKotlin
 rtk ./gradlew :gpu-plan:compileKotlin
+rtk ./gradlew :gpu-renderer:compileKotlin
 rtk ./gradlew :kanvas:compileKotlin
 rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6cSpatialDagAdmissionSurfaceTest'
 rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6aLayerSurfacePixelTest'
 ```
 
-- [ ] **Step 7: Commit and review** with `git add gpu-plan kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W6cSpatialDagAdmissionSurfaceTest.kt && git commit -m 'feat(gpu): admit w6c spatial dag roots'`; request one Sol review, apply at most one bounded correction, then request scoped Sol re-review.
+- [ ] **Step 7: Commit and review** with `git add gpu-plan gpu-renderer kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W6cSpatialDagAdmissionSurfaceTest.kt refactor/plans/2026-09-22-w6c-spatial-dag-implementation-plan.md && git commit -m 'feat(gpu): admit w6c crop root'`; request one Sol review, apply at most one bounded correction, then request scoped Sol re-review.
 
 ### Task 2: Crop, Offset, Tile, and F64 Bounds
 
@@ -222,7 +223,7 @@ rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6aLayerSurfaceP
 **Files:**
 
 - Create: `PLAN/W6cSpatialBoundsPlanner.kt`, `GPU/filters/GPUW6cSpatialSamplingPass.kt`, `TEST/surface/W6cSpatialBoundsSurfaceTest.kt`
-- Modify: `GEOM/RectProjectionF64.kt`, `MATRIX/LayerMappingF64.kt`, W6b `PLAN/SpatialFilterDagPlanV1.kt`, `PLAN/PlanPasses.kt`, `PLAN/PlanResources.kt`, `PLAN/W6aLayerGraphConstruction.kt`, W6b spatial lowerer/materializer.
+- Modify: `GEOM/RectProjectionF64.kt`, `MATRIX/LayerMappingF64.kt`, W6b `PLAN/W6bFilterGraphConstruction.kt`, `PLAN/W6bFilterPlanV1.kt`, `PLAN/W6bFilterGraphWitnessV1.kt`, `PLAN/W6aLayerGraphConstruction.kt`, and the W6b materializer. Consume the existing generic `PlanPass.FilterPass` and `FilterTarget` resource contracts without cosmetic edits to `PlanPasses.kt` or `PlanResources.kt`; change those files only if a concrete validator/resource gap is demonstrated.
 
 **Consumes:** W6b `FilterEvaluationKeyV1`, `FilterBoundsPlanV1`, W6a four regions/mapping, `roundOutToRectI32OrNull`, and frozen W6b filter target allocation.
 
@@ -442,7 +443,7 @@ rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6cSpatialDagPic
 
 **Produces:** W6c custody/status, one Sol whole-branch review, one bounded correction wave at most, and a Draft PR stacked on W6b without merge.
 
-- [ ] **Step 1: Run all W6c public shards sequentially**:
+- [x] **Step 1: Run all W6c public shards sequentially**:
 
 ```sh
 rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6cSpatialDagAdmissionSurfaceTest'
@@ -454,7 +455,7 @@ rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6cSpatialCacheR
 rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6cSpatialDagPictureTest'
 ```
 
-- [ ] **Step 2: Run targeted preservation sequentially**:
+- [x] **Step 2: Run targeted preservation sequentially**:
 
 ```sh
 rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6aLayerSurfacePixelTest'
@@ -471,7 +472,7 @@ rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bDropShadowSur
 rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bBudgetRecoverySurfacePixelTest'
 ```
 
-- [ ] **Step 3: Compile touched modules sequentially**:
+- [x] **Step 3: Compile touched modules sequentially**:
 
 ```sh
 rtk proxy ./gradlew :math:geometry:compileKotlinJvm
@@ -483,9 +484,9 @@ rtk ./gradlew :kanvas:compileKotlin
 rtk ./gradlew :kanvas:compileTestKotlin
 ```
 
-- [ ] **Step 4: Audit production paths manually** for `GPUImageFilterPlan`, `GPUMorphology`, `GPUFilterTile`, `copyTargetToOffscreenTexture`, post-freeze `PlanPass`/`PlanResource` creation, renderer bounds conversion, and legacy prepared composite route. Classify any legitimate W8 reference in status; do not add a static test.
-- [ ] **Step 5: Update durable status** with exact source/base hashes, tests/XML PASS/failure/error/skip counts, Gradle/native exits, nine admitted families, cache/B/B−1/recovery coverage, explicit W6d exclusions, and no ISO/global claim.
-- [ ] **Step 6: Commit documentation** with `git add refactor && git commit -m 'docs(refactor): record w6c spatial dag status'`.
+- [x] **Step 4: Audit production paths manually** for `GPUImageFilterPlan`, `GPUMorphology`, `GPUFilterTile`, `copyTargetToOffscreenTexture`, post-freeze `PlanPass`/`PlanResource` creation, renderer bounds conversion, and legacy prepared composite route. Classify any legitimate W8 reference in status; do not add a static test.
+- [x] **Step 5: Update durable status** with exact source/base hashes, tests/XML PASS/failure/error/skip counts, Gradle/native exits, nine admitted families, cache/B/B−1/recovery coverage, explicit W6d exclusions, and no ISO/global claim.
+- [x] **Step 6: Commit documentation** with `git add refactor && git commit -m 'docs(refactor): record w6c spatial dag status'`.
 - [ ] **Step 7: Request Sol whole-branch review** against the exact reviewed W6b base, covering capture/wire preservation, occurrence bindings, F64 bounds, pass/resource freeze, cache generations/leases, native ordering, public evidence, and fallback risk. If Critical/Important findings exist, apply one non-Sol bounded correction commit, rerun only causal selectors plus preservation, and request one scoped Sol re-review.
 - [ ] **Step 8: Verify stack and publish** with `rtk git status --short` and `rtk git log --oneline codex/w6b-blur-masks-shadows..HEAD`; push `codex/w6c-spatial-dag` and create/update a Draft PR targeting `codex/w6b-blur-masks-shadows`, describing exact base, commits, gates, exclusions, and native 133/134 `UNKNOWN`. Do not merge.
 

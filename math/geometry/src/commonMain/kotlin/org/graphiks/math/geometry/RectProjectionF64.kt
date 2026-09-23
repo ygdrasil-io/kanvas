@@ -48,6 +48,17 @@ public fun RectF64.translateF64OrNull(dxF64: Double, dyF64: Double): RectF64? {
         .takeIf { it.isFinite() && !it.isEmpty }
 }
 
+/** Finite, non-empty intersection retained in F64 until its owner seals texels. */
+public fun RectF64.intersectF64OrNull(other: RectF64): RectF64? {
+    if (!isFinite() || !other.isFinite() || isEmpty || other.isEmpty) return null
+    return RectF64(
+        maxOf(left, other.left),
+        maxOf(top, other.top),
+        minOf(right, other.right),
+        minOf(bottom, other.bottom),
+    ).takeUnless { it.isEmpty || !it.isFinite() }
+}
+
 /**
  * Expands finite F64 content by the finite three-sigma blur support before outward I32
  * projection.  The caller owns any later clip or target intersection.
@@ -64,6 +75,31 @@ public fun RectF64.expandForBlurF64OrNull(sigmaXF32: Float, sigmaYF32: Float): R
         right + supportXF64,
         bottom + supportYF64,
     ).takeIf { it.isFinite() && !it.isEmpty }
+}
+
+/** Expands finite F64 morphology support before the caller seals outward I32 texels. */
+public fun RectF64.expandForMorphologyF64OrNull(radiusXF64: Double, radiusYF64: Double): RectF64? {
+    if (!isFinite() || isEmpty || !radiusXF64.isFinite() || !radiusYF64.isFinite() ||
+        radiusXF64 < 0.0 || radiusYF64 < 0.0) return null
+    return RectF64(left - radiusXF64, top - radiusYF64, right + radiusXF64, bottom + radiusYF64)
+        .takeIf { it.isFinite() && !it.isEmpty }
+}
+
+/** Contracts known F64 morphology content; an empty contraction is represented as null. */
+public fun RectF64.insetForMorphologyF64OrNull(radiusXF64: Double, radiusYF64: Double): RectF64? {
+    if (!isFinite() || isEmpty || !radiusXF64.isFinite() || !radiusYF64.isFinite() ||
+        radiusXF64 < 0.0 || radiusYF64 < 0.0) return null
+    return RectF64(left + radiusXF64, top + radiusYF64, right - radiusXF64, bottom - radiusYF64)
+        .takeIf { it.isFinite() && !it.isEmpty }
+}
+
+/** Skia's maximum morphology kernel radius after nearest-integer device quantization. */
+public const val MORPHOLOGY_MAX_RADIUS_TEXELS_I32: Int = 256
+
+/** Seals one finite morphology radius to Skia's nearest, capped integer tap extent. */
+public fun morphologyRadiusTexelsI32OrNull(radiusF64: Double): Int? {
+    if (!radiusF64.isFinite() || radiusF64 < 0.0) return null
+    return minOf(floor(radiusF64 + 0.5), MORPHOLOGY_MAX_RADIUS_TEXELS_I32.toDouble()).toInt()
 }
 
 /** Rebase device texels at a target origin through finite F64 subtraction and checked I32 seal. */

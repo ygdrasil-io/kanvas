@@ -17,6 +17,8 @@ public object W6bFilterDiagnostics {
     public const val InvalidBounds: String = "w6b.filter.invalid_bounds"
     public const val FrameBudgetExceeded: String = "w6b.filter.frame_budget_exceeded"
     public const val NativeCapability: String = "w6b.filter.native_capability"
+    /** Direct filtered draws cannot approximate an opaque terminal clip with an AABB. */
+    public const val DirectTerminalClip: String = "w6b.filter.direct_terminal_clip"
     /** A malformed frozen drawPicture aggregate; capture/bounds/budget retain their own codes. */
     public const val PictureStreamInvalid: String = "w6b.picture_stream.invalid"
 

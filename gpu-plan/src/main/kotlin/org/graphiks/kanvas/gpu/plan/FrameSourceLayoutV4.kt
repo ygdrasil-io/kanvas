@@ -312,7 +312,14 @@ internal class FrameSourceLayoutV4 private constructor(
         val inventory = if (layeredInput == null) SourcePhysicalConstructionV1() else {
             val resources = mutableListOf<PlanResource>()
             val uniforms = linkedMapOf<String, PlanResourceId>()
+            val w6cColorUniformBindings = linkedMapOf<String, W6cColorUniformBindingV1>()
             val caches = mutableListOf<PlanCacheBindingV1>()
+            val w6cColorFilters = layeredInput.imageColorFilterExecutions()
+            // The W6c pass has one sampled input and one W5f uniform binding. Apply the same
+            // pre-publication W5f limits as ordinary material rows before issuing any resource.
+            w6cColorFilters.forEach { execution ->
+                requireColorUniformBindingV4(maxOf(16L, execution.dynamicByteCountI64), capabilities, bindingCountI32 = 2)
+            }
             fun buffer(role: PlanResourceRole, ordinal: Int, bytes: Long, usage: PlanResourceUsage,
                 lifetime: PlanResourceLifetime = PlanResourceLifetime.FrameLocal): PlanResourceId =
                 PlanResource.of(role, ordinal, PlanResourceKind.Buffer, null, null, bytes,
@@ -321,6 +328,16 @@ internal class FrameSourceLayoutV4 private constructor(
             (actualLegacy.map { it.canonicalIdentity to it.uniformByteCountI64 } +
                 actualV4.values.map { it.canonicalIdentity to it.uniformByteCountI64 }).forEach { (identity, bytes) ->
                 uniforms[identity] = buffer(PlanResourceRole.SourceUniformData, uniforms.size, bytes, PlanResourceUsage.Uniform)
+            }
+            w6cColorFilters.forEach { execution ->
+                val identity = W6cComposePlanner.colorUniformIdentity(execution)
+                val capacity = maxOf(16L, execution.dynamicByteCountI64)
+                val resource = buffer(
+                    PlanResourceRole.SourceUniformData, uniforms.size,
+                    capacity, PlanResourceUsage.Uniform,
+                )
+                uniforms[identity] = resource
+                w6cColorUniformBindings[identity] = W6cColorUniformBindingV1(resource, 0L, capacity)
             }
             imageInventory.forEachIndexed { index, allocation ->
                 val request = prepared.uploads.getValue(allocation.pixels).cacheRequest
@@ -341,10 +358,15 @@ internal class FrameSourceLayoutV4 private constructor(
                 .filterIsInstance<PlanCacheResourceRequest.Sampler>().distinct().forEachIndexed { index, request ->
                     caches += PlanCacheBindingV1(planResourceId(PlanResourceRole.RuntimeSampler, index), request)
                 }
-            require(resources.filter { it.role == PlanResourceRole.SourceUniformData }.sumOf { it.byteSize } == uniformBytesI64)
+            val w6cColorUniformBytes = w6cColorFilters.fold(0L) { bytes, execution ->
+                Math.addExact(bytes, maxOf(16L, execution.dynamicByteCountI64))
+            }
+            require(resources.filter { it.role == PlanResourceRole.SourceUniformData }.sumOf { it.byteSize } ==
+                Math.addExact(uniformBytesI64, w6cColorUniformBytes))
             val extra = resources.filterNot { it.role == PlanResourceRole.SourceUniformData }.fold(0L) { bytes, row -> Math.addExact(bytes, row.byteSize) }
-            require(Math.addExact(layeredInput.nonUniformBytesI64, Math.addExact(extra, noiseBytesI64)) == nonUniformBytesI64)
-            SourcePhysicalConstructionV1(resources, uniforms, caches)
+            require(Math.addExact(layeredInput.nonUniformBytesI64, Math.addExact(extra, noiseBytesI64)) ==
+                nonUniformBytesI64)
+            SourcePhysicalConstructionV1(resources, uniforms, caches, w6cColorUniformBindings)
         }
         SourceConstructionResultV4.Built(finish(table,roots,inventory))
     } catch (failure: RawMaterialRequirementsV2.Refusal) {

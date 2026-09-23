@@ -209,6 +209,9 @@ public class W6aLayerPlanCompiler public constructor(
         if (selected == null || selected.owner !== this) {
             return RenderPlanResult.InvalidScene(listOf(diagnostic(W6aPlanDiagnostics.UnsupportedChild, "Foreign W6a candidate.")))
         }
+        W6bFilterGraphConstruction.nativeCapabilityRefusalOrNull(selected.scene, capabilities)?.let { refusal ->
+            return RenderPlanResult.InvalidScene(listOf(refusal))
+        }
         return try {
             val bindings = mutableListOf<W6aLayerSourceBinding>()
             for (segment in selected.segments) when (val result = segment.compiler.constructSourceLanes(segment.candidate, capabilities, budget)) {
@@ -260,7 +263,7 @@ public class W6aLayerPlanCompiler public constructor(
         }
     }
 
-    /** The W6b native arm admits only the frozen Task 3–6 image, mask, and shadow operations. */
+    /** The W6 native arm admits only frozen W6b operations and the Task 1 W6c Crop witness. */
     private fun frozenW6bNativeAdmission(graph: RenderGraph): RenderPlanResult<RenderGraph>? {
         val filters = graph.passes().filterIsInstance<PlanPass.FilterPass>()
         if (filters.isEmpty()) return null
@@ -272,6 +275,15 @@ public class W6aLayerPlanCompiler public constructor(
             FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y,
         )
         val materialized = filters.all { pass -> when (val operation = pass.operation) {
+            is FilterPassOperationV1.Crop -> true
+            is FilterPassOperationV1.Offset -> true
+            is FilterPassOperationV1.Tile -> true
+            is FilterPassOperationV1.ColorFilter -> operation.uniformResource != null && operation.uniformOffsetBytesI64 != null &&
+                operation.uniformCapacityBytesI64 != null
+            is FilterPassOperationV1.Merge,
+            is FilterPassOperationV1.Blend,
+            is FilterPassOperationV1.Morphology,
+            -> true
             is FilterPassOperationV1.SeparableBlur -> operation.kind in nativeBlurKinds
             is FilterPassOperationV1.MaskBlurStyle,
             is FilterPassOperationV1.MaskShader,
@@ -280,7 +292,6 @@ public class W6aLayerPlanCompiler public constructor(
             is FilterPassOperationV1.DropShadowColorize,
             is FilterPassOperationV1.DropShadowComposite,
             -> true
-            else -> false
         } }
         val terminals = graph.passes().filterIsInstance<PlanPass.FilterComposite>()
         // W6b consumes a typed frozen W4 producer for direct mask coverage.  Do not admit a

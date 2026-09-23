@@ -9,6 +9,7 @@ import org.graphiks.kanvas.render.ir.MaskBlurStyle
 import org.graphiks.kanvas.render.ir.TileMode
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2I32
+import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.matrix.LayerMappingF64
 import org.graphiks.math.vector.Vector2F64
@@ -18,6 +19,22 @@ public enum class FilterAxisV1 { X, Y }
 
 /** The complete W6b implementation vocabulary; later tasks add execution, not another pass kind. */
 public enum class FilterImplementationKindV1 {
+    /** W6c source-domain Crop. */
+    CROP,
+    /** W6c source translation. */
+    OFFSET,
+    /** W6c periodic source sampling constrained to a destination domain. */
+    TILE,
+    /** W6c image color filter using the already sealed W5f numeric graph. */
+    COLOR_FILTER,
+    /** W6c ordered source-over composition of every frozen Merge input. */
+    MERGE_COMPOSITE,
+    /** W6c ordered background/foreground composition using a frozen W5 BlendPlan. */
+    BLEND_COMPOSITE,
+    /** W6c frozen horizontal morphology extrema pass. */
+    MORPHOLOGY_X,
+    /** W6c frozen vertical morphology extrema pass. */
+    MORPHOLOGY_Y,
     IMAGE_BLUR_X,
     IMAGE_BLUR_Y,
     MASK_COVERAGE_BLUR_X,
@@ -56,6 +73,27 @@ public class FilterInputSamplingV1 internal constructor(
         offsetSnapshotTargetLocalI32.y,
     )
     public fun copyKnownContentInputTargetLocalI32(): RectI32 = knownSnapshotInputTargetLocalI32.copy()
+}
+
+/** A target-local spatial sampler sealed by planning, retaining fractional F64 clips. */
+public class SpatialSamplingV1 internal constructor(
+    sourceInputTargetLocalI32: RectI32,
+    clipOutputTargetLocalF64: RectF64,
+    outputToInputOffsetTargetLocalF64: Vector2F64,
+) {
+    private val sourceSnapshot = sourceInputTargetLocalI32.copy()
+    private val clipSnapshot = clipOutputTargetLocalF64.copy()
+    private val offsetSnapshot = Vector2F64(outputToInputOffsetTargetLocalF64.x, outputToInputOffsetTargetLocalF64.y)
+
+    init {
+        require(!sourceSnapshot.isEmpty && !clipSnapshot.isEmpty && clipSnapshot.isFinite() &&
+            offsetSnapshot.x.isFinite() && offsetSnapshot.y.isFinite())
+    }
+
+    public fun copySourceInputTargetLocalI32(): RectI32 = sourceSnapshot.copy()
+    public fun copyClipOutputTargetLocalF64(): RectF64 = clipSnapshot.copy()
+    public fun copyOutputToInputOffsetTargetLocalF64(): Vector2F64 =
+        Vector2F64(offsetSnapshot.x, offsetSnapshot.y)
 }
 
 /** Immutable device-space spatial facts and the origin used to localize every filter target. */
@@ -127,6 +165,12 @@ public class FilterEvaluationKeyV1 private constructor(
     public val capturedNodeId: CapturedFilterNodeIdI32?,
     public val maskOccurrenceI32: Int?,
     public val boundSourceId: PlanResourceId,
+    /**
+     * Immutable source revision captured with this occurrence.  Null deliberately means that
+     * this evaluation is not cacheable across frames: a renderer must never guess a source
+     * generation from a physical resource id.
+     */
+    public val sourceRevisionIdentity: String?,
     public val mapping: LayerMappingF64,
     desiredOutputDeviceI32: RectI32,
 ) {
@@ -148,10 +192,12 @@ public class FilterEvaluationKeyV1 private constructor(
             boundSourceId: PlanResourceId,
             mapping: LayerMappingF64,
             desiredOutputDeviceI32: RectI32,
+            sourceRevisionIdentity: String? = null,
         ): FilterEvaluationKeyV1 = FilterEvaluationKeyV1(
             capturedNodeId,
             null,
             boundSourceId,
+            sourceRevisionIdentity,
             mapping,
             desiredOutputDeviceI32,
         )
@@ -161,10 +207,12 @@ public class FilterEvaluationKeyV1 private constructor(
             boundSourceId: PlanResourceId,
             mapping: LayerMappingF64,
             desiredOutputDeviceI32: RectI32,
+            sourceRevisionIdentity: String? = null,
         ): FilterEvaluationKeyV1 = FilterEvaluationKeyV1(
             null,
             maskOccurrenceI32,
             boundSourceId,
+            sourceRevisionIdentity,
             mapping,
             desiredOutputDeviceI32,
         )
@@ -195,6 +243,141 @@ public sealed interface FilterPassOperationV1 {
             )) { "Separable blur requires a blur implementation kind." }
             require((kind.name.endsWith("_X")) == (axis == FilterAxisV1.X)) {
                 "Separable blur kind and axis must agree."
+            }
+        }
+    }
+
+    public class Crop(
+        cropInputTargetLocalI32: RectI32,
+        public val tileMode: TileMode,
+        override val bounds: FilterBoundsPlanV1,
+        public val sampling: SpatialSamplingV1,
+        override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.CROP,
+    ) : FilterPassOperationV1 {
+        private val cropSnapshotInputTargetLocalI32 = cropInputTargetLocalI32.copy()
+
+        init {
+            require(kind == FilterImplementationKindV1.CROP)
+            require(!cropSnapshotInputTargetLocalI32.isEmpty)
+        }
+
+        public fun copyCropInputTargetLocalI32(): RectI32 = cropSnapshotInputTargetLocalI32.copy()
+    }
+
+    public class Offset(
+        offsetF64: Vector2F64,
+        override val bounds: FilterBoundsPlanV1,
+        public val sampling: SpatialSamplingV1,
+        override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.OFFSET,
+    ) : FilterPassOperationV1 {
+        private val offsetSnapshotF64 = Vector2F64(offsetF64.x, offsetF64.y)
+        init { require(kind == FilterImplementationKindV1.OFFSET && offsetSnapshotF64.x.isFinite() && offsetSnapshotF64.y.isFinite()) }
+        public fun copyOffsetF64(): Vector2F64 = Vector2F64(offsetSnapshotF64.x, offsetSnapshotF64.y)
+    }
+
+    public class Tile(
+        sourceInputTargetLocalI32: RectI32,
+        override val bounds: FilterBoundsPlanV1,
+        public val sampling: SpatialSamplingV1,
+        override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.TILE,
+    ) : FilterPassOperationV1 {
+        private val sourceSnapshotInputTargetLocalI32 = sourceInputTargetLocalI32.copy()
+        init { require(kind == FilterImplementationKindV1.TILE && !sourceSnapshotInputTargetLocalI32.isEmpty) }
+        public fun copySourceInputTargetLocalI32(): RectI32 = sourceSnapshotInputTargetLocalI32.copy()
+    }
+
+    /**
+     * The W5f execution and its sole FrameSourceLayoutV4 uniform row are frozen together.  This
+     * is deliberately a texture consumer, not a second color-filter evaluator.
+     */
+    public class ColorFilter(
+        public val execution: ColorFilterExecutionPlanV1,
+        public val uniformResource: PlanResourceId?,
+        /** Exact W5f byte-window start in [uniformResource], published by FrameSourceLayoutV4. */
+        public val uniformOffsetBytesI64: Long?,
+        public val uniformCapacityBytesI64: Long?,
+        override val bounds: FilterBoundsPlanV1,
+        public val sampling: FilterInputSamplingV1,
+        override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.COLOR_FILTER,
+    ) : FilterPassOperationV1 {
+        init {
+            require(kind == FilterImplementationKindV1.COLOR_FILTER)
+            require((uniformResource == null) == (uniformOffsetBytesI64 == null) &&
+                (uniformResource == null) == (uniformCapacityBytesI64 == null))
+            uniformCapacityBytesI64?.let { capacity ->
+                require(uniformResource!!.value.startsWith("${PlanResourceRole.SourceUniformData.name}:"))
+                requireW6cColorUniformWindow(requireNotNull(uniformOffsetBytesI64), capacity,
+                    execution.dynamicByteCountI64)
+            }
+        }
+
+        internal fun withUniformBinding(binding: W6cColorUniformBindingV1): ColorFilter =
+            ColorFilter(execution, binding.resourceId, binding.offsetBytesI64, binding.capacityBytesI64, bounds, sampling)
+    }
+
+    /**
+     * Merge preserves every captured input occurrence, including duplicates.  The sampling rows
+     * are positional: index N describes [PlanPass.FilterPass.inputs]' index N and are never a
+     * canonical-key lookup.
+     */
+    public class Merge(
+        inputSamplings: List<FilterInputSamplingV1>,
+        override val bounds: FilterBoundsPlanV1,
+        override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.MERGE_COMPOSITE,
+    ) : FilterPassOperationV1 {
+        private val samplingSnapshot = immutableList(inputSamplings)
+
+        init {
+            require(kind == FilterImplementationKindV1.MERGE_COMPOSITE)
+            require(samplingSnapshot.isNotEmpty())
+        }
+
+        public fun inputSamplings(): List<FilterInputSamplingV1> = samplingSnapshot
+    }
+
+    /**
+     * Background and foreground keep their public positions.  [blend] is issued by W5 before
+     * publication; renderer materialization receives no public BlendMode or replanning input.
+     */
+    public class Blend(
+        public val blend: BlendPlan,
+        backgroundSampling: FilterInputSamplingV1,
+        foregroundSampling: FilterInputSamplingV1,
+        override val bounds: FilterBoundsPlanV1,
+        override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.BLEND_COMPOSITE,
+    ) : FilterPassOperationV1 {
+        private val backgroundSamplingSnapshot = backgroundSampling
+        private val foregroundSamplingSnapshot = foregroundSampling
+
+        init { require(kind == FilterImplementationKindV1.BLEND_COMPOSITE) }
+
+        public fun backgroundSampling(): FilterInputSamplingV1 = backgroundSamplingSnapshot
+        public fun foregroundSampling(): FilterInputSamplingV1 = foregroundSamplingSnapshot
+    }
+
+    /**
+     * One axis of a frozen two-pass morphology evaluation.  Both the mapped F64 support and
+     * its checked I32 tap count are selected in :gpu-plan; native lowering only consumes them.
+     */
+    public class Morphology(
+        public val morphologyKind: Kind,
+        public val radiusXF64: Double,
+        public val radiusYF64: Double,
+        public val radiusXTexelsI32: Int,
+        public val radiusYTexelsI32: Int,
+        public val axis: FilterAxisV1,
+        override val bounds: FilterBoundsPlanV1,
+        public val sampling: FilterInputSamplingV1,
+        override val kind: FilterImplementationKindV1,
+    ) : FilterPassOperationV1 {
+        public enum class Kind { DILATE, ERODE }
+
+        init {
+            require(radiusXF64.isFinite() && radiusYF64.isFinite() && radiusXF64 >= 0.0 && radiusYF64 >= 0.0)
+            require(radiusXTexelsI32 >= 0 && radiusYTexelsI32 >= 0)
+            require((kind == FilterImplementationKindV1.MORPHOLOGY_X) == (axis == FilterAxisV1.X) &&
+                (kind == FilterImplementationKindV1.MORPHOLOGY_Y) == (axis == FilterAxisV1.Y)) {
+                "Morphology kind and axis must agree."
             }
         }
     }

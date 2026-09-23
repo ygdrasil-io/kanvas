@@ -410,22 +410,22 @@ internal fun validateW6aLayerTopology(
             val before = requireNotNull(versions[destination.id])
             when (val operation = pass.operation) {
                 is FilterCompositeOperationV1.Draw -> {
-                    require(scissor == sourceInDestination)
+                    require((operation.noOp && scissor == null) || (!operation.noOp && scissor == sourceInDestination))
                     require(operation.blend !is BlendPlan.DestinationReadV1)
-                    val after = if (operation.blend.compositionFacts.writesParentDevice) Math.addExact(before, 1L) else before
+                    val after = if (!operation.noOp && operation.blend.compositionFacts.writesParentDevice) Math.addExact(before, 1L) else before
                     versions[destination.id] = after
                     require(pass.destinationVersionAfter.valueI64 == after)
                     require(pass.replacedLayerSource == null)
                 }
                 is FilterCompositeOperationV1.Layer -> {
-                    require(scissor == sourceInDestination)
+                    require((operation.noOp && scissor == null) || (!operation.noOp && scissor == sourceInDestination))
                     val replaced = requireNotNull(pass.replacedLayerSource)
                     require(byId.getValue(replaced).role == PlanResourceRole.LayerTarget && replaced in initialized && restored.add(replaced))
                     val restore = operation.restore
                     require(restore.parentVersionBefore.valueI64 == before &&
-                        restore.parentVersionAfter == pass.destinationVersionAfter &&
+                        (operation.noOp || restore.parentVersionAfter == pass.destinationVersionAfter) &&
                         restore.writesParentDevice == restore.blend.compositionFacts.writesParentDevice)
-                    val after = if (restore.writesParentDevice) Math.addExact(before, 1L) else before
+                    val after = if (!operation.noOp && restore.writesParentDevice) Math.addExact(before, 1L) else before
                     versions[destination.id] = after
                     require(pass.destinationVersionAfter.valueI64 == after)
                 }

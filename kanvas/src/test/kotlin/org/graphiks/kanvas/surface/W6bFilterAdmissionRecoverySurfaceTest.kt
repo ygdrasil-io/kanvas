@@ -22,14 +22,14 @@ import org.junit.jupiter.api.Test
 /** Public W6b ownership, terminal-admission, and same-surface recovery contract. */
 class W6bFilterAdmissionRecoverySurfaceTest {
     @Test
-    fun `w6c filter refuses terminally and same surface recovers`() {
+    fun `w6c offset is admitted and same surface recovers`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
         val surface = Surface(2, 2)
         surface.canvas {
             drawRect(bounds, Paint(imageFilter = ImageFilter.Offset(1f, 0f)))
         }
 
-        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.unsupported_family:")
+        assertImageBlurMaterializes(surface)
 
         surface.discardRecordedOperations()
         surface.canvas {

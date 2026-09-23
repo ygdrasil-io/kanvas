@@ -1250,21 +1250,26 @@ internal fun validatePictureStreamAggregates(
                         is PlanPass.FilterComposite -> {
                             val operation = terminalPass.operation as? FilterCompositeOperationV1.Picture
                             val producer = passes.filterIsInstance<PlanPass.FilterPass>().singleOrNull { it.output == terminalPass.source }
-                            // A combined W6b image+mask occurrence materializes the sealed
-                            // Picture source through its frozen coverage before its image X/Y
-                            // chain.  Follow that already-published MaterializedSource edge;
-                            // it remains the sole immutable source of this terminal.
-                            val sourceMaterialization = producer?.evaluationKey?.boundSourceId?.let { input ->
-                                passes.filterIsInstance<PlanPass.FilterPass>().singleOrNull { it.output == input }
-                            }?.takeIf { it.operation is FilterPassOperationV1.MaterializedSource }
-                            val reachesConsumerSource = producer?.evaluationKey?.boundSourceId == consumer.output ||
-                                (sourceMaterialization?.evaluationKey?.boundSourceId == consumer.output &&
-                                    sourceMaterialization.inputs().firstOrNull() == consumer.output)
+                            // Contextual Compose may add more than the historical one-hop
+                            // MaterializedSource bridge. Follow the frozen bound-source chain
+                            // only; no renderer/source rediscovery is permitted here.
+                            fun reachesConsumerSource(start: PlanResourceId): Boolean {
+                                var current = start
+                                val visited = mutableSetOf<PlanResourceId>()
+                                while (visited.add(current)) {
+                                    val upstream = passes.filterIsInstance<PlanPass.FilterPass>()
+                                        .singleOrNull { it.output == current } ?: return false
+                                    val bound = upstream.evaluationKey.boundSourceId
+                                    if (bound == consumer.output) return true
+                                    current = bound
+                                }
+                                return false
+                            }
                             terminalPass.destination == aggregate.parentTargetId && operation != null &&
                                 operation.sourceSceneCanonicalId == consumer.sourceSceneCanonicalId &&
                                 operation.sourceCommandIndexI32 == consumer.sourceCommandIndexI32 &&
                                 producer?.output == terminalPass.source &&
-                                reachesConsumerSource
+                                reachesConsumerSource(terminalPass.source)
                         }
                         else -> false
                     }

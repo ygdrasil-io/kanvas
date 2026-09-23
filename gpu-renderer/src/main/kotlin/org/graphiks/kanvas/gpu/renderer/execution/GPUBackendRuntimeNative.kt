@@ -1169,7 +1169,7 @@ private class WgpuBackendSession(
         deviceGeneration = deviceGeneration,
         queue = glfw.wgpuContext.device.queue,
         onQueueFailure = {
-            try { decodedImageCache.retireGeneration() } finally { runtimeResourceCache.retireGeneration() }
+            try { decodedImageCache.retireGeneration() } finally { runtimeResourceCache.retireGeneration(); spatialFilterCache.retireGeneration() }
         },
     )
     private val preparedSceneChildren = GPUPreparedSceneChildRegistry(::closeRuntimeResources)
@@ -1218,6 +1218,7 @@ private class WgpuBackendSession(
                                 addAll(quarantinedSurfaceBlitCaches)
                                 if (!decodedImageCache.isClosed) add(decodedImageCache)
                                 if (!runtimeResourceCache.isClosed) add(runtimeResourceCache)
+                                if (!spatialFilterCache.isClosed) add(spatialFilterCache)
                             }
                         }
                     },
@@ -1292,6 +1293,7 @@ private class WgpuBackendSession(
     private val runtimeResourceCache = GPUW5hRuntimeResourceSessionCache(
         glfw.wgpuContext.device,glfw.wgpuContext.device.queue,deviceGeneration.value,
     )
+    private val spatialFilterCache = GPUW6cSpatialFilterSessionCache(glfw.wgpuContext.device, deviceGeneration.value)
 
     override val adapterInfo: GPUBackendAdapterSummary? = adapterSummary(glfw.wgpuContext.adapter.info)
 
@@ -1659,6 +1661,7 @@ private class WgpuBackendSession(
                     preparedSurfaceMixedMaterializer = preparedSurfaceMixedMaterializer,
                     decodedImageCache = decodedImageCache,
                     runtimeResourceCache = runtimeResourceCache,
+                    spatialFilterCache = spatialFilterCache,
                     onDestinationSnapshotCreated =
                         preparedSurfaceDestinationSnapshots::recordCreation,
                 )
@@ -1678,6 +1681,7 @@ private class WgpuBackendSession(
                         resourceProvider,
                         materializer,
                     ),
+                    spatialFilterCache = materializer.spatialFilterCacheOrNull(),
                 )
                 GPUFrameCoordinator(
                     preflighter = GPUFramePreflightPort { framePlan ->

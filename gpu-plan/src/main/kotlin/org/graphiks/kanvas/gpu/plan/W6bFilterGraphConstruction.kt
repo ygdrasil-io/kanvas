@@ -35,6 +35,8 @@ internal object W6bFilterGraphConstruction {
         desiredOutputDeviceI32: RectI32? = null,
         requiredInputDeviceI32: RectI32? = null,
         producedOutputDeviceI32: RectI32? = null,
+        /** Exact immutable SceneSnapshot revision for cache admission, if known. */
+        val sourceRevisionIdentity: String? = null,
     ) {
         private val extentSnapshotI32 = extent.copy()
         private val knownContentSnapshotI32 = knownContentDeviceI32?.copy()
@@ -78,7 +80,14 @@ internal object W6bFilterGraphConstruction {
             desiredOutputDeviceI32,
             requiredInputDeviceI32,
             producedOutputDeviceI32,
+            sourceRevisionIdentity,
         )
+
+        fun withSourceRevision(identity: String): SourceBinding {
+            require(identity.isNotBlank())
+            return SourceBinding(resourceId, extentSnapshotI32, Point2I32(originDeviceI32.x, originDeviceI32.y), mapping,
+                knownContentSnapshotI32, desiredOutputSnapshotI32, requiredInputSnapshotI32, producedOutputSnapshotI32, identity)
+        }
 
         /** Seals a source-to-output local sampling transform before native lowering. */
         fun samplingFor(output: SourceBinding): FilterInputSamplingV1 {
@@ -220,6 +229,18 @@ internal object W6bFilterGraphConstruction {
 
     internal class ConstructionFailure(val diagnostic: RenderDiagnostic) : IllegalArgumentException(diagnostic.message)
 
+    /**
+     * Contextual evaluation never returns a resource without the bounds that produced it.  The
+     * binding remains the sole carrier of target-local origin and known-content facts.
+     */
+    private class ContextualFilterResult(
+        val source: SourceBinding,
+        val bounds: FilterBoundsPlanV1,
+        val evaluationKey: FilterEvaluationKeyV1?,
+    ) {
+        val resourceId: PlanResourceId get() = source.resourceId
+    }
+
     internal fun owns(scene: SceneSnapshot): Boolean = ownership(scene).isOwned
 
     /** Unsupported W6c/W6d/backdrop/filtered-previous cases stop before source allocation. */
@@ -242,11 +263,35 @@ internal object W6bFilterGraphConstruction {
             W6bFilterDiagnostics.FilteredPrevious,
             "W6b does not admit initWithPrevious combined with a spatial filter.",
         )
-        if (ownership.hasUnsupportedImageFamily()) return W6bFilterDiagnostics.refusal(
+        ownership.unsupportedImageFamilyOwnerOrNull()?.let { owner -> return W6bFilterDiagnostics.refusal(
             W6bFilterDiagnostics.UnsupportedFamily,
-            "The captured image-filter family belongs to W6c or W6d.",
-        )
+            "The captured image-filter family belongs to $owner.",
+        ) }
         return null
+    }
+
+    /**
+     * Checks the positional Merge ABI against the immutable device facts before child lanes,
+     * targets, or a RenderGraph can be published.  Native lowering has one sampled-texture and
+     * one bind-group binding per retained input position.
+     */
+    internal fun nativeCapabilityRefusalOrNull(
+        scene: SceneSnapshot,
+        capabilities: PlanCapabilitySnapshot,
+    ): RenderDiagnostic? {
+        val ownership = ownership(scene)
+        if (!ownership.isOwned) return null
+        val inputCount = ownership.firstMergeInputCountExceeding(
+            capabilities.maxSampledTexturesPerShaderStageI32,
+            capabilities.maxBindingsPerBindGroupI32,
+        ) ?: return null
+        val sampledLimit = capabilities.maxSampledTexturesPerShaderStageI32?.toString() ?: "unknown"
+        val bindingLimit = capabilities.maxBindingsPerBindGroupI32?.toString() ?: "unknown"
+        return W6bFilterDiagnostics.refusal(
+            W6bFilterDiagnostics.NativeCapability,
+            "W6c Merge requires $inputCount sampled textures and bindings; " +
+                "device limits are sampledTextures=$sampledLimit, bindings=$bindingLimit.",
+        )
     }
 
     /** Sealed occurrence discovery is shared by W6a event ordering and W6b graph freezing. */
@@ -285,9 +330,16 @@ internal object W6bFilterGraphConstruction {
     /** Freezes only the post-material captured image-filter chain. */
     internal fun freezeImageOccurrence(
         occurrence: PositiveOccurrence,
-        occurrenceSource: SourceBinding,
+        sourceBinding: SourceBinding,
         cursor: FreezeCursor,
     ): FrozenOccurrence {
+        // The source scene's canonical id is an immutable content revision.  It is deliberately
+        // captured here, where the occurrence still owns the SceneSnapshot, and carried through
+        // every derived binding; later plan/native stages cannot rediscover it.
+        val occurrenceSource = sourceBinding.withSourceRevision(
+            "${occurrence.source.scene.canonicalId.value}:${occurrence.source.sourceCommandIndexI32}:" +
+                occurrence.source.picturePathI32().joinToString(","),
+        )
         val resources = mutableListOf<ResourceSpec>()
         val passes = mutableListOf<PlanPass>()
         fun append(pass: PlanPass) {
@@ -336,10 +388,12 @@ internal object W6bFilterGraphConstruction {
             append(PlanPass.FilterSourceClear(cursor.passOrdinalI32, id, source.resourceId))
             return source.withResource(id, knownContentDeviceI32 = null)
         }
-        fun keyFor(nodeId: CapturedFilterNodeIdI32?, maskOccurrenceI32: Int?, desired: RectI32): FilterEvaluationKeyV1 = when {
-            nodeId != null -> FilterEvaluationKeyV1.of(nodeId, occurrenceSource.resourceId, occurrenceSource.mapping, desired)
+        fun keyFor(nodeId: CapturedFilterNodeIdI32?, maskOccurrenceI32: Int?, boundSource: SourceBinding, desired: RectI32): FilterEvaluationKeyV1 = when {
+            nodeId != null -> FilterEvaluationKeyV1.of(nodeId, boundSource.resourceId, boundSource.mapping, desired,
+                sourceRevisionIdentity = boundSource.sourceRevisionIdentity)
             maskOccurrenceI32 != null -> FilterEvaluationKeyV1.forMaskOccurrence(
-                maskOccurrenceI32, occurrenceSource.resourceId, occurrenceSource.mapping, desired,
+                maskOccurrenceI32, boundSource.resourceId, boundSource.mapping, desired,
+                sourceRevisionIdentity = boundSource.sourceRevisionIdentity,
             )
             else -> error("W6b occurrence key is missing its captured identity.")
         }
@@ -351,7 +405,7 @@ internal object W6bFilterGraphConstruction {
             horizontalKind: FilterImplementationKindV1,
             verticalKind: FilterImplementationKindV1,
             key: FilterEvaluationKeyV1,
-        ): SourceBinding {
+        ): ContextualFilterResult {
             val horizontalBounds = blurBounds(source, sigmaXF32, 0f)
             val horizontal = allocateTarget(horizontalBounds)
             append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(source.resourceId), horizontal.resourceId, key,
@@ -362,27 +416,88 @@ internal object W6bFilterGraphConstruction {
             append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(horizontal.resourceId), vertical.resourceId, key,
                 FilterPassOperationV1.SeparableBlur(verticalKind, sigmaYF32, FilterAxisV1.Y, tileMode,
                     verticalBounds, filterInputSampling(horizontal, verticalBounds))))
-            return vertical
+            return ContextualFilterResult(vertical, verticalBounds, key)
         }
-        lateinit var materializeNode: (CapturedFilterNodeIdI32) -> Pair<SourceBinding, FilterEvaluationKeyV1>
-        fun materializeInput(input: CapturedFilterInputV1): SourceBinding = when (input) {
-            CapturedFilterInputV1.ImplicitSource -> occurrenceSource
-            CapturedFilterInputV1.TransparentBlack -> transparentBlack(occurrenceSource)
-            is CapturedFilterInputV1.Node -> materializeNode(input.id).first
+        fun appendMorphology(
+            source: SourceBinding,
+            morphologyKind: FilterPassOperationV1.Morphology.Kind,
+            radiusXF64: Double,
+            radiusYF64: Double,
+            key: FilterEvaluationKeyV1,
+        ): ContextualFilterResult {
+            val radii = W6cMorphologyPlanner.deviceRadii(radiusXF64, radiusYF64, source.mapping)
+            fun appendAxis(input: SourceBinding, axis: FilterAxisV1): SourceBinding {
+                val radius = if (axis == FilterAxisV1.X) radii.radiusXF64 else radii.radiusYF64
+                val bounds = W6cMorphologyPlanner.bounds(input, morphologyKind, axis, radius)
+                val output = allocateTarget(bounds)
+                val kind = if (axis == FilterAxisV1.X) FilterImplementationKindV1.MORPHOLOGY_X else FilterImplementationKindV1.MORPHOLOGY_Y
+                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
+                    FilterPassOperationV1.Morphology(morphologyKind, radii.radiusXF64, radii.radiusYF64,
+                        radii.radiusXTexelsI32, radii.radiusYTexelsI32, axis, bounds,
+                        filterInputSampling(input, bounds), kind)))
+                return output
+            }
+            val horizontal = appendAxis(source, FilterAxisV1.X)
+            val vertical = appendAxis(horizontal, FilterAxisV1.Y)
+            return ContextualFilterResult(vertical, W6cMorphologyPlanner.bounds(horizontal, morphologyKind,
+                FilterAxisV1.Y, radii.radiusYF64), key)
+        }
+        lateinit var materializeNode: (CapturedFilterNodeIdI32, SourceBinding) -> ContextualFilterResult
+        fun bindInput(input: CapturedFilterInputV1, currentSource: SourceBinding): ContextualFilterResult = when (input) {
+            CapturedFilterInputV1.ImplicitSource -> ContextualFilterResult(currentSource, identityBounds(currentSource), null)
+            CapturedFilterInputV1.TransparentBlack -> transparentBlack(currentSource).let { transparent ->
+                ContextualFilterResult(transparent, identityBounds(transparent), null)
+            }
+            is CapturedFilterInputV1.Node -> materializeNode(input.id, currentSource)
             is CapturedFilterInputV1.Picture, is CapturedFilterInputV1.Backdrop -> throw ConstructionFailure(
                 W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.UnsupportedFamily, "The captured filter input belongs to W6d."),
             )
         }
-        materializeNode = { id -> when (val node = occurrence.table.nodeAt(id)) {
+        fun materializeInput(input: CapturedFilterInputV1, currentSource: SourceBinding): SourceBinding =
+            bindInput(input, currentSource).source
+        materializeNode = { id, currentSource -> when (val node = occurrence.table.nodeAt(id)) {
+            is CapturedFilterNodeV1.Crop -> {
+                val input = materializeInput(node.input, currentSource)
+                val planned = W6cSpatialBoundsPlanner.crop(input, node, id == occurrence.root?.id)
+                val bounds = planned.bounds
+                val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
+                val output = allocateTarget(bounds)
+                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
+                    FilterPassOperationV1.Crop(planned.cropInputTargetLocalI32, node.tileMode, bounds,
+                        spatialSampling(input, bounds, planned.clipOutputTargetLocalF64, 0.0, 0.0))))
+                ContextualFilterResult(output, bounds, key)
+            }
+            is CapturedFilterNodeV1.Offset -> {
+                val input = materializeInput(node.input, currentSource)
+                val planned = W6cSpatialBoundsPlanner.offset(input, node)
+                val bounds = planned.bounds
+                val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
+                val output = allocateTarget(bounds)
+                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
+                    FilterPassOperationV1.Offset(Vector2F64(planned.offsetDeviceF64X, planned.offsetDeviceF64Y), bounds,
+                        spatialSampling(input, bounds, fullClip(bounds), -planned.offsetDeviceF64X, -planned.offsetDeviceF64Y))))
+                ContextualFilterResult(output, bounds, key)
+            }
+            is CapturedFilterNodeV1.Tile -> {
+                val input = materializeInput(node.input, currentSource)
+                val planned = W6cSpatialBoundsPlanner.tile(input, node, id == occurrence.root?.id)
+                val bounds = planned.bounds
+                val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
+                val output = allocateTarget(bounds)
+                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
+                    FilterPassOperationV1.Tile(planned.sourceInputTargetLocalI32, bounds,
+                        spatialSampling(input, bounds, planned.clipOutputTargetLocalF64, 0.0, 0.0))))
+                ContextualFilterResult(output, bounds, key)
+            }
             is CapturedFilterNodeV1.Blur -> {
-                val input = materializeInput(node.input)
+                val input = materializeInput(node.input, currentSource)
                 val full = blurBounds(input, node.sigmaX, node.sigmaY)
-                val key = keyFor(id, null, full.copyDesiredOutputDeviceI32())
+                val key = keyFor(id, null, currentSource, full.copyDesiredOutputDeviceI32())
                 appendBlur(input, node.sigmaX, node.sigmaY, node.tileMode,
-                    FilterImplementationKindV1.IMAGE_BLUR_X, FilterImplementationKindV1.IMAGE_BLUR_Y, key) to key
+                    FilterImplementationKindV1.IMAGE_BLUR_X, FilterImplementationKindV1.IMAGE_BLUR_Y, key)
             }
             is CapturedFilterNodeV1.DropShadow -> {
-                val input = materializeInput(node.input)
+                val input = materializeInput(node.input, currentSource)
                 val blurredBounds = blurBounds(input, node.sigmaX, node.sigmaY)
                 val predictedBlur = SourceBinding(occurrenceSource.resourceId,
                     SizeI32(blurredBounds.copyDesiredOutputDeviceI32().width(), blurredBounds.copyDesiredOutputDeviceI32().height()),
@@ -391,28 +506,98 @@ internal object W6bFilterGraphConstruction {
                 val predictedShadow = predictedBlur.withResource(predictedBlur.resourceId,
                     SizeI32(predictedShadowBounds.copyDesiredOutputDeviceI32().width(), predictedShadowBounds.copyDesiredOutputDeviceI32().height()),
                     predictedShadowBounds.copyTargetOriginDeviceI32(), predictedShadowBounds.copyProducedOutputDeviceI32())
-                val key = keyFor(id, null, dropShadowCompositeBounds(input, predictedShadow, node.mode).copyDesiredOutputDeviceI32())
+                val key = keyFor(id, null, currentSource, dropShadowCompositeBounds(input, predictedShadow, node.mode).copyDesiredOutputDeviceI32())
                 // DropShadow does not expose a public tile mode.  Skia defines its internal
                 // Blur through the overload whose default is transparent DECAL sampling.
                 val blurred = appendBlur(input, node.sigmaX, node.sigmaY, TileMode.DECAL,
                     FilterImplementationKindV1.IMAGE_BLUR_X, FilterImplementationKindV1.IMAGE_BLUR_Y, key)
-                val colorBounds = translatedBounds(blurred, node.dx.toDouble(), node.dy.toDouble())
+                val colorBounds = translatedBounds(blurred.source, node.dx.toDouble(), node.dy.toDouble())
                 val colorized = allocateTarget(colorBounds)
                 append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(blurred.resourceId), colorized.resourceId, key,
                     FilterPassOperationV1.DropShadowColorize(node.color, Vector2F64(node.dx.toDouble(), node.dy.toDouble()), colorBounds,
-                        dropShadowLinearSampling(blurred, colorBounds, node.dx.toDouble(), node.dy.toDouble()))))
+                        dropShadowLinearSampling(blurred.source, colorBounds, node.dx.toDouble(), node.dy.toDouble()))))
                 if (node.mode == CapturedDropShadowModeV1.SHADOW_ONLY) {
                     // The colored target is the terminal: there is no identity composite, target,
                     // slot, or lifetime to charge in SHADOW_ONLY.
-                    colorized to key
+                    ContextualFilterResult(colorized, colorBounds, key)
                 } else {
                     val compositeBounds = dropShadowCompositeBounds(input, colorized, node.mode)
                     val composite = allocateTarget(compositeBounds)
                     append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(colorized.resourceId, input.resourceId), composite.resourceId, key,
                         FilterPassOperationV1.DropShadowComposite(node.mode, input.resourceId, compositeBounds,
                             targetLocalSampleOffset(colorized, compositeBounds), targetLocalSampleOffset(input, compositeBounds))))
-                    composite to key
+                    ContextualFilterResult(composite, compositeBounds, key)
                 }
+            }
+            is CapturedFilterNodeV1.ColorFilter -> {
+                val input = materializeInput(node.input, currentSource)
+                val execution = when (val compiled = ColorFilterPlanCompilerV1.compile(node.filter)) {
+                    is ColorFilterCompileResultV1.Ready -> compiled.execution
+                    is ColorFilterCompileResultV1.Refused -> throw ConstructionFailure(W6bFilterDiagnostics.refusal(
+                        compiled.diagnosticCode, "W6c ColorFilter could not reuse the W5f numeric graph."))
+                }
+                val bounds = identityBounds(input)
+                val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
+                val output = allocateTarget(bounds)
+                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
+                    FilterPassOperationV1.ColorFilter(execution, null, null, null, bounds, filterInputSampling(input, bounds))))
+                ContextualFilterResult(output, bounds, key)
+            }
+            is CapturedFilterNodeV1.Compose -> {
+                // Skia Compose binds inner to the current source, then binds outer to inner's
+                // concrete result. This pair keeps result and bounds inseparable through recursion.
+                val inner = bindInput(node.inner, currentSource)
+                val outer = bindInput(node.outer, inner.source)
+                ContextualFilterResult(outer.source, outer.bounds, requireNotNull(outer.evaluationKey) {
+                    "W6c Compose requires a materialized outer filter result."
+                })
+            }
+            is CapturedFilterNodeV1.Merge -> {
+                // List traversal is deliberately positional: repeated and value-equal nodes are
+                // evaluated as separate occurrences unless their complete evaluation facts match
+                // at a future explicit cache boundary.
+                val inputs = node.map { input -> bindInput(input, currentSource) }.toList()
+                if (inputs.isEmpty()) throw ConstructionFailure(W6bFilterDiagnostics.refusal(
+                    W6bFilterDiagnostics.UnsupportedFamily, "W6c Merge requires at least one captured input."))
+                val sources = inputs.map(ContextualFilterResult::source)
+                val bounds = W6cMultiInputPlanner.bounds(sources)
+                val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
+                val output = allocateTarget(bounds)
+                append(PlanPass.FilterPass(cursor.passOrdinalI32, inputs.map(ContextualFilterResult::resourceId), output.resourceId, key,
+                    FilterPassOperationV1.Merge(sources.map { input -> filterInputSampling(input, bounds) }, bounds)))
+                ContextualFilterResult(output, bounds, key)
+            }
+            is CapturedFilterNodeV1.Blend -> {
+                // The public order is background then foreground.  FinalBlendPlanner freezes the
+                // exact W5 numeric/blend authority before any native materialization occurs.
+                val background = bindInput(node.background, currentSource)
+                val foreground = bindInput(node.foreground, currentSource)
+                val bounds = W6cMultiInputPlanner.bounds(listOf(background.source, foreground.source))
+                val blend = requireNotNull(FinalBlendPlanner.plan(
+                    org.graphiks.kanvas.render.ir.BlendNode.Mode(node.mode),
+                    CoveragePlan.FullOrScissor,
+                    SamplePlan.SingleSample,
+                    PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1(),
+                )) { "W6c Blend cannot freeze the selected W5 BlendPlan." }
+                val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
+                val output = allocateTarget(bounds)
+                append(PlanPass.FilterPass(cursor.passOrdinalI32,
+                    listOf(background.resourceId, foreground.resourceId), output.resourceId, key,
+                    FilterPassOperationV1.Blend(blend, filterInputSampling(background.source, bounds),
+                        filterInputSampling(foreground.source, bounds), bounds)))
+                ContextualFilterResult(output, bounds, key)
+            }
+            is CapturedFilterNodeV1.Dilate -> {
+                val input = materializeInput(node.input, currentSource)
+                val key = keyFor(id, null, currentSource, input.copyDeviceBoundsI32())
+                appendMorphology(input, FilterPassOperationV1.Morphology.Kind.DILATE,
+                    node.radiusX.toDouble(), node.radiusY.toDouble(), key)
+            }
+            is CapturedFilterNodeV1.Erode -> {
+                val input = materializeInput(node.input, currentSource)
+                val key = keyFor(id, null, currentSource, input.copyDeviceBoundsI32())
+                appendMorphology(input, FilterPassOperationV1.Morphology.Kind.ERODE,
+                    node.radiusX.toDouble(), node.radiusY.toDouble(), key)
             }
             else -> throw ConstructionFailure(W6bFilterDiagnostics.refusal(
                 W6bFilterDiagnostics.UnsupportedFamily, "The captured image-filter family belongs to W6c or W6d.",
@@ -421,9 +606,9 @@ internal object W6bFilterGraphConstruction {
         fun materializeMask(mask: MaskFilterNode, input: SourceBinding): Pair<SourceBinding, FilterEvaluationKeyV1> = when (mask) {
             is MaskFilterNode.Blur -> {
                 val full = blurBounds(input, mask.sigma, mask.sigma)
-                val key = keyFor(null, occurrence.maskOccurrenceI32, full.copyDesiredOutputDeviceI32())
+                val key = keyFor(null, occurrence.maskOccurrenceI32, input, full.copyDesiredOutputDeviceI32())
                 val blurred = appendBlur(input, mask.sigma, mask.sigma, TileMode.CLAMP,
-                    FilterImplementationKindV1.MASK_COVERAGE_BLUR_X, FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y, key)
+                    FilterImplementationKindV1.MASK_COVERAGE_BLUR_X, FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y, key).source
                 val styleBounds = identityBounds(blurred)
                 val styled = allocateTarget(styleBounds)
                 val original = input.resourceId.takeIf { mask.style != org.graphiks.kanvas.render.ir.MaskBlurStyle.NORMAL }
@@ -438,7 +623,7 @@ internal object W6bFilterGraphConstruction {
             }
             is MaskFilterNode.Shader -> {
                 val bounds = identityBounds(input)
-                val key = keyFor(null, occurrence.maskOccurrenceI32, bounds.copyDesiredOutputDeviceI32())
+                val key = keyFor(null, occurrence.maskOccurrenceI32, input, bounds.copyDesiredOutputDeviceI32())
                 val target = allocateTarget(bounds)
                 append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), target.resourceId, key,
                     FilterPassOperationV1.MaskShader(
@@ -448,7 +633,7 @@ internal object W6bFilterGraphConstruction {
             }
             is MaskFilterNode.Table -> {
                 val bounds = identityBounds(input)
-                val key = keyFor(null, occurrence.maskOccurrenceI32, bounds.copyDesiredOutputDeviceI32())
+                val key = keyFor(null, occurrence.maskOccurrenceI32, input, bounds.copyDesiredOutputDeviceI32())
                 val target = allocateTarget(bounds)
                 val tableResource = maskTableResource()
                 append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), target.resourceId, key,
@@ -458,9 +643,9 @@ internal object W6bFilterGraphConstruction {
             }
         }
 
-        val terminal = occurrence.root?.let { materializeNode(it.id) }
+        val terminal = occurrence.root?.let { materializeNode(it.id, occurrenceSource) }
             ?: error("W6b image freeze requires one captured image-filter root.")
-        return FrozenOccurrence(resources, passes, terminal.first, terminal.second)
+        return FrozenOccurrence(resources, passes, terminal.source, requireNotNull(terminal.evaluationKey))
     }
 
     /** Freezes raw-coverage mask work before W5 material/color evaluation. */
@@ -594,7 +779,11 @@ internal object W6bFilterGraphConstruction {
     }
 
     /** The output domain grows by blur support; it is never intersected back to the source. */
-    internal fun reverseInputDemand(occurrence: PositiveOccurrence?, desired: RectI32): RectI32 {
+    internal fun reverseInputDemand(
+        occurrence: PositiveOccurrence?,
+        desired: RectI32,
+        mapping: LayerMappingF64? = null,
+    ): RectI32? {
         if (occurrence == null) return desired.copy()
         fun expand(region: RectI32, x: Float, y: Float): RectI32 = RectF64(
             region.left.toDouble(), region.top.toDouble(), region.right.toDouble(), region.bottom.toDouble())
@@ -603,8 +792,32 @@ internal object W6bFilterGraphConstruction {
                 W6bFilterDiagnostics.InvalidBounds,
                 "W6b reverse blur demand cannot be represented in checked I32 texels.",
             ))
-        lateinit var inputDemand: (CapturedFilterInputV1, RectI32) -> RectI32
-        fun nodeDemand(id: CapturedFilterNodeIdI32, output: RectI32): RectI32 = when (val node = occurrence.table.nodeAt(id)) {
+        fun spatialDemand(node: CapturedFilterNodeV1, output: RectI32): RectI32? =
+            W6cSpatialBoundsPlanner.requiredInputBounds(node, output, mapping ?: throw ConstructionFailure(
+                W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                    "W6c reverse demand has no sealed local-to-device mapping."),
+        ))
+        lateinit var inputDemand: (CapturedFilterInputV1, RectI32) -> RectI32?
+        fun unionInputDemands(inputs: Iterable<CapturedFilterInputV1>, output: RectI32): RectI32? {
+            var demand: RectI32? = null
+            for (input in inputs) {
+                val required = inputDemand(input, output) ?: continue
+                demand = demand?.let { union(it, required) } ?: required
+            }
+            return demand
+        }
+        fun nodeDemand(id: CapturedFilterNodeIdI32, output: RectI32): RectI32? = when (val node = occurrence.table.nodeAt(id)) {
+            is CapturedFilterNodeV1.Crop -> spatialDemand(node, output)?.let { required -> inputDemand(node.input, required) }
+            is CapturedFilterNodeV1.Offset -> spatialDemand(node, output)?.let { required -> inputDemand(node.input, required) }
+            is CapturedFilterNodeV1.Tile -> spatialDemand(node, output)?.let { required -> inputDemand(node.input, required) }
+            is CapturedFilterNodeV1.Dilate -> inputDemand(node.input,
+                W6cMorphologyPlanner.requiredInputBounds(node.radiusX.toDouble(), node.radiusY.toDouble(), output,
+                    mapping ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                        "W6c reverse demand has no sealed local-to-device mapping."))))
+            is CapturedFilterNodeV1.Erode -> inputDemand(node.input,
+                W6cMorphologyPlanner.requiredInputBounds(node.radiusX.toDouble(), node.radiusY.toDouble(), output,
+                    mapping ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                        "W6c reverse demand has no sealed local-to-device mapping."))))
             is CapturedFilterNodeV1.Blur -> inputDemand(node.input, expand(output, node.sigmaX, node.sigmaY))
             is CapturedFilterNodeV1.DropShadow -> {
                 val translated = RectF64(output.left.toDouble(), output.top.toDouble(),
@@ -616,6 +829,16 @@ internal object W6bFilterGraphConstruction {
                 val shadow = expand(translated, node.sigmaX, node.sigmaY)
                 inputDemand(node.input, if (node.mode == CapturedDropShadowModeV1.COMPOSITE) union(output, shadow) else shadow)
             }
+            // These nodes do not alter their input's spatial demand.  Compose is contextual:
+            // outer consumes the inner result, so its reverse demand must flow into inner.
+            is CapturedFilterNodeV1.ColorFilter -> inputDemand(node.input, output)
+            is CapturedFilterNodeV1.Compose -> inputDemand(node.outer, output)?.let { outerDemand ->
+                inputDemand(node.inner, outerDemand)
+            }
+            // Keep the captured public order while forming a geometric union.  A Set here would
+            // erase repeated inputs before their individual source demand is accounted for.
+            is CapturedFilterNodeV1.Merge -> unionInputDemands(node, output)
+            is CapturedFilterNodeV1.Blend -> unionInputDemands(listOf(node.background, node.foreground), output)
             else -> throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.UnsupportedFamily,
                 "Reverse demand requires an admitted W6b filter."))
         }
@@ -713,6 +936,44 @@ internal object W6bFilterGraphConstruction {
         return FilterInputSamplingV1(targetLocalSampleOffset(input, outputBounds), knownTargetLocal)
     }
 
+    /** Seals F64 spatial sampling in resource coordinates; renderer receives neither device origins nor mapping. */
+    private fun spatialSampling(
+        input: SourceBinding,
+        outputBounds: FilterBoundsPlanV1,
+        clipOutputTargetLocalF64: RectF64,
+        extraOffsetXF64: Double,
+        extraOffsetYF64: Double,
+    ): SpatialSamplingV1 {
+        val inputDomain = input.copyDeviceBoundsI32()
+        val sourceLocal = try {
+            RectI32(
+                Math.subtractExact(inputDomain.left, input.originDeviceI32.x),
+                Math.subtractExact(inputDomain.top, input.originDeviceI32.y),
+                Math.subtractExact(inputDomain.right, input.originDeviceI32.x),
+                Math.subtractExact(inputDomain.bottom, input.originDeviceI32.y),
+            )
+        } catch (_: ArithmeticException) {
+            throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                "W6c source sampling rectangle cannot be represented in target-local I32 texels."))
+        }
+        val outputOrigin = outputBounds.copyTargetOriginDeviceI32()
+        val offset = try {
+            Vector2F64(
+                Math.subtractExact(outputOrigin.x, input.originDeviceI32.x).toDouble() + extraOffsetXF64,
+                Math.subtractExact(outputOrigin.y, input.originDeviceI32.y).toDouble() + extraOffsetYF64,
+            )
+        } catch (_: ArithmeticException) {
+            throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                "W6c source sampling origin overflows I32."))
+        }
+        return SpatialSamplingV1(sourceLocal, clipOutputTargetLocalF64, offset)
+    }
+
+    private fun fullClip(bounds: FilterBoundsPlanV1): RectF64 {
+        val desired = bounds.copyDesiredOutputDeviceI32()
+        return RectF64(0.0, 0.0, desired.width().toDouble(), desired.height().toDouble())
+    }
+
     private fun dropShadowCompositeBounds(input: SourceBinding, shadow: SourceBinding, mode: CapturedDropShadowModeV1): FilterBoundsPlanV1 {
         val inputDomain = input.copyDeviceBoundsI32()
         val shadowDomain = shadow.copyDeviceBoundsI32()
@@ -777,7 +1038,7 @@ internal object W6bFilterGraphConstruction {
                 val picture = (command as? SceneCommand.Draw)?.node?.geometry as? GeometryNode.Picture ?: return@forEachIndexed
                 if (picture.scene.canonicalId.value in nextAncestors) return true
                 if (visitOrdered(picture.scene, Math.addExact(depthI32, 1), insertion, nextAncestors,
-                        outerPictures + (command as SceneCommand.Draw).node, picturePathI32 + indexI32)) return true
+                        outerPictures + command.node, picturePathI32 + indexI32)) return true
             }
             return false
         }
@@ -796,7 +1057,8 @@ internal object W6bFilterGraphConstruction {
         // retain its existing W6a command-limit admission rather than becoming W6b-owned only
         // because the generic scene walk reached maxNodes.
         val isOwned: Boolean get() = roots.isNotEmpty() || hasMask || hasBackdrop
-        fun hasUnsupportedImageFamily(): Boolean = roots.any { root ->
+        fun unsupportedImageFamilyOwnerOrNull(): String? {
+            roots.forEach { root ->
             val pending = ArrayDeque<CapturedFilterNodeIdI32>()
             pending.addLast(root.root.id)
             val seen = BooleanArray(root.table.nodeCount)
@@ -805,16 +1067,78 @@ internal object W6bFilterGraphConstruction {
                 if (id.valueI32 !in seen.indices || seen[id.valueI32]) continue
                 seen[id.valueI32] = true
                 when (val node = root.table.nodeAt(id)) {
-                    is CapturedFilterNodeV1.Blur -> node.input.enqueueNodeOrUnsupported(pending)?.let { return true }
-                    is CapturedFilterNodeV1.DropShadow -> node.input.enqueueNodeOrUnsupported(pending)?.let { return true }
-                    else -> return true
+                    is CapturedFilterNodeV1.Crop -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.Offset -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.Tile -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.Blur -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.DropShadow -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.ColorFilter -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.Compose -> {
+                        node.inner.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                        node.outer.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    }
+                    is CapturedFilterNodeV1.Merge -> node.forEach { input ->
+                        input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    }
+                    is CapturedFilterNodeV1.Blend -> {
+                        node.background.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                        node.foreground.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    }
+                    is CapturedFilterNodeV1.Dilate -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.Erode -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    else -> return if (isW6cVariant(node)) "W6c" else "W6d"
                 }
             }
-            false
+            }
+            return null
+        }
+
+        fun firstMergeInputCountExceeding(sampledTextureLimit: Int?, bindGroupBindingLimit: Int?): Int? {
+            roots.forEach { root ->
+                val pending = ArrayDeque<CapturedFilterNodeIdI32>()
+                pending.addLast(root.root.id)
+                val seen = BooleanArray(root.table.nodeCount)
+                while (pending.isNotEmpty()) {
+                    val id = pending.removeLast()
+                    if (id.valueI32 !in seen.indices || seen[id.valueI32]) continue
+                    seen[id.valueI32] = true
+                    when (val node = root.table.nodeAt(id)) {
+                        is CapturedFilterNodeV1.Crop -> node.input.enqueueNodeOrUnsupported(pending)
+                        is CapturedFilterNodeV1.Offset -> node.input.enqueueNodeOrUnsupported(pending)
+                        is CapturedFilterNodeV1.Tile -> node.input.enqueueNodeOrUnsupported(pending)
+                        is CapturedFilterNodeV1.Blur -> node.input.enqueueNodeOrUnsupported(pending)
+                        is CapturedFilterNodeV1.DropShadow -> node.input.enqueueNodeOrUnsupported(pending)
+                        is CapturedFilterNodeV1.ColorFilter -> node.input.enqueueNodeOrUnsupported(pending)
+                        is CapturedFilterNodeV1.Compose -> {
+                            node.inner.enqueueNodeOrUnsupported(pending)
+                            node.outer.enqueueNodeOrUnsupported(pending)
+                        }
+                        is CapturedFilterNodeV1.Merge -> {
+                            if (sampledTextureLimit == null || bindGroupBindingLimit == null ||
+                                node.inputCount > sampledTextureLimit || node.inputCount > bindGroupBindingLimit
+                            ) return node.inputCount
+                            node.forEach { input -> input.enqueueNodeOrUnsupported(pending) }
+                        }
+                        is CapturedFilterNodeV1.Blend -> {
+                            node.background.enqueueNodeOrUnsupported(pending)
+                            node.foreground.enqueueNodeOrUnsupported(pending)
+                        }
+                        else -> Unit
+                    }
+                }
+            }
+            return null
         }
     }
 
     private data class RootOccurrence(val table: CapturedFilterTableV1, val root: CapturedFilterRootV1)
+
+    /** W6c owns these roots and this slice admits Crop, Offset and Tile only. */
+    private fun isW6cVariant(node: CapturedFilterNodeV1): Boolean = node is CapturedFilterNodeV1.Crop ||
+        node is CapturedFilterNodeV1.Offset || node is CapturedFilterNodeV1.Tile ||
+        node is CapturedFilterNodeV1.ColorFilter || node is CapturedFilterNodeV1.Compose ||
+        node is CapturedFilterNodeV1.Merge || node is CapturedFilterNodeV1.Blend ||
+        node is CapturedFilterNodeV1.Dilate || node is CapturedFilterNodeV1.Erode
     private data class FilterPayload(val root: CapturedFilterRootV1?, val mask: MaskFilterNode?)
 
     private fun filterPayload(paint: org.graphiks.kanvas.render.ir.PaintNode?, effects: EffectStack): FilterPayload {
