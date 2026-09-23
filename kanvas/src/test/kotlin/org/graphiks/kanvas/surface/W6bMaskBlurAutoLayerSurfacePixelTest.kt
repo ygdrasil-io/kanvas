@@ -28,6 +28,16 @@ class W6bMaskBlurAutoLayerSurfacePixelTest {
     }
 
     @Test
+    fun `fractional anti aliased coverage uses Porter Duff mask blur styles`() {
+        listOf(BlurStyle.SOLID, BlurStyle.OUTER, BlurStyle.INNER).forEach { style ->
+            val expected = W6bMaskBlurCpuOracle.renderFractionalStyle(style)
+            val actual = renderFractionalMaskedRect(style)
+
+            W6bMaskBlurCpuOracle.assertNear(expected, actual, toleranceI32 = 18)
+        }
+    }
+
+    @Test
     fun `translated masked draw applies its selected blend once over colored destination`() {
         val actual = Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
             surface.canvas {
@@ -200,6 +210,17 @@ class W6bMaskBlurAutoLayerSurfacePixelTest {
                     ColorARGB.Red,
                     maskFilter = MaskFilter.Blur(style, 1f),
                     antiAlias = false,
+                ))
+            }
+        }.render().pixels
+
+    private fun renderFractionalMaskedRect(style: BlurStyle): UByteArray =
+        Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
+            surface.canvas {
+                drawRect(RectF32.ofLTRB(3.25f, 2.25f, 6.75f, 5.75f), Paint(
+                    ColorARGB.Red,
+                    maskFilter = MaskFilter.Blur(style, 1f),
+                    antiAlias = true,
                 ))
             }
         }.render().pixels

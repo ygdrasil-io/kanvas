@@ -3,7 +3,7 @@
 package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.kanvas.render.ir.CapturedDropShadowModeV1
-import org.graphiks.kanvas.render.ir.CapturedFilterNodeId
+import org.graphiks.kanvas.render.ir.CapturedFilterNodeIdI32
 import org.graphiks.kanvas.render.ir.ImmutableUBytes
 import org.graphiks.kanvas.render.ir.MaskBlurStyle
 import org.graphiks.kanvas.render.ir.TileMode
@@ -29,6 +29,33 @@ public enum class FilterImplementationKindV1 {
     DROP_SHADOW_COMPOSITE,
     /** Typed W5 shaded source hand-off for a mask-only occurrence. */
     W5_MATERIALIZED_SOURCE,
+}
+
+/**
+ * One sealed output-local to input-local texel transform.  It is calculated while the W6b
+ * graph still owns device geometry; native lowering may only consume this target-local fact.
+ */
+public class FilterInputSamplingV1 internal constructor(
+    outputToInputOffsetTargetLocalI32: Point2I32,
+    knownContentInputTargetLocalI32: RectI32,
+) {
+    private val offsetSnapshotTargetLocalI32 = Point2I32(
+        outputToInputOffsetTargetLocalI32.x,
+        outputToInputOffsetTargetLocalI32.y,
+    )
+    private val knownSnapshotInputTargetLocalI32 = knownContentInputTargetLocalI32.copy()
+
+    init {
+        require(!knownSnapshotInputTargetLocalI32.isEmpty) {
+            "W6b target-local input sampling requires non-empty known content."
+        }
+    }
+
+    public fun copyOutputToInputOffsetTargetLocalI32(): Point2I32 = Point2I32(
+        offsetSnapshotTargetLocalI32.x,
+        offsetSnapshotTargetLocalI32.y,
+    )
+    public fun copyKnownContentInputTargetLocalI32(): RectI32 = knownSnapshotInputTargetLocalI32.copy()
 }
 
 /** Immutable device-space spatial facts and the origin used to localize every filter target. */
@@ -97,7 +124,7 @@ public class DropShadowLinearSamplingV1 internal constructor(
 
 /** Exact contextual identity for one captured node evaluation; equality-by-value is never a reuse proof. */
 public class FilterEvaluationKeyV1 private constructor(
-    public val capturedNodeId: CapturedFilterNodeId?,
+    public val capturedNodeId: CapturedFilterNodeIdI32?,
     public val maskOccurrenceI32: Int?,
     public val boundSourceId: PlanResourceId,
     public val mapping: LayerMappingF64,
@@ -117,7 +144,7 @@ public class FilterEvaluationKeyV1 private constructor(
 
     public companion object {
         public fun of(
-            capturedNodeId: CapturedFilterNodeId,
+            capturedNodeId: CapturedFilterNodeIdI32,
             boundSourceId: PlanResourceId,
             mapping: LayerMappingF64,
             desiredOutputDeviceI32: RectI32,
@@ -155,6 +182,8 @@ public sealed interface FilterPassOperationV1 {
         public val axis: FilterAxisV1,
         public val tileMode: TileMode,
         override val bounds: FilterBoundsPlanV1,
+        /** Sealed before publication; no renderer origin reconstruction is permitted. */
+        public val sampling: FilterInputSamplingV1? = null,
     ) : FilterPassOperationV1 {
         init {
             require(sigmaF32.isFinite() && sigmaF32 >= 0f) { "Blur sigma must be finite and non-negative." }
@@ -177,6 +206,8 @@ public sealed interface FilterPassOperationV1 {
         /** The preceding separable blurred coverage result. */
         public val blurredCoverageSource: PlanResourceId,
         override val bounds: FilterBoundsPlanV1,
+        public val blurredSampling: FilterInputSamplingV1? = null,
+        public val originalSampling: FilterInputSamplingV1? = null,
         override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.MASK_BLUR_STYLE,
     ) : FilterPassOperationV1 {
         init {
@@ -206,6 +237,8 @@ public sealed interface FilterPassOperationV1 {
             public val materialAuthority: PlanDrawMaterialAuthority,
             /** The occurrence-local F64 mapping already sealed by the filter evaluation. */
             public val evaluationMappingF64: LayerMappingF64,
+            /** W5's device-position bridge, sealed at publication; native must not recover it from filter bounds. */
+            public val materialDeviceOriginI32: Point2I32,
         ) : MaskShaderMaterialBindingV1 {
             init {
                 require(occurrenceIdI32 >= 0)
@@ -213,6 +246,7 @@ public sealed interface FilterPassOperationV1 {
                 require(uniformOffsetBytesI64 >= 0L && uniformCapacityBytesI64 > 0L &&
                     uniformOffsetBytesI64 < uniformCapacityBytesI64)
                 require(materialAuthority.materialPlanRef() == material)
+                require(materialDeviceOriginI32 == evaluationMappingF64.copyLayerOriginDeviceI32())
             }
         }
         /** Actual captured material and occurrence identity, never a canonical-string substitute. */
@@ -227,6 +261,7 @@ public sealed interface FilterPassOperationV1 {
     public data class MaskShader(
         public val materialBinding: MaskShaderMaterialBindingV1,
         override val bounds: FilterBoundsPlanV1,
+        public val sampling: FilterInputSamplingV1? = null,
         override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.MASK_SHADER,
     ) : FilterPassOperationV1 {
         init { require(kind == FilterImplementationKindV1.MASK_SHADER) }
@@ -243,6 +278,7 @@ public sealed interface FilterPassOperationV1 {
         /** Prevents identical content from being treated as a cross-occurrence resource authority. */
         public val ownerMaskOccurrenceI32: Int,
         override val bounds: FilterBoundsPlanV1,
+        public val sampling: FilterInputSamplingV1? = null,
         override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.MASK_TABLE,
     ) : FilterPassOperationV1 {
         private val tableSnapshot = ImmutableUBytes.copyOf(table.copyToUByteArray())
@@ -258,6 +294,8 @@ public sealed interface FilterPassOperationV1 {
     /** Freezes the already selected W5 color/material result without inventing a native filter. */
     public data class MaterializedSource(
         override val bounds: FilterBoundsPlanV1,
+        public val sourceSampling: FilterInputSamplingV1? = null,
+        public val coverageSampling: FilterInputSamplingV1? = null,
         override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.W5_MATERIALIZED_SOURCE,
     ) : FilterPassOperationV1 {
         init { require(kind == FilterImplementationKindV1.W5_MATERIALIZED_SOURCE) }

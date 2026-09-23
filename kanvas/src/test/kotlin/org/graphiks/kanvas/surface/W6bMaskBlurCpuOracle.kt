@@ -38,6 +38,9 @@ internal object W6bMaskBlurCpuOracle {
 
     fun renderStyle(style: BlurStyle): UByteArray = opaqueSource(styled(style, translatedRectCoverage()))
 
+    /** Independent area coverage for the public fractional AA rectangle fixture. */
+    fun renderFractionalStyle(style: BlurStyle): UByteArray = opaqueSource(styled(style, fractionalRectCoverage()))
+
     fun renderDstOutOverGreen(): UByteArray = dstOutGreen(styled(BlurStyle.NORMAL, translatedRectCoverage()))
 
     fun renderClippedRoundedRectMask(): UByteArray = opaqueSource(styled(BlurStyle.NORMAL, clippedRoundedRectCoverage()))
@@ -72,6 +75,18 @@ internal object W6bMaskBlurCpuOracle {
     private fun translatedRectCoverage(): FloatArray = FloatArray(widthI32 * heightI32).also { coverage ->
         // The public draw is local [3,6)×[3,6) after translate(1, 0).
         fillRect(coverage, 4, 3, 7, 6, 1f)
+    }
+
+    private fun fractionalRectCoverage(): FloatArray = FloatArray(widthI32 * heightI32).also { coverage ->
+        val leftF32 = 3.25f
+        val topF32 = 2.25f
+        val rightF32 = 6.75f
+        val bottomF32 = 5.75f
+        for (yI32 in 0 until heightI32) for (xI32 in 0 until widthI32) {
+            val coverageX = (minOf(xI32 + 1f, rightF32) - maxOf(xI32.toFloat(), leftF32)).coerceIn(0f, 1f)
+            val coverageY = (minOf(yI32 + 1f, bottomF32) - maxOf(yI32.toFloat(), topF32)).coerceIn(0f, 1f)
+            coverage[yI32 * widthI32 + xI32] = coverageX * coverageY
+        }
     }
 
     private fun clippedRoundedRectCoverage(): FloatArray = FloatArray(widthI32 * heightI32).also { coverage ->
@@ -133,9 +148,9 @@ internal object W6bMaskBlurCpuOracle {
         val blurred = blur(original)
         return FloatArray(original.size) { indexI32 -> when (style) {
             BlurStyle.NORMAL -> blurred[indexI32]
-            BlurStyle.SOLID -> maxOf(original[indexI32], blurred[indexI32])
-            BlurStyle.OUTER -> maxOf(0f, blurred[indexI32] - original[indexI32])
-            BlurStyle.INNER -> minOf(original[indexI32], blurred[indexI32])
+            BlurStyle.SOLID -> original[indexI32] + blurred[indexI32] * (1f - original[indexI32])
+            BlurStyle.OUTER -> blurred[indexI32] * (1f - original[indexI32])
+            BlurStyle.INNER -> blurred[indexI32] * original[indexI32]
         }.coerceIn(0f, 1f) }
     }
 

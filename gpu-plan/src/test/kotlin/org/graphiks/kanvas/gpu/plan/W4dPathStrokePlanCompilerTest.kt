@@ -12,7 +12,7 @@ import org.graphiks.kanvas.render.ir.BlendMode
 import org.graphiks.kanvas.render.ir.BlendNode
 import org.graphiks.kanvas.render.ir.BlenderNode
 import org.graphiks.kanvas.render.ir.CapturedFilterInputV1
-import org.graphiks.kanvas.render.ir.CapturedFilterNodeId
+import org.graphiks.kanvas.render.ir.CapturedFilterNodeIdI32
 import org.graphiks.kanvas.render.ir.CapturedFilterNodeV1
 import org.graphiks.kanvas.render.ir.CapturedFilterRootV1
 import org.graphiks.kanvas.render.ir.CapturedFilterTableV1
@@ -102,7 +102,7 @@ class W4dPathStrokePlanCompilerTest {
     @Test
     fun `513 draws remain outside W4d ownership when any structural capability family is unsupported`() {
         val base = pathDraw(PaintStyleNode.STROKE).node
-        val blurRoot = CapturedFilterRootV1(CapturedFilterNodeId(0))
+        val blurRoot = CapturedFilterRootV1(CapturedFilterNodeIdI32(0))
         val blurTable = CapturedFilterTableV1.of(listOf(
             CapturedFilterNodeV1.Blur(1f, 1f, TileMode.CLAMP, CapturedFilterInputV1.ImplicitSource),
         ))

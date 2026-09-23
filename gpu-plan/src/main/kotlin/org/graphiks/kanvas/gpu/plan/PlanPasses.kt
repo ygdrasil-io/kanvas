@@ -870,12 +870,20 @@ public sealed interface PlanPass {
         /** The typed frozen producer whose mask can expand this transparent source stage. */
         public val w6bMaskSourceBinding: W6bRasterCoverageBindingV1? = null,
         public val plannedCommandId: FramePlannedCommandIdI32? = null,
+        /**
+         * W5 material-coordinate bridge sealed by W6a construction.  Filter/Picture source
+         * renders consume this exact device origin rather than asking the renderer to recover
+         * one from a target map.
+         */
+        materialDeviceOriginI32: Point2I32? = null,
     ) : PlanPass {
+        private val materialDeviceOriginSnapshotI32 = materialDeviceOriginI32?.let { Point2I32(it.x, it.y) }
         init { require(w6bMaskSourceBinding == null || coverageSource != null) }
         override val role: PlanPassRole = PlanPassRole.MainRender
         override val id: PlanPassId = checkedPassId(role, ordinal)
         private val storedDraws = immutableList(draws)
         public fun draws(): List<PlanDraw> = storedDraws
+        public fun copyMaterialDeviceOriginI32(): Point2I32? = materialDeviceOriginSnapshotI32?.let { Point2I32(it.x, it.y) }
     }
 
     /** Clears one single-sample hard-edge coverage mask before its atomic producer sequence. */
@@ -1116,10 +1124,15 @@ public sealed interface PlanPass {
             occurrence.pictureW5CoordinatesOrNull(includeSourceDrawClip = !deferSourceDrawClip),
         /** When present, coverage is a(S), never geometric/cull coverage from [occurrence]. */
         public val sealedAlphaSource: PictureAlphaSourceV1? = null,
+        /** Precomputed source-to-output texel transform for [sealedAlphaSource]. */
+        public val sealedAlphaSampling: FilterInputSamplingV1? = null,
         /** Exact W4 geometry producer for a direct W6b mask blur, when one is admitted. */
         public val rasterBinding: W6bRasterCoverageBindingV1? = null,
     ) : PlanPass {
-        init { require(sealedAlphaSource == null || rasterBinding == null) }
+        init {
+            require(sealedAlphaSource == null || rasterBinding == null)
+            require((sealedAlphaSource == null) == (sealedAlphaSampling == null))
+        }
         override val role: PlanPassRole = PlanPassRole.FilterCoverageSource
         override val id: PlanPassId = checkedPassId(role, ordinal)
 
@@ -1127,7 +1140,7 @@ public sealed interface PlanPass {
         public fun withRasterBinding(binding: W6bRasterCoverageBindingV1): FilterCoverageSourcePass {
             require(sealedAlphaSource == null && rasterBinding == null)
             return FilterCoverageSourcePass(ordinal, output, occurrence, deferSourceDrawClip, pictureCoordinates,
-                sealedAlphaSource, binding)
+                sealedAlphaSource, sealedAlphaSampling, binding)
         }
     }
 
@@ -1136,6 +1149,7 @@ public sealed interface PlanPass {
         override val ordinal: Int,
         public val source: PlanResourceId,
         public val output: PlanResourceId,
+        public val sampling: FilterInputSamplingV1? = null,
     ) : PlanPass {
         init { require(source != output) }
         override val role: PlanPassRole = PlanPassRole.FilterCoverageRetain
@@ -1197,6 +1211,8 @@ public sealed interface PlanPass {
         public val graphTextureRequest: GraphTextureSourceRequestV1? = null,
         /** Published W5 material/uniform binding for [graphTextureRequest]. */
         public val graphTextureOperand: GraphTextureSourceOperandV1? = null,
+        /** Frozen source-to-output local sampling for layer and graph-texture hand-offs. */
+        public val sourceSampling: FilterInputSamplingV1? = null,
     ) : PlanPass {
         init {
             require(sourceSceneCanonicalId.isNotBlank() && sourceCommandIndexI32 >= 0) {

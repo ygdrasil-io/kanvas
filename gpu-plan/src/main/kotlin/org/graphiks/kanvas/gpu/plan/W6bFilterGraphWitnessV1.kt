@@ -44,11 +44,19 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                 is PlanPass.TextureCopy -> producers[pass.destination] = index
                 is PlanPass.PictureSourcePass -> {
                     pass.coverageSource?.let { produced(it, index); materialCoverageInputs += it }
+                    if (pass.layerInput != null || pass.graphTextureRequest != null || pass.graphTextureOperand != null) {
+                        require(pass.sourceSampling != null) {
+                            "W6b Picture source must publish target-local sampling before native lowering."
+                        }
+                    }
                     producers[pass.output] = index
                 }
                 is PlanPass.FilterCoverageSourcePass -> {
                     require(row(pass.output).role == PlanResourceRole.CoverageSource)
                     pass.sealedAlphaSource?.let { alpha ->
+                        require(pass.sealedAlphaSampling != null) {
+                            "W6b alpha coverage must publish target-local sampling before native lowering."
+                        }
                         if (alpha.aggregateId != null) {
                             val seal = passes[produced(alpha.sealedSourceId, index)] as? PlanPass.PictureAggregateSealPass
                             require(seal != null && seal.aggregateId == alpha.aggregateId &&
@@ -65,6 +73,9 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                     require(row(pass.source).role in setOf(PlanResourceRole.CoverageSource, PlanResourceRole.FilterTarget))
                     require(row(pass.output).role == PlanResourceRole.CoverageOriginal)
                     produced(pass.source, index)
+                    require(pass.sampling != null) {
+                        "W6b retained coverage must publish target-local sampling before native lowering."
+                    }
                     producers[pass.output] = index
                     owners[pass.output] = requireNotNull(owners[pass.source])
                 }
@@ -85,6 +96,7 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                     produced(bound.id, index)
                     require(row(pass.output).role == PlanResourceRole.FilterTarget)
                     require(pass.inputs().size == arity(pass.operation)) { "W6b operation input arity is invalid." }
+                    requirePublishedTargetLocalSampling(pass.operation)
                     pass.inputs().forEachIndexed { inputIndex, input ->
                         produced(input, index)
                         val materialCoverage = pass.operation is FilterPassOperationV1.MaterializedSource && inputIndex == 1
@@ -138,6 +150,24 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
             is FilterPassOperationV1.DropShadowColorize,
             -> 1
             is FilterPassOperationV1.MaterializedSource -> 2
+        }
+
+        /** Every W6b texture read has a plan-sealed local offset; the renderer owns no origin map. */
+        private fun requirePublishedTargetLocalSampling(operation: FilterPassOperationV1) {
+            when (operation) {
+                is FilterPassOperationV1.SeparableBlur -> require(operation.sampling != null)
+                is FilterPassOperationV1.MaskBlurStyle -> {
+                    require(operation.blurredSampling != null)
+                    require((operation.originalCoverageSource == null) == (operation.originalSampling == null))
+                }
+                is FilterPassOperationV1.MaskShader -> require(operation.sampling != null)
+                is FilterPassOperationV1.MaskTable -> require(operation.sampling != null)
+                is FilterPassOperationV1.MaterializedSource ->
+                    require(operation.sourceSampling != null && operation.coverageSampling != null)
+                is FilterPassOperationV1.DropShadowColorize,
+                is FilterPassOperationV1.DropShadowComposite,
+                -> Unit
+            }
         }
 
         /**

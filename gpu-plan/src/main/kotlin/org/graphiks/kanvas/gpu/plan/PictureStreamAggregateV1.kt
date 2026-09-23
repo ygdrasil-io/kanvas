@@ -84,20 +84,25 @@ public class PictureCompositeOperandsV1 internal constructor(
     public val sourceGenerationI64: Long,
     sourceBoundsTargetI32: RectI32,
     destinationOriginTargetI32: Point2I32,
-    public val deferredClip: ClipStackNode,
-    clipToDeviceF64: Matrix3x3F64,
+    compositeScissorTargetLocalI32: RectI32?,
+    sourceSampleOffsetTargetLocalI32: Point2I32,
     public val blend: BlendPlan,
     public val destinationVersionBefore: DestinationVersionI64,
+    /** False records a deliberately unsupported deferred clip without leaving it to native lowering. */
+    public val compositeScissorAdmitted: Boolean = true,
     public val load: AttachmentLoadPlan = AttachmentLoadPlan.Load,
     public val store: AttachmentStorePlan = AttachmentStorePlan.Store,
 ) {
     private val bounds = sourceBoundsTargetI32.copy()
     private val origin = Point2I32(destinationOriginTargetI32.x, destinationOriginTargetI32.y)
-    private val clipMapping = clipToDeviceF64.copy()
-    init { require(sourceGenerationI64 >= 0 && !bounds.isEmpty && clipMapping.isFinite()) }
+    private val scissor = compositeScissorTargetLocalI32?.copy()
+    private val sourceSampleOffset = Point2I32(sourceSampleOffsetTargetLocalI32.x, sourceSampleOffsetTargetLocalI32.y)
+    init { require(sourceGenerationI64 >= 0 && !bounds.isEmpty && scissor?.isEmpty != true) }
     public fun copySourceBoundsTargetI32(): RectI32 = bounds.copy()
     public fun copyDestinationOriginTargetI32(): Point2I32 = Point2I32(origin.x, origin.y)
-    public fun copyClipToDeviceF64(): Matrix3x3F64 = clipMapping.copy()
+    /** Null is a sealed empty terminal; native lowering must not re-evaluate a clip. */
+    public fun copyCompositeScissorTargetLocalI32(): RectI32? = scissor?.copy()
+    public fun copySourceSampleOffsetTargetLocalI32(): Point2I32 = Point2I32(sourceSampleOffset.x, sourceSampleOffset.y)
 }
 
 /** The four W6 regions stay separate even when a conservative plan gives two equal values. */
@@ -1155,10 +1160,8 @@ internal fun validatePictureStreamAggregates(
                     } ?: fail(aggregate, invariant = "Picture terminal lacks its complete composite operands.", passId = terminal)
                     if (terminalFacts.plannedCommandId != aggregate.sourcePlannedCommandId ||
                         terminalFacts.blend != operand.finalBlend ||
-                        terminalFacts.deferredClip.canonicalId != aggregate.deferredCompositeClip.canonicalId ||
-                        terminalFacts.copyClipToDeviceF64() != aggregate.copyEnclosingPictureTransformF64() ||
-                        operand.copyClipToDeviceF64() != aggregate.copyEnclosingPictureTransformF64()) {
-                        fail(aggregate, invariant = "Picture terminal lost its occurrence identity or enclosing clip mapping.", passId = terminal)
+                        terminalFacts.copySourceBoundsTargetI32().isEmpty) {
+                        fail(aggregate, invariant = "Picture terminal lost its occurrence identity or sealed target-local geometry.", passId = terminal)
                     }
                     val vertical = (terminalPass as? PlanPass.FilterComposite)?.let { composite ->
                         passes.filterIsInstance<PlanPass.FilterPass>().singleOrNull { it.output == composite.source }

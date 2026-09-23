@@ -655,7 +655,7 @@ public object PaintSceneAdapter {
 
 /** Capture-local identity map retained across scene operations and discarded at scene publication. */
 internal class FilterCaptureContext {
-    val ids: IdentityHashMap<ImageFilter, CapturedFilterNodeId> = IdentityHashMap()
+    val ids: IdentityHashMap<ImageFilter, CapturedFilterNodeIdI32> = IdentityHashMap()
     val table: CapturedFilterTableBuilderV1 = CapturedFilterTableBuilderV1()
 
     fun build(limits: GraphLimits): CapturedFilterTableV1 = table.build(limits)

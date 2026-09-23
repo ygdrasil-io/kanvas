@@ -667,7 +667,7 @@ class SceneArchiveCodecTest {
         val runtimeColor = ColorFilterNode.RuntimeEffect.of(colorDescriptor, uniforms, listOf(RuntimeColorFilterChild("child", colorChild)))
         val meshProgram = MeshProgramNode.of(shaderDescriptor, uniforms, listOf(MeshProgramChild.Shader("child", materialChild)))
         val source = CapturedFilterInputV1.ImplicitSource
-        fun node(index: Int): CapturedFilterInputV1 = CapturedFilterInputV1.Node(CapturedFilterNodeId(index))
+        fun node(index: Int): CapturedFilterInputV1 = CapturedFilterInputV1.Node(CapturedFilterNodeIdI32(index))
         val filters = listOf<CapturedFilterNodeV1>(
             CapturedFilterNodeV1.Crop(bounds, TileMode.CLAMP, source),
             CapturedFilterNodeV1.Blur(1f, 2f, TileMode.CLAMP, source),
@@ -693,7 +693,7 @@ class SceneArchiveCodecTest {
             CapturedFilterNodeV1.RuntimeEffect(imageDescriptor, uniforms, null, listOf(CapturedRuntimeImageFilterChildV1("child", node(1)))),
         )
         val filterTable = CapturedFilterTableV1.of(filters)
-        fun root(index: Int): CapturedFilterRootV1 = CapturedFilterRootV1(CapturedFilterNodeId(index))
+        fun root(index: Int): CapturedFilterRootV1 = CapturedFilterRootV1(CapturedFilterNodeIdI32(index))
         val imageChild = root(1)
         val runtimeImage = root(21)
         val allEffects = EffectStack.of(

@@ -6,27 +6,21 @@ import java.nio.ByteBuffer
 import java.util.Base64
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.color.ColorSpace
-import org.graphiks.kanvas.gpu.plan.FilterCompositeOperationV1
-import org.graphiks.kanvas.gpu.plan.PlanBudget
-import org.graphiks.kanvas.gpu.plan.PlanBufferAllocationPolicy
-import org.graphiks.kanvas.gpu.plan.PlanCapabilitySnapshot
-import org.graphiks.kanvas.gpu.plan.PlanLogicalColorFormat
-import org.graphiks.kanvas.gpu.plan.PlanOperationCapability
-import org.graphiks.kanvas.gpu.plan.PlanPass
-import org.graphiks.kanvas.gpu.plan.RenderGraph
-import org.graphiks.kanvas.gpu.plan.RuntimeEffectSemanticCatalog
-import org.graphiks.kanvas.gpu.plan.W6aLayerPlanCompiler
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.DropShadowMode
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
-import org.graphiks.kanvas.render.ir.DisplayOpSceneAdapter
-import org.graphiks.kanvas.render.ir.RenderPlanResult
-import org.graphiks.kanvas.render.ir.RenderTargetDescriptor
-import org.graphiks.kanvas.render.ir.SceneCaptureResult
+import org.graphiks.kanvas.render.ir.CapturedFilterInputV1
+import org.graphiks.kanvas.render.ir.CapturedFilterNodeIdI32
+import org.graphiks.kanvas.render.ir.CapturedFilterNodeV1
+import org.graphiks.kanvas.render.ir.CapturedFilterTableV1
+import org.graphiks.kanvas.render.ir.SceneArchiveCodec
+import org.graphiks.kanvas.render.ir.SceneArchiveDecodeResult
+import org.graphiks.kanvas.render.ir.SceneCommand
 import org.graphiks.kanvas.render.ir.SceneExtent
+import org.graphiks.kanvas.render.ir.SceneSnapshot
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.surface.W6bImageBlurCpuOracle
 import org.graphiks.math.color.ColorARGB
@@ -198,85 +192,44 @@ class W6bFilterPictureTest {
     }
 
     @Test
-    fun `publicly captured repeated Picture occurrences seal distinct graph sources and exact consumers`() {
-        val bounds = RectF32.ofLTRB(0f, 0f, 7f, 7f)
-        val source = PictureRecorder().also { recorder ->
-            recorder.beginRecording(bounds).drawRect(RectF32.ofLTRB(3f, 3f, 4f, 4f),
-                Paint(ColorARGB.White, antiAlias = false))
-        }.finishRecordingAsPicture()
-        val publicCapture = Surface(20, 7).also { surface ->
-            surface.canvas {
-                drawPicture(source, Paint(imageFilter = ImageFilter.Blur(1f, 1f, TileMode.DECAL)))
-                save()
-                translate(10f, 0f)
-                drawPicture(source, Paint(imageFilter = ImageFilter.Blur(1f, 1f, TileMode.DECAL)))
-                restore()
-            }
-        }
-        val scene = assertIs<SceneCaptureResult.Captured>(DisplayOpSceneAdapter.capture(
-            publicCapture.snapshotOps(), SceneExtent(20, 7), ColorSpace.SRGB,
-        )).scene
-        val compiler = W6aLayerPlanCompiler(RuntimeEffectSemanticCatalog.builtinSnapshot())
-        val candidate = assertIs<org.graphiks.kanvas.gpu.plan.GpuPlanSelection.Candidate>(
-            compiler.select(scene, RenderTargetDescriptor(scene.extent, scene.colorSpace)),
-        ).candidate
-        val planned = compiler.plan(candidate,
-            PlanCapabilitySnapshot.of(
-                deviceGeneration = 0L,
-                maxTextureDimension2D = 1_024,
-                maxBufferSizeBytes = 1L shl 20,
-                copyBytesPerRowAlignment = 256,
-                supportedFormats = setOf(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL),
-                minUniformBufferOffsetAlignment = 256,
-                maxDynamicUniformBuffersPerPipelineLayout = 4,
-                supportedOperations = PlanOperationCapability.entries.toSet(),
-                bufferAllocationPolicy = PlanBufferAllocationPolicy.of(1L shl 20, 1L shl 20, 1L shl 20),
-                maxUniformBufferBindingSizeBytesI64 = 1L shl 20,
-                maxStorageBufferBindingSizeBytesI64 = 1L shl 20,
-                maxStorageBuffersPerShaderStageI32 = 8,
-                maxUniformBuffersPerShaderStageI32 = 8,
-                maxSampledTexturesPerShaderStageI32 = 8,
-                maxSamplersPerShaderStageI32 = 8,
-                maxBindingsPerBindGroupI32 = 8,
-                maxBindGroupsI32 = 4,
-            ),
-            PlanBudget(1L shl 22),
-        )
-        if (planned !is RenderPlanResult.Ready<RenderGraph>) {
-            val diagnostics = when (planned) {
-                is RenderPlanResult.GapNotMigrated -> planned.diagnostics
-                is RenderPlanResult.GapOnPromotedScope -> planned.diagnostics
-                is RenderPlanResult.InvalidScene -> planned.diagnostics
-                is RenderPlanResult.ResourceLimitExceeded -> planned.diagnostics
-                is RenderPlanResult.Ready -> error("Ready plan has no refusal diagnostics")
-            }
-            error(diagnostics.joinToString { "${it.code.value}: ${it.message}" })
-        }
-        val graph = planned.plan
+    fun `captured filter table snapshots mutable rectangle input and node exposure`() {
+        val supplied = RectF32.ofLTRB(1f, 2f, 3f, 4f)
+        val table = CapturedFilterTableV1.of(listOf(
+            CapturedFilterNodeV1.Crop(supplied, org.graphiks.kanvas.render.ir.TileMode.CLAMP,
+                CapturedFilterInputV1.ImplicitSource),
+        ))
+        val canonical = table.canonicalId
+        val wire = filterTableWire(table)
 
-        val sourcePasses = graph.passes().filterIsInstance<PlanPass.PictureSourcePass>()
-        val terminals = graph.passes().filterIsInstance<PlanPass.FilterComposite>().filter {
-            it.operation is FilterCompositeOperationV1.Picture
-        }
-        assertEquals(2, terminals.size)
-        val consumers = terminals.map { terminal ->
-            val sourcePass = sourcePasses.single { it.output == terminal.evaluationKey.boundSourceId }
-            terminal.id to requireNotNull(sourcePass.graphTextureOperand)
-        }
-        val sealedPairs = consumers.map { (_, operand) ->
-            operand.sealedSourceId to operand.sealedSourceGenerationI64
-        }
-        assertEquals(2, sealedPairs.distinct().size)
-        consumers.forEach { (terminalId, operand) ->
-            val exactSourceConsumer = sourcePasses.single { it.graphTextureOperand === operand }
-            assertEquals(terminalId, terminals.single {
-                it.evaluationKey.boundSourceId == exactSourceConsumer.output
-            }.id)
-            assertTrue(graph.passes().filterIsInstance<PlanPass.PictureAggregateSealPass>().any {
-                it.sealedSource == operand.sealedSourceId &&
-                    it.sourceGenerationI64 == operand.sealedSourceGenerationI64
-            })
-        }
+        supplied.left = -100f
+        val exposed = (table.nodeAt(CapturedFilterNodeIdI32(0)) as CapturedFilterNodeV1.Crop).crop
+        exposed.right = 100f
+
+        val retained = (table.nodeAt(CapturedFilterNodeIdI32(0)) as CapturedFilterNodeV1.Crop).crop
+        assertEquals(1f, retained.left)
+        assertEquals(3f, retained.right)
+        assertEquals(canonical, table.canonicalId)
+        assertContentEquals(wire, filterTableWire(table))
+    }
+
+    @Test
+    fun `oversized schema 8 filter table is rejected before Picture publication`() {
+        val archive = oversizedFilterTableArchive()
+
+        val invalid = assertIs<SceneArchiveDecodeResult.Invalid>(SceneArchiveCodec.decodePicture(archive))
+        assertEquals("invalid-length", invalid.code)
+        assertNull(Picture.fromByteArray(archive))
+        assertNotNull(Picture.fromByteArray(pictureWithThreeFilteredDraws(ImageFilter.Blur(1f, 1f)).toByteArray()))
+    }
+
+    @Test
+    fun `oversized schema 8 Merge fanout is rejected before Picture publication`() {
+        val archive = oversizedMergeFanoutArchive()
+
+        val invalid = assertIs<SceneArchiveDecodeResult.Invalid>(SceneArchiveCodec.decodePicture(archive))
+        assertEquals("invalid-length", invalid.code)
+        assertNull(Picture.fromByteArray(archive))
+        assertNotNull(Picture.fromByteArray(pictureWithThreeFilteredDraws(ImageFilter.Blur(1f, 1f)).toByteArray()))
     }
 
     private fun replayedOccurrencesExpected(): UByteArray {
@@ -334,6 +287,64 @@ class W6bFilterPictureTest {
         val recorder = PictureRecorder()
         picture.playback(recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 8f, 8f)))
         assertNotNull(Picture.fromByteArray(recorder.finishRecordingAsPicture().toByteArray()))
+    }
+
+    private fun filterTableWire(table: CapturedFilterTableV1): ByteArray {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val scene = SceneSnapshot.of(
+            SceneExtent(2, 2),
+            ColorSpace.SRGB,
+            listOf(SceneCommand.Annotation.of(bounds, "filter-table", "snapshot")),
+            filterTable = table,
+        )
+        return SceneArchiveCodec.encodePicture(scene, bounds)
+    }
+
+    private fun oversizedFilterTableArchive(): ByteArray {
+        val bytes = pictureWithThreeFilteredDraws(ImageFilter.Blur(1f, 1f)).toByteArray()
+        val tableOffset = schema8FilterTableOffset(bytes)
+        val buffer = ByteBuffer.wrap(bytes)
+        require(buffer.getInt(tableOffset) == 1) { "expected one schema-8 table entry" }
+        val nodeStart = tableOffset + 4
+        require(buffer.getInt(nodeStart) == 2) { "expected a blur filter table entry" }
+        val tileLengthOffset = nodeStart + 12
+        val nodeEnd = tileLengthOffset + 4 + buffer.getInt(tileLengthOffset) + 4
+        val node = bytes.copyOfRange(nodeStart, nodeEnd)
+        val count = 4_097
+        val expanded = ByteArray(bytes.size + (count - 1) * node.size)
+        bytes.copyInto(expanded, endIndex = nodeStart)
+        repeat(count) { indexI32 -> node.copyInto(expanded, nodeStart + indexI32 * node.size) }
+        bytes.copyInto(expanded, nodeStart + count * node.size, nodeEnd)
+        ByteBuffer.wrap(expanded).putInt(tableOffset, count)
+        return expanded
+    }
+
+    private fun oversizedMergeFanoutArchive(): ByteArray {
+        val bytes = pictureWithThreeFilteredDraws(ImageFilter.Merge(listOf(ImageFilter.Blur(1f, 1f)))).toByteArray()
+        val tableOffset = schema8FilterTableOffset(bytes)
+        val buffer = ByteBuffer.wrap(bytes)
+        require(buffer.getInt(tableOffset) == 2) { "expected Merge and blur schema-8 table entries" }
+        val mergeStart = tableOffset + 4
+        require(buffer.getInt(mergeStart) == 17) { "expected Merge as schema-8 table root" }
+        val fanoutOffset = mergeStart + 4
+        require(buffer.getInt(fanoutOffset) == 1) { "expected one Merge input" }
+        val inputStart = fanoutOffset + 4
+        val inputEnd = inputStart + 8
+        val input = bytes.copyOfRange(inputStart, inputEnd)
+        val count = 4_097
+        val expanded = ByteArray(bytes.size + (count - 1) * input.size)
+        bytes.copyInto(expanded, endIndex = inputEnd)
+        repeat(count - 1) { indexI32 -> input.copyInto(expanded, inputEnd + indexI32 * input.size) }
+        bytes.copyInto(expanded, inputEnd + (count - 1) * input.size, inputEnd)
+        ByteBuffer.wrap(expanded).putInt(fanoutOffset, count)
+        return expanded
+    }
+
+    private fun schema8FilterTableOffset(bytes: ByteArray): Int {
+        val buffer = ByteBuffer.wrap(bytes)
+        var position = 40 // v14 header, extent width, and extent height.
+        repeat(3) { position += 4 + buffer.getInt(position) }
+        return position
     }
 
     private fun corruptedNestedBlurReference(replacement: Int): ByteArray {

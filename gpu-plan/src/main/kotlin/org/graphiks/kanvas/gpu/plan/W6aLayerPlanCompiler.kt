@@ -307,16 +307,9 @@ public class W6aLayerPlanCompiler public constructor(
         )))
     }
 
-    /** Exact coverage is unavailable in Task 3: accept only a frozen scissor-equivalent clip. */
-    private fun supportsFrozenDeferredPictureClip(operands: PictureCompositeOperandsV1): Boolean = when (val clip = operands.deferredClip) {
-        ClipStackNode.Empty -> true
-        is ClipStackNode.DeviceRect -> {
-            val bounds = clip.copyBounds()
-            if (bounds.isEmpty) true else !clip.antiAlias && operands.copyClipToDeviceF64()
-                .integralAxisAlignedDeviceScissorFor(bounds)
-        }
-        is ClipStackNode.Operations -> false
-    }
+    /** The graph has already converted the admitted hard-edge clip to a local sealed scissor. */
+    private fun supportsFrozenDeferredPictureClip(operands: PictureCompositeOperandsV1): Boolean =
+        operands.compositeScissorAdmitted && operands.copyCompositeScissorTargetLocalI32()?.isEmpty != true
 
     /** A hard-edge DeviceRect is exact only when its frozen mapped edges are device texels. */
     private fun Matrix3x3F64.integralAxisAlignedDeviceScissorFor(bounds: org.graphiks.math.geometry.RectF32): Boolean {

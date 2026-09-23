@@ -141,55 +141,6 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     private val templates = mutableMapOf<GPUDrawPacketID, GPUW5aGeometryHostTemplateV1>()
     private val analyticUniforms = mutableMapOf<GPUDrawPacketID, ByteArray>()
     private val geometryPipelines = mutableMapOf<GPUDrawPacketID, GPUWgpu4kCorePrimitivePipelineMapping.Mapped>()
-    private val targetOriginsDeviceI32: Map<PlanResourceId, Point2I32> = buildMap {
-        put(graph.resources().single { it.role == PlanResourceRole.LogicalTarget }.id, Point2I32.Origin)
-        framePlan.scopes().forEach { scope ->
-            put(scope.targetResource, scope.mapping.copyLayerOriginDeviceI32())
-        }
-        framePlan.pictureStreamAggregates().forEach { aggregate ->
-            aggregate.aggregateTargetId?.let { put(it, aggregate.outerEvaluationMappingF64.copyLayerOriginDeviceI32()) }
-        }
-        graph.passes().filterIsInstance<PlanPass.PictureSourcePass>().forEach { pass ->
-            pass.graphTextureOperand?.let { operand -> put(pass.output, operand.copyTargetOriginDeviceI32()) }
-        }
-        // The filter graph owns every source/output origin.  A mask style has two inputs
-        // (blurred plus retained original), so only its output origin is introduced here;
-        // the retained source inherits its exact already-published origin below.
-        graph.passes().filterIsInstance<PlanPass.FilterPass>().forEach { pass ->
-            val bounds = pass.operation.bounds
-            val boundedInput = when (pass.operation) {
-                is FilterPassOperationV1.MaterializedSource -> pass.inputs().first()
-                is FilterPassOperationV1.MaskBlurStyle -> null
-                // The composite has two frozen source lanes with independent origins.  Its
-                // target origin is published below; neither input can be rewritten here.
-                is FilterPassOperationV1.DropShadowComposite -> null
-                else -> pass.inputs().single()
-            }
-            // A MaskBlurStyle samples the preceding blurred target at its own published
-            // origin.  All other single-input filters retain the historical input-origin
-            // contract: the bounds' required input deliberately supersedes a provisional
-            // Picture-source origin.
-            boundedInput?.let { input -> put(input, Point2I32(
-                bounds.copyRequiredInputDeviceI32().left,
-                bounds.copyRequiredInputDeviceI32().top,
-            )) }
-            put(pass.output, bounds.copyTargetOriginDeviceI32())
-        }
-        graph.passes().filterIsInstance<PlanPass.FilterCoverageRetainPass>().forEach { pass ->
-            put(pass.output, requireNotNull(get(pass.source)) {
-                "A frozen retained coverage source needs its published input origin."
-            })
-        }
-        // Task 3 clears image-only coverage witnesses but does not sample them: their source
-        // W5 draw is already frozen in the following FilterSource pass.  Keep an explicit
-        // local origin so this graph-only clear can be lowered without inventing coordinates.
-        graph.passes().filterIsInstance<PlanPass.FilterCoverageSourcePass>().forEach { pass ->
-            putIfAbsent(pass.output, Point2I32.Origin)
-        }
-    }
-    internal fun targetOriginDeviceI32(resource: PlanResourceId): Point2I32 =
-        targetOriginsDeviceI32[resource]?.let { Point2I32(it.x, it.y) }
-            ?: error("Missing frozen W6 target origin for ${resource.value}")
     internal fun maskShaderMaterial(binding: FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned):
         GPUW6bMaskShaderMaterialV1 = requireNotNull(maskShaderMaterialsByOccurrenceI32[binding.occurrenceIdI32]) {
             "Missing frozen W6b mask-shader W5 row."
@@ -346,7 +297,16 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                         }
                         val targetExtent = requireNotNull(graph.resources().single { it.id == targetId }.copyExtent())
                         val targetBounds = GPUPixelBounds(0, 0, targetExtent.width, targetExtent.height)
-                        val targetOrigin = targetOriginsDeviceI32.getValue(targetId)
+                        // W6a construction seals the W5 material-coordinate bridge on every
+                        // ordinary render.  W6b passes have already localized their coverage
+                        // and texture operands and therefore need no target-origin lookup.
+                        val targetOrigin = when (pass) {
+                            is PlanPass.RenderPass -> requireNotNull(pass.copyMaterialDeviceOriginI32()) {
+                                "W6a render has no plan-sealed W5 material origin for ${pass.id.value}."
+                            }
+                            is PlanPass.FilterCoverageSourcePass -> Point2I32.Origin
+                            else -> Point2I32.Origin
+                        }
                         val packets = packetInputs.map { (packetPass, draw, coverageProducer) ->
                             val table = requireNotNull(graph.materialPlanTableOrNull())
                             val packed = draw.materialAuthority.colorSourceCoordinatesV4()?.let { graph.packedMaterialSourceV4(draw.materialAuthority) }
@@ -486,7 +446,11 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                 val packet = render.drawPackets.single()
                 packet.attachW4ePreparedFrameAuthority(frameAuthority)
                 if (packet.materialSourcePartitionV3() != null) {
-                    val origin = targetOriginsDeviceI32.getValue(binding.target)
+                    // W4e's old material-coordinate bridge consumes the exact origin already
+                    // frozen on its RenderPass.  In particular, no W6b operand/pass can look
+                    // up a target origin or convert device coordinates back to target-local.
+                    val origin = requireNotNull((render.w6aPassV1 as? PlanPass.RenderPass)
+                        ?.copyMaterialDeviceOriginI32()) { "Missing sealed W4e material origin." }
                     val template = requireNotNull(sealW4eMaterialGeometryHostV1(packet, commonFinalSource = true))
                     templates[packet.packetId] = template.copy(materialDevicePointWgsl =
                         "${requireNotNull(template.materialCoordinateSlot).devicePointWgsl} + vec2<f32>(${origin.x}.0, ${origin.y}.0)")

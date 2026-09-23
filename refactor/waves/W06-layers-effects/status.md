@@ -2,7 +2,10 @@
 
 ## Statut
 
-## Checkpoint W6b / Task 6 — shadows et budgets
+## Checkpoint W6b / correction whole-branch — shadows et budgets
+
+La vague de correction bornée issue de la revue whole-branch est basée sur
+`2bf3d52`. Elle ferme I1–I7 et M1–M3 sans étendre les exclusions W6b.
 
 Task 6 matérialise uniquement les opérations déjà gelées
 `DROP_SHADOW_COLORIZE` et `DROP_SHADOW_COMPOSITE`. La route native consomme
@@ -25,15 +28,17 @@ linéaire, conformément au contrat W3 RGBA8 sRGB prémultiplié.
 
 - `W6bDropShadowSurfacePixelTest` prouve `SHADOW_ONLY` sans source, halo
   étendu/translaté, `COMPOSITE`, layer explicite imbriqué et replay Picture
-  mémoire/wire : 2/2 XML PASS.
-- `W6bBudgetRecoverySurfacePixelTest` dérive publiquement B=372
-  (`root 8 + aggregate/source 8 + X/Y/color 12 + composite 8 + uniforms 80
-  + readback 256`) et B imbriqué=380; B accepte, B−1 refuse avant allocation
+  mémoire/wire : 6/6 XML PASS.
+- `W6bBudgetRecoverySurfacePixelTest` dérive publiquement B=336
+  (`root 8 + aggregate/source 8 + X/Y/color 12 + uniforms 52 + readback 256`)
+  et B imbriqué=344; B accepte, B−1 refuse avant allocation
   avec `w6b.filter.frame_budget_exceeded`, et le sibling tardif conserve le
   sentinel avant `discardRecordedOperations`/recovery : 2/2 XML PASS.
-- Les sept shards W6b ciblés totalisent 70/70 assertions XML PASS. Les trois
-  shards W6a de préservation totalisent 39/39 XML PASS. Les sept compilations
-  prescrites sortent 0.
+- Les sept shards W6b ciblés totalisent 80/80 assertions XML PASS : Picture
+  12, admission/recovery 27, image blur 10, mask blur 10, mask shader/table
+  13, DropShadow 6 et budget/recovery 2. Les compilations ciblées
+  `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin` et
+  `:kanvas:compileTestKotlin` sortent 0.
 
 Chaque shard GPU a ensuite reçu exit natif 133 après ses assertions. Cet état
 reste **UNKNOWN**, sans attribution au changement W6b, au test ou à
@@ -43,14 +48,19 @@ l'environnement; il n'est pas compté comme GREEN natif.
 
 La projection W6b passe seulement par `GPUW6aLayerFramePlan`,
 `GPUW6aEncoderScopesV1` et `GPUWgpu4kW6aLayerFramePayloadMaterializer`.
-Elle valide les I32 déjà scellés et matérialise les handles natives publiées.
+Le plan scelle, avec math checked, chaque scissor, sample rectangle et offset
+W6b en I32 target-local; native valide et matérialise ces valeurs sans
+recalcul device→target. Aucun operand/pass W6b ne consulte
+`targetOriginsDeviceI32` : la map a été retirée. Le seul bridge de position
+restant est l'origin device W5/W4e déjà figée sur le `RenderPass` pour un
+matériau legacy, et `MaskShader`/`GraphTexture` conservent uniquement leurs
+mappings émis par l'autorité antérieure, sans scissor ni offset W6b tardif.
 Il n'y a ni création post-freeze de `PlanPass`/`PlanResource`, ni budget ou
-bounds renderer-local; aucun cast de bounds W6b n'est ajouté. Le `.toInt()`
-antérieur du materializer est hors chemin shadow/bounds. Les références
-`GPUSeparableBlurRectFrameRecorder`, `GPUPreparedFilterDAGPlanner`,
-`GPUPreparedMaskFilterLowerer` et `GPUDropShadow` restent des définitions de
-voies legacy/W8 sans appel depuis la route W6b. Aucun test de forme/source,
-fake device ou compteur interne n'a été ajouté.
+bounds renderer-local. Les références `GPUSeparableBlurRectFrameRecorder`,
+`GPUPreparedFilterDAGPlanner`, `GPUPreparedMaskFilterLowerer` et
+`GPUDropShadow` restent des définitions de voies legacy/W8 sans appel depuis
+la route W6b. Aucun test de forme/source, fake device ou compteur interne n'a
+été ajouté.
 
 W6c reçoit sans modification la table capturée, les evaluation keys, les
 `FilterPass`/`FilterTarget`, le schedule, les lifetimes et les terminaux
@@ -134,8 +144,8 @@ La route W6a passe par `W6aLayerGraphLowerer`, `GPUW6aLayerFramePlan` et
 `GPUWgpu4kW6aLayerFramePayloadMaterializer`. Elle itère le graphe et le layout
 physique scellés; les créations natives de textures/buffers sont la
 matérialisation des `PlanResource` déjà gelées, non une création de resource ou
-pass de plan après freeze. Aucun `.toInt()` de bornes renderer-local n'est
-présent dans ces fichiers W6a.
+pass de plan après freeze. Les operands W6b ne font aucun `.toInt()` de
+bornes, projection de clip ou conversion device→target renderer-local.
 
 Les références interdites restent hors route W6a et sont conservées comme
 legacy/W8 : `GPULayerSaveRecord` et `GPUPreparedCompositeLowerer` dans la
@@ -174,4 +184,4 @@ Draft PR W6a directement sur `codex/w5h-registered-runtime-effects` :
 [#2403](https://github.com/ygdrasil-io/kanvas/pull/2403). W6a est clôturée dans
 les limites explicites ci-dessus. Task 6 ferme W6b dans son périmètre borné;
 W6c est l'étape suivante pour les familles et capabilities exclues, sans
-réouvrir une autorité renderer-local.
+réouvrir les operands target-local scellés de W6b.

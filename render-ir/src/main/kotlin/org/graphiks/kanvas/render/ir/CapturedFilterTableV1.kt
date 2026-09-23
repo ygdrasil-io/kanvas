@@ -8,20 +8,20 @@ import org.graphiks.math.geometry.SizeF32
 import org.graphiks.math.vector.Vector2F32
 
 /** Stable, table-local identity for an immutable captured image-filter node. */
-public data class CapturedFilterNodeId(public val value: Int) : CanonicalValue {
-    init { require(value >= 0) { "Captured filter node IDs must be non-negative" } }
-    override val canonicalId: CanonicalId = canonicalId("captured-filter-node-id-v1", value.toString())
+public data class CapturedFilterNodeIdI32(public val valueI32: Int) : CanonicalValue {
+    init { require(valueI32 >= 0) { "Captured filter node IDs must be non-negative" } }
+    override val canonicalId: CanonicalId = canonicalId("captured-filter-node-id-v1", valueI32.toString())
 }
 
 /** Reserved typed identities for W6d picture and backdrop filter inputs. */
-public data class CapturedPictureId(public val value: Int) : CanonicalValue {
-    init { require(value >= 0) { "Captured picture IDs must be non-negative" } }
-    override val canonicalId: CanonicalId = canonicalId("captured-picture-id-v1", value.toString())
+public data class CapturedPictureIdI32(public val valueI32: Int) : CanonicalValue {
+    init { require(valueI32 >= 0) { "Captured picture IDs must be non-negative" } }
+    override val canonicalId: CanonicalId = canonicalId("captured-picture-id-v1", valueI32.toString())
 }
 
-public data class CapturedBackdropId(public val value: Int) : CanonicalValue {
-    init { require(value >= 0) { "Captured backdrop IDs must be non-negative" } }
-    override val canonicalId: CanonicalId = canonicalId("captured-backdrop-id-v1", value.toString())
+public data class CapturedBackdropIdI32(public val valueI32: Int) : CanonicalValue {
+    init { require(valueI32 >= 0) { "Captured backdrop IDs must be non-negative" } }
+    override val canonicalId: CanonicalId = canonicalId("captured-backdrop-id-v1", valueI32.toString())
 }
 
 /** Explicit filter source binding; null public inputs always become [ImplicitSource]. */
@@ -32,20 +32,20 @@ public sealed interface CapturedFilterInputV1 : CanonicalValue {
     public data object TransparentBlack : CapturedFilterInputV1 {
         override val canonicalId: CanonicalId = canonicalId("captured-filter-input-v1", "transparent-black")
     }
-    public data class Node(public val id: CapturedFilterNodeId) : CapturedFilterInputV1 {
-        override val canonicalId: CanonicalId = canonicalId("captured-filter-input-v1", "node", id.value.toString())
+    public data class Node(public val id: CapturedFilterNodeIdI32) : CapturedFilterInputV1 {
+        override val canonicalId: CanonicalId = canonicalId("captured-filter-input-v1", "node", id.valueI32.toString())
     }
-    public data class Picture(public val id: CapturedPictureId) : CapturedFilterInputV1 {
-        override val canonicalId: CanonicalId = canonicalId("captured-filter-input-v1", "picture", id.value.toString())
+    public data class Picture(public val id: CapturedPictureIdI32) : CapturedFilterInputV1 {
+        override val canonicalId: CanonicalId = canonicalId("captured-filter-input-v1", "picture", id.valueI32.toString())
     }
-    public data class Backdrop(public val id: CapturedBackdropId) : CapturedFilterInputV1 {
-        override val canonicalId: CanonicalId = canonicalId("captured-filter-input-v1", "backdrop", id.value.toString())
+    public data class Backdrop(public val id: CapturedBackdropIdI32) : CapturedFilterInputV1 {
+        override val canonicalId: CanonicalId = canonicalId("captured-filter-input-v1", "backdrop", id.valueI32.toString())
     }
 }
 
 /** Typed scene root; recursive image-filter payloads are never stored at a paint/effect boundary. */
-public data class CapturedFilterRootV1(public val id: CapturedFilterNodeId) : EffectNode {
-    override val canonicalId: CanonicalId = canonicalId("captured-filter-root-v1", id.value.toString())
+public data class CapturedFilterRootV1(public val id: CapturedFilterNodeIdI32) : EffectNode {
+    override val canonicalId: CanonicalId = canonicalId("captured-filter-root-v1", id.valueI32.toString())
 }
 
 /**
@@ -55,7 +55,15 @@ public data class CapturedFilterRootV1(public val id: CapturedFilterNodeId) : Ef
 public sealed interface CapturedFilterNodeV1 : CanonicalValue {
     override val canonicalId: CanonicalId
         get() = capturedFilterNodeId(this)
-    public data class Crop(val crop: RectF32, val tileMode: TileMode, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
+    public class Crop(crop: RectF32, public val tileMode: TileMode, public val input: CapturedFilterInputV1) : CapturedFilterNodeV1 {
+        private val cropSnapshot = crop.copy()
+        /** A copy prevents callers from mutating the table through [nodeAt]. */
+        public val crop: RectF32 get() = cropSnapshot.copy()
+        public fun copyCrop(): RectF32 = cropSnapshot.copy()
+        override fun equals(other: Any?): Boolean = other is Crop && cropSnapshot == other.cropSnapshot &&
+            tileMode == other.tileMode && input == other.input
+        override fun hashCode(): Int = 31 * (31 * cropSnapshot.hashCode() + tileMode.hashCode()) + input.hashCode()
+    }
     public data class Blur(val sigmaX: Float, val sigmaY: Float, val tileMode: TileMode, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
     public data class DropShadow(val dx: Float, val dy: Float, val sigmaX: Float, val sigmaY: Float, val color: ColorARGB, val input: CapturedFilterInputV1, val mode: CapturedDropShadowModeV1) : CapturedFilterNodeV1
     public data class ColorFilter(val filter: ColorFilterNode, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
@@ -70,8 +78,23 @@ public sealed interface CapturedFilterNodeV1 : CanonicalValue {
     public data class PointLitSpecular(val location: Point2F32, val lightColor: ColorARGB, val surfaceScale: Float, val ks: Float, val shininess: Float, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
     public data class SpotLitSpecular(val location: Point2F32, val target: Point2F32, val specularExponent: Float, val cutoffAngle: Float, val lightColor: ColorARGB, val surfaceScale: Float, val ks: Float, val shininess: Float, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
     public data class Offset(val dx: Float, val dy: Float, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
-    public data class Tile(val src: RectF32, val dst: RectF32, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
+    public class Tile(src: RectF32, dst: RectF32, public val input: CapturedFilterInputV1) : CapturedFilterNodeV1 {
+        private val sourceSnapshot = src.copy()
+        private val destinationSnapshot = dst.copy()
+        public val src: RectF32 get() = sourceSnapshot.copy()
+        public val dst: RectF32 get() = destinationSnapshot.copy()
+        public fun copySource(): RectF32 = sourceSnapshot.copy()
+        public fun copyDestination(): RectF32 = destinationSnapshot.copy()
+        override fun equals(other: Any?): Boolean = other is Tile && sourceSnapshot == other.sourceSnapshot &&
+            destinationSnapshot == other.destinationSnapshot && input == other.input
+        override fun hashCode(): Int = 31 * (31 * sourceSnapshot.hashCode() + destinationSnapshot.hashCode()) + input.hashCode()
+    }
     public class Merge(inputs: Collection<CapturedFilterInputV1>) : CapturedFilterNodeV1, Iterable<CapturedFilterInputV1> {
+        init {
+            require(inputs.size <= GraphLimits().maxNodes) {
+                "Captured filter table fan-out exceeds node limit"
+            }
+        }
         private val values = immutableList(inputs)
         public val inputCount: Int get() = values.size
         public fun inputAt(index: Int): CapturedFilterInputV1 = values[index]
@@ -79,8 +102,25 @@ public sealed interface CapturedFilterNodeV1 : CanonicalValue {
         override val canonicalId: CanonicalId = canonicalSequenceId("captured-filter-merge-v1", values.map { it.canonicalId.value })
     }
     public data class DisplacementMap(val xChannelSelector: ColorChannel, val yChannelSelector: ColorChannel, val scale: Float, val displacement: CapturedFilterInputV1, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
-    public data class Picture(val scene: SceneSnapshot, val cullRect: RectF32, val src: RectF32?) : CapturedFilterNodeV1
-    public data class Magnifier(val src: RectF32, val zoom: Float, val inset: Float, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
+    public class Picture(public val scene: SceneSnapshot, cullRect: RectF32, src: RectF32?) : CapturedFilterNodeV1 {
+        private val cullSnapshot = cullRect.copy()
+        private val sourceSnapshot = src?.copy()
+        public val cullRect: RectF32 get() = cullSnapshot.copy()
+        public val src: RectF32? get() = sourceSnapshot?.copy()
+        public fun copyCullRect(): RectF32 = cullSnapshot.copy()
+        public fun copySource(): RectF32? = sourceSnapshot?.copy()
+        override fun equals(other: Any?): Boolean = other is Picture && scene == other.scene &&
+            cullSnapshot == other.cullSnapshot && sourceSnapshot == other.sourceSnapshot
+        override fun hashCode(): Int = 31 * (31 * scene.hashCode() + cullSnapshot.hashCode()) + (sourceSnapshot?.hashCode() ?: 0)
+    }
+    public class Magnifier(src: RectF32, public val zoom: Float, public val inset: Float, public val input: CapturedFilterInputV1) : CapturedFilterNodeV1 {
+        private val sourceSnapshot = src.copy()
+        public val src: RectF32 get() = sourceSnapshot.copy()
+        public fun copySource(): RectF32 = sourceSnapshot.copy()
+        override fun equals(other: Any?): Boolean = other is Magnifier && sourceSnapshot == other.sourceSnapshot &&
+            zoom == other.zoom && inset == other.inset && input == other.input
+        override fun hashCode(): Int = 31 * (31 * (31 * sourceSnapshot.hashCode() + zoom.hashCode()) + inset.hashCode()) + input.hashCode()
+    }
     public data class MatrixConvolution(val kernelSize: SizeF32, val kernel: ImmutableFloats, val gain: Float, val bias: Float, val kernelOffset: Vector2F32, val tileMode: TileMode, val convolveAlpha: Boolean, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
     public class RuntimeEffect(
         public val descriptor: RuntimeEffectDescriptor,
@@ -118,18 +158,25 @@ public data class CapturedRuntimeImageFilterChildV1(public val name: String, pub
 }
 
 /** Immutable table shared by every command in one [SceneSnapshot]. */
-public class CapturedFilterTableV1 private constructor(nodes: Collection<CapturedFilterNodeV1>) : CanonicalValue {
-    private val values = immutableList(nodes)
+public class CapturedFilterTableV1 private constructor(
+    /** Already copied by [of]; retaining it avoids a second unbounded copy. */
+    private val values: List<CapturedFilterNodeV1>,
+) : CanonicalValue {
     public val nodeCount: Int get() = values.size
-    public fun nodeAt(id: CapturedFilterNodeId): CapturedFilterNodeV1 = values.getOrElse(id.value) {
-        throw IllegalArgumentException("Unknown captured filter node ${id.value}")
+    public fun nodeAt(id: CapturedFilterNodeIdI32): CapturedFilterNodeV1 = values.getOrElse(id.valueI32) {
+        throw IllegalArgumentException("Unknown captured filter node ${id.valueI32}")
     }
     override val canonicalId: CanonicalId = canonicalSequenceId("captured-filter-table-v1", values.map { it.canonicalId.value })
 
     public companion object {
         public val Empty: CapturedFilterTableV1 = CapturedFilterTableV1(emptyList())
-        public fun of(nodes: Collection<CapturedFilterNodeV1>, limits: GraphLimits = GraphLimits()): CapturedFilterTableV1 =
-            CapturedFilterTableV1(nodes).also { it.validate(limits) }
+
+        public fun of(nodes: Collection<CapturedFilterNodeV1>, limits: GraphLimits = GraphLimits()): CapturedFilterTableV1 {
+            require(nodes.size <= limits.maxNodes) { "Captured filter table exceeds node limit" }
+            // Check before copying: archive input and capture callers must never duplicate an
+            // attacker-controlled graph that is already outside the W6b budget.
+            return CapturedFilterTableV1(ArrayList(nodes)).also { it.validate(limits) }
+        }
     }
 
     public fun validate(limits: GraphLimits = GraphLimits()) {
@@ -158,8 +205,8 @@ public class CapturedFilterTableV1 private constructor(nodes: Collection<Capture
                 inputs.asReversed().forEach { input ->
                     when (input) {
                         is CapturedFilterInputV1.Node -> {
-                            require(input.id.value in values.indices) { "Captured filter table references an unknown node" }
-                            pending.addLast(Visit(input.id.value, false, visit.depth + 1))
+                            require(input.id.valueI32 in values.indices) { "Captured filter table references an unknown node" }
+                            pending.addLast(Visit(input.id.valueI32, false, visit.depth + 1))
                         }
                         CapturedFilterInputV1.ImplicitSource,
                         CapturedFilterInputV1.TransparentBlack,
@@ -175,16 +222,22 @@ public class CapturedFilterTableV1 private constructor(nodes: Collection<Capture
 }
 
 /** Mutable capture-only builder. It never escapes a completed [SceneSnapshot]. */
-public class CapturedFilterTableBuilderV1 {
+public class CapturedFilterTableBuilderV1(private val limits: GraphLimits = GraphLimits()) {
     private val values = mutableListOf<CapturedFilterNodeV1?>()
-    public fun reserve(): CapturedFilterNodeId = CapturedFilterNodeId(values.size).also { values += null }
-    public fun put(id: CapturedFilterNodeId, node: CapturedFilterNodeV1) {
-        require(id.value in values.indices && values[id.value] == null) { "Captured filter table node ID is not reservable" }
-        values[id.value] = node
+    public fun reserve(): CapturedFilterNodeIdI32 {
+        require(values.size < limits.maxNodes) { "Captured filter table exceeds node limit" }
+        return CapturedFilterNodeIdI32(values.size).also { values += null }
     }
-    public fun build(limits: GraphLimits = GraphLimits()): CapturedFilterTableV1 = CapturedFilterTableV1.of(values.map {
-        requireNotNull(it) { "Captured filter table contains an unfinished node" }
-    }, limits)
+    public fun put(id: CapturedFilterNodeIdI32, node: CapturedFilterNodeV1) {
+        require(id.valueI32 in values.indices && values[id.valueI32] == null) { "Captured filter table node ID is not reservable" }
+        values[id.valueI32] = node
+    }
+    public fun build(limits: GraphLimits = this.limits): CapturedFilterTableV1 {
+        require(values.size <= limits.maxNodes) { "Captured filter table exceeds node limit" }
+        val completed = ArrayList<CapturedFilterNodeV1>(values.size)
+        values.forEach { completed += requireNotNull(it) { "Captured filter table contains an unfinished node" } }
+        return CapturedFilterTableV1.of(completed, limits)
+    }
 }
 
 /** Converts one historical recursive wire occurrence without adding value-based aliases. */

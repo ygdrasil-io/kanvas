@@ -27,7 +27,7 @@ import org.graphiks.math.geometry.InverseInteriorCoverageF32
 import org.graphiks.math.geometry.InversePathGeometryF32
 import org.graphiks.math.matrix.LayerMappingF64
 import org.graphiks.math.matrix.Matrix3x3F64
-import org.graphiks.kanvas.render.ir.CapturedFilterNodeId
+import org.graphiks.kanvas.render.ir.CapturedFilterNodeIdI32
 import org.graphiks.kanvas.render.ir.LayerDescriptor
 import org.graphiks.kanvas.render.ir.SceneExtent
 import org.graphiks.kanvas.render.ir.SceneSnapshot
@@ -1024,7 +1024,7 @@ class RenderGraphContractTest {
                     0,
                     listOf(resources.target.id),
                     planResourceId(PlanResourceRole.FilterTarget, 0),
-                    FilterEvaluationKeyV1.of(CapturedFilterNodeId(0), resources.target.id, mapping, deviceBounds),
+                    FilterEvaluationKeyV1.of(CapturedFilterNodeIdI32(0), resources.target.id, mapping, deviceBounds),
                     FilterPassOperationV1.SeparableBlur(
                         FilterImplementationKindV1.IMAGE_BLUR_X,
                         1f,
@@ -1042,6 +1042,13 @@ class RenderGraphContractTest {
         val graph = w6bFilterPublicationGraph()
 
         assertEquals(2, graph.passes().filterIsInstance<PlanPass.FilterPass>().size)
+    }
+
+    @Test
+    fun `w6b publication witness rejects renderer-local source sampling`() {
+        assertFailsWith<IllegalArgumentException> {
+            w6bFilterPublicationGraph(publishTargetLocalSampling = false)
+        }
     }
 
     @Test
@@ -1083,6 +1090,9 @@ class RenderGraphContractTest {
 
     @Test
     fun `w6b publication witness validates drop shadow original ownership and mode arity`() {
+        val baseline = w6bDropShadowPublicationGraph()
+        assertEquals(9, baseline.passes().size)
+
         assertFailsWith<IllegalArgumentException> {
             w6bDropShadowPublicationGraph(wrongOriginal = true)
         }
@@ -1131,7 +1141,8 @@ class RenderGraphContractTest {
         val occurrence = FilterOccurrenceSourceV1(scene, 0, null, emptyList(), LayerDescriptor.of())
         val seal = PlanPass.PictureAggregateSealPass(0, aggregate, source.id, source.id, 2L)
         fun alpha(generation: Long) = PlanPass.FilterCoverageSourcePass(1, coverage.id, occurrence,
-            sealedAlphaSource = PictureAlphaSourceV1(aggregate, source.id, generation, mapping, RectI32(0, 0, 1, 1)))
+            sealedAlphaSource = PictureAlphaSourceV1(aggregate, source.id, generation, mapping, RectI32(0, 0, 1, 1)),
+            sealedAlphaSampling = FilterInputSamplingV1(Point2I32.Origin, RectI32(0, 0, 1, 1)))
 
         assertEquals(0, W6bFilterGraphWitnessV1.seal(listOf(source, coverage), listOf(seal, alpha(2L))).occurrences().size)
         assertFailsWith<IllegalArgumentException> {
@@ -3246,6 +3257,7 @@ class RenderGraphContractTest {
         verticalUsesDifferentKey: Boolean = false,
         sourceRole: PlanResourceRole = PlanResourceRole.FilterSource,
         compositeIntermediateOutput: Boolean = false,
+        publishTargetLocalSampling: Boolean = true,
     ): RenderGraph {
         val passCountI32 = when {
             compositeIntermediateOutput && consumeTerminalOutput -> 7
@@ -3276,10 +3288,11 @@ class RenderGraphContractTest {
         val deviceBounds = RectI32(0, 0, 1, 1)
         val mapping = requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32.Origin))
         val actualBoundSource = if (sourceRole == PlanResourceRole.FilterSource) boundSource else source.id
-        val key = FilterEvaluationKeyV1.of(CapturedFilterNodeId(0), actualBoundSource, mapping, deviceBounds)
+        val key = FilterEvaluationKeyV1.of(CapturedFilterNodeIdI32(0), actualBoundSource, mapping, deviceBounds)
         val verticalKey = if (verticalUsesDifferentKey)
-            FilterEvaluationKeyV1.of(CapturedFilterNodeId(0), actualBoundSource, mapping, deviceBounds) else key
+            FilterEvaluationKeyV1.of(CapturedFilterNodeIdI32(0), actualBoundSource, mapping, deviceBounds) else key
         val bounds = FilterBoundsPlanV1(deviceBounds, deviceBounds, deviceBounds, deviceBounds, Point2I32.Origin)
+        val sampling = FilterInputSamplingV1(Point2I32.Origin, deviceBounds)
         val passes = buildList<PlanPass> {
             add(PlanPass.RenderPass(0, root.id, emptyList(), AttachmentLoadPlan.ClearTransparent, AttachmentStorePlan.Store,
                 destinationVersionAfter = DestinationVersionI64(0)))
@@ -3288,13 +3301,15 @@ class RenderGraphContractTest {
                 FilterPassOperationV1.SeparableBlur(if (firstAxis == FilterAxisV1.X)
                     FilterImplementationKindV1.IMAGE_BLUR_X else FilterImplementationKindV1.IMAGE_BLUR_Y,
                     1f, firstAxis,
-                    org.graphiks.kanvas.render.ir.TileMode.CLAMP, bounds)))
+                    org.graphiks.kanvas.render.ir.TileMode.CLAMP, bounds,
+                    sampling.takeIf { publishTargetLocalSampling })))
             if (compositeIntermediateOutput) add(PlanPass.FilterComposite(3, horizontal.id, root.id, key,
                 deviceBounds, Point2I32.Origin, FilterCompositeOperationV1.Draw(BlendPlan.SrcOver),
                 destinationVersionAfter = DestinationVersionI64(1)))
             add(PlanPass.FilterPass(if (compositeIntermediateOutput) 4 else 3, listOf(verticalInput), vertical.id, verticalKey,
                 FilterPassOperationV1.SeparableBlur(FilterImplementationKindV1.IMAGE_BLUR_Y, 1f, FilterAxisV1.Y,
-                    org.graphiks.kanvas.render.ir.TileMode.CLAMP, bounds)))
+                    org.graphiks.kanvas.render.ir.TileMode.CLAMP, bounds,
+                    sampling.takeIf { publishTargetLocalSampling })))
             if (consumeTerminalOutput) add(PlanPass.FilterComposite(if (compositeIntermediateOutput) 5 else 4, vertical.id, root.id, verticalKey,
                 deviceBounds, Point2I32.Origin, FilterCompositeOperationV1.Draw(BlendPlan.SrcOver),
                 destinationVersionAfter = DestinationVersionI64(if (compositeIntermediateOutput) 2 else 1)))
@@ -3328,14 +3343,15 @@ class RenderGraphContractTest {
         val mapping = requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32.Origin))
         val key = FilterEvaluationKeyV1.forMaskOccurrence(0, coverage.id, mapping, bounds)
         val filterBounds = FilterBoundsPlanV1(bounds, bounds, bounds, bounds, Point2I32.Origin)
+        val sampling = FilterInputSamplingV1(Point2I32.Origin, bounds)
         val passes = listOf<PlanPass>(
             PlanPass.FilterCoverageSourcePass(0, coverage.id, occurrence),
             PlanPass.FilterPass(1, listOf(coverage.id), horizontal.id, key,
                 FilterPassOperationV1.SeparableBlur(FilterImplementationKindV1.MASK_COVERAGE_BLUR_X, 1f,
-                    FilterAxisV1.X, org.graphiks.kanvas.render.ir.TileMode.CLAMP, filterBounds)),
+                    FilterAxisV1.X, org.graphiks.kanvas.render.ir.TileMode.CLAMP, filterBounds, sampling)),
             PlanPass.FilterPass(2, listOf(horizontal.id), vertical.id, key,
                 FilterPassOperationV1.SeparableBlur(FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y, 1f,
-                    FilterAxisV1.Y, org.graphiks.kanvas.render.ir.TileMode.CLAMP, filterBounds)),
+                    FilterAxisV1.Y, org.graphiks.kanvas.render.ir.TileMode.CLAMP, filterBounds, sampling)),
             PlanPass.PictureSourcePass(3, pictureSource.id, scene.canonicalId.value, 0, occurrence, vertical.id),
         )
         return listOf(coverage, horizontal, vertical, pictureSource) to passes
@@ -3378,8 +3394,12 @@ class RenderGraphContractTest {
         )
         val deviceBounds = RectI32(0, 0, 1, 1)
         val mapping = requireNotNull(LayerMappingF64.ofOrNull(Matrix3x3F64(), Point2I32.Origin))
-        val key = FilterEvaluationKeyV1.of(CapturedFilterNodeId(0), source.id, mapping, deviceBounds)
+        val key = FilterEvaluationKeyV1.of(CapturedFilterNodeIdI32(0), source.id, mapping, deviceBounds)
         val bounds = FilterBoundsPlanV1(deviceBounds, deviceBounds, deviceBounds, deviceBounds, Point2I32.Origin)
+        val sampling = FilterInputSamplingV1(Point2I32.Origin, deviceBounds)
+        val linearSampling = DropShadowLinearSamplingV1(
+            org.graphiks.math.vector.Vector2F64(0.0, 0.0), deviceBounds, deviceBounds,
+        )
         val inputs = buildList {
             add(colorized.id)
             if (includeOriginal) add(if (wrongOriginal) wrong.id else source.id)
@@ -3391,18 +3411,19 @@ class RenderGraphContractTest {
             PlanPass.PictureSourcePass(2, wrong.id, "wrong-shadow-source", 1),
             PlanPass.FilterPass(3, listOf(source.id), horizontal.id, key,
                 FilterPassOperationV1.SeparableBlur(FilterImplementationKindV1.IMAGE_BLUR_X, 1f,
-                    FilterAxisV1.X, org.graphiks.kanvas.render.ir.TileMode.CLAMP, bounds)),
+                    FilterAxisV1.X, org.graphiks.kanvas.render.ir.TileMode.CLAMP, bounds, sampling)),
             PlanPass.FilterPass(4, listOf(horizontal.id), vertical.id, key,
                 FilterPassOperationV1.SeparableBlur(FilterImplementationKindV1.IMAGE_BLUR_Y, 1f,
-                    FilterAxisV1.Y, org.graphiks.kanvas.render.ir.TileMode.CLAMP, bounds)),
+                    FilterAxisV1.Y, org.graphiks.kanvas.render.ir.TileMode.CLAMP, bounds, sampling)),
             PlanPass.FilterPass(5, listOf(if (wrongColorizeInput) source.id else vertical.id), colorized.id, key,
                 FilterPassOperationV1.DropShadowColorize(org.graphiks.math.color.ColorARGB.of(255, 1, 2, 3),
-                    org.graphiks.math.vector.Vector2F64(0.0, 0.0), bounds)),
+                    org.graphiks.math.vector.Vector2F64(0.0, 0.0), bounds, linearSampling)),
             PlanPass.FilterPass(6, inputs, terminal.id, key, FilterPassOperationV1.DropShadowComposite(
-                mode, if (includeOriginal) source.id else null, bounds)),
+                mode, if (includeOriginal) source.id else null, bounds,
+                Point2I32.Origin, Point2I32.Origin)),
             PlanPass.FilterComposite(7, terminal.id, root.id, key, deviceBounds, Point2I32.Origin,
                 FilterCompositeOperationV1.Draw(BlendPlan.SrcOver), destinationVersionAfter = DestinationVersionI64(1)),
-            PlanPass.ReadbackPass(8, root.id, staging.id, 256),
+            PlanPass.ReadbackPass(8, root.id, staging.id, 256, mappedBytesI64 = 4),
         )
         val resources = listOf(root, source, wrong, horizontal, vertical, colorized, terminal, staging)
         val budget = PlanBudget(4_096)

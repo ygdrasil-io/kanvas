@@ -497,14 +497,15 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         renderOperands += emptyRender(stepIndex, views.getValue(target), generation, clear = true, pass, owned)
                     }
                     is PlanPass.FilterCoverageSourcePass -> {
-                        val outputOrigin = frame.targetOriginDeviceI32(pass.output)
                         val extent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
                         when (val binding = pass.rasterBinding) {
                             null -> pass.sealedAlphaSource?.let { alpha ->
-                                val inputOrigin = frame.targetOriginDeviceI32(alpha.sealedSourceId)
+                                val offset = requireNotNull(pass.sealedAlphaSampling) {
+                                    "W6b sealed alpha source has no target-local sampling."
+                                }.copyOutputToInputOffsetTargetLocalI32()
                                 renderOperands += textureRender(stepIndex, views.getValue(pass.output), views.getValue(alpha.sealedSourceId), generation,
                                     W6A_VERTEX_SHADER + W6bMaskCoverageSnippet.alphaCoverageFragment(
-                                        inputOrigin.x, inputOrigin.y, outputOrigin.x, outputOrigin.y,
+                                        offset.x, offset.y,
                                     ), BlendPlan.LegacySrcOverV1, 0, 0, extent.width, extent.height, pass, owned)
                             } ?: run {
                                 // Task 3's image-only witness owns no mask producer and remains
@@ -524,11 +525,11 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         }
                     }
                     is PlanPass.FilterCoverageRetainPass -> {
-                        val inputOrigin = frame.targetOriginDeviceI32(pass.source)
-                        val outputOrigin = frame.targetOriginDeviceI32(pass.output)
+                        val sampling = requireNotNull(pass.sampling) { "W6b retained coverage has no sealed target-local sampling." }
+                        val offset = sampling.copyOutputToInputOffsetTargetLocalI32()
                         val extent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
                         renderOperands += textureRender(stepIndex, views.getValue(pass.output), views.getValue(pass.source), generation,
-                            sampledCompositeShader(outputOrigin.x - inputOrigin.x, outputOrigin.y - inputOrigin.y, 1f),
+                            sampledCompositeShader(offset.x, offset.y, 1f),
                             BlendPlan.LegacySrcOverV1, 0, 0, extent.width, extent.height, pass, owned)
                     }
                     is PlanPass.PictureAggregateSealPass -> {
@@ -536,24 +537,27 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     }
                     is PlanPass.PictureSourcePass -> {
                         val operand = pass.graphTextureOperand
+                        val sampleOffset = pass.sourceSampling?.copyOutputToInputOffsetTargetLocalI32()
                         if (operand == null) {
                             val layerInput = requireNotNull(pass.layerInput) {
                                 "W6b non-graph Picture source must retain its frozen layer input."
                             }
-                            val inputOrigin = frame.targetOriginDeviceI32(layerInput)
-                            val outputOrigin = frame.targetOriginDeviceI32(pass.output)
+                            val offset = requireNotNull(sampleOffset) {
+                                "W6b Picture layer source has no sealed target-local sampling."
+                            }
                             val extent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
                             renderOperands += textureRender(stepIndex, views.getValue(pass.output), views.getValue(layerInput), generation,
-                                sampledCompositeShader(outputOrigin.x - inputOrigin.x, outputOrigin.y - inputOrigin.y, 1f),
+                                sampledCompositeShader(offset.x, offset.y, 1f),
                                 BlendPlan.LegacySrcOverV1, 0, 0, extent.width, extent.height, pass, owned)
                         } else {
-                            val inputOrigin = frame.targetOriginDeviceI32(operand.sealedSourceId)
-                            val outputOrigin = frame.targetOriginDeviceI32(pass.output)
+                            val offset = requireNotNull(sampleOffset) {
+                                "W6b Picture graph texture source has no sealed target-local sampling."
+                            }
                             val extent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
                             val shader = W6A_VERTEX_SHADER + """
                                 @group(0) @binding(0) var picture_source: texture_2d<f32>;
                                 @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
-                                    let source_position = vec2<i32>(position.xy) + vec2<i32>(${outputOrigin.x - inputOrigin.x}, ${outputOrigin.y - inputOrigin.y});
+                                    let source_position = vec2<i32>(position.xy) + vec2<i32>(${offset.x}, ${offset.y});
                                     let source_extent = vec2<i32>(textureDimensions(picture_source));
                                     if (source_position.x < 0 || source_position.y < 0 || source_position.x >= source_extent.x || source_position.y >= source_extent.y) {
                                         return vec4<f32>(0.0);
@@ -566,7 +570,6 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         }
                     }
                     is PlanPass.FilterPass -> {
-                        val outputOrigin = frame.targetOriginDeviceI32(pass.output)
                         val outputExtent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
                         when (val operation = pass.operation) {
                             is FilterPassOperationV1.SeparableBlur -> {
@@ -578,17 +581,17 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 )) { "W6b cannot materialize ${operation.kind}." }
                                 require(pass.inputs().size == 1)
                                 val input = pass.inputs().single()
-                                val inputOrigin = frame.targetOriginDeviceI32(input)
-                                val known = operation.bounds.copyKnownContentDeviceI32()
-                                    ?: operation.bounds.copyRequiredInputDeviceI32()
+                                val sampling = requireNotNull(operation.sampling) {
+                                    "W6b blur has no sealed target-local sampling."
+                                }
+                                val offset = sampling.copyOutputToInputOffsetTargetLocalI32()
+                                val known = sampling.copyKnownContentInputTargetLocalI32()
                                 val shader = W6A_VERTEX_SHADER + W6bSeparableBlurSnippet.fragment(
                                     operation.axis,
                                     operation.sigmaF32,
                                     operation.tileMode,
-                                    inputOrigin.x,
-                                    inputOrigin.y,
-                                    outputOrigin.x,
-                                    outputOrigin.y,
+                                    offset.x,
+                                    offset.y,
                                     known.left,
                                     known.top,
                                     known.right,
@@ -602,12 +605,14 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     shader, BlendPlan.LegacySrcOverV1, 0, 0, outputExtent.width, outputExtent.height, pass, owned)
                             }
                             is FilterPassOperationV1.MaskBlurStyle -> {
-                                val blurredOrigin = frame.targetOriginDeviceI32(operation.blurredCoverageSource)
+                                val blurredOffset = requireNotNull(operation.blurredSampling) {
+                                    "W6b mask style has no sealed blurred sampling."
+                                }.copyOutputToInputOffsetTargetLocalI32()
                                 val original = operation.originalCoverageSource
+                                val originalOffset = operation.originalSampling?.copyOutputToInputOffsetTargetLocalI32()
                                 renderOperands += maskStyleRender(stepIndex, views.getValue(pass.output),
                                     views.getValue(operation.blurredCoverageSource), original?.let(views::get), generation,
-                                    operation.style, blurredOrigin.x, blurredOrigin.y, outputOrigin.x, outputOrigin.y,
-                                    original?.let(frame::targetOriginDeviceI32)?.x, original?.let(frame::targetOriginDeviceI32)?.y,
+                                    operation.style, blurredOffset.x, blurredOffset.y, originalOffset?.x, originalOffset?.y,
                                     outputExtent.width, outputExtent.height, pass, owned)
                             }
                             is FilterPassOperationV1.MaskShader -> {
@@ -615,29 +620,40 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 val binding = operation.materialBinding as? FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned
                                     ?: error("W6b mask shader lost its frozen W5 material binding.")
                                 val input = pass.inputs().single()
-                                val inputOrigin = frame.targetOriginDeviceI32(input)
+                                val offset = requireNotNull(operation.sampling) {
+                                    "W6b mask shader has no sealed target-local sampling."
+                                }.copyOutputToInputOffsetTargetLocalI32()
+                                // Device position is the pre-issued W5 material bridge, not a
+                                // W6b bounds/origin reconstruction in native lowering.
+                                val outputOrigin = binding.materialDeviceOriginI32
                                 maskShaderCoverageRender(stepIndex, views.getValue(pass.output), views.getValue(input), generation,
                                     frame.maskShaderMaterial(binding), sourceUniformBuffers.getValue(binding.uniformResource),
-                                    maskShaderResources.getValue(frame.maskShaderMaterial(binding)), inputOrigin.x, inputOrigin.y, outputOrigin.x, outputOrigin.y,
+                                    maskShaderResources.getValue(frame.maskShaderMaterial(binding)), offset.x, offset.y, outputOrigin.x, outputOrigin.y,
                                     outputExtent.width, outputExtent.height, pass, owned).also(renderOperands::add)
                             }
                             is FilterPassOperationV1.MaskTable -> {
                                 require(pass.inputs().size == 1)
                                 val input = pass.inputs().single()
-                                val inputOrigin = frame.targetOriginDeviceI32(input)
+                                val offset = requireNotNull(operation.sampling) {
+                                    "W6b mask table has no sealed target-local sampling."
+                                }.copyOutputToInputOffsetTargetLocalI32()
                                 renderOperands += maskTableCoverageRender(stepIndex, views.getValue(pass.output), views.getValue(input),
-                                    maskTableBuffers.getValue(operation.tableResourceId), generation, inputOrigin.x, inputOrigin.y,
-                                    outputOrigin.x, outputOrigin.y, outputExtent.width, outputExtent.height, pass, owned)
+                                    maskTableBuffers.getValue(operation.tableResourceId), generation, offset.x, offset.y,
+                                    outputExtent.width, outputExtent.height, pass, owned)
                             }
                             is FilterPassOperationV1.MaterializedSource -> {
                                 require(pass.inputs().size == 2)
                                 val input = pass.inputs().first()
-                                val inputOrigin = frame.targetOriginDeviceI32(input)
                                 val coverage = pass.inputs().last()
-                                val coverageOrigin = frame.targetOriginDeviceI32(coverage)
+                                val sourceOffset = requireNotNull(operation.sourceSampling) {
+                                    "W6b material source has no sealed target-local source sampling."
+                                }.copyOutputToInputOffsetTargetLocalI32()
+                                val coverageOffset = requireNotNull(operation.coverageSampling) {
+                                    "W6b material source has no sealed target-local coverage sampling."
+                                }.copyOutputToInputOffsetTargetLocalI32()
                                 renderOperands += maskedMaterialSourceRender(stepIndex, views.getValue(pass.output), views.getValue(input),
-                                    views.getValue(coverage), generation, inputOrigin.x, inputOrigin.y, coverageOrigin.x,
-                                    coverageOrigin.y, outputOrigin.x, outputOrigin.y,
+                                    views.getValue(coverage), generation, sourceOffset.x, sourceOffset.y, coverageOffset.x,
+                                    coverageOffset.y,
                                     materialSourceAlphaReplacement.getValue(input),
                                     outputExtent.width, outputExtent.height, pass, owned)
                             }
@@ -664,12 +680,13 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         val operands = requireNotNull(pass.operands) { "W6b Picture composite needs frozen operands." }
                         val source = operands.copySourceBoundsTargetI32()
                         val destination = operands.copyDestinationOriginTargetI32()
-                        val scissor = pictureCompositeScissor(frame, pass.destination, source, destination, operands)
+                        val scissor = operands.copyCompositeScissorTargetLocalI32()
+                        val sampleOffset = operands.copySourceSampleOffsetTargetLocalI32()
                         val operand = graphTextureOperandsBySource[pass.source]
                         renderOperands += if (scissor == null) emptyRender(stepIndex, views.getValue(pass.destination), generation,
                             clear = false, pass, owned) else if (operand == null) {
                             textureRender(stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
-                                sampledCompositeShader(source.left - destination.x, source.top - destination.y, 1f), operands.blend,
+                                sampledCompositeShader(sampleOffset.x, sampleOffset.y, 1f), operands.blend,
                                 scissor.left, scissor.top, scissor.width(), scissor.height(), pass, owned)
                         } else {
                             require(operand.finalBlend.canonicalLabel == operands.blend.canonicalLabel) {
@@ -718,7 +735,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             }
                             is FilterCompositeOperationV1.Picture -> {
                                 val terminal = requireNotNull(operation.terminal)
-                                val scissor = pictureCompositeScissor(frame, pass.destination, source, destination, terminal)
+                                val scissor = terminal.copyCompositeScissorTargetLocalI32()
                                 val operand = graphTextureOperandsBySource[pass.evaluationKey.boundSourceId]
                                 renderOperands += if (scissor == null) {
                                     emptyRender(stepIndex, views.getValue(pass.destination), generation, clear = false, pass, owned)
@@ -888,47 +905,6 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             operationKindOverride = if (pass is PlanPass.LayerComposite) GPUEncoderOperationKind.LayerComposite else null,
             w6aPassV1 = pass,
         )
-    }
-
-    /** Applies the typed deferred clip only at the frozen Picture terminal. */
-    private fun pictureCompositeScissor(
-        frame: GPUW6aLayerFramePlan,
-        destinationTarget: PlanResourceId,
-        source: RectI32,
-        destination: org.graphiks.math.geometry.Point2I32,
-        operands: PictureCompositeOperandsV1,
-    ): RectI32? {
-        val result = RectI32(destination.x, destination.y,
-            Math.addExact(destination.x, source.width()), Math.addExact(destination.y, source.height()))
-        val deviceClip = when (val clip = operands.deferredClip) {
-            ClipStackNode.Empty -> return result
-            is ClipStackNode.DeviceRect -> {
-                val bounds = clip.copyBounds()
-                if (bounds.isEmpty) return null
-                requireNotNull(operands.copyClipToDeviceF64().mapRectBoundsF64OrNull(RectF64(
-                    bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble(),
-                ))?.toExactDeviceRectI32OrNull()) { "W6b Picture deferred clip is not an exact device scissor." }
-            }
-            is ClipStackNode.Operations -> error("Task 3 requires a typed DeviceRect deferred Picture clip.")
-        }
-        val origin = frame.targetOriginDeviceI32(destinationTarget)
-        val local = RectI32(
-            Math.subtractExact(deviceClip.left, origin.x), Math.subtractExact(deviceClip.top, origin.y),
-            Math.subtractExact(deviceClip.right, origin.x), Math.subtractExact(deviceClip.bottom, origin.y),
-        )
-        return result.takeIf { it.intersect(local) }
-    }
-
-    /** The plan has already admitted only integral hard-edge clips; never widen one at lowering. */
-    private fun RectF64.toExactDeviceRectI32OrNull(): RectI32? {
-        fun coordinate(value: Double): Int? = if (value.isFinite() &&
-            value >= Int.MIN_VALUE.toDouble() && value <= Int.MAX_VALUE.toDouble() &&
-            value == value.toLong().toDouble()) value.toInt() else null
-        val left = coordinate(left) ?: return null
-        val top = coordinate(top) ?: return null
-        val right = coordinate(right) ?: return null
-        val bottom = coordinate(bottom) ?: return null
-        return RectI32(left, top, right, bottom)
     }
 
     /** Materializes one published graph-texture source and, when present, its frozen W5 filter row. */
@@ -1133,10 +1109,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         coverage: GPUTextureView,
         table: GPUBuffer,
         generation: GPUDeviceGenerationID,
-        inputOriginDeviceXI32: Int,
-        inputOriginDeviceYI32: Int,
-        outputOriginDeviceXI32: Int,
-        outputOriginDeviceYI32: Int,
+        outputToInputOffsetTargetLocalXI32: Int,
+        outputToInputOffsetTargetLocalYI32: Int,
         widthI32: Int,
         heightI32: Int,
         pass: PlanPass,
@@ -1148,7 +1122,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 type = GPUBufferBindingType.ReadOnlyStorage, minBindingSize = 256uL)),
         ))))
         val pipeline = pipeline(W6A_VERTEX_SHADER + W6bMaskCoverageSnippet.maskTableCoverageFragment(
-            inputOriginDeviceXI32, inputOriginDeviceYI32, outputOriginDeviceXI32, outputOriginDeviceYI32,
+            outputToInputOffsetTargetLocalXI32, outputToInputOffsetTargetLocalYI32,
         ), layout, w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
         val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout,
             entries = listOf(BindGroupEntry(0u, coverage), BindGroupEntry(1u, BufferBinding(table, 0uL, 256uL))))))
@@ -1176,8 +1150,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         material: GPUW6bMaskShaderMaterialV1,
         uniform: GPUBuffer,
         resources: Map<Int, GPUW6bMaskShaderResourceV1>,
-        inputOriginDeviceXI32: Int,
-        inputOriginDeviceYI32: Int,
+        outputToInputOffsetTargetLocalXI32: Int,
+        outputToInputOffsetTargetLocalYI32: Int,
         outputOriginDeviceXI32: Int,
         outputOriginDeviceYI32: Int,
         widthI32: Int,
@@ -1212,7 +1186,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             stage.bindingManifest.fold(stage.declarationsWgsl) { declarations, binding ->
                 declarations.replace("@group(1) @binding(${binding.bindingI32})",
                     "@group(0) @binding(${binding.bindingI32 + 1})")
-            }, material.sourceInputWgsl, inputOriginDeviceXI32, inputOriginDeviceYI32,
+            }, material.sourceInputWgsl, outputToInputOffsetTargetLocalXI32, outputToInputOffsetTargetLocalYI32,
             outputOriginDeviceXI32, outputOriginDeviceYI32,
         ), layout, w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
         val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout,
@@ -1258,12 +1232,10 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         original: GPUTextureView?,
         generation: GPUDeviceGenerationID,
         style: org.graphiks.kanvas.render.ir.MaskBlurStyle,
-        blurredOriginDeviceXI32: Int,
-        blurredOriginDeviceYI32: Int,
-        outputOriginDeviceXI32: Int,
-        outputOriginDeviceYI32: Int,
-        originalOriginDeviceXI32: Int?,
-        originalOriginDeviceYI32: Int?,
+        outputToBlurredOffsetTargetLocalXI32: Int,
+        outputToBlurredOffsetTargetLocalYI32: Int,
+        outputToOriginalOffsetTargetLocalXI32: Int?,
+        outputToOriginalOffsetTargetLocalYI32: Int?,
         widthI32: Int,
         heightI32: Int,
         pass: PlanPass,
@@ -1275,8 +1247,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             if (original != null) add(BindGroupLayoutEntry(1u, GPUShaderStage.Fragment, texture = TextureBindingLayout()))
         })))
         val pipeline = pipeline(W6A_VERTEX_SHADER + W6bMaskCoverageSnippet.maskStyleFragment(
-            style, blurredOriginDeviceXI32, blurredOriginDeviceYI32, outputOriginDeviceXI32, outputOriginDeviceYI32,
-            originalOriginDeviceXI32, originalOriginDeviceYI32,
+            style, outputToBlurredOffsetTargetLocalXI32, outputToBlurredOffsetTargetLocalYI32,
+            outputToOriginalOffsetTargetLocalXI32, outputToOriginalOffsetTargetLocalYI32,
         ), layout, w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
         val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = buildList {
             add(BindGroupEntry(0u, blurred))
@@ -1304,12 +1276,10 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         source: GPUTextureView,
         coverage: GPUTextureView,
         generation: GPUDeviceGenerationID,
-        sourceOriginDeviceXI32: Int,
-        sourceOriginDeviceYI32: Int,
-        coverageOriginDeviceXI32: Int,
-        coverageOriginDeviceYI32: Int,
-        outputOriginDeviceXI32: Int,
-        outputOriginDeviceYI32: Int,
+        outputToSourceOffsetTargetLocalXI32: Int,
+        outputToSourceOffsetTargetLocalYI32: Int,
+        outputToCoverageOffsetTargetLocalXI32: Int,
+        outputToCoverageOffsetTargetLocalYI32: Int,
         replacesSourceAlpha: Boolean,
         widthI32: Int,
         heightI32: Int,
@@ -1321,8 +1291,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             BindGroupLayoutEntry(1u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
         ))))
         val pipeline = pipeline(W6A_VERTEX_SHADER + W6bMaskCoverageSnippet.maskedMaterialSourceFragment(
-            sourceOriginDeviceXI32, sourceOriginDeviceYI32, coverageOriginDeviceXI32, coverageOriginDeviceYI32,
-            outputOriginDeviceXI32, outputOriginDeviceYI32, replacesSourceAlpha,
+            outputToSourceOffsetTargetLocalXI32, outputToSourceOffsetTargetLocalYI32,
+            outputToCoverageOffsetTargetLocalXI32, outputToCoverageOffsetTargetLocalYI32, replacesSourceAlpha,
         ), layout, w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
         val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(
             BindGroupEntry(0u, source), BindGroupEntry(1u, coverage),
@@ -1419,10 +1389,10 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         )
     }
 
-    private fun sampledCompositeShader(sourceOffsetX: Int, sourceOffsetY: Int, alpha: Float): String = W6A_VERTEX_SHADER + """
+    private fun sampledCompositeShader(sourceOffsetTargetLocalXI32: Int, sourceOffsetTargetLocalYI32: Int, alpha: Float): String = W6A_VERTEX_SHADER + """
         @group(0) @binding(0) var w6b_source: texture_2d<f32>;
         @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
-            let source_position = vec2<i32>(position.xy) + vec2<i32>($sourceOffsetX, $sourceOffsetY);
+            let source_position = vec2<i32>(position.xy) + vec2<i32>($sourceOffsetTargetLocalXI32, $sourceOffsetTargetLocalYI32);
             let source_extent = vec2<i32>(textureDimensions(w6b_source));
             if (source_position.x < 0 || source_position.y < 0 || source_position.x >= source_extent.x || source_position.y >= source_extent.y) {
                 return vec4<f32>(0.0);

@@ -159,6 +159,29 @@ class W6bMaskShaderTableSurfacePixelTest {
     }
 
     @Test
+    fun `identity 256 entry table preserves fractional anti aliased coverage`() {
+        // A half-covered opaque-red texel encodes as linear 0.5 premultiplied red in an
+        // sRGB RGBA8 attachment.  The table is a coverage substitution, so an identity
+        // LUT must leave those hand-derived bytes unchanged rather than square coverage.
+        val expected = ubyteArrayOf(
+            188u, 0u, 0u, 128u,
+            188u, 0u, 0u, 128u,
+        )
+        val identity = UByteArray(256) { indexI32 -> indexI32.toUByte() }
+        val actual = Surface(2, 1).also { surface ->
+            surface.canvas {
+                drawRect(RectF32.ofLTRB(.5f, 0f, 1.5f, 1f), Paint(
+                    ColorARGB.Red,
+                    maskFilter = MaskFilter.Table(identity),
+                    antiAlias = true,
+                ))
+            }
+        }.render().pixels
+
+        assertContentEquals(expected, actual)
+    }
+
+    @Test
     fun `Picture parent shader and descendant table masks consume the sealed aggregate source`() {
         val child = PictureRecorder().also { recorder ->
             recorder.beginRecording(bounds3x1).drawRect(bounds3x1, Paint(

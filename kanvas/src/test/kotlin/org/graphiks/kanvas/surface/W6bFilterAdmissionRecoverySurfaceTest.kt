@@ -101,6 +101,48 @@ class W6bFilterAdmissionRecoverySurfaceTest {
     }
 
     @Test
+    fun `finite huge blur refuses with stable bounds diagnostic and same surface recovers`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(ColorARGB.White, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 2)
+        surface.canvas {
+            drawPicture(picture, Paint(imageFilter = ImageFilter.Blur(Float.MAX_VALUE, Float.MAX_VALUE)))
+        }
+
+        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.invalid_bounds:")
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+        assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
+    }
+
+    @Test
+    fun `finite huge shadow offset refuses with stable bounds diagnostic and same surface recovers`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(ColorARGB.White, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 2)
+        surface.canvas {
+            drawPicture(picture, Paint(imageFilter = ImageFilter.DropShadow(
+                dx = Float.MAX_VALUE,
+                dy = 0f,
+                sigmaX = 0f,
+                sigmaY = 0f,
+                color = ColorARGB.Black,
+            )))
+        }
+
+        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.invalid_bounds:")
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
+        assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
+    }
+
+    @Test
     fun `nested picture filter refuses terminally and same surface recovers`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
         val recorder = PictureRecorder()

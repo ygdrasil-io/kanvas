@@ -244,7 +244,7 @@ private fun EffectStack.singleImageFilterOrNull(): CapturedFilterRootV1? = when 
 }
 
 internal class FilterRestoreContext(private val table: CapturedFilterTableV1) {
-    private val filters = mutableMapOf<CapturedFilterNodeId, org.graphiks.kanvas.paint.ImageFilter>()
+    private val filters = mutableMapOf<CapturedFilterNodeIdI32, org.graphiks.kanvas.paint.ImageFilter>()
 
     fun restore(root: CapturedFilterRootV1): org.graphiks.kanvas.paint.ImageFilter = node(root.id)
 
@@ -257,7 +257,7 @@ internal class FilterRestoreContext(private val table: CapturedFilterTableV1) {
         -> throw IllegalArgumentException("Captured filter input is not public-replayable in W6b")
     }
 
-    private fun node(id: CapturedFilterNodeId): org.graphiks.kanvas.paint.ImageFilter = filters[id] ?: when (val value = table.nodeAt(id)) {
+    private fun node(id: CapturedFilterNodeIdI32): org.graphiks.kanvas.paint.ImageFilter = filters[id] ?: when (val value = table.nodeAt(id)) {
         is CapturedFilterNodeV1.Crop -> org.graphiks.kanvas.paint.ImageFilter.Crop(value.crop.copy(), org.graphiks.kanvas.paint.TileMode.valueOf(value.tileMode.name), input(value.input))
         is CapturedFilterNodeV1.Blur -> org.graphiks.kanvas.paint.ImageFilter.Blur(value.sigmaX, value.sigmaY, org.graphiks.kanvas.paint.TileMode.valueOf(value.tileMode.name), input(value.input))
         is CapturedFilterNodeV1.DropShadow -> org.graphiks.kanvas.paint.ImageFilter.DropShadow(value.dx, value.dy, value.sigmaX, value.sigmaY, value.color, input(value.input), org.graphiks.kanvas.paint.DropShadowMode.valueOf(value.mode.name))

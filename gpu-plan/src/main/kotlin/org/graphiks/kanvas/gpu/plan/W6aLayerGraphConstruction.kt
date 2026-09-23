@@ -78,6 +78,15 @@ private class W6aRestoreFacts(
     val restoreAffectsTransparentBlack: Boolean = blend.finalRestoreAffectsTransparentBlackV1(colorFilter)
 }
 
+/** Keeps the only Device→target conversion for a deferred Picture clip in gpu-plan. */
+private fun RectF64.toExactI32OrNull(): RectI32? {
+    fun coordinate(value: Double): Int? = if (value.isFinite() &&
+        value >= Int.MIN_VALUE.toDouble() && value <= Int.MAX_VALUE.toDouble() &&
+        value == value.toLong().toDouble()) Math.toIntExact(value.toLong()) else null
+    return RectI32(coordinate(left) ?: return null, coordinate(top) ?: return null,
+        coordinate(right) ?: return null, coordinate(bottom) ?: return null)
+}
+
 /** Deliberately distinguished from malformed W6 topology so callers can recover before native work. */
 internal class W6aRestoreAdmissionFailure(message: String) : IllegalArgumentException(message)
 
@@ -412,7 +421,8 @@ internal class W6aLayerGraphConstruction(
                 if (clear) AttachmentLoadPlan.ClearTransparent else AttachmentLoadPlan.Load,
                 AttachmentStorePlan.Store, drawDataResources = draws.firstOrNull()?.let { dataByCommand[it.commandIndex] },
                 destinationVersionAfter = DestinationVersionI64(after), coverageSource = coverageSource,
-                w6bMaskSourceBinding = w6bMaskSourceBinding, plannedCommandId = plannedCommandId).also(passes::add)
+                w6bMaskSourceBinding = w6bMaskSourceBinding, plannedCommandId = plannedCommandId,
+                materialDeviceOriginI32 = filterSource(target).originDeviceI32).also(passes::add)
         }
 
         val bindingsByCommand = bindings.associateBy { it.firstCommandIndexI32 }
@@ -590,8 +600,59 @@ internal class W6aLayerGraphConstruction(
                     RectI32(0, 0, extent.width, extent.height), Point2I32.Origin, Math.multiplyExact(extent.width.toLong(), 4L))
                 selectedBlend.bindDestinationReadV1(before, snapshot)
             } else selectedBlend
+            val sourceInDestination = try {
+                RectI32(
+                    destinationOrigin.x,
+                    destinationOrigin.y,
+                    Math.addExact(destinationOrigin.x, sourceBounds.width()),
+                    Math.addExact(destinationOrigin.y, sourceBounds.height()),
+                )
+            } catch (_: ArithmeticException) {
+                throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                    W6bFilterDiagnostics.InvalidBounds,
+                    "W6b Picture terminal source bounds overflow target-local I32 texels.",
+                ))
+            }
+            val destinationDeviceOrigin = targetOriginDevice(destination)
+            val (scissor, scissorAdmitted) = when (clip) {
+                ClipStackNode.Empty -> sourceInDestination to true
+                is ClipStackNode.DeviceRect -> {
+                    val bounds = clip.copyBounds()
+                    if (bounds.isEmpty) null to true else {
+                        val device = clipMapping.mapRectBoundsF64OrNull(RectF64(
+                            bounds.left.toDouble(), bounds.top.toDouble(),
+                            bounds.right.toDouble(), bounds.bottom.toDouble(),
+                        ))?.toExactI32OrNull()
+                        val targetLocal = device?.let { exact -> try {
+                            RectI32(
+                                Math.subtractExact(exact.left, destinationDeviceOrigin.x),
+                                Math.subtractExact(exact.top, destinationDeviceOrigin.y),
+                                Math.subtractExact(exact.right, destinationDeviceOrigin.x),
+                                Math.subtractExact(exact.bottom, destinationDeviceOrigin.y),
+                            )
+                        } catch (_: ArithmeticException) {
+                            null
+                        } }
+                        targetLocal?.let { local ->
+                            sourceInDestination.copy().let { clipped -> clipped.takeIf { it.intersect(local) } }
+                        } to (targetLocal != null)
+                    }
+                }
+                is ClipStackNode.Operations -> sourceInDestination to false
+            }
+            val sourceSampleOffset = try {
+                Point2I32(
+                    Math.subtractExact(sourceBounds.left, destinationOrigin.x),
+                    Math.subtractExact(sourceBounds.top, destinationOrigin.y),
+                )
+            } catch (_: ArithmeticException) {
+                throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                    W6bFilterDiagnostics.InvalidBounds,
+                    "W6b Picture terminal sample offset overflows target-local I32 texels.",
+                ))
+            }
             return PictureCompositeOperandsV1(planned, source.resourceId, 0L, sourceBounds,
-                destinationOrigin, clip, clipMapping, blend, before)
+                destinationOrigin, scissor, sourceSampleOffset, blend, before, scissorAdmitted)
         }
         fun appendFrozenOccurrence(
             occurrence: W6bFilterGraphConstruction.PositiveOccurrence,
@@ -849,6 +910,9 @@ internal class W6aLayerGraphConstruction(
                     plannedCommandId = planned,
                     aggregateId = draft.id,
                     graphTextureRequest = graphTextureRequest,
+                    sourceSampling = (layerInput ?: graphTextureRequest?.sealedSourceId)?.let { inputId ->
+                        sourceBindingsById.getValue(inputId).samplingFor(sourceBindingsById.getValue(target))
+                    },
                 )
                 passes += pass
                 if (target in sourceBindingsById) {
@@ -1422,6 +1486,7 @@ internal class W6aLayerGraphConstruction(
                             generationI64, aggregateTargetBinding.mapping, aggregateTargetBinding.copyExtentI32().let {
                                 RectI32(0, 0, it.width, it.height)
                             }),
+                        sealedAlphaSampling = aggregateTargetBinding.samplingFor(coverage),
                     )
                     W6bFilterGraphConstruction.freezeMaskOccurrence(occurrence, coverage, filterCursor).also { frozen ->
                         filterResourceSpecs += frozen.resourceSpecs(); passes += frozen.passes()
@@ -1791,7 +1856,9 @@ internal class W6aLayerGraphConstruction(
                         sealedAlphaSource = PictureAlphaSourceV1(null, target, versions.getValue(target),
                             requireNotNull(geometry.mapping), targetExtent(target).let { extent ->
                                 RectI32(0, 0, extent.width, extent.height)
-                            }))
+                            }),
+                        sealedAlphaSampling = filterSource(target).samplingFor(coverage),
+                    )
                     val frozenMask = filtered.mask?.let {
                         W6bFilterGraphConstruction.freezeMaskOccurrence(filtered, coverage, filterCursor)
                     }
@@ -1807,6 +1874,7 @@ internal class W6aLayerGraphConstruction(
                         target,
                         target,
                         filtered.source.pictureW5CoordinatesOrNull(),
+                        sourceSampling = filterSource(target).samplingFor(source),
                     )
                     passes += layerSource
                     versions[source.resourceId] = 0L
@@ -2043,7 +2111,8 @@ internal class W6aLayerGraphConstruction(
                 PlanPass.RenderPass(pass.ordinal, pass.target, local, pass.load, pass.store,
                     drawDataResources = pass.drawDataResources, destinationVersionAfter = pass.destinationVersionAfter,
                     coverageSource = pass.coverageSource, w6bMaskSourceBinding = pass.w6bMaskSourceBinding,
-                    plannedCommandId = pass.plannedCommandId)
+                    plannedCommandId = pass.plannedCommandId,
+                    materialDeviceOriginI32 = pass.copyMaterialDeviceOriginI32())
             } else when (pass) {
                 is PlanPass.FilterPass -> {
                     val operation = (pass.operation as? FilterPassOperationV1.MaskShader)?.let { shader ->
@@ -2066,8 +2135,10 @@ internal class W6aLayerGraphConstruction(
                                         uniformCapacity,
                                         maskShaderAuthority(material, captured),
                                         pass.evaluationKey.mapping,
+                                        pass.evaluationKey.mapping.copyLayerOriginDeviceI32(),
                                     ),
                                     shader.bounds,
+                                    shader.sampling,
                                 )
                             }
                             is FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned -> shader
@@ -2088,7 +2159,7 @@ internal class W6aLayerGraphConstruction(
                 is PlanPass.FilterCoverageSourcePass -> pass.rasterBinding?.let { binding ->
                     PlanPass.FilterCoverageSourcePass(pass.ordinal, pass.output, pass.occurrence,
                         pass.deferSourceDrawClip, pass.pictureCoordinates, pass.sealedAlphaSource,
-                        binding.withDraw(localizedCoverageDraw(binding, pass.output)))
+                        pass.sealedAlphaSampling, binding.withDraw(localizedCoverageDraw(binding, pass.output)))
                 } ?: pass
                 is PlanPass.PictureSourcePass -> {
                     val request = pass.graphTextureRequest ?: return@map pass
@@ -2139,6 +2210,7 @@ internal class W6aLayerGraphConstruction(
                             coverageOperation = request.coverageOperation,
                             clipToDeviceF64 = request.copyClipToDeviceF64(),
                         ),
+                        sourceSampling = pass.sourceSampling,
                     )
                 }
                 is PlanPass.TextureCopy -> if (pass.destination in childSnapshots && pass.source != root) {

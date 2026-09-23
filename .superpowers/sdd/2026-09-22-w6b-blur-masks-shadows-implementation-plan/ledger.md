@@ -4,7 +4,7 @@
 
 - Workspace: `/Users/chaos/.codex/worktrees/cbf6/kanvas`
 - Branch: `codex/w6b-blur-masks-shadows`
-- Base before execution: `3fa03b7a2`
+- Base before execution: `1ff67ec849e66de4c1ac2767ddb1dffce8d40631`
 - Plan: six sequential tasks; Terra implements, Sol reviews.
 - Constraints: public behavioral tests only; no infrastructure/private/reflection/mock/fake-device/counter/static-source tests; geometry stays in `:math` with I32/I64/F32/F64 names; fonts, codecs, GMs, dashboard, renders, baselines, scores, `jpg-color-cube`, and global Skia are excluded.
 
@@ -57,8 +57,8 @@
 - [x] Task 5 Sol review and bounded correction if needed
 - [x] Task 6 — shadows, budget, convergence
 - [x] Task 6 Sol review and bounded correction if needed
-- [ ] Whole-branch Sol review and bounded correction if needed
-- [ ] Verification, push, stacked Draft PR, artifact attachment
+- [x] Whole-branch Sol review and bounded correction if needed
+- [x] Verification ciblée de la correction (sans push, PR ni artifact dans ce périmètre)
 
 ## Execution log
 
@@ -131,3 +131,4 @@
 - **R19 — sealed target-local spatial operands:** every W6b scissor, sample rectangle and source offset crossing into `:gpu-renderer` is final target-local I32 data computed with checked math in `:gpu-plan`; WGSL may transform only within those sealed local domains and native code may not rediscover device origins. Cost if wrong: plan/native become competing geometry authorities and large origins can silently overflow.
 - **R20 — bounded deeply immutable filter tables:** archive node counts and Merge fan-out are rejected against `GraphLimits.maxNodes` before list/object allocation; builders reserve within the same bound; mutable geometry payloads are snapshotted on input and on exposure so canonical IDs, bytes and planning cannot change after publication. Cost if wrong: hostile but schema-valid archives allocate/copy near one million entries and callers can mutate wire semantics behind a sealed canonical ID.
 - Whole-branch bounded Terra correction wave opened for I1–I7 and M1–M3; no new scope or excluded command is authorized.
+- Correction whole-branch finale, base `2bf3d52`: I1 scelle les scissors, sample rectangles et offsets W6b en I32 target-local checked et retire la map renderer-local d'origins; I2/I3 ajoutent les preuves AA Table/Porter-Duff; I4 rétablit `invalid_bounds`; I5/I6 bornent les archives avant allocation et snapshotent profondément les tables; I7 ne conserve que bytes/replay public, avec l'invariant de publication dans `RenderGraphContractTest`; M1/M2/M3 corrigent nomenclature, fixture DropShadow et documentation. `RenderGraphContractTest` est 95/95 exit 0; les sept shards W6b sont 80/80 XML PASS puis native exit 133, donc `UNKNOWN`. Aucun GM, dashboard, render, baseline, `jpg-color-cube` ou suite Skia globale n'a été lancé. Le détail RED→GREEN est dans `whole-branch-fix-report.md`.

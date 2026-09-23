@@ -5,7 +5,7 @@ import org.graphiks.kanvas.render.ir.MaskBlurStyle
 /**
  * WGSL fragments for already-frozen W6b mask-coverage work.
  *
- * Callers pass only plan-published target-local origins, resource bindings, and the selected
+ * Callers pass only plan-published target-local offsets, resource bindings, and the selected
  * style.  This object chooses neither bounds, resources, operations, nor blend behavior.
  */
 internal object W6bMaskCoverageSnippet {
@@ -17,15 +17,13 @@ internal object W6bMaskCoverageSnippet {
     """
 
     fun alphaCoverageFragment(
-        inputOriginDeviceXI32: Int,
-        inputOriginDeviceYI32: Int,
-        outputOriginDeviceXI32: Int,
-        outputOriginDeviceYI32: Int,
+        outputToInputOffsetTargetLocalXI32: Int,
+        outputToInputOffsetTargetLocalYI32: Int,
     ): String = """
         @group(0) @binding(0) var w6b_alpha_source: texture_2d<f32>;
         @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
-            let input_position = vec2<i32>(position.xy) + vec2<i32>($outputOriginDeviceXI32 - $inputOriginDeviceXI32,
-                $outputOriginDeviceYI32 - $inputOriginDeviceYI32);
+            let input_position = vec2<i32>(position.xy) + vec2<i32>($outputToInputOffsetTargetLocalXI32,
+                $outputToInputOffsetTargetLocalYI32);
             let input_extent = vec2<i32>(textureDimensions(w6b_alpha_source));
             if (input_position.x < 0 || input_position.y < 0 || input_position.x >= input_extent.x || input_position.y >= input_extent.y) {
                 return vec4<f32>(0.0);
@@ -42,8 +40,8 @@ internal object W6bMaskCoverageSnippet {
     fun maskShaderCoverageFragment(
         materialDeclarationsWgsl: String,
         materialInputWgsl: String,
-        inputOriginDeviceXI32: Int,
-        inputOriginDeviceYI32: Int,
+        outputToInputOffsetTargetLocalXI32: Int,
+        outputToInputOffsetTargetLocalYI32: Int,
         outputOriginDeviceXI32: Int,
         outputOriginDeviceYI32: Int,
     ): String = """
@@ -51,8 +49,8 @@ internal object W6bMaskCoverageSnippet {
         $materialDeclarationsWgsl
         @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
             let local = vec2<i32>(position.xy);
-            let input_position = local + vec2<i32>($outputOriginDeviceXI32 - $inputOriginDeviceXI32,
-                $outputOriginDeviceYI32 - $inputOriginDeviceYI32);
+            let input_position = local + vec2<i32>($outputToInputOffsetTargetLocalXI32,
+                $outputToInputOffsetTargetLocalYI32);
             let input_extent = vec2<i32>(textureDimensions(w6b_shader_coverage));
             if (input_position.x < 0 || input_position.y < 0 || input_position.x >= input_extent.x || input_position.y >= input_extent.y) {
                 return vec4<f32>(0.0);
@@ -66,16 +64,14 @@ internal object W6bMaskCoverageSnippet {
 
     /** Reads the plan-owned 256-byte LUT as 64 packed little-endian U32 storage words. */
     fun maskTableCoverageFragment(
-        inputOriginDeviceXI32: Int,
-        inputOriginDeviceYI32: Int,
-        outputOriginDeviceXI32: Int,
-        outputOriginDeviceYI32: Int,
+        outputToInputOffsetTargetLocalXI32: Int,
+        outputToInputOffsetTargetLocalYI32: Int,
     ): String = """
             @group(0) @binding(0) var w6b_table_coverage: texture_2d<f32>;
             @group(0) @binding(1) var<storage, read> w6b_mask_table_words: array<u32, 64>;
             @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
-                let input_position = vec2<i32>(position.xy) + vec2<i32>($outputOriginDeviceXI32 - $inputOriginDeviceXI32,
-                    $outputOriginDeviceYI32 - $inputOriginDeviceYI32);
+                let input_position = vec2<i32>(position.xy) + vec2<i32>($outputToInputOffsetTargetLocalXI32,
+                    $outputToInputOffsetTargetLocalYI32);
                 let input_extent = vec2<i32>(textureDimensions(w6b_table_coverage));
                 if (input_position.x < 0 || input_position.y < 0 || input_position.x >= input_extent.x || input_position.y >= input_extent.y) {
                     return vec4<f32>(0.0);
@@ -85,31 +81,29 @@ internal object W6bMaskCoverageSnippet {
                 let packed_word = w6b_mask_table_words[table_index / 4u];
                 let shift = (table_index % 4u) * 8u;
                 let table_alpha = f32((packed_word >> shift) & 0xffu) / 255.0;
-                return vec4<f32>(coverage * table_alpha);
+                return vec4<f32>(table_alpha);
             }
         """
 
     fun maskStyleFragment(
         style: MaskBlurStyle,
-        blurredOriginDeviceXI32: Int,
-        blurredOriginDeviceYI32: Int,
-        outputOriginDeviceXI32: Int,
-        outputOriginDeviceYI32: Int,
-        originalOriginDeviceXI32: Int?,
-        originalOriginDeviceYI32: Int?,
+        outputToBlurredOffsetTargetLocalXI32: Int,
+        outputToBlurredOffsetTargetLocalYI32: Int,
+        outputToOriginalOffsetTargetLocalXI32: Int?,
+        outputToOriginalOffsetTargetLocalYI32: Int?,
     ): String {
         val originalDeclaration = if (style == MaskBlurStyle.NORMAL) "" else
             "@group(0) @binding(1) var w6b_original_coverage: texture_2d<f32>;"
         val originalSample = if (style == MaskBlurStyle.NORMAL) "0.0" else """
             w6b_sample_coverage(w6b_original_coverage, vec2<i32>(position.xy) +
-                vec2<i32>($outputOriginDeviceXI32 - ${requireNotNull(originalOriginDeviceXI32)},
-                    $outputOriginDeviceYI32 - ${requireNotNull(originalOriginDeviceYI32)}))
+                vec2<i32>(${requireNotNull(outputToOriginalOffsetTargetLocalXI32)},
+                    ${requireNotNull(outputToOriginalOffsetTargetLocalYI32)}))
         """.trimIndent()
         val equation = when (style) {
             MaskBlurStyle.NORMAL -> "blurred"
-            MaskBlurStyle.SOLID -> "max(original, blurred)"
-            MaskBlurStyle.OUTER -> "max(0.0, blurred - original)"
-            MaskBlurStyle.INNER -> "min(original, blurred)"
+            MaskBlurStyle.SOLID -> "original + blurred * (1.0 - original)"
+            MaskBlurStyle.OUTER -> "blurred * (1.0 - original)"
+            MaskBlurStyle.INNER -> "blurred * original"
         }
         return """
             @group(0) @binding(0) var w6b_blurred_coverage: texture_2d<f32>;
@@ -121,8 +115,8 @@ internal object W6bMaskCoverageSnippet {
             }
             @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
                 let blurred = w6b_sample_coverage(w6b_blurred_coverage, vec2<i32>(position.xy) +
-                    vec2<i32>($outputOriginDeviceXI32 - $blurredOriginDeviceXI32,
-                        $outputOriginDeviceYI32 - $blurredOriginDeviceYI32));
+                    vec2<i32>($outputToBlurredOffsetTargetLocalXI32,
+                        $outputToBlurredOffsetTargetLocalYI32));
                 let original = $originalSample;
                 return vec4<f32>($equation);
             }
@@ -130,22 +124,20 @@ internal object W6bMaskCoverageSnippet {
     }
 
     fun maskedMaterialSourceFragment(
-        sourceOriginDeviceXI32: Int,
-        sourceOriginDeviceYI32: Int,
-        coverageOriginDeviceXI32: Int,
-        coverageOriginDeviceYI32: Int,
-        outputOriginDeviceXI32: Int,
-        outputOriginDeviceYI32: Int,
+        outputToSourceOffsetTargetLocalXI32: Int,
+        outputToSourceOffsetTargetLocalYI32: Int,
+        outputToCoverageOffsetTargetLocalXI32: Int,
+        outputToCoverageOffsetTargetLocalYI32: Int,
         replacesSourceAlpha: Boolean,
     ): String = """
         @group(0) @binding(0) var w6b_material_source: texture_2d<f32>;
         @group(0) @binding(1) var w6b_material_coverage: texture_2d<f32>;
         @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
             let local = vec2<i32>(position.xy);
-            let source_position = local + vec2<i32>($outputOriginDeviceXI32 - $sourceOriginDeviceXI32,
-                $outputOriginDeviceYI32 - $sourceOriginDeviceYI32);
-            let coverage_position = local + vec2<i32>($outputOriginDeviceXI32 - $coverageOriginDeviceXI32,
-                $outputOriginDeviceYI32 - $coverageOriginDeviceYI32);
+            let source_position = local + vec2<i32>($outputToSourceOffsetTargetLocalXI32,
+                $outputToSourceOffsetTargetLocalYI32);
+            let coverage_position = local + vec2<i32>($outputToCoverageOffsetTargetLocalXI32,
+                $outputToCoverageOffsetTargetLocalYI32);
             let source_extent = vec2<i32>(textureDimensions(w6b_material_source));
             let coverage_extent = vec2<i32>(textureDimensions(w6b_material_coverage));
             if (coverage_position.x < 0 || coverage_position.y < 0 || coverage_position.x >= coverage_extent.x || coverage_position.y >= coverage_extent.y) {
