@@ -206,6 +206,19 @@ class W6cSpatialBoundsSurfaceTest {
     }
 
     @Test
+    fun `nested Compose retains overlapping Tile output beyond terminal clip`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val filter = ImageFilter.Compose(
+            ImageFilter.Offset(-500f, 0f),
+            ImageFilter.Tile(bounds, RectF32.ofLTRB(0f, 0f, 501f, 1f)),
+        )
+        val surface = Surface(1, 1)
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.Blue, imageFilter = filter, antiAlias = false)) }
+
+        assertContentEquals(bytes(255), surface.render().pixels)
+    }
+
+    @Test
     fun `huge nested Compose Tile refuses before readback mutation and recovers`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
         val filter = ImageFilter.Compose(
@@ -219,6 +232,27 @@ class W6cSpatialBoundsSurfaceTest {
         val failure = assertFailsWith<IllegalStateException> { surface.readPixels(bounds, sentinel) }
         assertTrue(failure.message?.startsWith("w6b.filter.frame_budget_exceeded:") == true,
             failure.message ?: "missing nested Tile budget refusal")
+        assertContentEquals(UByteArray(4) { 0x5au }, sentinel)
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false)) }
+        assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u), surface.render().pixels)
+    }
+
+    @Test
+    fun `huge overlapping nested Compose Tile refuses before readback mutation and recovers`() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val filter = ImageFilter.Compose(
+            ImageFilter.Offset(-500f, 0f),
+            ImageFilter.Tile(bounds, RectF32.ofLTRB(0f, 0f, 1_000_000_000f, 1f)),
+        )
+        val surface = Surface(1, 1)
+        val sentinel = UByteArray(4) { 0x5au }
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.Blue, imageFilter = filter, antiAlias = false)) }
+
+        val failure = assertFailsWith<IllegalStateException> { surface.readPixels(bounds, sentinel) }
+        assertTrue(failure.message?.startsWith("w6b.filter.frame_budget_exceeded:") == true,
+            failure.message ?: "missing overlapping nested Tile budget refusal")
         assertContentEquals(UByteArray(4) { 0x5au }, sentinel)
 
         surface.discardRecordedOperations()

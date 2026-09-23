@@ -101,12 +101,14 @@ internal object W6cSpatialBoundsPlanner {
         return FilterBoundsPlanV1(materializedProduced, desired, required, materializedProduced,
             Point2I32(desired.left, desired.top))
     }
-    /** The public region is semantic, but target allocation is bounded by the already sealed consumer demand. */
+    /** Only a terminal root may be bounded by the consumer; nested filters retain public demand. */
     private fun boundToConsumer(publicDomain: RectI32, source: W6bFilterGraphConstruction.SourceBinding,
-        terminalRootNoOp: Boolean): RectI32 =
-        source.copyDesiredOutputDeviceI32()?.let { consumer ->
-            intersect(publicDomain, consumer) ?: if (terminalRootNoOp) terminalNoOpTexel(publicDomain) else publicDomain
+        terminalRootNoOp: Boolean): RectI32 {
+        if (!terminalRootNoOp) return publicDomain
+        return source.copyDesiredOutputDeviceI32()?.let { consumer ->
+            intersect(publicDomain, consumer) ?: terminalNoOpTexel(publicDomain)
         } ?: publicDomain
+    }
     /** A disjoint public domain still needs immutable non-empty FilterBounds, but never a huge target. */
     private fun terminalNoOpTexel(domain: RectI32): RectI32 = RectI32(domain.left, domain.top,
         Math.addExact(domain.left, 1), Math.addExact(domain.top, 1))
