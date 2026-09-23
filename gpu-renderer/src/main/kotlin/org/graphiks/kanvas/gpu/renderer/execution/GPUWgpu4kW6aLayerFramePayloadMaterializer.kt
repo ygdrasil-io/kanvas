@@ -1390,7 +1390,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         ))))
         val pipeline = pipeline(shader, layout, w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
         val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(
-            BindGroupEntry(0u, source), BindGroupEntry(1u, BufferBinding(uniform, requireNotNull(operation.uniformOffsetBytesI64).toULong(),
+            BindGroupEntry(0u, source), BindGroupEntry(1u, BufferBinding(uniform, 0uL,
                 requireNotNull(operation.uniformCapacityBytesI64).toULong())),
         ))))
         return GPUPreparedNativeScopeOperand.Render(stepIndex,
