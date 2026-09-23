@@ -4,6 +4,7 @@ package org.graphiks.kanvas.surface
 
 import kotlin.math.abs
 import kotlin.test.assertContentEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.Canvas
@@ -274,6 +275,64 @@ class W6dLightingSurfacePixelTest {
         assertFamilyNear(expected, surface.render(), maxChannelDelta = 0)
     }
 
+    @Test
+    fun `distant diffuse accepts signed surface scale minus one`() {
+        val alpha = alphaFixture()
+        val expected = W6dLightingCpuOracle.distantDiffuseRgba8(3, 3, alpha, 0, 0, 3, 3,
+            directionX = 1f, directionY = 0f, directionZ = 1f, surfaceDepth = -1f, kd = 1f)
+        assertFalse(expected.contentEquals(W6dLightingCpuOracle.distantDiffuseRgba8(3, 3, alpha, 0, 0, 3, 3,
+            directionX = 1f, directionY = 0f, directionZ = 1f, surfaceDepth = 1f, kd = 1f)))
+        assertDistantDiffuseNear(expected, -1f)
+    }
+
+    @Test
+    fun `spot diffuse accepts finite exponents outside legacy range`() {
+        listOf(.5f, 129f).forEach { exponent ->
+            val expected = W6dLightingCpuOracle.remainingFamilyRgba8(
+                W6dLightingCpuOracle.Family.SPOT_DIFFUSE, 3, 3, alphaFixture(),
+                locationX = 1f, locationY = 0f, locationZ = 1f,
+                targetX = 1f, targetY = 0f, targetZ = 0f,
+                surfaceDepth = 1f, coefficient = 1f, specularExponent = exponent, cutoffDegrees = 90f,
+            )
+            val surface = Surface(3, 3)
+            surface.canvas {
+                saveLayer(SaveLayerRec(paint = Paint(imageFilter = ImageFilter.SpotLitDiffuse(
+                    Point3F32(1f, 0f, 1f), Point3F32(1f, 0f, 0f), exponent, 90f,
+                    ColorARGB.White, 1f, 1f), antiAlias = false)))
+                listOf(1 to 0, 0 to 1, 1 to 1, 1 to 2).forEach { (x, y) ->
+                    drawRect(RectF32.ofLTRB(x.toFloat(), y.toFloat(), x + 1f, y + 1f), Paint(ColorARGB.White, antiAlias = false))
+                }
+                restore()
+            }
+            assertFamilyNear(expected, surface.render(), maxChannelDelta = 2)
+        }
+    }
+
+    @Test
+    fun `negative lighting coefficients and non finite parameters refuse without readback mutation then recover`() {
+        listOf(
+            ImageFilter.DistantLitDiffuse(Vector3F32(1f, 0f, 1f), ColorARGB.White, 1f, -.1f) to "w6b.filter.invalid_bounds:",
+            ImageFilter.PointLitSpecular(Point3F32(1f, 0f, 1f), ColorARGB.White, 1f, -.1f, 2f) to "w6b.filter.invalid_bounds:",
+            ImageFilter.DistantLitDiffuse(Vector3F32(Float.NaN, 0f, 1f), ColorARGB.White, 1f, 1f) to "non-finite-value:",
+            ImageFilter.SpotLitDiffuse(Point3F32(1f, 0f, 1f), Point3F32(1f, 0f, 0f), Float.POSITIVE_INFINITY, 90f,
+                ColorARGB.White, 1f, 1f) to "non-finite-value:",
+        ).forEach { (filter, prefix) -> assertLightingRefusesAndSurfaceRecovers(filter, prefix) }
+    }
+
+    @Test
+    fun `perspective lighting mapping refuses without readback mutation then recovers`() {
+        val surface = Surface(2, 2)
+        surface.canvas {
+            setMatrix(Matrix3x3F32(persp0 = .25f))
+            saveLayer(SaveLayerRec(paint = Paint(imageFilter = ImageFilter.DistantLitDiffuse(
+                Vector3F32(1f, 0f, 1f), ColorARGB.White, 1f, 1f), antiAlias = false)))
+            resetMatrix()
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.White, antiAlias = false))
+            restore()
+        }
+        assertLightingRefusalAndRecovery(surface, "w6a.layer.unsupported_lighting_mapping:")
+    }
+
     private fun renderLayerAlphaFixture(direction: Vector3F32): RenderResult {
         val surface = Surface(3, 3)
         surface.canvas {
@@ -285,6 +344,19 @@ class W6dLightingSurfacePixelTest {
             restore()
         }
         return surface.render()
+    }
+
+    private fun assertDistantDiffuseNear(expected: UByteArray, surfaceScale: Float) {
+        val surface = Surface(3, 3)
+        surface.canvas {
+            saveLayer(SaveLayerRec(paint = Paint(imageFilter = ImageFilter.DistantLitDiffuse(
+                Vector3F32(1f, 0f, 1f), ColorARGB.White, surfaceScale, 1f), antiAlias = false)))
+            listOf(1 to 0, 0 to 1, 1 to 1, 1 to 2).forEach { (x, y) ->
+                drawRect(RectF32.ofLTRB(x.toFloat(), y.toFloat(), x + 1f, y + 1f), Paint(ColorARGB.White, antiAlias = false))
+            }
+            restore()
+        }
+        assertFamilyNear(expected, surface.render(), maxChannelDelta = 2)
     }
 
     private fun assertRemainingFamily(
@@ -334,5 +406,30 @@ class W6dLightingSurfacePixelTest {
             assertTrue(abs(expected[index].toInt() - actual.pixels[index].toInt()) <= maxChannelDelta,
                 "channel $index expected=${expected[index]} actual=${actual.pixels[index]}")
         }
+    }
+
+    private fun assertLightingRefusesAndSurfaceRecovers(filter: ImageFilter, diagnosticPrefix: String) {
+        val surface = Surface(2, 2)
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.White, imageFilter = filter, antiAlias = false))
+        }
+        assertLightingRefusalAndRecovery(surface, diagnosticPrefix)
+    }
+
+    private fun assertLightingRefusalAndRecovery(surface: Surface, diagnosticPrefix: String) {
+        val sentinel = UByteArray(16) { 0x5au }
+        val before = sentinel.copyOf()
+        val failure = assertFailsWith<IllegalStateException> {
+            surface.readPixels(RectF32.ofLTRB(0f, 0f, 2f, 2f), sentinel)
+        }
+        assertTrue(failure.message?.startsWith(diagnosticPrefix) == true, failure.message ?: "missing diagnostic")
+        assertContentEquals(before, sentinel)
+        surface.discardRecordedOperations()
+        surface.canvas {
+            resetMatrix()
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.Red, antiAlias = false))
+        }
+        assertContentEquals(ubyteArrayOf(255u, 0u, 0u, 255u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u),
+            surface.render().pixels)
     }
 }

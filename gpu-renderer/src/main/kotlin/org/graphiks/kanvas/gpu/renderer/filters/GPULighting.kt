@@ -99,8 +99,8 @@ internal object GPUW6dDistantDiffusePass {
                     (w6d_distant_diffuse_alpha(base + vec2<i32>(-1, -1)) +
                     2.0 * w6d_distant_diffuse_alpha(base + vec2<i32>(0, -1)) +
                     w6d_distant_diffuse_alpha(base + vec2<i32>(1, -1))));
-                let rawNormal = vec3<f32>(-${program.mappedSurfaceDepthF32}f * dx,
-                    -${program.mappedSurfaceDepthF32}f * dy, 1.0);
+                let rawNormal = vec3<f32>(${-program.mappedSurfaceDepthF32}f * dx,
+                    ${-program.mappedSurfaceDepthF32}f * dy, 1.0);
                 let normalScale = max(max(abs(rawNormal.x), abs(rawNormal.y)), abs(rawNormal.z));
                 let scaledNormal = rawNormal / normalScale;
                 let normal = scaledNormal / length(scaledNormal);
@@ -203,7 +203,7 @@ internal object GPUW6dLightingPass {
                 let base = vec2<i32>(position.xy) + vec2<i32>(${offset.x}, ${offset.y});
                 let dx = 0.25 * ((w6d_lighting_alpha(base + vec2<i32>(1, -1)) + 2.0 * w6d_lighting_alpha(base + vec2<i32>(1, 0)) + w6d_lighting_alpha(base + vec2<i32>(1, 1))) - (w6d_lighting_alpha(base + vec2<i32>(-1, -1)) + 2.0 * w6d_lighting_alpha(base + vec2<i32>(-1, 0)) + w6d_lighting_alpha(base + vec2<i32>(-1, 1))));
                 let dy = 0.25 * ((w6d_lighting_alpha(base + vec2<i32>(-1, 1)) + 2.0 * w6d_lighting_alpha(base + vec2<i32>(0, 1)) + w6d_lighting_alpha(base + vec2<i32>(1, 1))) - (w6d_lighting_alpha(base + vec2<i32>(-1, -1)) + 2.0 * w6d_lighting_alpha(base + vec2<i32>(0, -1)) + w6d_lighting_alpha(base + vec2<i32>(1, -1))));
-                let normal = w6d_normalize_or_zero(vec3<f32>(-${surfaceDepth}f * dx, -${surfaceDepth}f * dy, 1.0));
+                let normal = w6d_normalize_or_zero(vec3<f32>(${-surfaceDepth}f * dx, ${-surfaceDepth}f * dy, 1.0));
                 let surface = vec3<f32>(position.xy, w6d_lighting_alpha(base) * ${surfaceDepth}f);
                 let surfaceToLight = w6d_normalize_or_zero($lightVector);
                 $cone
