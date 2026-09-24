@@ -10,6 +10,8 @@
 
 **Spec:** `refactor/specs/2026-09-24-w6d-picture-filter-source-design.md`, plus the W6/W6b/W6d specs named by the parent plan.
 
+**Status (Task 4, reviewed at `665242f1a`):** Tasks 4a–4c and the final cross-slice correction are implemented. Their Sol task reviews and final scoped rereview retain no Critical/Important finding. The final public XML gates report `W6dPictureFilterSurfacePixelTest` 18/0/0/0, `W6bImageBlurSurfacePixelTest` 10/0/0/0, `W6dPictureRuntimeEffectPictureTest` 4/0/0/0, `W6dLightingPictureTest` 3/0/0/0 and three W6a preservation selectors 1/0/0/0 each; targeted compilations exit 0. Every test worker subsequently exits 133, so process-level/native status remains **UNKNOWN**, not GREEN. The full W6a Picture class retains its pre-existing stale writer-version assertion (expected 14, current 15). Task 5 is the next parent-plan step; numeric B/B−1 remains Task 7. The checkboxes below are the original execution recipe; this status and the durable W06 checkpoint record the reviewed outcome.
+
 ## Global Constraints
 
 - Use the reviewed `codex/w6d-advanced-effects` HEAD after Task 33c; remain stacked on `codex/w6c-spatial-dag`. Do not create or merge a PR until parent-plan Task 7.

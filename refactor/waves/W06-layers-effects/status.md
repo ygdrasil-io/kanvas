@@ -1,12 +1,43 @@
-# W06 — layers et effets : checkpoints W6a/W6b/W6c
+# W06 — layers et effets : checkpoints W6a/W6b/W6c/W6d
 
 ## Statut
 
 La relecture Sol ciblée du dernier correctif W6c (`ae26bdbc49301f9ac6b962c766a39508231dd506`)
 ne conserve aucun Critical/Important. La Draft PR W6c [#2405](https://github.com/ygdrasil-io/kanvas/pull/2405)
 est empilée sur W6b [#2404](https://github.com/ygdrasil-io/kanvas/pull/2404), sans merge.
-W6d puis W6e demeurent à réaliser. Les sorties
+W6d Task 4 est maintenant revu ; Tasks 5–7 et W6e restent à réaliser. Les sorties
 natives 133 restent **UNKNOWN** malgré les assertions XML et les compilations ci-dessous.
+
+### Checkpoint W6d Task 4 — source Picture de filtre immuable
+
+La branche `codex/w6d-advanced-effects` à `665242f1a` termine Task 4a–4c du
+[plan détaillé](../../plans/2026-09-24-w6d-picture-filter-source-implementation-plan.md).
+Un agrégat Picture à owner de filtre émet Begin → enfants W4/W5/W6 ordonnés →
+Seal → `FilterPass.Picture` dans le graphe W6 gelé, sans faux draw, second
+graphe, replay renderer ni texture de taille zéro. Les contextes distincts et
+partagés, crop `src`, Picture vide sous Compose dans les deux ordres, clips
+exacts/refus explicites, layers imbriqués et halo ont des témoins pixels publics.
+La capture et le wire préservent les mutations ultérieures de `src`/cull, les
+identités de filtres et un vrai fixture Picture 14/schema 8 non-lighting issu
+du writer historique `e5ce423ab9d18987610b5b7021dbb02745f5e729`.
+Un refus tardif garde le buffer de lecture intact et récupère sur la même
+`Surface`. Les reviews Sol des trois tranches et la relecture finale corrigée
+ne gardent aucun Critical/Important.
+
+Les compilations ciblées `:render-ir`, `:gpu-plan`, `:gpu-renderer` et
+`:kanvas:compileTestKotlin` sortent 0. Derniers XML rapportés :
+`W6dPictureFilterSurfacePixelTest` 18/0/0/0,
+`W6bImageBlurSurfacePixelTest` 10/0/0/0,
+`W6dPictureRuntimeEffectPictureTest` 4/0/0/0,
+`W6dLightingPictureTest` 3/0/0/0 et trois sélecteurs de préservation W6a
+1/0/0/0 chacun. Le contrôleur a relancé indépendamment les témoins du clip
+total, du filtre partagé, du refus atomique, du fixture v14, du mapping inline
+H+T et du Compose extérieur vide : XML 1/0/0/0 à chaque fois. Chaque worker
+sort ensuite en 133 ; le statut process/native est **UNKNOWN**, sans claim ISO
+ou convergence globale. La classe W6a Picture complète possède déjà une
+assertion de version obsolète (14 attendu, writer courant 15), distincte de
+Task 4. La borne numérique checked-I64 B/B−1 reste à Task 7. Aucune PR W6d
+n'est encore ouverte ; Task 5 est le prochain lot.
 
 ### Quatrième correction W6c — conservation du domaine imbriqué chevauchant
 

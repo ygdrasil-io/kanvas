@@ -616,6 +616,8 @@ Branch on schema before reading old tag payloads in both table and recursive cod
 
 **Detailed plan:** `refactor/plans/2026-09-24-w6d-picture-filter-source-implementation-plan.md` replaces the original six steps. Task 4a provides a flat public pixel through a filter-owned Picture source; 4b covers nested scene, crop, empty and wrapper semantics; 4c covers memory/wire isolation, atomic refusal and preservation. The approved contract is `refactor/specs/2026-09-24-w6d-picture-filter-source-design.md`. Do not start Task 5 until all three gates have clean Sol reviews. Task 7 remains responsible for the numeric B/B−1 budget gate.
 
+**Reviewed checkpoint (`665242f1a`):** Task 4a–4c and the cross-slice empty-Compose correction have clean Sol gates, with public XML method assertions and targeted compilations passing. Test workers still exit 133, so process/native status is **UNKNOWN**; the pre-existing full `W6aLayerPictureTest` writer-version assertion remains separate. Task 5 may now start, but Task 7 still owns the numeric B/B−1 proof and W6d Draft PR.
+
 ### Task 5: Registered IMAGE_FILTER Runtime Effect
 
 **Agent:** Terra implementation; Sol review.
