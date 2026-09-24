@@ -344,6 +344,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 val template = frame.template(packet)
                                 val binding = frame.physical.geometryBinding(pass.id)
                                 val mapped = binding?.let { frame.geometryPipeline(packet) }
+                                val frozenLegacyColor = draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1
                                 // W6b has already selected this source pass and its target.  Its
                                 // source stage is transparent and must never consume the final
                                 // draw blend; that one belongs exclusively to FilterComposite.
@@ -361,6 +362,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 val uniformPayload = binding?.let { frame.analyticUniform(packet) }
                                 val nativeUniform = data?.let { geometryBuffers.getValue(it.uniform) } ?: uniform
                                 if (data != null) {
+                                    require(!frozenLegacyColor)
                                     require(draws.size == 1)
                                     if (verticesSemantic != null) {
                                         val vertices = verticesSemantic.artifact.vertexBytesForUpload()
@@ -417,8 +419,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     queue.writeBuffer(nativeUniform, binding.uniformOffsetI64.toULong(), ArrayBuffer.of(requireNotNull(uniformPayload)))
                                 }
                                 val bind = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout,
-                                    entries = listOf(BindGroupEntry(0u, BufferBinding(nativeUniform, 0uL,
-                                        uniformPayload?.size?.toULong() ?: geometryUniform.byteSize.toULong()))))))
+                                    entries = if (frozenLegacyColor) emptyList() else listOf(BindGroupEntry(0u,
+                                        BufferBinding(nativeUniform, 0uL, uniformPayload?.size?.toULong() ?: geometryUniform.byteSize.toULong()))))))
                                 add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)))
                                 add(GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(bind, generation),
                                     if (mapped == null) emptyList() else binding.let { listOf(it.uniformOffsetI64) }))

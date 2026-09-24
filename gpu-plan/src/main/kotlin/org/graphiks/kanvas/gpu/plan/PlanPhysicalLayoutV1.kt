@@ -120,14 +120,18 @@ public class PlanPhysicalLayoutV1 private constructor(
             require(source.uniforms.values.toSet() == rows.filter { it.role == PlanResourceRole.SourceUniformData }.map { it.id }.toSet())
             require(source.caches.filter { it.request !is PlanCacheResourceRequest.Sampler }.map { it.resourceId }.toSet() ==
                 rows.filter { it.lifetime == PlanResourceLifetime.DeviceSessionCache }.map { it.id }.toSet())
-            val uniforms = RenderGraph.visualDraws(graph.passes()).associate { draw ->
+            // A frozen Clear/DrawColor Picture entry owns a LegacyColor operand directly.  It
+            // has no W5 source uniform (and must not fabricate one after graph construction),
+            // while every material-backed draw retains the exact existing W5 row.
+            val uniforms = RenderGraph.visualDraws(graph.passes()).mapNotNull { draw ->
+                if (draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1) return@mapNotNull null
                 val table = requireNotNull(graph.materialTable)
                 val ref = draw.materialAuthority.materialPlanRef()
                 val identity = if (draw.materialAuthority.colorSourceCoordinatesV4() != null)
                     RawMaterialRequirementsV2.measureV4(table, ref).canonicalIdentity
                 else RawMaterialRequirementsV2.measureLegacy(table, ref).canonicalIdentity
                 draw.commandIndex to source.uniforms.getValue(identity)
-            }
+            }.toMap()
             val maskShaderUniforms = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
                 ((pass.operation as? FilterPassOperationV1.MaskShader)?.materialBinding
                     as? FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned)?.uniformResource

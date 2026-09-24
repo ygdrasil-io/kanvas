@@ -258,8 +258,14 @@ internal fun validateW6aLayerTopology(
             require(target.role == PlanResourceRole.PictureAggregateSource && target.kind == PlanResourceKind.Texture2D &&
                 target.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages() &&
                 PlanResourceUsage.Sampled in target.usages() && pass.target !in initialized && pass.target !in sealedPictureSources)
+            // A re-entrant Picture leaf can consume the output of an earlier W6b filter in the
+            // same frozen schedule.  That existing FilterTarget is initialized by its preceding
+            // FilterPass and is a valid aggregate parent alongside ordinary W6a source targets.
             require(parent.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget,
-                PlanResourceRole.PictureAggregateSource, PlanResourceRole.FilterSource) && pass.parentTarget in initialized)
+                PlanResourceRole.PictureAggregateSource, PlanResourceRole.FilterSource, PlanResourceRole.FilterTarget) &&
+                pass.parentTarget in initialized) {
+                "Picture aggregate parent must be an initialized W6a or W6b source target."
+            }
             initialized += pass.target
             versions[pass.target] = 0L
         }

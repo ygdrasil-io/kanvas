@@ -20,6 +20,7 @@ import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
 import org.graphiks.math.geometry.expandForBlurF64OrNull
 import org.graphiks.math.geometry.expandSamplingHaloF64OrNull
+import org.graphiks.math.geometry.intersectF64OrNull
 import org.graphiks.math.geometry.roundOutToRectI32OrNull
 import org.graphiks.math.geometry.translateF64OrNull
 import org.graphiks.math.matrix.LayerMappingF64
@@ -227,7 +228,12 @@ internal object W6bFilterGraphConstruction {
         val sourceGenerationI64: Long,
         val source: SourceBinding,
         val owner: PictureAggregateOwnerV1.FilterPicture,
-    ) { init { require(sourceGenerationI64 >= 0L) } }
+        contentDeviceF64: RectF64,
+    ) {
+        private val contentSnapshotF64 = contentDeviceF64.copy()
+        init { require(sourceGenerationI64 >= 0L && contentSnapshotF64.isFinite() && !contentSnapshotF64.isEmpty) }
+        fun copyContentDeviceF64(): RectF64 = contentSnapshotF64.copy()
+    }
 
     internal fun interface FilterPictureSourceEmitterV1 {
         fun emit(
@@ -235,7 +241,7 @@ internal object W6bFilterGraphConstruction {
             capturedNodeId: CapturedFilterNodeIdI32,
             node: CapturedFilterNodeV1.Picture,
             sourceContext: SourceBinding,
-        ): FilterPictureSourceEmissionV1
+        ): FilterPictureSourceEmissionV1?
     }
 
     internal class FrozenMask internal constructor(
@@ -839,23 +845,33 @@ internal object W6bFilterGraphConstruction {
             }
             is CapturedFilterNodeV1.Picture -> {
                 val emitted = emitFilterPictureSource.emit(occurrence, id, node, currentSource)
+                if (emitted == null) {
+                    val transparent = transparentBlack(currentSource)
+                    val bounds = identityBounds(transparent)
+                    val key = keyFor(
+                        id,
+                        null,
+                        currentSource,
+                        bounds.copyDesiredOutputDeviceI32(),
+                        pictureProvenance = PictureFilterEvaluationProvenanceV1.of(
+                            occurrence.table.canonicalId.value,
+                            occurrence.idI32,
+                        ),
+                    )
+                    // FilterComposite owns FilterTarget inputs.  Keep the existing transparent
+                    // source explicit, then route it through a sealed neutral Offset rather than
+                    // fabricating an empty Picture operation or allocating a zero-sized target.
+                    val output = allocateTarget(bounds)
+                    append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(transparent.resourceId), output.resourceId, key,
+                        FilterPassOperationV1.Offset(Vector2F64(0.0, 0.0), bounds,
+                            spatialSampling(transparent, bounds, fullClip(bounds), 0.0, 0.0))))
+                    ContextualFilterResult(output, bounds, key)
+                } else {
                 // The source callback contributes an aggregate slice directly into this same
                 // frame schedule (Begin → children → Seal).  Resume the filter cursor at the
                 // next global ordinal so the leaf follows that sealed slice immediately.
                 cursor.passOrdinalI32 = sink.nextOrdinalI32()
                 val bounds = identityBounds(emitted.source)
-                val cull = node.copyCullRect().let { rect -> currentSource.mapping.copyLocalToDeviceF64().mapRectBoundsF64OrNull(RectF64(
-                    rect.left.toDouble(), rect.top.toDouble(), rect.right.toDouble(), rect.bottom.toDouble(),
-                )) }
-                val source = node.copySource()?.let { rect -> currentSource.mapping.copyLocalToDeviceF64().mapRectBoundsF64OrNull(RectF64(
-                    rect.left.toDouble(), rect.top.toDouble(), rect.right.toDouble(), rect.bottom.toDouble(),
-                )) }
-                if (cull == null || !cull.isFinite() || cull.isEmpty || source == null && node.copySource() != null ||
-                    source?.isFinite() == false || source?.isEmpty == true) {
-                    throw ConstructionFailure(W6bFilterDiagnostics.refusal(
-                        W6bFilterDiagnostics.InvalidBounds, "W6d Picture source has invalid F64 geometry.",
-                    ))
-                }
                 val key = keyFor(
                     id,
                     null,
@@ -877,14 +893,15 @@ internal object W6bFilterGraphConstruction {
                 require(sealed.copyOwner().authenticates(key)) {
                     "W6d Picture source owner does not authenticate its captured-node evaluation."
                 }
-                val sampling = W6dPictureSamplingV1.ofOrNull(sealed.copySampling(), source, bounds)
+                val sampling = W6dPictureSamplingV1.ofOrNull(sealed.copySampling(), emitted.copyContentDeviceF64(), bounds)
                     ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(
                         W6bFilterDiagnostics.InvalidBounds,
                         "W6d Picture crop cannot be represented by frozen native F32 sampling coordinates.",
                     ))
                 append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(sealed.resourceId), output.resourceId, key,
-                    FilterPassOperationV1.Picture(sealed, cull, bounds, sampling)))
+                    FilterPassOperationV1.Picture(sealed, emitted.copyContentDeviceF64(), bounds, sampling)))
                 ContextualFilterResult(output, bounds, key)
+                }
             }
             else -> throw ConstructionFailure(W6bFilterDiagnostics.refusal(
                 W6bFilterDiagnostics.UnsupportedFamily, "The captured image-filter family belongs to W6c or W6d.",
@@ -1377,33 +1394,98 @@ internal object W6bFilterGraphConstruction {
         return Ownership(roots, mask, backdrop, filteredPrevious, bounded, invalidMaskTableLengthI32)
     }
 
-    /** Bounded iterative traversal refuses repeated ancestral Picture scenes. */
+    /**
+     * Visits both geometry Pictures and the scene carried by an admitted captured Picture node.
+     *
+     * A captured Picture is an execution occurrence, not a canonical-scene cache key: two equal
+     * scene values may be live on separate branches.  The active stack therefore uses object
+     * identity and is unwound in `finally`; canonical IDs remain only provenance on the emitted
+     * occurrence.  Captured node IDs join the source path so a nested filter can bind the exact
+     * owner that froze it.
+     */
     private fun visitScenes(root: SceneSnapshot,
         visit: (SceneSnapshot, SceneCommand, Int, Int, Boolean, List<org.graphiks.kanvas.render.ir.DrawNode>, List<Int>) -> Unit): Boolean {
         var visitedCommandsI32 = 0
+        val activeScenes = mutableListOf<SceneSnapshot>()
+
+        fun active(scene: SceneSnapshot): Boolean = activeScenes.any { it === scene }
+
+        fun inputs(node: CapturedFilterNodeV1): List<CapturedFilterInputV1> = when (node) {
+            is CapturedFilterNodeV1.Crop -> listOf(node.input)
+            is CapturedFilterNodeV1.Blur -> listOf(node.input)
+            is CapturedFilterNodeV1.DropShadow -> listOf(node.input)
+            is CapturedFilterNodeV1.ColorFilter -> listOf(node.input)
+            is CapturedFilterNodeV1.Compose -> listOf(node.outer, node.inner)
+            is CapturedFilterNodeV1.Blend -> listOf(node.background, node.foreground)
+            is CapturedFilterNodeV1.Dilate -> listOf(node.input)
+            is CapturedFilterNodeV1.Erode -> listOf(node.input)
+            is CapturedFilterNodeV1.DistantLitDiffuse -> listOf(node.input)
+            is CapturedFilterNodeV1.PointLitDiffuse -> listOf(node.input)
+            is CapturedFilterNodeV1.SpotLitDiffuse -> listOf(node.input)
+            is CapturedFilterNodeV1.DistantLitSpecular -> listOf(node.input)
+            is CapturedFilterNodeV1.PointLitSpecular -> listOf(node.input)
+            is CapturedFilterNodeV1.SpotLitSpecular -> listOf(node.input)
+            is CapturedFilterNodeV1.Offset -> listOf(node.input)
+            is CapturedFilterNodeV1.Tile -> listOf(node.input)
+            is CapturedFilterNodeV1.Merge -> node.toList()
+            is CapturedFilterNodeV1.DisplacementMap -> listOf(node.displacement, node.input)
+            is CapturedFilterNodeV1.Picture -> emptyList()
+            is CapturedFilterNodeV1.Magnifier -> listOf(node.input)
+            is CapturedFilterNodeV1.MatrixConvolution -> listOf(node.input)
+            is CapturedFilterNodeV1.RuntimeEffect -> node.map { it.input }
+        }
+
+        fun roots(scene: SceneSnapshot, command: SceneCommand): List<CapturedFilterRootV1> = when (command) {
+            is SceneCommand.Draw -> listOfNotNull(filterPayload(command.node.paint, command.node.effects).root)
+            is SceneCommand.BeginLayer -> filterPayload(command.descriptor.paint, command.descriptor.effects).let { payload ->
+                buildList {
+                    payload.root?.let(::add)
+                    filterPayload(null, command.descriptor.backdrop).root?.let(::add)
+                }
+            }
+            else -> emptyList()
+        }
+
         fun visitOrdered(
             scene: SceneSnapshot,
             depthI32: Int,
             insertionCommandIndexI32: Int?,
-            ancestors: Set<String>,
             outerPictures: List<org.graphiks.kanvas.render.ir.DrawNode>,
             picturePathI32: List<Int>,
         ): Boolean {
-            if (depthI32 > root.graphLimits.maxDepth) return true
-            val nextAncestors = ancestors + scene.canonicalId.value
-            scene.toList().forEachIndexed { indexI32, command ->
-                visitedCommandsI32 = try { Math.addExact(visitedCommandsI32, 1) } catch (_: ArithmeticException) { return true }
-                if (visitedCommandsI32 > root.graphLimits.maxNodes) return true
-                val insertion = insertionCommandIndexI32 ?: indexI32
-                visit(scene, command, insertion, indexI32, insertionCommandIndexI32 != null, outerPictures, picturePathI32)
-                val picture = (command as? SceneCommand.Draw)?.node?.geometry as? GeometryNode.Picture ?: return@forEachIndexed
-                if (picture.scene.canonicalId.value in nextAncestors) return true
-                if (visitOrdered(picture.scene, Math.addExact(depthI32, 1), insertion, nextAncestors,
-                        outerPictures + command.node, picturePathI32 + indexI32)) return true
+            if (depthI32 > root.graphLimits.maxDepth || active(scene)) return true
+            activeScenes += scene
+            try {
+                scene.toList().forEachIndexed { indexI32, command ->
+                    visitedCommandsI32 = try { Math.addExact(visitedCommandsI32, 1) } catch (_: ArithmeticException) { return true }
+                    if (visitedCommandsI32 > root.graphLimits.maxNodes) return true
+                    val insertion = insertionCommandIndexI32 ?: indexI32
+                    visit(scene, command, insertion, indexI32, insertionCommandIndexI32 != null, outerPictures, picturePathI32)
+                    val geometryPicture = (command as? SceneCommand.Draw)?.node?.geometry as? GeometryNode.Picture
+                    if (geometryPicture != null && visitOrdered(geometryPicture.scene, Math.addExact(depthI32, 1), insertion,
+                            outerPictures + command.node, picturePathI32 + indexI32)) return true
+
+                    val nestedOuter = (command as? SceneCommand.Draw)?.let { outerPictures + it.node } ?: outerPictures
+                    roots(scene, command).forEach { capturedRoot ->
+                        val seen = BooleanArray(scene.filterTable.nodeCount)
+                        fun visitNode(id: CapturedFilterNodeIdI32): Boolean {
+                            if (id.valueI32 !in seen.indices || seen[id.valueI32]) return false
+                            seen[id.valueI32] = true
+                            val node = scene.filterTable.nodeAt(id)
+                            if (node is CapturedFilterNodeV1.Picture &&
+                                visitOrdered(node.scene, Math.addExact(depthI32, 1), insertion,
+                                    nestedOuter, picturePathI32 + id.valueI32)) return true
+                            return inputs(node).filterIsInstance<CapturedFilterInputV1.Node>().any { child -> visitNode(child.id) }
+                        }
+                        if (visitNode(capturedRoot.id)) return true
+                    }
+                }
+                return false
+            } finally {
+                check(activeScenes.removeAt(activeScenes.lastIndex) === scene)
             }
-            return false
         }
-        return visitOrdered(root, 1, null, emptySet(), emptyList(), emptyList())
+        return visitOrdered(root, 1, null, emptyList(), emptyList())
     }
 
     private class Ownership(

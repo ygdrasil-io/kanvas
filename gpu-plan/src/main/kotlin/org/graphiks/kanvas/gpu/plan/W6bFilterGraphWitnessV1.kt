@@ -39,6 +39,13 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
             }.also { require(it < before) { "W6b input must precede its consumer." } }
 
             passes.forEachIndexed { index, pass -> when (pass) {
+                is PlanPass.PictureAggregateBeginPass -> {
+                    // A re-entrant Picture source carries the preceding FilterTarget as its
+                    // frozen construction parent.  It is therefore a real graph consumer even
+                    // though the Picture stream paints its own sealed aggregate rather than
+                    // sampling that target in a renderer-side replay.
+                    inputs += pass.parentTarget
+                }
                 is PlanPass.PictureAggregateSealPass -> producers[pass.sealedSource] = index
                 is PlanPass.RenderPass -> {
                     pass.coverageSource?.let { produced(it, index); materialCoverageInputs += it }
@@ -98,7 +105,9 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                     val materializedImageInput = isMaterializedImageInput(pass, passes, producers, rows)
                     val contextualFilterTargetInput = isContextualFilterTargetInput(pass, passes, producers, rows)
                     val contextualImageInput = isContextualImageInput(pass, passes, producers, rows)
-                    val filterTargetInput = materializedImageInput || contextualFilterTargetInput || contextualImageInput
+                    val reentrantPictureInput = isReentrantPictureInput(pass, passes, producers, rows)
+                    val filterTargetInput = materializedImageInput || contextualFilterTargetInput || contextualImageInput ||
+                        reentrantPictureInput
                     require(bound.role in setOf(PlanResourceRole.FilterSource, PlanResourceRole.CoverageSource) ||
                         filterTargetInput) {
                         "W6b occurrence source must be immutable FilterSource or CoverageSource."
@@ -283,6 +292,38 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                 }
                 else -> false
             }
+        }
+
+        /**
+         * A nested W6d Picture is allowed to begin from an earlier FilterTarget only when that
+         * exact target is the aggregate's parent and the Picture pass consumes the matching
+         * sealed generation.  This is deliberately narrower than accepting FilterTarget by
+         * role: it preserves one producer chain and cannot turn an arbitrary sibling output
+         * into a Picture source.
+         */
+        private fun isReentrantPictureInput(
+            pass: PlanPass.FilterPass,
+            passes: List<PlanPass>,
+            producers: Map<PlanResourceId, Int>,
+            rows: Map<PlanResourceId, PlanResource>,
+        ): Boolean {
+            val operation = pass.operation as? FilterPassOperationV1.Picture ?: return false
+            val sealed = operation.copySealedSource()
+            val boundSource = pass.evaluationKey.boundSourceId
+            if (rows.getValue(boundSource).role != PlanResourceRole.FilterTarget ||
+                pass.inputs() != listOf(sealed.resourceId) ||
+                rows.getValue(sealed.resourceId).role != PlanResourceRole.PictureAggregateSource ||
+                !sealed.copyOwner().authenticates(pass.evaluationKey)) return false
+            val passIndex = passes.indexOf(pass)
+            val boundProducer = producers[boundSource] ?: return false
+            if (boundProducer >= passIndex || passes[boundProducer] !is PlanPass.FilterPass) return false
+            val sealIndex = producers[sealed.resourceId] ?: return false
+            val seal = passes[sealIndex] as? PlanPass.PictureAggregateSealPass ?: return false
+            if (sealIndex >= passIndex || seal.aggregateId != sealed.aggregateId ||
+                seal.sourceGenerationI64 != sealed.sourceGenerationI64) return false
+            val begin = passes.subList(0, sealIndex).filterIsInstance<PlanPass.PictureAggregateBeginPass>()
+                .lastOrNull { it.aggregateId == sealed.aggregateId } ?: return false
+            return begin.target == sealed.resourceId && begin.parentTarget == boundSource
         }
 
         private fun validatePass(
