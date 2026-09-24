@@ -517,6 +517,59 @@ class W6dPictureFilterSurfacePixelTest {
         assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
     }
 
+    /** An inline host translation remains in the absolute source context of nested lighting layers. */
+    @Test
+    fun inlinePictureHostTranslationComposesWithNestedAbsoluteLayerTranslationForPointLighting() {
+        val alpha = FloatArray(6 * 3).also { pixels ->
+            listOf(3 to 0, 2 to 1, 3 to 1, 3 to 2).forEach { (x, y) -> pixels[y * 6 + x] = 1f }
+        }
+        val expected = W6dLightingCpuOracle.remainingFamilyRgba8(
+            W6dLightingCpuOracle.Family.POINT_DIFFUSE,
+            width = 6,
+            height = 3,
+            alpha = alpha,
+            locationX = 3f,
+            locationY = 0f,
+            locationZ = 1f,
+            surfaceDepth = 1f,
+            coefficient = 1f,
+        )
+        val pictureBounds = RectF32.ofLTRB(0f, 0f, 5f, 3f)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(pictureBounds).apply {
+                translate(1f, 0f)
+                saveLayer(SaveLayerRec(paint = Paint(antiAlias = false)))
+                saveLayer(SaveLayerRec(paint = Paint(
+                    imageFilter = ImageFilter.PointLitDiffuse(
+                        Point3F32(1f, 0f, 1f), ColorARGB.White, 1f, 1f,
+                    ),
+                    antiAlias = false,
+                )))
+                listOf(1 to 0, 0 to 1, 1 to 1, 1 to 2).forEach { (x, y) ->
+                    drawRect(
+                        RectF32.ofLTRB(x.toFloat(), y.toFloat(), x + 1f, y + 1f),
+                        Paint(ColorARGB.White, antiAlias = false),
+                    )
+                }
+                restore()
+                restore()
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(6, 3)
+        surface.canvas {
+            translate(1f, 0f)
+            drawPicture(picture)
+        }
+
+        val result = surface.render()
+
+        expected.indices.forEach { channel ->
+            assertTrue(abs(expected[channel].toInt() - result.pixels[channel].toInt()) <= 2,
+                "channel $channel expected=${expected[channel]} actual=${result.pixels[channel]}")
+        }
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
     private fun transformedCropBlurHaloExpected(): UByteArray {
         val blurred = W6bImageBlurCpuOracle.blurredAlpha(
             width = 7,
