@@ -27,4 +27,29 @@ class W6dPictureFilterSurfacePixelTest {
         assertContentEquals(expected, result.pixels)
         assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
     }
+
+    @Test
+    fun filterPictureCarriesCarrierTranslationIntoItsSealedPictureSource() {
+        val expected = ubyteArrayOf(
+            0u, 0u, 0u, 0u,
+            255u, 0u, 0u, 255u,
+            255u, 0u, 0u, 255u,
+            0u, 0u, 0u, 0u,
+        )
+        val pictureRect = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val recorder = PictureRecorder()
+        recorder.beginRecording(pictureRect).drawRect(pictureRect, Paint(ColorARGB.Red, antiAlias = false))
+        val picture = recorder.finishRecordingAsPicture()
+        val surface = Surface(4, 1)
+        surface.canvas {
+            translate(1f, 0f)
+            scale(2f, 1f)
+            drawRect(pictureRect, Paint(ColorARGB.Blue, imageFilter = ImageFilter.Picture(picture), antiAlias = false))
+        }
+
+        val result = surface.render()
+
+        assertContentEquals(expected, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
 }

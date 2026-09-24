@@ -3,6 +3,9 @@ package org.graphiks.kanvas.gpu.plan
 import org.graphiks.kanvas.render.ir.ColorChannel
 import org.graphiks.kanvas.render.ir.TileMode
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.Point2I32
+import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.Point3F32
 import org.graphiks.math.vector.Vector3F32
 
@@ -16,6 +19,55 @@ public enum class W6dSamplingProgramIdV1(public val inputArityI32: Int) {
     DISPLACEMENT_NEAREST_CLAMP_RGBA8_V1(2), MAGNIFIER_NEAREST_CLAMP_RGBA8_V1(1),
     DISTANT_DIFFUSE_RGBA8_V1(1), POINT_DIFFUSE_RGBA8_V1(1), SPOT_DIFFUSE_RGBA8_V1(1),
     DISTANT_SPECULAR_RGBA8_V1(1), POINT_SPECULAR_RGBA8_V1(1), SPOT_SPECULAR_RGBA8_V1(1),
+    PICTURE_NEAREST_CLAMP_RGBA8_V1(1),
+}
+
+/**
+ * Exact Picture texture coordinates after the F64 crop has been checked and rebased during
+ * plan construction. Native materialization may bind this immutable I32/F32 payload only.
+ */
+public class W6dPictureSamplingV1 private constructor(
+    outputToInputOffsetTargetLocalI32: Point2I32,
+    sourceCropInputTargetLocalF32: RectF32?,
+) {
+    private val offsetSnapshot = Point2I32(
+        outputToInputOffsetTargetLocalI32.x,
+        outputToInputOffsetTargetLocalI32.y,
+    )
+    private val cropSnapshot = sourceCropInputTargetLocalF32?.copy()
+
+    init {
+        require(cropSnapshot == null || cropSnapshot.isFinite() && !cropSnapshot.isEmpty)
+    }
+
+    public fun copyOutputToInputOffsetTargetLocalI32(): Point2I32 = Point2I32(offsetSnapshot.x, offsetSnapshot.y)
+    public fun copySourceCropInputTargetLocalF32(): RectF32? = cropSnapshot?.copy()
+    public fun copy(): W6dPictureSamplingV1 = W6dPictureSamplingV1(offsetSnapshot, cropSnapshot)
+    public fun matches(other: W6dPictureSamplingV1): Boolean =
+        offsetSnapshot == other.offsetSnapshot && cropSnapshot == other.cropSnapshot
+
+    public companion object {
+        /** Null means a finite F64 crop cannot be represented by the native F32 contract. */
+        public fun ofOrNull(
+            sourceSampling: FilterInputSamplingV1,
+            sourceRectF64: RectF64?,
+            bounds: FilterBoundsPlanV1,
+        ): W6dPictureSamplingV1? {
+            val offset = sourceSampling.copyOutputToInputOffsetTargetLocalI32()
+            val crop = sourceRectF64?.let { source ->
+                val origin = bounds.copyTargetOriginDeviceI32()
+                val left = source.left - origin.x.toDouble() + offset.x.toDouble()
+                val top = source.top - origin.y.toDouble() + offset.y.toDouble()
+                val right = source.right - origin.x.toDouble() + offset.x.toDouble()
+                val bottom = source.bottom - origin.y.toDouble() + offset.y.toDouble()
+                if (!left.isFinite() || !top.isFinite() || !right.isFinite() || !bottom.isFinite()) return null
+                val result = RectF32(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat())
+                if (!result.isFinite() || result.isEmpty) return null
+                result
+            }
+            return W6dPictureSamplingV1(offset, crop)
+        }
+    }
 }
 
 public sealed class W6dSamplingProgramV1(public val programId: W6dSamplingProgramIdV1) {
@@ -51,6 +103,13 @@ public sealed class W6dSamplingProgramV1(public val programId: W6dSamplingProgra
         public val innerBottomF64: Double,
         public val zoomF32: Float,
     ) : W6dSamplingProgramV1(W6dSamplingProgramIdV1.MAGNIFIER_NEAREST_CLAMP_RGBA8_V1)
+
+    /** One fixed nearest/decal Picture program with preflighted I32/F32 coordinates. */
+    public class Picture(sampling: W6dPictureSamplingV1) :
+        W6dSamplingProgramV1(W6dSamplingProgramIdV1.PICTURE_NEAREST_CLAMP_RGBA8_V1) {
+        private val samplingSnapshot = sampling.copy()
+        public fun copySampling(): W6dPictureSamplingV1 = samplingSnapshot.copy()
+    }
 
     /** Immutable lighting recipe, including mapped 3D facts and the four Sobel edge decisions. */
     public class DistantDiffuse internal constructor(
@@ -138,6 +197,7 @@ internal fun selectW6dSamplingProgram(
                 source.right - operation.insetF32, source.bottom - operation.insetF32, operation.zoomF32,
             )
         }
+        is FilterPassOperationV1.Picture -> W6dSamplingProgramV1.Picture(operation.copyPictureSampling())
         is FilterPassOperationV1.Lighting -> {
             val sampling = requireNotNull(operation.copySobelSamplingOrNull())
             if (operation.family == LightingFamilyV1.DISTANT_DIFFUSE) {

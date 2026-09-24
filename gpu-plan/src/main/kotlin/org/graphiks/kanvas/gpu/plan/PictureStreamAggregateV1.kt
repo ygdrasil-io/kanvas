@@ -46,7 +46,12 @@ public sealed interface PictureAggregateOwnerV1 {
 
     public class FilterPicture internal constructor(
         public val capturedNodeId: CapturedFilterNodeIdI32,
+        /** Content identity is coupled to occurrence identity; it never deduplicates captures. */
+        public val capturedFilterTableCanonicalId: String,
         public val filterOccurrenceIdI32: Int,
+        /** The carrier scene whose revision owns the filter evaluation. */
+        public val occurrenceSourceSceneCanonicalId: String,
+        /** The sealed Picture scene, retained for aggregate provenance. */
         public val sourceSceneCanonicalId: String,
         public val sourceCommandIndexI32: Int,
         sourcePathI32: List<Int>,
@@ -54,11 +59,31 @@ public sealed interface PictureAggregateOwnerV1 {
         private val sourcePath = immutableList(sourcePathI32)
 
         init {
-            require(filterOccurrenceIdI32 >= 0 && sourceSceneCanonicalId.isNotBlank() && sourceCommandIndexI32 >= 0)
+            require(filterOccurrenceIdI32 >= 0 && capturedFilterTableCanonicalId.isNotBlank() &&
+                occurrenceSourceSceneCanonicalId.isNotBlank() && sourceSceneCanonicalId.isNotBlank() &&
+                sourceCommandIndexI32 >= 0)
             require(sourcePath.all { it >= 0 })
         }
 
         public fun sourcePathI32(): List<Int> = sourcePath
+
+        /** Exact source revision used by [FilterEvaluationKeyV1], never an equality-by-value cache key. */
+        public fun evaluationSourceRevisionIdentity(): String =
+            "$occurrenceSourceSceneCanonicalId:$sourceCommandIndexI32:${sourcePath.joinToString(",")}"
+
+        /** Couples table, occurrence/path and captured node before an aggregate source is read. */
+        public fun matchesFilterOwner(other: FilterPicture): Boolean =
+            capturedNodeId == other.capturedNodeId &&
+                capturedFilterTableCanonicalId == other.capturedFilterTableCanonicalId &&
+                filterOccurrenceIdI32 == other.filterOccurrenceIdI32 &&
+                occurrenceSourceSceneCanonicalId == other.occurrenceSourceSceneCanonicalId &&
+                sourceSceneCanonicalId == other.sourceSceneCanonicalId &&
+                sourceCommandIndexI32 == other.sourceCommandIndexI32 && sourcePath == other.sourcePath
+
+        /** Binds the sealed source owner to the exact W6b node evaluation that reads it. */
+        public fun authenticates(evaluationKey: FilterEvaluationKeyV1): Boolean =
+            evaluationKey.capturedNodeId == capturedNodeId &&
+                evaluationKey.sourceRevisionIdentity == evaluationSourceRevisionIdentity()
     }
 }
 
@@ -529,7 +554,9 @@ internal fun PictureStreamAggregateDraftV1.freezeOwner(): PictureAggregateOwnerV
         PictureAggregateOwnerV1.DrawPicture(value.sourcePlannedCommandId)
     is PictureStreamAggregateDraftOwnerV1.FilterPicture -> PictureAggregateOwnerV1.FilterPicture(
         value.capturedNodeId,
+        value.occurrence.table.canonicalId.value,
         value.occurrence.idI32,
+        value.occurrence.source.scene.canonicalId.value,
         value.node.scene.canonicalId.value,
         value.source.sourceCommandIndexI32,
         value.source.picturePathI32(),
@@ -1288,7 +1315,9 @@ internal fun validatePictureStreamAggregates(
                     val readers = passes.filterIsInstance<PlanPass.FilterPass>().filter { pass ->
                         (pass.operation as? FilterPassOperationV1.Picture)?.copySealedSource()?.let { sealed ->
                             sealed.aggregateId == aggregate.id && sealed.resourceId == source &&
-                                sealed.sourceGenerationI64 == generation
+                                sealed.sourceGenerationI64 == generation &&
+                                sealed.copyOwner().matchesFilterOwner(owner) &&
+                                sealed.authenticates(pass.evaluationKey)
                         } == true
                     }
                     if (aggregate.sourcePlannedCommandId != null || aggregate.sourceSceneCanonicalId != owner.sourceSceneCanonicalId ||
@@ -1300,7 +1329,9 @@ internal fun validatePictureStreamAggregates(
                     val readerIndex = passIndex.getValue(reader.id)
                     val sealed = (reader.operation as FilterPassOperationV1.Picture).copySealedSource()
                     if (reader.inputs() != listOf(source) || sealed.aggregateId != aggregate.id ||
-                        sealed.resourceId != source || sealed.sourceGenerationI64 != generation || readerIndex <= sealIndex ||
+                        sealed.resourceId != source || sealed.sourceGenerationI64 != generation ||
+                        !sealed.copyOwner().matchesFilterOwner(owner) || !sealed.authenticates(reader.evaluationKey) ||
+                        readerIndex <= sealIndex ||
                         targetRow.firstPassIndex > beginIndex || targetRow.lastPassIndexExclusive <= readerIndex) {
                         fail(aggregate, invariant = "Filter-owned Picture source is not sealed through its exact reader lifetime.",
                             passId = reader.id, resourceId = source)

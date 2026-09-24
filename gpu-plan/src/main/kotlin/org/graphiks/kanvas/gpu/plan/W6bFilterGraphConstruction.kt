@@ -226,6 +226,7 @@ internal object W6bFilterGraphConstruction {
         val resourceId: PlanResourceId,
         val sourceGenerationI64: Long,
         val source: SourceBinding,
+        val owner: PictureAggregateOwnerV1.FilterPicture,
     ) { init { require(sourceGenerationI64 >= 0L) } }
 
     internal fun interface FilterPictureSourceEmitterV1 {
@@ -849,9 +850,18 @@ internal object W6bFilterGraphConstruction {
                     emitted.resourceId,
                     emitted.sourceGenerationI64,
                     emitted.source.samplingFor(output),
+                    emitted.owner,
                 )
+                require(sealed.authenticates(key)) {
+                    "W6d Picture source owner does not authenticate its captured-node evaluation."
+                }
+                val sampling = W6dPictureSamplingV1.ofOrNull(sealed.copySampling(), source, bounds)
+                    ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(
+                        W6bFilterDiagnostics.InvalidBounds,
+                        "W6d Picture crop cannot be represented by frozen native F32 sampling coordinates.",
+                    ))
                 append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(sealed.resourceId), output.resourceId, key,
-                    FilterPassOperationV1.Picture(sealed, cull, source, bounds)))
+                    FilterPassOperationV1.Picture(sealed, cull, bounds, sampling)))
                 ContextualFilterResult(output, bounds, key)
             }
             else -> throw ConstructionFailure(W6bFilterDiagnostics.refusal(

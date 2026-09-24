@@ -19,6 +19,8 @@ internal object GPUW6dAdvancedSamplingPass {
         W6dSamplingProgramIdV1.DISTANT_SPECULAR_RGBA8_V1,
         W6dSamplingProgramIdV1.POINT_SPECULAR_RGBA8_V1,
         W6dSamplingProgramIdV1.SPOT_SPECULAR_RGBA8_V1 -> error("Lighting has a dedicated frozen translator.")
+        W6dSamplingProgramIdV1.PICTURE_NEAREST_CLAMP_RGBA8_V1 ->
+            error("Picture has a dedicated frozen translator.")
     }
 
     private fun matrixConvolutionFragment(program: W6dSamplingProgramV1.Convolution): String {
@@ -76,6 +78,36 @@ internal object GPUW6dAdvancedSamplingPass {
                 let sampled = select(point, vec2<f32>(${program.centerXF64}f, ${program.centerYF64}f) + (point - vec2<f32>(${program.centerXF64}f, ${program.centerYF64}f)) / ${program.zoomF32}f, inside);
                 let extent = vec2<i32>(textureDimensions(w6d_magnifier_source));
                 return textureLoad(w6d_magnifier_source, clamp(vec2<i32>(round(sampled - vec2<f32>(0.5))), vec2<i32>(0), extent - vec2<i32>(1)), 0);
+            }
+        """
+    }
+}
+
+/** Translates only the preflighted Picture recipe; no captured geometry reaches this boundary. */
+internal object GPUW6dPictureSamplingPass {
+    fun fragment(program: W6dSamplingProgramV1.Picture): String {
+        val sampling = program.copySampling()
+        val offset = sampling.copyOutputToInputOffsetTargetLocalI32()
+        val crop = sampling.copySourceCropInputTargetLocalF32()
+        val cropMin = crop?.let { "vec2<f32>(${it.left}f, ${it.top}f)" } ?: "vec2<f32>(0.0f)"
+        val cropMax = crop?.let { "vec2<f32>(${it.right}f, ${it.bottom}f)" } ?: "vec2<f32>(0.0f)"
+        val cropEnabled = crop != null
+        return """
+            @group(0) @binding(0) var w6d_picture_source: texture_2d<f32>;
+            @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+                let source_position = vec2<i32>(position.xy) + vec2<i32>(${offset.x}, ${offset.y});
+                let source_extent = vec2<i32>(textureDimensions(w6d_picture_source));
+                if (source_position.x < 0 || source_position.y < 0 || source_position.x >= source_extent.x || source_position.y >= source_extent.y) {
+                    return vec4<f32>(0.0);
+                }
+                let source_coordinate = vec2<f32>(source_position);
+                let crop_min = $cropMin;
+                let crop_max = $cropMax;
+                if ($cropEnabled && (source_coordinate.x < crop_min.x || source_coordinate.y < crop_min.y ||
+                    source_coordinate.x >= crop_max.x || source_coordinate.y >= crop_max.y)) {
+                    return vec4<f32>(0.0);
+                }
+                return textureLoad(w6d_picture_source, source_position, 0);
             }
         """
     }

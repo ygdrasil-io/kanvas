@@ -345,14 +345,34 @@ public class SealedPictureFilterSourceV1 internal constructor(
     public val resourceId: PlanResourceId,
     public val sourceGenerationI64: Long,
     sampling: FilterInputSamplingV1,
+    owner: PictureAggregateOwnerV1.FilterPicture,
 ) {
     private val samplingSnapshot = sampling
+    private val ownerSnapshot = PictureAggregateOwnerV1.FilterPicture(
+        owner.capturedNodeId,
+        owner.capturedFilterTableCanonicalId,
+        owner.filterOccurrenceIdI32,
+        owner.occurrenceSourceSceneCanonicalId,
+        owner.sourceSceneCanonicalId,
+        owner.sourceCommandIndexI32,
+        owner.sourcePathI32(),
+    )
 
     init {
         require(sourceGenerationI64 >= 0L)
     }
 
     public fun copySampling(): FilterInputSamplingV1 = samplingSnapshot
+    public fun copyOwner(): PictureAggregateOwnerV1.FilterPicture = PictureAggregateOwnerV1.FilterPicture(
+        ownerSnapshot.capturedNodeId,
+        ownerSnapshot.capturedFilterTableCanonicalId,
+        ownerSnapshot.filterOccurrenceIdI32,
+        ownerSnapshot.occurrenceSourceSceneCanonicalId,
+        ownerSnapshot.sourceSceneCanonicalId,
+        ownerSnapshot.sourceCommandIndexI32,
+        ownerSnapshot.sourcePathI32(),
+    )
+    public fun authenticates(evaluationKey: FilterEvaluationKeyV1): Boolean = ownerSnapshot.authenticates(evaluationKey)
 }
 
 /** Frozen, renderer-readable operation payload.  No arm carries a public filter object. */
@@ -449,8 +469,8 @@ public sealed interface FilterPassOperationV1 {
     public class Picture(
         sealedSource: SealedPictureFilterSourceV1,
         cullRectF64: RectF64,
-        sourceRectF64: RectF64?,
         override val bounds: FilterBoundsPlanV1,
+        sampling: W6dPictureSamplingV1,
         override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.PICTURE,
     ) : FilterPassOperationV1 {
         private val sealedSourceSnapshot = SealedPictureFilterSourceV1(
@@ -458,31 +478,22 @@ public sealed interface FilterPassOperationV1 {
             sealedSource.resourceId,
             sealedSource.sourceGenerationI64,
             sealedSource.copySampling(),
+            sealedSource.copyOwner(),
         )
         private val cullRectSnapshotF64 = cullRectF64.copy()
-        private val sourceRectSnapshotF64 = sourceRectF64?.copy()
+        private val samplingSnapshot = sampling.copy()
         init { require(kind == FilterImplementationKindV1.PICTURE && cullRectSnapshotF64.isFinite() && !cullRectSnapshotF64.isEmpty &&
-            (sourceRectSnapshotF64 == null || sourceRectSnapshotF64.isFinite() && !sourceRectSnapshotF64.isEmpty)) }
+            samplingSnapshot.copyOutputToInputOffsetTargetLocalI32() == sealedSourceSnapshot.copySampling()
+                .copyOutputToInputOffsetTargetLocalI32()) }
         public fun copySealedSource(): SealedPictureFilterSourceV1 = SealedPictureFilterSourceV1(
             sealedSourceSnapshot.aggregateId,
             sealedSourceSnapshot.resourceId,
             sealedSourceSnapshot.sourceGenerationI64,
             sealedSourceSnapshot.copySampling(),
+            sealedSourceSnapshot.copyOwner(),
         )
         public fun copyCullRectF64(): RectF64 = cullRectSnapshotF64.copy()
-        public fun copySourceRectF64(): RectF64? = sourceRectSnapshotF64?.copy()
-
-        /** The optional Picture src crop, already rebased to the sealed input texture. */
-        public fun copySourceRectInputTargetLocalF64(): RectF64? = sourceRectSnapshotF64?.let { source ->
-            val outputOrigin = bounds.copyTargetOriginDeviceI32()
-            val offset = sealedSourceSnapshot.copySampling().copyOutputToInputOffsetTargetLocalI32()
-            RectF64(
-                source.left - outputOrigin.x.toDouble() + offset.x.toDouble(),
-                source.top - outputOrigin.y.toDouble() + offset.y.toDouble(),
-                source.right - outputOrigin.x.toDouble() + offset.x.toDouble(),
-                source.bottom - outputOrigin.y.toDouble() + offset.y.toDouble(),
-            )
-        }
+        public fun copyPictureSampling(): W6dPictureSamplingV1 = samplingSnapshot.copy()
     }
 
     public class RuntimeImageOpacity(
