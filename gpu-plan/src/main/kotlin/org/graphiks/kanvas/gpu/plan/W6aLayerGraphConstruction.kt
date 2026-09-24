@@ -327,6 +327,7 @@ internal class W6aLayerGraphConstruction(
         fun allocatePictureLayerTarget(
             domain: RectI32,
             parentTarget: PlanResourceId,
+            mappingLocalToDeviceF64: Matrix3x3F64? = null,
         ): W6bFilterGraphConstruction.SourceBinding {
             val parent = filterSource(parentTarget)
             val id = planResourceId(PlanResourceRole.LayerTarget,
@@ -335,7 +336,10 @@ internal class W6aLayerGraphConstruction(
                 id,
                 SizeI32(domain.width(), domain.height()),
                 Point2I32(domain.left, domain.top),
-                requireNotNull(LayerMappingF64.ofOrNull(parent.mapping.copyLocalToDeviceF64(), Point2I32(domain.left, domain.top))),
+                requireNotNull(LayerMappingF64.ofOrNull(
+                    mappingLocalToDeviceF64?.copy() ?: parent.mapping.copyLocalToDeviceF64(),
+                    Point2I32(domain.left, domain.top),
+                )),
                 parent.copyKnownContentDeviceI32(),
                 parent.copyDesiredOutputDeviceI32(),
                 parent.copyRequiredInputDeviceI32(),
@@ -1525,13 +1529,24 @@ internal class W6aLayerGraphConstruction(
                 layerParentTarget: PlanResourceId,
             ): PlanPassId {
                 val parentBinding = filterSource(layerParentTarget)
-                val layerBinding = allocatePictureLayerTarget(parentBinding.copyDeviceBoundsI32(), layerParentTarget)
+                val descriptor = requireNotNull(entry.descriptorSource.layerDescriptor)
+                val layerLocalToDevice = parentBinding.mapping.copyLocalToDeviceF64().timesCheckedOrNull(
+                    descriptor.transform.toMatrix3x3F64(),
+                ) ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                    W6bFilterDiagnostics.InvalidBounds,
+                    "Picture layer transform cannot be composed into finite F64 device coordinates.",
+                ))
+                val layerBinding = allocatePictureLayerTarget(
+                    parentBinding.copyDeviceBoundsI32(),
+                    layerParentTarget,
+                    layerLocalToDevice,
+                )
                 val layerTarget = layerBinding.resourceId
                 val layerScope = PictureLayerExecutionScope(
                     LayerScopeIdI32(nextPictureLayerScopeI32.also { nextPictureLayerScopeI32 = Math.addExact(it, 1) }),
                     layerTarget,
                 )
-                val initialization: LayerInitializationPlanV1 = if (requireNotNull(entry.descriptorSource.layerDescriptor).initWithPrevious) {
+                val initialization: LayerInitializationPlanV1 = if (descriptor.initWithPrevious) {
                     val parentExtent = parentBinding.copyExtentI32()
                     val sourceBounds = RectI32(0, 0, parentExtent.width, parentExtent.height)
                     val copy = PlanPass.TextureCopy(
@@ -1557,7 +1572,7 @@ internal class W6aLayerGraphConstruction(
                 }
                 val children = emitNestedLayerEntries(entry.children(), layerTarget, layerScope)
                 val before = DestinationVersionI64(versions[layerParentTarget] ?: 0L)
-                val restore = pictureLayerRestore(requireNotNull(entry.descriptorSource.layerDescriptor), before)
+                val restore = pictureLayerRestore(descriptor, before)
                 val terminal = entry.filterOccurrence?.let { occurrence ->
                     if (occurrence.mask is MaskFilterNode.Shader) captureMaskShaderMaterial(occurrence, layerTarget)
                     val coverage = allocateOccurrenceSource(targetDeviceBounds(layerTarget), layerTarget,

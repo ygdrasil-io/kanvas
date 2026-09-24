@@ -15,6 +15,8 @@ import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.matrix.Matrix3x3F32
+import org.graphiks.math.vector.Vector3F32
 import org.junit.jupiter.api.Test
 
 class W6dPictureFilterSurfacePixelTest {
@@ -423,6 +425,42 @@ class W6dPictureFilterSurfacePixelTest {
 
         W6bImageBlurCpuOracle.assertNear(expected, result.pixels)
         assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
+    @Test
+    fun latePictureChildRefusalIsAtomicAndSameSurfaceRecovers() {
+        val rect = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val sentinel = UByteArray(4) { 0x5au }
+        val before = sentinel.copyOf()
+        val expectedRecovery = ubyteArrayOf(0u, 255u, 0u, 255u)
+        val validPicture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(rect).drawRect(rect, Paint(ColorARGB.Red, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val lateRefusalPicture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(rect).apply {
+                setMatrix(Matrix3x3F32(persp0 = .25f))
+                saveLayer(SaveLayerRec(paint = Paint(imageFilter = ImageFilter.DistantLitDiffuse(
+                    Vector3F32(1f, 0f, 1f), ColorARGB.White, 1f, 1f), antiAlias = false)))
+                resetMatrix()
+                drawRect(rect, Paint(ColorARGB.White, antiAlias = false))
+                restore()
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(1, 1)
+        surface.canvas {
+            drawRect(rect, Paint(ColorARGB.Blue, imageFilter = ImageFilter.Picture(validPicture), antiAlias = false))
+            drawRect(rect, Paint(ColorARGB.Blue, imageFilter = ImageFilter.Picture(lateRefusalPicture), antiAlias = false))
+        }
+
+        val failure = assertFailsWith<IllegalStateException> { surface.readPixels(rect, sentinel) }
+
+        assertTrue(failure.message?.startsWith("w6a.layer.unsupported_lighting_mapping:") == true, failure.message ?: "missing diagnostic")
+        assertContentEquals(before, sentinel)
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(rect, Paint(ColorARGB.Green, antiAlias = false)) }
+        val recovered = surface.render()
+        assertContentEquals(expectedRecovery, recovered.pixels)
+        assertTrue(recovered.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
     }
 
     private fun transformedCropBlurHaloExpected(): UByteArray {
