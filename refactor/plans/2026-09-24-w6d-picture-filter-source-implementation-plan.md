@@ -22,6 +22,7 @@
 - RED must reach a semantic public assertion with unchanged production; missing selector, compile error, timeout or native 133/134 is not RED/GREEN evidence. Each positive checks public pixels and `nativeEvidenceScopeKinds` containing `Render` and `Readback`.
 - Tests use only public `Surface`, `Picture`, canvas/paint/filter APIs, `render()`, `readPixels`, diagnostics and `discardRecordedOperations()`. No infrastructure/static-source/private/reflection/mock/fake-device tests, GMs, fonts, codecs, dashboard, renders or scores.
 - Each Task 4a–4c uses a fresh Terra implementer and a Sol reviewer. Resolve Critical/Important findings before the next slice; run Gradle selectors sequentially, record command exit, XML methods/F/E/S, source commit and native 133/134 as `UNKNOWN` separately.
+- Baseline before Task 4: `:gpu-plan:compileKotlin` succeeded. The existing full `W6aLayerPictureTest` class has 9 XML methods, 1 pre-existing stale writer-version assertion (`expected 14`, current writer `15`) and a native worker exit 133; do not misreport that class as GREEN or as a Task 4 regression. Use its named public drawPicture pixel/wire methods below for preservation, and carry the known class failure to the W6d closure report.
 
 ## Review Focus
 
@@ -53,6 +54,7 @@ The implementation may refine names to match existing declarations, but must kee
 internal sealed interface PictureAggregateOwnerV1 {
     class DrawPicture(
         val occurrence: FilterOccurrenceSourceV1,
+        val draw: DrawNode,
         val plannedCommandId: FramePlannedCommandIdI32,
         val pictureOccurrenceIdI32: Int,
     ) : PictureAggregateOwnerV1
@@ -62,6 +64,36 @@ internal sealed interface PictureAggregateOwnerV1 {
         val sourceSceneCanonicalId: String,
         val picturePathI32: List<Int>,
     ) : PictureAggregateOwnerV1
+}
+
+internal sealed interface PictureAggregateDraftOwnerV1 {
+    class DrawPicture(
+        val occurrence: FilterOccurrenceSourceV1,
+        val draw: DrawNode,
+        val plannedCommandId: FramePlannedCommandIdI32,
+        val filterOccurrence: W6bFilterGraphConstruction.PositiveOccurrence?,
+    ) : PictureAggregateDraftOwnerV1
+    class FilterPicture(
+        val nodeId: CapturedFilterNodeIdI32,
+        val node: CapturedFilterNodeV1.Picture,
+        val occurrence: W6bFilterGraphConstruction.PositiveOccurrence,
+        val sourceContext: W6bFilterGraphConstruction.SourceBinding,
+        val picturePathI32: List<Int>,
+    ) : PictureAggregateDraftOwnerV1
+}
+
+internal class W6FramePassSinkV1(
+    private val passes: MutableList<PlanPass>,
+    private val cursor: W6bFilterGraphConstruction.FreezeCursor,
+) {
+    fun append(build: (Int) -> PlanPass): PlanPass {
+        val ordinal = passes.size
+        val pass = build(ordinal)
+        require(pass.ordinal == ordinal)
+        passes += pass
+        cursor.passOrdinalI32 = passes.size
+        return pass
+    }
 }
 
 public class SealedPictureFilterSourceV1(
@@ -76,7 +108,9 @@ public class SealedPictureFilterSourceV1(
 }
 ```
 
-Add `owner: PictureAggregateOwnerV1` to both `PictureStreamAggregateDraftV1` and `PictureStreamAggregateV1`; the filter owner is tied to the actual `PositiveOccurrence.table` by `filterOccurrenceIdI32` and `filterNodeId`, not by canonical equality. `FilterPassOperationV1.Picture` snapshots the sealed-source operand, cull, optional `src`, and output bounds. It must not expose a `SceneSnapshot` to native lowering. The graph records exactly one matching `PictureAggregateSealPass` before the consuming `FilterPass`, and the Picture aggregate validator retains the existing draw-owner branch verbatim.
+The draft receives `PictureAggregateDraftOwnerV1` and the frozen aggregate receives `PictureAggregateOwnerV1`; both are immutable at their boundary. Move draft `draw`, `source: FilterOccurrenceSourceV1`, `sourcePlannedCommandId` and draw-only clip/transform facts into `DraftOwner.DrawPicture`; do not leave nullable placeholders on the common draft. Its common fields are the actual `sourceScene`, aggregate ID, aggregate-local Picture occurrence ID, entry IDs/entries and frame-owned counters. `DraftOwner.FilterPicture` obtains scene/cull/src, mapping, desired domain and filter table from the real node/occurrence/source context; `pictureAggregateDomain` branches by draft owner, using `sourceContext.mapping` and the node cull for the filter branch, never `aggregate.draw`. The frozen filter owner carries only IDs/path/canonical provenance, no executable `SceneSnapshot`; it is tied to the actual `PositiveOccurrence.table` by occurrence ID plus node ID, not by canonical equality. `FilterPassOperationV1.Picture` snapshots the sealed-source operand, cull, optional `src`, and output bounds. It must not expose a `SceneSnapshot` to native lowering. The graph records exactly one matching `PictureAggregateSealPass` before the consuming `FilterPass`, and the Picture aggregate validator retains the existing draw-owner branch verbatim.
+
+`W6FramePassSinkV1` is a planner-local façade over W6a's **existing** frame pass list and W6b `FreezeCursor`, not a second graph or queue. `freezeImageOccurrence` takes this sink and an `emitFilterPictureSource(nodeId, node, occurrence, sourceContext)` callback, appends each filter pass through the sink, and returns resource specs plus output/key but no buffered pass list. W6a's callback emits Begin, descendants and Seal through that **same** sink; nested `appendFrozenOccurrence` reuses it. W6a appends the W6b resource specs once on return but does not append passes a second time. All direct W6a `passes +=` on this reentrant source path are routed through the sink, so one `passes.size` determines each ordinal and the cursor cannot lag behind nested work. If planning fails, the unpublished frame builder is discarded atomically.
 
 ### Task 4a: Flat Filter-Owned Picture Source, End to End
 
@@ -107,7 +141,7 @@ Add `owner: PictureAggregateOwnerV1` to both `PictureStreamAggregateDraftV1` and
 }
 ```
 - [ ] **Step 2: Run the RED selector.** `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dPictureFilterSurfacePixelTest.filterPictureIgnoresCarrierPixelsAndSamplesOnlySealedScene'`. Require a compiled test reaching the wrong pixel or existing W6d terminal Picture diagnostic; if it fails to compile or says “No tests found”, repair the fixture before proceeding. Record XML and native exit separately.
-- [ ] **Step 3: Add the owner and source-only lifecycle.** Introduce the typed owners from Shared typed boundary in `PictureStreamAggregateV1.kt`. Make the filter entry point receive the real `CapturedFilterNodeV1.Picture`, its `CapturedFilterNodeIdI32`, filter occurrence and source context; use the **same** `PictureStreamAggregateDiscoveryV1` instance and frame counters as root draws. Emit existing Begin, entry draw, Seal into the same ordered pass list. Branch owner-specific terminal validation as follows; all current draw-owner checks stay in the draw branch. Do not synthesize `DrawNode` or call `Picture.playback`.
+- [ ] **Step 3: Add the owner and source-only lifecycle.** Introduce both typed owner stages from Shared typed boundary in `PictureStreamAggregateV1.kt`. Move draft draw-only fields into `DraftOwner.DrawPicture`; let `DraftOwner.FilterPicture` carry its real captured node, occurrence and source context. In `pictureAggregateDomain`, retain the existing draw branch and use the filter node's captured cull plus `sourceContext.mapping`/demand for the filter branch. Give discovery an entry from the real filter-table node/occurrence, sharing the frame's aggregate/command/resource counters but allocating no public draw command ID for the filter owner. Emit existing Begin, entry draw, Seal into the same ordered pass list. Branch owner-specific terminal validation as follows; all current draw-owner checks stay in the draw branch. Do not synthesize `DrawNode` or call `Picture.playback`.
 
 ```kotlin
 when (aggregate.owner) {
@@ -122,7 +156,7 @@ when (aggregate.owner) {
 ```
 
 `validateDrawPictureTerminal` denotes extraction of the **unchanged** existing draw-terminal checks from `PictureStreamAggregateV1.kt`, not a second validation algorithm.
-- [ ] **Step 4: Bind the Picture leaf to the sealed generation.** In `W6bFilterGraphConstruction.materializeNode`, request the filter-owned aggregate from W6a graph construction; create the operand only after its seal has a resource ID and generation. Here `mappedCull`, `mappedSourceRect` and `pictureBounds` are the once-mapped, checked F64/I32 values from this source context:
+- [ ] **Step 4: Bind the Picture leaf to the sealed generation.** Refactor `freezeImageOccurrence` to accept the shared `W6FramePassSinkV1` and `emitFilterPictureSource` callback described above; its existing `append` delegates to `sink.append`, so earlier filter passes are already in frame order when a Picture leaf emits Begin/children/Seal. In `W6bFilterGraphConstruction.materializeNode`, request the filter-owned aggregate through that callback; create the operand only after its seal has a resource ID and generation. Here `mappedCull`, `mappedSourceRect` and `pictureBounds` are the once-mapped, checked F64/I32 values from this source context:
 
 ```kotlin
 val operation = FilterPassOperationV1.Picture(
@@ -131,9 +165,9 @@ val operation = FilterPassOperationV1.Picture(
     sourceRectF64 = mappedSourceRect,
     bounds = pictureBounds,
 )
-passes += PlanPass.FilterPass(
-    passes.size, listOf(sealed.resourceId), outputFilterTarget, evaluationKey, operation,
-)
+sink.append { ordinal -> PlanPass.FilterPass(
+    ordinal, listOf(sealed.resourceId), outputFilterTarget, evaluationKey, operation,
+) }
 ```
 
 Keep `bindInput(CapturedFilterInputV1.Picture(id))` refused. The operation snapshots mapping/crop/output bounds before publication; `RenderGraph.construct` admits `PictureAggregateSource` only for this arm, and `W6aLayerGraphValidation` plus `W6bFilterGraphWitnessV1` prove matching owner, seal, generation, order and lifetime.
@@ -146,7 +180,7 @@ require(seal.sourceGenerationI64 == operation.copySealedSource().sourceGeneratio
 ```
 
 An unsupported nested command remains a specific W6 terminal refusal before publication. Do not insert a render pass, resize a target or choose a program after freeze.
-- [ ] **Step 6: Run GREEN and drawPicture preservation, sequentially.** `rtk ./gradlew :gpu-plan:compileKotlin`; `rtk ./gradlew :gpu-renderer:compileKotlin`; `rtk ./gradlew :kanvas:compileTestKotlin`; the Step 2 selector; `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6aLayerPictureTest'`. Require public pixel and Render+Readback, not only a Gradle exit. Record XML method/F/E/S and native status.
+- [ ] **Step 6: Run GREEN and drawPicture preservation, sequentially.** `rtk ./gradlew :gpu-plan:compileKotlin`; `rtk ./gradlew :gpu-renderer:compileKotlin`; `rtk ./gradlew :kanvas:compileTestKotlin`; the Step 2 selector; `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6aLayerPictureTest.translatedPictureLayerKeepsNonzeroOrigin'`; `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6aLayerPictureTest.drawPictureInsidePreviousLayerPreservesHostClip'`. Require public pixel and Render+Readback, not only a Gradle exit. Record XML method/F/E/S and native status; retain the pre-existing full-class failure in custody.
 - [ ] **Step 7: Commit and Sol review.** Commit as `feat(gpu): execute flat w6d picture filter source`. Reviewer checks no fake draw identity, one graph/allocator, source-only seal, precise role exception, actual renderer pixels and unchanged drawPicture validators. Resolve Critical/Important before 4b.
 
 ### Task 4b: Nested Scene, Crop, Empty and Wrapper Semantics
@@ -159,7 +193,7 @@ An unsupported nested command remains a specific W6 terminal refusal before publ
 
 **Interfaces:** Consumes Task 4a owner and sealed-source operand. Produces bounded recursive filter-scene discovery, F64 crop/demand and transparent-black leaf behavior consumed by Task 4c and parent-plan Task 7.
 
-- [ ] **Step 1: Add public RED fixtures with independent byte oracles.** Add `pictureFilterNestedSceneKeepsSiblingAndDstOutOrder`: a 2×1 source Picture clears to red, draws green in the second texel and erases that whole texel with `DST_OUT`, then is used as the filter on a blue 2×1 carrier; assert first red and second transparent, plus Render+Readback. Add `pictureFilterNestedPictureLayerAndDrawColorKeepOrder`: a nested Picture containing a 1×1 blue child, a `drawColor` sibling and a saveLayer child; assert their recorded order from a separately written expected array. Add `pictureFilterSrcIsCropWithoutRescaleAndEmptyRemainsTransparent`: a 3×1 RGB Picture with `src=[1,0,2,1]` must leave only the green texel at x=1, not move it to x=0 or stretch it; `src=[3,0,4,1]` returns transparent. Add `emptyPictureStillRunsComposeColorFilterAndSrcComposite`: a Compose/ColorFilter wrapper that creates nonzero alpha from transparent input and a `SRC` composite over opaque green; assert those independently computed pixels. Add `transformedPictureCropKeepsBlurHaloOutsideCull`: a translated/scaled crop and blur wrapper whose halo extends beyond Picture cull. Each expected array precedes `PictureRecorder`/`Surface` creation. For the 3×1 crop, the exact leaf oracle is:
+- [ ] **Step 1: Add public RED fixtures with independent byte oracles.** Add `pictureFilterNestedSceneKeepsSiblingAndDstOutOrder`: a 2×1 source Picture clears to red, draws green in the second texel and erases that whole texel with `DST_OUT`, then is used as the filter on a blue 2×1 carrier; assert first red and second transparent, plus Render+Readback. Add `pictureFilterNestedPictureLayerAndDrawColorKeepOrder`: a nested Picture containing a 1×1 blue child, a `drawColor` sibling and a saveLayer child; assert their recorded order from a separately written expected array. Add `pictureFilterReentrantPassOrderKeepsEarlierAndInnerFilters`: a Compose/ColorFilter pass before the Picture leaf, whose scene itself has a filtered child; assert independently expected pixels so wrong ordinal/interleaving fails publicly. Add `pictureFilterSrcIsCropWithoutRescaleAndEmptyRemainsTransparent`: a 3×1 RGB Picture with `src=[1,0,2,1]` must leave only the green texel at x=1, not move it to x=0 or stretch it; `src=[3,0,4,1]` returns transparent. Add `emptyPictureStillRunsComposeColorFilterAndSrcComposite`: a Compose/ColorFilter wrapper that creates nonzero alpha from transparent input and a `SRC` composite over opaque green; assert those independently computed pixels. Add `transformedPictureCropKeepsBlurHaloOutsideCull`: a translated/scaled crop and blur wrapper whose halo extends beyond Picture cull. Each expected array precedes `PictureRecorder`/`Surface` creation. For the 3×1 crop, the exact leaf oracle is:
 
 ```kotlin
 val croppedExpected = ubyteArrayOf(
@@ -171,7 +205,7 @@ val emptyExpected = UByteArray(3 * 4)
 val src = RectF32.ofLTRB(1f, 0f, 2f, 1f)
 val emptySrc = RectF32.ofLTRB(3f, 0f, 4f, 1f)
 ```
-- [ ] **Step 2: Run RED selectors one at a time.** Run `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dPictureFilterSurfacePixelTest.pictureFilterNestedSceneKeepsSiblingAndDstOutOrder'`, then `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dPictureFilterSurfacePixelTest.pictureFilterSrcIsCropWithoutRescaleAndEmptyRemainsTransparent'`. Count only semantic pixel/diagnostic failures as causal RED; the other named fixtures must each be run by the class selector in Step 5 even if they are already correct.
+- [ ] **Step 2: Run RED selectors one at a time.** Run `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dPictureFilterSurfacePixelTest.pictureFilterNestedSceneKeepsSiblingAndDstOutOrder'`, then `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dPictureFilterSurfacePixelTest.pictureFilterReentrantPassOrderKeepsEarlierAndInnerFilters'`, then `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dPictureFilterSurfacePixelTest.pictureFilterSrcIsCropWithoutRescaleAndEmptyRemainsTransparent'`. Count only semantic pixel/diagnostic failures as causal RED; the other named fixtures must each be run by the class selector in Step 5 even if they are already correct.
 - [ ] **Step 3: Reuse recursive discovery and source contexts.** Extend W6b `visitScenes`/positive occurrence traversal to descend into `CapturedFilterNodeV1.Picture.scene` using the actual filter node ID and path; add active-path object-identity cycle detection to the existing bounded traversal, never canonical-ID equality. Carry W4/W5 lanes, nested Picture and layer scopes through the same source-only aggregate. A malformed ID/cycle/size returns a W6 terminal refusal before resource publication. Preserve captured sharing without physical deduplication of equal values. The recursion guard must compare scene object identities on the active path, and unwind on return:
 
 ```kotlin
@@ -198,7 +232,7 @@ private fun pictureKnownContentDeviceI32OrNull(
 ```
 
 In the existing W6b `materializeNode` context, a null result selects its existing `transparentBlack(currentSource)` and `ContextualFilterResult(transparent, identityBounds(transparent), null)` path; a non-null result is known Picture content, not the outer-filter output demand. Preserve the current W6b diagnostic shape and use the existing `RectF64.intersectF64OrNull` / `LayerMappingF64.mapLocalRectToDeviceI32OrNull` helpers; do not add geometry to `:gpu-plan`.
-- [ ] **Step 5: Run GREEN and W6b preservation sequentially.** `rtk proxy ./gradlew :math:geometry:compileKotlinJvm` only if touched; `rtk ./gradlew :gpu-plan:compileKotlin`; `rtk ./gradlew :gpu-renderer:compileKotlin`; `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dPictureFilterSurfacePixelTest'`; `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bImageBlurSurfacePixelTest'`; `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6aLayerPictureTest'`. Record XML and native custody.
+- [ ] **Step 5: Run GREEN and W6b preservation sequentially.** `rtk proxy ./gradlew :math:geometry:compileKotlinJvm` only if touched; `rtk ./gradlew :gpu-plan:compileKotlin`; `rtk ./gradlew :gpu-renderer:compileKotlin`; `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dPictureFilterSurfacePixelTest'`; `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bImageBlurSurfacePixelTest'`; `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6aLayerPictureTest.translatedPictureLayerKeepsNonzeroOrigin'`; `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6aLayerPictureTest.drawPictureInsidePreviousLayerPreservesHostClip'`. Record XML and native custody, including the known full-class baseline failure separately.
 - [ ] **Step 6: Commit and Sol review.** Commit as `feat(gpu): preserve nested w6d picture filter semantics`. Reviewer checks recursion/cycle boundary, no false cycle for equal values, crop mapping once, empty/wrapper behavior, exact source generation, no relaxed drawPicture invariant and no post-freeze renderer choice.
 
 ### Task 4c: Capture/Wire Isolation, Atomic Pressure and Preservation
@@ -241,7 +275,7 @@ assertTrue(recovered.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Read
 ```
 - [ ] **Step 3: Run causal REDs.** Run separately `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6dPictureRuntimeEffectPictureTest'` and the Step 2 method selector. If existing capture/wire already passes, classify it as preservation evidence, not fabricated RED; the atomic method must reach its intended diagnostic/pixel assertion to qualify.
 - [ ] **Step 4: Correct only observed gaps.** Retain the existing `SceneSnapshot` deep capture and Picture 15/schema 9 codec when green. Otherwise repair the specific copy/identity/decoder path; never add a second archive or deduplicate by content. Ensure every nested source image/program/uniform/staging allocation joins checked-I64 frame budget, the sealed source lifetime reaches its last reader, and materialization errors discard/quarantine the complete ready token. Keep `CapturedFilterInputV1.Picture(id)` refused.
-- [ ] **Step 5: Run GREEN and historical gates sequentially.** `rtk ./gradlew :render-ir:compileKotlin`; `rtk ./gradlew :gpu-plan:compileKotlin`; `rtk ./gradlew :gpu-renderer:compileKotlin`; `rtk ./gradlew :kanvas:compileTestKotlin`; `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dPictureFilterSurfacePixelTest'`; `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6dPictureRuntimeEffectPictureTest'`; `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6dLightingPictureTest'`; `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6aLayerPictureTest'`. Record every XML class/method F/E/S and native status.
+- [ ] **Step 5: Run GREEN and historical gates sequentially.** `rtk ./gradlew :render-ir:compileKotlin`; `rtk ./gradlew :gpu-plan:compileKotlin`; `rtk ./gradlew :gpu-renderer:compileKotlin`; `rtk ./gradlew :kanvas:compileTestKotlin`; `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dPictureFilterSurfacePixelTest'`; `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6dPictureRuntimeEffectPictureTest'`; `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6dLightingPictureTest'`; `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6aLayerPictureTest.memoryAndWireReplayPreservePreviousPixels'`; `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6aLayerPictureTest.drawPictureInsidePreviousLayerPreservesHostClip'`. Record every XML class/method F/E/S and native status; carry the known stale writer-version class failure explicitly, not as a Task 4 regression.
 - [ ] **Step 6: Commit and Sol review.** Commit as `test(gpu): prove w6d picture filter replay and recovery`. Reviewer checks copied mutable rects, stable table IDs, real historical fixtures, exact generation/lease/budget accounting, terminal no-publication and unchanged drawPicture/W5h contracts. Resolve Critical/Important before parent-plan Task 5.
 
 ## Definition of Done
@@ -255,7 +289,7 @@ assertTrue(recovered.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Read
 ## Plan Self-Review
 
 - **Spec coverage:** 4a establishes the typed owner, source-only seal, role/generation validation and actual flat pixels. 4b adds bounded filter-held traversal, ordered W4/W5 descendants, F64 crop/demand, empty/decal and wrappers. 4c covers capture identity, memory/wire, mutable input isolation, historical readers, atomic refusal and recovery; the numeric B/B−1 proof stays in parent Task 7. The spec's conceptual owner/discovery → binding/execution → evidence sequence is grouped into independently runnable vertical slices: 4a includes flat execution so its Sol review can reject a broken physical path before nested semantics are added.
-- **Type consistency:** `PictureAggregateOwnerV1.FilterPicture` is attached to both draft and frozen aggregates; `SealedPictureFilterSourceV1` snapshots the existing aggregate ID, resource ID, generation and `FilterInputSamplingV1` for the final `FilterPassOperationV1.Picture`. The optional `SceneSnapshot` planning provenance never enters renderer lowering. Existing draw-owner terminal validation remains separate.
+- **Type consistency:** `PictureAggregateDraftOwnerV1.FilterPicture` carries the captured node and source context only during planning; `PictureAggregateOwnerV1.FilterPicture` freezes IDs/path without a scene. `W6FramePassSinkV1` is the one frame pass/ordinal authority across reentrant W6a/W6b emission. `SealedPictureFilterSourceV1` snapshots the existing aggregate ID, resource ID, generation and `FilterInputSamplingV1` for the final `FilterPassOperationV1.Picture`. The `SceneSnapshot` planning provenance never enters renderer lowering. Existing draw-owner terminal validation remains separate.
 - **Review Focus:** the five header cases map respectively to 4a's leaf pixel, 4b's nested-order fixture, 4b's crop/empty/wrapper fixtures, 4c's equal/shared replay fixtures, and 4c's late refusal/recovery fixture.
 - **Placeholder scan:** all named test selectors, existing API calls and changed files are explicit. New helper names in snippets are defined in the same task; conditional file edits are gated by observed capture/wire or geometry defects, not deferred requirements. No private/infrastructure test is prescribed.
 
