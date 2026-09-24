@@ -4,11 +4,11 @@
 
 **Goal:** Deliver the eleven W6d advanced image-filter families, backdrop and filtered `initWithPrevious` through the single frozen W6 graph, with public `Surface`/`Picture` Render+Readback evidence.
 
-**Architecture:** W6d starts from the reviewed HEAD of `codex/w6c-spatial-dag`. Capture continues to produce the immutable W6b filter-node table; `:math` alone derives F64 bounds and checked I32 texel domains, then `:gpu-plan` adds typed operation arms only to the existing `FilterPass` and `FilterTarget` contracts. `:gpu-renderer` materializes the selected operation verbatim, and never chooses a kernel, target, format, mapping, pass, resource, ID, lifetime, or fallback after the plan is frozen.
+**Architecture:** W6d starts from the reviewed HEAD of `codex/w6c-spatial-dag`. Capture continues to produce the immutable W6b filter-node table; `:math` alone derives F64 bounds and checked I32 texel domains, then `:gpu-plan` adds typed operations on the existing `FilterPass`/`FilterTarget` contracts. The sole Task 4 exception reuses W6b's existing Picture aggregate passes and `PictureAggregateSource` to seal a filter-owned scene before its `FilterPass.Picture`. `:gpu-renderer` materializes the selected operations verbatim and never chooses a kernel, target, format, mapping, pass, resource, ID, lifetime, or fallback after freeze.
 
 **Tech Stack:** Kotlin/JVM; `:math:geometry`, `:math:matrix`, `:render-ir`, `:gpu-plan`, `:gpu-renderer`, `:kanvas`; WebGPU/WGSL; JUnit 5; public `Surface`, `Picture`, `Canvas`, `Paint`, `ImageFilter`, `RenderResult`, and `readPixels` APIs.
 
-**Spec:** `refactor/specs/2026-09-16-w6-layers-effects-design.md` §§5–16, `refactor/specs/2026-09-22-w6b-w6e-stacked-delivery-design.md` §§3, 6, 8–11, and the Task 3 amendment `refactor/specs/2026-09-23-w6d-lighting-3d-design.md` (Astra-reviewed, corrected at `0edbe98`).
+**Spec:** `refactor/specs/2026-09-16-w6-layers-effects-design.md` §§5–16, `refactor/specs/2026-09-22-w6b-w6e-stacked-delivery-design.md` §§3, 6, 8–11, the Task 3 amendment `refactor/specs/2026-09-23-w6d-lighting-3d-design.md` (Astra-reviewed, corrected at `0edbe98`), and the Task 4 amendment `refactor/specs/2026-09-24-w6d-picture-filter-source-design.md` (Astra-reviewed and user-approved).
 
 ## Global Constraints
 
@@ -25,7 +25,7 @@
 - Lighting's six public families use only `Vector3F32`/`Point3F32`; no 2D overload or implicit Z is retained. New Picture output is version 15/schema 9; older 2D-lighting records fail closed while older non-lighting scenes remain readable. All three coordinates enter canonical identity and frozen planning.
 - W6d lighting admits finite invertible affine parameter-to-layer mappings only. It maps XY as point or vector, and maps Z **and** `surfaceScale` as `((A·(z,z)).x + (A·(z,z)).y)/2`. Lighting output is unbounded before demanded-output/clip/target intersection; Sobel needs a one-texel halo with Skia's per-edge clamp/decal decision.
 - `kd/ks` are finite and non-negative. `surfaceScale` may be negative; `shininess` and spot exponent are any finite F32; spot cutoff is finite degrees and its frozen cosine is finite in `[-1,1]`. Legacy `GPULighting.kt` restrictions do not govern W6d. Degenerate-light and undefined-power cases follow the bounded, non-ISO Kanvas zero-contribution convention in the lighting spec.
-- W6d adds physical graph vocabulary only by extending W6b's existing `FilterPassOperationV1` arms on `PlanPass.FilterPass`; it reuses `PlanResourceRole.FilterTarget`. It creates no second frame graph, allocator, submit path, cache, planner, or renderer-side plan type.
+- W6d adds typed arms on W6b's existing `PlanPass.FilterPass` with `FilterTarget` output. Task 4 alone may reuse W6b's existing Picture aggregate pass types and `PictureAggregateSource` for a filter-owned source sealed before `FilterPass.Picture`; it adds no new `PlanPass` subtype or resource role. No second frame graph, allocator, submit path, cache, planner, or renderer-side plan type is allowed.
 - The full graph freezes before native preparation: passes, targets, snapshots, programs, uniforms, samplers, IDs, slots, usages, formats, sample counts, lifetimes, cache facts, and checked I64 budget. The renderer only binds and encodes those facts.
 - RGBA8 is W6d's only positive target format. F16/HDR is refused before native publication with the exact W6 capability diagnostic; it is never silently converted to RGBA8.
 - A W6-owned refusal is frame-terminal: before native publication it discards every reservation; between publication and submit it removes/quarantines the complete ready token; after submit it exposes no partial successful readback and keeps leases until completion/quarantine. A balanced public canvas followed by `discardRecordedOperations()` must recover on the same `Surface`.
@@ -66,7 +66,7 @@ TEST = kanvas/src/test/kotlin/org/graphiks/kanvas/
 | `IR/EffectNode.kt`, `IR/SceneCommand.kt`, `IR/SceneSnapshot.kt`, `IR/SceneArchiveCodec.kt`, `API/picture/Picture.kt` | Bind the eleven advanced nodes to typed W6c references; Task 3 advances new Picture output to 15/schema 9 for 3D lighting while preserving older non-lighting readers, then Task 4 carries Picture filter `SceneSnapshot` and backdrop identity without deduplicating equal values. |
 | `GEOM/RectF64.kt`, `GEOM/RectProjectionF64.kt`, `MATRIX/LayerMappingF64.kt` | Add only precision-named pure geometry helpers for sampling halos, translated domains, lens domains, and checked outward I32 projection. |
 | `PLAN/W6aLayerPlanCompiler.kt`, `PLAN/W6aLayerGraphConstruction.kt`, `PLAN/W6aPlanDiagnostics.kt` | Replace the W6a advanced/backdrop refusal with W6d admission, occurrence binding, save-time snapshots, final filtered layer DAG, terminal diagnostics, and immutable freeze. |
-| `PLAN/W6bFilterPlanV1.kt`, `PLAN/PlanPasses.kt`, `PLAN/PlanResources.kt`, `PLAN/RenderGraph.kt` | Add immutable advanced arms to `FilterPassOperationV1`; reuse the existing `FilterPass` and `FilterTarget`; preserve the one graph, IDs, dependencies, lifetime validation, and no active-attachment sampling rule. |
+| `PLAN/W6bFilterPlanV1.kt`, `PLAN/PlanPasses.kt`, `PLAN/PlanResources.kt`, `PLAN/RenderGraph.kt` | Add immutable advanced arms to `FilterPassOperationV1`; reuse `FilterPass` and `FilterTarget`. Task 4 alone consumes the existing `PictureAggregateSource` after its seal; preserve one graph, IDs, dependencies, lifetime validation, and no active-attachment sampling. |
 | `PLAN/RuntimeEffectSemanticCatalog.kt`, `PLAN/RuntimeEffectCpuEvaluatorV1.kt` | Generalize the catalogue to multi-ABI entries while preserving W5h's shader entry/hash; define the registered `kanvas.runtime.image-opacity` IMAGE_FILTER semantics and CPU oracle. |
 | `GPU/planning/W6aLayerGraphLowerer.kt`, `GPU/recording/GPUW6aLayerFramePlan.kt`, `GPU/execution/GPUWgpu4kW6aLayerFramePayloadMaterializer.kt`, `GPU/execution/GPUW6aEncoderScopesV1.kt` | Lower sealed FilterPass operations and frozen resource IDs to native encoders; materialize snapshots/targets/programs without recomputation or selection. |
 | `GPU/filters/GPUDisplacementMap.kt`, `GPU/filters/GPULighting.kt`, `GPU/filters/GPUPreparedFilterDescriptors.kt`, `GPU/filters/GPUFilterOracle.kt` | Reuse only as implementation kernels/oracle references after the W6d plan has selected and frozen a typed operation; do not route these helpers directly from public capture. |
@@ -149,14 +149,16 @@ public sealed interface FilterPassOperationV1 {
     }
 
     public class Picture(
-        public val scene: SceneSnapshot,
+        sealedSource: SealedPictureFilterSourceV1,
         cullRectF64: RectF64,
         sourceRectF64: RectF64?,
         override val bounds: FilterBoundsPlanV1,
         override val kind: FilterImplementationKindV1,
     ) : FilterPassOperationV1 {
+        private val sealedSourceSnapshot = sealedSource.copy()
         private val cullRectSnapshotF64 = cullRectF64.copyF64()
         private val sourceRectSnapshotF64 = sourceRectF64?.copyF64()
+        public fun copySealedSource(): SealedPictureFilterSourceV1 = sealedSourceSnapshot.copy()
         public fun copyCullRectF64(): RectF64 = cullRectSnapshotF64.copyF64()
         public fun copySourceRectF64(): RectF64? = sourceRectSnapshotF64?.copyF64()
     }
@@ -179,7 +181,9 @@ public sealed interface LightingParametersV1 {
 }
 ```
 
-`FilterImplementationKindV1` gains exactly `MATRIX_CONVOLUTION`, `DISPLACEMENT_MAP`, `MAGNIFIER`, `DISTANT_DIFFUSE`, `POINT_DIFFUSE`, `SPOT_DIFFUSE`, `DISTANT_SPECULAR`, `POINT_SPECULAR`, `SPOT_SPECULAR`, `PICTURE`, and `RUNTIME_IMAGE_OPACITY`. The existing `FilterPass(ordinal, inputs, output, evaluationKey, operation)` validates that all input/output targets are `FilterTarget` (except the pre-existing W6 source target), the operation bounds are non-empty, all F32 values are finite, and `output` is the one physical target represented by the operation. `PlanResourceRole.FilterTarget` remains the W6b RGBA8, single-sample, frame-local role with sealed `Sampled`, `RenderAttachment`, `CopySource`, and/or `CopyDestination` usage; its `PlanResource` still owns extent, bytes, format, lifetime, and allocation slot. No W6d class may add another operation hierarchy, `PlanPass` subtype, target role, or resource graph.
+`FilterImplementationKindV1` gains exactly `MATRIX_CONVOLUTION`, `DISPLACEMENT_MAP`, `MAGNIFIER`, `DISTANT_DIFFUSE`, `POINT_DIFFUSE`, `SPOT_DIFFUSE`, `DISTANT_SPECULAR`, `POINT_SPECULAR`, `SPOT_SPECULAR`, `PICTURE`, and `RUNTIME_IMAGE_OPACITY`. The existing `FilterPass(ordinal, inputs, output, evaluationKey, operation)` validates non-empty bounds, finite F32 values, and one physical `FilterTarget` output. Other arms keep W6b source roles; `Picture` alone reads its exact sealed `PictureAggregateSource` generation, as specified in `refactor/plans/2026-09-24-w6d-picture-filter-source-implementation-plan.md`. `FilterTarget` stays RGBA8, single-sample and frame-local with sealed usages, extent, bytes, lifetime and allocation slot. No W6d class adds another operation hierarchy, `PlanPass` subtype, target role, or resource graph.
+
+The `Picture` declaration above is the **post-Task-4 final interface**. Task 1's already-committed provisional constructor retains `SceneSnapshot` as planning provenance; Task 4 replaces that native-facing field with the sealed-source operand. Do not retrofit a fake `DrawNode` or pass a scene to native lowering during that transition.
 
 ```kotlin
 // PLAN/LayerScopePlanV1.kt semantic extension; physical work remains TextureCopy + FilterPass.
@@ -606,104 +610,11 @@ Branch on schema before reading old tag payloads in both table and recursive cod
 - [ ] **Step 3: GREEN and preservation.** Run sequentially `rtk ./gradlew :gpu-plan:compileKotlin`, `rtk ./gradlew :gpu-renderer:compileKotlin`, `rtk ./gradlew :kanvas:compileTestKotlin`, `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dLightingSurfacePixelTest'`, `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6dLightingPictureTest'`, then `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6aLayerRestoreSurfacePixelTest'`. Record XML method/F/E/S and native exit separately; 133/134 remains UNKNOWN. Commit `test(gpu): prove w6d lighting picture replay`.
 - [ ] **Step 4: Sol review.** Review Picture 15/schema 9 memory/wire pixel replay, old 2D-lighting refusal, historical non-lighting readability, Z-sensitive canonical identity, and frozen resource/budget behavior. Resolve Critical/Important findings before Task 4.
 
-### Task 4: Picture Filter as Immutable SceneSnapshot
+### Task 4: Execute an Immutable Picture Filter Source
 
-**Agent:** Terra implementation; Sol review.
+**Execution method:** Subagent-Driven Development, three sequential Terra implementation/Sol review gates.
 
-**Outcome:** `ImageFilter.Picture` owns a bounded immutable `SceneSnapshot`, preserves explicit W6c node identity through Picture memory/wire replay, and renders through the same W6 graph with no live Surface or codec dependency.
-
-**Files:**
-
-- Create: `TEST/picture/W6dPictureRuntimeEffectPictureTest.kt`
-- Create: `TEST/surface/W6dPictureFilterSurfacePixelTest.kt`
-- Modify: `IR/EffectNode.kt`
-- Modify: `IR/SceneArchiveCodec.kt`
-- Modify: `API/picture/Picture.kt`
-- Modify: `API/render/ir/PaintSceneAdapter.kt`
-- Modify: `PLAN/W6bFilterPlanV1.kt`
-- Modify: `PLAN/W6aLayerGraphConstruction.kt`
-- Modify: `GPU/execution/GPUWgpu4kW6aLayerFramePayloadMaterializer.kt`
-
-**Interfaces:**
-
-- Consumes: `ImageFilterNode.Picture.scene: SceneSnapshot`, Picture 15/schema 9 W6b node table after Task 3, `FilterPassOperationV1.Picture`, and current Picture readers.
-- Produces: a sealed Picture FilterPass whose scene/cull/source rect are deep snapshots, replayed with the scope mapping and W6 frame budget; it is used by Task 7 budget/recovery coverage.
-
-- [ ] **Step 1: Write public SceneSnapshot and wire witnesses.**
-
-```kotlin
-@Test fun `picture filter and image opacity survive memory wire replay and post capture mutation`() {
-    val picture = recordedPictureFilterSource()
-    val bytes = picture.toByteArray()
-    val wire = assertNotNull(Picture.fromByteArray(bytes))
-    val expected = expectedPictureFilterPixels()
-    listOf(picture, wire).forEach { replay ->
-        val surface = Surface(2, 1)
-        surface.canvas { replay.playback(this) }
-        val result = surface.render()
-        assertContentEquals(expected, result.pixels)
-        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
-    }
-}
-```
-
-Include public methods `pictureFilterDeepSnapshotsMutableCullAndSourceRects`, `equalPictureFiltersRemainDistinctWithoutCapturedSharing`, and `oldPicture14Schema8ReaderKeepsUnrelatedNodesByteStable`.
-
-- [ ] **Step 2: Run causal REDs.**
-
-Run: `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6dPictureRuntimeEffectPictureTest'`
-
-Run: `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dPictureFilterSurfacePixelTest'`
-
-Expected: FAIL because W6c reserves Picture inputs/filters; old Picture reader selectors remain green.
-
-- [ ] **Step 3: Capture and archive the bounded SceneSnapshot.**
-
-```kotlin
-is ImageFilter.Picture -> ImageFilterNode.Picture.of(
-    scene = capturePicture(value.picture).requireCaptured(),
-    cullRect = value.picture.cullRect.copy(),
-    src = value.src?.copy(),
-)
-```
-
-The archive references the table entry by stable captured ID, writes the `SceneSnapshot` through existing bounded Picture primitives, and rejects unknown ID/cycle/incoherent size before publishing a `Picture`. Equal values are not aliased; a truly shared captured node retains its single stable reference.
-
-- [ ] **Step 4: Plan and materialize the Picture operation as W6 input.**
-
-```kotlin
-val operation = FilterPassOperationV1.Picture(
-    scene = pictureNode.scene,
-    cullRectF64 = mapping.mapRectBoundsF64OrNull(pictureNode.copyCullRect().toRectF64())
-        ?: refuse(W6dPlanDiagnostics.PictureMapping),
-    sourceRectF64 = pictureNode.copySource()?.toRectF64(),
-    bounds = bounds,
-    kind = FilterImplementationKindV1.PICTURE,
-)
-```
-
-The plan recursively binds the captured scene only through W6c's occurrence/source-context rules and charges its targets, uniforms, images, staging, and leases before freeze. The renderer receives the selected nested operation/IDs; it does not call `Picture.playback`, capture a live `Surface`, or allocate a separate frame.
-
-- [ ] **Step 5: Run GREEN and historical compatibility selectors.**
-
-Run: `rtk ./gradlew :render-ir:compileKotlin`
-
-Run: `rtk ./gradlew :gpu-plan:compileKotlin`
-
-Run: `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6dPictureRuntimeEffectPictureTest'`
-
-Run: `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dPictureFilterSurfacePixelTest'`
-
-Run: `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6aLayerPictureTest'`
-
-- [ ] **Step 6: Commit and request Sol review.**
-
-```sh
-git add render-ir gpu-plan gpu-renderer kanvas/src/main/kotlin/org/graphiks/kanvas/picture kanvas/src/test/kotlin/org/graphiks/kanvas/picture kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W6dPictureFilterSurfacePixelTest.kt
-git commit -m "feat(kanvas): execute immutable w6d picture filters"
-```
-
-Sol checks SceneSnapshot immutability, wire compatibility, identity versus equality, bounded recursive planning, and absence of live-Surface/codec coupling.
+**Detailed plan:** `refactor/plans/2026-09-24-w6d-picture-filter-source-implementation-plan.md` replaces the original six steps. Task 4a provides a flat public pixel through a filter-owned Picture source; 4b covers nested scene, crop, empty and wrapper semantics; 4c covers memory/wire isolation, atomic refusal and preservation. The approved contract is `refactor/specs/2026-09-24-w6d-picture-filter-source-design.md`. Do not start Task 5 until all three gates have clean Sol reviews. Task 7 remains responsible for the numeric B/B−1 budget gate.
 
 ### Task 5: Registered IMAGE_FILTER Runtime Effect
 
@@ -1018,12 +929,12 @@ git commit -m "feat(gpu): close w6d advanced effect frame ownership"
 
 ## W6d Definition of Done
 
-- [ ] MatrixConvolution, DisplacementMap, Magnifier, six lighting families, Picture, and registered RuntimeEffect execute through W6c occurrence binding and W6d arms on `FilterPassOperationV1` only.
+- [ ] MatrixConvolution, DisplacementMap, Magnifier, six lighting families, Picture, and registered RuntimeEffect execute through W6c occurrence binding and W6d arms on `FilterPassOperationV1`; Picture alone additionally reads a filter-owned, sealed `PictureAggregateSource`.
 - [ ] Backdrop snapshots the immediate parent at save and filters before child draws; filtered previous copies unfiltered parent at save and evaluates its DAG only after children.
-- [ ] `ImageFilter.Picture` is a bounded immutable `SceneSnapshot`; memory/wire replay, mutation isolation, stable references, malformed-table refusal, and historical readers are publicly covered.
+- [ ] `ImageFilter.Picture` captures a bounded immutable `SceneSnapshot`, executes it through a filter-owned Picture aggregate sealed before `FilterPass.Picture`, and publicly covers memory/wire replay, mutation isolation, stable references, malformed-table refusal and historical readers.
 - [ ] `kanvas.runtime.image-opacity` v1 has IMAGE_FILTER ABI, required `input` image child, F32 `alpha`, same-pixel premultiplied RGBA multiplication, unchanged bounds, absent-input `ImplicitSource`, and no arbitrary runtime frontend; W5h hashes are unchanged.
 - [ ] Only RGBA8 is positively admitted; F16/HDR gets an exact capability refusal with no silent format substitution.
-- [ ] `:math` owns new geometry; `:gpu-plan` freezes only FilterPass/FilterTarget extensions; renderer has no post-freeze choice, replan, bounds reconstruction, target resize, pass insertion, ID rewrite, or legacy fallback.
+- [ ] `:math` owns new geometry; `:gpu-plan` freezes the FilterPass/FilterTarget extensions and, only for Task 4, reuses existing Picture aggregate passes and `PictureAggregateSource`. The renderer has no post-freeze choice, replan, bounds reconstruction, target resize, pass insertion, ID rewrite or legacy fallback.
 - [ ] Every resource, cache lease, snapshot, target, program, uniform, sampler, staging buffer, alignment, and allocation slot is budgeted with checked I64 before allocation; B/B-1, terminal no-publication, and same-surface recovery are publicly proved.
 - [ ] Each positive W6d witness asserts public Render+Readback scope evidence; exact and family-oracle tolerance policies remain separate; no prohibited private/infrastructure tests exist.
 - [ ] Required W6d shards, targeted W6a/W5h preservation, and touched-module compilations pass with recorded custody; native exits 133/134 remain `UNKNOWN`.
@@ -1032,10 +943,10 @@ git commit -m "feat(gpu): close w6d advanced effect frame ownership"
 ## Plan Self-Review
 
 - **Spec coverage:** Tasks 2, 31–33, 4 and 5 cover the eleven advanced families; Task 6 covers backdrop and filtered previous timing; Task 4 covers immutable Picture/table/wire; Task 5 covers multi-ABI image-opacity and W5h hash stability; Task 7 covers RGBA8/F16, budgets, atomicity, recovery, custody, review, and Draft PR. Fonts, codecs, GMs, arbitrary frontend code, legacy removal, global convergence, and unobservable device loss are explicitly excluded.
-- **Type consistency:** Every later task consumes W6b `FilterPassOperationV1`, `FilterEvaluationKeyV1`, `FilterBoundsPlanV1`, `PlanResourceRole.FilterTarget`, Task 1 `RuntimeEffectSemanticKindV1`, and F64/I32 bounds helpers. Backdrop uses `BackdropInitializationPlanV1`; filtered previous retains existing `LayerInitializationPlanV1.PreviousCopy`; both use `PlanPass.TextureCopy` plus the same `PlanPass.FilterPass` type.
+- **Type consistency:** Every later task consumes W6b `FilterPassOperationV1`, `FilterEvaluationKeyV1`, `FilterBoundsPlanV1`, `PlanResourceRole.FilterTarget`, Task 1 `RuntimeEffectSemanticKindV1`, and F64/I32 bounds helpers. Task 4 alone also consumes the existing `PictureAggregateSource` after its seal, with `SealedPictureFilterSourceV1` as the frozen operand. Backdrop uses `BackdropInitializationPlanV1`; filtered previous retains existing `LayerInitializationPlanV1.PreviousCopy`; both use `PlanPass.TextureCopy` plus the same `PlanPass.FilterPass` type.
 - **Review Focus:** each of the five header focus lines names its owning public test in Tasks 2–7, including the parent/child timing witness, family edge oracles, lighting degenerates, Picture/runtime wire isolation, and B/B-1 recovery.
 - **Placeholder scan:** an `rg` scan for deferred-work markers found none outside this review item; every task has concrete files, interfaces, tests, commands, implementation snippets, review gate, and commit.
 
 ## Execution Handoff
 
-The plan is ready for `superpowers:subagent-driven-development`: Terra implements each Task 1–7 in order, Sol reviews each task and the whole branch, and there is exactly one bounded Terra correction wave if the whole-branch review needs it. Do not begin W6e until Task 7 has either opened the W6d Draft PR or recorded a concrete blocker in the durable W06 status.
+The plan is ready for `superpowers:subagent-driven-development`: Terra implements the remaining Task 4a–4c gates in `refactor/plans/2026-09-24-w6d-picture-filter-source-implementation-plan.md`, then Tasks 5–7 in order; Sol reviews each gate and the whole branch. There is exactly one bounded Terra correction wave if the whole-branch review needs it. Do not begin W6e until Task 7 has either opened the W6d Draft PR or recorded a concrete blocker in the durable W06 status.
