@@ -246,6 +246,7 @@ internal class W6aLayerGraphConstruction(
         activeByScope.values.forEach { geometry -> admitRestoreBindings(restoreFactsByScope.getValue(geometry.occurrence.idI32)) }
 
         val passes = mutableListOf<PlanPass>()
+        val framePassSink = W6bFilterGraphConstruction.W6FramePassSinkV1(passes)
         val filterResourceSpecs = mutableListOf<W6bFilterGraphConstruction.ResourceSpec>()
         val coverageDepthExtents = linkedMapOf<PlanResourceId, SizeI32>()
         var nextCoverageDepthOrdinalI32 = lanes.size + 1
@@ -632,6 +633,7 @@ internal class W6aLayerGraphConstruction(
             captureMaskShaderMaterial(occurrence, target)
         }
         val filterCursor = W6bFilterGraphConstruction.FreezeCursor(0, 0, 0, 0, passes.size)
+        lateinit var emitFilterPictureSource: W6bFilterGraphConstruction.FilterPictureSourceEmitterV1
         // Construction owns these snapshots until their aggregate receives the final immutable
         // admission fact, before the corresponding pass is published.
         val pictureTerminalScissorAuthorityByPassId = linkedMapOf<PlanPassId, PictureTerminalScissorAuthorityV1>()
@@ -746,13 +748,15 @@ internal class W6aLayerGraphConstruction(
             val frozen = if (occurrence.root != null) {
                 materialized?.let { material ->
                     filterResourceSpecs += material.resourceSpecs()
-                    passes += material.passes()
+                    framePassSink.appendAll(material.passes())
                     sourceBindingsById[material.output.resourceId] = material.output
                 }
-                W6bFilterGraphConstruction.freezeImageOccurrence(occurrence, materialized?.output ?: source, filterCursor)
+                W6bFilterGraphConstruction.freezeImageOccurrence(
+                    occurrence, materialized?.output ?: source, filterCursor, framePassSink, emitFilterPictureSource,
+                )
             } else requireNotNull(materialized) { "W6b mask occurrence needs its materialized W5 source." }
             filterResourceSpecs += frozen.resourceSpecs()
-            passes += frozen.passes()
+            if (occurrence.root == null) framePassSink.appendAll(frozen.passes())
             sourceBindingsById[frozen.output.resourceId] = frozen.output
             val outputBounds = frozen.output.copyDeviceBoundsI32()
             val compositeDeviceBounds = intersect(outputBounds, terminalClipDeviceI32 ?: outputBounds)?.let { clipped ->
@@ -1188,6 +1192,25 @@ internal class W6aLayerGraphConstruction(
                 parentTarget: PlanResourceId,
             ): PictureAggregateDomain {
                 val parent = filterSource(parentTarget)
+                (aggregate.owner as? PictureStreamAggregateDraftOwnerV1.FilterPicture)?.let { owner ->
+                    val localToDevice = parent.mapping.copyLocalToDeviceF64()
+                    val nodeCull = owner.node.copyCullRect()
+                    val cull = localToDevice.mapRectBoundsF64OrNull(RectF64(
+                        nodeCull.left.toDouble(), nodeCull.top.toDouble(),
+                        nodeCull.right.toDouble(), nodeCull.bottom.toDouble(),
+                    ))?.roundOutToRectI32OrNull() ?: throw W6bFilterGraphConstruction.ConstructionFailure(
+                        W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                            "W6d filter Picture cull cannot be projected to checked I32 device texels."),
+                    )
+                    val demand = parent.copyDesiredOutputDeviceI32() ?: parent.copyDeviceBoundsI32()
+                    val source = intersect(cull, demand) ?: cull
+                    val mapping = LayerMappingF64.ofOrNull(localToDevice, Point2I32(source.left, source.top))
+                        ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                            W6bFilterDiagnostics.InvalidBounds,
+                            "W6d filter Picture source mapping is non-invertible.",
+                        ))
+                    return PictureAggregateDomain(localToDevice, mapping, cull, intersect(cull, source), demand, source)
+                }
                 val outerPictures = aggregate.source.outerPictures()
                 // Captured transforms map directly to root device coordinates. Target rebasing
                 // happens only in LayerMappingF64, never by composing the parent twice.
@@ -1280,11 +1303,11 @@ internal class W6aLayerGraphConstruction(
                 }
                 val aggregate = PictureStreamAggregateV1(
                     draft.id,
+                    draft.freezeOwner(),
                     draft.executionMode,
                     draft.sourceScene.canonicalId.value,
                     draft.sourceScene.toList().size,
                     draft.sourcePictureOccurrenceIdI32,
-                    draft.sourcePlannedCommandId,
                     draft.outerPicturePathI32(),
                     parentMapping,
                     draft.source.recordedInnerClipWithoutCull(),
@@ -1304,7 +1327,8 @@ internal class W6aLayerGraphConstruction(
                     seal?.id,
                     seal?.id,
                     Matrix3x3F64(),
-                    if (draft.outerPicturePathI32().isEmpty()) draft.source.sourceCommandIndexI32 else null,
+                    if (draft.owner is PictureStreamAggregateDraftOwnerV1.DrawPicture && draft.outerPicturePathI32().isEmpty())
+                        draft.source.sourceCommandIndexI32 else null,
                     executionPassIds = passes.subList(aggregateStartPassI32, passes.size).map(PlanPass::id),
                     terminalCompositeScissorAuthority = terminalScissorAuthority,
                 )
@@ -1606,6 +1630,17 @@ internal class W6aLayerGraphConstruction(
                 val seal = PlanPass.PictureAggregateSealPass(passes.size, draft.id, aggregateTargetBinding.resourceId,
                     aggregateTargetBinding.resourceId, generationI64)
                 passes += seal
+                if (draft.owner is PictureStreamAggregateDraftOwnerV1.FilterPicture) {
+                    // A filter-owned aggregate ends at Seal.  Its sole reader is published by
+                    // FilterPass.Picture outside this aggregate; no W5 graph texture, carrier
+                    // material, synthetic composite, or parent write is admitted here.
+                    terminal = seal.id
+                    beginPassId = (passes.first { pass -> pass is PlanPass.PictureAggregateBeginPass && pass.aggregateId == draft.id }
+                        as PlanPass.PictureAggregateBeginPass).id
+                    sealPassId = seal.id
+                    sealedSourceId = aggregateTargetBinding.resourceId
+                    generation = generationI64
+                } else {
                 val occurrence = draft.filterOccurrence
                 val maskedCoverage = occurrence?.mask?.let {
                     val coverage = allocateOccurrenceSource(targetDeviceBounds(aggregateTargetBinding.resourceId),
@@ -1653,13 +1688,13 @@ internal class W6aLayerGraphConstruction(
                 )
                 appendStreamSource(source.resourceId, draft.source,
                     PictureSourceLocatorV1(draft.sourcePictureOccurrenceIdI32, draft.source.sourceCommandIndexI32),
-                    draft.sourcePlannedCommandId, coverage = maskedCoverage?.resourceId,
+                    requireNotNull(draft.sourcePlannedCommandId), coverage = maskedCoverage?.resourceId,
                     graphTextureRequest = request, parentCoordinateTarget = parentTarget, deferSourceDrawClip = true)
                 terminal = if (occurrence != null) {
                     appendFrozenOccurrence(occurrence, source, parentTarget,
                         FilterCompositeOperationV1.Picture(draft.source.scene.canonicalId.value, draft.source.sourceCommandIndexI32),
                         maskedCoverage,
-                        pictureTerminal = { output, rect, origin -> freezePictureTerminal(draft.sourcePlannedCommandId,
+                        pictureTerminal = { output, rect, origin -> freezePictureTerminal(requireNotNull(draft.sourcePlannedCommandId),
                             output, parentTarget, rect, origin, draft.source.recordedInnerClipWithoutCull().terminalDeferredClip(),
                             composeInOrderF64(draft.source.outerPictures().map { it.transform }), pictureBlend(draft.draw)) }
                     ).also(::recordPictureWork).id
@@ -1667,7 +1702,7 @@ internal class W6aLayerGraphConstruction(
                     val domain = requireNotNull(intersect(source.copyDeviceBoundsI32(), targetDeviceBounds(parentTarget)))
                     val rect = requireNotNull(source.mapping.mapDeviceRectToLayerI32OrNull(domain))
                     val origin = requireNotNull(filterSource(parentTarget).mapping.mapDeviceRectToLayerI32OrNull(domain))
-                    val terminalAdmission = freezePictureTerminal(draft.sourcePlannedCommandId, source, parentTarget, rect,
+                    val terminalAdmission = freezePictureTerminal(requireNotNull(draft.sourcePlannedCommandId), source, parentTarget, rect,
                         Point2I32(origin.left, origin.top), draft.source.recordedInnerClipWithoutCull().terminalDeferredClip(),
                         composeInOrderF64(draft.source.outerPictures().map { it.transform }), pictureBlend(draft.draw))
                     val operands = terminalAdmission.operands
@@ -1685,23 +1720,25 @@ internal class W6aLayerGraphConstruction(
                 sealPassId = seal.id
                 sealedSourceId = aggregateTargetBinding.resourceId
                 generation = generationI64
+                }
             }
             val producedOutput = when (val pass = passes.lastOrNull { it.id == terminal }) {
                 is PlanPass.FilterComposite -> sourceBindingsById[pass.source]?.copyProducedOutputDeviceI32()
                 else -> aggregateDomain.knownContentDeviceI32
             }
             val terminalScissorAuthority = terminal?.let(pictureTerminalScissorAuthorityByPassId::get)
+            val filterOwned = draft.owner is PictureStreamAggregateDraftOwnerV1.FilterPicture
             val aggregate = PictureStreamAggregateV1(
                 draft.id,
+                draft.freezeOwner(),
                 draft.executionMode,
                 draft.sourceScene.canonicalId.value,
                 draft.sourceScene.toList().size,
                 draft.sourcePictureOccurrenceIdI32,
-                draft.sourcePlannedCommandId,
                 draft.outerPicturePathI32(),
                 aggregateDomain.mapping,
-                draft.source.recordedInnerClipWithoutCull(),
-                draft.source.recordedInnerClipWithoutCull().terminalDeferredClip(),
+                if (filterOwned) ClipStackNode.Empty else draft.source.recordedInnerClipWithoutCull(),
+                if (filterOwned) ClipStackNode.Empty else draft.source.recordedInnerClipWithoutCull().terminalDeferredClip(),
                 aggregateDomain.cullContentDeviceI32,
                 aggregateDomain.demandDeviceI32,
                 parentTarget,
@@ -1719,12 +1756,25 @@ internal class W6aLayerGraphConstruction(
                 sealPassId,
                 terminal,
                 composeInOrderF64(draft.source.outerPictures().map { it.transform }),
-                if (draft.outerPicturePathI32().isEmpty()) draft.source.sourceCommandIndexI32 else null,
+                if (!filterOwned && draft.outerPicturePathI32().isEmpty()) draft.source.sourceCommandIndexI32 else null,
                 executionPassIds = passes.subList(aggregateStartPassI32, passes.size).map(PlanPass::id),
                 terminalCompositeScissorAuthority = terminalScissorAuthority,
             )
             pictureStreamAggregates += aggregate
             return aggregate to terminal
+        }
+        emitFilterPictureSource = W6bFilterGraphConstruction.FilterPictureSourceEmitterV1 { occurrence, nodeId, node, sourceContext ->
+            val draft = pictureDiscovery.filterRoot(nodeId, node, occurrence)
+            val aggregate = appendPictureAggregate(draft, sourceContext.resourceId, null).first
+            val resourceId = requireNotNull(aggregate.sealedSourceId) {
+                "W6d filter Picture owner did not publish a sealed aggregate source."
+            }
+            W6bFilterGraphConstruction.FilterPictureSourceEmissionV1(
+                aggregate.id,
+                resourceId,
+                requireNotNull(aggregate.sealedSourceGenerationI64),
+                sourceBindingsById.getValue(resourceId),
+            )
         }
         // The root is the one scene attachment. It starts clear; every later root segment loads.
         appendRender(root, emptyList(), true)

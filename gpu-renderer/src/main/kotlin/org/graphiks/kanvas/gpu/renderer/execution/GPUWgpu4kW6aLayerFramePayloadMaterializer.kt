@@ -787,7 +787,18 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     W6A_VERTEX_SHADER + fragment,
                                     outputExtent.width, outputExtent.height, pass, owned)
                             }
-                            is FilterPassOperationV1.Picture,
+                            is FilterPassOperationV1.Picture -> {
+                                val sealed = operation.copySealedSource()
+                                require(pass.inputs() == listOf(sealed.resourceId)) {
+                                    "W6d Picture pass does not bind its exact sealed source."
+                                }
+                                val offset = sealed.copySampling().copyOutputToInputOffsetTargetLocalI32()
+                                renderOperands += textureRender(stepIndex, views.getValue(pass.output),
+                                    views.getValue(sealed.resourceId), generation,
+                                    sampledPictureShader(offset.x, offset.y, operation.copySourceRectInputTargetLocalF64()),
+                                    BlendPlan.LegacySrcOverV1,
+                                    0, 0, outputExtent.width, outputExtent.height, pass, owned)
+                            }
                             is FilterPassOperationV1.RuntimeImageOpacity,
                             -> error("W6d frozen operation ${operation.kind} reached materialization before its owning slice.")
                         }
@@ -1607,6 +1618,39 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             return textureLoad(w6b_source, source_position, 0) * $alpha;
         }
     """
+
+    /** Executes the sealed Picture crop in input-texture coordinates; it never reads a SceneSnapshot. */
+    private fun sampledPictureShader(
+        sourceOffsetTargetLocalXI32: Int,
+        sourceOffsetTargetLocalYI32: Int,
+        sourceCropInputTargetLocalF64: RectF64?,
+    ): String {
+        val crop = sourceCropInputTargetLocalF64?.let { rect ->
+            require(rect.left.toFloat().isFinite() && rect.top.toFloat().isFinite() &&
+                rect.right.toFloat().isFinite() && rect.bottom.toFloat().isFinite()) {
+                "W6d Picture crop cannot be represented by native F32 sampling coordinates."
+            }
+            """
+                let source_coordinate = vec2<f32>(source_position);
+                if (source_coordinate.x < ${rect.left.toFloat()} || source_coordinate.y < ${rect.top.toFloat()} ||
+                    source_coordinate.x >= ${rect.right.toFloat()} || source_coordinate.y >= ${rect.bottom.toFloat()}) {
+                    return vec4<f32>(0.0);
+                }
+            """.trimIndent()
+        } ?: ""
+        return W6A_VERTEX_SHADER + """
+            @group(0) @binding(0) var w6d_picture_source: texture_2d<f32>;
+            @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+                let source_position = vec2<i32>(position.xy) + vec2<i32>($sourceOffsetTargetLocalXI32, $sourceOffsetTargetLocalYI32);
+                let source_extent = vec2<i32>(textureDimensions(w6d_picture_source));
+                if (source_position.x < 0 || source_position.y < 0 || source_position.x >= source_extent.x || source_position.y >= source_extent.y) {
+                    return vec4<f32>(0.0);
+                }
+                $crop
+                return textureLoad(w6d_picture_source, source_position, 0);
+            }
+        """
+    }
 
     /** Colors the already-blurred alpha using only the frozen offset/color payload. */
     private fun dropShadowColorizeShader(

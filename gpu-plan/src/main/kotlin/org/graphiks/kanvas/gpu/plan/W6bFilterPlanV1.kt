@@ -10,7 +10,6 @@ import org.graphiks.kanvas.render.ir.ImmutableFloats
 import org.graphiks.kanvas.render.ir.MaskBlurStyle
 import org.graphiks.kanvas.render.ir.RuntimeEffectAbi
 import org.graphiks.kanvas.render.ir.RuntimeEffectDescriptor
-import org.graphiks.kanvas.render.ir.SceneSnapshot
 import org.graphiks.kanvas.render.ir.TileMode
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2I32
@@ -337,6 +336,25 @@ public class FilterEvaluationKeyV1 private constructor(
     }
 }
 
+/**
+ * The sole executable input of a filter-owned Picture leaf.  It snapshots the source aggregate
+ * resource and generation after Seal; the captured scene remains planner provenance only.
+ */
+public class SealedPictureFilterSourceV1 internal constructor(
+    public val aggregateId: PictureStreamAggregateIdI32,
+    public val resourceId: PlanResourceId,
+    public val sourceGenerationI64: Long,
+    sampling: FilterInputSamplingV1,
+) {
+    private val samplingSnapshot = sampling
+
+    init {
+        require(sourceGenerationI64 >= 0L)
+    }
+
+    public fun copySampling(): FilterInputSamplingV1 = samplingSnapshot
+}
+
 /** Frozen, renderer-readable operation payload.  No arm carries a public filter object. */
 public sealed interface FilterPassOperationV1 {
     public val kind: FilterImplementationKindV1
@@ -429,18 +447,42 @@ public sealed interface FilterPassOperationV1 {
     }
 
     public class Picture(
-        public val scene: SceneSnapshot,
+        sealedSource: SealedPictureFilterSourceV1,
         cullRectF64: RectF64,
         sourceRectF64: RectF64?,
         override val bounds: FilterBoundsPlanV1,
         override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.PICTURE,
     ) : FilterPassOperationV1 {
+        private val sealedSourceSnapshot = SealedPictureFilterSourceV1(
+            sealedSource.aggregateId,
+            sealedSource.resourceId,
+            sealedSource.sourceGenerationI64,
+            sealedSource.copySampling(),
+        )
         private val cullRectSnapshotF64 = cullRectF64.copy()
         private val sourceRectSnapshotF64 = sourceRectF64?.copy()
         init { require(kind == FilterImplementationKindV1.PICTURE && cullRectSnapshotF64.isFinite() && !cullRectSnapshotF64.isEmpty &&
             (sourceRectSnapshotF64 == null || sourceRectSnapshotF64.isFinite() && !sourceRectSnapshotF64.isEmpty)) }
+        public fun copySealedSource(): SealedPictureFilterSourceV1 = SealedPictureFilterSourceV1(
+            sealedSourceSnapshot.aggregateId,
+            sealedSourceSnapshot.resourceId,
+            sealedSourceSnapshot.sourceGenerationI64,
+            sealedSourceSnapshot.copySampling(),
+        )
         public fun copyCullRectF64(): RectF64 = cullRectSnapshotF64.copy()
         public fun copySourceRectF64(): RectF64? = sourceRectSnapshotF64?.copy()
+
+        /** The optional Picture src crop, already rebased to the sealed input texture. */
+        public fun copySourceRectInputTargetLocalF64(): RectF64? = sourceRectSnapshotF64?.let { source ->
+            val outputOrigin = bounds.copyTargetOriginDeviceI32()
+            val offset = sealedSourceSnapshot.copySampling().copyOutputToInputOffsetTargetLocalI32()
+            RectF64(
+                source.left - outputOrigin.x.toDouble() + offset.x.toDouble(),
+                source.top - outputOrigin.y.toDouble() + offset.y.toDouble(),
+                source.right - outputOrigin.x.toDouble() + offset.x.toDouble(),
+                source.bottom - outputOrigin.y.toDouble() + offset.y.toDouble(),
+            )
+        }
     }
 
     public class RuntimeImageOpacity(

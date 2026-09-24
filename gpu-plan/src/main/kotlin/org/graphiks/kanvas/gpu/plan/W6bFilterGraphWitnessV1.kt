@@ -111,7 +111,9 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                         produced(input, index)
                         val materialCoverage = pass.operation is FilterPassOperationV1.MaterializedSource && inputIndex == 1
                         val materializedImageSource = filterTargetInput && inputIndex == 0 && input == bound.id
-                        require(materialCoverage || materializedImageSource || belongsToBoundSource(input, bound.id)) {
+                        val sealedPictureSource = (pass.operation as? FilterPassOperationV1.Picture)
+                            ?.copySealedSource()?.resourceId == input
+                        require(materialCoverage || materializedImageSource || sealedPictureSource || belongsToBoundSource(input, bound.id)) {
                             "W6b input belongs to another occurrence."
                         }
                     }
@@ -455,11 +457,19 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                 }
                 // The W6d graph vocabulary is frozen before its execution slices add an
                 // occurrence chain.  Native admission rejects these arms until then.
+                is FilterPassOperationV1.Picture -> {
+                    val sealed = operation.copySealedSource()
+                    val source = rows.getValue(sealed.resourceId)
+                    val seal = producer(sealed.resourceId) as? PlanPass.PictureAggregateSealPass
+                    require(inputs == listOf(sealed.resourceId) && source.role == PlanResourceRole.PictureAggregateSource &&
+                        seal?.aggregateId == sealed.aggregateId && seal.sourceGenerationI64 == sealed.sourceGenerationI64) {
+                        "W6d Picture must consume exactly its sealed aggregate source generation."
+                    }
+                }
                 is FilterPassOperationV1.MatrixConvolution,
                 is FilterPassOperationV1.DisplacementMap,
                 is FilterPassOperationV1.Magnifier,
                 is FilterPassOperationV1.Lighting,
-                is FilterPassOperationV1.Picture,
                 is FilterPassOperationV1.RuntimeImageOpacity,
                 -> inputs.forEach(::contextuallyOwned)
             }

@@ -362,11 +362,15 @@ public class RenderGraph private constructor(
             val resourcesById = resources.associateBy(PlanResource::id)
             passes.filterIsInstance<PlanPass.FilterPass>().forEach { pass ->
                 when (pass.operation) {
+                    is FilterPassOperationV1.Picture -> {
+                        require(resourcesById.getValue(pass.output).role == PlanResourceRole.FilterTarget)
+                        require(pass.inputs().singleOrNull()?.let(resourcesById::getValue)?.role ==
+                            PlanResourceRole.PictureAggregateSource)
+                    }
                     is FilterPassOperationV1.MatrixConvolution,
                     is FilterPassOperationV1.DisplacementMap,
                     is FilterPassOperationV1.Magnifier,
                     is FilterPassOperationV1.Lighting,
-                    is FilterPassOperationV1.Picture,
                     is FilterPassOperationV1.RuntimeImageOpacity,
                     -> {
                         require(resourcesById.getValue(pass.output).role == PlanResourceRole.FilterTarget)

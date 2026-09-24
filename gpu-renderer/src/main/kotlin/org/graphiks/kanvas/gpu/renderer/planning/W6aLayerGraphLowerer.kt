@@ -16,7 +16,7 @@ internal class W6aLayerGraphLowerer {
                 is FilterPassOperationV1.Magnifier,
                 -> Unit
                 is FilterPassOperationV1.Lighting -> Unit
-                is FilterPassOperationV1.Picture,
+                is FilterPassOperationV1.Picture -> Unit
                 is FilterPassOperationV1.RuntimeImageOpacity,
                 -> throw IllegalArgumentException("W6d frozen operation ${operation.kind} is not executable until its owning slice.")
                 else -> Unit

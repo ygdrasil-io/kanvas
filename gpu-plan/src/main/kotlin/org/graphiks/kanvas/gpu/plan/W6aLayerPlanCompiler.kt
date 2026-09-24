@@ -316,7 +316,7 @@ public class W6aLayerPlanCompiler public constructor(
                     LightingFamilyV1.SPOT_SPECULAR -> program.programId == W6dSamplingProgramIdV1.SPOT_SPECULAR_RGBA8_V1
                 }
             } == true
-            is FilterPassOperationV1.Picture,
+            is FilterPassOperationV1.Picture -> true
             is FilterPassOperationV1.RuntimeImageOpacity,
             -> false
         } }

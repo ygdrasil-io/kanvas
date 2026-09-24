@@ -23,6 +23,7 @@ import org.graphiks.math.geometry.expandSamplingHaloF64OrNull
 import org.graphiks.math.geometry.roundOutToRectI32OrNull
 import org.graphiks.math.geometry.translateF64OrNull
 import org.graphiks.math.matrix.LayerMappingF64
+import org.graphiks.math.matrix.mapRectBoundsF64OrNull
 import org.graphiks.math.vector.Vector2F64
 
 /** W6b's single captured-filter authority; it publishes planning facts but never native work. */
@@ -205,6 +206,37 @@ internal object W6bFilterGraphConstruction {
         var passOrdinalI32: Int,
     )
 
+    /** The one frame schedule shared by W6a Picture sources and W6b filter operations. */
+    internal class W6FramePassSinkV1(private val values: MutableList<PlanPass>) {
+        fun nextOrdinalI32(): Int = values.size
+
+        fun append(pass: PlanPass) {
+            require(pass.ordinal == values.size) { "W6 frame pass ordinal is not contiguous." }
+            values += pass
+        }
+
+        fun appendAll(passes: List<PlanPass>) {
+            passes.forEach(::append)
+        }
+    }
+
+    /** The W6a-owned aggregate construction result consumed by one W6b Picture leaf. */
+    internal class FilterPictureSourceEmissionV1(
+        val aggregateId: PictureStreamAggregateIdI32,
+        val resourceId: PlanResourceId,
+        val sourceGenerationI64: Long,
+        val source: SourceBinding,
+    ) { init { require(sourceGenerationI64 >= 0L) } }
+
+    internal fun interface FilterPictureSourceEmitterV1 {
+        fun emit(
+            occurrence: PositiveOccurrence,
+            capturedNodeId: CapturedFilterNodeIdI32,
+            node: CapturedFilterNodeV1.Picture,
+            sourceContext: SourceBinding,
+        ): FilterPictureSourceEmissionV1
+    }
+
     internal class FrozenMask internal constructor(
         resourceSpecs: List<ResourceSpec>,
         passes: List<PlanPass>,
@@ -354,6 +386,8 @@ internal object W6bFilterGraphConstruction {
         occurrence: PositiveOccurrence,
         sourceBinding: SourceBinding,
         cursor: FreezeCursor,
+        sink: W6FramePassSinkV1,
+        emitFilterPictureSource: FilterPictureSourceEmitterV1,
     ): FrozenOccurrence {
         // The source scene's canonical id is an immutable content revision.  It is deliberately
         // captured here, where the occurrence still owns the SceneSnapshot, and carried through
@@ -367,6 +401,7 @@ internal object W6bFilterGraphConstruction {
         fun append(pass: PlanPass) {
             require(pass.ordinal == cursor.passOrdinalI32)
             cursor.passOrdinalI32 = Math.addExact(cursor.passOrdinalI32, 1)
+            sink.append(pass)
             passes += pass
         }
         fun resource(role: PlanResourceRole, extent: SizeI32): PlanResourceId {
@@ -786,6 +821,37 @@ internal object W6bFilterGraphConstruction {
                 append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
                     FilterPassOperationV1.Magnifier(RectF64(source.left.toDouble(), source.top.toDouble(), source.right.toDouble(), source.bottom.toDouble()),
                         node.zoom, node.inset, bounds)))
+                ContextualFilterResult(output, bounds, key)
+            }
+            is CapturedFilterNodeV1.Picture -> {
+                val emitted = emitFilterPictureSource.emit(occurrence, id, node, currentSource)
+                // The source callback contributes an aggregate slice directly into this same
+                // frame schedule (Begin → children → Seal).  Resume the filter cursor at the
+                // next global ordinal so the leaf follows that sealed slice immediately.
+                cursor.passOrdinalI32 = sink.nextOrdinalI32()
+                val bounds = identityBounds(emitted.source)
+                val cull = node.copyCullRect().let { rect -> currentSource.mapping.copyLocalToDeviceF64().mapRectBoundsF64OrNull(RectF64(
+                    rect.left.toDouble(), rect.top.toDouble(), rect.right.toDouble(), rect.bottom.toDouble(),
+                )) }
+                val source = node.copySource()?.let { rect -> currentSource.mapping.copyLocalToDeviceF64().mapRectBoundsF64OrNull(RectF64(
+                    rect.left.toDouble(), rect.top.toDouble(), rect.right.toDouble(), rect.bottom.toDouble(),
+                )) }
+                if (cull == null || !cull.isFinite() || cull.isEmpty || source == null && node.copySource() != null ||
+                    source?.isFinite() == false || source?.isEmpty == true) {
+                    throw ConstructionFailure(W6bFilterDiagnostics.refusal(
+                        W6bFilterDiagnostics.InvalidBounds, "W6d Picture source has invalid F64 geometry.",
+                    ))
+                }
+                val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
+                val output = allocateTarget(bounds)
+                val sealed = SealedPictureFilterSourceV1(
+                    emitted.aggregateId,
+                    emitted.resourceId,
+                    emitted.sourceGenerationI64,
+                    emitted.source.samplingFor(output),
+                )
+                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(sealed.resourceId), output.resourceId, key,
+                    FilterPassOperationV1.Picture(sealed, cull, source, bounds)))
                 ContextualFilterResult(output, bounds, key)
             }
             else -> throw ConstructionFailure(W6bFilterDiagnostics.refusal(
@@ -1354,6 +1420,7 @@ internal object W6bFilterGraphConstruction {
                         node.displacement.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
                         node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
                     }
+                    is CapturedFilterNodeV1.Picture -> Unit
                     is CapturedFilterNodeV1.Magnifier -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
                     is CapturedFilterNodeV1.DistantLitDiffuse -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
                     is CapturedFilterNodeV1.PointLitDiffuse -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }

@@ -259,7 +259,7 @@ internal fun validateW6aLayerTopology(
                 target.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages() &&
                 PlanResourceUsage.Sampled in target.usages() && pass.target !in initialized && pass.target !in sealedPictureSources)
             require(parent.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget,
-                PlanResourceRole.PictureAggregateSource) && pass.parentTarget in initialized)
+                PlanResourceRole.PictureAggregateSource, PlanResourceRole.FilterSource) && pass.parentTarget in initialized)
             initialized += pass.target
             versions[pass.target] = 0L
         }
@@ -354,6 +354,20 @@ internal fun validateW6aLayerTopology(
             require(pass.operation.bounds.copyRequiredInputDeviceI32().isEmpty.not())
             require(targetLocal(pass.operation.bounds.copyDesiredOutputDeviceI32()) ==
                 RectI32(0, 0, targetExtent.width, targetExtent.height))
+            (pass.operation as? FilterPassOperationV1.Picture)?.let { operation ->
+                val sealed = operation.copySealedSource()
+                val source = byId.getValue(sealed.resourceId)
+                val seal = passes.take(indexI32).filterIsInstance<PlanPass.PictureAggregateSealPass>().singleOrNull {
+                    it.aggregateId == sealed.aggregateId && it.sealedSource == sealed.resourceId
+                }
+                require(pass.inputs() == listOf(sealed.resourceId) &&
+                    source.role == PlanResourceRole.PictureAggregateSource &&
+                    sealed.resourceId in sealedPictureSources &&
+                    seal?.sourceGenerationI64 == sealed.sourceGenerationI64 &&
+                    versions[sealed.resourceId] == sealed.sourceGenerationI64) {
+                    "W6d Picture filter must read exactly one previously sealed aggregate generation."
+                }
+            }
             // Every typed filter output is an immutable source generation for its immediate
             // next operation, material pass, or terminal composite.  This is the same
             // publication boundary used by raw coverage and transparent-black sources.
