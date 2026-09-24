@@ -396,6 +396,28 @@ class W6dPictureFilterSurfacePixelTest {
         assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
     }
 
+    /** An outer empty Picture clears the concrete FilterTarget materialized by its Compose inner child. */
+    @Test
+    fun outerEmptyPictureClearsInnerFilterTargetBeforeSrcComposite() {
+        val expected = ubyteArrayOf(0u, 0u, 0u, 0u)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val empty = PictureRecorder().also { recorder -> recorder.beginRecording(bounds) }.finishRecordingAsPicture()
+        val filter = ImageFilter.Compose(
+            ImageFilter.Picture(empty),
+            ImageFilter.ColorFilter(ColorFilter.Blend(ColorARGB.Red, BlendMode.SRC)),
+        )
+        val surface = Surface(1, 1)
+        surface.canvas {
+            drawRect(bounds, Paint(ColorARGB.Green, antiAlias = false))
+            drawRect(bounds, Paint(ColorARGB.Blue, imageFilter = filter, blendMode = BlendMode.SRC, antiAlias = false))
+        }
+
+        val result = surface.render()
+
+        assertContentEquals(expected, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
     /**
      * The crop is transformed once through T(1) then S(2), placing the impulse at x=3. The
      * independently evaluated DECAL blur has a visible x=4 halo, which the parent clip retains

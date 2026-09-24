@@ -94,9 +94,25 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                     owners[pass.output] = requireNotNull(owners[pass.source])
                 }
                 is PlanPass.FilterSourceClear -> {
-                    require(row(pass.boundSourceId).role == PlanResourceRole.FilterSource)
+                    val producerIndex = produced(pass.boundSourceId, index)
+                    val followingNeutralOffset = (passes.getOrNull(index + 1) as? PlanPass.FilterPass)?.let { next ->
+                        val offset = next.operation as? FilterPassOperationV1.Offset
+                        offset != null && next.inputs() == listOf(pass.output) &&
+                            next.evaluationKey.boundSourceId == pass.boundSourceId &&
+                            offset.copyOffsetF64().let { it.x == 0.0 && it.y == 0.0 }
+                    } == true
+                    // This is the one contextual empty-Picture chain: Compose's inner FilterPass
+                    // publishes the exact current target generation, then the outer leaf clears
+                    // it and seals transparent input through Offset(0). No other FilterTarget is
+                    // eligible for FilterSourceClear.
+                    val contextualFilterTarget = row(pass.boundSourceId).role == PlanResourceRole.FilterTarget &&
+                        producerIndex == index - 1 && passes[producerIndex] is PlanPass.FilterPass && followingNeutralOffset
+                    require(row(pass.boundSourceId).role == PlanResourceRole.FilterSource || contextualFilterTarget)
                     require(row(pass.output).role == PlanResourceRole.FilterTransparentBlack)
-                    produced(pass.boundSourceId, index)
+                    // The clear does not sample this source, but the authenticated contextual
+                    // target is still consumed by its empty Picture evaluation. Retain that
+                    // frozen producer edge so it cannot become an uncomposited terminal.
+                    if (contextualFilterTarget) inputs += pass.boundSourceId
                     producers[pass.output] = index
                     owners[pass.output] = pass.boundSourceId
                 }
@@ -104,10 +120,11 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                     val bound = row(pass.evaluationKey.boundSourceId)
                     val materializedImageInput = isMaterializedImageInput(pass, passes, producers, rows)
                     val contextualFilterTargetInput = isContextualFilterTargetInput(pass, passes, producers, rows)
+                    val contextualTransparentInput = isContextualTransparentInput(pass, passes, producers, rows)
                     val contextualImageInput = isContextualImageInput(pass, passes, producers, rows)
                     val reentrantPictureInput = isReentrantPictureInput(pass, passes, producers, rows)
                     val filterTargetInput = materializedImageInput || contextualFilterTargetInput || contextualImageInput ||
-                        reentrantPictureInput
+                        reentrantPictureInput || contextualTransparentInput
                     require(bound.role in setOf(PlanResourceRole.FilterSource, PlanResourceRole.CoverageSource) ||
                         filterTargetInput) {
                         "W6b occurrence source must be immutable FilterSource or CoverageSource."
@@ -270,6 +287,26 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
             if (rows.getValue(boundSource).role != PlanResourceRole.FilterTarget || pass.inputs().firstOrNull() != boundSource) return false
             val producerIndex = producers[boundSource] ?: return false
             return producerIndex < passes.indexOf(pass) && passes[producerIndex] is PlanPass.FilterPass
+        }
+
+        /** An empty outer Picture may only consume Compose's current target through its clear and Offset(0). */
+        private fun isContextualTransparentInput(
+            pass: PlanPass.FilterPass,
+            passes: List<PlanPass>,
+            producers: Map<PlanResourceId, Int>,
+            rows: Map<PlanResourceId, PlanResource>,
+        ): Boolean {
+            val boundSource = pass.evaluationKey.boundSourceId
+            val offset = pass.operation as? FilterPassOperationV1.Offset ?: return false
+            val transparentInput = pass.inputs().singleOrNull() ?: return false
+            val clearIndex = producers[transparentInput] ?: return false
+            val clear = passes[clearIndex] as? PlanPass.FilterSourceClear ?: return false
+            val targetProducerIndex = producers[boundSource] ?: return false
+            return rows.getValue(boundSource).role == PlanResourceRole.FilterTarget &&
+                clear.output == transparentInput && clear.boundSourceId == boundSource &&
+                clearIndex == passes.indexOf(pass) - 1 && targetProducerIndex == clearIndex - 1 &&
+                passes[targetProducerIndex] is PlanPass.FilterPass &&
+                offset.copyOffsetF64().let { it.x == 0.0 && it.y == 0.0 }
         }
 
         /** The second blur pass inherits the contextual (rather than mask-materialized) X input. */

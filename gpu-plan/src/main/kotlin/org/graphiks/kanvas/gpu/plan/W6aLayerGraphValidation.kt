@@ -207,7 +207,21 @@ internal fun validateW6aLayerTopology(
             require(output.role == PlanResourceRole.FilterTransparentBlack && output.kind == PlanResourceKind.Texture2D &&
                 output.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in output.usages() &&
                 PlanResourceUsage.Sampled in output.usages())
-            require(boundSource.role == PlanResourceRole.FilterSource && boundSource.id in initialized)
+            val followingNeutralOffset = (passes.getOrNull(indexI32 + 1) as? PlanPass.FilterPass)?.let { next ->
+                val offset = next.operation as? FilterPassOperationV1.Offset
+                offset != null && next.inputs() == listOf(pass.output) &&
+                    next.evaluationKey.boundSourceId == pass.boundSourceId &&
+                    offset.copyOffsetF64().let { it.x == 0.0 && it.y == 0.0 }
+            } == true
+            // An outer empty Picture may be contextual to Compose's immediately preceding inner
+            // FilterPass. Its FilterTarget is still at that producer's generation zero and must
+            // flow directly through the frozen neutral Offset; arbitrary FilterTargets remain
+            // invalid clear sources.
+            val contextualFilterTarget = boundSource.role == PlanResourceRole.FilterTarget &&
+                (passes.getOrNull(indexI32 - 1) as? PlanPass.FilterPass)?.output == boundSource.id &&
+                boundSource.id in initialized && versions[boundSource.id] == 0L && followingNeutralOffset
+            require((boundSource.role == PlanResourceRole.FilterSource && boundSource.id in initialized) ||
+                contextualFilterTarget)
             require(initialized.add(output.id))
             versions[output.id] = 0L
         }
