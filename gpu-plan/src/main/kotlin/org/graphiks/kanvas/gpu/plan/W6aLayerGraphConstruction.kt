@@ -1520,6 +1520,10 @@ internal class W6aLayerGraphConstruction(
                 }
             } else null
             val entryTarget = aggregateTargetDraft?.resourceId ?: parentTarget
+            // LayerDescriptor transforms are captured Canvas transforms in this Picture, not
+            // deltas from an enclosing layer.  Keep this Picture's source context fixed so two
+            // nested layers recorded under one transform do not apply it twice.
+            val outerPictureLocalToDeviceF64 = filterSource(entryTarget).mapping.copyLocalToDeviceF64()
             val childStartPassI32 = passes.size
             data class NestedLayerEmission(val entry: PictureStreamEntryV1.Layer, val terminal: PlanPassId)
             val nestedLayersByEntry = linkedMapOf<PictureStreamEntryIdI32, NestedLayerEmission>()
@@ -1530,7 +1534,7 @@ internal class W6aLayerGraphConstruction(
             ): PlanPassId {
                 val parentBinding = filterSource(layerParentTarget)
                 val descriptor = requireNotNull(entry.descriptorSource.layerDescriptor)
-                val layerLocalToDevice = parentBinding.mapping.copyLocalToDeviceF64().timesCheckedOrNull(
+                val layerLocalToDevice = outerPictureLocalToDeviceF64.timesCheckedOrNull(
                     descriptor.transform.toMatrix3x3F64(),
                 ) ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
                     W6bFilterDiagnostics.InvalidBounds,

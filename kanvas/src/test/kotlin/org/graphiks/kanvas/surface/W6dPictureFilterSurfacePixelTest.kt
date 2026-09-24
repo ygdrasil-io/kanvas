@@ -2,6 +2,7 @@
 
 package org.graphiks.kanvas.surface
 
+import kotlin.math.abs
 import kotlin.test.assertContentEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
@@ -14,6 +15,7 @@ import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.geometry.Point3F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.vector.Vector3F32
@@ -461,6 +463,58 @@ class W6dPictureFilterSurfacePixelTest {
         val recovered = surface.render()
         assertContentEquals(expectedRecovery, recovered.pixels)
         assertTrue(recovered.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
+    /** Nested layer descriptors retain their absolute recorded translation for point-light coordinates. */
+    @Test
+    fun nestedPictureLayersApplySharedAbsoluteTranslationOnceForPointLighting() {
+        val alpha = FloatArray(5 * 3).also { pixels ->
+            listOf(2 to 0, 1 to 1, 2 to 1, 2 to 2).forEach { (x, y) -> pixels[y * 5 + x] = 1f }
+        }
+        val expected = W6dLightingCpuOracle.remainingFamilyRgba8(
+            W6dLightingCpuOracle.Family.POINT_DIFFUSE,
+            width = 5,
+            height = 3,
+            alpha = alpha,
+            locationX = 2f,
+            locationY = 0f,
+            locationZ = 1f,
+            surfaceDepth = 1f,
+            coefficient = 1f,
+        )
+        val bounds = RectF32.ofLTRB(0f, 0f, 5f, 3f)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                translate(1f, 0f)
+                saveLayer(SaveLayerRec(paint = Paint(antiAlias = false)))
+                saveLayer(SaveLayerRec(paint = Paint(
+                    imageFilter = ImageFilter.PointLitDiffuse(
+                        Point3F32(1f, 0f, 1f), ColorARGB.White, 1f, 1f,
+                    ),
+                    antiAlias = false,
+                )))
+                listOf(1 to 0, 0 to 1, 1 to 1, 1 to 2).forEach { (x, y) ->
+                    drawRect(
+                        RectF32.ofLTRB(x.toFloat(), y.toFloat(), x + 1f, y + 1f),
+                        Paint(ColorARGB.White, antiAlias = false),
+                    )
+                }
+                restore()
+                restore()
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(5, 3)
+        surface.canvas {
+            drawRect(bounds, Paint(ColorARGB.Green, imageFilter = ImageFilter.Picture(picture), antiAlias = false))
+        }
+
+        val result = surface.render()
+
+        expected.indices.forEach { channel ->
+            assertTrue(abs(expected[channel].toInt() - result.pixels[channel].toInt()) <= 2,
+                "channel $channel expected=${expected[channel]} actual=${result.pixels[channel]}")
+        }
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
     }
 
     private fun transformedCropBlurHaloExpected(): UByteArray {
