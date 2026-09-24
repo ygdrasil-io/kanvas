@@ -83,7 +83,8 @@ public sealed interface PictureAggregateOwnerV1 {
         /** Binds the sealed source owner to the exact W6b node evaluation that reads it. */
         public fun authenticates(evaluationKey: FilterEvaluationKeyV1): Boolean =
             evaluationKey.capturedNodeId == capturedNodeId &&
-                evaluationKey.sourceRevisionIdentity == evaluationSourceRevisionIdentity()
+                evaluationKey.sourceRevisionIdentity == evaluationSourceRevisionIdentity() &&
+                evaluationKey.copyPictureProvenanceOrNull()?.matches(this) == true
     }
 }
 
@@ -1314,10 +1315,10 @@ internal fun validatePictureStreamAggregates(
                     val owner = aggregate.owner
                     val readers = passes.filterIsInstance<PlanPass.FilterPass>().filter { pass ->
                         (pass.operation as? FilterPassOperationV1.Picture)?.copySealedSource()?.let { sealed ->
-                            sealed.aggregateId == aggregate.id && sealed.resourceId == source &&
+                                sealed.aggregateId == aggregate.id && sealed.resourceId == source &&
                                 sealed.sourceGenerationI64 == generation &&
                                 sealed.copyOwner().matchesFilterOwner(owner) &&
-                                sealed.authenticates(pass.evaluationKey)
+                                sealed.copyOwner().authenticates(pass.evaluationKey)
                         } == true
                     }
                     if (aggregate.sourcePlannedCommandId != null || aggregate.sourceSceneCanonicalId != owner.sourceSceneCanonicalId ||
@@ -1330,7 +1331,7 @@ internal fun validatePictureStreamAggregates(
                     val sealed = (reader.operation as FilterPassOperationV1.Picture).copySealedSource()
                     if (reader.inputs() != listOf(source) || sealed.aggregateId != aggregate.id ||
                         sealed.resourceId != source || sealed.sourceGenerationI64 != generation ||
-                        !sealed.copyOwner().matchesFilterOwner(owner) || !sealed.authenticates(reader.evaluationKey) ||
+                        !sealed.copyOwner().matchesFilterOwner(owner) || !sealed.copyOwner().authenticates(reader.evaluationKey) ||
                         readerIndex <= sealIndex ||
                         targetRow.firstPassIndex > beginIndex || targetRow.lastPassIndexExclusive <= readerIndex) {
                         fail(aggregate, invariant = "Filter-owned Picture source is not sealed through its exact reader lifetime.",

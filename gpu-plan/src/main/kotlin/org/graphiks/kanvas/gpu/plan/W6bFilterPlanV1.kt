@@ -277,6 +277,41 @@ public class DropShadowLinearSamplingV1 internal constructor(
     public fun copyOutputFootprintTargetLocalI32(): RectI32 = outputFootprintSnapshotTargetLocalI32.copy()
 }
 
+/**
+ * Immutable ownership proof for a W6d Picture evaluation.  The table canonical ID identifies
+ * content only, so it is deliberately paired with the frame-local positive occurrence rather
+ * than being used to deduplicate two equal captured tables.
+ */
+public class PictureFilterEvaluationProvenanceV1 private constructor(
+    public val capturedFilterTableCanonicalId: String,
+    public val filterOccurrenceIdI32: Int,
+) {
+    init {
+        require(capturedFilterTableCanonicalId.isNotBlank() && filterOccurrenceIdI32 >= 0) {
+            "Picture evaluation provenance requires a captured table and non-negative occurrence."
+        }
+    }
+
+    internal fun matches(owner: PictureAggregateOwnerV1.FilterPicture): Boolean =
+        capturedFilterTableCanonicalId == owner.capturedFilterTableCanonicalId &&
+            filterOccurrenceIdI32 == owner.filterOccurrenceIdI32
+
+    public fun copy(): PictureFilterEvaluationProvenanceV1 = PictureFilterEvaluationProvenanceV1(
+        capturedFilterTableCanonicalId,
+        filterOccurrenceIdI32,
+    )
+
+    public companion object {
+        internal fun of(
+            capturedFilterTableCanonicalId: String,
+            filterOccurrenceIdI32: Int,
+        ): PictureFilterEvaluationProvenanceV1 = PictureFilterEvaluationProvenanceV1(
+            capturedFilterTableCanonicalId,
+            filterOccurrenceIdI32,
+        )
+    }
+}
+
 /** Exact contextual identity for one captured node evaluation; equality-by-value is never a reuse proof. */
 public class FilterEvaluationKeyV1 private constructor(
     public val capturedNodeId: CapturedFilterNodeIdI32?,
@@ -286,12 +321,14 @@ public class FilterEvaluationKeyV1 private constructor(
      * Immutable source revision captured with this occurrence.  Null deliberately means that
      * this evaluation is not cacheable across frames: a renderer must never guess a source
      * generation from a physical resource id.
-     */
+    */
     public val sourceRevisionIdentity: String?,
+    pictureProvenance: PictureFilterEvaluationProvenanceV1?,
     public val mapping: LayerMappingF64,
     desiredOutputDeviceI32: RectI32,
 ) {
     private val desiredOutputSnapshotI32 = desiredOutputDeviceI32.copy()
+    private val pictureProvenanceSnapshot = pictureProvenance?.copy()
 
     init {
         require(!desiredOutputSnapshotI32.isEmpty) { "Filter evaluation output must be non-empty." }
@@ -299,9 +336,13 @@ public class FilterEvaluationKeyV1 private constructor(
             "A filter evaluation is either one captured node or one mask occurrence."
         }
         require(maskOccurrenceI32 == null || maskOccurrenceI32 >= 0)
+        require(pictureProvenanceSnapshot == null || capturedNodeId != null) {
+            "Picture evaluation provenance requires a captured node evaluation."
+        }
     }
 
     public fun copyDesiredOutputDeviceI32(): RectI32 = desiredOutputSnapshotI32.copy()
+    public fun copyPictureProvenanceOrNull(): PictureFilterEvaluationProvenanceV1? = pictureProvenanceSnapshot?.copy()
 
     public companion object {
         public fun of(
@@ -310,11 +351,13 @@ public class FilterEvaluationKeyV1 private constructor(
             mapping: LayerMappingF64,
             desiredOutputDeviceI32: RectI32,
             sourceRevisionIdentity: String? = null,
+            pictureProvenance: PictureFilterEvaluationProvenanceV1? = null,
         ): FilterEvaluationKeyV1 = FilterEvaluationKeyV1(
             capturedNodeId,
             null,
             boundSourceId,
             sourceRevisionIdentity,
+            pictureProvenance,
             mapping,
             desiredOutputDeviceI32,
         )
@@ -330,6 +373,7 @@ public class FilterEvaluationKeyV1 private constructor(
             maskOccurrenceI32,
             boundSourceId,
             sourceRevisionIdentity,
+            null,
             mapping,
             desiredOutputDeviceI32,
         )

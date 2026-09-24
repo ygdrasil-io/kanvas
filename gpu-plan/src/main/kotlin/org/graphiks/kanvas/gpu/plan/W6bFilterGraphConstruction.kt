@@ -446,14 +446,27 @@ internal object W6bFilterGraphConstruction {
             append(PlanPass.FilterSourceClear(cursor.passOrdinalI32, id, source.resourceId))
             return source.withResource(id, knownContentDeviceI32 = null)
         }
-        fun keyFor(nodeId: CapturedFilterNodeIdI32?, maskOccurrenceI32: Int?, boundSource: SourceBinding, desired: RectI32): FilterEvaluationKeyV1 = when {
-            nodeId != null -> FilterEvaluationKeyV1.of(nodeId, boundSource.resourceId, boundSource.mapping, desired,
-                sourceRevisionIdentity = boundSource.sourceRevisionIdentity)
-            maskOccurrenceI32 != null -> FilterEvaluationKeyV1.forMaskOccurrence(
-                maskOccurrenceI32, boundSource.resourceId, boundSource.mapping, desired,
-                sourceRevisionIdentity = boundSource.sourceRevisionIdentity,
-            )
-            else -> error("W6b occurrence key is missing its captured identity.")
+        fun keyFor(
+            nodeId: CapturedFilterNodeIdI32?,
+            maskOccurrenceI32: Int?,
+            boundSource: SourceBinding,
+            desired: RectI32,
+            pictureProvenance: PictureFilterEvaluationProvenanceV1? = null,
+        ): FilterEvaluationKeyV1 {
+            require(pictureProvenance == null || nodeId != null) {
+                "Only a captured-node evaluation can carry Picture provenance."
+            }
+            return when {
+                nodeId != null -> FilterEvaluationKeyV1.of(nodeId, boundSource.resourceId, boundSource.mapping, desired,
+                    sourceRevisionIdentity = boundSource.sourceRevisionIdentity,
+                    pictureProvenance = pictureProvenance,
+                )
+                maskOccurrenceI32 != null -> FilterEvaluationKeyV1.forMaskOccurrence(
+                    maskOccurrenceI32, boundSource.resourceId, boundSource.mapping, desired,
+                    sourceRevisionIdentity = boundSource.sourceRevisionIdentity,
+                )
+                else -> error("W6b occurrence key is missing its captured identity.")
+            }
         }
         fun appendBlur(
             source: SourceBinding,
@@ -843,7 +856,16 @@ internal object W6bFilterGraphConstruction {
                         W6bFilterDiagnostics.InvalidBounds, "W6d Picture source has invalid F64 geometry.",
                     ))
                 }
-                val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
+                val key = keyFor(
+                    id,
+                    null,
+                    currentSource,
+                    bounds.copyDesiredOutputDeviceI32(),
+                    pictureProvenance = PictureFilterEvaluationProvenanceV1.of(
+                        occurrence.table.canonicalId.value,
+                        occurrence.idI32,
+                    ),
+                )
                 val output = allocateTarget(bounds)
                 val sealed = SealedPictureFilterSourceV1(
                     emitted.aggregateId,
@@ -852,7 +874,7 @@ internal object W6bFilterGraphConstruction {
                     emitted.source.samplingFor(output),
                     emitted.owner,
                 )
-                require(sealed.authenticates(key)) {
+                require(sealed.copyOwner().authenticates(key)) {
                     "W6d Picture source owner does not authenticate its captured-node evaluation."
                 }
                 val sampling = W6dPictureSamplingV1.ofOrNull(sealed.copySampling(), source, bounds)

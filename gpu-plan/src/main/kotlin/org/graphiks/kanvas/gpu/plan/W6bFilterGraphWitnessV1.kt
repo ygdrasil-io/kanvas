@@ -113,7 +113,7 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                         val materializedImageSource = filterTargetInput && inputIndex == 0 && input == bound.id
                         val sealedPictureSource = (pass.operation as? FilterPassOperationV1.Picture)
                             ?.copySealedSource()?.let { sealed ->
-                                sealed.resourceId == input && sealed.authenticates(pass.evaluationKey)
+                                sealed.resourceId == input && sealed.copyOwner().authenticates(pass.evaluationKey)
                             } == true
                         require(materialCoverage || materializedImageSource || sealedPictureSource || belongsToBoundSource(input, bound.id)) {
                             "W6b input belongs to another occurrence."
@@ -465,7 +465,7 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                     val seal = producer(sealed.resourceId) as? PlanPass.PictureAggregateSealPass
                     require(inputs == listOf(sealed.resourceId) && source.role == PlanResourceRole.PictureAggregateSource &&
                         seal?.aggregateId == sealed.aggregateId && seal.sourceGenerationI64 == sealed.sourceGenerationI64 &&
-                        sealed.authenticates(key) && operation.copyPictureSampling().copyOutputToInputOffsetTargetLocalI32() ==
+                        sealed.copyOwner().authenticates(key) && operation.copyPictureSampling().copyOutputToInputOffsetTargetLocalI32() ==
                         sealed.copySampling().copyOutputToInputOffsetTargetLocalI32()) {
                         "W6d Picture must consume exactly its sealed aggregate source generation."
                     }

@@ -365,7 +365,7 @@ internal fun validateW6aLayerTopology(
                     sealed.resourceId in sealedPictureSources &&
                     seal?.sourceGenerationI64 == sealed.sourceGenerationI64 &&
                     versions[sealed.resourceId] == sealed.sourceGenerationI64 &&
-                    sealed.authenticates(pass.evaluationKey)) {
+                    sealed.copyOwner().authenticates(pass.evaluationKey)) {
                     "W6d Picture filter must read exactly one previously sealed aggregate generation."
                 }
             }
