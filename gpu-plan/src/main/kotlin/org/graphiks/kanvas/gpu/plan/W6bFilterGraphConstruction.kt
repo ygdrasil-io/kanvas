@@ -181,6 +181,8 @@ internal object W6bFilterGraphConstruction {
 
     internal class PositiveOccurrence internal constructor(
         val idI32: Int,
+        /** Unique source evaluation that owns nested captured Picture traversal. */
+        val evaluationIdentityI32: Int,
         val table: CapturedFilterTableV1,
         val root: CapturedFilterRootV1?,
         val mask: MaskFilterNode?,
@@ -361,11 +363,15 @@ internal object W6bFilterGraphConstruction {
         val result = mutableListOf<PositiveOccurrence>()
         var nextOccurrenceI32 = 0
         var nextMaskOccurrenceI32 = 0
+        var nextEvaluationIdentityI32 = 0
         visitScenes(scene) { nestedScene, command, insertionIndexI32, commandIndexI32, nested, outerPictures, picturePathI32 ->
+            val evaluationIdentityI32 = nextEvaluationIdentityI32.also {
+                nextEvaluationIdentityI32 = Math.addExact(it, 1)
+            }
             fun append(root: CapturedFilterRootV1?, mask: MaskFilterNode?, layer: Boolean, picture: Boolean) {
                 if (root == null && mask == null) return
                 result += PositiveOccurrence(
-                    nextOccurrenceI32++, nestedScene.filterTable, root, mask, insertionIndexI32,
+                    nextOccurrenceI32++, evaluationIdentityI32, nestedScene.filterTable, root, mask, insertionIndexI32,
                     nestedScene.canonicalId.value, commandIndexI32, layer, picture || nested, nextMaskOccurrenceI32,
                     picturePathI32,
                     FilterOccurrenceSourceV1(nestedScene, commandIndexI32,
@@ -383,6 +389,7 @@ internal object W6bFilterGraphConstruction {
                 }
                 else -> Unit
             }
+            evaluationIdentityI32
         }
         return immutableList(result)
     }
@@ -1367,30 +1374,33 @@ internal object W6bFilterGraphConstruction {
         var backdrop = false
         var filteredPrevious = false
         var invalidMaskTableLengthI32: Int? = null
-        val bounded = visitScenes(scene) { nestedScene, command, _, _, _, _, _ -> when (command) {
-            is SceneCommand.Draw -> filterPayload(command.node.paint, command.node.effects).let { payload ->
-                payload.root?.let { roots += RootOccurrence(nestedScene.filterTable, it) }
-                mask = mask || payload.mask != null
-                (payload.mask as? MaskFilterNode.Table)?.let { table ->
-                    if (table.table.sizeI32 != 256 && invalidMaskTableLengthI32 == null)
-                        invalidMaskTableLengthI32 = table.table.sizeI32
+        val bounded = visitScenes(scene) { nestedScene, command, _, _, _, _, _ ->
+            when (command) {
+                is SceneCommand.Draw -> filterPayload(command.node.paint, command.node.effects).let { payload ->
+                    payload.root?.let { roots += RootOccurrence(nestedScene.filterTable, it) }
+                    mask = mask || payload.mask != null
+                    (payload.mask as? MaskFilterNode.Table)?.let { table ->
+                        if (table.table.sizeI32 != 256 && invalidMaskTableLengthI32 == null)
+                            invalidMaskTableLengthI32 = table.table.sizeI32
+                    }
                 }
+                is SceneCommand.BeginLayer -> filterPayload(command.descriptor.paint, command.descriptor.effects).let { payload ->
+                    payload.root?.let { roots += RootOccurrence(nestedScene.filterTable, it) }
+                    mask = mask || payload.mask != null
+                    (payload.mask as? MaskFilterNode.Table)?.let { table ->
+                        if (table.table.sizeI32 != 256 && invalidMaskTableLengthI32 == null)
+                            invalidMaskTableLengthI32 = table.table.sizeI32
+                    }
+                    if (command.descriptor.backdrop !is EffectStack.Empty) {
+                        backdrop = true
+                        filterPayload(null, command.descriptor.backdrop).root?.let { roots += RootOccurrence(nestedScene.filterTable, it) }
+                    }
+                    filteredPrevious = filteredPrevious || command.descriptor.initWithPrevious && (payload.root != null || payload.mask != null)
+                }
+                else -> Unit
             }
-            is SceneCommand.BeginLayer -> filterPayload(command.descriptor.paint, command.descriptor.effects).let { payload ->
-                payload.root?.let { roots += RootOccurrence(nestedScene.filterTable, it) }
-                mask = mask || payload.mask != null
-                (payload.mask as? MaskFilterNode.Table)?.let { table ->
-                    if (table.table.sizeI32 != 256 && invalidMaskTableLengthI32 == null)
-                        invalidMaskTableLengthI32 = table.table.sizeI32
-                }
-                if (command.descriptor.backdrop !is EffectStack.Empty) {
-                    backdrop = true
-                    filterPayload(null, command.descriptor.backdrop).root?.let { roots += RootOccurrence(nestedScene.filterTable, it) }
-                }
-                filteredPrevious = filteredPrevious || command.descriptor.initWithPrevious && (payload.root != null || payload.mask != null)
-            }
-            else -> Unit
-        } }
+            0
+        }
         return Ownership(roots, mask, backdrop, filteredPrevious, bounded, invalidMaskTableLengthI32)
     }
 
@@ -1400,11 +1410,11 @@ internal object W6bFilterGraphConstruction {
      * A captured Picture is an execution occurrence, not a canonical-scene cache key: two equal
      * scene values may be live on separate branches.  The active stack therefore uses object
      * identity and is unwound in `finally`; canonical IDs remain only provenance on the emitted
-     * occurrence.  Captured node IDs join the source path so a nested filter can bind the exact
-     * owner that froze it.
+     * occurrence.  The source evaluation identity and captured node ID join the source path so
+     * a nested filter binds the exact owner that froze it, even when one filter object is reused.
      */
     private fun visitScenes(root: SceneSnapshot,
-        visit: (SceneSnapshot, SceneCommand, Int, Int, Boolean, List<org.graphiks.kanvas.render.ir.DrawNode>, List<Int>) -> Unit): Boolean {
+        visit: (SceneSnapshot, SceneCommand, Int, Int, Boolean, List<org.graphiks.kanvas.render.ir.DrawNode>, List<Int>) -> Int): Boolean {
         var visitedCommandsI32 = 0
         val activeScenes = mutableListOf<SceneSnapshot>()
 
@@ -1460,7 +1470,8 @@ internal object W6bFilterGraphConstruction {
                     visitedCommandsI32 = try { Math.addExact(visitedCommandsI32, 1) } catch (_: ArithmeticException) { return true }
                     if (visitedCommandsI32 > root.graphLimits.maxNodes) return true
                     val insertion = insertionCommandIndexI32 ?: indexI32
-                    visit(scene, command, insertion, indexI32, insertionCommandIndexI32 != null, outerPictures, picturePathI32)
+                    val evaluationIdentityI32 = visit(scene, command, insertion, indexI32,
+                        insertionCommandIndexI32 != null, outerPictures, picturePathI32)
                     val geometryPicture = (command as? SceneCommand.Draw)?.node?.geometry as? GeometryNode.Picture
                     if (geometryPicture != null && visitOrdered(geometryPicture.scene, Math.addExact(depthI32, 1), insertion,
                             outerPictures + command.node, picturePathI32 + indexI32)) return true
@@ -1474,7 +1485,7 @@ internal object W6bFilterGraphConstruction {
                             val node = scene.filterTable.nodeAt(id)
                             if (node is CapturedFilterNodeV1.Picture &&
                                 visitOrdered(node.scene, Math.addExact(depthI32, 1), insertion,
-                                    nestedOuter, picturePathI32 + id.valueI32)) return true
+                                    nestedOuter, picturePathI32 + evaluationIdentityI32 + id.valueI32)) return true
                             return inputs(node).filterIsInstance<CapturedFilterInputV1.Node>().any { child -> visitNode(child.id) }
                         }
                         if (visitNode(capturedRoot.id)) return true

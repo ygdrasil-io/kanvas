@@ -3,6 +3,7 @@
 package org.graphiks.kanvas.surface
 
 import kotlin.test.assertContentEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.paint.BlendMode
@@ -50,6 +51,37 @@ class W6dPictureFilterSurfacePixelTest {
             translate(1f, 0f)
             scale(2f, 1f)
             drawRect(pictureRect, Paint(ColorARGB.Blue, imageFilter = ImageFilter.Picture(picture), antiAlias = false))
+        }
+
+        val result = surface.render()
+
+        assertContentEquals(expected, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
+    /** One shared Picture-filter object remains two execution occurrences, one per carrier. */
+    @Test
+    fun sharedPictureFilterObjectKeepsEachNestedFilteredChild() {
+        val expected = ubyteArrayOf(
+            0u, 0u, 255u, 255u,
+            0u, 0u, 255u, 255u,
+        )
+        val unit = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val source = PictureRecorder().also { recorder ->
+            recorder.beginRecording(unit).drawRect(unit, Paint(
+                ColorARGB.Red,
+                imageFilter = ImageFilter.ColorFilter(ColorFilter.Blend(ColorARGB.Blue, BlendMode.SRC)),
+                antiAlias = false,
+            ))
+        }.finishRecordingAsPicture()
+        val shared = ImageFilter.Picture(source)
+        val surface = Surface(2, 1)
+        surface.canvas {
+            drawRect(unit, Paint(ColorARGB.Green, imageFilter = shared, antiAlias = false))
+            save()
+            translate(1f, 0f)
+            drawRect(unit, Paint(ColorARGB.Green, imageFilter = shared, antiAlias = false))
+            restore()
         }
 
         val result = surface.render()
@@ -147,6 +179,101 @@ class W6dPictureFilterSurfacePixelTest {
 
         assertContentEquals(expected, result.pixels)
         assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
+    /** A fractional hard clip may render exactly or refuse before publication, but never widen. */
+    @Test
+    fun pictureFilterFractionalDrawColorClipNeverPaintsBoundingBox() {
+        val exactExpected = ubyteArrayOf(
+            255u, 0u, 0u, 255u,
+            0u, 0u, 255u, 255u,
+        )
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 1f)
+        val fractional = RectF32.ofLTRB(0.25f, 0f, 1.25f, 1f)
+        val source = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                clear(ColorARGB.Blue)
+                clipRect(fractional, ClipOp.INTERSECT, antiAlias = false)
+                drawColor(ColorARGB.Red, BlendMode.SRC)
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 1)
+        surface.canvas {
+            drawRect(bounds, Paint(ColorARGB.Black, imageFilter = ImageFilter.Picture(source), antiAlias = false))
+        }
+
+        val rendered = runCatching { surface.render() }
+        val result = rendered.getOrNull()
+        if (result != null) {
+            assertContentEquals(exactExpected, result.pixels)
+            assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+        } else {
+            val failure = requireNotNull(rendered.exceptionOrNull())
+            assertTrue(failure is IllegalStateException)
+            assertTrue(failure.message?.startsWith("w6a.layer.unsupported_child:") == true, failure.message ?: "missing diagnostic")
+        }
+    }
+
+    /** A non-pixel DeviceRect clip is rejected before it can widen an SRC DrawColor write. */
+    @Test
+    fun pictureFilterFractionalDrawColorClipRefusesWithoutReadbackMutation() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 1f)
+        val fractional = RectF32.ofLTRB(0.25f, 0f, 1.25f, 1f)
+        val source = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                clear(ColorARGB.Blue)
+                clipRect(fractional, ClipOp.INTERSECT, antiAlias = false)
+                drawColor(ColorARGB.Red, BlendMode.SRC)
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 1)
+        surface.canvas {
+            drawRect(bounds, Paint(ColorARGB.Black, imageFilter = ImageFilter.Picture(source), antiAlias = false))
+        }
+        val sentinel = UByteArray(8) { 0x5au }
+        val before = sentinel.copyOf()
+
+        val failure = assertFailsWith<IllegalStateException> { surface.readPixels(bounds, sentinel) }
+
+        assertTrue(failure.message?.startsWith(
+            "w6a.layer.unsupported_child: Picture DrawColor clip has no exact pixel-aligned scissor representation.",
+        ) == true, failure.message ?: "missing diagnostic")
+        assertContentEquals(before, sentinel)
+
+        surface.discardRecordedOperations()
+        surface.canvas { drawRect(bounds, Paint(ColorARGB.Green, antiAlias = false)) }
+        val recovered = surface.render()
+        assertContentEquals(ubyteArrayOf(0u, 255u, 0u, 255u, 0u, 255u, 0u, 255u), recovered.pixels)
+        assertTrue(recovered.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
+    /** A rotated recorded clip has no scissor-equivalent frozen DrawColor representation. */
+    @Test
+    fun pictureFilterRotatedDrawColorClipRefusesWithoutReadbackMutation() {
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
+        val source = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                clear(ColorARGB.Blue)
+                save()
+                rotate(30f, 1f, 1f)
+                clipRect(RectF32.ofLTRB(0.5f, 0f, 1.5f, 2f), ClipOp.INTERSECT, antiAlias = false)
+                drawColor(ColorARGB.Red, BlendMode.SRC)
+                restore()
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 2)
+        surface.canvas {
+            drawRect(bounds, Paint(ColorARGB.Black, imageFilter = ImageFilter.Picture(source), antiAlias = false))
+        }
+        val sentinel = UByteArray(16) { 0x5au }
+        val before = sentinel.copyOf()
+
+        val failure = assertFailsWith<IllegalStateException> { surface.readPixels(bounds, sentinel) }
+
+        assertTrue(failure.message?.startsWith(
+            "w6a.layer.unsupported_child: Picture DrawColor clip has no exact pixel-aligned scissor representation.",
+        ) == true, failure.message ?: "missing diagnostic")
+        assertContentEquals(before, sentinel)
     }
 
     /** A fully excluded DrawColor is a clip no-op even when its un-clipped mode is SRC. */

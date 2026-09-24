@@ -28,6 +28,7 @@ import org.graphiks.math.vector.Vector2I32
 import org.graphiks.math.matrix.LayerMappingF64
 import org.graphiks.math.matrix.Matrix3x3F64
 import org.graphiks.math.matrix.composeInOrderF64
+import org.graphiks.math.matrix.isFinite
 import org.graphiks.math.matrix.mapRectBoundsF64OrNull
 import org.graphiks.math.matrix.relativeToOriginI32OrNull
 import org.graphiks.math.matrix.timesCheckedOrNull
@@ -1006,6 +1007,7 @@ internal class W6aLayerGraphConstruction(
                     passes[coveragePassIndexI32] = coveragePass.withRasterBinding(
                         PlanPass.W6bRasterCoverageBindingV1(
                             coverageDraw,
+                            laneI32,
                             allocateCoverageRasterData(dataByCommand[coverageDraw.commandIndex]),
                             coverageDepth,
                         ),
@@ -1108,6 +1110,23 @@ internal class W6aLayerGraphConstruction(
             ): PlanPass.RenderPass {
                 val extent = filterSource(target).copyExtentI32()
                 val targetBounds = RectI32(0, 0, extent.width, extent.height)
+                fun unsupportedScissor(): Nothing = throw W6bFilterGraphConstruction.ConstructionFailure(
+                    W6bFilterDiagnostics.refusal(
+                        W6aPlanDiagnostics.UnsupportedChild,
+                        "Picture DrawColor clip has no exact pixel-aligned scissor representation.",
+                    ),
+                )
+                fun isAxisAlignedScissor(matrix: Matrix3x3F64): Boolean = matrix.isFinite() &&
+                    matrix.persp0F64 == 0.0 && matrix.persp1F64 == 0.0 && matrix.persp2F64 == 1.0 &&
+                    ((matrix.kxF64 == 0.0 && matrix.kyF64 == 0.0) ||
+                        (matrix.sxF64 == 0.0 && matrix.syF64 == 0.0))
+                fun exactTargetScissor(clipToDevice: Matrix3x3F64, bounds: RectF64): RectI32 {
+                    if (!isAxisAlignedScissor(clipToDevice)) unsupportedScissor()
+                    val device = clipToDevice.mapRectBoundsF64OrNull(bounds)?.toExactI32OrNull() ?: unsupportedScissor()
+                    return filterSource(target).mapping.mapDeviceRectToTargetI32OrNull(
+                        device, filterSource(target).originDeviceI32,
+                    ) ?: unsupportedScissor()
+                }
                 transform?.let { matrix ->
                     if (!listOf(matrix.sx, matrix.kx, matrix.tx, matrix.ky, matrix.sy, matrix.ty,
                             matrix.persp0, matrix.persp1, matrix.persp2).all(Float::isFinite)) {
@@ -1120,32 +1139,12 @@ internal class W6aLayerGraphConstruction(
                     ClipStackNode.Empty -> targetBounds
                     is ClipStackNode.DeviceRect -> {
                         val bounds = clip.copyBounds()
-                        val device = filterSource(target).mapping.mapLocalRectToDeviceI32OrNull(RectF64(
-                            bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble(),
-                        )) ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                            W6bFilterDiagnostics.InvalidBounds, "Picture DrawColor clip cannot be projected to checked I32 texels.",
+                        if (bounds.isEmpty) null else intersect(targetBounds, exactTargetScissor(
+                            filterSource(target).mapping.copyLocalToDeviceF64(),
+                            RectF64(bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble()),
                         ))
-                        val local = filterSource(target).mapping.mapDeviceRectToTargetI32OrNull(
-                            device, filterSource(target).originDeviceI32,
-                        ) ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                            W6bFilterDiagnostics.InvalidBounds, "Picture DrawColor clip cannot be rebased to its target.",
-                        ))
-                        intersect(targetBounds, local)
                     }
                     is ClipStackNode.Operations -> {
-                        fun targetLocalRect(bounds: RectF64): RectI32 {
-                            val device = filterSource(target).mapping.mapLocalRectToDeviceI32OrNull(bounds)
-                                ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                                    W6bFilterDiagnostics.InvalidBounds,
-                                    "Picture DrawColor clip cannot be projected to checked I32 texels.",
-                                ))
-                            return filterSource(target).mapping.mapDeviceRectToTargetI32OrNull(
-                                device, filterSource(target).originDeviceI32,
-                            ) ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                                W6bFilterDiagnostics.InvalidBounds,
-                                "Picture DrawColor clip cannot be rebased to its target.",
-                            ))
-                        }
                         clip.fold(targetBounds.copy()) { accumulated, entry ->
                             val geometry = entry.geometry as? GeometryNode.Rect
                                 ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
@@ -1164,25 +1163,11 @@ internal class W6aLayerGraphConstruction(
                                     "Picture DrawColor clip lacks a captured transform.",
                                 ))
                             val bounds = geometry.copyBounds()
-                            val local = transform.toMatrix3x3F64().mapRectBoundsF64OrNull(RectF64(
+                            val clipToDevice = filterSource(target).mapping.copyLocalToDeviceF64()
+                                .timesCheckedOrNull(transform.toMatrix3x3F64()) ?: unsupportedScissor()
+                            accumulated.takeIf { it.intersect(exactTargetScissor(clipToDevice, RectF64(
                                 bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble(),
-                            )) ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                                W6bFilterDiagnostics.InvalidBounds,
-                                "Picture DrawColor clip transform is not finite.",
-                            ))
-                            val device = filterSource(target).mapping.mapLocalRectToDeviceF64OrNull(local)
-                                ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                                    W6bFilterDiagnostics.InvalidBounds,
-                                    "Picture DrawColor clip cannot be projected to finite device texels.",
-                                ))
-                            if (entry.antiAlias && listOf(device.left, device.top, device.right, device.bottom)
-                                    .any { edge -> edge != kotlin.math.floor(edge) }) {
-                                throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                                    W6aPlanDiagnostics.UnsupportedChild,
-                                    "Picture DrawColor anti-aliased clip has no exact frozen scissor representation.",
-                                ))
-                            }
-                            accumulated.takeIf { it.intersect(targetLocalRect(local)) }
+                            ))) }
                                 ?: RectI32(0, 0, 0, 0)
                         }.takeUnless(RectI32::isEmpty)
                     }
@@ -2096,6 +2081,7 @@ internal class W6aLayerGraphConstruction(
                                 }
                                 PlanPass.W6bRasterCoverageBindingV1(
                                     selectedDraw.withFinalBlendV1(BlendPlan.LegacySrcOverV1),
+                                    bindings.indexOf(binding),
                                     allocateCoverageRasterData(dataByCommand[selectedDraw.commandIndex]),
                                     coverageDepth,
                                 )
@@ -2450,6 +2436,9 @@ internal class W6aLayerGraphConstruction(
     ): RenderGraph {
         require(bound.size == lanes.size || bound.isEmpty() && table == null)
         val byCommand = bound.flatMap { RenderGraph.visualDraws(it) }.associateBy { it.commandIndex }
+        val byLaneAndCommand = bound.flatMapIndexed { laneI32, passes ->
+            RenderGraph.visualDraws(passes).map { draw -> (laneI32 to draw.commandIndex) to draw }
+        }.toMap()
         val geometryByTarget = geometries.filterNot(W6aScopeGeometry::isElided).associateBy {
             planResourceId(PlanResourceRole.LayerTarget, it.occurrence.idI32)
         }
@@ -2495,7 +2484,11 @@ internal class W6aLayerGraphConstruction(
         // has its own frozen origin.  Bind that producer to the published coverage target here;
         // renderer materialization receives only the target-local W4 operand.
         fun localizedCoverageDraw(binding: PlanPass.W6bRasterCoverageBindingV1, target: PlanResourceId): PlanDraw {
-            val selected = byCommand.getValue(binding.draw.commandIndex).withFinalBlendV1(binding.draw.blend)
+            val selected = byLaneAndCommand.getValue(binding.sourceLaneI32 to binding.draw.commandIndex)
+                .withFinalBlendV1(binding.draw.blend)
+            if (bindings.getOrNull(binding.sourceLaneI32)?.occurrenceInput?.commandIndexI32 == binding.draw.commandIndex) {
+                return selected
+            }
             val source = requireNotNull(filterSourceBindings[target]) {
                 "A raster W6b coverage binding requires its published source mapping."
             }

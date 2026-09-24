@@ -107,3 +107,70 @@ Relecture effectuée avant commit : pas de geometry ajoutée hors `:math`, pas d
 nouveau `PlanPass`, rôle ressource, allocator, cache ou renderer replay. Les
 gates `W6bImageBlur` et les deux sélecteurs W6a prescrits restent verts dans
 leurs XML ; le writer14 stale du test W6a complet n'a pas été utilisé.
+
+## Correctif Sol — round 1/5 : provenance partagée et admission des clips
+
+### RED causal et diagnostic
+
+| Finding | RED public observé | Diagnostic de première cause |
+| --- | --- | --- |
+| Même `ImageFilter.Picture` sur deux carriers | `sharedPictureFilterObjectKeepsEachNestedFilteredChild`: XML `1/1/0/0`; les deux texels attendus bleus étaient rouges. | Le chemin de nested filter ne distinguait que `picturePath + capturedNodeId`. Les deux évaluations physiques du même objet partageaient donc la même provenance. Après le premier threading d'identité, le binder global par `commandIndex` sélectionnait encore le premier child: `localizedCoverageDraw command=4 visible [0,1), domain [1,2)`. |
+| Clip `DrawColor` fractionnaire | `pictureFilterFractionalDrawColorClipNeverPaintsBoundingBox`: XML `1/1/0/0`; attendu rouge/bleu, observé rouge/rouge. | La conversion du clip en scissor utilisait un rectangle I32 borné, qui élargissait le bbox fractionnaire. Avec `SRC`, le texel hors clip était donc peint à tort. |
+| Refus atomique fractionnaire | `pictureFilterFractionalDrawColorClipRefusesWithoutReadbackMutation`: XML `1/1/0/0`; `assertFailsWith` échouait car le readback aboutissait. | Le DeviceRect non pixel-exact était admis avant publication. |
+| Clip tourné | `pictureFilterRotatedDrawColorClipRefusesWithoutReadbackMutation`: XML `1/1/0/0`; même absence de refus. | Un clip non axis-aligned était réduit à son bbox scissor, ce qui ne préserve pas `SRC` pixel-à-pixel. |
+
+Les quatre exécutions RED ont fini avec le worker natif `133`; leurs verdicts
+JUnit ci-dessus restent les résultats de méthode observés et le statut de
+processus est `UNKNOWN`.
+
+### GREEN minimal
+
+`PositiveOccurrence` porte une identité d'évaluation monotone et `visitScenes`
+la propage jusqu'aux enfants de `ImageFilter.Picture`. `filterRoot` et
+`matchingOccurrence` utilisent désormais cette identité parentale exacte, sans
+déduplication par canonical ID. La fixture publique à deux texels, avec child
+filtré bleu et `Render` + `Readback`, est GREEN (`1/0/0/0`).
+
+La liaison de raster W6b conserve aussi le lane W4/W5 physique qui a gelé le
+draw. Au moment de la publication, le lookup est `(sourceLaneI32,
+commandIndex)`, jamais le seul `commandIndex`; le lane dynamic déjà local au
+target est passé tel quel, sans seconde localisation. Les lanes directs gardent
+leur localisation existante. Cela ne clone pas le child après freeze et ne
+change ni les command IDs/ordinals publics, ni `visualCommandCount` (les draws
+physiques de `RenderGraph.visualDraws` seulement).
+
+Pour `DrawColor`, un scissor est admis uniquement lorsque la matrice est finie,
+sans perspective, axis-aligned (les quarter-turns axis-aligned restent admis)
+et que les quatre bords deviennent exactement des I32 après mapping au target.
+Un DeviceRect ou un clip d'opérations qui ne satisfait pas cette règle est
+refusé terminalement avant publication avec
+`w6a.layer.unsupported_child: Picture DrawColor clip has no exact pixel-aligned scissor representation.`
+Les fixtures fractionnaire et rotation vérifient ce diagnostic et le sentinel
+de readback inchangé; le clip exact existant conserve `Render` + `Readback`
+GREEN. Le test causal tolère explicitement seulement deux résultats corrects
+(pixels exacts ou refus); cette implémentation choisit le refus atomique pour
+les deux cas non représentables, elle ne prétend pas les rendre.
+
+Le nettoyage de relecture a momentanément retiré `byCommand`, qui reste requis
+par les `boundDraw` non-W6b (compile: symbole non résolu aux lignes 2460/2481).
+Le diagnostic a été suivi jusqu'à cette première condition fausse et l'index a
+été restauré; le nouveau lookup par lane reste donc strictement cantonné au
+binder W6b.
+
+### Vérification du correctif
+
+| Commande | JUnit XML (tests/failures/errors/skipped) | Processus |
+| --- | --- | --- |
+| `:gpu-plan:compileKotlin` | n/a | SUCCESS (rerun après correctif final) |
+| `:gpu-renderer:compileKotlin` | n/a | SUCCESS (rerun après correctif final) |
+| `:kanvas:test --tests W6dPictureFilterSurfacePixelTest` | 14/0/0/0 | UNKNOWN — worker natif exit 133 après tests passants |
+| `:kanvas:test --tests W6bImageBlurSurfacePixelTest` | 10/0/0/0 | UNKNOWN — worker natif exit 133 après tests passants |
+| `:kanvas:test --tests W6aLayerPictureTest.translatedPictureLayerKeepsNonzeroOrigin` | 1/0/0/0 | UNKNOWN — worker natif exit 133 après test passant |
+| `:kanvas:test --tests W6aLayerPictureTest.drawPictureInsidePreviousLayerPreservesHostClip` | 1/0/0/0 | UNKNOWN — worker natif exit 133 après test passant |
+
+`git diff --check` est propre. Aucun diagnostic temporaire `origin=$origin` ne
+fait partie du diff. Les fichiers supplémentaires de ce round sont
+`PictureStreamAggregateV1.kt` (matching d'évaluation), `PlanPasses.kt` (lane
+physique), `W6aLayerGraphConstruction.kt` (binding et admission de scissor),
+`W6bFilterGraphConstruction.kt` (identité traversée), et
+`W6dPictureFilterSurfacePixelTest.kt` (preuves pixel publiques).

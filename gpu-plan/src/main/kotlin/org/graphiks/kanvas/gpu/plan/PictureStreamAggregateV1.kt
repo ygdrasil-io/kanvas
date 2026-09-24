@@ -908,7 +908,9 @@ internal class PictureStreamAggregateDiscoveryV1(
 
         val aggregate = aggregateId()
         val sourcePictureOccurrence = pictureOccurrence()
-        val filterPath = occurrence.source.picturePathI32() + capturedNodeId.valueI32
+        // Match nested filters through the concrete parent evaluation, not merely a captured
+        // node ID. One ImageFilter.Picture object may be applied by multiple carrier commands.
+        val filterPath = occurrence.source.picturePathI32() + occurrence.evaluationIdentityI32 + capturedNodeId.valueI32
         val outerPictures = occurrence.source.outerPictures() + listOfNotNull(occurrence.source.sourceDraw)
         val entries = streamEntries(node.scene, aggregate, sourcePictureOccurrence, outerPictures, filterPath,
             0, node.scene.toList().size, null, intArrayOf(0))
@@ -927,11 +929,11 @@ internal class PictureStreamAggregateDiscoveryV1(
     private fun matchingOccurrence(
         scene: SceneSnapshot,
         commandIndexI32: Int,
-        path: List<Int>,
+        parentEvaluationPathI32: List<Int>,
     ): W6bFilterGraphConstruction.PositiveOccurrence? = positiveOccurrences.singleOrNull { occurrence ->
         occurrence.sourceSceneCanonicalId == scene.canonicalId.value &&
             occurrence.sourceCommandIndexI32 == commandIndexI32 &&
-            occurrence.outerPicturePathI32() == path
+            occurrence.outerPicturePathI32() == parentEvaluationPathI32
     }
 
     private fun matchingLayerEnd(

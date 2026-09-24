@@ -1097,10 +1097,13 @@ public sealed interface PlanPass {
      */
     public class W6bRasterCoverageBindingV1(
         public val draw: PlanDraw,
+        /** Physical W4/W5 lane that owns this occurrence's frozen draw. */
+        public val sourceLaneI32: Int,
         public val drawDataResources: PlanDrawDataResources?,
         public val depthStencil: PlanResourceId? = null,
     ) {
         init {
+            require(sourceLaneI32 >= 0)
             val stencil = draw is PathDraw && draw.strategy == PathFillStrategy.StencilCover
             require(stencil == (depthStencil != null)) {
                 "Only a frozen stencil-cover draw may bind W6b coverage depth-stencil state."
@@ -1111,7 +1114,7 @@ public sealed interface PlanPass {
         }
 
         public fun withDraw(draw: PlanDraw): W6bRasterCoverageBindingV1 =
-            W6bRasterCoverageBindingV1(draw, drawDataResources, depthStencil)
+            W6bRasterCoverageBindingV1(draw, sourceLaneI32, drawDataResources, depthStencil)
     }
 
     /** Captures raw geometry/path-effect coverage for one immutable W6b occurrence. */
