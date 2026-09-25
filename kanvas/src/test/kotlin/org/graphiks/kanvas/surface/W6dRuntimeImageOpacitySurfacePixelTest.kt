@@ -53,6 +53,7 @@ class W6dRuntimeImageOpacitySurfacePixelTest {
     @Suppress("DEPRECATION")
     @Test
     fun unknownOrWrongAbiRefusesWithoutReadbackMutation() {
+        val unknownRecoveryExpected = rgba(60, 30, 15, 128)
         val unknown = SceneRecordingScope.recordingOnly {
             RuntimeEffect.compile("@fragment fn main() -> @location(0) vec4f { return vec4f(1.0); }").getOrThrow()
         }
@@ -67,7 +68,19 @@ class W6dRuntimeImageOpacitySurfacePixelTest {
 
         assertTrue(failure.message?.startsWith("w6d.runtime_effect.not_registered:") == true, failure.message ?: "missing diagnostic")
         assertContentEquals(before, sentinel)
+        surface.discardRecordedOperations()
+        surface.canvas {
+            drawRect(unit, Paint(shader = sourceShader, imageFilter = imageOpacity(.5f), antiAlias = false))
+        }
+        val unknownRecovery = surface.render()
+        val unknownRecoveryReadback = UByteArray(4)
 
+        assertContentEquals(unknownRecoveryExpected, unknownRecovery.pixels)
+        assertTrue(surface.readPixels(unit, unknownRecoveryReadback))
+        assertContentEquals(unknownRecoveryExpected, unknownRecoveryReadback)
+        assertTrue(unknownRecovery.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+
+        val wrongAbiRecoveryExpected = rgba(60, 30, 15, 128)
         val wrongAbiSurface = Surface(1, 1)
         wrongAbiSurface.canvas {
             drawRect(
@@ -94,6 +107,17 @@ class W6dRuntimeImageOpacitySurfacePixelTest {
             wrongAbiFailure.message ?: "missing diagnostic",
         )
         assertContentEquals(wrongAbiBefore, wrongAbiSentinel)
+        wrongAbiSurface.discardRecordedOperations()
+        wrongAbiSurface.canvas {
+            drawRect(unit, Paint(shader = sourceShader, imageFilter = imageOpacity(.5f), antiAlias = false))
+        }
+        val wrongAbiRecovery = wrongAbiSurface.render()
+        val wrongAbiRecoveryReadback = UByteArray(4)
+
+        assertContentEquals(wrongAbiRecoveryExpected, wrongAbiRecovery.pixels)
+        assertTrue(wrongAbiSurface.readPixels(unit, wrongAbiRecoveryReadback))
+        assertContentEquals(wrongAbiRecoveryExpected, wrongAbiRecoveryReadback)
+        assertTrue(wrongAbiRecovery.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
     }
 
     private fun imageOpacity(alpha: Float, input: ImageFilter? = null): ImageFilter.RuntimeEffect = ImageFilter.RuntimeEffect(
