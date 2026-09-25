@@ -2,11 +2,75 @@
 
 ## Statut
 
+### Checkpoint W6d Task 7 — ownership atomique de frame
+
+La tranche Terra Task 7 est implémentée sur la source
+`87b3b580a0c7f615e2034b6bcb58144edfe408f0` ; ses Steps 1–6 sont clos. Les
+Steps 7–8 (une review Sol whole-branch, puis la Draft PR empilée) appartiennent
+explicitement au contrôleur : aucune review, push, PR ou merge n'a été lancé
+ici. W6e reste la prochaine vague après ces gates contrôleur.
+
+`W6dAdvancedRecoverySurfacePixelTest` est une preuve exclusivement publique
+`Surface`/`Canvas`/`Picture` : elle calcule ses octets attendus avant la
+création de la `Surface` ou du `PictureRecorder`, puis observe pixels et scopes
+`Render` + `Readback`. Le B exact de son fixture 1×1 est
+`4 + 4 + 4 + 4 + 4 + 16 + 16 + 256 = 308` octets : root RGBA8, layer,
+source draw capturée, source layer, `FilterTarget`, deux records uniforms, puis
+une ligne de readback RGBA8 alignée. B accepte ; B−1 refuse avec
+`w6d.layer.frame_budget_exceeded`, laisse le sentinel intact et récupère sur la
+même `Surface`. Le même test couvre replay chaud encore pessimiste, sibling
+avancé tardif atomique et un seul graphe gelé qui contient les onze familles.
+
+`GPUColorFormat.RGBA16_FLOAT` est le plus petit token public de requête F16,
+strictement refusal-only : il ne construit ni target, ni conversion, ni backend.
+Une frame W6d-owned le terminalise avant capture, plan, publication ou soumission
+native avec `w6d.layer.unsupported_target_format`; RGBA8 s'exécute positivement.
+L'inventaire reste le graphe W6 existant : `PlanResource` impose descriptor,
+usage, slot, lifetime et taille checked-I64 avant freeze ; le peak sémantique
+est `peakFrameLocalBytesI64` et le peak physique additionne chaque slot par
+`Math.addExact`. Les programmes/samplers déjà sélectionnés sont des métadonnées
+gelées de l'opération, sans allocation F16 ou ressource native tardive.
+
+L'audit manuel ne trouve aucune conversion de bounds renderer-local ni création
+post-freeze de pass/resource/ID sur la route W6d. `GPUPlanSurfaceRouter` rend
+toute frame W6b/W6d-owned terminale plutôt que de la laisser rejoindre
+`legacy()`. `GPUPreparedCompositeLowerer` et
+`GPUPreparedSurfaceProductEntry` restent des références prepared historiques
+W8 : aucun appel W6d n'y entre. Aucun test statique, mock, reflection, fake
+device, GM, dashboard, render/reference/score ou suite Skia globale n'a été
+ajouté.
+
+| Selector | XML classe PASS/F/E/S | Gradle | Native / observation |
+| --- | ---: | ---: | --- |
+| `W6dAdvancedSamplingSurfacePixelTest` | 5/0/0/0 | 1 | 133/UNKNOWN |
+| `W6dLightingSurfacePixelTest` | 29/0/0/0 | 1 | 133/UNKNOWN |
+| `W6dPictureFilterSurfacePixelTest` | 18/0/0/0 | 1 | 133/UNKNOWN |
+| `W6dRuntimeImageOpacitySurfacePixelTest` | 3/0/0/0 | 1 | 133/UNKNOWN |
+| `W6dBackdropPreviousSurfacePixelTest` | 7/0/0/0 | 1 | 133/UNKNOWN |
+| `W6dAdvancedRecoverySurfacePixelTest` | 5/0/0/0 | 1 | 133/UNKNOWN |
+| `W6dPictureRuntimeEffectPictureTest` | 6/0/0/0 | 1 | 133/UNKNOWN |
+| `W6cSpatialDagPictureTest` | 3/0/0/0 | 1 | 133/UNKNOWN |
+| `W6cComposeSurfaceTest` | 4/0/0/0 | 1 | 133/UNKNOWN |
+| `W6cSpatialCacheRecoverySurfaceTest` | 6/0/0/0 | 1 | 133/UNKNOWN |
+| `W6bImageBlurSurfacePixelTest` | 10/0/0/0 | 1 | 133/UNKNOWN |
+| `W6aInitWithPreviousSurfacePixelTest` | 8/0/0/0 | 1 | 133/UNKNOWN |
+| `W6aLayerBudgetRecoverySurfacePixelTest` | 10/0/0/0 | 1 | 133/UNKNOWN |
+| `W5hRuntimeEffectSurfacePixelTest` | 18/0/0/0 | 1 | 133/UNKNOWN |
+
+Les 132 assertions XML de classe sont 132/0/0/0. Le XML de wrapper Gradle
+rapporte l'exit natif 133 comme failure de processus ; il ne contredit pas ces
+assertions mais rend chaque commande `Gradle=1`. Cette santé native est
+**UNKNOWN**, jamais GREEN natif (la même règle couvre 134). Les sept compiles
+séquentiels `:math:geometry`, `:math:matrix`, `:render-ir`, `:gpu-plan`,
+`:gpu-renderer`, `:kanvas:compileKotlin` et `:kanvas:compileTestKotlin` sortent
+0. Aucune claim ISO ou convergence Skia globale n'est formulée.
+
 La relecture Sol ciblée du dernier correctif W6c (`ae26bdbc49301f9ac6b962c766a39508231dd506`)
 ne conserve aucun Critical/Important. La Draft PR W6c [#2405](https://github.com/ygdrasil-io/kanvas/pull/2405)
 est empilée sur W6b [#2404](https://github.com/ygdrasil-io/kanvas/pull/2404), sans merge.
-W6d Task 4 est maintenant revu ; Tasks 5–7 et W6e restent à réaliser. Les sorties
-natives 133 restent **UNKNOWN** malgré les assertions XML et les compilations ci-dessous.
+W6d Tasks 1–6 sont revues ; Task 7 attend seulement les deux gates contrôleur
+ci-dessus. Les sorties natives 133 restent **UNKNOWN** malgré les assertions
+XML et les compilations ci-dessous.
 
 ### Checkpoint W6d Task 4 — source Picture de filtre immuable
 

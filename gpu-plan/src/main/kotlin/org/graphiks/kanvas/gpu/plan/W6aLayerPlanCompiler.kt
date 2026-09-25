@@ -252,7 +252,9 @@ public class W6aLayerPlanCompiler public constructor(
             }
         } catch (failure: W6aResourceLimitFailure) {
             val message = failure.message ?: "Layer frame budget exceeded."
-            if (W6bFilterGraphConstruction.owns(selected.scene)) {
+            if (W6bFilterGraphConstruction.ownsW6dAdvanced(selected.scene)) {
+                RenderPlanResult.ResourceLimitExceeded(listOf(W6dPlanDiagnostics.budgetRefusal(message)))
+            } else if (W6bFilterGraphConstruction.owns(selected.scene)) {
                 RenderPlanResult.ResourceLimitExceeded(listOf(W6bFilterDiagnostics.budgetRefusal(message)))
             } else {
                 W6aLayerPlanBudget.refusal(message)

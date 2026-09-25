@@ -287,6 +287,9 @@ internal object W6bFilterGraphConstruction {
 
     internal fun owns(scene: SceneSnapshot): Boolean = ownership(scene).isOwned
 
+    /** W6d resource refusals retain their advanced-family owner across W6c wrappers. */
+    internal fun ownsW6dAdvanced(scene: SceneSnapshot): Boolean = ownership(scene).hasW6dAdvanced
+
     /** True when a transparent-black-producing lighting terminal survives public wrappers. */
     internal fun hasDistantDiffuseTerminal(occurrence: PositiveOccurrence): Boolean {
         lateinit var nodeHasDistant: (CapturedFilterNodeIdI32) -> Boolean
@@ -1559,6 +1562,33 @@ internal object W6bFilterGraphConstruction {
         // retain its existing W6a command-limit admission rather than becoming W6b-owned only
         // because the generic scene walk reached maxNodes.
         val isOwned: Boolean get() = roots.isNotEmpty() || hasMask || hasBackdrop
+        val hasW6dAdvanced: Boolean get() = roots.any { root ->
+            val pending = ArrayDeque<CapturedFilterNodeIdI32>()
+            pending.addLast(root.root.id)
+            val seen = BooleanArray(root.table.nodeCount)
+            while (pending.isNotEmpty()) {
+                val id = pending.removeLast()
+                if (id.valueI32 !in seen.indices || seen[id.valueI32]) continue
+                seen[id.valueI32] = true
+                when (val node = root.table.nodeAt(id)) {
+                    is CapturedFilterNodeV1.MatrixConvolution,
+                    is CapturedFilterNodeV1.DisplacementMap,
+                    is CapturedFilterNodeV1.Magnifier,
+                    is CapturedFilterNodeV1.DistantLitDiffuse,
+                    is CapturedFilterNodeV1.PointLitDiffuse,
+                    is CapturedFilterNodeV1.SpotLitDiffuse,
+                    is CapturedFilterNodeV1.DistantLitSpecular,
+                    is CapturedFilterNodeV1.PointLitSpecular,
+                    is CapturedFilterNodeV1.SpotLitSpecular,
+                    is CapturedFilterNodeV1.Picture,
+                    is CapturedFilterNodeV1.RuntimeEffect,
+                    -> return true
+                    else -> appendNodeInputs(node, pending)
+                }
+            }
+            false
+        }
+
         fun unsupportedImageFamilyOwnerOrNull(): String? {
             roots.forEach { root ->
             val pending = ArrayDeque<CapturedFilterNodeIdI32>()
@@ -1657,6 +1687,34 @@ internal object W6bFilterGraphConstruction {
         node is CapturedFilterNodeV1.ColorFilter || node is CapturedFilterNodeV1.Compose ||
         node is CapturedFilterNodeV1.Merge || node is CapturedFilterNodeV1.Blend ||
         node is CapturedFilterNodeV1.Dilate || node is CapturedFilterNodeV1.Erode
+
+    private fun appendNodeInputs(node: CapturedFilterNodeV1, pending: ArrayDeque<CapturedFilterNodeIdI32>) {
+        val inputs: List<CapturedFilterInputV1> = when (node) {
+            is CapturedFilterNodeV1.Crop -> listOf(node.input)
+            is CapturedFilterNodeV1.Blur -> listOf(node.input)
+            is CapturedFilterNodeV1.DropShadow -> listOf(node.input)
+            is CapturedFilterNodeV1.ColorFilter -> listOf(node.input)
+            is CapturedFilterNodeV1.Compose -> listOf(node.outer, node.inner)
+            is CapturedFilterNodeV1.Blend -> listOf(node.background, node.foreground)
+            is CapturedFilterNodeV1.Dilate -> listOf(node.input)
+            is CapturedFilterNodeV1.Erode -> listOf(node.input)
+            is CapturedFilterNodeV1.DistantLitDiffuse -> listOf(node.input)
+            is CapturedFilterNodeV1.PointLitDiffuse -> listOf(node.input)
+            is CapturedFilterNodeV1.SpotLitDiffuse -> listOf(node.input)
+            is CapturedFilterNodeV1.DistantLitSpecular -> listOf(node.input)
+            is CapturedFilterNodeV1.PointLitSpecular -> listOf(node.input)
+            is CapturedFilterNodeV1.SpotLitSpecular -> listOf(node.input)
+            is CapturedFilterNodeV1.Offset -> listOf(node.input)
+            is CapturedFilterNodeV1.Tile -> listOf(node.input)
+            is CapturedFilterNodeV1.Merge -> node.toList()
+            is CapturedFilterNodeV1.DisplacementMap -> listOf(node.displacement, node.input)
+            is CapturedFilterNodeV1.Picture -> emptyList()
+            is CapturedFilterNodeV1.Magnifier -> listOf(node.input)
+            is CapturedFilterNodeV1.MatrixConvolution -> listOf(node.input)
+            is CapturedFilterNodeV1.RuntimeEffect -> node.map { it.input }
+        }
+        inputs.filterIsInstance<CapturedFilterInputV1.Node>().forEach { pending.addLast(it.id) }
+    }
     private data class FilterPayload(val root: CapturedFilterRootV1?, val mask: MaskFilterNode?)
 
     private fun filterPayload(paint: org.graphiks.kanvas.render.ir.PaintNode?, effects: EffectStack): FilterPayload {

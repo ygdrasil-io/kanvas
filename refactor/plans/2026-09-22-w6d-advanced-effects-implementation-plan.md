@@ -836,7 +836,7 @@ Sol checks physical command order, immediate-parent versions/origins, backdrop p
 - Consumes: every frozen Task 1–6 resource/pass/slot, W6c cache/lease rules, public `Surface.render()`, `Surface.readPixels`, `Surface.discardRecordedOperations()`, and W6 diagnostics.
 - Produces: `w6d.layer.frame_budget_exceeded`, exact F16 capability refusal, no-publication/same-surface recovery proof, status custody, and the W6d Draft PR gate.
 
-- [ ] **Step 1: Add B/B-1, F16, late-refusal, and recovery cases.**
+- [x] **Step 1: Add B/B-1, F16, late-refusal, and recovery cases.**
 
 ```kotlin
 @Test fun `exact budget accepts and one byte less refuses without readback publication then recovers`() {
@@ -853,13 +853,13 @@ Sol checks physical command order, immediate-parent versions/origins, backdrop p
 
 Add `f16RequestsRefuseWithExactCapabilityBeforeReadback`, `warmReplayKeepsPessimisticBudget`, `lateAdvancedSiblingRefusalPublishesNoHealthySibling`, and `allElevenFamiliesUseOneFrozenGraph` using public output only. Derive B from documented fixture dimensions/resource formula, never by asking the planner in the test.
 
-- [ ] **Step 2: Run causal REDs.**
+- [x] **Step 2: Run causal REDs.**
 
 Run: `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dAdvancedRecoverySurfacePixelTest'`
 
 Expected: FAIL while final accounting/router diagnostics are incomplete; no internal telemetry is asserted.
 
-- [ ] **Step 3: Complete pre-publication accounting and terminal ownership.**
+- [x] **Step 3: Complete pre-publication accounting and terminal ownership.**
 
 ```kotlin
 val physicalPeakI64 = checkedPhysicalAllocationPeakI64(frozenSlots)
@@ -870,7 +870,7 @@ if (peakI64 > budget.frameLocalBytesI64) throw W6aResourceLimitFailure(W6dPlanDi
 
 Require every FilterTarget/snapshot/previous copy/buffer/program/sampler/staging resource to have an owner, generation, descriptor, usage, slot, lifetime, and checked I64 charge before freeze. Cache hits retain pessimistic B and leases. Candidate gate/router terminalize W6d-owned F16, runtime, resource, and late material failures rather than entering a prepared route.
 
-- [ ] **Step 4: Run W6d shards and targeted prior-wave preservation sequentially.**
+- [x] **Step 4: Run W6d shards and targeted prior-wave preservation sequentially.**
 
 Run: `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dAdvancedSamplingSurfacePixelTest'`
 
@@ -900,7 +900,7 @@ Run: `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6aLayerBu
 
 Run: `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W5hRuntimeEffectSurfacePixelTest'`
 
-- [ ] **Step 5: Compile touched modules sequentially and audit only manually.**
+- [x] **Step 5: Compile touched modules sequentially and audit only manually.**
 
 Run: `rtk proxy ./gradlew :math:geometry:compileKotlinJvm`
 
@@ -918,12 +918,30 @@ Run: `rtk ./gradlew :kanvas:compileTestKotlin`
 
 Manually search the W6d production path for renderer-local bounds conversions, post-freeze resource/pass/ID creation, `GPUPreparedCompositeLowerer`, `GPUPreparedSurfaceProductEntry`, and legacy filter dispatch. Classify legitimate W8 references in review notes; do not create a static-source test.
 
-- [ ] **Step 6: Update durable status and commit.** Record exact test/XML custody, Gradle exits, source commit, native status (`133`/`134` = `UNKNOWN`), B/B-1 formula, accepted RGBA8, exact F16 refusal, exclusions, no ISO/global claim, and W6e as the next wave.
+- [x] **Step 6: Update durable status and commit.** Record exact test/XML custody, Gradle exits, source commit, native status (`133`/`134` = `UNKNOWN`), B/B-1 formula, accepted RGBA8, exact F16 refusal, exclusions, no ISO/global claim, and W6e as the next wave.
 
 ```sh
 git add gpu-plan kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W6dAdvancedRecoverySurfacePixelTest.kt refactor
 git commit -m "feat(gpu): close w6d advanced effect frame ownership"
 ```
+
+**Execution record (Terra, source `87b3b580a0c7f615e2034b6bcb58144edfe408f0`):**
+the public causal RED first exposed the former W6b owner at B−1, then the F16
+RED exposed `w6b.filter.unsupported_target_format`; both reach their asserted
+semantic behavior without a fixture or infrastructure failure. GREEN is the
+five-method class XML `5/0/0/0`: B is exactly
+`4 + 4 + 4 + 4 + 4 + 16 + 16 + 256 = 308`, B−1 is
+`w6d.layer.frame_budget_exceeded`, F16 is
+`w6d.layer.unsupported_target_format` before capture/plan/native, warm replay
+is pessimistic, a late advanced sibling publishes no healthy sibling, and one
+frozen graph covers all eleven families. `RGBA16_FLOAT` is a public
+refusal-only carrier, never a rendered/conversion target. The fourteen listed
+selectors total `132/0/0/0` in class XML; each Gradle process exits 1 because
+its native executor exits 133, therefore native is **UNKNOWN**. The seven
+listed compile selectors exit 0. Manual audit found no W6d renderer-local
+bounds conversion, post-freeze resource/pass/ID creation or W6d call into
+prepared/legacy filters. Steps 7–8 are controller-owned and intentionally
+remain unchecked; W6e is next after them.
 
 - [ ] **Step 7: Request whole-branch Sol review and run the one bounded correction policy.** Review `codex/w6c-spatial-dag..HEAD` for spec coverage, all eleven families, bounds/mappings, save order, immutable Picture/wire, runtime ABI/hash isolation, resources/lifetimes/budgets, atomic visibility, public evidence, and legacy fallback. If there is a Critical/Important finding, Terra makes one bounded correction commit, reruns only causally affected Task 2–7 selectors plus preservation, then requests one scoped Sol re-review.
 

@@ -71,6 +71,13 @@ internal class GPUPlanSurfaceRouter(
         }
         val layerOwned = GPUPlanSurfaceCandidateGate.ownsW6aLayers(planningOperations)
         val w6bOwned = GPUPlanSurfaceCandidateGate.ownsW6bFilters(planningOperations)
+        val w6dOwned = GPUPlanSurfaceCandidateGate.ownsW6dAdvancedFilters(planningOperations)
+        if (w6dOwned && config.gpuColorFormat == GPUColorFormat.RGBA16_FLOAT) {
+            throw GPUPlanSurfaceTerminalException(
+                org.graphiks.kanvas.gpu.plan.W6dPlanDiagnostics.UnsupportedTargetFormat,
+                "W6d advanced filters do not support the public RGBA16_FLOAT target.",
+            )
+        }
         if (w6bOwned && config.gpuColorFormat != GPUColorFormat.RGBA8_UNORM_SRGB) {
             throw GPUPlanSurfaceTerminalException(
                 org.graphiks.kanvas.gpu.plan.W6bFilterDiagnostics.UnsupportedTargetFormat,

@@ -27,4 +27,7 @@ internal fun RenderConfig.mapPreparedGpuColorConfig(): GPUPreparedSurfaceColorMa
             physicalFormat = CanonicalGPUColorFormat.BGRA8Unorm,
             interpretation = GPUColorInterpretation.EncodedPremulSrgb,
         )
+        GPUColorFormat.RGBA16_FLOAT -> GPUPreparedSurfaceColorMapping.Refused(
+            "unsupported.surface.gpu-color-format.rgba16float",
+        )
     }
