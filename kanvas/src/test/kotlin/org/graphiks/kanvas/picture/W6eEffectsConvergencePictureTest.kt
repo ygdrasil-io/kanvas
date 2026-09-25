@@ -26,7 +26,9 @@ class W6eEffectsConvergencePictureTest {
         val cropExpected = rgbaRow(listOf(transparent, blue, transparent, transparent))
         val offsetExpected = rgbaRow(listOf(transparent, blue, transparent, transparent))
         val tileExpected = rgbaRow(listOf(blue, transparent, blue, transparent))
-        val blurExpected = W6eBlurShadowCpuOracle.blurOpaqueWhiteImpulse(7, 7, 3, 3)
+        // Edge placement makes the captured DECAL addressing observable before either Picture
+        // recorder or replay Surface is created.
+        val blurExpected = W6eBlurShadowCpuOracle.blurOpaqueWhiteImpulse(7, 7, 0, 3)
         val shadowExpected = W6eBlurShadowCpuOracle.dropShadow(
             width = 7, height = 7, sourceAlpha = impulseAlpha(7, 7, 2, 3),
             sourceColor = ColorARGB.White, dx = 2f, dy = 0f, sigma = 1f,
@@ -38,13 +40,14 @@ class W6eEffectsConvergencePictureTest {
         val tileDestination = RectF32.ofLTRB(0f, 0f, 4f, 1f)
         val fixtures = listOf(
             exactFixture("Crop", 4, 1, cropExpected, ImageFilter.Crop(cropRect, TileMode.DECAL),
-                RectF32.ofLTRB(1f, 0f, 2f, 1f), ColorARGB.Blue),
+                RectF32.ofLTRB(1f, 0f, 2f, 1f), ColorARGB.Blue,
+                RectF32.ofLTRB(0f, 0f, 1f, 1f), ColorARGB.Red),
             exactFixture("Offset", 4, 1, offsetExpected, ImageFilter.Offset(1f, 0f),
                 RectF32.ofLTRB(0f, 0f, 1f, 1f), ColorARGB.Blue),
             exactFixture("Tile", 4, 1, tileExpected, ImageFilter.Tile(tileSource, tileDestination),
                 RectF32.ofLTRB(0f, 0f, 1f, 1f), ColorARGB.Blue),
             oracleFixture("Blur", blurExpected, ImageFilter.Blur(1f, 1f, TileMode.DECAL),
-                RectF32.ofLTRB(3f, 3f, 4f, 4f), ColorARGB.White),
+                RectF32.ofLTRB(0f, 3f, 1f, 4f), ColorARGB.White),
             oracleFixture("DropShadow", shadowExpected, ImageFilter.DropShadow(
                 2f, 0f, 1f, 1f, ColorARGB.Blue, mode = DropShadowMode.COMPOSITE,
             ), RectF32.ofLTRB(2f, 3f, 3f, 4f), ColorARGB.White),
@@ -56,7 +59,10 @@ class W6eEffectsConvergencePictureTest {
         cropRect.setLTRB(0f, 0f, 1f, 1f)
         tileSource.setLTRB(1f, 0f, 2f, 1f)
         tileDestination.setLTRB(1f, 0f, 2f, 1f)
-        fixtures.forEach { it.sourceRect.setLTRB(0f, 0f, 0f, 0f) }
+        fixtures.forEach {
+            it.sourceRect.setLTRB(0f, 0f, 0f, 0f)
+            it.extraSourceRect?.setLTRB(0f, 0f, 0f, 0f)
+        }
 
         captured.forEach { (fixture, picture) ->
             val bytes = picture.toByteArray()
@@ -76,7 +82,10 @@ class W6eEffectsConvergencePictureTest {
         filter: ImageFilter,
         sourceRect: RectF32,
         sourceColor: ColorARGB,
-    ): Fixture = Fixture(name, width, height, expected, maxDelta = null, filter, sourceRect, sourceColor)
+        extraSourceRect: RectF32? = null,
+        extraSourceColor: ColorARGB? = null,
+    ): Fixture = Fixture(name, width, height, expected, maxDelta = null, filter, sourceRect, sourceColor,
+        extraSourceRect, extraSourceColor)
 
     private fun oracleFixture(
         name: String,
@@ -99,11 +108,16 @@ class W6eEffectsConvergencePictureTest {
         private val filter: ImageFilter,
         val sourceRect: RectF32,
         private val sourceColor: ColorARGB,
+        val extraSourceRect: RectF32? = null,
+        private val extraSourceColor: ColorARGB? = null,
     ) {
         fun record(): Picture = PictureRecorder().also { recorder ->
-            recorder.beginRecording(RectF32.ofLTRB(0f, 0f, width.toFloat(), height.toFloat())).drawRect(
-                sourceRect, Paint(sourceColor, imageFilter = filter, antiAlias = false),
-            )
+            recorder.beginRecording(RectF32.ofLTRB(0f, 0f, width.toFloat(), height.toFloat())).apply {
+                extraSourceRect?.let { extra ->
+                    drawRect(extra, Paint(requireNotNull(extraSourceColor), imageFilter = filter, antiAlias = false))
+                }
+                drawRect(sourceRect, Paint(sourceColor, imageFilter = filter, antiAlias = false))
+            }
         }.finishRecordingAsPicture()
 
         fun assertPixels(result: RenderResult) {

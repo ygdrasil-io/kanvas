@@ -22,7 +22,9 @@ class W6eCoreEffectsSurfacePixelTest {
         val cropExpected = rgbaRow(listOf(transparent, blue, transparent, transparent))
         val offsetExpected = rgbaRow(listOf(transparent, blue, transparent, transparent))
         val tileExpected = rgbaRow(listOf(blue, transparent, blue, transparent))
-        val blurExpected = W6eBlurShadowCpuOracle.blurOpaqueWhiteImpulse(7, 7, 3, 3)
+        // The impulse sits at the left edge so DECAL addressing is observable: an implementation
+        // that silently substitutes Clamp/Repeat/Mirror cannot produce this oracle field.
+        val blurExpected = W6eBlurShadowCpuOracle.blurOpaqueWhiteImpulse(7, 7, 0, 3)
         val shadowExpected = W6eBlurShadowCpuOracle.dropShadow(
             width = 7, height = 7, sourceAlpha = impulseAlpha(7, 7, 2, 3),
             sourceColor = ColorARGB.White, dx = 2f, dy = 0f, sigma = 1f,
@@ -31,6 +33,7 @@ class W6eCoreEffectsSurfacePixelTest {
 
         assertRenderedExactly(cropExpected) {
             renderLayer(4, 1, ImageFilter.Crop(RectF32.ofLTRB(1f, 0f, 2f, 1f), TileMode.DECAL)) {
+                drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.Red, antiAlias = false))
                 drawRect(RectF32.ofLTRB(1f, 0f, 2f, 1f), Paint(ColorARGB.Blue, antiAlias = false))
             }
         }
@@ -48,7 +51,7 @@ class W6eCoreEffectsSurfacePixelTest {
         }
         assertFamilyNear(blurExpected, maxDelta = 12) {
             renderLayer(7, 7, ImageFilter.Blur(1f, 1f, TileMode.DECAL)) {
-                drawRect(RectF32.ofLTRB(3f, 3f, 4f, 4f), Paint(ColorARGB.White, antiAlias = false))
+                drawRect(RectF32.ofLTRB(0f, 3f, 1f, 4f), Paint(ColorARGB.White, antiAlias = false))
             }
         }
         assertFamilyNear(shadowExpected, maxDelta = 12) {
