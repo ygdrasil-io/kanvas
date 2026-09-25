@@ -2,6 +2,36 @@
 
 ## Statut
 
+### Gate final W6d bloqué — Magnifier à zoom inférieur à 1
+
+La review Sol globale depuis W6c a relevé quatre points `Important` et un
+`Minor`. L'unique vague de correction bornée (`536d0e58e`, puis son témoin
+monographe `79c1fa86d`) ferme Picture sur `saveLayer`, les contextes de
+sampling gelés, les branches lighting et la tolérance du témoin onze-familles.
+La relecture Sol ciblée de cette vague laisse toutefois **deux variants
+Important ouverts sur Magnifier**. Le premier :
+la reverse demand de `Magnifier` réserve `union(output, mappedLens)`, alors que
+le contrat accepte `0 < zoom < 1` et que le shader échantillonne
+`center + (point - center) / zoom`. Avec une lentille `[1,4]`, un clip de sortie
+`[1,2]`, `zoom=0.5` et `inset=0`, le pixel `1.5` lit le texel `0`, hors de la
+copie qui commence à `1`. Un backdrop ou `initWithPrevious` clippé peut donc
+perdre cet input avant publication. Les témoins Magnifier existants ne couvrent
+que des zooms `1` et `2`.
+
+Le second concerne le draw direct transformé : la reverse demand reçoit le
+mapping du parent avant la composition du transform capturé du draw. Une
+lentille locale `[0,10]` sous translation `+100`, un clip `[100,101]` et
+`zoom=2` peuvent réserver uniquement `[100,101]` alors que le shader, qui
+emploie le vrai mapping gelé, lit vers `102`. Le test Magnifier transformé
+actuel porte sur un layer non clippé et ne ferme pas ce cas direct.
+
+Les Steps 1–7 sont exécutés, mais le gate de review de Step 7 n'est **pas
+validé** et Step 8 (push/PR stackée) n'est pas lancé. Le plan autorisait une
+seule vague de correction et une seule relecture ciblée, sans boucle ; il faut
+une décision explicite pour prolonger cette politique ou changer le périmètre
+de Magnifier. W6e ne démarre pas. Les XML et compilations déjà rapportés ne
+prouvent pas ce cas limite ; les exits natifs 133 restent **UNKNOWN**.
+
 ### Correction whole-branch W6d — contextes sampling, snapshots et branches lighting
 
 La correction bornée sur la base revue
