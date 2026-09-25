@@ -108,19 +108,20 @@ class W6dAdvancedRecoverySurfacePixelTest {
     }
 
     @Test
-    fun `independent frozen graphs cover all eleven W6d filter families with branch-sensitive output`() {
+    fun `one frozen graph covers all eleven W6d filter families with branch-sensitive output`() {
         // This independent composite oracle is complete before either public recording object is
-        // created. Each family owns a separate public 3x3 surface, so no later allocation can
-        // mask a sparse source result from a previous family.
+        // created. Each family owns a populated, disjoint public 3x3 lane in the same graph.
         val expected = allElevenFamilyExpectedPixels()
         val redPicture = allFamilyPicture(ColorARGB.Red)
         val baseline = renderAllElevenFamilies(redPicture)
-        assertAllElevenFamilyBands(expected, baseline)
+        assertAllElevenFamilyBands(expected, baseline.pixels)
+        assertTrue(baseline.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
 
         familyNames.indices.forEach { familyIndex ->
             val mutationPicture = if (familyIndex == pictureFamilyIndex) allFamilyPicture(ColorARGB.Blue) else redPicture
             val mutated = renderAllElevenFamilies(mutationPicture, mutedFamilyIndex = familyIndex)
-            assertBandChanged(baseline, mutated, familyIndex, familyNames[familyIndex])
+            assertBandChanged(baseline.pixels, mutated.pixels, familyIndex, familyNames[familyIndex])
+            assertTrue(mutated.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
         }
     }
 
@@ -135,11 +136,13 @@ class W6dAdvancedRecoverySurfacePixelTest {
         canvas.restore()
     }
 
-    private fun renderAllElevenFamilies(picture: org.graphiks.kanvas.picture.Picture, mutedFamilyIndex: Int? = null): UByteArray {
-        val combined = UByteArray(familyWidthI32 * familyHeightI32 * familyNames.size * 4)
-        familyNames.indices.forEach { familyIndex ->
-            val surface = Surface(familyWidthI32, familyHeightI32)
-            surface.canvas {
+    private fun renderAllElevenFamilies(picture: org.graphiks.kanvas.picture.Picture, mutedFamilyIndex: Int? = null): RenderResult {
+        val surface = Surface(familyWidthI32, familyHeightI32 * familyNames.size)
+        surface.canvas {
+            familyNames.indices.forEach { familyIndex ->
+                save()
+                translate(0f, (familyIndex * familyHeightI32).toFloat())
+                clipRect(familyRect, antiAlias = false)
                 val filter = allFamilyFilter(familyIndex, picture, mutedFamilyIndex == familyIndex)
                 when (familyIndex) {
                     pictureFamilyIndex -> {
@@ -159,12 +162,10 @@ class W6dAdvancedRecoverySurfacePixelTest {
                         restore()
                     }
                 }
+                restore()
             }
-            val rendered = surface.render()
-            assertTrue(rendered.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
-            rendered.pixels.copyInto(combined, familyIndex * familyWidthI32 * familyHeightI32 * 4)
         }
-        return combined
+        return surface.render()
     }
 
     private fun allFamilyFilter(familyIndex: Int, picture: org.graphiks.kanvas.picture.Picture, muted: Boolean): ImageFilter = when (familyIndex) {

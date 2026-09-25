@@ -24,13 +24,13 @@ black ne sont plus coupés par la géométrie source.
 Les witnesses publics `Surface` + `Render` + `Readback` frais couvrent Picture
 sur layer, map décalée, Magnifier transformé à origin non nul, halo Matrix pour
 backdrop/previous et les branches lighting `Merge`/`Blend`. La recovery
-onze-familles est devenue causale : chaque famille est rendue dans sa propre
-Surface 3×3 depuis un oracle calculé avant `Surface`/`PictureRecorder`; la
-variante Matrix sparse antérieure ne constituait qu'une dépendance à la
-réutilisation d'allocation d'une bande ultérieure (la même fixture isolée
-échouait déjà sur la base), et ne masque plus aucun résultat. Picture et runtime
-restent byte-exact ; les seules tolérances famille sont explicites (Matrix,
-Displacement, Magnifier ≤1, lighting ≤2).
+onze-familles est causale dans **un seul graphe gelé** : une même `Surface`
+contient les onze lanes publiques 3×3, toutes peuplées et disjointes, et chaque
+baseline ou mutation construit une seule telle `Surface`. L'oracle complet est
+calculé avant `Surface`/`PictureRecorder`; Matrix est rempli sur sa lane au lieu
+de s'appuyer sur le cas sparse non probant. Aucun composite `SRC` ne masque les
+branches. Picture et runtime restent byte-exact ; les seules tolérances famille
+sont explicites (Matrix, Displacement, Magnifier ≤1, lighting ≤2).
 
 Le contrat historique W6a `unsupportedBackdropRefusesTerminallyAndRecovers`
 est remplacé par l'acceptation pixel d'un Blur backdrop depuis son parent gelé,
