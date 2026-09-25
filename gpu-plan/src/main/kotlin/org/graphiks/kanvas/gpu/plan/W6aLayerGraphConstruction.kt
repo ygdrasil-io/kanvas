@@ -2607,7 +2607,7 @@ internal class W6aLayerGraphConstruction(
                 caps, lanes[laneI32].sourceTable())) { "w6a.layer.w4e_payload" }
             w4eBindings += PlanW4eGeometryBindingV1(target, targetExtent, native, payload, targetOriginDevice(target))
         }
-        nonUniformBytesI64 = W6aLayerPlanBudget.peak(resources, passes.size, budget)
+        nonUniformBytesI64 = W6aLayerPlanBudget.peak(resources, passes, caps, budget)
     }
 
     fun publish(
@@ -2842,7 +2842,7 @@ internal class W6aLayerGraphConstruction(
             }
         }
         val allResources = resources + source.resources
-        val peak = W6aLayerPlanBudget.peak(allResources, passes.size, budget)
+        val peak = W6aLayerPlanBudget.peak(allResources, passes, caps, budget)
         val construction = RenderGraph.construct(id, W6aLayerPlanCompiler.CAPABILITY_ID, extent,
             PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL, caps, budget, RenderGraph.visualDraws(passes).size, allResources, passes,
             passes.zipWithNext { first, second -> PlanPassDependency(first.id, second.id) }, peak, table)

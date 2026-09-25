@@ -14,12 +14,17 @@ ici. W6e reste la prochaine vague après ces gates contrôleur.
 `Surface`/`Canvas`/`Picture` : elle calcule ses octets attendus avant la
 création de la `Surface` ou du `PictureRecorder`, puis observe pixels et scopes
 `Render` + `Readback`. Le B exact de son fixture 1×1 est
-`4 + 4 + 4 + 4 + 4 + 16 + 16 + 256 = 308` octets : root RGBA8, layer,
-source draw capturée, source layer, `FilterTarget`, deux records uniforms, puis
-une ligne de readback RGBA8 alignée. B accepte ; B−1 refuse avec
+`4 + 4 + 4 + 4 + 4 + 16 + 16 + 4096 + 256 = 4404` octets : root RGBA8, layer,
+source draw capturée, source layer, `FilterTarget`, deux records uniforms, un
+lease programme W6d logique de 4096 octets, puis une ligne de readback RGBA8
+alignée. B accepte ; B−1 refuse avec
 `w6d.layer.frame_budget_exceeded`, laisse le sentinel intact et récupère sur la
 même `Surface`. Le même test couvre replay chaud encore pessimiste, sibling
 avancé tardif atomique et un seul graphe gelé qui contient les onze familles.
+Ce dernier témoin contient onze bandes publiques 3×3 disjointes ; un oracle CPU
+complet est calculé avant `Surface` et `PictureRecorder`, puis une mutation
+publique de chaque famille doit modifier sa propre bande. Il ne termine plus
+par une couleur `SRC` opaque qui pourrait masquer les branches.
 
 `GPUColorFormat.RGBA16_FLOAT` est le plus petit token public de requête F16,
 strictement refusal-only : il ne construit ni target, ni conversion, ni backend.
@@ -28,8 +33,14 @@ native avec `w6d.layer.unsupported_target_format`; RGBA8 s'exécute positivement
 L'inventaire reste le graphe W6 existant : `PlanResource` impose descriptor,
 usage, slot, lifetime et taille checked-I64 avant freeze ; le peak sémantique
 est `peakFrameLocalBytesI64` et le peak physique additionne chaque slot par
-`Math.addExact`. Les programmes/samplers déjà sélectionnés sont des métadonnées
-gelées de l'opération, sans allocation F16 ou ressource native tardive.
+`Math.addExact`. Chaque programme W6d ajoute avant publication un lease typé
+gelé : owner `PlanPassId`, génération device, descriptor (programme, inputs,
+output, RGBA8/1×), usages `{ShaderModule, RenderPipeline}`, slot physique et
+lifetime `[0, passes.size)`. Sa charge est `max(4096, descriptor encodé + payload canonique checked-I64)`
+et elle demeure due pour chaque owner même cache warm. C'est une réserve logique
+exacte du budget publié, non une prétention de taille byte-exacte des objets
+opaques shader/pipeline du driver ; cette taille physique reste non observable
+par l'API et constitue la limite/risque documenté de cette tranche.
 
 L'audit manuel ne trouve aucune conversion de bounds renderer-local ni création
 post-freeze de pass/resource/ID sur la route W6d. `GPUPlanSurfaceRouter` rend

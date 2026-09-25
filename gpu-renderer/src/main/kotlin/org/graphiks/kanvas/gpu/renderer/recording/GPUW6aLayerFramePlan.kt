@@ -155,7 +155,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
         require(graph.verifyW6aLayerCompilerWitness())
         val verticesSource = if (graph.passes().filterIsInstance<PlanPass.RenderPass>().flatMap { it.draws() }.any { it is W5bVerticesDraw })
             PreparedSourceFrameV6.layeredVertices(graph) else null
-        val allocations = graph.resources().map { resource -> GPUFrameMemoryAllocation(refs.getValue(resource.id).value,
+        val resourceAllocations = graph.resources().map { resource -> GPUFrameMemoryAllocation(refs.getValue(resource.id).value,
             when (resource.role) {
                 PlanResourceRole.LogicalTarget -> GPUFrameMemoryCategory.CanonicalTarget
                 PlanResourceRole.LayerTarget -> GPUFrameMemoryCategory.LayerTarget
@@ -164,6 +164,19 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
             }, resource.byteSize,
             if (resource.kind == PlanResourceKind.Texture2D) GPUFrameMemoryResourceKind.Texture2D else GPUFrameMemoryResourceKind.Buffer,
             resource.copyExtent()?.let { GPUPixelBounds(0, 0, it.width, it.height) }, resource.firstPassIndex, resource.lastPassIndexExclusive) }
+        val programAllocations = physical.programSlots().map { slot ->
+            val lease = slot.lease
+            GPUFrameMemoryAllocation(
+                label = "w6d.program.slot.${slot.slotI32}.${lease.ownerPassId.value}",
+                category = GPUFrameMemoryCategory.ReusableScratch,
+                bytes = lease.reservedBytesI64,
+                resourceKind = GPUFrameMemoryResourceKind.LogicalProgram,
+                extent = null,
+                firstPassIndex = lease.firstPassIndexI32,
+                lastPassIndexExclusive = lease.lastPassIndexExclusiveI32,
+            )
+        }
+        val allocations = resourceAllocations + programAllocations
         memory = GPUFrameMemoryBudgetPlanner.plan(GPUFrameMemoryBudgetRequest(allocations,
             minOf(graph.budget.maxFrameLocalBytes, request.rendererAggregateMemoryBudgetBytes ?: Long.MAX_VALUE), requireNotNull(request.capabilities.limits)))
         require(memory.diagnostic == null && memory.targetResidentBytes + memory.peakFrameTransientBytes ==

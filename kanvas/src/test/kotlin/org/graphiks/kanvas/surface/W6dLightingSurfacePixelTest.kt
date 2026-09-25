@@ -276,7 +276,10 @@ class W6dLightingSurfacePixelTest {
         val expected = UByteArray(512 * 4).also { pixels ->
             center.copyInto(pixels, destinationOffset = 256 * 4)
         }
-        val surface = Surface(512, 1, config = RenderConfig(frameLocalBudgetBytes = 5_000L))
+        // One W6d FilterPass now holds its 4096-byte logical program lease through frame
+        // completion.  10_000 keeps this test focused on terminal clipping rather than that
+        // separately verified admission reservation.
+        val surface = Surface(512, 1, config = RenderConfig(frameLocalBudgetBytes = 10_000L))
         surface.canvas {
             clipRect(RectF32.ofLTRB(256f, 0f, 257f, 1f), antiAlias = false)
             drawRect(RectF32.ofLTRB(256f, 0f, 257f, 1f), Paint(ColorARGB.White,

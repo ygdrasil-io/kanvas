@@ -164,20 +164,149 @@ public sealed class W6dSamplingProgramV1(public val programId: W6dSamplingProgra
     }
 }
 
+/** Native program preparation needs both module and render-pipeline authority. */
+public enum class W6dProgramUsageV1 { ShaderModule, RenderPipeline }
+
+/** A W6d program lease is retained through completion rather than one FilterPass execution. */
+public enum class W6dProgramLifetimeV1 { ThroughFrameCompletion }
+
+/**
+ * Exact immutable binding identity for one selected W6d recipe.  The owner is intentionally
+ * separate: identical recipes in distinct FilterPasses retain independent pessimistic leases.
+ */
+public class W6dFrozenProgramIdentityV1 internal constructor(
+    public val programId: W6dSamplingProgramIdV1,
+    inputs: List<PlanResourceId>,
+    public val output: PlanResourceId,
+) {
+    private val storedInputs = immutableList(inputs)
+    init { require(storedInputs.size == programId.inputArityI32 && output !in storedInputs) }
+    public fun inputs(): List<PlanResourceId> = storedInputs
+    public fun matches(program: W6dSamplingProgramV1, inputs: List<PlanResourceId>, output: PlanResourceId): Boolean =
+        programId == program.programId && storedInputs == inputs && this.output == output
+}
+
+/**
+ * Pre-publication descriptor for one W6d module/pipeline request.  Its RGBA8/sample facts are
+ * planner facts, never reconstructed by the renderer.
+ */
+public class W6dProgramDescriptorV1 internal constructor(
+    public val identity: W6dFrozenProgramIdentityV1,
+    public val targetFormat: PlanLogicalColorFormat,
+    public val targetSampleCountI32: Int,
+) {
+    init {
+        require(targetFormat == PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL)
+        require(targetSampleCountI32 == 1)
+    }
+}
+
+/**
+ * Pessimistic, graph-owned accounting lease for an opaque native W6d program.
+ *
+ * [reservedBytesI64] is a stable logical admission unit, not a claimed byte size of a browser
+ * or driver shader module/pipeline.  [descriptorBytesI64] and [recipePayloadBytesI64] form an
+ * exact checked-I64 logical encoding, while the floor conservatively bounds its small forms.
+ * Native allocation remains opaque, so no driver-byte-exact claim is made here.
+ */
+public class W6dProgramLeaseV1 internal constructor(
+    public val ownerPassId: PlanPassId,
+    public val generationI64: Long,
+    public val descriptor: W6dProgramDescriptorV1,
+    usages: Set<W6dProgramUsageV1>,
+    public val lifetime: W6dProgramLifetimeV1,
+    public val firstPassIndexI32: Int,
+    public val lastPassIndexExclusiveI32: Int,
+    public val descriptorBytesI64: Long,
+    public val recipePayloadBytesI64: Long,
+    public val reservedBytesI64: Long,
+) {
+    private val storedUsages = immutableSet(usages)
+    init {
+        require(ownerPassId.value.isNotBlank() && generationI64 >= 0L)
+        require(storedUsages == setOf(W6dProgramUsageV1.ShaderModule, W6dProgramUsageV1.RenderPipeline))
+        require(lifetime == W6dProgramLifetimeV1.ThroughFrameCompletion)
+        require(firstPassIndexI32 == 0 && lastPassIndexExclusiveI32 > firstPassIndexI32)
+        require(descriptorBytesI64 > 0L && recipePayloadBytesI64 > 0L &&
+            reservedBytesI64 >= Math.addExact(descriptorBytesI64, recipePayloadBytesI64) &&
+            reservedBytesI64 >= LOGICAL_LEASE_FLOOR_BYTES_I64)
+    }
+
+    public fun usages(): Set<W6dProgramUsageV1> = storedUsages
+
+    /** Renderer-side consumption verifies the exact already-budgeted lease before materialization. */
+    public fun matches(binding: W6dFrozenProgramBindingV1, deviceGenerationI64: Long, passCountI32: Int): Boolean =
+        ownerPassId == binding.ownerPassId && generationI64 == deviceGenerationI64 &&
+            descriptor.identity.matches(binding.program, binding.inputs(), binding.output) &&
+            lifetime == W6dProgramLifetimeV1.ThroughFrameCompletion && firstPassIndexI32 == 0 &&
+            lastPassIndexExclusiveI32 == passCountI32 &&
+            storedUsages == setOf(W6dProgramUsageV1.ShaderModule, W6dProgramUsageV1.RenderPipeline) &&
+            reservedBytesI64 >= Math.addExact(descriptorBytesI64, recipePayloadBytesI64) &&
+            reservedBytesI64 >= LOGICAL_LEASE_FLOOR_BYTES_I64
+
+    public companion object {
+        /** Stable pessimistic lease unit; it is not an opaque driver allocation measurement. */
+        public const val LOGICAL_LEASE_FLOOR_BYTES_I64: Long = 4096L
+    }
+}
+
 /** The exact resources of this FilterPass, not a second graph or allocation authority. */
 public class W6dFrozenProgramBindingV1 internal constructor(
+    public val ownerPassId: PlanPassId,
     public val program: W6dSamplingProgramV1,
     inputs: List<PlanResourceId>,
     public val output: PlanResourceId,
 ) {
     private val storedInputs = immutableList(inputs)
-    init { require(storedInputs.size == program.programId.inputArityI32 && output !in storedInputs) }
+    public val identity = W6dFrozenProgramIdentityV1(program.programId, storedInputs, output)
+    init { require(identity.matches(program, storedInputs, output)) }
     /** Slot 0 is the source, or displacement; slot 1 is the displaced source. */
     public fun inputs(): List<PlanResourceId> = storedInputs
 }
 
+/**
+ * The sole W6d logical-program lease issuer.  It runs before graph publication and charges a
+ * lease per owner even if a native cache later reuses a module or pipeline.
+ */
+internal object W6dProgramLeasePlannerV1 {
+    fun freeze(
+        resources: List<PlanResource>,
+        passes: List<PlanPass>,
+        capabilities: PlanCapabilitySnapshot,
+    ): List<W6dProgramLeaseV1> {
+        if (passes.isEmpty()) return emptyList()
+        val resourcesById = resources.associateBy(PlanResource::id)
+        return passes.mapNotNull { candidate ->
+            val pass = candidate as? PlanPass.FilterPass ?: return@mapNotNull null
+            val binding = pass.frozenSamplingProgram ?: return@mapNotNull null
+            require(binding.ownerPassId == pass.id && binding.identity.matches(binding.program, pass.inputs(), pass.output))
+            val output = requireNotNull(resourcesById[pass.output]) { "W6d program output has no graph resource." }
+            require(output.kind == PlanResourceKind.Texture2D &&
+                output.format == PlanTextureFormat.Color(PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL) &&
+                output.sampleCountI32 == 1) { "W6d programs require a frozen RGBA8 single-sample FilterTarget." }
+            val descriptorBytesI64 = checkedLogicalDescriptorBytesI64(pass.id, binding)
+            val recipePayloadBytesI64 = binding.program.checkedLogicalRecipePayloadBytesI64()
+            val encodedPayloadBytesI64 = Math.addExact(descriptorBytesI64, recipePayloadBytesI64)
+            W6dProgramLeaseV1(
+                ownerPassId = pass.id,
+                generationI64 = capabilities.deviceGeneration,
+                descriptor = W6dProgramDescriptorV1(binding.identity,
+                    PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL, 1),
+                usages = setOf(W6dProgramUsageV1.ShaderModule, W6dProgramUsageV1.RenderPipeline),
+                lifetime = W6dProgramLifetimeV1.ThroughFrameCompletion,
+                firstPassIndexI32 = 0,
+                lastPassIndexExclusiveI32 = passes.size,
+                descriptorBytesI64 = descriptorBytesI64,
+                recipePayloadBytesI64 = recipePayloadBytesI64,
+                reservedBytesI64 = maxOf(W6dProgramLeaseV1.LOGICAL_LEASE_FLOOR_BYTES_I64, encodedPayloadBytesI64),
+            )
+        }
+    }
+}
+
 /** Called only while constructing the W6 physical pass, before graph validation/freeze. */
 internal fun selectW6dSamplingProgram(
+    ownerPassId: PlanPassId,
     operation: FilterPassOperationV1,
     inputs: List<PlanResourceId>,
     output: PlanResourceId,
@@ -225,8 +354,40 @@ internal fun selectW6dSamplingProgram(
         }
         else -> return null
     }
-    return W6dFrozenProgramBindingV1(program, inputs, output)
+    return W6dFrozenProgramBindingV1(ownerPassId, program, inputs, output)
 }
+
+/**
+ * Canonical logical payload sizing for the immutable plan record.  A convolution retains one
+ * F64/F64/F32 tuple per tap; all remaining shipped W6d recipes have bounded scalar payloads and
+ * therefore remain below the lease floor.  Every arithmetic operation is checked-I64.
+ */
+private fun W6dSamplingProgramV1.checkedLogicalRecipePayloadBytesI64(): Long = when (this) {
+    is W6dSamplingProgramV1.Convolution -> Math.addExact(64L,
+        Math.multiplyExact(taps().size.toLong(), 24L))
+    is W6dSamplingProgramV1.Displacement -> 32L
+    is W6dSamplingProgramV1.Magnifier -> 64L
+    is W6dSamplingProgramV1.Picture -> 64L
+    is W6dSamplingProgramV1.RuntimeImageOpacity -> 32L
+    is W6dSamplingProgramV1.DistantDiffuse -> 128L
+    is W6dSamplingProgramV1.Lighting -> 256L
+}
+
+/**
+ * Canonical byte count for the immutable logical lease descriptor.  It records every identity
+ * string as UTF-8 plus fixed-width generation, descriptor, usage and lifetime fields; this is
+ * an admission encoding, not a serialization of opaque driver objects.
+ */
+private fun checkedLogicalDescriptorBytesI64(
+    ownerPassId: PlanPassId,
+    binding: W6dFrozenProgramBindingV1,
+): Long = buildList {
+    add(48L) // generation, RGBA8/sample, two usages, lifetime and half-open pass range
+    add(ownerPassId.value.encodeToByteArray().size.toLong())
+    add(binding.program.programId.name.encodeToByteArray().size.toLong())
+    binding.inputs().forEach { input -> add(input.value.encodeToByteArray().size.toLong()) }
+    add(binding.output.value.encodeToByteArray().size.toLong())
+}.fold(0L) { total, bytes -> Math.addExact(total, bytes) }
 
 private fun ColorChannel.componentIndex(): Int = when (this) {
     ColorChannel.RED -> 0

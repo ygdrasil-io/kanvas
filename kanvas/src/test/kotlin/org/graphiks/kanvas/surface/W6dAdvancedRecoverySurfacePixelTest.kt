@@ -2,14 +2,13 @@
 
 package org.graphiks.kanvas.surface
 
+import kotlin.math.abs
 import kotlin.test.assertContentEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.canvas.SaveLayerRec
-import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorChannel
-import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.TileMode
@@ -28,9 +27,11 @@ import org.junit.jupiter.api.Test
  * Public W6d atomic-visibility witnesses.  B is derived before a [Surface] exists:
  * one RGBA8 root texel (4), the explicit layer target (4), the captured draw source
  * and layer source (2 × 4), and one frozen MatrixConvolution FilterTarget texel (4),
- * a 16-byte W6 draw record plus a 16-byte frozen matrix-operation uniform record, and
- * one aligned RGBA8 readback row (256). Program and sampler selection is frozen metadata
- * for this registered operation and does not allocate a separate resource.
+ * a 16-byte W6 draw record plus a 16-byte frozen matrix-operation uniform record, one
+ * 4096-byte frozen W6d program logical lease, and one aligned RGBA8 readback row (256).
+ * The program lease is an immutable owner/program/binding record held through frame
+ * completion, charged before native publication even on a warm cache hit; it is not a
+ * claim about opaque driver pipeline allocation.
  */
 class W6dAdvancedRecoverySurfacePixelTest {
     @Test
@@ -107,17 +108,21 @@ class W6dAdvancedRecoverySurfacePixelTest {
     }
 
     @Test
-    fun `one frozen graph covers all eleven W6d filter families`() {
-        val expected = rgba(0, 0, 0)
-        val surface = Surface(1, 1)
-        val allFamilies = allElevenFamilyGraph()
-        surface.canvas {
-            drawRect(unit, Paint(ColorARGB.White, imageFilter = allFamilies, antiAlias = false))
-        }
+    fun `one frozen graph covers all eleven W6d filter families with branch-sensitive output`() {
+        // This independent composite oracle is complete before either public recording object is
+        // created.  Each advanced family owns a disjoint 3x3 band, so no later branch can mask it.
+        val expected = allElevenFamilyExpectedPixels()
+        val redPicture = allFamilyPicture(ColorARGB.Red)
+        val baseline = renderAllElevenFamilies(redPicture)
+        assertPixelsNear(expected, baseline.pixels, maxChannelDelta = 2)
+        assertTrue(baseline.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
 
-        val result = surface.render()
-        assertContentEquals(expected, result.pixels)
-        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+        familyNames.indices.forEach { familyIndex ->
+            val mutationPicture = if (familyIndex == pictureFamilyIndex) allFamilyPicture(ColorARGB.Blue) else redPicture
+            val mutated = renderAllElevenFamilies(mutationPicture, mutedFamilyIndex = familyIndex)
+            assertBandChanged(baseline.pixels, mutated.pixels, familyIndex, familyNames[familyIndex])
+            assertTrue(mutated.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+        }
     }
 
     private fun advancedWitnessSurface(frameLocalBudgetBytes: Long): Surface =
@@ -131,33 +136,143 @@ class W6dAdvancedRecoverySurfacePixelTest {
         canvas.restore()
     }
 
-    private fun allElevenFamilyGraph(): ImageFilter {
-        val picture = PictureRecorder().also { recorder ->
-            recorder.beginRecording(unit).drawRect(unit, Paint(ColorARGB.White, antiAlias = false))
-        }.finishRecordingAsPicture()
-        return ImageFilter.ColorFilter(
-            ColorFilter.Blend(ColorARGB.Black, BlendMode.SRC),
-            ImageFilter.Merge(listOf(
-                identityMatrixConvolution(),
-                ImageFilter.DisplacementMap(ColorChannel.R, ColorChannel.G, 0f, ImageFilter.Offset(0f, 0f)),
-                ImageFilter.Magnifier(unit, zoom = 1f, inset = 0f),
-                ImageFilter.Picture(picture),
-                ImageFilter.RuntimeEffect(
-                    requireNotNull(RuntimeEffect.registered("kanvas.runtime.image-opacity", 1)),
-                    UniformBlock { float1("alpha", 1f) },
-                ),
-                ImageFilter.DistantLitDiffuse(Vector3F32(0f, 0f, 1f), ColorARGB.White, 1f, 1f),
-                ImageFilter.PointLitDiffuse(Point3F32(0f, 0f, 1f), ColorARGB.White, 1f, 1f),
-                ImageFilter.SpotLitDiffuse(
-                    Point3F32(0f, 0f, 1f), Point3F32(0f, 0f, 0f), 1f, 90f, ColorARGB.White, 1f, 1f,
-                ),
-                ImageFilter.DistantLitSpecular(Vector3F32(0f, 0f, 1f), ColorARGB.White, 1f, 1f, 1f),
-                ImageFilter.PointLitSpecular(Point3F32(0f, 0f, 1f), ColorARGB.White, 1f, 1f, 1f),
-                ImageFilter.SpotLitSpecular(
-                    Point3F32(0f, 0f, 1f), Point3F32(0f, 0f, 0f), 1f, 90f, ColorARGB.White, 1f, 1f, 1f,
-                ),
-            )),
+    private fun renderAllElevenFamilies(picture: org.graphiks.kanvas.picture.Picture, mutedFamilyIndex: Int? = null): RenderResult {
+        val surface = Surface(familyWidthI32, familyHeightI32 * familyNames.size)
+        surface.canvas {
+            familyNames.indices.forEach { familyIndex ->
+                save()
+                translate(0f, (familyIndex * familyHeightI32).toFloat())
+                clipRect(familyRect, antiAlias = false)
+                val filter = allFamilyFilter(familyIndex, picture, mutedFamilyIndex == familyIndex)
+                if (familyIndex == pictureFamilyIndex) {
+                    // Picture is a filter-owned aggregate and therefore keeps its captured carrier draw.
+                    drawRect(unit, Paint(ColorARGB.Blue, imageFilter = filter, antiAlias = false))
+                } else {
+                    saveLayer(SaveLayerRec(paint = Paint(imageFilter = filter, antiAlias = false)))
+                    drawAllFamilySource(this, familyIndex)
+                    restore()
+                }
+                restore()
+            }
+        }
+        return surface.render()
+    }
+
+    private fun allFamilyFilter(familyIndex: Int, picture: org.graphiks.kanvas.picture.Picture, muted: Boolean): ImageFilter = when (familyIndex) {
+        matrixFamilyIndex -> ImageFilter.MatrixConvolution(
+            SizeF32.of(1f, 1f), floatArrayOf(if (muted) 0f else 1f), 1f, 0f,
+            Vector2F32(0f, 0f), TileMode.CLAMP, true,
         )
+        displacementFamilyIndex -> ImageFilter.DisplacementMap(
+            ColorChannel.R, ColorChannel.G, if (muted) 100f else 0f, ImageFilter.Offset(0f, 0f),
+        )
+        magnifierFamilyIndex -> ImageFilter.Magnifier(
+            RectF32.ofLTRB(-1f, 0f, 3f, 1f), zoom = if (muted) 2f else 1f, inset = .5f,
+        )
+        pictureFamilyIndex -> ImageFilter.Picture(picture)
+        runtimeFamilyIndex -> ImageFilter.RuntimeEffect(
+            requireNotNull(RuntimeEffect.registered("kanvas.runtime.image-opacity", 1)),
+            UniformBlock { float1("alpha", if (muted) 0f else 1f) },
+        )
+        distantDiffuseFamilyIndex -> ImageFilter.DistantLitDiffuse(
+            if (muted) Vector3F32(0f, 0f, 0f) else Vector3F32(1f, 0f, 1f), ColorARGB.White, 1f, 1f,
+        )
+        pointDiffuseFamilyIndex -> ImageFilter.PointLitDiffuse(
+            Point3F32(1f, 0f, if (muted) 100f else 1f), ColorARGB.White, 1f, 1f,
+        )
+        spotDiffuseFamilyIndex -> ImageFilter.SpotLitDiffuse(
+            Point3F32(1f, 0f, 1f), Point3F32(1f, 0f, if (muted) 2f else 0f), 1f, 90f,
+            ColorARGB.White, 1f, 1f,
+        )
+        distantSpecularFamilyIndex -> ImageFilter.DistantLitSpecular(
+            if (muted) Vector3F32(0f, 0f, -1f) else Vector3F32(1f, 0f, 1f), ColorARGB.White, 1f, 1f, 2f,
+        )
+        pointSpecularFamilyIndex -> ImageFilter.PointLitSpecular(
+            Point3F32(1f, 0f, if (muted) 100f else 1f), ColorARGB.White, 1f, 1f, 2f,
+        )
+        spotSpecularFamilyIndex -> ImageFilter.SpotLitSpecular(
+            Point3F32(1f, 0f, 1f), Point3F32(1f, 0f, if (muted) 2f else 0f), 1f, 90f,
+            ColorARGB.White, 1f, 1f, 2f,
+        )
+        else -> error("Unknown W6d family index $familyIndex")
+    }
+
+    private fun drawAllFamilySource(canvas: Canvas, familyIndex: Int) {
+        when (familyIndex) {
+            displacementFamilyIndex,
+            magnifierFamilyIndex,
+            -> (0 until familyHeightI32).forEach { y -> listOf(ColorARGB.Red, ColorARGB.Green, ColorARGB.Blue).forEachIndexed { x, color ->
+                canvas.drawRect(RectF32.ofLTRB(x.toFloat(), y.toFloat(), x + 1f, y + 1f), Paint(color, antiAlias = false))
+            }
+            }
+            distantDiffuseFamilyIndex,
+            pointDiffuseFamilyIndex,
+            spotDiffuseFamilyIndex,
+            distantSpecularFamilyIndex,
+            pointSpecularFamilyIndex,
+            spotSpecularFamilyIndex,
+            -> lightingFixtureCoordinates.forEach { (x, y) ->
+                canvas.drawRect(RectF32.ofLTRB(x.toFloat(), y.toFloat(), x + 1f, y + 1f), Paint(ColorARGB.White, antiAlias = false))
+            }
+            else -> canvas.drawRect(unit, Paint(ColorARGB.Red, antiAlias = false))
+        }
+    }
+
+    private fun allElevenFamilyExpectedPixels(): UByteArray = UByteArray(familyWidthI32 * familyHeightI32 * familyNames.size * 4).also { expected ->
+        fun putBand(familyIndex: Int, pixels: UByteArray) = pixels.copyInto(expected, familyIndex * familyWidthI32 * familyHeightI32 * 4)
+        val redPixel = rgba(255, 0, 0)
+        putBand(matrixFamilyIndex, bandWithTopRow(listOf(redPixel)))
+        putBand(displacementFamilyIndex, samplingBand(
+            W6dAdvancedSamplingCpuOracle.displacementRedNearestClamp(samplingSourcePixels, scale = 0f),
+        ))
+        putBand(magnifierFamilyIndex, samplingBand(samplingSourcePixels))
+        putBand(pictureFamilyIndex, bandWithTopRow(listOf(redPixel)))
+        putBand(runtimeFamilyIndex, bandWithTopRow(listOf(redPixel)))
+        putBand(distantDiffuseFamilyIndex, W6dLightingCpuOracle.distantDiffuseRgba8(
+            3, 3, lightingAlphaFixture, 0, 0, 3, 3, 1f, 0f, 1f, 1f, 1f,
+        ))
+        putBand(pointDiffuseFamilyIndex, remainingLightingExpected(W6dLightingCpuOracle.Family.POINT_DIFFUSE))
+        putBand(spotDiffuseFamilyIndex, remainingLightingExpected(W6dLightingCpuOracle.Family.SPOT_DIFFUSE))
+        putBand(distantSpecularFamilyIndex, remainingLightingExpected(W6dLightingCpuOracle.Family.DISTANT_SPECULAR))
+        putBand(pointSpecularFamilyIndex, remainingLightingExpected(W6dLightingCpuOracle.Family.POINT_SPECULAR))
+        putBand(spotSpecularFamilyIndex, remainingLightingExpected(W6dLightingCpuOracle.Family.SPOT_SPECULAR))
+    }
+
+    private fun remainingLightingExpected(family: W6dLightingCpuOracle.Family): UByteArray =
+        W6dLightingCpuOracle.remainingFamilyRgba8(
+            family, 3, 3, lightingAlphaFixture,
+            locationX = 1f, locationY = 0f, locationZ = 1f,
+            targetX = 1f, targetY = 0f, targetZ = 0f,
+            surfaceDepth = 1f, coefficient = 1f, shininess = 2f, specularExponent = 1f, cutoffDegrees = 90f,
+        )
+
+    private fun bandWithTopRow(pixels: List<UByteArray>): UByteArray = UByteArray(familyWidthI32 * familyHeightI32 * 4).also { band ->
+        pixels.forEachIndexed { x, pixel -> pixel.copyInto(band, x * 4) }
+    }
+
+    private fun samplingBand(row: UByteArray): UByteArray = UByteArray(familyWidthI32 * familyHeightI32 * 4).also { band ->
+        (0 until familyHeightI32).forEach { y -> row.copyInto(band, y * familyWidthI32 * 4) }
+    }
+
+    private fun allFamilyPicture(color: ColorARGB): org.graphiks.kanvas.picture.Picture = PictureRecorder().also { recorder ->
+        recorder.beginRecording(unit).drawRect(unit, Paint(color, antiAlias = false))
+    }.finishRecordingAsPicture()
+
+    private fun assertPixelsNear(expected: UByteArray, actual: UByteArray, maxChannelDelta: Int) {
+        assertTrue(expected.size == actual.size)
+        expected.indices.forEach { index ->
+            assertTrue(abs(expected[index].toInt() - actual[index].toInt()) <= maxChannelDelta,
+                "pixel ${index / 4} channel ${index % 4} expected=${expected[index]} actual=${actual[index]} " +
+                    "expectedRgba=${expected.copyOfRange(index / 4 * 4, index / 4 * 4 + 4).contentToString()} " +
+                    "actualRgba=${actual.copyOfRange(index / 4 * 4, index / 4 * 4 + 4).contentToString()}")
+        }
+    }
+
+    private fun assertBandChanged(before: UByteArray, after: UByteArray, familyIndex: Int, familyName: String) {
+        val start = familyIndex * familyWidthI32 * familyHeightI32 * 4
+        val end = start + familyWidthI32 * familyHeightI32 * 4
+        assertTrue((start until end).any { abs(before[it].toInt() - after[it].toInt()) > 2 },
+            "$familyName mutation did not change its public output band")
     }
 
     private fun assertTerminalWithoutReadbackMutation(surface: Surface, diagnosticPrefix: String) {
@@ -177,7 +292,37 @@ class W6dAdvancedRecoverySurfacePixelTest {
     )
 
     private companion object {
-        const val W6D_BUDGET_BYTES: Long = 4L + 4L + 4L + 4L + 4L + 16L + 16L + 256L
+        const val W6D_BUDGET_BYTES: Long = 4L + 4L + 4L + 4L + 4L + 16L + 16L + 4096L + 256L
         val unit: RectF32 = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        const val familyWidthI32: Int = 3
+        const val familyHeightI32: Int = 3
+        val familyRect: RectF32 = RectF32.ofLTRB(0f, 0f, familyWidthI32.toFloat(), familyHeightI32.toFloat())
+        const val matrixFamilyIndex: Int = 0
+        const val displacementFamilyIndex: Int = 1
+        const val magnifierFamilyIndex: Int = 2
+        const val pictureFamilyIndex: Int = 3
+        const val runtimeFamilyIndex: Int = 4
+        const val distantDiffuseFamilyIndex: Int = 5
+        const val pointDiffuseFamilyIndex: Int = 6
+        const val spotDiffuseFamilyIndex: Int = 7
+        const val distantSpecularFamilyIndex: Int = 8
+        const val pointSpecularFamilyIndex: Int = 9
+        const val spotSpecularFamilyIndex: Int = 10
+        val familyNames: List<String> = listOf(
+            "MatrixConvolution", "DisplacementMap", "Magnifier", "Picture", "RuntimeEffect",
+            "DistantLitDiffuse", "PointLitDiffuse", "SpotLitDiffuse", "DistantLitSpecular",
+            "PointLitSpecular", "SpotLitSpecular",
+        )
+        val lightingAlphaFixture: FloatArray = floatArrayOf(
+            0f, 1f, 0f,
+            1f, 1f, 0f,
+            0f, 1f, 0f,
+        )
+        val samplingSourcePixels: UByteArray = ubyteArrayOf(
+            255u, 0u, 0u, 255u,
+            0u, 255u, 0u, 255u,
+            0u, 0u, 255u, 255u,
+        )
+        val lightingFixtureCoordinates: List<Pair<Int, Int>> = listOf(1 to 0, 0 to 1, 1 to 1, 1 to 2)
     }
 }

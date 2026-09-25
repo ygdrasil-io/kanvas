@@ -56,6 +56,18 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         var spatialBinding: GPUW6cSpatialFilterSessionCache.Binding? = null
         try {
             val graph = frame.graph
+            // Consume only the exact program leases that were frozen and budgeted before this
+            // native boundary.  A warm driver cache may avoid creation work, never this lease.
+            val frozenPrograms = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
+                pass.frozenSamplingProgram?.let { pass.id to it }
+            }
+            require(frame.physical.programSlots().map { it.lease.ownerPassId }.toSet() ==
+                frozenPrograms.map { it.first }.toSet()) { "W6d native program lease set differs from the frozen graph." }
+            frozenPrograms.forEach { (ownerPassId, binding) ->
+                require(frame.physical.programSlot(ownerPassId).lease.matches(
+                    binding, generationSeal.deviceGeneration.value, graph.passes().size,
+                )) { "W6d native program materialization lacks its pre-publication logical lease." }
+            }
             spatialBinding = if (frame.physical.spatialCachePlans().isEmpty()) null else
                 requireNotNull(spatialFilterCache?.consume(framePlan)) { "W6c cache binding was not selected by preflight." }
             val materialSourceAlphaReplacement = frozenMaterialSourceAlphaReplacement(graph)

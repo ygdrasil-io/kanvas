@@ -930,11 +930,18 @@ the public causal RED first exposed the former W6b owner at B−1, then the F16
 RED exposed `w6b.filter.unsupported_target_format`; both reach their asserted
 semantic behavior without a fixture or infrastructure failure. GREEN is the
 five-method class XML `5/0/0/0`: B is exactly
-`4 + 4 + 4 + 4 + 4 + 16 + 16 + 256 = 308`, B−1 is
+`4 + 4 + 4 + 4 + 4 + 16 + 16 + 4096 + 256 = 4404`, B−1 is
 `w6d.layer.frame_budget_exceeded`, F16 is
 `w6d.layer.unsupported_target_format` before capture/plan/native, warm replay
 is pessimistic, a late advanced sibling publishes no healthy sibling, and one
-frozen graph covers all eleven families. `RGBA16_FLOAT` is a public
+frozen graph covers all eleven families through disjoint public bands, a
+pre-recording independent oracle and one controlled public mutation per family.
+Each W6d program is also frozen before publication as a per-owner logical lease
+with device generation, RGBA8 descriptor, `{ShaderModule, RenderPipeline}`
+usages, physical slot and `[0, passes.size)` lifetime. Its exact published
+charge is `max(4096, encoded descriptor + canonical payload checked-I64)` even on cache hits; it is
+not a claimed byte measurement of opaque driver shader/pipeline allocations.
+`RGBA16_FLOAT` is a public
 refusal-only carrier, never a rendered/conversion target. The fourteen listed
 selectors total `132/0/0/0` in class XML; each Gradle process exits 1 because
 its native executor exits 133, therefore native is **UNKNOWN**. The seven

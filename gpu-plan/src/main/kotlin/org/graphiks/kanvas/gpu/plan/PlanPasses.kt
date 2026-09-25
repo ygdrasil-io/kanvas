@@ -1267,7 +1267,7 @@ public sealed interface PlanPass {
         private val storedInputs = immutableList(inputs)
         /** W6d executable recipe and binding contract selected before this graph can freeze. */
         public val frozenSamplingProgram: W6dFrozenProgramBindingV1? =
-            selectW6dSamplingProgram(operation, storedInputs, output)
+            selectW6dSamplingProgram(id, operation, storedInputs, output)
         init {
             require(storedInputs.isNotEmpty() && output !in storedInputs) {
                 "A filter pass requires distinct input and output resources."
