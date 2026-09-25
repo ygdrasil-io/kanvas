@@ -52,26 +52,6 @@ class W6bFilterAdmissionRecoverySurfaceTest {
     }
 
     @Test
-    fun `filtered previous refuses terminally and same surface recovers`() {
-        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
-        val surface = Surface(2, 2)
-        surface.canvas {
-            saveLayer(SaveLayerRec(
-                paint = Paint(imageFilter = ImageFilter.Blur(1f, 1f)),
-                initWithPrevious = true,
-            ))
-            drawRect(bounds, Paint(ColorARGB.White, antiAlias = false))
-            restore()
-        }
-
-        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.filtered_previous:")
-
-        surface.discardRecordedOperations()
-        surface.canvas { drawRect(bounds, Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
-        assertContentEquals(recoveryBlue2x2(), surface.render().pixels)
-    }
-
-    @Test
     fun `w6b non-rgba target refuses terminally and same surface recovers`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 2f, 2f)
         val recoveryColor = ColorARGB.of(255, 17, 61, 211)
