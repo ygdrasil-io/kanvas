@@ -529,27 +529,10 @@ internal class W6aLayerGraphConstruction(
             val inputDemandFilter = W6bFilterGraphConstruction.hasReverseInputDemandTerminal(occurrence)
             val consumerDemandFilter = W6bFilterGraphConstruction.hasConsumerDemandTerminal(occurrence)
             if (consumerDemandFilter) directConsumerDemandCommands += occurrence.insertionCommandIndexI32
-            // The W5 wrapper represents the terminal consumer clip. Any filter with reverse
-            // input demand must rasterize its pre-clip source before freezing its halo.
-            val sourceGeometryDraw = if (inputDemandFilter) draw.withoutW6aTerminalClip() else draw
-            val rasterInTarget = intersect(w6aRasterBoundsI32(sourceGeometryDraw), targetBounds)
-            // Keep only the texels demanded by the frozen input halo, not the terminal
-            // clip/scissor itself. A null terminal domain is a legal sealed no-op.
-            val sourceDomain = when {
-                terminalNoOp -> noOpDomain
-                inputDemandFilter -> W6bFilterGraphConstruction.reverseInputDemand(
-                    occurrence, consumerDomain, filterSource(parentTarget).mapping,
-                )?.let { demand -> rasterInTarget?.let { raster -> intersect(raster, demand) } } ?: noOpDomain
-                else -> rasterInTarget?.let { raster -> intersect(raster, w6aScissorI32(draw)) } ?: noOpDomain
-            }
-            // Lighting affects transparent black. Its physical child remains tightly rasterized,
-            // while its semantic output is the frozen terminal consumer. Sampling filters only
-            // widen their input domain and retain their content-sized output contract.
-            val desired = if (consumerDemandFilter && !terminalNoOp) consumerDomain else sourceDomain
-            // Only the samplers that freeze target-local coordinates need the draw mapping.
-            // Rebinding Picture/Matrix to it would compose a carrier transform twice: those
-            // established paths retain the parent source mapping below.
-            val sourceLocalToDevice = if (W6bFilterGraphConstruction.hasContentOutputSamplingTerminal(occurrence)) {
+            // The sampler recipe maps its public local lens with this captured draw transform.
+            // Derive it before reverse demand so direct clipped Magnifier input matches the
+            // immutable coordinates later used to freeze the filter pass.
+            val sourceLocalToDeviceF64 = if (W6bFilterGraphConstruction.hasContentOutputSamplingTerminal(occurrence)) {
                 occurrence.source.sourceDraw?.let { sourceDraw ->
                     val sourceToParent = composeInOrderF64(
                         occurrence.source.outerPictures().map { it.transform } + sourceDraw.transform,
@@ -563,9 +546,32 @@ internal class W6aLayerGraphConstruction(
                         "W6d direct sampling filter requires its captured source draw mapping."),
                 )
             } else null
+            // The W5 wrapper represents the terminal consumer clip. Any filter with reverse
+            // input demand must rasterize its pre-clip source before freezing its halo.
+            val sourceGeometryDraw = if (inputDemandFilter) draw.withoutW6aTerminalClip() else draw
+            val rasterInTarget = intersect(w6aRasterBoundsI32(sourceGeometryDraw), targetBounds)
+            // Keep only the texels demanded by the frozen input halo, not the terminal
+            // clip/scissor itself. A null terminal domain is a legal sealed no-op.
+            val sourceDomain = when {
+                terminalNoOp -> noOpDomain
+                inputDemandFilter -> W6bFilterGraphConstruction.reverseInputDemand(
+                    occurrence, consumerDomain,
+                    sourceLocalToDeviceF64?.let { mapping ->
+                        requireNotNull(LayerMappingF64.ofOrNull(mapping, filterSource(parentTarget).originDeviceI32))
+                    } ?: filterSource(parentTarget).mapping,
+                )?.let { demand -> rasterInTarget?.let { raster -> intersect(raster, demand) } } ?: noOpDomain
+                else -> rasterInTarget?.let { raster -> intersect(raster, w6aScissorI32(draw)) } ?: noOpDomain
+            }
+            // Lighting affects transparent black. Its physical child remains tightly rasterized,
+            // while its semantic output is the frozen terminal consumer. Sampling filters only
+            // widen their input domain and retain their content-sized output contract.
+            val desired = if (consumerDemandFilter && !terminalNoOp) consumerDomain else sourceDomain
+            // Only the samplers that freeze target-local coordinates need the draw mapping.
+            // Rebinding Picture/Matrix to it would compose a carrier transform twice: those
+            // established paths retain the parent source mapping below.
             directFilterSourceByCommand[occurrence.insertionCommandIndexI32] = DirectFilterSources(
                 allocateOccurrenceSource(sourceDomain, parentTarget, PlanResourceRole.CoverageSource,
-                    mappingLocalToDeviceF64 = sourceLocalToDevice,
+                    mappingLocalToDeviceF64 = sourceLocalToDeviceF64,
                     desiredOutputDeviceI32 = desired, requiredInputDeviceI32 = sourceDomain),
             )
         }

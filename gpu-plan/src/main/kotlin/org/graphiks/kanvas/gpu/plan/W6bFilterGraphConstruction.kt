@@ -1370,11 +1370,40 @@ internal object W6bFilterGraphConstruction {
                 val lens = node.copySource()
                 val mapping = mapping ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(
                     W6bFilterDiagnostics.InvalidBounds, "W6d magnifier reverse demand has no sealed local-to-device mapping."))
-                val mappedLens = mapping.mapLocalRectToDeviceF64OrNull(RectF64(
+                val mappedLensF64 = mapping.mapLocalRectToDeviceF64OrNull(RectF64(
                     lens.left.toDouble(), lens.top.toDouble(), lens.right.toDouble(), lens.bottom.toDouble(),
-                ))?.roundOutToRectI32OrNull() ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(
+                )) ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(
                     W6bFilterDiagnostics.InvalidBounds, "W6d magnifier reverse lens cannot be represented in checked I32 texels."))
-                inputDemand(node.input, union(output, mappedLens))
+                val zoomF64 = node.zoom.toDouble()
+                if (!zoomF64.isFinite() || zoomF64 <= 0.0) throw ConstructionFailure(W6bFilterDiagnostics.refusal(
+                    W6bFilterDiagnostics.InvalidBounds, "W6d magnifier reverse demand has invalid zoom."))
+                val insetF64 = node.inset.toDouble()
+                if (!insetF64.isFinite() || insetF64 < 0.0) throw ConstructionFailure(W6bFilterDiagnostics.refusal(
+                    W6bFilterDiagnostics.InvalidBounds, "W6d magnifier reverse demand has invalid inset."))
+                // The frozen shader samples the inset lens after mapping it to device space,
+                // then applies its inverse zoom around the mapped center.  In particular,
+                // 0 < zoom < 1 expands that sampled domain beyond the original lens.
+                val centerXF64 = (mappedLensF64.left + mappedLensF64.right) / 2.0
+                val centerYF64 = (mappedLensF64.top + mappedLensF64.bottom) / 2.0
+                val innerLeftF64 = mappedLensF64.left + insetF64
+                val innerTopF64 = mappedLensF64.top + insetF64
+                val innerRightF64 = mappedLensF64.right - insetF64
+                val innerBottomF64 = mappedLensF64.bottom - insetF64
+                val inverseSampledLensF64 = RectF64(
+                    centerXF64 + (innerLeftF64 - centerXF64) / zoomF64,
+                    centerYF64 + (innerTopF64 - centerYF64) / zoomF64,
+                    centerXF64 + (innerRightF64 - centerXF64) / zoomF64,
+                    centerYF64 + (innerBottomF64 - centerYF64) / zoomF64,
+                )
+                if (!inverseSampledLensF64.isFinite()) throw ConstructionFailure(W6bFilterDiagnostics.refusal(
+                    W6bFilterDiagnostics.InvalidBounds,
+                    "W6d magnifier reverse sampled lens is non-finite."))
+                val inverseSampledLensI32 = if (inverseSampledLensF64.isEmpty) output.copy() else
+                    inverseSampledLensF64.roundOutToRectI32OrNull() ?: throw ConstructionFailure(
+                        W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                            "W6d magnifier reverse sampled lens cannot be represented in checked I32 texels."),
+                    )
+                inputDemand(node.input, union(output, inverseSampledLensI32))
             }
             is CapturedFilterNodeV1.DistantLitDiffuse -> inputDemand(node.input, sobelRequiredInput(output))
             is CapturedFilterNodeV1.PointLitDiffuse -> inputDemand(node.input, sobelRequiredInput(output))
