@@ -25,6 +25,7 @@ class W6dMagnifierReverseDemandSurfacePixelTest {
         // x=.5, i.e. source texel 0.  The independent attachment oracle therefore replaces
         // only clipped x=1 with red; it is fixed before recording the Surface.
         val expected = red + red + blue + yellow + white
+        val expectedReadback = expected.copyOf()
         val surface = Surface(5, 1)
 
         surface.canvas {
@@ -37,7 +38,7 @@ class W6dMagnifierReverseDemandSurfacePixelTest {
             restore()
         }
 
-        assertPublicPixels(expected, surface, RectF32.ofLTRB(0f, 0f, 5f, 1f))
+        assertPublicPixels(expected, surface, RectF32.ofLTRB(0f, 0f, 5f, 1f), expectedReadback)
     }
 
     @Test
@@ -48,6 +49,7 @@ class W6dMagnifierReverseDemandSurfacePixelTest {
         val source = directSourcePixels()
         val expected = UByteArray(110 * 4).also { source.copyInto(it, destinationOffset = 100 * 4,
             startIndex = 2 * 4, endIndex = 3 * 4) }
+        val expectedReadback = pixel(expected, 110, 100, 0)
         val image = Image.fromPixels(10, 1, source.toByteArray(), sourceId = "w6d-magnifier-direct-source",
             alphaType = AlphaType.PREMUL)
         val surface = Surface(110, 1)
@@ -62,7 +64,59 @@ class W6dMagnifierReverseDemandSurfacePixelTest {
             ))
         }
 
-        assertPublicPixels(expected, surface, RectF32.ofLTRB(100f, 0f, 101f, 1f))
+        assertPublicPixels(expected, surface, RectF32.ofLTRB(100f, 0f, 101f, 1f), expectedReadback)
+    }
+
+    @Test
+    fun `collapsed inset lens retains its inclusive magnified row`() {
+        // The inset collapses the y lens to y=.5. The shader's <= admits pixel center (3.5,.5),
+        // which samples x=6 at zoom .375. This exact source texel lies outside the old empty
+        // rectangle fallback and must be present in the backdrop snapshot.
+        val expected = clearPixels(7, 1).also {
+            setPixel(it, 7, 3, 0, white)
+            setPixel(it, 7, 6, 0, white)
+        }
+        val expectedReadback = pixel(expected, 7, 3, 0)
+        val surface = Surface(7, 1)
+
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(3f, 0f, 4f, 1f), Paint(ColorARGB.Red, antiAlias = false))
+            drawRect(RectF32.ofLTRB(6f, 0f, 7f, 1f), Paint(ColorARGB.White, antiAlias = false))
+            clipRect(RectF32.ofLTRB(3f, 0f, 4f, 1f), antiAlias = false)
+            saveLayer(SaveLayerRec(
+                backdrop = ImageFilter.Magnifier(RectF32.ofLTRB(0f, 0f, 4f, 1f), zoom = .375f, inset = .5f),
+                paint = Paint(blendMode = BlendMode.SRC, antiAlias = false),
+            ))
+            restore()
+        }
+
+        assertPublicPixels(expected, surface, RectF32.ofLTRB(3f, 0f, 4f, 1f), expectedReadback)
+    }
+
+    @Test
+    fun `magnifier upper sampled boundary retains ties-to-even texel`() {
+        // At output center (3.5,2.5), the non-degenerate inset lens samples (6, 10/3).
+        // WGSL round(6 - .5) is the ties-to-even texel 6, although an I32 half-open envelope
+        // ending at coordinate 6 excludes it.
+        val expected = clearPixels(7, 4).also {
+            setPixel(it, 7, 3, 2, blue)
+            setPixel(it, 7, 6, 3, blue)
+        }
+        val expectedReadback = pixel(expected, 7, 3, 2)
+        val surface = Surface(7, 4)
+
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(3f, 2f, 4f, 3f), Paint(ColorARGB.Red, antiAlias = false))
+            drawRect(RectF32.ofLTRB(6f, 3f, 7f, 4f), Paint(ColorARGB.Blue, antiAlias = false))
+            clipRect(RectF32.ofLTRB(3f, 2f, 4f, 3f), antiAlias = false)
+            saveLayer(SaveLayerRec(
+                backdrop = ImageFilter.Magnifier(RectF32.ofLTRB(0f, 0f, 4f, 4f), zoom = .375f, inset = .5f),
+                paint = Paint(blendMode = BlendMode.SRC, antiAlias = false),
+            ))
+            restore()
+        }
+
+        assertPublicPixels(expected, surface, RectF32.ofLTRB(3f, 2f, 4f, 3f), expectedReadback)
     }
 
     private fun drawBackdropFixture(canvas: Canvas) {
@@ -86,7 +140,12 @@ class W6dMagnifierReverseDemandSurfacePixelTest {
         255u, 255u, 255u, 255u,
     )
 
-    private fun assertPublicPixels(expected: UByteArray, surface: Surface, readbackBounds: RectF32) {
+    private fun assertPublicPixels(
+        expected: UByteArray,
+        surface: Surface,
+        readbackBounds: RectF32,
+        expectedReadback: UByteArray,
+    ) {
         val rendered = surface.render()
         assertTrue(rendered.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
             rendered.nativeEvidenceScopeKinds.toString())
@@ -94,8 +153,7 @@ class W6dMagnifierReverseDemandSurfacePixelTest {
 
         val readback = UByteArray(readbackBounds.width().toInt() * readbackBounds.height().toInt() * 4)
         assertTrue(surface.readPixels(readbackBounds, readback))
-        val offset = readbackBounds.left.toInt() * 4
-        assertNear(expected.copyOfRange(offset, offset + readback.size), readback)
+        assertNear(expectedReadback, readback)
     }
 
     private fun assertNear(expected: UByteArray, actual: UByteArray) {
@@ -103,6 +161,15 @@ class W6dMagnifierReverseDemandSurfacePixelTest {
         expected.indices.forEach { index -> assertTrue(abs(expected[index].toInt() - actual[index].toInt()) <= 1,
             "channel $index expected=${expected[index]} actual=${actual[index]}") }
     }
+
+    private fun clearPixels(width: Int, height: Int): UByteArray = UByteArray(width * height * 4)
+
+    private fun setPixel(pixels: UByteArray, width: Int, x: Int, y: Int, color: UByteArray) {
+        color.copyInto(pixels, destinationOffset = (y * width + x) * 4)
+    }
+
+    private fun pixel(pixels: UByteArray, width: Int, x: Int, y: Int): UByteArray =
+        pixels.copyOfRange((y * width + x) * 4, (y * width + x + 1) * 4)
 
     private companion object {
         val red: UByteArray = ubyteArrayOf(255u, 0u, 0u, 255u)

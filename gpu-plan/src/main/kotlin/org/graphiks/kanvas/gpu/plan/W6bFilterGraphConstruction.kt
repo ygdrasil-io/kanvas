@@ -1389,21 +1389,35 @@ internal object W6bFilterGraphConstruction {
                 val innerTopF64 = mappedLensF64.top + insetF64
                 val innerRightF64 = mappedLensF64.right - insetF64
                 val innerBottomF64 = mappedLensF64.bottom - insetF64
-                val inverseSampledLensF64 = RectF64(
-                    centerXF64 + (innerLeftF64 - centerXF64) / zoomF64,
-                    centerYF64 + (innerTopF64 - centerYF64) / zoomF64,
-                    centerXF64 + (innerRightF64 - centerXF64) / zoomF64,
-                    centerYF64 + (innerBottomF64 - centerYF64) / zoomF64,
-                )
-                if (!inverseSampledLensF64.isFinite()) throw ConstructionFailure(W6bFilterDiagnostics.refusal(
-                    W6bFilterDiagnostics.InvalidBounds,
-                    "W6d magnifier reverse sampled lens is non-finite."))
-                val inverseSampledLensI32 = if (inverseSampledLensF64.isEmpty) output.copy() else
-                    inverseSampledLensF64.roundOutToRectI32OrNull() ?: throw ConstructionFailure(
+                // WGSL admits every edge of the inner lens. A reversed edge is the only
+                // no-sampling case; equal edges still admit a pixel-center line.
+                if (innerLeftF64 > innerRightF64 || innerTopF64 > innerBottomF64) {
+                    inputDemand(node.input, output)
+                } else {
+                    val inverseSampledLensF64 = RectF64(
+                        centerXF64 + (innerLeftF64 - centerXF64) / zoomF64,
+                        centerYF64 + (innerTopF64 - centerYF64) / zoomF64,
+                        centerXF64 + (innerRightF64 - centerXF64) / zoomF64,
+                        centerYF64 + (innerBottomF64 - centerYF64) / zoomF64,
+                    )
+                    if (!inverseSampledLensF64.isFinite()) throw ConstructionFailure(W6bFilterDiagnostics.refusal(
+                        W6bFilterDiagnostics.InvalidBounds,
+                        "W6d magnifier reverse sampled lens is non-finite."))
+                    // The shader loads round(sampled - .5).  The F64 half-texel envelope makes
+                    // outward I32 rounding include inclusive endpoints and ties-to-even texels,
+                    // including a lens collapsed to one admitted coordinate line.
+                    val sourceTexelEnvelopeF64 = RectF64(
+                        inverseSampledLensF64.left - .5,
+                        inverseSampledLensF64.top - .5,
+                        inverseSampledLensF64.right + .5,
+                        inverseSampledLensF64.bottom + .5,
+                    )
+                    val inverseSampledLensI32 = sourceTexelEnvelopeF64.roundOutToRectI32OrNull() ?: throw ConstructionFailure(
                         W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
                             "W6d magnifier reverse sampled lens cannot be represented in checked I32 texels."),
                     )
-                inputDemand(node.input, union(output, inverseSampledLensI32))
+                    inputDemand(node.input, union(output, inverseSampledLensI32))
+                }
             }
             is CapturedFilterNodeV1.DistantLitDiffuse -> inputDemand(node.input, sobelRequiredInput(output))
             is CapturedFilterNodeV1.PointLitDiffuse -> inputDemand(node.input, sobelRequiredInput(output))
