@@ -3,6 +3,7 @@
 package org.graphiks.kanvas.picture
 
 import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
 import kotlin.test.assertNotSame
 import kotlin.test.assertNotNull
 import kotlin.test.assertSame
@@ -44,6 +45,7 @@ class W6eCrossLaneEffectsPictureTest {
             assertSame(filters[0], filters[1])
             assertSame(filters[1], filters[2])
             assertNotSame(filters[0], filters[3])
+            assertEquals(filters[0], filters[3])
             assertPicturePixels(expected, candidate)
         }
     }

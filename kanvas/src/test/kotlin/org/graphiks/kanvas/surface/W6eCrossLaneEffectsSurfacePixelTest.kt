@@ -132,6 +132,15 @@ class W6eCrossLaneEffectsSurfacePixelTest {
             samplingSource, lensLeft = -1f, lensRight = 3f, zoom = 2f, inset = .5f,
         )
         val runtimeExpected = ubyteArrayOf(60u, 30u, 15u, 128u)
+        val distantDiffuseExpected = W6eLightingCpuOracle.distantDiffuse()
+        val pointDiffuseExpected = W6eLightingCpuOracle.pointDiffuse()
+        val spotDiffuseExpected = W6eLightingCpuOracle.spotDiffuse()
+        val distantSpecularExpected = W6eLightingCpuOracle.distantSpecular()
+        val pointSpecularExpected = W6eLightingCpuOracle.pointSpecular()
+        val spotSpecularExpected = W6eLightingCpuOracle.spotSpecular()
+        val offsetExpected = rgbaRow(listOf(transparent, blue, transparent, transparent))
+        val tileExpected = rgbaRow(listOf(blue, transparent, blue, transparent))
+        val pictureExpected = rgba(ColorARGB.Red)
         val sourcePicture = PictureRecorder().also { recorder ->
             recorder.beginRecording(unit).drawRect(unit, Paint(ColorARGB.Red, antiAlias = false))
         }.finishRecordingAsPicture()
@@ -171,23 +180,23 @@ class W6eCrossLaneEffectsSurfacePixelTest {
             FamilyCase("Erode", 5, 1, erodeExpected, null, ImageFilter.Erode(1f, 0f)) {
                 drawOpaque(1f, 4f, ColorARGB.Red)
             },
-            FamilyCase("DistantDiffuse", 3, 3, W6eLightingCpuOracle.distantDiffuse(), 2,
+            FamilyCase("DistantDiffuse", 3, 3, distantDiffuseExpected, 2,
                 ImageFilter.DistantLitDiffuse(Vector3F32(1f, 0f, 1f), ColorARGB.White, 1f, 1f), lightingSource),
-            FamilyCase("PointDiffuse", 3, 3, W6eLightingCpuOracle.pointDiffuse(), 2,
+            FamilyCase("PointDiffuse", 3, 3, pointDiffuseExpected, 2,
                 ImageFilter.PointLitDiffuse(Point3F32(1f, 0f, 1f), ColorARGB.White, 1f, 1f), lightingSource),
-            FamilyCase("SpotDiffuse", 3, 3, W6eLightingCpuOracle.spotDiffuse(), 2,
+            FamilyCase("SpotDiffuse", 3, 3, spotDiffuseExpected, 2,
                 ImageFilter.SpotLitDiffuse(Point3F32(1f, 0f, 1f), Point3F32(1f, 0f, 0f), 1f, 90f,
                     ColorARGB.White, 1f, 1f), lightingSource),
-            FamilyCase("DistantSpecular", 3, 3, W6eLightingCpuOracle.distantSpecular(), 2,
+            FamilyCase("DistantSpecular", 3, 3, distantSpecularExpected, 2,
                 ImageFilter.DistantLitSpecular(Vector3F32(1f, 0f, 1f), ColorARGB.White, 1f, 1f, 2f), lightingSource),
-            FamilyCase("PointSpecular", 3, 3, W6eLightingCpuOracle.pointSpecular(), 2,
+            FamilyCase("PointSpecular", 3, 3, pointSpecularExpected, 2,
                 ImageFilter.PointLitSpecular(Point3F32(1f, 0f, 1f), ColorARGB.White, 1f, 1f, 2f), lightingSource),
-            FamilyCase("SpotSpecular", 3, 3, W6eLightingCpuOracle.spotSpecular(), 2,
+            FamilyCase("SpotSpecular", 3, 3, spotSpecularExpected, 2,
                 ImageFilter.SpotLitSpecular(Point3F32(1f, 0f, 1f), Point3F32(1f, 0f, 0f), 1f, 90f,
                     ColorARGB.White, 1f, 1f, 2f), lightingSource),
-            FamilyCase("Offset", 4, 1, rgbaRow(listOf(transparent, blue, transparent, transparent)), null,
+            FamilyCase("Offset", 4, 1, offsetExpected, null,
                 ImageFilter.Offset(1f, 0f)) { drawOpaque(0f, 1f, ColorARGB.Blue) },
-            FamilyCase("Tile", 4, 1, rgbaRow(listOf(blue, transparent, blue, transparent)), null,
+            FamilyCase("Tile", 4, 1, tileExpected, null,
                 ImageFilter.Tile(RectF32.ofLTRB(0f, 0f, 2f, 1f), RectF32.ofLTRB(0f, 0f, 4f, 1f))) {
                 drawOpaque(0f, 1f, ColorARGB.Blue)
             },
@@ -198,7 +207,7 @@ class W6eCrossLaneEffectsSurfacePixelTest {
                 ImageFilter.DisplacementMap(ColorChannel.R, ColorChannel.G, 1f, ImageFilter.Offset(0f, 0f))) {
                 drawSamplingSource()
             },
-            FamilyCase("Picture", 1, 1, rgba(ColorARGB.Red), null, ImageFilter.Picture(sourcePicture)) {
+            FamilyCase("Picture", 1, 1, pictureExpected, null, ImageFilter.Picture(sourcePicture)) {
                 drawOpaque(0f, 1f, ColorARGB.Blue)
             },
             FamilyCase("Magnifier", 3, 1, magnifierExpected, 1,
