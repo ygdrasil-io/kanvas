@@ -263,6 +263,23 @@ public class RenderGraph private constructor(
                                     pass.copySourceBoundsI32() == initialization.copySourceBoundsParentI32() &&
                                     pass.copyDestinationOriginI32() == initialization.copyDestinationOriginLayerI32())
                             }
+                            is LayerInitializationPlanV1.Backdrop -> {
+                                val plan = initialization.plan
+                                val pass = passesById[step.passId] as? PlanPass.FilterComposite
+                                val expectedParentTarget = parentTarget(scope)
+                                require(plan.parentTarget == expectedParentTarget && pass != null &&
+                                    pass.source == plan.filteredTarget && pass.destination == scope.targetResource &&
+                                    pass.operation is FilterCompositeOperationV1.Draw && pass.replacedLayerSource == null)
+                                val copy = construction.passes().singleOrNull { candidate -> candidate is PlanPass.TextureCopy &&
+                                    candidate.source == plan.parentTarget && candidate.destination == plan.snapshotTarget &&
+                                    candidate.destinationVersion == plan.capturedParentVersion
+                                } as? PlanPass.TextureCopy
+                                require(copy != null && copy.ordinal < pass.ordinal)
+                                require(construction.passes().any { candidate -> candidate is PlanPass.FilterPass &&
+                                    candidate.output == plan.filteredTarget && copy.ordinal < candidate.ordinal &&
+                                    candidate.ordinal < pass.ordinal
+                                })
+                            }
                         }
                         require(initialized.add(scope.id) && scope.id !in restored)
                         initializeOrder[scope.id] = stepIndexI32

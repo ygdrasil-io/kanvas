@@ -378,8 +378,6 @@ public class W6aLayerPlanCompiler public constructor(
      * observable even when an explicit empty composite clip later elides geometry and targets.
      */
     private fun semanticRefusalFor(descriptor: LayerDescriptor, w6bOwned: Boolean): Pair<String, String>? {
-        if (descriptor.backdrop !is EffectStack.Empty) return W6aPlanDiagnostics.UnsupportedBackdrop to
-            "W6a does not admit layer backdrop filters."
         if (descriptor.paint == null && descriptor.material != null) return W6aPlanDiagnostics.UnsupportedRestore to "A restore source without its captured paint is unsupported."
         val paint = descriptor.paint ?: return null
         if (!w6bOwned && (paint.imageFilter != null || paint.maskFilter != null)) return W6aPlanDiagnostics.UnsupportedSpatialFilter to

@@ -12,6 +12,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.canvas.SaveLayerRec
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
@@ -24,6 +26,32 @@ import org.junit.jupiter.api.Test
 
 /** Public memory/wire witnesses for filter-owned Picture sources. */
 class W6dPictureRuntimeEffectPictureTest {
+    @Test
+    fun backdropAndPreviousReplayAcrossMemoryAndWire() {
+        // Backdrop is the sole initializer even when initWithPrevious is also captured. Its
+        // half-red snapshot is established before the opaque green child, in memory and wire.
+        val expected = ubyteArrayOf(43u, 181u, 93u, 255u, 176u, 35u, 51u, 128u)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 2f, 1f)).apply {
+                drawRect(RectF32.ofLTRB(0f, 0f, 2f, 1f), Paint(ColorARGB.of(255, 239, 51, 73), antiAlias = false))
+                saveLayer(SaveLayerRec(
+                    backdrop = imageOpacity(.5f),
+                    initWithPrevious = true,
+                    paint = Paint(blendMode = BlendMode.SRC, antiAlias = false),
+                ))
+                drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.of(255, 43, 181, 93), antiAlias = false))
+                restore()
+            }
+        }.finishRecordingAsPicture()
+        val decoded = assertNotNull(Picture.fromByteArray(picture.toByteArray()))
+
+        for (candidate in listOf(picture, decoded)) {
+            val result = Surface(2, 1).also { surface -> surface.canvas { drawPicture(candidate) } }.render()
+            assertContentEquals(expected, result.pixels)
+            assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+        }
+    }
+
     @Test
     fun runtimeImageOpacityWireReplayKeepsW5hHashes() {
         val expected = ubyteArrayOf(60u, 30u, 15u, 128u)

@@ -193,6 +193,8 @@ internal object W6bFilterGraphConstruction {
         val sourceCommandIndexI32: Int,
         val isLayerOccurrence: Boolean,
         val isPictureOccurrence: Boolean,
+        /** This is the save-time backdrop root, not the post-child layer root. */
+        val isBackdropInitialization: Boolean,
         val maskOccurrenceI32: Int,
         picturePathI32: List<Int>,
         val source: FilterOccurrenceSourceV1,
@@ -306,7 +308,7 @@ internal object W6bFilterGraphConstruction {
         return occurrence.root?.let { nodeHasDistant(it.id) } == true
     }
 
-    /** Unsupported W6c/W6d/backdrop/filtered-previous cases stop before source allocation. */
+    /** Unsupported captured-filter cases stop before source allocation. */
     internal fun admissionRefusalOrNull(scene: SceneSnapshot): RenderDiagnostic? {
         val ownership = ownership(scene)
         if (!ownership.isOwned) return null
@@ -318,14 +320,6 @@ internal object W6bFilterGraphConstruction {
             W6bFilterDiagnostics.InvalidMaskTableLength,
             "MaskFilter.Table requires exactly 256 entries; captured $lengthI32.",
         ) }
-        if (ownership.hasBackdrop) return W6bFilterDiagnostics.refusal(
-            W6bFilterDiagnostics.UnsupportedBackdrop,
-            "W6b does not admit backdrop filters.",
-        )
-        if (ownership.hasFilteredPrevious) return W6bFilterDiagnostics.refusal(
-            W6bFilterDiagnostics.FilteredPrevious,
-            "W6b does not admit initWithPrevious combined with a spatial filter.",
-        )
         ownership.unsupportedImageFamilyOwnerOrNull()?.let { owner -> return W6bFilterDiagnostics.refusal(
             W6bFilterDiagnostics.UnsupportedFamily,
             "The captured image-filter family belongs to $owner.",
@@ -368,11 +362,18 @@ internal object W6bFilterGraphConstruction {
             val evaluationIdentityI32 = nextEvaluationIdentityI32.also {
                 nextEvaluationIdentityI32 = Math.addExact(it, 1)
             }
-            fun append(root: CapturedFilterRootV1?, mask: MaskFilterNode?, layer: Boolean, picture: Boolean) {
+            fun append(
+                root: CapturedFilterRootV1?,
+                mask: MaskFilterNode?,
+                layer: Boolean,
+                picture: Boolean,
+                backdropInitialization: Boolean = false,
+            ) {
                 if (root == null && mask == null) return
                 result += PositiveOccurrence(
                     nextOccurrenceI32++, evaluationIdentityI32, nestedScene.filterTable, root, mask, insertionIndexI32,
-                    nestedScene.canonicalId.value, commandIndexI32, layer, picture || nested, nextMaskOccurrenceI32,
+                    nestedScene.canonicalId.value, commandIndexI32, layer, picture || nested, backdropInitialization,
+                    nextMaskOccurrenceI32,
                     picturePathI32,
                     FilterOccurrenceSourceV1(nestedScene, commandIndexI32,
                         (command as? SceneCommand.Draw)?.node, outerPictures,
@@ -386,6 +387,9 @@ internal object W6bFilterGraphConstruction {
                 }
                 is SceneCommand.BeginLayer -> filterPayload(command.descriptor.paint, command.descriptor.effects).let { payload ->
                     append(payload.root, payload.mask, true, false)
+                    filterPayload(null, command.descriptor.backdrop).root?.let { backdrop ->
+                        append(backdrop, null, true, false, backdropInitialization = true)
+                    }
                 }
                 else -> Unit
             }

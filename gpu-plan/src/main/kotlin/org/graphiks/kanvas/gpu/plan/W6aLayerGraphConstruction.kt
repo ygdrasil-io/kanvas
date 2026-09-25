@@ -10,6 +10,7 @@ import org.graphiks.kanvas.render.ir.MaskFilterNode
 import org.graphiks.kanvas.render.ir.CoverageRequest
 import org.graphiks.kanvas.render.ir.DrawNode
 import org.graphiks.kanvas.render.ir.DrawOrigin
+import org.graphiks.kanvas.render.ir.EffectStack
 import org.graphiks.kanvas.render.ir.PaintNode
 import org.graphiks.kanvas.render.ir.PaintStyleNode
 import org.graphiks.kanvas.render.ir.SceneCommand
@@ -63,6 +64,8 @@ private class W6aRestoreFacts(
     val colorFilter: ColorFilterExecutionPlanV1?,
     val blend: BlendPlan,
     initWithPrevious: Boolean,
+    hasBackdrop: Boolean,
+    hasLayerFilter: Boolean,
 ) {
     /** Only the selected W5 destination-read blend needs a restore-time snapshot resource. */
     val restoreReadsPriorDevice: Boolean = blend.compositionFacts.readsPriorDevice
@@ -77,8 +80,11 @@ private class W6aRestoreFacts(
                 !facts.readsPriorDevice && !facts.affectsTransparentBlack && facts.writesParentDevice
             }
         } == true
-    val previousContentRequiresFullParentDomain: Boolean = initWithPrevious && !isIdentityPreviousPassthrough
-    val readsPriorDevice: Boolean = restoreReadsPriorDevice || previousContentRequiresFullParentDomain
+    val previousContentRequiresFullParentDomain: Boolean = initWithPrevious &&
+        (!isIdentityPreviousPassthrough || hasLayerFilter)
+    /** A backdrop samples its immediate parent before the child target exists, so it needs its complete desired domain. */
+    val backdropRequiresFullParentDomain: Boolean = hasBackdrop
+    val readsPriorDevice: Boolean = restoreReadsPriorDevice || previousContentRequiresFullParentDomain || backdropRequiresFullParentDomain
     val writesParentDevice: Boolean = blend.compositionFacts.writesParentDevice
     val restoreAffectsTransparentBlack: Boolean = blend.finalRestoreAffectsTransparentBlackV1(colorFilter)
 }
@@ -213,7 +219,7 @@ internal class W6aLayerGraphConstruction(
         for (indexI32 in occurrences.indices.reversed()) {
             val occurrence = occurrences[indexI32]
             val desired = desiredOutputByScope[occurrence.idI32]
-            var known = if (occurrence.descriptor.initWithPrevious) desired?.copy()
+            var known = if (occurrence.descriptor.initWithPrevious || occurrence.descriptor.backdrop !is EffectStack.Empty) desired?.copy()
                 else directKnownByScope[occurrence.idI32]
             occurrence.childIdsI32.forEach { childIdI32 ->
                 known = unionOrNull(known, producedOutputByScope[childIdI32])
@@ -452,7 +458,10 @@ internal class W6aLayerGraphConstruction(
             filterScene?.toList()?.size ?: bindings.maxOfOrNull { it.firstCommandIndexI32 + 1 } ?: 0,
         )
         val pictureStreamAggregates = mutableListOf<PictureStreamAggregateV1>()
-        val filterLayersByBegin = filterOccurrences.filter { it.isLayerOccurrence }.associateBy { it.insertionCommandIndexI32 }
+        val filterLayersByBegin = filterOccurrences.filter { it.isLayerOccurrence && !it.isBackdropInitialization }
+            .associateBy { it.insertionCommandIndexI32 }
+        val backdropFiltersByBegin = filterOccurrences.filter(W6bFilterGraphConstruction.PositiveOccurrence::isBackdropInitialization)
+            .associateBy { it.insertionCommandIndexI32 }
         data class DirectFilterSources(
             val coverage: W6bFilterGraphConstruction.SourceBinding,
         )
@@ -1553,7 +1562,62 @@ internal class W6aLayerGraphConstruction(
                     LayerScopeIdI32(nextPictureLayerScopeI32.also { nextPictureLayerScopeI32 = Math.addExact(it, 1) }),
                     layerTarget,
                 )
-                val initialization: LayerInitializationPlanV1 = if (descriptor.initWithPrevious) {
+                fun layerOccurrence(backdropInitialization: Boolean): W6bFilterGraphConstruction.PositiveOccurrence? =
+                    filterOccurrences.singleOrNull { occurrence ->
+                        occurrence.isLayerOccurrence && occurrence.isBackdropInitialization == backdropInitialization &&
+                            occurrence.sourceSceneCanonicalId == entry.descriptorSource.scene.canonicalId.value &&
+                            occurrence.sourceCommandIndexI32 == entry.descriptorSource.sourceCommandIndexI32 &&
+                            occurrence.outerPicturePathI32() == entry.descriptorSource.picturePathI32()
+                    }
+                val backdropOccurrence = layerOccurrence(backdropInitialization = true)
+                val postChildOccurrence = layerOccurrence(backdropInitialization = false)
+                val initialization: LayerInitializationPlanV1 = if (backdropOccurrence != null) {
+                    val parentExtent = parentBinding.copyExtentI32()
+                    val parentDomain = parentBinding.copyDeviceBoundsI32()
+                    val sourceBounds = RectI32(0, 0, parentExtent.width, parentExtent.height)
+                    val snapshot = allocateOccurrenceSource(
+                        parentDomain,
+                        layerParentTarget,
+                        PlanResourceRole.FilterSource,
+                        copyDestination = true,
+                        mappingLocalToDeviceF64 = parentBinding.mapping.copyLocalToDeviceF64(),
+                        knownContentDeviceI32 = parentDomain,
+                        desiredOutputDeviceI32 = parentDomain,
+                        requiredInputDeviceI32 = parentDomain,
+                        producedOutputDeviceI32 = parentDomain,
+                    )
+                    val capturedParentVersion = DestinationVersionI64(versions[layerParentTarget] ?: 0L)
+                    val clear = appendRender(layerTarget, emptyList(), true)
+                    val copy = PlanPass.TextureCopy(
+                        passes.size,
+                        layerParentTarget,
+                        snapshot.resourceId,
+                        capturedParentVersion,
+                        sourceBounds,
+                        Point2I32.Origin,
+                        Math.multiplyExact(parentExtent.width.toLong(), 4L),
+                    )
+                    passes += copy
+                    val initializationComposite = appendFrozenOccurrence(
+                        backdropOccurrence,
+                        snapshot,
+                        layerTarget,
+                        FilterCompositeOperationV1.Draw(BlendPlan.LegacySrcOverV1),
+                        terminalClipDeviceI32 = parentDomain,
+                    )
+                    require(clear.ordinal < copy.ordinal && copy.ordinal < initializationComposite.ordinal)
+                    LayerInitializationPlanV1.Backdrop(
+                        BackdropInitializationPlanV1(
+                            layerParentTarget,
+                            snapshot.resourceId,
+                            initializationComposite.source,
+                            capturedParentVersion,
+                            requireNotNull(backdropOccurrence.root).id,
+                        ),
+                    ).also {
+                        steps += LayerExecutionStepV1.Initialize(layerScope.id, initializationComposite.id)
+                    }
+                } else if (descriptor.initWithPrevious) {
                     val parentExtent = parentBinding.copyExtentI32()
                     val sourceBounds = RectI32(0, 0, parentExtent.width, parentExtent.height)
                     val copy = PlanPass.TextureCopy(
@@ -1580,7 +1644,7 @@ internal class W6aLayerGraphConstruction(
                 val children = emitNestedLayerEntries(entry.children(), layerTarget, layerScope)
                 val before = DestinationVersionI64(versions[layerParentTarget] ?: 0L)
                 val restore = pictureLayerRestore(descriptor, before)
-                val terminal = entry.filterOccurrence?.let { occurrence ->
+                val terminal = postChildOccurrence?.let { occurrence ->
                     if (occurrence.mask is MaskFilterNode.Shader) captureMaskShaderMaterial(occurrence, layerTarget)
                     val coverage = allocateOccurrenceSource(targetDeviceBounds(layerTarget), layerTarget,
                         PlanResourceRole.CoverageSource,
@@ -2035,7 +2099,59 @@ internal class W6aLayerGraphConstruction(
                 val scopeId = LayerScopeIdI32(occurrence.idI32)
                 require(geometry.mapping != null)
                 val layerTarget = targetFor(occurrence.idI32)
-                if (!occurrence.descriptor.initWithPrevious) {
+                val backdrop = backdropFiltersByBegin[occurrence.beginCommandIndexI32]
+                if (backdrop != null) {
+                    val parentTarget = targetFor(occurrence.parentIdI32)
+                    val parentOrigin = targetOriginDevice(parentTarget)
+                    val copyDomain = requireNotNull(geometry.compositeDomainDeviceI32)
+                    val sourceBounds = RectI32(
+                        Math.toIntExact(Math.subtractExact(copyDomain.left.toLong(), parentOrigin.x.toLong())),
+                        Math.toIntExact(Math.subtractExact(copyDomain.top.toLong(), parentOrigin.y.toLong())),
+                        Math.toIntExact(Math.subtractExact(copyDomain.right.toLong(), parentOrigin.x.toLong())),
+                        Math.toIntExact(Math.subtractExact(copyDomain.bottom.toLong(), parentOrigin.y.toLong())),
+                    )
+                    val snapshot = allocateOccurrenceSource(
+                        copyDomain,
+                        parentTarget,
+                        PlanResourceRole.FilterSource,
+                        copyDestination = true,
+                        knownContentDeviceI32 = copyDomain,
+                        desiredOutputDeviceI32 = copyDomain,
+                        requiredInputDeviceI32 = copyDomain,
+                        producedOutputDeviceI32 = copyDomain,
+                    )
+                    val capturedParentVersion = DestinationVersionI64(versions[parentTarget] ?: 0L)
+                    val clear = appendRender(layerTarget, emptyList(), true)
+                    val copy = PlanPass.TextureCopy(
+                        passes.size,
+                        parentTarget,
+                        snapshot.resourceId,
+                        capturedParentVersion,
+                        sourceBounds,
+                        Point2I32.Origin,
+                        Math.multiplyExact(sourceBounds.width().toLong(), 4L),
+                    )
+                    passes += copy
+                    val initializationComposite = appendFrozenOccurrence(
+                        backdrop,
+                        snapshot,
+                        layerTarget,
+                        FilterCompositeOperationV1.Draw(BlendPlan.LegacySrcOverV1),
+                        terminalClipDeviceI32 = copyDomain,
+                    )
+                    initializationByScope[occurrence.idI32] = LayerInitializationPlanV1.Backdrop(
+                        BackdropInitializationPlanV1(
+                            parentTarget,
+                            snapshot.resourceId,
+                            initializationComposite.source,
+                            capturedParentVersion,
+                            requireNotNull(backdrop.root).id,
+                        ),
+                    )
+                    // The terminal composite is the semantic initializer; the clear is a physical attachment precondition.
+                    require(clear.ordinal < copy.ordinal && copy.ordinal < initializationComposite.ordinal)
+                    steps += LayerExecutionStepV1.Initialize(scopeId, initializationComposite.id)
+                } else if (!occurrence.descriptor.initWithPrevious) {
                     val initialize = appendRender(layerTarget, emptyList(), true)
                     initializationByScope[occurrence.idI32] = LayerInitializationPlanV1.TransparentBlack
                     steps += LayerExecutionStepV1.Initialize(scopeId, initialize.id)
@@ -2060,6 +2176,9 @@ internal class W6aLayerGraphConstruction(
                         Math.multiplyExact(sourceBounds.width().toLong(), 4L),
                     )
                     passes += copy
+                    // TextureCopy establishes the new layer generation even when it has no child
+                    // draw.  The post-child DAG consumes this exact source generation below.
+                    versions[layerTarget] = 0L
                     initializationByScope[occurrence.idI32] = LayerInitializationPlanV1.PreviousCopy(
                         parentTarget,
                         layerTarget,
@@ -2748,7 +2867,8 @@ internal class W6aLayerGraphConstruction(
         val hintDomain = hint?.roundOutToRectI32OrNull()
             ?: if (hint == null) null else throw IllegalArgumentException(W6aPlanDiagnostics.MappingOverflow)
         val required = desired.copy()
-        val effective = if (restoreFacts.previousContentRequiresFullParentDomain || restoreFacts.restoreAffectsTransparentBlack) desired
+        val effective = if (restoreFacts.previousContentRequiresFullParentDomain || restoreFacts.backdropRequiresFullParentDomain ||
+            restoreFacts.restoreAffectsTransparentBlack) desired
             else if (physicalInput == null) desired else hintDomain?.let { union(physicalInput, it) } ?: physicalInput
         val composite = intersect(effective, desired)
         if (composite == null) return W6aScopeGeometry(occurrence, null, hint, known, desired, required, produced, null)
@@ -3006,8 +3126,14 @@ internal class W6aLayerGraphConstruction(
             PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1())) {
             "${W6aPlanDiagnostics.UnsupportedRestore}: restore blend"
         }
-        return W6aRestoreFacts(paint?.color?.alpha?.div(255f) ?: 1f, colorFilter, blend,
-            occurrence.descriptor.initWithPrevious)
+        return W6aRestoreFacts(
+            paint?.color?.alpha?.div(255f) ?: 1f,
+            colorFilter,
+            blend,
+            occurrence.descriptor.initWithPrevious,
+            occurrence.descriptor.backdrop !is EffectStack.Empty,
+            paint?.imageFilter != null || paint?.maskFilter != null || occurrence.descriptor.effects !is EffectStack.Empty,
+        )
     }
 
     /** The W5 filter proof owns bytes; W6 admits only the already-sealed binding requirements. */
