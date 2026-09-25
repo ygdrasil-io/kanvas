@@ -16,15 +16,6 @@ import kotlin.math.sqrt
  * field exposes both Sobel derivatives without depending on the renderer's captured filter data.
  */
 object W6eLightingCpuOracle {
-    enum class Family {
-        DISTANT_DIFFUSE,
-        POINT_DIFFUSE,
-        SPOT_DIFFUSE,
-        DISTANT_SPECULAR,
-        POINT_SPECULAR,
-        SPOT_SPECULAR,
-    }
-
     private const val width = 3
     private const val height = 3
     private val alpha = floatArrayOf(
@@ -33,43 +24,57 @@ object W6eLightingCpuOracle {
         0f, 1f, 0f,
     )
 
-    fun distantDiffuse(): UByteArray = render(Family.DISTANT_DIFFUSE)
-    fun pointDiffuse(): UByteArray = render(Family.POINT_DIFFUSE)
-    fun spotDiffuse(): UByteArray = render(Family.SPOT_DIFFUSE)
-    fun distantSpecular(): UByteArray = render(Family.DISTANT_SPECULAR)
-    fun pointSpecular(): UByteArray = render(Family.POINT_SPECULAR)
-    fun spotSpecular(): UByteArray = render(Family.SPOT_SPECULAR)
-
-    private fun render(family: Family): UByteArray = UByteArray(width * height * 4).also { output ->
-        for (y in 0 until height) for (x in 0 until width) {
+    fun distantDiffuse(): UByteArray {
+        val direction = unit(1f, 0f, 1f)
+        return rasterize(opaqueAlpha = true) { x, y ->
             val normal = normalAt(x, y)
-            val light = when (family) {
-                Family.DISTANT_DIFFUSE, Family.DISTANT_SPECULAR -> unit(1f, 0f, 1f)
-                else -> unit(1f - (x + .5f), -(y + .5f), 1f - alpha[y * width + x])
-            }
-            val cone = when (family) {
-                Family.SPOT_DIFFUSE, Family.SPOT_SPECULAR -> spotCone(light)
-                else -> 1f
-            }
-            val diffuse = if (normal == null || light == null) 0f else max(0f, dot(normal, light))
-            val contribution = when (family) {
-                Family.DISTANT_DIFFUSE, Family.POINT_DIFFUSE, Family.SPOT_DIFFUSE -> diffuse * cone
-                else -> specular(normal, light) * cone
-            }
-            val linear = contribution.coerceIn(0f, 1f)
-            val srgb = if (linear <= .0031308f) 12.92f * linear
-            else 1.055f * linear.toDouble().pow(1.0 / 2.4).toFloat() - .055f
-            val channel = (srgb * 255f).roundToInt().toUByte()
-            val offset = (y * width + x) * 4
-            output[offset] = channel
-            output[offset + 1] = channel
-            output[offset + 2] = channel
-            output[offset + 3] = when (family) {
-                Family.DISTANT_DIFFUSE, Family.POINT_DIFFUSE, Family.SPOT_DIFFUSE -> 255u
-                else -> (linear * 255f).roundToInt().toUByte()
-            }
+            if (normal == null || direction == null) 0f else max(0f, dot(normal, direction))
         }
     }
+
+    fun pointDiffuse(): UByteArray = rasterize(opaqueAlpha = true) { x, y ->
+        val normal = normalAt(x, y)
+        val light = pointLightAt(x, y)
+        if (normal == null || light == null) 0f else max(0f, dot(normal, light))
+    }
+
+    fun spotDiffuse(): UByteArray = rasterize(opaqueAlpha = true) { x, y ->
+        val normal = normalAt(x, y)
+        val light = pointLightAt(x, y)
+        if (normal == null || light == null) 0f else max(0f, dot(normal, light)) * spotCone(light)
+    }
+
+    fun distantSpecular(): UByteArray {
+        val direction = unit(1f, 0f, 1f)
+        return rasterize(opaqueAlpha = false) { x, y -> specular(normalAt(x, y), direction) }
+    }
+
+    fun pointSpecular(): UByteArray = rasterize(opaqueAlpha = false) { x, y ->
+        specular(normalAt(x, y), pointLightAt(x, y))
+    }
+
+    fun spotSpecular(): UByteArray = rasterize(opaqueAlpha = false) { x, y ->
+        val light = pointLightAt(x, y)
+        specular(normalAt(x, y), light) * spotCone(light)
+    }
+
+    private fun rasterize(opaqueAlpha: Boolean, contributionAt: (Int, Int) -> Float): UByteArray =
+        UByteArray(width * height * 4).also { output ->
+            for (y in 0 until height) for (x in 0 until width) {
+                val linear = contributionAt(x, y).coerceIn(0f, 1f)
+                val srgb = if (linear <= .0031308f) 12.92f * linear
+                else 1.055f * linear.toDouble().pow(1.0 / 2.4).toFloat() - .055f
+                val channel = (srgb * 255f).roundToInt().toUByte()
+                val offset = (y * width + x) * 4
+                output[offset] = channel
+                output[offset + 1] = channel
+                output[offset + 2] = channel
+                output[offset + 3] = if (opaqueAlpha) 255u else (linear * 255f).roundToInt().toUByte()
+            }
+        }
+
+    private fun pointLightAt(x: Int, y: Int): Triple<Float, Float, Float>? =
+        unit(1f - (x + .5f), -(y + .5f), 1f - alpha[y * width + x])
 
     private fun normalAt(x: Int, y: Int): Triple<Float, Float, Float>? {
         fun sample(sampleX: Int, sampleY: Int): Float = alpha[
