@@ -11,6 +11,7 @@ import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.RuntimeEffect
 import org.graphiks.kanvas.pipeline.UniformBlock
 import org.graphiks.math.color.ColorARGB
@@ -116,10 +117,56 @@ class W6dBackdropPreviousSurfacePixelTest {
         assertPublicPixels(expected, surface)
     }
 
+    @Test
+    fun `backdrop blur reads the immediate parent outside its restrictive output clip`() {
+        // The clip admits only x=1 on restore, but DECAL blur there needs the opaque parent
+        // impulse at x=0. The CPU oracle owns the Gaussian taps before Surface is constructed.
+        val expected = restrictiveClipBlurExpected()
+        val surface = Surface(2, 1)
+        surface.canvas {
+            drawOpaque(0f, 1f, ColorARGB.White)
+            clipRect(RectF32.ofLTRB(1f, 0f, 2f, 1f), antiAlias = false)
+            saveLayer(SaveLayerRec(backdrop = ImageFilter.Blur(1f, 1f, TileMode.DECAL), paint = Paint(
+                blendMode = BlendMode.SRC,
+                antiAlias = false,
+            )))
+            restore()
+        }
+
+        assertPublicBlurPixels(expected, surface)
+    }
+
+    @Test
+    fun `filtered previous blur reads the immediate parent outside its restrictive output clip`() {
+        // This is the same public spatial-filter witness through initWithPrevious. It proves
+        // that the pre-child copy uses filter input demand rather than the output clip alone.
+        val expected = restrictiveClipBlurExpected()
+        val surface = Surface(2, 1)
+        surface.canvas {
+            drawOpaque(0f, 1f, ColorARGB.White)
+            clipRect(RectF32.ofLTRB(1f, 0f, 2f, 1f), antiAlias = false)
+            saveLayer(SaveLayerRec(initWithPrevious = true, paint = Paint(
+                imageFilter = ImageFilter.Blur(1f, 1f, TileMode.DECAL),
+                blendMode = BlendMode.SRC,
+                antiAlias = false,
+            )))
+            restore()
+        }
+
+        assertPublicBlurPixels(expected, surface)
+    }
+
     private fun assertPublicPixels(expected: UByteArray, surface: Surface) {
         val result = surface.render()
 
         assertContentEquals(expected, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
+    private fun assertPublicBlurPixels(expected: UByteArray, surface: Surface) {
+        val result = surface.render()
+
+        W6bImageBlurCpuOracle.assertNear(expected, result.pixels, tolerance = 3)
         assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
     }
 
@@ -140,6 +187,23 @@ class W6dBackdropPreviousSurfacePixelTest {
         0f, 0f, 0f, 0f, 0f,
         0f, 0f, 0f, 0f, 1f,
     )))
+
+    /** Independent source/blur/clip oracle; x=0 is the untouched parent after clipped restore. */
+    private fun restrictiveClipBlurExpected(): UByteArray {
+        val blurred = W6bImageBlurCpuOracle.toOpaqueWhiteRgba(W6bImageBlurCpuOracle.blurredAlpha(
+            width = 2,
+            height = 1,
+            sourceAlpha = ubyteArrayOf(255u, 0u),
+            sigmaX = 1f,
+            sigmaY = 1f,
+            tileMode = TileMode.DECAL,
+        ))
+        blurred[0] = 255u
+        blurred[1] = 255u
+        blurred[2] = 255u
+        blurred[3] = 255u
+        return blurred
+    }
 
     /** Independent linear-light CPU oracle for one .5 opacity source restored over opaque red. */
     private fun halfSourceOver(destination: ColorARGB, source: ColorARGB): UByteArray = rgba(

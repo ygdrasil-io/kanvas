@@ -184,6 +184,10 @@ internal class W6aLayerGraphConstruction(
             deferredFilterFailure = failure
             emptyList()
         }
+        val filterLayersByBegin = filterOccurrences.filter { it.isLayerOccurrence && !it.isBackdropInitialization }
+            .associateBy { it.insertionCommandIndexI32 }
+        val backdropFiltersByBegin = filterOccurrences.filter(W6bFilterGraphConstruction.PositiveOccurrence::isBackdropInitialization)
+            .associateBy { it.insertionCommandIndexI32 }
         // A direct mask blur inside an explicit W6a layer composites its frozen auto-layer
         // back into that layer before the ordinary restore.  Reserve its already-frozen halo
         // in the parent target now; otherwise the W6a content-sized target clips the terminal.
@@ -212,6 +216,30 @@ internal class W6aLayerGraphConstruction(
             desiredOutputByScope[occurrence.idI32] = parentDesired?.let { desiredOutput(occurrence.descriptor, it) }
         }
 
+        // A backdrop or filtered initWithPrevious layer reads its immediate parent before the
+        // layer target exists.  Its copy must therefore cover the frozen filter's reverse input
+        // demand, while desiredOutput remains the independent restore clip.  The parent desired
+        // domain is the only available source outside an inner restrictive clip.
+        val snapshotInputByScope = arrayOfNulls<RectI32>(occurrences.size)
+        occurrences.forEach { occurrence ->
+            val desired = desiredOutputByScope[occurrence.idI32] ?: return@forEach
+            val filter = backdropFiltersByBegin[occurrence.beginCommandIndexI32] ?: if (occurrence.descriptor.initWithPrevious)
+                filterLayersByBegin[occurrence.beginCommandIndexI32] else null
+            if (filter != null) {
+                val transform = occurrence.descriptor.transform
+                val localToDevice = Matrix3x3F64(
+                    transform.sx.toDouble(), transform.kx.toDouble(), transform.tx.toDouble(),
+                    transform.ky.toDouble(), transform.sy.toDouble(), transform.ty.toDouble(),
+                    transform.persp0.toDouble(), transform.persp1.toDouble(), transform.persp2.toDouble(),
+                )
+                val mapping = LayerMappingF64.ofOrNull(localToDevice, Point2I32(desired.left, desired.top))
+                    ?: throw IllegalArgumentException(W6aPlanDiagnostics.NonFiniteTransform)
+                val parentDesired = occurrence.parentIdI32?.let(desiredOutputByScope::get) ?: rootDomainDeviceI32
+                snapshotInputByScope[occurrence.idI32] = W6bFilterGraphConstruction.reverseInputDemand(filter, desired, mapping)
+                    ?.let { input -> intersect(input, parentDesired) }
+            }
+        }
+
         // Restore output is post-order.  This is an ID-indexed table rather than recursive
         // descendant walks, so a legal GraphLimits depth has linear work and stack use.
         val knownContentByScope = arrayOfNulls<RectI32>(occurrences.size)
@@ -219,17 +247,18 @@ internal class W6aLayerGraphConstruction(
         for (indexI32 in occurrences.indices.reversed()) {
             val occurrence = occurrences[indexI32]
             val desired = desiredOutputByScope[occurrence.idI32]
-            var known = if (occurrence.descriptor.initWithPrevious || occurrence.descriptor.backdrop !is EffectStack.Empty) desired?.copy()
+            val snapshotInput = snapshotInputByScope[occurrence.idI32]
+            var known = snapshotInput?.copy() ?: if (occurrence.descriptor.initWithPrevious || occurrence.descriptor.backdrop !is EffectStack.Empty) desired?.copy()
                 else directKnownByScope[occurrence.idI32]
             occurrence.childIdsI32.forEach { childIdI32 ->
                 known = unionOrNull(known, producedOutputByScope[childIdI32])
             }
-            known = desired?.let { desiredDomain -> known?.let { intersect(it, desiredDomain) } }
+            if (snapshotInput == null) known = desired?.let { desiredDomain -> known?.let { intersect(it, desiredDomain) } }
             knownContentByScope[occurrence.idI32] = known
             producedOutputByScope[occurrence.idI32] = when {
                 desired == null -> null
                 restoreFactsByScope.getValue(occurrence.idI32).restoreAffectsTransparentBlack -> desired.copy()
-                else -> known?.copy()
+                else -> known?.let { intersect(it, desired) }
             }
         }
 
@@ -239,7 +268,7 @@ internal class W6aLayerGraphConstruction(
         val geometryByScope = arrayOfNulls<W6aScopeGeometry>(occurrences.size)
         for (indexI32 in occurrences.indices.reversed()) {
             val occurrence = occurrences[indexI32]
-            var physicalInput = directKnownByScope[occurrence.idI32]
+            var physicalInput = unionOrNull(directKnownByScope[occurrence.idI32], snapshotInputByScope[occurrence.idI32])
             occurrence.childIdsI32.forEach { childIdI32 ->
                 physicalInput = unionOrNull(physicalInput, geometryByScope[childIdI32]?.compositeDomainDeviceI32)
             }
@@ -250,6 +279,7 @@ internal class W6aLayerGraphConstruction(
                 knownContentByScope[occurrence.idI32],
                 producedOutputByScope[occurrence.idI32],
                 physicalInput,
+                snapshotInputByScope[occurrence.idI32],
             )
         }
         geometries = immutableList(occurrences.map { requireNotNull(geometryByScope[it.idI32]) })
@@ -458,10 +488,6 @@ internal class W6aLayerGraphConstruction(
             filterScene?.toList()?.size ?: bindings.maxOfOrNull { it.firstCommandIndexI32 + 1 } ?: 0,
         )
         val pictureStreamAggregates = mutableListOf<PictureStreamAggregateV1>()
-        val filterLayersByBegin = filterOccurrences.filter { it.isLayerOccurrence && !it.isBackdropInitialization }
-            .associateBy { it.insertionCommandIndexI32 }
-        val backdropFiltersByBegin = filterOccurrences.filter(W6bFilterGraphConstruction.PositiveOccurrence::isBackdropInitialization)
-            .associateBy { it.insertionCommandIndexI32 }
         data class DirectFilterSources(
             val coverage: W6bFilterGraphConstruction.SourceBinding,
         )
@@ -2103,7 +2129,7 @@ internal class W6aLayerGraphConstruction(
                 if (backdrop != null) {
                     val parentTarget = targetFor(occurrence.parentIdI32)
                     val parentOrigin = targetOriginDevice(parentTarget)
-                    val copyDomain = requireNotNull(geometry.compositeDomainDeviceI32)
+                    val copyDomain = requireNotNull(snapshotInputByScope[occurrence.idI32] ?: geometry.compositeDomainDeviceI32)
                     val sourceBounds = RectI32(
                         Math.toIntExact(Math.subtractExact(copyDomain.left.toLong(), parentOrigin.x.toLong())),
                         Math.toIntExact(Math.subtractExact(copyDomain.top.toLong(), parentOrigin.y.toLong())),
@@ -2116,9 +2142,9 @@ internal class W6aLayerGraphConstruction(
                         PlanResourceRole.FilterSource,
                         copyDestination = true,
                         knownContentDeviceI32 = copyDomain,
-                        desiredOutputDeviceI32 = copyDomain,
+                        desiredOutputDeviceI32 = geometry.desiredOutputDeviceI32,
                         requiredInputDeviceI32 = copyDomain,
-                        producedOutputDeviceI32 = copyDomain,
+                        producedOutputDeviceI32 = geometry.producedOutputDeviceI32,
                     )
                     val capturedParentVersion = DestinationVersionI64(versions[parentTarget] ?: 0L)
                     val clear = appendRender(layerTarget, emptyList(), true)
@@ -2137,7 +2163,7 @@ internal class W6aLayerGraphConstruction(
                         snapshot,
                         layerTarget,
                         FilterCompositeOperationV1.Draw(BlendPlan.LegacySrcOverV1),
-                        terminalClipDeviceI32 = copyDomain,
+                        terminalClipDeviceI32 = geometry.desiredOutputDeviceI32,
                     )
                     initializationByScope[occurrence.idI32] = LayerInitializationPlanV1.Backdrop(
                         BackdropInitializationPlanV1(
@@ -2158,7 +2184,7 @@ internal class W6aLayerGraphConstruction(
                 } else {
                     val parentTarget = targetFor(occurrence.parentIdI32)
                     val parentOrigin = targetOriginDevice(parentTarget)
-                    val copyDomain = requireNotNull(geometry.compositeDomainDeviceI32)
+                    val copyDomain = requireNotNull(snapshotInputByScope[occurrence.idI32] ?: geometry.compositeDomainDeviceI32)
                     val sourceBounds = RectI32(
                         Math.toIntExact(Math.subtractExact(copyDomain.left.toLong(), parentOrigin.x.toLong())),
                         Math.toIntExact(Math.subtractExact(copyDomain.top.toLong(), parentOrigin.y.toLong())),
@@ -2166,13 +2192,18 @@ internal class W6aLayerGraphConstruction(
                         Math.toIntExact(Math.subtractExact(copyDomain.bottom.toLong(), parentOrigin.y.toLong())),
                     )
                     val capturedParentVersion = DestinationVersionI64(versions[parentTarget] ?: 0L)
+                    val layerOrigin = targetOriginDevice(layerTarget)
+                    val destinationOrigin = Point2I32(
+                        Math.toIntExact(Math.subtractExact(copyDomain.left.toLong(), layerOrigin.x.toLong())),
+                        Math.toIntExact(Math.subtractExact(copyDomain.top.toLong(), layerOrigin.y.toLong())),
+                    )
                     val copy = PlanPass.TextureCopy(
                         passes.size,
                         parentTarget,
                         layerTarget,
                         capturedParentVersion,
                         sourceBounds,
-                        Point2I32.Origin,
+                        destinationOrigin,
                         Math.multiplyExact(sourceBounds.width().toLong(), 4L),
                     )
                     passes += copy
@@ -2184,7 +2215,7 @@ internal class W6aLayerGraphConstruction(
                         layerTarget,
                         capturedParentVersion,
                         sourceBounds,
-                        Point2I32.Origin,
+                        destinationOrigin,
                     )
                     steps += LayerExecutionStepV1.Initialize(scopeId, copy.id)
                 }
@@ -2385,10 +2416,16 @@ internal class W6aLayerGraphConstruction(
                         Math.multiplyExact(parentExtent.width.toLong(), 4L))
                 }
                 val childDomain = requireNotNull(geometry.compositeDomainDeviceI32)
+                // A backdrop initializer may retain input halo in its physical target, but its
+                // subsequent ordinary layer restore is still constrained to desired output.
+                // Restoring the halo with SRC would otherwise erase the immediate parent outside
+                // the save-time composite clip.
+                val restoreDomain = if (backdropFiltersByBegin.containsKey(occurrence.beginCommandIndexI32))
+                    requireNotNull(geometry.desiredOutputDeviceI32) else childDomain
                 val parentOrigin = targetOriginDevice(parentTarget)
                 val destinationOrigin = Point2I32(
-                    Math.toIntExact(Math.subtractExact(childDomain.left.toLong(), parentOrigin.x.toLong())),
-                    Math.toIntExact(Math.subtractExact(childDomain.top.toLong(), parentOrigin.y.toLong())),
+                    Math.toIntExact(Math.subtractExact(restoreDomain.left.toLong(), parentOrigin.x.toLong())),
+                    Math.toIntExact(Math.subtractExact(restoreDomain.top.toLong(), parentOrigin.y.toLong())),
                 )
                 val composite = filterLayersByBegin[occurrence.beginCommandIndexI32]?.let { filtered ->
                     val coverage = allocateOccurrenceSource(targetDeviceBounds(target), target,
@@ -2429,7 +2466,12 @@ internal class W6aLayerGraphConstruction(
                         FilterCompositeOperationV1.Layer(restore), frozenMask?.output ?: coverage, target,
                         terminalClipDeviceI32 = geometry.desiredOutputDeviceI32)
                 } ?: PlanPass.LayerComposite(passes.size, scopeId, target, parentTarget,
-                    RectI32(0, 0, childDomain.width(), childDomain.height()), destinationOrigin, restore,
+                    RectI32(
+                        Math.toIntExact(Math.subtractExact(restoreDomain.left.toLong(), childDomain.left.toLong())),
+                        Math.toIntExact(Math.subtractExact(restoreDomain.top.toLong(), childDomain.top.toLong())),
+                        Math.toIntExact(Math.subtractExact(restoreDomain.right.toLong(), childDomain.left.toLong())),
+                        Math.toIntExact(Math.subtractExact(restoreDomain.bottom.toLong(), childDomain.top.toLong())),
+                    ), destinationOrigin, restore,
                     AttachmentLoadPlan.Load, AttachmentStorePlan.Store, after).also {
                     versions[parentTarget] = after.valueI64
                     passes += it
@@ -2851,6 +2893,7 @@ internal class W6aLayerGraphConstruction(
         known: RectI32?,
         produced: RectI32?,
         physicalInput: RectI32?,
+        snapshotInput: RectI32?,
     ): W6aScopeGeometry {
         if (desired == null) return W6aScopeGeometry(occurrence, null, null, known, null, null, produced, null)
         val transform = occurrence.descriptor.transform
@@ -2866,11 +2909,15 @@ internal class W6aLayerGraphConstruction(
         }
         val hintDomain = hint?.roundOutToRectI32OrNull()
             ?: if (hint == null) null else throw IllegalArgumentException(W6aPlanDiagnostics.MappingOverflow)
-        val required = desired.copy()
-        val effective = if (restoreFacts.previousContentRequiresFullParentDomain || restoreFacts.backdropRequiresFullParentDomain ||
+        val required = snapshotInput?.copy() ?: desired.copy()
+        val effective = if (snapshotInput != null) {
+            val sourceAndOutput = union(snapshotInput, desired)
+            physicalInput?.let { input -> intersect(input, desired)?.let { union(sourceAndOutput, it) } ?: sourceAndOutput }
+                ?: sourceAndOutput
+        } else if (restoreFacts.previousContentRequiresFullParentDomain || restoreFacts.backdropRequiresFullParentDomain ||
             restoreFacts.restoreAffectsTransparentBlack) desired
             else if (physicalInput == null) desired else hintDomain?.let { union(physicalInput, it) } ?: physicalInput
-        val composite = intersect(effective, desired)
+        val composite = if (snapshotInput == null) intersect(effective, desired) else effective
         if (composite == null) return W6aScopeGeometry(occurrence, null, hint, known, desired, required, produced, null)
         val mapping = LayerMappingF64.ofOrNull(localToDevice, Point2I32(composite.left, composite.top))
             ?: throw IllegalArgumentException(W6aPlanDiagnostics.NonFiniteTransform)
