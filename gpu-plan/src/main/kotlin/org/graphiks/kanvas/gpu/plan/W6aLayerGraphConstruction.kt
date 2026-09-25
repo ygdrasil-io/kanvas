@@ -130,8 +130,8 @@ internal class W6aLayerGraphConstruction(
     private val resources: List<PlanResource>
     private val frozenFilterResourceSpecs: List<W6bFilterGraphConstruction.ResourceSpec>
     private val filterSourceBindings: Map<PlanResourceId, W6bFilterGraphConstruction.SourceBinding>
-    /** Direct distant-diffuse sources defer their terminal hard clip until FilterComposite. */
-    private val directDistantDiffuseCommands: Set<Int>
+    /** Direct lighting sources defer their terminal hard clip until FilterComposite. */
+    private val directConsumerDemandCommands: Set<Int>
     /** Additional real W5 source rows used by captured MaskShader coverage evaluation. */
     private val maskMaterialSourcesByOccurrence: Map<Int, MaterialSourceConstructionV4>
     /** One W5 row per isolated Picture paint; it samples a sealed graph texture, never a SceneSnapshot. */
@@ -508,7 +508,7 @@ internal class W6aLayerGraphConstruction(
             }
         }
         val directFilterSourceByCommand = linkedMapOf<Int, DirectFilterSources>()
-        val directDistantDiffuseCommands = linkedSetOf<Int>()
+        val directConsumerDemandCommands = linkedSetOf<Int>()
         filterOccurrences.filterNot { it.isLayerOccurrence || it.isPictureOccurrence }.forEach { occurrence ->
             // Reject an opaque terminal clip before allocating any direct filter source; W4e
             // retains ownership of complex clips on non-filtered routes.
@@ -526,31 +526,50 @@ internal class W6aLayerGraphConstruction(
             val consumerDomain = clippedConsumer ?: targetBounds
             val noOpDomain = RectI32(targetBounds.left, targetBounds.top,
                 Math.addExact(targetBounds.left, 1), Math.addExact(targetBounds.top, 1))
-            val distantDiffuse = W6bFilterGraphConstruction.hasDistantDiffuseTerminal(occurrence)
-            if (distantDiffuse) directDistantDiffuseCommands += occurrence.insertionCommandIndexI32
-            // The W5 wrapper represents the terminal consumer clip.  Distant diffuse instead
-            // rasterizes its pre-clip source so Sobel can sample the one-texel halo.
-            val sourceGeometryDraw = if (distantDiffuse) draw.withoutW6aTerminalClip() else draw
+            val inputDemandFilter = W6bFilterGraphConstruction.hasReverseInputDemandTerminal(occurrence)
+            val consumerDemandFilter = W6bFilterGraphConstruction.hasConsumerDemandTerminal(occurrence)
+            if (consumerDemandFilter) directConsumerDemandCommands += occurrence.insertionCommandIndexI32
+            // The W5 wrapper represents the terminal consumer clip. Any filter with reverse
+            // input demand must rasterize its pre-clip source before freezing its halo.
+            val sourceGeometryDraw = if (inputDemandFilter) draw.withoutW6aTerminalClip() else draw
             val rasterInTarget = intersect(w6aRasterBoundsI32(sourceGeometryDraw), targetBounds)
-            // Distant diffuse keeps only the texels demanded by its frozen Sobel halo, not the
-            // terminal clip/scissor itself. A null terminal domain is a legal sealed no-op.
+            // Keep only the texels demanded by the frozen input halo, not the terminal
+            // clip/scissor itself. A null terminal domain is a legal sealed no-op.
             val sourceDomain = when {
                 terminalNoOp -> noOpDomain
-                distantDiffuse -> W6bFilterGraphConstruction.reverseInputDemand(
+                inputDemandFilter -> W6bFilterGraphConstruction.reverseInputDemand(
                     occurrence, consumerDomain, filterSource(parentTarget).mapping,
                 )?.let { demand -> rasterInTarget?.let { raster -> intersect(raster, demand) } } ?: noOpDomain
                 else -> rasterInTarget?.let { raster -> intersect(raster, w6aScissorI32(draw)) } ?: noOpDomain
             }
-            // The admitted distant-diffuse slice affects transparent black.  Its physical child
-            // remains tightly rasterized, while its semantic demand is the frozen terminal consumer;
-            // all other families retain their existing content-sized direct source contract.
-            val desired = if (distantDiffuse && !terminalNoOp) consumerDomain else sourceDomain
+            // Lighting affects transparent black. Its physical child remains tightly rasterized,
+            // while its semantic output is the frozen terminal consumer. Sampling filters only
+            // widen their input domain and retain their content-sized output contract.
+            val desired = if (consumerDemandFilter && !terminalNoOp) consumerDomain else sourceDomain
+            // Only the samplers that freeze target-local coordinates need the draw mapping.
+            // Rebinding Picture/Matrix to it would compose a carrier transform twice: those
+            // established paths retain the parent source mapping below.
+            val sourceLocalToDevice = if (W6bFilterGraphConstruction.hasContentOutputSamplingTerminal(occurrence)) {
+                occurrence.source.sourceDraw?.let { sourceDraw ->
+                    val sourceToParent = composeInOrderF64(
+                        occurrence.source.outerPictures().map { it.transform } + sourceDraw.transform,
+                    )
+                    requireNotNull(filterSource(parentTarget).mapping.copyLocalToDeviceF64()
+                        .timesCheckedOrNull(sourceToParent)) {
+                        "W6d direct source local-to-device mapping cannot be composed in finite F64."
+                    }
+                } ?: throw W6bFilterGraphConstruction.ConstructionFailure(
+                    W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                        "W6d direct sampling filter requires its captured source draw mapping."),
+                )
+            } else null
             directFilterSourceByCommand[occurrence.insertionCommandIndexI32] = DirectFilterSources(
                 allocateOccurrenceSource(sourceDomain, parentTarget, PlanResourceRole.CoverageSource,
+                    mappingLocalToDeviceF64 = sourceLocalToDevice,
                     desiredOutputDeviceI32 = desired, requiredInputDeviceI32 = sourceDomain),
             )
         }
-        this.directDistantDiffuseCommands = directDistantDiffuseCommands
+        this.directConsumerDemandCommands = directConsumerDemandCommands
         /*
          * MaskShader is not a placeholder operation: the captured MaterialNode is normalized by
          * the same W5 source authority as the rest of the frame.  Its row is appended to this
@@ -906,16 +925,15 @@ internal class W6aLayerGraphConstruction(
             fun filterOwnerLocalToDevice(): Matrix3x3F64 {
                 val owner = draft.owner as? PictureStreamAggregateDraftOwnerV1.FilterPicture
                     ?: error("A draw-owned Picture aggregate has no filter-owner mapping.")
-                val carrier = requireNotNull(owner.source.sourceDraw) {
-                    "A filter-owned Picture aggregate requires its captured carrier draw."
-                }
-                val carrierToSource = composeInOrderF64(
-                    owner.source.outerPictures().map { it.transform } + carrier.transform,
-                )
-                return requireNotNull(requireNotNull(filterOwnerSource).mapping.copyLocalToDeviceF64()
-                    .timesCheckedOrNull(carrierToSource)) {
-                    "A filter-owned Picture carrier transform cannot be composed in finite F64."
-                }
+                return owner.source.sourceDraw?.let { carrier ->
+                    val carrierToSource = composeInOrderF64(
+                        owner.source.outerPictures().map { it.transform } + carrier.transform,
+                    )
+                    requireNotNull(requireNotNull(filterOwnerSource).mapping.copyLocalToDeviceF64()
+                        .timesCheckedOrNull(carrierToSource)) {
+                        "A filter-owned Picture carrier transform cannot be composed in finite F64."
+                    }
+                } ?: requireNotNull(filterOwnerSource).mapping.copyLocalToDeviceF64()
             }
             val plannedDrawSources = linkedMapOf<FramePlannedCommandIdI32, Pair<PlanPassId, Int>>()
             val plannedDrawCoordinates = linkedMapOf<FramePlannedCommandIdI32, PictureDrawCoordinatesV1>()
@@ -2058,17 +2076,19 @@ internal class W6aLayerGraphConstruction(
             }
             val effectiveLocal = cullLocal.intersectF64OrNull(sourceLocal ?: cullLocal)
                 ?: return@FilterPictureSourceEmitterV1 null
-            val carrier = requireNotNull(occurrence.source.sourceDraw) {
-                "W6d filter Picture requires its captured carrier draw."
-            }
-            val carrierToSource = composeInOrderF64(occurrence.source.outerPictures().map { it.transform } + carrier.transform)
-            val localToDevice = requireNotNull(sourceContext.mapping.copyLocalToDeviceF64().timesCheckedOrNull(carrierToSource)) {
-                "W6d filter Picture carrier transform cannot be composed in finite F64."
-            }
-            val contentMapping = LayerMappingF64.ofOrNull(localToDevice, Point2I32.Origin)
-                ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                    W6bFilterDiagnostics.InvalidBounds, "W6d Picture source mapping is non-invertible.",
-                ))
+            // Draw-owned filters compose their captured carrier transform once. A BeginLayer
+            // filter has no DrawNode by design: its already-frozen SourceBinding mapping is the
+            // layer context and remains the sole geometry authority for its Picture source.
+            val contentMapping = occurrence.source.sourceDraw?.let { carrier ->
+                val carrierToSource = composeInOrderF64(occurrence.source.outerPictures().map { it.transform } + carrier.transform)
+                val localToDevice = requireNotNull(sourceContext.mapping.copyLocalToDeviceF64().timesCheckedOrNull(carrierToSource)) {
+                    "W6d filter Picture carrier transform cannot be composed in finite F64."
+                }
+                LayerMappingF64.ofOrNull(localToDevice, Point2I32.Origin)
+                    ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                        W6bFilterDiagnostics.InvalidBounds, "W6d Picture source mapping is non-invertible.",
+                    ))
+            } ?: sourceContext.mapping
             val contentDeviceF64 = contentMapping.mapLocalRectToDeviceF64OrNull(effectiveLocal)
                 ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
                     W6bFilterDiagnostics.InvalidBounds, "W6d Picture crop cannot be mapped to finite device coordinates.",
@@ -2462,9 +2482,17 @@ internal class W6aLayerGraphConstruction(
                     passes += layerSource
                     versions[source.resourceId] = 0L
                     steps += LayerExecutionStepV1.RenderChildren(scopeId, layerSource.id)
+                    // Displacement and magnifier preserve a content-sized output coordinate
+                    // domain after freezing their input demand. Matrix keeps its established
+                    // wide output contract; lighting may emit onto transparent black. All other
+                    // families retain their existing desired-output terminal.
+                    val filterTerminalDomain = if (
+                        W6bFilterGraphConstruction.hasContentOutputSamplingTerminal(filtered) &&
+                        !W6bFilterGraphConstruction.hasConsumerDemandTerminal(filtered)
+                    ) childDomain else geometry.desiredOutputDeviceI32
                     appendFrozenOccurrence(filtered, source, parentTarget,
                         FilterCompositeOperationV1.Layer(restore), frozenMask?.output ?: coverage, target,
-                        terminalClipDeviceI32 = geometry.desiredOutputDeviceI32)
+                        terminalClipDeviceI32 = filterTerminalDomain)
                 } ?: PlanPass.LayerComposite(passes.size, scopeId, target, parentTarget,
                     RectI32(
                         Math.toIntExact(Math.subtractExact(restoreDomain.left.toLong(), childDomain.left.toLong())),
@@ -2649,7 +2677,7 @@ internal class W6aLayerGraphConstruction(
             val draw = bound.withFinalBlendV1(finalBlends.getValue(command))
             // Lighting's Sobel neighborhood is evaluated before its terminal clip.  The
             // matching terminal FilterComposite remains the sole owner of that hard clip.
-            val sourceDraw = if (command in directDistantDiffuseCommands && target in filterSourceBindings)
+            val sourceDraw = if (command in directConsumerDemandCommands && target in filterSourceBindings)
                 draw.withoutW6aTerminalClip() else draw
             if (sourceDraw is W5bW4ePathDraw) {
                 val native = w4eBindings.flatMap { it.nativePasses() }.filterIsInstance<PlanPass.PathRenderPass>()

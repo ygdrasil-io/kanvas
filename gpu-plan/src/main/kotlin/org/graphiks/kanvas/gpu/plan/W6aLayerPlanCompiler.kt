@@ -74,13 +74,13 @@ public class W6aLayerPlanCompiler public constructor(
         W6bFilterGraphConstruction.admissionRefusalOrNull(scene)?.let { refusal ->
             return GpuPlanSelection.InvalidScene(listOf(refusal))
         }
-        // A direct distant-diffuse source must reach the frozen Sobel pass before its terminal
-        // clip.  Keep that clip in the immutable W6b occurrence for FilterComposite, while the
-        // existing W5 lane receives the un-clipped geometry it must rasterize.
-        val directDistantDiffuseCommands = if (ownsW6b) W6bFilterGraphConstruction.positiveOccurrences(scene)
+        // A direct filter with reverse input demand must reach its frozen sampler before its
+        // terminal clip. Keep that clip in the immutable W6b occurrence for FilterComposite,
+        // while the existing W5 lane receives the un-clipped geometry it must rasterize.
+        val directInputDemandCommands = if (ownsW6b) W6bFilterGraphConstruction.positiveOccurrences(scene)
             .asSequence()
             .filter { occurrence -> !occurrence.isLayerOccurrence && !occurrence.isPictureOccurrence &&
-                W6bFilterGraphConstruction.hasDistantDiffuseTerminal(occurrence) }
+                W6bFilterGraphConstruction.hasReverseInputDemandTerminal(occurrence) }
             .map { occurrence -> occurrence.insertionCommandIndexI32 }
             .toSet()
         else emptySet()
@@ -188,7 +188,7 @@ public class W6aLayerPlanCompiler public constructor(
             val draws = setOf(drawIndexI32)
             val segment = SceneSnapshot.of(scene.extent, scene.colorSpace, commands.mapIndexed { index, command ->
                 if (index in draws) {
-                    stripW6bPayload(command as SceneCommand.Draw, drawIndexI32 in directDistantDiffuseCommands)
+                    stripW6bPayload(command as SceneCommand.Draw, drawIndexI32 in directInputDemandCommands)
                 } else SceneCommand.Annotation.of(org.graphiks.math.geometry.RectF32(0f, 0f, 0f, 0f), "w6a.segment", index.toString())
             }, graphLimits)
             val child = CapabilityCompilerChain.of(listOf(W5bVerticesPlanCompiler(runtimeCatalog), W5bPointPlanCompiler(runtimeCatalog), W5eImagePlanCompiler(), W3SolidRectPlanCompiler(),

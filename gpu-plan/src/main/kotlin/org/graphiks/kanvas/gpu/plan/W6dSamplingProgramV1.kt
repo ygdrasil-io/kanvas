@@ -93,7 +93,14 @@ public sealed class W6dSamplingProgramV1(public val programId: W6dSamplingProgra
         public val xComponentI32: Int,
         public val yComponentI32: Int,
         public val scaleF32: Float,
-    ) : W6dSamplingProgramV1(W6dSamplingProgramIdV1.DISPLACEMENT_NEAREST_CLAMP_RGBA8_V1)
+        displacementSampling: FilterInputSamplingV1,
+        sourceSampling: FilterInputSamplingV1,
+    ) : W6dSamplingProgramV1(W6dSamplingProgramIdV1.DISPLACEMENT_NEAREST_CLAMP_RGBA8_V1) {
+        private val displacementSamplingSnapshot = displacementSampling.copy()
+        private val sourceSamplingSnapshot = sourceSampling.copy()
+        public fun copyDisplacementSampling(): FilterInputSamplingV1 = displacementSamplingSnapshot.copy()
+        public fun copySourceSampling(): FilterInputSamplingV1 = sourceSamplingSnapshot.copy()
+    }
 
     public class Magnifier internal constructor(
         public val centerXF64: Double,
@@ -103,7 +110,12 @@ public sealed class W6dSamplingProgramV1(public val programId: W6dSamplingProgra
         public val innerRightF64: Double,
         public val innerBottomF64: Double,
         public val zoomF32: Float,
+        inputSampling: FilterInputSamplingV1,
     ) : W6dSamplingProgramV1(W6dSamplingProgramIdV1.MAGNIFIER_NEAREST_CLAMP_RGBA8_V1)
+    {
+        private val inputSamplingSnapshot = inputSampling.copy()
+        public fun copyInputSampling(): FilterInputSamplingV1 = inputSamplingSnapshot.copy()
+    }
 
     /** One fixed nearest/decal Picture program with preflighted I32/F32 coordinates. */
     public class Picture(sampling: W6dPictureSamplingV1) :
@@ -328,6 +340,7 @@ internal fun selectW6dSamplingProgram(
         }
         is FilterPassOperationV1.DisplacementMap -> W6dSamplingProgramV1.Displacement(
             operation.xChannel.componentIndex(), operation.yChannel.componentIndex(), operation.scaleF32,
+            operation.copyDisplacementSampling(), operation.copySourceSampling(),
         )
         is FilterPassOperationV1.Magnifier -> {
             val source = operation.copySourceF64()
@@ -335,6 +348,7 @@ internal fun selectW6dSamplingProgram(
                 (source.left + source.right) / 2.0, (source.top + source.bottom) / 2.0,
                 source.left + operation.insetF32, source.top + operation.insetF32,
                 source.right - operation.insetF32, source.bottom - operation.insetF32, operation.zoomF32,
+                operation.copyInputSampling(),
             )
         }
         is FilterPassOperationV1.Picture -> W6dSamplingProgramV1.Picture(operation.copyPictureSampling())

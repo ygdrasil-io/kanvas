@@ -108,20 +108,19 @@ class W6dAdvancedRecoverySurfacePixelTest {
     }
 
     @Test
-    fun `one frozen graph covers all eleven W6d filter families with branch-sensitive output`() {
+    fun `independent frozen graphs cover all eleven W6d filter families with branch-sensitive output`() {
         // This independent composite oracle is complete before either public recording object is
-        // created.  Each advanced family owns a disjoint 3x3 band, so no later branch can mask it.
+        // created. Each family owns a separate public 3x3 surface, so no later allocation can
+        // mask a sparse source result from a previous family.
         val expected = allElevenFamilyExpectedPixels()
         val redPicture = allFamilyPicture(ColorARGB.Red)
         val baseline = renderAllElevenFamilies(redPicture)
-        assertPixelsNear(expected, baseline.pixels, maxChannelDelta = 2)
-        assertTrue(baseline.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+        assertAllElevenFamilyBands(expected, baseline)
 
         familyNames.indices.forEach { familyIndex ->
             val mutationPicture = if (familyIndex == pictureFamilyIndex) allFamilyPicture(ColorARGB.Blue) else redPicture
             val mutated = renderAllElevenFamilies(mutationPicture, mutedFamilyIndex = familyIndex)
-            assertBandChanged(baseline.pixels, mutated.pixels, familyIndex, familyNames[familyIndex])
-            assertTrue(mutated.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+            assertBandChanged(baseline, mutated, familyIndex, familyNames[familyIndex])
         }
     }
 
@@ -136,26 +135,36 @@ class W6dAdvancedRecoverySurfacePixelTest {
         canvas.restore()
     }
 
-    private fun renderAllElevenFamilies(picture: org.graphiks.kanvas.picture.Picture, mutedFamilyIndex: Int? = null): RenderResult {
-        val surface = Surface(familyWidthI32, familyHeightI32 * familyNames.size)
-        surface.canvas {
-            familyNames.indices.forEach { familyIndex ->
-                save()
-                translate(0f, (familyIndex * familyHeightI32).toFloat())
-                clipRect(familyRect, antiAlias = false)
+    private fun renderAllElevenFamilies(picture: org.graphiks.kanvas.picture.Picture, mutedFamilyIndex: Int? = null): UByteArray {
+        val combined = UByteArray(familyWidthI32 * familyHeightI32 * familyNames.size * 4)
+        familyNames.indices.forEach { familyIndex ->
+            val surface = Surface(familyWidthI32, familyHeightI32)
+            surface.canvas {
                 val filter = allFamilyFilter(familyIndex, picture, mutedFamilyIndex == familyIndex)
-                if (familyIndex == pictureFamilyIndex) {
-                    // Picture is a filter-owned aggregate and therefore keeps its captured carrier draw.
-                    drawRect(unit, Paint(ColorARGB.Blue, imageFilter = filter, antiAlias = false))
-                } else {
-                    saveLayer(SaveLayerRec(paint = Paint(imageFilter = filter, antiAlias = false)))
-                    drawAllFamilySource(this, familyIndex)
-                    restore()
+                when (familyIndex) {
+                    pictureFamilyIndex -> {
+                        // Picture is a filter-owned aggregate and therefore keeps its captured carrier draw.
+                        drawRect(unit, Paint(ColorARGB.Blue, imageFilter = filter, antiAlias = false))
+                    }
+                    matrixFamilyIndex -> {
+                        // Fill the Matrix source band before freezing it. A sparse source did
+                        // not make this family observable without a later allocation reuse.
+                        saveLayer(SaveLayerRec(bounds = familyRect, paint = Paint(imageFilter = filter, antiAlias = false)))
+                        drawRect(familyRect, Paint(ColorARGB.Red, antiAlias = false))
+                        restore()
+                    }
+                    else -> {
+                        saveLayer(SaveLayerRec(paint = Paint(imageFilter = filter, antiAlias = false)))
+                        drawAllFamilySource(this, familyIndex)
+                        restore()
+                    }
                 }
-                restore()
             }
+            val rendered = surface.render()
+            assertTrue(rendered.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+            rendered.pixels.copyInto(combined, familyIndex * familyWidthI32 * familyHeightI32 * 4)
         }
-        return surface.render()
+        return combined
     }
 
     private fun allFamilyFilter(familyIndex: Int, picture: org.graphiks.kanvas.picture.Picture, muted: Boolean): ImageFilter = when (familyIndex) {
@@ -199,6 +208,9 @@ class W6dAdvancedRecoverySurfacePixelTest {
 
     private fun drawAllFamilySource(canvas: Canvas, familyIndex: Int) {
         when (familyIndex) {
+            matrixFamilyIndex -> (0 until familyHeightI32).forEach { y -> (0 until familyWidthI32).forEach { x ->
+                canvas.drawRect(RectF32.ofLTRB(x.toFloat(), y.toFloat(), x + 1f, y + 1f), Paint(ColorARGB.Red, antiAlias = false))
+            } }
             displacementFamilyIndex,
             magnifierFamilyIndex,
             -> (0 until familyHeightI32).forEach { y -> listOf(ColorARGB.Red, ColorARGB.Green, ColorARGB.Blue).forEachIndexed { x, color ->
@@ -221,7 +233,9 @@ class W6dAdvancedRecoverySurfacePixelTest {
     private fun allElevenFamilyExpectedPixels(): UByteArray = UByteArray(familyWidthI32 * familyHeightI32 * familyNames.size * 4).also { expected ->
         fun putBand(familyIndex: Int, pixels: UByteArray) = pixels.copyInto(expected, familyIndex * familyWidthI32 * familyHeightI32 * 4)
         val redPixel = rgba(255, 0, 0)
-        putBand(matrixFamilyIndex, bandWithTopRow(listOf(redPixel)))
+        putBand(matrixFamilyIndex, UByteArray(familyWidthI32 * familyHeightI32 * 4).also { band ->
+            (0 until familyWidthI32 * familyHeightI32).forEach { redPixel.copyInto(band, it * 4) }
+        })
         putBand(displacementFamilyIndex, samplingBand(
             W6dAdvancedSamplingCpuOracle.displacementRedNearestClamp(samplingSourcePixels, scale = 0f),
         ))
@@ -265,6 +279,21 @@ class W6dAdvancedRecoverySurfacePixelTest {
                 "pixel ${index / 4} channel ${index % 4} expected=${expected[index]} actual=${actual[index]} " +
                     "expectedRgba=${expected.copyOfRange(index / 4 * 4, index / 4 * 4 + 4).contentToString()} " +
                     "actualRgba=${actual.copyOfRange(index / 4 * 4, index / 4 * 4 + 4).contentToString()}")
+        }
+    }
+
+    /** Exact-copy families stay byte-exact; only numerical sampling/lighting keep their local tolerance. */
+    private fun assertAllElevenFamilyBands(expected: UByteArray, actual: UByteArray) {
+        assertTrue(expected.size == actual.size)
+        familyNames.indices.forEach { familyIndex ->
+            val start = familyIndex * familyWidthI32 * familyHeightI32 * 4
+            val end = start + familyWidthI32 * familyHeightI32 * 4
+            val tolerance = when (familyIndex) {
+                pictureFamilyIndex, runtimeFamilyIndex -> 0
+                matrixFamilyIndex, displacementFamilyIndex, magnifierFamilyIndex -> 1
+                else -> 2
+            }
+            assertPixelsNear(expected.copyOfRange(start, end), actual.copyOfRange(start, end), tolerance)
         }
     }
 

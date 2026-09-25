@@ -48,6 +48,24 @@ internal object W6dAdvancedSamplingCpuOracle {
         }
     }
 
+    /**
+     * The displacement image is shifted in its own device domain before both its nearest-clamp
+     * lookup and the source lookup. This deliberately keeps the two input coordinate spaces
+     * independent of the filtered output's target-local origin.
+     */
+    fun displacementOffsetMapRedNearestClamp(source: UByteArray, mapOffsetX: Int, scale: Float): UByteArray {
+        require(source.size % 4 == 0)
+        val width = source.size / 4
+        return UByteArray(source.size).also { output ->
+            for (x in 0 until width) {
+                val mapX = (x - mapOffsetX).coerceIn(0, width - 1)
+                val offset = source[mapX * 4].toInt() / 255f * scale
+                val sampleX = (x + offset).roundToInt().coerceIn(0, width - 1)
+                source.copyInto(output, x * 4, sampleX * 4, sampleX * 4 + 4)
+            }
+        }
+    }
+
     fun magnifierNearestClamp(source: UByteArray, lensLeft: Float, lensRight: Float, zoom: Float, inset: Float): UByteArray {
         require(source.size % 4 == 0 && lensLeft < lensRight && zoom > 0f && inset >= 0f)
         val width = source.size / 4

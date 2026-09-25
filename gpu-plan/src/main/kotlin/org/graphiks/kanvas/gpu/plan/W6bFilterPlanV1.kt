@@ -192,6 +192,10 @@ public class FilterInputSamplingV1 internal constructor(
         offsetSnapshotTargetLocalI32.y,
     )
     public fun copyKnownContentInputTargetLocalI32(): RectI32 = knownSnapshotInputTargetLocalI32.copy()
+    public fun copy(): FilterInputSamplingV1 = FilterInputSamplingV1(
+        copyOutputToInputOffsetTargetLocalI32(),
+        copyKnownContentInputTargetLocalI32(),
+    )
 }
 
 /** A target-local spatial sampler sealed by planning, retaining fractional F64 clips. */
@@ -457,9 +461,15 @@ public sealed interface FilterPassOperationV1 {
         public val yChannel: ColorChannel,
         public val scaleF32: Float,
         override val bounds: FilterBoundsPlanV1,
+        displacementSampling: FilterInputSamplingV1,
+        sourceSampling: FilterInputSamplingV1,
         override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.DISPLACEMENT_MAP,
     ) : FilterPassOperationV1 {
+        private val displacementSamplingSnapshot = displacementSampling.copy()
+        private val sourceSamplingSnapshot = sourceSampling.copy()
         init { require(kind == FilterImplementationKindV1.DISPLACEMENT_MAP && scaleF32.isFinite()) }
+        public fun copyDisplacementSampling(): FilterInputSamplingV1 = displacementSamplingSnapshot.copy()
+        public fun copySourceSampling(): FilterInputSamplingV1 = sourceSamplingSnapshot.copy()
     }
 
     public class Magnifier(
@@ -467,12 +477,15 @@ public sealed interface FilterPassOperationV1 {
         public val zoomF32: Float,
         public val insetF32: Float,
         override val bounds: FilterBoundsPlanV1,
+        inputSampling: FilterInputSamplingV1,
         override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.MAGNIFIER,
     ) : FilterPassOperationV1 {
         private val sourceSnapshotF64 = sourceF64.copy()
+        private val inputSamplingSnapshot = inputSampling.copy()
         init { require(kind == FilterImplementationKindV1.MAGNIFIER && sourceSnapshotF64.isFinite() && !sourceSnapshotF64.isEmpty &&
             zoomF32.isFinite() && zoomF32 > 0f && insetF32.isFinite() && insetF32 >= 0f) }
         public fun copySourceF64(): RectF64 = sourceSnapshotF64.copy()
+        public fun copyInputSampling(): FilterInputSamplingV1 = inputSamplingSnapshot.copy()
     }
 
     public class Lighting(

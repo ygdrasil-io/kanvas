@@ -17,6 +17,8 @@ import org.graphiks.kanvas.pipeline.UniformBlock
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.color.ColorMatrixF32
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.geometry.SizeF32
+import org.graphiks.math.vector.Vector2F32
 import org.junit.jupiter.api.Test
 
 /** Public save/restore order witnesses for W6d backdrop and filtered previous layers. */
@@ -156,6 +158,44 @@ class W6dBackdropPreviousSurfacePixelTest {
         assertPublicBlurPixels(expected, surface)
     }
 
+    @Test
+    fun `backdrop convolution snapshots its left input halo outside restrictive output clip`() {
+        val parent = ubyteArrayOf(255u, 255u, 255u, 255u, 0u, 0u, 0u, 0u)
+        val convolved = W6dAdvancedSamplingCpuOracle.convolution3x1Clamp(parent, floatArrayOf(1f, 0f, 0f), offsetX = 1)
+        val expected = parent.copyOf().also { convolved.copyInto(it, destinationOffset = 4, startIndex = 4, endIndex = 8) }
+        val surface = Surface(2, 1)
+
+        surface.canvas {
+            drawOpaque(0f, 1f, ColorARGB.White)
+            clipRect(RectF32.ofLTRB(1f, 0f, 2f, 1f), antiAlias = false)
+            saveLayer(SaveLayerRec(backdrop = leftSampleMatrix(), paint = Paint(blendMode = BlendMode.SRC, antiAlias = false)))
+            restore()
+        }
+
+        assertPublicSamplingPixels(expected, surface)
+    }
+
+    @Test
+    fun `filtered previous convolution snapshots its left input halo outside restrictive output clip`() {
+        val parent = ubyteArrayOf(255u, 255u, 255u, 255u, 0u, 0u, 0u, 0u)
+        val convolved = W6dAdvancedSamplingCpuOracle.convolution3x1Clamp(parent, floatArrayOf(1f, 0f, 0f), offsetX = 1)
+        val expected = parent.copyOf().also { convolved.copyInto(it, destinationOffset = 4, startIndex = 4, endIndex = 8) }
+        val surface = Surface(2, 1)
+
+        surface.canvas {
+            drawOpaque(0f, 1f, ColorARGB.White)
+            clipRect(RectF32.ofLTRB(1f, 0f, 2f, 1f), antiAlias = false)
+            saveLayer(SaveLayerRec(initWithPrevious = true, paint = Paint(
+                imageFilter = leftSampleMatrix(),
+                blendMode = BlendMode.SRC,
+                antiAlias = false,
+            )))
+            restore()
+        }
+
+        assertPublicSamplingPixels(expected, surface)
+    }
+
     private fun assertPublicPixels(expected: UByteArray, surface: Surface) {
         val result = surface.render()
 
@@ -170,6 +210,16 @@ class W6dBackdropPreviousSurfacePixelTest {
         assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
     }
 
+    private fun assertPublicSamplingPixels(expected: UByteArray, surface: Surface) {
+        val result = surface.render()
+
+        expected.indices.forEach { index -> assertTrue(
+            kotlin.math.abs(expected[index].toInt() - result.pixels[index].toInt()) <= 1,
+            "channel $index expected=${expected[index]} actual=${result.pixels[index]}",
+        ) }
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
     private fun org.graphiks.kanvas.canvas.Canvas.drawOpaque(left: Float, right: Float, color: ColorARGB) {
         drawRect(RectF32.ofLTRB(left, 0f, right, 1f), Paint(color, antiAlias = false))
     }
@@ -177,6 +227,16 @@ class W6dBackdropPreviousSurfacePixelTest {
     private fun imageOpacity(alpha: Float): ImageFilter.RuntimeEffect = ImageFilter.RuntimeEffect(
         requireNotNull(RuntimeEffect.registered("kanvas.runtime.image-opacity", 1)),
         UniformBlock { float1("alpha", alpha) },
+    )
+
+    private fun leftSampleMatrix(): ImageFilter.MatrixConvolution = ImageFilter.MatrixConvolution(
+        SizeF32.of(3f, 1f),
+        floatArrayOf(1f, 0f, 0f),
+        1f,
+        0f,
+        Vector2F32(1f, 0f),
+        TileMode.CLAMP,
+        true,
     )
 
     private fun solidGreenFilter(): ImageFilter = ImageFilter.ColorFilter(ColorFilter.Blend(green, BlendMode.SRC))

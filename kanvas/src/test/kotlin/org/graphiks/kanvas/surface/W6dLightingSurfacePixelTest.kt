@@ -9,6 +9,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.canvas.SaveLayerRec
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
@@ -228,6 +229,49 @@ class W6dLightingSurfacePixelTest {
         }
 
         assertTrue(expected[0].toInt() > 0, "The ColorFilter wrapper must not re-bound transparent-black lighting.")
+        assertFamilyNear(expected, surface.render(), maxChannelDelta = 2)
+    }
+
+    @Test
+    fun `merge preserves consumer demand for its visible lighting branch`() {
+        val alpha = FloatArray(25).also { it[2 * 5 + 2] = 1f }
+        val expected = W6dLightingCpuOracle.distantDiffuseRgba8(5, 5, alpha, 2, 2, 3, 3,
+            directionX = 1f, directionY = 0f, directionZ = 1f, surfaceDepth = 1f, kd = 1f)
+        val filter = ImageFilter.Merge(listOf(ImageFilter.DistantLitDiffuse(
+            Vector3F32(1f, 0f, 1f),
+            ColorARGB.White,
+            1f,
+            1f,
+            ImageFilter.Crop(RectF32.ofLTRB(2f, 2f, 3f, 3f)),
+        )))
+        val surface = Surface(5, 5)
+
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(2f, 2f, 3f, 3f), Paint(ColorARGB.White, imageFilter = filter, antiAlias = false))
+        }
+
+        assertTrue(expected[0].toInt() > 0, "The Merge branch must retain visible lighting outside crop content.")
+        assertFamilyNear(expected, surface.render(), maxChannelDelta = 2)
+    }
+
+    @Test
+    fun `blend preserves consumer demand for its SRC lighting branch`() {
+        val alpha = FloatArray(25).also { it[2 * 5 + 2] = 1f }
+        val expected = W6dLightingCpuOracle.distantDiffuseRgba8(5, 5, alpha, 2, 2, 3, 3,
+            directionX = 1f, directionY = 0f, directionZ = 1f, surfaceDepth = 1f, kd = 1f)
+        val crop = ImageFilter.Crop(RectF32.ofLTRB(2f, 2f, 3f, 3f))
+        val filter = ImageFilter.Blend(
+            BlendMode.SRC,
+            crop,
+            ImageFilter.DistantLitDiffuse(Vector3F32(1f, 0f, 1f), ColorARGB.White, 1f, 1f, crop),
+        )
+        val surface = Surface(5, 5)
+
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(2f, 2f, 3f, 3f), Paint(ColorARGB.White, imageFilter = filter, antiAlias = false))
+        }
+
+        assertTrue(expected[0].toInt() > 0, "The Blend foreground must retain visible lighting outside crop content.")
         assertFamilyNear(expected, surface.render(), maxChannelDelta = 2)
     }
 

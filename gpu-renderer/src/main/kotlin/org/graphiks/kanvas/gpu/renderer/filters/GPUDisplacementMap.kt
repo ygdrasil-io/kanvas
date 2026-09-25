@@ -56,21 +56,26 @@ internal object GPUW6dAdvancedSamplingPass {
     }
 
     private fun displacementFragment(program: W6dSamplingProgramV1.Displacement): String {
+        val displacementOffset = program.copyDisplacementSampling().copyOutputToInputOffsetTargetLocalI32()
+        val sourceOffset = program.copySourceSampling().copyOutputToInputOffsetTargetLocalI32()
         return """
             @group(0) @binding(0) var w6d_displacement: texture_2d<f32>;
             @group(0) @binding(1) var w6d_source: texture_2d<f32>;
             @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
                 let base = vec2<i32>(position.xy);
                 let map_extent = vec2<i32>(textureDimensions(w6d_displacement));
-                let map = textureLoad(w6d_displacement, clamp(base, vec2<i32>(0), map_extent - vec2<i32>(1)), 0);
+                let map_coordinate = base + vec2<i32>(${displacementOffset.x}, ${displacementOffset.y});
+                let map = textureLoad(w6d_displacement, clamp(map_coordinate, vec2<i32>(0), map_extent - vec2<i32>(1)), 0);
                 let source_extent = vec2<i32>(textureDimensions(w6d_source));
-                let coordinate = vec2<i32>(round(vec2<f32>(base) + vec2<f32>(map[${program.xComponentI32}], map[${program.yComponentI32}]) * ${program.scaleF32}f));
+                let source_base = base + vec2<i32>(${sourceOffset.x}, ${sourceOffset.y});
+                let coordinate = vec2<i32>(round(vec2<f32>(source_base) + vec2<f32>(map[${program.xComponentI32}], map[${program.yComponentI32}]) * ${program.scaleF32}f));
                 return textureLoad(w6d_source, clamp(coordinate, vec2<i32>(0), source_extent - vec2<i32>(1)), 0);
             }
         """
     }
 
     private fun magnifierFragment(program: W6dSamplingProgramV1.Magnifier): String {
+        val inputOffset = program.copyInputSampling().copyOutputToInputOffsetTargetLocalI32()
         return """
             @group(0) @binding(0) var w6d_magnifier_source: texture_2d<f32>;
             @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
@@ -79,7 +84,8 @@ internal object GPUW6dAdvancedSamplingPass {
                     point.y >= ${program.innerTopF64}f && point.y <= ${program.innerBottomF64}f;
                 let sampled = select(point, vec2<f32>(${program.centerXF64}f, ${program.centerYF64}f) + (point - vec2<f32>(${program.centerXF64}f, ${program.centerYF64}f)) / ${program.zoomF32}f, inside);
                 let extent = vec2<i32>(textureDimensions(w6d_magnifier_source));
-                return textureLoad(w6d_magnifier_source, clamp(vec2<i32>(round(sampled - vec2<f32>(0.5))), vec2<i32>(0), extent - vec2<i32>(1)), 0);
+                let source_coordinate = vec2<i32>(round(sampled - vec2<f32>(0.5))) + vec2<i32>(${inputOffset.x}, ${inputOffset.y});
+                return textureLoad(w6d_magnifier_source, clamp(source_coordinate, vec2<i32>(0), extent - vec2<i32>(1)), 0);
             }
         """
     }

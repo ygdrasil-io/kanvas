@@ -22,6 +22,28 @@ import org.graphiks.math.vector.Vector3F32
 import org.junit.jupiter.api.Test
 
 class W6dPictureFilterSurfacePixelTest {
+    /** A layer filter has no carrier DrawNode; its frozen layer mapping owns Picture source placement. */
+    @Test
+    fun pictureFilterOnSaveLayerUsesFrozenLayerSourceContext() {
+        val expected = ubyteArrayOf(255u, 0u, 0u, 255u)
+        val unit = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(unit).drawRect(unit, Paint(ColorARGB.Red, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val surface = Surface(1, 1)
+
+        surface.canvas {
+            saveLayer(SaveLayerRec(paint = Paint(imageFilter = ImageFilter.Picture(picture), antiAlias = false)))
+            drawRect(unit, Paint(ColorARGB.Blue, antiAlias = false))
+            restore()
+        }
+
+        val result = surface.render()
+
+        assertContentEquals(expected, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
     @Test
     fun filterPictureIgnoresCarrierPixelsAndSamplesOnlySealedScene() {
         val expected = ubyteArrayOf(255u, 0u, 0u, 255u)

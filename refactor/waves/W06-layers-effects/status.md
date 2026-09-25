@@ -2,6 +2,50 @@
 
 ## Statut
 
+### Correction whole-branch W6d — contextes sampling, snapshots et branches lighting
+
+La correction bornée sur la base revue
+`a9ad64fd6de89d7471f94d7d29f9a7d70c5dc281` conserve le graphe W6 unique et
+ses ressources/pass/IDs gelés. Un `ImageFilter.Picture` de `saveLayer` sans
+`sourceDraw` emploie désormais le mapping déjà gelé du layer ; un carrier de
+draw continue à composer son transform exactement une fois. Les demandes
+inverses de `MatrixConvolution`, `DisplacementMap` et `Magnifier` sont
+propagées avant l'intersection parent : le halo Matrix et les snapshots
+`backdrop`/`initWithPrevious` ne perdent donc plus leurs texels d'entrée.
+
+Les recettes W6d figent aussi l'offset target-local de **chaque** input de
+`DisplacementMap` et de `Magnifier`. Le renderer lit ces valeurs scellées sans
+replan ni reconstruction de bounds : map et source de displacement peuvent
+avoir des origins distincts, et la source Magnifier est exprimée dans le même
+repère target-local. Les six lumières gardent leur consumer domain à travers
+`Compose`, `Merge` et `Blend`, de sorte que les pixels créés depuis transparent
+black ne sont plus coupés par la géométrie source.
+
+Les witnesses publics `Surface` + `Render` + `Readback` frais couvrent Picture
+sur layer, map décalée, Magnifier transformé à origin non nul, halo Matrix pour
+backdrop/previous et les branches lighting `Merge`/`Blend`. La recovery
+onze-familles est devenue causale : chaque famille est rendue dans sa propre
+Surface 3×3 depuis un oracle calculé avant `Surface`/`PictureRecorder`; la
+variante Matrix sparse antérieure ne constituait qu'une dépendance à la
+réutilisation d'allocation d'une bande ultérieure (la même fixture isolée
+échouait déjà sur la base), et ne masque plus aucun résultat. Picture et runtime
+restent byte-exact ; les seules tolérances famille sont explicites (Matrix,
+Displacement, Magnifier ≤1, lighting ≤2).
+
+Le contrat historique W6a `unsupportedBackdropRefusesTerminallyAndRecovers`
+est remplacé par l'acceptation pixel d'un Blur backdrop depuis son parent gelé,
+comportement W6d intentionnel. Les sélecteurs ciblés ont donné, dans leurs XML
+au moment de l'exécution, `W6dAdvancedSampling` 7/0/0/0,
+`W6dAdvancedRecovery` 5/0/0/0, `W6dBackdropPrevious` 9/0/0/0,
+`W6dLighting` 31/0/0/0, `W6dPictureFilter` 19/0/0/0, puis les préservations
+W6a Layer 16/0/0/0 et Previous 8/0/0/0, W6b ImageBlur 10/0/0/0, W6c Compose
+4/0/0/0 et MultiInput 5/0/0/0. Les workers terminent encore après JUnit avec
+133 : native **UNKNOWN**, sans claim native, ISO ou globale. La compilation
+finale `:gpu-plan:compileKotlin :gpu-renderer:compileKotlin
+:kanvas:compileKotlin :kanvas:compileTestKotlin` sort 0. Fonts/codecs, GMs,
+dashboard/renders/scores et suite globale restent exclus ; W6e n'est pas
+démarrée.
+
 ### Checkpoint W6d Task 7 — ownership atomique de frame
 
 La tranche Terra Task 7 est implémentée sur la source
