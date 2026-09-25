@@ -6,6 +6,18 @@ import org.graphiks.kanvas.render.ir.RuntimeUniformType
 public data class RuntimeEffectCpuColorF32(public val rF32: Float, public val gF32: Float, public val bF32: Float, public val aF32: Float) {
     init { require(listOf(rF32, gF32, bF32, aF32).all { it.isFinite() }) { W5hPlanDiagnostics.CpuNumeric } }
 }
+
+/** The sealed W6d IMAGE_FILTER operation: one input sample, scalar premultiplied-RGBA opacity. */
+public fun evaluateImageOpacity(
+    input: RuntimeEffectCpuColorF32,
+    alphaF32: Float,
+): RuntimeEffectCpuColorF32 = RuntimeEffectCpuColorF32(
+    input.rF32 * alphaF32,
+    input.gF32 * alphaF32,
+    input.bF32 * alphaF32,
+    input.aF32 * alphaF32,
+)
+
 public sealed interface RuntimeEffectCpuUniformV1 {
     public data class FloatValue(public val name: String, public val valueF32: Float) : RuntimeEffectCpuUniformV1 {
         init { require(name.isNotBlank() && valueF32.isFinite()) { W5hPlanDiagnostics.CpuUniforms } }
@@ -74,7 +86,6 @@ public object ImageOpacityCpuEvaluatorV1 : RuntimeEffectCpuEvaluatorV1 {
             "invalid.material.runtime_effect.cpu_uniforms"
         }
         val input = requireNotNull(inputs.children[0])
-        return RuntimeEffectCpuColorF32(input.rF32 * alpha.valueF32, input.gF32 * alpha.valueF32,
-            input.bF32 * alpha.valueF32, input.aF32 * alpha.valueF32)
+        return evaluateImageOpacity(input, alpha.valueF32)
     }
 }

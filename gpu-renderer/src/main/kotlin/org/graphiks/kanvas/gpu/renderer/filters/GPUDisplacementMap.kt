@@ -21,6 +21,8 @@ internal object GPUW6dAdvancedSamplingPass {
         W6dSamplingProgramIdV1.SPOT_SPECULAR_RGBA8_V1 -> error("Lighting has a dedicated frozen translator.")
         W6dSamplingProgramIdV1.PICTURE_NEAREST_CLAMP_RGBA8_V1 ->
             error("Picture has a dedicated frozen translator.")
+        W6dSamplingProgramIdV1.RUNTIME_IMAGE_OPACITY_RGBA8_V1 ->
+            runtimeImageOpacityFragment(program as W6dSamplingProgramV1.RuntimeImageOpacity)
     }
 
     private fun matrixConvolutionFragment(program: W6dSamplingProgramV1.Convolution): String {
@@ -81,6 +83,18 @@ internal object GPUW6dAdvancedSamplingPass {
             }
         """
     }
+
+    private fun runtimeImageOpacityFragment(program: W6dSamplingProgramV1.RuntimeImageOpacity): String = """
+        @group(0) @binding(0) var w6d_runtime_image_opacity_source: texture_2d<f32>;
+        @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+            let coordinate = vec2<i32>(position.xy);
+            let extent = vec2<i32>(textureDimensions(w6d_runtime_image_opacity_source));
+            if (coordinate.x < 0 || coordinate.y < 0 || coordinate.x >= extent.x || coordinate.y >= extent.y) {
+                return vec4<f32>(0.0);
+            }
+            return textureLoad(w6d_runtime_image_opacity_source, coordinate, 0) * ${program.alphaF32}f;
+        }
+    """
 }
 
 /** Translates only the preflighted Picture recipe; no captured geometry reaches this boundary. */

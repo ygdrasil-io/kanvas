@@ -765,6 +765,7 @@ internal class W6aLayerGraphConstruction(
                 }
                 W6bFilterGraphConstruction.freezeImageOccurrence(
                     occurrence, materialized?.output ?: source, filterCursor, framePassSink, emitFilterPictureSource,
+                    runtimeCatalog,
                 )
             } else requireNotNull(materialized) { "W6b mask occurrence needs its materialized W5 source." }
             filterResourceSpecs += frozen.resourceSpecs()

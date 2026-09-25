@@ -643,9 +643,12 @@ public object RuntimeBindingValidator {
             return RuntimeBindingValidationResult.UnexpectedUniform(name)
         }
 
-        descriptor.forEach { slot ->
+        descriptor.childSlots.forEach { slot ->
             val child = children.firstOrNull { it.name == slot.name }
-                ?: return RuntimeBindingValidationResult.MissingChild(slot.name)
+            if (child == null) {
+                if (!slot.nullable) return RuntimeBindingValidationResult.MissingChild(slot.name)
+                return@forEach
+            }
             if (child.type != slot.type) {
                 return RuntimeBindingValidationResult.ChildTypeMismatch(slot.name, slot.type, child.type)
             }

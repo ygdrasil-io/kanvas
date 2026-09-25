@@ -10,8 +10,13 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNotSame
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.pipeline.RuntimeEffect
+import org.graphiks.kanvas.pipeline.UniformBlock
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
@@ -19,6 +24,28 @@ import org.junit.jupiter.api.Test
 
 /** Public memory/wire witnesses for filter-owned Picture sources. */
 class W6dPictureRuntimeEffectPictureTest {
+    @Test
+    fun runtimeImageOpacityWireReplayKeepsW5hHashes() {
+        val expected = ubyteArrayOf(60u, 30u, 15u, 128u)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(RectF32.ofLTRB(0f, 0f, 1f, 1f)).drawRect(
+                RectF32.ofLTRB(0f, 0f, 1f, 1f),
+                Paint(shader = runtimeImageOpacitySourceShader, imageFilter = imageOpacity(.5f), antiAlias = false),
+            )
+        }.finishRecordingAsPicture()
+        val decoded = assertNotNull(Picture.fromByteArray(picture.toByteArray()))
+
+        for (candidate in listOf(picture, decoded)) {
+            val result = Surface(1, 1).also { surface -> surface.canvas { drawPicture(candidate) } }.render()
+            assertContentEquals(expected, result.pixels)
+            assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+        }
+        assertEquals(
+            "2c7646732d3484bdc2d99a813af1ae721872bbfeb3b2030e2ee4eb39be53d6c8",
+            assertNotNull(RuntimeEffect.registered("kanvas.runtime.child-opacity", 1)).abiHash,
+        )
+    }
+
     @Test
     fun equalPictureFiltersRemainDistinctAcrossWireReplay() {
         val expected = opaqueRedPair()
@@ -135,6 +162,16 @@ class W6dPictureRuntimeEffectPictureTest {
     private fun opaqueRedPair(): UByteArray = ubyteArrayOf(
         255u, 0u, 0u, 255u,
         255u, 0u, 0u, 255u,
+    )
+
+    // Matches the surface fixture's exact encoded sRGB input for .5f linear-premul opacity.
+    private val runtimeImageOpacitySourceShader: Shader = Shader.Image(
+        Image.fromPixels(1, 1, byteArrayOf(85, 45, 24, -1), alphaType = AlphaType.PREMUL),
+    )
+
+    private fun imageOpacity(alpha: Float): ImageFilter.RuntimeEffect = ImageFilter.RuntimeEffect(
+        requireNotNull(RuntimeEffect.registered("kanvas.runtime.image-opacity", 1)),
+        UniformBlock { float1("alpha", alpha) },
     )
 
     /**

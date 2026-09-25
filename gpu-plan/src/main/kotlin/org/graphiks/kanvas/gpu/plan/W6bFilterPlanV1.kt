@@ -10,6 +10,8 @@ import org.graphiks.kanvas.render.ir.ImmutableFloats
 import org.graphiks.kanvas.render.ir.MaskBlurStyle
 import org.graphiks.kanvas.render.ir.RuntimeEffectAbi
 import org.graphiks.kanvas.render.ir.RuntimeEffectDescriptor
+import org.graphiks.kanvas.render.ir.RuntimeUniformSlotV2
+import org.graphiks.kanvas.render.ir.RuntimeUniformType
 import org.graphiks.kanvas.render.ir.TileMode
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2I32
@@ -543,11 +545,25 @@ public sealed interface FilterPassOperationV1 {
     public class RuntimeImageOpacity(
         public val effect: RuntimeEffectDescriptor,
         public val alphaF32: Float,
+        /** Exact alpha-field ABI location selected before the frame graph freezes. */
+        public val alphaUniformOffsetBytesI32: Int,
         override val bounds: FilterBoundsPlanV1,
+        /** Same-pixel binding retained for renderer validation; its offset must be zero. */
+        public val sampling: FilterInputSamplingV1,
         override val kind: FilterImplementationKindV1 = FilterImplementationKindV1.RUNTIME_IMAGE_OPACITY,
     ) : FilterPassOperationV1 {
-        init { require(kind == FilterImplementationKindV1.RUNTIME_IMAGE_OPACITY && effect.id.value == "kanvas.runtime.image-opacity" &&
-            effect.semanticVersionI32 == 1 && effect.abi == RuntimeEffectAbi.IMAGE_FILTER && alphaF32.isFinite() && alphaF32 in 0f..1f) }
+        init {
+            require(kind == FilterImplementationKindV1.RUNTIME_IMAGE_OPACITY &&
+                effect.id.value == "kanvas.runtime.image-opacity" && effect.semanticVersionI32 == 1 &&
+                effect.abi == RuntimeEffectAbi.IMAGE_FILTER && effect.recomputeAbiHash() == effect.abiHash &&
+                alphaF32.isFinite() && alphaF32 in 0f..1f)
+            require(effect.uniformBlock.slots == listOf(
+                RuntimeUniformSlotV2("alpha", RuntimeUniformType.FLOAT, alphaUniformOffsetBytesI32, 4, 4, 1, 0),
+            ))
+            require(sampling.copyOutputToInputOffsetTargetLocalI32() == Point2I32(0, 0)) {
+                "Runtime image opacity must retain a same-pixel input binding."
+            }
+        }
     }
 
     public data class SeparableBlur(

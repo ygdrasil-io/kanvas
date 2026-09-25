@@ -133,7 +133,6 @@ public sealed interface CapturedFilterNodeV1 : CanonicalValue {
         private val storedUniforms = immutableUniformMap(uniforms)
         private val storedChildren = immutableList(children)
         init {
-            require(descriptor.abi == RuntimeEffectAbi.IMAGE_FILTER) { "Runtime image filter must use IMAGE_FILTER ABI" }
             require(childShaderName == null || childShaderName.isNotBlank()) { "Runtime child shader name must not be blank" }
             require(storedChildren.map(CapturedRuntimeImageFilterChildV1::name).distinct().size == storedChildren.size) { "Runtime image-filter child names must be unique" }
             require(childShaderName == null || storedChildren.none { it.name == childShaderName }) { "Runtime image-filter child names must be unique" }

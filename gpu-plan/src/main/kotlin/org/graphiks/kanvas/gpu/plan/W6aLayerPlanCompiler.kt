@@ -322,8 +322,13 @@ public class W6aLayerPlanCompiler public constructor(
                     pass.frozenSamplingProgram.inputs() == pass.inputs() &&
                     pass.frozenSamplingProgram.output == pass.output
             } == true
-            is FilterPassOperationV1.RuntimeImageOpacity,
-            -> false
+            is FilterPassOperationV1.RuntimeImageOpacity -> pass.frozenSamplingProgram?.program?.let { program ->
+                program is W6dSamplingProgramV1.RuntimeImageOpacity &&
+                    program.alphaF32 == operation.alphaF32 &&
+                    program.alphaUniformOffsetBytesI32 == operation.alphaUniformOffsetBytesI32 &&
+                    pass.frozenSamplingProgram.inputs() == pass.inputs() &&
+                    pass.frozenSamplingProgram.output == pass.output
+            } == true
         } }
         val terminals = graph.passes().filterIsInstance<PlanPass.FilterComposite>()
         // W6b consumes a typed frozen W4 producer for direct mask coverage.  Do not admit a

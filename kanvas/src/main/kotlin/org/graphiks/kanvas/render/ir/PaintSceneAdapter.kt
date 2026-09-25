@@ -203,7 +203,11 @@ public object PaintSceneAdapter {
             is ImageFilter.Magnifier -> CapturedFilterNodeV1.Magnifier(src.checked("image-filter.src"), zoom.checked("image-filter.zoom"), inset.checked("image-filter.inset"), input(input))
             is ImageFilter.MatrixConvolution -> CapturedFilterNodeV1.MatrixConvolution(kernelSize.checked("image-filter.kernel-size"), ImmutableFloats.copyOf(kernel.checked("image-filter.kernel")), gain.checked("image-filter.gain"), bias.checked("image-filter.bias"), kernelOffset.checked("image-filter.kernel-offset"), TileMode.valueOf(tileMode.name), convolveAlpha, input(input))
             is ImageFilter.RuntimeEffect -> CapturedFilterNodeV1.RuntimeEffect(
-                effect.toDescriptor(RuntimeEffectAbi.IMAGE_FILTER, childImageFilters.keys.map { RuntimeChildSlot(it, RuntimeChildType.IMAGE_FILTER) } + listOfNotNull(childShaderName?.let { RuntimeChildSlot(it, RuntimeChildType.SHADER) })),
+                effect.descriptor ?: effect.toDescriptor(
+                    RuntimeEffectAbi.IMAGE_FILTER,
+                    childImageFilters.keys.map { RuntimeChildSlot(it, RuntimeChildType.IMAGE_FILTER) } +
+                        listOfNotNull(childShaderName?.let { RuntimeChildSlot(it, RuntimeChildType.SHADER) }),
+                ),
                 uniforms.toRuntimeUniforms(), childShaderName,
                 childImageFilters.map { (name, child) -> CapturedRuntimeImageFilterChildV1(name, input(child)) },
             )

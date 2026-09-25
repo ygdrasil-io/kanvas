@@ -307,7 +307,6 @@ public sealed interface ImageFilterNode : EffectNode {
         private val storedUniforms: Map<String, RuntimeUniformValue> = immutableUniformMap(uniforms)
         private val storedChildren: List<RuntimeImageFilterChild> = immutableList(children)
         init {
-            require(descriptor.abi == RuntimeEffectAbi.IMAGE_FILTER) { "Runtime image filter must use IMAGE_FILTER ABI" }
             require(childShaderName == null || childShaderName.isNotBlank()) { "Runtime child shader name must not be blank" }
             require(storedChildren.map(RuntimeImageFilterChild::name).distinct().size == storedChildren.size) {
                 "Runtime image-filter child names must be unique"

@@ -806,8 +806,31 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     BlendPlan.LegacySrcOverV1,
                                     0, 0, outputExtent.width, outputExtent.height, pass, owned)
                             }
-                            is FilterPassOperationV1.RuntimeImageOpacity,
-                            -> error("W6d frozen operation ${operation.kind} reached materialization before its owning slice.")
+                            is FilterPassOperationV1.RuntimeImageOpacity -> {
+                                val binding = requireNotNull(pass.frozenSamplingProgram) {
+                                    "W6d runtime image opacity lost its frozen program/binding contract."
+                                }
+                                val program = binding.program as? W6dSamplingProgramV1.RuntimeImageOpacity
+                                    ?: error("W6d runtime image opacity received a non-runtime frozen program.")
+                                require(binding.inputs() == pass.inputs() && binding.output == pass.output &&
+                                    program.alphaF32 == operation.alphaF32 &&
+                                    program.alphaUniformOffsetBytesI32 == operation.alphaUniformOffsetBytesI32 &&
+                                    operation.sampling.copyOutputToInputOffsetTargetLocalI32().x == 0 &&
+                                    operation.sampling.copyOutputToInputOffsetTargetLocalI32().y == 0) {
+                                    "W6d runtime image opacity does not retain its sealed same-pixel binding."
+                                }
+                                renderOperands += multiInputRender(
+                                    stepIndex,
+                                    views.getValue(binding.output),
+                                    binding.inputs().map(views::getValue),
+                                    generation,
+                                    W6A_VERTEX_SHADER + GPUW6dAdvancedSamplingPass.fragment(program),
+                                    outputExtent.width,
+                                    outputExtent.height,
+                                    pass,
+                                    owned,
+                                )
+                            }
                         }
                     }
                     is PlanPass.PictureComposite -> {

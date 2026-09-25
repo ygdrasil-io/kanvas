@@ -20,6 +20,7 @@ public enum class W6dSamplingProgramIdV1(public val inputArityI32: Int) {
     DISTANT_DIFFUSE_RGBA8_V1(1), POINT_DIFFUSE_RGBA8_V1(1), SPOT_DIFFUSE_RGBA8_V1(1),
     DISTANT_SPECULAR_RGBA8_V1(1), POINT_SPECULAR_RGBA8_V1(1), SPOT_SPECULAR_RGBA8_V1(1),
     PICTURE_NEAREST_CLAMP_RGBA8_V1(1),
+    RUNTIME_IMAGE_OPACITY_RGBA8_V1(1),
 }
 
 /**
@@ -111,6 +112,16 @@ public sealed class W6dSamplingProgramV1(public val programId: W6dSamplingProgra
         public fun copySampling(): W6dPictureSamplingV1 = samplingSnapshot.copy()
     }
 
+    /** Registered IMAGE_FILTER program with its alpha field already selected from the ABI. */
+    public class RuntimeImageOpacity(
+        public val alphaF32: Float,
+        public val alphaUniformOffsetBytesI32: Int,
+    ) : W6dSamplingProgramV1(W6dSamplingProgramIdV1.RUNTIME_IMAGE_OPACITY_RGBA8_V1) {
+        init {
+            require(alphaF32.isFinite() && alphaF32 in 0f..1f && alphaUniformOffsetBytesI32 == 0)
+        }
+    }
+
     /** Immutable lighting recipe, including mapped 3D facts and the four Sobel edge decisions. */
     public class DistantDiffuse internal constructor(
         direction3F32: Vector3F32,
@@ -198,6 +209,10 @@ internal fun selectW6dSamplingProgram(
             )
         }
         is FilterPassOperationV1.Picture -> W6dSamplingProgramV1.Picture(operation.copyPictureSampling())
+        is FilterPassOperationV1.RuntimeImageOpacity -> W6dSamplingProgramV1.RuntimeImageOpacity(
+            operation.alphaF32,
+            operation.alphaUniformOffsetBytesI32,
+        )
         is FilterPassOperationV1.Lighting -> {
             val sampling = requireNotNull(operation.copySobelSamplingOrNull())
             if (operation.family == LightingFamilyV1.DISTANT_DIFFUSE) {

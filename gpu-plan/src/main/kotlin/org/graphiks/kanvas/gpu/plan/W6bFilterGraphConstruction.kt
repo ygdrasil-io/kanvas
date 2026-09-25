@@ -402,6 +402,7 @@ internal object W6bFilterGraphConstruction {
         cursor: FreezeCursor,
         sink: W6FramePassSinkV1,
         emitFilterPictureSource: FilterPictureSourceEmitterV1,
+        runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
     ): FrozenOccurrence {
         // The source scene's canonical id is an immutable content revision.  It is deliberately
         // captured here, where the occurrence still owns the SceneSnapshot, and carried through
@@ -910,6 +911,45 @@ internal object W6bFilterGraphConstruction {
                 ContextualFilterResult(output, bounds, key)
                 }
             }
+            is CapturedFilterNodeV1.RuntimeEffect -> {
+                val entry = runtimeCatalog.find(
+                    node.descriptor.id,
+                    node.descriptor.semanticVersionI32,
+                    node.descriptor.abiHash,
+                ) ?: throw ConstructionFailure(W6dPlanDiagnostics.refusal(
+                    W6dPlanDiagnostics.RuntimeEffectNotRegistered,
+                    "Runtime image filter ${node.descriptor.id.value}@${node.descriptor.semanticVersionI32} is not registered.",
+                ))
+                if (entry.semanticKind != RuntimeEffectSemanticKindV1.IMAGE_OPACITY ||
+                    entry.descriptor != node.descriptor ||
+                    node.descriptor.abi != org.graphiks.kanvas.render.ir.RuntimeEffectAbi.IMAGE_FILTER
+                ) throw ConstructionFailure(W6dPlanDiagnostics.refusal(
+                    W6dPlanDiagnostics.RuntimeEffectAbiUnsupported,
+                    "Runtime image filter ${node.descriptor.id.value} does not have the IMAGE_FILTER image-opacity ABI.",
+                ))
+                val alpha = node.uniforms()["alpha"] as? org.graphiks.kanvas.render.ir.RuntimeUniformValue.F1
+                if (alpha == null || !alpha.value.isFinite() || alpha.value !in 0f..1f) {
+                    throw ConstructionFailure(W6dPlanDiagnostics.refusal(
+                        W6dPlanDiagnostics.RuntimeEffectInvalidBinding,
+                        "Runtime image opacity requires finite alpha in [0, 1].",
+                    ))
+                }
+                val input = node.firstOrNull { it.name == "input" }?.input ?: CapturedFilterInputV1.ImplicitSource
+                val source = materializeInput(input, currentSource)
+                val bounds = identityBounds(source)
+                val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
+                val output = allocateTarget(bounds)
+                val uniform = requireNotNull(entry.descriptor.uniformBlock.slots.singleOrNull { it.name == "alpha" })
+                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(source.resourceId), output.resourceId, key,
+                    FilterPassOperationV1.RuntimeImageOpacity(
+                        entry.descriptor,
+                        alpha.value,
+                        uniform.offsetBytesI32,
+                        bounds,
+                        filterInputSampling(source, bounds),
+                    )))
+                ContextualFilterResult(output, bounds, key)
+            }
             else -> throw ConstructionFailure(W6bFilterDiagnostics.refusal(
                 W6bFilterDiagnostics.UnsupportedFamily, "The captured image-filter family belongs to W6c or W6d.",
             ))
@@ -1218,6 +1258,10 @@ internal object W6bFilterGraphConstruction {
             is CapturedFilterNodeV1.DistantLitSpecular -> inputDemand(node.input, sobelRequiredInput(output))
             is CapturedFilterNodeV1.PointLitSpecular -> inputDemand(node.input, sobelRequiredInput(output))
             is CapturedFilterNodeV1.SpotLitSpecular -> inputDemand(node.input, sobelRequiredInput(output))
+            is CapturedFilterNodeV1.RuntimeEffect -> inputDemand(
+                node.firstOrNull { it.name == "input" }?.input ?: CapturedFilterInputV1.ImplicitSource,
+                output,
+            )
             else -> throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.UnsupportedFamily,
                 "Reverse demand requires an admitted W6b filter."))
         }
@@ -1553,6 +1597,9 @@ internal object W6bFilterGraphConstruction {
                     is CapturedFilterNodeV1.DistantLitSpecular -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
                     is CapturedFilterNodeV1.PointLitSpecular -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
                     is CapturedFilterNodeV1.SpotLitSpecular -> node.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    is CapturedFilterNodeV1.RuntimeEffect -> node.forEach { child ->
+                        child.input.enqueueNodeOrUnsupported(pending)?.let { return "W6d" }
+                    }
                     else -> return if (isW6cVariant(node)) "W6c" else "W6d"
                 }
             }
