@@ -952,20 +952,20 @@ remain unchecked; W6e is next after them.
 
 - [x] **Step 7: Request whole-branch Sol review and run the bounded correction policy.** Review `codex/w6c-spatial-dag..HEAD` for spec coverage, all eleven families, bounds/mappings, save order, immutable Picture/wire, runtime ABI/hash isolation, resources/lifetimes/budgets, atomic visibility, public evidence, and legacy fallback. The first Terra correction wave (`536d0e58e`, `79c1fa86d`) and its Sol re-review isolated two Magnifier variants. The user explicitly authorized an exceptional second targeted wave (`715eb7896`, `519129b8b`), whose Sol re-review marked both ADDRESSED with no new Critical/Important. The obsolete W6b filtered-previous refusal was removed at `b20a833fa` and independently Sol-approved. Process/native 133 remains UNKNOWN; see durable W06 status.
 
-- [ ] **Step 8: Create the stacked Draft PR only after green gates.** Push `codex/w6d-advanced-effects` and create/update one Draft PR targeting `codex/w6c-spatial-dag`. Its description names the seven task commits, exact gates/custody, accepted RGBA8, F16 refusal, exclusions, native `UNKNOWN` when applicable, one Sol review/fix-wave status, and W6e as next step. Do not merge.
+- [x] **Step 8: Create the stacked Draft PR only after green gates.** Branch `codex/w6d-advanced-effects` was pushed and [Draft PR #2406](https://github.com/ygdrasil-io/kanvas/pull/2406) opened on `codex/w6c-spatial-dag`, verified `OPEN`/`isDraft=true`. Its description names the seven task landmarks, exact gates/custody, accepted RGBA8, F16 refusal, exclusions, native `UNKNOWN`, the Sol review/correction exception, and W6e as next step. No merge.
 
 ## W6d Definition of Done
 
-- [ ] MatrixConvolution, DisplacementMap, Magnifier, six lighting families, Picture, and registered RuntimeEffect execute through W6c occurrence binding and W6d arms on `FilterPassOperationV1`; Picture alone additionally reads a filter-owned, sealed `PictureAggregateSource`.
-- [ ] Backdrop snapshots the immediate parent at save and filters before child draws; filtered previous copies unfiltered parent at save and evaluates its DAG only after children.
-- [ ] `ImageFilter.Picture` captures a bounded immutable `SceneSnapshot`, executes it through a filter-owned Picture aggregate sealed before `FilterPass.Picture`, and publicly covers memory/wire replay, mutation isolation, stable references, malformed-table refusal and historical readers.
-- [ ] `kanvas.runtime.image-opacity` v1 has IMAGE_FILTER ABI, required `input` image child, F32 `alpha`, same-pixel premultiplied RGBA multiplication, unchanged bounds, absent-input `ImplicitSource`, and no arbitrary runtime frontend; W5h hashes are unchanged.
-- [ ] Only RGBA8 is positively admitted; F16/HDR gets an exact capability refusal with no silent format substitution.
-- [ ] `:math` owns new geometry; `:gpu-plan` freezes the FilterPass/FilterTarget extensions and, only for Task 4, reuses existing Picture aggregate passes and `PictureAggregateSource`. The renderer has no post-freeze choice, replan, bounds reconstruction, target resize, pass insertion, ID rewrite or legacy fallback.
-- [ ] Every resource, cache lease, snapshot, target, program, uniform, sampler, staging buffer, alignment, and allocation slot is budgeted with checked I64 before allocation; B/B-1, terminal no-publication, and same-surface recovery are publicly proved.
-- [ ] Each positive W6d witness asserts public Render+Readback scope evidence; exact and family-oracle tolerance policies remain separate; no prohibited private/infrastructure tests exist.
-- [ ] Required W6d shards, targeted W6a/W5h preservation, and touched-module compilations pass with recorded custody; native exits 133/134 remain `UNKNOWN`.
-- [ ] One whole-branch Sol review has no open Critical/Important finding after at most one bounded correction wave, and one unmerged Draft PR is stacked on W6c.
+- [x] MatrixConvolution, DisplacementMap, Magnifier, six lighting families, Picture, and registered RuntimeEffect execute through W6c occurrence binding and W6d arms on `FilterPassOperationV1`; Picture alone additionally reads a filter-owned, sealed `PictureAggregateSource`.
+- [x] Backdrop snapshots the immediate parent at save and filters before child draws; filtered previous copies unfiltered parent at save and evaluates its DAG only after children.
+- [x] `ImageFilter.Picture` captures a bounded immutable `SceneSnapshot`, executes it through a filter-owned Picture aggregate sealed before `FilterPass.Picture`, and publicly covers memory/wire replay, mutation isolation, stable references, malformed-table refusal and historical readers.
+- [x] `kanvas.runtime.image-opacity` v1 has IMAGE_FILTER ABI, required `input` image child, F32 `alpha`, same-pixel premultiplied RGBA multiplication, unchanged bounds, absent-input `ImplicitSource`, and no arbitrary runtime frontend; W5h hashes are unchanged.
+- [x] Only RGBA8 is positively admitted; F16/HDR gets an exact capability refusal with no silent format substitution.
+- [x] `:math` owns new geometry; `:gpu-plan` freezes the FilterPass/FilterTarget extensions and, only for Task 4, reuses existing Picture aggregate passes and `PictureAggregateSource`. The renderer has no post-freeze choice, replan, bounds reconstruction, target resize, pass insertion, ID rewrite or legacy fallback.
+- [x] Every W6d resource and program has a checked-I64 pre-allocation *logical* admission charge, owner, generation, descriptor, usages, slot and lifetime; B/B−1, terminal no-publication, and same-surface recovery are publicly proved. Opaque driver shader/pipeline bytes are not measured and remain a documented limit.
+- [x] Each positive W6d witness asserts public Render+Readback scope evidence; exact and family-oracle tolerance policies remain separate; no prohibited private/infrastructure tests exist.
+- [x] Required W6d shards, targeted W6a/W5h preservation, and touched-module compilations have recorded XML/exit custody; native exits 133/134 remain `UNKNOWN` rather than process-level green.
+- [x] The whole-branch Sol review and scoped re-reviews have no open Critical/Important finding after the user-authorized Magnifier correction exception, and one unmerged Draft PR is stacked on W6c.
 
 ## Plan Self-Review
 

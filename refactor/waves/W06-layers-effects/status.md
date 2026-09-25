@@ -2,7 +2,7 @@
 
 ## Statut
 
-### Gate final W6d — reviews Sol closes, PR stackée en préparation
+### Gate final W6d — reviews Sol closes, Draft PR stackée #2406
 
 La review Sol globale depuis W6c a relevé quatre points `Important` et un
 `Minor`. La première correction bornée (`536d0e58e`, `79c1fa86d`) a fermé
@@ -32,8 +32,11 @@ Vérification indépendante sur `b20a833fa` : `:gpu-plan:compileKotlin` et
 W6b AdmissionRecovery 26/0/0/0, W6d BackdropPrevious 9/0/0/0 et W6d
 AdvancedRecovery 5/0/0/0. Chaque task Gradle de test sort 1 après un executor
 natif 133 : statut process/native **UNKNOWN**, jamais un succès natif. Le
-diff check contre la base W6c est net. La Draft PR W6d doit encore être
-créée sur `codex/w6c-spatial-dag`, sans merge ; W6e n'est pas démarrée.
+diff check contre la base W6c est net. La [Draft PR W6d #2406](https://github.com/ygdrasil-io/kanvas/pull/2406)
+est ouverte sur `codex/w6c-spatial-dag`, sans merge. W6e n'est pas démarrée.
+
+Les checkpoints ci-dessous conservent leur état historique ; ce gate final
+prévaut sur leurs anciennes mentions « PR non ouverte ».
 
 ### Correction whole-branch W6d — contextes sampling, snapshots et branches lighting
 
