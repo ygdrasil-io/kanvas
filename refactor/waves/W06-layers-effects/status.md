@@ -2,35 +2,38 @@
 
 ## Statut
 
-### Gate final W6d bloqué — Magnifier à zoom inférieur à 1
+### Gate final W6d — reviews Sol closes, PR stackée en préparation
 
 La review Sol globale depuis W6c a relevé quatre points `Important` et un
-`Minor`. L'unique vague de correction bornée (`536d0e58e`, puis son témoin
-monographe `79c1fa86d`) ferme Picture sur `saveLayer`, les contextes de
-sampling gelés, les branches lighting et la tolérance du témoin onze-familles.
-La relecture Sol ciblée de cette vague laisse toutefois **deux variants
-Important ouverts sur Magnifier**. Le premier :
-la reverse demand de `Magnifier` réserve `union(output, mappedLens)`, alors que
-le contrat accepte `0 < zoom < 1` et que le shader échantillonne
-`center + (point - center) / zoom`. Avec une lentille `[1,4]`, un clip de sortie
-`[1,2]`, `zoom=0.5` et `inset=0`, le pixel `1.5` lit le texel `0`, hors de la
-copie qui commence à `1`. Un backdrop ou `initWithPrevious` clippé peut donc
-perdre cet input avant publication. Les témoins Magnifier existants ne couvrent
-que des zooms `1` et `2`.
+`Minor`. La première correction bornée (`536d0e58e`, `79c1fa86d`) a fermé
+Picture sur `saveLayer`, les offsets de sampling gelés, les branches lighting
+et la tolérance du témoin onze-familles. Sa relecture a isolé deux variants
+`Magnifier` encore réels : `zoom < 1` sous snapshot clippé et draw direct
+transformé dont la reverse demand ignorait le transform. L'utilisateur a
+autorisé exceptionnellement une seconde correction ciblée et sa relecture.
 
-Le second concerne le draw direct transformé : la reverse demand reçoit le
-mapping du parent avant la composition du transform capturé du draw. Une
-lentille locale `[0,10]` sous translation `+100`, un clip `[100,101]` et
-`zoom=2` peuvent réserver uniquement `[100,101]` alors que le shader, qui
-emploie le vrai mapping gelé, lit vers `102`. Le test Magnifier transformé
-actuel porte sur un layer non clippé et ne ferme pas ce cas direct.
+Les commits `715eb7896` et `519129b8b` réservent désormais l'enveloppe des
+texels effectivement échantillonnés, en F64 puis I32 vérifié, avec le même
+mapping gelé pour la demande inverse et la source du draw. L'inset réduit à
+une ligne reste inclusif comme le shader ; une marge d'un demi-texel conserve
+également les égalités de `round(sampled - 0.5)` à la borne exclusive. Quatre
+témoins pixels publics `Surface` + `Render` + `Readback` ont donné deux RED
+causaux, puis les XML `4/0/0/0`. La relecture Sol ciblée marque les deux
+variants **ADDRESSED**, sans nouveau Critical/Important.
 
-Les Steps 1–7 sont exécutés, mais le gate de review de Step 7 n'est **pas
-validé** et Step 8 (push/PR stackée) n'est pas lancé. Le plan autorisait une
-seule vague de correction et une seule relecture ciblée, sans boucle ; il faut
-une décision explicite pour prolonger cette politique ou changer le périmètre
-de Magnifier. W6e ne démarre pas. Les XML et compilations déjà rapportés ne
-prouvent pas ce cas limite ; les exits natifs 133 restent **UNKNOWN**.
+Un ancien test W6b exigeait encore le refus de Blur + `initWithPrevious`,
+comportement intentionnellement devenu positif dans W6d. Le commit
+`b20a833fa` retire uniquement cette méthode obsolète ; les témoins W6d
+conservent l'ordre save/child, le halo Blur sous clip et la récupération sur
+la même `Surface`. La review Sol de ce retrait est Approved.
+
+Vérification indépendante sur `b20a833fa` : `:gpu-plan:compileKotlin` et
+`:kanvas:compileTestKotlin` sortent 0 ; les XML ciblés `Magnifier` 4/0/0/0,
+W6b AdmissionRecovery 26/0/0/0, W6d BackdropPrevious 9/0/0/0 et W6d
+AdvancedRecovery 5/0/0/0. Chaque task Gradle de test sort 1 après un executor
+natif 133 : statut process/native **UNKNOWN**, jamais un succès natif. Le
+diff check contre la base W6c est net. La Draft PR W6d doit encore être
+créée sur `codex/w6c-spatial-dag`, sans merge ; W6e n'est pas démarrée.
 
 ### Correction whole-branch W6d — contextes sampling, snapshots et branches lighting
 
