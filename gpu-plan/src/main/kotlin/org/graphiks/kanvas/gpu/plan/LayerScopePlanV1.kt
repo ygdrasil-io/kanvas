@@ -4,6 +4,7 @@ import org.graphiks.math.geometry.Point2I32
 import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.matrix.LayerMappingF64
+import org.graphiks.kanvas.render.ir.CapturedFilterNodeIdI32
 
 /** Occurrence identity: equal layer descriptors never share an identifier. */
 @JvmInline
@@ -27,7 +28,19 @@ public sealed interface LayerInitializationPlanV1 {
         public fun copyDestinationOriginLayerI32(): Point2I32 =
             Point2I32(destinationOriginLayerI32.x, destinationOriginLayerI32.y)
     }
+
+    /** A save-time snapshot of the immediate parent, filtered before any child work starts. */
+    public class Backdrop(public val plan: BackdropInitializationPlanV1) : LayerInitializationPlanV1
 }
+
+/** Semantic witness for the existing copy/filter/composite sequence used to initialize a backdrop layer. */
+public class BackdropInitializationPlanV1 internal constructor(
+    public val parentTarget: PlanResourceId,
+    public val snapshotTarget: PlanResourceId,
+    public val filteredTarget: PlanResourceId,
+    public val capturedParentVersion: DestinationVersionI64,
+    public val filterRoot: CapturedFilterNodeIdI32,
+)
 
 public class LayerBoundsPlanV1 internal constructor(
     requestedHintDeviceF64: RectF64?,

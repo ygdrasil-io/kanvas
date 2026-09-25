@@ -74,6 +74,16 @@ public class W6aLayerPlanCompiler public constructor(
         W6bFilterGraphConstruction.admissionRefusalOrNull(scene)?.let { refusal ->
             return GpuPlanSelection.InvalidScene(listOf(refusal))
         }
+        // A direct filter with reverse input demand must reach its frozen sampler before its
+        // terminal clip. Keep that clip in the immutable W6b occurrence for FilterComposite,
+        // while the existing W5 lane receives the un-clipped geometry it must rasterize.
+        val directInputDemandCommands = if (ownsW6b) W6bFilterGraphConstruction.positiveOccurrences(scene)
+            .asSequence()
+            .filter { occurrence -> !occurrence.isLayerOccurrence && !occurrence.isPictureOccurrence &&
+                W6bFilterGraphConstruction.hasReverseInputDemandTerminal(occurrence) }
+            .map { occurrence -> occurrence.insertionCommandIndexI32 }
+            .toSet()
+        else emptySet()
 
         // Layer occurrence limits come from the same immutable GraphLimits vocabulary used at
         // capture.  W6 owns the resulting terminal refusal before it can issue a resource or
@@ -178,7 +188,7 @@ public class W6aLayerPlanCompiler public constructor(
             val draws = setOf(drawIndexI32)
             val segment = SceneSnapshot.of(scene.extent, scene.colorSpace, commands.mapIndexed { index, command ->
                 if (index in draws) {
-                    stripW6bPayload(command as SceneCommand.Draw)
+                    stripW6bPayload(command as SceneCommand.Draw, drawIndexI32 in directInputDemandCommands)
                 } else SceneCommand.Annotation.of(org.graphiks.math.geometry.RectF32(0f, 0f, 0f, 0f), "w6a.segment", index.toString())
             }, graphLimits)
             val child = CapabilityCompilerChain.of(listOf(W5bVerticesPlanCompiler(runtimeCatalog), W5bPointPlanCompiler(runtimeCatalog), W5eImagePlanCompiler(), W3SolidRectPlanCompiler(),
@@ -242,7 +252,9 @@ public class W6aLayerPlanCompiler public constructor(
             }
         } catch (failure: W6aResourceLimitFailure) {
             val message = failure.message ?: "Layer frame budget exceeded."
-            if (W6bFilterGraphConstruction.owns(selected.scene)) {
+            if (W6bFilterGraphConstruction.ownsW6dAdvanced(selected.scene)) {
+                RenderPlanResult.ResourceLimitExceeded(listOf(W6dPlanDiagnostics.budgetRefusal(message)))
+            } else if (W6bFilterGraphConstruction.owns(selected.scene)) {
                 RenderPlanResult.ResourceLimitExceeded(listOf(W6bFilterDiagnostics.budgetRefusal(message)))
             } else {
                 W6aLayerPlanBudget.refusal(message)
@@ -292,6 +304,33 @@ public class W6aLayerPlanCompiler public constructor(
             is FilterPassOperationV1.DropShadowColorize,
             is FilterPassOperationV1.DropShadowComposite,
             -> true
+            is FilterPassOperationV1.MatrixConvolution,
+            is FilterPassOperationV1.DisplacementMap,
+            is FilterPassOperationV1.Magnifier,
+            -> true
+            is FilterPassOperationV1.Lighting -> pass.frozenSamplingProgram?.program?.let { program ->
+                when (operation.family) {
+                    LightingFamilyV1.DISTANT_DIFFUSE -> program.programId == W6dSamplingProgramIdV1.DISTANT_DIFFUSE_RGBA8_V1
+                    LightingFamilyV1.POINT_DIFFUSE -> program.programId == W6dSamplingProgramIdV1.POINT_DIFFUSE_RGBA8_V1
+                    LightingFamilyV1.SPOT_DIFFUSE -> program.programId == W6dSamplingProgramIdV1.SPOT_DIFFUSE_RGBA8_V1
+                    LightingFamilyV1.DISTANT_SPECULAR -> program.programId == W6dSamplingProgramIdV1.DISTANT_SPECULAR_RGBA8_V1
+                    LightingFamilyV1.POINT_SPECULAR -> program.programId == W6dSamplingProgramIdV1.POINT_SPECULAR_RGBA8_V1
+                    LightingFamilyV1.SPOT_SPECULAR -> program.programId == W6dSamplingProgramIdV1.SPOT_SPECULAR_RGBA8_V1
+                }
+            } == true
+            is FilterPassOperationV1.Picture -> pass.frozenSamplingProgram?.program?.let { program ->
+                program is W6dSamplingProgramV1.Picture &&
+                    program.copySampling().matches(operation.copyPictureSampling()) &&
+                    pass.frozenSamplingProgram.inputs() == pass.inputs() &&
+                    pass.frozenSamplingProgram.output == pass.output
+            } == true
+            is FilterPassOperationV1.RuntimeImageOpacity -> pass.frozenSamplingProgram?.program?.let { program ->
+                program is W6dSamplingProgramV1.RuntimeImageOpacity &&
+                    program.alphaF32 == operation.alphaF32 &&
+                    program.alphaUniformOffsetBytesI32 == operation.alphaUniformOffsetBytesI32 &&
+                    pass.frozenSamplingProgram.inputs() == pass.inputs() &&
+                    pass.frozenSamplingProgram.output == pass.output
+            } == true
         } }
         val terminals = graph.passes().filterIsInstance<PlanPass.FilterComposite>()
         // W6b consumes a typed frozen W4 producer for direct mask coverage.  Do not admit a
@@ -341,8 +380,6 @@ public class W6aLayerPlanCompiler public constructor(
      * observable even when an explicit empty composite clip later elides geometry and targets.
      */
     private fun semanticRefusalFor(descriptor: LayerDescriptor, w6bOwned: Boolean): Pair<String, String>? {
-        if (descriptor.backdrop !is EffectStack.Empty) return W6aPlanDiagnostics.UnsupportedBackdrop to
-            "W6a does not admit layer backdrop filters."
         if (descriptor.paint == null && descriptor.material != null) return W6aPlanDiagnostics.UnsupportedRestore to "A restore source without its captured paint is unsupported."
         val paint = descriptor.paint ?: return null
         if (!w6bOwned && (paint.imageFilter != null || paint.maskFilter != null)) return W6aPlanDiagnostics.UnsupportedSpatialFilter to
@@ -361,15 +398,17 @@ public class W6aLayerPlanCompiler public constructor(
      * the unfiltered source draw, but never sees a public spatial-filter object or chooses a
      * second filter route.
      */
-    private fun stripW6bPayload(command: SceneCommand.Draw): SceneCommand.Draw {
+    private fun stripW6bPayload(command: SceneCommand.Draw, deferTerminalClip: Boolean = false): SceneCommand.Draw {
         val paint = command.node.paint
         val effects = (command.node.effects as? EffectStack.Entries)?.let { entries ->
             EffectStack.of(entries.filterNot { it is CapturedFilterRootV1 || it is MaskFilterNode })
         } ?: command.node.effects
-        if ((paint == null || paint.imageFilter == null && paint.maskFilter == null) && effects === command.node.effects) return command
+        if ((paint == null || paint.imageFilter == null && paint.maskFilter == null) && effects === command.node.effects &&
+            !deferTerminalClip) return command
         return command.copy(node = command.node.copy(
             paint = paint?.copy(imageFilter = null, maskFilter = null),
             effects = effects,
+            clip = if (deferTerminalClip) ClipStackNode.Empty else command.node.clip,
         ))
     }
 

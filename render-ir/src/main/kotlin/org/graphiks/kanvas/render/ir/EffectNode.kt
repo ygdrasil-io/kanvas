@@ -5,10 +5,12 @@ import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.PathF32
 import org.graphiks.math.geometry.PathSegmentF32
 import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.geometry.Point3F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.SizeF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.vector.Vector2F32
+import org.graphiks.math.vector.Vector3F32
 
 /** Root of backend-neutral effects. */
 public sealed interface EffectNode : CanonicalValue
@@ -175,42 +177,42 @@ public sealed interface ImageFilterNode : EffectNode {
         override val canonicalId: CanonicalId = canonicalId("image-filter-erode-v1", radiusX.canonicalBits(), radiusY.canonicalBits(), optionalEffectId(input).value)
     }
     public data class DistantLitDiffuse(
-        public val directionX: Float, public val directionY: Float, public val lightColor: ColorARGB,
+        public val direction: Vector3F32, public val lightColor: ColorARGB,
         public val surfaceScale: Float, public val kd: Float, public val input: ImageFilterNode? = null,
     ) : ImageFilterNode {
-        override val canonicalId: CanonicalId = lightingId("image-filter-distant-lit-diffuse-v1", directionX, directionY, lightColor, surfaceScale, kd, input)
+        override val canonicalId: CanonicalId = lightingId("image-filter-distant-lit-diffuse-v2", direction, lightColor, surfaceScale, kd, input)
     }
     public data class PointLitDiffuse(
-        public val location: Point2F32, public val lightColor: ColorARGB, public val surfaceScale: Float,
+        public val location: Point3F32, public val lightColor: ColorARGB, public val surfaceScale: Float,
         public val kd: Float, public val input: ImageFilterNode? = null,
     ) : ImageFilterNode {
-        override val canonicalId: CanonicalId = canonicalId("image-filter-point-lit-diffuse-v1", effectPointId(location).value, effectColorId(lightColor).value, surfaceScale.canonicalBits(), kd.canonicalBits(), optionalEffectId(input).value)
+        override val canonicalId: CanonicalId = canonicalId("image-filter-point-lit-diffuse-v2", effectPointId(location).value, effectColorId(lightColor).value, surfaceScale.canonicalBits(), kd.canonicalBits(), optionalEffectId(input).value)
     }
     public data class SpotLitDiffuse(
-        public val location: Point2F32, public val target: Point2F32, public val specularExponent: Float,
+        public val location: Point3F32, public val target: Point3F32, public val specularExponent: Float,
         public val cutoffAngle: Float, public val lightColor: ColorARGB, public val surfaceScale: Float,
         public val kd: Float, public val input: ImageFilterNode? = null,
     ) : ImageFilterNode {
-        override val canonicalId: CanonicalId = spotLightingId("image-filter-spot-lit-diffuse-v1", location, target, specularExponent, cutoffAngle, lightColor, surfaceScale, kd, null, input)
+        override val canonicalId: CanonicalId = spotLightingId("image-filter-spot-lit-diffuse-v2", location, target, specularExponent, cutoffAngle, lightColor, surfaceScale, kd, null, input)
     }
     public data class DistantLitSpecular(
-        public val directionX: Float, public val directionY: Float, public val lightColor: ColorARGB,
+        public val direction: Vector3F32, public val lightColor: ColorARGB,
         public val surfaceScale: Float, public val ks: Float, public val shininess: Float, public val input: ImageFilterNode? = null,
     ) : ImageFilterNode {
-        override val canonicalId: CanonicalId = canonicalId("image-filter-distant-lit-specular-v1", directionX.canonicalBits(), directionY.canonicalBits(), effectColorId(lightColor).value, surfaceScale.canonicalBits(), ks.canonicalBits(), shininess.canonicalBits(), optionalEffectId(input).value)
+        override val canonicalId: CanonicalId = lightingId("image-filter-distant-lit-specular-v2", direction, lightColor, surfaceScale, ks, input, shininess)
     }
     public data class PointLitSpecular(
-        public val location: Point2F32, public val lightColor: ColorARGB, public val surfaceScale: Float,
+        public val location: Point3F32, public val lightColor: ColorARGB, public val surfaceScale: Float,
         public val ks: Float, public val shininess: Float, public val input: ImageFilterNode? = null,
     ) : ImageFilterNode {
-        override val canonicalId: CanonicalId = canonicalId("image-filter-point-lit-specular-v1", effectPointId(location).value, effectColorId(lightColor).value, surfaceScale.canonicalBits(), ks.canonicalBits(), shininess.canonicalBits(), optionalEffectId(input).value)
+        override val canonicalId: CanonicalId = canonicalId("image-filter-point-lit-specular-v2", effectPointId(location).value, effectColorId(lightColor).value, surfaceScale.canonicalBits(), ks.canonicalBits(), shininess.canonicalBits(), optionalEffectId(input).value)
     }
     public data class SpotLitSpecular(
-        public val location: Point2F32, public val target: Point2F32, public val specularExponent: Float,
+        public val location: Point3F32, public val target: Point3F32, public val specularExponent: Float,
         public val cutoffAngle: Float, public val lightColor: ColorARGB, public val surfaceScale: Float,
         public val ks: Float, public val shininess: Float, public val input: ImageFilterNode? = null,
     ) : ImageFilterNode {
-        override val canonicalId: CanonicalId = spotLightingId("image-filter-spot-lit-specular-v1", location, target, specularExponent, cutoffAngle, lightColor, surfaceScale, ks, shininess, input)
+        override val canonicalId: CanonicalId = spotLightingId("image-filter-spot-lit-specular-v2", location, target, specularExponent, cutoffAngle, lightColor, surfaceScale, ks, shininess, input)
     }
     public data class Offset(public val dx: Float, public val dy: Float, public val input: ImageFilterNode? = null) : ImageFilterNode {
         override val canonicalId: CanonicalId = canonicalId("image-filter-offset-v1", dx.canonicalBits(), dy.canonicalBits(), optionalEffectId(input).value)
@@ -305,7 +307,6 @@ public sealed interface ImageFilterNode : EffectNode {
         private val storedUniforms: Map<String, RuntimeUniformValue> = immutableUniformMap(uniforms)
         private val storedChildren: List<RuntimeImageFilterChild> = immutableList(children)
         init {
-            require(descriptor.abi == RuntimeEffectAbi.IMAGE_FILTER) { "Runtime image filter must use IMAGE_FILTER ABI" }
             require(childShaderName == null || childShaderName.isNotBlank()) { "Runtime child shader name must not be blank" }
             require(storedChildren.map(RuntimeImageFilterChild::name).distinct().size == storedChildren.size) {
                 "Runtime image-filter child names must be unique"
@@ -792,7 +793,7 @@ private fun stackEffects(value: EffectStack): List<EffectNode> = when (value) {
 }
 
 private fun effectColorId(color: ColorARGB): CanonicalId = canonicalId("color", color.value.toString())
-private fun effectPointId(point: Point2F32): CanonicalId = canonicalId("point", point.x.canonicalBits(), point.y.canonicalBits())
+private fun effectPointId(point: Point3F32): CanonicalId = canonicalId("point3", point.x.canonicalBits(), point.y.canonicalBits(), point.z.canonicalBits())
 private fun effectVectorId(vector: Vector2F32): CanonicalId = canonicalId("vector", vector.x.canonicalBits(), vector.y.canonicalBits())
 private fun effectRectId(rect: RectF32): CanonicalId = canonicalId("rect", rect.left.canonicalBits(), rect.top.canonicalBits(), rect.right.canonicalBits(), rect.bottom.canonicalBits())
 private fun optionalEffectId(value: EffectNode?): CanonicalId = canonicalOptionalId("effect", value?.canonicalId)
@@ -819,13 +820,13 @@ private fun effectPathSegmentId(segment: PathSegmentF32): CanonicalId = when (se
     )
     PathSegmentF32.Close -> canonicalId("close")
 }
-private fun lightingId(tag: String, x: Float, y: Float, color: ColorARGB, surface: Float, coefficient: Float, input: ImageFilterNode?): CanonicalId = canonicalId(
-    tag, x.canonicalBits(), y.canonicalBits(), effectColorId(color).value, surface.canonicalBits(), coefficient.canonicalBits(), optionalEffectId(input).value,
+private fun lightingId(tag: String, direction: Vector3F32, color: ColorARGB, surface: Float, coefficient: Float, input: ImageFilterNode?, shininess: Float? = null): CanonicalId = canonicalId(
+    tag, direction.x.canonicalBits(), direction.y.canonicalBits(), direction.z.canonicalBits(), effectColorId(color).value, surface.canonicalBits(), coefficient.canonicalBits(), shininess?.canonicalBits() ?: "none", optionalEffectId(input).value,
 )
 private fun spotLightingId(
     tag: String,
-    location: Point2F32,
-    target: Point2F32,
+    location: Point3F32,
+    target: Point3F32,
     exponent: Float,
     cutoff: Float,
     color: ColorARGB,

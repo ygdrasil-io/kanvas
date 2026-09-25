@@ -4,6 +4,7 @@ import java.util.ArrayDeque
 import java.util.IdentityHashMap
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.canvas.DrawPathSourceOperation
+import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.surface.GPUColorFormat
 import org.graphiks.kanvas.surface.RenderConfig
 
@@ -41,6 +42,61 @@ internal object GPUPlanSurfaceCandidateGate {
             }
         }
         return false
+    }
+
+    /**
+     * Exact W6d capability ownership is deliberately narrower than generic W6b filter
+     * admission. It is used only to reject a declared-but-unimplemented target format
+     * before capture, plan publication, or native submission.
+     */
+    fun ownsW6dAdvancedFilters(operations: List<DisplayOp>): Boolean {
+        val pending = ArrayDeque<List<DisplayOp>>()
+        pending.addLast(operations)
+        val seenPictures = IdentityHashMap<org.graphiks.kanvas.picture.Picture, Boolean>()
+        var inspectedI32 = 0
+        while (pending.isNotEmpty()) {
+            pending.removeLast().forEach { operation ->
+                inspectedI32 = try {
+                    Math.addExact(inspectedI32, 1)
+                } catch (_: ArithmeticException) {
+                    return true
+                }
+                if (inspectedI32 > W6B_PICTURE_VISIT_LIMIT_I32) return true
+                if (operation.paintOrNull()?.imageFilter.containsW6dAdvancedArm() ||
+                    (operation as? DisplayOp.BeginLayer)?.rec?.backdrop.containsW6dAdvancedArm()
+                ) return true
+                if (operation is DisplayOp.DrawPicture && seenPictures.put(operation.picture, true) == null) {
+                    pending.addLast(operation.picture.ops)
+                }
+            }
+        }
+        return false
+    }
+
+    private fun ImageFilter?.containsW6dAdvancedArm(): Boolean = when (this) {
+        null -> false
+        is ImageFilter.DistantLitDiffuse,
+        is ImageFilter.PointLitDiffuse,
+        is ImageFilter.SpotLitDiffuse,
+        is ImageFilter.DistantLitSpecular,
+        is ImageFilter.PointLitSpecular,
+        is ImageFilter.SpotLitSpecular,
+        is ImageFilter.DisplacementMap,
+        is ImageFilter.Picture,
+        is ImageFilter.Magnifier,
+        is ImageFilter.MatrixConvolution,
+        is ImageFilter.RuntimeEffect -> true
+        is ImageFilter.Crop -> input.containsW6dAdvancedArm()
+        is ImageFilter.Blur -> input.containsW6dAdvancedArm()
+        is ImageFilter.DropShadow -> input.containsW6dAdvancedArm()
+        is ImageFilter.ColorFilter -> input.containsW6dAdvancedArm()
+        is ImageFilter.Compose -> outer.containsW6dAdvancedArm() || inner.containsW6dAdvancedArm()
+        is ImageFilter.Blend -> background.containsW6dAdvancedArm() || foreground.containsW6dAdvancedArm()
+        is ImageFilter.Dilate -> input.containsW6dAdvancedArm()
+        is ImageFilter.Erode -> input.containsW6dAdvancedArm()
+        is ImageFilter.Offset -> input.containsW6dAdvancedArm()
+        is ImageFilter.Tile -> input.containsW6dAdvancedArm()
+        is ImageFilter.Merge -> inputs.any { input -> input.containsW6dAdvancedArm() }
     }
 
     private fun DisplayOp.paintOrNull(): org.graphiks.kanvas.paint.Paint? = when (this) {

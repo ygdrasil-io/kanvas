@@ -28,6 +28,12 @@ internal class RenderGraphConstruction internal constructor(
     private val resourceValues = immutableList(resources)
     private val passValues = immutableList(passes)
     private val dependencyValues = immutableList(dependencies)
+    /** Frozen before graph publication; renderer receives this exact lease set, never a late program choice. */
+    private val w6dProgramLeaseValues = immutableList(
+        if (capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID)
+            W6dProgramLeasePlannerV1.freeze(resourceValues, passValues, capabilities)
+        else emptyList(),
+    )
     private val lanes = immutableList(geometryLanes)
     fun w5bGeometryLanes(): List<GeometryLaneConstruction> = lanes
     fun materialPlanTableOrNull(): MaterialPlanTable? = materialTable
@@ -46,6 +52,7 @@ internal class RenderGraphConstruction internal constructor(
     fun resources(): List<PlanResource> = resourceValues
     fun passes(): List<PlanPass> = passValues
     fun dependencies(): List<PlanPassDependency> = dependencyValues
+    fun w6dProgramLeases(): List<W6dProgramLeaseV1> = w6dProgramLeaseValues
 
     fun rebindMaterials(table: MaterialPlanTable, remap: (MaterialPlanRef) -> MaterialPlanRef): RenderGraphConstruction {
         val passes = remapSourcePassesV4(passes(),remap=remap)

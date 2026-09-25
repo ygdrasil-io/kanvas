@@ -3,9 +3,11 @@ package org.graphiks.kanvas.render.ir
 import java.util.ArrayDeque
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.geometry.Point3F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.SizeF32
 import org.graphiks.math.vector.Vector2F32
+import org.graphiks.math.vector.Vector3F32
 
 /** Stable, table-local identity for an immutable captured image-filter node. */
 public data class CapturedFilterNodeIdI32(public val valueI32: Int) : CanonicalValue {
@@ -71,12 +73,12 @@ public sealed interface CapturedFilterNodeV1 : CanonicalValue {
     public data class Blend(val mode: BlendMode, val background: CapturedFilterInputV1, val foreground: CapturedFilterInputV1) : CapturedFilterNodeV1
     public data class Dilate(val radiusX: Float, val radiusY: Float, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
     public data class Erode(val radiusX: Float, val radiusY: Float, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
-    public data class DistantLitDiffuse(val directionX: Float, val directionY: Float, val lightColor: ColorARGB, val surfaceScale: Float, val kd: Float, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
-    public data class PointLitDiffuse(val location: Point2F32, val lightColor: ColorARGB, val surfaceScale: Float, val kd: Float, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
-    public data class SpotLitDiffuse(val location: Point2F32, val target: Point2F32, val specularExponent: Float, val cutoffAngle: Float, val lightColor: ColorARGB, val surfaceScale: Float, val kd: Float, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
-    public data class DistantLitSpecular(val directionX: Float, val directionY: Float, val lightColor: ColorARGB, val surfaceScale: Float, val ks: Float, val shininess: Float, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
-    public data class PointLitSpecular(val location: Point2F32, val lightColor: ColorARGB, val surfaceScale: Float, val ks: Float, val shininess: Float, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
-    public data class SpotLitSpecular(val location: Point2F32, val target: Point2F32, val specularExponent: Float, val cutoffAngle: Float, val lightColor: ColorARGB, val surfaceScale: Float, val ks: Float, val shininess: Float, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
+    public data class DistantLitDiffuse(val direction: Vector3F32, val lightColor: ColorARGB, val surfaceScale: Float, val kd: Float, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
+    public data class PointLitDiffuse(val location: Point3F32, val lightColor: ColorARGB, val surfaceScale: Float, val kd: Float, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
+    public data class SpotLitDiffuse(val location: Point3F32, val target: Point3F32, val specularExponent: Float, val cutoffAngle: Float, val lightColor: ColorARGB, val surfaceScale: Float, val kd: Float, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
+    public data class DistantLitSpecular(val direction: Vector3F32, val lightColor: ColorARGB, val surfaceScale: Float, val ks: Float, val shininess: Float, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
+    public data class PointLitSpecular(val location: Point3F32, val lightColor: ColorARGB, val surfaceScale: Float, val ks: Float, val shininess: Float, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
+    public data class SpotLitSpecular(val location: Point3F32, val target: Point3F32, val specularExponent: Float, val cutoffAngle: Float, val lightColor: ColorARGB, val surfaceScale: Float, val ks: Float, val shininess: Float, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
     public data class Offset(val dx: Float, val dy: Float, val input: CapturedFilterInputV1) : CapturedFilterNodeV1
     public class Tile(src: RectF32, dst: RectF32, public val input: CapturedFilterInputV1) : CapturedFilterNodeV1 {
         private val sourceSnapshot = src.copy()
@@ -131,7 +133,6 @@ public sealed interface CapturedFilterNodeV1 : CanonicalValue {
         private val storedUniforms = immutableUniformMap(uniforms)
         private val storedChildren = immutableList(children)
         init {
-            require(descriptor.abi == RuntimeEffectAbi.IMAGE_FILTER) { "Runtime image filter must use IMAGE_FILTER ABI" }
             require(childShaderName == null || childShaderName.isNotBlank()) { "Runtime child shader name must not be blank" }
             require(storedChildren.map(CapturedRuntimeImageFilterChildV1::name).distinct().size == storedChildren.size) { "Runtime image-filter child names must be unique" }
             require(childShaderName == null || storedChildren.none { it.name == childShaderName }) { "Runtime image-filter child names must be unique" }
@@ -270,10 +271,10 @@ internal fun CapturedFilterTableBuilderV1.appendLegacyOccurrence(value: ImageFil
         is ImageFilterNode.Blend -> CapturedFilterNodeV1.Blend(value.mode, input(value.background), input(value.foreground))
         is ImageFilterNode.Dilate -> CapturedFilterNodeV1.Dilate(value.radiusX, value.radiusY, input(value.input))
         is ImageFilterNode.Erode -> CapturedFilterNodeV1.Erode(value.radiusX, value.radiusY, input(value.input))
-        is ImageFilterNode.DistantLitDiffuse -> CapturedFilterNodeV1.DistantLitDiffuse(value.directionX, value.directionY, value.lightColor, value.surfaceScale, value.kd, input(value.input))
+        is ImageFilterNode.DistantLitDiffuse -> CapturedFilterNodeV1.DistantLitDiffuse(value.direction, value.lightColor, value.surfaceScale, value.kd, input(value.input))
         is ImageFilterNode.PointLitDiffuse -> CapturedFilterNodeV1.PointLitDiffuse(value.location, value.lightColor, value.surfaceScale, value.kd, input(value.input))
         is ImageFilterNode.SpotLitDiffuse -> CapturedFilterNodeV1.SpotLitDiffuse(value.location, value.target, value.specularExponent, value.cutoffAngle, value.lightColor, value.surfaceScale, value.kd, input(value.input))
-        is ImageFilterNode.DistantLitSpecular -> CapturedFilterNodeV1.DistantLitSpecular(value.directionX, value.directionY, value.lightColor, value.surfaceScale, value.ks, value.shininess, input(value.input))
+        is ImageFilterNode.DistantLitSpecular -> CapturedFilterNodeV1.DistantLitSpecular(value.direction, value.lightColor, value.surfaceScale, value.ks, value.shininess, input(value.input))
         is ImageFilterNode.PointLitSpecular -> CapturedFilterNodeV1.PointLitSpecular(value.location, value.lightColor, value.surfaceScale, value.ks, value.shininess, input(value.input))
         is ImageFilterNode.SpotLitSpecular -> CapturedFilterNodeV1.SpotLitSpecular(value.location, value.target, value.specularExponent, value.cutoffAngle, value.lightColor, value.surfaceScale, value.ks, value.shininess, input(value.input))
         is ImageFilterNode.Offset -> CapturedFilterNodeV1.Offset(value.dx, value.dy, input(value.input))
@@ -323,12 +324,12 @@ private fun capturedFilterNodeId(value: CapturedFilterNodeV1): CanonicalId = whe
     is CapturedFilterNodeV1.Blend -> canonicalId("captured-filter-blend-v1", value.mode.name, value.background.canonicalId.value, value.foreground.canonicalId.value)
     is CapturedFilterNodeV1.Dilate -> canonicalId("captured-filter-dilate-v1", value.radiusX.canonicalBits(), value.radiusY.canonicalBits(), value.input.canonicalId.value)
     is CapturedFilterNodeV1.Erode -> canonicalId("captured-filter-erode-v1", value.radiusX.canonicalBits(), value.radiusY.canonicalBits(), value.input.canonicalId.value)
-    is CapturedFilterNodeV1.DistantLitDiffuse -> canonicalId("captured-filter-distant-lit-diffuse-v1", value.directionX.canonicalBits(), value.directionY.canonicalBits(), capturedColorId(value.lightColor).value, value.surfaceScale.canonicalBits(), value.kd.canonicalBits(), value.input.canonicalId.value)
-    is CapturedFilterNodeV1.PointLitDiffuse -> canonicalId("captured-filter-point-lit-diffuse-v1", capturedPointId(value.location).value, capturedColorId(value.lightColor).value, value.surfaceScale.canonicalBits(), value.kd.canonicalBits(), value.input.canonicalId.value)
-    is CapturedFilterNodeV1.SpotLitDiffuse -> canonicalId("captured-filter-spot-lit-diffuse-v1", capturedPointId(value.location).value, capturedPointId(value.target).value, value.specularExponent.canonicalBits(), value.cutoffAngle.canonicalBits(), capturedColorId(value.lightColor).value, value.surfaceScale.canonicalBits(), value.kd.canonicalBits(), value.input.canonicalId.value)
-    is CapturedFilterNodeV1.DistantLitSpecular -> canonicalId("captured-filter-distant-lit-specular-v1", value.directionX.canonicalBits(), value.directionY.canonicalBits(), capturedColorId(value.lightColor).value, value.surfaceScale.canonicalBits(), value.ks.canonicalBits(), value.shininess.canonicalBits(), value.input.canonicalId.value)
-    is CapturedFilterNodeV1.PointLitSpecular -> canonicalId("captured-filter-point-lit-specular-v1", capturedPointId(value.location).value, capturedColorId(value.lightColor).value, value.surfaceScale.canonicalBits(), value.ks.canonicalBits(), value.shininess.canonicalBits(), value.input.canonicalId.value)
-    is CapturedFilterNodeV1.SpotLitSpecular -> canonicalId("captured-filter-spot-lit-specular-v1", capturedPointId(value.location).value, capturedPointId(value.target).value, value.specularExponent.canonicalBits(), value.cutoffAngle.canonicalBits(), capturedColorId(value.lightColor).value, value.surfaceScale.canonicalBits(), value.ks.canonicalBits(), value.shininess.canonicalBits(), value.input.canonicalId.value)
+    is CapturedFilterNodeV1.DistantLitDiffuse -> canonicalId("captured-filter-distant-lit-diffuse-v2", capturedVectorId(value.direction).value, capturedColorId(value.lightColor).value, value.surfaceScale.canonicalBits(), value.kd.canonicalBits(), value.input.canonicalId.value)
+    is CapturedFilterNodeV1.PointLitDiffuse -> canonicalId("captured-filter-point-lit-diffuse-v2", capturedPointId(value.location).value, capturedColorId(value.lightColor).value, value.surfaceScale.canonicalBits(), value.kd.canonicalBits(), value.input.canonicalId.value)
+    is CapturedFilterNodeV1.SpotLitDiffuse -> canonicalId("captured-filter-spot-lit-diffuse-v2", capturedPointId(value.location).value, capturedPointId(value.target).value, value.specularExponent.canonicalBits(), value.cutoffAngle.canonicalBits(), capturedColorId(value.lightColor).value, value.surfaceScale.canonicalBits(), value.kd.canonicalBits(), value.input.canonicalId.value)
+    is CapturedFilterNodeV1.DistantLitSpecular -> canonicalId("captured-filter-distant-lit-specular-v2", capturedVectorId(value.direction).value, capturedColorId(value.lightColor).value, value.surfaceScale.canonicalBits(), value.ks.canonicalBits(), value.shininess.canonicalBits(), value.input.canonicalId.value)
+    is CapturedFilterNodeV1.PointLitSpecular -> canonicalId("captured-filter-point-lit-specular-v2", capturedPointId(value.location).value, capturedColorId(value.lightColor).value, value.surfaceScale.canonicalBits(), value.ks.canonicalBits(), value.shininess.canonicalBits(), value.input.canonicalId.value)
+    is CapturedFilterNodeV1.SpotLitSpecular -> canonicalId("captured-filter-spot-lit-specular-v2", capturedPointId(value.location).value, capturedPointId(value.target).value, value.specularExponent.canonicalBits(), value.cutoffAngle.canonicalBits(), capturedColorId(value.lightColor).value, value.surfaceScale.canonicalBits(), value.ks.canonicalBits(), value.shininess.canonicalBits(), value.input.canonicalId.value)
     is CapturedFilterNodeV1.Offset -> canonicalId("captured-filter-offset-v1", value.dx.canonicalBits(), value.dy.canonicalBits(), value.input.canonicalId.value)
     is CapturedFilterNodeV1.Tile -> canonicalId("captured-filter-tile-v1", capturedRectId(value.src).value, capturedRectId(value.dst).value, value.input.canonicalId.value)
     is CapturedFilterNodeV1.Merge -> canonicalSequenceId("captured-filter-merge-v1", value.map { it.canonicalId.value })
@@ -340,6 +341,7 @@ private fun capturedFilterNodeId(value: CapturedFilterNodeV1): CanonicalId = whe
 }
 
 private fun capturedColorId(value: ColorARGB): CanonicalId = canonicalId("color", value.value.toString())
-private fun capturedPointId(value: Point2F32): CanonicalId = canonicalId("point", value.x.canonicalBits(), value.y.canonicalBits())
+private fun capturedPointId(value: Point3F32): CanonicalId = canonicalId("point3", value.x.canonicalBits(), value.y.canonicalBits(), value.z.canonicalBits())
 private fun capturedVectorId(value: Vector2F32): CanonicalId = canonicalId("vector", value.x.canonicalBits(), value.y.canonicalBits())
+private fun capturedVectorId(value: Vector3F32): CanonicalId = canonicalId("vector3", value.x.canonicalBits(), value.y.canonicalBits(), value.z.canonicalBits())
 private fun capturedRectId(value: RectF32): CanonicalId = canonicalId("rect", value.left.canonicalBits(), value.top.canonicalBits(), value.right.canonicalBits(), value.bottom.canonicalBits())

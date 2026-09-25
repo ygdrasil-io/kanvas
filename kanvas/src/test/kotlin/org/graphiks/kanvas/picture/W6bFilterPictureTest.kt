@@ -30,7 +30,7 @@ class W6bFilterPictureTest {
      * a reader which aliases equal filters by value instead of captured identity.
      */
     @Test
-    fun picture14PreservesSharedFilterIdentityWithoutValueAliasing() {
+    fun picture15PreservesSharedFilterIdentityWithoutValueAliasing() {
         val shared = ImageFilter.Blur(1f, 2f, TileMode.MIRROR)
         val equalButDistinct = ImageFilter.Blur(1f, 2f, TileMode.MIRROR)
         val picture = pictureWithThreeFilteredDraws(shared, shared, equalButDistinct)
@@ -39,8 +39,8 @@ class W6bFilterPictureTest {
         val memoryFilters = filtersFromPublicTraversal(picture)
         assertSame(memoryFilters[0], memoryFilters[1])
         assertNotSame(memoryFilters[0], memoryFilters[2])
-        assertEquals(14, ByteBuffer.wrap(bytes).getInt(4))
-        assertEquals(8, ByteBuffer.wrap(bytes).getInt(28))
+        assertEquals(15, ByteBuffer.wrap(bytes).getInt(4))
+        assertEquals(9, ByteBuffer.wrap(bytes).getInt(28))
 
         val decoded = assertNotNull(Picture.fromByteArray(bytes))
         val wireFilters = filtersFromPublicTraversal(decoded)

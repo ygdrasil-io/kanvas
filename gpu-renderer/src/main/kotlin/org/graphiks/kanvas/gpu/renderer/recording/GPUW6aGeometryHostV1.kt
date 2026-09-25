@@ -20,12 +20,30 @@ internal const val W6A_RECT_SHADER: String = W6A_VERTEX_SHADER + """
     }
 """
 
-internal fun w6aGeometryTemplate(packet: GPUDrawPacket, blend: BlendPlan, targetOriginDeviceI32: Point2I32): GPUW5aGeometryHostTemplateV1 =
-    GPUW5aGeometryHostTemplateV1(packet.packetId.value,
-        "w6a.rect.v1.${packet.commandIdValue}.${targetOriginDeviceI32.x}.${targetOriginDeviceI32.y}", W6A_RECT_SHADER, "vs_main", "fs_main",
-        w6aColorTarget(blend).hostTargetV1(), GPUW5aHostBindGroupLayoutV1.of(listOf(GPUW5aHostBindGroupEntryV1(0, 2u,
-            GPUW5aHostBindingLayoutV1.Buffer(GPUBufferBindingType.Uniform, false, 16L)))), null, MaterialCoordinateSlotV1.FragmentPosition,
+internal fun w6aGeometryTemplate(packet: GPUDrawPacket, draw: SolidRectDraw, targetOriginDeviceI32: Point2I32): GPUW5aGeometryHostTemplateV1 {
+    val frozen = (draw.materialAuthority as? PlanDrawMaterialAuthority.LegacyColorV1)?.copyColorF32()
+    val source = frozen?.let(::w6aFrozenColorShader) ?: W6A_RECT_SHADER
+    val layout = if (frozen == null) GPUW5aHostBindGroupLayoutV1.of(listOf(GPUW5aHostBindGroupEntryV1(0, 2u,
+        GPUW5aHostBindingLayoutV1.Buffer(GPUBufferBindingType.Uniform, false, 16L)))) else GPUW5aHostBindGroupLayoutV1.of(emptyList())
+    val colorKey = frozen?.let { ".${it.red.toBits()}.${it.green.toBits()}.${it.blue.toBits()}.${it.alpha.toBits()}" }.orEmpty()
+    return GPUW5aGeometryHostTemplateV1(packet.packetId.value,
+        "w6a.rect.v1.${packet.commandIdValue}.${targetOriginDeviceI32.x}.${targetOriginDeviceI32.y}$colorKey", source, "vs_main", "fs_main",
+        w6aColorTarget(draw.blend).hostTargetV1(), layout, null, MaterialCoordinateSlotV1.FragmentPosition,
         materialDevicePointWgsl = "fragment_position.xy + vec2<f32>(${targetOriginDeviceI32.x}.0, ${targetOriginDeviceI32.y}.0)")
+}
+
+/** A legacy colour is already sealed into the picture stream and has no W5 uniform row. */
+private fun w6aFrozenColorShader(color: org.graphiks.math.color.ColorF32): String {
+    fun component(value: Float): String {
+        require(value.isFinite()) { "Frozen W6 colour must be finite" }
+        return if (value == 0f) "0.0" else value.toString().replace('E', 'e')
+    }
+    return W6A_VERTEX_SHADER + """
+        @fragment fn fs_main(@builtin(position) fragment_position: vec4<f32>) -> @location(0) vec4<f32> {
+            return vec4<f32>(${component(color.red)}, ${component(color.green)}, ${component(color.blue)}, ${component(color.alpha)});
+        }
+    """
+}
 
 internal fun w6aColorTarget(blend: BlendPlan): ColorTargetState {
     fun factor(value: BlendFactorV1): GPUBlendFactor = when (value) {

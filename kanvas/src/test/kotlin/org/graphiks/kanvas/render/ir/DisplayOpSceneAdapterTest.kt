@@ -10,6 +10,7 @@ import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Blender
 import org.graphiks.kanvas.paint.ImageFilter
+import org.graphiks.math.geometry.Point3F32
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.picture.Picture
@@ -125,7 +126,7 @@ class DisplayOpSceneAdapterTest {
             ),
             DisplayOp.DrawRect(
                 bounds,
-                Paint(imageFilter = ImageFilter.PointLitDiffuse(Point2F32(Float.POSITIVE_INFINITY, 0f), ColorARGB.White, 1f, 1f)),
+                Paint(imageFilter = ImageFilter.PointLitDiffuse(Point3F32(Float.POSITIVE_INFINITY, 0f, 1f), ColorARGB.White, 1f, 1f)),
                 transform,
                 ClipStack.WideOpen,
             ),

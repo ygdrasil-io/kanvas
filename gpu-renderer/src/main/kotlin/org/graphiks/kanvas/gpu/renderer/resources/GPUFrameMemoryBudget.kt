@@ -27,6 +27,8 @@ enum class GPUFrameMemoryCategory(val targetResident: Boolean) {
 enum class GPUFrameMemoryResourceKind {
     Texture2D,
     Buffer,
+    /** Pessimistic admission lease for opaque native program objects; never a buffer allocation. */
+    LogicalProgram,
 }
 
 /** One handle-free allocation fact consumed by aggregate frame budgeting. */
@@ -52,6 +54,9 @@ data class GPUFrameMemoryAllocation(
             }
             GPUFrameMemoryResourceKind.Buffer -> require(extent == null) {
                 "GPUFrameMemoryAllocation.extent must be absent for Buffer allocations"
+            }
+            GPUFrameMemoryResourceKind.LogicalProgram -> require(extent == null) {
+                "GPUFrameMemoryAllocation.extent must be absent for LogicalProgram leases"
             }
         }
     }
@@ -207,6 +212,7 @@ private fun GPUFrameMemoryAllocation.exceeds(limits: GPULimits): Boolean = when 
             textureExtent.height.toLong() > limits.maxTextureDimension2D
     }
     GPUFrameMemoryResourceKind.Buffer -> false
+    GPUFrameMemoryResourceKind.LogicalProgram -> false
 }
 
 private fun BigInteger.clampedLong(): Long = min(Long.MAX_VALUE.toBigInteger()).toLong()

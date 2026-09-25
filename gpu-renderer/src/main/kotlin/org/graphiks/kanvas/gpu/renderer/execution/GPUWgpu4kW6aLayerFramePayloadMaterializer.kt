@@ -11,12 +11,15 @@ import org.graphiks.kanvas.gpu.renderer.materials.W5aMaterialSourceStage
 import org.graphiks.kanvas.gpu.renderer.filters.GPUW6cMorphologyPass
 import org.graphiks.kanvas.gpu.renderer.filters.GPUW6cMultiInputPass
 import org.graphiks.kanvas.gpu.renderer.filters.GPUW6cSpatialSamplingPass
+import org.graphiks.kanvas.gpu.renderer.filters.GPUW6dAdvancedSamplingPass
+import org.graphiks.kanvas.gpu.renderer.filters.GPUW6dDistantDiffusePass
+import org.graphiks.kanvas.gpu.renderer.filters.GPUW6dLightingPass
+import org.graphiks.kanvas.gpu.renderer.filters.GPUW6dPictureSamplingPass
 import org.graphiks.kanvas.gpu.renderer.recording.*
 import org.graphiks.kanvas.gpu.renderer.wgsl.W6bMaskCoverageSnippet
 import org.graphiks.kanvas.gpu.renderer.wgsl.W6bSeparableBlurSnippet
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.render.ir.ClipStackNode
-import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.matrix.mapRectBoundsF64OrNull
 
@@ -53,6 +56,18 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         var spatialBinding: GPUW6cSpatialFilterSessionCache.Binding? = null
         try {
             val graph = frame.graph
+            // Consume only the exact program leases that were frozen and budgeted before this
+            // native boundary.  A warm driver cache may avoid creation work, never this lease.
+            val frozenPrograms = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
+                pass.frozenSamplingProgram?.let { pass.id to it }
+            }
+            require(frame.physical.programSlots().map { it.lease.ownerPassId }.toSet() ==
+                frozenPrograms.map { it.first }.toSet()) { "W6d native program lease set differs from the frozen graph." }
+            frozenPrograms.forEach { (ownerPassId, binding) ->
+                require(frame.physical.programSlot(ownerPassId).lease.matches(
+                    binding, generationSeal.deviceGeneration.value, graph.passes().size,
+                )) { "W6d native program materialization lacks its pre-publication logical lease." }
+            }
             spatialBinding = if (frame.physical.spatialCachePlans().isEmpty()) null else
                 requireNotNull(spatialFilterCache?.consume(framePlan)) { "W6c cache binding was not selected by preflight." }
             val materialSourceAlphaReplacement = frozenMaterialSourceAlphaReplacement(graph)
@@ -341,6 +356,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 val template = frame.template(packet)
                                 val binding = frame.physical.geometryBinding(pass.id)
                                 val mapped = binding?.let { frame.geometryPipeline(packet) }
+                                val frozenLegacyColor = draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1
                                 // W6b has already selected this source pass and its target.  Its
                                 // source stage is transparent and must never consume the final
                                 // draw blend; that one belongs exclusively to FilterComposite.
@@ -358,6 +374,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 val uniformPayload = binding?.let { frame.analyticUniform(packet) }
                                 val nativeUniform = data?.let { geometryBuffers.getValue(it.uniform) } ?: uniform
                                 if (data != null) {
+                                    require(!frozenLegacyColor)
                                     require(draws.size == 1)
                                     if (verticesSemantic != null) {
                                         val vertices = verticesSemantic.artifact.vertexBytesForUpload()
@@ -414,8 +431,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     queue.writeBuffer(nativeUniform, binding.uniformOffsetI64.toULong(), ArrayBuffer.of(requireNotNull(uniformPayload)))
                                 }
                                 val bind = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout,
-                                    entries = listOf(BindGroupEntry(0u, BufferBinding(nativeUniform, 0uL,
-                                        uniformPayload?.size?.toULong() ?: geometryUniform.byteSize.toULong()))))))
+                                    entries = if (frozenLegacyColor) emptyList() else listOf(BindGroupEntry(0u,
+                                        BufferBinding(nativeUniform, 0uL, uniformPayload?.size?.toULong() ?: geometryUniform.byteSize.toULong()))))))
                                 add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)))
                                 add(GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(bind, generation),
                                     if (mapped == null) emptyList() else binding.let { listOf(it.uniformOffsetI64) }))
@@ -752,6 +769,79 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 renderOperands += dropShadowCompositeRender(stepIndex, views.getValue(pass.output), views.getValue(shadow),
                                     views.getValue(original), generation, operation, outputExtent.width, outputExtent.height,
                                     pass, owned)
+                            }
+                            is FilterPassOperationV1.MatrixConvolution,
+                            is FilterPassOperationV1.DisplacementMap,
+                            is FilterPassOperationV1.Magnifier -> {
+                                val binding = requireNotNull(pass.frozenSamplingProgram) {
+                                    "W6d sampling pass lost its frozen program/binding contract."
+                                }
+                                require(binding.inputs() == pass.inputs() && binding.output == pass.output)
+                                renderOperands += multiInputRender(stepIndex, views.getValue(binding.output), binding.inputs().map(views::getValue), generation,
+                                    W6A_VERTEX_SHADER + GPUW6dAdvancedSamplingPass.fragment(binding.program),
+                                    outputExtent.width, outputExtent.height, pass, owned)
+                            }
+                            is FilterPassOperationV1.Lighting -> {
+                                val binding = requireNotNull(pass.frozenSamplingProgram) {
+                                    "W6d lighting lost its frozen program/binding contract."
+                                }
+                                require(binding.inputs() == pass.inputs() && binding.output == pass.output)
+                                val fragment = when (val program = binding.program) {
+                                    is W6dSamplingProgramV1.DistantDiffuse -> {
+                                        require(operation.family == LightingFamilyV1.DISTANT_DIFFUSE)
+                                        GPUW6dDistantDiffusePass.fragment(program)
+                                    }
+                                    is W6dSamplingProgramV1.Lighting -> {
+                                        require(operation.family == program.family)
+                                        GPUW6dLightingPass.fragment(program)
+                                    }
+                                    else -> error("W6d lighting received a non-lighting frozen recipe.")
+                                }
+                                renderOperands += multiInputRender(stepIndex, views.getValue(binding.output), binding.inputs().map(views::getValue), generation,
+                                    W6A_VERTEX_SHADER + fragment,
+                                    outputExtent.width, outputExtent.height, pass, owned)
+                            }
+                            is FilterPassOperationV1.Picture -> {
+                                val sealed = operation.copySealedSource()
+                                val binding = requireNotNull(pass.frozenSamplingProgram) {
+                                    "W6d Picture pass lost its frozen program/binding contract."
+                                }
+                                val program = binding.program as? W6dSamplingProgramV1.Picture
+                                    ?: error("W6d Picture pass received a non-Picture frozen program.")
+                                require(binding.inputs() == listOf(sealed.resourceId) && binding.output == pass.output &&
+                                    program.copySampling().matches(operation.copyPictureSampling())) {
+                                    "W6d Picture pass does not bind its exact frozen source and sampling recipe."
+                                }
+                                renderOperands += textureRender(stepIndex, views.getValue(binding.output),
+                                    views.getValue(binding.inputs().single()), generation,
+                                    W6A_VERTEX_SHADER + GPUW6dPictureSamplingPass.fragment(program),
+                                    BlendPlan.LegacySrcOverV1,
+                                    0, 0, outputExtent.width, outputExtent.height, pass, owned)
+                            }
+                            is FilterPassOperationV1.RuntimeImageOpacity -> {
+                                val binding = requireNotNull(pass.frozenSamplingProgram) {
+                                    "W6d runtime image opacity lost its frozen program/binding contract."
+                                }
+                                val program = binding.program as? W6dSamplingProgramV1.RuntimeImageOpacity
+                                    ?: error("W6d runtime image opacity received a non-runtime frozen program.")
+                                require(binding.inputs() == pass.inputs() && binding.output == pass.output &&
+                                    program.alphaF32 == operation.alphaF32 &&
+                                    program.alphaUniformOffsetBytesI32 == operation.alphaUniformOffsetBytesI32 &&
+                                    operation.sampling.copyOutputToInputOffsetTargetLocalI32().x == 0 &&
+                                    operation.sampling.copyOutputToInputOffsetTargetLocalI32().y == 0) {
+                                    "W6d runtime image opacity does not retain its sealed same-pixel binding."
+                                }
+                                renderOperands += multiInputRender(
+                                    stepIndex,
+                                    views.getValue(binding.output),
+                                    binding.inputs().map(views::getValue),
+                                    generation,
+                                    W6A_VERTEX_SHADER + GPUW6dAdvancedSamplingPass.fragment(program),
+                                    outputExtent.width,
+                                    outputExtent.height,
+                                    pass,
+                                    owned,
+                                )
                             }
                         }
                     }

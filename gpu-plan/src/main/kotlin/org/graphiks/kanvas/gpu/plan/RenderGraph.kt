@@ -263,6 +263,23 @@ public class RenderGraph private constructor(
                                     pass.copySourceBoundsI32() == initialization.copySourceBoundsParentI32() &&
                                     pass.copyDestinationOriginI32() == initialization.copyDestinationOriginLayerI32())
                             }
+                            is LayerInitializationPlanV1.Backdrop -> {
+                                val plan = initialization.plan
+                                val pass = passesById[step.passId] as? PlanPass.FilterComposite
+                                val expectedParentTarget = parentTarget(scope)
+                                require(plan.parentTarget == expectedParentTarget && pass != null &&
+                                    pass.source == plan.filteredTarget && pass.destination == scope.targetResource &&
+                                    pass.operation is FilterCompositeOperationV1.Draw && pass.replacedLayerSource == null)
+                                val copy = construction.passes().singleOrNull { candidate -> candidate is PlanPass.TextureCopy &&
+                                    candidate.source == plan.parentTarget && candidate.destination == plan.snapshotTarget &&
+                                    candidate.destinationVersion == plan.capturedParentVersion
+                                } as? PlanPass.TextureCopy
+                                require(copy != null && copy.ordinal < pass.ordinal)
+                                require(construction.passes().any { candidate -> candidate is PlanPass.FilterPass &&
+                                    candidate.output == plan.filteredTarget && copy.ordinal < candidate.ordinal &&
+                                    candidate.ordinal < pass.ordinal
+                                })
+                            }
                         }
                         require(initialized.add(scope.id) && scope.id !in restored)
                         initializeOrder[scope.id] = stepIndexI32
@@ -359,6 +376,29 @@ public class RenderGraph private constructor(
             w5bW4eSource: RenderGraph? = null,
             w5bW4eFacts: W4eGeometryFactsV6? = null,
         ): RenderGraphConstruction {
+            val resourcesById = resources.associateBy(PlanResource::id)
+            passes.filterIsInstance<PlanPass.FilterPass>().forEach { pass ->
+                when (pass.operation) {
+                    is FilterPassOperationV1.Picture -> {
+                        require(resourcesById.getValue(pass.output).role == PlanResourceRole.FilterTarget)
+                        require(pass.inputs().singleOrNull()?.let(resourcesById::getValue)?.role ==
+                            PlanResourceRole.PictureAggregateSource)
+                    }
+                    is FilterPassOperationV1.MatrixConvolution,
+                    is FilterPassOperationV1.DisplacementMap,
+                    is FilterPassOperationV1.Magnifier,
+                    is FilterPassOperationV1.Lighting,
+                    is FilterPassOperationV1.RuntimeImageOpacity,
+                    -> {
+                        require(resourcesById.getValue(pass.output).role == PlanResourceRole.FilterTarget)
+                        require(pass.inputs().all { input -> resourcesById.getValue(input).role in setOf(
+                            PlanResourceRole.FilterTarget, PlanResourceRole.FilterSource,
+                            PlanResourceRole.FilterTransparentBlack,
+                        ) })
+                    }
+                    else -> Unit
+                }
+            }
             val stopSlab = materialPlanTable?.gradientStopSlab
             val maskShaderBindings = passes.filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
                 ((pass.operation as? FilterPassOperationV1.MaskShader)?.materialBinding as?
@@ -562,7 +602,7 @@ public class RenderGraph private constructor(
             validatePassCapabilities(passes, capabilities)
             if (capabilityId == W6aLayerPlanCompiler.CAPABILITY_ID) {
                 validateW6aLayerTopology(resources, passes, dependencies, targetExtent, visualCommandCount, capabilities.copyBytesPerRowAlignment)
-                require(W6aLayerPlanBudget.peak(resources, passes.size, budget) == peakFrameLocalBytes)
+                require(W6aLayerPlanBudget.peak(resources, passes, capabilities, budget) == peakFrameLocalBytes)
                 return
             }
             validateW5bDestinationVersions(passes)

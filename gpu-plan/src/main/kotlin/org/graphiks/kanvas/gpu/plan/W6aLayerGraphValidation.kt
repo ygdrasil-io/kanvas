@@ -207,7 +207,21 @@ internal fun validateW6aLayerTopology(
             require(output.role == PlanResourceRole.FilterTransparentBlack && output.kind == PlanResourceKind.Texture2D &&
                 output.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in output.usages() &&
                 PlanResourceUsage.Sampled in output.usages())
-            require(boundSource.role == PlanResourceRole.FilterSource && boundSource.id in initialized)
+            val followingNeutralOffset = (passes.getOrNull(indexI32 + 1) as? PlanPass.FilterPass)?.let { next ->
+                val offset = next.operation as? FilterPassOperationV1.Offset
+                offset != null && next.inputs() == listOf(pass.output) &&
+                    next.evaluationKey.boundSourceId == pass.boundSourceId &&
+                    offset.copyOffsetF64().let { it.x == 0.0 && it.y == 0.0 }
+            } == true
+            // An outer empty Picture may be contextual to Compose's immediately preceding inner
+            // FilterPass. Its FilterTarget is still at that producer's generation zero and must
+            // flow directly through the frozen neutral Offset; arbitrary FilterTargets remain
+            // invalid clear sources.
+            val contextualFilterTarget = boundSource.role == PlanResourceRole.FilterTarget &&
+                (passes.getOrNull(indexI32 - 1) as? PlanPass.FilterPass)?.output == boundSource.id &&
+                boundSource.id in initialized && versions[boundSource.id] == 0L && followingNeutralOffset
+            require((boundSource.role == PlanResourceRole.FilterSource && boundSource.id in initialized) ||
+                contextualFilterTarget)
             require(initialized.add(output.id))
             versions[output.id] = 0L
         }
@@ -258,8 +272,14 @@ internal fun validateW6aLayerTopology(
             require(target.role == PlanResourceRole.PictureAggregateSource && target.kind == PlanResourceKind.Texture2D &&
                 target.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages() &&
                 PlanResourceUsage.Sampled in target.usages() && pass.target !in initialized && pass.target !in sealedPictureSources)
+            // A re-entrant Picture leaf can consume the output of an earlier W6b filter in the
+            // same frozen schedule.  That existing FilterTarget is initialized by its preceding
+            // FilterPass and is a valid aggregate parent alongside ordinary W6a source targets.
             require(parent.role in setOf(PlanResourceRole.LogicalTarget, PlanResourceRole.LayerTarget,
-                PlanResourceRole.PictureAggregateSource) && pass.parentTarget in initialized)
+                PlanResourceRole.PictureAggregateSource, PlanResourceRole.FilterSource, PlanResourceRole.FilterTarget) &&
+                pass.parentTarget in initialized) {
+                "Picture aggregate parent must be an initialized W6a or W6b source target."
+            }
             initialized += pass.target
             versions[pass.target] = 0L
         }
@@ -354,6 +374,21 @@ internal fun validateW6aLayerTopology(
             require(pass.operation.bounds.copyRequiredInputDeviceI32().isEmpty.not())
             require(targetLocal(pass.operation.bounds.copyDesiredOutputDeviceI32()) ==
                 RectI32(0, 0, targetExtent.width, targetExtent.height))
+            (pass.operation as? FilterPassOperationV1.Picture)?.let { operation ->
+                val sealed = operation.copySealedSource()
+                val source = byId.getValue(sealed.resourceId)
+                val seal = passes.take(indexI32).filterIsInstance<PlanPass.PictureAggregateSealPass>().singleOrNull {
+                    it.aggregateId == sealed.aggregateId && it.sealedSource == sealed.resourceId
+                }
+                require(pass.inputs() == listOf(sealed.resourceId) &&
+                    source.role == PlanResourceRole.PictureAggregateSource &&
+                    sealed.resourceId in sealedPictureSources &&
+                    seal?.sourceGenerationI64 == sealed.sourceGenerationI64 &&
+                    versions[sealed.resourceId] == sealed.sourceGenerationI64 &&
+                    sealed.copyOwner().authenticates(pass.evaluationKey)) {
+                    "W6d Picture filter must read exactly one previously sealed aggregate generation."
+                }
+            }
             // Every typed filter output is an immutable source generation for its immediate
             // next operation, material pass, or terminal composite.  This is the same
             // publication boundary used by raw coverage and transparent-black sources.

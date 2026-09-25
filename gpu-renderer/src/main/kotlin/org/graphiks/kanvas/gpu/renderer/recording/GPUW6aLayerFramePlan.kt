@@ -155,7 +155,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
         require(graph.verifyW6aLayerCompilerWitness())
         val verticesSource = if (graph.passes().filterIsInstance<PlanPass.RenderPass>().flatMap { it.draws() }.any { it is W5bVerticesDraw })
             PreparedSourceFrameV6.layeredVertices(graph) else null
-        val allocations = graph.resources().map { resource -> GPUFrameMemoryAllocation(refs.getValue(resource.id).value,
+        val resourceAllocations = graph.resources().map { resource -> GPUFrameMemoryAllocation(refs.getValue(resource.id).value,
             when (resource.role) {
                 PlanResourceRole.LogicalTarget -> GPUFrameMemoryCategory.CanonicalTarget
                 PlanResourceRole.LayerTarget -> GPUFrameMemoryCategory.LayerTarget
@@ -164,6 +164,19 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
             }, resource.byteSize,
             if (resource.kind == PlanResourceKind.Texture2D) GPUFrameMemoryResourceKind.Texture2D else GPUFrameMemoryResourceKind.Buffer,
             resource.copyExtent()?.let { GPUPixelBounds(0, 0, it.width, it.height) }, resource.firstPassIndex, resource.lastPassIndexExclusive) }
+        val programAllocations = physical.programSlots().map { slot ->
+            val lease = slot.lease
+            GPUFrameMemoryAllocation(
+                label = "w6d.program.slot.${slot.slotI32}.${lease.ownerPassId.value}",
+                category = GPUFrameMemoryCategory.ReusableScratch,
+                bytes = lease.reservedBytesI64,
+                resourceKind = GPUFrameMemoryResourceKind.LogicalProgram,
+                extent = null,
+                firstPassIndex = lease.firstPassIndexI32,
+                lastPassIndexExclusive = lease.lastPassIndexExclusiveI32,
+            )
+        }
+        val allocations = resourceAllocations + programAllocations
         memory = GPUFrameMemoryBudgetPlanner.plan(GPUFrameMemoryBudgetRequest(allocations,
             minOf(graph.budget.maxFrameLocalBytes, request.rendererAggregateMemoryBudgetBytes ?: Long.MAX_VALUE), requireNotNull(request.capabilities.limits)))
         require(memory.diagnostic == null && memory.targetResidentBytes + memory.peakFrameTransientBytes ==
@@ -308,7 +321,11 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                             else -> Point2I32.Origin
                         }
                         val packets = packetInputs.map { (packetPass, draw, coverageProducer) ->
-                            val table = requireNotNull(graph.materialPlanTableOrNull())
+                            // A frozen Picture stream may contain only Clear/DrawColor entries.
+                            // Those legacy-color SolidRect operands are complete without a W5
+                            // material table; every material-backed branch below still demands
+                            // the exact pre-issued table before it can lower.
+                            val table = graph.materialPlanTableOrNull()
                             val packed = draw.materialAuthority.colorSourceCoordinatesV4()?.let { graph.packedMaterialSourceV4(draw.materialAuthority) }
                             val packet = when (draw) {
                                 is W5bVerticesDraw -> lowerW5bVerticesDraw(draw, targetBounds, graph, requireNotNull(verticesSource),
@@ -316,26 +333,26 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                                 is SolidRectDraw -> GpuPlanTaskListLowerer().packet(draw, ColorF32.Transparent,
                                     draw.commandIndex, targetBounds, table, null, packed)
                                 is W5bPointDraw -> GpuPlanTaskListLowerer().packet(draw, ColorF32.Transparent,
-                                    draw.commandIndex, targetBounds, table, null, packed, graph)
+                                    draw.commandIndex, targetBounds, requireNotNull(table), null, packed, graph)
                                 is AnalyticRectDraw -> W4aAnalyticRectGraphLowerer().packet(draw, ColorF32.Transparent,
-                                    draw.commandIndex, targetBounds, table, w5b = true, packedSourceV4 = packed,
+                                    draw.commandIndex, targetBounds, requireNotNull(table), w5b = true, packedSourceV4 = packed,
                                     packetSuffix = if (pass is PlanPass.FilterCoverageSourcePass) ".w6b.${pass.id.value}" else "",
                                     coverageOnly = pass is PlanPass.FilterCoverageSourcePass).packet
                                 is AnalyticRRectDraw -> W4bAnalyticRRectGraphLowerer().packet(draw, ColorF32.Transparent,
-                                    draw.commandIndex, targetBounds, table, w5b = true, packedSourceV4 = packed,
+                                    draw.commandIndex, targetBounds, requireNotNull(table), w5b = true, packedSourceV4 = packed,
                                     packetSuffix = if (pass is PlanPass.FilterCoverageSourcePass) ".w6b.${pass.id.value}" else "",
                                     coverageOnly = pass is PlanPass.FilterCoverageSourcePass).packet
                                 is PathFillDraw -> if (packetPass == null)
                                     W4cPathFillGraphLowerer().w6bCoveragePacket("${pass.id.value}.coverage", draw,
-                                        coverageProducer, table, targetBounds, graph).packet
-                                    else W4cPathFillGraphLowerer().w5bPacket(packetPass, listOf(draw), table, targetBounds, graph).packet
+                                        coverageProducer, requireNotNull(table), targetBounds, graph).packet
+                                    else W4cPathFillGraphLowerer().w5bPacket(packetPass, listOf(draw), requireNotNull(table), targetBounds, graph).packet
                                 is PathStrokeDraw -> if (packetPass == null)
                                     W4dPathStrokeGraphLowerer().w6bCoveragePacket("${pass.id.value}.coverage", draw,
-                                        coverageProducer, table, targetBounds, graph).packet
-                                    else W4dPathStrokeGraphLowerer().w5bPacket(packetPass, listOf(draw), table, targetBounds, graph).packet
+                                        coverageProducer, requireNotNull(table), targetBounds, graph).packet
+                                    else W4dPathStrokeGraphLowerer().w5bPacket(packetPass, listOf(draw), requireNotNull(table), targetBounds, graph).packet
                                 else -> error("Unadmitted W6 geometry")
                             }
-                            if (draw is SolidRectDraw) templates[packet.packetId] = w6aGeometryTemplate(packet, draw.blend, targetOrigin)
+                            if (draw is SolidRectDraw) templates[packet.packetId] = w6aGeometryTemplate(packet, draw, targetOrigin)
                             else if (draw is W5bVerticesDraw) {
                                 templates[packet.packetId] = requireNotNull(sealW5aGeometryHostTemplateV1(packet)).copy(
                                     materialDevicePointWgsl = "input.position.xy + vec2<f32>(${targetOrigin.x}.0, ${targetOrigin.y}.0)")
@@ -346,12 +363,12 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                                 val semantic = packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive
                                 val key = if (draw is PathFillDraw) if (packetPass == null)
                                     W4cPathFillGraphLowerer().w6bCoveragePacket("${pass.id.value}.coverage", draw,
-                                        coverageProducer, table, targetBounds, graph).structuralPipelineKey
-                                    else W4cPathFillGraphLowerer().w5bPacket(packetPass, listOf(draw), table, targetBounds, graph).structuralPipelineKey
+                                        coverageProducer, requireNotNull(table), targetBounds, graph).structuralPipelineKey
+                                    else W4cPathFillGraphLowerer().w5bPacket(packetPass, listOf(draw), requireNotNull(table), targetBounds, graph).structuralPipelineKey
                                     else if (draw is PathStrokeDraw) if (packetPass == null)
                                         W4dPathStrokeGraphLowerer().w6bCoveragePacket("${pass.id.value}.coverage", draw,
-                                            coverageProducer, table, targetBounds, graph).structuralPipelineKey
-                                        else W4dPathStrokeGraphLowerer().w5bPacket(packetPass, listOf(draw), table, targetBounds, graph).structuralPipelineKey
+                                            coverageProducer, requireNotNull(table), targetBounds, graph).structuralPipelineKey
+                                        else W4dPathStrokeGraphLowerer().w5bPacket(packetPass, listOf(draw), requireNotNull(table), targetBounds, graph).structuralPipelineKey
                                     else corePrimitiveRenderPipelineStructuralKey(semantic, requireNotNull(packet.clipExecutionPlan),
                                         requireNotNull(packet.blendPlan), 1, GPUColorFormat.RGBA8UnormSrgb.corePrimitiveStructuralColorFormat())
                                 val mapping = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key)

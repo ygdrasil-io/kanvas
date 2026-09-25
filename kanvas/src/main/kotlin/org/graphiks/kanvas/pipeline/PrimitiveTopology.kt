@@ -15,4 +15,4 @@ enum class VertexStepMode { VERTEX, INSTANCE }
 enum class LoadOp { CLEAR, LOAD }
 enum class StoreOp { STORE, DISCARD }
 enum class UniformType { FLOAT, FLOAT2, FLOAT3, FLOAT4, INT1, MAT3X3, MAT4X4 }
-enum class ChildType { SHADER, COLOR_FILTER, BLENDER }
+enum class ChildType { SHADER, COLOR_FILTER, IMAGE_FILTER, BLENDER }

@@ -39,6 +39,13 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
             }.also { require(it < before) { "W6b input must precede its consumer." } }
 
             passes.forEachIndexed { index, pass -> when (pass) {
+                is PlanPass.PictureAggregateBeginPass -> {
+                    // A re-entrant Picture source carries the preceding FilterTarget as its
+                    // frozen construction parent.  It is therefore a real graph consumer even
+                    // though the Picture stream paints its own sealed aggregate rather than
+                    // sampling that target in a renderer-side replay.
+                    inputs += pass.parentTarget
+                }
                 is PlanPass.PictureAggregateSealPass -> producers[pass.sealedSource] = index
                 is PlanPass.RenderPass -> {
                     pass.coverageSource?.let { produced(it, index); materialCoverageInputs += it }
@@ -87,9 +94,25 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                     owners[pass.output] = requireNotNull(owners[pass.source])
                 }
                 is PlanPass.FilterSourceClear -> {
-                    require(row(pass.boundSourceId).role == PlanResourceRole.FilterSource)
+                    val producerIndex = produced(pass.boundSourceId, index)
+                    val followingNeutralOffset = (passes.getOrNull(index + 1) as? PlanPass.FilterPass)?.let { next ->
+                        val offset = next.operation as? FilterPassOperationV1.Offset
+                        offset != null && next.inputs() == listOf(pass.output) &&
+                            next.evaluationKey.boundSourceId == pass.boundSourceId &&
+                            offset.copyOffsetF64().let { it.x == 0.0 && it.y == 0.0 }
+                    } == true
+                    // This is the one contextual empty-Picture chain: Compose's inner FilterPass
+                    // publishes the exact current target generation, then the outer leaf clears
+                    // it and seals transparent input through Offset(0). No other FilterTarget is
+                    // eligible for FilterSourceClear.
+                    val contextualFilterTarget = row(pass.boundSourceId).role == PlanResourceRole.FilterTarget &&
+                        producerIndex == index - 1 && passes[producerIndex] is PlanPass.FilterPass && followingNeutralOffset
+                    require(row(pass.boundSourceId).role == PlanResourceRole.FilterSource || contextualFilterTarget)
                     require(row(pass.output).role == PlanResourceRole.FilterTransparentBlack)
-                    produced(pass.boundSourceId, index)
+                    // The clear does not sample this source, but the authenticated contextual
+                    // target is still consumed by its empty Picture evaluation. Retain that
+                    // frozen producer edge so it cannot become an uncomposited terminal.
+                    if (contextualFilterTarget) inputs += pass.boundSourceId
                     producers[pass.output] = index
                     owners[pass.output] = pass.boundSourceId
                 }
@@ -97,8 +120,11 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                     val bound = row(pass.evaluationKey.boundSourceId)
                     val materializedImageInput = isMaterializedImageInput(pass, passes, producers, rows)
                     val contextualFilterTargetInput = isContextualFilterTargetInput(pass, passes, producers, rows)
+                    val contextualTransparentInput = isContextualTransparentInput(pass, passes, producers, rows)
                     val contextualImageInput = isContextualImageInput(pass, passes, producers, rows)
-                    val filterTargetInput = materializedImageInput || contextualFilterTargetInput || contextualImageInput
+                    val reentrantPictureInput = isReentrantPictureInput(pass, passes, producers, rows)
+                    val filterTargetInput = materializedImageInput || contextualFilterTargetInput || contextualImageInput ||
+                        reentrantPictureInput || contextualTransparentInput
                     require(bound.role in setOf(PlanResourceRole.FilterSource, PlanResourceRole.CoverageSource) ||
                         filterTargetInput) {
                         "W6b occurrence source must be immutable FilterSource or CoverageSource."
@@ -111,7 +137,11 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                         produced(input, index)
                         val materialCoverage = pass.operation is FilterPassOperationV1.MaterializedSource && inputIndex == 1
                         val materializedImageSource = filterTargetInput && inputIndex == 0 && input == bound.id
-                        require(materialCoverage || materializedImageSource || belongsToBoundSource(input, bound.id)) {
+                        val sealedPictureSource = (pass.operation as? FilterPassOperationV1.Picture)
+                            ?.copySealedSource()?.let { sealed ->
+                                sealed.resourceId == input && sealed.copyOwner().authenticates(pass.evaluationKey)
+                            } == true
+                        require(materialCoverage || materializedImageSource || sealedPictureSource || belongsToBoundSource(input, bound.id)) {
                             "W6b input belongs to another occurrence."
                         }
                     }
@@ -163,7 +193,13 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
             is FilterPassOperationV1.MaskShader,
             is FilterPassOperationV1.MaskTable,
             is FilterPassOperationV1.DropShadowColorize,
+            is FilterPassOperationV1.MatrixConvolution,
+            is FilterPassOperationV1.Magnifier,
+            is FilterPassOperationV1.Lighting,
+            is FilterPassOperationV1.Picture,
+            is FilterPassOperationV1.RuntimeImageOpacity,
             -> 1
+            is FilterPassOperationV1.DisplacementMap -> 2
             is FilterPassOperationV1.MaterializedSource -> 2
             is FilterPassOperationV1.Merge -> operation.inputSamplings().size
             is FilterPassOperationV1.Blend -> 2
@@ -197,6 +233,12 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                     require(operation.sourceSampling != null && operation.coverageSampling != null)
                 is FilterPassOperationV1.DropShadowColorize,
                 is FilterPassOperationV1.DropShadowComposite,
+                is FilterPassOperationV1.MatrixConvolution,
+                is FilterPassOperationV1.DisplacementMap,
+                is FilterPassOperationV1.Magnifier,
+                is FilterPassOperationV1.Lighting,
+                is FilterPassOperationV1.Picture,
+                is FilterPassOperationV1.RuntimeImageOpacity,
                 -> Unit
             }
         }
@@ -247,6 +289,26 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
             return producerIndex < passes.indexOf(pass) && passes[producerIndex] is PlanPass.FilterPass
         }
 
+        /** An empty outer Picture may only consume Compose's current target through its clear and Offset(0). */
+        private fun isContextualTransparentInput(
+            pass: PlanPass.FilterPass,
+            passes: List<PlanPass>,
+            producers: Map<PlanResourceId, Int>,
+            rows: Map<PlanResourceId, PlanResource>,
+        ): Boolean {
+            val boundSource = pass.evaluationKey.boundSourceId
+            val offset = pass.operation as? FilterPassOperationV1.Offset ?: return false
+            val transparentInput = pass.inputs().singleOrNull() ?: return false
+            val clearIndex = producers[transparentInput] ?: return false
+            val clear = passes[clearIndex] as? PlanPass.FilterSourceClear ?: return false
+            val targetProducerIndex = producers[boundSource] ?: return false
+            return rows.getValue(boundSource).role == PlanResourceRole.FilterTarget &&
+                clear.output == transparentInput && clear.boundSourceId == boundSource &&
+                clearIndex == passes.indexOf(pass) - 1 && targetProducerIndex == clearIndex - 1 &&
+                passes[targetProducerIndex] is PlanPass.FilterPass &&
+                offset.copyOffsetF64().let { it.x == 0.0 && it.y == 0.0 }
+        }
+
         /** The second blur pass inherits the contextual (rather than mask-materialized) X input. */
         private fun isContextualImageInput(
             pass: PlanPass.FilterPass,
@@ -267,6 +329,38 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                 }
                 else -> false
             }
+        }
+
+        /**
+         * A nested W6d Picture is allowed to begin from an earlier FilterTarget only when that
+         * exact target is the aggregate's parent and the Picture pass consumes the matching
+         * sealed generation.  This is deliberately narrower than accepting FilterTarget by
+         * role: it preserves one producer chain and cannot turn an arbitrary sibling output
+         * into a Picture source.
+         */
+        private fun isReentrantPictureInput(
+            pass: PlanPass.FilterPass,
+            passes: List<PlanPass>,
+            producers: Map<PlanResourceId, Int>,
+            rows: Map<PlanResourceId, PlanResource>,
+        ): Boolean {
+            val operation = pass.operation as? FilterPassOperationV1.Picture ?: return false
+            val sealed = operation.copySealedSource()
+            val boundSource = pass.evaluationKey.boundSourceId
+            if (rows.getValue(boundSource).role != PlanResourceRole.FilterTarget ||
+                pass.inputs() != listOf(sealed.resourceId) ||
+                rows.getValue(sealed.resourceId).role != PlanResourceRole.PictureAggregateSource ||
+                !sealed.copyOwner().authenticates(pass.evaluationKey)) return false
+            val passIndex = passes.indexOf(pass)
+            val boundProducer = producers[boundSource] ?: return false
+            if (boundProducer >= passIndex || passes[boundProducer] !is PlanPass.FilterPass) return false
+            val sealIndex = producers[sealed.resourceId] ?: return false
+            val seal = passes[sealIndex] as? PlanPass.PictureAggregateSealPass ?: return false
+            if (sealIndex >= passIndex || seal.aggregateId != sealed.aggregateId ||
+                seal.sourceGenerationI64 != sealed.sourceGenerationI64) return false
+            val begin = passes.subList(0, sealIndex).filterIsInstance<PlanPass.PictureAggregateBeginPass>()
+                .lastOrNull { it.aggregateId == sealed.aggregateId } ?: return false
+            return begin.target == sealed.resourceId && begin.parentTarget == boundSource
         }
 
         private fun validatePass(
@@ -441,6 +535,25 @@ internal class W6bFilterGraphWitnessV1 private constructor(occurrences: List<Occ
                         "W6b drop shadow composite must consume plan-sealed target-local coordinates."
                     }
                 }
+                // The W6d graph vocabulary is frozen before its execution slices add an
+                // occurrence chain.  Native admission rejects these arms until then.
+                is FilterPassOperationV1.Picture -> {
+                    val sealed = operation.copySealedSource()
+                    val source = rows.getValue(sealed.resourceId)
+                    val seal = producer(sealed.resourceId) as? PlanPass.PictureAggregateSealPass
+                    require(inputs == listOf(sealed.resourceId) && source.role == PlanResourceRole.PictureAggregateSource &&
+                        seal?.aggregateId == sealed.aggregateId && seal.sourceGenerationI64 == sealed.sourceGenerationI64 &&
+                        sealed.copyOwner().authenticates(key) && operation.copyPictureSampling().copyOutputToInputOffsetTargetLocalI32() ==
+                        sealed.copySampling().copyOutputToInputOffsetTargetLocalI32()) {
+                        "W6d Picture must consume exactly its sealed aggregate source generation."
+                    }
+                }
+                is FilterPassOperationV1.MatrixConvolution,
+                is FilterPassOperationV1.DisplacementMap,
+                is FilterPassOperationV1.Magnifier,
+                is FilterPassOperationV1.Lighting,
+                is FilterPassOperationV1.RuntimeImageOpacity,
+                -> inputs.forEach(::contextuallyOwned)
             }
         }
 

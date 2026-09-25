@@ -1,12 +1,198 @@
-# W06 — layers et effets : checkpoints W6a/W6b/W6c
+# W06 — layers et effets : checkpoints W6a/W6b/W6c/W6d
 
 ## Statut
+
+### Gate final W6d — reviews Sol closes, Draft PR stackée #2406
+
+La review Sol globale depuis W6c a relevé quatre points `Important` et un
+`Minor`. La première correction bornée (`536d0e58e`, `79c1fa86d`) a fermé
+Picture sur `saveLayer`, les offsets de sampling gelés, les branches lighting
+et la tolérance du témoin onze-familles. Sa relecture a isolé deux variants
+`Magnifier` encore réels : `zoom < 1` sous snapshot clippé et draw direct
+transformé dont la reverse demand ignorait le transform. L'utilisateur a
+autorisé exceptionnellement une seconde correction ciblée et sa relecture.
+
+Les commits `715eb7896` et `519129b8b` réservent désormais l'enveloppe des
+texels effectivement échantillonnés, en F64 puis I32 vérifié, avec le même
+mapping gelé pour la demande inverse et la source du draw. L'inset réduit à
+une ligne reste inclusif comme le shader ; une marge d'un demi-texel conserve
+également les égalités de `round(sampled - 0.5)` à la borne exclusive. Quatre
+témoins pixels publics `Surface` + `Render` + `Readback` ont donné deux RED
+causaux, puis les XML `4/0/0/0`. La relecture Sol ciblée marque les deux
+variants **ADDRESSED**, sans nouveau Critical/Important.
+
+Un ancien test W6b exigeait encore le refus de Blur + `initWithPrevious`,
+comportement intentionnellement devenu positif dans W6d. Le commit
+`b20a833fa` retire uniquement cette méthode obsolète ; les témoins W6d
+conservent l'ordre save/child, le halo Blur sous clip et la récupération sur
+la même `Surface`. La review Sol de ce retrait est Approved.
+
+Vérification indépendante sur `b20a833fa` : `:gpu-plan:compileKotlin` et
+`:kanvas:compileTestKotlin` sortent 0 ; les XML ciblés `Magnifier` 4/0/0/0,
+W6b AdmissionRecovery 26/0/0/0, W6d BackdropPrevious 9/0/0/0 et W6d
+AdvancedRecovery 5/0/0/0. Chaque task Gradle de test sort 1 après un executor
+natif 133 : statut process/native **UNKNOWN**, jamais un succès natif. Le
+diff check contre la base W6c est net. La [Draft PR W6d #2406](https://github.com/ygdrasil-io/kanvas/pull/2406)
+est ouverte sur `codex/w6c-spatial-dag`, sans merge. W6e n'est pas démarrée.
+
+Les checkpoints ci-dessous conservent leur état historique ; ce gate final
+prévaut sur leurs anciennes mentions « PR non ouverte ».
+
+### Correction whole-branch W6d — contextes sampling, snapshots et branches lighting
+
+La correction bornée sur la base revue
+`a9ad64fd6de89d7471f94d7d29f9a7d70c5dc281` conserve le graphe W6 unique et
+ses ressources/pass/IDs gelés. Un `ImageFilter.Picture` de `saveLayer` sans
+`sourceDraw` emploie désormais le mapping déjà gelé du layer ; un carrier de
+draw continue à composer son transform exactement une fois. Les demandes
+inverses de `MatrixConvolution`, `DisplacementMap` et `Magnifier` sont
+propagées avant l'intersection parent : le halo Matrix et les snapshots
+`backdrop`/`initWithPrevious` ne perdent donc plus leurs texels d'entrée.
+
+Les recettes W6d figent aussi l'offset target-local de **chaque** input de
+`DisplacementMap` et de `Magnifier`. Le renderer lit ces valeurs scellées sans
+replan ni reconstruction de bounds : map et source de displacement peuvent
+avoir des origins distincts, et la source Magnifier est exprimée dans le même
+repère target-local. Les six lumières gardent leur consumer domain à travers
+`Compose`, `Merge` et `Blend`, de sorte que les pixels créés depuis transparent
+black ne sont plus coupés par la géométrie source.
+
+Les witnesses publics `Surface` + `Render` + `Readback` frais couvrent Picture
+sur layer, map décalée, Magnifier transformé à origin non nul, halo Matrix pour
+backdrop/previous et les branches lighting `Merge`/`Blend`. La recovery
+onze-familles est causale dans **un seul graphe gelé** : une même `Surface`
+contient les onze lanes publiques 3×3, toutes peuplées et disjointes, et chaque
+baseline ou mutation construit une seule telle `Surface`. L'oracle complet est
+calculé avant `Surface`/`PictureRecorder`; Matrix est rempli sur sa lane au lieu
+de s'appuyer sur le cas sparse non probant. Aucun composite `SRC` ne masque les
+branches. Picture et runtime restent byte-exact ; les seules tolérances famille
+sont explicites (Matrix, Displacement, Magnifier ≤1, lighting ≤2).
+
+Le contrat historique W6a `unsupportedBackdropRefusesTerminallyAndRecovers`
+est remplacé par l'acceptation pixel d'un Blur backdrop depuis son parent gelé,
+comportement W6d intentionnel. Les sélecteurs ciblés ont donné, dans leurs XML
+au moment de l'exécution, `W6dAdvancedSampling` 7/0/0/0,
+`W6dAdvancedRecovery` 5/0/0/0, `W6dBackdropPrevious` 9/0/0/0,
+`W6dLighting` 31/0/0/0, `W6dPictureFilter` 19/0/0/0, puis les préservations
+W6a Layer 16/0/0/0 et Previous 8/0/0/0, W6b ImageBlur 10/0/0/0, W6c Compose
+4/0/0/0 et MultiInput 5/0/0/0. Les workers terminent encore après JUnit avec
+133 : native **UNKNOWN**, sans claim native, ISO ou globale. La compilation
+finale `:gpu-plan:compileKotlin :gpu-renderer:compileKotlin
+:kanvas:compileKotlin :kanvas:compileTestKotlin` sort 0. Fonts/codecs, GMs,
+dashboard/renders/scores et suite globale restent exclus ; W6e n'est pas
+démarrée.
+
+### Checkpoint W6d Task 7 — ownership atomique de frame
+
+La tranche Terra Task 7 est implémentée sur la source
+`87b3b580a0c7f615e2034b6bcb58144edfe408f0` ; ses Steps 1–6 sont clos. Les
+Steps 7–8 (une review Sol whole-branch, puis la Draft PR empilée) appartiennent
+explicitement au contrôleur : aucune review, push, PR ou merge n'a été lancé
+ici. W6e reste la prochaine vague après ces gates contrôleur.
+
+`W6dAdvancedRecoverySurfacePixelTest` est une preuve exclusivement publique
+`Surface`/`Canvas`/`Picture` : elle calcule ses octets attendus avant la
+création de la `Surface` ou du `PictureRecorder`, puis observe pixels et scopes
+`Render` + `Readback`. Le B exact de son fixture 1×1 est
+`4 + 4 + 4 + 4 + 4 + 16 + 16 + 4096 + 256 = 4404` octets : root RGBA8, layer,
+source draw capturée, source layer, `FilterTarget`, deux records uniforms, un
+lease programme W6d logique de 4096 octets, puis une ligne de readback RGBA8
+alignée. B accepte ; B−1 refuse avec
+`w6d.layer.frame_budget_exceeded`, laisse le sentinel intact et récupère sur la
+même `Surface`. Le même test couvre replay chaud encore pessimiste, sibling
+avancé tardif atomique et un seul graphe gelé qui contient les onze familles.
+Ce dernier témoin contient onze bandes publiques 3×3 disjointes ; un oracle CPU
+complet est calculé avant `Surface` et `PictureRecorder`, puis une mutation
+publique de chaque famille doit modifier sa propre bande. Il ne termine plus
+par une couleur `SRC` opaque qui pourrait masquer les branches.
+
+`GPUColorFormat.RGBA16_FLOAT` est le plus petit token public de requête F16,
+strictement refusal-only : il ne construit ni target, ni conversion, ni backend.
+Une frame W6d-owned le terminalise avant capture, plan, publication ou soumission
+native avec `w6d.layer.unsupported_target_format`; RGBA8 s'exécute positivement.
+L'inventaire reste le graphe W6 existant : `PlanResource` impose descriptor,
+usage, slot, lifetime et taille checked-I64 avant freeze ; le peak sémantique
+est `peakFrameLocalBytesI64` et le peak physique additionne chaque slot par
+`Math.addExact`. Chaque programme W6d ajoute avant publication un lease typé
+gelé : owner `PlanPassId`, génération device, descriptor (programme, inputs,
+output, RGBA8/1×), usages `{ShaderModule, RenderPipeline}`, slot physique et
+lifetime `[0, passes.size)`. Sa charge est `max(4096, descriptor encodé + payload canonique checked-I64)`
+et elle demeure due pour chaque owner même cache warm. C'est une réserve logique
+exacte du budget publié, non une prétention de taille byte-exacte des objets
+opaques shader/pipeline du driver ; cette taille physique reste non observable
+par l'API et constitue la limite/risque documenté de cette tranche.
+
+L'audit manuel ne trouve aucune conversion de bounds renderer-local ni création
+post-freeze de pass/resource/ID sur la route W6d. `GPUPlanSurfaceRouter` rend
+toute frame W6b/W6d-owned terminale plutôt que de la laisser rejoindre
+`legacy()`. `GPUPreparedCompositeLowerer` et
+`GPUPreparedSurfaceProductEntry` restent des références prepared historiques
+W8 : aucun appel W6d n'y entre. Aucun test statique, mock, reflection, fake
+device, GM, dashboard, render/reference/score ou suite Skia globale n'a été
+ajouté.
+
+| Selector | XML classe PASS/F/E/S | Gradle | Native / observation |
+| --- | ---: | ---: | --- |
+| `W6dAdvancedSamplingSurfacePixelTest` | 5/0/0/0 | 1 | 133/UNKNOWN |
+| `W6dLightingSurfacePixelTest` | 29/0/0/0 | 1 | 133/UNKNOWN |
+| `W6dPictureFilterSurfacePixelTest` | 18/0/0/0 | 1 | 133/UNKNOWN |
+| `W6dRuntimeImageOpacitySurfacePixelTest` | 3/0/0/0 | 1 | 133/UNKNOWN |
+| `W6dBackdropPreviousSurfacePixelTest` | 7/0/0/0 | 1 | 133/UNKNOWN |
+| `W6dAdvancedRecoverySurfacePixelTest` | 5/0/0/0 | 1 | 133/UNKNOWN |
+| `W6dPictureRuntimeEffectPictureTest` | 6/0/0/0 | 1 | 133/UNKNOWN |
+| `W6cSpatialDagPictureTest` | 3/0/0/0 | 1 | 133/UNKNOWN |
+| `W6cComposeSurfaceTest` | 4/0/0/0 | 1 | 133/UNKNOWN |
+| `W6cSpatialCacheRecoverySurfaceTest` | 6/0/0/0 | 1 | 133/UNKNOWN |
+| `W6bImageBlurSurfacePixelTest` | 10/0/0/0 | 1 | 133/UNKNOWN |
+| `W6aInitWithPreviousSurfacePixelTest` | 8/0/0/0 | 1 | 133/UNKNOWN |
+| `W6aLayerBudgetRecoverySurfacePixelTest` | 10/0/0/0 | 1 | 133/UNKNOWN |
+| `W5hRuntimeEffectSurfacePixelTest` | 18/0/0/0 | 1 | 133/UNKNOWN |
+
+Les 132 assertions XML de classe sont 132/0/0/0. Le XML de wrapper Gradle
+rapporte l'exit natif 133 comme failure de processus ; il ne contredit pas ces
+assertions mais rend chaque commande `Gradle=1`. Cette santé native est
+**UNKNOWN**, jamais GREEN natif (la même règle couvre 134). Les sept compiles
+séquentiels `:math:geometry`, `:math:matrix`, `:render-ir`, `:gpu-plan`,
+`:gpu-renderer`, `:kanvas:compileKotlin` et `:kanvas:compileTestKotlin` sortent
+0. Aucune claim ISO ou convergence Skia globale n'est formulée.
 
 La relecture Sol ciblée du dernier correctif W6c (`ae26bdbc49301f9ac6b962c766a39508231dd506`)
 ne conserve aucun Critical/Important. La Draft PR W6c [#2405](https://github.com/ygdrasil-io/kanvas/pull/2405)
 est empilée sur W6b [#2404](https://github.com/ygdrasil-io/kanvas/pull/2404), sans merge.
-W6d puis W6e demeurent à réaliser. Les sorties
-natives 133 restent **UNKNOWN** malgré les assertions XML et les compilations ci-dessous.
+W6d Tasks 1–6 sont revues ; Task 7 attend seulement les deux gates contrôleur
+ci-dessus. Les sorties natives 133 restent **UNKNOWN** malgré les assertions
+XML et les compilations ci-dessous.
+
+### Checkpoint W6d Task 4 — source Picture de filtre immuable
+
+La branche `codex/w6d-advanced-effects` à `665242f1a` termine Task 4a–4c du
+[plan détaillé](../../plans/2026-09-24-w6d-picture-filter-source-implementation-plan.md).
+Un agrégat Picture à owner de filtre émet Begin → enfants W4/W5/W6 ordonnés →
+Seal → `FilterPass.Picture` dans le graphe W6 gelé, sans faux draw, second
+graphe, replay renderer ni texture de taille zéro. Les contextes distincts et
+partagés, crop `src`, Picture vide sous Compose dans les deux ordres, clips
+exacts/refus explicites, layers imbriqués et halo ont des témoins pixels publics.
+La capture et le wire préservent les mutations ultérieures de `src`/cull, les
+identités de filtres et un vrai fixture Picture 14/schema 8 non-lighting issu
+du writer historique `e5ce423ab9d18987610b5b7021dbb02745f5e729`.
+Un refus tardif garde le buffer de lecture intact et récupère sur la même
+`Surface`. Les reviews Sol des trois tranches et la relecture finale corrigée
+ne gardent aucun Critical/Important.
+
+Les compilations ciblées `:render-ir`, `:gpu-plan`, `:gpu-renderer` et
+`:kanvas:compileTestKotlin` sortent 0. Derniers XML rapportés :
+`W6dPictureFilterSurfacePixelTest` 18/0/0/0,
+`W6bImageBlurSurfacePixelTest` 10/0/0/0,
+`W6dPictureRuntimeEffectPictureTest` 4/0/0/0,
+`W6dLightingPictureTest` 3/0/0/0 et trois sélecteurs de préservation W6a
+1/0/0/0 chacun. Le contrôleur a relancé indépendamment les témoins du clip
+total, du filtre partagé, du refus atomique, du fixture v14, du mapping inline
+H+T et du Compose extérieur vide : XML 1/0/0/0 à chaque fois. Chaque worker
+sort ensuite en 133 ; le statut process/native est **UNKNOWN**, sans claim ISO
+ou convergence globale. La classe W6a Picture complète possède déjà une
+assertion de version obsolète (14 attendu, writer courant 15), distincte de
+Task 4. La borne numérique checked-I64 B/B−1 reste à Task 7. Aucune PR W6d
+n'est encore ouverte ; Task 5 est le prochain lot.
 
 ### Quatrième correction W6c — conservation du domaine imbriqué chevauchant
 

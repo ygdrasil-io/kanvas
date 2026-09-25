@@ -8,10 +8,12 @@ import org.graphiks.kanvas.color.TransferFunction
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.PathBuilder
 import org.graphiks.math.geometry.Point2F32
+import org.graphiks.math.geometry.Point3F32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.SizeF32
 import org.graphiks.math.matrix.Matrix3x3F32
 import org.graphiks.math.vector.Vector2F32
+import org.graphiks.math.vector.Vector3F32
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -146,12 +148,12 @@ class ResourceSnapshotTest {
             ImageFilterNode.Blend(BlendMode.OVERLAY, ImageFilterNode.Offset(1f, 2f), ImageFilterNode.Dilate(3f, 4f)),
             ImageFilterNode.Dilate(1f, 2f),
             ImageFilterNode.Erode(1f, 2f),
-            ImageFilterNode.DistantLitDiffuse(1f, 2f, ColorARGB.Red, 3f, 4f),
-            ImageFilterNode.PointLitDiffuse(Point2F32(1f, 2f), ColorARGB.Red, 3f, 4f),
-            ImageFilterNode.SpotLitDiffuse(Point2F32(1f, 2f), Point2F32(3f, 4f), 5f, 6f, ColorARGB.Red, 7f, 8f),
-            ImageFilterNode.DistantLitSpecular(1f, 2f, ColorARGB.Red, 3f, 4f, 5f),
-            ImageFilterNode.PointLitSpecular(Point2F32(1f, 2f), ColorARGB.Red, 3f, 4f, 5f),
-            ImageFilterNode.SpotLitSpecular(Point2F32(1f, 2f), Point2F32(3f, 4f), 5f, 6f, ColorARGB.Red, 7f, 8f, 9f),
+            ImageFilterNode.DistantLitDiffuse(Vector3F32(1f, 2f, 3f), ColorARGB.Red, 3f, 4f),
+            ImageFilterNode.PointLitDiffuse(Point3F32(1f, 2f, 3f), ColorARGB.Red, 3f, 4f),
+            ImageFilterNode.SpotLitDiffuse(Point3F32(1f, 2f, 3f), Point3F32(3f, 4f, 5f), 5f, 6f, ColorARGB.Red, 7f, 8f),
+            ImageFilterNode.DistantLitSpecular(Vector3F32(1f, 2f, 3f), ColorARGB.Red, 3f, 4f, 5f),
+            ImageFilterNode.PointLitSpecular(Point3F32(1f, 2f, 3f), ColorARGB.Red, 3f, 4f, 5f),
+            ImageFilterNode.SpotLitSpecular(Point3F32(1f, 2f, 3f), Point3F32(3f, 4f, 5f), 5f, 6f, ColorARGB.Red, 7f, 8f, 9f),
             ImageFilterNode.Offset(1f, 2f),
             ImageFilterNode.Tile.of(RectF32(1f, 2f, 3f, 4f), RectF32(5f, 6f, 7f, 8f)),
             ImageFilterNode.Merge.of(listOf(ImageFilterNode.Offset(1f, 2f))),

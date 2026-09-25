@@ -2,6 +2,7 @@ package org.graphiks.math.matrix
 
 import kotlin.math.sqrt
 import org.graphiks.math.geometry.Point2I32
+import org.graphiks.math.geometry.Point3F32
 import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RRectF32
@@ -9,6 +10,7 @@ import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.rebaseAtOriginI32OrNull
 import org.graphiks.math.geometry.roundOutToRectI32OrNull
 import org.graphiks.math.vector.Vector2F64
+import org.graphiks.math.vector.Vector3F32
 
 /** Immutable local/device/layer mapping sealed before a layer graph is published. */
 public class LayerMappingF64 private constructor(
@@ -21,6 +23,47 @@ public class LayerMappingF64 private constructor(
     public fun copyDeviceToLayerF64(): Matrix3x3F64 = deviceToLayerF64.copy()
     public fun copyLocalToLayerF64(): Matrix3x3F64 = localToLayerF64.copy()
     public fun copyLayerOriginDeviceI32(): Point2I32 = Point2I32(layerOriginDeviceI32.x, layerOriginDeviceI32.y)
+
+    /** Maps 3D lighting positions through the sealed affine local-to-layer transform. */
+    public fun mapLightingPointToLayerF32OrNull(point: Point3F32): Point3F32? = mapLighting(point.x, point.y, point.z, true)
+
+    /** Maps 3D lighting directions without applying translation. */
+    public fun mapLightingVectorToLayerF32OrNull(vector: Vector3F32): Vector3F32? =
+        mapLighting(vector.x, vector.y, vector.z, false)?.let { Vector3F32(it.x, it.y, it.z) }
+
+    /** Skia-compatible affine depth scaling: average of A·(z,z). */
+    public fun mapLightingZToLayerF32OrNull(value: Float): Float? = mapLighting(0f, 0f, value, false)?.z
+
+    /** Freezes a spot axis after mapping without overflowing finite F32 endpoints. */
+    public fun normalizedLightingDirectionF32OrNull(location: Point3F32, target: Point3F32): Vector3F32? {
+        if (!location.isFinite() || !target.isFinite()) return null
+        val dx = target.x.toDouble() - location.x.toDouble()
+        val dy = target.y.toDouble() - location.y.toDouble()
+        val dz = target.z.toDouble() - location.z.toDouble()
+        val scale = maxOf(kotlin.math.abs(dx), kotlin.math.abs(dy), kotlin.math.abs(dz))
+        if (!scale.isFinite()) return null
+        if (scale == 0.0) return Vector3F32.Zero
+        val unitLength = sqrt((dx / scale) * (dx / scale) + (dy / scale) * (dy / scale) + (dz / scale) * (dz / scale))
+        if (!unitLength.isFinite() || unitLength == 0.0) return null
+        fun narrow(value: Double): Float? = value.takeIf { it.isFinite() && it >= -Float.MAX_VALUE && it <= Float.MAX_VALUE }?.toFloat()
+        return Vector3F32(
+            narrow(dx / scale / unitLength) ?: return null,
+            narrow(dy / scale / unitLength) ?: return null,
+            narrow(dz / scale / unitLength) ?: return null,
+        )
+    }
+
+    private fun mapLighting(xF32: Float, yF32: Float, zF32: Float, translate: Boolean): Point3F32? {
+        if (!xF32.isFinite() || !yF32.isFinite() || !zF32.isFinite() ||
+            localToLayerF64.persp0F64 != 0.0 || localToLayerF64.persp1F64 != 0.0 || localToLayerF64.persp2F64 != 1.0) return null
+        val x = xF32.toDouble(); val y = yF32.toDouble(); val z = zF32.toDouble()
+        val mappedX = localToLayerF64.sxF64 * x + localToLayerF64.kxF64 * y + if (translate) localToLayerF64.txF64 else 0.0
+        val mappedY = localToLayerF64.kyF64 * x + localToLayerF64.syF64 * y + if (translate) localToLayerF64.tyF64 else 0.0
+        val depth = ((localToLayerF64.sxF64 * z + localToLayerF64.kxF64 * z) +
+            (localToLayerF64.kyF64 * z + localToLayerF64.syF64 * z)) / 2.0
+        fun narrow(value: Double): Float? = value.takeIf { it.isFinite() && it >= -Float.MAX_VALUE && it <= Float.MAX_VALUE }?.toFloat()
+        return Point3F32(narrow(mappedX) ?: return null, narrow(mappedY) ?: return null, narrow(depth) ?: return null)
+    }
 
     /** Projects a sealed device-space texel rectangle into checked layer texels. */
     public fun mapDeviceRectToLayerI32OrNull(boundsDeviceI32: RectI32): RectI32? =

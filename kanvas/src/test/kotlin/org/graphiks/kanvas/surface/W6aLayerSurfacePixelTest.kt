@@ -179,7 +179,7 @@ class W6aLayerSurfacePixelTest {
     }
 
     @Test
-    fun `unsupportedBackdropRefusesTerminallyAndRecovers`() {
+    fun `backdrop blur is admitted from its frozen transparent parent`() {
         val surface = Surface(2, 2)
         surface.canvas {
             saveLayer(SaveLayerRec(
@@ -190,10 +190,9 @@ class W6aLayerSurfacePixelTest {
             restore()
         }
 
-        assertTerminalWithoutReadbackMutation(surface, "w6b.filter.unsupported_backdrop")
-        surface.discardRecordedOperations()
-        surface.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 2f, 2f), Paint(ColorARGB.of(255, 17, 61, 211), antiAlias = false)) }
-        assertPixel(surface.render().pixels, 2, 1, 1, 17, 61, 211, 255)
+        // W6d snapshots the parent before the child is drawn. The transparent parent remains
+        // transparent through the blur, then the child composites normally into the layer.
+        assertPixel(surface.render().pixels, 2, 1, 1, 255, 255, 255, 255)
     }
 
     @Test

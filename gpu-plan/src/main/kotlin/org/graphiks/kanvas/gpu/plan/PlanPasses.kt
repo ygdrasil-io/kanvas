@@ -1097,10 +1097,13 @@ public sealed interface PlanPass {
      */
     public class W6bRasterCoverageBindingV1(
         public val draw: PlanDraw,
+        /** Physical W4/W5 lane that owns this occurrence's frozen draw. */
+        public val sourceLaneI32: Int,
         public val drawDataResources: PlanDrawDataResources?,
         public val depthStencil: PlanResourceId? = null,
     ) {
         init {
+            require(sourceLaneI32 >= 0)
             val stencil = draw is PathDraw && draw.strategy == PathFillStrategy.StencilCover
             require(stencil == (depthStencil != null)) {
                 "Only a frozen stencil-cover draw may bind W6b coverage depth-stencil state."
@@ -1111,7 +1114,7 @@ public sealed interface PlanPass {
         }
 
         public fun withDraw(draw: PlanDraw): W6bRasterCoverageBindingV1 =
-            W6bRasterCoverageBindingV1(draw, drawDataResources, depthStencil)
+            W6bRasterCoverageBindingV1(draw, sourceLaneI32, drawDataResources, depthStencil)
     }
 
     /** Captures raw geometry/path-effect coverage for one immutable W6b occurrence. */
@@ -1262,6 +1265,9 @@ public sealed interface PlanPass {
         override val role: PlanPassRole = PlanPassRole.Filter
         override val id: PlanPassId = checkedPassId(role, ordinal)
         private val storedInputs = immutableList(inputs)
+        /** W6d executable recipe and binding contract selected before this graph can freeze. */
+        public val frozenSamplingProgram: W6dFrozenProgramBindingV1? =
+            selectW6dSamplingProgram(id, operation, storedInputs, output)
         init {
             require(storedInputs.isNotEmpty() && output !in storedInputs) {
                 "A filter pass requires distinct input and output resources."
@@ -1275,6 +1281,15 @@ public sealed interface PlanPass {
                 }
                 is FilterPassOperationV1.Morphology -> require(storedInputs.size == 1) {
                     "Morphology requires one frozen source input."
+                }
+                is FilterPassOperationV1.MatrixConvolution,
+                is FilterPassOperationV1.Magnifier,
+                is FilterPassOperationV1.Lighting,
+                is FilterPassOperationV1.Picture,
+                is FilterPassOperationV1.RuntimeImageOpacity,
+                -> require(storedInputs.size == 1) { "W6d single-input operation requires one frozen source input." }
+                is FilterPassOperationV1.DisplacementMap -> require(storedInputs.size == 2) {
+                    "Displacement map requires frozen displacement then source inputs."
                 }
                 else -> Unit
             }

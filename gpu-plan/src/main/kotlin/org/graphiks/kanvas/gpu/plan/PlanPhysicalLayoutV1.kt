@@ -12,6 +12,14 @@ public class PlanPhysicalSlotV1 internal constructor(
     init { require(slotI32 >= 0 && reservedBytesI64 >= 0L) }
 }
 
+/** A typed slot for an opaque native W6d shader-module/render-pipeline lease. */
+public class PlanProgramSlotV1 internal constructor(
+    public val slotI32: Int,
+    public val lease: W6dProgramLeaseV1,
+) {
+    init { require(slotI32 >= 0 && lease.reservedBytesI64 > 0L) }
+}
+
 /** The request retains W5's captured identity/generation contract; IDs and slots belong to the graph. */
 public class PlanCacheBindingV1 internal constructor(
     public val resourceId: PlanResourceId,
@@ -75,6 +83,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     w4eGeometry: List<PlanW4eGeometryBindingV1>,
     pictureComposites: Map<PlanPassId, PictureCompositeOperandsV1>,
     spatialCaches: List<SpatialFilterCachePlanV1>,
+    programLeases: List<W6dProgramLeaseV1>,
 ) {
     private val resources = immutableList(resources)
     private val caches = immutableList(cacheBindings)
@@ -91,8 +100,14 @@ public class PlanPhysicalLayoutV1 private constructor(
             add(PlanPhysicalSlotV1(resources.size + offsetI32, cache.resourceId, 0L))
         }
     })
+    private val programSlots = immutableList(programLeases.mapIndexed { offsetI32, lease ->
+        PlanProgramSlotV1(slots.size + offsetI32, lease)
+    })
 
     public fun slots(): List<PlanPhysicalSlotV1> = slots
+    public fun programSlots(): List<PlanProgramSlotV1> = programSlots
+    public fun programSlot(ownerPassId: PlanPassId): PlanProgramSlotV1 =
+        programSlots.single { it.lease.ownerPassId == ownerPassId }
     public fun cacheBindings(): List<PlanCacheBindingV1> = caches
     /** Planner-selected spatial cache requests; native code receives a preflight binding for these values only. */
     public fun spatialCachePlans(): List<SpatialFilterCachePlanV1> = spatialCaches
@@ -120,14 +135,18 @@ public class PlanPhysicalLayoutV1 private constructor(
             require(source.uniforms.values.toSet() == rows.filter { it.role == PlanResourceRole.SourceUniformData }.map { it.id }.toSet())
             require(source.caches.filter { it.request !is PlanCacheResourceRequest.Sampler }.map { it.resourceId }.toSet() ==
                 rows.filter { it.lifetime == PlanResourceLifetime.DeviceSessionCache }.map { it.id }.toSet())
-            val uniforms = RenderGraph.visualDraws(graph.passes()).associate { draw ->
+            // A frozen Clear/DrawColor Picture entry owns a LegacyColor operand directly.  It
+            // has no W5 source uniform (and must not fabricate one after graph construction),
+            // while every material-backed draw retains the exact existing W5 row.
+            val uniforms = RenderGraph.visualDraws(graph.passes()).mapNotNull { draw ->
+                if (draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1) return@mapNotNull null
                 val table = requireNotNull(graph.materialTable)
                 val ref = draw.materialAuthority.materialPlanRef()
                 val identity = if (draw.materialAuthority.colorSourceCoordinatesV4() != null)
                     RawMaterialRequirementsV2.measureV4(table, ref).canonicalIdentity
                 else RawMaterialRequirementsV2.measureLegacy(table, ref).canonicalIdentity
                 draw.commandIndex to source.uniforms.getValue(identity)
-            }
+            }.toMap()
             val maskShaderUniforms = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
                 ((pass.operation as? FilterPassOperationV1.MaskShader)?.materialBinding
                     as? FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned)?.uniformResource
@@ -271,8 +290,17 @@ public class PlanPhysicalLayoutV1 private constructor(
                 )
             }
             require(spatialCaches.map { it.outputResourceId }.distinct().size == spatialCaches.size)
-            val layout = PlanPhysicalLayoutV1(rows, source.caches, uniforms, geometry, source.w4eGeometry, pictures, spatialCaches)
+            val layout = PlanPhysicalLayoutV1(rows, source.caches, uniforms, geometry, source.w4eGeometry, pictures, spatialCaches,
+                graph.w6dProgramLeases())
             require(layout.slots.map { it.resourceId }.distinct().size == layout.slots.size)
+            require(layout.programSlots().map { it.slotI32 }.distinct().size == layout.programSlots().size)
+            val frozenPrograms = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
+                pass.frozenSamplingProgram?.let { pass.id to it }
+            }
+            require(layout.programSlots().map { it.lease.ownerPassId }.toSet() == frozenPrograms.map { it.first }.toSet())
+            frozenPrograms.forEach { (ownerPassId, binding) ->
+                require(layout.programSlot(ownerPassId).lease.matches(binding, graph.capabilities.deviceGeneration, graph.passes().size))
+            }
             // All reservations (including cache hits) remain live until frame completion.
             require(rows.all { it.firstPassIndex == 0 && it.lastPassIndexExclusive == graph.passes().size })
             source.caches.forEach { binding ->

@@ -6,6 +6,18 @@ import org.graphiks.kanvas.render.ir.RuntimeUniformType
 public data class RuntimeEffectCpuColorF32(public val rF32: Float, public val gF32: Float, public val bF32: Float, public val aF32: Float) {
     init { require(listOf(rF32, gF32, bF32, aF32).all { it.isFinite() }) { W5hPlanDiagnostics.CpuNumeric } }
 }
+
+/** The sealed W6d IMAGE_FILTER operation: one input sample, scalar premultiplied-RGBA opacity. */
+public fun evaluateImageOpacity(
+    input: RuntimeEffectCpuColorF32,
+    alphaF32: Float,
+): RuntimeEffectCpuColorF32 = RuntimeEffectCpuColorF32(
+    input.rF32 * alphaF32,
+    input.gF32 * alphaF32,
+    input.bF32 * alphaF32,
+    input.aF32 * alphaF32,
+)
+
 public sealed interface RuntimeEffectCpuUniformV1 {
     public data class FloatValue(public val name: String, public val valueF32: Float) : RuntimeEffectCpuUniformV1 {
         init { require(name.isNotBlank() && valueF32.isFinite()) { W5hPlanDiagnostics.CpuUniforms } }
@@ -58,5 +70,22 @@ public object ChildOpacityCpuEvaluatorV1 : RuntimeEffectCpuEvaluatorV1 {
             "invalid.material.runtime_effect.cpu_numeric"
         }
         return out
+    }
+}
+
+/** Same-pixel IMAGE_FILTER evaluator; absent public children are bound to the W6 implicit source. */
+public object ImageOpacityCpuEvaluatorV1 : RuntimeEffectCpuEvaluatorV1 {
+    override val id: String = "kanvas.runtime.image-opacity.cpu-v1"
+    override val evaluatorVersionI32: Int = 1
+    override fun evaluate(inputs: RuntimeEffectCpuInputsV1): RuntimeEffectCpuColorF32 {
+        require(inputs.children.size == 1 && inputs.children[0] != null) { "invalid.material.runtime_effect.cpu_children" }
+        require(inputs.uniforms.size == 1) { "invalid.material.runtime_effect.cpu_uniforms" }
+        val alpha = inputs.uniforms[0] as? RuntimeEffectCpuUniformV1.FloatValue
+            ?: throw IllegalArgumentException("invalid.material.runtime_effect.cpu_uniforms")
+        require(alpha.name == "alpha" && alpha.valueF32.isFinite() && alpha.valueF32 in 0f..1f) {
+            "invalid.material.runtime_effect.cpu_uniforms"
+        }
+        val input = requireNotNull(inputs.children[0])
+        return evaluateImageOpacity(input, alpha.valueF32)
     }
 }

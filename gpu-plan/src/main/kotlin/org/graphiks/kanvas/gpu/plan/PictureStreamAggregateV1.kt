@@ -2,6 +2,8 @@ package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.kanvas.render.ir.ClipStackNode
 import org.graphiks.kanvas.render.ir.BlendMode
+import org.graphiks.kanvas.render.ir.CapturedFilterNodeIdI32
+import org.graphiks.kanvas.render.ir.CapturedFilterNodeV1
 import org.graphiks.kanvas.render.ir.DrawNode
 import org.graphiks.kanvas.render.ir.GeometryNode
 import org.graphiks.kanvas.render.ir.SceneCommand
@@ -9,6 +11,7 @@ import org.graphiks.kanvas.render.ir.SceneSnapshot
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.color.ColorF32
 import org.graphiks.math.geometry.Point2I32
+import org.graphiks.math.geometry.RectF64
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.matrix.LayerMappingF64
 import org.graphiks.math.matrix.Matrix3x3F32
@@ -31,6 +34,59 @@ public value class PictureStreamEntryIdI32(public val valueI32: Int) {
 @JvmInline
 public value class FramePlannedCommandIdI32(public val valueI32: Int) {
     init { require(valueI32 >= 0) { "Planned command IDs must be non-negative." } }
+}
+
+/**
+ * The physical owner of a Picture aggregate.  A filter-owned Picture deliberately has no
+ * fabricated [FramePlannedCommandIdI32]: its only consumer is the sealed filter operand.
+ */
+public sealed interface PictureAggregateOwnerV1 {
+    public class DrawPicture internal constructor(
+        public val sourcePlannedCommandId: FramePlannedCommandIdI32,
+    ) : PictureAggregateOwnerV1
+
+    public class FilterPicture internal constructor(
+        public val capturedNodeId: CapturedFilterNodeIdI32,
+        /** Content identity is coupled to occurrence identity; it never deduplicates captures. */
+        public val capturedFilterTableCanonicalId: String,
+        public val filterOccurrenceIdI32: Int,
+        /** The carrier scene whose revision owns the filter evaluation. */
+        public val occurrenceSourceSceneCanonicalId: String,
+        /** The sealed Picture scene, retained for aggregate provenance. */
+        public val sourceSceneCanonicalId: String,
+        public val sourceCommandIndexI32: Int,
+        sourcePathI32: List<Int>,
+    ) : PictureAggregateOwnerV1 {
+        private val sourcePath = immutableList(sourcePathI32)
+
+        init {
+            require(filterOccurrenceIdI32 >= 0 && capturedFilterTableCanonicalId.isNotBlank() &&
+                occurrenceSourceSceneCanonicalId.isNotBlank() && sourceSceneCanonicalId.isNotBlank() &&
+                sourceCommandIndexI32 >= 0)
+            require(sourcePath.all { it >= 0 })
+        }
+
+        public fun sourcePathI32(): List<Int> = sourcePath
+
+        /** Exact source revision used by [FilterEvaluationKeyV1], never an equality-by-value cache key. */
+        public fun evaluationSourceRevisionIdentity(): String =
+            "$occurrenceSourceSceneCanonicalId:$sourceCommandIndexI32:${sourcePath.joinToString(",")}"
+
+        /** Couples table, occurrence/path and captured node before an aggregate source is read. */
+        public fun matchesFilterOwner(other: FilterPicture): Boolean =
+            capturedNodeId == other.capturedNodeId &&
+                capturedFilterTableCanonicalId == other.capturedFilterTableCanonicalId &&
+                filterOccurrenceIdI32 == other.filterOccurrenceIdI32 &&
+                occurrenceSourceSceneCanonicalId == other.occurrenceSourceSceneCanonicalId &&
+                sourceSceneCanonicalId == other.sourceSceneCanonicalId &&
+                sourceCommandIndexI32 == other.sourceCommandIndexI32 && sourcePath == other.sourcePath
+
+        /** Binds the sealed source owner to the exact W6b node evaluation that reads it. */
+        public fun authenticates(evaluationKey: FilterEvaluationKeyV1): Boolean =
+            evaluationKey.capturedNodeId == capturedNodeId &&
+                evaluationKey.sourceRevisionIdentity == evaluationSourceRevisionIdentity() &&
+                evaluationKey.copyPictureProvenanceOrNull()?.matches(this) == true
+    }
 }
 
 /** Locates one command in one *occurrence* of a captured Picture stream. */
@@ -359,12 +415,11 @@ public sealed interface PictureStreamEntryV1 {
  */
 public class PictureStreamAggregateV1 internal constructor(
     public val id: PictureStreamAggregateIdI32,
+    public val owner: PictureAggregateOwnerV1,
     public val executionMode: PictureStreamExecutionModeV1,
     public val sourceSceneCanonicalId: String,
     public val sourceCommandCountI32: Int,
     public val sourcePictureOccurrenceIdI32: Int,
-    /** Frame identity of this drawPicture command; nested entries may reference the same ID. */
-    public val sourcePlannedCommandId: FramePlannedCommandIdI32,
     outerPicturePathI32: List<Int>,
     public val outerEvaluationMappingF64: LayerMappingF64,
     public val recordedInnerClip: ClipStackNode,
@@ -418,6 +473,10 @@ public class PictureStreamAggregateV1 internal constructor(
         }
     }
 
+    /** Present only for the historical GeometryNode.Picture owner. */
+    public val sourcePlannedCommandId: FramePlannedCommandIdI32?
+        get() = (owner as? PictureAggregateOwnerV1.DrawPicture)?.sourcePlannedCommandId
+
     public fun outerPicturePathI32(): List<Int> = outerPath
     public fun copyCullContentBoundDeviceI32(): RectI32? = cullContent?.copy()
     public fun copyDemandRegionDeviceI32(): RectI32 = demand.copy()
@@ -448,22 +507,75 @@ internal fun pictureStreamInvalid(
 }
 
 /** Planner-only source facts. They are converted to immutable [PictureStreamAggregateV1] values at publication. */
+internal sealed interface PictureStreamAggregateDraftOwnerV1 {
+    val source: FilterOccurrenceSourceV1
+    val sourcePlannedCommandId: FramePlannedCommandIdI32?
+    val filterOccurrence: W6bFilterGraphConstruction.PositiveOccurrence?
+
+    class DrawPicture(
+        override val source: FilterOccurrenceSourceV1,
+        val draw: DrawNode,
+        override val filterOccurrence: W6bFilterGraphConstruction.PositiveOccurrence?,
+        override val sourcePlannedCommandId: FramePlannedCommandIdI32,
+    ) : PictureStreamAggregateDraftOwnerV1
+
+    class FilterPicture(
+        val capturedNodeId: CapturedFilterNodeIdI32,
+        val node: CapturedFilterNodeV1.Picture,
+        val occurrence: W6bFilterGraphConstruction.PositiveOccurrence,
+        override val source: FilterOccurrenceSourceV1,
+        knownContentDeviceI32: RectI32,
+        sourceDomainDeviceI32: RectI32,
+        contentDeviceF64: RectF64,
+    ) : PictureStreamAggregateDraftOwnerV1 {
+        private val knownContentSnapshotI32 = knownContentDeviceI32.copy()
+        private val sourceDomainSnapshotI32 = sourceDomainDeviceI32.copy()
+        private val contentSnapshotF64 = contentDeviceF64.copy()
+        init {
+            require(!knownContentSnapshotI32.isEmpty && !sourceDomainSnapshotI32.isEmpty &&
+                contentSnapshotF64.isFinite() && !contentSnapshotF64.isEmpty)
+        }
+        fun copyKnownContentDeviceI32(): RectI32 = knownContentSnapshotI32.copy()
+        fun copySourceDomainDeviceI32(): RectI32 = sourceDomainSnapshotI32.copy()
+        fun copyContentDeviceF64(): RectF64 = contentSnapshotF64.copy()
+        /** The owner occurrence is provenance, not a post-seal parent filter to replay. */
+        override val filterOccurrence: W6bFilterGraphConstruction.PositiveOccurrence? = null
+        override val sourcePlannedCommandId: FramePlannedCommandIdI32? = null
+    }
+}
+
 internal class PictureStreamAggregateDraftV1(
     val id: PictureStreamAggregateIdI32,
     val executionMode: PictureStreamExecutionModeV1,
     val sourceScene: SceneSnapshot,
     val sourcePictureOccurrenceIdI32: Int,
-    val sourcePlannedCommandId: FramePlannedCommandIdI32,
     outerPicturePathI32: List<Int>,
-    val source: FilterOccurrenceSourceV1,
-    val draw: DrawNode,
-    val filterOccurrence: W6bFilterGraphConstruction.PositiveOccurrence?,
+    val owner: PictureStreamAggregateDraftOwnerV1,
     entries: List<PictureStreamEntryDraftV1>,
 ) {
     private val outerPath = immutableList(outerPicturePathI32)
     private val values = immutableList(entries)
     fun outerPicturePathI32(): List<Int> = outerPath
     fun entries(): List<PictureStreamEntryDraftV1> = values
+    val source: FilterOccurrenceSourceV1 get() = owner.source
+    val sourcePlannedCommandId: FramePlannedCommandIdI32? get() = owner.sourcePlannedCommandId
+    val filterOccurrence: W6bFilterGraphConstruction.PositiveOccurrence? get() = owner.filterOccurrence
+    val draw: DrawNode get() = (owner as? PictureStreamAggregateDraftOwnerV1.DrawPicture)?.draw
+        ?: throw IllegalStateException("A filter-owned Picture aggregate has no carrier DrawNode.")
+}
+
+internal fun PictureStreamAggregateDraftV1.freezeOwner(): PictureAggregateOwnerV1 = when (val value = owner) {
+    is PictureStreamAggregateDraftOwnerV1.DrawPicture ->
+        PictureAggregateOwnerV1.DrawPicture(value.sourcePlannedCommandId)
+    is PictureStreamAggregateDraftOwnerV1.FilterPicture -> PictureAggregateOwnerV1.FilterPicture(
+        value.capturedNodeId,
+        value.occurrence.table.canonicalId.value,
+        value.occurrence.idI32,
+        value.occurrence.source.scene.canonicalId.value,
+        value.node.scene.canonicalId.value,
+        value.source.sourceCommandIndexI32,
+        value.source.picturePathI32(),
+    )
 }
 
 internal sealed interface PictureStreamEntryDraftV1 {
@@ -543,10 +655,12 @@ internal sealed interface PictureStreamEntryDraftV1 {
  */
 internal class PictureStreamAggregateDiscoveryV1(
     private val positiveOccurrences: List<W6bFilterGraphConstruction.PositiveOccurrence>,
+    initialFrameCommandI32: Int,
 ) {
+    init { require(initialFrameCommandI32 >= 0) }
     private var nextAggregateI32: Int = 0
     private var nextPictureOccurrenceI32: Int = 0
-    private var nextFrameCommandI32: Int = 0
+    private var nextFrameCommandI32: Int = initialFrameCommandI32
 
     fun root(
         scene: SceneSnapshot,
@@ -664,11 +778,150 @@ internal class PictureStreamAggregateDiscoveryV1(
             if (draw.paint == null) PictureStreamExecutionModeV1.INLINE_CURRENT_TARGET else PictureStreamExecutionModeV1.ISOLATED_SOURCE,
             picture.scene,
             pictureOccurrence,
-            sourcePlannedCommandId,
             outerPath,
-            source,
-            draw,
-            filter,
+            PictureStreamAggregateDraftOwnerV1.DrawPicture(source, draw, filter, sourcePlannedCommandId),
+            entries,
+        )
+    }
+
+    /** A Picture filter owns its captured scene and every nested W4/W5/W6c occurrence in order. */
+    fun filterRoot(
+        capturedNodeId: CapturedFilterNodeIdI32,
+        node: CapturedFilterNodeV1.Picture,
+        occurrence: W6bFilterGraphConstruction.PositiveOccurrence,
+        knownContentDeviceI32: RectI32,
+        sourceDomainDeviceI32: RectI32,
+        contentDeviceF64: RectF64,
+    ): PictureStreamAggregateDraftV1 {
+        fun aggregateId(): PictureStreamAggregateIdI32 = PictureStreamAggregateIdI32(nextAggregateI32.also {
+            nextAggregateI32 = Math.addExact(it, 1)
+        })
+        fun pictureOccurrence(): Int = nextPictureOccurrenceI32.also {
+            nextPictureOccurrenceI32 = Math.addExact(it, 1)
+        }
+        fun planned(): FramePlannedCommandIdI32 = FramePlannedCommandIdI32(nextFrameCommandI32.also {
+            nextFrameCommandI32 = Math.addExact(it, 1)
+        })
+
+        lateinit var buildDrawPicture: (SceneSnapshot, Int, DrawNode, FramePlannedCommandIdI32, List<DrawNode>, List<Int>) ->
+            PictureStreamAggregateDraftV1
+        fun streamEntries(
+            sourceScene: SceneSnapshot,
+            aggregate: PictureStreamAggregateIdI32,
+            sourcePictureOccurrenceI32: Int,
+            outerPictures: List<DrawNode>,
+            path: List<Int>,
+            startInclusiveI32: Int,
+            endExclusiveI32: Int,
+            pictureDraw: DrawNode?,
+            entryCounter: IntArray,
+        ): List<PictureStreamEntryDraftV1> {
+            val commands = sourceScene.toList()
+            fun entryId(): PictureStreamEntryIdI32 = PictureStreamEntryIdI32(entryCounter[0].also {
+                entryCounter[0] = Math.addExact(it, 1)
+            })
+            fun locator(indexI32: Int): PictureSourceLocatorV1 = PictureSourceLocatorV1(sourcePictureOccurrenceI32, indexI32)
+            val values = mutableListOf<PictureStreamEntryDraftV1>()
+            var indexI32 = startInclusiveI32
+            while (indexI32 < endExclusiveI32) {
+                when (val command = commands[indexI32]) {
+                    is SceneCommand.Draw -> {
+                        val childPicture = command.node.geometry as? GeometryNode.Picture
+                        if (childPicture == null) {
+                            val enclosing = if (pictureDraw == null) outerPictures else outerPictures + pictureDraw
+                            val source = FilterOccurrenceSourceV1(sourceScene, indexI32, command.node, enclosing,
+                                picturePathI32 = path)
+                            values += PictureStreamEntryDraftV1.Draw(entryId(), locator(indexI32), planned(), source,
+                                matchingOccurrence(sourceScene, indexI32, path))
+                        } else {
+                            val childPlanned = planned()
+                            val enclosing = if (pictureDraw == null) outerPictures else outerPictures + pictureDraw
+                            val child = buildDrawPicture(sourceScene, indexI32, command.node, childPlanned, enclosing, path)
+                            values += PictureStreamEntryDraftV1.Picture(entryId(), locator(indexI32), childPlanned, child)
+                        }
+                        indexI32 = Math.addExact(indexI32, 1)
+                    }
+                    is SceneCommand.Clear -> {
+                        values += PictureStreamEntryDraftV1.Clear(entryId(), locator(indexI32), planned(), command.color)
+                        indexI32 = Math.addExact(indexI32, 1)
+                    }
+                    is SceneCommand.DrawColor -> {
+                        values += PictureStreamEntryDraftV1.DrawColor(entryId(), locator(indexI32), planned(), command.color,
+                            command.mode, command.transform, command.clip)
+                        indexI32 = Math.addExact(indexI32, 1)
+                    }
+                    is SceneCommand.SetTransform -> {
+                        values += PictureStreamEntryDraftV1.ConsumedState(entryId(), locator(indexI32),
+                            PictureStreamConsumedStateV1.Transform(command.matrix))
+                        indexI32 = Math.addExact(indexI32, 1)
+                    }
+                    is SceneCommand.SetClip -> {
+                        values += PictureStreamEntryDraftV1.ConsumedState(entryId(), locator(indexI32),
+                            PictureStreamConsumedStateV1.Clip(command.clip))
+                        indexI32 = Math.addExact(indexI32, 1)
+                    }
+                    is SceneCommand.Annotation -> {
+                        values += PictureStreamEntryDraftV1.AnnotationNoOp(entryId(), locator(indexI32), command.canonicalId.value)
+                        indexI32 = Math.addExact(indexI32, 1)
+                    }
+                    is SceneCommand.BeginLayer -> {
+                        val end = matchingLayerEnd(commands, indexI32, aggregate, locator(indexI32))
+                        if (end >= endExclusiveI32) throw pictureStreamInvalid(aggregate, locator(indexI32),
+                            "Layer interval escapes its owning Picture scope.")
+                        val enclosing = if (pictureDraw == null) outerPictures else outerPictures + pictureDraw
+                        val layerSource = FilterOccurrenceSourceV1(sourceScene, indexI32, null, enclosing, command.descriptor,
+                            path)
+                        values += PictureStreamEntryDraftV1.Layer(entryId(), locator(indexI32), planned(), layerSource, end,
+                            streamEntries(sourceScene, aggregate, sourcePictureOccurrenceI32, outerPictures, path,
+                                Math.addExact(indexI32, 1), end, pictureDraw, entryCounter),
+                            matchingOccurrence(sourceScene, indexI32, path))
+                        indexI32 = Math.addExact(end, 1)
+                    }
+                    SceneCommand.EndLayer -> throw pictureStreamInvalid(aggregate, locator(indexI32),
+                        "EndLayer has no matching BeginLayer.")
+                    is SceneCommand.State, is SceneCommand.Readback -> throw W6bFilterGraphConstruction.ConstructionFailure(
+                        W6bFilterDiagnostics.refusal(W6aPlanDiagnostics.UnsupportedChild,
+                            "This Picture source command has no admitted W4/W5 lane."))
+                }
+            }
+            return immutableList(values)
+        }
+        buildDrawPicture = { parentScene, commandIndexI32, draw, sourcePlannedCommandId, outerPictures, outerPath ->
+            val picture = draw.geometry as? GeometryNode.Picture
+                ?: throw IllegalArgumentException("Picture aggregate requires GeometryNode.Picture.")
+            val aggregate = aggregateId()
+            val pictureOccurrence = pictureOccurrence()
+            val source = FilterOccurrenceSourceV1(parentScene, commandIndexI32, draw, outerPictures,
+                picturePathI32 = outerPath)
+            PictureStreamAggregateDraftV1(
+                aggregate,
+                if (draw.paint == null) PictureStreamExecutionModeV1.INLINE_CURRENT_TARGET else PictureStreamExecutionModeV1.ISOLATED_SOURCE,
+                picture.scene,
+                pictureOccurrence,
+                outerPath,
+                PictureStreamAggregateDraftOwnerV1.DrawPicture(source, draw,
+                    matchingOccurrence(parentScene, commandIndexI32, outerPath), sourcePlannedCommandId),
+                streamEntries(picture.scene, aggregate, pictureOccurrence, outerPictures, outerPath + commandIndexI32,
+                    0, picture.scene.toList().size, draw, intArrayOf(0)),
+            )
+        }
+
+        val aggregate = aggregateId()
+        val sourcePictureOccurrence = pictureOccurrence()
+        // Match nested filters through the concrete parent evaluation, not merely a captured
+        // node ID. One ImageFilter.Picture object may be applied by multiple carrier commands.
+        val filterPath = occurrence.source.picturePathI32() + occurrence.evaluationIdentityI32 + capturedNodeId.valueI32
+        val outerPictures = occurrence.source.outerPictures() + listOfNotNull(occurrence.source.sourceDraw)
+        val entries = streamEntries(node.scene, aggregate, sourcePictureOccurrence, outerPictures, filterPath,
+            0, node.scene.toList().size, null, intArrayOf(0))
+        return PictureStreamAggregateDraftV1(
+            aggregate,
+            PictureStreamExecutionModeV1.ISOLATED_SOURCE,
+            node.scene,
+            sourcePictureOccurrence,
+            filterPath,
+            PictureStreamAggregateDraftOwnerV1.FilterPicture(capturedNodeId, node, occurrence, occurrence.source,
+                knownContentDeviceI32, sourceDomainDeviceI32, contentDeviceF64),
             entries,
         )
     }
@@ -676,11 +929,11 @@ internal class PictureStreamAggregateDiscoveryV1(
     private fun matchingOccurrence(
         scene: SceneSnapshot,
         commandIndexI32: Int,
-        path: List<Int>,
+        parentEvaluationPathI32: List<Int>,
     ): W6bFilterGraphConstruction.PositiveOccurrence? = positiveOccurrences.singleOrNull { occurrence ->
         occurrence.sourceSceneCanonicalId == scene.canonicalId.value &&
             occurrence.sourceCommandIndexI32 == commandIndexI32 &&
-            occurrence.outerPicturePathI32() == path
+            occurrence.outerPicturePathI32() == parentEvaluationPathI32
     }
 
     private fun matchingLayerEnd(
@@ -741,7 +994,8 @@ internal fun validatePictureStreamAggregates(
         fail(first, invariant = "Aggregate ID is duplicated.")
     }
     if (scopeById.size != frame.scopes().size) fail(aggregates.first(), invariant = "Layer scope ID is duplicated.")
-    if (aggregates.map { it.sourcePlannedCommandId }.distinct().size != aggregates.size) {
+    val drawOwners = aggregates.mapNotNull { (it.owner as? PictureAggregateOwnerV1.DrawPicture)?.sourcePlannedCommandId }
+    if (drawOwners.distinct().size != drawOwners.size) {
         fail(aggregates.first(), invariant = "Picture aggregate source planned ID aliases another occurrence.")
     }
     val treePlannedIds = mutableSetOf<FramePlannedCommandIdI32>()
@@ -883,9 +1137,15 @@ internal fun validatePictureStreamAggregates(
                 is PictureStreamEntryV1.DrawColor,
                 -> {
                     val (terminal, indexI32) = requireTerminal()
-                    val pass = passById.getValue(terminal) as? PlanPass.PictureSourcePass
-                    if (pass == null || pass.output != target || pass.pictureSourceLocator != locator ||
-                        pass.plannedCommandId != entry.plannedCommandId) {
+                    val pass = passById.getValue(terminal)
+                    val writesFrozenCommand = when (pass) {
+                        is PlanPass.PictureSourcePass -> pass.output == target && pass.pictureSourceLocator == locator &&
+                            pass.plannedCommandId == entry.plannedCommandId
+                        is PlanPass.RenderPass -> pass.target == target && pass.plannedCommandId == entry.plannedCommandId &&
+                            pass.draws().singleOrNull()?.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1
+                        else -> false
+                    }
+                    if (!writesFrozenCommand) {
                         fail(aggregate, entry, "Visual Picture command does not write its immediate target.", terminal, target)
                     }
                     immediateTerminals += indexI32
@@ -1148,7 +1408,33 @@ internal fun validatePictureStreamAggregates(
                 val graphTextureConsumers = passes.filterIsInstance<PlanPass.PictureSourcePass>().filter { pass ->
                     pass.aggregateId == aggregate.id && (pass.graphTextureRequest != null || pass.graphTextureOperand != null)
                 }
-                if (isTerminallyEmptyAggregate(aggregate)) {
+                if (aggregate.owner is PictureAggregateOwnerV1.FilterPicture) {
+                    val owner = aggregate.owner
+                    val readers = passes.filterIsInstance<PlanPass.FilterPass>().filter { pass ->
+                        (pass.operation as? FilterPassOperationV1.Picture)?.copySealedSource()?.let { sealed ->
+                                sealed.aggregateId == aggregate.id && sealed.resourceId == source &&
+                                sealed.sourceGenerationI64 == generation &&
+                                sealed.copyOwner().matchesFilterOwner(owner) &&
+                                sealed.copyOwner().authenticates(pass.evaluationKey)
+                        } == true
+                    }
+                    if (aggregate.sourcePlannedCommandId != null || aggregate.sourceSceneCanonicalId != owner.sourceSceneCanonicalId ||
+                        aggregate.rootSourceCommandIndexI32 != null || aggregate.terminalPassId != seal ||
+                        graphTextureConsumers.isNotEmpty() || readers.size != 1) {
+                        fail(aggregate, invariant = "Filter-owned Picture must end at seal with one sealed FilterPass reader.")
+                    }
+                    val reader = readers.single()
+                    val readerIndex = passIndex.getValue(reader.id)
+                    val sealed = (reader.operation as FilterPassOperationV1.Picture).copySealedSource()
+                    if (reader.inputs() != listOf(source) || sealed.aggregateId != aggregate.id ||
+                        sealed.resourceId != source || sealed.sourceGenerationI64 != generation ||
+                        !sealed.copyOwner().matchesFilterOwner(owner) || !sealed.copyOwner().authenticates(reader.evaluationKey) ||
+                        readerIndex <= sealIndex ||
+                        targetRow.firstPassIndex > beginIndex || targetRow.lastPassIndexExclusive <= readerIndex) {
+                        fail(aggregate, invariant = "Filter-owned Picture source is not sealed through its exact reader lifetime.",
+                            passId = reader.id, resourceId = source)
+                    }
+                } else if (isTerminallyEmptyAggregate(aggregate)) {
                     val authority = aggregate.terminalCompositeScissorAuthority
                         ?: fail(aggregate, invariant = "Empty Picture aggregate lost its final scissor admission.")
                     if (!authority.compositeScissorAdmitted || !authority.terminalIsEmpty ||

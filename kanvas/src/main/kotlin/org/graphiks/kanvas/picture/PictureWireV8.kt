@@ -261,12 +261,14 @@ internal fun stableChildTypeId(value: ChildType): Byte = when (value) {
     ChildType.SHADER -> 1
     ChildType.COLOR_FILTER -> 2
     ChildType.BLENDER -> 3
+    ChildType.IMAGE_FILTER -> 4
 }
 
 internal fun stableChildTypeFromId(id: Byte): ChildType? = when (id.toInt()) {
     1 -> ChildType.SHADER
     2 -> ChildType.COLOR_FILTER
     3 -> ChildType.BLENDER
+    4 -> ChildType.IMAGE_FILTER
     else -> null
 }
 
