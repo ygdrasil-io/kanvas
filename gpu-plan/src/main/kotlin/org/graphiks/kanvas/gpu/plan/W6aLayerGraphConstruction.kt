@@ -3124,6 +3124,9 @@ internal class W6aLayerGraphConstruction(
         }
         val hintDomain = hint?.roundOutToRectI32OrNull()
             ?: if (hint == null) null else throw IllegalArgumentException(W6aPlanDiagnostics.MappingOverflow)
+        // requiredInput is a logical read demand, not the finite sampled-source extent.
+        // Keep all direct/child input below, but do not pad its CLAMP edge with the inverse
+        // halo's transparent texels. Snapshots instead capture their required parent region.
         val required = snapshotInput?.copy() ?: sourceDemand?.copy() ?: desired.copy()
         val effective = if (snapshotInput != null) {
             val sourceAndOutput = union(snapshotInput, desired)

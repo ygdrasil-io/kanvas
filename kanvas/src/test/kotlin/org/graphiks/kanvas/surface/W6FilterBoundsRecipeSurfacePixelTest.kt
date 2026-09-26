@@ -10,11 +10,31 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
+import org.graphiks.math.geometry.SizeF32
+import org.graphiks.math.vector.Vector2F32
 import org.graphiks.math.vector.Vector3F32
 import org.junit.jupiter.api.Test
 
 /** Public Render+Readback witnesses for W6's pre-reservation contextual filter recipe. */
 class W6FilterBoundsRecipeSurfacePixelTest {
+    /**
+     * Unioning the logical convolution halo into the sampled source would insert transparent
+     * texels before its left CLAMP edge. The one initialized blue texel must remain that edge.
+     */
+    @Test
+    fun reverseHaloDoesNotReplaceClampedLayerSourceEdge() {
+        val expected = ubyteArrayOf(0u, 0u, 0u, 0u, 0u, 0u, 255u, 255u, 0u, 0u, 0u, 0u)
+        val filter = ImageFilter.MatrixConvolution(SizeF32.of(3f, 1f), floatArrayOf(1f, 0f, 0f),
+            1f, 0f, Vector2F32(1f, 0f), TileMode.CLAMP, true)
+        val surface = Surface(3, 1)
+        surface.canvas {
+            saveLayer(SaveLayerRec(paint = Paint(imageFilter = filter, antiAlias = false)))
+            drawRect(RectF32.ofLTRB(1f, 0f, 2f, 1f), Paint(ColorARGB.Blue, antiAlias = false))
+            restore()
+        }
+        assertRenderAndReadback(surface, expected)
+    }
+
     /**
      * Removing the recipe's forward-produced bounds must erase the offset pixel at x=1 and the
      * blur halo around the 7x7 impulse, even though neither belongs to the raw child content.

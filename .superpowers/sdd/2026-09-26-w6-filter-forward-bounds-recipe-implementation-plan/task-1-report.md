@@ -271,3 +271,88 @@ Auto-review:
 The verification-before-completion skill required fresh compiles/selectors and
 separate application XML versus native/Gradle status. TDD guided the public REDs;
 systematic debugging isolated both source-domain and caller-demand divergences.
+
+## Sol review follow-up: logical reverse demand versus sampled-source extent
+
+Review base: `69509d8ad` (production checkpoint `7d82f7a43`). The controller
+requested verification of the Important `sealGeometry` finding before any fix;
+the other finding (direct filtered draws under an unfiltered parent) remains
+Task 2 and is not implemented here. Receiving-code-review and systematic-debugging
+required checking the sampling contract rather than mechanically adding a union.
+
+Conclusion: contest this finding. There is no missing physical source in the
+reported direct-content/no-snapshot path. `physicalInput` already includes all
+captured direct raster content and every explicit child's terminal production;
+with a recipe, `preserveSourceDomain` prevents intersecting it with the terminal
+or inverse demand. An admissible hint can enlarge it. `requiredInput` records the
+logical sampling demand, which can lie outside that finite source. Such samples
+use the family's frozen tile/boundary semantics; they are not evidence that new
+initialized source texels exist. Snapshots are different: their inverse request
+must capture actual parent pixels and already contributes to the physical domain.
+Direct filtered sampling also retains raster intersected with its reverse request,
+not an invented transparent halo. No source truncation was found in this audit.
+
+Spec sections 3–4 explicitly distinguish the source extent from all four logical
+regions and require preservation of `MatrixConvolution` and lighting edge modes.
+The phrase “contenu + ... + demande inverse/snapshot” therefore cannot mean an
+unconditional rectangular union of the logical request into every finite source:
+that changes CLAMP and the kernels' aligned source/output domains. Required demand
+still controls dependency evaluation and snapshot/input capture where applicable.
+Known content remains separate from initialized transparent padding and production;
+none of these regions is replaced with cull, hint or terminal output.
+
+New public witness: `W6FilterBoundsRecipeSurfacePixelTest.reverseHaloDoesNotReplaceClampedLayerSourceEdge`.
+It renders a one-texel blue source at x=1 on a 3×1 Surface through a 3×1 convolution
+whose left tap has weight 1, offset 1, CLAMP. The independently fixed expected RGBA
+is transparent / blue / transparent; Render and Readback evidence are required.
+The source edge stays x=1 even though the inverse request extends beyond it.
+
+Controlled causal experiment, with strictly serialized Gradle invocations:
+
+1. Unchanged production: new witness XML 1/1 GREEN; worker15 exit133, Gradle exit1,
+   native UNKNOWN.
+2. Temporary mutation only: replace `composite` selection for preserved sources
+   with `union(effective, sourceDemand)`. New witness and existing
+   `W6dLightingSurfacePixelTest.distant diffuse child touching output edge clamps its Sobel source`
+   both RED (XML 2 tests, 2 failures, no skips/errors; 12:07:04Z–12:07:05Z).
+   Matrix assertion: index6 expected255 actual0; expected blue at x1, actual blue
+   at x2. Sobel assertion: channel4 expected235 actual217. Worker16 exit133,
+   Gradle exit1, native UNKNOWN. This is a counterexample to the proposed union,
+   not a failure of the retained implementation.
+3. Mutation immediately restored; `git diff` confirmed no executable production
+   change. Restored replay: 58/58 application methods GREEN, worker17 exit133,
+   Gradle exit1 (12:09:19Z–12:09:23Z).
+4. Added only a three-line explanatory comment beside `required` in `sealGeometry`.
+   `rtk ./gradlew :gpu-plan:compileKotlin :kanvas:compileTestKotlin` rebuilt gpu-plan:
+   exit0, BUILD SUCCESSFUL.
+5. Final replay on this exact code/test diff: 77/77 application methods GREEN,
+   no skips/errors/failures; timestamps 12:10:05Z–12:10:09Z on 2026-09-26.
+   Worker18 exit133, Gradle exit1, native UNKNOWN. XML remains under the same
+   `kanvas/build/test-results/test` path documented above.
+
+Final command is `rtk ./gradlew :kanvas:test`, followed by one
+`--tests 'org.graphiks.kanvas.surface.<Selector>'` for each of:
+
+| Selector | Methods |
+| --- | ---: |
+| W6FilterBoundsRecipeSurfacePixelTest | 5 |
+| W6dLightingSurfacePixelTest | 31 |
+| W6dAdvancedSamplingSurfacePixelTest | 7 |
+| W6dMagnifierReverseDemandSurfacePixelTest | 4 |
+| W6cSpatialCacheRecoverySurfaceTest | 6 |
+| W6dAdvancedRecoverySurfacePixelTest | 5 |
+| W6bImageBlurSurfacePixelTest | 10 |
+| W6dBackdropPreviousSurfacePixelTest | 9 |
+
+This retains causal Blur/Compose witnesses, all convolution tile modes, real
+Magnifier input beyond the output clip, backdrop capture and cold/warm budget
+B/B−1 refusal/recovery (Crop B=308 bytes), without expanding source allocations.
+It does not claim a new large-clip identity/Crop budget audit; that remains Task 3.
+The earlier RRect baseline was not replayed in this bounded review wave and remains
+unchanged/out of scope. Native worker termination prevents a global Gradle PASS.
+
+Review checkpoint diff is exactly the new public test (20 added lines), the
+`sealGeometry` comment (3 added lines), and this report section. No executable
+production, renderer, wire, public API, allocator or identity change. No diagnostic
+substitution remains. No subagent or infrastructure/GM test was added. The dirty
+W6d progress ledger remains unstaged. The controller owns the finding disposition.
