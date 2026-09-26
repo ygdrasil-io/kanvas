@@ -30,6 +30,48 @@ private sealed interface GPUW6bMaskShaderResourceV1 {
     class Runtime(val lease: GPUW5hRuntimeResourceSessionCache.Lease) : GPUW6bMaskShaderResourceV1
 }
 
+private data class W4eClipMaskInitializeNativePreflight(
+    val entries: List<GPUW4eNativePassEntry>,
+    val recipesByPassId: Map<String, W4eClipMaskInitializeRecipeV1>,
+)
+
+/** Authenticates the final W4e binding and its recorded initialize packets before any device.create*. */
+private fun preflightW4eClipMaskInitializes(
+    frame: GPUW6aLayerFramePlan,
+    framePlan: GPUFramePlan,
+): Map<PlanW4eGeometryBindingV1, W4eClipMaskInitializeNativePreflight> =
+    frame.w4eAuthorities.map { (binding, authority) ->
+        val entries = framePlan.steps.mapIndexedNotNull { index, step ->
+            val render = step as? GPUFrameStep.RenderPassStep ?: return@mapIndexedNotNull null
+            if (render.w6aPassV1?.id !in binding.graphPassIds()) return@mapIndexedNotNull null
+            val bound = binding.nativePass(requireNotNull(render.w6aPassV1).id)
+            require(bound != null)
+            if (bound is PlanPass.ClipMaskInitialize) require(bound === render.w6aPassV1)
+            GPUW4eNativePassEntry(index, render, render.drawPackets.single())
+        }
+        require(entries.isNotEmpty() && entries.first().packet.w4ePreparedFrameAuthority?.validatesRenderSteps(
+            framePlan.frameId.value, framePlan.capabilitySeal.sealHash, entries.map { it.render },
+        ) == true)
+        val recipes = entries.mapNotNull { entry ->
+            frame.w4eClipMaskInitializeRecipeOrNull(entry.packet)?.let { recipe ->
+                require(recipe.passId.value == entry.packet.passId)
+                recipe.passId.value to recipe
+            }
+        }.toMap()
+        val initializes = binding.nativePasses().filterIsInstance<PlanPass.ClipMaskInitialize>()
+        require(recipes.keys == initializes.map { it.id.value }.toSet()) {
+            "W4e ClipMaskInitialize recording recipes must cover exactly one final binding."
+        }
+        initializes.forEach { initialize ->
+            val recipe = recipes.getValue(initialize.id.value)
+            require(recipe.passId == initialize.id && recipe.output == initialize.output &&
+                recipe.copyDomainI32() == initialize.copyDomainI32() &&
+                recipe.clearCoverageF32 == initialize.clearCoverageF32)
+        }
+        requireW4eClipMaskInitializeRecipes(entries, recipes)
+        binding to W4eClipMaskInitializeNativePreflight(entries, recipes)
+    }.toMap()
+
 /** Native translation of exact W6 resources and passes behind one ordinary frame draft. */
 internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
     private val device: GPUDevice,
@@ -56,6 +98,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         var spatialBinding: GPUW6cSpatialFilterSessionCache.Binding? = null
         try {
             val graph = frame.graph
+            val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
             // native boundary.  A warm driver cache may avoid creation work, never this lease.
             val frozenPrograms = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
@@ -300,23 +343,9 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 queue.writeBuffer(geometryBuffers.getValue(payload.uniformResourceId), 0uL, ArrayBuffer.of(payload.copyUniformData()))
                 fun buffer(id: PlanResourceId) = GPUPreparedNativeBufferOperand(geometryBuffers.getValue(id), generation,
                     byteCapacity = frame.physical.resource(id).byteSize)
-                val entries = framePlan.steps.mapIndexedNotNull { index, step ->
-                    val render = step as? GPUFrameStep.RenderPassStep ?: return@mapIndexedNotNull null
-                    if (render.w6aPassV1?.id !in binding.graphPassIds()) return@mapIndexedNotNull null
-                    GPUW4eNativePassEntry(index, render, render.drawPackets.single())
-                }
-                require(entries.first().packet.w4ePreparedFrameAuthority?.validatesRenderSteps(framePlan.frameId.value,
-                    framePlan.capabilitySeal.sealHash, entries.map { it.render }) == true)
-                val clipMaskInitializeRecipes = entries.mapNotNull { entry ->
-                    frame.w4eClipMaskInitializeRecipeOrNull(entry.packet)?.let { recipe ->
-                        require(recipe.passId.value == entry.packet.passId)
-                        recipe.passId.value to recipe
-                    }
-                }.toMap()
-                require(clipMaskInitializeRecipes.keys == binding.nativePasses()
-                    .filterIsInstance<PlanPass.ClipMaskInitialize>().map { it.id.value }.toSet()) {
-                    "W4e ClipMaskInitialize recording recipes must cover exactly one final binding."
-                }
+                val preflight = w4eClipMaskInitializePreflights.getValue(binding)
+                val entries = preflight.entries
+                val clipMaskInitializeRecipes = preflight.recipesByPassId
                 val extent = binding.copyExtentI32()
                 val childOwned = owned.own(GPUW4eNativeOwnedHandles())
                 encodeW4eNativePasses(device, generation, entries, payload, buffer(payload.vertexResourceId),

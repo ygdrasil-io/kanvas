@@ -240,6 +240,30 @@ internal class GPUW4eNativeOwnedHandles : AutoCloseable, GPUW5aGeometryPipelineT
 
 internal data class GPUW4eNativePassEntry(val index: Int, val render: GPUFrameStep.RenderPassStep, val packet: GPUDrawPacket)
 
+/** Pure recipe/packet equivalence check, callable before any native allocation and at encoding. */
+internal fun requireW4eClipMaskInitializeRecipes(
+    entries: List<GPUW4eNativePassEntry>,
+    clipMaskInitializeRecipesByPassId: Map<String, W4eClipMaskInitializeRecipeV1>,
+) {
+    if (clipMaskInitializeRecipesByPassId.isEmpty()) return
+    val initializePasses = entries.mapNotNull { entry ->
+        (entry.packet.w4ePreparedClipPass as? GPUW4ePreparedClipPassAuthority.Initialize)?.let { entry to it }
+    }
+    require(clipMaskInitializeRecipesByPassId.keys == initializePasses.map { (_, pass) -> pass.passId }.toSet()) {
+        "W4e ClipMaskInitialize native recipes must be exhaustive for their bound packet sequence."
+    }
+    initializePasses.forEach { (_, pass) ->
+        val recipe = requireNotNull(clipMaskInitializeRecipesByPassId[pass.passId])
+        val domain = recipe.copyDomainI32()
+        require(recipe.passId.value == pass.passId && recipe.output.value == pass.outputResourceId &&
+            domain.left == pass.domain.left && domain.top == pass.domain.top &&
+            domain.right == pass.domain.right && domain.bottom == pass.domain.bottom &&
+            recipe.clearCoverageF32 == pass.clearCoverage) {
+            "W4e ClipMaskInitialize packet differs from its frozen planner recipe."
+        }
+    }
+}
+
 /** Shared W4e native pass encoder; its caller owns allocation, source publication and the draft. */
 internal fun encodeW4eNativePasses(
     device: GPUDevice,
@@ -260,24 +284,7 @@ internal fun encodeW4eNativePasses(
     refusal: (String, String) -> RuntimeException,
     clipMaskInitializeRecipesByPassId: Map<String, W4eClipMaskInitializeRecipeV1> = emptyMap(),
 ): List<GPUPreparedNativeScopeOperand.Render> {
-    val initializePasses = entries.mapNotNull { entry ->
-        (entry.packet.w4ePreparedClipPass as? GPUW4ePreparedClipPassAuthority.Initialize)?.let { entry to it }
-    }
-    if (clipMaskInitializeRecipesByPassId.isNotEmpty()) {
-        require(clipMaskInitializeRecipesByPassId.keys == initializePasses.map { (_, pass) -> pass.passId }.toSet()) {
-            "W4e ClipMaskInitialize native recipes must be exhaustive for their bound packet sequence."
-        }
-        initializePasses.forEach { (_, pass) ->
-            val recipe = requireNotNull(clipMaskInitializeRecipesByPassId[pass.passId])
-            val domain = recipe.copyDomainI32()
-            require(recipe.passId.value == pass.passId && recipe.output.value == pass.outputResourceId &&
-                domain.left == pass.domain.left && domain.top == pass.domain.top &&
-                domain.right == pass.domain.right && domain.bottom == pass.domain.bottom &&
-                recipe.clearCoverageF32 == pass.clearCoverage) {
-                "W4e ClipMaskInitialize packet differs from its frozen planner recipe."
-            }
-        }
-    }
+    requireW4eClipMaskInitializeRecipes(entries, clipMaskInitializeRecipesByPassId)
     val clearPipelines = mutableMapOf<Float, GPURenderPipeline>()
     val producerPipelines = mutableMapOf<Int, GPUW4eNativePipeline>()
     val foldPipelines = mutableMapOf<org.graphiks.kanvas.gpu.plan.ClipCombineOperation, GPUW4eNativePipeline>()
