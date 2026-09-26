@@ -82,7 +82,8 @@ internal fun describeW5bW4ePathSourcesV6(source: SourceDeferredRenderConstructio
     return SourceDeferredRenderConstructionV4.of(PlanId("w5b.w4e.${source.id.value}"),W4eClipPlanCompiler.W5B_HARD_CAPABILITY_ID,
         source.targetExtent,topology.format,source.capabilities,source.budget,colors.size,topology.resources,
         topology.passes,topology.dependencies,source.sourceTable(),DeferredLaneTopologyV4.GeneralGeometryAndColor,
-        source,colors.map { it.commandIndex },colors.associate { it.commandIndex to data },depth)
+        source,colors.map { it.commandIndex },colors.associate { it.commandIndex to data },depth,
+        preparedIdentity = { _, _, geometry -> PlanId("w5b.w4e.${requireNotNull(geometry).id.value}") })
 }
 
 private fun w4eColorConsumers(passes: List<PlanPass.PathRenderPass>,blends: Map<Int,BlendPlan>): List<W5bW4ePathDraw> {

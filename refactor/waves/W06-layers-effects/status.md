@@ -587,3 +587,102 @@ Draft PR W6a directement sur `codex/w5h-registered-runtime-effects` :
 les limites explicites ci-dessus. Task 6 ferme W6b dans son périmètre borné;
 W6c est l'étape suivante pour les familles et capabilities exclues, sans
 réouvrir les operands target-local scellés de W6b.
+
+## Checkpoint prérequis W6e — recette de bounds contextuelle, Task 3
+
+Sur `820710118`, les nouveaux témoins publics `W6FilterBoundsRecipe*` restent
+sans modification d'owner. Le Crop sous clip 2×1 dérive en I64 checked
+`B=312 = root 8 + quatre targets 1×1 (16) + deux rows W6 (32) + readback
+aligné 256`; B produit exactement le pixel bleu, tandis que B−1 refuse avec
+`w6b.filter.frame_budget_exceeded`, ne modifie pas le sentinel et le même
+`Surface` redevient enregistrable. Le ColorFilter identité a son propre seuil,
+calculé avant `Surface` : `B=392 = root 8 + quatre targets 1×1 (16) + deux
+rows W6 (32) + matrice 20×F32 (80) + readback aligné 256`; B/B−1 vérifient les
+mêmes pixels exacts, diagnostic, sentinel et recovery. Le replay Picture
+inclut son target direct supplémentaire : `B=316 = root 8 + cinq targets 1×1
+(20) + 32 + 256`; les replays froid/chaud du même Picture passent à B et
+refusent à B−1, puis chacun discard/re-record sur sa propre `Surface` et
+vérifie pixels exacts avec Render+Readback. Le témoin de snapshot emploie une
+matrice dépendante du parent qui mappe son rouge vers vert et un enfant noir
+semi-transparent : le même pixel enfant conserve une contribution backdrop
+visible; backdrop au save est `[177,134,76,255, 177,180,76,255]`, alors que le
+contre-factuel snapshot tardif contaminé par l'enfant a vert 100 au premier
+pixel. `initWithPrevious` reste vérifié après l'enfant avec
+`[212,45,92,255, 241,53,106,255]`, puis les deux surfaces recover après discard.
+
+Les XML frais des deux nouvelles classes sont `10/0/0/0` (Surface) et
+`3/0/0/0` (Picture). Chaque invocation Gradle quitte néanmoins avec le worker
+natif 133 après JUnit : statut natif **UNKNOWN**, jamais PASS global. La
+compilation ciblée `:gpu-plan:compileKotlin :kanvas:compileTestKotlin` sort 0.
+
+La réexécution systématique a établi trois causes distinctes, toutes corrigées
+ou contractualisées explicitement. `W6bBudgetRecoverySurfacePixelTest` est
+revenu à 2/0 : un Picture aggregate réévaluait `DropShadow` avec son domaine
+source inverse comme `desiredOutput`, ce qui annulait sa production translatée;
+le recipe conserve désormais cette demande aval. `W6bFilterAdmissionRecoverySurfaceTest`
+est à 26/0 : un `DeviceRect` vide est reconnu avant toute projection du cull
+à travers une matrice singulière. `W6cSpatialDagAdmissionSurfaceTest` est à
+2/0 : son ancien refus `unsupported_family` était obsolète puisque Magnifier
+est une famille W6d admise; le témoin public vérifie désormais le pixel bleu,
+Render+Readback et la recovery après discard/re-record.
+
+Les selectors prescrits sont tous verts en XML : nouveaux Surface 10 et
+Picture 3; W6a budget 10; W6b budget 2 et filter admission 26; W6c DAG 2 et
+cache 6; W6d advanced 5, backdrop/previous 9, Magnifier 4 et Picture runtime
+6. Chaque invocation de test termine ensuite avec le worker natif 133 : ces
+résultats natifs restent **UNKNOWN**, jamais PASS global. Les compilations
+`:gpu-plan:compileKotlin :kanvas:compileTestKotlin` terminent 0.
+
+Correction de la review Sol Task 3 : le premier run du nouveau témoin Surface
+était `8/2/0/0` (identity à 312 au lieu de son B 392, et oracle backdrop avec
+quantification intermédiaire erronée), puis la correction d'arithmétique et de
+l'oracle est `10/0/0/0`; Picture reste `3/0/0/0`. Les selectors de préservation
+rejoués sont `W6bBudgetRecoverySurfacePixelTest` `2/0/0/0` et
+`W6dBackdropPreviousSurfacePixelTest` `9/0/0/0`. Chacune de ces invocations
+termine ensuite par worker 133, donc native **UNKNOWN**; aucun owner de
+production n'a changé pour cette correction.
+
+Correction round 2 de la review Sol : l'ancien enfant opaque masquait backdrop
+au pixel commun; le nouveau témoin le rend observablement causal avec l'enfant
+noir à alpha .5 et un contre-factuel algébrique disjoint calculé avant Surface.
+Le selector `W6FilterBoundsRecipeSurfacePixelTest` est `10/0/0/0` et
+`W6dBackdropPreviousSurfacePixelTest` `9/0/0/0`; chaque Gradle se termine après
+JUnit par worker 133, native **UNKNOWN**. Aucun owner production n'a été modifié.
+
+Exclusions Task 3 : aucun GM, font, codec/format externe, dashboard/render,
+rebaseline, suite Skia globale, `jpg-color-cube` ou test d'infrastructure. Le
+worker 133 reste la limite native explicite, classée **UNKNOWN**.
+
+## Gate final du prérequis W6e — recette de bounds contextuelle
+
+La review Sol whole-branch a demandé trois corrections : sortie d'un Picture
+top-level avant réservation du parent, source physique finie d'un draw filtré
+dans Picture, et exclusion d'un restore `DST` non écrivant. La re-review Sol
+les a validées, puis a identifié un cas adjacent : un draw filtré `DST` dans
+une Picture inline pouvait être disjoint du parent désormais resserré et
+échouer en `w6b.filter.invalid_bounds`. Le témoin public
+`inlineFilteredDstOutsideWritingSiblingIsNoOpAndRecovers` a reproduit ce RED
+avant le correctif `202047bd9`. L'entrée Picture reste désormais dans le
+stream comme entrée élidée, sans composite physique ; la seconde re-review Sol
+ciblée accepte ce correctif sans nouveau finding Critical ou Important.
+
+Sur `202047bd9`, une vérification fraîche et sérialisée donne 8/8 JUnit
+pour `W6FilterBoundsRecipePictureTest`, 12/12 pour
+`W6FilterBoundsRecipeSurfacePixelTest`, 3/3 pour
+`W6cSpatialDagPictureTest` et 20/20 pour
+`W6dPictureFilterSurfacePixelTest`. Les deux compilations
+`:gpu-plan:compileKotlin` et `:kanvas:compileTestKotlin` sortent 0 ;
+`git diff --check` depuis W6d est propre. Chacun des quatre sélecteurs de
+test termine cependant avec un worker natif 133 après les assertions :
+**43/43 JUnit ciblés verts, statut global natif UNKNOWN**. La matrice plus
+large avant ce dernier correctif comptait 191/193 JUnit verts ; ses deux
+échecs connus sont le masque RRect et une assertion de test Picture14/schema8
+devenue obsolète face au writer Picture15/schema9 déjà présent sur W6d. Ce
+checkpoint ne prétend pas que cette matrice entière a été rejouée sur le
+dernier commit.
+
+La branche prérequis est `codex/w6e-filter-bounds-recipe`, stackée sur
+`codex/w6d-advanced-effects`. Les exclusions précédentes restent inchangées :
+aucun test d'infrastructure, GM, dashboard/render/rebaseline,
+`jpg-color-cube`, font ou codec externe n'a été exécuté. Aucun merge ni claim
+ISO n'est déduit de ces résultats.

@@ -39,7 +39,10 @@ internal fun describeW5bGeneralPathSourcesV4(source: SourceDeferredRenderConstru
         source.capabilities, source.budget, layout.colors.size, envelope.resources, envelope.passes,
         envelope.dependencies, source.sourceTable(), DeferredLaneTopologyV4.GeneralGeometryAndColor,
         source, layout.colors.map { it.commandIndex }, layout.colors.associate { it.commandIndex to layout.data },
-        layout.depthByCommand)
+        layout.depthByCommand, preparedIdentity = { _, command, geometry ->
+            generalFinalBlendPlanId(requireNotNull(geometry).id,
+                layout.colors.map { it.withCommandIndexI32(command) })
+        })
 }
 
 private class GeneralColorInputsV4(colors: List<GeneralPathDraw>, geometryResources: List<PlanResource>,

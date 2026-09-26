@@ -41,6 +41,8 @@ internal class SourceDeferredRenderConstructionV4 private constructor(
     data: Map<Int, PlanDrawDataResources>,
     depth: Map<Int, PlanResourceId>,
     val w4ePayload: W4eNativePayloadPlan?,
+    private val preparedIdentity: PreparedSceneIdentityV1? = null,
+    private val occurrenceScene: org.graphiks.kanvas.render.ir.SceneSnapshot? = null,
 ) {
     private val extent = extent.copy()
     val targetExtent: SizeI32 get() = extent.copy()
@@ -58,6 +60,41 @@ internal class SourceDeferredRenderConstructionV4 private constructor(
     fun geometryCommandsI32(): List<Int> = commandValues
     fun drawDataByCommandI32(): Map<Int, PlanDrawDataResources> = dataValues
     fun depthStencilByCommandI32(): Map<Int, PlanResourceId> = depthValues
+
+    internal fun withPreparedIdentityV1(identity: PreparedSceneIdentityV1): SourceDeferredRenderConstructionV4 =
+        copyRebindingV1(identity, occurrenceScene)
+
+    internal fun withOccurrenceSceneV1(scene: org.graphiks.kanvas.render.ir.SceneSnapshot): SourceDeferredRenderConstructionV4 =
+        copyRebindingV1(preparedIdentity, occurrenceScene ?: scene)
+
+    private fun copyRebindingV1(identity: PreparedSceneIdentityV1?, scene: org.graphiks.kanvas.render.ir.SceneSnapshot?): SourceDeferredRenderConstructionV4 =
+        SourceDeferredRenderConstructionV4(id, capabilityId, targetExtent, colorFormat, capabilities, budget,
+            visualCommandCount, resourceValues, passValues, dependencyValues, sourceMetadata, topology,
+            geometrySource, commandValues, dataValues, depthValues, w4ePayload, identity, scene)
+
+    /** Bind compiler-owned identities only; no compiler selection or geometric calculation is repeated. */
+    internal fun bindOccurrenceCommandV1(commandIndexI32: Int): SourceDeferredRenderConstructionV4 {
+        val rebind = PreparedCommandRebindingV1(commandIndexI32)
+        val scene = requireNotNull(occurrenceScene) { "Prepared occurrence lost its compiler scene." }
+        fun bind(lane: SourceDeferredRenderConstructionV4): SourceDeferredRenderConstructionV4 {
+            val geometry = lane.geometrySource?.let(::bind)
+            val canonical = (lane.occurrenceScene ?: scene).rebindOccurrenceCommandV1(commandIndexI32).canonicalId
+            val identity = requireNotNull(lane.preparedIdentity) { "Prepared occurrence lost its compiler identity formula." }
+            rebind.prepareGroups(lane.passes())
+            val boundPasses = lane.passes().map(rebind::pass)
+            val boundId = identity(canonical, commandIndexI32, geometry)
+            return when (val result = of(boundId, lane.capabilityId, lane.targetExtent, lane.colorFormat,
+                lane.capabilities, lane.budget, lane.visualCommandCount, lane.resources(), boundPasses,
+                lane.dependencies(), lane.sourceTable(), lane.topology, geometry,
+                lane.geometryCommandsI32().map { commandIndexI32 },
+                lane.drawDataByCommandI32().mapKeys { commandIndexI32 },
+                lane.depthStencilByCommandI32().mapKeys { commandIndexI32 }, lane.w4ePayload)) {
+                is SourceConstructionResultV4.Built -> result.value
+                is SourceConstructionResultV4.Refused -> error("Prepared occurrence rebinding violates frozen topology: ${result.failure}")
+            }
+        }
+        return bind(this)
+    }
 
     /** A validated clear-only lane has no material consumer and issues no material table. */
     fun publishClearOnly(): RenderGraph {
@@ -92,7 +129,8 @@ internal class SourceDeferredRenderConstructionV4 private constructor(
                 remap = { it },overlayReference = { draw -> byCommand.getValue(draw.commandIndex) })
             return of(original.id,original.capabilityId,original.targetExtent,original.colorFormat,original.capabilities,
                 original.budget,original.visualCommandCount,original.resources(),passes,original.dependencies(),sources,
-                original.topology,geometry,original.geometryCommandsI32(),original.drawDataByCommandI32(),original.depthStencilByCommandI32(),original.w4ePayload)
+                original.topology,geometry,original.geometryCommandsI32(),original.drawDataByCommandI32(),original.depthStencilByCommandI32(),original.w4ePayload,
+                original.preparedIdentity,original.occurrenceScene)
         }
         val geometry = geometrySource?.let { original -> when (val result = rebuild(original,null)) {
             is SourceConstructionResultV4.Built -> result.value
@@ -105,7 +143,7 @@ internal class SourceDeferredRenderConstructionV4 private constructor(
 
     companion object {
         fun clearOnly(id: PlanId,capabilityId: String,extent: SizeI32,caps: PlanCapabilitySnapshot,
-            budget: PlanBudget): RenderPlanResult<SourceDeferredRenderConstructionV4> {
+            budget: PlanBudget, preparedIdentity: PreparedSceneIdentityV1? = null): RenderPlanResult<SourceDeferredRenderConstructionV4> {
             val topology = W5bGeometryLanePlanV3.describeClearOnly(capabilityId,extent,caps,budget)
             RawMaterialRequirementsV2.requireFrameBudget(emptyList(),topology.peakI64,budget,
                 "resource-limit.w5b.destination-budget")
@@ -115,7 +153,7 @@ internal class SourceDeferredRenderConstructionV4 private constructor(
             }
             return when (val value = of(id,capabilityId,extent,topology.format,caps,budget,0,
                 topology.resources,topology.passes,topology.dependencies,sources,DeferredLaneTopologyV4.GeometryBridge,
-                null,emptyList(),emptyMap(),emptyMap())) {
+                null,emptyList(),emptyMap(),emptyMap(),preparedIdentity=preparedIdentity)) {
                 is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(value.value)
                 is SourceConstructionResultV4.Refused -> value.failure
             }
@@ -128,6 +166,8 @@ internal class SourceDeferredRenderConstructionV4 private constructor(
             geometrySource: SourceDeferredRenderConstructionV4?, geometryCommandsI32: List<Int>,
             data: Map<Int, PlanDrawDataResources>, depth: Map<Int, PlanResourceId>,
             w4ePayload: W4eNativePayloadPlan? = null,
+            preparedIdentity: PreparedSceneIdentityV1? = null,
+            occurrenceScene: org.graphiks.kanvas.render.ir.SceneSnapshot? = null,
         ): SourceConstructionResultV4<SourceDeferredRenderConstructionV4> = try {
             // This is the very same resource, lifetime, dependency and geometry validator used
             // by RenderGraph.construct. No material table or source certificate is fabricated.
@@ -180,7 +220,7 @@ internal class SourceDeferredRenderConstructionV4 private constructor(
             }
             SourceConstructionResultV4.Built(SourceDeferredRenderConstructionV4(id, capabilityId, extent,
                 format, caps, budget, visualCommandCount, resources, passes, dependencies, sources,
-                topology, geometrySource, geometryCommandsI32, data, depth,w4ePayload))
+                topology, geometrySource, geometryCommandsI32, data, depth,w4ePayload,preparedIdentity,occurrenceScene))
         } catch (failure: IllegalArgumentException) {
             sourceConstructionRefusalV4(failure.message ?: W5fPlanDiagnostics.Schema)
         } catch (_: ArithmeticException) {

@@ -22,7 +22,7 @@ internal object W6cSpatialBoundsPlanner {
     internal data class TilePlan(val bounds: FilterBoundsPlanV1, val sourceInputTargetLocalI32: RectI32,
         val clipOutputTargetLocalF64: RectF64)
 
-    internal fun crop(source: W6bFilterGraphConstruction.SourceBinding, node: CapturedFilterNodeV1.Crop,
+    internal fun crop(source: W6bSourceGeometryV1, node: CapturedFilterNodeV1.Crop,
         terminalRootNoOp: Boolean = false): CropPlan {
         val cropDeviceF64 = map(node.copyCrop(), source.mapping) ?: refuse("Crop bounds cannot be mapped through the sealed layer transform.")
         val desired = boundToConsumer(seal(cropDeviceF64), source, terminalRootNoOp)
@@ -33,7 +33,7 @@ internal object W6cSpatialBoundsPlanner {
             localClip(cropDeviceF64, Point2I32(desired.left, desired.top)))
     }
 
-    internal fun offset(source: W6bFilterGraphConstruction.SourceBinding, node: CapturedFilterNodeV1.Offset): OffsetPlan {
+    internal fun offset(source: W6bSourceGeometryV1, node: CapturedFilterNodeV1.Offset): OffsetPlan {
         val offsetDevice = source.mapping.mapLocalVectorToDeviceF64OrNull(Vector2F64(node.dx.toDouble(), node.dy.toDouble()))
             ?: refuse("Offset requires a finite affine local-to-device displacement.")
         val input = source.copyDeviceBoundsI32()
@@ -44,7 +44,7 @@ internal object W6cSpatialBoundsPlanner {
         return OffsetPlan(bounds(source, desired, input, produced), offsetDevice.x, offsetDevice.y)
     }
 
-    internal fun tile(source: W6bFilterGraphConstruction.SourceBinding, node: CapturedFilterNodeV1.Tile,
+    internal fun tile(source: W6bSourceGeometryV1, node: CapturedFilterNodeV1.Tile,
         terminalRootNoOp: Boolean = false): TilePlan {
         val sourceDevice = map(node.copySource(), source.mapping) ?: refuse("Tile source bounds cannot be mapped through the sealed layer transform.")
         val destinationDevice = map(node.copyDestination(), source.mapping) ?: refuse("Tile destination bounds cannot be mapped through the sealed layer transform.")
@@ -92,7 +92,7 @@ internal object W6cSpatialBoundsPlanner {
         else -> null
     } }
 
-    private fun bounds(source: W6bFilterGraphConstruction.SourceBinding, desired: RectI32, required: RectI32,
+    private fun bounds(source: W6bSourceGeometryV1, desired: RectI32, required: RectI32,
         produced: RectI32?): FilterBoundsPlanV1 {
         // The result texture only represents desiredOutput. Retain the separate produced fact,
         // but restrict its materialized subset so known/produced coordinates remain valid for
@@ -102,7 +102,7 @@ internal object W6cSpatialBoundsPlanner {
             Point2I32(desired.left, desired.top))
     }
     /** Only a terminal root may be bounded by the consumer; nested filters retain public demand. */
-    private fun boundToConsumer(publicDomain: RectI32, source: W6bFilterGraphConstruction.SourceBinding,
+    private fun boundToConsumer(publicDomain: RectI32, source: W6bSourceGeometryV1,
         terminalRootNoOp: Boolean): RectI32 {
         if (!terminalRootNoOp) return publicDomain
         return source.copyDesiredOutputDeviceI32()?.let { consumer ->

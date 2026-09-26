@@ -3,7 +3,6 @@
 package org.graphiks.kanvas.surface
 
 import kotlin.test.assertContentEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.paint.ImageFilter
@@ -31,22 +30,31 @@ class W6cSpatialDagAdmissionSurfaceTest {
     }
 
     @Test
-    fun `late W6d sibling refuses without readback mutation and same surface recovers`() {
+    fun `late W6d Magnifier sibling is admitted with pixels and same surface recovers`() {
         val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
-        val sentinel = UByteArray(4) { 0x5au }
-        val before = sentinel.copyOf()
+        // The first Crop writes red, then the explicit blue Magnifier samples its only texel
+        // at zoom=1/inset=0 and SRC_OVER replaces that red.  This oracle is fixed before
+        // either public recording object is created.
+        val expected = ubyteArrayOf(0u, 0u, 255u, 255u)
         val surface = Surface(1, 1)
         surface.canvas {
             saveLayer(SaveLayerRec(paint = Paint(imageFilter = ImageFilter.Crop(bounds))))
             drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false))
             restore()
-            drawRect(bounds, Paint(imageFilter = ImageFilter.Magnifier(bounds, zoom = 1f, inset = 0f)))
+            drawRect(bounds, Paint(
+                ColorARGB.Blue,
+                imageFilter = ImageFilter.Magnifier(bounds, zoom = 1f, inset = 0f),
+                antiAlias = false,
+            ))
         }
 
-        val failure = assertFailsWith<IllegalStateException> { surface.readPixels(bounds, sentinel) }
-        assertTrue(failure.message?.startsWith("w6b.filter.unsupported_family:") == true,
-            failure.message ?: "missing diagnostic")
-        assertContentEquals(before, sentinel)
+        val rendered = surface.render()
+        assertContentEquals(expected, rendered.pixels)
+        assertTrue(rendered.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            rendered.nativeEvidenceScopeKinds.toString())
+        val readback = UByteArray(4)
+        assertTrue(surface.readPixels(bounds, readback))
+        assertContentEquals(expected, readback)
 
         surface.discardRecordedOperations()
         surface.canvas { drawRect(bounds, Paint(ColorARGB.Blue, antiAlias = false)) }

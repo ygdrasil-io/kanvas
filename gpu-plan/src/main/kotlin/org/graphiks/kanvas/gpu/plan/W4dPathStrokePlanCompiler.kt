@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.plan
 
+import org.graphiks.kanvas.render.ir.CanonicalId
+
 import java.security.MessageDigest
 import java.util.Collections
 import org.graphiks.kanvas.color.ColorSpace
@@ -334,7 +336,7 @@ public class W4dPathStrokePlanCompiler internal constructor(
     internal fun constructSources(candidate: GpuPlanCandidate,capabilities: PlanCapabilitySnapshot,
         budget: PlanBudget): RenderPlanResult<SourceDeferredRenderConstructionV4> = constructChecked(candidate,capabilities,budget,
         clear = { selected,extent -> SourceDeferredRenderConstructionV4.clearOnly(
-            PlanId(identity(selected,capabilities,budget)),W5B_CAPABILITY_ID,extent,capabilities,budget) }) { selected,memory,stencil ->
+            PlanId(identity(selected,capabilities,budget)),W5B_CAPABILITY_ID,extent,capabilities,budget, preparedIdentity = { scene, _, _ -> PlanId(identity(selected, capabilities, budget, scene)) }) }) { selected,memory,stencil ->
             val extent = SizeI32(selected.target.extent.width,selected.target.extent.height)
             graph(selected,capabilities,budget,memory,stencil,
                 destination = { draws,resources,data,depth ->
@@ -360,7 +362,8 @@ public class W4dPathStrokePlanCompiler internal constructor(
             SizeI32(selected.target.extent.width,selected.target.extent.height),topology.format,capabilities,budget,selected.draws.size,
             topology.resources,topology.passes,topology.dependencies,selected.sources,
             if (selected.capabilityId == W5B_CAPABILITY_ID) DeferredLaneTopologyV4.GeometryBridge else DeferredLaneTopologyV4.Ordinary,
-            null,emptyList(),emptyMap(),emptyMap())) {
+            null,emptyList(),emptyMap(),emptyMap(),
+                preparedIdentity = { scene, _, _ -> PlanId(identity(selected, capabilities, budget, scene)) })) {
             is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(result.value)
             is SourceConstructionResultV4.Refused -> result.failure
         }
@@ -479,9 +482,10 @@ public class W4dPathStrokePlanCompiler internal constructor(
         capabilities.bufferAllocationPolicy.vertexFloorBytes, capabilities.bufferAllocationPolicy.indexFloorBytes,
         capabilities.bufferAllocationPolicy.uniformFloorBytes,
     ).all { value -> value > 0L && value and (value - 1L) == 0L }
-    private fun identity(selected: Candidate, caps: PlanCapabilitySnapshot, budget: PlanBudget): String {
+    private fun identity(selected: Candidate, caps: PlanCapabilitySnapshot, budget: PlanBudget,
+        sceneIdentity: CanonicalId = selected.sceneCanonicalId): String {
         val fields = listOf(
-            "w4d-plan-w5a-material-v2", selected.sceneCanonicalId.value, selected.target.canonicalId.value,
+            "w4d-plan-w5a-material-v2", sceneIdentity.value, selected.target.canonicalId.value,
             caps.deviceGeneration.toString(), caps.maxTextureDimension2D.toString(), caps.maxBufferSizeBytes.toString(),
             caps.copyBytesPerRowAlignment.toString(), caps.supportedFormats().map { it.name }.sorted().joinToString(","),
             caps.minUniformBufferOffsetAlignment.toString(), caps.maxDynamicUniformBuffersPerPipelineLayout.toString(),

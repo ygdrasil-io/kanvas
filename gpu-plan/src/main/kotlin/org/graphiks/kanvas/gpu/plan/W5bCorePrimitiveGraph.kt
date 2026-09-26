@@ -86,6 +86,12 @@ public class W5bPointDraw private constructor(
         W5bPointDraw(commandIndex, if (composedV5) PlanDrawMaterialAuthority.MaterialV5(ref)
             else PlanDrawMaterialAuthority.MaterialV1(ref), vertices, indices, contours, bounds, scissor, blend, clipOnly)
 
+    /** Rebind only the occurrence identity; retain the selected geometry and material authority. */
+    internal fun withCommandIndexI32(indexI32: Int): W5bPointDraw {
+        require(indexI32 >= 0)
+        return W5bPointDraw(indexI32, materialAuthority, vertices, indices, contours, bounds, scissor, blend, clipOnly)
+    }
+
     public companion object {
         public fun of(commandIndexI32: Int, material: MaterialPlanRef, verticesF32: FloatArray,
             indicesI32: IntArray, contourStartsI32: IntArray, boundsI32: RectI32,

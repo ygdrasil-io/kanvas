@@ -217,7 +217,7 @@ public class W5eImagePlanCompiler(private val runtimeCatalog: RuntimeEffectSeman
                     minOf(budget.maxFrameLocalBytes / 128L, Int.MAX_VALUE.toLong()))
             }.toMap()
             val overlaid = lanes.map { lane -> when (val result = lane.overlayImageSources { captured[it.commandIndex] }) {
-                is SourceConstructionResultV4.Built -> result.value
+                is SourceConstructionResultV4.Built -> result.value.withOccurrenceSceneV1(projected)
                 is SourceConstructionResultV4.Refused -> return result.failure
             } }
             RenderPlanResult.Ready(overlaid)

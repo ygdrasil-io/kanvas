@@ -5,6 +5,7 @@ package org.graphiks.kanvas.surface
 import kotlin.math.abs
 import kotlin.test.assertContentEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.paint.BlendMode
@@ -14,6 +15,7 @@ import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.picture.PictureRecorder
+import org.graphiks.kanvas.picture.Picture
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.Point3F32
 import org.graphiks.math.geometry.RectF32
@@ -22,6 +24,44 @@ import org.graphiks.math.vector.Vector3F32
 import org.junit.jupiter.api.Test
 
 class W6dPictureFilterSurfacePixelTest {
+    /** Interleaved direct and filter-owned Pictures must retain distinct physical occurrences. */
+    @Test
+    fun interleavedDirectAndFilterPicturesRetainOrderAfterWireReplay() {
+        val expected = ubyteArrayOf(
+            255u, 0u, 0u, 255u, 0u, 0u, 255u, 255u,
+            0u, 255u, 0u, 255u, 255u, 0u, 0u, 255u,
+        )
+        val unit = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        fun picture(color: ColorARGB) = PictureRecorder().also { recorder ->
+            recorder.beginRecording(unit).drawRect(unit, Paint(color, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val red = picture(ColorARGB.Red)
+        val blue = picture(ColorARGB.Blue)
+        val green = picture(ColorARGB.Green)
+        val bounds = RectF32.ofLTRB(0f, 0f, 4f, 1f)
+        val recorded = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                drawPicture(red)
+                translate(1f, 0f)
+                drawRect(unit, Paint(ColorARGB.Black, imageFilter = ImageFilter.Picture(blue), antiAlias = false))
+                translate(1f, 0f)
+                drawPicture(green)
+                translate(1f, 0f)
+                saveLayer(SaveLayerRec(paint = Paint(imageFilter = ImageFilter.Picture(red), antiAlias = false)))
+                drawRect(unit, Paint(ColorARGB.Black, antiAlias = false))
+                restore()
+            }
+        }.finishRecordingAsPicture()
+        val replayed = assertNotNull(Picture.fromByteArray(recorded.toByteArray()))
+        for (source in listOf(recorded, replayed)) {
+            val surface = Surface(4, 1)
+            surface.canvas { drawPicture(source) }
+            val result = surface.render()
+            assertContentEquals(expected, result.pixels)
+            assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+        }
+    }
+
     /** A layer filter has no carrier DrawNode; its frozen layer mapping owns Picture source placement. */
     @Test
     fun pictureFilterOnSaveLayerUsesFrozenLayerSourceContext() {

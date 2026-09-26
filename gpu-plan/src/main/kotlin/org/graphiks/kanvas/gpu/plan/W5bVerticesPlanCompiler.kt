@@ -79,7 +79,7 @@ internal class W5bVerticesPlanCompiler(private val catalog: RuntimeEffectSemanti
         if (selected == null || selected.owner !== this) return sourceConstructionRefusalV4(W5fPlanDiagnostics.Schema).failure
         if (selected.draw.blend == BlendPlan.NoOpV1) return SourceDeferredRenderConstructionV4.clearOnly(
             PlanId("w5b.vertices.${selected.sceneCanonicalId.value}"), CAPABILITY_ID,
-            SizeI32(selected.target.extent.width, selected.target.extent.height), caps, budget)
+            SizeI32(selected.target.extent.width, selected.target.extent.height), caps, budget, preparedIdentity = { scene, _, _ -> PlanId("w5b.vertices.${scene.value}") })
         return try {
             val draw = selected.draw
             if (draw.indexElementBytesI32 == 4 && PlanOperationCapability.Uint32Index !in caps.supportedOperations())
@@ -110,7 +110,9 @@ internal class W5bVerticesPlanCompiler(private val catalog: RuntimeEffectSemanti
             when (val result = SourceDeferredRenderConstructionV4.of(PlanId("w5b.vertices.${selected.sceneCanonicalId.value}"),
                 CAPABILITY_ID, extent, topology.format, caps, budget, 1, topology.resources, topology.passes,
                 topology.dependencies, sources, DeferredLaneTopologyV4.Ordinary, null, emptyList(), emptyMap(), emptyMap())) {
-                is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(result.value)
+                is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(result.value.withPreparedIdentityV1 {
+                    scene, _, _ -> PlanId("w5b.vertices.${scene.value}")
+                })
                 is SourceConstructionResultV4.Refused -> result.failure
             }
         } catch (failure: IllegalArgumentException) { sourceConstructionRefusalV4(failure.message ?: W5fPlanDiagnostics.Schema).failure }
