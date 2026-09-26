@@ -3216,7 +3216,7 @@ internal class W6aLayerGraphConstruction(
                 binding.bindSources(localized.entries.associate { (key, draw) -> key.first to draw })
             },
             w6SolidRectHostRecipes = freezeW6SolidRectHostsV1(passes),
-            w6AnalyticRectHostRecipes = freezeW6AnalyticRectHostsV1(passes),
+            w6CorePrimitiveHostRecipes = freezeW6CorePrimitiveHostsV1(passes),
         )
         val allResources = resources + finalSource.resources
         val peak = W6aLayerPlanBudget.peak(allResources, passes, caps, budget)

@@ -141,8 +141,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     private val templates = mutableMapOf<GPUDrawPacketID, GPUW5aGeometryHostTemplateV1>()
     /** Each W6 SolidRect packet retains its final planner ordinal/site for later native consumption. */
     private val solidRectSitesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W6GeometrySiteKeyV1>()
-    /** Each W6 AnalyticRect packet retains its final planner ordinal/site for later native consumption. */
-    private val analyticRectSitesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W6GeometrySiteKeyV1>()
+    /** Each W6 analytic CorePrimitive packet retains its final planner ordinal/site for native consumption. */
+    private val corePrimitiveSitesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W6GeometrySiteKeyV1>()
     private val analyticUniforms = mutableMapOf<GPUDrawPacketID, ByteArray>()
     private val geometryPipelines = mutableMapOf<GPUDrawPacketID, GPUWgpu4kCorePrimitivePipelineMapping.Mapped>()
     internal fun maskShaderMaterial(binding: FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned):
@@ -364,12 +364,16 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                                 require(solidRectSitesByPacket.put(packet, site) == null)
                                 templates[packet.packetId] = w6aGeometryTemplate(packet, recipe)
                             }
-                            else if (draw is AnalyticRectDraw && packetPass != null) {
+                            else if ((draw is AnalyticRectDraw || draw is AnalyticRRectDraw) && packetPass != null) {
                                 val site = W6GeometrySiteKeyV1(packetPass.id, drawOrdinalI32)
-                                val recipe = physical.w6AnalyticRectHostRecipe(site)
+                                val recipe = physical.w6CorePrimitiveHostRecipe(site)
                                 require(recipe.site == site)
-                                require(analyticRectSitesByPacket.put(packet, site) == null)
-                                val key = w6aAnalyticRectStructuralKey(recipe, targetBounds)
+                                require((draw is AnalyticRectDraw && recipe is W6AnalyticRectHostRecipeV1) ||
+                                    (draw is AnalyticRRectDraw && recipe is W6AnalyticRRectHostRecipeV1)) {
+                                    "W6 analytic CorePrimitive host recipe shape changed after final pass binding."
+                                }
+                                require(corePrimitiveSitesByPacket.put(packet, site) == null)
+                                val key = w6aCorePrimitiveStructuralKey(recipe, targetBounds)
                                 val mapping = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key)
                                 require(mapping is GPUWgpu4kCorePrimitivePipelineMapping.Mapped)
                                 geometryPipelines[packet.packetId] = mapping
@@ -378,7 +382,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                                     GPUCorePrimitivePreparedSemanticAuthority.capture(semantic))
                                 require(uniform is GPUCorePrimitiveAnalyticShapeUniformBuildResult.Accepted)
                                 analyticUniforms[packet.packetId] = uniform.bytes.copyOf()
-                                templates[packet.packetId] = w6aAnalyticRectGeometryTemplate(packet, recipe, key)
+                                templates[packet.packetId] = w6aCorePrimitiveGeometryTemplate(packet, recipe, key)
                             }
                             else if (draw is W5bVerticesDraw) {
                                 templates[packet.packetId] = requireNotNull(sealW5aGeometryHostTemplateV1(packet)).copy(
@@ -505,9 +509,9 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
             solidRectSitesByPacket.size == physical.w6SolidRectHostRecipes().size) {
             "Every frozen W6 SolidRect host recipe must project to exactly one packet."
         }
-        require(analyticRectSitesByPacket.values.toSet() == physical.w6AnalyticRectHostRecipes().keys &&
-            analyticRectSitesByPacket.size == physical.w6AnalyticRectHostRecipes().size) {
-            "Every frozen W6 AnalyticRect host recipe must project to exactly one packet."
+        require(corePrimitiveSitesByPacket.values.toSet() == physical.w6CorePrimitiveHostRecipes().keys &&
+            corePrimitiveSitesByPacket.size == physical.w6CorePrimitiveHostRecipes().size) {
+            "Every frozen W6 analytic CorePrimitive host recipe must project to exactly one packet."
         }
     }
 
@@ -548,8 +552,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     internal fun template(packet: GPUDrawPacket): GPUW5aGeometryHostTemplateV1? = templates[packet.packetId]
     /** Planner site retained with the packet; no native stage may infer it from material authority. */
     internal fun solidRectSite(packet: GPUDrawPacket): W6GeometrySiteKeyV1? = solidRectSitesByPacket[packet]
-    /** Planner site retained with the packet; native code must not infer it from AnalyticRectDraw. */
-    internal fun analyticRectSite(packet: GPUDrawPacket): W6GeometrySiteKeyV1? = analyticRectSitesByPacket[packet]
+    /** Planner site retained with the packet; native code must not infer it from an analytic draw. */
+    internal fun corePrimitiveSite(packet: GPUDrawPacket): W6GeometrySiteKeyV1? = corePrimitiveSitesByPacket[packet]
     internal fun validatesW4eFragments(frame: GPUFramePlan): Boolean = validates(frame) && w4eAuthorities.all { (binding, _) ->
         val renders = frame.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().filter { it.w6aPassV1?.id in binding.graphPassIds() }
         val authority = renders.firstOrNull()?.drawPackets?.singleOrNull()?.w4ePreparedFrameAuthority

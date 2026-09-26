@@ -55,10 +55,13 @@ internal fun w6aGeometryTemplate(packet: GPUDrawPacket, recipe: W6SolidRectHostR
  * Builds the existing CorePrimitive key from the final planner recipe only.  The packet still
  * supplies immutable shape bytes, but it is not allowed to select the W6 host route.
  */
-internal fun w6aAnalyticRectStructuralKey(recipe: W6AnalyticRectHostRecipeV1,
+internal fun w6aCorePrimitiveStructuralKey(recipe: W6CorePrimitiveHostRecipeV1,
     targetBounds: GPUPixelBounds): GPUCorePrimitiveRenderPipelineStructuralKey {
     val selector = recipe.selector
-    require(selector.family == W6CorePrimitiveHostGeometryFamilyV1.AnalyticRect)
+    require(selector.family in setOf(
+        W6CorePrimitiveHostGeometryFamilyV1.AnalyticRect,
+        W6CorePrimitiveHostGeometryFamilyV1.AnalyticRRect,
+    ))
     require(selector.uniformAbi == W6CorePrimitiveHostUniformAbiV1.AnalyticShape80)
     require(selector.target == W6CorePrimitiveHostTargetV1.Rgba8UnormSrgbSingleSample)
     require(selector.coverage == W6CorePrimitiveHostCoverageV1.AnalyticScalarAA)
@@ -79,12 +82,16 @@ internal fun w6aAnalyticRectStructuralKey(recipe: W6AnalyticRectHostRecipeV1,
 }
 
 /** Mechanically projects the final planner recipe into the existing CorePrimitive host template. */
-internal fun w6aAnalyticRectGeometryTemplate(packet: GPUDrawPacket, recipe: W6AnalyticRectHostRecipeV1,
+internal fun w6aCorePrimitiveGeometryTemplate(packet: GPUDrawPacket, recipe: W6CorePrimitiveHostRecipeV1,
     key: GPUCorePrimitiveRenderPipelineStructuralKey): GPUW5aGeometryHostTemplateV1 {
     val template = requireNotNull(sealCorePrimitiveGeometryHostTemplateV1(packet, key))
     val origin = recipe.materialOriginDeviceI32
+    val family = when (recipe.selector.family) {
+        W6CorePrimitiveHostGeometryFamilyV1.AnalyticRect -> "analytic-rect"
+        W6CorePrimitiveHostGeometryFamilyV1.AnalyticRRect -> "analytic-rrect"
+    }
     return template.copy(
-        pipelineRecipeId = "w6a.analytic-rect.v1.${recipe.site.ownerPassId.value}.${recipe.site.drawOrdinalI32}",
+        pipelineRecipeId = "w6a.$family.v1.${recipe.site.ownerPassId.value}.${recipe.site.drawOrdinalI32}",
         materialCoordinateSlot = MaterialCoordinateSlotV1.FragmentPosition,
         materialDevicePointWgsl = "fragment_position.xy + vec2<f32>(${origin.x}.0, ${origin.y}.0)",
     )

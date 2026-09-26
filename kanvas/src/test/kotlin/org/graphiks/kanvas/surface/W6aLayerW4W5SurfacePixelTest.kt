@@ -112,7 +112,10 @@ class W6aLayerW4W5SurfacePixelTest {
                     opaque(RED).copy(antiAlias = true))
                 if (layered) restore()
             }
-            assertContentEquals(expected, surface.render().pixels, "layered=$layered")
+            val result = surface.render()
+            assertContentEquals(expected, result.pixels, "layered=$layered")
+            assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+                "layered=$layered ${result.nativeEvidenceScopeKinds}")
         }
     }
 

@@ -363,17 +363,24 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     }
                                     frame.physical.w6SolidRectHostRecipe(site)
                                 }
-                                val analyticRectRecipe = (draw as? AnalyticRectDraw)
+                                val corePrimitiveRecipe = draw.takeIf {
+                                    it is AnalyticRectDraw || it is AnalyticRRectDraw
+                                }
                                     ?.takeIf { pass is PlanPass.RenderPass }
                                     ?.let {
                                         val site = W6GeometrySiteKeyV1(pass.id, drawOrdinalI32)
-                                        require(frame.analyticRectSite(packet) == site) {
-                                            "W6 AnalyticRect packet lost its frozen owner/ordinal."
+                                        require(frame.corePrimitiveSite(packet) == site) {
+                                            "W6 analytic CorePrimitive packet lost its frozen owner/ordinal."
                                         }
-                                        frame.physical.w6AnalyticRectHostRecipe(site)
+                                        frame.physical.w6CorePrimitiveHostRecipe(site).also { recipe ->
+                                            require((draw is AnalyticRectDraw && recipe is W6AnalyticRectHostRecipeV1) ||
+                                                (draw is AnalyticRRectDraw && recipe is W6AnalyticRRectHostRecipeV1)) {
+                                                "W6 analytic CorePrimitive recipe shape differs from its packet."
+                                            }
+                                        }
                                     }
-                                require(analyticRectRecipe == null || mapped != null) {
-                                    "W6 AnalyticRect host recipe requires its frozen CorePrimitive pipeline before allocation."
+                                require(corePrimitiveRecipe == null || mapped != null) {
+                                    "W6 analytic CorePrimitive host recipe requires its frozen pipeline before allocation."
                                 }
                                 val frozenLegacyColor = when (val recipe = solidRectRecipe) {
                                     null -> draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1
@@ -468,8 +475,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     is SolidRectDraw -> draw.copyVisibleBounds().also {
                                         require(it.intersect(draw.copyScissor()))
                                     }
-                                    is AnalyticRectDraw -> analyticRectRecipe?.scissor ?: draw.copyScissor()
-                                    is AnalyticRRectDraw -> draw.copyScissor()
+                                    is AnalyticRectDraw, is AnalyticRRectDraw ->
+                                        requireNotNull(corePrimitiveRecipe).scissor
                                     is PathDraw -> draw.copyScissorI32()
                                     is W5bPointDraw -> draw.copyScissorI32()
                                     is W5bVerticesDraw -> draw.copyScissorI32()
