@@ -50,6 +50,24 @@ class W6eCrossLaneEffectsSurfacePixelTest {
         }
     }
 
+    @TestFactory
+    fun `all families replay from captured Picture`(): Stream<DynamicTest> = allFamilies().stream().map { family ->
+        DynamicTest.dynamicTest("${family.name} memory Picture replay") {
+            // These independent family expectations were built in allFamilies before this
+            // recorder is allocated.  Replaying the immutable Picture twice through public
+            // Surfaces catches loss of the W4/W5 nested-layer payload at capture time.
+            assertCapturedPictureReplay(family, family.draw, family.expected, family.name)
+            family.sourceVariation?.let { variation ->
+                assertCapturedPictureReplay(
+                    family,
+                    variation.draw,
+                    variation.expected,
+                    "${family.name} contextual source variation",
+                )
+            }
+        }
+    }
+
     @Test
     fun backdropPreviousAndDestinationReadKeepTheirSpecifiedOrder() {
         // These bytes are calculated before the Surface is created.  Backdrop wins over
@@ -295,6 +313,32 @@ class W6eCrossLaneEffectsSurfacePixelTest {
             val variationResult = renderNested(variation.draw)
             assertContentEquals(variation.expected, variationResult.pixels, "${family.name} contextual source variation")
             assertRenderAndReadback(variationResult)
+        }
+    }
+
+    private fun assertCapturedPictureReplay(
+        family: FamilyCase,
+        draw: Canvas.() -> Unit,
+        expected: UByteArray,
+        name: String,
+    ) {
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(RectF32.ofLTRB(0f, 0f, family.width.toFloat(), family.height.toFloat())).apply {
+                saveLayer()
+                saveLayer(SaveLayerRec(paint = Paint(imageFilter = family.filter, antiAlias = false)))
+                draw(this)
+                restore()
+                restore()
+            }
+        }.finishRecordingAsPicture()
+
+        repeat(2) { replay ->
+            val result = Surface(family.width, family.height).also { surface ->
+                surface.canvas { drawPicture(picture) }
+            }.render()
+            family.maxChannelDelta?.let { delta -> assertNear(expected, result.pixels, delta, "$name replay $replay") }
+                ?: assertContentEquals(expected, result.pixels, "$name replay $replay")
+            assertRenderAndReadback(result)
         }
     }
 

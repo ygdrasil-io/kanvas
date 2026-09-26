@@ -9,7 +9,10 @@ La convergence W6e est empilée sur le prérequis revu
 empilé sur W6d ; elle ne cible donc pas W6d directement. Les neuf commits de
 témoins publics déjà présents sont `bfb2ef150`, `311d2a6be`, `15d801f3a`,
 `f8249079c`, `8d4c72a67`, `b65e7f674`, `99de83a62`, `8683e4c51` et
-`b2fc6450d`. Task 6 ajoute le témoin public
+`b2fc6450d`. L'amendement approuvé de Task 6 ajoute, dans
+`W6eCrossLaneEffectsSurfacePixelTest`, 22 cas JUnit publics et indépendamment
+nommés de replay mémoire `Picture` ; chacun capture son fixture Task 5 puis le
+rejoue deux fois via `Surface`. Il conserve
 `W6eEffectsBudgetCacheRecoverySurfacePixelTest`, sans modifier de production,
 de format Picture, de planner, de cache, de route ou de renderer.
 
@@ -26,27 +29,33 @@ sentinel et, après `discardRecordedOperations()`, rend le vert attendu sur la
 même `Surface`. Les attentes sont définies avant `PictureRecorder`/`Surface`;
 les témoins n'inspectent aucune clé de cache, lease, plan ou backend.
 
-Ce B/B−1 est une preuve **Crop-only** : la matrice Task 5 actuelle est une
-liste privée de 22 cas dynamiques, à dimensions, inputs et ressources
-distincts, sans `Picture`/graphe agrégé réutilisable. Les formules publiques
-W6b, recette de bounds et W6d ne décrivent chacune que leur propre graphe
-fermé ; elles ne déterminent pas les slots/lifetimes ni les charges de
-target/program/lease du pic commun des 22 familles. Il n'existe donc pas ici
-de B all-22 dérivable avant `PictureRecorder`/`Surface` sans essai empirique
-ou inspection du planner, deux voies interdites par W6e. Cette preuve agrégée
-reste bloquée ; aucun B n'est inventé et aucun claim all-family n'est formulé.
+Les quatre preuves B/B−1 sont séparées et arithmétiques avant leur propre
+`PictureRecorder`/`Surface` : W6b Shadow Picture
+`8 + 8 + 12 + 52 + 256 = 336`, W6c Crop layer
+`5×4 + 2×16 + 256 = 308`, W6d MatrixConvolution layer
+`5×4 + 2×16 + 4096 + 256 = 4404`, et W6e Crop Picture
+`8 + 12 + 32 + 256 = 308` octets checked-I64. Elles ne sont ni une formule
+commune ni une observation de hit du cache natif. La matrice Task 5 reste 22
+fixtures aux dimensions, inputs et ressources distincts : les replays mémoire
+prouvent leurs pixels, mais ne déterminent pas les slots/lifetimes ni les
+charges target/program/lease d'un pic commun. La matrice de budgets exacts
+par famille et son agrégat restent donc un gap ouvert ; leases et générations
+relèvent de la revue structurelle, sans claim public correspondant.
 
 Les sept compilations prescrites sortent 0 : `:math:geometry:compileKotlinJvm`,
 `:math:matrix:compileKotlinJvm`, `:render-ir:compileKotlin`,
 `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin`,
-`:kanvas:compileKotlin` et `:kanvas:compileTestKotlin`. Les onze sélecteurs
-publics sont exécutés séquentiellement avec leurs XML de classe : Surface
-Core `1/0/0/0`, Composition `1/0/0/0`, Lighting/Picture `7/0/0/0`, Advanced
-`1/0/0/0`, Cross-lane `25/0/0/0`, Budget/Cache/Recovery `2/0/0/0` ; Picture
-Core `1/0/0/0`, Composition `1/0/0/0`, Lighting `1/0/0/0`, Runtime `1/0/0/0`
-et Cross-lane `1/0/0/0`. Chaque invocation de test a Gradle exit 1 uniquement
-après l'exit natif 133 : la custody native est **UNKNOWN**, jamais PASS. Cette
-classification ne cache aucun RED sémantique JUnit.
+`:kanvas:compileKotlin` et `:kanvas:compileTestKotlin`. Les quatorze
+sélecteurs publics sont exécutés séquentiellement avec leurs XML de classe :
+Surface Core `1/0/0/0`, Composition `1/0/0/0`, Lighting/Picture `7/0/0/0`,
+Advanced `1/0/0/0`, Cross-lane `47/0/0/0` (22 anciens + 22 replays mémoire +
+3 témoins), Budget/Cache/Recovery `2/0/0/0` ; Picture Core `1/0/0/0`,
+Composition `1/0/0/0`, Lighting `1/0/0/0`, Runtime `1/0/0/0`, Cross-lane
+`1/0/0/0` ; puis W6b Budget `2/0/0/0`, W6c Spatial Cache `6/0/0/0` et W6d
+Advanced Recovery `5/0/0/0`, soit `77/0/0/0` XML au total. Chaque invocation
+de test a Gradle exit 1 uniquement après l'exit natif 133 : la custody native
+est **UNKNOWN**, jamais PASS. Cette classification ne cache aucun RED
+sémantique JUnit et la même règle classe 134 `UNKNOWN`.
 
 L'audit manuel post-freeze du diff W6e ne trouve aucun chemin de production
 modifié. La recherche des références `GPUPreparedCompositeLowerer`,
