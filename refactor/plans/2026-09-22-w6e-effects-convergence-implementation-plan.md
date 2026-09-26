@@ -2,17 +2,17 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Qualify the reviewed W6b–W6d stack with six sequential public convergence shards covering all 22 image-filter families, their W4/W5/layer interactions, and atomic budget/cache/recovery behavior, without adding an API, planner, algorithm, or wire format.
+**Goal:** Qualify the reviewed W6b–W6d stack with six sequential public convergence shards covering all 22 image-filter families, their W4/W5/layer interactions, repeatable Picture replay, and representative atomic budget/cache/recovery behavior, without adding an API, planner, algorithm, or wire format. No exact common B for an aggregate of all 22 families is claimed.
 
 **Architecture:** W6e is a covering and integration wave, not a fourth spatial implementation. It consumes W6b's immutable capture and frozen physical-graph contracts, runs independently computed public `Surface`/`Picture` witnesses against the W6d branch, and permits only a causal, bounded correction in an existing W6b–W6d owner when a public RED identifies an integration defect. The one authority remains `Surface/Picture → render-ir → :math → :gpu-plan → :gpu-renderer → one submit → public visibility`; W6e never forks it.
 
 **Tech Stack:** Kotlin/JVM; `:render-ir`, `:math:geometry`, `:math:matrix`, `:gpu-plan`, `:gpu-renderer`, `:kanvas`; WebGPU/WGSL; JUnit 5; public `Surface`, `Canvas`, `Picture`, paint/filter APIs, Render, Readback, pixels, and diagnostics.
 
-**Spec:** `refactor/specs/2026-09-16-w6-layers-effects-design.md` §§5–16; `refactor/specs/2026-09-22-w6b-w6e-stacked-delivery-design.md` §§3 and 7–10; `refactor/plans/2026-09-22-w6b-blur-masks-shadows-implementation-plan.md`; `refactor/plans/2026-09-22-w6c-spatial-dag-implementation-plan.md`; `refactor/plans/2026-09-22-w6d-advanced-effects-implementation-plan.md`. Base: reviewed `codex/w6d-advanced-effects`; implementation branch: `codex/w6e-effects-convergence`; its Draft PR targets `codex/w6d-advanced-effects`.
+**Spec:** `refactor/specs/2026-09-16-w6-layers-effects-design.md` §§5–16; `refactor/specs/2026-09-22-w6b-w6e-stacked-delivery-design.md` §§3 and 7–10; `refactor/plans/2026-09-22-w6b-blur-masks-shadows-implementation-plan.md`; `refactor/plans/2026-09-22-w6c-spatial-dag-implementation-plan.md`; `refactor/plans/2026-09-22-w6d-advanced-effects-implementation-plan.md`. Base effective: prerequisite reviewed `codex/w6e-filter-bounds-recipe` (`6bd5962e5`, Draft PR #2407), itself stacked on `codex/w6d-advanced-effects`; implementation branch: `codex/w6e-effects-convergence`; its eventual Draft PR targets the prerequisite, never W6d directly.
 
 ## Global Constraints
 
-- Before Task 1, record `rtk git rev-parse codex/w6d-advanced-effects`; stop if its reviewed W6b–W6d contracts or public selectors are absent. W6e does not repair a missing base by recreating one.
+- Before Task 1, record `rtk git rev-parse codex/w6e-filter-bounds-recipe`; stop if this reviewed prerequisite or its W6b–W6d public selectors are absent. W6e does not repair a missing base by recreating one.
 - W6e adds no public API, filter family, planner, algorithm, wire/Picture format, graph, allocator, cache, submit route, or renderer-side planning type. A production correction is allowed only in the existing W6b/W6c/W6d owner named by a causal public RED and may not alter its published contract.
 - The canonical shared names are exactly `CapturedFilterNodeIdI32`, `CapturedFilterInputV1`, `CapturedFilterTableV1`, `FilterEvaluationKeyV1`, `FilterBoundsPlanV1`, `FilterPassOperationV1`, `PlanPass.FilterPass`, and `PlanResourceRole.FilterTarget`. W6e consumes these names; it does not introduce aliases or equivalents. The four written plans use this same nomenclature before implementation begins.
 - Each checkbox is one 2–5 minute action. Use public RED → minimal GREEN → local refactor. A RED is valid only when unchanged production reaches the stated public pixel, diagnostic, or recovery assertion; compilation, fixture, permission, native availability, timeout, reflection, mock, fake, or infrastructure failure is not evidence.
@@ -23,15 +23,15 @@
 - Preserve W6a's `knownContent`, `desiredOutput`, `requiredInput`, and `producedOutput` separately. Preserve W6b's contextual input binding and W6c's cache semantics. A renderer only materializes frozen `PlanPass.FilterPass` and `PlanResourceRole.FilterTarget` records.
 - Use only RGBA8 as the positive format. F16/HDR remains an exact capability refusal. Fonts/glyph generation, codecs/external formats, GMs, dashboard, renders, references, baselines, scores, rebaseline, global Skia, `jpg-color-cube`, arbitrary SkSL/WGSL frontend, W8 legacy removal, and unobservable device-loss proof are excluded.
 - A W6-owned refusal is frame-terminal: no partial readback or healthy sibling is public; a balanced public Canvas followed by `discardRecordedOperations()` must allow a correct scene on the same `Surface`. Native exits 133/134 are `UNKNOWN`, never PASS evidence.
-- Run each Gradle invocation serially from `/Users/chaos/.codex/worktrees/cbf6/kanvas` via `rtk` (or `rtk proxy` for KMP compile selectors). Record Gradle exit, JUnit XML method custody, native exit, and source commit separately.
+- Run each Gradle invocation serially from the active isolated W6e worktree via `rtk` (or `rtk proxy` for KMP compile selectors). Record Gradle exit, JUnit XML method custody, native exit, and source commit separately.
 - Terra implements every task. Sol reviews every task and the whole branch. Per task permit one bounded Terra correction and one scoped Sol re-review; for the whole branch permit one bounded non-Sol correction wave and one scoped Sol re-review. Create one stacked Draft PR only after green gates; do not merge.
 
 ## Review Focus
 
-- **Cross-family source context:** a nested `Compose` containing `Blur` and `Offset` must bind the outer node to the inner result, not the layer source; Task 5 test `allFamiliesPreserveContextualImplicitSourceAcrossNestedLayers` owns it.
+- **Cross-family source context:** a nested `Compose` containing `Blur` and `Offset` must bind the outer node to the inner result, not the layer source; Task 5 test `composeBlurAndOffsetBindTheOuterNodeToTheInnerIntermediate` in `W6eCrossLaneEffectsSurfacePixelTest` owns it.
 - **Destination timing:** a backdrop and filtered previous layer with an advanced filter must observe the immediate parent at save and parent-plus-children after child rendering respectively; Task 5 test `backdropPreviousAndDestinationReadKeepTheirSpecifiedOrder` owns it.
 - **Exact versus approximate policy:** Crop/Offset/Blend remain byte-exact next to a blurred or convolution result that uses only its local oracle tolerance; Task 1 test `coreShardKeepsExactAndBlurOracleAssertionsSeparate` owns it.
-- **Cache pressure:** an identical warm Picture replay must retain the cold B/B-1 admission result and leases even when a filter result is reusable; Task 6 test `warmCacheRemainsPessimisticAtExactBudgetBoundary` owns it.
+- **Cache pressure:** the exact W6e Crop B/B−1 witness and the closed W6b/W6c/W6d budget fixtures retain pessimistic admission after public replay. Task 6 re-runs these public selectors; structural review, not public cache-hit introspection, checks leases and generations. No exact aggregate B for all 22 families is inferred from these separate fixtures.
 - **Late terminality:** a valid earlier sibling plus a late unsupported/corrupt W6 owner must leave sentinel readback unchanged and recover on that `Surface`; Task 6 test `lateRefusalDoesNotPublishHealthySiblingAndSameSurfaceRecovers` owns it.
 
 ---
@@ -49,7 +49,7 @@ TEST = kanvas/src/test/kotlin/org/graphiks/kanvas/
 
 | Existing owner | W6e responsibility |
 | --- | --- |
-| `IR/EffectNode.kt`, `IR/SceneArchiveCodec.kt`, `API/picture/Picture.kt`, `API/picture/PictureWireV8.kt` | Consume `CapturedFilterTableV1` and Picture 14/schema 8 only through public replay. Correct a W6b–W6d integration bug here only when a public memory/wire RED identifies it; no format bump. |
+| `IR/EffectNode.kt`, `IR/SceneArchiveCodec.kt`, `API/picture/Picture.kt`, `API/picture/PictureWireV8.kt` | Consume `CapturedFilterTableV1` and the current Picture 15/schema 9 writer (with historical reader support) only through public replay. Correct a W6b–W6d integration bug here only when a public memory/wire RED identifies it; no format bump. |
 | `PLAN/W6aLayerPlanCompiler.kt`, `PLAN/W6aLayerGraphConstruction.kt`, `PLAN/PlanPasses.kt`, `PLAN/PlanResources.kt`, `PLAN/RenderGraph.kt`, `PLAN/W6aLayerPlanBudget.kt` | Existing sole owners of `FilterEvaluationKeyV1`, `FilterPassOperationV1`, `PlanPass.FilterPass`, `PlanResourceRole.FilterTarget`, order, lifetime, cache, and budget. W6e may correct only a RED-proven joining defect. |
 | `GPU/planning/W6aLayerGraphLowerer.kt`, `GPU/recording/GPUW6aLayerFramePlan.kt`, `GPU/execution/GPUWgpu4kW6aLayerFramePayloadMaterializer.kt` | Existing frozen-plan lower/materialize owners. No W6e planning, bounds, resource, pass, or fallback choice may be added. |
 | `API/surface/gpu/GPUPlanSurfaceCandidateGate.kt`, `API/surface/gpu/GPUPlanSurfaceRouter.kt` | Existing terminal-owner boundary; only RED-proven W6b–W6d integration corrections are allowed. |
@@ -117,13 +117,13 @@ An integration fix is admissible only after this causal chain is documented in t
 
 **Interfaces:**
 
-- Consumes: `CapturedFilterTableV1`, `CapturedFilterInputV1.ImplicitSource`, `FilterEvaluationKeyV1`, W6b blur/shadow `FilterPassOperationV1` arms, Picture 14/schema 8.
+- Consumes: `CapturedFilterTableV1`, `CapturedFilterInputV1.ImplicitSource`, `FilterEvaluationKeyV1`, W6b blur/shadow `FilterPassOperationV1` arms, Picture 15/schema 9 writer with historical reader support.
 - Produces: `coreShardKeepsExactAndBlurOracleAssertionsSeparate`, `coreShardMemoryAndWireReplayAreStable`, and public custody for five named families; Task 5 reuses their fixture builders without changing their oracle policy.
 
 - [ ] **Step 1 (2–5 min): Record the reviewed W6d base hash and verify W6b canonical names are present; stop and report a base-contract gap if any name is missing.**
 
 ```sh
-rtk git rev-parse codex/w6d-advanced-effects
+rtk git rev-parse codex/w6e-filter-bounds-recipe
 rtk rg -n 'CapturedFilterNodeIdI32|CapturedFilterInputV1|CapturedFilterTableV1|FilterEvaluationKeyV1|FilterPassOperationV1|PlanPass.FilterPass|PlanResourceRole.FilterTarget' render-ir gpu-plan
 ```
 
@@ -419,7 +419,7 @@ git commit -m 'test(kanvas): cover w6e advanced sampling runtime effects'
 **Interfaces:**
 
 - Consumes: the previous four shards' public builders; W4 geometry, W5 material/color/blend authority, W6a nesting, W6d backdrop/previous, and canonical W6b contracts.
-- Produces: `allFamiliesPreserveContextualImplicitSourceAcrossNestedLayers`, `backdropPreviousAndDestinationReadKeepTheirSpecifiedOrder`, and the complete 22-family attribution matrix; Task 6 consumes this fixture for budget/recovery only.
+- Produces: independently named 22-family nested-layer cases, `backdropPreviousAndDestinationReadKeepTheirSpecifiedOrder`, and the complete attribution matrix; Task 6 extends these same public fixtures with repeatable Picture replay, but does not sum their separate resource budgets.
 
 - [ ] **Step 1 (2–5 min): Declare the 22-family covering matrix in test data, one public case per family, before any Surface is created.**
 
@@ -495,11 +495,12 @@ git commit -m 'test(kanvas): cover w6e cross lane effect matrix'
 
 **Agent:** Terra implementation; Sol review.
 
-**Outcome:** Public B/B-1, pessimistic cache, sentinel/no-publication, and same-Surface recovery prove the frozen W6 stack remains transactional; W6e then qualifies one Draft PR without merge.
+**Outcome:** The 22 independently named Task 5 fixtures retain their pixels on repeatable public Picture replay. Exact B/B−1 and pessimistic cache admission remain proven by the closed W6e Crop, W6b, W6c, and W6d fixtures; sentinel/no-publication and same-Surface recovery prove representative terminality. Structural review covers leases and generations. This is not a claim of an exact common budget for a 22-family aggregate or of an observed native cache hit. W6e then qualifies one Draft PR without merge.
 
 **Files:**
 
 - Create: `TEST/surface/W6eEffectsBudgetCacheRecoverySurfacePixelTest.kt`
+- Modify: `TEST/surface/W6eCrossLaneEffectsSurfacePixelTest.kt` for one independently named Picture-replay case per existing family fixture.
 - Modify only if causal: existing W6b–W6d budget/cache/router/materializer owner.
 - Modify: `refactor/waves/W06-layers-effects/status.md`
 - Modify: `refactor/README.md`
@@ -507,21 +508,35 @@ git commit -m 'test(kanvas): cover w6e cross lane effect matrix'
 
 **Interfaces:**
 
-- Consumes: Task 5 public all-family fixture; existing pessimistic budget/cache/lease lifecycle and terminal public `Surface` APIs.
-- Produces: public B/B-1/cache/recovery custody, status/README delivery, whole-branch review, and one unmerged Draft PR on W6d.
+- Consumes: Task 5's 22 separate public family fixtures; the closed W6b/W6c/W6d exact-budget selectors; existing pessimistic budget/cache/lease lifecycle and terminal public `Surface` APIs.
+- Produces: repeatable public Picture replay for every named family, representative exact B/B−1/cache/recovery custody, status/README delivery, whole-branch review, and one unmerged Draft PR on the reviewed bounds-recipe prerequisite.
 
-- [ ] **Step 1 (2–5 min): Derive B independently from documented fixture dimensions and frozen target/resource formula before creating a Surface; write B and B−1 public cases.**
+- [ ] **Step 1 (2–5 min): Retain the existing W6e Crop Picture B=308/B−1 test; run it and the closed W6b/W6c/W6d budget fixtures without deriving a fictitious all-family B. Each fixture states its exact arithmetic before creating its own Picture or Surface.**
 
 ```kotlin
 @Test fun warmCacheRemainsPessimisticAtExactBudgetBoundary() {
-    val budgetB = documentedW6eFixtureBudgetBytes()
-    assertContentEquals(expectedAllFamilyPixels(), renderAllFamilies(budgetB))
-    primeByPublicRenderOnly()
-    assertTerminalWithoutReadbackMutation(renderAllFamiliesSurface(budgetB - 1L), "w6d.layer.frame_budget_exceeded", sentinelBytes())
+    val budgetB = 8L + 12L + 32L + 256L // closed 2×1 Crop Picture, not all 22 families
+    assertContentEquals(expectedCropPixels, renderCropPicture(budgetB))
+    replayCropPicturePubliclyAt(budgetB)
+    assertTerminalWithoutReadbackMutation(cropSurface(budgetB - 1L), "w6b.filter.frame_budget_exceeded", sentinelBytes())
 }
 ```
 
-- [ ] **Step 2 (2–5 min): Write a late-refusal sentinel and same-Surface recovery witness using only public operations.**
+- [ ] **Step 2 (2–5 min): Add independently reported public memory-Picture replay for each of Task 5's 22 fixtures. Build expected pixels/oracles before the recorder, then render the recorded Picture twice through public Surfaces with the existing exact or family-local tolerance policy and Render+Readback evidence. Keep the existing shard Picture wire/mutation tests; do not add a codec or new wire format.**
+
+```kotlin
+@TestFactory fun allFamiliesReplayFromCapturedPicture(): Stream<DynamicTest> =
+    allFamilies().stream().map { family -> DynamicTest.dynamicTest(family.name) {
+        val expected = family.expected // independently built by the existing fixture
+        val picture = recordNestedFamilyPicture(family)
+        listOf(render(picture), render(picture)).forEach { result ->
+            assertFamilyPixels(expected, result.pixels, family.maxChannelDelta)
+            assertRenderAndReadback(result)
+        }
+    } }
+```
+
+- [ ] **Step 3 (2–5 min): Retain the late-refusal sentinel and same-Surface recovery witness using only public operations.**
 
 ```kotlin
 @Test fun lateRefusalDoesNotPublishHealthySiblingAndSameSurfaceRecovers() {
@@ -533,13 +548,13 @@ git commit -m 'test(kanvas): cover w6e cross lane effect matrix'
 }
 ```
 
-- [ ] **Step 3 (2–5 min): Run the budget/cache/recovery selector unchanged and distinguish a semantic RED from native exit 133/134 (`UNKNOWN`).**
+- [ ] **Step 4 (2–5 min): Run the Picture-replay and representative budget/cache/recovery selectors serially; distinguish any semantic RED from native exit 133/134 (`UNKNOWN`).**
 
-Run: `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6eEffectsBudgetCacheRecoverySurfacePixelTest'`
+Run: `rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6eCrossLaneEffectsSurfacePixelTest'`, then `W6eEffectsBudgetCacheRecoverySurfacePixelTest`, `W6bBudgetRecoverySurfacePixelTest`, `W6cSpatialCacheRecoverySurfaceTest`, and `W6dAdvancedRecoverySurfacePixelTest` as separate selectors.
 
-Expected: PASS, or a causal public B/B-1/cache/sentinel/recovery RED; native 133/134 is recorded `UNKNOWN`.
+Expected: public Picture replay and the closed exact B/B−1/cache/sentinel/recovery fixtures have no JUnit failure; any causal public failure is reported by named family or fixture. Native 133/134 is recorded `UNKNOWN`.
 
-- [ ] **Step 4 (2–5 min): If a causal RED proves an integration bug, correct only its established W6b–W6d owner without changing cache key, budget contract, resource role, lease lifecycle, or route.**
+- [ ] **Step 5 (2–5 min): If a causal RED proves an integration bug, correct only its established W6b–W6d owner without changing cache key, budget contract, resource role, lease lifecycle, or route.**
 
 ```kotlin
 // Existing invariant retained by a permitted correction.
@@ -547,7 +562,7 @@ require(peakBytesI64 <= frameBudgetBytesI64)
 publishReadyTokenOnlyAfterAllFrozenResourcesValidate()
 ```
 
-- [ ] **Step 5 (2–5 min): Run all six W6e shards and touched-module compilation serially.**
+- [ ] **Step 6 (2–5 min): Run all six W6e shards, the three representative prior-wave budget selectors, and touched-module compilation serially.**
 
 ```sh
 rtk proxy ./gradlew :math:geometry:compileKotlinJvm
@@ -568,56 +583,60 @@ rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6eCompositionEf
 rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6eLightingPictureReplayTest'
 rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6eRuntimeImageFilterPictureTest'
 rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6eCrossLaneEffectsPictureTest'
+rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bBudgetRecoverySurfacePixelTest'
+rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6cSpatialCacheRecoverySurfaceTest'
+rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dAdvancedRecoverySurfacePixelTest'
 ```
 
-- [ ] **Step 6 (2–5 min): Manually audit changed production paths for a post-freeze pass/resource/ID/bounds/cache-key creation or legacy fallback; classify an existing W8 reference in review notes and do not add a static-source test.**
+- [ ] **Step 7 (2–5 min): Manually audit changed production paths for a post-freeze pass/resource/ID/bounds/cache-key creation or legacy fallback; classify an existing W8 reference in review notes and do not add a static-source test.**
 
 ```sh
 rtk rg -n 'GPUPreparedCompositeLowerer|GPUPreparedSurfaceProductEntry|GPUImageFilterPlan|\.toInt\(\)|PlanPass\(|PlanResource\(' gpu-plan gpu-renderer kanvas
 ```
 
-- [ ] **Step 7 (2–5 min): Update W06 status/README with exact base and source commits, B formula, named public shards, Gradle/XML/native custody, native `UNKNOWN` policy, exclusions, and no ISO/global convergence claim.**
+- [ ] **Step 8 (2–5 min): Update W06 status/README with exact base and source commits, the four separate closed-fixture B formulas (W6b Shadow Picture `8+8+12+52+256=336`, W6c Crop layer `5×4+2×16+256=308`, W6d MatrixConvolution layer `5×4+2×16+4096+256=4404`, W6e Crop Picture `8+12+32+256=308`), named public shards, Gradle/XML/native custody, native `UNKNOWN` policy, exclusions, and no ISO/global or all-22 aggregate-budget claim. Track exact per-family and aggregate budgets as an open gap.**
 
-- [ ] **Step 8 (2–5 min): Run a red-flag placeholder scan using `rtk rg -n --pcre2 '(?:TO)(?:DO)|(?:TB)(?:D)|implement[[:space:]]later|fill[[:space:]]in[[:space:]]details|appropriate[[:space:]]error[[:space:]]handling|similar[[:space:]]to[[:space:]]Task' refactor/plans/2026-09-22-w6e-effects-convergence-implementation-plan.md`, repair every accidental placeholder, then run `rtk git diff --check` and `rtk git diff -- refactor/plans/2026-09-22-w6e-effects-convergence-implementation-plan.md`.**
+- [ ] **Step 9 (2–5 min): Run a red-flag placeholder scan using `rtk rg -n --pcre2 '(?:TO)(?:DO)|(?:TB)(?:D)|implement[[:space:]]later|fill[[:space:]]in[[:space:]]details|appropriate[[:space:]]error[[:space:]]handling|similar[[:space:]]to[[:space:]]Task' refactor/plans/2026-09-22-w6e-effects-convergence-implementation-plan.md`, repair every accidental placeholder, then run `rtk git diff --check` and inspect the plan diff.**
 
-- [ ] **Step 9 (2–5 min): Commit Task 6 and request whole-branch Sol review against the exact W6d base.**
+- [ ] **Step 10 (2–5 min): Commit the amended Task 6 evidence and request whole-branch Sol review against exact prerequisite `6bd5962e5`.**
 
 ```sh
-git add kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W6eEffectsBudgetCacheRecoverySurfacePixelTest.kt refactor
+git add kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W6eCrossLaneEffectsSurfacePixelTest.kt kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W6eEffectsBudgetCacheRecoverySurfacePixelTest.kt refactor/README.md refactor/waves/W06-layers-effects/status.md refactor/plans/2026-09-22-w6e-effects-convergence-implementation-plan.md
 git commit -m 'test(kanvas): close w6e effects convergence'
 ```
 
-Sol reviews all 22 family witnesses, exact/oracle policy, canonical W6b-contract consumption, W4/W5/layer ordering, snapshots, cache pessimism/leases, terminal visibility, and absence of a new authority. If it finds Critical/Important findings, Terra makes exactly one bounded correction commit, reruns only causal selectors plus their named preservation selectors, and requests one scoped Sol re-review.
+Sol reviews all 22 family witnesses including repeatable memory-Picture replay, exact/oracle policy, canonical W6b-contract consumption, W4/W5/layer ordering, snapshots, representative cache pessimism/leases, terminal visibility, and absence of a new authority. It must not infer an all-22 exact-budget proof from these separate fixtures. If it finds Critical/Important findings, Terra makes exactly one bounded correction commit, reruns only causal selectors plus their named preservation selectors, and requests one scoped Sol re-review.
 
-- [ ] **Step 10 (2–5 min): Verify the stack/diff and create or update the unmerged Draft PR targeting W6d.**
+- [ ] **Step 11 (2–5 min): Verify the stack/diff and create or update the unmerged Draft PR targeting `codex/w6e-filter-bounds-recipe`.**
 
 ```sh
 rtk git status --short
 rtk git diff --check
-rtk git log --oneline codex/w6d-advanced-effects..HEAD
+rtk git log --oneline codex/w6e-filter-bounds-recipe..HEAD
 git push origin codex/w6e-effects-convergence
 ```
 
-The Draft PR description states its exact base, six task commits, 22-family shard mapping, green/unknown custody, B/B-1 formula, exclusions, Sol review status, and that no merge occurred.
+The Draft PR description states its exact prerequisite base, actual commit range, 22-family shard mapping, green/unknown custody, separate closed-fixture B/B−1 formulas, the open aggregate/per-family budget gap, exclusions, Sol review status, and that no merge occurred.
 
 ## W6e Definition of Done
 
-- [ ] Six public shards run sequentially with exact membership: (1) Crop/Blur/DropShadow/Offset/Tile; (2) ColorFilter/Compose/Blend/Dilate/Erode/Merge; (3) six lighting families plus Picture; (4) Displacement/Magnifier/MatrixConvolution/runtime IMAGE_FILTER; (5) all 22 with W4/W5/nesting/backdrop/previous/crop/destination-read; (6) B/B-1/cache/recovery.
-- [ ] W6e consumes exactly `CapturedFilterNodeIdI32`, `CapturedFilterInputV1`, `CapturedFilterTableV1`, `FilterEvaluationKeyV1`, `FilterPassOperationV1`, `PlanPass.FilterPass`, and `PlanResourceRole.FilterTarget`; W6c/W6d wording is corrected to these names without creating a new contract.
+- [ ] Six public shards run sequentially with exact membership: (1) Crop/Blur/DropShadow/Offset/Tile; (2) ColorFilter/Compose/Blend/Dilate/Erode/Merge; (3) six lighting families plus Picture; (4) Displacement/Magnifier/MatrixConvolution/runtime IMAGE_FILTER; (5) all 22 with W4/W5/nesting/backdrop/previous/crop/destination-read; (6) all-22 repeatable memory-Picture replay, separate representative B/B−1/cache/recovery fixtures. The prior-wave W6b/W6c/W6d boundary selectors also run serially.
+- [ ] W6e consumes exactly `CapturedFilterNodeIdI32`, `CapturedFilterInputV1`, `CapturedFilterTableV1`, `FilterEvaluationKeyV1`, `FilterBoundsPlanV1`, `FilterPassOperationV1`, `PlanPass.FilterPass`, and `PlanResourceRole.FilterTarget`; W6c/W6d wording is corrected to these names without creating a new contract.
 - [ ] Every expected precedes Surface/Picture construction; exact cases remain byte-exact; only family-local independent CPU oracles tolerate Blur, convolution, lighting, magnifier, and displacement; every positive case carries Render+Readback evidence.
 - [ ] Tests contain no private/reflection/mock/fake/counter/static-source/infrastructure assertion and prove terminal sentinel/no-publication and same-Surface recovery publicly.
+- [ ] The W6e Crop B=308 and closed W6b/W6c/W6d budgets retain independent pre-Surface arithmetic. Neither per-family nor aggregate all-22 exact B, actual native cache hits, or leases are claimed as public observations; the missing exact-budget matrix is tracked as a gap and structural review owns lease/generation checks.
 - [ ] Any production change is a one-owner causal correction in W6b–W6d preserving frozen authority; no API, planner, algorithm, format, cache, graph, or fallback is added.
 - [ ] Fonts, codecs, GMs/dashboard/renders/baselines/scores, global Skia, `jpg-color-cube`, arbitrary frontends, F16/HDR positive rendering, and native 133/134 success claims remain excluded.
-- [ ] Sol task reviews and a whole-branch Sol review leave no Critical/Important finding after at most one bounded correction wave; one unmerged Draft PR is stacked on W6d.
+- [ ] Sol task reviews and a whole-branch Sol review leave no Critical/Important finding after at most one bounded correction wave; one unmerged Draft PR is stacked on the reviewed bounds-recipe prerequisite.
 
 ## Plan Self-Review
 
-- **Spec coverage:** Tasks 1–4 cover exactly 5 + 6 + 7 + 4 = 22 families. Task 5 covers their W4/W5/layer/destination interactions. Task 6 covers budgets, cache pessimism, terminality, recovery, qualification, and delivery. The explicit exclusions remain exclusions.
-- **Type consistency:** Every task consumes the W6b canonical seven names; none declares a replacement. All permitted production corrections remain in existing W6b–W6d owners and must preserve the frozen records.
-- **Review focus:** The five header risks are pinned to public tests in Tasks 5, 5, 1, 6, and 6 respectively.
+- **Spec coverage:** Tasks 1–4 cover exactly 5 + 6 + 7 + 4 = 22 families. Task 5 covers their W4/W5/layer/destination interactions. Task 6 adds their repeatable memory-Picture replay and covers representative exact budgets, cache pessimism, terminality, recovery, qualification, and delivery. The spec asks for a public B/B−1 shard, not a shared all-22 B; the absent per-family/aggregate exact-budget proof is explicit.
+- **Type consistency:** Every task consumes the W6b canonical eight names; none declares a replacement. All permitted production corrections remain in existing W6b–W6d owners and must preserve the frozen records.
+- **Review focus:** The five header risks are pinned to public tests in Tasks 5, 5, 1, 6 plus the prior-wave closed-fixture selectors, and 6 respectively.
 - **Placeholder scan:** Task 6 provides the exact scan; this plan contains concrete files, interfaces, test names, snippets, serialized commands, commits, reviews, and PR criteria.
 - **Diff check:** Task 6 runs `git diff --check`; planning changes are confined to this plan and delivery documentation/tests or causal W6b–W6d integration fixes during execution.
 
 ## Execution Handoff
 
-Plan complete and saved to `refactor/plans/2026-09-22-w6e-effects-convergence-implementation-plan.md`. The required execution method is subagent-driven: Terra implements Tasks 1–6 in order, Sol reviews each task and the whole branch, with one bounded correction wave only. Review the plan before implementation; do not merge the Draft PR.
+Plan saved to `refactor/plans/2026-09-22-w6e-effects-convergence-implementation-plan.md`. Tasks 1–5 and the initial Task 6 Crop/refusal witnesses are already implemented. The user-approved Task 6 amendment replaces the impossible-to-derive shared all-22 B with all-22 repeatable Picture replay plus separate closed-fixture W6b/W6c/W6d and W6e Crop exact B/B−1 checks; do not silently upgrade these to an aggregate budget claim. Resume Task 6 subagent-driven with Terra implementation and Sol task/whole-branch reviews; do not merge the Draft PR.
