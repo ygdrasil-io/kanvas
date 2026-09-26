@@ -149,17 +149,21 @@ internal fun w6aPointPacketMatchesRecipe(packet: GPUDrawPacket, draw: W5bPointDr
     recipe: W6PointHostRecipeV1): Boolean {
     val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive ?: return false
     val geometry = semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath ?: return false
+    val uniform = semantic.payloadRef.uniformBlock ?: return false
+    val bounds = recipe.bounds
+    val scissor = recipe.scissor
     return draw.clipOnly == null && draw.pointMode == recipe.pointMode &&
         semantic.sourceFamily == org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily.PointLine &&
         semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor &&
         geometry.geometryMode == org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode.DirectTriangles &&
-        geometry.vertices == recipe.verticesF32 && geometry.indices == recipe.indicesI32 &&
-        geometry.sourceVertexCount == recipe.verticesF32.size / 2 &&
-        geometry.coverBounds == GPUPixelBounds(recipe.bounds.left, recipe.bounds.top, recipe.bounds.right, recipe.bounds.bottom) &&
-        semantic.scissorBounds == GPUPixelBounds(recipe.scissor.left, recipe.scissor.top, recipe.scissor.right, recipe.scissor.bottom) &&
+        uniform.byteSize == 32L && uniform.bytes.size == 32 &&
+        geometry.vertices == recipe.copyVerticesF32().toList() && geometry.indices == recipe.copyIndicesI32().toList() &&
+        geometry.sourceVertexCount == recipe.vertexCountI32 &&
+        geometry.coverBounds == GPUPixelBounds(bounds.left, bounds.top, bounds.right, bounds.bottom) &&
+        semantic.scissorBounds == GPUPixelBounds(scissor.left, scissor.top, scissor.right, scissor.bottom) &&
         draw.copyVerticesF32().contentEquals(recipe.copyVerticesF32()) &&
         draw.copyIndicesI32().contentEquals(recipe.copyIndicesI32()) &&
-        draw.copyBoundsI32() == recipe.bounds && draw.copyScissorI32() == recipe.scissor
+        draw.copyBoundsI32() == bounds && draw.copyScissorI32() == scissor
 }
 
 /** Validates the packet's immutable shape payload against the final RenderPass recipe. */

@@ -261,9 +261,9 @@ public class PlanPhysicalLayoutV1 private constructor(
                     draw.copyVerticesF32().contentEquals(recipe.copyVerticesF32()) &&
                     draw.copyIndicesI32().contentEquals(recipe.copyIndicesI32()) &&
                     draw.copyBoundsI32() == recipe.bounds && draw.copyScissorI32() == recipe.scissor &&
-                    binding.vertexCountI32 == recipe.verticesF32.size / 2 &&
-                    binding.indexCountI32 == recipe.indicesI32.size &&
-                    binding.maxLocalIndexI32 == recipe.indicesI32.max() &&
+                    binding.vertexCountI32 == recipe.vertexCountI32 &&
+                    binding.indexCountI32 == recipe.indexCountI32 &&
+                    binding.maxLocalIndexI32 == recipe.maxIndexI32 &&
                     binding.uniformBytesI64 == 32L) {
                     "W6 Point host recipe or physical source changed after final pass binding."
                 }

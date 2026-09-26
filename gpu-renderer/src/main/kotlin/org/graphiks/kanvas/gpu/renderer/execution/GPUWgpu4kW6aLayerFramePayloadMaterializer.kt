@@ -401,6 +401,23 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 require(pointRecipe == null || mapped != null) {
                                     "W6 Point host recipe requires its frozen pipeline before allocation."
                                 }
+                                val pointUniformPayload = pointRecipe?.let { recipe ->
+                                    val pointBinding = requireNotNull(binding) {
+                                        "W6 Point host recipe requires its physical geometry binding before allocation."
+                                    }
+                                    val semantic = packet.semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.CorePrimitive
+                                        ?: error("W6 Point host recipe requires a CorePrimitive payload before allocation.")
+                                    val block = requireNotNull(semantic.payloadRef.uniformBlock) {
+                                        "W6 Point host recipe requires its Point32 uniform block before allocation."
+                                    }
+                                    val payload = frame.analyticUniform(packet)
+                                    require(recipe.selector.uniformAbi == W6CorePrimitiveHostUniformAbiV1.Point32 &&
+                                        block.byteSize == 32L && block.bytes.size == 32 && payload.size == 32 &&
+                                        pointBinding.uniformBytesI64 == 32L && payload.size.toLong() == pointBinding.uniformBytesI64) {
+                                        "W6 Point host recipe Point32 uniform differs from its sealed physical binding."
+                                    }
+                                    payload
+                                }
                                 val frozenLegacyColor = when (val recipe = solidRectRecipe) {
                                     null -> draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1
                                     else -> recipe.colorMode is W6SolidRectColorModeV1.FrozenColor
@@ -419,7 +436,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     else geometryPipeline(mapped, layout, owned, template,
                                         if (maskMaterialSource) BlendPlan.LegacySrcOverV1 else null,
                                         maskMaterialSource && pass is PlanPass.StencilCover)
-                                val uniformPayload = binding?.let { frame.analyticUniform(packet) }
+                                val uniformPayload = binding?.let { pointUniformPayload ?: frame.analyticUniform(packet) }
                                 val nativeUniform = data?.let { geometryBuffers.getValue(it.uniform) } ?: uniform
                                 if (data != null) {
                                     require(!frozenLegacyColor)

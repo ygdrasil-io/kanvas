@@ -69,64 +69,122 @@ public sealed interface W6CorePrimitiveHostRecipeV1 {
 }
 
 /** Immutable final-pass recipe for one W6 AnalyticRect draw; no renderer-owned geometry is added. */
-@ConsistentCopyVisibility
-public data class W6AnalyticRectHostRecipeV1 internal constructor(
+public class W6AnalyticRectHostRecipeV1 internal constructor(
     override public val site: W6GeometrySiteKeyV1,
     override public val selector: W6CorePrimitiveHostSelectorV1,
-    public val deviceBounds: RectF32,
-    override public val rasterBounds: RectI32,
-    override public val scissor: RectI32,
-    override public val materialOriginDeviceI32: Point2I32,
+    deviceBounds: RectF32,
+    rasterBounds: RectI32,
+    scissor: RectI32,
+    materialOriginDeviceI32: Point2I32,
 ) : W6CorePrimitiveHostRecipeV1 {
+    private val deviceBoundsSnapshot = deviceBounds.copy()
+    private val rasterBoundsSnapshot = rasterBounds.copy()
+    private val scissorSnapshot = scissor.copy()
+    private val materialOriginSnapshot = Point2I32(materialOriginDeviceI32.x, materialOriginDeviceI32.y)
+    public val deviceBounds: RectF32 get() = deviceBoundsSnapshot.copy()
+    override public val rasterBounds: RectI32 get() = rasterBoundsSnapshot.copy()
+    override public val scissor: RectI32 get() = scissorSnapshot.copy()
+    override public val materialOriginDeviceI32: Point2I32 get() =
+        Point2I32(materialOriginSnapshot.x, materialOriginSnapshot.y)
+
     init {
         require(selector.family == W6CorePrimitiveHostGeometryFamilyV1.AnalyticRect)
-        require(!deviceBounds.isEmpty && !rasterBounds.isEmpty && !scissor.isEmpty)
+        require(!deviceBoundsSnapshot.isEmpty && !rasterBoundsSnapshot.isEmpty && !scissorSnapshot.isEmpty)
     }
+
+    override fun equals(other: Any?): Boolean = other is W6AnalyticRectHostRecipeV1 &&
+        site == other.site && selector == other.selector && deviceBoundsSnapshot == other.deviceBoundsSnapshot &&
+        rasterBoundsSnapshot == other.rasterBoundsSnapshot && scissorSnapshot == other.scissorSnapshot &&
+        materialOriginSnapshot == other.materialOriginSnapshot
+
+    override fun hashCode(): Int = listOf(site, selector, deviceBoundsSnapshot, rasterBoundsSnapshot,
+        scissorSnapshot, materialOriginSnapshot).fold(1) { hash, value -> 31 * hash + value.hashCode() }
 }
 
 /** Immutable final-pass recipe for one W6 AnalyticRRect draw, including its canonical radii. */
-@ConsistentCopyVisibility
-public data class W6AnalyticRRectHostRecipeV1 internal constructor(
+public class W6AnalyticRRectHostRecipeV1 internal constructor(
     override public val site: W6GeometrySiteKeyV1,
     override public val selector: W6CorePrimitiveHostSelectorV1,
-    public val deviceShape: RRectF32,
+    deviceShape: RRectF32,
     public val drawOrigin: DrawOrigin,
-    override public val rasterBounds: RectI32,
-    override public val scissor: RectI32,
-    override public val materialOriginDeviceI32: Point2I32,
+    rasterBounds: RectI32,
+    scissor: RectI32,
+    materialOriginDeviceI32: Point2I32,
 ) : W6CorePrimitiveHostRecipeV1 {
+    private val deviceShapeSnapshot = deviceShape.copyFrozen()
+    private val rasterBoundsSnapshot = rasterBounds.copy()
+    private val scissorSnapshot = scissor.copy()
+    private val materialOriginSnapshot = Point2I32(materialOriginDeviceI32.x, materialOriginDeviceI32.y)
+    public val deviceShape: RRectF32 get() = deviceShapeSnapshot.copyFrozen()
+    override public val rasterBounds: RectI32 get() = rasterBoundsSnapshot.copy()
+    override public val scissor: RectI32 get() = scissorSnapshot.copy()
+    override public val materialOriginDeviceI32: Point2I32 get() =
+        Point2I32(materialOriginSnapshot.x, materialOriginSnapshot.y)
+
     init {
         require(selector.family == W6CorePrimitiveHostGeometryFamilyV1.AnalyticRRect)
         require(drawOrigin == DrawOrigin.RECT || drawOrigin == DrawOrigin.RRECT)
-        require(!deviceShape.rect.isEmpty && !rasterBounds.isEmpty && !scissor.isEmpty)
+        require(!deviceShapeSnapshot.rect.isEmpty && !rasterBoundsSnapshot.isEmpty && !scissorSnapshot.isEmpty)
     }
+
+    override fun equals(other: Any?): Boolean = other is W6AnalyticRRectHostRecipeV1 &&
+        site == other.site && selector == other.selector && deviceShapeSnapshot == other.deviceShapeSnapshot &&
+        drawOrigin == other.drawOrigin && rasterBoundsSnapshot == other.rasterBoundsSnapshot &&
+        scissorSnapshot == other.scissorSnapshot && materialOriginSnapshot == other.materialOriginSnapshot
+
+    override fun hashCode(): Int = listOf(site, selector, deviceShapeSnapshot, drawOrigin, rasterBoundsSnapshot,
+        scissorSnapshot, materialOriginSnapshot).fold(1) { hash, value -> 31 * hash + value.hashCode() }
 }
 
 /** Immutable final-pass recipe for one non-W4e W5b Point draw. Geometry remains sealed scalar sequences. */
-@ConsistentCopyVisibility
-public data class W6PointHostRecipeV1 internal constructor(
+public class W6PointHostRecipeV1 internal constructor(
     override public val site: W6GeometrySiteKeyV1,
     override public val selector: W6CorePrimitiveHostSelectorV1,
     public val pointMode: PointMode,
-    public val verticesF32: List<Float>,
-    public val indicesI32: List<Int>,
-    public val bounds: RectI32,
-    override public val scissor: RectI32,
-    override public val materialOriginDeviceI32: Point2I32,
+    verticesF32: List<Float>,
+    indicesI32: List<Int>,
+    bounds: RectI32,
+    scissor: RectI32,
+    materialOriginDeviceI32: Point2I32,
 ) : W6CorePrimitiveHostRecipeV1 {
-    override public val rasterBounds: RectI32 get() = bounds
+    private val verticesSnapshot = immutableList(verticesF32)
+    private val indicesSnapshot = immutableList(indicesI32)
+    private val boundsSnapshot = bounds.copy()
+    private val scissorSnapshot = scissor.copy()
+    private val materialOriginSnapshot = Point2I32(materialOriginDeviceI32.x, materialOriginDeviceI32.y)
+    public val vertexCountI32: Int get() = verticesSnapshot.size / 2
+    public val indexCountI32: Int get() = indicesSnapshot.size
+    public val maxIndexI32: Int get() = indicesSnapshot.max()
+    public val bounds: RectI32 get() = boundsSnapshot.copy()
+    override public val rasterBounds: RectI32 get() = boundsSnapshot.copy()
+    override public val scissor: RectI32 get() = scissorSnapshot.copy()
+    override public val materialOriginDeviceI32: Point2I32 get() =
+        Point2I32(materialOriginSnapshot.x, materialOriginSnapshot.y)
 
     init {
         require(selector.family == W6CorePrimitiveHostGeometryFamilyV1.Point)
-        require(pointMode == PointMode.POINTS && !bounds.isEmpty && !scissor.isEmpty)
-        require(verticesF32.size >= 8 && verticesF32.size % 8 == 0 && verticesF32.all(Float::isFinite))
-        require(indicesI32.size == verticesF32.size / 8 * 6 && indicesI32.isNotEmpty())
-        require(indicesI32.all { it in 0 until verticesF32.size / 2 })
+        require(pointMode == PointMode.POINTS && !boundsSnapshot.isEmpty && !scissorSnapshot.isEmpty)
+        require(verticesSnapshot.size >= 8 && verticesSnapshot.size % 8 == 0 && verticesSnapshot.all(Float::isFinite))
+        require(indicesSnapshot.size == verticesSnapshot.size / 8 * 6 && indicesSnapshot.isNotEmpty())
+        require(indicesSnapshot.all { it in 0 until verticesSnapshot.size / 2 })
     }
 
-    public fun copyVerticesF32(): FloatArray = verticesF32.toFloatArray()
-    public fun copyIndicesI32(): IntArray = indicesI32.toIntArray()
+    public fun copyVerticesF32(): FloatArray = verticesSnapshot.toFloatArray()
+    public fun copyIndicesI32(): IntArray = indicesSnapshot.toIntArray()
+
+    override fun equals(other: Any?): Boolean = other is W6PointHostRecipeV1 &&
+        site == other.site && selector == other.selector && pointMode == other.pointMode &&
+        verticesSnapshot == other.verticesSnapshot && indicesSnapshot == other.indicesSnapshot &&
+        boundsSnapshot == other.boundsSnapshot && scissorSnapshot == other.scissorSnapshot &&
+        materialOriginSnapshot == other.materialOriginSnapshot
+
+    override fun hashCode(): Int = listOf(site, selector, pointMode, verticesSnapshot, indicesSnapshot,
+        boundsSnapshot, scissorSnapshot, materialOriginSnapshot).fold(1) { hash, value -> 31 * hash + value.hashCode() }
 }
+
+private fun RRectF32.copyFrozen(): RRectF32 = RRectF32.of(
+    rect.copy(), topLeft, topRight, bottomRight, bottomLeft,
+)
 
 /** Freezes only non-W4e CorePrimitive geometry in final RenderPass planner order. */
 public fun freezeW6CorePrimitiveHostsV1(passes: List<PlanPass>): Map<W6GeometrySiteKeyV1, W6CorePrimitiveHostRecipeV1> {
