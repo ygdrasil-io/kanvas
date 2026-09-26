@@ -352,11 +352,21 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             is PlanPass.StencilCover -> listOf(pass.draw)
                         }
                         val commands = buildList {
-                            draws.zip(render.drawPackets).forEach { (draw, packet) ->
+                            draws.zip(render.drawPackets).forEachIndexed { drawOrdinalI32, (draw, packet) ->
                                 val template = frame.template(packet)
                                 val binding = frame.physical.geometryBinding(pass.id)
                                 val mapped = binding?.let { frame.geometryPipeline(packet) }
-                                val frozenLegacyColor = draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1
+                                val solidRectRecipe = (draw as? SolidRectDraw)?.let {
+                                    val site = W6GeometrySiteKeyV1(pass.id, drawOrdinalI32)
+                                    require(frame.solidRectSite(packet) == site) {
+                                        "W6 SolidRect packet lost its frozen owner/ordinal."
+                                    }
+                                    frame.physical.w6SolidRectHostRecipe(site)
+                                }
+                                val frozenLegacyColor = when (val recipe = solidRectRecipe) {
+                                    null -> draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1
+                                    else -> recipe.colorMode is W6SolidRectColorModeV1.FrozenColor
+                                }
                                 // W6b has already selected this source pass and its target.  Its
                                 // source stage is transparent and must never consume the final
                                 // draw blend; that one belongs exclusively to FilterComposite.
@@ -366,7 +376,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 val data = binding?.data
                                 val verticesSemantic = packet.semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.Vertices
                                 val pipeline = if (mapped == null) pipeline(requireNotNull(template).sourceWgsl, layout,
-                                    w6aColorTarget(if (maskMaterialSource) BlendPlan.LegacySrcOverV1 else draw.blend), owned, template,
+                                    w6aColorTarget(if (maskMaterialSource) BlendPlan.LegacySrcOverV1 else solidRectRecipe?.blend ?: draw.blend), owned, template,
                                     verticesSemantic?.artifact)
                                     else geometryPipeline(mapped, layout, owned, template,
                                         if (maskMaterialSource) BlendPlan.LegacySrcOverV1 else null,
