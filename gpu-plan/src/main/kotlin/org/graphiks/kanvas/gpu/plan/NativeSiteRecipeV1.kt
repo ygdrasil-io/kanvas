@@ -189,6 +189,26 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
                 left.canonicalLogicalEncodingV1 == right.canonicalLogicalEncodingV1
         }
 
+    /**
+     * Canonical encoding excludes non-selector geometry payload, so retain provenance separately:
+     * every wrapper must carry the exact frozen host object published beside this catalog.
+     */
+    internal fun authenticatesFrozenHosts(
+        solidRects: Map<W6GeometrySiteKeyV1, W6SolidRectHostRecipeV1>,
+        corePrimitives: Map<W6GeometrySiteKeyV1, W6CorePrimitiveHostRecipeV1>,
+        preparedVertices: Map<W6GeometrySiteKeyV1, W6PreparedVerticesHostRecipeV1>,
+        plainLayerComposites: Map<W6LayerCompositeSiteKeyV1, W6PlainLayerCompositeRecipeV1>,
+        clipMaskInitializes: Map<PlanPassId, W4eClipMaskInitializeRecipeV1>,
+    ): Boolean = orderedRecipes.all { recipe ->
+        when (recipe) {
+            is W6SolidRectNativeSiteRecipeV1 -> solidRects[recipe.host.site] === recipe.host
+            is W6CorePrimitiveNativeSiteRecipeV1 -> corePrimitives[recipe.host.site] === recipe.host
+            is W6PreparedVerticesNativeSiteRecipeV1 -> preparedVertices[recipe.host.site] === recipe.host
+            is W6PlainLayerCompositeNativeSiteRecipeV1 -> plainLayerComposites[recipe.host.site] === recipe.host
+            is W4eClipMaskInitializeNativeSiteRecipeV1 -> clipMaskInitializes[recipe.host.passId] === recipe.host
+        }
+    }
+
     internal companion object {
         val Empty: NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1(emptyList())
     }
@@ -253,10 +273,36 @@ private class NativeSiteEncodingWriterV1(family: NativeSiteRecipeFamilyV1) {
     }
 
     fun int(name: String, value: Int) { field(name, value.toString()) }
+    fun long(name: String, value: Long) { field(name, value.toString()) }
     fun float(name: String, value: Float) { field(name, value.toRawBits().toUInt().toString(16)) }
     fun text(name: String, value: String) { field(name, value) }
     fun enum(name: String, value: Enum<*>) { field(name, value.name) }
-    fun blend(name: String, value: BlendPlan) { field(name, value.canonicalLabel) }
+    fun blend(name: String, value: BlendPlan) {
+        when (value) {
+            BlendPlan.LegacySrcOverV1 -> text("$name.kind", "LegacySrcOverV1")
+            BlendPlan.NoOpV1 -> text("$name.kind", "NoOpV1")
+            is BlendPlan.FixedFunctionV1 -> {
+                text("$name.kind", "FixedFunctionV1")
+                enum("$name.mode", value.mode)
+                enum("$name.colorSource", value.colorSource)
+                enum("$name.colorDestination", value.colorDestination)
+                enum("$name.alphaSource", value.alphaSource)
+                enum("$name.alphaDestination", value.alphaDestination)
+                enum("$name.operation", value.operation)
+                enum("$name.coverage", value.coverage)
+            }
+            is BlendPlan.DestinationReadV1 -> {
+                text("$name.kind", "DestinationReadV1")
+                enum("$name.mode", value.mode)
+                text("$name.formulaIdentity", value.formulaIdentity)
+                enum("$name.coverage", value.coverage)
+                long("$name.requiredDestinationVersion", value.requiredDestinationVersion.valueI64)
+                value.snapshotResource?.let { text("$name.snapshotResource", it.value) }
+                    ?: text("$name.snapshotResource", "none")
+                int("$name.compositionAbi", value.compositionAbiI32)
+            }
+        }
+    }
     fun selector(value: W6CorePrimitiveHostSelectorV1) {
         enum("geometry", value.family)
         enum("uniformAbi", value.uniformAbi)

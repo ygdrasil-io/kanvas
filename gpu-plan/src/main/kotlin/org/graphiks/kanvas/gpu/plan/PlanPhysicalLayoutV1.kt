@@ -236,6 +236,11 @@ public class PlanPhysicalLayoutV1 private constructor(
             require(source.nativeSiteRecipeCatalogV1.matches(expectedNativeSiteRecipes)) {
                 "Native-site recipe catalog changed after final planner binding."
             }
+            require(source.nativeSiteRecipeCatalogV1.authenticatesFrozenHosts(
+                source.w6SolidRectHostRecipes, source.w6CorePrimitiveHostRecipes,
+                source.w6PreparedVerticesHostRecipes, source.w6PlainLayerCompositeRecipes,
+                source.w4eClipMaskInitializeRecipes,
+            )) { "Native-site recipe catalog host provenance changed after final planner binding." }
             // A frozen Clear/DrawColor Picture entry owns a LegacyColor operand directly.  It
             // has no W5 source uniform (and must not fabricate one after graph construction),
             // while every material-backed draw retains the exact existing W5 row.
