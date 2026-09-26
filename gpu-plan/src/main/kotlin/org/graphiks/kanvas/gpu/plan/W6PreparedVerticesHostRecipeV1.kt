@@ -14,6 +14,8 @@ public enum class W6PreparedVerticesHostUniformAbiV1 { DrawUniform64 }
 public enum class W6PreparedVerticesHostGroupZeroAbiV1 { DrawUniform64 }
 public enum class W6PreparedVerticesHostCoordinateSlotV1 { InputPosition }
 public enum class W6PreparedVerticesHostMaterialSourceKindV1 { MaterialV5, ColorSourceV4 }
+/** The selected W5 source-layout identity, retained separately from the source-family label. */
+public enum class W6PreparedVerticesHostSourceIdentityKindV1 { LegacyV2, ColorSourceV4 }
 
 /** Immutable vertex-input layout already encoded by [PreparedVerticesUploadPayloadV1]. */
 public class W6PreparedVerticesHostLayoutV1 internal constructor(
@@ -46,21 +48,22 @@ public class W6PreparedVerticesHostLayoutV1 internal constructor(
 /** Typed source identity selected by the final planner, never by native materialization. */
 public class W6PreparedVerticesHostMaterialSourceV1 internal constructor(
     public val kind: W6PreparedVerticesHostMaterialSourceKindV1,
+    public val identityKind: W6PreparedVerticesHostSourceIdentityKindV1,
     public val materialRef: MaterialPlanRef,
     public val programStructuralId: MaterialProgramPlanId,
     public val canonicalBindingIdentity: String,
 ) {
     init { require(canonicalBindingIdentity.isNotBlank()) }
     override fun equals(other: Any?): Boolean = other is W6PreparedVerticesHostMaterialSourceV1 &&
-        kind == other.kind && materialRef == other.materialRef && programStructuralId == other.programStructuralId &&
+        kind == other.kind && identityKind == other.identityKind && materialRef == other.materialRef && programStructuralId == other.programStructuralId &&
         canonicalBindingIdentity == other.canonicalBindingIdentity
-    override fun hashCode(): Int = listOf(kind, materialRef, programStructuralId, canonicalBindingIdentity)
+    override fun hashCode(): Int = listOf(kind, identityKind, materialRef, programStructuralId, canonicalBindingIdentity)
         .fold(1) { hash, value -> 31 * hash + value.hashCode() }
 
     /** Rechecks the planner-owned material/source table without exposing its internal footprint API. */
     public fun authenticates(table: MaterialPlanTable): Boolean = runCatching {
         table.entry(materialRef).program.structuralId == programStructuralId &&
-            RawMaterialRequirementsV2.measureV4(table, materialRef).canonicalIdentity == canonicalBindingIdentity
+            preparedVerticesSourceBindingIdentity(identityKind, table, materialRef) == canonicalBindingIdentity
     }.getOrDefault(false)
 }
 
@@ -177,7 +180,7 @@ public fun freezeW6PreparedVerticesHostsV1(
                 coordinateSlot = W6PreparedVerticesHostCoordinateSlotV1.InputPosition,
                 materialOriginDeviceI32 = Point2I32(origin.x, origin.y),
                 payloadCanonicalIdentity = payload.canonicalIdentity,
-                hostProgramIdentity = preparedVerticesProgramIdentity(layout, payload, vertices.blend, source),
+                hostProgramIdentity = preparedVerticesProgramIdentity(layout, payload, vertices.blend, source, origin),
             )
             require(recipes.put(site, recipe) == null)
         }
@@ -211,15 +214,15 @@ private fun preparedVerticesSource(
     table: MaterialPlanTable,
 ): W6PreparedVerticesHostMaterialSourceV1 {
     val ref = authority.materialPlanRef()
-    val coordinates = authority.colorSourceCoordinatesV4()
     val kind = when (authority) {
         is PlanDrawMaterialAuthority.MaterialV5 -> W6PreparedVerticesHostMaterialSourceKindV1.MaterialV5
         is PlanDrawMaterialAuthority.MaterialV4 -> W6PreparedVerticesHostMaterialSourceKindV1.ColorSourceV4
         else -> error("W6 prepared vertices only admits W5 material source authorities.")
     }
-    val canonicalBindingIdentity = if (coordinates != null) RawMaterialRequirementsV2.measureV4(table, ref).canonicalIdentity
-        else RawMaterialRequirementsV2.measureLegacy(table, ref).canonicalIdentity
-    return W6PreparedVerticesHostMaterialSourceV1(kind, ref, table.entry(ref).program.structuralId,
+    val identityKind = if (authority.colorSourceCoordinatesV4() != null)
+        W6PreparedVerticesHostSourceIdentityKindV1.ColorSourceV4 else W6PreparedVerticesHostSourceIdentityKindV1.LegacyV2
+    val canonicalBindingIdentity = preparedVerticesSourceBindingIdentity(identityKind, table, ref)
+    return W6PreparedVerticesHostMaterialSourceV1(kind, identityKind, ref, table.entry(ref).program.structuralId,
         canonicalBindingIdentity)
 }
 
@@ -228,6 +231,7 @@ private fun preparedVerticesProgramIdentity(
     payload: PreparedVerticesUploadPayloadV1,
     blend: BlendPlan,
     source: W6PreparedVerticesHostMaterialSourceV1,
+    origin: Point2I32,
 ): W6PreparedVerticesHostProgramIdentityV1 = W6PreparedVerticesHostProgramIdentityV1(
     "w6-prepared-vertices-host-v1:" + listOf(
         "layout=${layout.attributes().joinToString(",")}:${layout.offsetsBytesI32().entries.joinToString(",")}:${layout.strideBytesI32}",
@@ -237,6 +241,19 @@ private fun preparedVerticesProgramIdentity(
         "blend=${blend.canonicalLabel}",
         "target=rgba8unorm-srgb:1",
         "abi=group0-draw-uniform-64",
-        "source=${source.kind}:${source.programStructuralId.value}:${source.canonicalBindingIdentity}",
+        "coordinate=input-position",
+        "origin=${origin.x},${origin.y}",
+        "source=${source.kind}:${source.identityKind}:${source.programStructuralId.value}:${source.canonicalBindingIdentity}",
     ).joinToString("|"),
 )
+
+private fun preparedVerticesSourceBindingIdentity(
+    kind: W6PreparedVerticesHostSourceIdentityKindV1,
+    table: MaterialPlanTable,
+    ref: MaterialPlanRef,
+): String = when (kind) {
+    W6PreparedVerticesHostSourceIdentityKindV1.LegacyV2 ->
+        RawMaterialRequirementsV2.measureLegacy(table, ref).canonicalIdentity
+    W6PreparedVerticesHostSourceIdentityKindV1.ColorSourceV4 ->
+        RawMaterialRequirementsV2.measureV4(table, ref).canonicalIdentity
+}

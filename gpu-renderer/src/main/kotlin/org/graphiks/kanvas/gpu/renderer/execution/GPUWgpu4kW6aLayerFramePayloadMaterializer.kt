@@ -444,13 +444,25 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     val semantic = packet.semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.Vertices
                                         ?: error("W6 prepared-vertices host recipe requires a Vertices payload before allocation.")
                                     val payload = frame.analyticUniform(packet)
+                                    val sealedUpload = requireNotNull(verticesBinding.verticesUploadPayload) {
+                                        "W6 prepared-vertices host recipe requires its sealed render-ir upload payload before allocation."
+                                    }
+                                    val sealedVertexBytes = sealedUpload.copyVertexBytes()
+                                    val sealedIndexBytes = sealedUpload.copyIndexBytes()
+                                    val artifactVertexBytes = semantic.artifact.vertexBytesForUpload()
+                                    val artifactIndexBytes = semantic.artifact.indexBytesForUpload()
                                     require(recipe.uniformAbi == W6PreparedVerticesHostUniformAbiV1.DrawUniform64 &&
                                         recipe.groupZeroAbi == W6PreparedVerticesHostGroupZeroAbiV1.DrawUniform64 &&
                                         payload.size == 64 && verticesBinding.uniformBytesI64 == 64L &&
                                         payload.size.toLong() == verticesBinding.uniformBytesI64 &&
                                         verticesBinding.verticesUploadPayload?.canonicalIdentity == recipe.payloadCanonicalIdentity &&
-                                        semantic.artifact.vertexBytesForUpload().size.toLong() == verticesBinding.vertexBytesI64 &&
-                                        (semantic.artifact.indexBytesForUpload()?.size?.toLong() ?: 0L) == verticesBinding.indexBytesI64) {
+                                        artifactVertexBytes.contentEquals(sealedVertexBytes) &&
+                                        when {
+                                            sealedIndexBytes == null -> artifactIndexBytes == null
+                                            artifactIndexBytes == null -> false
+                                            else -> artifactIndexBytes.contentEquals(sealedIndexBytes)
+                                        } && artifactVertexBytes.size.toLong() == verticesBinding.vertexBytesI64 &&
+                                        (artifactIndexBytes?.size?.toLong() ?: 0L) == verticesBinding.indexBytesI64) {
                                         "W6 prepared-vertices host recipe layout or DrawUniform64 differs from its sealed physical binding."
                                     }
                                     payload

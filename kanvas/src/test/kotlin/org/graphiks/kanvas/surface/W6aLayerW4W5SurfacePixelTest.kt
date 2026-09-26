@@ -281,7 +281,10 @@ class W6aLayerW4W5SurfacePixelTest {
                 } }
                 if (layered) restore()
             }
-            assertContentEquals(expected, surface.render().pixels, "layered=$layered")
+            val actual = surface.render()
+            assertContentEquals(expected, actual.pixels, "layered=$layered")
+            if (layered) assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+                "layered=$layered ${actual.nativeEvidenceScopeKinds}")
         }
     }
 
@@ -298,7 +301,10 @@ class W6aLayerW4W5SurfacePixelTest {
                 pixelClip(1) { drawVertices(vertices, opaque(BLUE)) }
                 if (layered) restore()
             }
-            assertContentEquals(expected, surface.render().pixels, "layered=$layered")
+            val actual = surface.render()
+            assertContentEquals(expected, actual.pixels, "layered=$layered")
+            if (layered) assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+                "layered=$layered ${actual.nativeEvidenceScopeKinds}")
         }
     }
 
