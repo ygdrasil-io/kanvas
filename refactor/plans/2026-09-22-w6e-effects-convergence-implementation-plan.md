@@ -8,11 +8,11 @@
 
 **Tech Stack:** Kotlin/JVM; `:render-ir`, `:math:geometry`, `:math:matrix`, `:gpu-plan`, `:gpu-renderer`, `:kanvas`; WebGPU/WGSL; JUnit 5; public `Surface`, `Canvas`, `Picture`, paint/filter APIs, Render, Readback, pixels, and diagnostics.
 
-**Spec:** `refactor/specs/2026-09-16-w6-layers-effects-design.md` §§5–16; `refactor/specs/2026-09-22-w6b-w6e-stacked-delivery-design.md` §§3 and 7–10; `refactor/plans/2026-09-22-w6b-blur-masks-shadows-implementation-plan.md`; `refactor/plans/2026-09-22-w6c-spatial-dag-implementation-plan.md`; `refactor/plans/2026-09-22-w6d-advanced-effects-implementation-plan.md`. Base: reviewed `codex/w6d-advanced-effects`; implementation branch: `codex/w6e-effects-convergence`; its Draft PR targets `codex/w6d-advanced-effects`.
+**Spec:** `refactor/specs/2026-09-16-w6-layers-effects-design.md` §§5–16; `refactor/specs/2026-09-22-w6b-w6e-stacked-delivery-design.md` §§3 and 7–10; `refactor/plans/2026-09-22-w6b-blur-masks-shadows-implementation-plan.md`; `refactor/plans/2026-09-22-w6c-spatial-dag-implementation-plan.md`; `refactor/plans/2026-09-22-w6d-advanced-effects-implementation-plan.md`. Base effective: prerequisite reviewed `codex/w6e-filter-bounds-recipe` (`6bd5962e5`, Draft PR #2407), itself stacked on `codex/w6d-advanced-effects`; implementation branch: `codex/w6e-effects-convergence`; its eventual Draft PR targets the prerequisite, never W6d directly.
 
 ## Global Constraints
 
-- Before Task 1, record `rtk git rev-parse codex/w6d-advanced-effects`; stop if its reviewed W6b–W6d contracts or public selectors are absent. W6e does not repair a missing base by recreating one.
+- Before Task 1, record `rtk git rev-parse codex/w6e-filter-bounds-recipe`; stop if this reviewed prerequisite or its W6b–W6d public selectors are absent. W6e does not repair a missing base by recreating one.
 - W6e adds no public API, filter family, planner, algorithm, wire/Picture format, graph, allocator, cache, submit route, or renderer-side planning type. A production correction is allowed only in the existing W6b/W6c/W6d owner named by a causal public RED and may not alter its published contract.
 - The canonical shared names are exactly `CapturedFilterNodeIdI32`, `CapturedFilterInputV1`, `CapturedFilterTableV1`, `FilterEvaluationKeyV1`, `FilterBoundsPlanV1`, `FilterPassOperationV1`, `PlanPass.FilterPass`, and `PlanResourceRole.FilterTarget`. W6e consumes these names; it does not introduce aliases or equivalents. The four written plans use this same nomenclature before implementation begins.
 - Each checkbox is one 2–5 minute action. Use public RED → minimal GREEN → local refactor. A RED is valid only when unchanged production reaches the stated public pixel, diagnostic, or recovery assertion; compilation, fixture, permission, native availability, timeout, reflection, mock, fake, or infrastructure failure is not evidence.
@@ -49,7 +49,7 @@ TEST = kanvas/src/test/kotlin/org/graphiks/kanvas/
 
 | Existing owner | W6e responsibility |
 | --- | --- |
-| `IR/EffectNode.kt`, `IR/SceneArchiveCodec.kt`, `API/picture/Picture.kt`, `API/picture/PictureWireV8.kt` | Consume `CapturedFilterTableV1` and Picture 14/schema 8 only through public replay. Correct a W6b–W6d integration bug here only when a public memory/wire RED identifies it; no format bump. |
+| `IR/EffectNode.kt`, `IR/SceneArchiveCodec.kt`, `API/picture/Picture.kt`, `API/picture/PictureWireV8.kt` | Consume `CapturedFilterTableV1` and the current Picture 15/schema 9 writer (with historical reader support) only through public replay. Correct a W6b–W6d integration bug here only when a public memory/wire RED identifies it; no format bump. |
 | `PLAN/W6aLayerPlanCompiler.kt`, `PLAN/W6aLayerGraphConstruction.kt`, `PLAN/PlanPasses.kt`, `PLAN/PlanResources.kt`, `PLAN/RenderGraph.kt`, `PLAN/W6aLayerPlanBudget.kt` | Existing sole owners of `FilterEvaluationKeyV1`, `FilterPassOperationV1`, `PlanPass.FilterPass`, `PlanResourceRole.FilterTarget`, order, lifetime, cache, and budget. W6e may correct only a RED-proven joining defect. |
 | `GPU/planning/W6aLayerGraphLowerer.kt`, `GPU/recording/GPUW6aLayerFramePlan.kt`, `GPU/execution/GPUWgpu4kW6aLayerFramePayloadMaterializer.kt` | Existing frozen-plan lower/materialize owners. No W6e planning, bounds, resource, pass, or fallback choice may be added. |
 | `API/surface/gpu/GPUPlanSurfaceCandidateGate.kt`, `API/surface/gpu/GPUPlanSurfaceRouter.kt` | Existing terminal-owner boundary; only RED-proven W6b–W6d integration corrections are allowed. |
@@ -117,13 +117,13 @@ An integration fix is admissible only after this causal chain is documented in t
 
 **Interfaces:**
 
-- Consumes: `CapturedFilterTableV1`, `CapturedFilterInputV1.ImplicitSource`, `FilterEvaluationKeyV1`, W6b blur/shadow `FilterPassOperationV1` arms, Picture 14/schema 8.
+- Consumes: `CapturedFilterTableV1`, `CapturedFilterInputV1.ImplicitSource`, `FilterEvaluationKeyV1`, W6b blur/shadow `FilterPassOperationV1` arms, Picture 15/schema 9 writer with historical reader support.
 - Produces: `coreShardKeepsExactAndBlurOracleAssertionsSeparate`, `coreShardMemoryAndWireReplayAreStable`, and public custody for five named families; Task 5 reuses their fixture builders without changing their oracle policy.
 
 - [ ] **Step 1 (2–5 min): Record the reviewed W6d base hash and verify W6b canonical names are present; stop and report a base-contract gap if any name is missing.**
 
 ```sh
-rtk git rev-parse codex/w6d-advanced-effects
+rtk git rev-parse codex/w6e-filter-bounds-recipe
 rtk rg -n 'CapturedFilterNodeIdI32|CapturedFilterInputV1|CapturedFilterTableV1|FilterEvaluationKeyV1|FilterPassOperationV1|PlanPass.FilterPass|PlanResourceRole.FilterTarget' render-ir gpu-plan
 ```
 
@@ -508,7 +508,7 @@ git commit -m 'test(kanvas): cover w6e cross lane effect matrix'
 **Interfaces:**
 
 - Consumes: Task 5 public all-family fixture; existing pessimistic budget/cache/lease lifecycle and terminal public `Surface` APIs.
-- Produces: public B/B-1/cache/recovery custody, status/README delivery, whole-branch review, and one unmerged Draft PR on W6d.
+- Produces: public B/B-1/cache/recovery custody, status/README delivery, whole-branch review, and one unmerged Draft PR on the reviewed bounds-recipe prerequisite.
 
 - [ ] **Step 1 (2–5 min): Derive B independently from documented fixture dimensions and frozen target/resource formula before creating a Surface; write B and B−1 public cases.**
 
@@ -580,7 +580,7 @@ rtk rg -n 'GPUPreparedCompositeLowerer|GPUPreparedSurfaceProductEntry|GPUImageFi
 
 - [ ] **Step 8 (2–5 min): Run a red-flag placeholder scan using `rtk rg -n --pcre2 '(?:TO)(?:DO)|(?:TB)(?:D)|implement[[:space:]]later|fill[[:space:]]in[[:space:]]details|appropriate[[:space:]]error[[:space:]]handling|similar[[:space:]]to[[:space:]]Task' refactor/plans/2026-09-22-w6e-effects-convergence-implementation-plan.md`, repair every accidental placeholder, then run `rtk git diff --check` and `rtk git diff -- refactor/plans/2026-09-22-w6e-effects-convergence-implementation-plan.md`.**
 
-- [ ] **Step 9 (2–5 min): Commit Task 6 and request whole-branch Sol review against the exact W6d base.**
+- [ ] **Step 9 (2–5 min): Commit Task 6 and request whole-branch Sol review against exact prerequisite `6bd5962e5`.**
 
 ```sh
 git add kanvas/src/test/kotlin/org/graphiks/kanvas/surface/W6eEffectsBudgetCacheRecoverySurfacePixelTest.kt refactor
@@ -589,16 +589,16 @@ git commit -m 'test(kanvas): close w6e effects convergence'
 
 Sol reviews all 22 family witnesses, exact/oracle policy, canonical W6b-contract consumption, W4/W5/layer ordering, snapshots, cache pessimism/leases, terminal visibility, and absence of a new authority. If it finds Critical/Important findings, Terra makes exactly one bounded correction commit, reruns only causal selectors plus their named preservation selectors, and requests one scoped Sol re-review.
 
-- [ ] **Step 10 (2–5 min): Verify the stack/diff and create or update the unmerged Draft PR targeting W6d.**
+- [ ] **Step 10 (2–5 min): Verify the stack/diff and create or update the unmerged Draft PR targeting `codex/w6e-filter-bounds-recipe`.**
 
 ```sh
 rtk git status --short
 rtk git diff --check
-rtk git log --oneline codex/w6d-advanced-effects..HEAD
+rtk git log --oneline codex/w6e-filter-bounds-recipe..HEAD
 git push origin codex/w6e-effects-convergence
 ```
 
-The Draft PR description states its exact base, six task commits, 22-family shard mapping, green/unknown custody, B/B-1 formula, exclusions, Sol review status, and that no merge occurred.
+The Draft PR description states its exact prerequisite base, six task commits, 22-family shard mapping, green/unknown custody, B/B-1 formula, exclusions, Sol review status, and that no merge occurred.
 
 ## W6e Definition of Done
 
@@ -608,7 +608,7 @@ The Draft PR description states its exact base, six task commits, 22-family shar
 - [ ] Tests contain no private/reflection/mock/fake/counter/static-source/infrastructure assertion and prove terminal sentinel/no-publication and same-Surface recovery publicly.
 - [ ] Any production change is a one-owner causal correction in W6b–W6d preserving frozen authority; no API, planner, algorithm, format, cache, graph, or fallback is added.
 - [ ] Fonts, codecs, GMs/dashboard/renders/baselines/scores, global Skia, `jpg-color-cube`, arbitrary frontends, F16/HDR positive rendering, and native 133/134 success claims remain excluded.
-- [ ] Sol task reviews and a whole-branch Sol review leave no Critical/Important finding after at most one bounded correction wave; one unmerged Draft PR is stacked on W6d.
+- [ ] Sol task reviews and a whole-branch Sol review leave no Critical/Important finding after at most one bounded correction wave; one unmerged Draft PR is stacked on the reviewed bounds-recipe prerequisite.
 
 ## Plan Self-Review
 

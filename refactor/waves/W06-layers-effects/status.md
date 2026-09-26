@@ -2,6 +2,55 @@
 
 ## Statut
 
+## Checkpoint W6e Task 6 — budgets, cache, refus terminal et recovery publics
+
+La convergence W6e est empilée sur le prérequis revu
+`codex/w6e-filter-bounds-recipe` à `6bd5962e5` (Draft PR #2407), lui-même
+empilé sur W6d ; elle ne cible donc pas W6d directement. Les neuf commits de
+témoins publics déjà présents sont `bfb2ef150`, `311d2a6be`, `15d801f3a`,
+`f8249079c`, `8d4c72a67`, `b65e7f674`, `99de83a62`, `8683e4c51` et
+`b2fc6450d`. Task 6 ajoute le témoin public
+`W6eEffectsBudgetCacheRecoverySurfacePixelTest`, sans modifier de production,
+de format Picture, de planner, de cache, de route ou de renderer.
+
+Son fixture Picture Crop 2×1 calcule son budget avant toute construction :
+root RGBA8 `2×1×4 = 8`, coverage/shaded/Crop `3×1×1×4 = 12`, deux rows
+frame/material `2×16 = 32`, readback RGBA8 aligné `256`, soit
+`B = 8 + 12 + 32 + 256 = 308` octets checked-I64. `B` rend exactement le bleu
+puis la transparence ; le même Picture est rejoué publiquement pour chauffer
+le cache, et `B−1` reste terminal avec
+`w6b.filter.frame_budget_exceeded:`, sentinel intact. Un sibling bleu antérieur
+suivi d'un runtime `IMAGE_FILTER` à ABI incompatible refuse avec
+`w6d.runtime_effect.abi_unsupported:`, ne publie pas le sibling dans le buffer
+sentinel et, après `discardRecordedOperations()`, rend le vert attendu sur la
+même `Surface`. Les attentes sont définies avant `PictureRecorder`/`Surface`;
+les témoins n'inspectent aucune clé de cache, lease, plan ou backend.
+
+Les sept compilations prescrites sortent 0 : `:math:geometry:compileKotlinJvm`,
+`:math:matrix:compileKotlinJvm`, `:render-ir:compileKotlin`,
+`:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin`,
+`:kanvas:compileKotlin` et `:kanvas:compileTestKotlin`. Les onze sélecteurs
+publics sont exécutés séquentiellement avec leurs XML de classe : Surface
+Core `1/0/0/0`, Composition `1/0/0/0`, Lighting/Picture `7/0/0/0`, Advanced
+`1/0/0/0`, Cross-lane `24/0/0/0`, Budget/Cache/Recovery `2/0/0/0` ; Picture
+Core `1/0/0/0`, Composition `1/0/0/0`, Lighting `1/0/0/0`, Runtime `1/0/0/0`
+et Cross-lane `1/0/0/0`. Chaque invocation de test a Gradle exit 1 uniquement
+après l'exit natif 133 : la custody native est **UNKNOWN**, jamais PASS. Cette
+classification ne cache aucun RED sémantique JUnit.
+
+L'audit manuel post-freeze du diff W6e ne trouve aucun chemin de production
+modifié. La recherche des références `GPUPreparedCompositeLowerer`,
+`GPUPreparedSurfaceProductEntry`, `GPUImageFilterPlan`, `PlanPass` et
+`PlanResource` identifie des définitions historiques et des références W8,
+pas une création post-freeze de pass/resource/ID/bounds/cache-key ou un fallback
+sur la route W6e ; aucun test statique n'est ajouté. Le writer courant reste
+Picture 15/schema 9 avec lecteurs historiques ; les anciennes mentions
+Picture 14/schema 8 sont de la documentation obsolète, pas une instruction de
+wire change. Fonts, codecs, GMs/dashboard/renders/scores, Skia global,
+`jpg-color-cube`, F16/HDR positif et toute claim ISO/globale restent exclus.
+La review Sol whole-branch, le push et la Draft PR sur le prérequis restent
+des gates contrôleur ; aucun merge n'a été effectué.
+
 ### Gate final W6d — reviews Sol closes, Draft PR stackée #2406
 
 La review Sol globale depuis W6c a relevé quatre points `Important` et un
