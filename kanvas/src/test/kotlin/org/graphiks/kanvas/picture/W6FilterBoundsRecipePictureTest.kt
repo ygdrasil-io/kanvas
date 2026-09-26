@@ -62,8 +62,9 @@ class W6FilterBoundsRecipePictureTest {
         val unit = RectF32.ofLTRB(0f, 0f, 1f, 1f)
         val child = PictureRecorder().also { recorder ->
             recorder.beginRecording(unit).apply {
-                // The recorder cull is a serializable DeviceRect hard clip: the wider primitive
-                // proves it limits the child's source, while the enclosing Blur still owns halo.
+                // This second hard clip is distinct from the recorder cull. It limits the child
+                // source, while the enclosing Blur still owns its halo after Picture replay.
+                clipRect(unit, ClipOp.INTERSECT, antiAlias = false)
                 drawRect(RectF32.ofLTRB(-1f, 0f, 2f, 1f), Paint(ColorARGB.White, antiAlias = false))
             }
         }.finishRecordingAsPicture()
