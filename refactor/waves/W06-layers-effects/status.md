@@ -587,3 +587,34 @@ Draft PR W6a directement sur `codex/w5h-registered-runtime-effects` :
 les limites explicites ci-dessus. Task 6 ferme W6b dans son périmètre borné;
 W6c est l'étape suivante pour les familles et capabilities exclues, sans
 réouvrir les operands target-local scellés de W6b.
+
+## Checkpoint W6e Task 3 — budget contextuel, temporalité et recovery
+
+Sur `820710118`, les nouveaux témoins publics `W6FilterBoundsRecipe*` restent
+sans modification d'owner. Le Crop sous clip 2×1 dérive en I64 checked
+`B=312 = root 8 + quatre targets 1×1 (16) + deux rows W6 (32) + readback
+aligné 256`; B produit exactement le pixel bleu, tandis que B−1 refuse avec
+`w6b.filter.frame_budget_exceeded`, ne modifie pas le sentinel et le même
+`Surface` redevient enregistrable. Le replay Picture inclut son target direct
+supplémentaire : `B=316 = root 8 + cinq targets 1×1 (20) + 32 + 256`; les
+replays froid/chaud du même Picture passent à B et refusent à B−1. Le témoin
+de snapshot vérifie backdrop au save et `initWithPrevious` après l'enfant.
+
+Les XML frais des deux nouvelles classes sont `10/0/0/0` (Surface) et
+`3/0/0/0` (Picture). Chaque invocation Gradle quitte néanmoins avec le worker
+natif 133 après JUnit : statut natif **UNKNOWN**, jamais PASS global. La
+compilation ciblée `:gpu-plan:compileKotlin :kanvas:compileTestKotlin` sort 0.
+
+La matrice de préservation Task 3 a aussi observé trois RED XML dans des
+owners non modifiés : `W6bBudgetRecoverySurfacePixelTest` 0/2/0/0
+(`w6a.layer.invalid_plan: W6b shadow has no sealed bounds`),
+`W6bFilterAdmissionRecoverySurfaceTest` 25/1/0/0 (projection cull Picture
+sous transformée singulière), et `W6cSpatialDagAdmissionSurfaceTest` 1/1/0/0
+(le sibling Magnifier n'émet plus le refus attendu). Ils sont consignés pour
+la revue Sol; aucune correction non causale n'est incluse dans ce checkpoint.
+Les autres selectors prescrits sont verts en XML : W6a budget 10, W6c cache
+6, W6d advanced 5, backdrop/previous 9, Magnifier 4 et Picture runtime 6.
+
+Exclusions Task 3 : aucun GM, font, codec/format externe, dashboard/render,
+rebaseline, suite Skia globale, `jpg-color-cube` ou test d'infrastructure. Le
+worker 133 et les trois RED précités sont les limites résiduelles explicites.

@@ -3,15 +3,22 @@
 package org.graphiks.kanvas.surface
 
 import kotlin.test.assertContentEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import kotlin.math.pow
+import kotlin.math.roundToInt
 import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
+import org.graphiks.kanvas.pipeline.RuntimeEffect
+import org.graphiks.kanvas.pipeline.UniformBlock
 import org.graphiks.math.color.ColorARGB
+import org.graphiks.math.color.ColorMatrixF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.SizeF32
 import org.graphiks.math.vector.Vector2F32
@@ -20,6 +27,93 @@ import org.junit.jupiter.api.Test
 
 /** Public Render+Readback witnesses for W6's pre-reservation contextual filter recipe. */
 class W6FilterBoundsRecipeSurfacePixelTest {
+    /**
+     * A full 2x1 output clip is deliberately larger than the 1x1 DECAL Crop content.  B is
+     * derived before any Surface exists: root 2x1 RGBA8 (8), four 1x1 RGBA8 targets (16:
+     * layer, source, Crop and terminal composite), two 16-byte W6 rows (32), and the 2x1
+     * readback aligned to 256 bytes.  All terms use checked I64 arithmetic: 8+16+32+256=312.
+     * Treating producedOutput as desiredOutput would make a Crop target 2x1 and exceed B.
+     */
+    @Test
+    fun tinyCropAndIdentityKeepContentSizedBudget() {
+        val unit = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val full = RectF32.ofLTRB(0f, 0f, 2f, 1f)
+        val expected = ubyteArrayOf(0u, 0u, 255u, 255u, 0u, 0u, 0u, 0u)
+        val budgetB = listOf(
+            Math.multiplyExact(2L, Math.multiplyExact(1L, 4L)),
+            Math.multiplyExact(4L, Math.multiplyExact(1L, 4L)),
+            Math.multiplyExact(2L, 16L),
+            256L,
+        ).fold(0L, Math::addExact)
+        fun recordCrop(surface: Surface) = surface.canvas {
+            clipRect(full, antiAlias = false)
+            saveLayer(SaveLayerRec(paint = Paint(imageFilter = ImageFilter.Crop(unit, TileMode.DECAL), antiAlias = false)))
+            drawRect(unit, Paint(ColorARGB.Blue, antiAlias = false))
+            restore()
+        }
+
+        val admitted = Surface(2, 1, config = RenderConfig(frameLocalBudgetBytes = budgetB))
+        recordCrop(admitted)
+        assertRenderAndReadback(admitted, expected)
+
+        val refused = Surface(2, 1, config = RenderConfig(frameLocalBudgetBytes = Math.subtractExact(budgetB, 1L)))
+        recordCrop(refused)
+        val sentinel = UByteArray(8) { 0x5au }
+        val before = sentinel.copyOf()
+        val failure = assertFailsWith<IllegalStateException> { refused.readPixels(full, sentinel) }
+        assertTrue(failure.message?.startsWith("w6b.filter.frame_budget_exceeded:") == true,
+            failure.message ?: "missing W6 budget diagnostic")
+        assertContentEquals(before, sentinel)
+        refused.discardRecordedOperations()
+        refused.canvas { drawRect(unit, Paint(ColorARGB.Blue, antiAlias = false)) }
+        assertRenderAndReadback(refused, expected)
+
+        val identity = ImageFilter.ColorFilter(ColorFilter.Matrix(ColorMatrixF32.ofIdentity()))
+        val identitySurface = Surface(2, 1)
+        identitySurface.canvas {
+            clipRect(full, antiAlias = false)
+            saveLayer(SaveLayerRec(paint = Paint(imageFilter = identity, antiAlias = false)))
+            drawRect(unit, Paint(ColorARGB.Blue, antiAlias = false))
+            restore()
+        }
+        assertRenderAndReadback(identitySurface, expected)
+    }
+
+    /** The backdrop snapshots its parent at save; filtered previous is filtered only after its child. */
+    @Test
+    fun backdropAndPreviousKeepSaveThenPostChildOrder() {
+        val red = ColorARGB.of(255, 239, 51, 73)
+        val blue = ColorARGB.of(255, 17, 61, 211)
+        val green = ColorARGB.of(255, 43, 181, 93)
+        val backdropExpected = halfSourceOver(red, blue) + rgba(177, 136, 84)
+        val previousExpected = halfSourceOver(red, blue) + rgba(239, 51, 73)
+        val halfOpacity = ImageFilter.RuntimeEffect(
+            requireNotNull(RuntimeEffect.registered("kanvas.runtime.image-opacity", 1)),
+            UniformBlock { float1("alpha", .5f) },
+        )
+
+        val backdrop = Surface(2, 1)
+        backdrop.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 2f, 1f), Paint(red, antiAlias = false))
+            saveLayer(SaveLayerRec(
+                backdrop = ImageFilter.ColorFilter(ColorFilter.Blend(green, BlendMode.SRC)),
+                paint = Paint(imageFilter = halfOpacity, antiAlias = false),
+            ))
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(blue, antiAlias = false))
+            restore()
+        }
+        assertRenderAndReadback(backdrop, backdropExpected)
+
+        val previous = Surface(2, 1)
+        previous.canvas {
+            drawRect(RectF32.ofLTRB(0f, 0f, 2f, 1f), Paint(red, antiAlias = false))
+            saveLayer(SaveLayerRec(initWithPrevious = true, paint = Paint(imageFilter = halfOpacity, antiAlias = false)))
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(blue, antiAlias = false))
+            restore()
+        }
+        assertRenderAndReadback(previous, previousExpected)
+    }
+
     /**
      * Unioning the logical convolution halo into the sampled source would insert transparent
      * texels before its left CLAMP edge. The one initialized blue texel must remain that edge.
@@ -221,4 +315,21 @@ class W6FilterBoundsRecipeSurfacePixelTest {
         if (tolerance == 0) assertContentEquals(expected, actual.pixels)
         else W6bImageBlurCpuOracle.assertNear(expected, actual.pixels, tolerance)
     }
+
+    private fun halfSourceOver(destination: ColorARGB, source: ColorARGB): UByteArray = rgba(
+        encodeLinear((decodeSrgb(source.red) + decodeSrgb(destination.red)) * .5),
+        encodeLinear((decodeSrgb(source.green) + decodeSrgb(destination.green)) * .5),
+        encodeLinear((decodeSrgb(source.blue) + decodeSrgb(destination.blue)) * .5),
+    )
+
+    private fun decodeSrgb(encoded: Int): Double = (encoded / 255.0).let { value ->
+        if (value <= .04045) value / 12.92 else ((value + .055) / 1.055).pow(2.4)
+    }
+
+    private fun encodeLinear(linear: Double): Int = (if (linear <= .0031308) linear * 12.92
+        else 1.055 * linear.pow(1.0 / 2.4) - .055).times(255.0).roundToInt()
+
+    private fun rgba(red: Int, green: Int, blue: Int, alpha: Int = 255): UByteArray = ubyteArrayOf(
+        red.toUByte(), green.toUByte(), blue.toUByte(), alpha.toUByte(),
+    )
 }
