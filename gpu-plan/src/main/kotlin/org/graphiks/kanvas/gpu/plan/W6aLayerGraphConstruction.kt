@@ -3218,6 +3218,7 @@ internal class W6aLayerGraphConstruction(
             w6SolidRectHostRecipes = freezeW6SolidRectHostsV1(passes),
             w6CorePrimitiveHostRecipes = freezeW6CorePrimitiveHostsV1(passes),
             w6PreparedVerticesHostRecipes = freezeW6PreparedVerticesHostsV1(passes, requireNotNull(table)),
+            w6PlainLayerCompositeRecipes = freezeW6PlainLayerCompositeRecipesV1(passes),
         )
         val allResources = resources + finalSource.resources
         val peak = W6aLayerPlanBudget.peak(allResources, passes, caps, budget)

@@ -605,6 +605,40 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             commands, render.drawPackets.map { requireNotNull(it.semanticPayload) }, w6aPassV1 = pass)
                     }
                     is PlanPass.LayerComposite -> {
+                        val plainSite = W6LayerCompositeSiteKeyV1(pass.id, 0)
+                        val plainRecipe = frame.physical.w6PlainLayerCompositeRecipeOrNull(plainSite)
+                        if (plainRecipe != null) {
+                            require(plainRecipe.site == plainSite && plainRecipe.source == pass.source &&
+                                plainRecipe.destination == pass.destination &&
+                                plainRecipe.family == W6PlainLayerCompositeFamilyV1.FullscreenRestore &&
+                                plainRecipe.target == W6PlainLayerCompositeTargetV1.Rgba8UnormSrgbSingleSample &&
+                                plainRecipe.groupZeroAbi == W6PlainLayerCompositeGroupZeroAbiV1.OneTexture &&
+                                plainRecipe.blend !is BlendPlan.DestinationReadV1 && plainRecipe.alphaF32.isFinite()) {
+                                "W6 plain layer-composite recipe projection changed before native allocation."
+                            }
+                            val source = plainRecipe.copySourceBoundsLayerI32()
+                            val destination = plainRecipe.copyDestinationOriginParentI32()
+                            val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(
+                                BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
+                            ))))
+                            val shader = W6A_VERTEX_SHADER + """
+                                @group(0) @binding(0) var layer_source: texture_2d<f32>;
+                                @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+                                    return textureLoad(layer_source, vec2<i32>(position.xy) - vec2<i32>(${destination.x}, ${destination.y}) + vec2<i32>(${source.left}, ${source.top}), 0) * ${plainRecipe.alphaF32};
+                                }
+                            """
+                            val pipeline = pipeline(shader, layout, w6aColorTarget(plainRecipe.blend), owned)
+                            val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout,
+                                entries = listOf(BindGroupEntry(0u, views.getValue(plainRecipe.source))))))
+                            renderOperands += GPUPreparedNativeScopeOperand.Render(stepIndex,
+                                GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(views.getValue(plainRecipe.destination), generation)),
+                                listOf(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+                                    GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+                                    GPUPreparedNativeRenderCommand.SetScissor(destination.x, destination.y, source.width(), source.height()),
+                                    GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0))),
+                                operationKindOverride = GPUEncoderOperationKind.LayerComposite, w6aPassV1 = pass)
+                            return@forEachIndexed
+                        }
                         val filter = pass.restore.colorFilter
                         val destinationRead = pass.restore.blend as? BlendPlan.DestinationReadV1
                         val entries = buildList {

@@ -145,6 +145,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     private val corePrimitiveSitesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W6GeometrySiteKeyV1>()
     /** Each W6 Prepared Vertices packet retains its final planner ordinal/site for native consumption. */
     private val preparedVerticesSitesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W6GeometrySiteKeyV1>()
+    /** Every admitted fullscreen restore is projected once by its pass/site, not by a renderer key. */
+    private val plainLayerCompositeSites = linkedSetOf<W6LayerCompositeSiteKeyV1>()
     private val analyticUniforms = mutableMapOf<GPUDrawPacketID, ByteArray>()
     private val geometryPipelines = mutableMapOf<GPUDrawPacketID, GPUWgpu4kCorePrimitivePipelineMapping.Mapped>()
     internal fun maskShaderMaterial(binding: FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned):
@@ -479,6 +481,15 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                             else -> depthId?.let { listOf(GPUFrameResourceUse(refs.getValue(it), GPUFrameResourceRole.PathDepthStencil,
                                 GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceLifetime.FrameLocal, true)) }.orEmpty()
                         }
+                        if (pass is PlanPass.LayerComposite) {
+                            val site = W6LayerCompositeSiteKeyV1(pass.id, 0)
+                            physical.w6PlainLayerCompositeRecipeOrNull(site)?.let { recipe ->
+                                require(recipe.site == site && recipe.source == pass.source && recipe.destination == pass.destination)
+                                require(plainLayerCompositeSites.add(site)) {
+                                    "W6 plain layer-composite recipe projected more than once."
+                                }
+                            }
+                        }
                         add(GPUFrameStep.RenderPassStep(refs.getValue(targetId) as GPUFrameTargetRef,
                             GPULoadStorePlan(if (clear) "clear" else "load", GPUStorePlan.Store),
                             GPUSamplePlan.SingleSampleFrame,
@@ -546,6 +557,9 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
         require(preparedVerticesSitesByPacket.values.toSet() == physical.w6PreparedVerticesHostRecipes().keys &&
             preparedVerticesSitesByPacket.size == physical.w6PreparedVerticesHostRecipes().size) {
             "Every frozen W6 prepared-vertices host recipe must project to exactly one packet."
+        }
+        require(plainLayerCompositeSites == physical.w6PlainLayerCompositeRecipes().keys) {
+            "Every frozen W6 plain layer-composite recipe must project to exactly one LayerComposite pass."
         }
     }
 
