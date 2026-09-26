@@ -91,3 +91,16 @@ fallback is unreachable for a direct occurrence with a mask because the early pa
 `evaluatedMasksByOccurrence` before it stores direct facts, and the physical direct path requires
 those facts. It remains necessary for non-direct/layer occurrences, so no broad invariant was
 added there.
+
+## Astra round 2 follow-up
+
+The existing public no-op/recovery selector was RED after round 1: a disjoint
+source/reverse-demand path skipped direct facts and late allocation threw. The correction keeps
+finite raster facts when demand is disjoint and distinguishes an intentional filtered `null`
+from an unfiltered draw, so it cannot fall back to raw raster for a non-writing blend or no-op.
+The local `withoutW6aTerminalClip` unwrap was removed because the W6a compiler already supplies
+the pre-terminal draw. The selector is XML 1/1 green; Gradle/native 133 is UNKNOWN. The gpu-plan
+compile succeeded.
+
+The proposed B=312 Tile budget requires fixed resource arithmetic that belongs to Task 3. It was
+not added without private planner/resource inspection.

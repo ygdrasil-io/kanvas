@@ -643,13 +643,13 @@ internal class W6aLayerGraphConstruction(
             )
             RenderGraph.visualDraws(binding.source.passes()).forEach { draw ->
                 val occurrence = directFiltersByCommand[draw.commandIndex]
-                val sourceDraw = occurrence?.takeIf(W6bFilterGraphConstruction::hasReverseInputDemandTerminal)
-                    ?.let { draw.withoutW6aTerminalClip() } ?: draw
-                intersect(w6aRasterBoundsI32(sourceDraw), w6aScissorI32(sourceDraw))?.let { raster ->
-                    val produced = occurrence?.let { direct ->
+                intersect(w6aRasterBoundsI32(draw), w6aScissorI32(draw))?.let { raster ->
+                    val produced = if (occurrence == null) raster else run {
+                        val direct = occurrence
                         val terminalClip = directTerminalClip(direct)
-                        val terminalDesired = if (terminalClip == null) desired
-                            else intersect(desired, terminalClip) ?: return@let null
+                        val terminalDesired = terminalClip?.let { intersect(desired, it) }
+                        if (terminalClip != null && terminalDesired == null) null else {
+                        val effectiveDesired = terminalDesired ?: desired
                         val sourceLocalToDevice = if (W6bFilterGraphConstruction.hasContentOutputSamplingTerminal(direct)) {
                             direct.source.sourceDraw?.let { sourceDraw ->
                                 val sourceToParent = composeInOrderF64(
@@ -665,24 +665,25 @@ internal class W6aLayerGraphConstruction(
                         } else parentLocalToDevice
                         val mapping = requireNotNull(LayerMappingF64.ofOrNull(sourceLocalToDevice,
                             Point2I32(raster.left, raster.top)))
-                        val recipe = W6bFilterGraphConstruction.bindOccurrenceRecipe(direct, terminalDesired, mapping)
-                        val sourceDomain = intersect(raster, recipe.copyRequiredInputDeviceI32() ?: raster) ?: return@let null
-                        val facts = W6bFilterSourceFactsV1(sourceDomain, sourceDomain, terminalDesired, mapping,
+                        val recipe = W6bFilterGraphConstruction.bindOccurrenceRecipe(direct, effectiveDesired, mapping)
+                        val sourceDomain = intersect(raster, recipe.copyRequiredInputDeviceI32() ?: raster) ?: raster
+                        val facts = W6bFilterSourceFactsV1(sourceDomain, sourceDomain, effectiveDesired, mapping,
                             { bound, context -> prepareFilterPicture(direct, bound, context) })
                         val masked = direct.mask?.let { recipe.evaluateMask(facts).also {
                             evaluatedMasksByOccurrence[direct] = it
                         } }
                         val imageFacts = masked?.output?.let { output -> W6bFilterSourceFactsV1(
-                            output.copyDeviceBoundsI32(), output.copyKnownContentDeviceI32(), terminalDesired, output.mapping,
+                            output.copyDeviceBoundsI32(), output.copyKnownContentDeviceI32(), effectiveDesired, output.mapping,
                             { bound, context -> prepareFilterPicture(direct, bound, context) },
                         ) } ?: facts
                         val evaluated = direct.root?.let { recipe.evaluate(imageFacts, runtimeCatalog).also {
                             evaluatedImagesByOccurrence[direct] = it
                         } } ?: masked
-                        directAutoLayerFactsByOccurrence[direct] = DirectAutoLayerFacts(sourceDomain, terminalDesired)
+                        directAutoLayerFactsByOccurrence[direct] = DirectAutoLayerFacts(sourceDomain, effectiveDesired)
                         if (!draw.blend.compositionFacts.writesParentDevice) null else evaluated?.copyProducedOutputDeviceI32()
                             ?.let { output -> terminalClip?.let { intersect(output, it) } ?: output }
-                    } ?: raster
+                        }
+                    }
                     scopeIdI32?.let { scope ->
                         directKnownByScope[scope] = unionOrNull(directKnownByScope[scope], produced)
                     }
