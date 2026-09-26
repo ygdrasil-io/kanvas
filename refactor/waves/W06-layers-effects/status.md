@@ -605,16 +605,24 @@ Les XML frais des deux nouvelles classes sont `10/0/0/0` (Surface) et
 natif 133 après JUnit : statut natif **UNKNOWN**, jamais PASS global. La
 compilation ciblée `:gpu-plan:compileKotlin :kanvas:compileTestKotlin` sort 0.
 
-La matrice de préservation Task 3 a aussi observé trois RED XML dans des
-owners non modifiés : `W6bBudgetRecoverySurfacePixelTest` 0/2/0/0
-(`w6a.layer.invalid_plan: W6b shadow has no sealed bounds`),
-`W6bFilterAdmissionRecoverySurfaceTest` 25/1/0/0 (projection cull Picture
-sous transformée singulière), et `W6cSpatialDagAdmissionSurfaceTest` 1/1/0/0
-(le sibling Magnifier n'émet plus le refus attendu). Ils sont consignés pour
-la revue Sol; aucune correction non causale n'est incluse dans ce checkpoint.
-Les autres selectors prescrits sont verts en XML : W6a budget 10, W6c cache
-6, W6d advanced 5, backdrop/previous 9, Magnifier 4 et Picture runtime 6.
+La réexécution systématique a établi trois causes distinctes, toutes corrigées
+ou contractualisées explicitement. `W6bBudgetRecoverySurfacePixelTest` est
+revenu à 2/0 : un Picture aggregate réévaluait `DropShadow` avec son domaine
+source inverse comme `desiredOutput`, ce qui annulait sa production translatée;
+le recipe conserve désormais cette demande aval. `W6bFilterAdmissionRecoverySurfaceTest`
+est à 26/0 : un `DeviceRect` vide est reconnu avant toute projection du cull
+à travers une matrice singulière. `W6cSpatialDagAdmissionSurfaceTest` est à
+2/0 : son ancien refus `unsupported_family` était obsolète puisque Magnifier
+est une famille W6d admise; le témoin public vérifie désormais le pixel bleu,
+Render+Readback et la recovery après discard/re-record.
+
+Les selectors prescrits sont tous verts en XML : nouveaux Surface 10 et
+Picture 3; W6a budget 10; W6b budget 2 et filter admission 26; W6c DAG 2 et
+cache 6; W6d advanced 5, backdrop/previous 9, Magnifier 4 et Picture runtime
+6. Chaque invocation de test termine ensuite avec le worker natif 133 : ces
+résultats natifs restent **UNKNOWN**, jamais PASS global. Les compilations
+`:gpu-plan:compileKotlin :kanvas:compileTestKotlin` terminent 0.
 
 Exclusions Task 3 : aucun GM, font, codec/format externe, dashboard/render,
 rebaseline, suite Skia globale, `jpg-color-cube` ou test d'infrastructure. Le
-worker 133 et les trois RED précités sont les limites résiduelles explicites.
+worker 133 reste la limite native explicite, classée **UNKNOWN**.
