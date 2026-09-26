@@ -34,6 +34,21 @@ internal class W6bPreparedPictureSourceV1(
 /** Only resource substitution remains deferred; family, geometry and sampling are already sealed. */
 internal sealed interface W6bRecipeOperationV1 {
     class Fixed(val operation: FilterPassOperationV1) : W6bRecipeOperationV1
+    class MaskStyle(
+        val style: org.graphiks.kanvas.render.ir.MaskBlurStyle,
+        val original: W6bRecipeSymbolV1?,
+        val blurred: W6bRecipeSymbolV1,
+        val bounds: FilterBoundsPlanV1,
+        val blurredSampling: FilterInputSamplingV1,
+        val originalSampling: FilterInputSamplingV1?,
+    ) : W6bRecipeOperationV1
+    class MaskTable(
+        val table: org.graphiks.kanvas.render.ir.ImmutableUBytes,
+        val resource: W6bRecipeSymbolV1,
+        val ownerMaskOccurrenceI32: Int,
+        val bounds: FilterBoundsPlanV1,
+        val sampling: FilterInputSamplingV1,
+    ) : W6bRecipeOperationV1
     class ShadowComposite(
         val mode: CapturedDropShadowModeV1,
         val original: W6bRecipeSymbolV1,
@@ -56,6 +71,9 @@ internal sealed interface W6bRecipeInstructionV1 {
         fun copyExtentI32(): SizeI32 = extent.copy()
     }
     class Clear(val output: W6bRecipeSymbolV1, val reference: W6bRecipeSymbolV1) : W6bRecipeInstructionV1
+    class MaskTableResource(val symbol: W6bRecipeSymbolV1) : W6bRecipeInstructionV1
+    class RetainCoverage(val source: W6bRecipeSymbolV1, val output: W6bRecipeSymbolV1,
+        val sampling: FilterInputSamplingV1) : W6bRecipeInstructionV1
     class PictureSource(val output: W6bRecipeSourceV1, val context: W6bRecipeSymbolV1,
         val prepared: W6bPreparedPictureSourceV1) : W6bRecipeInstructionV1
     class Pass(inputs: List<W6bRecipeSymbolV1>, val output: W6bRecipeSymbolV1,

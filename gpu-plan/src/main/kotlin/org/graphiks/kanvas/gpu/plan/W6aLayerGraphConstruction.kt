@@ -188,6 +188,213 @@ internal class W6aLayerGraphConstruction(
             filterOccurrences,
             filterScene?.toList()?.size ?: bindings.maxOfOrNull { it.firstCommandIndexI32 + 1 } ?: 0,
         )
+        fun preparePictureDrawLane(
+            entry: PictureStreamEntryDraftV1.Draw,
+            sourceGeometry: W6bSourceGeometryV1,
+            ownerContext: W6bSourceGeometryV1?,
+            target: PlanResourceId,
+            sourceOnly: Boolean,
+        ): Pair<OccurrenceSourceInputV1, SourceDeferredRenderConstructionV4> {
+                val captured = requireNotNull(entry.source.sourceDraw)
+            val domain = sourceGeometry.copyDeviceBoundsI32()
+            // A filter-owned Picture aggregate is already rooted in its exact source
+            // context.  Its child scene transform must compose from that mapping, rather
+            // than restart at the captured Picture-local origin while its cull is mapped
+            // through the filter source below in pictureAggregateDomain.
+            val enclosing = ownerContext?.let { source ->
+                requireNotNull(source.mapping.copyLocalToDeviceF64().timesCheckedOrNull(
+                    composeInOrderF64(entry.source.outerPictures().map { it.transform }),
+                )) { "Picture source transform cannot be composed in finite F64." }
+            } ?: composeInOrderF64(entry.source.outerPictures().map { it.transform })
+            val evaluation = requireNotNull(enclosing.timesCheckedOrNull(captured.transform.toMatrix3x3F64()))
+            val input = OccurrenceSourceInputV1(entry.plannedCommandId, entry.locator, entry.source,
+                requireNotNull(LayerMappingF64.ofOrNull(evaluation, Point2I32(domain.left, domain.top))),
+                enclosing, domain, domain, entry.source.recordedInnerClipWithoutCull(), ClipStackNode.Empty, target,
+                entry.plannedCommandId.valueI32, sourceOnly)
+            val compiler = CapabilityCompilerChain.of(listOf(W5bVerticesPlanCompiler(runtimeCatalog),
+                W5bPointPlanCompiler(runtimeCatalog), W5eImagePlanCompiler(), W3SolidRectPlanCompiler(),
+                W4aAnalyticRectPlanCompiler(), W4bAnalyticRRectPlanCompiler(), W4cPathFillPlanCompiler(),
+                W4dPathStrokePlanCompiler()), runtimeCatalog)
+            val lane = when (val result = compiler.constructSourceLanes(input, caps, budget)) {
+                is org.graphiks.kanvas.render.ir.RenderPlanResult.Ready -> result.plan.single()
+                else -> {
+                    val diagnostics = when (result) {
+                        is org.graphiks.kanvas.render.ir.RenderPlanResult.GapOnPromotedScope -> result.diagnostics
+                        is org.graphiks.kanvas.render.ir.RenderPlanResult.GapNotMigrated -> result.diagnostics
+                        is org.graphiks.kanvas.render.ir.RenderPlanResult.InvalidScene -> result.diagnostics
+                        is org.graphiks.kanvas.render.ir.RenderPlanResult.ResourceLimitExceeded -> result.diagnostics
+                    }
+                    throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                        W6aPlanDiagnostics.UnsupportedChild,
+                        "Occurrence ${entry.plannedCommandId} has no W4/W5 lane: ${diagnostics.joinToString { it.code.value + ": " + it.message }}"))
+                }
+            }
+            return input to lane
+        }
+
+        data class PictureAggregateDomain(
+            val localToDeviceF64: Matrix3x3F64,
+            val mapping: LayerMappingF64,
+            val cullContentDeviceI32: RectI32,
+            val knownContentDeviceI32: RectI32?,
+            val demandDeviceI32: RectI32,
+            val sourceDeviceI32: RectI32,
+        )
+        fun pictureAggregateDomain(
+            aggregate: PictureStreamAggregateDraftV1,
+            parent: W6bSourceGeometryV1,
+            filterOwnerSource: W6bSourceGeometryV1?,
+        ): PictureAggregateDomain {
+            (aggregate.owner as? PictureStreamAggregateDraftOwnerV1.FilterPicture)?.let { owner ->
+                val localToDevice = owner.source.sourceDraw?.let { carrier ->
+                    val carrierToSource = composeInOrderF64(owner.source.outerPictures().map { it.transform } + carrier.transform)
+                    requireNotNull(parent.mapping.copyLocalToDeviceF64().timesCheckedOrNull(carrierToSource))
+                } ?: parent.mapping.copyLocalToDeviceF64()
+                // The emitter owns the one F64 crop projection for this filter context.
+                // Do not remap it here: the aggregate only chooses a target origin and
+                // carries that sealed content through its descendants.
+                val known = owner.copyKnownContentDeviceI32()
+                val sourceDomain = owner.copySourceDomainDeviceI32()
+                val demand = parent.copyDesiredOutputDeviceI32() ?: parent.copyDeviceBoundsI32()
+                // A consumer clip is a terminal demand, not a source crop: retaining the
+                // known Picture content lets an outer blur produce its halo beyond cull.
+                val source = sourceDomain.copy()
+                val mapping = LayerMappingF64.ofOrNull(localToDevice, Point2I32(source.left, source.top))
+                    ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                        W6bFilterDiagnostics.InvalidBounds,
+                        "W6d filter Picture source mapping is non-invertible.",
+                    ))
+                return PictureAggregateDomain(localToDevice, mapping, sourceDomain, known, demand, source)
+            }
+            val outerPictures = aggregate.source.outerPictures()
+            // Captured transforms map directly to root device coordinates. Target rebasing
+            // happens only in LayerMappingF64, never by composing the parent twice.
+            val outerTransforms = outerPictures.map { it.transform } + aggregate.draw.transform
+            val outer = try {
+                composeInOrderF64(outerTransforms)
+            } catch (_: IllegalArgumentException) {
+                throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                    W6bFilterDiagnostics.InvalidBounds,
+                    "Picture outer transform cannot be composed in finite F64.",
+                ))
+            }
+            val localToDevice = filterOwnerSource?.let { source ->
+                requireNotNull(source.mapping.copyLocalToDeviceF64().timesCheckedOrNull(outer)) {
+                    "Picture outer transform cannot be composed in finite F64."
+                }
+            } ?: outer
+            val picture = aggregate.draw.geometry as? GeometryNode.Picture
+                ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                    W6aPlanDiagnostics.UnsupportedChild, "Picture aggregate lost its captured Picture geometry.",
+                ))
+            val cull = localToDevice.mapRectBoundsF64OrNull(RectF64(
+                picture.copyCullRect().left.toDouble(), picture.copyCullRect().top.toDouble(),
+                picture.copyCullRect().right.toDouble(), picture.copyCullRect().bottom.toDouble(),
+            ))?.roundOutToRectI32OrNull() ?: throw W6bFilterGraphConstruction.ConstructionFailure(
+                W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                    "Picture cull cannot be projected to checked I32 device texels."),
+            )
+            val parentDomain = parent.copyDeviceBoundsI32()
+            val enclosing = composeInOrderF64(outerPictures.map { it.transform })
+            val deferredDemand = when (val clip = aggregate.source.recordedInnerClipWithoutCull()) {
+                ClipStackNode.Empty, is ClipStackNode.Operations -> parentDomain.copy()
+                is ClipStackNode.DeviceRect -> clip.copyBounds().let { bounds ->
+                    enclosing.mapRectBoundsF64OrNull(RectF64(bounds.left.toDouble(), bounds.top.toDouble(),
+                        bounds.right.toDouble(), bounds.bottom.toDouble()))?.roundOutToRectI32OrNull()
+                        ?.let { rounded -> intersect(rounded, parentDomain) }
+                }
+            }
+            // An empty clip is a later terminal no-op.  Keeping its source demand conservative
+            // is intentional until Task 3 materializes the typed deferred clip.
+            val demand = deferredDemand ?: parentDomain.copy()
+            val reverseMapping = LayerMappingF64.ofOrNull(localToDevice, Point2I32(demand.left, demand.top))
+                ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                    W6bFilterDiagnostics.InvalidBounds, "Picture reverse-demand mapping is non-invertible.",
+                ))
+            // A spatial no-op requests no source texels.  The aggregate still needs a non-empty
+            // transaction target, so retain its cull rectangle without turning null into demand.
+            val source = W6bFilterGraphConstruction.reverseInputDemand(aggregate.filterOccurrence, demand, reverseMapping)
+                ?: cull
+            val known = intersect(cull, source)
+            val mapping = LayerMappingF64.ofOrNull(localToDevice, Point2I32(source.left, source.top))
+                ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                    W6bFilterDiagnostics.InvalidBounds, "Picture evaluation mapping is non-invertible.",
+                ))
+            return PictureAggregateDomain(localToDevice, mapping, cull, known, demand, source)
+        }
+
+        fun pictureColorBounds(
+            sourceGeometry: W6bSourceGeometryV1,
+            clip: ClipStackNode,
+            transform: org.graphiks.math.matrix.Matrix3x3F32?,
+        ): RectI32? {
+            val extent = sourceGeometry.copyExtentI32()
+            val targetBounds = RectI32(0, 0, extent.width, extent.height)
+            fun unsupportedScissor(): Nothing = throw W6bFilterGraphConstruction.ConstructionFailure(
+                W6bFilterDiagnostics.refusal(
+                    W6aPlanDiagnostics.UnsupportedChild,
+                    "Picture DrawColor clip has no exact pixel-aligned scissor representation.",
+                ),
+            )
+            fun isAxisAlignedScissor(matrix: Matrix3x3F64): Boolean = matrix.isFinite() &&
+                matrix.persp0F64 == 0.0 && matrix.persp1F64 == 0.0 && matrix.persp2F64 == 1.0 &&
+                ((matrix.kxF64 == 0.0 && matrix.kyF64 == 0.0) ||
+                    (matrix.sxF64 == 0.0 && matrix.syF64 == 0.0))
+            fun exactTargetScissor(clipToDevice: Matrix3x3F64, bounds: RectF64): RectI32 {
+                if (!isAxisAlignedScissor(clipToDevice)) unsupportedScissor()
+                val device = clipToDevice.mapRectBoundsF64OrNull(bounds)?.toExactI32OrNull() ?: unsupportedScissor()
+                return sourceGeometry.mapping.mapDeviceRectToTargetI32OrNull(
+                    device, sourceGeometry.originDeviceI32,
+                ) ?: unsupportedScissor()
+            }
+            transform?.let { matrix ->
+                if (!listOf(matrix.sx, matrix.kx, matrix.tx, matrix.ky, matrix.sy, matrix.ty,
+                        matrix.persp0, matrix.persp1, matrix.persp2).all(Float::isFinite)) {
+                    throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                        W6bFilterDiagnostics.InvalidBounds, "Picture DrawColor transform is non-finite.",
+                    ))
+                }
+            }
+            val clippedBounds = when (clip) {
+                ClipStackNode.Empty -> targetBounds
+                is ClipStackNode.DeviceRect -> {
+                    val bounds = clip.copyBounds()
+                    if (bounds.isEmpty) null else intersect(targetBounds, exactTargetScissor(
+                        sourceGeometry.mapping.copyLocalToDeviceF64(),
+                        RectF64(bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble()),
+                    ))
+                }
+                is ClipStackNode.Operations -> {
+                    clip.fold(targetBounds.copy()) { accumulated, entry ->
+                        val geometry = entry.geometry as? GeometryNode.Rect
+                            ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                                W6aPlanDiagnostics.UnsupportedChild,
+                                "Picture DrawColor requires rectangular intersect clips.",
+                            ))
+                        if (entry.operation != ClipOperation.INTERSECT) {
+                            throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                                W6aPlanDiagnostics.UnsupportedChild,
+                                "Picture DrawColor clip has no exact frozen scissor representation.",
+                            ))
+                        }
+                        val transform = (entry.transform as? ClipTransformSnapshot.Known)?.copyMatrixF32()
+                            ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                                W6aPlanDiagnostics.UnsupportedChild,
+                                "Picture DrawColor clip lacks a captured transform.",
+                            ))
+                        val bounds = geometry.copyBounds()
+                        val clipToDevice = sourceGeometry.mapping.copyLocalToDeviceF64()
+                            .timesCheckedOrNull(transform.toMatrix3x3F64()) ?: unsupportedScissor()
+                        accumulated.takeIf { it.intersect(exactTargetScissor(clipToDevice, RectF64(
+                            bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble(),
+                        ))) }
+                            ?: RectI32(0, 0, 0, 0)
+                    }.takeUnless(RectI32::isEmpty)
+                }
+            }
+            return clippedBounds
+        }
+
         fun prepareFilterPicture(
             occurrence: W6bFilterGraphConstruction.PositiveOccurrence,
             bound: W6bBoundFilterOperationV1,
@@ -311,59 +518,65 @@ internal class W6aLayerGraphConstruction(
         // descendant walks, so a legal GraphLimits depth has linear work and stack use.
         val knownContentByScope = arrayOfNulls<RectI32>(occurrences.size)
         val producedOutputByScope = arrayOfNulls<RectI32>(occurrences.size)
+        val geometryByScope = arrayOfNulls<W6aScopeGeometry>(occurrences.size)
+        val evaluatedImagesByOccurrence = java.util.IdentityHashMap<W6bFilterGraphConstruction.PositiveOccurrence, W6bEvaluatedFilterRecipeV1>()
+        val evaluatedMasksByOccurrence = java.util.IdentityHashMap<W6bFilterGraphConstruction.PositiveOccurrence, W6bEvaluatedFilterRecipeV1>()
         for (indexI32 in occurrences.indices.reversed()) {
             val occurrence = occurrences[indexI32]
             val desired = desiredOutputByScope[occurrence.idI32]
             val snapshotInput = snapshotInputByScope[occurrence.idI32]
-            var known = snapshotInput?.copy() ?: if (occurrence.descriptor.initWithPrevious || occurrence.descriptor.backdrop !is EffectStack.Empty) desired?.copy()
-                else directKnownByScope[occurrence.idI32]
-            occurrence.childIdsI32.forEach { childIdI32 ->
-                known = unionOrNull(known, producedOutputByScope[childIdI32])
+            val filter = filterLayersByBegin[occurrence.beginCommandIndexI32]
+            val transform = occurrence.descriptor.transform
+            val localToDevice = Matrix3x3F64(
+                transform.sx.toDouble(), transform.kx.toDouble(), transform.tx.toDouble(),
+                transform.ky.toDouble(), transform.sy.toDouble(), transform.ty.toDouble(),
+                transform.persp0.toDouble(), transform.persp1.toDouble(), transform.persp2.toDouble())
+            val demandMapping = desired?.let {
+                LayerMappingF64.ofOrNull(localToDevice, Point2I32(it.left, it.top))
+                    ?: throw IllegalArgumentException(W6aPlanDiagnostics.NonFiniteTransform)
             }
-            if (snapshotInput == null) known = desired?.let { desiredDomain -> known?.let { intersect(it, desiredDomain) } }
+            val recipe = if (filter != null && desired != null) W6bFilterGraphConstruction.bindOccurrenceRecipe(
+                filter, desired, requireNotNull(demandMapping)) else null
+            val sourceDemand = if (recipe == null) desired else recipe.copyRequiredInputDeviceI32()
+            var known = snapshotInput?.copy() ?: if (occurrence.descriptor.initWithPrevious ||
+                occurrence.descriptor.backdrop !is EffectStack.Empty) desired?.copy() else directKnownByScope[occurrence.idI32]
+            var physicalInput = unionOrNull(directKnownByScope[occurrence.idI32], snapshotInput)
+            occurrence.childIdsI32.forEach { child ->
+                known = unionOrNull(known, producedOutputByScope[child])
+                physicalInput = unionOrNull(physicalInput, producedOutputByScope[child])
+            }
+            if (snapshotInput == null) known = sourceDemand?.let { demand -> known?.let { intersect(it, demand) } }
             knownContentByScope[occurrence.idI32] = known
-            val filterProduced = filterLayersByBegin[occurrence.beginCommandIndexI32]?.let { filter ->
-                desired?.let { consumer ->
-                    val transform = occurrence.descriptor.transform
-                    val localToDevice = Matrix3x3F64(
-                        transform.sx.toDouble(), transform.kx.toDouble(), transform.tx.toDouble(),
-                        transform.ky.toDouble(), transform.sy.toDouble(), transform.ty.toDouble(),
-                        transform.persp0.toDouble(), transform.persp1.toDouble(), transform.persp2.toDouble(),
-                    )
-                    val mapping = LayerMappingF64.ofOrNull(localToDevice, Point2I32(consumer.left, consumer.top))
-                        ?: throw IllegalArgumentException(W6aPlanDiagnostics.NonFiniteTransform)
-                    W6bFilterGraphConstruction.bindOccurrenceRecipe(filter, consumer, mapping).evaluate(
-                        W6bFilterSourceFactsV1(known ?: consumer, known, consumer, mapping,
-                            { bound, context -> prepareFilterPicture(filter, bound, context) }), runtimeCatalog,
-                    ).copyProducedOutputDeviceI32()
+            val sourceGeometry = sealGeometry(occurrence, restoreFactsByScope.getValue(occurrence.idI32),
+                desired, known, null, physicalInput, snapshotInput, sourceDemand)
+            val domain = sourceGeometry.compositeDomainDeviceI32
+            val evaluation = if (recipe != null && domain != null) {
+                var facts = W6bFilterSourceFactsV1(domain, known, requireNotNull(desired), requireNotNull(sourceGeometry.mapping),
+                    { bound, context -> prepareFilterPicture(requireNotNull(filter), bound, context) })
+                if (filter?.mask != null) {
+                    val mask = recipe.evaluateMask(facts)
+                    evaluatedMasksByOccurrence[filter] = mask
+                    val output = mask.output
+                    facts = W6bFilterSourceFactsV1(output.copyDeviceBoundsI32(), output.copyKnownContentDeviceI32(),
+                        output.copyDesiredOutputDeviceI32() ?: requireNotNull(desired), output.mapping,
+                        { bound, context -> prepareFilterPicture(filter, bound, context) })
                 }
-            }
-            producedOutputByScope[occurrence.idI32] = when {
+                if (filter?.root != null) recipe.evaluate(facts, runtimeCatalog).also {
+                    evaluatedImagesByOccurrence[filter] = it
+                } else evaluatedMasksByOccurrence[filter]
+            } else null
+            val produced = when {
                 desired == null -> null
                 restoreFactsByScope.getValue(occurrence.idI32).restoreAffectsTransparentBlack -> desired.copy()
-                else -> filterProduced ?: known?.let { intersect(it, desired) }
+                evaluation != null -> evaluation.copyProducedOutputDeviceI32()?.let { intersect(it, desired) }
+                filter != null -> null
+                else -> known?.let { intersect(it, desired) }
             }
-        }
-
-        // Only after output is known do we freeze target domains.  A parent retains every child
-        // target domain it must composite, including a child whose restore expands transparent
-        // black beyond the parent's direct content.
-        val geometryByScope = arrayOfNulls<W6aScopeGeometry>(occurrences.size)
-        for (indexI32 in occurrences.indices.reversed()) {
-            val occurrence = occurrences[indexI32]
-            var physicalInput = unionOrNull(directKnownByScope[occurrence.idI32], snapshotInputByScope[occurrence.idI32])
-            occurrence.childIdsI32.forEach { childIdI32 ->
-                physicalInput = unionOrNull(physicalInput, producedOutputByScope[childIdI32])
-            }
-            geometryByScope[occurrence.idI32] = sealGeometry(
-                occurrence,
-                restoreFactsByScope.getValue(occurrence.idI32),
-                desiredOutputByScope[occurrence.idI32],
-                knownContentByScope[occurrence.idI32],
-                producedOutputByScope[occurrence.idI32],
-                physicalInput,
-                snapshotInputByScope[occurrence.idI32],
-            )
+            producedOutputByScope[occurrence.idI32] = produced
+            geometryByScope[occurrence.idI32] = W6aScopeGeometry(occurrence, sourceGeometry.mapping,
+                sourceGeometry.requestedHintDeviceF64, sourceGeometry.knownContentDeviceI32,
+                sourceGeometry.desiredOutputDeviceI32, sourceGeometry.requiredInputDeviceI32, produced,
+                sourceGeometry.compositeDomainDeviceI32)
         }
         geometries = immutableList(occurrences.map { requireNotNull(geometryByScope[it.idI32]) })
         val activeByScope = geometries.filterNot(W6aScopeGeometry::isElided).associateBy { it.occurrence.idI32 }
@@ -904,7 +1117,8 @@ internal class W6aLayerGraphConstruction(
                 }
                 W6bFilterGraphConstruction.freezeImageOccurrence(
                     occurrence, materialized?.output ?: source, filterCursor, framePassSink, emitFilterPictureSource,
-                    runtimeCatalog, preparePicture = { bound, context -> prepareFilterPicture(occurrence, bound, context) },
+                    runtimeCatalog, evaluated = evaluatedImagesByOccurrence[occurrence],
+                    preparePicture = { bound, context -> prepareFilterPicture(occurrence, bound, context) },
                 )
             } else requireNotNull(materialized) { "W6b mask occurrence needs its materialized W5 source." }
             filterResourceSpecs += frozen.resourceSpecs()
@@ -1044,40 +1258,9 @@ internal class W6aLayerGraphConstruction(
                 coverageProducer: PlanResourceId? = coverage,
                 workScope: PictureLayerExecutionScope? = owningLayerScope,
             ): PlanPassId? {
-                val captured = requireNotNull(entry.source.sourceDraw)
-                val domain = targetDeviceBounds(target)
-                // A filter-owned Picture aggregate is already rooted in its exact source
-                // context.  Its child scene transform must compose from that mapping, rather
-                // than restart at the captured Picture-local origin while its cull is mapped
-                // through the filter source below in pictureAggregateDomain.
-                val enclosing = filterOwnerSource?.let { source ->
-                    requireNotNull(source.mapping.copyLocalToDeviceF64().timesCheckedOrNull(
-                        composeInOrderF64(entry.source.outerPictures().map { it.transform }),
-                    )) { "Picture source transform cannot be composed in finite F64." }
-                } ?: composeInOrderF64(entry.source.outerPictures().map { it.transform })
-                val evaluation = requireNotNull(enclosing.timesCheckedOrNull(captured.transform.toMatrix3x3F64()))
-                val input = OccurrenceSourceInputV1(entry.plannedCommandId, entry.locator, entry.source,
-                    requireNotNull(LayerMappingF64.ofOrNull(evaluation, Point2I32(domain.left, domain.top))),
-                    enclosing, domain, domain, entry.source.recordedInnerClipWithoutCull(), ClipStackNode.Empty, target,
-                    entry.plannedCommandId.valueI32, coverage != null)
-                val compiler = CapabilityCompilerChain.of(listOf(W5bVerticesPlanCompiler(runtimeCatalog),
-                    W5bPointPlanCompiler(runtimeCatalog), W5eImagePlanCompiler(), W3SolidRectPlanCompiler(),
-                    W4aAnalyticRectPlanCompiler(), W4bAnalyticRRectPlanCompiler(), W4cPathFillPlanCompiler(),
-                    W4dPathStrokePlanCompiler()), runtimeCatalog)
-                val lane = when (val result = compiler.constructSourceLanes(input, caps, budget)) {
-                    is org.graphiks.kanvas.render.ir.RenderPlanResult.Ready -> result.plan.single()
-                    else -> {
-                        val diagnostics = when (result) {
-                            is org.graphiks.kanvas.render.ir.RenderPlanResult.GapOnPromotedScope -> result.diagnostics
-                            is org.graphiks.kanvas.render.ir.RenderPlanResult.GapNotMigrated -> result.diagnostics
-                            is org.graphiks.kanvas.render.ir.RenderPlanResult.InvalidScene -> result.diagnostics
-                            is org.graphiks.kanvas.render.ir.RenderPlanResult.ResourceLimitExceeded -> result.diagnostics
-                        }
-                        throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                            W6aPlanDiagnostics.UnsupportedChild,
-                            "Occurrence ${entry.plannedCommandId} has no W4/W5 lane: ${diagnostics.joinToString { it.code.value + ": " + it.message }}"))
-                    }
-                }
+                val (input, lane) = preparePictureDrawLane(entry, filterSource(target),
+                    filterOwnerSource, target, coverage != null)
+                val enclosing = input.enclosingMappingF64
                 val selected = RenderGraph.visualDraws(lane.passes()).singleOrNull() ?: return null
                 val laneI32 = this.bindings.size
                 this.bindings += W6aLayerSourceBinding(null, input.commandIndexI32, lane, input)
@@ -1253,68 +1436,7 @@ internal class W6aLayerGraphConstruction(
             ): PlanPass.RenderPass {
                 val extent = filterSource(target).copyExtentI32()
                 val targetBounds = RectI32(0, 0, extent.width, extent.height)
-                fun unsupportedScissor(): Nothing = throw W6bFilterGraphConstruction.ConstructionFailure(
-                    W6bFilterDiagnostics.refusal(
-                        W6aPlanDiagnostics.UnsupportedChild,
-                        "Picture DrawColor clip has no exact pixel-aligned scissor representation.",
-                    ),
-                )
-                fun isAxisAlignedScissor(matrix: Matrix3x3F64): Boolean = matrix.isFinite() &&
-                    matrix.persp0F64 == 0.0 && matrix.persp1F64 == 0.0 && matrix.persp2F64 == 1.0 &&
-                    ((matrix.kxF64 == 0.0 && matrix.kyF64 == 0.0) ||
-                        (matrix.sxF64 == 0.0 && matrix.syF64 == 0.0))
-                fun exactTargetScissor(clipToDevice: Matrix3x3F64, bounds: RectF64): RectI32 {
-                    if (!isAxisAlignedScissor(clipToDevice)) unsupportedScissor()
-                    val device = clipToDevice.mapRectBoundsF64OrNull(bounds)?.toExactI32OrNull() ?: unsupportedScissor()
-                    return filterSource(target).mapping.mapDeviceRectToTargetI32OrNull(
-                        device, filterSource(target).originDeviceI32,
-                    ) ?: unsupportedScissor()
-                }
-                transform?.let { matrix ->
-                    if (!listOf(matrix.sx, matrix.kx, matrix.tx, matrix.ky, matrix.sy, matrix.ty,
-                            matrix.persp0, matrix.persp1, matrix.persp2).all(Float::isFinite)) {
-                        throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                            W6bFilterDiagnostics.InvalidBounds, "Picture DrawColor transform is non-finite.",
-                        ))
-                    }
-                }
-                val clippedBounds = when (clip) {
-                    ClipStackNode.Empty -> targetBounds
-                    is ClipStackNode.DeviceRect -> {
-                        val bounds = clip.copyBounds()
-                        if (bounds.isEmpty) null else intersect(targetBounds, exactTargetScissor(
-                            filterSource(target).mapping.copyLocalToDeviceF64(),
-                            RectF64(bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble()),
-                        ))
-                    }
-                    is ClipStackNode.Operations -> {
-                        clip.fold(targetBounds.copy()) { accumulated, entry ->
-                            val geometry = entry.geometry as? GeometryNode.Rect
-                                ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                                    W6aPlanDiagnostics.UnsupportedChild,
-                                    "Picture DrawColor requires rectangular intersect clips.",
-                                ))
-                            if (entry.operation != ClipOperation.INTERSECT) {
-                                throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                                    W6aPlanDiagnostics.UnsupportedChild,
-                                    "Picture DrawColor clip has no exact frozen scissor representation.",
-                                ))
-                            }
-                            val transform = (entry.transform as? ClipTransformSnapshot.Known)?.copyMatrixF32()
-                                ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                                    W6aPlanDiagnostics.UnsupportedChild,
-                                    "Picture DrawColor clip lacks a captured transform.",
-                                ))
-                            val bounds = geometry.copyBounds()
-                            val clipToDevice = filterSource(target).mapping.copyLocalToDeviceF64()
-                                .timesCheckedOrNull(transform.toMatrix3x3F64()) ?: unsupportedScissor()
-                            accumulated.takeIf { it.intersect(exactTargetScissor(clipToDevice, RectF64(
-                                bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble(),
-                            ))) }
-                                ?: RectI32(0, 0, 0, 0)
-                        }.takeUnless(RectI32::isEmpty)
-                    }
-                }
+                val clippedBounds = pictureColorBounds(filterSource(target), clip, transform)
                 // DrawColor is matrix-invariant, but it is clip-bound.  A fully clipped command
                 // remains a sealed visual entry with a transparent SrcOver no-op rather than
                 // being widened to the target or silently removed from source order.
@@ -1477,94 +1599,6 @@ internal class W6aLayerGraphConstruction(
              * sizes the immutable child source; the deferred clip is retained for the terminal
              * composite and never cuts samples before a parent blur/image filter can consume them.
              */
-            data class PictureAggregateDomain(
-                val localToDeviceF64: Matrix3x3F64,
-                val mapping: LayerMappingF64,
-                val cullContentDeviceI32: RectI32,
-                val knownContentDeviceI32: RectI32?,
-                val demandDeviceI32: RectI32,
-                val sourceDeviceI32: RectI32,
-            )
-            fun pictureAggregateDomain(
-                aggregate: PictureStreamAggregateDraftV1,
-                parentTarget: PlanResourceId,
-            ): PictureAggregateDomain {
-                val parent = filterOwnerSource ?: filterSource(parentTarget)
-                (aggregate.owner as? PictureStreamAggregateDraftOwnerV1.FilterPicture)?.let { owner ->
-                    val localToDevice = filterOwnerLocalToDevice()
-                    // The emitter owns the one F64 crop projection for this filter context.
-                    // Do not remap it here: the aggregate only chooses a target origin and
-                    // carries that sealed content through its descendants.
-                    val known = owner.copyKnownContentDeviceI32()
-                    val sourceDomain = owner.copySourceDomainDeviceI32()
-                    val demand = parent.copyDesiredOutputDeviceI32() ?: parent.copyDeviceBoundsI32()
-                    // A consumer clip is a terminal demand, not a source crop: retaining the
-                    // known Picture content lets an outer blur produce its halo beyond cull.
-                    val source = sourceDomain.copy()
-                    val mapping = LayerMappingF64.ofOrNull(localToDevice, Point2I32(source.left, source.top))
-                        ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                            W6bFilterDiagnostics.InvalidBounds,
-                            "W6d filter Picture source mapping is non-invertible.",
-                        ))
-                    return PictureAggregateDomain(localToDevice, mapping, sourceDomain, known, demand, source)
-                }
-                val outerPictures = aggregate.source.outerPictures()
-                // Captured transforms map directly to root device coordinates. Target rebasing
-                // happens only in LayerMappingF64, never by composing the parent twice.
-                val outerTransforms = outerPictures.map { it.transform } + aggregate.draw.transform
-                val outer = try {
-                    composeInOrderF64(outerTransforms)
-                } catch (_: IllegalArgumentException) {
-                    throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                        W6bFilterDiagnostics.InvalidBounds,
-                        "Picture outer transform cannot be composed in finite F64.",
-                    ))
-                }
-                val localToDevice = filterOwnerSource?.let { source ->
-                    requireNotNull(source.mapping.copyLocalToDeviceF64().timesCheckedOrNull(outer)) {
-                        "Picture outer transform cannot be composed in finite F64."
-                    }
-                } ?: outer
-                val picture = aggregate.draw.geometry as? GeometryNode.Picture
-                    ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                        W6aPlanDiagnostics.UnsupportedChild, "Picture aggregate lost its captured Picture geometry.",
-                    ))
-                val cull = localToDevice.mapRectBoundsF64OrNull(RectF64(
-                    picture.copyCullRect().left.toDouble(), picture.copyCullRect().top.toDouble(),
-                    picture.copyCullRect().right.toDouble(), picture.copyCullRect().bottom.toDouble(),
-                ))?.roundOutToRectI32OrNull() ?: throw W6bFilterGraphConstruction.ConstructionFailure(
-                    W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
-                        "Picture cull cannot be projected to checked I32 device texels."),
-                )
-                val parentDomain = parent.copyDeviceBoundsI32()
-                val enclosing = composeInOrderF64(outerPictures.map { it.transform })
-                val deferredDemand = when (val clip = aggregate.source.recordedInnerClipWithoutCull()) {
-                    ClipStackNode.Empty, is ClipStackNode.Operations -> parentDomain.copy()
-                    is ClipStackNode.DeviceRect -> clip.copyBounds().let { bounds ->
-                        enclosing.mapRectBoundsF64OrNull(RectF64(bounds.left.toDouble(), bounds.top.toDouble(),
-                            bounds.right.toDouble(), bounds.bottom.toDouble()))?.roundOutToRectI32OrNull()
-                            ?.let { rounded -> intersect(rounded, parentDomain) }
-                    }
-                }
-                // An empty clip is a later terminal no-op.  Keeping its source demand conservative
-                // is intentional until Task 3 materializes the typed deferred clip.
-                val demand = deferredDemand ?: parentDomain.copy()
-                val reverseMapping = LayerMappingF64.ofOrNull(localToDevice, Point2I32(demand.left, demand.top))
-                    ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                        W6bFilterDiagnostics.InvalidBounds, "Picture reverse-demand mapping is non-invertible.",
-                    ))
-                // A spatial no-op requests no source texels.  The aggregate still needs a non-empty
-                // transaction target, so retain its cull rectangle without turning null into demand.
-                val source = W6bFilterGraphConstruction.reverseInputDemand(aggregate.filterOccurrence, demand, reverseMapping)
-                    ?: cull
-                val known = intersect(cull, source)
-                val mapping = LayerMappingF64.ofOrNull(localToDevice, Point2I32(source.left, source.top))
-                    ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                        W6bFilterDiagnostics.InvalidBounds, "Picture evaluation mapping is non-invertible.",
-                    ))
-                return PictureAggregateDomain(localToDevice, mapping, cull, known, demand, source)
-            }
-
             if (terminallyEmptyAggregate) {
                 /*
                  * A typed empty deferred clip annihilates the complete Picture stream before
@@ -1638,7 +1672,7 @@ internal class W6aLayerGraphConstruction(
                 return aggregate to seal?.id
             }
 
-            var aggregateDomain = pictureAggregateDomain(draft, parentTarget)
+            var aggregateDomain = pictureAggregateDomain(draft, filterOwnerSource ?: filterSource(parentTarget), filterOwnerSource)
             val aggregateTargetDraft = if (draft.executionMode == PictureStreamExecutionModeV1.ISOLATED_SOURCE) {
                 val domain = aggregateDomain.sourceDeviceI32
                 allocateOccurrenceSource(
@@ -2502,7 +2536,7 @@ internal class W6aLayerGraphConstruction(
                         sealedAlphaSampling = filterSource(target).samplingFor(coverage),
                     )
                     val frozenMask = filtered.mask?.let {
-                        W6bFilterGraphConstruction.freezeMaskOccurrence(filtered, coverage, filterCursor)
+                        W6bFilterGraphConstruction.freezeMaskOccurrence(filtered, coverage, filterCursor, evaluatedMasksByOccurrence[filtered])
                     }
                     frozenMask?.let { filterResourceSpecs += it.resourceSpecs(); passes += it.passes() }
                     val source = allocateShadedOccurrenceSource(frozenMask?.output ?: coverage, target)
@@ -2961,6 +2995,7 @@ internal class W6aLayerGraphConstruction(
         produced: RectI32?,
         physicalInput: RectI32?,
         snapshotInput: RectI32?,
+        sourceDemand: RectI32? = desired,
     ): W6aScopeGeometry {
         if (desired == null) return W6aScopeGeometry(occurrence, null, null, known, null, null, produced, null)
         val transform = occurrence.descriptor.transform
@@ -2976,7 +3011,7 @@ internal class W6aLayerGraphConstruction(
         }
         val hintDomain = hint?.roundOutToRectI32OrNull()
             ?: if (hint == null) null else throw IllegalArgumentException(W6aPlanDiagnostics.MappingOverflow)
-        val required = snapshotInput?.copy() ?: desired.copy()
+        val required = snapshotInput?.copy() ?: sourceDemand?.copy() ?: desired.copy()
         val effective = if (snapshotInput != null) {
             val sourceAndOutput = union(snapshotInput, desired)
             physicalInput?.let { input -> intersect(input, desired)?.let { union(sourceAndOutput, it) } ?: sourceAndOutput }
@@ -2984,7 +3019,7 @@ internal class W6aLayerGraphConstruction(
         } else if (restoreFacts.previousContentRequiresFullParentDomain || restoreFacts.backdropRequiresFullParentDomain ||
             restoreFacts.restoreAffectsTransparentBlack) desired
             else if (physicalInput == null) desired else hintDomain?.let { union(physicalInput, it) } ?: physicalInput
-        val composite = if (snapshotInput == null) intersect(effective, desired) else effective
+        val composite = if (snapshotInput == null) intersect(effective, sourceDemand ?: desired) else effective
         if (composite == null) return W6aScopeGeometry(occurrence, null, hint, known, desired, required, produced, null)
         val mapping = LayerMappingF64.ofOrNull(localToDevice, Point2I32(composite.left, composite.top))
             ?: throw IllegalArgumentException(W6aPlanDiagnostics.NonFiniteTransform)

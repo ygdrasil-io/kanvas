@@ -41,6 +41,8 @@ internal class W6bContextualFilterRecipeV1 internal constructor(
 ) {
     private val demands = W6bFilterDemandsV1(occurrence.topology, occurrence.mask, desiredOutputDeviceI32, mapping)
     fun copyRequiredInputDeviceI32(): RectI32? = demands.copyRequiredSourceI32()
+    fun evaluateMask(source: W6bFilterSourceFactsV1): W6bEvaluatedFilterRecipeV1 =
+        W6bFilterGraphConstruction.evaluateMaskRecipe(occurrence, source)
     fun evaluate(source: W6bFilterSourceFactsV1, runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot): W6bEvaluatedFilterRecipeV1 =
         W6bFilterGraphConstruction.evaluateRecipe(occurrence, source, demands, runtimeCatalog)
 }

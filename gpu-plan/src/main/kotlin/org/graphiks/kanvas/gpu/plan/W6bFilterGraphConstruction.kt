@@ -422,9 +422,20 @@ internal object W6bFilterGraphConstruction {
                 W6bFilterSourceFactsV1(source.copyDeviceBoundsI32(), source.copyKnownContentDeviceI32(),
                     source.copyDesiredOutputDeviceI32() ?: source.copyDeviceBoundsI32(), source.mapping, preparePicture),
                 runtimeCatalog)
+        return lowerRecipe(recipe, source, cursor, sink, emitFilterPictureSource)
+    }
+
+    private fun lowerRecipe(
+        recipe: W6bEvaluatedFilterRecipeV1,
+        source: SourceBinding,
+        cursor: FreezeCursor,
+        sink: W6FramePassSinkV1?,
+        emitFilterPictureSource: FilterPictureSourceEmitterV1?,
+    ): FrozenOccurrence {
         val resources = mutableListOf<ResourceSpec>()
         val passes = mutableListOf<PlanPass>()
         val bindings = linkedMapOf(W6bRecipeSymbolV1(0) to source)
+        val tableIds = mutableMapOf<W6bRecipeSymbolV1, PlanResourceId>()
         val pictures = mutableMapOf<W6bRecipeSymbolV1, FilterPictureSourceEmissionV1>()
         fun physical(symbol: W6bRecipeSymbolV1): SourceBinding = bindings.getValue(symbol)
         val keys = java.util.IdentityHashMap<W6bRecipeKeyV1, FilterEvaluationKeyV1>()
@@ -434,7 +445,7 @@ internal object W6bFilterGraphConstruction {
         fun append(pass: PlanPass) {
             require(pass.ordinal == cursor.passOrdinalI32)
             cursor.passOrdinalI32 = Math.addExact(cursor.passOrdinalI32, 1)
-            sink.append(pass)
+            sink?.append(pass)
             passes += pass
         }
         for (instruction in recipe.instructions) when (instruction) {
@@ -444,7 +455,9 @@ internal object W6bFilterGraphConstruction {
                         cursor.filterTargetOrdinalI32 = Math.addExact(it, 1) }
                     PlanResourceRole.FilterTransparentBlack -> cursor.transparentBlackOrdinalI32.also {
                         cursor.transparentBlackOrdinalI32 = Math.addExact(it, 1) }
-                    else -> error("Image recipe has an invalid resource role.")
+                    PlanResourceRole.CoverageOriginal -> cursor.coverageOriginalOrdinalI32.also {
+                        cursor.coverageOriginalOrdinalI32 = Math.addExact(it, 1) }
+                    else -> error("Recipe has an invalid resource role.")
                 }
                 val id = planResourceId(instruction.role, ordinal)
                 val geometry = recipe.sources.getValue(instruction.symbol)
@@ -453,21 +466,36 @@ internal object W6bFilterGraphConstruction {
                     geometry.originDeviceI32, geometry.copyKnownContentDeviceI32(), geometry.copyDesiredOutputDeviceI32(),
                     geometry.copyRequiredInputDeviceI32(), geometry.copyProducedOutputDeviceI32())
             }
+            is W6bRecipeInstructionV1.MaskTableResource -> {
+                val ordinal = cursor.maskTableOrdinalI32.also { cursor.maskTableOrdinalI32 = Math.addExact(it, 1) }
+                val id = planResourceId(PlanResourceRole.MaskTableData, ordinal)
+                resources += ResourceSpec.maskTable(id)
+                tableIds[instruction.symbol] = id
+            }
+            is W6bRecipeInstructionV1.RetainCoverage -> append(PlanPass.FilterCoverageRetainPass(
+                cursor.passOrdinalI32, physical(instruction.source).resourceId,
+                physical(instruction.output).resourceId, instruction.sampling))
             is W6bRecipeInstructionV1.Clear -> append(PlanPass.FilterSourceClear(cursor.passOrdinalI32,
                 physical(instruction.output).resourceId, physical(instruction.reference).resourceId))
             is W6bRecipeInstructionV1.PictureSource -> {
-                val emitted = emitFilterPictureSource.emit(instruction.prepared, physical(instruction.context))
+                val emitted = requireNotNull(emitFilterPictureSource).emit(instruction.prepared, physical(instruction.context))
                 require(emitted.source.copyDeviceBoundsI32() == instruction.output.copyDeviceBoundsI32()) {
                     "Picture physical source disagrees with its evaluated recipe domain."
                 }
                 pictures[instruction.output.symbol] = emitted
                 bindings[instruction.output.symbol] = emitted.source
-                cursor.passOrdinalI32 = sink.nextOrdinalI32()
+                cursor.passOrdinalI32 = requireNotNull(sink).nextOrdinalI32()
             }
             is W6bRecipeInstructionV1.Pass -> {
                 val key = lowerKey(instruction.key)
                 val operation = when (val selected = instruction.operation) {
                     is W6bRecipeOperationV1.Fixed -> selected.operation
+                    is W6bRecipeOperationV1.MaskStyle -> FilterPassOperationV1.MaskBlurStyle(selected.style,
+                        selected.original?.let { physical(it).resourceId }, physical(selected.blurred).resourceId,
+                        selected.bounds, selected.blurredSampling, selected.originalSampling)
+                    is W6bRecipeOperationV1.MaskTable -> FilterPassOperationV1.MaskTable(selected.table,
+                        tableIds.getValue(selected.resource), 256, 0L, selected.ownerMaskOccurrenceI32,
+                        selected.bounds, selected.sampling)
                     is W6bRecipeOperationV1.ShadowComposite -> FilterPassOperationV1.DropShadowComposite(
                         selected.mode, physical(selected.original).resourceId, selected.bounds,
                         selected.shadowOffset, selected.originalOffset)
@@ -994,58 +1022,70 @@ internal object W6bFilterGraphConstruction {
         occurrence: PositiveOccurrence,
         coverageSource: SourceBinding,
         cursor: FreezeCursor,
+        evaluated: W6bEvaluatedFilterRecipeV1? = null,
     ): FrozenMask {
-        val mask = requireNotNull(occurrence.mask) { "W6b mask freeze requires a captured mask." }
-        val resources = mutableListOf<ResourceSpec>()
-        val passes = mutableListOf<PlanPass>()
-        fun append(pass: PlanPass) {
-            require(pass.ordinal == cursor.passOrdinalI32)
-            cursor.passOrdinalI32 = Math.addExact(cursor.passOrdinalI32, 1)
-            passes += pass
+        val desired = coverageSource.copyDesiredOutputDeviceI32() ?: coverageSource.copyDeviceBoundsI32()
+        val recipe = evaluated ?: bindOccurrenceRecipe(occurrence, desired, coverageSource.mapping).evaluateMask(
+            W6bFilterSourceFactsV1(coverageSource.copyDeviceBoundsI32(), coverageSource.copyKnownContentDeviceI32(),
+                desired, coverageSource.mapping))
+        val frozen = lowerRecipe(recipe, coverageSource, cursor, null, null)
+        return FrozenMask(frozen.resourceSpecs(), frozen.passes(), frozen.output)
+    }
+
+    internal fun evaluateMaskRecipe(
+        occurrence: PositiveOccurrence,
+        sourceFacts: W6bFilterSourceFactsV1,
+    ): W6bEvaluatedFilterRecipeV1 {
+        val mask = requireNotNull(occurrence.mask) { "W6b mask recipe requires a captured mask." }
+        val domain = sourceFacts.copySourceDomainDeviceI32()
+        val coverageSource = W6bRecipeSourceV1(W6bRecipeSymbolV1(0), SizeI32(domain.width(), domain.height()),
+            Point2I32(domain.left, domain.top), sourceFacts.mapping, sourceFacts.copyKnownContentDeviceI32(),
+            sourceFacts.copyDesiredOutputDeviceI32(), domain, sourceFacts.copyKnownContentDeviceI32())
+        val instructions = mutableListOf<W6bRecipeInstructionV1>()
+        val sources = linkedMapOf(coverageSource.symbol to coverageSource)
+        var nextSymbolI32 = 1
+        fun resource(role: PlanResourceRole, extent: SizeI32): W6bRecipeSymbolV1 =
+            W6bRecipeSymbolV1(nextSymbolI32++).also { instructions += W6bRecipeInstructionV1.Resource(it, role, extent) }
+        fun target(bounds: FilterBoundsPlanV1): W6bRecipeSourceV1 {
+            val extent = SizeI32(bounds.copyDesiredOutputDeviceI32().width(), bounds.copyDesiredOutputDeviceI32().height())
+            val symbol = resource(PlanResourceRole.FilterTarget, extent)
+            return coverageSource.withSymbol(symbol, extent, bounds.copyTargetOriginDeviceI32(),
+                bounds.copyProducedOutputDeviceI32(), bounds.copyDesiredOutputDeviceI32(),
+                bounds.copyRequiredInputDeviceI32(), bounds.copyProducedOutputDeviceI32()).also { sources[symbol] = it }
         }
-        fun target(bounds: FilterBoundsPlanV1): SourceBinding {
-            val ordinal = cursor.filterTargetOrdinalI32.also { cursor.filterTargetOrdinalI32 = Math.addExact(it, 1) }
-            val id = planResourceId(PlanResourceRole.FilterTarget, ordinal)
-            resources += ResourceSpec(id, PlanResourceRole.FilterTarget,
-                SizeI32(bounds.copyDesiredOutputDeviceI32().width(), bounds.copyDesiredOutputDeviceI32().height()))
-            return coverageSource.withResource(id,
-                SizeI32(bounds.copyDesiredOutputDeviceI32().width(), bounds.copyDesiredOutputDeviceI32().height()),
-                bounds.copyTargetOriginDeviceI32(), bounds.copyProducedOutputDeviceI32(),
-                bounds.copyDesiredOutputDeviceI32(), bounds.copyRequiredInputDeviceI32(), bounds.copyProducedOutputDeviceI32())
+        fun maskTableResource(): W6bRecipeSymbolV1 = W6bRecipeSymbolV1(nextSymbolI32++).also {
+            instructions += W6bRecipeInstructionV1.MaskTableResource(it)
         }
-        fun maskTableResource(): PlanResourceId {
-            val ordinal = cursor.maskTableOrdinalI32.also {
-                cursor.maskTableOrdinalI32 = Math.addExact(it, 1)
-            }
-            return planResourceId(PlanResourceRole.MaskTableData, ordinal).also { id ->
-                resources += ResourceSpec.maskTable(id)
-            }
+        fun key(desired: RectI32): W6bRecipeKeyV1 =
+            W6bRecipeKeyV1(null, occurrence.maskOccurrenceI32, coverageSource, desired, null)
+        fun appendPass(inputs: List<W6bRecipeSymbolV1>, output: W6bRecipeSymbolV1,
+            key: W6bRecipeKeyV1, operation: FilterPassOperationV1) {
+            instructions += W6bRecipeInstructionV1.Pass(inputs, output, key, W6bRecipeOperationV1.Fixed(operation))
         }
-        fun key(desired: RectI32): FilterEvaluationKeyV1 = FilterEvaluationKeyV1.forMaskOccurrence(
-            occurrence.maskOccurrenceI32, coverageSource.resourceId, coverageSource.mapping, desired,
-        )
-        fun blur(source: SourceBinding, sigma: Float, evaluationKey: FilterEvaluationKeyV1): SourceBinding {
+        fun appendSymbolicPass(inputs: List<W6bRecipeSymbolV1>, output: W6bRecipeSymbolV1,
+            key: W6bRecipeKeyV1, operation: W6bRecipeOperationV1) {
+            instructions += W6bRecipeInstructionV1.Pass(inputs, output, key, operation)
+        }
+        fun blur(source: W6bRecipeSourceV1, sigma: Float, evaluationKey: W6bRecipeKeyV1): W6bRecipeSourceV1 {
             val horizontalBounds = blurBounds(source, sigma, 0f)
             val horizontal = target(horizontalBounds)
-            append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(source.resourceId), horizontal.resourceId, evaluationKey,
+            appendPass( listOf(source.symbol), horizontal.symbol, evaluationKey,
                 FilterPassOperationV1.SeparableBlur(FilterImplementationKindV1.MASK_COVERAGE_BLUR_X, sigma,
-                    FilterAxisV1.X, TileMode.CLAMP, horizontalBounds, filterInputSampling(source, horizontalBounds))))
+                    FilterAxisV1.X, TileMode.CLAMP, horizontalBounds, filterInputSampling(source, horizontalBounds)))
             val verticalBounds = blurBounds(horizontal, 0f, sigma)
             val vertical = target(verticalBounds)
-            append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(horizontal.resourceId), vertical.resourceId, evaluationKey,
+            appendPass( listOf(horizontal.symbol), vertical.symbol, evaluationKey,
                 FilterPassOperationV1.SeparableBlur(FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y, sigma,
-                    FilterAxisV1.Y, TileMode.CLAMP, verticalBounds, filterInputSampling(horizontal, verticalBounds))))
+                    FilterAxisV1.Y, TileMode.CLAMP, verticalBounds, filterInputSampling(horizontal, verticalBounds)))
             return vertical
         }
         val output = when (mask) {
             is MaskFilterNode.Blur -> {
                 val original = if (mask.style == org.graphiks.kanvas.render.ir.MaskBlurStyle.NORMAL) null else {
-                    val ordinal = cursor.coverageOriginalOrdinalI32.also { cursor.coverageOriginalOrdinalI32 = Math.addExact(it, 1) }
-                    val id = planResourceId(PlanResourceRole.CoverageOriginal, ordinal)
-                    resources += ResourceSpec(id, PlanResourceRole.CoverageOriginal, coverageSource.copyExtentI32())
-                    append(PlanPass.FilterCoverageRetainPass(cursor.passOrdinalI32, coverageSource.resourceId, id,
-                        filterInputSampling(coverageSource, identityBounds(coverageSource))))
-                    coverageSource.withResource(id, knownContentDeviceI32 = coverageSource.copyKnownContentDeviceI32())
+                    val id = resource(PlanResourceRole.CoverageOriginal, coverageSource.copyExtentI32())
+                    instructions += W6bRecipeInstructionV1.RetainCoverage(coverageSource.symbol, id,
+                        filterInputSampling(coverageSource, identityBounds(coverageSource)))
+                    coverageSource.withSymbol(id).also { sources[id] = it }
                 }
                 val full = blurBounds(coverageSource, mask.sigma, mask.sigma)
                 val evaluationKey = key(full.copyDesiredOutputDeviceI32())
@@ -1053,22 +1093,22 @@ internal object W6bFilterGraphConstruction {
                 val bounds = identityBounds(blurred)
                 val styled = target(bounds)
                 val inputs = buildList {
-                    add(blurred.resourceId)
-                    original?.let { add(it.resourceId) }
+                    add(blurred.symbol)
+                    original?.let { add(it.symbol) }
                 }
-                append(PlanPass.FilterPass(cursor.passOrdinalI32, inputs, styled.resourceId, evaluationKey,
-                    FilterPassOperationV1.MaskBlurStyle(mask.style, original?.resourceId, blurred.resourceId, bounds,
-                        filterInputSampling(blurred, bounds), original?.let { filterInputSampling(it, bounds) })))
+                appendSymbolicPass( inputs, styled.symbol, evaluationKey,
+                    W6bRecipeOperationV1.MaskStyle(mask.style, original?.symbol, blurred.symbol, bounds,
+                        filterInputSampling(blurred, bounds), original?.let { filterInputSampling(it, bounds) }))
                 styled
             }
             is MaskFilterNode.Shader -> {
                 val bounds = identityBounds(coverageSource)
                 val evaluationKey = key(bounds.copyDesiredOutputDeviceI32())
                 val output = target(bounds)
-                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(coverageSource.resourceId), output.resourceId, evaluationKey,
+                appendPass( listOf(coverageSource.symbol), output.symbol, evaluationKey,
                     FilterPassOperationV1.MaskShader(
                         FilterPassOperationV1.MaskShaderMaterialBindingV1.CapturedOccurrence(occurrence.idI32, mask.material),
-                        bounds, filterInputSampling(coverageSource, bounds))))
+                        bounds, filterInputSampling(coverageSource, bounds)))
                 output
             }
             is MaskFilterNode.Table -> {
@@ -1076,13 +1116,14 @@ internal object W6bFilterGraphConstruction {
                 val evaluationKey = key(bounds.copyDesiredOutputDeviceI32())
                 val output = target(bounds)
                 val tableResource = maskTableResource()
-                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(coverageSource.resourceId), output.resourceId, evaluationKey,
-                    FilterPassOperationV1.MaskTable(mask.table, tableResource, 256, 0L,
-                        occurrence.maskOccurrenceI32, bounds, filterInputSampling(coverageSource, bounds))))
+                appendSymbolicPass( listOf(coverageSource.symbol), output.symbol, evaluationKey,
+                    W6bRecipeOperationV1.MaskTable(mask.table, tableResource,
+                        occurrence.maskOccurrenceI32, bounds, filterInputSampling(coverageSource, bounds)))
                 output
             }
         }
-        return FrozenMask(resources, passes, output)
+        return W6bEvaluatedFilterRecipeV1(domain, output,
+            instructions.filterIsInstance<W6bRecipeInstructionV1.Pass>().last().key, instructions, sources)
     }
 
     /** A mask-only occurrence still gets one typed terminal filter target before parent blending. */
