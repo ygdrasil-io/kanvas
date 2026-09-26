@@ -28,6 +28,25 @@ internal class W6bBoundFilterTopologyV1(occurrence: W6bFilterGraphConstruction.P
     val operations: List<W6bBoundFilterOperationV1>
     val terminal: W6bFilterReferenceV1
 
+    /** Wrapper classifications follow the same contextual edges as demand and evaluation. */
+    fun hasTerminalFamily(predicate: (CapturedFilterNodeV1) -> Boolean): Boolean {
+        val classified = java.util.IdentityHashMap<W6bBoundFilterOperationV1, Boolean>()
+        fun matches(reference: W6bFilterReferenceV1): Boolean = when (reference) {
+            is W6bFilterReferenceV1.Result -> classified[reference.operation] == true
+            else -> false
+        }
+        for (operation in operations) {
+            val wrapped = when (operation.node) {
+                is CapturedFilterNodeV1.ColorFilter, is CapturedFilterNodeV1.Merge,
+                is CapturedFilterNodeV1.Blend -> operation.inputs.any(::matches)
+                else -> false
+            }
+            // A non-source binding records Compose's inner result even if outer is a leaf.
+            classified[operation] = predicate(operation.node) || wrapped || matches(operation.boundSource)
+        }
+        return matches(terminal)
+    }
+
     init {
         val ordered = mutableListOf<W6bBoundFilterOperationV1>()
         lateinit var bindNode: (CapturedFilterNodeIdI32, W6bFilterReferenceV1) -> W6bFilterReferenceV1

@@ -26,7 +26,7 @@ internal object W6cMorphologyPlanner {
     }
 
     internal fun bounds(
-        source: W6bFilterGraphConstruction.SourceBinding,
+        source: W6bSourceGeometryV1,
         morphologyKind: FilterPassOperationV1.Morphology.Kind,
         axis: FilterAxisV1,
         radiusF64: Double,

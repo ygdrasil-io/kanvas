@@ -32,27 +32,27 @@ internal object W6bFilterGraphConstruction {
     internal class SourceBinding(
         val resourceId: PlanResourceId,
         extent: SizeI32,
-        val originDeviceI32: Point2I32,
-        val mapping: LayerMappingF64,
+        override val originDeviceI32: Point2I32,
+        override val mapping: LayerMappingF64,
         knownContentDeviceI32: RectI32? = null,
         desiredOutputDeviceI32: RectI32? = null,
         requiredInputDeviceI32: RectI32? = null,
         producedOutputDeviceI32: RectI32? = null,
         /** Exact immutable SceneSnapshot revision for cache admission, if known. */
         val sourceRevisionIdentity: String? = null,
-    ) {
+    ) : W6bSourceGeometryV1 {
         private val extentSnapshotI32 = extent.copy()
         private val knownContentSnapshotI32 = knownContentDeviceI32?.copy()
         private val desiredOutputSnapshotI32 = desiredOutputDeviceI32?.copy()
         private val requiredInputSnapshotI32 = requiredInputDeviceI32?.copy()
         private val producedOutputSnapshotI32 = producedOutputDeviceI32?.copy()
 
-        fun copyExtentI32(): SizeI32 = extentSnapshotI32.copy()
-        fun copyKnownContentDeviceI32(): RectI32? = knownContentSnapshotI32?.copy()
-        fun copyDesiredOutputDeviceI32(): RectI32? = desiredOutputSnapshotI32?.copy()
-        fun copyRequiredInputDeviceI32(): RectI32? = requiredInputSnapshotI32?.copy()
-        fun copyProducedOutputDeviceI32(): RectI32? = producedOutputSnapshotI32?.copy()
-        fun copyDeviceBoundsI32(): RectI32 = try {
+        override fun copyExtentI32(): SizeI32 = extentSnapshotI32.copy()
+        override fun copyKnownContentDeviceI32(): RectI32? = knownContentSnapshotI32?.copy()
+        override fun copyDesiredOutputDeviceI32(): RectI32? = desiredOutputSnapshotI32?.copy()
+        override fun copyRequiredInputDeviceI32(): RectI32? = requiredInputSnapshotI32?.copy()
+        override fun copyProducedOutputDeviceI32(): RectI32? = producedOutputSnapshotI32?.copy()
+        override fun copyDeviceBoundsI32(): RectI32 = try {
             RectI32(
                 originDeviceI32.x,
                 originDeviceI32.y,
@@ -291,73 +291,28 @@ internal object W6bFilterGraphConstruction {
     /** W6d resource refusals retain their advanced-family owner across W6c wrappers. */
     internal fun ownsW6dAdvanced(scene: SceneSnapshot): Boolean = ownership(scene).hasW6dAdvanced
 
-    /** True when a frozen W6d branch needs an input domain beyond its rasterized output. */
-    internal fun hasReverseInputDemandTerminal(occurrence: PositiveOccurrence): Boolean {
-        lateinit var nodeNeedsInputDemand: (CapturedFilterNodeIdI32) -> Boolean
-        fun inputNeedsInputDemand(input: CapturedFilterInputV1): Boolean = when (input) {
-            is CapturedFilterInputV1.Node -> nodeNeedsInputDemand(input.id)
-            else -> false
-        }
-        nodeNeedsInputDemand = { id -> when (val node = occurrence.table.nodeAt(id)) {
-            is CapturedFilterNodeV1.MatrixConvolution,
-            is CapturedFilterNodeV1.DisplacementMap,
-            is CapturedFilterNodeV1.Magnifier,
-            is CapturedFilterNodeV1.DistantLitDiffuse,
-            is CapturedFilterNodeV1.PointLitDiffuse,
-            is CapturedFilterNodeV1.SpotLitDiffuse,
-            is CapturedFilterNodeV1.DistantLitSpecular,
-            is CapturedFilterNodeV1.PointLitSpecular,
+    internal fun hasReverseInputDemandTerminal(occurrence: PositiveOccurrence): Boolean =
+        occurrence.topology.hasTerminalFamily { node -> when (node) {
+            is CapturedFilterNodeV1.MatrixConvolution, is CapturedFilterNodeV1.DisplacementMap,
+            is CapturedFilterNodeV1.Magnifier, is CapturedFilterNodeV1.DistantLitDiffuse,
+            is CapturedFilterNodeV1.PointLitDiffuse, is CapturedFilterNodeV1.SpotLitDiffuse,
+            is CapturedFilterNodeV1.DistantLitSpecular, is CapturedFilterNodeV1.PointLitSpecular,
             is CapturedFilterNodeV1.SpotLitSpecular -> true
-            is CapturedFilterNodeV1.Compose -> inputNeedsInputDemand(node.outer) || inputNeedsInputDemand(node.inner)
-            is CapturedFilterNodeV1.ColorFilter -> inputNeedsInputDemand(node.input)
-            is CapturedFilterNodeV1.Merge -> node.any(::inputNeedsInputDemand)
-            is CapturedFilterNodeV1.Blend -> inputNeedsInputDemand(node.background) || inputNeedsInputDemand(node.foreground)
             else -> false
         } }
-        return occurrence.root?.let { nodeNeedsInputDemand(it.id) } == true
-    }
 
-    /** Lighting can synthesize visible pixels from transparent black, so its output follows its consumer. */
-    internal fun hasConsumerDemandTerminal(occurrence: PositiveOccurrence): Boolean {
-        lateinit var nodeNeedsConsumerDemand: (CapturedFilterNodeIdI32) -> Boolean
-        fun inputNeedsConsumerDemand(input: CapturedFilterInputV1): Boolean = when (input) {
-            is CapturedFilterInputV1.Node -> nodeNeedsConsumerDemand(input.id)
-            else -> false
-        }
-        nodeNeedsConsumerDemand = { id -> when (val node = occurrence.table.nodeAt(id)) {
-            is CapturedFilterNodeV1.DistantLitDiffuse,
-            is CapturedFilterNodeV1.PointLitDiffuse,
-            is CapturedFilterNodeV1.SpotLitDiffuse,
-            is CapturedFilterNodeV1.DistantLitSpecular,
-            is CapturedFilterNodeV1.PointLitSpecular,
-            is CapturedFilterNodeV1.SpotLitSpecular -> true
-            is CapturedFilterNodeV1.Compose -> inputNeedsConsumerDemand(node.outer) || inputNeedsConsumerDemand(node.inner)
-            is CapturedFilterNodeV1.ColorFilter -> inputNeedsConsumerDemand(node.input)
-            is CapturedFilterNodeV1.Merge -> node.any(::inputNeedsConsumerDemand)
-            is CapturedFilterNodeV1.Blend -> inputNeedsConsumerDemand(node.background) || inputNeedsConsumerDemand(node.foreground)
+    internal fun hasConsumerDemandTerminal(occurrence: PositiveOccurrence): Boolean =
+        occurrence.topology.hasTerminalFamily { node -> when (node) {
+            is CapturedFilterNodeV1.DistantLitDiffuse, is CapturedFilterNodeV1.PointLitDiffuse,
+            is CapturedFilterNodeV1.SpotLitDiffuse, is CapturedFilterNodeV1.DistantLitSpecular,
+            is CapturedFilterNodeV1.PointLitSpecular, is CapturedFilterNodeV1.SpotLitSpecular -> true
             else -> false
         } }
-        return occurrence.root?.let { nodeNeedsConsumerDemand(it.id) } == true
-    }
 
-    /** These samplers preserve content-sized output coordinates after their input demand is frozen. */
-    internal fun hasContentOutputSamplingTerminal(occurrence: PositiveOccurrence): Boolean {
-        lateinit var nodeNeedsContentOutput: (CapturedFilterNodeIdI32) -> Boolean
-        fun inputNeedsContentOutput(input: CapturedFilterInputV1): Boolean = when (input) {
-            is CapturedFilterInputV1.Node -> nodeNeedsContentOutput(input.id)
-            else -> false
+    internal fun hasContentOutputSamplingTerminal(occurrence: PositiveOccurrence): Boolean =
+        occurrence.topology.hasTerminalFamily { node ->
+            node is CapturedFilterNodeV1.DisplacementMap || node is CapturedFilterNodeV1.Magnifier
         }
-        nodeNeedsContentOutput = { id -> when (val node = occurrence.table.nodeAt(id)) {
-            is CapturedFilterNodeV1.DisplacementMap,
-            is CapturedFilterNodeV1.Magnifier -> true
-            is CapturedFilterNodeV1.Compose -> inputNeedsContentOutput(node.outer) || inputNeedsContentOutput(node.inner)
-            is CapturedFilterNodeV1.ColorFilter -> inputNeedsContentOutput(node.input)
-            is CapturedFilterNodeV1.Merge -> node.any(::inputNeedsContentOutput)
-            is CapturedFilterNodeV1.Blend -> inputNeedsContentOutput(node.background) || inputNeedsContentOutput(node.foreground)
-            else -> false
-        } }
-        return occurrence.root?.let { nodeNeedsContentOutput(it.id) } == true
-    }
 
     /** Unsupported captured-filter cases stop before source allocation. */
     internal fun admissionRefusalOrNull(scene: SceneSnapshot): RenderDiagnostic? {
@@ -1173,7 +1128,7 @@ internal object W6bFilterGraphConstruction {
             listOf(pass), output, key)
     }
 
-    private fun identityBounds(source: SourceBinding): FilterBoundsPlanV1 {
+    private fun identityBounds(source: W6bSourceGeometryV1): FilterBoundsPlanV1 {
         val domain = source.copyDeviceBoundsI32()
         val desired = source.copyDesiredOutputDeviceI32() ?: domain
         return FilterBoundsPlanV1(source.copyKnownContentDeviceI32(), desired,
@@ -1183,7 +1138,7 @@ internal object W6bFilterGraphConstruction {
     }
 
     /** Sampling filters preserve their content-sized output while reverse demand grows only the input. */
-    private fun samplingBounds(source: SourceBinding): FilterBoundsPlanV1 {
+    private fun samplingBounds(source: W6bSourceGeometryV1): FilterBoundsPlanV1 {
         val domain = source.copyDeviceBoundsI32()
         val desired = source.copyKnownContentDeviceI32() ?: source.copyDesiredOutputDeviceI32() ?: domain
         return FilterBoundsPlanV1(source.copyKnownContentDeviceI32(), desired,
@@ -1192,7 +1147,7 @@ internal object W6bFilterGraphConstruction {
             Point2I32(desired.left, desired.top))
     }
 
-    private fun exactPositiveI32(value: Float, label: String): Int {
+    internal fun exactPositiveI32(value: Float, label: String): Int {
         if (!value.isFinite() || value <= 0f || value != value.toLong().toFloat()) throw ConstructionFailure(
             W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds, "W6d $label is not a positive integral F32."))
         return try { Math.toIntExact(value.toLong()) } catch (_: ArithmeticException) {
@@ -1201,7 +1156,7 @@ internal object W6bFilterGraphConstruction {
         }
     }
 
-    private fun matrixBounds(source: SourceBinding, width: Int, height: Int, offsetX: Double, offsetY: Double): FilterBoundsPlanV1 {
+    private fun matrixBounds(source: W6bSourceGeometryV1, width: Int, height: Int, offsetX: Double, offsetY: Double): FilterBoundsPlanV1 {
         val desired = source.copyDeviceBoundsI32()
         val required = RectF64(desired.left.toDouble(), desired.top.toDouble(), desired.right.toDouble(), desired.bottom.toDouble())
             .expandSamplingHaloF64OrNull(offsetX.coerceAtLeast(0.0), offsetY.coerceAtLeast(0.0),
@@ -1213,7 +1168,7 @@ internal object W6bFilterGraphConstruction {
     }
 
     /** Lighting affects transparent black, so its desired domain is never narrowed to source content. */
-    private fun distantDiffuseBounds(source: SourceBinding, consumerDemand: RectI32?): FilterBoundsPlanV1 {
+    private fun distantDiffuseBounds(source: W6bSourceGeometryV1, consumerDemand: RectI32?): FilterBoundsPlanV1 {
         val desired = consumerDemand ?: source.copyDesiredOutputDeviceI32() ?: source.copyDeviceBoundsI32()
         val required = RectF64(desired.left.toDouble(), desired.top.toDouble(), desired.right.toDouble(), desired.bottom.toDouble())
             .expandSamplingHaloF64OrNull(1.0, 1.0, 1.0, 1.0)?.roundOutToRectI32OrNull()
@@ -1226,7 +1181,7 @@ internal object W6bFilterGraphConstruction {
     }
 
     /** All origin transforms and edge decisions are published before the renderer sees a pass. */
-    private fun distantDiffuseSobelSampling(input: SourceBinding, bounds: FilterBoundsPlanV1): W6dSobelSamplingV1 {
+    private fun distantDiffuseSobelSampling(input: W6bSourceGeometryV1, bounds: FilterBoundsPlanV1): W6dSobelSamplingV1 {
         val output = bounds.copyDesiredOutputDeviceI32()
         val child = input.copyDeviceBoundsI32()
         fun local(region: RectI32, label: String): RectI32 = try {
@@ -1251,170 +1206,21 @@ internal object W6bFilterGraphConstruction {
             if (child.bottom == output.bottom) W6dSobelEdgeModeV1.CLAMP else W6dSobelEdgeModeV1.DECAL)
     }
 
-    /** The output domain grows by blur support; it is never intersected back to the source. */
+    /** Compatibility entry point; contextual recipe demand is the only inverse authority. */
     internal fun reverseInputDemand(
         occurrence: PositiveOccurrence?,
         desired: RectI32,
         mapping: LayerMappingF64? = null,
-    ): RectI32? {
-        if (occurrence == null) return desired.copy()
-        fun expand(region: RectI32, x: Float, y: Float): RectI32 = RectF64(
-            region.left.toDouble(), region.top.toDouble(), region.right.toDouble(), region.bottom.toDouble())
-            .expandForBlurF64OrNull(x, y)?.roundOutToRectI32OrNull()
-            ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(
-                W6bFilterDiagnostics.InvalidBounds,
-                "W6b reverse blur demand cannot be represented in checked I32 texels.",
-            ))
-        fun spatialDemand(node: CapturedFilterNodeV1, output: RectI32): RectI32? =
-            W6cSpatialBoundsPlanner.requiredInputBounds(node, output, mapping ?: throw ConstructionFailure(
-                W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
-                    "W6c reverse demand has no sealed local-to-device mapping."),
-        ))
-        lateinit var inputDemand: (CapturedFilterInputV1, RectI32) -> RectI32?
-        fun unionInputDemands(inputs: Iterable<CapturedFilterInputV1>, output: RectI32): RectI32? {
-            var demand: RectI32? = null
-            for (input in inputs) {
-                val required = inputDemand(input, output) ?: continue
-                demand = demand?.let { union(it, required) } ?: required
-            }
-            return demand
-        }
-        fun nodeDemand(id: CapturedFilterNodeIdI32, output: RectI32): RectI32? = when (val node = occurrence.table.nodeAt(id)) {
-            is CapturedFilterNodeV1.Crop -> spatialDemand(node, output)?.let { required -> inputDemand(node.input, required) }
-            is CapturedFilterNodeV1.Offset -> spatialDemand(node, output)?.let { required -> inputDemand(node.input, required) }
-            is CapturedFilterNodeV1.Tile -> spatialDemand(node, output)?.let { required -> inputDemand(node.input, required) }
-            is CapturedFilterNodeV1.Dilate -> inputDemand(node.input,
-                W6cMorphologyPlanner.requiredInputBounds(node.radiusX.toDouble(), node.radiusY.toDouble(), output,
-                    mapping ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
-                        "W6c reverse demand has no sealed local-to-device mapping."))))
-            is CapturedFilterNodeV1.Erode -> inputDemand(node.input,
-                W6cMorphologyPlanner.requiredInputBounds(node.radiusX.toDouble(), node.radiusY.toDouble(), output,
-                    mapping ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
-                        "W6c reverse demand has no sealed local-to-device mapping."))))
-            is CapturedFilterNodeV1.Blur -> inputDemand(node.input, expand(output, node.sigmaX, node.sigmaY))
-            is CapturedFilterNodeV1.DropShadow -> {
-                val translated = RectF64(output.left.toDouble(), output.top.toDouble(),
-                    output.right.toDouble(), output.bottom.toDouble()).translateF64OrNull(-node.dx.toDouble(), -node.dy.toDouble())
-                    ?.roundOutToRectI32OrNull() ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(
-                    W6bFilterDiagnostics.InvalidBounds,
-                    "W6b reverse shadow demand cannot be represented in checked I32 texels.",
-                ))
-                val shadow = expand(translated, node.sigmaX, node.sigmaY)
-                inputDemand(node.input, if (node.mode == CapturedDropShadowModeV1.COMPOSITE) union(output, shadow) else shadow)
-            }
-            // These nodes do not alter their input's spatial demand.  Compose is contextual:
-            // outer consumes the inner result, so its reverse demand must flow into inner.
-            is CapturedFilterNodeV1.ColorFilter -> inputDemand(node.input, output)
-            is CapturedFilterNodeV1.Compose -> inputDemand(node.outer, output)?.let { outerDemand ->
-                inputDemand(node.inner, outerDemand)
-            }
-            // Keep the captured public order while forming a geometric union.  A Set here would
-            // erase repeated inputs before their individual source demand is accounted for.
-            is CapturedFilterNodeV1.Merge -> unionInputDemands(node, output)
-            is CapturedFilterNodeV1.Blend -> unionInputDemands(listOf(node.background, node.foreground), output)
-            is CapturedFilterNodeV1.MatrixConvolution -> {
-                val width = exactPositiveI32(node.kernelSize.width, "matrix kernel width")
-                val height = exactPositiveI32(node.kernelSize.height, "matrix kernel height")
-                val offsetX = node.kernelOffset.x.toDouble()
-                val offsetY = node.kernelOffset.y.toDouble()
-                val required = RectF64(output.left.toDouble(), output.top.toDouble(), output.right.toDouble(), output.bottom.toDouble())
-                    .expandSamplingHaloF64OrNull(offsetX.coerceAtLeast(0.0), offsetY.coerceAtLeast(0.0),
-                        (width - 1.0 - offsetX).coerceAtLeast(0.0), (height - 1.0 - offsetY).coerceAtLeast(0.0))
-                    ?.roundOutToRectI32OrNull() ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(
-                    W6bFilterDiagnostics.InvalidBounds, "W6d matrix reverse sampling halo cannot be represented in checked I32 texels."))
-                inputDemand(node.input, required)
-            }
-            is CapturedFilterNodeV1.DisplacementMap -> {
-                val scale = node.scale.toDouble()
-                if (!scale.isFinite()) throw ConstructionFailure(W6bFilterDiagnostics.refusal(
-                    W6bFilterDiagnostics.InvalidBounds, "W6d displacement reverse demand has non-finite scale."))
-                val halo = kotlin.math.abs(scale)
-                val sourceRequired = RectF64(output.left.toDouble(), output.top.toDouble(), output.right.toDouble(), output.bottom.toDouble())
-                    .expandSamplingHaloF64OrNull(halo, halo, halo, halo)?.roundOutToRectI32OrNull()
-                    ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(
-                    W6bFilterDiagnostics.InvalidBounds, "W6d displacement reverse sampling halo cannot be represented in checked I32 texels."))
-                unionInputDemands(listOf(node.displacement, node.input), output)?.let { mapRequired ->
-                    union(mapRequired, inputDemand(node.input, sourceRequired) ?: sourceRequired)
-                }
-            }
-            is CapturedFilterNodeV1.Magnifier -> {
-                val lens = node.copySource()
-                val mapping = mapping ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(
-                    W6bFilterDiagnostics.InvalidBounds, "W6d magnifier reverse demand has no sealed local-to-device mapping."))
-                val mappedLensF64 = mapping.mapLocalRectToDeviceF64OrNull(RectF64(
-                    lens.left.toDouble(), lens.top.toDouble(), lens.right.toDouble(), lens.bottom.toDouble(),
-                )) ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(
-                    W6bFilterDiagnostics.InvalidBounds, "W6d magnifier reverse lens cannot be represented in checked I32 texels."))
-                val zoomF64 = node.zoom.toDouble()
-                if (!zoomF64.isFinite() || zoomF64 <= 0.0) throw ConstructionFailure(W6bFilterDiagnostics.refusal(
-                    W6bFilterDiagnostics.InvalidBounds, "W6d magnifier reverse demand has invalid zoom."))
-                val insetF64 = node.inset.toDouble()
-                if (!insetF64.isFinite() || insetF64 < 0.0) throw ConstructionFailure(W6bFilterDiagnostics.refusal(
-                    W6bFilterDiagnostics.InvalidBounds, "W6d magnifier reverse demand has invalid inset."))
-                // The frozen shader samples the inset lens after mapping it to device space,
-                // then applies its inverse zoom around the mapped center.  In particular,
-                // 0 < zoom < 1 expands that sampled domain beyond the original lens.
-                val centerXF64 = (mappedLensF64.left + mappedLensF64.right) / 2.0
-                val centerYF64 = (mappedLensF64.top + mappedLensF64.bottom) / 2.0
-                val innerLeftF64 = mappedLensF64.left + insetF64
-                val innerTopF64 = mappedLensF64.top + insetF64
-                val innerRightF64 = mappedLensF64.right - insetF64
-                val innerBottomF64 = mappedLensF64.bottom - insetF64
-                // WGSL admits every edge of the inner lens. A reversed edge is the only
-                // no-sampling case; equal edges still admit a pixel-center line.
-                if (innerLeftF64 > innerRightF64 || innerTopF64 > innerBottomF64) {
-                    inputDemand(node.input, output)
-                } else {
-                    val inverseSampledLensF64 = RectF64(
-                        centerXF64 + (innerLeftF64 - centerXF64) / zoomF64,
-                        centerYF64 + (innerTopF64 - centerYF64) / zoomF64,
-                        centerXF64 + (innerRightF64 - centerXF64) / zoomF64,
-                        centerYF64 + (innerBottomF64 - centerYF64) / zoomF64,
-                    )
-                    if (!inverseSampledLensF64.isFinite()) throw ConstructionFailure(W6bFilterDiagnostics.refusal(
-                        W6bFilterDiagnostics.InvalidBounds,
-                        "W6d magnifier reverse sampled lens is non-finite."))
-                    // The shader loads round(sampled - .5).  The F64 half-texel envelope makes
-                    // outward I32 rounding include inclusive endpoints and ties-to-even texels,
-                    // including a lens collapsed to one admitted coordinate line.
-                    val sourceTexelEnvelopeF64 = RectF64(
-                        inverseSampledLensF64.left - .5,
-                        inverseSampledLensF64.top - .5,
-                        inverseSampledLensF64.right + .5,
-                        inverseSampledLensF64.bottom + .5,
-                    )
-                    val inverseSampledLensI32 = sourceTexelEnvelopeF64.roundOutToRectI32OrNull() ?: throw ConstructionFailure(
-                        W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
-                            "W6d magnifier reverse sampled lens cannot be represented in checked I32 texels."),
-                    )
-                    inputDemand(node.input, union(output, inverseSampledLensI32))
-                }
-            }
-            is CapturedFilterNodeV1.DistantLitDiffuse -> inputDemand(node.input, sobelRequiredInput(output))
-            is CapturedFilterNodeV1.PointLitDiffuse -> inputDemand(node.input, sobelRequiredInput(output))
-            is CapturedFilterNodeV1.SpotLitDiffuse -> inputDemand(node.input, sobelRequiredInput(output))
-            is CapturedFilterNodeV1.DistantLitSpecular -> inputDemand(node.input, sobelRequiredInput(output))
-            is CapturedFilterNodeV1.PointLitSpecular -> inputDemand(node.input, sobelRequiredInput(output))
-            is CapturedFilterNodeV1.SpotLitSpecular -> inputDemand(node.input, sobelRequiredInput(output))
-            is CapturedFilterNodeV1.RuntimeEffect -> inputDemand(
-                node.firstOrNull { it.name == "input" }?.input ?: CapturedFilterInputV1.ImplicitSource,
-                output,
-            )
-            else -> throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.UnsupportedFamily,
-                "Reverse demand requires an admitted W6b filter."))
-        }
-        inputDemand = { input, region -> if (input is CapturedFilterInputV1.Node) nodeDemand(input.id, region) else region }
-        val imageInput = occurrence.root?.let { nodeDemand(it.id, desired) } ?: desired
-        return (occurrence.mask as? MaskFilterNode.Blur)?.let { expand(imageInput, it.sigma, it.sigma) } ?: imageInput
-    }
+    ): RectI32? = if (occurrence == null) desired.copy() else
+        W6bFilterDemandsV1(occurrence.topology, occurrence.mask, desired, mapping).copyRequiredSourceI32()
 
-    private fun sobelRequiredInput(output: RectI32): RectI32 = RectF64(
+    internal fun sobelRequiredInput(output: RectI32): RectI32 = RectF64(
         output.left.toDouble(), output.top.toDouble(), output.right.toDouble(), output.bottom.toDouble(),
     ).expandSamplingHaloF64OrNull(1.0, 1.0, 1.0, 1.0)?.roundOutToRectI32OrNull()
         ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
             "W6d distant diffuse reverse Sobel demand cannot be represented in checked I32 texels."))
 
-    private fun blurBounds(source: SourceBinding, sigmaXF32: Float, sigmaYF32: Float): FilterBoundsPlanV1 {
+    private fun blurBounds(source: W6bSourceGeometryV1, sigmaXF32: Float, sigmaYF32: Float): FilterBoundsPlanV1 {
         val input = source.copyDeviceBoundsI32()
         val desired = RectF64(input.left.toDouble(), input.top.toDouble(), input.right.toDouble(), input.bottom.toDouble())
             .expandForBlurF64OrNull(sigmaXF32, sigmaYF32)?.roundOutToRectI32OrNull()
@@ -1424,7 +1230,7 @@ internal object W6bFilterGraphConstruction {
             source.copyKnownContentDeviceI32()?.let { desired.copy() }, Point2I32(desired.left, desired.top))
     }
 
-    private fun translatedBounds(source: SourceBinding, dxF64: Double, dyF64: Double): FilterBoundsPlanV1 {
+    private fun translatedBounds(source: W6bSourceGeometryV1, dxF64: Double, dyF64: Double): FilterBoundsPlanV1 {
         val input = source.copyDeviceBoundsI32()
         fun translate(bounds: RectI32): RectI32 = RectF64(bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble())
             .translateF64OrNull(dxF64, dyF64)?.roundOutToRectI32OrNull()
@@ -1442,7 +1248,7 @@ internal object W6bFilterGraphConstruction {
      * sampled source domain and DECAL supplies transparent taps beyond it.
      */
     private fun dropShadowLinearSampling(
-        input: SourceBinding,
+        input: W6bSourceGeometryV1,
         outputBounds: FilterBoundsPlanV1,
         dxF64: Double,
         dyF64: Double,
@@ -1469,7 +1275,7 @@ internal object W6bFilterGraphConstruction {
     }
 
     /** A COMPOSITE pass receives only plan-frozen target-local source coordinates. */
-    private fun targetLocalSampleOffset(input: SourceBinding, outputBounds: FilterBoundsPlanV1): Point2I32 {
+    private fun targetLocalSampleOffset(input: W6bSourceGeometryV1, outputBounds: FilterBoundsPlanV1): Point2I32 {
         val outputOrigin = outputBounds.copyTargetOriginDeviceI32()
         return try {
             Point2I32(
@@ -1484,7 +1290,7 @@ internal object W6bFilterGraphConstruction {
     }
 
     /** Converts every source-space rectangle while the graph still owns both device origins. */
-    private fun filterInputSampling(input: SourceBinding, outputBounds: FilterBoundsPlanV1): FilterInputSamplingV1 {
+    private fun filterInputSampling(input: W6bSourceGeometryV1, outputBounds: FilterBoundsPlanV1): FilterInputSamplingV1 {
         val inputOrigin = input.originDeviceI32
         val known = input.copyKnownContentDeviceI32() ?: input.copyDeviceBoundsI32()
         val knownTargetLocal = try {
@@ -1505,7 +1311,7 @@ internal object W6bFilterGraphConstruction {
 
     /** Seals F64 spatial sampling in resource coordinates; renderer receives neither device origins nor mapping. */
     private fun spatialSampling(
-        input: SourceBinding,
+        input: W6bSourceGeometryV1,
         outputBounds: FilterBoundsPlanV1,
         clipOutputTargetLocalF64: RectF64,
         extraOffsetXF64: Double,
@@ -1541,7 +1347,7 @@ internal object W6bFilterGraphConstruction {
         return RectF64(0.0, 0.0, desired.width().toDouble(), desired.height().toDouble())
     }
 
-    private fun dropShadowCompositeBounds(input: SourceBinding, shadow: SourceBinding, mode: CapturedDropShadowModeV1): FilterBoundsPlanV1 {
+    private fun dropShadowCompositeBounds(input: W6bSourceGeometryV1, shadow: W6bSourceGeometryV1, mode: CapturedDropShadowModeV1): FilterBoundsPlanV1 {
         val inputDomain = input.copyDeviceBoundsI32()
         val shadowDomain = shadow.copyDeviceBoundsI32()
         val desired = if (mode == CapturedDropShadowModeV1.COMPOSITE) union(inputDomain, shadowDomain) else shadowDomain
