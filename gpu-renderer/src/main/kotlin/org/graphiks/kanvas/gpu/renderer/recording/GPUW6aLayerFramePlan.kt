@@ -139,6 +139,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
             }
         }
     private val templates = mutableMapOf<GPUDrawPacketID, GPUW5aGeometryHostTemplateV1>()
+    /** Each W6 SolidRect packet retains its final planner ordinal/site for later native consumption. */
+    private val solidRectSitesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W6GeometrySiteKeyV1>()
     private val analyticUniforms = mutableMapOf<GPUDrawPacketID, ByteArray>()
     private val geometryPipelines = mutableMapOf<GPUDrawPacketID, GPUWgpu4kCorePrimitivePipelineMapping.Mapped>()
     internal fun maskShaderMaterial(binding: FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned):
@@ -320,7 +322,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                             is PlanPass.FilterCoverageSourcePass -> Point2I32.Origin
                             else -> Point2I32.Origin
                         }
-                        val packets = packetInputs.map { (packetPass, draw, coverageProducer) ->
+                        val packets = packetInputs.mapIndexed { drawOrdinalI32, (packetPass, draw, coverageProducer) ->
                             // A frozen Picture stream may contain only Clear/DrawColor entries.
                             // Those legacy-color SolidRect operands are complete without a W5
                             // material table; every material-backed branch below still demands
@@ -352,7 +354,14 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                                     else W4dPathStrokeGraphLowerer().w5bPacket(packetPass, listOf(draw), requireNotNull(table), targetBounds, graph).packet
                                 else -> error("Unadmitted W6 geometry")
                             }
-                            if (draw is SolidRectDraw) templates[packet.packetId] = w6aGeometryTemplate(packet, draw, targetOrigin)
+                            if (draw is SolidRectDraw) {
+                                val owner = requireNotNull(packetPass) { "W6 SolidRect host recipe only admits RenderPass draws." }
+                                val site = W6GeometrySiteKeyV1(owner.id, drawOrdinalI32)
+                                val recipe = physical.w6SolidRectHostRecipe(site)
+                                require(recipe.site == site)
+                                require(solidRectSitesByPacket.put(packet, site) == null)
+                                templates[packet.packetId] = w6aGeometryTemplate(packet, recipe)
+                            }
                             else if (draw is W5bVerticesDraw) {
                                 templates[packet.packetId] = requireNotNull(sealW5aGeometryHostTemplateV1(packet)).copy(
                                     materialDevicePointWgsl = "input.position.xy + vec2<f32>(${targetOrigin.x}.0, ${targetOrigin.y}.0)")
@@ -474,6 +483,10 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
             }
             require(frameAuthority.validatesRenders(request.frameId.value, seal.sealHash, renders))
         }
+        require(solidRectSitesByPacket.values.toSet() == physical.w6SolidRectHostRecipes().keys &&
+            solidRectSitesByPacket.size == physical.w6SolidRectHostRecipes().size) {
+            "Every frozen W6 SolidRect host recipe must project to exactly one packet."
+        }
     }
 
     internal fun taskList(): GPUTaskList = GPUTaskList(request.frameId, seal, listOf(recording), graph.id.value,
@@ -511,6 +524,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
         !frame.atomicallyRefused && frame.memoryBudget == memory && graph.verifyW6aLayerCompilerWitness()
 
     internal fun template(packet: GPUDrawPacket): GPUW5aGeometryHostTemplateV1? = templates[packet.packetId]
+    /** Planner site retained with the packet; no native stage may infer it from material authority. */
+    internal fun solidRectSite(packet: GPUDrawPacket): W6GeometrySiteKeyV1? = solidRectSitesByPacket[packet]
     internal fun validatesW4eFragments(frame: GPUFramePlan): Boolean = validates(frame) && w4eAuthorities.all { (binding, _) ->
         val renders = frame.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().filter { it.w6aPassV1?.id in binding.graphPassIds() }
         val authority = renders.firstOrNull()?.drawPackets?.singleOrNull()?.w4ePreparedFrameAuthority

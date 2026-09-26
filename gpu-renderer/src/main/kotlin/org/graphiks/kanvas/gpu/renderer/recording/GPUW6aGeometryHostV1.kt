@@ -4,7 +4,6 @@ import io.ygdrasil.webgpu.*
 import org.graphiks.kanvas.gpu.plan.*
 import org.graphiks.kanvas.gpu.renderer.execution.MaterialCoordinateSlotV1
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
-import org.graphiks.math.geometry.Point2I32
 
 internal const val W6A_VERTEX_SHADER: String = """
     @vertex fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
@@ -20,16 +19,30 @@ internal const val W6A_RECT_SHADER: String = W6A_VERTEX_SHADER + """
     }
 """
 
-internal fun w6aGeometryTemplate(packet: GPUDrawPacket, draw: SolidRectDraw, targetOriginDeviceI32: Point2I32): GPUW5aGeometryHostTemplateV1 {
-    val frozen = (draw.materialAuthority as? PlanDrawMaterialAuthority.LegacyColorV1)?.copyColorF32()
+/** Mechanically lowers the planner-owned recipe; it deliberately does not inspect the draw packet's authority. */
+internal fun w6aGeometryTemplate(packet: GPUDrawPacket, recipe: W6SolidRectHostRecipeV1): GPUW5aGeometryHostTemplateV1 {
+    require(recipe.family == W6SolidRectGeometryFamilyV1.FullscreenTriangle)
+    require(recipe.target == W6SolidRectTargetV1.Rgba8UnormSrgbSingleSample)
+    require(recipe.coordinateSlot == W6SolidRectCoordinateSlotV1.FragmentPosition)
+    val frozen = (recipe.colorMode as? W6SolidRectColorModeV1.FrozenColor)?.color?.copyColorF32()
     val source = frozen?.let(::w6aFrozenColorShader) ?: W6A_RECT_SHADER
-    val layout = if (frozen == null) GPUW5aHostBindGroupLayoutV1.of(listOf(GPUW5aHostBindGroupEntryV1(0, 2u,
-        GPUW5aHostBindingLayoutV1.Buffer(GPUBufferBindingType.Uniform, false, 16L)))) else GPUW5aHostBindGroupLayoutV1.of(emptyList())
+    val layout = when (recipe.groupZeroAbi) {
+        W6SolidRectGroupZeroAbiV1.UniformColor16 -> {
+            require(recipe.colorMode is W6SolidRectColorModeV1.UniformColor16)
+            GPUW5aHostBindGroupLayoutV1.of(listOf(GPUW5aHostBindGroupEntryV1(0, 2u,
+                GPUW5aHostBindingLayoutV1.Buffer(GPUBufferBindingType.Uniform, false, 16L))))
+        }
+        W6SolidRectGroupZeroAbiV1.Empty -> {
+            require(frozen != null)
+            GPUW5aHostBindGroupLayoutV1.of(emptyList())
+        }
+    }
+    val origin = recipe.materialOriginDeviceI32
     val colorKey = frozen?.let { ".${it.red.toBits()}.${it.green.toBits()}.${it.blue.toBits()}.${it.alpha.toBits()}" }.orEmpty()
     return GPUW5aGeometryHostTemplateV1(packet.packetId.value,
-        "w6a.rect.v1.${packet.commandIdValue}.${targetOriginDeviceI32.x}.${targetOriginDeviceI32.y}$colorKey", source, "vs_main", "fs_main",
-        w6aColorTarget(draw.blend).hostTargetV1(), layout, null, MaterialCoordinateSlotV1.FragmentPosition,
-        materialDevicePointWgsl = "fragment_position.xy + vec2<f32>(${targetOriginDeviceI32.x}.0, ${targetOriginDeviceI32.y}.0)")
+        "w6a.rect.v1.${recipe.site.ownerPassId.value}.${recipe.site.drawOrdinalI32}.${origin.xI32}.${origin.yI32}$colorKey", source, "vs_main", "fs_main",
+        w6aColorTarget(recipe.blend).hostTargetV1(), layout, null, MaterialCoordinateSlotV1.FragmentPosition,
+        materialDevicePointWgsl = "fragment_position.xy + vec2<f32>(${origin.xI32}.0, ${origin.yI32}.0)")
 }
 
 /** A legacy colour is already sealed into the picture stream and has no W5 uniform row. */

@@ -3205,13 +3205,25 @@ internal class W6aLayerGraphConstruction(
                 else -> pass
             }
         }
-        val allResources = resources + source.resources
+        // SolidRect host selection belongs to the same final source/layout boundary as its W5
+        // rows.  The recipe is behavior-neutral and does not participate in the W6 budget yet.
+        val finalSource = SourcePhysicalConstructionV1(
+            resources = source.resources,
+            uniforms = source.uniforms,
+            caches = source.caches,
+            w6cColorUniformBindings = source.w6cColorUniformBindings,
+            w4eGeometry = w4eBindings.map { binding ->
+                binding.bindSources(localized.entries.associate { (key, draw) -> key.first to draw })
+            },
+            w6SolidRectHostRecipes = freezeW6SolidRectHostsV1(passes),
+        )
+        val allResources = resources + finalSource.resources
         val peak = W6aLayerPlanBudget.peak(allResources, passes, caps, budget)
         val construction = RenderGraph.construct(id, W6aLayerPlanCompiler.CAPABILITY_ID, extent,
             PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL, caps, budget, RenderGraph.visualDraws(passes).size, allResources, passes,
             passes.zipWithNext { first, second -> PlanPassDependency(first.id, second.id) }, peak, table)
         val sourceNonUniform = Math.subtractExact(construction.peakFrameLocalBytes,
-            source.resources.filter { it.role == PlanResourceRole.SourceUniformData }.fold(0L) { bytes, row -> Math.addExact(bytes, row.byteSize) })
+            finalSource.resources.filter { it.role == PlanResourceRole.SourceUniformData }.fold(0L) { bytes, row -> Math.addExact(bytes, row.byteSize) })
         val frozenMaterialRows = buildList {
             maskMaterialRoots.forEach { (occurrenceIdI32, material) ->
                 val source = maskMaterialSourcesByOccurrence.getValue(occurrenceIdI32)
@@ -3225,15 +3237,7 @@ internal class W6aLayerGraphConstruction(
             }
         }
         return RenderGraph.publishW6a(construction, frame,
-            packConstructedFrame(listOf(construction), table, sourceNonUniform, frozenMaterialRows), SourcePhysicalConstructionV1(
-                resources = source.resources,
-                uniforms = source.uniforms,
-                caches = source.caches,
-                w6cColorUniformBindings = source.w6cColorUniformBindings,
-                w4eGeometry = w4eBindings.map { binding ->
-                    binding.bindSources(localized.entries.associate { (key, draw) -> key.first to draw })
-                },
-            ))
+            packConstructedFrame(listOf(construction), table, sourceNonUniform, frozenMaterialRows), finalSource)
     }
 
     /** Appended after all native W5 lanes, preserving one source-table/publish authority. */
