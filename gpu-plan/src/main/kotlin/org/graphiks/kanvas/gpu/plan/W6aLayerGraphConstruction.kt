@@ -595,24 +595,6 @@ internal class W6aLayerGraphConstruction(
             .associateBy { it.insertionCommandIndexI32 }
         val backdropFiltersByBegin = filterOccurrences.filter(W6bFilterGraphConstruction.PositiveOccurrence::isBackdropInitialization)
             .associateBy { it.insertionCommandIndexI32 }
-        // A direct mask blur inside an explicit W6a layer composites its frozen auto-layer
-        // back into that layer before the ordinary restore.  Reserve its already-frozen halo
-        // in the parent target now; otherwise the W6a content-sized target clips the terminal.
-        val directBlurByCommand = filterOccurrences.filter { occurrence ->
-            !occurrence.isLayerOccurrence && !occurrence.isPictureOccurrence && occurrence.mask is MaskFilterNode.Blur
-        }.associateBy { occurrence -> occurrence.insertionCommandIndexI32 }
-        val directKnownByScope = arrayOfNulls<RectI32>(occurrences.size)
-        bindings.forEach { binding ->
-            val scopeIdI32 = binding.scopeI32 ?: return@forEach
-            RenderGraph.visualDraws(binding.source.passes()).forEach { draw ->
-                intersect(w6aRasterBoundsI32(draw), w6aScissorI32(draw))?.let { bounds ->
-                    val frozenAutoLayerBounds = directBlurByCommand[draw.commandIndex]?.let { occurrence ->
-                        W6bFilterGraphConstruction.reverseInputDemand(occurrence, bounds, binding.occurrenceInput?.mapping) ?: bounds
-                    } ?: bounds
-                    directKnownByScope[scopeIdI32] = unionOrNull(directKnownByScope[scopeIdI32], frozenAutoLayerBounds)
-                }
-            }
-        }
 
         // Desired restore output is semantic and flows from the root clip downward.  It must
         // never be constrained by a parent's later, content-sized physical allocation.
@@ -621,6 +603,68 @@ internal class W6aLayerGraphConstruction(
             val parentDesired = if (occurrence.parentIdI32 == null) rootDomainDeviceI32
                 else desiredOutputByScope[occurrence.parentIdI32]
             desiredOutputByScope[occurrence.idI32] = parentDesired?.let { desiredOutput(occurrence.descriptor, it) }
+        }
+
+        val evaluatedImagesByOccurrence = java.util.IdentityHashMap<W6bFilterGraphConstruction.PositiveOccurrence, W6bEvaluatedFilterRecipeV1>()
+        val evaluatedMasksByOccurrence = java.util.IdentityHashMap<W6bFilterGraphConstruction.PositiveOccurrence, W6bEvaluatedFilterRecipeV1>()
+        data class DirectAutoLayerFacts(
+            val sourceDomainDeviceI32: RectI32,
+            val desiredOutputDeviceI32: RectI32,
+        )
+        val directAutoLayerFactsByOccurrence = java.util.IdentityHashMap<W6bFilterGraphConstruction.PositiveOccurrence, DirectAutoLayerFacts>()
+        val directFiltersByCommand = filterOccurrences.filterNot {
+            it.isLayerOccurrence || it.isPictureOccurrence
+        }.associateBy { it.insertionCommandIndexI32 }
+        val directKnownByScope = arrayOfNulls<RectI32>(occurrences.size)
+        bindings.forEach { binding ->
+            val scopeIdI32 = binding.scopeI32
+            val desired = scopeIdI32?.let(desiredOutputByScope::get) ?: rootDomainDeviceI32
+            val parentTransform = scopeIdI32?.let(occurrences::get)?.descriptor?.transform
+            val parentLocalToDevice = Matrix3x3F64(
+                parentTransform?.sx?.toDouble() ?: 1.0, parentTransform?.kx?.toDouble() ?: 0.0, parentTransform?.tx?.toDouble() ?: 0.0,
+                parentTransform?.ky?.toDouble() ?: 0.0, parentTransform?.sy?.toDouble() ?: 1.0, parentTransform?.ty?.toDouble() ?: 0.0,
+                parentTransform?.persp0?.toDouble() ?: 0.0, parentTransform?.persp1?.toDouble() ?: 0.0, parentTransform?.persp2?.toDouble() ?: 1.0,
+            )
+            RenderGraph.visualDraws(binding.source.passes()).forEach { draw ->
+                intersect(w6aRasterBoundsI32(draw), w6aScissorI32(draw))?.let { bounds ->
+                    val occurrence = directFiltersByCommand[draw.commandIndex]
+                    val produced = occurrence?.let { direct ->
+                        val sourceLocalToDevice = if (W6bFilterGraphConstruction.hasContentOutputSamplingTerminal(direct)) {
+                            direct.source.sourceDraw?.let { sourceDraw ->
+                                val sourceToParent = composeInOrderF64(
+                                    direct.source.outerPictures().map { it.transform } + sourceDraw.transform,
+                                )
+                                requireNotNull(parentLocalToDevice.timesCheckedOrNull(sourceToParent)) {
+                                    "W6d direct source local-to-device mapping cannot be composed in finite F64."
+                                }
+                            } ?: throw W6bFilterGraphConstruction.ConstructionFailure(
+                                W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                                    "W6d direct sampling filter requires its captured source draw mapping."),
+                            )
+                        } else parentLocalToDevice
+                        val mapping = requireNotNull(LayerMappingF64.ofOrNull(sourceLocalToDevice,
+                            Point2I32(bounds.left, bounds.top)))
+                        val facts = W6bFilterSourceFactsV1(bounds, bounds, desired, mapping,
+                            { bound, context -> prepareFilterPicture(direct, bound, context) })
+                        val recipe = W6bFilterGraphConstruction.bindOccurrenceRecipe(direct, desired, mapping)
+                        val masked = direct.mask?.let { recipe.evaluateMask(facts).also {
+                            evaluatedMasksByOccurrence[direct] = it
+                        } }
+                        val imageFacts = masked?.output?.let { output -> W6bFilterSourceFactsV1(
+                            output.copyDeviceBoundsI32(), output.copyKnownContentDeviceI32(), desired, output.mapping,
+                            { bound, context -> prepareFilterPicture(direct, bound, context) },
+                        ) } ?: facts
+                        val evaluated = direct.root?.let { recipe.evaluate(imageFacts, runtimeCatalog).also {
+                            evaluatedImagesByOccurrence[direct] = it
+                        } } ?: masked
+                        directAutoLayerFactsByOccurrence[direct] = DirectAutoLayerFacts(bounds, desired)
+                        evaluated?.copyProducedOutputDeviceI32()
+                    } ?: bounds
+                    scopeIdI32?.let { scope ->
+                        directKnownByScope[scope] = unionOrNull(directKnownByScope[scope], produced)
+                    }
+                }
+            }
         }
 
         // A backdrop or filtered initWithPrevious layer reads its immediate parent before the
@@ -652,8 +696,6 @@ internal class W6aLayerGraphConstruction(
         val knownContentByScope = arrayOfNulls<RectI32>(occurrences.size)
         val producedOutputByScope = arrayOfNulls<RectI32>(occurrences.size)
         val geometryByScope = arrayOfNulls<W6aScopeGeometry>(occurrences.size)
-        val evaluatedImagesByOccurrence = java.util.IdentityHashMap<W6bFilterGraphConstruction.PositiveOccurrence, W6bEvaluatedFilterRecipeV1>()
-        val evaluatedMasksByOccurrence = java.util.IdentityHashMap<W6bFilterGraphConstruction.PositiveOccurrence, W6bEvaluatedFilterRecipeV1>()
         for (indexI32 in occurrences.indices.reversed()) {
             val occurrence = occurrences[indexI32]
             val desired = desiredOutputByScope[occurrence.idI32]
@@ -936,23 +978,23 @@ internal class W6aLayerGraphConstruction(
         val directFilterSourceByCommand = linkedMapOf<Int, DirectFilterSources>()
         val directConsumerDemandCommands = linkedSetOf<Int>()
         filterOccurrences.filterNot { it.isLayerOccurrence || it.isPictureOccurrence }.forEach { occurrence ->
+            val earlyFacts = requireNotNull(directAutoLayerFactsByOccurrence[occurrence]) {
+                "W6b direct occurrence has no pre-reservation recipe facts."
+            }
             // Reject an opaque terminal clip before allocating any direct filter source; W4e
             // retains ownership of complex clips on non-filtered routes.
             val terminalClip = directTerminalClip(occurrence)
             val binding = requireNotNull(bindingsByCommand[occurrence.insertionCommandIndexI32]) {
                 "W6b direct occurrence has no W5 source generation."
             }
-            val draw = RenderGraph.visualDraws(binding.source.passes()).single()
             val parentTarget = targetFor(binding.scopeI32)
             val targetBounds = targetDeviceBounds(parentTarget)
             // A direct occurrence's terminal clip is its downstream consumer.  Seal that
             // intersection before allocating coverage or freezing an unbounded lighting pass.
             val clippedConsumer = terminalClip?.let { intersect(targetBounds, it) }
             val terminalNoOp = terminalClip != null && clippedConsumer == null
-            val consumerDomain = clippedConsumer ?: targetBounds
             val noOpDomain = RectI32(targetBounds.left, targetBounds.top,
                 Math.addExact(targetBounds.left, 1), Math.addExact(targetBounds.top, 1))
-            val inputDemandFilter = W6bFilterGraphConstruction.hasReverseInputDemandTerminal(occurrence)
             val consumerDemandFilter = W6bFilterGraphConstruction.hasConsumerDemandTerminal(occurrence)
             if (consumerDemandFilter) directConsumerDemandCommands += occurrence.insertionCommandIndexI32
             // The sampler recipe maps its public local lens with this captured draw transform.
@@ -972,26 +1014,13 @@ internal class W6aLayerGraphConstruction(
                         "W6d direct sampling filter requires its captured source draw mapping."),
                 )
             } else null
-            // The W5 wrapper represents the terminal consumer clip. Any filter with reverse
-            // input demand must rasterize its pre-clip source before freezing its halo.
-            val sourceGeometryDraw = if (inputDemandFilter) draw.withoutW6aTerminalClip() else draw
-            val rasterInTarget = intersect(w6aRasterBoundsI32(sourceGeometryDraw), targetBounds)
-            // Keep only the texels demanded by the frozen input halo, not the terminal
-            // clip/scissor itself. A null terminal domain is a legal sealed no-op.
-            val sourceDomain = when {
-                terminalNoOp -> noOpDomain
-                inputDemandFilter -> W6bFilterGraphConstruction.reverseInputDemand(
-                    occurrence, consumerDomain,
-                    sourceLocalToDeviceF64?.let { mapping ->
-                        requireNotNull(LayerMappingF64.ofOrNull(mapping, filterSource(parentTarget).originDeviceI32))
-                    } ?: filterSource(parentTarget).mapping,
-                )?.let { demand -> rasterInTarget?.let { raster -> intersect(raster, demand) } } ?: noOpDomain
-                else -> rasterInTarget?.let { raster -> intersect(raster, w6aScissorI32(draw)) } ?: noOpDomain
-            }
+            // The recipe was evaluated before parent reservation, using its own inverse demand.
+            // Its physical source remains this direct draw's clipped raster domain.
+            val sourceDomain = if (terminalNoOp) noOpDomain else earlyFacts.sourceDomainDeviceI32
             // Lighting affects transparent black. Its physical child remains tightly rasterized,
             // while its semantic output is the frozen terminal consumer. Sampling filters only
             // widen their input domain and retain their content-sized output contract.
-            val desired = if (consumerDemandFilter && !terminalNoOp) consumerDomain else sourceDomain
+            val desired = if (terminalNoOp) noOpDomain else earlyFacts.desiredOutputDeviceI32
             // Only the samplers that freeze target-local coordinates need the draw mapping.
             // Rebinding Picture/Matrix to it would compose a carrier transform twice: those
             // established paths retain the parent source mapping below.
@@ -2463,7 +2492,7 @@ internal class W6aLayerGraphConstruction(
                                 occurrence.source, rasterBinding = rasterBinding)
                             val frozen = occurrence.mask?.let {
                                 val input = sources.coverage
-                                val evaluation = W6bFilterGraphConstruction.evaluateMaskRecipe(occurrence,
+                                val evaluation = evaluatedMasksByOccurrence[occurrence] ?: W6bFilterGraphConstruction.evaluateMaskRecipe(occurrence,
                                     W6bFilterSourceFactsV1(input.copyDeviceBoundsI32(), input.copyKnownContentDeviceI32(),
                                         input.copyDesiredOutputDeviceI32() ?: input.copyDeviceBoundsI32(), input.mapping))
                                 W6bFilterGraphConstruction.freezeMaskOccurrence(occurrence, input, filterCursor, evaluation)
@@ -2581,7 +2610,8 @@ internal class W6aLayerGraphConstruction(
                             val occurrence = requireNotNull(directOccurrence)
                             val composite = appendFrozenOccurrence(occurrence, source, parentTarget,
                                 FilterCompositeOperationV1.Draw(selectedDraw.blend), materialCoverage,
-                                terminalClipDeviceI32 = directTerminalClip(occurrence))
+                                terminalClipDeviceI32 = directTerminalClip(occurrence),
+                                evaluatedImage = evaluatedImagesByOccurrence[occurrence])
                             binding.scopeI32?.let {
                                 steps += LayerExecutionStepV1.RenderChildren(LayerScopeIdI32(it), composite.id)
                             }

@@ -73,6 +73,39 @@ class W6FilterBoundsRecipeSurfacePixelTest {
         assertRenderAndReadback(blurSurface, blurExpected, tolerance = 12)
     }
 
+    /**
+     * Removing direct auto-layer production from the parent known content clips the x=1 Offset
+     * pixel and the Blur halo when this otherwise unfiltered layer is restored.
+     */
+    @Test
+    fun directOffsetAndBlurSurviveUnfilteredParent() {
+        val transparent = ubyteArrayOf(0u, 0u, 0u, 0u)
+        val blue = ubyteArrayOf(0u, 0u, 255u, 255u)
+        val offsetExpected = transparent + blue + transparent + transparent
+        val offsetSurface = Surface(4, 1)
+        offsetSurface.canvas {
+            saveLayer()
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(
+                ColorARGB.Blue, imageFilter = ImageFilter.Offset(1f, 0f), antiAlias = false,
+            ))
+            restore()
+        }
+        assertRenderAndReadback(offsetSurface, offsetExpected)
+
+        val blurExpected = W6bImageBlurCpuOracle.toOpaqueWhiteRgba(W6bImageBlurCpuOracle.blurredAlpha(
+            7, 7, UByteArray(49).also { it[3 + 3 * 7] = 255u }, 1f, 1f, TileMode.DECAL,
+        ))
+        val blurSurface = Surface(7, 7)
+        blurSurface.canvas {
+            saveLayer()
+            drawRect(RectF32.ofLTRB(3f, 3f, 4f, 4f), Paint(
+                ColorARGB.White, imageFilter = ImageFilter.Blur(1f, 1f, TileMode.DECAL), antiAlias = false,
+            ))
+            restore()
+        }
+        assertRenderAndReadback(blurSurface, blurExpected, tolerance = 12)
+    }
+
     /** A prematurely clipped Compose intermediate cannot return from +20 to the terminal x=0. */
     @Test
     fun composeKeepsIntermediateOutsideTerminalClip() {
