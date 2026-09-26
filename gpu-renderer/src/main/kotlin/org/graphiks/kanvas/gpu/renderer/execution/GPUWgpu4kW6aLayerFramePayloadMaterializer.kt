@@ -363,6 +363,15 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     }
                                     frame.physical.w6SolidRectHostRecipe(site)
                                 }
+                                val analyticRectRecipe = (draw as? AnalyticRectDraw)
+                                    ?.takeIf { pass is PlanPass.RenderPass }
+                                    ?.let {
+                                        val site = W6GeometrySiteKeyV1(pass.id, drawOrdinalI32)
+                                        require(frame.analyticRectSite(packet) == site) {
+                                            "W6 AnalyticRect packet lost its frozen owner/ordinal."
+                                        }
+                                        frame.physical.w6AnalyticRectHostRecipe(site)
+                                    }
                                 val frozenLegacyColor = when (val recipe = solidRectRecipe) {
                                     null -> draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1
                                     else -> recipe.colorMode is W6SolidRectColorModeV1.FrozenColor
@@ -381,6 +390,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     else geometryPipeline(mapped, layout, owned, template,
                                         if (maskMaterialSource) BlendPlan.LegacySrcOverV1 else null,
                                         maskMaterialSource && pass is PlanPass.StencilCover)
+                                require(analyticRectRecipe == null || mapped != null)
                                 val uniformPayload = binding?.let { frame.analyticUniform(packet) }
                                 val nativeUniform = data?.let { geometryBuffers.getValue(it.uniform) } ?: uniform
                                 if (data != null) {
@@ -456,7 +466,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     is SolidRectDraw -> draw.copyVisibleBounds().also {
                                         require(it.intersect(draw.copyScissor()))
                                     }
-                                    is AnalyticRectDraw -> draw.copyScissor()
+                                    is AnalyticRectDraw -> analyticRectRecipe?.scissor ?: draw.copyScissor()
                                     is AnalyticRRectDraw -> draw.copyScissor()
                                     is PathDraw -> draw.copyScissorI32()
                                     is W5bPointDraw -> draw.copyScissorI32()

@@ -4,6 +4,7 @@ package org.graphiks.kanvas.surface
 
 import kotlin.test.assertContentEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.image.AlphaType
@@ -113,6 +114,24 @@ class W6aLayerW4W5SurfacePixelTest {
             }
             assertContentEquals(expected, surface.render().pixels, "layered=$layered")
         }
+    }
+
+    @Test
+    fun `fractional AA Rect retains exact pixels and native evidence in a translated layer`() {
+        // This fixed AA sample is a public pixel contract. Keep it before Surface construction
+        // so it cannot inherit a planner or renderer decision.
+        val expected = rgba(0, 0, 0, 0) + rgba(228, 48, 69, 229) + rgba(239, 51, 73)
+        val surface = Surface(3, 1)
+        surface.canvas {
+            saveLayer(RectF32.ofLTRB(1f, 0f, 3f, 1f))
+            drawRect(RectF32.ofLTRB(1.1f, -1f, 4.1f, 2f), opaque(RED).copy(antiAlias = true))
+            restore()
+        }
+
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
     }
 
     @Test

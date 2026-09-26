@@ -2,8 +2,14 @@ package org.graphiks.kanvas.gpu.renderer.recording
 
 import io.ygdrasil.webgpu.*
 import org.graphiks.kanvas.gpu.plan.*
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.execution.MaterialCoordinateSlotV1
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveStructuralBlend
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveStructuralClip
+import org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer
 
 internal const val W6A_VERTEX_SHADER: String = """
     @vertex fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
@@ -43,6 +49,45 @@ internal fun w6aGeometryTemplate(packet: GPUDrawPacket, recipe: W6SolidRectHostR
         "w6a.rect.v1.${recipe.site.ownerPassId.value}.${recipe.site.drawOrdinalI32}.${origin.x}.${origin.y}$colorKey", source, "vs_main", "fs_main",
         w6aColorTarget(recipe.blend).hostTargetV1(), layout, null, MaterialCoordinateSlotV1.FragmentPosition,
         materialDevicePointWgsl = "fragment_position.xy + vec2<f32>(${origin.x}.0, ${origin.y}.0)")
+}
+
+/**
+ * Builds the existing CorePrimitive key from the final planner recipe only.  The packet still
+ * supplies immutable shape bytes, but it is not allowed to select the W6 host route.
+ */
+internal fun w6aAnalyticRectStructuralKey(recipe: W6AnalyticRectHostRecipeV1,
+    targetBounds: GPUPixelBounds): GPUCorePrimitiveRenderPipelineStructuralKey {
+    val selector = recipe.selector
+    require(selector.family == W6CorePrimitiveHostGeometryFamilyV1.AnalyticRect)
+    require(selector.uniformAbi == W6CorePrimitiveHostUniformAbiV1.AnalyticShape80)
+    require(selector.target == W6CorePrimitiveHostTargetV1.Rgba8UnormSrgbSingleSample)
+    require(selector.coverage == W6CorePrimitiveHostCoverageV1.AnalyticScalarAA)
+    require(selector.coordinateSlot == W6CorePrimitiveHostCoordinateSlotV1.FragmentPosition &&
+        selector.groupZeroAbi == W6CorePrimitiveHostGroupZeroAbiV1.DynamicUniform80)
+    val scissor = recipe.scissor
+    val clip = GPUPixelBounds(scissor.left, scissor.top, scissor.right, scissor.bottom).let { bounds ->
+        if (bounds == targetBounds) GPUClipExecutionPlan.NoClip else GPUClipExecutionPlan.ScissorOnly(bounds)
+    }
+    return GPUCorePrimitiveRenderPipelineStructuralKey(
+        shader = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape,
+        topology = GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList,
+        blend = W5bBlendPlanLowerer.lower(selector.blend).corePrimitiveStructuralBlend(),
+        clip = clip.corePrimitiveStructuralClip(),
+        colorFormat = GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8UnormSrgb,
+        sampleCount = selector.target.sampleCountI32,
+    )
+}
+
+/** Mechanically projects the final planner recipe into the existing CorePrimitive host template. */
+internal fun w6aAnalyticRectGeometryTemplate(packet: GPUDrawPacket, recipe: W6AnalyticRectHostRecipeV1,
+    key: GPUCorePrimitiveRenderPipelineStructuralKey): GPUW5aGeometryHostTemplateV1 {
+    val template = requireNotNull(sealCorePrimitiveGeometryHostTemplateV1(packet, key))
+    val origin = recipe.materialOriginDeviceI32
+    return template.copy(
+        pipelineRecipeId = "w6a.analytic-rect.v1.${recipe.site.ownerPassId.value}.${recipe.site.drawOrdinalI32}",
+        materialCoordinateSlot = MaterialCoordinateSlotV1.FragmentPosition,
+        materialDevicePointWgsl = "fragment_position.xy + vec2<f32>(${origin.x}.0, ${origin.y}.0)",
+    )
 }
 
 /** A legacy colour is already sealed into the picture stream and has no W5 uniform row. */

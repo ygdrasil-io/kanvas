@@ -1023,7 +1023,7 @@ private val PATH_STENCIL_COVER_INVERSE_STATE = pathStencilState(
     inverseFill = true,
 )
 
-private fun GPUBlendPlan.corePrimitiveStructuralBlend():
+internal fun GPUBlendPlan.corePrimitiveStructuralBlend():
     GPUCorePrimitiveRenderPipelineStructuralKey.Blend = when (this) {
     is GPUBlendPlan.FixedFunctionBlend -> GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed(
         mode,
@@ -1048,7 +1048,7 @@ private fun GPUBlendPlan.corePrimitiveStructuralBlend():
     is GPUBlendPlan.UnsupportedBlend -> GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Unsupported(mode)
 }
 
-private fun GPUClipExecutionPlan.corePrimitiveStructuralClip():
+internal fun GPUClipExecutionPlan.corePrimitiveStructuralClip():
     GPUCorePrimitiveRenderPipelineStructuralKey.Clip = when (this) {
     GPUClipExecutionPlan.NoClip,
     is GPUClipExecutionPlan.ScissorOnly,
