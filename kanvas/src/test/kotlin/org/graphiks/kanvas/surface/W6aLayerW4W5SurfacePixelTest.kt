@@ -283,7 +283,7 @@ class W6aLayerW4W5SurfacePixelTest {
             }
             val actual = surface.render()
             assertContentEquals(expected, actual.pixels, "layered=$layered")
-            if (layered) assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
                 "layered=$layered ${actual.nativeEvidenceScopeKinds}")
         }
     }
@@ -303,7 +303,7 @@ class W6aLayerW4W5SurfacePixelTest {
             }
             val actual = surface.render()
             assertContentEquals(expected, actual.pixels, "layered=$layered")
-            if (layered) assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
                 "layered=$layered ${actual.nativeEvidenceScopeKinds}")
         }
     }
