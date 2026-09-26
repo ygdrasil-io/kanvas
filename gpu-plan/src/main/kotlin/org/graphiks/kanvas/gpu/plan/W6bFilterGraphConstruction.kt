@@ -1035,95 +1035,126 @@ internal object W6bFilterGraphConstruction {
     internal fun evaluateMaskRecipe(
         occurrence: PositiveOccurrence,
         sourceFacts: W6bFilterSourceFactsV1,
-    ): W6bEvaluatedFilterRecipeV1 {
+    ): W6bEvaluatedFilterRecipeV1 =
+        prepareMaskRecipe(occurrence, sourceFacts).evaluate(sourceFacts.copyKnownContentDeviceI32())
+
+    /** Select mask geometry once, then seal initialized regions after its W4 coverage is prepared. */
+    internal fun prepareMaskRecipe(
+        occurrence: PositiveOccurrence,
+        sourceFacts: W6bFilterSourceFactsV1,
+    ): W6bPreparedMaskRecipeV1 {
         val mask = requireNotNull(occurrence.mask) { "W6b mask recipe requires a captured mask." }
         val domain = sourceFacts.copySourceDomainDeviceI32()
-        val coverageSource = W6bRecipeSourceV1(W6bRecipeSymbolV1(0), SizeI32(domain.width(), domain.height()),
-            Point2I32(domain.left, domain.top), sourceFacts.mapping, sourceFacts.copyKnownContentDeviceI32(),
-            sourceFacts.copyDesiredOutputDeviceI32(), domain, sourceFacts.copyKnownContentDeviceI32())
-        val instructions = mutableListOf<W6bRecipeInstructionV1>()
-        val sources = linkedMapOf(coverageSource.symbol to coverageSource)
+        val coverage = W6bRecipeSourceV1(W6bRecipeSymbolV1(0), SizeI32(domain.width(), domain.height()),
+            Point2I32(domain.left, domain.top), sourceFacts.mapping, null,
+            sourceFacts.copyDesiredOutputDeviceI32(), domain, null)
+        val sourceGeometry = linkedMapOf(coverage.symbol to coverage)
+        val content = linkedMapOf<W6bRecipeSymbolV1, (RectI32?) -> RectI32?>(coverage.symbol to { it?.copy() })
+        val builders = mutableListOf<(Map<W6bRecipeSymbolV1, W6bRecipeSourceV1>) -> W6bRecipeInstructionV1>()
         var nextSymbolI32 = 1
+        fun fixed(instruction: W6bRecipeInstructionV1) { builders += { instruction } }
         fun resource(role: PlanResourceRole, extent: SizeI32): W6bRecipeSymbolV1 =
-            W6bRecipeSymbolV1(nextSymbolI32++).also { instructions += W6bRecipeInstructionV1.Resource(it, role, extent) }
-        fun target(bounds: FilterBoundsPlanV1): W6bRecipeSourceV1 {
-            val extent = SizeI32(bounds.copyDesiredOutputDeviceI32().width(), bounds.copyDesiredOutputDeviceI32().height())
+            W6bRecipeSymbolV1(nextSymbolI32++).also { fixed(W6bRecipeInstructionV1.Resource(it, role, extent)) }
+        fun target(bounds: FilterBoundsPlanV1, produced: (RectI32?) -> RectI32?): W6bRecipeSourceV1 {
+            val desired = bounds.copyDesiredOutputDeviceI32()
+            val extent = SizeI32(desired.width(), desired.height())
             val symbol = resource(PlanResourceRole.FilterTarget, extent)
-            return coverageSource.withSymbol(symbol, extent, bounds.copyTargetOriginDeviceI32(),
-                bounds.copyProducedOutputDeviceI32(), bounds.copyDesiredOutputDeviceI32(),
-                bounds.copyRequiredInputDeviceI32(), bounds.copyProducedOutputDeviceI32()).also { sources[symbol] = it }
+            content[symbol] = produced
+            return coverage.withSymbol(symbol, extent, bounds.copyTargetOriginDeviceI32(), null,
+                desired, bounds.copyRequiredInputDeviceI32(), null).also { sourceGeometry[symbol] = it }
         }
-        fun maskTableResource(): W6bRecipeSymbolV1 = W6bRecipeSymbolV1(nextSymbolI32++).also {
-            instructions += W6bRecipeInstructionV1.MaskTableResource(it)
-        }
-        fun key(desired: RectI32): W6bRecipeKeyV1 =
-            W6bRecipeKeyV1(null, occurrence.maskOccurrenceI32, coverageSource, desired, null)
-        fun appendPass(inputs: List<W6bRecipeSymbolV1>, output: W6bRecipeSymbolV1,
-            key: W6bRecipeKeyV1, operation: FilterPassOperationV1) {
-            instructions += W6bRecipeInstructionV1.Pass(inputs, output, key, W6bRecipeOperationV1.Fixed(operation))
-        }
-        fun appendSymbolicPass(inputs: List<W6bRecipeSymbolV1>, output: W6bRecipeSymbolV1,
-            key: W6bRecipeKeyV1, operation: W6bRecipeOperationV1) {
-            instructions += W6bRecipeInstructionV1.Pass(inputs, output, key, operation)
-        }
+        fun key(desired: RectI32) = W6bRecipeKeyV1(null, occurrence.maskOccurrenceI32, coverage, desired, null)
+        fun sealedBounds(geometry: FilterBoundsPlanV1, input: W6bRecipeSourceV1,
+            output: W6bRecipeSourceV1): FilterBoundsPlanV1 = FilterBoundsPlanV1(
+            input.copyKnownContentDeviceI32(), geometry.copyDesiredOutputDeviceI32(),
+            geometry.copyRequiredInputDeviceI32(), output.copyProducedOutputDeviceI32(),
+            geometry.copyTargetOriginDeviceI32())
         fun blur(source: W6bRecipeSourceV1, sigma: Float, evaluationKey: W6bRecipeKeyV1): W6bRecipeSourceV1 {
-            val horizontalBounds = blurBounds(source, sigma, 0f)
-            val horizontal = target(horizontalBounds)
-            appendPass( listOf(source.symbol), horizontal.symbol, evaluationKey,
-                FilterPassOperationV1.SeparableBlur(FilterImplementationKindV1.MASK_COVERAGE_BLUR_X, sigma,
-                    FilterAxisV1.X, TileMode.CLAMP, horizontalBounds, filterInputSampling(source, horizontalBounds)))
-            val verticalBounds = blurBounds(horizontal, 0f, sigma)
-            val vertical = target(verticalBounds)
-            appendPass( listOf(horizontal.symbol), vertical.symbol, evaluationKey,
-                FilterPassOperationV1.SeparableBlur(FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y, sigma,
-                    FilterAxisV1.Y, TileMode.CLAMP, verticalBounds, filterInputSampling(horizontal, verticalBounds)))
-            return vertical
+            fun axis(input: W6bRecipeSourceV1, axis: FilterAxisV1): W6bRecipeSourceV1 {
+                val x = if (axis == FilterAxisV1.X) sigma else 0f
+                val y = if (axis == FilterAxisV1.Y) sigma else 0f
+                val geometry = blurBounds(input, x, y)
+                val incoming = content.getValue(input.symbol)
+                val output = target(geometry) { known ->
+                    incoming(known)?.let { expandBlurRegion(it, x, y) }
+                }
+                val sampling = filterInputSampling(input, geometry)
+                builders += { sources ->
+                    val bounds = sealedBounds(geometry, sources.getValue(input.symbol), sources.getValue(output.symbol))
+                    W6bRecipeInstructionV1.Pass(listOf(input.symbol), output.symbol, evaluationKey,
+                        W6bRecipeOperationV1.Fixed(FilterPassOperationV1.SeparableBlur(
+                            if (axis == FilterAxisV1.X) FilterImplementationKindV1.MASK_COVERAGE_BLUR_X
+                            else FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y,
+                            sigma, axis, TileMode.CLAMP, bounds, sampling)))
+                }
+                return output
+            }
+            return axis(axis(source, FilterAxisV1.X), FilterAxisV1.Y)
         }
         val output = when (mask) {
             is MaskFilterNode.Blur -> {
                 val original = if (mask.style == org.graphiks.kanvas.render.ir.MaskBlurStyle.NORMAL) null else {
-                    val id = resource(PlanResourceRole.CoverageOriginal, coverageSource.copyExtentI32())
-                    instructions += W6bRecipeInstructionV1.RetainCoverage(coverageSource.symbol, id,
-                        filterInputSampling(coverageSource, identityBounds(coverageSource)))
-                    coverageSource.withSymbol(id).also { sources[id] = it }
+                    val symbol = resource(PlanResourceRole.CoverageOriginal, coverage.copyExtentI32())
+                    content[symbol] = content.getValue(coverage.symbol)
+                    fixed(W6bRecipeInstructionV1.RetainCoverage(coverage.symbol, symbol,
+                        filterInputSampling(coverage, identityBounds(coverage))))
+                    coverage.withSymbol(symbol).also { sourceGeometry[symbol] = it }
                 }
-                val full = blurBounds(coverageSource, mask.sigma, mask.sigma)
-                val evaluationKey = key(full.copyDesiredOutputDeviceI32())
-                val blurred = blur(coverageSource, mask.sigma, evaluationKey)
-                val bounds = identityBounds(blurred)
-                val styled = target(bounds)
-                val inputs = buildList {
-                    add(blurred.symbol)
-                    original?.let { add(it.symbol) }
+                val evaluationKey = key(blurBounds(coverage, mask.sigma, mask.sigma).copyDesiredOutputDeviceI32())
+                val blurred = blur(coverage, mask.sigma, evaluationKey)
+                val geometry = identityBounds(blurred)
+                val blurredContent = content.getValue(blurred.symbol)
+                val styled = target(geometry) { known ->
+                    val produced = blurredContent(known)
+                    if (mask.style == org.graphiks.kanvas.render.ir.MaskBlurStyle.INNER)
+                        known?.let { raw -> produced?.let { intersectI32(raw, it) } }
+                    else produced
                 }
-                appendSymbolicPass( inputs, styled.symbol, evaluationKey,
-                    W6bRecipeOperationV1.MaskStyle(mask.style, original?.symbol, blurred.symbol, bounds,
-                        filterInputSampling(blurred, bounds), original?.let { filterInputSampling(it, bounds) }))
+                val blurredSampling = filterInputSampling(blurred, geometry)
+                val originalSampling = original?.let { filterInputSampling(it, geometry) }
+                val inputs = listOfNotNull(blurred.symbol, original?.symbol)
+                builders += { sources -> W6bRecipeInstructionV1.Pass(inputs, styled.symbol, evaluationKey,
+                    W6bRecipeOperationV1.MaskStyle(mask.style, original?.symbol, blurred.symbol,
+                        sealedBounds(geometry, sources.getValue(blurred.symbol), sources.getValue(styled.symbol)),
+                        blurredSampling, originalSampling)) }
                 styled
             }
             is MaskFilterNode.Shader -> {
-                val bounds = identityBounds(coverageSource)
-                val evaluationKey = key(bounds.copyDesiredOutputDeviceI32())
-                val output = target(bounds)
-                appendPass( listOf(coverageSource.symbol), output.symbol, evaluationKey,
-                    FilterPassOperationV1.MaskShader(
+                val geometry = identityBounds(coverage)
+                val evaluationKey = key(geometry.copyDesiredOutputDeviceI32())
+                val output = target(geometry, content.getValue(coverage.symbol))
+                val sampling = filterInputSampling(coverage, geometry)
+                builders += { sources -> W6bRecipeInstructionV1.Pass(listOf(coverage.symbol), output.symbol, evaluationKey,
+                    W6bRecipeOperationV1.Fixed(FilterPassOperationV1.MaskShader(
                         FilterPassOperationV1.MaskShaderMaterialBindingV1.CapturedOccurrence(occurrence.idI32, mask.material),
-                        bounds, filterInputSampling(coverageSource, bounds)))
+                        sealedBounds(geometry, sources.getValue(coverage.symbol), sources.getValue(output.symbol)), sampling))) }
                 output
             }
             is MaskFilterNode.Table -> {
-                val bounds = identityBounds(coverageSource)
-                val evaluationKey = key(bounds.copyDesiredOutputDeviceI32())
-                val output = target(bounds)
-                val tableResource = maskTableResource()
-                appendSymbolicPass( listOf(coverageSource.symbol), output.symbol, evaluationKey,
-                    W6bRecipeOperationV1.MaskTable(mask.table, tableResource,
-                        occurrence.maskOccurrenceI32, bounds, filterInputSampling(coverageSource, bounds)))
+                val geometry = identityBounds(coverage)
+                val evaluationKey = key(geometry.copyDesiredOutputDeviceI32())
+                val output = target(geometry, content.getValue(coverage.symbol))
+                val table = W6bRecipeSymbolV1(nextSymbolI32++)
+                fixed(W6bRecipeInstructionV1.MaskTableResource(table))
+                val sampling = filterInputSampling(coverage, geometry)
+                builders += { sources -> W6bRecipeInstructionV1.Pass(listOf(coverage.symbol), output.symbol, evaluationKey,
+                    W6bRecipeOperationV1.MaskTable(mask.table, table, occurrence.maskOccurrenceI32,
+                        sealedBounds(geometry, sources.getValue(coverage.symbol), sources.getValue(output.symbol)), sampling)) }
                 output
             }
         }
-        return W6bEvaluatedFilterRecipeV1(domain, output,
-            instructions.filterIsInstance<W6bRecipeInstructionV1.Pass>().last().key, instructions, sources)
+        val frozenGeometry = sourceGeometry.toMap()
+        val frozenContent = content.toMap()
+        val frozenBuilders = builders.toList()
+        return W6bPreparedMaskRecipeV1(output) { known ->
+            val sources = frozenGeometry.mapValues { (symbol, geometry) ->
+                val initialized = frozenContent.getValue(symbol)(known)
+                geometry.withSymbol(symbol, knownContentDeviceI32 = initialized, producedOutputDeviceI32 = initialized)
+            }
+            val instructions = frozenBuilders.map { it(sources) }
+            W6bEvaluatedFilterRecipeV1(domain, sources.getValue(output.symbol),
+                instructions.filterIsInstance<W6bRecipeInstructionV1.Pass>().last().key, instructions, sources)
+        }
     }
 
     /** A mask-only occurrence still gets one typed terminal filter target before parent blending. */
@@ -1244,6 +1275,16 @@ internal object W6bFilterGraphConstruction {
     ).expandSamplingHaloF64OrNull(1.0, 1.0, 1.0, 1.0)?.roundOutToRectI32OrNull()
         ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
             "W6d distant diffuse reverse Sobel demand cannot be represented in checked I32 texels."))
+
+    private fun expandBlurRegion(input: RectI32, sigmaXF32: Float, sigmaYF32: Float): RectI32 =
+        RectF64(input.left.toDouble(), input.top.toDouble(), input.right.toDouble(), input.bottom.toDouble())
+            .expandForBlurF64OrNull(sigmaXF32, sigmaYF32)?.roundOutToRectI32OrNull()
+            ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(
+                W6bFilterDiagnostics.InvalidBounds, "W6b blur expansion cannot be represented in checked I32 texels."))
+
+    private fun intersectI32(first: RectI32, second: RectI32): RectI32? =
+        RectI32(maxOf(first.left, second.left), maxOf(first.top, second.top),
+            minOf(first.right, second.right), minOf(first.bottom, second.bottom)).takeUnless(RectI32::isEmpty)
 
     private fun blurBounds(source: W6bSourceGeometryV1, sigmaXF32: Float, sigmaYF32: Float): FilterBoundsPlanV1 {
         val input = source.copyDeviceBoundsI32()

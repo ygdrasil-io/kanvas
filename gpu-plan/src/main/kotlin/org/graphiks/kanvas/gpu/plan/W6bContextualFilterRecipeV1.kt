@@ -33,6 +33,15 @@ internal class W6bEvaluatedFilterRecipeV1(
     fun copyProducedOutputDeviceI32(): RectI32? = output.copyProducedOutputDeviceI32()
 }
 
+/** The mask footprint is independent of initialized texels; bind those after the single W4 lane. */
+internal class W6bPreparedMaskRecipeV1(
+    val outputGeometry: W6bRecipeSourceV1,
+    private val bindInitializedContent: (RectI32?) -> W6bEvaluatedFilterRecipeV1,
+) {
+    fun evaluate(knownContentDeviceI32: RectI32?): W6bEvaluatedFilterRecipeV1 =
+        bindInitializedContent(knownContentDeviceI32?.copy())
+}
+
 /** One bound topology supplies inverse demand and forward descriptors to physical lowering. */
 internal class W6bContextualFilterRecipeV1 internal constructor(
     private val occurrence: W6bFilterGraphConstruction.PositiveOccurrence,
