@@ -615,6 +615,22 @@ internal class W6aLayerGraphConstruction(
         val directFiltersByCommand = filterOccurrences.filterNot {
             it.isLayerOccurrence || it.isPictureOccurrence
         }.associateBy { it.insertionCommandIndexI32 }
+        fun directTerminalClip(occurrence: W6bFilterGraphConstruction.PositiveOccurrence): RectI32? = when (
+            val clip = occurrence.source.recordedInnerClipWithoutCull().terminalDeferredClip()
+        ) {
+            ClipStackNode.Empty -> null
+            is ClipStackNode.Operations -> throw W6bFilterGraphConstruction.ConstructionFailure(
+                W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.DirectTerminalClip,
+                    "W6c direct filtered terminal requires an exact DeviceRect clip."),
+            )
+            is ClipStackNode.DeviceRect -> clip.copyBounds().let { bounds ->
+                RectF64(bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble())
+                    .roundOutToRectI32OrNull() ?: throw W6bFilterGraphConstruction.ConstructionFailure(
+                    W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                        "W6b direct terminal clip cannot be rounded into I32 texels."),
+                )
+            }
+        }
         val directKnownByScope = arrayOfNulls<RectI32>(occurrences.size)
         bindings.forEach { binding ->
             val scopeIdI32 = binding.scopeI32
@@ -626,9 +642,14 @@ internal class W6aLayerGraphConstruction(
                 parentTransform?.persp0?.toDouble() ?: 0.0, parentTransform?.persp1?.toDouble() ?: 0.0, parentTransform?.persp2?.toDouble() ?: 1.0,
             )
             RenderGraph.visualDraws(binding.source.passes()).forEach { draw ->
-                intersect(w6aRasterBoundsI32(draw), w6aScissorI32(draw))?.let { bounds ->
-                    val occurrence = directFiltersByCommand[draw.commandIndex]
+                val occurrence = directFiltersByCommand[draw.commandIndex]
+                val sourceDraw = occurrence?.takeIf(W6bFilterGraphConstruction::hasReverseInputDemandTerminal)
+                    ?.let { draw.withoutW6aTerminalClip() } ?: draw
+                intersect(w6aRasterBoundsI32(sourceDraw), w6aScissorI32(sourceDraw))?.let { raster ->
                     val produced = occurrence?.let { direct ->
+                        val terminalClip = directTerminalClip(direct)
+                        val terminalDesired = if (terminalClip == null) desired
+                            else intersect(desired, terminalClip) ?: return@let null
                         val sourceLocalToDevice = if (W6bFilterGraphConstruction.hasContentOutputSamplingTerminal(direct)) {
                             direct.source.sourceDraw?.let { sourceDraw ->
                                 val sourceToParent = composeInOrderF64(
@@ -643,23 +664,25 @@ internal class W6aLayerGraphConstruction(
                             )
                         } else parentLocalToDevice
                         val mapping = requireNotNull(LayerMappingF64.ofOrNull(sourceLocalToDevice,
-                            Point2I32(bounds.left, bounds.top)))
-                        val facts = W6bFilterSourceFactsV1(bounds, bounds, desired, mapping,
+                            Point2I32(raster.left, raster.top)))
+                        val recipe = W6bFilterGraphConstruction.bindOccurrenceRecipe(direct, terminalDesired, mapping)
+                        val sourceDomain = intersect(raster, recipe.copyRequiredInputDeviceI32() ?: raster) ?: return@let null
+                        val facts = W6bFilterSourceFactsV1(sourceDomain, sourceDomain, terminalDesired, mapping,
                             { bound, context -> prepareFilterPicture(direct, bound, context) })
-                        val recipe = W6bFilterGraphConstruction.bindOccurrenceRecipe(direct, desired, mapping)
                         val masked = direct.mask?.let { recipe.evaluateMask(facts).also {
                             evaluatedMasksByOccurrence[direct] = it
                         } }
                         val imageFacts = masked?.output?.let { output -> W6bFilterSourceFactsV1(
-                            output.copyDeviceBoundsI32(), output.copyKnownContentDeviceI32(), desired, output.mapping,
+                            output.copyDeviceBoundsI32(), output.copyKnownContentDeviceI32(), terminalDesired, output.mapping,
                             { bound, context -> prepareFilterPicture(direct, bound, context) },
                         ) } ?: facts
                         val evaluated = direct.root?.let { recipe.evaluate(imageFacts, runtimeCatalog).also {
                             evaluatedImagesByOccurrence[direct] = it
                         } } ?: masked
-                        directAutoLayerFactsByOccurrence[direct] = DirectAutoLayerFacts(bounds, desired)
-                        evaluated?.copyProducedOutputDeviceI32()
-                    } ?: bounds
+                        directAutoLayerFactsByOccurrence[direct] = DirectAutoLayerFacts(sourceDomain, terminalDesired)
+                        if (!draw.blend.compositionFacts.writesParentDevice) null else evaluated?.copyProducedOutputDeviceI32()
+                            ?.let { output -> terminalClip?.let { intersect(output, it) } ?: output }
+                    } ?: raster
                     scopeIdI32?.let { scope ->
                         directKnownByScope[scope] = unionOrNull(directKnownByScope[scope], produced)
                     }
@@ -959,22 +982,6 @@ internal class W6aLayerGraphConstruction(
         data class DirectFilterSources(
             val coverage: W6bFilterGraphConstruction.SourceBinding,
         )
-        fun directTerminalClip(occurrence: W6bFilterGraphConstruction.PositiveOccurrence): RectI32? = when (
-            val clip = occurrence.source.recordedInnerClipWithoutCull().terminalDeferredClip()
-        ) {
-            ClipStackNode.Empty -> null
-            is ClipStackNode.Operations -> throw W6bFilterGraphConstruction.ConstructionFailure(
-                W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.DirectTerminalClip,
-                    "W6c direct filtered terminal requires an exact DeviceRect clip."),
-            )
-            is ClipStackNode.DeviceRect -> clip.copyBounds().let { bounds ->
-                RectF64(bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble())
-                    .roundOutToRectI32OrNull() ?: throw W6bFilterGraphConstruction.ConstructionFailure(
-                    W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
-                        "W6b direct terminal clip cannot be rounded into I32 texels."),
-                )
-            }
-        }
         val directFilterSourceByCommand = linkedMapOf<Int, DirectFilterSources>()
         val directConsumerDemandCommands = linkedSetOf<Int>()
         filterOccurrences.filterNot { it.isLayerOccurrence || it.isPictureOccurrence }.forEach { occurrence ->

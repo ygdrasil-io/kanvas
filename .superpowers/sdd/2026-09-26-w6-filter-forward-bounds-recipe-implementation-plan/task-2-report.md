@@ -71,3 +71,23 @@ Task files: `W6aLayerGraphConstruction.kt`, `W6FilterBoundsRecipeSurfacePixelTes
 `render-ir/.../SceneArchiveCodec.kt`. The user-owned W6d progress ledger remains untouched and
 unstaged. Concern: the unrelated known RRect baseline remains 9/10; native worker 133 makes
 otherwise-green selector Gradle status UNKNOWN. This checkpoint awaits Sol review.
+
+## Sol round 1 follow-up
+
+Verified and corrected the two direct-owner findings in `W6aLayerGraphConstruction`:
+
+- Early direct evaluation now unwraps only reverse-demand terminal clips, intersects its finite
+  pre-terminal raster with the bound recipe's own `requiredInput`, and carries that sealed domain
+  to late allocation. It does not union a logical halo into the physical source, preserving the
+  existing Matrix CLAMP counterexample.
+- The same `directTerminalClip` authority is now computed before early propagation. The recipe is
+  bound to its clipped terminal desired domain and early `producedOutput` is intersected with that
+  clip; a blend that cannot write the parent contributes no known content. Late lowering uses the
+  same helper.
+
+`W6FilterBoundsRecipeSurfacePixelTest` remains XML 6/6 green after this correction (Gradle 133,
+UNKNOWN); `:gpu-plan:compileKotlin :kanvas:compileTestKotlin` is successful. The late mask
+fallback is unreachable for a direct occurrence with a mask because the early pass populates
+`evaluatedMasksByOccurrence` before it stores direct facts, and the physical direct path requires
+those facts. It remains necessary for non-direct/layer occurrences, so no broad invariant was
+added there.
