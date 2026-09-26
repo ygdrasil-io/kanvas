@@ -11,7 +11,7 @@ already positively admitted.
 ## B arithmetic
 
 `tinyCropAndIdentityKeepContentSizedBudget` derives all operands before a
-`Surface` is built with checked I64 operations:
+`Surface` is built with checked I64 operations. Crop has:
 
 - root RGBA8 2×1: 8
 - layer, FilterSource, Crop and terminal composite targets 1×1: 4×4 = 16
@@ -19,11 +19,21 @@ already positively admitted.
 - RGBA8 readback row aligned to 256: 256
 - `B = 8 + 16 + 32 + 256 = 312`
 
-At B pixels are `[blue, transparent]` with Render+Readback. At B−1 the public
+At Crop B pixels are `[blue, transparent]` with Render+Readback. At B−1 the public
 diagnostic starts `w6b.filter.frame_budget_exceeded:`, the readPixels sentinel
 is unchanged, and discard/re-record on that same Surface gives the expected
 pixels. Expanding Crop's produced output to the full desired 2×1 would add
 bytes and fail B, so the test rejects that regression.
+
+The identity `ColorFilter` is an independent boundary, not a default-budget
+smoke render. Its content-sized target terms are again root 8, four 1×1 targets
+16 and two W6 rows 32; its identity matrix has 20 F32 coefficients, so its
+uniform payload adds `20×4 = 80`; the aligned readback is 256. Therefore
+`B = 8 + 16 + 32 + 80 + 256 = 392`. Its B render has exact
+`[blue, transparent]` pixels plus Render+Readback; its B−1 readback refuses
+with the same public diagnostic, leaves a sentinel untouched, and the same
+Surface discard/re-records to the exact pixels. This is hand-derived from the
+fixture's RGBA8/F32 quantities, not a planner counter.
 
 `warmPictureReplayRetainsColdBudgetAndIdentity` keeps one immutable Picture
 through cold and warm replay. Its direct Picture source contributes one extra
@@ -52,8 +62,15 @@ Layer frame requires 316 bytes; budget is 312.` This was a test-arithmetic
 error, not a production defect; the corrected public B is 316.
 
 `backdropAndPreviousKeepSaveThenPostChildOrder` creates both expected pixel
-arrays before either Surface: backdrop uses its save-time parent snapshot;
-filtered `initWithPrevious` sees its blue child before its filter is applied.
+arrays before either Surface: backdrop uses an input-dependent matrix which
+halves the save-time parent's red channel in linear space, yielding exact
+backdrop pixels `[176,56,162,255, 210,51,73,255]`; filtered
+`initWithPrevious` sees its blue child before its filter is applied.
+
+Both cold and warm Picture B−1 refusals now discard and re-record on their
+respective same surfaces, then assert the exact `[blue, transparent]` pixels
+and `Render`/`Readback` scopes. This is in addition to their original sentinel
+atomicity and cold/warm B proof.
 
 ## Preservation selectors
 
@@ -116,14 +133,48 @@ failure or a native PASS claim.
    printed `... PASSED`; the complete class then printed XML 26/0/0/0. Both
    invocations again ended only with 133/UNKNOWN after JUnit.
 
+### Sol review correction round 1
+
+The review identified three evidence gaps, so this round changes only the two
+public Task 3 test classes. The first new Surface run was deliberately recorded
+before changing an owner:
+
+`rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6FilterBoundsRecipeSurfacePixelTest'`
+produced XML `8/2/0/0` and then native-worker exit 133 (`UNKNOWN`).
+`tinyCropAndIdentityKeepContentSizedBudget` reported
+`w6b.filter.frame_budget_exceeded: Layer frame requires 392 bytes; budget is 312`:
+the first identity arithmetic had omitted its actual 20-F32 matrix uniform.
+The backdrop assertion reported its independently visible one-byte distinction,
+`Expected [176,56,162,255, 211,51,73,255]` versus
+`actual [176,56,162,255, 210,51,73,255]`; analysis found the expected oracle
+had incorrectly quantized the matrix output before the opacity composite.
+Neither RED named a production owner.
+
+The correction states the 80-byte matrix term in checked I64 arithmetic and
+keeps the matrix/opacity calculation in one linear expression. Rerunning the
+same Surface command printed all ten methods `PASSED`; its XML was
+`10/0/0/0`, followed only by worker 133/`UNKNOWN`. The Picture command
+`rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6FilterBoundsRecipePictureTest'`
+printed all three methods `PASSED`, XML `3/0/0/0`, then worker 133/`UNKNOWN`.
+Focused preservation remained green in JUnit XML:
+
+| Selector | XML PASS/F/E/S | Gradle / native |
+| --- | ---: | --- |
+| `W6bBudgetRecoverySurfacePixelTest` | 2/0/0/0 | exit 1; 133/UNKNOWN |
+| `W6dBackdropPreviousSurfacePixelTest` | 9/0/0/0 | exit 1; 133/UNKNOWN |
+
+No production owner changed in this round.
+
 `rtk ./gradlew :gpu-plan:compileKotlin :kanvas:compileTestKotlin` exited 0
 with `BUILD SUCCESSFUL`.
 
 ## Scope and self-review
 
-Changed files are the two Task 3 public test classes, the authorized existing
-`W6cSpatialDagAdmissionSurfaceTest`, the causal Picture aggregate owner,
-this report, and `refactor/waves/W06-layers-effects/status.md`. No API,
+Across Task 3, changed files are the two Task 3 public test classes, the
+authorized existing `W6cSpatialDagAdmissionSurfaceTest`, the causal Picture
+aggregate owner, this report, and `refactor/waves/W06-layers-effects/status.md`.
+This review correction changes only the two Task 3 test classes, this report
+and that status checkpoint. No API,
 renderer, wire format, budget/cache type, GM, font, codec, external-format or
 infrastructure test was added. The user-owned
 `.superpowers/sdd/2026-09-22-w6d-advanced-effects-implementation-plan/progress.md`

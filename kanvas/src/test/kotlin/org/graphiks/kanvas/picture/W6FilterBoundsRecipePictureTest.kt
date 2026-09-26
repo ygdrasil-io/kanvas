@@ -49,6 +49,9 @@ class W6FilterBoundsRecipePictureTest {
         fun record(surface: Surface) = surface.canvas {
             drawPicture(picture)
         }
+        fun recordRecovery(surface: Surface) = surface.canvas {
+            drawRect(unit, Paint(ColorARGB.Blue, antiAlias = false))
+        }
         fun assertBudgetRefusal(surface: Surface) {
             val sentinel = UByteArray(8) { 0x5au }
             val before = sentinel.copyOf()
@@ -61,6 +64,9 @@ class W6FilterBoundsRecipePictureTest {
         val coldRefusal = Surface(2, 1, config = RenderConfig(frameLocalBudgetBytes = Math.subtractExact(budgetB, 1L)))
         record(coldRefusal)
         assertBudgetRefusal(coldRefusal)
+        coldRefusal.discardRecordedOperations()
+        recordRecovery(coldRefusal)
+        assertPixelsAndScopes(coldRefusal, expected)
 
         val admitted = Surface(2, 1, config = RenderConfig(frameLocalBudgetBytes = budgetB))
         record(admitted)
@@ -72,6 +78,9 @@ class W6FilterBoundsRecipePictureTest {
         val warmRefusal = Surface(2, 1, config = RenderConfig(frameLocalBudgetBytes = Math.subtractExact(budgetB, 1L)))
         record(warmRefusal)
         assertBudgetRefusal(warmRefusal)
+        warmRefusal.discardRecordedOperations()
+        recordRecovery(warmRefusal)
+        assertPixelsAndScopes(warmRefusal, expected)
     }
 
     /**

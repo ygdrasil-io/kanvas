@@ -595,10 +595,16 @@ sans modification d'owner. Le Crop sous clip 2×1 dérive en I64 checked
 `B=312 = root 8 + quatre targets 1×1 (16) + deux rows W6 (32) + readback
 aligné 256`; B produit exactement le pixel bleu, tandis que B−1 refuse avec
 `w6b.filter.frame_budget_exceeded`, ne modifie pas le sentinel et le même
-`Surface` redevient enregistrable. Le replay Picture inclut son target direct
-supplémentaire : `B=316 = root 8 + cinq targets 1×1 (20) + 32 + 256`; les
-replays froid/chaud du même Picture passent à B et refusent à B−1. Le témoin
-de snapshot vérifie backdrop au save et `initWithPrevious` après l'enfant.
+`Surface` redevient enregistrable. Le ColorFilter identité a son propre seuil,
+calculé avant `Surface` : `B=392 = root 8 + quatre targets 1×1 (16) + deux
+rows W6 (32) + matrice 20×F32 (80) + readback aligné 256`; B/B−1 vérifient les
+mêmes pixels exacts, diagnostic, sentinel et recovery. Le replay Picture
+inclut son target direct supplémentaire : `B=316 = root 8 + cinq targets 1×1
+(20) + 32 + 256`; les replays froid/chaud du même Picture passent à B et
+refusent à B−1, puis chacun discard/re-record sur sa propre `Surface` et
+vérifie pixels exacts avec Render+Readback. Le témoin de snapshot emploie une
+matrice dépendante du parent et vérifie backdrop au save (pixels
+`[176,56,162,255, 210,51,73,255]`) et `initWithPrevious` après l'enfant.
 
 Les XML frais des deux nouvelles classes sont `10/0/0/0` (Surface) et
 `3/0/0/0` (Picture). Chaque invocation Gradle quitte néanmoins avec le worker
@@ -622,6 +628,15 @@ cache 6; W6d advanced 5, backdrop/previous 9, Magnifier 4 et Picture runtime
 6. Chaque invocation de test termine ensuite avec le worker natif 133 : ces
 résultats natifs restent **UNKNOWN**, jamais PASS global. Les compilations
 `:gpu-plan:compileKotlin :kanvas:compileTestKotlin` terminent 0.
+
+Correction de la review Sol Task 3 : le premier run du nouveau témoin Surface
+était `8/2/0/0` (identity à 312 au lieu de son B 392, et oracle backdrop avec
+quantification intermédiaire erronée), puis la correction d'arithmétique et de
+l'oracle est `10/0/0/0`; Picture reste `3/0/0/0`. Les selectors de préservation
+rejoués sont `W6bBudgetRecoverySurfacePixelTest` `2/0/0/0` et
+`W6dBackdropPreviousSurfacePixelTest` `9/0/0/0`. Chacune de ces invocations
+termine ensuite par worker 133, donc native **UNKNOWN**; aucun owner de
+production n'a changé pour cette correction.
 
 Exclusions Task 3 : aucun GM, font, codec/format externe, dashboard/render,
 rebaseline, suite Skia globale, `jpg-color-cube` ou test d'infrastructure. Le

@@ -33,6 +33,8 @@ class W6FilterBoundsRecipeSurfacePixelTest {
      * layer, source, Crop and terminal composite), two 16-byte W6 rows (32), and the 2x1
      * readback aligned to 256 bytes.  All terms use checked I64 arithmetic: 8+16+32+256=312.
      * Treating producedOutput as desiredOutput would make a Crop target 2x1 and exceed B.
+     * The identity ColorFilter has its own independently stated B/B-1 witness below: the
+     * content-sized target accounting is the same, but it is not admitted at a default budget.
      */
     @Test
     fun tinyCropAndIdentityKeepContentSizedBudget() {
@@ -69,14 +71,39 @@ class W6FilterBoundsRecipeSurfacePixelTest {
         assertRenderAndReadback(refused, expected)
 
         val identity = ImageFilter.ColorFilter(ColorFilter.Matrix(ColorMatrixF32.ofIdentity()))
-        val identitySurface = Surface(2, 1)
-        identitySurface.canvas {
+        // Identity has the same 2x1 root (8), four 1x1 targets (16), and two W6 rows (32),
+        // plus its actual 20-F32 matrix uniform (80) and the aligned readback (256): B=392.
+        val identityBudgetB = listOf(
+            Math.multiplyExact(2L, Math.multiplyExact(1L, 4L)),
+            Math.multiplyExact(4L, Math.multiplyExact(1L, 4L)),
+            Math.multiplyExact(2L, 16L),
+            Math.multiplyExact(20L, 4L),
+            256L,
+        ).fold(0L, Math::addExact)
+        fun recordIdentity(surface: Surface) = surface.canvas {
             clipRect(full, antiAlias = false)
             saveLayer(SaveLayerRec(paint = Paint(imageFilter = identity, antiAlias = false)))
             drawRect(unit, Paint(ColorARGB.Blue, antiAlias = false))
             restore()
         }
-        assertRenderAndReadback(identitySurface, expected)
+
+        val identityAdmitted = Surface(2, 1, config = RenderConfig(frameLocalBudgetBytes = identityBudgetB))
+        recordIdentity(identityAdmitted)
+        assertRenderAndReadback(identityAdmitted, expected)
+
+        val identityRefused = Surface(2, 1, config = RenderConfig(
+            frameLocalBudgetBytes = Math.subtractExact(identityBudgetB, 1L),
+        ))
+        recordIdentity(identityRefused)
+        val identitySentinel = UByteArray(8) { 0x5au }
+        val identityBefore = identitySentinel.copyOf()
+        val identityFailure = assertFailsWith<IllegalStateException> { identityRefused.readPixels(full, identitySentinel) }
+        assertTrue(identityFailure.message?.startsWith("w6b.filter.frame_budget_exceeded:") == true,
+            identityFailure.message ?: "missing W6 budget diagnostic")
+        assertContentEquals(identityBefore, identitySentinel)
+        identityRefused.discardRecordedOperations()
+        identityRefused.canvas { drawRect(unit, Paint(ColorARGB.Blue, antiAlias = false)) }
+        assertRenderAndReadback(identityRefused, expected)
     }
 
     /** The backdrop snapshots its parent at save; filtered previous is filtered only after its child. */
@@ -84,9 +111,16 @@ class W6FilterBoundsRecipeSurfacePixelTest {
     fun backdropAndPreviousKeepSaveThenPostChildOrder() {
         val red = ColorARGB.of(255, 239, 51, 73)
         val blue = ColorARGB.of(255, 17, 61, 211)
-        val green = ColorARGB.of(255, 43, 181, 93)
-        val backdropExpected = halfSourceOver(red, blue) + rgba(177, 136, 84)
+        // The matrix consumes the parent snapshot: it halves parent red in linear space, then
+        // the .5 layer opacity composites it over that parent. Thus x=1 has .75 parent-linear
+        // red, calculated without quantizing an intermediate pixel before either Surface exists.
+        val backdropExpected = halfSourceOver(red, blue) + rgba(
+            encodeLinear(decodeSrgb(red.red) * .75), red.green, red.blue,
+        )
         val previousExpected = halfSourceOver(red, blue) + rgba(239, 51, 73)
+        val parentDependentBackdrop = ImageFilter.ColorFilter(ColorFilter.Matrix(
+            ColorMatrixF32.ofIdentity().apply { setScale(.5f, 1f, 1f, 1f) },
+        ))
         val halfOpacity = ImageFilter.RuntimeEffect(
             requireNotNull(RuntimeEffect.registered("kanvas.runtime.image-opacity", 1)),
             UniformBlock { float1("alpha", .5f) },
@@ -96,7 +130,7 @@ class W6FilterBoundsRecipeSurfacePixelTest {
         backdrop.canvas {
             drawRect(RectF32.ofLTRB(0f, 0f, 2f, 1f), Paint(red, antiAlias = false))
             saveLayer(SaveLayerRec(
-                backdrop = ImageFilter.ColorFilter(ColorFilter.Blend(green, BlendMode.SRC)),
+                backdrop = parentDependentBackdrop,
                 paint = Paint(imageFilter = halfOpacity, antiAlias = false),
             ))
             drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(blue, antiAlias = false))
