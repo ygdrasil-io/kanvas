@@ -3215,6 +3215,7 @@ internal class W6aLayerGraphConstruction(
         val preparedVerticesHostRecipes = freezeW6PreparedVerticesHostsV1(passes, requireNotNull(table))
         val plainLayerCompositeRecipes = freezeW6PlainLayerCompositeRecipesV1(passes)
         val clipMaskInitializeRecipes = freezeW4eClipMaskInitializeRecipesV1(finalW4eBindings)
+        val w6bCoverageRasterGeometry = freezeW6bCoverageRasterGeometryV1(passes, resources + source.resources, caps)
         val nativeSiteRecipeCatalog = freezeNativeSiteRecipeCatalogV1(
             passes, solidRectHostRecipes, corePrimitiveHostRecipes, preparedVerticesHostRecipes,
             plainLayerCompositeRecipes, clipMaskInitializeRecipes,
@@ -3230,6 +3231,7 @@ internal class W6aLayerGraphConstruction(
             w6PreparedVerticesHostRecipes = preparedVerticesHostRecipes,
             w6PlainLayerCompositeRecipes = plainLayerCompositeRecipes,
             w4eClipMaskInitializeRecipes = clipMaskInitializeRecipes,
+            w6bCoverageRasterGeometry = w6bCoverageRasterGeometry,
             nativeSiteRecipeCatalogV1 = nativeSiteRecipeCatalog,
         )
         val allResources = resources + finalSource.resources

@@ -45,6 +45,8 @@ internal class SourcePhysicalConstructionV1(
     val w6PlainLayerCompositeRecipes: Map<W6LayerCompositeSiteKeyV1, W6PlainLayerCompositeRecipeV1> = emptyMap(),
     /** Final W4e ClipMaskInitialize recipes, limited to the final W4e bindings. */
     val w4eClipMaskInitializeRecipes: Map<PlanPassId, W4eClipMaskInitializeRecipeV1> = emptyMap(),
+    /** Final W6b V/I/U coverage-raster bundles; renderer selection remains intentionally open until 2P7b. */
+    val w6bCoverageRasterGeometry: Map<PlanPassId, W6bCoverageRasterGeometryV1> = emptyMap(),
     /** Versioned catalog derived exclusively from the preceding final planner recipes. */
     val nativeSiteRecipeCatalogV1: NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1.Empty,
 )
@@ -101,6 +103,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     preparedVerticesHostRecipes: Map<W6GeometrySiteKeyV1, W6PreparedVerticesHostRecipeV1>,
     plainLayerCompositeRecipes: Map<W6LayerCompositeSiteKeyV1, W6PlainLayerCompositeRecipeV1>,
     w4eClipMaskInitializeRecipes: Map<PlanPassId, W4eClipMaskInitializeRecipeV1>,
+    w6bCoverageRasterGeometry: Map<PlanPassId, W6bCoverageRasterGeometryV1>,
     nativeSiteRecipeCatalogV1: NativeSiteRecipeCatalogV1,
 ) {
     private val resources = immutableList(resources)
@@ -115,6 +118,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     private val preparedVerticesHosts = java.util.Collections.unmodifiableMap(LinkedHashMap(preparedVerticesHostRecipes))
     private val plainLayerComposites = java.util.Collections.unmodifiableMap(LinkedHashMap(plainLayerCompositeRecipes))
     private val clipMaskInitializes = java.util.Collections.unmodifiableMap(LinkedHashMap(w4eClipMaskInitializeRecipes))
+    private val coverageRasterGeometry = java.util.Collections.unmodifiableMap(LinkedHashMap(w6bCoverageRasterGeometry))
     private val nativeSiteRecipes = nativeSiteRecipeCatalogV1
     private val slots = immutableList(buildList {
         resources.forEachIndexed { indexI32, resource ->
@@ -178,6 +182,10 @@ public class PlanPhysicalLayoutV1 private constructor(
         (nativeSiteRecipes.recipe(NativeSiteOwnerV1(passId, clipMaskInitializes.getValue(passId).packetOrdinalI32, 0)) as? W4eClipMaskInitializeNativeSiteRecipeV1)
             ?.host ?: error("Missing frozen W4e ClipMaskInitialize native-site recipe for ${passId.value}.")
     public fun w4eClipMaskInitializeRecipes(): Map<PlanPassId, W4eClipMaskInitializeRecipeV1> = clipMaskInitializes
+    /** Exact final W6b raw-coverage geometry and V/I/U windows, without a renderer recipe selection. */
+    public fun w6bCoverageRasterGeometry(passId: PlanPassId): W6bCoverageRasterGeometryV1 =
+        requireNotNull(coverageRasterGeometry[passId]) { "Missing frozen W6b coverage raster geometry for ${passId.value}." }
+    public fun w6bCoverageRasterGeometries(): Map<PlanPassId, W6bCoverageRasterGeometryV1> = coverageRasterGeometry
     /** Ordered planner catalog consumed by the bounded 2P0–2P6 renderer sites. */
     public fun nativeSiteRecipeCatalogV1(): NativeSiteRecipeCatalogV1 = nativeSiteRecipes
 
@@ -227,6 +235,15 @@ public class PlanPhysicalLayoutV1 private constructor(
                     output.format == PlanTextureFormat.CoverageMask && output.sampleCountI32 == 1 &&
                     PlanResourceUsage.RenderAttachment in output.usages()) {
                     "W4e ClipMaskInitialize recipe changed after final binding."
+                }
+            }
+            val expectedCoverageRasterGeometry = freezeW6bCoverageRasterGeometryV1(graph.passes(), rows, graph.capabilities)
+            require(source.w6bCoverageRasterGeometry.keys == expectedCoverageRasterGeometry.keys)
+            source.w6bCoverageRasterGeometry.forEach { (passId, frozen) ->
+                val pass = graph.passes().single { it.id == passId } as? PlanPass.FilterCoverageSourcePass
+                require(pass?.rasterBinding != null && frozen.ownerPassId == passId &&
+                    frozen.matches(expectedCoverageRasterGeometry.getValue(passId))) {
+                    "W6b coverage raster geometry or V/I/U windows changed after final pass binding."
                 }
             }
             val expectedNativeSiteRecipes = freezeNativeSiteRecipeCatalogV1(
@@ -427,6 +444,7 @@ public class PlanPhysicalLayoutV1 private constructor(
             val layout = PlanPhysicalLayoutV1(rows, source.caches, uniforms, geometry, source.w4eGeometry, pictures, spatialCaches,
                 graph.w6dProgramLeases(), source.w6SolidRectHostRecipes, source.w6CorePrimitiveHostRecipes,
                 source.w6PreparedVerticesHostRecipes, source.w6PlainLayerCompositeRecipes, source.w4eClipMaskInitializeRecipes,
+                source.w6bCoverageRasterGeometry,
                 source.nativeSiteRecipeCatalogV1)
             require(layout.slots.map { it.resourceId }.distinct().size == layout.slots.size)
             require(layout.programSlots().map { it.slotI32 }.distinct().size == layout.programSlots().size)
