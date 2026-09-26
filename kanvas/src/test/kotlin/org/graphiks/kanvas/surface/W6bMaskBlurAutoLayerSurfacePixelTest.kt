@@ -141,6 +141,8 @@ class W6bMaskBlurAutoLayerSurfacePixelTest {
         val outsideClipOffsetI32 = (4 * W6bMaskBlurCpuOracle.widthI32 + 2) * 4
         assertContentEquals(ubyteArrayOf(0u, 0u, 0u, 0u),
             expected.copyOfRange(outsideClipOffsetI32, outsideClipOffsetI32 + 4))
+        assertContentEquals(ubyteArrayOf(0u, 0u, 0u, 0u),
+            actual.copyOfRange(outsideClipOffsetI32, outsideClipOffsetI32 + 4))
         assertTrue(expected[(4 * W6bMaskBlurCpuOracle.widthI32 + 4) * 4 + 3] > 0u,
             "Expected non-zero RRect coverage inside the clip")
 

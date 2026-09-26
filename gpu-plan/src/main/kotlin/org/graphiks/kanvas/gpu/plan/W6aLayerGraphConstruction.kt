@@ -132,6 +132,8 @@ internal class W6aLayerGraphConstruction(
     private val filterSourceBindings: Map<PlanResourceId, W6bFilterGraphConstruction.SourceBinding>
     /** Direct lighting sources defer their terminal hard clip until FilterComposite. */
     private val directConsumerDemandCommands: Set<Int>
+    /** Direct mask blurs retain their full analytic source coverage until FilterComposite. */
+    private val directMaskBlurCommands: Set<Int>
     /** Additional real W5 source rows used by captured MaskShader coverage evaluation. */
     private val maskMaterialSourcesByOccurrence: Map<Int, MaterialSourceConstructionV4>
     /** One W5 row per isolated Picture paint; it samples a sealed graph texture, never a SceneSnapshot. */
@@ -1097,6 +1099,7 @@ internal class W6aLayerGraphConstruction(
         )
         val directFilterSourceByCommand = linkedMapOf<Int, DirectFilterSources>()
         val directConsumerDemandCommands = linkedSetOf<Int>()
+        val directMaskBlurCommands = linkedSetOf<Int>()
         activeFilterOccurrences.filterNot { it.isLayerOccurrence || it.isPictureOccurrence }.forEach { occurrence ->
             val binding = bindingsByCommand.getValue(occurrence.insertionCommandIndexI32)
             val earlyFacts = requireNotNull(directAutoLayerFactsByOccurrence[occurrence])
@@ -1112,9 +1115,8 @@ internal class W6aLayerGraphConstruction(
             val noOpDomain = RectI32(targetBounds.left, targetBounds.top,
                 Math.addExact(targetBounds.left, 1), Math.addExact(targetBounds.top, 1))
             val consumerDemandFilter = W6bFilterGraphConstruction.hasConsumerDemandTerminal(occurrence)
-            if (consumerDemandFilter || occurrence.mask is MaskFilterNode.Blur) {
-                directConsumerDemandCommands += occurrence.insertionCommandIndexI32
-            }
+            if (consumerDemandFilter) directConsumerDemandCommands += occurrence.insertionCommandIndexI32
+            if (occurrence.mask is MaskFilterNode.Blur) directMaskBlurCommands += occurrence.insertionCommandIndexI32
             // The sampler recipe maps its public local lens with this captured draw transform.
             // Derive it before reverse demand so direct clipped Magnifier input matches the
             // immutable coordinates later used to freeze the filter pass.
@@ -1149,6 +1151,7 @@ internal class W6aLayerGraphConstruction(
             )
         }
         this.directConsumerDemandCommands = directConsumerDemandCommands
+        this.directMaskBlurCommands = directMaskBlurCommands
         /*
          * MaskShader is not a placeholder operation: the captured MaterialNode is normalized by
          * the same W5 source authority as the rest of the frame.  Its row is appended to this
@@ -3025,10 +3028,10 @@ internal class W6aLayerGraphConstruction(
         fun localizedCoverageDraw(binding: PlanPass.W6bRasterCoverageBindingV1, target: PlanResourceId): PlanDraw {
             val selected = byLaneAndCommand.getValue(binding.sourceLaneI32 to binding.draw.commandIndex)
                 .withFinalBlendV1(binding.draw.blend)
-            val sourceDraw = if (binding.draw.commandIndex in directConsumerDemandCommands) {
-                selected.withoutW6aTerminalClip()
-            } else {
-                selected
+            val sourceDraw = when {
+                binding.draw.commandIndex in directMaskBlurCommands -> selected.withoutW6aTerminalClip(expandAnalyticRaster = true)
+                binding.draw.commandIndex in directConsumerDemandCommands -> selected.withoutW6aTerminalClip()
+                else -> selected
             }
             if (bindings.getOrNull(binding.sourceLaneI32)?.occurrenceInput?.commandIndexI32 == binding.draw.commandIndex) {
                 return sourceDraw
@@ -3477,11 +3480,11 @@ internal class W6aLayerGraphConstruction(
     }
 
     /** Removes only the deferred direct-filter clip wrappers; geometry remains W5-owned. */
-    private fun PlanDraw.withoutW6aTerminalClip(): PlanDraw {
+    private fun PlanDraw.withoutW6aTerminalClip(expandAnalyticRaster: Boolean = false): PlanDraw {
         var source = this
         while (source is ClippedPlanDraw) source = source.source
-        // Analytic coverage must retain its whole raster before a direct mask blur;
-        // FilterComposite owns the public hard clip after the filter chain.
+        if (!expandAnalyticRaster) return source
+        // A direct mask blur consumes analytic coverage before FilterComposite applies the clip.
         return when (source) {
             is AnalyticRectDraw, is AnalyticRRectDraw ->
                 source.withLocalizedScissorV6(w6aRasterBoundsI32(source))
