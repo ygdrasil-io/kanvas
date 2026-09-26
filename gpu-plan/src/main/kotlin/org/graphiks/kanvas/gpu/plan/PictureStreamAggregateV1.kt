@@ -784,6 +784,68 @@ internal class PictureStreamAggregateDiscoveryV1(
         )
     }
 
+    /** Local draft symbols do not advance the frame's identity cursors. */
+    fun prepareFilterRoot(
+        capturedNodeId: CapturedFilterNodeIdI32,
+        node: CapturedFilterNodeV1.Picture,
+        occurrence: W6bFilterGraphConstruction.PositiveOccurrence,
+        knownContentDeviceI32: RectI32,
+        sourceDomainDeviceI32: RectI32,
+        contentDeviceF64: RectF64,
+    ): PictureStreamAggregateDraftV1 = PictureStreamAggregateDiscoveryV1(positiveOccurrences, 0).filterRoot(
+        capturedNodeId, node, occurrence, knownContentDeviceI32, sourceDomainDeviceI32, contentDeviceF64)
+
+    /** Assign the existing cursors to a prepared tree, without reading its scenes again. */
+    fun publishFilterRoot(prepared: PictureStreamAggregateDraftV1): PictureStreamAggregateDraftV1 {
+        val aggregateBase = nextAggregateI32
+        val occurrenceBase = nextPictureOccurrenceI32
+        val commandBase = nextFrameCommandI32
+        fun aggregate(id: PictureStreamAggregateIdI32): PictureStreamAggregateIdI32 {
+            val value = Math.addExact(aggregateBase, id.valueI32)
+            nextAggregateI32 = maxOf(nextAggregateI32, Math.addExact(value, 1))
+            return PictureStreamAggregateIdI32(value)
+        }
+        fun occurrence(id: Int): Int = Math.addExact(occurrenceBase, id).also {
+            nextPictureOccurrenceI32 = maxOf(nextPictureOccurrenceI32, Math.addExact(it, 1))
+        }
+        fun planned(id: FramePlannedCommandIdI32): FramePlannedCommandIdI32 {
+            val value = Math.addExact(commandBase, id.valueI32)
+            nextFrameCommandI32 = maxOf(nextFrameCommandI32, Math.addExact(value, 1))
+            return FramePlannedCommandIdI32(value)
+        }
+        fun locator(value: PictureSourceLocatorV1): PictureSourceLocatorV1 =
+            PictureSourceLocatorV1(occurrence(value.pictureOccurrenceIdI32), value.sourceCommandIndexI32)
+        lateinit var bindDraft: (PictureStreamAggregateDraftV1) -> PictureStreamAggregateDraftV1
+        fun entries(values: List<PictureStreamEntryDraftV1>): List<PictureStreamEntryDraftV1> = values.map { value ->
+            val position = locator(value.locator)
+            when (value) {
+                is PictureStreamEntryDraftV1.Draw -> PictureStreamEntryDraftV1.Draw(value.id, position,
+                    planned(value.plannedCommandId), value.source, value.filterOccurrence)
+                is PictureStreamEntryDraftV1.Picture -> PictureStreamEntryDraftV1.Picture(value.id, position,
+                    planned(value.plannedCommandId), bindDraft(value.child))
+                is PictureStreamEntryDraftV1.Layer -> PictureStreamEntryDraftV1.Layer(value.id, position,
+                    planned(value.plannedCommandId), value.descriptorSource, value.endCommandIndexI32,
+                    entries(value.children()), value.filterOccurrence)
+                is PictureStreamEntryDraftV1.Clear -> PictureStreamEntryDraftV1.Clear(value.id, position,
+                    planned(value.plannedCommandId), value.color)
+                is PictureStreamEntryDraftV1.DrawColor -> PictureStreamEntryDraftV1.DrawColor(value.id, position,
+                    planned(value.plannedCommandId), value.color, value.mode, value.copyTransformF32(), value.clip)
+                is PictureStreamEntryDraftV1.ConsumedState -> PictureStreamEntryDraftV1.ConsumedState(value.id, position, value.state)
+                is PictureStreamEntryDraftV1.AnnotationNoOp -> PictureStreamEntryDraftV1.AnnotationNoOp(value.id, position, value.annotationCanonicalId)
+            }
+        }
+        bindDraft = { value ->
+            val owner = when (val owner = value.owner) {
+                is PictureStreamAggregateDraftOwnerV1.FilterPicture -> owner
+                is PictureStreamAggregateDraftOwnerV1.DrawPicture -> PictureStreamAggregateDraftOwnerV1.DrawPicture(
+                    owner.source, owner.draw, owner.filterOccurrence, planned(owner.sourcePlannedCommandId))
+            }
+            PictureStreamAggregateDraftV1(aggregate(value.id), value.executionMode, value.sourceScene,
+                occurrence(value.sourcePictureOccurrenceIdI32), value.outerPicturePathI32(), owner, entries(value.entries()))
+        }
+        return bindDraft(prepared)
+    }
+
     /** A Picture filter owns its captured scene and every nested W4/W5/W6c occurrence in order. */
     fun filterRoot(
         capturedNodeId: CapturedFilterNodeIdI32,

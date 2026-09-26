@@ -242,11 +242,9 @@ internal object W6bFilterGraphConstruction {
 
     internal fun interface FilterPictureSourceEmitterV1 {
         fun emit(
-            occurrence: PositiveOccurrence,
-            capturedNodeId: CapturedFilterNodeIdI32,
-            node: CapturedFilterNodeV1.Picture,
+            prepared: W6bPreparedPictureSourceV1,
             sourceContext: SourceBinding,
-        ): FilterPictureSourceEmissionV1?
+        ): FilterPictureSourceEmissionV1
     }
 
     internal class FrozenMask internal constructor(
@@ -279,11 +277,11 @@ internal object W6bFilterGraphConstruction {
      * binding remains the sole carrier of target-local origin and known-content facts.
      */
     private class ContextualFilterResult(
-        val source: SourceBinding,
+        val source: W6bRecipeSourceV1,
         val bounds: FilterBoundsPlanV1,
-        val evaluationKey: FilterEvaluationKeyV1?,
+        val evaluationKey: W6bRecipeKeyV1?,
     ) {
-        val resourceId: PlanResourceId get() = source.resourceId
+        val symbol: W6bRecipeSymbolV1 get() = source.symbol
     }
 
     internal fun owns(scene: SceneSnapshot): Boolean = ownership(scene).isOwned
@@ -413,123 +411,174 @@ internal object W6bFilterGraphConstruction {
         sink: W6FramePassSinkV1,
         emitFilterPictureSource: FilterPictureSourceEmitterV1,
         runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
+        evaluated: W6bEvaluatedFilterRecipeV1? = null,
+        preparePicture: ((W6bBoundFilterOperationV1, W6bSourceGeometryV1) -> W6bPreparedPictureSourceV1?)? = null,
     ): FrozenOccurrence {
-        // The source scene's canonical id is an immutable content revision.  It is deliberately
-        // captured here, where the occurrence still owns the SceneSnapshot, and carried through
-        // every derived binding; later plan/native stages cannot rediscover it.
-        val occurrenceSource = sourceBinding.withSourceRevision(
+        val source = sourceBinding.withSourceRevision(
             "${occurrence.source.scene.canonicalId.value}:${occurrence.source.sourceCommandIndexI32}:" +
-                occurrence.source.picturePathI32().joinToString(","),
-        )
+                occurrence.source.picturePathI32().joinToString(","))
+        val recipe = evaluated ?: bindOccurrenceRecipe(occurrence,
+            source.copyDesiredOutputDeviceI32() ?: source.copyDeviceBoundsI32(), source.mapping).evaluate(
+                W6bFilterSourceFactsV1(source.copyDeviceBoundsI32(), source.copyKnownContentDeviceI32(),
+                    source.copyDesiredOutputDeviceI32() ?: source.copyDeviceBoundsI32(), source.mapping, preparePicture),
+                runtimeCatalog)
         val resources = mutableListOf<ResourceSpec>()
         val passes = mutableListOf<PlanPass>()
+        val bindings = linkedMapOf(W6bRecipeSymbolV1(0) to source)
+        val pictures = mutableMapOf<W6bRecipeSymbolV1, FilterPictureSourceEmissionV1>()
+        fun physical(symbol: W6bRecipeSymbolV1): SourceBinding = bindings.getValue(symbol)
+        val keys = java.util.IdentityHashMap<W6bRecipeKeyV1, FilterEvaluationKeyV1>()
+        fun lowerKey(key: W6bRecipeKeyV1): FilterEvaluationKeyV1 = keys.getOrPut(key) {
+            key.lower(physical(key.boundSource.symbol))
+        }
         fun append(pass: PlanPass) {
             require(pass.ordinal == cursor.passOrdinalI32)
             cursor.passOrdinalI32 = Math.addExact(cursor.passOrdinalI32, 1)
             sink.append(pass)
             passes += pass
         }
-        fun resource(role: PlanResourceRole, extent: SizeI32): PlanResourceId {
-            val ordinal = when (role) {
-                PlanResourceRole.FilterTarget -> cursor.filterTargetOrdinalI32.also {
-                    cursor.filterTargetOrdinalI32 = Math.addExact(it, 1)
+        for (instruction in recipe.instructions) when (instruction) {
+            is W6bRecipeInstructionV1.Resource -> {
+                val ordinal = when (instruction.role) {
+                    PlanResourceRole.FilterTarget -> cursor.filterTargetOrdinalI32.also {
+                        cursor.filterTargetOrdinalI32 = Math.addExact(it, 1) }
+                    PlanResourceRole.FilterTransparentBlack -> cursor.transparentBlackOrdinalI32.also {
+                        cursor.transparentBlackOrdinalI32 = Math.addExact(it, 1) }
+                    else -> error("Image recipe has an invalid resource role.")
                 }
-                PlanResourceRole.FilterTransparentBlack -> cursor.transparentBlackOrdinalI32.also {
-                    cursor.transparentBlackOrdinalI32 = Math.addExact(it, 1)
-                }
-                PlanResourceRole.CoverageOriginal -> cursor.coverageOriginalOrdinalI32.also {
-                    cursor.coverageOriginalOrdinalI32 = Math.addExact(it, 1)
-                }
-                else -> error("W6b only allocates typed filter resources.")
+                val id = planResourceId(instruction.role, ordinal)
+                val geometry = recipe.sources.getValue(instruction.symbol)
+                resources += ResourceSpec(id, instruction.role, instruction.copyExtentI32())
+                bindings[instruction.symbol] = source.withResource(id, geometry.copyExtentI32(),
+                    geometry.originDeviceI32, geometry.copyKnownContentDeviceI32(), geometry.copyDesiredOutputDeviceI32(),
+                    geometry.copyRequiredInputDeviceI32(), geometry.copyProducedOutputDeviceI32())
             }
-            val id = planResourceId(role, ordinal)
-            resources += ResourceSpec(id, role, extent)
-            return id
+            is W6bRecipeInstructionV1.Clear -> append(PlanPass.FilterSourceClear(cursor.passOrdinalI32,
+                physical(instruction.output).resourceId, physical(instruction.reference).resourceId))
+            is W6bRecipeInstructionV1.PictureSource -> {
+                val emitted = emitFilterPictureSource.emit(instruction.prepared, physical(instruction.context))
+                require(emitted.source.copyDeviceBoundsI32() == instruction.output.copyDeviceBoundsI32()) {
+                    "Picture physical source disagrees with its evaluated recipe domain."
+                }
+                pictures[instruction.output.symbol] = emitted
+                bindings[instruction.output.symbol] = emitted.source
+                cursor.passOrdinalI32 = sink.nextOrdinalI32()
+            }
+            is W6bRecipeInstructionV1.Pass -> {
+                val key = lowerKey(instruction.key)
+                val operation = when (val selected = instruction.operation) {
+                    is W6bRecipeOperationV1.Fixed -> selected.operation
+                    is W6bRecipeOperationV1.ShadowComposite -> FilterPassOperationV1.DropShadowComposite(
+                        selected.mode, physical(selected.original).resourceId, selected.bounds,
+                        selected.shadowOffset, selected.originalOffset)
+                    is W6bRecipeOperationV1.Picture -> {
+                        val emitted = pictures.getValue(selected.source)
+                        val sealed = SealedPictureFilterSourceV1(emitted.aggregateId, emitted.resourceId,
+                            emitted.sourceGenerationI64, selected.inputSampling, emitted.owner)
+                        require(sealed.copyOwner().authenticates(key)) {
+                            "W6d Picture source owner does not authenticate its captured-node evaluation."
+                        }
+                        FilterPassOperationV1.Picture(sealed, selected.prepared.copyContentDeviceF64(),
+                            selected.bounds, selected.sampling)
+                    }
+                }
+                append(PlanPass.FilterPass(cursor.passOrdinalI32, instruction.inputs.map { physical(it).resourceId },
+                    physical(instruction.output).resourceId, key, operation))
+            }
         }
-        fun maskTableResource(): PlanResourceId {
-            val ordinal = cursor.maskTableOrdinalI32.also {
-                cursor.maskTableOrdinalI32 = Math.addExact(it, 1)
-            }
-            return planResourceId(PlanResourceRole.MaskTableData, ordinal).also { id ->
-                resources += ResourceSpec.maskTable(id)
-            }
+        return FrozenOccurrence(resources, passes, physical(recipe.output.symbol),
+            lowerKey(recipe.terminalKey))
+    }
+
+    internal fun evaluateRecipe(
+        occurrence: PositiveOccurrence,
+        sourceFacts: W6bFilterSourceFactsV1,
+        demands: W6bFilterDemandsV1,
+        runtimeCatalog: RuntimeEffectSemanticCatalogSnapshot,
+    ): W6bEvaluatedFilterRecipeV1 {
+        val domain = sourceFacts.copySourceDomainDeviceI32()
+        val occurrenceSource = W6bRecipeSourceV1(W6bRecipeSymbolV1(0), SizeI32(domain.width(), domain.height()),
+            Point2I32(domain.left, domain.top), sourceFacts.mapping, sourceFacts.copyKnownContentDeviceI32(),
+            sourceFacts.copyDesiredOutputDeviceI32(), demands.copyRequiredSourceI32(), sourceFacts.copyKnownContentDeviceI32())
+        val instructions = mutableListOf<W6bRecipeInstructionV1>()
+        val sources = linkedMapOf(occurrenceSource.symbol to occurrenceSource)
+        var nextSymbolI32 = 1
+        fun resource(role: PlanResourceRole, extent: SizeI32): W6bRecipeSymbolV1 =
+            W6bRecipeSymbolV1(nextSymbolI32++).also { instructions += W6bRecipeInstructionV1.Resource(it, role, extent) }
+        fun appendPass(inputs: List<W6bRecipeSymbolV1>, output: W6bRecipeSymbolV1,
+            key: W6bRecipeKeyV1, operation: FilterPassOperationV1) {
+            instructions += W6bRecipeInstructionV1.Pass(inputs, output, key, W6bRecipeOperationV1.Fixed(operation))
         }
-        fun bindOutput(id: PlanResourceId, bounds: FilterBoundsPlanV1): SourceBinding {
+        fun appendSymbolicPass(inputs: List<W6bRecipeSymbolV1>, output: W6bRecipeSymbolV1,
+            key: W6bRecipeKeyV1, operation: W6bRecipeOperationV1) {
+            instructions += W6bRecipeInstructionV1.Pass(inputs, output, key, operation)
+        }
+        fun bindOutput(id: W6bRecipeSymbolV1, bounds: FilterBoundsPlanV1): W6bRecipeSourceV1 {
             val desired = bounds.copyDesiredOutputDeviceI32()
-            return occurrenceSource.withResource(
+            return occurrenceSource.withSymbol(
                 id, SizeI32(desired.width(), desired.height()), bounds.copyTargetOriginDeviceI32(),
                 bounds.copyProducedOutputDeviceI32(), bounds.copyDesiredOutputDeviceI32(),
                 bounds.copyRequiredInputDeviceI32(), bounds.copyProducedOutputDeviceI32(),
-            )
+            ).also { sources[id] = it }
         }
-        fun allocateTarget(bounds: FilterBoundsPlanV1): SourceBinding = bindOutput(
+        fun allocateTarget(bounds: FilterBoundsPlanV1): W6bRecipeSourceV1 = bindOutput(
             resource(PlanResourceRole.FilterTarget, bounds.copyDesiredOutputDeviceI32().let { SizeI32(it.width(), it.height()) }), bounds,
         )
-        fun transparentBlack(source: SourceBinding): SourceBinding {
+        fun transparentBlack(source: W6bRecipeSourceV1): W6bRecipeSourceV1 {
             val id = resource(PlanResourceRole.FilterTransparentBlack, source.copyExtentI32())
-            append(PlanPass.FilterSourceClear(cursor.passOrdinalI32, id, source.resourceId))
-            return source.withResource(id, knownContentDeviceI32 = null)
+            instructions += W6bRecipeInstructionV1.Clear(id, source.symbol)
+            return source.withSymbol(id, knownContentDeviceI32 = null, producedOutputDeviceI32 = null).also { sources[id] = it }
         }
         fun keyFor(
             nodeId: CapturedFilterNodeIdI32?,
             maskOccurrenceI32: Int?,
-            boundSource: SourceBinding,
+            boundSource: W6bRecipeSourceV1,
             desired: RectI32,
             pictureProvenance: PictureFilterEvaluationProvenanceV1? = null,
-        ): FilterEvaluationKeyV1 {
+        ): W6bRecipeKeyV1 {
             require(pictureProvenance == null || nodeId != null) {
                 "Only a captured-node evaluation can carry Picture provenance."
             }
-            return when {
-                nodeId != null -> FilterEvaluationKeyV1.of(nodeId, boundSource.resourceId, boundSource.mapping, desired,
-                    sourceRevisionIdentity = boundSource.sourceRevisionIdentity,
-                    pictureProvenance = pictureProvenance,
-                )
-                maskOccurrenceI32 != null -> FilterEvaluationKeyV1.forMaskOccurrence(
-                    maskOccurrenceI32, boundSource.resourceId, boundSource.mapping, desired,
-                    sourceRevisionIdentity = boundSource.sourceRevisionIdentity,
-                )
-                else -> error("W6b occurrence key is missing its captured identity.")
-            }
+            return W6bRecipeKeyV1(nodeId, maskOccurrenceI32, boundSource, desired, pictureProvenance)
         }
         fun appendBlur(
-            source: SourceBinding,
+            source: W6bRecipeSourceV1,
             sigmaXF32: Float,
             sigmaYF32: Float,
             tileMode: TileMode,
             horizontalKind: FilterImplementationKindV1,
             verticalKind: FilterImplementationKindV1,
-            key: FilterEvaluationKeyV1,
+            key: W6bRecipeKeyV1,
         ): ContextualFilterResult {
             val horizontalBounds = blurBounds(source, sigmaXF32, 0f)
             val horizontal = allocateTarget(horizontalBounds)
-            append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(source.resourceId), horizontal.resourceId, key,
+            appendPass( listOf(source.symbol), horizontal.symbol, key,
                 FilterPassOperationV1.SeparableBlur(horizontalKind, sigmaXF32, FilterAxisV1.X, tileMode,
-                    horizontalBounds, filterInputSampling(source, horizontalBounds))))
+                    horizontalBounds, filterInputSampling(source, horizontalBounds)))
             val verticalBounds = blurBounds(horizontal, 0f, sigmaYF32)
             val vertical = allocateTarget(verticalBounds)
-            append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(horizontal.resourceId), vertical.resourceId, key,
+            appendPass( listOf(horizontal.symbol), vertical.symbol, key,
                 FilterPassOperationV1.SeparableBlur(verticalKind, sigmaYF32, FilterAxisV1.Y, tileMode,
-                    verticalBounds, filterInputSampling(horizontal, verticalBounds))))
+                    verticalBounds, filterInputSampling(horizontal, verticalBounds)))
             return ContextualFilterResult(vertical, verticalBounds, key)
         }
         fun appendMorphology(
-            source: SourceBinding,
+            source: W6bRecipeSourceV1,
             morphologyKind: FilterPassOperationV1.Morphology.Kind,
             radiusXF64: Double,
             radiusYF64: Double,
-            key: FilterEvaluationKeyV1,
+            key: W6bRecipeKeyV1,
         ): ContextualFilterResult {
             val radii = W6cMorphologyPlanner.deviceRadii(radiusXF64, radiusYF64, source.mapping)
-            fun appendAxis(input: SourceBinding, axis: FilterAxisV1): SourceBinding {
+            fun appendAxis(input: W6bRecipeSourceV1, axis: FilterAxisV1): W6bRecipeSourceV1 {
                 val radius = if (axis == FilterAxisV1.X) radii.radiusXF64 else radii.radiusYF64
                 val bounds = W6cMorphologyPlanner.bounds(input, morphologyKind, axis, radius)
                 val output = allocateTarget(bounds)
                 val kind = if (axis == FilterAxisV1.X) FilterImplementationKindV1.MORPHOLOGY_X else FilterImplementationKindV1.MORPHOLOGY_Y
-                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
+                appendPass( listOf(input.symbol), output.symbol, key,
                     FilterPassOperationV1.Morphology(morphologyKind, radii.radiusXF64, radii.radiusYF64,
                         radii.radiusXTexelsI32, radii.radiusYTexelsI32, axis, bounds,
-                        filterInputSampling(input, bounds), kind)))
+                        filterInputSampling(input, bounds), kind))
                 return output
             }
             val horizontal = appendAxis(source, FilterAxisV1.X)
@@ -539,8 +588,8 @@ internal object W6bFilterGraphConstruction {
         }
         fun appendLighting(
             id: CapturedFilterNodeIdI32,
-            input: SourceBinding,
-            sourceForKey: SourceBinding,
+            input: W6bRecipeSourceV1,
+            sourceForKey: W6bRecipeSourceV1,
             family: LightingFamilyV1,
             parameters: LightingParametersV1,
         ): ContextualFilterResult {
@@ -549,7 +598,7 @@ internal object W6bFilterGraphConstruction {
             val bounds = distantDiffuseBounds(input, sourceForKey.copyDesiredOutputDeviceI32())
             val key = keyFor(id, null, sourceForKey, bounds.copyDesiredOutputDeviceI32())
             val output = allocateTarget(bounds)
-            append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
+            appendPass( listOf(input.symbol), output.symbol, key,
                 FilterPassOperationV1.Lighting(family, parameters, bounds, when (family) {
                     LightingFamilyV1.DISTANT_DIFFUSE -> FilterImplementationKindV1.DISTANT_DIFFUSE
                     LightingFamilyV1.POINT_DIFFUSE -> FilterImplementationKindV1.POINT_DIFFUSE
@@ -557,7 +606,7 @@ internal object W6bFilterGraphConstruction {
                     LightingFamilyV1.DISTANT_SPECULAR -> FilterImplementationKindV1.DISTANT_SPECULAR
                     LightingFamilyV1.POINT_SPECULAR -> FilterImplementationKindV1.POINT_SPECULAR
                     LightingFamilyV1.SPOT_SPECULAR -> FilterImplementationKindV1.SPOT_SPECULAR
-                }, distantDiffuseSobelSampling(input, bounds))))
+                }, distantDiffuseSobelSampling(input, bounds)))
             return ContextualFilterResult(output, bounds, key)
         }
         val boundResults = java.util.IdentityHashMap<W6bFilterReferenceV1, ContextualFilterResult>()
@@ -578,8 +627,8 @@ internal object W6bFilterGraphConstruction {
         }
         for (bound in occurrence.topology.operations) {
             val id = bound.id
-            val currentSource = resolved(bound.boundSource).source.withResource(
-                resolved(bound.boundSource).resourceId,
+            val currentSource = resolved(bound.boundSource).source.withSymbol(
+                resolved(bound.boundSource).symbol,
                 desiredOutputDeviceI32 = occurrenceSource.copyDesiredOutputDeviceI32(),
             )
             val inputs = bound.inputs.iterator()
@@ -592,9 +641,9 @@ internal object W6bFilterGraphConstruction {
                 val bounds = planned.bounds
                 val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
                 val output = allocateTarget(bounds)
-                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
+                appendPass( listOf(input.symbol), output.symbol, key,
                     FilterPassOperationV1.Crop(planned.cropInputTargetLocalI32, node.tileMode, bounds,
-                        spatialSampling(input, bounds, planned.clipOutputTargetLocalF64, 0.0, 0.0))))
+                        spatialSampling(input, bounds, planned.clipOutputTargetLocalF64, 0.0, 0.0)))
                 ContextualFilterResult(output, bounds, key)
             }
             is CapturedFilterNodeV1.Offset -> {
@@ -603,9 +652,9 @@ internal object W6bFilterGraphConstruction {
                 val bounds = planned.bounds
                 val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
                 val output = allocateTarget(bounds)
-                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
+                appendPass( listOf(input.symbol), output.symbol, key,
                     FilterPassOperationV1.Offset(Vector2F64(planned.offsetDeviceF64X, planned.offsetDeviceF64Y), bounds,
-                        spatialSampling(input, bounds, fullClip(bounds), -planned.offsetDeviceF64X, -planned.offsetDeviceF64Y))))
+                        spatialSampling(input, bounds, fullClip(bounds), -planned.offsetDeviceF64X, -planned.offsetDeviceF64Y)))
                 ContextualFilterResult(output, bounds, key)
             }
             is CapturedFilterNodeV1.Tile -> {
@@ -614,9 +663,9 @@ internal object W6bFilterGraphConstruction {
                 val bounds = planned.bounds
                 val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
                 val output = allocateTarget(bounds)
-                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
+                appendPass( listOf(input.symbol), output.symbol, key,
                     FilterPassOperationV1.Tile(planned.sourceInputTargetLocalI32, bounds,
-                        spatialSampling(input, bounds, planned.clipOutputTargetLocalF64, 0.0, 0.0))))
+                        spatialSampling(input, bounds, planned.clipOutputTargetLocalF64, 0.0, 0.0)))
                 ContextualFilterResult(output, bounds, key)
             }
             is CapturedFilterNodeV1.Blur -> {
@@ -629,11 +678,11 @@ internal object W6bFilterGraphConstruction {
             is CapturedFilterNodeV1.DropShadow -> {
                 val input = nextInput().source
                 val blurredBounds = blurBounds(input, node.sigmaX, node.sigmaY)
-                val predictedBlur = SourceBinding(occurrenceSource.resourceId,
+                val predictedBlur = W6bRecipeSourceV1(occurrenceSource.symbol,
                     SizeI32(blurredBounds.copyDesiredOutputDeviceI32().width(), blurredBounds.copyDesiredOutputDeviceI32().height()),
                     blurredBounds.copyTargetOriginDeviceI32(), occurrenceSource.mapping, blurredBounds.copyProducedOutputDeviceI32())
                 val predictedShadowBounds = translatedBounds(predictedBlur, node.dx.toDouble(), node.dy.toDouble())
-                val predictedShadow = predictedBlur.withResource(predictedBlur.resourceId,
+                val predictedShadow = predictedBlur.withSymbol(predictedBlur.symbol,
                     SizeI32(predictedShadowBounds.copyDesiredOutputDeviceI32().width(), predictedShadowBounds.copyDesiredOutputDeviceI32().height()),
                     predictedShadowBounds.copyTargetOriginDeviceI32(), predictedShadowBounds.copyProducedOutputDeviceI32())
                 val key = keyFor(id, null, currentSource, dropShadowCompositeBounds(input, predictedShadow, node.mode).copyDesiredOutputDeviceI32())
@@ -643,9 +692,9 @@ internal object W6bFilterGraphConstruction {
                     FilterImplementationKindV1.IMAGE_BLUR_X, FilterImplementationKindV1.IMAGE_BLUR_Y, key)
                 val colorBounds = translatedBounds(blurred.source, node.dx.toDouble(), node.dy.toDouble())
                 val colorized = allocateTarget(colorBounds)
-                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(blurred.resourceId), colorized.resourceId, key,
+                appendPass( listOf(blurred.symbol), colorized.symbol, key,
                     FilterPassOperationV1.DropShadowColorize(node.color, Vector2F64(node.dx.toDouble(), node.dy.toDouble()), colorBounds,
-                        dropShadowLinearSampling(blurred.source, colorBounds, node.dx.toDouble(), node.dy.toDouble()))))
+                        dropShadowLinearSampling(blurred.source, colorBounds, node.dx.toDouble(), node.dy.toDouble())))
                 if (node.mode == CapturedDropShadowModeV1.SHADOW_ONLY) {
                     // The colored target is the terminal: there is no identity composite, target,
                     // slot, or lifetime to charge in SHADOW_ONLY.
@@ -653,9 +702,9 @@ internal object W6bFilterGraphConstruction {
                 } else {
                     val compositeBounds = dropShadowCompositeBounds(input, colorized, node.mode)
                     val composite = allocateTarget(compositeBounds)
-                    append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(colorized.resourceId, input.resourceId), composite.resourceId, key,
-                        FilterPassOperationV1.DropShadowComposite(node.mode, input.resourceId, compositeBounds,
-                            targetLocalSampleOffset(colorized, compositeBounds), targetLocalSampleOffset(input, compositeBounds))))
+                    appendSymbolicPass( listOf(colorized.symbol, input.symbol), composite.symbol, key,
+                        W6bRecipeOperationV1.ShadowComposite(node.mode, input.symbol, compositeBounds,
+                            targetLocalSampleOffset(colorized, compositeBounds), targetLocalSampleOffset(input, compositeBounds)))
                     ContextualFilterResult(composite, compositeBounds, key)
                 }
             }
@@ -669,8 +718,8 @@ internal object W6bFilterGraphConstruction {
                 val bounds = identityBounds(input)
                 val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
                 val output = allocateTarget(bounds)
-                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
-                    FilterPassOperationV1.ColorFilter(execution, null, null, null, bounds, filterInputSampling(input, bounds))))
+                appendPass( listOf(input.symbol), output.symbol, key,
+                    FilterPassOperationV1.ColorFilter(execution, null, null, null, bounds, filterInputSampling(input, bounds)))
                 ContextualFilterResult(output, bounds, key)
             }
             is CapturedFilterNodeV1.Merge -> {
@@ -684,8 +733,8 @@ internal object W6bFilterGraphConstruction {
                 val bounds = W6cMultiInputPlanner.bounds(sources)
                 val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
                 val output = allocateTarget(bounds)
-                append(PlanPass.FilterPass(cursor.passOrdinalI32, inputs.map(ContextualFilterResult::resourceId), output.resourceId, key,
-                    FilterPassOperationV1.Merge(sources.map { input -> filterInputSampling(input, bounds) }, bounds)))
+                appendPass( inputs.map(ContextualFilterResult::symbol), output.symbol, key,
+                    FilterPassOperationV1.Merge(sources.map { input -> filterInputSampling(input, bounds) }, bounds))
                 ContextualFilterResult(output, bounds, key)
             }
             is CapturedFilterNodeV1.Blend -> {
@@ -702,10 +751,10 @@ internal object W6bFilterGraphConstruction {
                 )) { "W6c Blend cannot freeze the selected W5 BlendPlan." }
                 val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
                 val output = allocateTarget(bounds)
-                append(PlanPass.FilterPass(cursor.passOrdinalI32,
-                    listOf(background.resourceId, foreground.resourceId), output.resourceId, key,
+                appendPass(
+                    listOf(background.symbol, foreground.symbol), output.symbol, key,
                     FilterPassOperationV1.Blend(blend, filterInputSampling(background.source, bounds),
-                        filterInputSampling(foreground.source, bounds), bounds)))
+                        filterInputSampling(foreground.source, bounds), bounds))
                 ContextualFilterResult(output, bounds, key)
             }
             is CapturedFilterNodeV1.Dilate -> {
@@ -809,9 +858,9 @@ internal object W6bFilterGraphConstruction {
                 val bounds = matrixBounds(input, width, height, offsetX, offsetY)
                 val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
                 val output = allocateTarget(bounds)
-                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
+                appendPass( listOf(input.symbol), output.symbol, key,
                     FilterPassOperationV1.MatrixConvolution(SizeI32(width, height), node.kernel, node.gain, node.bias,
-                        Vector2F64(offsetX, offsetY), node.tileMode, node.convolveAlpha, bounds)))
+                        Vector2F64(offsetX, offsetY), node.tileMode, node.convolveAlpha, bounds))
                 ContextualFilterResult(output, bounds, key)
             }
             is CapturedFilterNodeV1.DisplacementMap -> {
@@ -822,9 +871,9 @@ internal object W6bFilterGraphConstruction {
                 val bounds = samplingBounds(input)
                 val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
                 val output = allocateTarget(bounds)
-                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(displacement.resourceId, input.resourceId), output.resourceId, key,
+                appendPass( listOf(displacement.symbol, input.symbol), output.symbol, key,
                     FilterPassOperationV1.DisplacementMap(node.xChannelSelector, node.yChannelSelector, node.scale, bounds,
-                        filterInputSampling(displacement, bounds), filterInputSampling(input, bounds))))
+                        filterInputSampling(displacement, bounds), filterInputSampling(input, bounds)))
                 ContextualFilterResult(output, bounds, key)
             }
             is CapturedFilterNodeV1.Magnifier -> {
@@ -851,69 +900,43 @@ internal object W6bFilterGraphConstruction {
                 )
                 val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
                 val output = allocateTarget(bounds)
-                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), output.resourceId, key,
+                appendPass( listOf(input.symbol), output.symbol, key,
                     FilterPassOperationV1.Magnifier(sourceTargetLocal, node.zoom, node.inset, bounds,
-                        filterInputSampling(input, bounds))))
+                        filterInputSampling(input, bounds)))
                 ContextualFilterResult(output, bounds, key)
             }
             is CapturedFilterNodeV1.Picture -> {
-                val emitted = emitFilterPictureSource.emit(occurrence, id, node, currentSource)
-                if (emitted == null) {
+                val prepared = requireNotNull(sourceFacts.preparePicture) {
+                    "Picture recipe requires its W6a semantic draft resolver."
+                }(bound, currentSource)
+                val provenance = PictureFilterEvaluationProvenanceV1.of(occurrence.table.canonicalId.value, occurrence.idI32)
+                if (prepared == null) {
                     val transparent = transparentBlack(currentSource)
                     val bounds = identityBounds(transparent)
-                    val key = keyFor(
-                        id,
-                        null,
-                        currentSource,
-                        bounds.copyDesiredOutputDeviceI32(),
-                        pictureProvenance = PictureFilterEvaluationProvenanceV1.of(
-                            occurrence.table.canonicalId.value,
-                            occurrence.idI32,
-                        ),
-                    )
-                    // FilterComposite owns FilterTarget inputs.  Keep the existing transparent
-                    // source explicit, then route it through a sealed neutral Offset rather than
-                    // fabricating an empty Picture operation or allocating a zero-sized target.
+                    val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32(), provenance)
                     val output = allocateTarget(bounds)
-                    append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(transparent.resourceId), output.resourceId, key,
+                    appendPass(listOf(transparent.symbol), output.symbol, key,
                         FilterPassOperationV1.Offset(Vector2F64(0.0, 0.0), bounds,
-                            spatialSampling(transparent, bounds, fullClip(bounds), 0.0, 0.0))))
+                            spatialSampling(transparent, bounds, fullClip(bounds), 0.0, 0.0)))
                     ContextualFilterResult(output, bounds, key)
                 } else {
-                // The source callback contributes an aggregate slice directly into this same
-                // frame schedule (Begin → children → Seal).  Resume the filter cursor at the
-                // next global ordinal so the leaf follows that sealed slice immediately.
-                cursor.passOrdinalI32 = sink.nextOrdinalI32()
-                val bounds = identityBounds(emitted.source)
-                val key = keyFor(
-                    id,
-                    null,
-                    currentSource,
-                    bounds.copyDesiredOutputDeviceI32(),
-                    pictureProvenance = PictureFilterEvaluationProvenanceV1.of(
-                        occurrence.table.canonicalId.value,
-                        occurrence.idI32,
-                    ),
-                )
-                val output = allocateTarget(bounds)
-                val sealed = SealedPictureFilterSourceV1(
-                    emitted.aggregateId,
-                    emitted.resourceId,
-                    emitted.sourceGenerationI64,
-                    emitted.source.samplingFor(output),
-                    emitted.owner,
-                )
-                require(sealed.copyOwner().authenticates(key)) {
-                    "W6d Picture source owner does not authenticate its captured-node evaluation."
-                }
-                val sampling = W6dPictureSamplingV1.ofOrNull(sealed.copySampling(), emitted.copyContentDeviceF64(), bounds)
-                    ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(
-                        W6bFilterDiagnostics.InvalidBounds,
-                        "W6d Picture crop cannot be represented by frozen native F32 sampling coordinates.",
-                    ))
-                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(sealed.resourceId), output.resourceId, key,
-                    FilterPassOperationV1.Picture(sealed, emitted.copyContentDeviceF64(), bounds, sampling)))
-                ContextualFilterResult(output, bounds, key)
+                    val geometry = prepared.source
+                    val picture = W6bRecipeSourceV1(W6bRecipeSymbolV1(nextSymbolI32++), geometry.copyExtentI32(),
+                        geometry.originDeviceI32, geometry.mapping, geometry.copyKnownContentDeviceI32(),
+                        geometry.copyDesiredOutputDeviceI32(), geometry.copyRequiredInputDeviceI32(),
+                        geometry.copyProducedOutputDeviceI32())
+                    sources[picture.symbol] = picture
+                    instructions += W6bRecipeInstructionV1.PictureSource(picture, currentSource.symbol, prepared)
+                    val bounds = identityBounds(picture)
+                    val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32(), provenance)
+                    val output = allocateTarget(bounds)
+                    val inputSampling = filterInputSampling(picture, bounds)
+                    val sampling = W6dPictureSamplingV1.ofOrNull(inputSampling, prepared.copyContentDeviceF64(), bounds)
+                        ?: throw ConstructionFailure(W6bFilterDiagnostics.refusal(W6bFilterDiagnostics.InvalidBounds,
+                            "W6d Picture crop cannot be represented by frozen native F32 sampling coordinates."))
+                    appendSymbolicPass(listOf(picture.symbol), output.symbol, key,
+                        W6bRecipeOperationV1.Picture(picture.symbol, bounds, sampling, inputSampling, prepared))
+                    ContextualFilterResult(output, bounds, key)
                 }
             }
             is CapturedFilterNodeV1.RuntimeEffect -> {
@@ -945,14 +968,14 @@ internal object W6bFilterGraphConstruction {
                 val key = keyFor(id, null, currentSource, bounds.copyDesiredOutputDeviceI32())
                 val output = allocateTarget(bounds)
                 val uniform = requireNotNull(entry.descriptor.uniformBlock.slots.singleOrNull { it.name == "alpha" })
-                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(source.resourceId), output.resourceId, key,
+                appendPass( listOf(source.symbol), output.symbol, key,
                     FilterPassOperationV1.RuntimeImageOpacity(
                         entry.descriptor,
                         alpha.value,
                         uniform.offsetBytesI32,
                         bounds,
                         filterInputSampling(source, bounds),
-                    )))
+                    ))
                 ContextualFilterResult(output, bounds, key)
             }
             else -> throw ConstructionFailure(W6bFilterDiagnostics.refusal(
@@ -961,48 +984,9 @@ internal object W6bFilterGraphConstruction {
             }
             operationResults[bound] = result
         }
-        fun materializeMask(mask: MaskFilterNode, input: SourceBinding): Pair<SourceBinding, FilterEvaluationKeyV1> = when (mask) {
-            is MaskFilterNode.Blur -> {
-                val full = blurBounds(input, mask.sigma, mask.sigma)
-                val key = keyFor(null, occurrence.maskOccurrenceI32, input, full.copyDesiredOutputDeviceI32())
-                val blurred = appendBlur(input, mask.sigma, mask.sigma, TileMode.CLAMP,
-                    FilterImplementationKindV1.MASK_COVERAGE_BLUR_X, FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y, key).source
-                val styleBounds = identityBounds(blurred)
-                val styled = allocateTarget(styleBounds)
-                val original = input.resourceId.takeIf { mask.style != org.graphiks.kanvas.render.ir.MaskBlurStyle.NORMAL }
-                val styleInputs = buildList {
-                    add(blurred.resourceId)
-                    original?.let(::add)
-                }
-                append(PlanPass.FilterPass(cursor.passOrdinalI32, styleInputs, styled.resourceId, key,
-                    FilterPassOperationV1.MaskBlurStyle(mask.style, original, blurred.resourceId, styleBounds,
-                        filterInputSampling(blurred, styleBounds), original?.let { filterInputSampling(input, styleBounds) })))
-                styled to key
-            }
-            is MaskFilterNode.Shader -> {
-                val bounds = identityBounds(input)
-                val key = keyFor(null, occurrence.maskOccurrenceI32, input, bounds.copyDesiredOutputDeviceI32())
-                val target = allocateTarget(bounds)
-                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), target.resourceId, key,
-                    FilterPassOperationV1.MaskShader(
-                        FilterPassOperationV1.MaskShaderMaterialBindingV1.CapturedOccurrence(occurrence.idI32, mask.material),
-                        bounds, filterInputSampling(input, bounds))))
-                target to key
-            }
-            is MaskFilterNode.Table -> {
-                val bounds = identityBounds(input)
-                val key = keyFor(null, occurrence.maskOccurrenceI32, input, bounds.copyDesiredOutputDeviceI32())
-                val target = allocateTarget(bounds)
-                val tableResource = maskTableResource()
-                append(PlanPass.FilterPass(cursor.passOrdinalI32, listOf(input.resourceId), target.resourceId, key,
-                    FilterPassOperationV1.MaskTable(mask.table, tableResource, 256, 0L,
-                        occurrence.maskOccurrenceI32, bounds, filterInputSampling(input, bounds))))
-                target to key
-            }
-        }
-
         val terminal = resolved(occurrence.topology.terminal)
-        return FrozenOccurrence(resources, passes, terminal.source, requireNotNull(terminal.evaluationKey))
+        return W6bEvaluatedFilterRecipeV1(demands.copyRequiredSourceI32(), terminal.source,
+            requireNotNull(terminal.evaluationKey), instructions, sources)
     }
 
     /** Freezes raw-coverage mask work before W5 material/color evaluation. */

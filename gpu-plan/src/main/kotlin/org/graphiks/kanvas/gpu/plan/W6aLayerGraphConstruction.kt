@@ -184,6 +184,73 @@ internal class W6aLayerGraphConstruction(
             deferredFilterFailure = failure
             emptyList()
         }
+        val pictureDiscovery = PictureStreamAggregateDiscoveryV1(
+            filterOccurrences,
+            filterScene?.toList()?.size ?: bindings.maxOfOrNull { it.firstCommandIndexI32 + 1 } ?: 0,
+        )
+        fun prepareFilterPicture(
+            occurrence: W6bFilterGraphConstruction.PositiveOccurrence,
+            bound: W6bBoundFilterOperationV1,
+            sourceContext: W6bSourceGeometryV1,
+        ): W6bPreparedPictureSourceV1? {
+            val nodeId = bound.id
+            val node = bound.node as org.graphiks.kanvas.render.ir.CapturedFilterNodeV1.Picture
+            val commands = node.scene.toList()
+            if (commands.none { command -> command is SceneCommand.Draw || command is SceneCommand.Clear ||
+                    command is SceneCommand.DrawColor || command is SceneCommand.BeginLayer }) {
+                return null
+            } else {
+            val cullLocal = node.copyCullRect().let { bounds -> RectF64(
+                bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble(),
+            ) }
+            val sourceLocal = node.copySource()?.let { bounds -> RectF64(
+                bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble(),
+            ) }
+            if (!cullLocal.isFinite() || sourceLocal?.isFinite() == false) {
+                throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                    W6bFilterDiagnostics.InvalidBounds, "W6d Picture source has invalid F64 geometry.",
+                ))
+            }
+            val effectiveLocal = cullLocal.intersectF64OrNull(sourceLocal ?: cullLocal)
+                ?: return null
+            // Draw-owned filters compose their captured carrier transform once. A BeginLayer
+            // filter has no DrawNode by design: its already-frozen SourceBinding mapping is the
+            // layer context and remains the sole geometry authority for its Picture source.
+            val contentMapping = occurrence.source.sourceDraw?.let { carrier ->
+                val carrierToSource = composeInOrderF64(occurrence.source.outerPictures().map { it.transform } + carrier.transform)
+                val localToDevice = requireNotNull(sourceContext.mapping.copyLocalToDeviceF64().timesCheckedOrNull(carrierToSource)) {
+                    "W6d filter Picture carrier transform cannot be composed in finite F64."
+                }
+                LayerMappingF64.ofOrNull(localToDevice, Point2I32.Origin)
+                    ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                        W6bFilterDiagnostics.InvalidBounds, "W6d Picture source mapping is non-invertible.",
+                    ))
+            } ?: sourceContext.mapping
+            val contentDeviceF64 = contentMapping.mapLocalRectToDeviceF64OrNull(effectiveLocal)
+                ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                    W6bFilterDiagnostics.InvalidBounds, "W6d Picture crop cannot be mapped to finite device coordinates.",
+                ))
+            val knownContentDeviceI32 = contentDeviceF64.roundOutToRectI32OrNull()
+                ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                    W6bFilterDiagnostics.InvalidBounds, "W6d Picture crop cannot fit checked I32 texels.",
+                ))
+            val sourceDomainDeviceI32 = if (sourceLocal == null) knownContentDeviceI32 else
+                contentMapping.mapLocalRectToDeviceI32OrNull(cullLocal)
+                    ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
+                        W6bFilterDiagnostics.InvalidBounds, "W6d Picture cull cannot fit checked I32 texels.",
+                    ))
+            val draft = pictureDiscovery.prepareFilterRoot(nodeId, node, occurrence, knownContentDeviceI32,
+                sourceDomainDeviceI32, contentDeviceF64)
+            val mapping = requireNotNull(LayerMappingF64.ofOrNull(contentMapping.copyLocalToDeviceF64(),
+                Point2I32(sourceDomainDeviceI32.left, sourceDomainDeviceI32.top)))
+            val geometry = W6bRecipeSourceV1(W6bRecipeSymbolV1(0),
+                SizeI32(sourceDomainDeviceI32.width(), sourceDomainDeviceI32.height()),
+                Point2I32(sourceDomainDeviceI32.left, sourceDomainDeviceI32.top), mapping,
+                knownContentDeviceI32, sourceContext.copyDesiredOutputDeviceI32() ?: sourceContext.copyDeviceBoundsI32(),
+                sourceDomainDeviceI32, knownContentDeviceI32)
+            return W6bPreparedPictureSourceV1(draft, geometry, contentDeviceF64)
+            }
+        }
         val filterLayersByBegin = filterOccurrences.filter { it.isLayerOccurrence && !it.isBackdropInitialization }
             .associateBy { it.insertionCommandIndexI32 }
         val backdropFiltersByBegin = filterOccurrences.filter(W6bFilterGraphConstruction.PositiveOccurrence::isBackdropInitialization)
@@ -266,7 +333,8 @@ internal class W6aLayerGraphConstruction(
                     val mapping = LayerMappingF64.ofOrNull(localToDevice, Point2I32(consumer.left, consumer.top))
                         ?: throw IllegalArgumentException(W6aPlanDiagnostics.NonFiniteTransform)
                     W6bFilterGraphConstruction.bindOccurrenceRecipe(filter, consumer, mapping).evaluate(
-                        W6bFilterSourceFactsV1(known ?: consumer, known, consumer, mapping), runtimeCatalog,
+                        W6bFilterSourceFactsV1(known ?: consumer, known, consumer, mapping,
+                            { bound, context -> prepareFilterPicture(filter, bound, context) }), runtimeCatalog,
                     ).copyProducedOutputDeviceI32()
                 }
             }
@@ -498,10 +566,6 @@ internal class W6aLayerGraphConstruction(
         // One ordered, occurrence-local aggregate discovery owns nested Picture structure.  It
         // intentionally replaces the earlier leaf flattening: a filtered parent retains every
         // child (including unfiltered siblings) and an inline child remains in the current target.
-        val pictureDiscovery = PictureStreamAggregateDiscoveryV1(
-            filterOccurrences,
-            filterScene?.toList()?.size ?: bindings.maxOfOrNull { it.firstCommandIndexI32 + 1 } ?: 0,
-        )
         val pictureStreamAggregates = mutableListOf<PictureStreamAggregateV1>()
         data class DirectFilterSources(
             val coverage: W6bFilterGraphConstruction.SourceBinding,
@@ -840,7 +904,7 @@ internal class W6aLayerGraphConstruction(
                 }
                 W6bFilterGraphConstruction.freezeImageOccurrence(
                     occurrence, materialized?.output ?: source, filterCursor, framePassSink, emitFilterPictureSource,
-                    runtimeCatalog,
+                    runtimeCatalog, preparePicture = { bound, context -> prepareFilterPicture(occurrence, bound, context) },
                 )
             } else requireNotNull(materialized) { "W6b mask occurrence needs its materialized W5 source." }
             filterResourceSpecs += frozen.resourceSpecs()
@@ -2078,53 +2142,8 @@ internal class W6aLayerGraphConstruction(
             pictureStreamAggregates += aggregate
             return aggregate to terminal
         }
-        emitFilterPictureSource = W6bFilterGraphConstruction.FilterPictureSourceEmitterV1 { occurrence, nodeId, node, sourceContext ->
-            val commands = node.scene.toList()
-            if (commands.none { command -> command is SceneCommand.Draw || command is SceneCommand.Clear ||
-                    command is SceneCommand.DrawColor || command is SceneCommand.BeginLayer }) {
-                null
-            } else {
-            val cullLocal = node.copyCullRect().let { bounds -> RectF64(
-                bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble(),
-            ) }
-            val sourceLocal = node.copySource()?.let { bounds -> RectF64(
-                bounds.left.toDouble(), bounds.top.toDouble(), bounds.right.toDouble(), bounds.bottom.toDouble(),
-            ) }
-            if (!cullLocal.isFinite() || sourceLocal?.isFinite() == false) {
-                throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                    W6bFilterDiagnostics.InvalidBounds, "W6d Picture source has invalid F64 geometry.",
-                ))
-            }
-            val effectiveLocal = cullLocal.intersectF64OrNull(sourceLocal ?: cullLocal)
-                ?: return@FilterPictureSourceEmitterV1 null
-            // Draw-owned filters compose their captured carrier transform once. A BeginLayer
-            // filter has no DrawNode by design: its already-frozen SourceBinding mapping is the
-            // layer context and remains the sole geometry authority for its Picture source.
-            val contentMapping = occurrence.source.sourceDraw?.let { carrier ->
-                val carrierToSource = composeInOrderF64(occurrence.source.outerPictures().map { it.transform } + carrier.transform)
-                val localToDevice = requireNotNull(sourceContext.mapping.copyLocalToDeviceF64().timesCheckedOrNull(carrierToSource)) {
-                    "W6d filter Picture carrier transform cannot be composed in finite F64."
-                }
-                LayerMappingF64.ofOrNull(localToDevice, Point2I32.Origin)
-                    ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                        W6bFilterDiagnostics.InvalidBounds, "W6d Picture source mapping is non-invertible.",
-                    ))
-            } ?: sourceContext.mapping
-            val contentDeviceF64 = contentMapping.mapLocalRectToDeviceF64OrNull(effectiveLocal)
-                ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                    W6bFilterDiagnostics.InvalidBounds, "W6d Picture crop cannot be mapped to finite device coordinates.",
-                ))
-            val knownContentDeviceI32 = contentDeviceF64.roundOutToRectI32OrNull()
-                ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                    W6bFilterDiagnostics.InvalidBounds, "W6d Picture crop cannot fit checked I32 texels.",
-                ))
-            val sourceDomainDeviceI32 = if (sourceLocal == null) knownContentDeviceI32 else
-                contentMapping.mapLocalRectToDeviceI32OrNull(cullLocal)
-                    ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
-                        W6bFilterDiagnostics.InvalidBounds, "W6d Picture cull cannot fit checked I32 texels.",
-                    ))
-            val draft = pictureDiscovery.filterRoot(nodeId, node, occurrence, knownContentDeviceI32,
-                sourceDomainDeviceI32, contentDeviceF64)
+        emitFilterPictureSource = W6bFilterGraphConstruction.FilterPictureSourceEmitterV1 { prepared, sourceContext ->
+            val draft = pictureDiscovery.publishFilterRoot(prepared.draft)
             // A re-entrant W6d leaf may be evaluated from a W6b-produced FilterTarget rather
             // than an ordinary W6a layer target.  It is already allocated by W6b; retain only
             // its immutable mapping facts locally so the nested aggregate can discover its
@@ -2142,9 +2161,8 @@ internal class W6aLayerGraphConstruction(
                 sourceBindingsById.getValue(resourceId),
                 aggregate.owner as? PictureAggregateOwnerV1.FilterPicture
                     ?: error("W6d Picture aggregate did not freeze a filter-owned source identity."),
-                contentDeviceF64,
+                prepared.copyContentDeviceF64(),
             )
-            }
         }
         // The root is the one scene attachment. It starts clear; every later root segment loads.
         appendRender(root, emptyList(), true)
