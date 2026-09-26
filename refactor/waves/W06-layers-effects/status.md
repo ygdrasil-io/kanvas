@@ -588,7 +588,7 @@ les limites explicites ci-dessus. Task 6 ferme W6b dans son périmètre borné;
 W6c est l'étape suivante pour les familles et capabilities exclues, sans
 réouvrir les operands target-local scellés de W6b.
 
-## Checkpoint W6e Task 3 — budget contextuel, temporalité et recovery
+## Checkpoint prérequis W6e — recette de bounds contextuelle, Task 3
 
 Sur `820710118`, les nouveaux témoins publics `W6FilterBoundsRecipe*` restent
 sans modification d'owner. Le Crop sous clip 2×1 dérive en I64 checked
