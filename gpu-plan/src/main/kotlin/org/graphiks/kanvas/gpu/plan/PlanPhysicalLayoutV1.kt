@@ -45,6 +45,8 @@ internal class SourcePhysicalConstructionV1(
     val w6PlainLayerCompositeRecipes: Map<W6LayerCompositeSiteKeyV1, W6PlainLayerCompositeRecipeV1> = emptyMap(),
     /** Final W4e ClipMaskInitialize recipes, limited to the final W4e bindings. */
     val w4eClipMaskInitializeRecipes: Map<PlanPassId, W4eClipMaskInitializeRecipeV1> = emptyMap(),
+    /** Versioned catalog derived exclusively from the preceding final planner recipes. */
+    val nativeSiteRecipeCatalogV1: NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1.Empty,
 )
 
 internal fun requireW6cColorUniformWindow(offsetBytesI64: Long, capacityBytesI64: Long, dynamicBytesI64: Long) {
@@ -99,6 +101,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     preparedVerticesHostRecipes: Map<W6GeometrySiteKeyV1, W6PreparedVerticesHostRecipeV1>,
     plainLayerCompositeRecipes: Map<W6LayerCompositeSiteKeyV1, W6PlainLayerCompositeRecipeV1>,
     w4eClipMaskInitializeRecipes: Map<PlanPassId, W4eClipMaskInitializeRecipeV1>,
+    nativeSiteRecipeCatalogV1: NativeSiteRecipeCatalogV1,
 ) {
     private val resources = immutableList(resources)
     private val caches = immutableList(cacheBindings)
@@ -112,6 +115,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     private val preparedVerticesHosts = java.util.Collections.unmodifiableMap(LinkedHashMap(preparedVerticesHostRecipes))
     private val plainLayerComposites = java.util.Collections.unmodifiableMap(LinkedHashMap(plainLayerCompositeRecipes))
     private val clipMaskInitializes = java.util.Collections.unmodifiableMap(LinkedHashMap(w4eClipMaskInitializeRecipes))
+    private val nativeSiteRecipes = nativeSiteRecipeCatalogV1
     private val slots = immutableList(buildList {
         resources.forEachIndexed { indexI32, resource ->
             add(PlanPhysicalSlotV1(indexI32, resource.id, resource.byteSize))
@@ -149,26 +153,33 @@ public class PlanPhysicalLayoutV1 private constructor(
     }.also { slot(it.resourceId) }
     /** Exact W6 SolidRect recipe sealed for this final graph site. */
     public fun w6SolidRectHostRecipe(site: W6GeometrySiteKeyV1): W6SolidRectHostRecipeV1 =
-        requireNotNull(solidRectHosts[site]) { "Missing frozen W6 SolidRect host recipe for ${site.ownerPassId.value}/${site.drawOrdinalI32}." }
+        (nativeSiteRecipes.recipe(NativeSiteOwnerV1(site.ownerPassId, site.drawOrdinalI32, 0)) as? W6SolidRectNativeSiteRecipeV1)
+            ?.host ?: error("Missing frozen W6 SolidRect native-site recipe for ${site.ownerPassId.value}/${site.drawOrdinalI32}.")
     public fun w6SolidRectHostRecipes(): Map<W6GeometrySiteKeyV1, W6SolidRectHostRecipeV1> = solidRectHosts
     /** Exact W6 non-W4e CorePrimitive recipe sealed for this final graph site. */
     public fun w6CorePrimitiveHostRecipe(site: W6GeometrySiteKeyV1): W6CorePrimitiveHostRecipeV1 =
-        requireNotNull(corePrimitiveHosts[site]) { "Missing frozen W6 CorePrimitive host recipe for ${site.ownerPassId.value}/${site.drawOrdinalI32}." }
+        (nativeSiteRecipes.recipe(NativeSiteOwnerV1(site.ownerPassId, site.drawOrdinalI32, 0)) as? W6CorePrimitiveNativeSiteRecipeV1)
+            ?.host ?: error("Missing frozen W6 CorePrimitive native-site recipe for ${site.ownerPassId.value}/${site.drawOrdinalI32}.")
     public fun w6CorePrimitiveHostRecipes(): Map<W6GeometrySiteKeyV1, W6CorePrimitiveHostRecipeV1> = corePrimitiveHosts
     /** Exact W6 Prepared Vertices recipe sealed for this final graph site. */
     public fun w6PreparedVerticesHostRecipe(site: W6GeometrySiteKeyV1): W6PreparedVerticesHostRecipeV1 =
-        requireNotNull(preparedVerticesHosts[site]) { "Missing frozen W6 prepared-vertices host recipe for ${site.ownerPassId.value}/${site.drawOrdinalI32}." }
+        (nativeSiteRecipes.recipe(NativeSiteOwnerV1(site.ownerPassId, site.drawOrdinalI32, 0)) as? W6PreparedVerticesNativeSiteRecipeV1)
+            ?.host ?: error("Missing frozen W6 prepared-vertices native-site recipe for ${site.ownerPassId.value}/${site.drawOrdinalI32}.")
     public fun w6PreparedVerticesHostRecipes(): Map<W6GeometrySiteKeyV1, W6PreparedVerticesHostRecipeV1> = preparedVerticesHosts
     /** Exact W6 plain fullscreen layer-restore recipe sealed for this final graph site. */
     public fun w6PlainLayerCompositeRecipe(site: W6LayerCompositeSiteKeyV1): W6PlainLayerCompositeRecipeV1 =
-        requireNotNull(plainLayerComposites[site]) { "Missing frozen W6 plain layer-composite recipe for ${site.ownerPassId.value}/${site.siteOrdinalI32}." }
+        (nativeSiteRecipes.recipe(NativeSiteOwnerV1(site.ownerPassId, site.siteOrdinalI32, 0)) as? W6PlainLayerCompositeNativeSiteRecipeV1)
+            ?.host ?: error("Missing frozen W6 plain layer-composite native-site recipe for ${site.ownerPassId.value}/${site.siteOrdinalI32}.")
     public fun w6PlainLayerCompositeRecipeOrNull(site: W6LayerCompositeSiteKeyV1): W6PlainLayerCompositeRecipeV1? =
-        plainLayerComposites[site]
+        (nativeSiteRecipes.recipeOrNull(NativeSiteOwnerV1(site.ownerPassId, site.siteOrdinalI32, 0)) as? W6PlainLayerCompositeNativeSiteRecipeV1)?.host
     public fun w6PlainLayerCompositeRecipes(): Map<W6LayerCompositeSiteKeyV1, W6PlainLayerCompositeRecipeV1> = plainLayerComposites
     /** Exact W4e clip-mask initialize recipe sealed for this final W4e binding pass. */
     public fun w4eClipMaskInitializeRecipe(passId: PlanPassId): W4eClipMaskInitializeRecipeV1 =
-        requireNotNull(clipMaskInitializes[passId]) { "Missing frozen W4e ClipMaskInitialize recipe for ${passId.value}." }
+        (nativeSiteRecipes.recipe(NativeSiteOwnerV1(passId, clipMaskInitializes.getValue(passId).packetOrdinalI32, 0)) as? W4eClipMaskInitializeNativeSiteRecipeV1)
+            ?.host ?: error("Missing frozen W4e ClipMaskInitialize native-site recipe for ${passId.value}.")
     public fun w4eClipMaskInitializeRecipes(): Map<PlanPassId, W4eClipMaskInitializeRecipeV1> = clipMaskInitializes
+    /** Ordered planner catalog consumed by the bounded 2P0–2P6 renderer sites. */
+    public fun nativeSiteRecipeCatalogV1(): NativeSiteRecipeCatalogV1 = nativeSiteRecipes
 
     internal companion object {
         fun seal(graph: RenderGraphConstruction, source: SourcePhysicalConstructionV1): PlanPhysicalLayoutV1 {
@@ -217,6 +228,13 @@ public class PlanPhysicalLayoutV1 private constructor(
                     PlanResourceUsage.RenderAttachment in output.usages()) {
                     "W4e ClipMaskInitialize recipe changed after final binding."
                 }
+            }
+            val expectedNativeSiteRecipes = freezeNativeSiteRecipeCatalogV1(
+                graph.passes(), expectedSolidRectHosts, expectedCorePrimitiveHosts, expectedPreparedVerticesHosts,
+                expectedPlainLayerComposites, expectedClipMaskInitializes,
+            )
+            require(source.nativeSiteRecipeCatalogV1.matches(expectedNativeSiteRecipes)) {
+                "Native-site recipe catalog changed after final planner binding."
             }
             // A frozen Clear/DrawColor Picture entry owns a LegacyColor operand directly.  It
             // has no W5 source uniform (and must not fabricate one after graph construction),
@@ -403,7 +421,8 @@ public class PlanPhysicalLayoutV1 private constructor(
             require(spatialCaches.map { it.outputResourceId }.distinct().size == spatialCaches.size)
             val layout = PlanPhysicalLayoutV1(rows, source.caches, uniforms, geometry, source.w4eGeometry, pictures, spatialCaches,
                 graph.w6dProgramLeases(), source.w6SolidRectHostRecipes, source.w6CorePrimitiveHostRecipes,
-                source.w6PreparedVerticesHostRecipes, source.w6PlainLayerCompositeRecipes, source.w4eClipMaskInitializeRecipes)
+                source.w6PreparedVerticesHostRecipes, source.w6PlainLayerCompositeRecipes, source.w4eClipMaskInitializeRecipes,
+                source.nativeSiteRecipeCatalogV1)
             require(layout.slots.map { it.resourceId }.distinct().size == layout.slots.size)
             require(layout.programSlots().map { it.slotI32 }.distinct().size == layout.programSlots().size)
             val frozenPrograms = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->

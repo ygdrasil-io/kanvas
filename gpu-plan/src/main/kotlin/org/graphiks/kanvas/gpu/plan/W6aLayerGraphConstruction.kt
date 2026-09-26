@@ -3210,17 +3210,27 @@ internal class W6aLayerGraphConstruction(
         val finalW4eBindings = w4eBindings.map { binding ->
             binding.bindSources(localized.entries.associate { (key, draw) -> key.first to draw })
         }
+        val solidRectHostRecipes = freezeW6SolidRectHostsV1(passes)
+        val corePrimitiveHostRecipes = freezeW6CorePrimitiveHostsV1(passes)
+        val preparedVerticesHostRecipes = freezeW6PreparedVerticesHostsV1(passes, requireNotNull(table))
+        val plainLayerCompositeRecipes = freezeW6PlainLayerCompositeRecipesV1(passes)
+        val clipMaskInitializeRecipes = freezeW4eClipMaskInitializeRecipesV1(finalW4eBindings)
+        val nativeSiteRecipeCatalog = freezeNativeSiteRecipeCatalogV1(
+            passes, solidRectHostRecipes, corePrimitiveHostRecipes, preparedVerticesHostRecipes,
+            plainLayerCompositeRecipes, clipMaskInitializeRecipes,
+        )
         val finalSource = SourcePhysicalConstructionV1(
             resources = source.resources,
             uniforms = source.uniforms,
             caches = source.caches,
             w6cColorUniformBindings = source.w6cColorUniformBindings,
             w4eGeometry = finalW4eBindings,
-            w6SolidRectHostRecipes = freezeW6SolidRectHostsV1(passes),
-            w6CorePrimitiveHostRecipes = freezeW6CorePrimitiveHostsV1(passes),
-            w6PreparedVerticesHostRecipes = freezeW6PreparedVerticesHostsV1(passes, requireNotNull(table)),
-            w6PlainLayerCompositeRecipes = freezeW6PlainLayerCompositeRecipesV1(passes),
-            w4eClipMaskInitializeRecipes = freezeW4eClipMaskInitializeRecipesV1(finalW4eBindings),
+            w6SolidRectHostRecipes = solidRectHostRecipes,
+            w6CorePrimitiveHostRecipes = corePrimitiveHostRecipes,
+            w6PreparedVerticesHostRecipes = preparedVerticesHostRecipes,
+            w6PlainLayerCompositeRecipes = plainLayerCompositeRecipes,
+            w4eClipMaskInitializeRecipes = clipMaskInitializeRecipes,
+            nativeSiteRecipeCatalogV1 = nativeSiteRecipeCatalog,
         )
         val allResources = resources + finalSource.resources
         val peak = W6aLayerPlanBudget.peak(allResources, passes, caps, budget)

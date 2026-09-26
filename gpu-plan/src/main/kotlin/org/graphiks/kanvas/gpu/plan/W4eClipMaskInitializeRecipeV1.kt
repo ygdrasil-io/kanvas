@@ -27,6 +27,8 @@ public data class W4eClipMaskInitializeTargetV1(
  */
 public class W4eClipMaskInitializeRecipeV1 internal constructor(
     public val passId: PlanPassId,
+    /** Final planner packet ordinal for this one-bundle native pass; not a global catalog index. */
+    public val packetOrdinalI32: Int,
     /** Logical output target, retained as a planner [PlanResourceId], never a native handle or slot. */
     public val output: PlanResourceId,
     domainI32: RectI32,
@@ -43,6 +45,7 @@ public class W4eClipMaskInitializeRecipeV1 internal constructor(
     public fun copyDomainI32(): RectI32 = domainSnapshotI32.copy()
 
     init {
+        require(packetOrdinalI32 >= 0)
         require(family == W4eClipMaskInitializeFamilyV1.FullscreenTriangle)
         require(target == W4eClipMaskInitializeTargetV1.Rgba8UnormSingleSample)
         require(load == W4eClipMaskInitializeLoadV1.Clear)
@@ -51,11 +54,11 @@ public class W4eClipMaskInitializeRecipeV1 internal constructor(
     }
 
     override fun equals(other: Any?): Boolean = other is W4eClipMaskInitializeRecipeV1 &&
-        passId == other.passId && output == other.output && domainSnapshotI32 == other.domainSnapshotI32 &&
+        passId == other.passId && packetOrdinalI32 == other.packetOrdinalI32 && output == other.output && domainSnapshotI32 == other.domainSnapshotI32 &&
         clearCoverageF32.toBits() == other.clearCoverageF32.toBits() && family == other.family &&
         target == other.target && load == other.load && groupZeroAbi == other.groupZeroAbi
 
-    override fun hashCode(): Int = listOf(passId, output, domainSnapshotI32, clearCoverageF32.toBits(), family,
+    override fun hashCode(): Int = listOf(passId, packetOrdinalI32, output, domainSnapshotI32, clearCoverageF32.toBits(), family,
         target, load, groupZeroAbi).fold(1) { hash, value -> 31 * hash + value.hashCode() }
 
     private companion object {
@@ -79,6 +82,7 @@ public fun freezeW4eClipMaskInitializeRecipesV1(
             require(binding.nativePass(initialize.id) === initialize)
             val recipe = W4eClipMaskInitializeRecipeV1(
                 passId = initialize.id,
+                packetOrdinalI32 = initialize.ordinal,
                 output = initialize.output,
                 domainI32 = initialize.copyDomainI32(),
                 clearCoverageF32 = initialize.clearCoverageF32,
