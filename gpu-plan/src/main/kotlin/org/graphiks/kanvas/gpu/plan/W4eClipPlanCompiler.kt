@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.plan
 
+import org.graphiks.kanvas.render.ir.CanonicalId
+
 import java.security.MessageDigest
 import java.util.Collections
 import org.graphiks.kanvas.color.ColorSpace
@@ -416,7 +418,8 @@ public class W4eClipPlanCompiler internal constructor(
                 PlanId(identity(selected,capabilities,budget,false)),W5A_HARD_CAPABILITY_ID,base.targetExtent,
                 base.colorFormat,capabilities,budget,base.visualCommandCount,clipped.resources,clipped.passes,
                 clipped.dependencies,base.sourceTable(),DeferredLaneTopologyV4.Ordinary,null,
-                emptyList(),emptyMap(),emptyMap(),clipped.payload)) {
+                emptyList(),emptyMap(),emptyMap(),clipped.payload,
+                preparedIdentity = { scene, _, _ -> PlanId(identity(selected, capabilities, budget, false, scene)) })) {
                 is SourceConstructionResultV4.Built -> result.value
                 is SourceConstructionResultV4.Refused -> return result.failure
             }
@@ -1187,10 +1190,11 @@ public class W4eClipPlanCompiler internal constructor(
         else -> this
     }
 
-    private fun identity(selected: Candidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget, aa: Boolean): String {
+    private fun identity(selected: Candidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget, aa: Boolean,
+        sceneIdentity: CanonicalId = selected.sceneCanonicalId): String {
         val digest = MessageDigest.getInstance("SHA-256")
         val fields = listOf(
-            "w4e-clip-plan-v2-material-v1", selected.sceneCanonicalId.value, selected.target.canonicalId.value,
+            "w4e-clip-plan-v2-material-v1", sceneIdentity.value, selected.target.canonicalId.value,
             if (aa) W5A_AA_CAPABILITY_ID else W5A_HARD_CAPABILITY_ID, budget.maxFrameLocalBytes.toString(),
         ) + selected.stacks.map { it.identity } + planCapabilityIdentityFacts(capabilities)
         fields.forEach { field ->

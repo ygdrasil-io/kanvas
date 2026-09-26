@@ -82,7 +82,7 @@ public class W4bAnalyticRRectPlanCompiler internal constructor(private val runti
         budget: PlanBudget): RenderPlanResult<SourceDeferredRenderConstructionV4> = constructChecked(candidate,capabilities,budget,
         clear = { selected,extent -> SourceDeferredRenderConstructionV4.clearOnly(
             PlanId(planIdentity(selected.sceneCanonicalId,selected.target,capabilities,budget)),W5B_CAPABILITY_ID,
-            extent,capabilities,budget) }) { selected,extent,draws,ordinary,memory ->
+            extent,capabilities,budget, preparedIdentity = { scene, _, _ -> PlanId(planIdentity(scene, selected.target, capabilities, budget)) }) }) { selected,extent,draws,ordinary,memory ->
             val sources = requireNotNull(selected.sourceTable) { W5fPlanDiagnostics.Schema }
             val symbolic = draws.mapIndexed { ordinal,draw -> draw.withMaterialRef(MaterialPlanRef(ordinal)) }
             val topology = if (selected.capabilityId == W5B_CAPABILITY_ID)
@@ -98,7 +98,8 @@ public class W4bAnalyticRRectPlanCompiler internal constructor(private val runti
                 PlanId(planIdentity(selected.sceneCanonicalId,selected.target,capabilities,budget)),selected.capabilityId,
                 extent,topology.format,capabilities,budget,draws.size,topology.resources,topology.passes,topology.dependencies,
                 sources,if (selected.capabilityId == W5B_CAPABILITY_ID) DeferredLaneTopologyV4.GeometryBridge
-                    else DeferredLaneTopologyV4.Ordinary,null,emptyList(),emptyMap(),emptyMap())) {
+                    else DeferredLaneTopologyV4.Ordinary,null,emptyList(),emptyMap(),emptyMap(),
+                preparedIdentity = { scene, _, _ -> PlanId(planIdentity(scene, selected.target, capabilities, budget)) })) {
                 is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(result.value)
                 is SourceConstructionResultV4.Refused -> result.failure
             }

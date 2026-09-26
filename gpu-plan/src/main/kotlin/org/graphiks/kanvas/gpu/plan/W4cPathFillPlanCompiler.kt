@@ -421,7 +421,7 @@ public class W4cPathFillPlanCompiler internal constructor(private val runtimeCat
         budget: PlanBudget): RenderPlanResult<SourceDeferredRenderConstructionV4> = constructChecked(candidate,capabilities,budget,
         clear = { selected,extent -> SourceDeferredRenderConstructionV4.clearOnly(
             PlanId(planIdentity(selected.sceneCanonicalId,selected.target,capabilities,budget)),W5B_CAPABILITY_ID,
-            extent,capabilities,budget) },
+            extent,capabilities,budget, preparedIdentity = { scene, _, _ -> PlanId(planIdentity(scene, selected.target, capabilities, budget)) }) },
         destination = { selected,extent,draws,resources,data,depth,memory ->
             val symbolic = draws.mapIndexed { ordinal,draw -> draw.withMaterialRef(MaterialPlanRef(ordinal)) }
             deferred(selected,extent,capabilities,budget,W5bDestinationGraphSealer.describeSources(W5B_CAPABILITY_ID,
@@ -440,7 +440,8 @@ public class W4cPathFillPlanCompiler internal constructor(private val runtimeCat
             PlanId(planIdentity(selected.sceneCanonicalId,selected.target,capabilities,budget)),selected.capabilityId,
             extent,topology.format,capabilities,budget,selected.draws.size,topology.resources,topology.passes,topology.dependencies,
             selected.sourceTable,if (selected.capabilityId == W5B_CAPABILITY_ID) DeferredLaneTopologyV4.GeometryBridge
-                else DeferredLaneTopologyV4.Ordinary,null,emptyList(),emptyMap(),emptyMap())) {
+                else DeferredLaneTopologyV4.Ordinary,null,emptyList(),emptyMap(),emptyMap(),
+                preparedIdentity = { scene, _, _ -> PlanId(planIdentity(scene, selected.target, capabilities, budget)) })) {
             is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(result.value)
             is SourceConstructionResultV4.Refused -> result.failure
         }

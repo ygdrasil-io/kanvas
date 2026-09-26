@@ -123,7 +123,8 @@ public class W3SolidRectPlanCompiler internal constructor(private val runtimeCat
                 else ordinaryTopology(draws,extent,targetBytes,stagingBytes,memory)
             when (val result = SourceDeferredRenderConstructionV4.of(id,selected.capabilityId,extent,topology.format,
                 capabilities,budget,selected.draws.size,topology.resources,topology.passes,topology.dependencies,sources,
-                DeferredLaneTopologyV4.Ordinary,null,emptyList(),emptyMap(),emptyMap())) {
+                DeferredLaneTopologyV4.Ordinary,null,emptyList(),emptyMap(),emptyMap(),
+                preparedIdentity = { scene, _, _ -> PlanId(planIdentity(scene, selected.target, capabilities, budget, selected.capabilityId)) })) {
                 is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(result.value)
                 is SourceConstructionResultV4.Refused -> result.failure
             }

@@ -46,4 +46,9 @@ public class W5bVerticesDraw internal constructor(
         PlanDrawMaterialAuthority.MaterialV5(ref), geometryF32, colors, transformF32, bounds, scissor, blend, primitiveBlend, upload)
     internal fun withBlend(value: BlendPlan): W5bVerticesDraw = W5bVerticesDraw(commandIndex,
         materialAuthority, geometryF32, colors, transformF32, bounds, scissor, value, primitiveBlend, upload)
+    internal fun withCommandIndexI32(indexI32: Int): W5bVerticesDraw {
+        require(indexI32 >= 0)
+        return W5bVerticesDraw(indexI32, materialAuthority, geometryF32, colors, transformF32,
+            bounds, scissor, blend, primitiveBlend, upload)
+    }
 }

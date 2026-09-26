@@ -202,6 +202,12 @@ public class GeneralPathDraw private constructor(
         get() = (materialAuthority as? PlanDrawMaterialAuthority.LegacyColorV1)?.copyColorF32()
             ?: throw IllegalStateException("W5 material draws have no legacy colour authority")
 
+    /** Rebind only the occurrence identity; retain the selected geometry and material authority. */
+    internal fun withCommandIndexI32(indexI32: Int): GeneralPathDraw {
+        require(indexI32 >= 0)
+        return GeneralPathDraw(indexI32, materialAuthority, geometrySnapshot, strategy, scissorSnapshotI32, coverage, sample, blend)
+    }
+
     public companion object {
         public fun of(
             commandIndex: Int,
@@ -392,6 +398,12 @@ public class SolidRectDraw private constructor(
         get() = (materialAuthority as? PlanDrawMaterialAuthority.LegacyColorV1)?.copyColorF32()
             ?: throw IllegalStateException("W5 material draws have no legacy colour authority")
 
+    /** Rebind only the occurrence identity; retain the selected geometry and material authority. */
+    internal fun withCommandIndexI32(indexI32: Int): SolidRectDraw {
+        require(indexI32 >= 0)
+        return SolidRectDraw(indexI32, materialAuthority, storedVisibleBounds, storedScissor, coverage, sample, blend)
+    }
+
     public companion object {
         public fun of(
             commandIndex: Int,
@@ -468,6 +480,12 @@ public class AnalyticRectDraw private constructor(
     override public val color: ColorF32
         get() = (materialAuthority as? PlanDrawMaterialAuthority.LegacyColorV1)?.copyColorF32()
             ?: throw IllegalStateException("W5 material draws have no legacy colour authority")
+
+    /** Rebind only the occurrence identity; retain the selected geometry and material authority. */
+    internal fun withCommandIndexI32(indexI32: Int): AnalyticRectDraw {
+        require(indexI32 >= 0)
+        return AnalyticRectDraw(indexI32, materialAuthority, storedDeviceBounds, storedRasterBounds, storedScissor, blend)
+    }
 
     public companion object {
         public fun of(
@@ -561,6 +579,12 @@ public class AnalyticRRectDraw private constructor(
     override public val color: ColorF32
         get() = (materialAuthority as? PlanDrawMaterialAuthority.LegacyColorV1)?.copyColorF32()
             ?: throw IllegalStateException("W5 material draws have no legacy colour authority")
+
+    /** Rebind only the occurrence identity; retain the selected geometry and material authority. */
+    internal fun withCommandIndexI32(indexI32: Int): AnalyticRRectDraw {
+        require(indexI32 >= 0)
+        return AnalyticRRectDraw(indexI32, materialAuthority, origin, storedDeviceShape, storedRasterBounds, storedScissor, blend)
+    }
 
     public companion object {
         public fun of(
@@ -667,6 +691,12 @@ public class PathFillDraw private constructor(
 
     override fun copyScissorI32(): RectI32 = scissorSnapshotI32.copy()
 
+    /** Rebind only the occurrence identity; retain the selected geometry and material authority. */
+    internal fun withCommandIndexI32(indexI32: Int): PathFillDraw {
+        require(indexI32 >= 0)
+        return PathFillDraw(indexI32, materialAuthority, geometrySnapshotF32, strategy, scissorSnapshotI32, blend)
+    }
+
     public companion object {
         public fun of(
             commandIndex: Int,
@@ -759,6 +789,12 @@ public class PathStrokeDraw private constructor(
     override fun copyPathGeometry(): PathDrawGeometry = PathDrawGeometry.Stroke(geometrySnapshotF32)
 
     override fun copyScissorI32(): RectI32 = scissorSnapshotI32.copy()
+
+    /** Rebind only the occurrence identity; retain the selected geometry and material authority. */
+    internal fun withCommandIndexI32(indexI32: Int): PathStrokeDraw {
+        require(indexI32 >= 0)
+        return PathStrokeDraw(indexI32, materialAuthority, geometrySnapshotF32, mode, styleF64, scissorSnapshotI32, blend)
+    }
 
     public companion object {
         public fun of(

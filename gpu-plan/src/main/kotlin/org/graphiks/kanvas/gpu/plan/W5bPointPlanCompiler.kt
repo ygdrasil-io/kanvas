@@ -60,7 +60,7 @@ internal class W5bPointPlanCompiler(private val catalog: RuntimeEffectSemanticCa
         if (selected == null || selected.owner !== this) return sourceConstructionRefusalV4(W5fPlanDiagnostics.Schema).failure
         if (selected.source.blend == BlendPlan.NoOpV1) return SourceDeferredRenderConstructionV4.clearOnly(
             PlanId("w5b.point.${selected.sceneCanonicalId.value}"), W5bCorePrimitiveGraph.CAPABILITY_ID,
-            SizeI32(selected.target.extent.width, selected.target.extent.height), caps, budget)
+            SizeI32(selected.target.extent.width, selected.target.extent.height), caps, budget, preparedIdentity = { scene, _, _ -> PlanId("w5b.point.${scene.value}") })
         return try {
             val geometry = selected.geometry
             val draw = W5bPointDraw.of(selected.commandI32, MaterialPlanRef(0), geometry.copyVerticesF32(),
@@ -80,7 +80,9 @@ internal class W5bPointPlanCompiler(private val catalog: RuntimeEffectSemanticCa
             val data = PlanDrawDataResources(resources[0].id, resources[1].id, resources[2].id)
             when (val result = W5hPreparedPointMaterialV6.constructSources(PlanId("w5b.point.${selected.sceneCanonicalId.value}"),
                 SizeI32(selected.target.extent.width, selected.target.extent.height), caps, budget, listOf(draw), listOf(selected.source), resources, data)) {
-                is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(result.value)
+                is SourceConstructionResultV4.Built -> RenderPlanResult.Ready(result.value.withPreparedIdentityV1 {
+                    scene, _, _ -> PlanId("w5b.point.${scene.value}")
+                })
                 is SourceConstructionResultV4.Refused -> result.failure
             }
         } catch (failure: IllegalArgumentException) { sourceConstructionRefusalV4(failure.message ?: W5fPlanDiagnostics.Schema).failure }

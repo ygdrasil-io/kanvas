@@ -229,7 +229,9 @@ internal class W6aLayerGraphConstruction(
                         "Occurrence ${entry.plannedCommandId} has no W4/W5 lane: ${diagnostics.joinToString { it.code.value + ": " + it.message }}"))
                 }
             }
-            return input to lane
+            val rebound = lane.bindOccurrenceCommandV1(entry.plannedCommandId.valueI32)
+            require(rebound.id == lane.id) { "Identity-only occurrence rebinding changed its compiler PlanId." }
+            return input to rebound
         }
 
         data class PictureAggregateDomain(

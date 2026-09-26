@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.plan
 
+import org.graphiks.kanvas.render.ir.CanonicalId
+
 import java.security.MessageDigest
 import java.util.Collections
 import org.graphiks.kanvas.color.ColorSpace
@@ -434,7 +436,7 @@ public class W4dGeneralPathPlanCompiler internal constructor(
             if (anyAa) promoted("W5b final blending requires the admitted single-sample W4d.2 topology")
             else if (selected.draws.isEmpty()) SourceDeferredRenderConstructionV4.clearOnly(
                 PlanId(identity(selected,capabilities,budget,W5B_HARD_CAPABILITY_ID)),W5B_HARD_CAPABILITY_ID,
-                SizeI32(selected.target.extent.width,selected.target.extent.height),capabilities,budget)
+                SizeI32(selected.target.extent.width,selected.target.extent.height),capabilities,budget, preparedIdentity = { scene, _, _ -> PlanId(identity(selected, capabilities, budget, W5B_HARD_CAPABILITY_ID, scene)) })
             else withHardMemory(selected,capabilities,budget,geometry) { memory ->
                 val topology = hardSourceTopology(selected,memory,hardStencil)
                 val refs = selected.draws.map { it.material }
@@ -444,7 +446,8 @@ public class W4dGeneralPathPlanCompiler internal constructor(
                     PlanId(identity(selected,capabilities,budget,W5A_HARD_CAPABILITY_ID)),W5A_HARD_CAPABILITY_ID,
                     SizeI32(selected.target.extent.width,selected.target.extent.height),FORMAT,capabilities,budget,selected.draws.size,
                     topology.resources,symbolic,topology.dependencies,selected.sources,DeferredLaneTopologyV4.Ordinary,
-                    null,emptyList(),emptyMap(),emptyMap())
+                    null,emptyList(),emptyMap(),emptyMap(),
+                preparedIdentity = { scene, _, _ -> PlanId(identity(selected, capabilities, budget, W5A_HARD_CAPABILITY_ID, scene)) })
                 when (source) {
                     is SourceConstructionResultV4.Refused -> source.failure
                     is SourceConstructionResultV4.Built -> {
@@ -1189,9 +1192,10 @@ public class W4dGeneralPathPlanCompiler internal constructor(
         capabilities.bufferAllocationPolicy.uniformFloorBytes,
     ).all { it > 0L && it and (it - 1L) == 0L }
 
-    private fun identity(selected: Candidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget, capability: String): String {
+    private fun identity(selected: Candidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget, capability: String,
+        sceneIdentity: CanonicalId = selected.sceneCanonicalId): String {
         val fields = listOf(
-            "w4d-general-plan-v2-material-v1", capability, selected.sceneCanonicalId.value, selected.target.canonicalId.value,
+            "w4d-general-plan-v2-material-v1", capability, sceneIdentity.value, selected.target.canonicalId.value,
             capabilities.deviceGeneration.toString(), capabilities.maxTextureDimension2D.toString(), capabilities.maxBufferSizeBytes.toString(),
             capabilities.copyBytesPerRowAlignment.toString(), capabilities.supportedFormats().map { it.name }.sorted().joinToString(","),
             capabilities.minUniformBufferOffsetAlignment.toString(), capabilities.maxDynamicUniformBuffersPerPipelineLayout.toString(),

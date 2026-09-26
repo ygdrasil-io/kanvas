@@ -108,7 +108,10 @@ public class CapabilityCompilerChain private constructor(
                     org.graphiks.math.geometry.RectF32(0f, 0f, 0f, 0f), "w6.occurrence", index.toString())
             }, input.captured.scene.graphLimits)
         return when (val selection = select(scene, RenderTargetDescriptor(extent, scene.colorSpace))) {
-            is GpuPlanSelection.Candidate -> constructSourceLanes(selection.candidate, capabilities, budget)
+            is GpuPlanSelection.Candidate -> when (val constructed = constructSourceLanes(selection.candidate, capabilities, budget)) {
+                is RenderPlanResult.Ready -> RenderPlanResult.Ready(constructed.plan.map { it.withOccurrenceSceneV1(scene) })
+                else -> constructed
+            }
             is GpuPlanSelection.InvalidScene -> RenderPlanResult.InvalidScene(selection.diagnostics())
             is GpuPlanSelection.ResourceLimitExceeded -> RenderPlanResult.ResourceLimitExceeded(selection.diagnostics())
             is GpuPlanSelection.MaterialOnlyRefusal -> RenderPlanResult.GapOnPromotedScope(selection.diagnostics())
