@@ -28,7 +28,7 @@
 
 ## Review Focus
 
-- **Cross-family source context:** a nested `Compose` containing `Blur` and `Offset` must bind the outer node to the inner result, not the layer source; Task 5 test `allFamiliesPreserveContextualImplicitSourceAcrossNestedLayers` owns it.
+- **Cross-family source context:** a nested `Compose` containing `Blur` and `Offset` must bind the outer node to the inner result, not the layer source; Task 5 test `composeBlurAndOffsetBindTheOuterNodeToTheInnerIntermediate` in `W6eCrossLaneEffectsSurfacePixelTest` owns it.
 - **Destination timing:** a backdrop and filtered previous layer with an advanced filter must observe the immediate parent at save and parent-plus-children after child rendering respectively; Task 5 test `backdropPreviousAndDestinationReadKeepTheirSpecifiedOrder` owns it.
 - **Exact versus approximate policy:** Crop/Offset/Blend remain byte-exact next to a blurred or convolution result that uses only its local oracle tolerance; Task 1 test `coreShardKeepsExactAndBlurOracleAssertionsSeparate` owns it.
 - **Cache pressure:** the exact W6e Crop B/B−1 witness and the closed W6b/W6c/W6d budget fixtures retain pessimistic admission after public replay. Task 6 re-runs these public selectors; structural review, not public cache-hit introspection, checks leases and generations. No exact aggregate B for all 22 families is inferred from these separate fixtures.
@@ -621,7 +621,7 @@ The Draft PR description states its exact prerequisite base, actual commit range
 ## W6e Definition of Done
 
 - [ ] Six public shards run sequentially with exact membership: (1) Crop/Blur/DropShadow/Offset/Tile; (2) ColorFilter/Compose/Blend/Dilate/Erode/Merge; (3) six lighting families plus Picture; (4) Displacement/Magnifier/MatrixConvolution/runtime IMAGE_FILTER; (5) all 22 with W4/W5/nesting/backdrop/previous/crop/destination-read; (6) all-22 repeatable memory-Picture replay, separate representative B/B−1/cache/recovery fixtures. The prior-wave W6b/W6c/W6d boundary selectors also run serially.
-- [ ] W6e consumes exactly `CapturedFilterNodeIdI32`, `CapturedFilterInputV1`, `CapturedFilterTableV1`, `FilterEvaluationKeyV1`, `FilterPassOperationV1`, `PlanPass.FilterPass`, and `PlanResourceRole.FilterTarget`; W6c/W6d wording is corrected to these names without creating a new contract.
+- [ ] W6e consumes exactly `CapturedFilterNodeIdI32`, `CapturedFilterInputV1`, `CapturedFilterTableV1`, `FilterEvaluationKeyV1`, `FilterBoundsPlanV1`, `FilterPassOperationV1`, `PlanPass.FilterPass`, and `PlanResourceRole.FilterTarget`; W6c/W6d wording is corrected to these names without creating a new contract.
 - [ ] Every expected precedes Surface/Picture construction; exact cases remain byte-exact; only family-local independent CPU oracles tolerate Blur, convolution, lighting, magnifier, and displacement; every positive case carries Render+Readback evidence.
 - [ ] Tests contain no private/reflection/mock/fake/counter/static-source/infrastructure assertion and prove terminal sentinel/no-publication and same-Surface recovery publicly.
 - [ ] The W6e Crop B=308 and closed W6b/W6c/W6d budgets retain independent pre-Surface arithmetic. Neither per-family nor aggregate all-22 exact B, actual native cache hits, or leases are claimed as public observations; the missing exact-budget matrix is tracked as a gap and structural review owns lease/generation checks.
@@ -632,7 +632,7 @@ The Draft PR description states its exact prerequisite base, actual commit range
 ## Plan Self-Review
 
 - **Spec coverage:** Tasks 1–4 cover exactly 5 + 6 + 7 + 4 = 22 families. Task 5 covers their W4/W5/layer/destination interactions. Task 6 adds their repeatable memory-Picture replay and covers representative exact budgets, cache pessimism, terminality, recovery, qualification, and delivery. The spec asks for a public B/B−1 shard, not a shared all-22 B; the absent per-family/aggregate exact-budget proof is explicit.
-- **Type consistency:** Every task consumes the W6b canonical seven names; none declares a replacement. All permitted production corrections remain in existing W6b–W6d owners and must preserve the frozen records.
+- **Type consistency:** Every task consumes the W6b canonical eight names; none declares a replacement. All permitted production corrections remain in existing W6b–W6d owners and must preserve the frozen records.
 - **Review focus:** The five header risks are pinned to public tests in Tasks 5, 5, 1, 6 plus the prior-wave closed-fixture selectors, and 6 respectively.
 - **Placeholder scan:** Task 6 provides the exact scan; this plan contains concrete files, interfaces, test names, snippets, serialized commands, commits, reviews, and PR criteria.
 - **Diff check:** Task 6 runs `git diff --check`; planning changes are confined to this plan and delivery documentation/tests or causal W6b–W6d integration fixes during execution.

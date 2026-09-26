@@ -9,7 +9,10 @@ La convergence W6e est empilée sur le prérequis revu
 empilé sur W6d ; elle ne cible donc pas W6d directement. Les neuf commits de
 témoins publics déjà présents sont `bfb2ef150`, `311d2a6be`, `15d801f3a`,
 `f8249079c`, `8d4c72a67`, `b65e7f674`, `99de83a62`, `8683e4c51` et
-`b2fc6450d`. L'amendement approuvé de Task 6 ajoute, dans
+`b2fc6450d`. Ce checkpoint est amendé depuis `282709744` (`docs(refactor):
+correct w6e cross-lane custody`) et s'appuie sur la source locale
+`85e6f6c80` (`test(kanvas): close w6e effects convergence`) ; cette
+attribution ne signale ni push ni PR. L'amendement approuvé de Task 6 ajoute, dans
 `W6eCrossLaneEffectsSurfacePixelTest`, 22 cas JUnit publics et indépendamment
 nommés de replay mémoire `Picture` ; chacun capture son fixture Task 5 puis le
 rejoue deux fois via `Surface`. Il conserve
