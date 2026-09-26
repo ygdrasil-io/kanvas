@@ -15,6 +15,8 @@ import org.graphiks.math.geometry.CornerRadiiF32
 import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.geometry.RRectF32
 import org.junit.jupiter.api.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertTrue
 
 /** Public Surface contract for frozen W6b mask coverage and auto-layer materialization. */
 class W6bMaskBlurAutoLayerSurfacePixelTest {
@@ -118,7 +120,8 @@ class W6bMaskBlurAutoLayerSurfacePixelTest {
 
     @Test
     fun `clipped rounded rect mask blur preserves its frozen analytic coverage`() {
-        val actual = Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
+        val expected = W6bMaskBlurCpuOracle.renderClippedRoundedRectMask()
+        val result = Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
             surface.canvas {
                 clipRect(RectF32.ofLTRB(3f, 2f, 8f, 7f), antiAlias = false)
                 val radius = CornerRadiiF32.of(2f, 2f)
@@ -131,9 +134,17 @@ class W6bMaskBlurAutoLayerSurfacePixelTest {
                     ),
                 )
             }
-        }.render().pixels
+        }.render()
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            result.nativeEvidenceScopeKinds.toString())
+        val actual = result.pixels
+        val outsideClipOffsetI32 = (4 * W6bMaskBlurCpuOracle.widthI32 + 2) * 4
+        assertContentEquals(ubyteArrayOf(0u, 0u, 0u, 0u),
+            expected.copyOfRange(outsideClipOffsetI32, outsideClipOffsetI32 + 4))
+        assertTrue(expected[(4 * W6bMaskBlurCpuOracle.widthI32 + 4) * 4 + 3] > 0u,
+            "Expected non-zero RRect coverage inside the clip")
 
-        W6bMaskBlurCpuOracle.assertNear(W6bMaskBlurCpuOracle.renderClippedRoundedRectMask(), actual)
+        W6bMaskBlurCpuOracle.assertNear(expected, actual)
     }
 
     @Test

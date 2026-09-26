@@ -716,7 +716,14 @@ internal class W6aLayerGraphConstruction(
             )
             RenderGraph.visualDraws(binding.source.passes()).forEach { draw ->
                 val occurrence = directFiltersByCommand[draw.commandIndex]
-                intersect(w6aRasterBoundsI32(draw), w6aScissorI32(draw))?.let { raster ->
+                val raster = if (occurrence?.mask is MaskFilterNode.Blur) {
+                    // A mask blur consumes the complete RRect/path coverage before the
+                    // public clip is applied at its terminal composite.
+                    w6aRasterBoundsI32(draw)
+                } else {
+                    intersect(w6aRasterBoundsI32(draw), w6aScissorI32(draw))
+                }
+                raster?.let { raster ->
                     val produced = if (occurrence == null) raster else run {
                         val direct = occurrence
                         val terminalClip = directTerminalClip(direct)
@@ -1105,7 +1112,9 @@ internal class W6aLayerGraphConstruction(
             val noOpDomain = RectI32(targetBounds.left, targetBounds.top,
                 Math.addExact(targetBounds.left, 1), Math.addExact(targetBounds.top, 1))
             val consumerDemandFilter = W6bFilterGraphConstruction.hasConsumerDemandTerminal(occurrence)
-            if (consumerDemandFilter) directConsumerDemandCommands += occurrence.insertionCommandIndexI32
+            if (consumerDemandFilter || occurrence.mask is MaskFilterNode.Blur) {
+                directConsumerDemandCommands += occurrence.insertionCommandIndexI32
+            }
             // The sampler recipe maps its public local lens with this captured draw transform.
             // Derive it before reverse demand so direct clipped Magnifier input matches the
             // immutable coordinates later used to freeze the filter pass.
@@ -3016,13 +3025,18 @@ internal class W6aLayerGraphConstruction(
         fun localizedCoverageDraw(binding: PlanPass.W6bRasterCoverageBindingV1, target: PlanResourceId): PlanDraw {
             val selected = byLaneAndCommand.getValue(binding.sourceLaneI32 to binding.draw.commandIndex)
                 .withFinalBlendV1(binding.draw.blend)
+            val sourceDraw = if (binding.draw.commandIndex in directConsumerDemandCommands) {
+                selected.withoutW6aTerminalClip()
+            } else {
+                selected
+            }
             if (bindings.getOrNull(binding.sourceLaneI32)?.occurrenceInput?.commandIndexI32 == binding.draw.commandIndex) {
-                return selected
+                return sourceDraw
             }
             val source = requireNotNull(filterSourceBindings[target]) {
                 "A raster W6b coverage binding requires its published source mapping."
             }
-            return localizeLayerDraw(selected, source.mapping, source.copyDeviceBoundsI32())
+            return localizeLayerDraw(sourceDraw, source.mapping, source.copyDeviceBoundsI32())
         }
         require(maskMaterialRoots.keys == maskMaterialSourcesByOccurrence.keys)
         require(graphTextureMaterialRoots.keys == graphTextureMaterialSourcesByAggregate.keys)
@@ -3466,7 +3480,13 @@ internal class W6aLayerGraphConstruction(
     private fun PlanDraw.withoutW6aTerminalClip(): PlanDraw {
         var source = this
         while (source is ClippedPlanDraw) source = source.source
-        return source
+        // Analytic coverage must retain its whole raster before a direct mask blur;
+        // FilterComposite owns the public hard clip after the filter chain.
+        return when (source) {
+            is AnalyticRectDraw, is AnalyticRRectDraw ->
+                source.withLocalizedScissorV6(w6aRasterBoundsI32(source))
+            else -> source
+        }
     }
 
     /** Bakes an already-admitted hard clip into the existing W4 draw; no renderer clip planning occurs. */
