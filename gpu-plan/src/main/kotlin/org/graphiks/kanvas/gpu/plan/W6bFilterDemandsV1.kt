@@ -20,9 +20,14 @@ internal class W6bFilterDemandsV1(
     mapping: LayerMappingF64?,
 ) {
     private val outputs = java.util.IdentityHashMap<W6bBoundFilterOperationV1, RectI32>()
+    private val inputs = java.util.IdentityHashMap<W6bBoundFilterOperationV1, RectI32>()
+    private val positionalInputs = java.util.IdentityHashMap<W6bBoundFilterOperationV1, Array<RectI32?>>()
     private var requiredSource: RectI32? = null
     fun copyRequiredSourceI32(): RectI32? = requiredSource?.copy()
     fun copyOutputI32(operation: W6bBoundFilterOperationV1): RectI32? = outputs[operation]?.copy()
+    fun copyInputI32(operation: W6bBoundFilterOperationV1): RectI32? = inputs[operation]?.copy()
+    fun copyInputDemandsI32(operation: W6bBoundFilterOperationV1): List<RectI32?> =
+        operation.inputs.indices.map { positionalInputs[operation]?.get(it)?.copy() }
 
     init {
         fun expand(region: RectI32, x: Float, y: Float): RectI32 = RectF64(
@@ -51,11 +56,15 @@ internal class W6bFilterDemandsV1(
         record(topology.terminal, desired)
         for (bound in topology.operations.asReversed()) {
             val output = outputs[bound] ?: continue
-            fun inputDemand(index: Int, region: RectI32): RectI32? = record(bound.inputs[index], region)
+            fun inputDemand(index: Int, region: RectI32): RectI32? = record(bound.inputs[index], region)?.also {
+                inputs[bound] = inputs[bound]?.let { prior -> union(prior, it) } ?: it.copy()
+                val positions = positionalInputs.getOrPut(bound) { arrayOfNulls(bound.inputs.size) }
+                positions[index] = positions[index]?.let { prior -> union(prior, it) } ?: it.copy()
+            }
             fun unionInputDemands(region: RectI32): RectI32? {
                 var demand: RectI32? = null
-                bound.inputs.forEach { input ->
-                    record(input, region)?.let { required -> demand = demand?.let { union(it, required) } ?: required }
+                bound.inputs.indices.forEach { index ->
+                    inputDemand(index, region)?.let { required -> demand = demand?.let { union(it, required) } ?: required }
                 }
                 return demand
             }

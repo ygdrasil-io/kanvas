@@ -70,6 +70,23 @@ class W6FilterBoundsRecipeSurfacePixelTest {
         assertRenderAndReadback(surface, expected)
     }
 
+    /** Lighting must receive the outer Offset's inverse demand, not the terminal clip. */
+    @Test
+    fun composeLightingProducesInItsOwnDemandOutsideTerminalClip() {
+        val expected = ubyteArrayOf(255u, 255u, 255u, 255u)
+        val filter = ImageFilter.Compose(ImageFilter.Offset(-20f, 0f),
+            ImageFilter.DistantLitDiffuse(Vector3F32(0f, 0f, 1f), ColorARGB.White, 0f, 1f))
+        val surface = Surface(1, 1)
+        surface.canvas {
+            saveLayer()
+            saveLayer(SaveLayerRec(paint = Paint(imageFilter = filter, antiAlias = false)))
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.Blue, antiAlias = false))
+            restore()
+            restore()
+        }
+        assertRenderAndReadback(surface, expected)
+    }
+
     /**
      * The independent Sobel oracle requires both source-edge CLAMP and transparent requested
      * output.  Collapsing the source domain to the final allocation changes this 3x3 result.

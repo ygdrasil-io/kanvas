@@ -19,15 +19,38 @@ internal class W6bFilterSourceFactsV1(
     fun copyDesiredOutputDeviceI32(): RectI32 = desiredOutput.copy()
 }
 
+/** Semantic regions are independent of the retained physical sampling target of each phase. */
+internal class W6bEvaluatedOperationFactsV1(
+    val nodeId: org.graphiks.kanvas.render.ir.CapturedFilterNodeIdI32,
+    knownContentDeviceI32: RectI32?,
+    desiredOutputDeviceI32: RectI32?,
+    requiredInputDeviceI32: RectI32?,
+    producedOutputDeviceI32: RectI32?,
+    inputDemandsDeviceI32: List<RectI32?>,
+) {
+    private val known = knownContentDeviceI32?.copy()
+    private val desired = desiredOutputDeviceI32?.copy()
+    private val required = requiredInputDeviceI32?.copy()
+    private val produced = producedOutputDeviceI32?.copy()
+    private val inputDemands = inputDemandsDeviceI32.map { it?.copy() }
+    fun copyKnownContentDeviceI32(): RectI32? = known?.copy()
+    fun copyDesiredOutputDeviceI32(): RectI32? = desired?.copy()
+    fun copyRequiredInputDeviceI32(): RectI32? = required?.copy()
+    fun copyProducedOutputDeviceI32(): RectI32? = produced?.copy()
+    fun copyInputDemandsDeviceI32(): List<RectI32?> = inputDemands.map { it?.copy() }
+}
+
 internal class W6bEvaluatedFilterRecipeV1(
     requiredInputDeviceI32: RectI32?,
     val output: W6bRecipeSourceV1,
     val terminalKey: W6bRecipeKeyV1,
     instructions: List<W6bRecipeInstructionV1>,
     sources: Map<W6bRecipeSymbolV1, W6bRecipeSourceV1>,
+    operationFacts: List<W6bEvaluatedOperationFactsV1> = emptyList(),
 ) {
     private val requiredInput = requiredInputDeviceI32?.copy()
     val instructions = immutableList(instructions)
+    val operationFacts = immutableList(operationFacts)
     val sources: Map<W6bRecipeSymbolV1, W6bRecipeSourceV1> = java.util.Collections.unmodifiableMap(LinkedHashMap(sources))
     fun copyRequiredInputDeviceI32(): RectI32? = requiredInput?.copy()
     fun copyProducedOutputDeviceI32(): RectI32? = output.copyProducedOutputDeviceI32()

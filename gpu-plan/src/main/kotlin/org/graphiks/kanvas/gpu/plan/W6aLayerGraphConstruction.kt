@@ -678,10 +678,10 @@ internal class W6aLayerGraphConstruction(
                 known = unionOrNull(known, producedOutputByScope[child])
                 physicalInput = unionOrNull(physicalInput, producedOutputByScope[child])
             }
-            if (snapshotInput == null) known = sourceDemand?.let { demand -> known?.let { intersect(it, demand) } }
+            if (snapshotInput == null && recipe == null) known = sourceDemand?.let { demand -> known?.let { intersect(it, demand) } }
             knownContentByScope[occurrence.idI32] = known
             val sourceGeometry = sealGeometry(occurrence, restoreFactsByScope.getValue(occurrence.idI32),
-                desired, known, null, physicalInput, snapshotInput, sourceDemand)
+                desired, known, null, physicalInput, snapshotInput, sourceDemand, preserveSourceDomain = recipe != null)
             val domain = sourceGeometry.compositeDomainDeviceI32
             val evaluation = if (recipe != null && domain != null) {
                 var facts = W6bFilterSourceFactsV1(domain, known, requireNotNull(desired), requireNotNull(sourceGeometry.mapping),
@@ -748,8 +748,8 @@ internal class W6aLayerGraphConstruction(
                 Math.addExact(origin.x, targetExtent(target).width), Math.addExact(origin.y, targetExtent(target).height))
             val geometry = target.takeIf { it != root }?.let { activeByScope.getValue(it.value.substringAfter(':').toInt()) }
             val binding = W6bFilterGraphConstruction.SourceBinding(target, targetExtent(target), origin, mapping,
-                geometry?.knownContentDeviceI32 ?: domain, geometry?.desiredOutputDeviceI32 ?: domain,
-                geometry?.requiredInputDeviceI32 ?: domain, geometry?.producedOutputDeviceI32 ?: geometry?.knownContentDeviceI32 ?: domain)
+                if (geometry == null) domain else geometry.knownContentDeviceI32, geometry?.desiredOutputDeviceI32 ?: domain,
+                geometry?.requiredInputDeviceI32 ?: domain, if (geometry == null) domain else geometry.producedOutputDeviceI32)
             return binding
         }
         fun targetDeviceBounds(target: PlanResourceId): RectI32 = filterSource(target).copyDeviceBoundsI32()
@@ -1250,11 +1250,17 @@ internal class W6aLayerGraphConstruction(
                     framePassSink.appendAll(material.passes())
                     sourceBindingsById[material.output.resourceId] = material.output
                 }
-                W6bFilterGraphConstruction.freezeImageOccurrence(
-                    occurrence, materialized?.output ?: source, filterCursor, framePassSink, emitFilterPictureSource,
-                    runtimeCatalog, evaluated = evaluatedImage ?: evaluatedImagesByOccurrence[occurrence],
-                    preparePicture = { bound, context -> prepareFilterPicture(occurrence, bound, context) },
-                )
+                val input = materialized?.output ?: source
+                // Direct auto-layers retain their historical evaluation point; Task 2 only
+                // propagates these already evaluated productions into their parent scopes.
+                val evaluation = evaluatedImage ?: evaluatedImagesByOccurrence[occurrence] ?: run {
+                    val desired = terminalClipDeviceI32 ?: targetDeviceBounds(destination)
+                    W6bFilterGraphConstruction.bindOccurrenceRecipe(occurrence, desired, input.mapping).evaluate(
+                        W6bFilterSourceFactsV1(input.copyDeviceBoundsI32(), input.copyKnownContentDeviceI32(),
+                            desired, input.mapping, { bound, context -> prepareFilterPicture(occurrence, bound, context) }), runtimeCatalog)
+                }
+                W6bFilterGraphConstruction.freezeImageOccurrence(occurrence, input, filterCursor,
+                    framePassSink, emitFilterPictureSource, evaluation)
             } else requireNotNull(materialized) { "W6b mask occurrence needs its materialized W5 source." }
             filterResourceSpecs += frozen.resourceSpecs()
             if (occurrence.root == null) framePassSink.appendAll(frozen.passes())
@@ -2456,7 +2462,11 @@ internal class W6aLayerGraphConstruction(
                             passes += PlanPass.FilterCoverageSourcePass(passes.size, sources.coverage.resourceId,
                                 occurrence.source, rasterBinding = rasterBinding)
                             val frozen = occurrence.mask?.let {
-                                W6bFilterGraphConstruction.freezeMaskOccurrence(occurrence, sources.coverage, filterCursor)
+                                val input = sources.coverage
+                                val evaluation = W6bFilterGraphConstruction.evaluateMaskRecipe(occurrence,
+                                    W6bFilterSourceFactsV1(input.copyDeviceBoundsI32(), input.copyKnownContentDeviceI32(),
+                                        input.copyDesiredOutputDeviceI32() ?: input.copyDeviceBoundsI32(), input.mapping))
+                                W6bFilterGraphConstruction.freezeMaskOccurrence(occurrence, input, filterCursor, evaluation)
                             }
                             frozen?.let { filterResourceSpecs += it.resourceSpecs(); passes += it.passes(); it.output }
                                 ?: sources.coverage
@@ -2638,7 +2648,7 @@ internal class W6aLayerGraphConstruction(
                         sealedAlphaSampling = filterSource(target).samplingFor(coverage),
                     )
                     val frozenMask = filtered.mask?.let {
-                        W6bFilterGraphConstruction.freezeMaskOccurrence(filtered, coverage, filterCursor, evaluatedMasksByOccurrence[filtered])
+                        W6bFilterGraphConstruction.freezeMaskOccurrence(filtered, coverage, filterCursor, evaluatedMasksByOccurrence.getValue(filtered))
                     }
                     frozenMask?.let { filterResourceSpecs += it.resourceSpecs(); passes += it.passes() }
                     val source = allocateShadedOccurrenceSource(frozenMask?.output ?: coverage, target)
@@ -3098,6 +3108,7 @@ internal class W6aLayerGraphConstruction(
         physicalInput: RectI32?,
         snapshotInput: RectI32?,
         sourceDemand: RectI32? = desired,
+        preserveSourceDomain: Boolean = false,
     ): W6aScopeGeometry {
         if (desired == null) return W6aScopeGeometry(occurrence, null, null, known, null, null, produced, null)
         val transform = occurrence.descriptor.transform
@@ -3121,7 +3132,7 @@ internal class W6aLayerGraphConstruction(
         } else if (restoreFacts.previousContentRequiresFullParentDomain || restoreFacts.backdropRequiresFullParentDomain ||
             restoreFacts.restoreAffectsTransparentBlack) desired
             else if (physicalInput == null) desired else hintDomain?.let { union(physicalInput, it) } ?: physicalInput
-        val composite = if (snapshotInput == null) intersect(effective, sourceDemand ?: desired) else effective
+        val composite = if (snapshotInput == null && !preserveSourceDomain) intersect(effective, sourceDemand ?: desired) else effective
         if (composite == null) return W6aScopeGeometry(occurrence, null, hint, known, desired, required, produced, null)
         val mapping = LayerMappingF64.ofOrNull(localToDevice, Point2I32(composite.left, composite.top))
             ?: throw IllegalArgumentException(W6aPlanDiagnostics.NonFiniteTransform)
