@@ -255,10 +255,25 @@ internal class W6aLayerGraphConstruction(
             }
             if (snapshotInput == null) known = desired?.let { desiredDomain -> known?.let { intersect(it, desiredDomain) } }
             knownContentByScope[occurrence.idI32] = known
+            val filterProduced = filterLayersByBegin[occurrence.beginCommandIndexI32]?.let { filter ->
+                desired?.let { consumer ->
+                    val transform = occurrence.descriptor.transform
+                    val localToDevice = Matrix3x3F64(
+                        transform.sx.toDouble(), transform.kx.toDouble(), transform.tx.toDouble(),
+                        transform.ky.toDouble(), transform.sy.toDouble(), transform.ty.toDouble(),
+                        transform.persp0.toDouble(), transform.persp1.toDouble(), transform.persp2.toDouble(),
+                    )
+                    val mapping = LayerMappingF64.ofOrNull(localToDevice, Point2I32(consumer.left, consumer.top))
+                        ?: throw IllegalArgumentException(W6aPlanDiagnostics.NonFiniteTransform)
+                    W6bFilterGraphConstruction.bindOccurrenceRecipe(filter, consumer, mapping).evaluate(
+                        W6bFilterSourceFactsV1(known ?: consumer, known, consumer, mapping), runtimeCatalog,
+                    ).copyProducedOutputDeviceI32()
+                }
+            }
             producedOutputByScope[occurrence.idI32] = when {
                 desired == null -> null
                 restoreFactsByScope.getValue(occurrence.idI32).restoreAffectsTransparentBlack -> desired.copy()
-                else -> known?.let { intersect(it, desired) }
+                else -> filterProduced ?: known?.let { intersect(it, desired) }
             }
         }
 
@@ -270,7 +285,7 @@ internal class W6aLayerGraphConstruction(
             val occurrence = occurrences[indexI32]
             var physicalInput = unionOrNull(directKnownByScope[occurrence.idI32], snapshotInputByScope[occurrence.idI32])
             occurrence.childIdsI32.forEach { childIdI32 ->
-                physicalInput = unionOrNull(physicalInput, geometryByScope[childIdI32]?.compositeDomainDeviceI32)
+                physicalInput = unionOrNull(physicalInput, producedOutputByScope[childIdI32])
             }
             geometryByScope[occurrence.idI32] = sealGeometry(
                 occurrence,
