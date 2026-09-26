@@ -124,3 +124,34 @@ Both existing public recovery selectors are XML 1/1 green after the correction:
 
 The native 133 is unchanged from the focused suite environment and does not represent a JUnit
 failure. The user-owned W6d ledger remains unstaged.
+
+## Sol round 3 follow-up
+
+The public RED `nonWritingDirectFilterWithSeparateWritingSiblingIsNoOpAndRecovers` records a
+direct `ImageFilter.Offset` at x=5 with `BlendMode.DST` inside an otherwise unfiltered layer and
+a writing blue sibling at x=0. Its independent pre-Surface oracle is `[blue, transparent x5]`.
+On `3ad441db4`, XML was 1/1 RED before the pixel assertion with
+`W6b direct occurrence has no pre-reservation recipe facts`.
+
+Root-cause tracing showed that `DST` is represented by W5 as `BlendPlan.NoOpV1`; consequently no
+visual `PlanDraw` reaches the early recipe pass, but the late loop was still iterating its
+semantic filter occurrence. The correction now obtains the exact W5 binding first: a missing
+early fact is accepted only if that binding has no visual draw, otherwise the invariant still
+throws. This makes the non-writing occurrence consistently allocate neither source nor late
+recipe, while every visible direct occurrence continues to require and consume its memoized
+evaluation. No recipe is recalculated and no planner/renderer/wire path changed.
+
+After the correction the new public DST/recovery witness is XML 1/1 green. The full direct class
+is XML 7/7 green, including direct Offset/Blur and reverse-demand/clip witnesses. The existing
+W6c and W6d terminal no-op recovery selectors are each XML 1/1 green. The Picture class is XML
+2/2 green, and `:gpu-plan:compileKotlin` exits 0. Every GPU selector still ends in native exit
+133 after green XML, so its Gradle result is recorded as UNKNOWN rather than PASS.
+
+The optional equal-but-distinct equality assertion was investigated but not retained:
+`ImageFilter.Picture` equality includes its internal `Picture` identity, while wire replay
+reconstructs that `Picture`. The attempted public assertion was correctly RED, so changing that
+semantic contract would be out of scope. The existing shared-identity and distinct-identity
+assertions remain. The `appendFrozenOccurrence` late evaluation fallback is unreachable for a
+visible direct image occurrence: its only direct call passes the memoized map value, while the
+new non-writing `DST` form now creates no direct source or call at all. It remains needed for
+non-direct/layer/Picture paths, so it was not broadened into an unsafe global invariant.

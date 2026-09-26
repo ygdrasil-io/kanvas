@@ -991,15 +991,22 @@ internal class W6aLayerGraphConstruction(
         val directFilterSourceByCommand = linkedMapOf<Int, DirectFilterSources>()
         val directConsumerDemandCommands = linkedSetOf<Int>()
         filterOccurrences.filterNot { it.isLayerOccurrence || it.isPictureOccurrence }.forEach { occurrence ->
-            val earlyFacts = requireNotNull(directAutoLayerFactsByOccurrence[occurrence]) {
-                "W6b direct occurrence has no pre-reservation recipe facts."
+            val binding = requireNotNull(bindingsByCommand[occurrence.insertionCommandIndexI32]) {
+                "W6b direct occurrence has no W5 source generation."
+            }
+            val earlyFacts = directAutoLayerFactsByOccurrence[occurrence]
+            if (earlyFacts == null) {
+                // DST is removed by W5 before there is a visual source to evaluate.  It cannot
+                // affect its parent, so it must not create a late source merely because the
+                // semantic filter occurrence remains in the immutable scene.
+                require(RenderGraph.visualDraws(binding.source.passes()).isEmpty()) {
+                    "W6b direct occurrence has a visual source but no pre-reservation recipe facts."
+                }
+                return@forEach
             }
             // Reject an opaque terminal clip before allocating any direct filter source; W4e
             // retains ownership of complex clips on non-filtered routes.
             val terminalClip = directTerminalClip(occurrence)
-            val binding = requireNotNull(bindingsByCommand[occurrence.insertionCommandIndexI32]) {
-                "W6b direct occurrence has no W5 source generation."
-            }
             val parentTarget = targetFor(binding.scopeI32)
             val targetBounds = targetDeviceBounds(parentTarget)
             // A direct occurrence's terminal clip is its downstream consumer.  Seal that

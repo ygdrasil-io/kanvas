@@ -5,6 +5,7 @@ package org.graphiks.kanvas.surface
 import kotlin.test.assertContentEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.SaveLayerRec
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.TileMode
@@ -104,6 +105,26 @@ class W6FilterBoundsRecipeSurfacePixelTest {
             restore()
         }
         assertRenderAndReadback(blurSurface, blurExpected, tolerance = 12)
+    }
+
+    /** A non-writing direct filter is a no-op even when a sibling gives its parent a smaller target. */
+    @Test
+    fun nonWritingDirectFilterWithSeparateWritingSiblingIsNoOpAndRecovers() {
+        val transparent = ubyteArrayOf(0u, 0u, 0u, 0u)
+        val blue = ubyteArrayOf(0u, 0u, 255u, 255u)
+        val expected = blue + transparent + transparent + transparent + transparent + transparent
+        val surface = Surface(6, 1)
+        surface.canvas {
+            saveLayer()
+            drawRect(RectF32.ofLTRB(5f, 0f, 6f, 1f), Paint(
+                ColorARGB.Blue, blendMode = BlendMode.DST,
+                imageFilter = ImageFilter.Offset(0f, 0f), antiAlias = false,
+            ))
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.Blue, antiAlias = false))
+            restore()
+        }
+
+        assertRenderAndReadback(surface, expected)
     }
 
     /** A prematurely clipped Compose intermediate cannot return from +20 to the terminal x=0. */
