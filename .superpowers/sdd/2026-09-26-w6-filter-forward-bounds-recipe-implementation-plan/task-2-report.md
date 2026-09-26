@@ -104,3 +104,23 @@ compile succeeded.
 
 The proposed B=312 Tile budget requires fixed resource arithmetic that belongs to Task 3. It was
 not added without private planner/resource inspection.
+
+## Terminal no-op regression follow-up
+
+`W6dLightingSurfacePixelTest.disjoint direct terminal clip is a no op and surface recovers`
+exposed the remaining empty-terminal form: `terminalDesired == null` returned before writing a
+direct fact, while late lowering correctly required that fact before taking its terminal no-op
+route. The minimal correction records `DirectAutoLayerFacts(raster, desired)` in that early
+branch and still returns a `null` produced output. Late lowering uses the fact only to select its
+sealed terminal no-op path, whose own no-op domain prevents allocation or raw-content revival.
+
+Both existing public recovery selectors are XML 1/1 green after the correction:
+
+| Selector | JUnit XML | Gradle/native |
+| --- | --- | --- |
+| `W6dLightingSurfacePixelTest.disjoint direct terminal clip is a no op and surface recovers` | 1/1 green | 133, UNKNOWN |
+| `W6cSpatialBoundsSurfaceTest.direct filtered draw outside its clipped terminal is a no-op and surface recovers` | 1/1 green | 133, UNKNOWN |
+| `:gpu-plan:compileKotlin` | — | exit 0 |
+
+The native 133 is unchanged from the focused suite environment and does not represent a JUnit
+failure. The user-owned W6d ledger remains unstaged.

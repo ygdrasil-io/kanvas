@@ -648,7 +648,12 @@ internal class W6aLayerGraphConstruction(
                         val direct = occurrence
                         val terminalClip = directTerminalClip(direct)
                         val terminalDesired = terminalClip?.let { intersect(desired, it) }
-                        if (terminalClip != null && terminalDesired == null) null else {
+                        if (terminalClip != null && terminalDesired == null) {
+                            // Late lowering still needs a direct fact to select its sealed
+                            // terminal no-op route; this source is never allocated there.
+                            directAutoLayerFactsByOccurrence[direct] = DirectAutoLayerFacts(raster, desired)
+                            null
+                        } else {
                         val effectiveDesired = terminalDesired ?: desired
                         val sourceLocalToDevice = if (W6bFilterGraphConstruction.hasContentOutputSamplingTerminal(direct)) {
                             direct.source.sourceDraw?.let { sourceDraw ->
