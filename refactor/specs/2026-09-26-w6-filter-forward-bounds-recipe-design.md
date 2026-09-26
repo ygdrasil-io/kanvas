@@ -92,8 +92,11 @@ native, ni `PlanResourceId` final, ni numéro de pass, ni allocation. Son calcul
 utilise des faits de source et de mapping indépendants de l'étendue du target
 **parent** encore à réserver, mais pas de celle du target **source**. W6a
 scelle d'abord le domaine source et l'ancrage de sampling à partir du contenu
-direct, des sorties enfants, du hint admissible et des besoins
-inverses/snapshot. `blurBounds`, `Offset`, `MatrixConvolution` et les modes de
+direct, des sorties enfants, du hint admissible et des pixels de snapshot
+effectivement disponibles. La demande inverse guide le raster et les snapshots,
+mais n'élargit pas automatiquement le domaine source fini : un échantillon hors
+de ce domaine suit le mode de bord du filtre (`DECAL`/`CLAMP`). `blurBounds`,
+`Offset`, `MatrixConvolution` et les modes de
 bord du lighting réutilisent exactement ce domaine, non une approximation par
 `knownContent`. La source ne se déduit jamais de la sortie du même filtre. Si
 une famille a besoin d'un input Picture, la recette conserve sa provenance ;
@@ -120,8 +123,10 @@ arrondi extérieur.
 3. En post-ordre des scopes et des auto-layers de draws/Picture entries, W6a
    réunit contenu direct, snapshots `initWithPrevious`/backdrop et **sorties
    terminales après clip/blend** des enfants. Il scelle le domaine source
-   échantillonné (contenu + sorties enfants + hint admissible + demande
-   inverse/snapshot) et son ancrage. Cette étape ne dépend pas de la sortie
+   échantillonné (contenu + sorties enfants + hint admissible + pixels de
+   snapshot disponibles) et son ancrage. La demande inverse sélectionne les
+   pixels à produire/lire dans ce domaine sans déplacer son bord physique.
+   Cette étape ne dépend pas de la sortie
    filtrée du même scope ni de l'allocation de son parent. Pour un draw filtré,
    le domaine de son auto-layer vient du raster capturé et de sa propre
    demande inverse, pas du target parent encore absent. La phase forward de
