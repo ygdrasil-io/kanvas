@@ -592,7 +592,12 @@ internal class W6aLayerGraphConstruction(
             aggregate = { draft, parent ->
                 val domain = pictureAggregateDomain(draft, parent, filterOwner)
                 val target = if (draft.executionMode == PictureStreamExecutionModeV1.ISOLATED_SOURCE)
-                    pictureGeometry(domain.sourceDeviceI32, domain.localToDeviceF64)
+                    pictureGeometry(
+                        domain.sourceDeviceI32,
+                        domain.localToDeviceF64,
+                        desired = domain.demandDeviceI32,
+                        required = domain.sourceDeviceI32,
+                    )
                 else pictureGeometry(parent.copyDeviceBoundsI32(), parent.mapping.copyLocalToDeviceF64(),
                     parent.copyKnownContentDeviceI32())
                 val empty = (draft.source.recordedInnerClipWithoutCull().terminalDeferredClip()
@@ -600,7 +605,16 @@ internal class W6aLayerGraphConstruction(
                 val known = if (empty) null else entries(draft.entries(), target, domain.localToDeviceF64, draft.source)
                 facts.domains[draft.source] = domain.copy(knownContentDeviceI32 = known)
                 if (draft.owner is PictureStreamAggregateDraftOwnerV1.FilterPicture || empty) known
-                else evaluate(draft.filterOccurrence, pictureGeometry(domain.sourceDeviceI32, domain.localToDeviceF64, known))
+                else evaluate(
+                    draft.filterOccurrence,
+                    pictureGeometry(
+                        domain.sourceDeviceI32,
+                        domain.localToDeviceF64,
+                        known,
+                        desired = domain.demandDeviceI32,
+                        required = domain.sourceDeviceI32,
+                    ),
+                )
             }
             aggregate(rootDraft, parentSource)
             facts
