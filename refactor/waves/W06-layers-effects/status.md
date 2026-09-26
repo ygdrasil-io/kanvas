@@ -42,7 +42,7 @@ Les sept compilations prescrites sortent 0 : `:math:geometry:compileKotlinJvm`,
 `:kanvas:compileKotlin` et `:kanvas:compileTestKotlin`. Les onze sélecteurs
 publics sont exécutés séquentiellement avec leurs XML de classe : Surface
 Core `1/0/0/0`, Composition `1/0/0/0`, Lighting/Picture `7/0/0/0`, Advanced
-`1/0/0/0`, Cross-lane `24/0/0/0`, Budget/Cache/Recovery `2/0/0/0` ; Picture
+`1/0/0/0`, Cross-lane `25/0/0/0`, Budget/Cache/Recovery `2/0/0/0` ; Picture
 Core `1/0/0/0`, Composition `1/0/0/0`, Lighting `1/0/0/0`, Runtime `1/0/0/0`
 et Cross-lane `1/0/0/0`. Chaque invocation de test a Gradle exit 1 uniquement
 après l'exit natif 133 : la custody native est **UNKNOWN**, jamais PASS. Cette
