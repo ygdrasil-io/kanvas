@@ -387,6 +387,23 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                                 analyticUniforms[packet.packetId] = uniform.bytes.copyOf()
                                 templates[packet.packetId] = w6aCorePrimitiveGeometryTemplate(packet, recipe, key)
                             }
+                            else if (draw is W5bPointDraw && packetPass != null && draw.clipOnly == null) {
+                                val site = W6GeometrySiteKeyV1(packetPass.id, drawOrdinalI32)
+                                val recipe = physical.w6CorePrimitiveHostRecipe(site) as? W6PointHostRecipeV1
+                                    ?: error("W6 Point host recipe shape changed after final pass binding.")
+                                require(recipe.site == site && w6aPointPacketMatchesRecipe(packet, draw, recipe)) {
+                                    "W6 Point packet geometry differs from its frozen host recipe."
+                                }
+                                require(corePrimitiveSitesByPacket.put(packet, site) == null)
+                                val key = w6aPointStructuralKey(packet, recipe, targetBounds)
+                                val mapping = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key)
+                                require(mapping is GPUWgpu4kCorePrimitivePipelineMapping.Mapped)
+                                geometryPipelines[packet.packetId] = mapping
+                                val semantic = packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive
+                                analyticUniforms[packet.packetId] = requireNotNull(semantic.payloadRef.uniformBlock).bytes
+                                    .map(Int::toByte).toByteArray()
+                                templates[packet.packetId] = w6aPointGeometryTemplate(packet, recipe, key)
+                            }
                             else if (draw is W5bVerticesDraw) {
                                 templates[packet.packetId] = requireNotNull(sealW5aGeometryHostTemplateV1(packet)).copy(
                                     materialDevicePointWgsl = "input.position.xy + vec2<f32>(${targetOrigin.x}.0, ${targetOrigin.y}.0)")

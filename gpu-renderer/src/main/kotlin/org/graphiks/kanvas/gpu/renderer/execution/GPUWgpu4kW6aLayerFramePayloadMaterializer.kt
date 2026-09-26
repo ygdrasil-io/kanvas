@@ -382,8 +382,24 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                             }
                                         }
                                     }
+                                val pointRecipe = (draw as? W5bPointDraw)
+                                    ?.takeIf { it.clipOnly == null && pass is PlanPass.RenderPass }
+                                    ?.let { point ->
+                                        val site = W6GeometrySiteKeyV1(pass.id, drawOrdinalI32)
+                                        require(frame.corePrimitiveSite(packet) == site) {
+                                            "W6 Point packet lost its frozen owner/ordinal."
+                                        }
+                                        (frame.physical.w6CorePrimitiveHostRecipe(site) as? W6PointHostRecipeV1)?.also { recipe ->
+                                            require(w6aPointPacketMatchesRecipe(packet, point, recipe)) {
+                                                "W6 Point packet geometry differs from its frozen host recipe."
+                                            }
+                                        } ?: error("W6 Point recipe shape differs from its packet.")
+                                    }
                                 require(corePrimitiveRecipe == null || mapped != null) {
                                     "W6 analytic CorePrimitive host recipe requires its frozen pipeline before allocation."
+                                }
+                                require(pointRecipe == null || mapped != null) {
+                                    "W6 Point host recipe requires its frozen pipeline before allocation."
                                 }
                                 val frozenLegacyColor = when (val recipe = solidRectRecipe) {
                                     null -> draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1
@@ -433,7 +449,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                         )).let { it.vertices to it.indices }
                                         is W5bPointDraw -> sourceBounds?.let { bounds ->
                                             fullMaskMaterialPointGeometry(draw, bounds)
-                                        } ?: (draw.copyVerticesF32() to draw.copyIndicesI32())
+                                        } ?: pointRecipe?.let { it.copyVerticesF32() to it.copyIndicesI32() }
+                                            ?: (draw.copyVerticesF32() to draw.copyIndicesI32())
                                         is PathDraw -> {
                                             sourceBounds?.let { bounds ->
                                                 if (pass is PlanPass.StencilCover) {
@@ -482,7 +499,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     is AnalyticRectDraw, is AnalyticRRectDraw ->
                                         requireNotNull(corePrimitiveRecipe).scissor
                                     is PathDraw -> draw.copyScissorI32()
-                                    is W5bPointDraw -> draw.copyScissorI32()
+                                    is W5bPointDraw -> pointRecipe?.scissor ?: draw.copyScissorI32()
                                     is W5bVerticesDraw -> draw.copyScissorI32()
                                     else -> error("Unadmitted W6 geometry")
                                 }

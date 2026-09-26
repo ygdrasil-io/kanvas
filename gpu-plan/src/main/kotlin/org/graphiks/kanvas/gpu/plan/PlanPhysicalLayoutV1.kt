@@ -37,7 +37,7 @@ internal class SourcePhysicalConstructionV1(
     val w4eGeometry: List<PlanW4eGeometryBindingV1> = emptyList(),
     /** Final W6 SolidRect host choices, attached before the peak/layout publication boundary. */
     val w6SolidRectHostRecipes: Map<W6GeometrySiteKeyV1, W6SolidRectHostRecipeV1> = emptyMap(),
-    /** Final W6 AnalyticRect/RRect host choices, attached beside the already sealed physical source. */
+    /** Final W6 non-W4e CorePrimitive host choices, attached beside the already sealed physical source. */
     val w6CorePrimitiveHostRecipes: Map<W6GeometrySiteKeyV1, W6CorePrimitiveHostRecipeV1> = emptyMap(),
 )
 
@@ -139,7 +139,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     public fun w6SolidRectHostRecipe(site: W6GeometrySiteKeyV1): W6SolidRectHostRecipeV1 =
         requireNotNull(solidRectHosts[site]) { "Missing frozen W6 SolidRect host recipe for ${site.ownerPassId.value}/${site.drawOrdinalI32}." }
     public fun w6SolidRectHostRecipes(): Map<W6GeometrySiteKeyV1, W6SolidRectHostRecipeV1> = solidRectHosts
-    /** Exact W6 AnalyticRect/RRect recipe sealed for this final graph site. */
+    /** Exact W6 non-W4e CorePrimitive recipe sealed for this final graph site. */
     public fun w6CorePrimitiveHostRecipe(site: W6GeometrySiteKeyV1): W6CorePrimitiveHostRecipeV1 =
         requireNotNull(corePrimitiveHosts[site]) { "Missing frozen W6 CorePrimitive host recipe for ${site.ownerPassId.value}/${site.drawOrdinalI32}." }
     public fun w6CorePrimitiveHostRecipes(): Map<W6GeometrySiteKeyV1, W6CorePrimitiveHostRecipeV1> = corePrimitiveHosts
@@ -253,6 +253,21 @@ public class PlanPhysicalLayoutV1 private constructor(
                     Math.addExact(binding.uniformOffsetI64, binding.uniformBytesI64) <= rows.single { it.id == data.uniform }.byteSize)
                 pass.id to binding
             }.toMap()
+            source.w6CorePrimitiveHostRecipes.values.filterIsInstance<W6PointHostRecipeV1>().forEach { recipe ->
+                val render = graph.passes().filterIsInstance<PlanPass.RenderPass>().single { it.id == recipe.site.ownerPassId }
+                val draw = render.draws()[recipe.site.drawOrdinalI32] as W5bPointDraw
+                val binding = geometry.getValue(render.id)
+                require(draw.clipOnly == null && draw.pointMode == recipe.pointMode &&
+                    draw.copyVerticesF32().contentEquals(recipe.copyVerticesF32()) &&
+                    draw.copyIndicesI32().contentEquals(recipe.copyIndicesI32()) &&
+                    draw.copyBoundsI32() == recipe.bounds && draw.copyScissorI32() == recipe.scissor &&
+                    binding.vertexCountI32 == recipe.verticesF32.size / 2 &&
+                    binding.indexCountI32 == recipe.indicesI32.size &&
+                    binding.maxLocalIndexI32 == recipe.indicesI32.max() &&
+                    binding.uniformBytesI64 == 32L) {
+                    "W6 Point host recipe or physical source changed after final pass binding."
+                }
+            }
             source.w4eGeometry.forEach { lane ->
                 require(lane.payload.matchesDeclaredResources(rows))
                 require(rows.single { it.id == lane.target }.copyExtent() == lane.copyExtentI32())

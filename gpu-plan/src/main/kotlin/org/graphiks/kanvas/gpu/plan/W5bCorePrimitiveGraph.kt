@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.kanvas.render.ir.DrawNode
+import org.graphiks.kanvas.render.ir.PointMode
 import org.graphiks.math.color.ColorF32
 import org.graphiks.math.geometry.RectI32
 import org.graphiks.math.geometry.SizeI32
@@ -52,6 +53,8 @@ public object W5bCorePrimitiveGraph {
 public class W5bPointDraw private constructor(
     override public val commandIndex: Int,
     override public val materialAuthority: PlanDrawMaterialAuthority,
+    /** Original planner-selected point mode; W5b admits POINTS only. */
+    public val pointMode: PointMode,
     verticesF32: FloatArray,
     indicesI32: IntArray,
     contourStartsI32: IntArray,
@@ -77,25 +80,26 @@ public class W5bPointDraw private constructor(
         require(clipOnly == null)
         val local = org.graphiks.math.geometry.PointSquaresF32.fromDeviceQuadsF32OrNull(vertices, bounds)
             ?.relativeToOriginI32OrNull(originI32) ?: return null
-        return W5bPointDraw(commandIndex, materialAuthority, local.copyVerticesF32(), indices, contours,
+        return W5bPointDraw(commandIndex, materialAuthority, pointMode, local.copyVerticesF32(), indices, contours,
             local.copyBoundsI32(), scissorI32, blend, null)
     }
-    internal fun withBlend(plan: BlendPlan): W5bPointDraw = W5bPointDraw(commandIndex, materialAuthority,
+    internal fun withBlend(plan: BlendPlan): W5bPointDraw = W5bPointDraw(commandIndex, materialAuthority, pointMode,
         vertices, indices, contours, bounds, scissor, plan, clipOnly)
     internal fun withMaterialRef(ref: MaterialPlanRef, composedV5: Boolean = materialAuthority is PlanDrawMaterialAuthority.MaterialV5): W5bPointDraw =
         W5bPointDraw(commandIndex, if (composedV5) PlanDrawMaterialAuthority.MaterialV5(ref)
-            else PlanDrawMaterialAuthority.MaterialV1(ref), vertices, indices, contours, bounds, scissor, blend, clipOnly)
+            else PlanDrawMaterialAuthority.MaterialV1(ref), pointMode, vertices, indices, contours, bounds, scissor, blend, clipOnly)
 
     /** Rebind only the occurrence identity; retain the selected geometry and material authority. */
     internal fun withCommandIndexI32(indexI32: Int): W5bPointDraw {
         require(indexI32 >= 0)
-        return W5bPointDraw(indexI32, materialAuthority, vertices, indices, contours, bounds, scissor, blend, clipOnly)
+        return W5bPointDraw(indexI32, materialAuthority, pointMode, vertices, indices, contours, bounds, scissor, blend, clipOnly)
     }
 
     public companion object {
         public fun of(commandIndexI32: Int, material: MaterialPlanRef, verticesF32: FloatArray,
             indicesI32: IntArray, contourStartsI32: IntArray, boundsI32: RectI32,
-            scissorI32: RectI32, blend: BlendPlan, clipOnly: W4eClipOnlyPlan? = null, composedV5: Boolean = false): W5bPointDraw {
+            scissorI32: RectI32, blend: BlendPlan, clipOnly: W4eClipOnlyPlan? = null, composedV5: Boolean = false,
+            pointMode: PointMode = PointMode.POINTS): W5bPointDraw {
             require(commandIndexI32 >= 0 && !boundsI32.isEmpty && !scissorI32.isEmpty)
             require(contourStartsI32.size in 1..64 && verticesF32.size == contourStartsI32.size * 8 &&
                 indicesI32.size == contourStartsI32.size * 6 && verticesF32.all(Float::isFinite))
@@ -104,6 +108,7 @@ public class W5bPointDraw private constructor(
                 vertexI32 == indexI32 / 6 * 4 + intArrayOf(0, 1, 2, 0, 2, 3)[indexI32 % 6]
             })
             require(blend != BlendPlan.NoOpV1)
+            require(pointMode == PointMode.POINTS)
             val finalBlend = if (clipOnly == null) blend else {
                 val mode = when (blend) {
                     is BlendPlan.FixedFunctionV1 -> blend.mode
@@ -115,7 +120,7 @@ public class W5bPointDraw private constructor(
                     .copy(compositionAbiI32 = 4)
             }
             return W5bPointDraw(commandIndexI32, if (composedV5) PlanDrawMaterialAuthority.MaterialV5(material)
-                else PlanDrawMaterialAuthority.MaterialV1(material),
+                else PlanDrawMaterialAuthority.MaterialV1(material), pointMode,
                 verticesF32, indicesI32, contourStartsI32, boundsI32, scissorI32, finalBlend, clipOnly)
         }
     }

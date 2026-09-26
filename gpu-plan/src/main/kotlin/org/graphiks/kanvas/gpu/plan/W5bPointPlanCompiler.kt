@@ -7,7 +7,7 @@ import org.graphiks.math.matrix.preparePointSquaresF32OrNull
 /** Pre-publication adapter for the existing W5b point draw and W5h source owner. */
 internal class W5bPointPlanCompiler(private val catalog: RuntimeEffectSemanticCatalogSnapshot) : GpuPlanCompiler {
     private class Candidate(val owner: W5bPointPlanCompiler, val commandI32: Int, val original: DrawNode,
-        val geometry: PointSquaresF32, val scissor: RectI32, val source: W5hPreparedPointMaterialV6,
+        val pointMode: PointMode, val geometry: PointSquaresF32, val scissor: RectI32, val source: W5hPreparedPointMaterialV6,
         override val sceneCanonicalId: CanonicalId, override val target: RenderTargetDescriptor): GpuPlanCandidate {
         override val capabilityId: String = W5bCorePrimitiveGraph.CAPABILITY_ID
     }
@@ -48,7 +48,7 @@ internal class W5bPointPlanCompiler(private val catalog: RuntimeEffectSemanticCa
         val source = try { W5hPreparedPointMaterialV6.capture(draw, scissor, BlendTargetClampV1.Unavailable, catalog) }
         catch (failure: IllegalArgumentException) { return GpuPlanSelection.MaterialOnlyRefusal(W5bCorePrimitiveGraph.CAPABILITY_ID,
             scene.canonicalId, target, listOf(EffectiveMaterialPlanner.Result.Refused(failure.message ?: W5fPlanDiagnostics.Schema))) }
-        return GpuPlanSelection.Candidate(Candidate(this, entry.index, draw, geometry, scissor, source, scene.canonicalId, target))
+        return GpuPlanSelection.Candidate(Candidate(this, entry.index, draw, points.mode, geometry, scissor, source, scene.canonicalId, target))
     }
 
     override fun plan(candidate: GpuPlanCandidate, capabilities: PlanCapabilitySnapshot, budget: PlanBudget): RenderPlanResult<RenderGraph> =
@@ -65,7 +65,7 @@ internal class W5bPointPlanCompiler(private val catalog: RuntimeEffectSemanticCa
             val geometry = selected.geometry
             val draw = W5bPointDraw.of(selected.commandI32, MaterialPlanRef(0), geometry.copyVerticesF32(),
                 geometry.copyIndicesI32(), geometry.copyContourStartsI32(), geometry.copyBoundsI32(), selected.scissor,
-                selected.source.blend, composedV5 = true)
+                selected.source.blend, composedV5 = true, pointMode = selected.pointMode)
             val resources = listOf(Triple(PlanResourceRole.VertexData, PlanScratchBufferKind.Vertex, geometry.pointCountI32 * 32L),
                 Triple(PlanResourceRole.IndexData, PlanScratchBufferKind.Index, geometry.pointCountI32 * 24L),
                 Triple(PlanResourceRole.UniformData, PlanScratchBufferKind.Uniform, maxOf(32L, caps.minUniformBufferOffsetAlignment.toLong())))

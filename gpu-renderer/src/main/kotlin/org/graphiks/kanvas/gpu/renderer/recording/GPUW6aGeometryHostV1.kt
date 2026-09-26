@@ -12,6 +12,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveStructuralBlend
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveStructuralClip
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer
 
 internal const val W6A_VERTEX_SHADER: String = """
@@ -68,6 +69,7 @@ internal fun w6aCorePrimitiveStructuralKey(recipe: W6CorePrimitiveHostRecipeV1,
     require(selector.uniformAbi == W6CorePrimitiveHostUniformAbiV1.AnalyticShape80)
     require(selector.target == W6CorePrimitiveHostTargetV1.Rgba8UnormSrgbSingleSample)
     require(selector.coverage == W6CorePrimitiveHostCoverageV1.AnalyticScalarAA)
+    require(selector.topology == W6CorePrimitiveHostTopologyV1.IndexedTriangleList)
     require(selector.coordinateSlot == W6CorePrimitiveHostCoordinateSlotV1.FragmentPosition &&
         selector.groupZeroAbi == W6CorePrimitiveHostGroupZeroAbiV1.DynamicUniform80)
     val scissor = recipe.scissor
@@ -92,12 +94,72 @@ internal fun w6aCorePrimitiveGeometryTemplate(packet: GPUDrawPacket, recipe: W6C
     val family = when (recipe.selector.family) {
         W6CorePrimitiveHostGeometryFamilyV1.AnalyticRect -> "analytic-rect"
         W6CorePrimitiveHostGeometryFamilyV1.AnalyticRRect -> "analytic-rrect"
+        W6CorePrimitiveHostGeometryFamilyV1.Point -> error("W6 Point uses its dedicated host template.")
     }
     return template.copy(
         pipelineRecipeId = "w6a.$family.v1.${recipe.site.ownerPassId.value}.${recipe.site.drawOrdinalI32}",
         materialCoordinateSlot = MaterialCoordinateSlotV1.FragmentPosition,
         materialDevicePointWgsl = "fragment_position.xy + vec2<f32>(${origin.x}.0, ${origin.y}.0)",
     )
+}
+
+/** Builds a Point key from its frozen site axes; packet material bytes never select geometry axes. */
+internal fun w6aPointStructuralKey(packet: GPUDrawPacket, recipe: W6PointHostRecipeV1,
+    targetBounds: GPUPixelBounds): GPUCorePrimitiveRenderPipelineStructuralKey {
+    val selector = recipe.selector
+    require(selector.family == W6CorePrimitiveHostGeometryFamilyV1.Point &&
+        selector.uniformAbi == W6CorePrimitiveHostUniformAbiV1.Point32 &&
+        selector.coverage == W6CorePrimitiveHostCoverageV1.FullOrScissor &&
+        selector.topology == W6CorePrimitiveHostTopologyV1.IndexedTriangleList &&
+        selector.target == W6CorePrimitiveHostTargetV1.Rgba8UnormSrgbSingleSample &&
+        selector.coordinateSlot == W6CorePrimitiveHostCoordinateSlotV1.FragmentPosition &&
+        selector.groupZeroAbi == W6CorePrimitiveHostGroupZeroAbiV1.DynamicUniform32)
+    val scissor = recipe.scissor
+    val clip = GPUPixelBounds(scissor.left, scissor.top, scissor.right, scissor.bottom).let { bounds ->
+        if (bounds == targetBounds) GPUClipExecutionPlan.NoClip else GPUClipExecutionPlan.ScissorOnly(bounds)
+    }
+    val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
+        ?: error("W6 Point host recipe requires a CorePrimitive packet.")
+    val key = corePrimitiveRenderPipelineStructuralKey(semantic, clip,
+        W5bBlendPlanLowerer.lower(selector.blend), selector.target.sampleCountI32,
+        GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8UnormSrgb)
+    require(key.topology == GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList &&
+        key.blend == W5bBlendPlanLowerer.lower(selector.blend).corePrimitiveStructuralBlend() &&
+        key.colorFormat == GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8UnormSrgb &&
+        key.sampleCount == selector.target.sampleCountI32) {
+        "W6 Point host recipe selected an unexpected native geometry axis."
+    }
+    return key
+}
+
+/** Mechanically projects the final Point recipe into the existing CorePrimitive host template. */
+internal fun w6aPointGeometryTemplate(packet: GPUDrawPacket, recipe: W6PointHostRecipeV1,
+    key: GPUCorePrimitiveRenderPipelineStructuralKey): GPUW5aGeometryHostTemplateV1 {
+    val template = requireNotNull(sealCorePrimitiveGeometryHostTemplateV1(packet, key))
+    val origin = recipe.materialOriginDeviceI32
+    return template.copy(
+        pipelineRecipeId = "w6a.point.v1.${recipe.site.ownerPassId.value}.${recipe.site.drawOrdinalI32}",
+        materialCoordinateSlot = MaterialCoordinateSlotV1.FragmentPosition,
+        materialDevicePointWgsl = "fragment_position.xy + vec2<f32>(${origin.x}.0, ${origin.y}.0)",
+    )
+}
+
+/** Authenticates the packet bytes against the frozen Point geometry before native allocation. */
+internal fun w6aPointPacketMatchesRecipe(packet: GPUDrawPacket, draw: W5bPointDraw,
+    recipe: W6PointHostRecipeV1): Boolean {
+    val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive ?: return false
+    val geometry = semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath ?: return false
+    return draw.clipOnly == null && draw.pointMode == recipe.pointMode &&
+        semantic.sourceFamily == org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily.PointLine &&
+        semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor &&
+        geometry.geometryMode == org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode.DirectTriangles &&
+        geometry.vertices == recipe.verticesF32 && geometry.indices == recipe.indicesI32 &&
+        geometry.sourceVertexCount == recipe.verticesF32.size / 2 &&
+        geometry.coverBounds == GPUPixelBounds(recipe.bounds.left, recipe.bounds.top, recipe.bounds.right, recipe.bounds.bottom) &&
+        semantic.scissorBounds == GPUPixelBounds(recipe.scissor.left, recipe.scissor.top, recipe.scissor.right, recipe.scissor.bottom) &&
+        draw.copyVerticesF32().contentEquals(recipe.copyVerticesF32()) &&
+        draw.copyIndicesI32().contentEquals(recipe.copyIndicesI32()) &&
+        draw.copyBoundsI32() == recipe.bounds && draw.copyScissorI32() == recipe.scissor
 }
 
 /** Validates the packet's immutable shape payload against the final RenderPass recipe. */
@@ -124,6 +186,7 @@ internal fun w6aCorePrimitivePacketMatchesRecipe(packet: GPUDrawPacket, draw: Pl
                 geometry.radii.size == 8 && geometry.radii.zip(rrectRadii(recipe.deviceShape)).all { (actual, expected) -> actual.sameF32(expected) } &&
                 draw.copyRasterBounds() == recipe.rasterBounds && draw.copyScissor() == recipe.scissor
         }
+        is W6PointHostRecipeV1 -> false
     }
 }
 

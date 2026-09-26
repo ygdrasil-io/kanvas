@@ -154,20 +154,35 @@ class W6aLayerW4W5SurfacePixelTest {
 
     @Test
     fun `fractional frozen Point and Vertices rebase at a nonzero layer origin`() {
-        val expected = rgba(0, 0, 0, 0) + rgba(43, 181, 93) + rgba(239, 51, 73)
-        val triangle = Vertices(VertexMode.TRIANGLES,
-            listOf(Point2F32(2f, -1f), Point2F32(3f, -1f), Point2F32(2f, 2f)))
-        val surface = Surface(3, 1)
-        surface.canvas {
+        // This must fail if a W6 Point site is lowered from root rather than frozen layer-local facts.
+        val expectedPoint = rgba(0, 0, 0, 0) + rgba(43, 181, 93) + rgba(0, 0, 0, 0)
+        val expectedVertices = rgba(0, 0, 0, 0) + rgba(0, 0, 0, 0) + rgba(239, 51, 73)
+        val pointSurface = Surface(3, 1)
+        pointSurface.canvas {
             saveLayer(RectF32.ofLTRB(1f, 0f, 3f, 1f))
             drawPoint(1.1f, .5f, opaque(GREEN).copy(strokeWidth = 0f))
+            restore()
+        }
+        val point = pointSurface.render()
+        assertContentEquals(expectedPoint, point.pixels)
+        assertTrue(point.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            point.nativeEvidenceScopeKinds.toString())
+
+        val triangle = Vertices(VertexMode.TRIANGLES,
+            listOf(Point2F32(2f, -1f), Point2F32(3f, -1f), Point2F32(2f, 2f)))
+        val verticesSurface = Surface(3, 1)
+        verticesSurface.canvas {
+            saveLayer(RectF32.ofLTRB(1f, 0f, 3f, 1f))
             save()
             translate(.1f, 0f)
             drawVertices(triangle, opaque(RED))
             restore()
             restore()
         }
-        assertContentEquals(expected, surface.render().pixels)
+        val vertices = verticesSurface.render()
+        assertContentEquals(expectedVertices, vertices.pixels)
+        assertTrue(vertices.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            vertices.nativeEvidenceScopeKinds.toString())
     }
 
     @Test
