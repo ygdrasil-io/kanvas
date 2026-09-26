@@ -155,3 +155,64 @@ assertions remain. The `appendFrozenOccurrence` late evaluation fallback is unre
 visible direct image occurrence: its only direct call passes the memoized map value, while the
 new non-writing `DST` form now creates no direct source or call at all. It remains needed for
 non-direct/layer/Picture paths, so it was not broadened into an unsafe global invariant.
+
+## Astra fix round 4 — direct MaskShader DST routing
+
+Sol's remaining Important finding is addressed. On starting HEAD `34ffd3068`, the new public
+`nonWritingDirectMaskShaderWithSeparateWritingSiblingIsNoOpAndRecovers` was reproduced RED
+before any production change. Its direct `MaskFilter.Shader(Shader.SolidColor(White))` draw at
+x=5 uses DST, while a blue sibling at x=0 writes inside an unfiltered `saveLayer`. Literal
+expected RGBA pixels for that frame and a subsequent red x=5 recovery frame are prepared
+before `Surface`. Both renders assert `Render` + `Readback`, and the second follows
+`discardRecordedOperations()` on the same surface.
+
+The failure was a real named JUnit failure, not inferred from the native process status:
+
+```text
+rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6FilterBoundsRecipeSurfacePixelTest.nonWritingDirectMaskShaderWithSeparateWritingSiblingIsNoOpAndRecovers'
+W6FilterBoundsRecipeSurfacePixelTest > nonWritingDirectMaskShaderWithSeparateWritingSiblingIsNoOpAndRecovers() FAILED
+tests="1" skipped="0" failures="1" errors="0"
+GPUPlanSurfaceTerminalException: w6a.layer.unsupported_child: Required value was null.
+Process 'Gradle Test Executor 69' finished with non-zero exit value 133
+BUILD FAILED in 4s
+```
+
+The command's first sandboxed attempt exited 1 before Gradle execution because the existing
+Gradle wrapper lock was outside writable roots. The authorized escalated rerun above produced
+the causal RED; it also exited 1 as a Gradle process, separately from native worker exit 133.
+
+Root cause: W5 removes the DST visual source and the source-allocation loop skips its semantic
+occurrence, but the later MaskShader capture loop still required that absent source. W6a now
+selects `activeFilterOccurrences` once before all late occurrence consumers. A direct occurrence
+without early recipe facts is omitted only after verifying that its exact W5 binding has no
+visual draws. Real visual sources without facts still throw the strict existing invariant.
+Allocation, insertion grouping, mask material capture, and late Picture-layer lookup consume
+that same selection. Layer/Picture occurrences retain their existing routes. No second DAG
+interpretation, recipe `PlanResourceId`, API, wire, renderer, or budget change was introduced.
+
+Fresh verification commands were serialized, in this order after the production correction:
+
+```text
+rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6FilterBoundsRecipeSurfacePixelTest.nonWritingDirectMaskShaderWithSeparateWritingSiblingIsNoOpAndRecovers'
+rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6FilterBoundsRecipeSurfacePixelTest'
+rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.picture.W6FilterBoundsRecipePictureTest'
+rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6cSpatialBoundsSurfaceTest.direct filtered draw outside its clipped terminal is a no-op and surface recovers'
+rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dLightingSurfacePixelTest.disjoint direct terminal clip is a no op and surface recovers'
+rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6bMaskShaderTableSurfacePixelTest'
+rtk ./gradlew :gpu-plan:compileKotlin :kanvas:compileTestKotlin
+```
+
+| Command above | Fresh JUnit XML / output | Gradle exit | Native worker |
+| --- | --- | --- | --- |
+| Focused MaskShader DST | 1 test, 0 failures, 0 errors; named test PASSED | 1 | executor 70, exit 133 — UNKNOWN |
+| Recipe Surface class | 8 tests, 0 failures, 0 errors | 1 | executor 71, exit 133 — UNKNOWN |
+| Recipe Picture class | 2 tests, 0 failures, 0 errors | 1 | executor 72, exit 133 — UNKNOWN |
+| Direct W6c no-op/recovery | 1 test, 0 failures, 0 errors | 1 | executor 73, exit 133 — UNKNOWN |
+| Direct W6d no-op/recovery | 1 test, 0 failures, 0 errors | 1 | executor 74, exit 133 — UNKNOWN |
+| MaskShaderTable class | 13 tests, 0 failures, 0 errors | 1 | executor 75, exit 133 — UNKNOWN |
+| Both compilation tasks | `BUILD SUCCESSFUL in 920ms` | 0 | not applicable |
+
+Status: **DONE_WITH_CONCERNS pending independent Sol re-review**. Native 133 is still not a
+global PASS. No GM, fonts, external codec, or global Skia tests were run. The user-owned dirty
+W6d progress ledger was neither edited nor staged. The scoped commit contains only W6a, the
+public Surface test, and this appended report.

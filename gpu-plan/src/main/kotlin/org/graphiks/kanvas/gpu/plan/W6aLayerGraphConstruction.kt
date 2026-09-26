@@ -980,7 +980,20 @@ internal class W6aLayerGraphConstruction(
 
         val bindingsByCommand = bindings.associateBy { it.firstCommandIndexI32 }
         deferredFilterFailure?.let { throw it }
-        val filterOccurrencesByInsertion = filterOccurrences.groupBy { it.insertionCommandIndexI32 }
+        // W5 removes DST before a visual source exists. Keep that routing decision common to
+        // every late consumer, including mask-shader material capture as well as allocation.
+        val activeFilterOccurrences = filterOccurrences.filter { occurrence ->
+            if (occurrence.isLayerOccurrence || occurrence.isPictureOccurrence) return@filter true
+            val binding = requireNotNull(bindingsByCommand[occurrence.insertionCommandIndexI32]) {
+                "W6b direct occurrence has no W5 source generation."
+            }
+            if (directAutoLayerFactsByOccurrence.containsKey(occurrence)) return@filter true
+            require(RenderGraph.visualDraws(binding.source.passes()).isEmpty()) {
+                "W6b direct occurrence has a visual source but no pre-reservation recipe facts."
+            }
+            false
+        }
+        val filterOccurrencesByInsertion = activeFilterOccurrences.groupBy { it.insertionCommandIndexI32 }
         // One ordered, occurrence-local aggregate discovery owns nested Picture structure.  It
         // intentionally replaces the earlier leaf flattening: a filtered parent retains every
         // child (including unfiltered siblings) and an inline child remains in the current target.
@@ -990,20 +1003,9 @@ internal class W6aLayerGraphConstruction(
         )
         val directFilterSourceByCommand = linkedMapOf<Int, DirectFilterSources>()
         val directConsumerDemandCommands = linkedSetOf<Int>()
-        filterOccurrences.filterNot { it.isLayerOccurrence || it.isPictureOccurrence }.forEach { occurrence ->
-            val binding = requireNotNull(bindingsByCommand[occurrence.insertionCommandIndexI32]) {
-                "W6b direct occurrence has no W5 source generation."
-            }
-            val earlyFacts = directAutoLayerFactsByOccurrence[occurrence]
-            if (earlyFacts == null) {
-                // DST is removed by W5 before there is a visual source to evaluate.  It cannot
-                // affect its parent, so it must not create a late source merely because the
-                // semantic filter occurrence remains in the immutable scene.
-                require(RenderGraph.visualDraws(binding.source.passes()).isEmpty()) {
-                    "W6b direct occurrence has a visual source but no pre-reservation recipe facts."
-                }
-                return@forEach
-            }
+        activeFilterOccurrences.filterNot { it.isLayerOccurrence || it.isPictureOccurrence }.forEach { occurrence ->
+            val binding = bindingsByCommand.getValue(occurrence.insertionCommandIndexI32)
+            val earlyFacts = requireNotNull(directAutoLayerFactsByOccurrence[occurrence])
             // Reject an opaque terminal clip before allocating any direct filter source; W4e
             // retains ownership of complex clips on non-filtered routes.
             val terminalClip = directTerminalClip(occurrence)
@@ -1162,7 +1164,7 @@ internal class W6aLayerGraphConstruction(
                 }
             }
         }
-        filterOccurrences.filter { it.mask is MaskFilterNode.Shader }.forEach { occurrence ->
+        activeFilterOccurrences.filter { it.mask is MaskFilterNode.Shader }.forEach { occurrence ->
             // A layer recorded inside a Picture has no top-level W6a occurrence.  Its actual
             // target is allocated while the ordered Picture stream opens that layer below.
             if (occurrence.isLayerOccurrence && occurrence.outerPicturePathI32().isNotEmpty()) return@forEach
@@ -1913,7 +1915,7 @@ internal class W6aLayerGraphConstruction(
                     layerTarget,
                 )
                 fun layerOccurrence(backdropInitialization: Boolean): W6bFilterGraphConstruction.PositiveOccurrence? =
-                    filterOccurrences.singleOrNull { occurrence ->
+                    activeFilterOccurrences.singleOrNull { occurrence ->
                         occurrence.isLayerOccurrence && occurrence.isBackdropInitialization == backdropInitialization &&
                             occurrence.sourceSceneCanonicalId == entry.descriptorSource.scene.canonicalId.value &&
                             occurrence.sourceCommandIndexI32 == entry.descriptorSource.sourceCommandIndexI32 &&

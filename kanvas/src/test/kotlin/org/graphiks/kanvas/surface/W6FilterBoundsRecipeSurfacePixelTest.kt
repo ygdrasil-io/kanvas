@@ -7,7 +7,9 @@ import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ImageFilter
+import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.math.color.ColorARGB
 import org.graphiks.math.geometry.RectF32
@@ -125,6 +127,33 @@ class W6FilterBoundsRecipeSurfacePixelTest {
         }
 
         assertRenderAndReadback(surface, expected)
+    }
+
+    /** A removed DST source must also skip mask-shader capture and leave the surface reusable. */
+    @Test
+    fun nonWritingDirectMaskShaderWithSeparateWritingSiblingIsNoOpAndRecovers() {
+        val transparent = ubyteArrayOf(0u, 0u, 0u, 0u)
+        val blue = ubyteArrayOf(0u, 0u, 255u, 255u)
+        val red = ubyteArrayOf(255u, 0u, 0u, 255u)
+        val expected = blue + transparent + transparent + transparent + transparent + transparent
+        val recoveryExpected = transparent + transparent + transparent + transparent + transparent + red
+        val surface = Surface(6, 1)
+        surface.canvas {
+            saveLayer()
+            drawRect(RectF32.ofLTRB(5f, 0f, 6f, 1f), Paint(
+                ColorARGB.Blue, blendMode = BlendMode.DST,
+                maskFilter = MaskFilter.Shader(Shader.SolidColor(ColorARGB.White)), antiAlias = false,
+            ))
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.Blue, antiAlias = false))
+            restore()
+        }
+        assertRenderAndReadback(surface, expected)
+
+        surface.discardRecordedOperations()
+        surface.canvas {
+            drawRect(RectF32.ofLTRB(5f, 0f, 6f, 1f), Paint(ColorARGB.Red, antiAlias = false))
+        }
+        assertRenderAndReadback(surface, recoveryExpected)
     }
 
     /** A prematurely clipped Compose intermediate cannot return from +20 to the terminal x=0. */
