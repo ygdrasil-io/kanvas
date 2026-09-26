@@ -51,7 +51,12 @@ class W6aLayerW4W5SurfacePixelTest {
                 drawPath(shape, opaque(BLUE))
                 if (layered) restore()
             }
-            assertContentEquals(expected, surface.render().pixels, "layered=$layered")
+            val actual = surface.render()
+            assertContentEquals(expected, actual.pixels, "layered=$layered")
+            // The root control may use the prepared path; only the W6 layer is required to
+            // reach native Render + Readback evidence through its W4e path route.
+            if (layered) assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+                "layered=$layered ${actual.nativeEvidenceScopeKinds}")
         }
     }
 
@@ -76,7 +81,12 @@ class W6aLayerW4W5SurfacePixelTest {
                     Paint(shader = gradient, antiAlias = false))
                 if (layered) restore()
             }
-            assertContentEquals(expected, surface.render().pixels, "layered=$layered")
+            val actual = surface.render()
+            assertContentEquals(expected, actual.pixels, "layered=$layered")
+            // The root control may use the prepared path; only the W6 layer is required to
+            // reach native Render + Readback evidence through its ordered W4e clip prefix.
+            if (layered) assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+                "layered=$layered ${actual.nativeEvidenceScopeKinds}")
         }
     }
 

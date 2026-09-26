@@ -147,6 +147,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     private val preparedVerticesSitesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W6GeometrySiteKeyV1>()
     /** Every admitted fullscreen restore is projected once by its pass/site, not by a renderer key. */
     private val plainLayerCompositeSites = linkedSetOf<W6LayerCompositeSiteKeyV1>()
+    /** Each bound W4e initialization packet carries the exact planner recipe through native encoding. */
+    private val clipMaskInitializeRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskInitializeRecipeV1>()
     private val analyticUniforms = mutableMapOf<GPUDrawPacketID, ByteArray>()
     private val geometryPipelines = mutableMapOf<GPUDrawPacketID, GPUWgpu4kCorePrimitivePipelineMapping.Mapped>()
     internal fun maskShaderMaterial(binding: FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned):
@@ -246,6 +248,17 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                     val packet = if (prepared == null) builder.preparedClipPacket(native, pass.ordinal,
                         requireNotNull(authority.clipPassFor(native.id.value))) else builder.pathPacket(prepared, consumer, pass.ordinal,
                         color?.blend ?: BlendPlan.LegacySrcOverV1)
+                    if (native is PlanPass.ClipMaskInitialize) {
+                        val recipe = physical.w4eClipMaskInitializeRecipe(native.id)
+                        require(recipe.passId == native.id && recipe.output == native.output &&
+                            recipe.copyDomainI32() == native.copyDomainI32() &&
+                            recipe.clearCoverageF32 == native.clearCoverageF32) {
+                            "W4e ClipMaskInitialize recipe differs from the final bound pass."
+                        }
+                        require(clipMaskInitializeRecipesByPacket.put(packet, recipe) == null) {
+                            "W4e ClipMaskInitialize recipe projected more than once."
+                        }
+                    }
                     color?.let { draw -> packet.attachW5aSourceStageV2(org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2.issue(
                         requireNotNull(graph.materialPlanTableOrNull()), draw.materialAuthority, draw.commandIndex,
                         draw.materialAuthority.colorSourceCoordinatesV4()?.let { graph.packedMaterialSourceV4(draw.materialAuthority) })) }
@@ -561,10 +574,19 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
         require(plainLayerCompositeSites == physical.w6PlainLayerCompositeRecipes().keys) {
             "Every frozen W6 plain layer-composite recipe must project to exactly one LayerComposite pass."
         }
+        require(clipMaskInitializeRecipesByPacket.values.map { it.passId }.toSet() ==
+            physical.w4eClipMaskInitializeRecipes().keys &&
+            clipMaskInitializeRecipesByPacket.size == physical.w4eClipMaskInitializeRecipes().size) {
+            "Every frozen W4e ClipMaskInitialize recipe must project to exactly one packet."
+        }
     }
 
     internal fun taskList(): GPUTaskList = GPUTaskList(request.frameId, seal, listOf(recording), graph.id.value,
         tasks, emptyList(), GPUTaskPhase.entries, memory, w6aLayerFrameV1 = this)
+
+    /** Returns only the recipe attached during W6 recording; native encoding cannot rediscover it. */
+    internal fun w4eClipMaskInitializeRecipeOrNull(packet: GPUDrawPacket): W4eClipMaskInitializeRecipeV1? =
+        clipMaskInitializeRecipesByPacket[packet]
 
     /** Exact plan-owned snapshot consumer, with coordinates in its target's local space. */
     internal fun destinationCopy(packet: GPUDrawPacket): PlanPass.TextureCopy? {

@@ -43,6 +43,8 @@ internal class SourcePhysicalConstructionV1(
     val w6PreparedVerticesHostRecipes: Map<W6GeometrySiteKeyV1, W6PreparedVerticesHostRecipeV1> = emptyMap(),
     /** Final unfiltered non-destination-read fullscreen layer restores. */
     val w6PlainLayerCompositeRecipes: Map<W6LayerCompositeSiteKeyV1, W6PlainLayerCompositeRecipeV1> = emptyMap(),
+    /** Final W4e ClipMaskInitialize recipes, limited to the final W4e bindings. */
+    val w4eClipMaskInitializeRecipes: Map<PlanPassId, W4eClipMaskInitializeRecipeV1> = emptyMap(),
 )
 
 internal fun requireW6cColorUniformWindow(offsetBytesI64: Long, capacityBytesI64: Long, dynamicBytesI64: Long) {
@@ -96,6 +98,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     corePrimitiveHostRecipes: Map<W6GeometrySiteKeyV1, W6CorePrimitiveHostRecipeV1>,
     preparedVerticesHostRecipes: Map<W6GeometrySiteKeyV1, W6PreparedVerticesHostRecipeV1>,
     plainLayerCompositeRecipes: Map<W6LayerCompositeSiteKeyV1, W6PlainLayerCompositeRecipeV1>,
+    w4eClipMaskInitializeRecipes: Map<PlanPassId, W4eClipMaskInitializeRecipeV1>,
 ) {
     private val resources = immutableList(resources)
     private val caches = immutableList(cacheBindings)
@@ -108,6 +111,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     private val corePrimitiveHosts = java.util.Collections.unmodifiableMap(LinkedHashMap(corePrimitiveHostRecipes))
     private val preparedVerticesHosts = java.util.Collections.unmodifiableMap(LinkedHashMap(preparedVerticesHostRecipes))
     private val plainLayerComposites = java.util.Collections.unmodifiableMap(LinkedHashMap(plainLayerCompositeRecipes))
+    private val clipMaskInitializes = java.util.Collections.unmodifiableMap(LinkedHashMap(w4eClipMaskInitializeRecipes))
     private val slots = immutableList(buildList {
         resources.forEachIndexed { indexI32, resource ->
             add(PlanPhysicalSlotV1(indexI32, resource.id, resource.byteSize))
@@ -161,6 +165,10 @@ public class PlanPhysicalLayoutV1 private constructor(
     public fun w6PlainLayerCompositeRecipeOrNull(site: W6LayerCompositeSiteKeyV1): W6PlainLayerCompositeRecipeV1? =
         plainLayerComposites[site]
     public fun w6PlainLayerCompositeRecipes(): Map<W6LayerCompositeSiteKeyV1, W6PlainLayerCompositeRecipeV1> = plainLayerComposites
+    /** Exact W4e clip-mask initialize recipe sealed for this final W4e binding pass. */
+    public fun w4eClipMaskInitializeRecipe(passId: PlanPassId): W4eClipMaskInitializeRecipeV1 =
+        requireNotNull(clipMaskInitializes[passId]) { "Missing frozen W4e ClipMaskInitialize recipe for ${passId.value}." }
+    public fun w4eClipMaskInitializeRecipes(): Map<PlanPassId, W4eClipMaskInitializeRecipeV1> = clipMaskInitializes
 
     internal companion object {
         fun seal(graph: RenderGraphConstruction, source: SourcePhysicalConstructionV1): PlanPhysicalLayoutV1 {
@@ -195,6 +203,19 @@ public class PlanPhysicalLayoutV1 private constructor(
             source.w6PlainLayerCompositeRecipes.forEach { (site, recipe) ->
                 require(recipe.site == site && recipe == expectedPlainLayerComposites.getValue(site)) {
                     "W6 plain layer-composite recipe changed after final pass binding."
+                }
+            }
+            val expectedClipMaskInitializes = freezeW4eClipMaskInitializeRecipesV1(source.w4eGeometry)
+            require(source.w4eClipMaskInitializeRecipes.keys == expectedClipMaskInitializes.keys)
+            source.w4eClipMaskInitializeRecipes.forEach { (passId, recipe) ->
+                val bound = source.w4eGeometry.single { passId in it.graphPassIds() }.nativePass(passId)
+                val final = graph.passes().single { it.id == passId }
+                val output = rows.single { it.id == recipe.output }
+                require(bound === final && final is PlanPass.ClipMaskInitialize &&
+                    recipe.passId == passId && recipe == expectedClipMaskInitializes.getValue(passId) &&
+                    output.format == PlanTextureFormat.CoverageMask && output.sampleCountI32 == 1 &&
+                    PlanResourceUsage.RenderAttachment in output.usages()) {
+                    "W4e ClipMaskInitialize recipe changed after final binding."
                 }
             }
             // A frozen Clear/DrawColor Picture entry owns a LegacyColor operand directly.  It
@@ -382,7 +403,7 @@ public class PlanPhysicalLayoutV1 private constructor(
             require(spatialCaches.map { it.outputResourceId }.distinct().size == spatialCaches.size)
             val layout = PlanPhysicalLayoutV1(rows, source.caches, uniforms, geometry, source.w4eGeometry, pictures, spatialCaches,
                 graph.w6dProgramLeases(), source.w6SolidRectHostRecipes, source.w6CorePrimitiveHostRecipes,
-                source.w6PreparedVerticesHostRecipes, source.w6PlainLayerCompositeRecipes)
+                source.w6PreparedVerticesHostRecipes, source.w6PlainLayerCompositeRecipes, source.w4eClipMaskInitializeRecipes)
             require(layout.slots.map { it.resourceId }.distinct().size == layout.slots.size)
             require(layout.programSlots().map { it.slotI32 }.distinct().size == layout.programSlots().size)
             val frozenPrograms = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->

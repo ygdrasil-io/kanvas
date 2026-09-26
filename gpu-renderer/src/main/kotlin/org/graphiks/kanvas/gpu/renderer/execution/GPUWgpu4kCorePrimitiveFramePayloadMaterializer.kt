@@ -59,6 +59,7 @@ import kotlin.math.floor
 import org.graphiks.kanvas.gpu.plan.AttachmentLoadPlan
 import org.graphiks.kanvas.gpu.plan.PlanDepthStencilLoadStore
 import org.graphiks.kanvas.gpu.plan.PlanResourceRole
+import org.graphiks.kanvas.gpu.plan.W4eClipMaskInitializeRecipeV1
 import org.graphiks.kanvas.gpu.plan.W4eNativePayloadPlan
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
@@ -257,7 +258,26 @@ internal fun encodeW4eNativePasses(
     commonSource: Boolean,
     retainedConsumerFor: (String) -> org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority?,
     refusal: (String, String) -> RuntimeException,
+    clipMaskInitializeRecipesByPassId: Map<String, W4eClipMaskInitializeRecipeV1> = emptyMap(),
 ): List<GPUPreparedNativeScopeOperand.Render> {
+    val initializePasses = entries.mapNotNull { entry ->
+        (entry.packet.w4ePreparedClipPass as? GPUW4ePreparedClipPassAuthority.Initialize)?.let { entry to it }
+    }
+    if (clipMaskInitializeRecipesByPassId.isNotEmpty()) {
+        require(clipMaskInitializeRecipesByPassId.keys == initializePasses.map { (_, pass) -> pass.passId }.toSet()) {
+            "W4e ClipMaskInitialize native recipes must be exhaustive for their bound packet sequence."
+        }
+        initializePasses.forEach { (_, pass) ->
+            val recipe = requireNotNull(clipMaskInitializeRecipesByPassId[pass.passId])
+            val domain = recipe.copyDomainI32()
+            require(recipe.passId.value == pass.passId && recipe.output.value == pass.outputResourceId &&
+                domain.left == pass.domain.left && domain.top == pass.domain.top &&
+                domain.right == pass.domain.right && domain.bottom == pass.domain.bottom &&
+                recipe.clearCoverageF32 == pass.clearCoverage) {
+                "W4e ClipMaskInitialize packet differs from its frozen planner recipe."
+            }
+        }
+    }
     val clearPipelines = mutableMapOf<Float, GPURenderPipeline>()
     val producerPipelines = mutableMapOf<Int, GPUW4eNativePipeline>()
     val foldPipelines = mutableMapOf<org.graphiks.kanvas.gpu.plan.ClipCombineOperation, GPUW4eNativePipeline>()
@@ -373,14 +393,19 @@ internal fun encodeW4eNativePasses(
         val pass = entry.packet.w4ePreparedClipPass
         val path = entry.packet.w4ePreparedPath
         when (pass) {
-            is GPUW4ePreparedClipPassAuthority.Initialize -> GPUPreparedNativeScopeOperand.Render(entry.index,
-                GPUPreparedNativeRenderPassConfig(attachment(pass.outputResourceId), loadOperation = GPUPreparedNativeLoadOperation.Clear,
-                    clearColor = GPUPreparedNativeClearColor(pass.clearCoverage.toDouble(), pass.clearCoverage.toDouble(), pass.clearCoverage.toDouble(), pass.clearCoverage.toDouble())), listOf(
+            is GPUW4ePreparedClipPassAuthority.Initialize -> {
+                val recipe = clipMaskInitializeRecipesByPassId[pass.passId]
+                val output = recipe?.output?.value ?: pass.outputResourceId
+                val coverage = recipe?.clearCoverageF32 ?: pass.clearCoverage
+                GPUPreparedNativeScopeOperand.Render(entry.index,
+                GPUPreparedNativeRenderPassConfig(attachment(output), loadOperation = GPUPreparedNativeLoadOperation.Clear,
+                    clearColor = GPUPreparedNativeClearColor(coverage.toDouble(), coverage.toDouble(), coverage.toDouble(), coverage.toDouble())), listOf(
                     GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(
-                        clearPipeline(pass.clearCoverage), generation,
+                        clearPipeline(coverage), generation,
                     )),
                     GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)),
                 ))
+            }
             is GPUW4ePreparedClipPassAuthority.PathMaskClear -> GPUPreparedNativeScopeOperand.Render(entry.index,
                 GPUPreparedNativeRenderPassConfig(attachment(pass.targetResourceId), loadOperation = GPUPreparedNativeLoadOperation.Clear,
                     clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)), listOf(

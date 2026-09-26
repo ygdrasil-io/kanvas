@@ -3207,18 +3207,20 @@ internal class W6aLayerGraphConstruction(
         }
         // SolidRect host selection belongs to the same final source/layout boundary as its W5
         // rows.  The recipe is behavior-neutral and does not participate in the W6 budget yet.
+        val finalW4eBindings = w4eBindings.map { binding ->
+            binding.bindSources(localized.entries.associate { (key, draw) -> key.first to draw })
+        }
         val finalSource = SourcePhysicalConstructionV1(
             resources = source.resources,
             uniforms = source.uniforms,
             caches = source.caches,
             w6cColorUniformBindings = source.w6cColorUniformBindings,
-            w4eGeometry = w4eBindings.map { binding ->
-                binding.bindSources(localized.entries.associate { (key, draw) -> key.first to draw })
-            },
+            w4eGeometry = finalW4eBindings,
             w6SolidRectHostRecipes = freezeW6SolidRectHostsV1(passes),
             w6CorePrimitiveHostRecipes = freezeW6CorePrimitiveHostsV1(passes),
             w6PreparedVerticesHostRecipes = freezeW6PreparedVerticesHostsV1(passes, requireNotNull(table)),
             w6PlainLayerCompositeRecipes = freezeW6PlainLayerCompositeRecipesV1(passes),
+            w4eClipMaskInitializeRecipes = freezeW4eClipMaskInitializeRecipesV1(finalW4eBindings),
         )
         val allResources = resources + finalSource.resources
         val peak = W6aLayerPlanBudget.peak(allResources, passes, caps, budget)

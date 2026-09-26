@@ -307,6 +307,16 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 }
                 require(entries.first().packet.w4ePreparedFrameAuthority?.validatesRenderSteps(framePlan.frameId.value,
                     framePlan.capabilitySeal.sealHash, entries.map { it.render }) == true)
+                val clipMaskInitializeRecipes = entries.mapNotNull { entry ->
+                    frame.w4eClipMaskInitializeRecipeOrNull(entry.packet)?.let { recipe ->
+                        require(recipe.passId.value == entry.packet.passId)
+                        recipe.passId.value to recipe
+                    }
+                }.toMap()
+                require(clipMaskInitializeRecipes.keys == binding.nativePasses()
+                    .filterIsInstance<PlanPass.ClipMaskInitialize>().map { it.id.value }.toSet()) {
+                    "W4e ClipMaskInitialize recording recipes must cover exactly one final binding."
+                }
                 val extent = binding.copyExtentI32()
                 val childOwned = owned.own(GPUW4eNativeOwnedHandles())
                 encodeW4eNativePasses(device, generation, entries, payload, buffer(payload.vertexResourceId),
@@ -315,7 +325,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     { id -> graph.resources().single { it.id.value == id }.format == PlanTextureFormat.CoverageMask },
                     GPUPreparedNativeTextureViewOperand(views.getValue(binding.target), generation), null,
                     org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, extent.width, extent.height),
-                    commonSource = true, authority::consumerFor, { code, message -> IllegalArgumentException("$code: $message") })
+                    commonSource = true, authority::consumerFor, { code, message -> IllegalArgumentException("$code: $message") },
+                    clipMaskInitializeRecipesByPassId = clipMaskInitializeRecipes)
                     .map { native ->
                         val pass = graph.passes()[native.sourceStepIndex - 1]
                         native.pass.depthStencilTarget?.let { pathViews[native.sourceStepIndex] = it.view }
