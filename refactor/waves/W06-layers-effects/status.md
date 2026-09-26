@@ -652,3 +652,37 @@ JUnit par worker 133, native **UNKNOWN**. Aucun owner production n'a été modif
 Exclusions Task 3 : aucun GM, font, codec/format externe, dashboard/render,
 rebaseline, suite Skia globale, `jpg-color-cube` ou test d'infrastructure. Le
 worker 133 reste la limite native explicite, classée **UNKNOWN**.
+
+## Gate final du prérequis W6e — recette de bounds contextuelle
+
+La review Sol whole-branch a demandé trois corrections : sortie d'un Picture
+top-level avant réservation du parent, source physique finie d'un draw filtré
+dans Picture, et exclusion d'un restore `DST` non écrivant. La re-review Sol
+les a validées, puis a identifié un cas adjacent : un draw filtré `DST` dans
+une Picture inline pouvait être disjoint du parent désormais resserré et
+échouer en `w6b.filter.invalid_bounds`. Le témoin public
+`inlineFilteredDstOutsideWritingSiblingIsNoOpAndRecovers` a reproduit ce RED
+avant le correctif `202047bd9`. L'entrée Picture reste désormais dans le
+stream comme entrée élidée, sans composite physique ; la seconde re-review Sol
+ciblée accepte ce correctif sans nouveau finding Critical ou Important.
+
+Sur `202047bd9`, une vérification fraîche et sérialisée donne 8/8 JUnit
+pour `W6FilterBoundsRecipePictureTest`, 12/12 pour
+`W6FilterBoundsRecipeSurfacePixelTest`, 3/3 pour
+`W6cSpatialDagPictureTest` et 20/20 pour
+`W6dPictureFilterSurfacePixelTest`. Les deux compilations
+`:gpu-plan:compileKotlin` et `:kanvas:compileTestKotlin` sortent 0 ;
+`git diff --check` depuis W6d est propre. Chacun des quatre sélecteurs de
+test termine cependant avec un worker natif 133 après les assertions :
+**43/43 JUnit ciblés verts, statut global natif UNKNOWN**. La matrice plus
+large avant ce dernier correctif comptait 191/193 JUnit verts ; ses deux
+échecs connus sont le masque RRect et une assertion de test Picture14/schema8
+devenue obsolète face au writer Picture15/schema9 déjà présent sur W6d. Ce
+checkpoint ne prétend pas que cette matrice entière a été rejouée sur le
+dernier commit.
+
+La branche prérequis est `codex/w6e-filter-bounds-recipe`, stackée sur
+`codex/w6d-advanced-effects`. Les exclusions précédentes restent inchangées :
+aucun test d'infrastructure, GM, dashboard/render/rebaseline,
+`jpg-color-cube`, font ou codec externe n'a été exécuté. Aucun merge ni claim
+ISO n'est déduit de ces résultats.
