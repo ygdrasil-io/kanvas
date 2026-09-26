@@ -84,16 +84,32 @@ spécialisation renderer ne peut ajouter un type ou un slot non gelé.
 
 La charge d'un bundle programme vaut au minimum `4096` octets logiques,
 comme le lease W6d existant, ou la taille checked-I64 de son descriptor et
-de sa recette canonique si elle est supérieure. Un sampler consommé par une
-frame W6 reçoit aussi un lease logique de `4096` octets par slot gelé. Cette
-charge de frame est distincte du `byteSizeI64 = 0` de
+de sa recette canonique si elle est supérieure. Un sampler natif consommé
+par une frame W6 reçoit aussi un lease logique de `4096` octets par slot
+gelé, y compris dans la spécialisation W5a de destination-read. Le slot et
+son `PlanResourceId` sont émis par le planner avant freeze, même si le
+sampler natif n'est pas un `PlanResource` texture/buffer. Cette charge de
+frame est distincte du `byteSizeI64 = 0` de
 `PlanCacheResourceRequest.Sampler`, qui ne mesure pas l'objet natif conservé
-dans le cache de session W5h ;
-ce cache compte lui aussi `4096` octets logiques par sampler résident, sans
-prétendre mesurer sa taille driver. Sa clé canonique et son API ne changent
-pas ; les refus, évictions et leases W5h hors W6 demandent une préservation
-ciblée, car leur capacité résidente peut changer.
+dans le cache de session W5h. La cible finale de ce cache est `4096` octets
+logiques par sampler résident, sans prétendre mesurer sa taille driver ; sa
+clé canonique et son API ne changent pas. Dans ce lot, cette modification
+W5h et le témoin runtime positif sont différés : aucun effet enregistré
+public ne déclare actuellement de sampler, donc il n'existe ni entrée
+résidente positive ni test public B/B−1 légitime. Le refus public existant
+reste un témoin de préservation, pas une preuve positive.
 Les leases W6d existants sont réutilisés ou intégrés sans double charge.
+
+L'inventaire couvre toute la chaîne native W6, pas seulement le matérialiseur
+géométrique W6 : les bundles W4e délégués puis les spécialisations W5a
+`materializeW5aSourcePartitionV2` en font partie. Les recettes matériau sont
+calculées depuis la `MaterialPlanTable` et les sources typées scellées, non
+depuis un `MaterialPlanRef` nu ni depuis le WGSL produit tardivement. Une
+table fermée relie chaque site natif à owner/ordinal/recette/charge. Le
+dispatcher authentifie l'ensemble de cet inventaire avant la première
+allocation ; une autorité de consommation commune passe par W6/W4e/W5a et
+contrôle la dernière spécialisation. La projection budget du renderer
+additionne chaque lease opaque exactement une fois comme le planner.
 
 Le pic de frame additionne en I64 vérifié tous les slots physiques déclarés
 et ces leases opaques. Par défaut, leurs lifetimes couvrent la frame jusqu'à
@@ -139,7 +155,8 @@ La matrice minimale est :
 - le RRect clippé et les témoins W6b mask/shadow adjacents, après correction
   de l'oracle ;
 - une frontière B/B−1 pour un programme W6b, une pour W6c, une pour W6d
-  préservée et une pour le sampler runtime consommé par W6 ;
+  préservée et une pour un sampler natif W6 réellement consommé dans la
+  spécialisation W5a ; le sampler runtime W5h reste un gap identifié ;
 - un graphe public multi-familles borné dont le B est calculé depuis **ses
   propres** slots, charges et lifetimes, avec pixels, refus terminal, sentinel
   et récupération sur la même `Surface` ;
@@ -165,10 +182,12 @@ rebaseline, suite Skia globale, `jpg-color-cube`, tests d'infrastructure,
 frontend SkSL/WGSL arbitraire, F16/HDR positif, device-loss non observable et
 retrait legacy W8 restent hors périmètre.
 
-Ce lot est terminé lorsque l'oracle RRect et ses témoins voisins n'ont aucun
-échec JUnit, que toute ressource opaque de W6 §11 créée par la route admise
-a un owner et une réservation logique authentifiée avant matérialisation,
-que les nouvelles frontières B/B−1 et le graphe multi-familles public sont
-qualifiés, et que
-les reviews Sol ne laissent aucun finding Critical/Important. Il ne ferme ni
-la taille réelle opaque du driver, ni native133/134, ni la convergence GM/ISO.
+Ce lot partiel est terminé lorsque l'oracle RRect et ses témoins voisins
+n'ont aucun échec JUnit, que toute ressource opaque effectivement créée par
+la route W6 admise a un owner et une réservation logique authentifiée avant
+matérialisation, que les nouvelles frontières B/B−1 accessibles et le graphe
+multi-familles public sont qualifiés, et que les reviews Sol ne laissent
+aucun finding Critical/Important. W6 global reste **ouvert** tant qu'une
+voie publique positive à sampler runtime et la comptabilité résidente W5h
+ne sont pas spécifiées puis prouvées ; ce lot ne ferme pas davantage la
+taille réelle opaque du driver, native133/134 ou la convergence GM/ISO.
