@@ -40,9 +40,9 @@ internal fun w6aGeometryTemplate(packet: GPUDrawPacket, recipe: W6SolidRectHostR
     val origin = recipe.materialOriginDeviceI32
     val colorKey = frozen?.let { ".${it.red.toBits()}.${it.green.toBits()}.${it.blue.toBits()}.${it.alpha.toBits()}" }.orEmpty()
     return GPUW5aGeometryHostTemplateV1(packet.packetId.value,
-        "w6a.rect.v1.${recipe.site.ownerPassId.value}.${recipe.site.drawOrdinalI32}.${origin.xI32}.${origin.yI32}$colorKey", source, "vs_main", "fs_main",
+        "w6a.rect.v1.${recipe.site.ownerPassId.value}.${recipe.site.drawOrdinalI32}.${origin.x}.${origin.y}$colorKey", source, "vs_main", "fs_main",
         w6aColorTarget(recipe.blend).hostTargetV1(), layout, null, MaterialCoordinateSlotV1.FragmentPosition,
-        materialDevicePointWgsl = "fragment_position.xy + vec2<f32>(${origin.xI32}.0, ${origin.yI32}.0)")
+        materialDevicePointWgsl = "fragment_position.xy + vec2<f32>(${origin.x}.0, ${origin.y}.0)")
 }
 
 /** A legacy colour is already sealed into the picture stream and has no W5 uniform row. */

@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.plan
 
 import org.graphiks.math.color.ColorF32
+import org.graphiks.math.geometry.Point2I32
 
 /** Stable planner-owned location of one W6 SolidRect native geometry site. */
 public data class W6GeometrySiteKeyV1(
@@ -68,12 +69,6 @@ public enum class W6SolidRectCoordinateSlotV1 { FragmentPosition }
 /** The host bind-group ABI is fixed at group zero; its entry shape follows the frozen color mode. */
 public enum class W6SolidRectGroupZeroAbiV1 { UniformColor16, Empty }
 
-/** I32 material origin already selected with the final target mapping. */
-public data class W6SolidRectMaterialOriginI32V1(
-    public val xI32: Int,
-    public val yI32: Int,
-)
-
 /**
  * Immutable, renderer-neutral W6 SolidRect host recipe.  It contains every fact used to select
  * the fullscreen shader, group-zero layout, fixed-function blend, and material coordinate origin.
@@ -84,7 +79,7 @@ public data class W6SolidRectHostRecipeV1 internal constructor(
     public val family: W6SolidRectGeometryFamilyV1,
     public val colorMode: W6SolidRectColorModeV1,
     public val blend: BlendPlan,
-    public val materialOriginDeviceI32: W6SolidRectMaterialOriginI32V1,
+    public val materialOriginDeviceI32: Point2I32,
     public val target: W6SolidRectTargetV1,
     public val coordinateSlot: W6SolidRectCoordinateSlotV1,
     public val groupZeroAbi: W6SolidRectGroupZeroAbiV1,
@@ -120,7 +115,7 @@ public fun freezeW6SolidRectHostsV1(passes: List<PlanPass>): Map<W6GeometrySiteK
                 family = W6SolidRectGeometryFamilyV1.FullscreenTriangle,
                 colorMode = colorMode,
                 blend = solid.blend,
-                materialOriginDeviceI32 = W6SolidRectMaterialOriginI32V1(origin.x, origin.y),
+                materialOriginDeviceI32 = Point2I32(origin.x, origin.y),
                 target = W6SolidRectTargetV1.Rgba8UnormSrgbSingleSample,
                 coordinateSlot = W6SolidRectCoordinateSlotV1.FragmentPosition,
                 groupZeroAbi = if (colorMode is W6SolidRectColorModeV1.UniformColor16)
