@@ -118,9 +118,21 @@ class W6aLayerW4W5SurfacePixelTest {
 
     @Test
     fun `fractional AA Rect retains exact pixels and native evidence in a translated layer`() {
-        // This fixed AA sample is a public pixel contract. Keep it before Surface construction
-        // so it cannot inherit a planner or renderer decision.
-        val expected = rgba(0, 0, 0, 0) + rgba(228, 48, 69, 229) + rgba(239, 51, 73)
+        // This is the fixed public byte contract from the pre-2P1 fractional RRect witness
+        // directly above. At this sole raster row y=.5, the RRect bounds [-1, 2] and radius .25
+        // give -.75 <= .5 <= 1.75, so its analytic boundary is exactly the same vertical Rect
+        // boundary. Both shapes use the same opaque public RED and layer transform; this makes
+        // the RRect a separate, pre-existing oracle for the Rect route rather than an observed
+        // output of the recipe under test. Keep the literal before either Surface is constructed.
+        val expectedFromPreTaskRRectContract =
+            rgba(0, 0, 0, 0) + rgba(228, 48, 69, 229) + rgba(239, 51, 73)
+        val rrectControl = Surface(3, 1)
+        rrectControl.canvas {
+            saveLayer(RectF32.ofLTRB(1f, 0f, 3f, 1f))
+            drawRRect(RRectF32.of(RectF32.ofLTRB(1.1f, -1f, 4.1f, 2f), CornerRadiiF32.of(.25f)),
+                opaque(RED).copy(antiAlias = true))
+            restore()
+        }
         val surface = Surface(3, 1)
         surface.canvas {
             saveLayer(RectF32.ofLTRB(1f, 0f, 3f, 1f))
@@ -128,8 +140,11 @@ class W6aLayerW4W5SurfacePixelTest {
             restore()
         }
 
+        val reference = rrectControl.render()
         val actual = surface.render()
-        assertContentEquals(expected, actual.pixels)
+        assertContentEquals(expectedFromPreTaskRRectContract, reference.pixels)
+        assertContentEquals(reference.pixels, actual.pixels)
+        assertContentEquals(expectedFromPreTaskRRectContract, actual.pixels)
         assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
             actual.nativeEvidenceScopeKinds.toString())
     }

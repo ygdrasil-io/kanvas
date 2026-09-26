@@ -372,6 +372,9 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                         }
                                         frame.physical.w6AnalyticRectHostRecipe(site)
                                     }
+                                require(analyticRectRecipe == null || mapped != null) {
+                                    "W6 AnalyticRect host recipe requires its frozen CorePrimitive pipeline before allocation."
+                                }
                                 val frozenLegacyColor = when (val recipe = solidRectRecipe) {
                                     null -> draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1
                                     else -> recipe.colorMode is W6SolidRectColorModeV1.FrozenColor
@@ -390,7 +393,6 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     else geometryPipeline(mapped, layout, owned, template,
                                         if (maskMaterialSource) BlendPlan.LegacySrcOverV1 else null,
                                         maskMaterialSource && pass is PlanPass.StencilCover)
-                                require(analyticRectRecipe == null || mapped != null)
                                 val uniformPayload = binding?.let { frame.analyticUniform(packet) }
                                 val nativeUniform = data?.let { geometryBuffers.getValue(it.uniform) } ?: uniform
                                 if (data != null) {
