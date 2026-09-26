@@ -395,11 +395,30 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                             }
                                         } ?: error("W6 Point recipe shape differs from its packet.")
                                     }
+                                val preparedVerticesRecipe = (draw as? W5bVerticesDraw)
+                                    ?.takeIf { pass is PlanPass.RenderPass }
+                                    ?.let {
+                                        val site = W6GeometrySiteKeyV1(pass.id, drawOrdinalI32)
+                                        require(frame.preparedVerticesSite(packet) == site) {
+                                            "W6 prepared-vertices packet lost its frozen owner/ordinal."
+                                        }
+                                        frame.physical.w6PreparedVerticesHostRecipe(site).also { recipe ->
+                                            require(w6aPreparedVerticesPacketMatchesRecipe(packet, recipe)) {
+                                                "W6 prepared-vertices packet layout, uniform, or source differs from its frozen host recipe."
+                                            }
+                                            require(frame.template(packet)?.pipelineRecipeId == recipe.hostProgramIdentity.canonicalIdentity) {
+                                                "W6 prepared-vertices renderer template lost its frozen host program identity."
+                                            }
+                                        }
+                                    }
                                 require(corePrimitiveRecipe == null || mapped != null) {
                                     "W6 analytic CorePrimitive host recipe requires its frozen pipeline before allocation."
                                 }
                                 require(pointRecipe == null || mapped != null) {
                                     "W6 Point host recipe requires its frozen pipeline before allocation."
+                                }
+                                require(preparedVerticesRecipe == null || mapped == null) {
+                                    "W6 prepared-vertices host recipe must not select a CorePrimitive pipeline."
                                 }
                                 val pointUniformPayload = pointRecipe?.let { recipe ->
                                     val pointBinding = requireNotNull(binding) {
@@ -418,6 +437,24 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                     }
                                     payload
                                 }
+                                val preparedVerticesUniformPayload = preparedVerticesRecipe?.let { recipe ->
+                                    val verticesBinding = requireNotNull(binding) {
+                                        "W6 prepared-vertices host recipe requires its physical geometry binding before allocation."
+                                    }
+                                    val semantic = packet.semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.Vertices
+                                        ?: error("W6 prepared-vertices host recipe requires a Vertices payload before allocation.")
+                                    val payload = frame.analyticUniform(packet)
+                                    require(recipe.uniformAbi == W6PreparedVerticesHostUniformAbiV1.DrawUniform64 &&
+                                        recipe.groupZeroAbi == W6PreparedVerticesHostGroupZeroAbiV1.DrawUniform64 &&
+                                        payload.size == 64 && verticesBinding.uniformBytesI64 == 64L &&
+                                        payload.size.toLong() == verticesBinding.uniformBytesI64 &&
+                                        verticesBinding.verticesUploadPayload?.canonicalIdentity == recipe.payloadCanonicalIdentity &&
+                                        semantic.artifact.vertexBytesForUpload().size.toLong() == verticesBinding.vertexBytesI64 &&
+                                        (semantic.artifact.indexBytesForUpload()?.size?.toLong() ?: 0L) == verticesBinding.indexBytesI64) {
+                                        "W6 prepared-vertices host recipe layout or DrawUniform64 differs from its sealed physical binding."
+                                    }
+                                    payload
+                                }
                                 val frozenLegacyColor = when (val recipe = solidRectRecipe) {
                                     null -> draw.materialAuthority is PlanDrawMaterialAuthority.LegacyColorV1
                                     else -> recipe.colorMode is W6SolidRectColorModeV1.FrozenColor
@@ -431,12 +468,13 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 val data = binding?.data
                                 val verticesSemantic = packet.semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.Vertices
                                 val pipeline = if (mapped == null) pipeline(requireNotNull(template).sourceWgsl, layout,
-                                    w6aColorTarget(if (maskMaterialSource) BlendPlan.LegacySrcOverV1 else solidRectRecipe?.blend ?: draw.blend), owned, template,
+                                    w6aColorTarget(if (maskMaterialSource) BlendPlan.LegacySrcOverV1 else solidRectRecipe?.blend
+                                        ?: preparedVerticesRecipe?.blend ?: draw.blend), owned, template,
                                     verticesSemantic?.artifact)
                                     else geometryPipeline(mapped, layout, owned, template,
                                         if (maskMaterialSource) BlendPlan.LegacySrcOverV1 else null,
                                         maskMaterialSource && pass is PlanPass.StencilCover)
-                                val uniformPayload = binding?.let { pointUniformPayload ?: frame.analyticUniform(packet) }
+                                val uniformPayload = binding?.let { pointUniformPayload ?: preparedVerticesUniformPayload ?: frame.analyticUniform(packet) }
                                 val nativeUniform = data?.let { geometryBuffers.getValue(it.uniform) } ?: uniform
                                 if (data != null) {
                                     require(!frozenLegacyColor)

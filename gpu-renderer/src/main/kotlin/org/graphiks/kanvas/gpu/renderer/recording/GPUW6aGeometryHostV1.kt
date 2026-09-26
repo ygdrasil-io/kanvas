@@ -5,6 +5,7 @@ import org.graphiks.kanvas.gpu.plan.*
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.execution.MaterialCoordinateSlotV1
+import org.graphiks.kanvas.gpu.renderer.execution.preparedVerticesDrawLayoutV6
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
@@ -142,6 +143,60 @@ internal fun w6aPointGeometryTemplate(packet: GPUDrawPacket, recipe: W6PointHost
         materialCoordinateSlot = MaterialCoordinateSlotV1.FragmentPosition,
         materialDevicePointWgsl = "fragment_position.xy + vec2<f32>(${origin.x}.0, ${origin.y}.0)",
     )
+}
+
+/** Mechanically translates the sealed Prepared Vertices selector; packet facts only authenticate it. */
+internal fun w6aPreparedVerticesGeometryTemplate(packet: GPUDrawPacket,
+    recipe: W6PreparedVerticesHostRecipeV1): GPUW5aGeometryHostTemplateV1 {
+    require(w6aPreparedVerticesPacketMatchesRecipe(packet, recipe)) {
+        "W6 prepared-vertices packet differs from its frozen host recipe."
+    }
+    val template = requireNotNull(sealW5aGeometryHostTemplateV1(packet))
+    require(template.target == w6aColorTarget(recipe.blend).hostTargetV1() &&
+        template.groupZeroLayout.entries == preparedVerticesDrawLayoutV6().hostLayoutV1().entries &&
+        template.primitiveEncodedInput == (recipe.primitiveAlpha == W6PreparedVerticesHostPrimitiveAlphaV1.VertexColor)) {
+        "W6 prepared-vertices renderer template differs from its frozen layout, blend, or primitive-alpha selector."
+    }
+    val origin = recipe.materialOriginDeviceI32
+    return template.copy(pipelineRecipeId = recipe.hostProgramIdentity.canonicalIdentity,
+        materialDevicePointWgsl = "input.position.xy + vec2<f32>(${origin.x}.0, ${origin.y}.0)")
+}
+
+/** Authenticates the renderer packet against planner-owned layout, uniform, blend, and source facts. */
+internal fun w6aPreparedVerticesPacketMatchesRecipe(packet: GPUDrawPacket,
+    recipe: W6PreparedVerticesHostRecipeV1): Boolean {
+    val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.Vertices ?: return false
+    val artifact = semantic.artifact
+    val provenance = semantic.materialPlanProvenance ?: return false
+    val layout = recipe.layout
+    val attributes = layout.attributes().map { attribute -> when (attribute) {
+        W6PreparedVerticesHostAttributeV1.Position -> "position"
+        W6PreparedVerticesHostAttributeV1.Color -> "color"
+        W6PreparedVerticesHostAttributeV1.TexCoord -> "texcoord"
+    } }
+    val offsets = layout.offsetsBytesI32().entries.associate { (attribute, offset) ->
+        when (attribute) {
+            W6PreparedVerticesHostAttributeV1.Position -> "position"
+            W6PreparedVerticesHostAttributeV1.Color -> "color"
+            W6PreparedVerticesHostAttributeV1.TexCoord -> "texcoord"
+        } to offset
+    }
+    val sourceTable = provenance.sourcePlanTable
+    val expectedTopology = when (recipe.topology) {
+        W6PreparedVerticesHostTopologyV1.TriangleList -> "Triangles"
+        W6PreparedVerticesHostTopologyV1.TriangleStrip -> "TriangleStrip"
+    }
+    val expectedIndex = when (recipe.indexWidth) {
+        W6PreparedVerticesHostIndexWidthV1.None -> null
+        W6PreparedVerticesHostIndexWidthV1.Uint16 -> "uint16"
+        W6PreparedVerticesHostIndexWidthV1.Uint32 -> "uint32"
+    }
+    return semantic.targetFormat == "rgba8unorm-srgb" && semantic.topologyIdentity.sourceLabel == expectedTopology &&
+        artifact.layout.attributes == attributes && artifact.layout.offsets == offsets &&
+        artifact.layout.strideBytes == layout.strideBytesI32 && artifact.indexFormat == expectedIndex &&
+        semantic.primitiveColorPresent == (recipe.primitiveAlpha == W6PreparedVerticesHostPrimitiveAlphaV1.VertexColor) &&
+        semantic.w5bFinalBlendPlan == recipe.blend && provenance.ref == recipe.source.materialRef &&
+        recipe.source.authenticates(sourceTable)
 }
 
 /** Authenticates the packet bytes against the frozen Point geometry before native allocation. */

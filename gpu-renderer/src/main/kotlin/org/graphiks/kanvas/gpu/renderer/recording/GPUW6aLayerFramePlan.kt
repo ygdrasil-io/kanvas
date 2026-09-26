@@ -143,6 +143,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     private val solidRectSitesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W6GeometrySiteKeyV1>()
     /** Each W6 analytic CorePrimitive packet retains its final planner ordinal/site for native consumption. */
     private val corePrimitiveSitesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W6GeometrySiteKeyV1>()
+    /** Each W6 Prepared Vertices packet retains its final planner ordinal/site for native consumption. */
+    private val preparedVerticesSitesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W6GeometrySiteKeyV1>()
     private val analyticUniforms = mutableMapOf<GPUDrawPacketID, ByteArray>()
     private val geometryPipelines = mutableMapOf<GPUDrawPacketID, GPUWgpu4kCorePrimitivePipelineMapping.Mapped>()
     internal fun maskShaderMaterial(binding: FilterPassOperationV1.MaskShaderMaterialBindingV1.Planned):
@@ -405,8 +407,16 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                                 templates[packet.packetId] = w6aPointGeometryTemplate(packet, recipe, key)
                             }
                             else if (draw is W5bVerticesDraw) {
-                                templates[packet.packetId] = requireNotNull(sealW5aGeometryHostTemplateV1(packet)).copy(
-                                    materialDevicePointWgsl = "input.position.xy + vec2<f32>(${targetOrigin.x}.0, ${targetOrigin.y}.0)")
+                                val owner = requireNotNull(packetPass) {
+                                    "W6 prepared-vertices host recipe only admits RenderPass draws."
+                                }
+                                val site = W6GeometrySiteKeyV1(owner.id, drawOrdinalI32)
+                                val recipe = physical.w6PreparedVerticesHostRecipe(site)
+                                require(recipe.site == site && w6aPreparedVerticesPacketMatchesRecipe(packet, recipe)) {
+                                    "W6 prepared-vertices packet layout, uniform, or source differs from its frozen host recipe."
+                                }
+                                require(preparedVerticesSitesByPacket.put(packet, site) == null)
+                                templates[packet.packetId] = w6aPreparedVerticesGeometryTemplate(packet, recipe)
                                 analyticUniforms[packet.packetId] = preparedVerticesDrawUniformBytes(
                                     packet.semanticPayload as GPUDrawSemanticPayload.Vertices, null)
                             }
@@ -533,6 +543,10 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
             corePrimitiveSitesByPacket.size == physical.w6CorePrimitiveHostRecipes().size) {
             "Every frozen W6 analytic CorePrimitive host recipe must project to exactly one packet."
         }
+        require(preparedVerticesSitesByPacket.values.toSet() == physical.w6PreparedVerticesHostRecipes().keys &&
+            preparedVerticesSitesByPacket.size == physical.w6PreparedVerticesHostRecipes().size) {
+            "Every frozen W6 prepared-vertices host recipe must project to exactly one packet."
+        }
     }
 
     internal fun taskList(): GPUTaskList = GPUTaskList(request.frameId, seal, listOf(recording), graph.id.value,
@@ -574,6 +588,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     internal fun solidRectSite(packet: GPUDrawPacket): W6GeometrySiteKeyV1? = solidRectSitesByPacket[packet]
     /** Planner site retained with the packet; native code must not infer it from an analytic draw. */
     internal fun corePrimitiveSite(packet: GPUDrawPacket): W6GeometrySiteKeyV1? = corePrimitiveSitesByPacket[packet]
+    /** Planner site retained with the packet; native code must not infer it from prepared upload bytes. */
+    internal fun preparedVerticesSite(packet: GPUDrawPacket): W6GeometrySiteKeyV1? = preparedVerticesSitesByPacket[packet]
     internal fun validatesW4eFragments(frame: GPUFramePlan): Boolean = validates(frame) && w4eAuthorities.all { (binding, _) ->
         val renders = frame.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().filter { it.w6aPassV1?.id in binding.graphPassIds() }
         val authority = renders.firstOrNull()?.drawPackets?.singleOrNull()?.w4ePreparedFrameAuthority

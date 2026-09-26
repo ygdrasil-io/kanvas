@@ -39,6 +39,8 @@ internal class SourcePhysicalConstructionV1(
     val w6SolidRectHostRecipes: Map<W6GeometrySiteKeyV1, W6SolidRectHostRecipeV1> = emptyMap(),
     /** Final W6 non-W4e CorePrimitive host choices, attached beside the already sealed physical source. */
     val w6CorePrimitiveHostRecipes: Map<W6GeometrySiteKeyV1, W6CorePrimitiveHostRecipeV1> = emptyMap(),
+    /** Final W6 prepared-vertices host choices; upload bytes remain in their sealed render-ir payload. */
+    val w6PreparedVerticesHostRecipes: Map<W6GeometrySiteKeyV1, W6PreparedVerticesHostRecipeV1> = emptyMap(),
 )
 
 internal fun requireW6cColorUniformWindow(offsetBytesI64: Long, capacityBytesI64: Long, dynamicBytesI64: Long) {
@@ -90,6 +92,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     programLeases: List<W6dProgramLeaseV1>,
     solidRectHostRecipes: Map<W6GeometrySiteKeyV1, W6SolidRectHostRecipeV1>,
     corePrimitiveHostRecipes: Map<W6GeometrySiteKeyV1, W6CorePrimitiveHostRecipeV1>,
+    preparedVerticesHostRecipes: Map<W6GeometrySiteKeyV1, W6PreparedVerticesHostRecipeV1>,
 ) {
     private val resources = immutableList(resources)
     private val caches = immutableList(cacheBindings)
@@ -100,6 +103,7 @@ public class PlanPhysicalLayoutV1 private constructor(
     private val spatialCaches = immutableList(spatialCaches)
     private val solidRectHosts = java.util.Collections.unmodifiableMap(LinkedHashMap(solidRectHostRecipes))
     private val corePrimitiveHosts = java.util.Collections.unmodifiableMap(LinkedHashMap(corePrimitiveHostRecipes))
+    private val preparedVerticesHosts = java.util.Collections.unmodifiableMap(LinkedHashMap(preparedVerticesHostRecipes))
     private val slots = immutableList(buildList {
         resources.forEachIndexed { indexI32, resource ->
             add(PlanPhysicalSlotV1(indexI32, resource.id, resource.byteSize))
@@ -143,6 +147,10 @@ public class PlanPhysicalLayoutV1 private constructor(
     public fun w6CorePrimitiveHostRecipe(site: W6GeometrySiteKeyV1): W6CorePrimitiveHostRecipeV1 =
         requireNotNull(corePrimitiveHosts[site]) { "Missing frozen W6 CorePrimitive host recipe for ${site.ownerPassId.value}/${site.drawOrdinalI32}." }
     public fun w6CorePrimitiveHostRecipes(): Map<W6GeometrySiteKeyV1, W6CorePrimitiveHostRecipeV1> = corePrimitiveHosts
+    /** Exact W6 Prepared Vertices recipe sealed for this final graph site. */
+    public fun w6PreparedVerticesHostRecipe(site: W6GeometrySiteKeyV1): W6PreparedVerticesHostRecipeV1 =
+        requireNotNull(preparedVerticesHosts[site]) { "Missing frozen W6 prepared-vertices host recipe for ${site.ownerPassId.value}/${site.drawOrdinalI32}." }
+    public fun w6PreparedVerticesHostRecipes(): Map<W6GeometrySiteKeyV1, W6PreparedVerticesHostRecipeV1> = preparedVerticesHosts
 
     internal companion object {
         fun seal(graph: RenderGraphConstruction, source: SourcePhysicalConstructionV1): PlanPhysicalLayoutV1 {
@@ -163,6 +171,13 @@ public class PlanPhysicalLayoutV1 private constructor(
             source.w6CorePrimitiveHostRecipes.forEach { (site, recipe) ->
                 require(recipe.site == site && recipe == expectedCorePrimitiveHosts.getValue(site)) {
                     "W6 CorePrimitive host recipe changed after final pass binding."
+                }
+            }
+            val expectedPreparedVerticesHosts = freezeW6PreparedVerticesHostsV1(graph.passes(), requireNotNull(graph.materialTable))
+            require(source.w6PreparedVerticesHostRecipes.keys == expectedPreparedVerticesHosts.keys)
+            source.w6PreparedVerticesHostRecipes.forEach { (site, recipe) ->
+                require(recipe.site == site && recipe == expectedPreparedVerticesHosts.getValue(site)) {
+                    "W6 prepared-vertices host recipe changed after final pass binding."
                 }
             }
             // A frozen Clear/DrawColor Picture entry owns a LegacyColor operand directly.  It
@@ -268,6 +283,19 @@ public class PlanPhysicalLayoutV1 private constructor(
                     "W6 Point host recipe or physical source changed after final pass binding."
                 }
             }
+            source.w6PreparedVerticesHostRecipes.values.forEach { recipe ->
+                val render = graph.passes().filterIsInstance<PlanPass.RenderPass>().single { it.id == recipe.site.ownerPassId }
+                val draw = render.draws()[recipe.site.drawOrdinalI32] as W5bVerticesDraw
+                val payload = requireNotNull(draw.sealedUploadPayloadOrNull())
+                val binding = geometry.getValue(render.id)
+                require(payload.canonicalIdentity == recipe.payloadCanonicalIdentity &&
+                    binding.verticesUploadPayload?.canonicalIdentity == recipe.payloadCanonicalIdentity &&
+                    binding.vertexStrideBytesI32 == recipe.layout.strideBytesI32 && binding.uniformBytesI64 == 64L &&
+                    binding.vertexCountI32 == payload.vertexCountI32 && binding.indexCountI32 == (payload.indexCountI32 ?: 0) &&
+                    binding.indexElementBytesI32 == (payload.indexElementBytesI32 ?: 0) && draw.blend == recipe.blend) {
+                    "W6 prepared-vertices host recipe or physical source changed after final pass binding."
+                }
+            }
             source.w4eGeometry.forEach { lane ->
                 require(lane.payload.matchesDeclaredResources(rows))
                 require(rows.single { it.id == lane.target }.copyExtent() == lane.copyExtentI32())
@@ -336,7 +364,8 @@ public class PlanPhysicalLayoutV1 private constructor(
             }
             require(spatialCaches.map { it.outputResourceId }.distinct().size == spatialCaches.size)
             val layout = PlanPhysicalLayoutV1(rows, source.caches, uniforms, geometry, source.w4eGeometry, pictures, spatialCaches,
-                graph.w6dProgramLeases(), source.w6SolidRectHostRecipes, source.w6CorePrimitiveHostRecipes)
+                graph.w6dProgramLeases(), source.w6SolidRectHostRecipes, source.w6CorePrimitiveHostRecipes,
+                source.w6PreparedVerticesHostRecipes)
             require(layout.slots.map { it.resourceId }.distinct().size == layout.slots.size)
             require(layout.programSlots().map { it.slotI32 }.distinct().size == layout.programSlots().size)
             val frozenPrograms = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
