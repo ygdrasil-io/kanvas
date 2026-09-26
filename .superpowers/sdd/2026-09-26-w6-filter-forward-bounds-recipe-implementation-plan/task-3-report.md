@@ -63,9 +63,13 @@ error, not a production defect; the corrected public B is 316.
 
 `backdropAndPreviousKeepSaveThenPostChildOrder` creates both expected pixel
 arrays before either Surface: backdrop uses an input-dependent matrix which
-halves the save-time parent's red channel in linear space, yielding exact
-backdrop pixels `[176,56,162,255, 210,51,73,255]`; filtered
-`initWithPrevious` sees its blue child before its filter is applied.
+maps the save-time parent's red channel to green. Its child is a distinct
+half-opacity black draw, so x=0 changes while retaining a visible backdrop
+contribution. The independently calculated snapshot pixels are
+`[177,134,76,255, 177,180,76,255]`; the previous branch is
+`[212,45,92,255, 241,53,106,255]`, proving its filter observes the child after
+the children. A child-contaminated late-snapshot counterfactual has x=0 green
+100 rather than 134, and the test asserts the two pre-Surface arrays differ.
 
 Both cold and warm Picture B−1 refusals now discard and re-record on their
 respective same surfaces, then assert the exact `[blue, transparent]` pixels
@@ -163,6 +167,26 @@ Focused preservation remained green in JUnit XML:
 | `W6bBudgetRecoverySurfacePixelTest` | 2/0/0/0 | exit 1; 133/UNKNOWN |
 | `W6dBackdropPreviousSurfacePixelTest` | 9/0/0/0 | exit 1; 133/UNKNOWN |
 
+No production owner changed in this round.
+
+### Sol review correction round 2
+
+The prior opaque-child fixture could hide the backdrop precisely where the
+child drew. The strengthened public fixture uses a black source at opacity .5,
+so the same x=0 contains red parent `.5`, save-time matrix-green `.25`, and
+child black `.25`; x=1 is the no-child backdrop result. All operands use the
+independent sRGB linear/encode helpers before `Surface`. The explicit
+counterfactual applies the same matrix to a parent already contaminated by the
+child: its x=0 green is 100 rather than the required save-time 134. We did not
+temporarily mutate a production snapshot owner because the public current-path
+test and this disjoint algebra establish the discrimination without risking a
+shared planner regression. Both backdrop and `initWithPrevious` surfaces also
+discard/re-record an exact blue recovery with Render+Readback.
+
+`rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6FilterBoundsRecipeSurfacePixelTest'`
+printed all ten methods `PASSED` (XML `10/0/0/0`), then worker 133/`UNKNOWN`.
+`rtk ./gradlew :kanvas:test --tests 'org.graphiks.kanvas.surface.W6dBackdropPreviousSurfacePixelTest'`
+printed all nine methods `PASSED` (XML `9/0/0/0`), then worker 133/`UNKNOWN`.
 No production owner changed in this round.
 
 `rtk ./gradlew :gpu-plan:compileKotlin :kanvas:compileTestKotlin` exited 0

@@ -109,17 +109,31 @@ class W6FilterBoundsRecipeSurfacePixelTest {
     /** The backdrop snapshots its parent at save; filtered previous is filtered only after its child. */
     @Test
     fun backdropAndPreviousKeepSaveThenPostChildOrder() {
-        val red = ColorARGB.of(255, 239, 51, 73)
-        val blue = ColorARGB.of(255, 17, 61, 211)
-        // The matrix consumes the parent snapshot: it halves parent red in linear space, then
-        // the .5 layer opacity composites it over that parent. Thus x=1 has .75 parent-linear
-        // red, calculated without quantizing an intermediate pixel before either Surface exists.
-        val backdropExpected = halfSourceOver(red, blue) + rgba(
-            encodeLinear(decodeSrgb(red.red) * .75), red.green, red.blue,
-        )
-        val previousExpected = halfSourceOver(red, blue) + rgba(239, 51, 73)
+        val red = ColorARGB.of(255, 241, 53, 106)
+        val childBlack = ColorARGB.Black
+        val recoveryBlue = ColorARGB.Blue
+        val greenFromParent = ColorARGB.of(255, 0, red.red, 0)
+        // The matrix maps the saved red parent to green. The .5 black child still leaves that
+        // backdrop visible at x=0; then the .5 layer opacity restores it over red. A late
+        // snapshot that included the child would map red+black instead and is observably distinct.
+        val backdropExpected = backdropChildThenHalfRestore(red, greenFromParent, childBlack) +
+            halfSourceOver(red, greenFromParent)
+        val lateMatrixInput = halfSourceOverColor(red, childBlack)
+        val childContaminatedLateSnapshot = backdropChildThenHalfRestore(
+            red, ColorARGB.of(255, 0, lateMatrixInput.red, 0), childBlack,
+        ) + halfSourceOver(red, greenFromParent)
+        assertTrue(!backdropExpected.contentEquals(childContaminatedLateSnapshot),
+            "A child-contaminated late backdrop must differ from the save-time snapshot oracle.")
+        val previousExpected = previousChildThenHalfRestore(red, childBlack) + rgba(red.red, red.green, red.blue)
+        val recoveryExpected = rgba(recoveryBlue.red, recoveryBlue.green, recoveryBlue.blue) +
+            rgba(recoveryBlue.red, recoveryBlue.green, recoveryBlue.blue)
         val parentDependentBackdrop = ImageFilter.ColorFilter(ColorFilter.Matrix(
-            ColorMatrixF32.ofIdentity().apply { setScale(.5f, 1f, 1f, 1f) },
+            ColorMatrixF32.of(floatArrayOf(
+                0f, 0f, 0f, 0f, 0f,
+                1f, 0f, 0f, 0f, 0f,
+                0f, 0f, 0f, 0f, 0f,
+                0f, 0f, 0f, 1f, 0f,
+            )),
         ))
         val halfOpacity = ImageFilter.RuntimeEffect(
             requireNotNull(RuntimeEffect.registered("kanvas.runtime.image-opacity", 1)),
@@ -133,19 +147,29 @@ class W6FilterBoundsRecipeSurfacePixelTest {
                 backdrop = parentDependentBackdrop,
                 paint = Paint(imageFilter = halfOpacity, antiAlias = false),
             ))
-            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(blue, antiAlias = false))
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(
+                shader = Shader.Opacity(Shader.SolidColor(childBlack), .5f), antiAlias = false,
+            ))
             restore()
         }
         assertRenderAndReadback(backdrop, backdropExpected)
+        backdrop.discardRecordedOperations()
+        backdrop.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 2f, 1f), Paint(recoveryBlue, antiAlias = false)) }
+        assertRenderAndReadback(backdrop, recoveryExpected)
 
         val previous = Surface(2, 1)
         previous.canvas {
             drawRect(RectF32.ofLTRB(0f, 0f, 2f, 1f), Paint(red, antiAlias = false))
             saveLayer(SaveLayerRec(initWithPrevious = true, paint = Paint(imageFilter = halfOpacity, antiAlias = false)))
-            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(blue, antiAlias = false))
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(
+                shader = Shader.Opacity(Shader.SolidColor(childBlack), .5f), antiAlias = false,
+            ))
             restore()
         }
         assertRenderAndReadback(previous, previousExpected)
+        previous.discardRecordedOperations()
+        previous.canvas { drawRect(RectF32.ofLTRB(0f, 0f, 2f, 1f), Paint(recoveryBlue, antiAlias = false)) }
+        assertRenderAndReadback(previous, recoveryExpected)
     }
 
     /**
@@ -350,10 +374,25 @@ class W6FilterBoundsRecipeSurfacePixelTest {
         else W6bImageBlurCpuOracle.assertNear(expected, actual.pixels, tolerance)
     }
 
-    private fun halfSourceOver(destination: ColorARGB, source: ColorARGB): UByteArray = rgba(
+    private fun halfSourceOver(destination: ColorARGB, source: ColorARGB): UByteArray =
+        halfSourceOverColor(destination, source).let { color -> rgba(color.red, color.green, color.blue) }
+
+    private fun halfSourceOverColor(destination: ColorARGB, source: ColorARGB): ColorARGB = ColorARGB.of(255,
         encodeLinear((decodeSrgb(source.red) + decodeSrgb(destination.red)) * .5),
         encodeLinear((decodeSrgb(source.green) + decodeSrgb(destination.green)) * .5),
         encodeLinear((decodeSrgb(source.blue) + decodeSrgb(destination.blue)) * .5),
+    )
+
+    private fun backdropChildThenHalfRestore(parent: ColorARGB, backdrop: ColorARGB, child: ColorARGB): UByteArray = rgba(
+        encodeLinear(decodeSrgb(parent.red) * .5 + decodeSrgb(backdrop.red) * .25 + decodeSrgb(child.red) * .25),
+        encodeLinear(decodeSrgb(parent.green) * .5 + decodeSrgb(backdrop.green) * .25 + decodeSrgb(child.green) * .25),
+        encodeLinear(decodeSrgb(parent.blue) * .5 + decodeSrgb(backdrop.blue) * .25 + decodeSrgb(child.blue) * .25),
+    )
+
+    private fun previousChildThenHalfRestore(parent: ColorARGB, child: ColorARGB): UByteArray = rgba(
+        encodeLinear(decodeSrgb(parent.red) * .75 + decodeSrgb(child.red) * .25),
+        encodeLinear(decodeSrgb(parent.green) * .75 + decodeSrgb(child.green) * .25),
+        encodeLinear(decodeSrgb(parent.blue) * .75 + decodeSrgb(child.blue) * .25),
     )
 
     private fun decodeSrgb(encoded: Int): Double = (encoded / 255.0).let { value ->

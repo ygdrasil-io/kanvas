@@ -603,8 +603,12 @@ inclut son target direct supplémentaire : `B=316 = root 8 + cinq targets 1×1
 (20) + 32 + 256`; les replays froid/chaud du même Picture passent à B et
 refusent à B−1, puis chacun discard/re-record sur sa propre `Surface` et
 vérifie pixels exacts avec Render+Readback. Le témoin de snapshot emploie une
-matrice dépendante du parent et vérifie backdrop au save (pixels
-`[176,56,162,255, 210,51,73,255]`) et `initWithPrevious` après l'enfant.
+matrice dépendante du parent qui mappe son rouge vers vert et un enfant noir
+semi-transparent : le même pixel enfant conserve une contribution backdrop
+visible; backdrop au save est `[177,134,76,255, 177,180,76,255]`, alors que le
+contre-factuel snapshot tardif contaminé par l'enfant a vert 100 au premier
+pixel. `initWithPrevious` reste vérifié après l'enfant avec
+`[212,45,92,255, 241,53,106,255]`, puis les deux surfaces recover après discard.
 
 Les XML frais des deux nouvelles classes sont `10/0/0/0` (Surface) et
 `3/0/0/0` (Picture). Chaque invocation Gradle quitte néanmoins avec le worker
@@ -637,6 +641,13 @@ rejoués sont `W6bBudgetRecoverySurfacePixelTest` `2/0/0/0` et
 `W6dBackdropPreviousSurfacePixelTest` `9/0/0/0`. Chacune de ces invocations
 termine ensuite par worker 133, donc native **UNKNOWN**; aucun owner de
 production n'a changé pour cette correction.
+
+Correction round 2 de la review Sol : l'ancien enfant opaque masquait backdrop
+au pixel commun; le nouveau témoin le rend observablement causal avec l'enfant
+noir à alpha .5 et un contre-factuel algébrique disjoint calculé avant Surface.
+Le selector `W6FilterBoundsRecipeSurfacePixelTest` est `10/0/0/0` et
+`W6dBackdropPreviousSurfacePixelTest` `9/0/0/0`; chaque Gradle se termine après
+JUnit par worker 133, native **UNKNOWN**. Aucun owner production n'a été modifié.
 
 Exclusions Task 3 : aucun GM, font, codec/format externe, dashboard/render,
 rebaseline, suite Skia globale, `jpg-color-cube` ou test d'infrastructure. Le
