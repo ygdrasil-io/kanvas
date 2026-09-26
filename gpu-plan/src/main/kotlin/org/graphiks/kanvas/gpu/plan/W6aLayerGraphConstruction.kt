@@ -2206,6 +2206,11 @@ internal class W6aLayerGraphConstruction(
                     val occurrence = entry.filterOccurrence
                     if (occurrence == null) {
                         appendPlannedDraw(entry, entryTarget)
+                    } else if (!pictureBlend(requireNotNull(entry.source.sourceDraw)).compositionFacts.writesParentDevice) {
+                        // Early aggregate bounds already sealed this Picture draw as non-writing.
+                        // Retain the stream entry and its captured position, but do not attempt a
+                        // disjoint terminal composite after the parent has correctly shrunk.
+                        null
                     } else {
                         val coverage = allocatePreparedCoverage(occurrence, entryTarget)
                         filterCursor.passOrdinalI32 = passes.size

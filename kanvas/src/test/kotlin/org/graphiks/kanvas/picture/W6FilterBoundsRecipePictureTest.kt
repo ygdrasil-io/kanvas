@@ -9,6 +9,7 @@ import kotlin.test.assertNotSame
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.TileMode
@@ -24,6 +25,42 @@ import org.junit.jupiter.api.Test
 
 /** Public Picture memory/wire witnesses for W6 contextual direct-filter bounds. */
 class W6FilterBoundsRecipePictureTest {
+    /**
+     * A filtered DST entry remains in the inline Picture stream even though its disjoint terminal
+     * cannot write the shrunken parent. The subsequent sibling is still emitted in recorded order.
+     */
+    @Test
+    fun inlineFilteredDstOutsideWritingSiblingIsNoOpAndRecovers() {
+        val full = RectF32.ofLTRB(0f, 0f, 6f, 1f)
+        val sibling = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val disjoint = RectF32.ofLTRB(5f, 0f, 6f, 1f)
+        val expected = UByteArray(24).also { it[2] = 255u; it[3] = 255u }
+        // Root 6x1 (24), the parent and the four finite filtered Picture targets (5x1x1x4),
+        // frame/two material rows (48), and aligned readback (256): B = 348.
+        val budgetB = listOf(24L, Math.multiplyExact(5L, 4L), 16L, 32L, 256L).fold(0L, Math::addExact)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(full).apply {
+                drawRect(disjoint, Paint(ColorARGB.Red, blendMode = BlendMode.DST,
+                    imageFilter = ImageFilter.Offset(0f, 0f), antiAlias = false))
+                drawRect(sibling, Paint(ColorARGB.Blue, antiAlias = false))
+            }
+        }.finishRecordingAsPicture()
+        fun record(surface: Surface, candidate: Picture) = surface.canvas {
+            saveLayer()
+            drawPicture(candidate)
+            restore()
+        }
+
+        for (candidate in listOf(picture, assertNotNull(Picture.fromByteArray(picture.toByteArray())))) {
+            val surface = Surface(6, 1, config = RenderConfig(frameLocalBudgetBytes = budgetB))
+            record(surface, candidate)
+            assertPixelsAndScopes(surface, expected)
+            surface.discardRecordedOperations()
+            surface.canvas { drawRect(sibling, Paint(ColorARGB.Blue, antiAlias = false)) }
+            assertPixelsAndScopes(surface, expected)
+        }
+    }
+
     /** The parent must reserve the tiny Picture's terminal output before its own allocation. */
     @Test
     fun tinyTopLevelPictureKeepsParentContentSizedBudget() {
