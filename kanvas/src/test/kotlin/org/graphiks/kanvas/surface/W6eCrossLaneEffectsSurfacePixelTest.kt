@@ -119,8 +119,15 @@ class W6eCrossLaneEffectsSurfacePixelTest {
         )
         val colorFilterExpected = ubyteArrayOf(0u, 0u, 0u, 54u)
         val composeExpected = ubyteArrayOf(0u, 0u, 0u, 0u, 0u, 0u, 0u, 54u)
-        val mergeExpected = ubyteArrayOf(136u, 0u, 0u, 255u)
+        // The source is opaque white.  Two half-alpha black SRC_OVER passes attenuate each
+        // linear-sRGB channel to the independently derived encoded value 136.  With an empty
+        // contextual source their alpha is 128 + 128 * (1 - 128 / 255) = 191.749, or 192.
+        val mergeExpected = ubyteArrayOf(136u, 136u, 136u, 255u)
         val blendExpected = rgba(ColorARGB.Blue)
+        // SRC_IN scales opaque blue by the contextual background alpha.  A half-opaque white
+        // source therefore yields linear-premul blue .5, whose sRGB OETF is 188 at alpha 128.
+        val blendHalfSourceExpected = ubyteArrayOf(0u, 0u, 188u, 128u)
+        val halfOpaqueWhite = ColorARGB.of(128, 255, 255, 255)
         val dilateExpected = opaqueRed(0, 1, 2, width = 3)
         val erodeExpected = opaqueRed(2, width = 5)
         val samplingSource = samplingSourcePixels()
@@ -150,7 +157,10 @@ class W6eCrossLaneEffectsSurfacePixelTest {
                     Paint(ColorARGB.White, antiAlias = false))
             }
         }
-        val red = ImageFilter.ColorFilter(ColorFilter.Blend(ColorARGB.Red, BlendMode.SRC))
+        // This omitted input must bind to the immediate nested layer.  A root/blank binding
+        // makes Blend's half-alpha variation transparent and makes Merge black/translucent,
+        // instead of the independently declared blue/gray results below.
+        val contextualSource = ImageFilter.ColorFilter(ColorFilter.Matrix(ColorMatrixF32.ofIdentity()))
         val blueFilter = ImageFilter.ColorFilter(ColorFilter.Blend(ColorARGB.Blue, BlendMode.SRC))
         val sharedBlack = ImageFilter.ColorFilter(ColorFilter.Blend(ColorARGB.of(128, 0, 0, 0), BlendMode.SRC))
 
@@ -173,7 +183,9 @@ class W6eCrossLaneEffectsSurfacePixelTest {
                 drawOpaque(0f, 1f, ColorARGB.Red)
             },
             FamilyCase("Blend", 1, 1, blendExpected, null,
-                ImageFilter.Blend(BlendMode.SRC_IN, red, blueFilter)) { drawOpaque(0f, 1f, ColorARGB.White) },
+                SourceVariation(blendHalfSourceExpected) { drawOpaque(0f, 1f, halfOpaqueWhite) },
+                ImageFilter.Blend(BlendMode.SRC_IN, contextualSource, blueFilter),
+                { drawOpaque(0f, 1f, ColorARGB.White) }),
             FamilyCase("Dilate", 3, 1, dilateExpected, null, ImageFilter.Dilate(1f, 0f)) {
                 drawOpaque(1f, 2f, ColorARGB.Red)
             },
@@ -200,9 +212,9 @@ class W6eCrossLaneEffectsSurfacePixelTest {
                 ImageFilter.Tile(RectF32.ofLTRB(0f, 0f, 2f, 1f), RectF32.ofLTRB(0f, 0f, 4f, 1f))) {
                 drawOpaque(0f, 1f, ColorARGB.Blue)
             },
-            FamilyCase("Merge", 1, 1, mergeExpected, null, ImageFilter.Merge(listOf(red, sharedBlack, sharedBlack))) {
-                drawOpaque(0f, 1f, ColorARGB.White)
-            },
+            FamilyCase("Merge", 1, 1, mergeExpected, null,
+                null, ImageFilter.Merge(listOf(contextualSource, sharedBlack, sharedBlack)),
+                { drawOpaque(0f, 1f, ColorARGB.White) }),
             FamilyCase("DisplacementMap", 3, 1, displacementExpected, 1,
                 ImageFilter.DisplacementMap(ColorChannel.R, ColorChannel.G, 1f, ImageFilter.Offset(0f, 0f))) {
                 drawSamplingSource()
@@ -223,19 +235,25 @@ class W6eCrossLaneEffectsSurfacePixelTest {
     }
 
     private fun assertCaseThroughW4W5NestedLayer(family: FamilyCase) {
-        val result = Surface(family.width, family.height).also { surface ->
+        fun renderNested(draw: Canvas.() -> Unit): RenderResult = Surface(family.width, family.height).also { surface ->
             surface.canvas {
                 saveLayer()
                 saveLayer(SaveLayerRec(paint = Paint(imageFilter = family.filter, antiAlias = false)))
-                family.draw(this)
+                draw(this)
                 restore()
                 restore()
             }
         }.render()
 
+        val result = renderNested(family.draw)
         family.maxChannelDelta?.let { delta -> assertNear(family.expected, result.pixels, delta, family.name) }
             ?: assertContentEquals(family.expected, result.pixels, family.name)
         assertRenderAndReadback(result)
+        family.sourceVariation?.let { variation ->
+            val variationResult = renderNested(variation.draw)
+            assertContentEquals(variation.expected, variationResult.pixels, "${family.name} contextual source variation")
+            assertRenderAndReadback(variationResult)
+        }
     }
 
     private fun assertNear(expected: UByteArray, actual: UByteArray, maxDelta: Int, name: String) {
@@ -301,7 +319,23 @@ class W6eCrossLaneEffectsSurfacePixelTest {
         val height: Int,
         val expected: UByteArray,
         val maxChannelDelta: Int?,
+        val sourceVariation: SourceVariation?,
         val filter: ImageFilter,
+        val draw: Canvas.() -> Unit,
+    ) {
+        constructor(
+            name: String,
+            width: Int,
+            height: Int,
+            expected: UByteArray,
+            maxChannelDelta: Int?,
+            filter: ImageFilter,
+            draw: Canvas.() -> Unit,
+        ) : this(name, width, height, expected, maxChannelDelta, null, filter, draw)
+    }
+
+    private data class SourceVariation(
+        val expected: UByteArray,
         val draw: Canvas.() -> Unit,
     )
 
