@@ -247,6 +247,21 @@ internal class W6aLayerGraphConstruction(
             parent: W6bSourceGeometryV1,
             filterOwnerSource: W6bSourceGeometryV1?,
         ): PictureAggregateDomain {
+            val terminalClip = aggregate.source.recordedInnerClipWithoutCull().terminalDeferredClip()
+            if ((terminalClip as? ClipStackNode.DeviceRect)?.copyBounds()?.isEmpty == true) {
+                // A finite empty intersect owns no child texels.  In particular, it must not
+                // ask the Picture cull (or child transform) to project through a singular
+                // matrix before the aggregate's typed terminal no-op is emitted below.
+                val domain = parent.copyDeviceBoundsI32()
+                return PictureAggregateDomain(
+                    parent.mapping.copyLocalToDeviceF64(),
+                    parent.mapping,
+                    domain,
+                    null,
+                    domain,
+                    domain,
+                )
+            }
             (aggregate.owner as? PictureStreamAggregateDraftOwnerV1.FilterPicture)?.let { owner ->
                 val localToDevice = owner.source.sourceDraw?.let { carrier ->
                     val carrierToSource = composeInOrderF64(owner.source.outerPictures().map { it.transform } + carrier.transform)
@@ -297,7 +312,7 @@ internal class W6aLayerGraphConstruction(
             )
             val parentDomain = parent.copyDeviceBoundsI32()
             val enclosing = composeInOrderF64(outerPictures.map { it.transform })
-            val deferredDemand = when (val clip = aggregate.source.recordedInnerClipWithoutCull()) {
+            val deferredDemand = when (val clip = terminalClip) {
                 ClipStackNode.Empty, is ClipStackNode.Operations -> parentDomain.copy()
                 is ClipStackNode.DeviceRect -> clip.copyBounds().let { bounds ->
                     enclosing.mapRectBoundsF64OrNull(RectF64(bounds.left.toDouble(), bounds.top.toDouble(),
