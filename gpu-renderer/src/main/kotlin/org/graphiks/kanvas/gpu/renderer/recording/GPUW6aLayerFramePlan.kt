@@ -372,6 +372,9 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                                     (draw is AnalyticRRectDraw && recipe is W6AnalyticRRectHostRecipeV1)) {
                                     "W6 analytic CorePrimitive host recipe shape changed after final pass binding."
                                 }
+                                require(w6aCorePrimitivePacketMatchesRecipe(packet, draw, recipe)) {
+                                    "W6 analytic CorePrimitive packet geometry differs from its frozen host recipe."
+                                }
                                 require(corePrimitiveSitesByPacket.put(packet, site) == null)
                                 val key = w6aCorePrimitiveStructuralKey(recipe, targetBounds)
                                 val mapping = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key)

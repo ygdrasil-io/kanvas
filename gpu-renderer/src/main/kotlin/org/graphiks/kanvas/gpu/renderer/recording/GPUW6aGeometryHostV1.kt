@@ -7,6 +7,9 @@ import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.execution.MaterialCoordinateSlotV1
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveStructuralBlend
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveStructuralClip
 import org.graphiks.kanvas.gpu.renderer.planning.W5bBlendPlanLowerer
@@ -96,6 +99,47 @@ internal fun w6aCorePrimitiveGeometryTemplate(packet: GPUDrawPacket, recipe: W6C
         materialDevicePointWgsl = "fragment_position.xy + vec2<f32>(${origin.x}.0, ${origin.y}.0)",
     )
 }
+
+/** Validates the packet's immutable shape payload against the final RenderPass recipe. */
+internal fun w6aCorePrimitivePacketMatchesRecipe(packet: GPUDrawPacket, draw: PlanDraw,
+    recipe: W6CorePrimitiveHostRecipeV1): Boolean {
+    val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive ?: return false
+    if (semantic.coverageMode != GPUCorePrimitiveCoverageMode.ScalarAA ||
+        semantic.scissorBounds.left != recipe.scissor.left || semantic.scissorBounds.top != recipe.scissor.top ||
+        semantic.scissorBounds.right != recipe.scissor.right || semantic.scissorBounds.bottom != recipe.scissor.bottom) return false
+    return when (recipe) {
+        is W6AnalyticRectHostRecipeV1 -> {
+            val geometry = semantic.geometry as? GPUCorePrimitiveGeometry.Rect ?: return false
+            draw is AnalyticRectDraw && sameRectF32(draw.copyDeviceBounds(), recipe.deviceBounds) &&
+                geometry.left.sameF32(recipe.deviceBounds.left) && geometry.top.sameF32(recipe.deviceBounds.top) &&
+                geometry.right.sameF32(recipe.deviceBounds.right) && geometry.bottom.sameF32(recipe.deviceBounds.bottom) &&
+                draw.copyRasterBounds() == recipe.rasterBounds && draw.copyScissor() == recipe.scissor
+        }
+        is W6AnalyticRRectHostRecipeV1 -> {
+            val geometry = semantic.geometry as? GPUCorePrimitiveGeometry.RRect ?: return false
+            draw is AnalyticRRectDraw && draw.origin == recipe.drawOrigin &&
+                sameRRectF32(draw.copyDeviceShape(), recipe.deviceShape) &&
+                geometry.left.sameF32(recipe.deviceShape.rect.left) && geometry.top.sameF32(recipe.deviceShape.rect.top) &&
+                geometry.right.sameF32(recipe.deviceShape.rect.right) && geometry.bottom.sameF32(recipe.deviceShape.rect.bottom) &&
+                geometry.radii.size == 8 && geometry.radii.zip(rrectRadii(recipe.deviceShape)).all { (actual, expected) -> actual.sameF32(expected) } &&
+                draw.copyRasterBounds() == recipe.rasterBounds && draw.copyScissor() == recipe.scissor
+        }
+    }
+}
+
+private fun sameRectF32(left: org.graphiks.math.geometry.RectF32, right: org.graphiks.math.geometry.RectF32): Boolean =
+    left.left.sameF32(right.left) && left.top.sameF32(right.top) &&
+        left.right.sameF32(right.right) && left.bottom.sameF32(right.bottom)
+
+private fun sameRRectF32(left: org.graphiks.math.geometry.RRectF32, right: org.graphiks.math.geometry.RRectF32): Boolean =
+    sameRectF32(left.rect, right.rect) && rrectRadii(left).zip(rrectRadii(right)).all { (a, b) -> a.sameF32(b) }
+
+private fun rrectRadii(shape: org.graphiks.math.geometry.RRectF32): List<Float> = listOf(
+    shape.topLeft.x, shape.topLeft.y, shape.topRight.x, shape.topRight.y,
+    shape.bottomRight.x, shape.bottomRight.y, shape.bottomLeft.x, shape.bottomLeft.y,
+)
+
+private fun Float.sameF32(other: Float): Boolean = toRawBits() == other.toRawBits()
 
 /** A legacy colour is already sealed into the picture stream and has no W5 uniform row. */
 private fun w6aFrozenColorShader(color: org.graphiks.math.color.ColorF32): String {

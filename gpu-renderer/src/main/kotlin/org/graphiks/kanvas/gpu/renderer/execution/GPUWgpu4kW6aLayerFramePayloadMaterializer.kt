@@ -377,6 +377,9 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                                 (draw is AnalyticRRectDraw && recipe is W6AnalyticRRectHostRecipeV1)) {
                                                 "W6 analytic CorePrimitive recipe shape differs from its packet."
                                             }
+                                            require(w6aCorePrimitivePacketMatchesRecipe(packet, draw, recipe)) {
+                                                "W6 analytic CorePrimitive packet geometry differs from its frozen host recipe."
+                                            }
                                         }
                                     }
                                 require(corePrimitiveRecipe == null || mapped != null) {
@@ -425,8 +428,9 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                         // Expand only this existing source draw to that target; W5
                                         // then shades the material once while FilterCoverage owns
                                         // the original shape coverage independently.
-                                        is AnalyticRectDraw -> packW4RasterGeometry(listOf(sourceBounds ?: draw.copyRasterBounds())).let { it.vertices to it.indices }
-                                        is AnalyticRRectDraw -> packW4RasterGeometry(listOf(sourceBounds ?: draw.copyRasterBounds())).let { it.vertices to it.indices }
+                                        is AnalyticRectDraw, is AnalyticRRectDraw -> packW4RasterGeometry(listOf(
+                                            sourceBounds ?: requireNotNull(corePrimitiveRecipe).rasterBounds,
+                                        )).let { it.vertices to it.indices }
                                         is W5bPointDraw -> sourceBounds?.let { bounds ->
                                             fullMaskMaterialPointGeometry(draw, bounds)
                                         } ?: (draw.copyVerticesF32() to draw.copyIndicesI32())
