@@ -297,8 +297,10 @@ private class NativeSiteEncodingWriterV1(family: NativeSiteRecipeFamilyV1) {
                 text("$name.formulaIdentity", value.formulaIdentity)
                 enum("$name.coverage", value.coverage)
                 long("$name.requiredDestinationVersion", value.requiredDestinationVersion.valueI64)
-                value.snapshotResource?.let { text("$name.snapshotResource", it.value) }
-                    ?: text("$name.snapshotResource", "none")
+                value.snapshotResource?.let {
+                    text("$name.snapshotResource.present", "true")
+                    text("$name.snapshotResource.value", it.value)
+                } ?: text("$name.snapshotResource.present", "false")
                 int("$name.compositionAbi", value.compositionAbiI32)
             }
         }
