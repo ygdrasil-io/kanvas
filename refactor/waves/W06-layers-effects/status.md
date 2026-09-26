@@ -26,6 +26,16 @@ sentinel et, après `discardRecordedOperations()`, rend le vert attendu sur la
 même `Surface`. Les attentes sont définies avant `PictureRecorder`/`Surface`;
 les témoins n'inspectent aucune clé de cache, lease, plan ou backend.
 
+Ce B/B−1 est une preuve **Crop-only** : la matrice Task 5 actuelle est une
+liste privée de 22 cas dynamiques, à dimensions, inputs et ressources
+distincts, sans `Picture`/graphe agrégé réutilisable. Les formules publiques
+W6b, recette de bounds et W6d ne décrivent chacune que leur propre graphe
+fermé ; elles ne déterminent pas les slots/lifetimes ni les charges de
+target/program/lease du pic commun des 22 familles. Il n'existe donc pas ici
+de B all-22 dérivable avant `PictureRecorder`/`Surface` sans essai empirique
+ou inspection du planner, deux voies interdites par W6e. Cette preuve agrégée
+reste bloquée ; aucun B n'est inventé et aucun claim all-family n'est formulé.
+
 Les sept compilations prescrites sortent 0 : `:math:geometry:compileKotlinJvm`,
 `:math:matrix:compileKotlinJvm`, `:render-ir:compileKotlin`,
 `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin`,

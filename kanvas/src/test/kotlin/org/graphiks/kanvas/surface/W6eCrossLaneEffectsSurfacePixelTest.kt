@@ -52,13 +52,34 @@ class W6eCrossLaneEffectsSurfacePixelTest {
 
     @Test
     fun backdropPreviousAndDestinationReadKeepTheirSpecifiedOrder() {
-        // This complete result is calculated before the Surface is created.  Backdrop wins over
-        // previous for the first child: red DIFFERENCE green.  The next child starts from that
-        // restored parent with filtered initWithPrevious, so only x=1 changes to blue DIFFERENCE
-        // green.  SRC restores make an accidental root read or reordered child observable.
-        val expected = opaqueDifference(ColorARGB.Red, ColorARGB.Green) +
-            opaqueDifference(ColorARGB.Blue, ColorARGB.Green) + rgba(ColorARGB.Green)
-        val identity = ImageFilter.ColorFilter(ColorFilter.Matrix(ColorMatrixF32.ofIdentity()))
+        // These bytes are calculated before the Surface is created.  Backdrop wins over
+        // previous for the first child: red DIFFERENCE green.  The next child initializes from
+        // that restored parent.  Blue DIFFERENCE first changes x=1 against that retained green,
+        // then the W6d 3x1 convolution samples the completed parent-plus-child row.  Reading
+        // root content, sampling before the child, or replacing the convolution with identity
+        // changes the exact result.
+        val afterBackdropChild = rgbaRow(listOf(
+            opaqueDifference(ColorARGB.Red, ColorARGB.Green),
+            rgba(ColorARGB.Green),
+            rgba(ColorARGB.Green),
+        ))
+        val parentPlusChild = afterBackdropChild.copyOf().also { pixels ->
+            opaqueDifference(ColorARGB.Blue, pixels.copyOfRange(4, 8)).copyInto(pixels, 4)
+        }
+        val expected = W6eAdvancedSamplingCpuOracle.convolution3x1Clamp(
+            parentPlusChild,
+            floatArrayOf(1f, 0f, 0f),
+            kernelOffsetX = 1,
+        )
+        val previousSampling = ImageFilter.MatrixConvolution(
+            SizeF32.of(3f, 1f),
+            floatArrayOf(1f, 0f, 0f),
+            1f,
+            0f,
+            Vector2F32(1f, 0f),
+            TileMode.CLAMP,
+            true,
+        )
 
         val result = Surface(3, 1).also { surface ->
             surface.canvas {
@@ -72,7 +93,7 @@ class W6eCrossLaneEffectsSurfacePixelTest {
                 restore()
                 saveLayer(SaveLayerRec(
                     initWithPrevious = true,
-                    paint = Paint(imageFilter = identity, blendMode = BlendMode.SRC, antiAlias = false),
+                    paint = Paint(imageFilter = previousSampling, blendMode = BlendMode.SRC, antiAlias = false),
                 ))
                 drawOpaque(1f, 2f, ColorARGB.Blue, BlendMode.DIFFERENCE)
                 restore()
@@ -81,6 +102,33 @@ class W6eCrossLaneEffectsSurfacePixelTest {
 
         assertContentEquals(expected, result.pixels)
         assertRenderAndReadback(result)
+    }
+
+    @Test
+    fun composeBlurAndOffsetBindTheOuterNodeToTheInnerIntermediate() {
+        // Both expected images are calculated through the family-local Blur oracle before a
+        // Surface exists.  The inner Offset moves the impulse before the outer Blur samples it;
+        // binding the outer node to the raw layer source would instead leave each impulse one
+        // pixel to the left.  The second source mutation makes that wrong binding independently
+        // observable rather than depending on one fixed impulse location.
+        val firstExpected = W6eBlurShadowCpuOracle.blurOpaqueWhiteImpulse(7, 1, 1, 0)
+        val secondExpected = W6eBlurShadowCpuOracle.blurOpaqueWhiteImpulse(7, 1, 2, 0)
+        val filter = ImageFilter.Compose(
+            ImageFilter.Blur(1f, 1f, TileMode.DECAL),
+            ImageFilter.Offset(1f, 0f),
+        )
+
+        val first = renderNestedFilter(7, 1, filter) {
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.White, antiAlias = false))
+        }
+        assertNear(firstExpected, first.pixels, 12, "Compose Blur Offset first source")
+        assertRenderAndReadback(first)
+
+        val second = renderNestedFilter(7, 1, filter) {
+            drawRect(RectF32.ofLTRB(1f, 0f, 2f, 1f), Paint(ColorARGB.White, antiAlias = false))
+        }
+        assertNear(secondExpected, second.pixels, 12, "Compose Blur Offset source mutation")
+        assertRenderAndReadback(second)
     }
 
     @Test
@@ -235,15 +283,9 @@ class W6eCrossLaneEffectsSurfacePixelTest {
     }
 
     private fun assertCaseThroughW4W5NestedLayer(family: FamilyCase) {
-        fun renderNested(draw: Canvas.() -> Unit): RenderResult = Surface(family.width, family.height).also { surface ->
-            surface.canvas {
-                saveLayer()
-                saveLayer(SaveLayerRec(paint = Paint(imageFilter = family.filter, antiAlias = false)))
-                draw(this)
-                restore()
-                restore()
-            }
-        }.render()
+        fun renderNested(draw: Canvas.() -> Unit): RenderResult = renderNestedFilter(
+            family.width, family.height, family.filter, draw,
+        )
 
         val result = renderNested(family.draw)
         family.maxChannelDelta?.let { delta -> assertNear(family.expected, result.pixels, delta, family.name) }
@@ -255,6 +297,21 @@ class W6eCrossLaneEffectsSurfacePixelTest {
             assertRenderAndReadback(variationResult)
         }
     }
+
+    private fun renderNestedFilter(
+        width: Int,
+        height: Int,
+        filter: ImageFilter,
+        draw: Canvas.() -> Unit,
+    ): RenderResult = Surface(width, height).also { surface ->
+        surface.canvas {
+            saveLayer()
+            saveLayer(SaveLayerRec(paint = Paint(imageFilter = filter, antiAlias = false)))
+            draw(this)
+            restore()
+            restore()
+        }
+    }.render()
 
     private fun assertNear(expected: UByteArray, actual: UByteArray, maxDelta: Int, name: String) {
         assertTrue(expected.size == actual.size, "$name expected=${expected.size} actual=${actual.size}")
@@ -285,6 +342,15 @@ class W6eCrossLaneEffectsSurfacePixelTest {
     private fun opaqueDifference(source: ColorARGB, destination: ColorARGB): UByteArray = rgba(
         difference(source.red, destination.red), difference(source.green, destination.green), difference(source.blue, destination.blue),
     )
+
+    private fun opaqueDifference(source: ColorARGB, destination: UByteArray): UByteArray {
+        require(destination.size == 4)
+        return rgba(
+            difference(source.red, destination[0].toInt()),
+            difference(source.green, destination[1].toInt()),
+            difference(source.blue, destination[2].toInt()),
+        )
+    }
 
     private fun difference(source: Int, destination: Int): Int {
         fun decode(value: Int): Double = (value / 255.0).let { encoded ->
