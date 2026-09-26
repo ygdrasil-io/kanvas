@@ -27,6 +27,55 @@ import org.junit.jupiter.api.Test
 
 /** Public Render+Readback witnesses for W6's pre-reservation contextual filter recipe. */
 class W6FilterBoundsRecipeSurfacePixelTest {
+    /** DST restores retain their own filter source, but cannot enlarge the writing parent's target. */
+    @Test
+    fun nonWritingChildLayerKeepsWritingSiblingBudgetAndRecovers() {
+        val full = RectF32.ofLTRB(0f, 0f, 6f, 1f)
+        val unit = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val expected = UByteArray(24).also { it[2] = 255u; it[3] = 255u }
+        // Root 24, parent/child/coverage/shaded/Offset five 1x1 RGBA8 targets 20,
+        // frame row 16, two solid-color material rows 32, aligned readback 256: B=348.
+        val budgetB = listOf(24L, Math.multiplyExact(5L, 4L), 16L, 32L, 256L).fold(0L, Math::addExact)
+        fun record(surface: Surface) = surface.canvas {
+            saveLayer()
+            drawRect(unit, Paint(ColorARGB.Blue, antiAlias = false))
+            saveLayer(SaveLayerRec(paint = Paint(blendMode = BlendMode.DST,
+                imageFilter = ImageFilter.Offset(0f, 0f), antiAlias = false)))
+            drawRect(RectF32.ofLTRB(5f, 0f, 6f, 1f), Paint(ColorARGB.Red, antiAlias = false))
+            restore()
+            restore()
+        }
+        val admitted = Surface(6, 1, config = RenderConfig(frameLocalBudgetBytes = budgetB))
+        record(admitted)
+        assertRenderAndReadback(admitted, expected)
+        val refused = Surface(6, 1, config = RenderConfig(frameLocalBudgetBytes = budgetB - 1L))
+        record(refused)
+        val sentinel = UByteArray(24) { 0x5au }
+        val before = sentinel.copyOf()
+        val failure = assertFailsWith<IllegalStateException> { refused.readPixels(full, sentinel) }
+        assertTrue(failure.message?.startsWith("w6b.filter.frame_budget_exceeded:") == true,
+            failure.message ?: "missing W6 budget diagnostic")
+        assertContentEquals(before, sentinel)
+        refused.discardRecordedOperations()
+        refused.canvas { drawRect(unit, Paint(ColorARGB.Blue, antiAlias = false)) }
+        assertRenderAndReadback(refused, expected)
+    }
+
+    @Test
+    fun disjointNonWritingUnfilteredChildRetainsValidRestore() {
+        val expected = UByteArray(24).also { it[2] = 255u; it[3] = 255u }
+        val surface = Surface(6, 1)
+        surface.canvas {
+            saveLayer()
+            drawRect(RectF32.ofLTRB(0f, 0f, 1f, 1f), Paint(ColorARGB.Blue, antiAlias = false))
+            saveLayer(SaveLayerRec(paint = Paint(blendMode = BlendMode.DST, antiAlias = false)))
+            drawRect(RectF32.ofLTRB(5f, 0f, 6f, 1f), Paint(ColorARGB.Red, antiAlias = false))
+            restore()
+            restore()
+        }
+        assertRenderAndReadback(surface, expected)
+    }
+
     /**
      * A full 2x1 output clip is deliberately larger than the 1x1 DECAL Crop content.  B is
      * derived before any Surface exists: root 2x1 RGBA8 (8), four 1x1 RGBA8 targets (16:

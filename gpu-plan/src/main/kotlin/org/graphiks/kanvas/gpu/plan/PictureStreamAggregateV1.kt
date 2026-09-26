@@ -675,6 +675,10 @@ internal class PictureStreamAggregateDiscoveryV1(
         emptyList(),
     )
 
+    /** Discover once with local symbols; frame identities are assigned in emission order. */
+    fun prepareRoot(scene: SceneSnapshot, commandIndexI32: Int, draw: DrawNode): PictureStreamAggregateDraftV1 =
+        PictureStreamAggregateDiscoveryV1(positiveOccurrences, 0).root(scene, commandIndexI32, draw)
+
     private fun build(
         scene: SceneSnapshot,
         commandIndexI32: Int,
@@ -796,7 +800,7 @@ internal class PictureStreamAggregateDiscoveryV1(
         capturedNodeId, node, occurrence, knownContentDeviceI32, sourceDomainDeviceI32, contentDeviceF64)
 
     /** Assign the existing cursors to a prepared tree, without reading its scenes again. */
-    fun publishFilterRoot(prepared: PictureStreamAggregateDraftV1): PictureStreamAggregateDraftV1 {
+    fun publishRoot(prepared: PictureStreamAggregateDraftV1): PictureStreamAggregateDraftV1 {
         val aggregateBase = nextAggregateI32
         val occurrenceBase = nextPictureOccurrenceI32
         val commandBase = nextFrameCommandI32

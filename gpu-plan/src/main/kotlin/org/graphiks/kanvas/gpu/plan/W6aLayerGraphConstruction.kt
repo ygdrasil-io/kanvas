@@ -241,6 +241,7 @@ internal class W6aLayerGraphConstruction(
             val knownContentDeviceI32: RectI32?,
             val demandDeviceI32: RectI32,
             val sourceDeviceI32: RectI32,
+            val recipe: W6bContextualFilterRecipeV1? = null,
         )
         fun pictureAggregateDomain(
             aggregate: PictureStreamAggregateDraftV1,
@@ -329,13 +330,16 @@ internal class W6aLayerGraphConstruction(
                 ))
             // A spatial no-op requests no source texels.  The aggregate still needs a non-empty
             // transaction target, so retain its cull rectangle without turning null into demand.
-            val source = W6bFilterGraphConstruction.reverseInputDemand(aggregate.filterOccurrence, demand, reverseMapping)
+            val recipe = aggregate.filterOccurrence?.let {
+                W6bFilterGraphConstruction.bindOccurrenceRecipe(it, demand, reverseMapping)
+            }
+            val source = (if (recipe == null) demand else recipe.copyRequiredInputDeviceI32())
                 ?: cull
             val mapping = LayerMappingF64.ofOrNull(localToDevice, Point2I32(source.left, source.top))
                 ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
                     W6bFilterDiagnostics.InvalidBounds, "Picture evaluation mapping is non-invertible.",
                 ))
-            return PictureAggregateDomain(localToDevice, mapping, cull, null, demand, source)
+            return PictureAggregateDomain(localToDevice, mapping, cull, null, demand, source, recipe)
         }
 
         fun pictureColorBounds(
@@ -427,6 +431,7 @@ internal class W6aLayerGraphConstruction(
             return PreparedPictureRestore(descriptor.paint?.color?.alphaNormalized ?: 1f, colorFilter, blend)
         }
         class PreparedPictureFacts {
+            var terminalOutputDeviceI32: RectI32? = null
             val domains = java.util.IdentityHashMap<FilterOccurrenceSourceV1, PictureAggregateDomain>()
             val lanes = java.util.IdentityHashMap<FilterOccurrenceSourceV1, Pair<OccurrenceSourceInputV1, SourceDeferredRenderConstructionV4>>()
             val coverages = java.util.IdentityHashMap<W6bFilterGraphConstruction.PositiveOccurrence, W6bRecipeSourceV1>()
@@ -435,6 +440,15 @@ internal class W6aLayerGraphConstruction(
             val masks = java.util.IdentityHashMap<W6bFilterGraphConstruction.PositiveOccurrence, W6bEvaluatedFilterRecipeV1>()
             val images = java.util.IdentityHashMap<W6bFilterGraphConstruction.PositiveOccurrence, W6bEvaluatedFilterRecipeV1>()
             val colors = mutableMapOf<Pair<FilterOccurrenceSourceV1, PictureStreamEntryIdI32>, RectI32?>()
+        }
+        fun pictureBlend(draw: DrawNode): BlendPlan = requireNotNull(FinalBlendPlanner.plan(
+            draw.blend, CoveragePlan.FullOrScissor, SamplePlan.SingleSample,
+            PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1(),
+        )) { "${W6aPlanDiagnostics.UnsupportedChild}: Picture blend" }
+        fun pictureWrittenOutput(draw: DrawNode, produced: RectI32?, desired: RectI32): RectI32? = when {
+            !pictureBlend(draw).compositionFacts.writesParentDevice -> null
+            pictureBlend(draw).finalRestoreAffectsTransparentBlackV1(null) -> desired.copy()
+            else -> produced?.let { intersect(it, desired) }
         }
         val preparedPictureFacts = java.util.IdentityHashMap<PictureStreamAggregateDraftOwnerV1.FilterPicture, PreparedPictureFacts>()
         lateinit var preparePictureFacts: (PictureStreamAggregateDraftV1, W6bSourceGeometryV1, W6bSourceGeometryV1?) -> PreparedPictureFacts
@@ -519,7 +533,8 @@ internal class W6aLayerGraphConstruction(
             fun sourceFacts(source: W6bSourceGeometryV1) = W6bFilterSourceFactsV1(source.copyDeviceBoundsI32(),
                 source.copyKnownContentDeviceI32(), source.copyDesiredOutputDeviceI32() ?: source.copyDeviceBoundsI32(), source.mapping)
             fun evaluate(occurrence: W6bFilterGraphConstruction.PositiveOccurrence?, raw: W6bRecipeSourceV1,
-                maskDraft: W6bPreparedMaskRecipeV1? = null): RectI32? {
+                maskDraft: W6bPreparedMaskRecipeV1? = null,
+                recipe: W6bContextualFilterRecipeV1? = null): RectI32? {
                 if (occurrence == null) return raw.copyKnownContentDeviceI32()
                 facts.coverages[occurrence] = raw
                 val mask = occurrence.mask?.let {
@@ -531,7 +546,7 @@ internal class W6aLayerGraphConstruction(
                 }
                 val image = occurrence.root?.let {
                     val desired = shaded.copyDesiredOutputDeviceI32() ?: shaded.copyDeviceBoundsI32()
-                    W6bFilterGraphConstruction.bindOccurrenceRecipe(occurrence, desired, shaded.mapping).evaluate(
+                    (recipe ?: W6bFilterGraphConstruction.bindOccurrenceRecipe(occurrence, desired, shaded.mapping)).evaluate(
                         W6bFilterSourceFactsV1(shaded.copyDeviceBoundsI32(), shaded.copyKnownContentDeviceI32(),
                             desired, shaded.mapping, { bound, context -> prepareFilterPicture(occurrence, bound, context) }),
                         runtimeCatalog).also { facts.images[occurrence] = it }
@@ -546,18 +561,29 @@ internal class W6aLayerGraphConstruction(
                 values.forEach { entry ->
                     val produced: RectI32? = when (entry) {
                         is PictureStreamEntryDraftV1.Draw -> {
-                            val raw = pictureGeometry(domain, source.mapping.copyLocalToDeviceF64())
+                            val provisional = pictureGeometry(domain, source.mapping.copyLocalToDeviceF64())
+                            val rasterLane = preparePictureDrawLane(entry, provisional, filterOwner, root, entry.filterOccurrence != null)
+                            val raster = RenderGraph.visualDraws(rasterLane.second.passes()).singleOrNull()?.let { draw ->
+                                intersect(w6aRasterBoundsI32(draw), w6aScissorI32(draw))
+                            }?.translateCheckedOrNull(Vector2I32(domain.left, domain.top))?.let { intersect(it, domain) }
+                            val recipe = entry.filterOccurrence?.let {
+                                W6bFilterGraphConstruction.bindOccurrenceRecipe(it, domain, provisional.mapping)
+                            }
+                            // Reverse demand selects texels from the finite draw raster; its
+                            // logical halo must not move the physical CLAMP edge.
+                            val sourceDomain = if (recipe != null && raster != null)
+                                intersect(raster, recipe.copyRequiredInputDeviceI32() ?: raster) ?: raster else domain
+                            val raw = pictureGeometry(sourceDomain, source.mapping.copyLocalToDeviceF64(),
+                                raster?.let { intersect(it, sourceDomain) }, desired = domain)
                             val mask = entry.filterOccurrence?.takeIf { it.mask != null }?.let {
                                 W6bFilterGraphConstruction.prepareMaskRecipe(it, sourceFacts(raw))
                             }
                             val laneDomain = mask?.outputGeometry ?: raw
-                            val lane = preparePictureDrawLane(entry, laneDomain, filterOwner, root, entry.filterOccurrence != null)
+                            val lane = if (laneDomain.copyDeviceBoundsI32() == domain) rasterLane else
+                                preparePictureDrawLane(entry, laneDomain, filterOwner, root, entry.filterOccurrence != null)
                             facts.lanes[entry.source] = lane
-                            val raster = RenderGraph.visualDraws(lane.second.passes()).singleOrNull()?.let(::w6aRasterBoundsI32)
-                                ?.translateCheckedOrNull(Vector2I32(laneDomain.originDeviceI32.x, laneDomain.originDeviceI32.y))
-                                ?.let { intersect(it, domain) }
-                            val actual = raw.withSymbol(raw.symbol, knownContentDeviceI32 = raster, producedOutputDeviceI32 = raster)
-                            evaluate(entry.filterOccurrence, actual, mask)
+                            pictureWrittenOutput(requireNotNull(entry.source.sourceDraw),
+                                evaluate(entry.filterOccurrence, raw, mask, recipe), domain)
                         }
                         is PictureStreamEntryDraftV1.Picture -> aggregate(entry.child, source)
                         is PictureStreamEntryDraftV1.Layer -> {
@@ -605,7 +631,7 @@ internal class W6aLayerGraphConstruction(
                 val known = if (empty) null else entries(draft.entries(), target, domain.localToDeviceF64, draft.source)
                 facts.domains[draft.source] = domain.copy(knownContentDeviceI32 = known)
                 if (draft.owner is PictureStreamAggregateDraftOwnerV1.FilterPicture || empty) known
-                else evaluate(
+                else pictureWrittenOutput(draft.draw, evaluate(
                     draft.filterOccurrence,
                     pictureGeometry(
                         domain.sourceDeviceI32,
@@ -614,9 +640,10 @@ internal class W6aLayerGraphConstruction(
                         desired = domain.demandDeviceI32,
                         required = domain.sourceDeviceI32,
                     ),
-                )
+                    recipe = domain.recipe,
+                ), domain.demandDeviceI32)
             }
-            aggregate(rootDraft, parentSource)
+            facts.terminalOutputDeviceI32 = aggregate(rootDraft, parentSource)
             facts
         }
 
@@ -661,6 +688,23 @@ internal class W6aLayerGraphConstruction(
             }
         }
         val directKnownByScope = arrayOfNulls<RectI32>(occurrences.size)
+        val filterCommands = filterScene?.toList() ?: emptyList()
+        fun pictureParentScope(commandIndexI32: Int): Int? = occurrences
+            .filter { it.beginCommandIndexI32 < commandIndexI32 && commandIndexI32 < it.endCommandIndexI32 }
+            .maxByOrNull { it.beginCommandIndexI32 }?.idI32
+        val preparedRootPictures = linkedMapOf<Int, Pair<PictureStreamAggregateDraftV1, PreparedPictureFacts>>()
+        filterCommands.forEachIndexed { commandIndexI32, command ->
+            val draw = (command as? SceneCommand.Draw)?.node
+            if (draw?.geometry is GeometryNode.Picture) {
+                val scope = pictureParentScope(commandIndexI32)
+                val desired = scope?.let(desiredOutputByScope::get) ?: rootDomainDeviceI32
+                val mapping = scope?.let { occurrences[it].descriptor.transform.toMatrix3x3F64() } ?: Matrix3x3F64()
+                val draft = pictureDiscovery.prepareRoot(requireNotNull(filterScene), commandIndexI32, draw)
+                val facts = preparePictureFacts(draft, pictureGeometry(desired, mapping, desired), null)
+                preparedRootPictures[commandIndexI32] = draft to facts
+                scope?.let { directKnownByScope[it] = unionOrNull(directKnownByScope[it], facts.terminalOutputDeviceI32) }
+            }
+        }
         bindings.forEach { binding ->
             val scopeIdI32 = binding.scopeI32
             val desired = scopeIdI32?.let(desiredOutputByScope::get) ?: rootDomainDeviceI32
@@ -800,6 +844,7 @@ internal class W6aLayerGraphConstruction(
             } else null
             val produced = when {
                 desired == null -> null
+                !restoreFactsByScope.getValue(occurrence.idI32).writesParentDevice -> null
                 restoreFactsByScope.getValue(occurrence.idI32).restoreAffectsTransparentBlack -> desired.copy()
                 evaluation != null -> evaluation.copyProducedOutputDeviceI32()?.let { intersect(it, desired) }
                 filter != null -> null
@@ -853,6 +898,19 @@ internal class W6aLayerGraphConstruction(
             return binding
         }
         fun targetDeviceBounds(target: PlanResourceId): RectI32 = filterSource(target).copyDeviceBoundsI32()
+        fun layerRestoreCoordinates(source: RectI32, destination: RectI32,
+            writesParent: Boolean, desired: RectI32 = source): Pair<RectI32, Point2I32> {
+            val written = intersect(desired, destination)
+            if (written == null) {
+                require(!writesParent) { "A writing layer restore has no reserved parent texels." }
+                // DST retains its valid restore step, but no source sample can affect the
+                // parent. A bounded texel keeps both physical operands valid when disjoint.
+                return RectI32(0, 0, 1, 1) to Point2I32.Origin
+            }
+            return RectI32(Math.subtractExact(written.left, source.left), Math.subtractExact(written.top, source.top),
+                Math.subtractExact(written.right, source.left), Math.subtractExact(written.bottom, source.top)) to Point2I32(
+                Math.subtractExact(written.left, destination.left), Math.subtractExact(written.top, destination.top))
+        }
         fun allocateOccurrenceSource(
             domain: RectI32,
             parentTarget: PlanResourceId,
@@ -1492,7 +1550,13 @@ internal class W6aLayerGraphConstruction(
                 coverageProducer: PlanResourceId? = coverage,
                 workScope: PictureLayerExecutionScope? = owningLayerScope,
             ): PlanPassId? {
-                val (preparedInput, preparedLane) = frozenFacts.lanes.getValue(entry.source)
+                val originalLane = frozenFacts.lanes.getValue(entry.source)
+                // Inline unfiltered draws acquire the already-reserved parent coordinates
+                // here. Only the existing W4/W5 lane is rebound; no filter DAG is revisited.
+                val (preparedInput, preparedLane) = if (entry.filterOccurrence == null &&
+                    originalLane.first.copyDomainDeviceI32() != filterSource(target).copyDeviceBoundsI32())
+                    preparePictureDrawLane(entry, filterSource(target), filterOwnerSource, target, false)
+                else originalLane
                 require(preparedInput.copyDomainDeviceI32() == filterSource(target).copyDeviceBoundsI32()) {
                     "Prepared Picture lane disagrees with its physical source domain."
                 }
@@ -1716,12 +1780,6 @@ internal class W6aLayerGraphConstruction(
                     alphaF32,
                 )
             }
-            fun pictureBlend(draw: DrawNode): BlendPlan = requireNotNull(FinalBlendPlanner.plan(
-                draw.blend,
-                CoveragePlan.FullOrScissor,
-                SamplePlan.SingleSample,
-                PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL.blendTargetClampV1(),
-            )) { "${W6aPlanDiagnostics.UnsupportedChild}: Picture blend" }
             fun pictureColorFilter(draw: DrawNode): ColorFilterExecutionPlanV1? = draw.paint?.colorFilter?.let { filter ->
                 (ColorFilterPlanCompilerV1.compile(filter) as? ColorFilterCompileResultV1.Ready)?.execution
                     ?: throw W6bFilterGraphConstruction.ConstructionFailure(W6bFilterDiagnostics.refusal(
@@ -1933,7 +1991,7 @@ internal class W6aLayerGraphConstruction(
                 val descriptor = requireNotNull(entry.descriptorSource.layerDescriptor)
                 val layerLocalToDevice = frozenFacts.layerSources.getValue(entry.descriptorSource).mapping.copyLocalToDeviceF64()
                 val layerBinding = allocatePictureLayerTarget(
-                    parentBinding.copyDeviceBoundsI32(),
+                    frozenFacts.layerSources.getValue(entry.descriptorSource).copyDeviceBoundsI32(),
                     layerParentTarget,
                     layerLocalToDevice,
                     frozenFacts.layerSources.getValue(entry.descriptorSource),
@@ -2054,9 +2112,10 @@ internal class W6aLayerGraphConstruction(
                     steps += LayerExecutionStepV1.Restore(layerScope.id, composite.id)
                     composite.id
                 } ?: run {
-                    val layerExtent = layerBinding.copyExtentI32()
+                    val (sourceBounds, destinationOrigin) = layerRestoreCoordinates(
+                        layerBinding.copyDeviceBoundsI32(), parentBinding.copyDeviceBoundsI32(), restore.writesParentDevice)
                     val composite = PlanPass.LayerComposite(passes.size, layerScope.id, layerTarget, layerParentTarget,
-                        RectI32(0, 0, layerExtent.width, layerExtent.height), Point2I32.Origin, restore,
+                        sourceBounds, destinationOrigin, restore,
                         AttachmentLoadPlan.Load, AttachmentStorePlan.Store, restore.parentVersionAfter)
                     passes += composite
                     versions[layerParentTarget] = restore.parentVersionAfter.valueI64
@@ -2148,8 +2207,7 @@ internal class W6aLayerGraphConstruction(
                     if (occurrence == null) {
                         appendPlannedDraw(entry, entryTarget)
                     } else {
-                        val coverage = allocateOccurrenceSource(targetDeviceBounds(entryTarget), entryTarget,
-                            PlanResourceRole.CoverageSource)
+                        val coverage = allocatePreparedCoverage(occurrence, entryTarget)
                         filterCursor.passOrdinalI32 = passes.size
                         passes += PlanPass.FilterCoverageSourcePass(passes.size, coverage.resourceId, occurrence.source)
                         val masked = occurrence.mask?.let {
@@ -2364,7 +2422,7 @@ internal class W6aLayerGraphConstruction(
             return aggregate to terminal
         }
         emitFilterPictureSource = W6bFilterGraphConstruction.FilterPictureSourceEmitterV1 { prepared, sourceContext ->
-            val draft = pictureDiscovery.publishFilterRoot(prepared.draft)
+            val draft = pictureDiscovery.publishRoot(prepared.draft)
             // A re-entrant W6d leaf may be evaluated from a W6b-produced FilterTarget rather
             // than an ordinary W6a layer target.  It is already allocated by W6b; retain only
             // its immutable mapping facts locally so the nested aggregate can discover its
@@ -2395,10 +2453,6 @@ internal class W6aLayerGraphConstruction(
             bindings.maxOfOrNull { it.firstCommandIndexI32 } ?: -1,
             filterScene?.toList()?.lastIndex ?: -1,
         )
-        val filterCommands = filterScene?.toList() ?: emptyList()
-        fun pictureParentScope(commandIndexI32: Int): Int? = occurrences
-            .filter { it.beginCommandIndexI32 < commandIndexI32 && commandIndexI32 < it.endCommandIndexI32 }
-            .maxByOrNull { it.beginCommandIndexI32 }?.idI32
         fun pictureParentTarget(commandIndexI32: Int): PlanResourceId = targetFor(pictureParentScope(commandIndexI32))
         for (commandIndexI32 in 0..lastCommandIndexI32) {
             begins[commandIndexI32]?.let { occurrence ->
@@ -2673,11 +2727,11 @@ internal class W6aLayerGraphConstruction(
             (filterCommands.getOrNull(commandIndexI32) as? org.graphiks.kanvas.render.ir.SceneCommand.Draw)
                 ?.node?.geometry?.let { geometry -> if (geometry is GeometryNode.Picture) {
                     val parentTarget = pictureParentTarget(commandIndexI32)
-                    val rootDraw = (filterCommands[commandIndexI32] as org.graphiks.kanvas.render.ir.SceneCommand.Draw).node
-                    appendPictureAggregate(pictureDiscovery.root(requireNotNull(filterScene), commandIndexI32, rootDraw),
+                    val (prepared, facts) = preparedRootPictures.getValue(commandIndexI32)
+                    appendPictureAggregate(pictureDiscovery.publishRoot(prepared),
                         parentTarget, pictureParentScope(commandIndexI32)?.let { scopeI32 ->
                             PictureLayerExecutionScope(LayerScopeIdI32(scopeI32), targetFor(scopeI32))
-                        })
+                        }, preparedFacts = facts)
                 } }
             ends[commandIndexI32]?.let { occurrence ->
                 val geometry = activeByScope[occurrence.idI32] ?: return@let
@@ -2708,11 +2762,6 @@ internal class W6aLayerGraphConstruction(
                 // the save-time composite clip.
                 val restoreDomain = if (backdropFiltersByBegin.containsKey(occurrence.beginCommandIndexI32))
                     requireNotNull(geometry.desiredOutputDeviceI32) else childDomain
-                val parentOrigin = targetOriginDevice(parentTarget)
-                val destinationOrigin = Point2I32(
-                    Math.toIntExact(Math.subtractExact(restoreDomain.left.toLong(), parentOrigin.x.toLong())),
-                    Math.toIntExact(Math.subtractExact(restoreDomain.top.toLong(), parentOrigin.y.toLong())),
-                )
                 val composite = filterLayersByBegin[occurrence.beginCommandIndexI32]?.let { filtered ->
                     val coverage = allocateOccurrenceSource(targetDeviceBounds(target), target,
                         PlanResourceRole.CoverageSource,
@@ -2759,16 +2808,15 @@ internal class W6aLayerGraphConstruction(
                     appendFrozenOccurrence(filtered, source, parentTarget,
                         FilterCompositeOperationV1.Layer(restore), frozenMask?.output ?: coverage, target,
                         terminalClipDeviceI32 = filterTerminalDomain)
-                } ?: PlanPass.LayerComposite(passes.size, scopeId, target, parentTarget,
-                    RectI32(
-                        Math.toIntExact(Math.subtractExact(restoreDomain.left.toLong(), childDomain.left.toLong())),
-                        Math.toIntExact(Math.subtractExact(restoreDomain.top.toLong(), childDomain.top.toLong())),
-                        Math.toIntExact(Math.subtractExact(restoreDomain.right.toLong(), childDomain.left.toLong())),
-                        Math.toIntExact(Math.subtractExact(restoreDomain.bottom.toLong(), childDomain.top.toLong())),
-                    ), destinationOrigin, restore,
-                    AttachmentLoadPlan.Load, AttachmentStorePlan.Store, after).also {
-                    versions[parentTarget] = after.valueI64
-                    passes += it
+                } ?: run {
+                    val (sourceBounds, destinationOrigin) = layerRestoreCoordinates(childDomain,
+                        targetDeviceBounds(parentTarget), restore.writesParentDevice, restoreDomain)
+                    PlanPass.LayerComposite(passes.size, scopeId, target, parentTarget,
+                        sourceBounds, destinationOrigin, restore,
+                        AttachmentLoadPlan.Load, AttachmentStorePlan.Store, after).also {
+                        versions[parentTarget] = after.valueI64
+                        passes += it
+                    }
                 }
                 steps += LayerExecutionStepV1.Restore(scopeId, composite.id)
                 scopePlans[occurrence.idI32] = LayerScopePlanV1(
