@@ -722,8 +722,12 @@ private fun preflightW6LayerCompositeDestinations(frame: GPUW6aLayerFramePlan, f
         val renderIndex = framePlan.steps.indexOfFirst { (it as? GPUFrameStep.RenderPassStep)?.w6aPassV1?.id == pass.id }
         val copy = frame.graph.passes().take(passIndex).filterIsInstance<PlanPass.TextureCopy>().singleOrNull { it.source == actual.destination && it.destination == actual.destinationSnapshot && it.destinationVersion == actual.requiredDestinationVersion }
             ?: error("IIIa2 destination LayerComposite lacks its causal frozen TextureCopy.")
-        val copyIndex = framePlan.steps.indexOfFirst { (it as? GPUFrameStep.CopyResourceStep)?.let { step -> step.source == frame.refs.getValue(copy.source) && step.destination == frame.refs.getValue(copy.destination) } == true }
         val target = frame.physical.resource(actual.destination); val source = frame.physical.resource(actual.source); val snapshot = frame.physical.resource(actual.destinationSnapshot)
+        val copyBounds = requireNotNull(copy.copySourceBoundsI32())
+        val copyIndex = framePlan.steps.indexOfFirst { step -> (step as? GPUFrameStep.CopyResourceStep)?.let {
+            it.source == frame.refs.getValue(copy.source) && it.destination == frame.refs.getValue(copy.destination) &&
+                it.regions == listOf(org.graphiks.kanvas.gpu.renderer.resources.GPUResourceCopyRegion(0L, 0L, GPUPixelBounds(copyBounds.left, copyBounds.top, copyBounds.right, copyBounds.bottom), target.byteSize))
+        } == true }
         val uses = listOf(
             org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.source), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.LayerTarget, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false),
             org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.destinationSnapshot), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.DestinationSnapshot, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false),
@@ -745,8 +749,12 @@ private fun preflightW6LayerCompositeFilteredDestinations(frame: GPUW6aLayerFram
         val renderIndex = framePlan.steps.indexOfFirst { (it as? GPUFrameStep.RenderPassStep)?.w6aPassV1?.id == pass.id }
         val copy = frame.graph.passes().take(passIndex).filterIsInstance<PlanPass.TextureCopy>().singleOrNull { it.source == actual.destination && it.destination == actual.destinationSnapshot && it.destinationVersion == actual.requiredDestinationVersion }
             ?: error("IIIa2 filtered destination LayerComposite lacks its causal frozen TextureCopy.")
-        val copyIndex = framePlan.steps.indexOfFirst { (it as? GPUFrameStep.CopyResourceStep)?.let { step -> step.source == frame.refs.getValue(copy.source) && step.destination == frame.refs.getValue(copy.destination) } == true }
         val target = frame.physical.resource(actual.destination); val source = frame.physical.resource(actual.source); val uniform = frame.physical.resource(actual.uniformResource); val snapshot = frame.physical.resource(actual.destinationSnapshot)
+        val copyBounds = requireNotNull(copy.copySourceBoundsI32())
+        val copyIndex = framePlan.steps.indexOfFirst { step -> (step as? GPUFrameStep.CopyResourceStep)?.let {
+            it.source == frame.refs.getValue(copy.source) && it.destination == frame.refs.getValue(copy.destination) &&
+                it.regions == listOf(org.graphiks.kanvas.gpu.renderer.resources.GPUResourceCopyRegion(0L, 0L, GPUPixelBounds(copyBounds.left, copyBounds.top, copyBounds.right, copyBounds.bottom), target.byteSize))
+        } == true }
         val uses = listOf(
             org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.source), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.LayerTarget, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false),
             org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.uniformResource), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.UniformData, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.Uniform, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false),
