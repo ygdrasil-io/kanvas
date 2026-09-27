@@ -1240,3 +1240,27 @@ relevé un préflight incomplet et des axes natifs non consommés ; les relectur
 successives marquent ces points **ADDRESSED** et ne relèvent aucun nouveau
 Critical/Important. IIb1 est review-clean, mais IIb2 cover, III/IV, W5a,
 leases/B/B−1, 2B et le gate W6 global restent ouverts.
+
+### 2A0c.IIb2 — ClipMaskProducer.Path stencil-cover bundle 1
+
+Le même `ClipMaskProducer.Path` à fan stencil gèle maintenant ses deux sites
+natifs ordonnés sous le même pass et packet : edge bundle 0 puis cover bundle
+1. La recette cover versionnée lie sa cible, son resolve AA éventuel et son
+D24S8 aux ressources physiques finales, au fill rule/scissor de `:math`, au
+sample count et aux axes shader/topologie/ABI/stencil/blend. Le cover et
+l'edge sont deux pipelines du même render pass : l'état d'attachment et le
+fan V/I sont portés par l'edge, dont l'identité et les usages sont vérifiés
+avec le cover avant toute création native. Le catalogue, le seal, le packet
+W6 et le préflight conservent les deux bundles même si un draw est omis. La
+route W4d directe garde son fallback distinct.
+
+Le témoin public EVEN_ODD à deux contours fixe ses pixels avant `Surface` :
+son trou distingue la couverture du simple contour extérieur et demande
+`Render` + `Readback`. Commit `164a5d796`. Les trois compilations ciblées
+sortent 0 ; le sélecteur W4e direct passe avec Gradle exit 0. Le nouveau
+sélecteur et la classe W6aLayerW4W5 donnent XML `23/0/0/0` pour la classe,
+mais leurs workers natifs sortent 133 après JUnit : **UNKNOWN** pour le gate
+global. Review indépendante Sol : **Approved**, aucun finding
+Critical/Important ; la review est statique et ne remplace pas les tests.
+IIb est review-clean ; 2A0c.III/IV, W5a, leases/B/B−1, 2B et le gate W6
+global restent ouverts.
