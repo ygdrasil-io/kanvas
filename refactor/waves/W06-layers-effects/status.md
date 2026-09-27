@@ -940,3 +940,24 @@ produisent `11/0/0/0` et `5/0/0/0` dans leurs XML. L'exécuteur natif sort
 133 (**UNKNOWN**). La relecture Sol est **Approved**, sans défaut
 Critical/Important. IIIc2a est review-clean ; IIIc2b, IIIc3, IIIa2 et les
 gates W4e/W5a, budget/leases et 2B restent ouverts.
+
+### 2A0b.IIIc2b1 — FilterComposite.Layer destination-read sans W5f
+
+Le commit `b8c93fa` ajoute une recette distincte pour le restore filtré qui
+lit un snapshot de destination, sans `colorFilter` de restore. Elle sépare
+source filtrée et layer remplacée, lie snapshot et version du parent, et
+scelle descriptions physiques, alpha/blend, coordonnées, ABI texture source
+puis snapshot et draw. La préparation enregistre ces deux usages dans cet
+ordre. Avant allocation, le préflight vérifie la copie du parent vers le
+snapshot antérieure au restore, la version requise et les usages enregistrés.
+Le renderer traduit la recette cataloguée dans un helper dédié ; seul le cas
+combiné W5f+snapshot conserve temporairement un bridge sans recette.
+
+Le témoin public `saveLayer(imageFilter=...)` avec parent bleu et
+`DIFFERENCE` fixe magenta avant `Surface` et vérifie pixels, `Render` et
+`Readback`. Le témoin cyan garde la combinaison W5f future, sans servir de
+preuve de b1. Trois compilations ciblées réussissent ; les deux classes
+publiques donnent `13/0/0/0` et `5/0/0/0` en XML. L'exécuteur natif sort 133
+(**UNKNOWN**). Relecture Sol **Approved**, aucun Critical/Important.
+IIIc2b2, IIIc3, IIIa2 et les gates W4e/W5a, budget/leases et 2B restent
+ouverts.
