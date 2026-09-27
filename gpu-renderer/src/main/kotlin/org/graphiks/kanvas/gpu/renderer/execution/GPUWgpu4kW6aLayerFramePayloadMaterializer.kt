@@ -479,7 +479,9 @@ private fun preflightW6FilterBlends(frame: GPUW6aLayerFramePlan, framePlan: GPUF
     require(frame.physical.w6FilterBlendRecipes().keys == expected.keys)
     expected.forEach { (id, frozen) ->
         val actual = frame.physical.w6FilterBlendRecipe(id)
-        require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1())
+        require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1() &&
+            actual.blendFormulaWgsl == frozen.blendFormulaWgsl &&
+            actual.blendFormulaWgsl == frozenW6FilterBlendFormulaWgslV1(actual.blend, actual.formula))
         val pass = frame.graph.passes().single { it.id == id } as? PlanPass.FilterPass
             ?: error("W6 Blend owner is not FilterPass.")
         val operation = pass.operation as? FilterPassOperationV1.Blend
@@ -2484,6 +2486,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         require(sources.size == 2 && recipe.ownerPassId == pass.id && recipe.target == pass.output &&
             recipe.groupZeroAbi == W6FilterBlendGroupZeroAbiV1.BackgroundAndForegroundTextures &&
             recipe.shaderFamily == W6FilterBlendShaderFamilyV1.FrozenW5BlendFormulaTextureLoad &&
+            recipe.blendFormulaWgsl == frozenW6FilterBlendFormulaWgslV1(recipe.blend, recipe.formula) &&
             recipe.load == AttachmentLoadPlan.ClearTransparent && recipe.store == AttachmentStorePlan.Store)
         val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = sources.indices.map {
             BindGroupLayoutEntry(it.toUInt(), GPUShaderStage.Fragment, texture = TextureBindingLayout())

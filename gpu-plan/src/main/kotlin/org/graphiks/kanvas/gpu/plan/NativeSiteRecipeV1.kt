@@ -48,9 +48,11 @@ public class W6FilterBlendInputRecipeV1 internal constructor(public val source: 
 }
 public enum class W6FilterBlendGroupZeroAbiV1 { BackgroundAndForegroundTextures }
 public enum class W6FilterBlendShaderFamilyV1 { FrozenW5BlendFormulaTextureLoad }
-public class W6FilterBlendRecipeV1 internal constructor(public val ownerPassId: PlanPassId, public val target: PlanResourceId, background: W6FilterBlendInputRecipeV1, foreground: W6FilterBlendInputRecipeV1, extent: org.graphiks.math.geometry.SizeI32, public val blend: BlendPlan, public val blendFormulaWgsl: String, public val targetFormat: PlanLogicalColorFormat, public val sampleCountI32: Int, public val load: AttachmentLoadPlan = AttachmentLoadPlan.ClearTransparent, public val store: AttachmentStorePlan = AttachmentStorePlan.Store, public val groupZeroAbi: W6FilterBlendGroupZeroAbiV1 = W6FilterBlendGroupZeroAbiV1.BackgroundAndForegroundTextures, public val shaderFamily: W6FilterBlendShaderFamilyV1 = W6FilterBlendShaderFamilyV1.FrozenW5BlendFormulaTextureLoad, public val draw: W6FullscreenEmptyDrawV1 = W6FullscreenEmptyDrawV1()) {
+/** Backend-neutral identity of the W5 formula renderer asks the planner to materialize. */
+public enum class W6FilterBlendFormulaV1 { W5BlendFormulaV1 }
+public class W6FilterBlendRecipeV1 internal constructor(public val ownerPassId: PlanPassId, public val target: PlanResourceId, background: W6FilterBlendInputRecipeV1, foreground: W6FilterBlendInputRecipeV1, extent: org.graphiks.math.geometry.SizeI32, public val blend: BlendPlan, public val formula: W6FilterBlendFormulaV1, public val blendFormulaWgsl: String, public val targetFormat: PlanLogicalColorFormat, public val sampleCountI32: Int, public val load: AttachmentLoadPlan = AttachmentLoadPlan.ClearTransparent, public val store: AttachmentStorePlan = AttachmentStorePlan.Store, public val groupZeroAbi: W6FilterBlendGroupZeroAbiV1 = W6FilterBlendGroupZeroAbiV1.BackgroundAndForegroundTextures, public val shaderFamily: W6FilterBlendShaderFamilyV1 = W6FilterBlendShaderFamilyV1.FrozenW5BlendFormulaTextureLoad, public val draw: W6FullscreenEmptyDrawV1 = W6FullscreenEmptyDrawV1()) {
     private val frozenBackground = background; private val frozenForeground = foreground; private val frozenExtent = extent.copy()
-    init { require(sampleCountI32 == 1 && blendFormulaWgsl.isNotEmpty()) }
+    init { require(sampleCountI32 == 1 && blendFormulaWgsl == frozenW6FilterBlendFormulaWgslV1(blend, formula)) }
     public fun background() = frozenBackground; public fun foreground() = frozenForeground; public fun copyExtent() = frozenExtent.copy(); public fun nativeSiteOwnerV1() = NativeSiteOwnerV1(ownerPassId, 0, 0); public fun canonicalLogicalEncodingV1() = W6FilterBlendNativeSiteRecipeV1(this).canonicalLogicalEncodingV1
 }
 public class W6FilterBlendNativeSiteRecipeV1 internal constructor(public val host: W6FilterBlendRecipeV1) : NativeSiteRecipeV1 {
@@ -58,7 +60,7 @@ public class W6FilterBlendNativeSiteRecipeV1 internal constructor(public val hos
     override val canonicalLogicalEncodingV1: String = nativeSiteEncodingV1(family) {
         text("owner", host.ownerPassId.value); int("ordinal", owner.drawOrPacketOrdinalI32); int("bundle", owner.bundleOrdinalI32); text("target", host.target.value); int("inputCount", 2)
         listOf(host.background(), host.foreground()).forEachIndexed { index, input -> text("input.$index", input.source.value); int("input.$index.extentWidth", input.copyExtent().width); int("input.$index.extentHeight", input.copyExtent().height); rect("input.$index.knownContent", input.copyKnownContentTargetLocalI32()); point("input.$index.offset", input.copyOutputToInputOffsetTargetLocalI32()); enum("input.$index.format", input.format); int("input.$index.sampleCount", input.sampleCountI32) }
-        int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); blend("blend", host.blend); text("blendFormulaWgsl", host.blendFormulaWgsl); enum("load", host.load); enum("store", host.store); enum("targetFormat", host.targetFormat); int("sampleCount", host.sampleCountI32); enum("groupZeroAbi", host.groupZeroAbi); enum("shaderFamily", host.shaderFamily); int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32); int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32)
+        int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); blend("blend", host.blend); enum("formula", host.formula); enum("load", host.load); enum("store", host.store); enum("targetFormat", host.targetFormat); int("sampleCount", host.sampleCountI32); enum("groupZeroAbi", host.groupZeroAbi); enum("shaderFamily", host.shaderFamily); int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32); int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32)
     }
 }
 
@@ -1234,8 +1236,15 @@ public fun freezeW6FilterBlendRecipesV1(passes: List<PlanPass>, resources: List<
         val target = resources.single { it.id == pass.output }; val targetFormat = (target.format as? PlanTextureFormat.Color)?.value ?: error("W6 Blend requires color target.")
         require(target.sampleCountI32 == 1 && PlanResourceUsage.RenderAttachment in target.usages())
         fun input(index: Int, sampling: FilterInputSamplingV1): W6FilterBlendInputRecipeV1 { val source = resources.single { it.id == pass.inputs()[index] }; val format = (source.format as? PlanTextureFormat.Color)?.value ?: error("W6 Blend requires color source."); require(source.sampleCountI32 == 1 && PlanResourceUsage.Sampled in source.usages()); return W6FilterBlendInputRecipeV1(pass.inputs()[index], requireNotNull(source.copyExtent()), sampling.copyKnownContentInputTargetLocalI32(), sampling.copyOutputToInputOffsetTargetLocalI32(), format, source.sampleCountI32) }
-        val formula = requireNotNull(BlendFormulaProgramV1.selectedBlendFunctionWgsl(operation.blend.w6FilterBlendModeLabelV1(), "w6d2_frozen_blend")) { "W6 Blend has no frozen formula." }
-        require(put(pass.id, W6FilterBlendRecipeV1(pass.id, pass.output, input(0, operation.backgroundSampling()), input(1, operation.foregroundSampling()), requireNotNull(target.copyExtent()), operation.blend, formula, targetFormat, target.sampleCountI32)) == null)
+        val formula = W6FilterBlendFormulaV1.W5BlendFormulaV1
+        require(put(pass.id, W6FilterBlendRecipeV1(pass.id, pass.output, input(0, operation.backgroundSampling()), input(1, operation.foregroundSampling()), requireNotNull(target.copyExtent()), operation.blend, formula, frozenW6FilterBlendFormulaWgslV1(operation.blend, formula), targetFormat, target.sampleCountI32)) == null)
+    }
+}
+
+public fun frozenW6FilterBlendFormulaWgslV1(blend: BlendPlan, formula: W6FilterBlendFormulaV1): String {
+    require(formula == W6FilterBlendFormulaV1.W5BlendFormulaV1)
+    return requireNotNull(BlendFormulaProgramV1.selectedBlendFunctionWgsl(blend.w6FilterBlendModeLabelV1(), "w6d2_frozen_blend")) {
+        "W6 Blend has no frozen formula."
     }
 }
 

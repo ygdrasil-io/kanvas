@@ -398,7 +398,12 @@ public class PlanPhysicalLayoutV1 private constructor(
             source.w6FilterMergeRecipes.forEach { (id, recipe) -> require(recipe.canonicalLogicalEncodingV1() == expectedMerges.getValue(id).canonicalLogicalEncodingV1()) }
             val expectedBlends = freezeW6FilterBlendRecipesV1(graph.passes(), rows)
             require(source.w6FilterBlendRecipes.keys == expectedBlends.keys)
-            source.w6FilterBlendRecipes.forEach { (id, recipe) -> require(recipe.canonicalLogicalEncodingV1() == expectedBlends.getValue(id).canonicalLogicalEncodingV1()) }
+            source.w6FilterBlendRecipes.forEach { (id, recipe) ->
+                val expected = expectedBlends.getValue(id)
+                require(recipe.canonicalLogicalEncodingV1() == expected.canonicalLogicalEncodingV1() &&
+                    recipe.blendFormulaWgsl == expected.blendFormulaWgsl &&
+                    recipe.blendFormulaWgsl == frozenW6FilterBlendFormulaWgslV1(recipe.blend, recipe.formula))
+            }
             val expectedNativeSiteRecipes = freezeNativeSiteRecipeCatalogV1(
                 graph.passes(), expectedSolidRectHosts, expectedCorePrimitiveHosts, expectedPreparedVerticesHosts,
                 expectedPlainLayerComposites, expectedClipMaskInitializes, expectedCoverageRasterHosts, expectedFullscreenEmpties, expectedCoverageAlphas, expectedCoverageSolidRects, expectedCoverageRetains, expectedPictureSourceLayers, expectedPictureSourceGraphs, expectedSpatialCrops, expectedSpatialOffsets, expectedSpatialTiles, expectedMorphologies, expectedColorFilters, expectedMerges, expectedBlends,
