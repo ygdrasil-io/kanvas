@@ -9,6 +9,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
+import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.PathEffect
@@ -22,6 +23,34 @@ import org.junit.jupiter.api.Test
  * the compact CPU equations deliberately do not invoke a planner, renderer, or test control.
  */
 class W6aLayerRestoreSurfacePixelTest {
+    @Test
+    fun `filteredLayerImageFilterRestoreWithoutColorFilterUsesSrcComposite`() {
+        val expected = rgbaCpu(0, 0, 0, 54)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val surface = Surface(1, 1)
+        surface.canvas {
+            drawRect(bounds, Paint(ColorARGB.Green, antiAlias = false))
+            saveLayer(paint = Paint(imageFilter = ImageFilter.ColorFilter(ColorFilter.Luma), blendMode = BlendMode.SRC, antiAlias = false))
+            drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false)); restore()
+        }
+        val actual = surface.render(); assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
+    fun `filtered layer restore color filter runs after image filter`() {
+        val expected = rgbaCpu(0, 255, 0, 255)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val surface = Surface(1, 1)
+        surface.canvas {
+            drawRect(bounds, Paint(ColorARGB.Blue, antiAlias = false))
+            saveLayer(paint = Paint(imageFilter = ImageFilter.ColorFilter(ColorFilter.Luma), colorFilter = opaqueGreenFromTransparentBlack(), blendMode = BlendMode.SRC, antiAlias = false))
+            drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false)); restore()
+        }
+        val actual = surface.render(); assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")), actual.nativeEvidenceScopeKinds.toString())
+    }
+
     @Test
     fun `restoreAlphaAppliesOnceToOverlappingChildren`() {
         // Opaque blue is the final child result. The independent CPU oracle applies 128/255 in
