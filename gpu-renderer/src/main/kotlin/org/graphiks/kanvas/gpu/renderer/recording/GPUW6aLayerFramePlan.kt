@@ -195,6 +195,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     /** Each final analytic W4e producer packet retains its planner owner and packet ordinal. */
     private val clipMaskProducerRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskProducerRecipeV1>()
     private val clipMaskProducerDirectTriangleRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskProducerDirectTriangleRecipeV1>()
+    /** Only native bundle 0 is frozen here; the path cover remains IIb2 fallback. */
+    private val clipMaskProducerStencilEdgeRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskProducerStencilEdgeRecipeV1>()
     /** I2 folds keep their planner owner/packet through W6 recording into native encoding. */
     private val clipMaskFoldRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskFoldRecipeV1>()
     private val analyticUniforms = mutableMapOf<GPUDrawPacketID, ByteArray>()
@@ -382,6 +384,14 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                                 direct.inverseCoverage == native.inverseCoverage && direct.antiAlias == native.antiAlias)
                             require(clipMaskProducerDirectTriangleRecipesByPacket.put(packet, direct) == null)
                         }
+                        val edge = physical.w4eClipMaskProducerStencilEdgeRecipes()[native.id]
+                        if (edge != null) {
+                            require(edge.passId == native.id && edge.packetOrdinalI32 == native.ordinal &&
+                                edge.target.id == native.target && edge.resolveTarget?.id == native.resolveTarget &&
+                                edge.depthStencil.id == native.depthStencil && edge.sampleCountI32 == native.sampleCountI32 &&
+                                edge.inverseCoverage == native.inverseCoverage && edge.antiAlias == native.antiAlias)
+                            require(clipMaskProducerStencilEdgeRecipesByPacket.put(packet, edge) == null)
+                        }
                     }
                     if (native is PlanPass.ClipMaskFold) {
                         val recipe = physical.w4eClipMaskFoldRecipe(native.id)
@@ -412,11 +422,12 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                         GPULoadStorePlan(if (path == null) "clear" else "load", GPUStorePlan.Store), samples,
                         resourceUses = uses, drawPackets = listOf(packet), sourceTaskIds = task,
                         batches = listOf(GPUFrameRenderBatch("w6a.${pass.id.value}", GPUPassBatchKind.Isolated, listOf(packet), task)),
-                        depthStencilLoadStore = physical.w4eClipMaskProducerDirectTriangleRecipes()[native.id]?.let { recipe ->
+                        depthStencilLoadStore = (physical.w4eClipMaskProducerDirectTriangleRecipes()[native.id]?.depthStencilState
+                            ?: physical.w4eClipMaskProducerStencilEdgeRecipes()[native.id]?.depthStencilState)?.let { state ->
                             GPUDepthStencilLoadStorePlan.WritableStencil(
-                                when (recipe.depthStencilState.stencilLoad) {
+                                when (state.stencilLoad) {
                                     W4eClipMaskProducerDepthStencilLoadV1.Clear -> GPUStencilLoadOperation.Clear
-                                }, GPUStorePlan.Store, recipe.depthStencilState.stencilClearValueU32)
+                                }, GPUStorePlan.Store, state.stencilClearValueU32)
                         } ?: path?.let(builder::depthStencilLoadStore), w6aPassV1 = pass))
                     return@forEach
                 }
@@ -867,6 +878,9 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
         require(clipMaskProducerDirectTriangleRecipesByPacket.values.map { it.passId }.toSet() ==
             physical.w4eClipMaskProducerDirectTriangleRecipes().keys &&
             clipMaskProducerDirectTriangleRecipesByPacket.size == physical.w4eClipMaskProducerDirectTriangleRecipes().size)
+        require(clipMaskProducerStencilEdgeRecipesByPacket.values.map { it.passId }.toSet() ==
+            physical.w4eClipMaskProducerStencilEdgeRecipes().keys &&
+            clipMaskProducerStencilEdgeRecipesByPacket.size == physical.w4eClipMaskProducerStencilEdgeRecipes().size)
         require(clipMaskFoldRecipesByPacket.values.map { it.passId }.toSet() ==
             physical.w4eClipMaskFoldRecipes().keys &&
             clipMaskFoldRecipesByPacket.size == physical.w4eClipMaskFoldRecipes().size) {
@@ -886,6 +900,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
         clipMaskProducerRecipesByPacket[packet]
     internal fun w4eClipMaskProducerDirectTriangleRecipeOrNull(packet: GPUDrawPacket): W4eClipMaskProducerDirectTriangleRecipeV1? =
         clipMaskProducerDirectTriangleRecipesByPacket[packet]
+    internal fun w4eClipMaskProducerStencilEdgeRecipeOrNull(packet: GPUDrawPacket): W4eClipMaskProducerStencilEdgeRecipeV1? =
+        clipMaskProducerStencilEdgeRecipesByPacket[packet]
 
     internal fun w4eClipMaskFoldRecipeOrNull(packet: GPUDrawPacket): W4eClipMaskFoldRecipeV1? =
         clipMaskFoldRecipesByPacket[packet]

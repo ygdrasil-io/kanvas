@@ -68,6 +68,7 @@ import org.graphiks.kanvas.gpu.plan.W4eDirectTriangleTopologyV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskInitializeRecipeV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerRecipeV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerDirectTriangleRecipeV1
+import org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerStencilEdgeRecipeV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskFoldRecipeV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskFoldGroupZeroAbiV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskFoldLoadV1
@@ -385,6 +386,7 @@ internal fun encodeW4eNativePasses(
     clipMaskInitializeRecipesByPassId: Map<String, W4eClipMaskInitializeRecipeV1> = emptyMap(),
     clipMaskProducerRecipesByPassId: Map<String, W4eClipMaskProducerRecipeV1> = emptyMap(),
     clipMaskProducerDirectTriangleRecipesByPassId: Map<String, W4eClipMaskProducerDirectTriangleRecipeV1> = emptyMap(),
+    clipMaskProducerStencilEdgeRecipesByPassId: Map<String, W4eClipMaskProducerStencilEdgeRecipeV1> = emptyMap(),
     clipMaskFoldRecipesByPassId: Map<String, W4eClipMaskFoldRecipeV1> = emptyMap(),
 ): List<GPUPreparedNativeScopeOperand.Render> {
     requireW4eClipMaskInitializeRecipes(entries, clipMaskInitializeRecipesByPassId)
@@ -539,13 +541,14 @@ internal fun encodeW4eNativePasses(
             is GPUW4ePreparedClipPassAuthority.Producer -> {
                 val frozenRecipe = clipMaskProducerRecipesByPassId[pass.passId]
                 val frozenDirectTriangleRecipe = clipMaskProducerDirectTriangleRecipesByPassId[pass.passId]
-                val targetResourceId = frozenRecipe?.target?.id?.value ?: frozenDirectTriangleRecipe?.target?.id?.value ?: pass.targetResourceId
-                val resolveTargetResourceId = frozenRecipe?.resolveTarget?.id?.value ?: frozenDirectTriangleRecipe?.resolveTarget?.id?.value ?: pass.resolveTargetResourceId
-                val depthStencilResourceId = frozenRecipe?.depthStencil?.id?.value ?: frozenDirectTriangleRecipe?.depthStencil?.id?.value ?: pass.depthStencilResourceId
-                val sampleCount = frozenRecipe?.sampleCountI32 ?: frozenDirectTriangleRecipe?.sampleCountI32 ?: pass.sampleCount
-                val inverseCoverage = frozenRecipe?.inverseCoverage ?: frozenDirectTriangleRecipe?.inverseCoverage ?: pass.inverseCoverage
+                val frozenStencilEdgeRecipe = clipMaskProducerStencilEdgeRecipesByPassId[pass.passId]
+                val targetResourceId = frozenRecipe?.target?.id?.value ?: frozenDirectTriangleRecipe?.target?.id?.value ?: frozenStencilEdgeRecipe?.target?.id?.value ?: pass.targetResourceId
+                val resolveTargetResourceId = frozenRecipe?.resolveTarget?.id?.value ?: frozenDirectTriangleRecipe?.resolveTarget?.id?.value ?: frozenStencilEdgeRecipe?.resolveTarget?.id?.value ?: pass.resolveTargetResourceId
+                val depthStencilResourceId = frozenRecipe?.depthStencil?.id?.value ?: frozenDirectTriangleRecipe?.depthStencil?.id?.value ?: frozenStencilEdgeRecipe?.depthStencil?.id?.value ?: pass.depthStencilResourceId
+                val sampleCount = frozenRecipe?.sampleCountI32 ?: frozenDirectTriangleRecipe?.sampleCountI32 ?: frozenStencilEdgeRecipe?.sampleCountI32 ?: pass.sampleCount
+                val inverseCoverage = frozenRecipe?.inverseCoverage ?: frozenDirectTriangleRecipe?.inverseCoverage ?: frozenStencilEdgeRecipe?.inverseCoverage ?: pass.inverseCoverage
                 val depthTarget = depthStencilResourceId?.let(attachment)
-                val frozenDepthStencilState = frozenRecipe?.depthStencilState ?: frozenDirectTriangleRecipe?.depthStencilState
+                val frozenDepthStencilState = frozenRecipe?.depthStencilState ?: frozenDirectTriangleRecipe?.depthStencilState ?: frozenStencilEdgeRecipe?.depthStencilState
                 val producerCommands = when {
                     frozenRecipe != null -> {
                         require(frozenRecipe.geometry in setOf(org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerGeometryV1.Rect, org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerGeometryV1.RRect) &&
@@ -621,8 +624,15 @@ internal fun encodeW4eNativePasses(
                             if (depthTarget == null) throw refusal(
                                 "invalid.native-core-primitive.w4e-path-depth", "W4e path stencil producer lacks its sealed D24S8 attachment.",
                             )
-                            val evenOdd = pathGeometry.fillRule == org.graphiks.math.geometry.FillRule.EVEN_ODD ||
-                                pathGeometry.fillRule == org.graphiks.math.geometry.FillRule.INVERSE_EVEN_ODD
+                            val edge = frozenStencilEdgeRecipe
+                            if (edge != null) require(edge.passId.value == pass.passId && edge.packetOrdinalI32 == entry.render.w6aPassV1?.ordinal &&
+                                edge.vertexCountI32 == nativePayload.geometrySlice(edge.passId.value, W4eNativePayloadPlan.PRODUCER_PATH)?.vertexCount &&
+                                edge.indexCountI32 == nativePayload.geometrySlice(edge.passId.value, W4eNativePayloadPlan.PRODUCER_PATH)?.indexCount &&
+                                edge.depthStencil.id.value == depthStencilResourceId && edge.target.id.value == targetResourceId) {
+                                "W4e stencil-edge bundle-0 must use its exact frozen V/I and attachments."
+                            }
+                            val evenOdd = (edge?.fillRule ?: pathGeometry.fillRule) == org.graphiks.math.geometry.FillRule.EVEN_ODD ||
+                                (edge?.fillRule ?: pathGeometry.fillRule) == org.graphiks.math.geometry.FillRule.INVERSE_EVEN_ODD
                             val stencilPipeline = createW4ePathGeometryPipeline(
                                 device, GPUTextureFormat.RGBA8Unorm, sampleCount, 0f,
                                 stencil = w4ePathStencilProducerState(evenOdd), colorWrite = false,
@@ -635,9 +645,9 @@ internal fun encodeW4eNativePasses(
                             buildList {
                                 add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(stencilPipeline, generation)))
                                 addAll(indexedGeometryCommands(
-                                    entry.packet.passId,
+                                    edge?.passId?.value ?: entry.packet.passId,
                                     W4eNativePayloadPlan.PRODUCER_PATH,
-                                    GPUPixelBounds(scissor.left, scissor.top, scissor.right, scissor.bottom),
+                                    edge?.copyScissorI32()?.let { GPUPixelBounds(it.left, it.top, it.right, it.bottom) } ?: GPUPixelBounds(scissor.left, scissor.top, scissor.right, scissor.bottom),
                                 ))
                                 add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(coverPipeline, generation)))
                                 add(GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)))

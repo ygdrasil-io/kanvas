@@ -42,6 +42,7 @@ private data class W4eClipMaskInitializeNativePreflight(
     val recipesByPassId: Map<String, W4eClipMaskInitializeRecipeV1>,
     val producerRecipesByPassId: Map<String, W4eClipMaskProducerRecipeV1>,
     val producerDirectTriangleRecipesByPassId: Map<String, W4eClipMaskProducerDirectTriangleRecipeV1>,
+    val producerStencilEdgeRecipesByPassId: Map<String, W4eClipMaskProducerStencilEdgeRecipeV1>,
     val foldRecipesByPassId: Map<String, W4eClipMaskFoldRecipeV1>,
 )
 
@@ -101,6 +102,26 @@ private fun preflightW4eClipMaskInitializes(
         requireW4eClipMaskProducerRecipes(entries, producerRecipes,
             frame.graph.resources().associateBy { it.id.value }, frame.refs.mapKeys { it.key.value }) { binding.payload }
         val directTriangleRecipes = entries.mapNotNull { entry -> frame.w4eClipMaskProducerDirectTriangleRecipeOrNull(entry.packet)?.let { it.passId.value to it } }.toMap()
+        val stencilEdgeRecipes = entries.mapNotNull { entry -> frame.w4eClipMaskProducerStencilEdgeRecipeOrNull(entry.packet)?.let { it.passId.value to it } }.toMap()
+        val stencilEdges = binding.nativePasses().filterIsInstance<PlanPass.ClipMaskProducer>().filter {
+            (it.copyGeometryF32() as? org.graphiks.math.geometry.ClipGeometryF32.Path)?.copyPathGeometryF32()?.copyStencilEdgeFanF32OrNull() != null
+        }
+        require(stencilEdgeRecipes.keys == stencilEdges.map { it.id.value }.toSet())
+        entries.forEach { entry -> frame.w4eClipMaskProducerStencilEdgeRecipeOrNull(entry.packet)?.let { recipe ->
+            val producer = entry.packet.w4ePreparedClipPass as? org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipPassAuthority.Producer
+            val slice = requireNotNull(binding.payload.geometrySlice(recipe.passId.value, W4eNativePayloadPlan.PRODUCER_PATH))
+            require(recipe.target.format == PlanTextureFormat.CoverageMask && recipe.depthStencil.format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8) &&
+                recipe.vertexCountI32 == recipe.copyVerticesF32().size / 2 && recipe.indexCountI32 == recipe.copyIndicesI32().size &&
+                slice.firstIndex == recipe.indexFirstI32 && slice.indexCount == recipe.indexCountI32 && slice.baseVertex == recipe.baseVertexI32 &&
+                slice.vertexCount == recipe.vertexCountI32 && slice.maxLocalIndex == recipe.maxLocalIndexI32 && producer != null &&
+                entry.render.w6aPassV1?.id == recipe.passId && entry.render.w6aPassV1?.ordinal == recipe.packetOrdinalI32 &&
+                producer.targetResourceId == recipe.target.id.value && producer.resolveTargetResourceId == recipe.resolveTarget?.id?.value &&
+                producer.depthStencilResourceId == recipe.depthStencil.id.value && producer.sampleCount == recipe.sampleCountI32 &&
+                entry.render.target == frame.refs.getValue(recipe.target.id) && entry.render.loadStore.loadOp == "clear" &&
+                entry.render.depthStencilLoadStore == GPUDepthStencilLoadStorePlan.WritableStencil(GPUStencilLoadOperation.Clear, GPUStorePlan.Store, 0u)) {
+                "W4e stencil-edge bundle-0 recording differs from its frozen recipe."
+            }
+        } }
         val directTriangles = binding.nativePasses().filterIsInstance<PlanPass.ClipMaskProducer>().filter {
             (it.copyGeometryF32() as? org.graphiks.math.geometry.ClipGeometryF32.Path)?.copyPathGeometryF32()?.copyDirectTriangleF32OrNull() != null
         }
@@ -159,7 +180,7 @@ private fun preflightW4eClipMaskInitializes(
                 recipe.source.id == fold.source && recipe.output.id == fold.output && recipe.operation == fold.operation &&
                 recipe.copyDomainI32() == fold.copyDomainI32())
         }
-        binding to W4eClipMaskInitializeNativePreflight(entries, recipes, producerRecipes, directTriangleRecipes, foldRecipes)
+        binding to W4eClipMaskInitializeNativePreflight(entries, recipes, producerRecipes, directTriangleRecipes, stencilEdgeRecipes, foldRecipes)
     }.toMap()
 
 /** Exhaustively authenticates W6b recipes, packet order, meshes and V/I/U windows before any device.create*. */
@@ -1714,6 +1735,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 val clipMaskInitializeRecipes = preflight.recipesByPassId
                 val clipMaskProducerRecipes = preflight.producerRecipesByPassId
                 val clipMaskProducerDirectTriangleRecipes = preflight.producerDirectTriangleRecipesByPassId
+                val clipMaskProducerStencilEdgeRecipes = preflight.producerStencilEdgeRecipesByPassId
                 val clipMaskFoldRecipes = preflight.foldRecipesByPassId
                 val extent = binding.copyExtentI32()
                 val childOwned = owned.own(GPUW4eNativeOwnedHandles())
@@ -1727,6 +1749,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     clipMaskInitializeRecipesByPassId = clipMaskInitializeRecipes,
                     clipMaskProducerRecipesByPassId = clipMaskProducerRecipes,
                     clipMaskProducerDirectTriangleRecipesByPassId = clipMaskProducerDirectTriangleRecipes,
+                    clipMaskProducerStencilEdgeRecipesByPassId = clipMaskProducerStencilEdgeRecipes,
                     clipMaskFoldRecipesByPassId = clipMaskFoldRecipes)
                     .map { native ->
                         val pass = graph.passes()[native.sourceStepIndex - 1]
