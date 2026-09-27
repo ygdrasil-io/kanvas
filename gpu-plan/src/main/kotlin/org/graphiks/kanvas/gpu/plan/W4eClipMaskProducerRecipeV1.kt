@@ -9,6 +9,24 @@ public enum class W4eClipMaskProducerShaderFamilyV1 { AnalyticCoverage }
 public enum class W4eClipMaskProducerGroupZeroAbiV1 { ProducerUniform }
 public enum class W4eClipMaskProducerLoadV1 { Clear }
 public enum class W4eClipMaskProducerStoreV1 { Store }
+public enum class W4eClipMaskProducerDepthStencilLoadV1 { Clear }
+public enum class W4eClipMaskProducerDepthStencilStoreV1 { Store }
+
+/** Exact depth/stencil attachment operations selected for an analytic producer site. */
+public class W4eClipMaskProducerDepthStencilStateV1 internal constructor(
+    public val depthClearValueF32: Float,
+    public val depthLoad: W4eClipMaskProducerDepthStencilLoadV1,
+    public val depthStore: W4eClipMaskProducerDepthStencilStoreV1,
+    public val depthReadOnly: Boolean,
+    public val stencilClearValueU32: UInt,
+    public val stencilLoad: W4eClipMaskProducerDepthStencilLoadV1,
+    public val stencilStore: W4eClipMaskProducerDepthStencilStoreV1,
+    public val stencilReadOnly: Boolean,
+) {
+    init {
+        require(depthClearValueF32.isFinite() && depthClearValueF32 in 0f..1f && stencilClearValueU32 <= 0xffu)
+    }
+}
 
 /** Immutable physical operand selected before native allocation. */
 public class W4eClipMaskProducerPhysicalOperandV1 internal constructor(
@@ -34,6 +52,7 @@ public class W4eClipMaskProducerRecipeV1 internal constructor(
     public val target: W4eClipMaskProducerPhysicalOperandV1,
     public val resolveTarget: W4eClipMaskProducerPhysicalOperandV1?,
     public val depthStencil: W4eClipMaskProducerPhysicalOperandV1?,
+    public val depthStencilState: W4eClipMaskProducerDepthStencilStateV1?,
     public val uniform: W4eClipMaskProducerPhysicalOperandV1,
     public val uniformPurpose: String,
     public val uniformOffsetBytesI64: Long,
@@ -68,6 +87,7 @@ public class W4eClipMaskProducerRecipeV1 internal constructor(
         require(PlanResourceUsage.RenderAttachment in target.usages() && fullscreenVertexCountI32 == 3)
         require((sampleCountI32 == 1) == (resolveTarget == null))
         require((sampleCountI32 == 1) == (depthStencil == null))
+        require((depthStencil == null) == (depthStencilState == null))
         require(shaderFamily == W4eClipMaskProducerShaderFamilyV1.AnalyticCoverage && groupZeroAbi == W4eClipMaskProducerGroupZeroAbiV1.ProducerUniform && load == W4eClipMaskProducerLoadV1.Clear && store == W4eClipMaskProducerStoreV1.Store)
     }
 }
@@ -91,6 +111,10 @@ public class W4eClipMaskProducerNativeSiteRecipeV1 internal constructor(
         operand("target", host.target)
         host.resolveTarget?.let { operand("resolve", it) } ?: text("resolve.present", "false")
         host.depthStencil?.let { operand("depth", it) } ?: text("depth.present", "false")
+        host.depthStencilState?.let { state ->
+            float("depth.config.clearValue", state.depthClearValueF32); enum("depth.config.load", state.depthLoad); enum("depth.config.store", state.depthStore); int("depth.config.readOnly", if (state.depthReadOnly) 1 else 0)
+            int("stencil.config.clearValue", state.stencilClearValueU32.toInt()); enum("stencil.config.load", state.stencilLoad); enum("stencil.config.store", state.stencilStore); int("stencil.config.readOnly", if (state.stencilReadOnly) 1 else 0)
+        } ?: text("depth.config.present", "false")
         operand("uniform", host.uniform); text("uniform.purpose", host.uniformPurpose); long("uniform.offset", host.uniformOffsetBytesI64); long("uniform.size", host.uniformByteSizeI64)
         enum("geometry", host.geometry); when (val geometry = host.copyGeometryF32()) {
             is ClipGeometryF32.Rect -> rectF32("geometry.rect", geometry.copyRectF32())
@@ -128,6 +152,7 @@ public fun freezeW4eClipMaskProducerRecipesV1(bindings: List<PlanW4eGeometryBind
         val uniform = rows.getValue(binding.payload.uniformResourceId)
         require(recipes.put(producer.id, W4eClipMaskProducerRecipeV1(producer.id, producer.ordinal,
             W4eClipMaskProducerPhysicalOperandV1(target), resolve?.let(::W4eClipMaskProducerPhysicalOperandV1), depth?.let(::W4eClipMaskProducerPhysicalOperandV1),
+            depth?.let { W4eClipMaskProducerDepthStencilStateV1(1f, W4eClipMaskProducerDepthStencilLoadV1.Clear, W4eClipMaskProducerDepthStencilStoreV1.Store, false, 0u, W4eClipMaskProducerDepthStencilLoadV1.Clear, W4eClipMaskProducerDepthStencilStoreV1.Store, false) },
             W4eClipMaskProducerPhysicalOperandV1(uniform), slice.purpose, slice.offsetBytes, slice.byteSize, geometry,
             producer.copyGeometryF32(), producer.inverseCoverage, producer.antiAlias, producer.sampleCountI32,
             W4eClipMaskProducerShaderFamilyV1.AnalyticCoverage, W4eClipMaskProducerGroupZeroAbiV1.ProducerUniform,

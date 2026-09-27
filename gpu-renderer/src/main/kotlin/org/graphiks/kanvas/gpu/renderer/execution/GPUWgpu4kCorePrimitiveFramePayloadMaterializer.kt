@@ -312,6 +312,16 @@ internal fun requireW4eClipMaskProducerRecipes(
             producer.inverseCoverage == recipe.inverseCoverage && producer.antiAlias == recipe.antiAlias) {
             "W4e ClipMaskProducer owner, ordinal, attachments, sample or coverage facts differ from the frozen planner recipe."
         }
+        recipe.depthStencilState?.let { state ->
+            require(recipe.depthStencil != null && state.depthClearValueF32 == 1f &&
+                state.depthLoad == org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerDepthStencilLoadV1.Clear &&
+                state.depthStore == org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerDepthStencilStoreV1.Store && !state.depthReadOnly &&
+                state.stencilClearValueU32 == 0u &&
+                state.stencilLoad == org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerDepthStencilLoadV1.Clear &&
+                state.stencilStore == org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerDepthStencilStoreV1.Store && !state.stencilReadOnly) {
+                "W4e ClipMaskProducer depth/stencil state differs from its frozen analytic recipe."
+            }
+        } ?: require(recipe.depthStencil == null) { "W4e ClipMaskProducer depth attachment lacks frozen state." }
         when (val frozen = recipe.copyGeometryF32()) {
             is org.graphiks.math.geometry.ClipGeometryF32.Rect -> {
                 val actual = producer.geometry as? GPUW4ePreparedClipGeometry.Rect
@@ -384,6 +394,12 @@ internal fun encodeW4eNativePasses(
     }
     fun clearPipeline(coverage: Float) = clearPipelines.getOrPut(coverage) {
         createW4eClearPipeline(device, coverage, owned)
+    }
+    fun frozenDepthStencilLoad(operation: org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerDepthStencilLoadV1) = when (operation) {
+        org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerDepthStencilLoadV1.Clear -> GPUPreparedNativeLoadOperation.Clear
+    }
+    fun frozenDepthStencilStore(operation: org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerDepthStencilStoreV1) = when (operation) {
+        org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerDepthStencilStoreV1.Store -> GPUPreparedNativeStoreOperation.Store
     }
     fun foldPipeline(operation: org.graphiks.kanvas.gpu.plan.ClipCombineOperation) =
         foldPipelines.getOrPut(operation) { createW4eFoldPipeline(device, operation, owned) }
@@ -508,6 +524,7 @@ internal fun encodeW4eNativePasses(
                 val sampleCount = frozenRecipe?.sampleCountI32 ?: pass.sampleCount
                 val inverseCoverage = frozenRecipe?.inverseCoverage ?: pass.inverseCoverage
                 val depthTarget = depthStencilResourceId?.let(attachment)
+                val frozenDepthStencilState = frozenRecipe?.depthStencilState
                 val producerCommands = when {
                     frozenRecipe != null -> {
                         require(frozenRecipe.geometry in setOf(org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerGeometryV1.Rect, org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerGeometryV1.RRect) &&
@@ -592,10 +609,14 @@ internal fun encodeW4eNativePasses(
                     attachment(targetResourceId), resolveTargetResourceId?.let(attachment), depthTarget,
                     GPUPreparedNativeLoadOperation.Clear, GPUPreparedNativeStoreOperation.Store,
                     GPUPreparedNativeClearColor(if (inverseCoverage) 1.0 else 0.0, if (inverseCoverage) 1.0 else 0.0, if (inverseCoverage) 1.0 else 0.0, if (inverseCoverage) 1.0 else 0.0),
-                    depthClearValue = 1f.takeIf { depthTarget != null }, depthLoadOperation = GPUPreparedNativeLoadOperation.Clear.takeIf { depthTarget != null },
-                    depthStoreOperation = GPUPreparedNativeStoreOperation.Store.takeIf { depthTarget != null }, depthReadOnly = depthTarget == null,
-                    stencilClearValue = 0u.takeIf { depthTarget != null }, stencilLoadOperation = GPUPreparedNativeLoadOperation.Clear.takeIf { depthTarget != null },
-                    stencilStoreOperation = GPUPreparedNativeStoreOperation.Store.takeIf { depthTarget != null }, stencilReadOnly = depthTarget == null), producerCommands)
+                    depthClearValue = frozenDepthStencilState?.depthClearValueF32 ?: 1f.takeIf { depthTarget != null },
+                    depthLoadOperation = frozenDepthStencilState?.depthLoad?.let(::frozenDepthStencilLoad) ?: GPUPreparedNativeLoadOperation.Clear.takeIf { depthTarget != null },
+                    depthStoreOperation = frozenDepthStencilState?.depthStore?.let(::frozenDepthStencilStore) ?: GPUPreparedNativeStoreOperation.Store.takeIf { depthTarget != null },
+                    depthReadOnly = frozenDepthStencilState?.depthReadOnly ?: depthTarget == null,
+                    stencilClearValue = frozenDepthStencilState?.stencilClearValueU32 ?: 0u.takeIf { depthTarget != null },
+                    stencilLoadOperation = frozenDepthStencilState?.stencilLoad?.let(::frozenDepthStencilLoad) ?: GPUPreparedNativeLoadOperation.Clear.takeIf { depthTarget != null },
+                    stencilStoreOperation = frozenDepthStencilState?.stencilStore?.let(::frozenDepthStencilStore) ?: GPUPreparedNativeStoreOperation.Store.takeIf { depthTarget != null },
+                    stencilReadOnly = frozenDepthStencilState?.stencilReadOnly ?: depthTarget == null), producerCommands)
             }
             is GPUW4ePreparedClipPassAuthority.Fold -> {
                 val pipeline = foldPipeline(pass.operation)
