@@ -544,7 +544,7 @@ private fun preflightW6FilterSeparableBlurs(frame: GPUW6aLayerFramePlan, framePl
         val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == id }
         val source = frame.physical.resource(actual.source); val target = frame.physical.resource(actual.target)
         val uses = listOf(org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.source), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false))
-        require(actual.ownerPassId == pass.id && actual.target == pass.output && actual.source == pass.inputs().single() && actual.kind == operation.kind && actual.axis == operation.axis && actual.sigmaF32.toRawBits() == operation.sigmaF32.toRawBits() && actual.tileMode == operation.tileMode && actual.copyKnownContentTargetLocalI32() == sampling.copyKnownContentInputTargetLocalI32() && actual.copyOutputToInputOffsetTargetLocalI32() == sampling.copyOutputToInputOffsetTargetLocalI32() && target.copyExtent() == actual.copyExtent() && source.copyExtent() == actual.copySourceExtent() && target.format == PlanTextureFormat.Color(actual.targetFormat) && source.format == PlanTextureFormat.Color(actual.sourceFormat) && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in source.usages() && render.target == frame.refs.getValue(actual.target) && render.resourceUses == uses && render.drawPackets.isEmpty() && render.loadStore.loadOp == "clear" && render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan is GPUSamplePlan.SingleSampleFrame && render.depthStencilLoadStore == null)
+        require(actual.ownerPassId == pass.id && actual.target == pass.output && actual.source == pass.inputs().single() && actual.kind == operation.kind && actual.axis == operation.axis && actual.sigmaF32.toRawBits() == operation.sigmaF32.toRawBits() && actual.tileMode == operation.tileMode && actual.groupZeroAbi == W6FilterSeparableBlurGroupZeroAbiV1.SourceTexture && actual.copyKnownContentTargetLocalI32() == sampling.copyKnownContentInputTargetLocalI32() && actual.copyOutputToInputOffsetTargetLocalI32() == sampling.copyOutputToInputOffsetTargetLocalI32() && target.copyExtent() == actual.copyExtent() && source.copyExtent() == actual.copySourceExtent() && target.format == PlanTextureFormat.Color(actual.targetFormat) && source.format == PlanTextureFormat.Color(actual.sourceFormat) && target.sampleCountI32 == actual.sampleCountI32 && source.sampleCountI32 == actual.sourceSampleCountI32 && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in source.usages() && render.target == frame.refs.getValue(actual.target) && render.resourceUses == uses && render.drawPackets.isEmpty() && render.loadStore.loadOp == "clear" && render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan is GPUSamplePlan.SingleSampleFrame && render.depthStencilLoadStore == null)
     }
 }
 
@@ -1355,7 +1355,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             val offset = recipe.copyOutputToInputOffsetTargetLocalI32(); val known = recipe.copyKnownContentTargetLocalI32()
                             val shader = W6A_VERTEX_SHADER + W6bSeparableBlurSnippet.fragment(recipe.axis, recipe.sigmaF32, recipe.tileMode, offset.x, offset.y, known.left, known.top, known.right, known.bottom, recipe.kind in setOf(FilterImplementationKindV1.MASK_COVERAGE_BLUR_X, FilterImplementationKindV1.MASK_COVERAGE_BLUR_Y))
                             val extent = recipe.copyExtent()
-                            renderOperands += textureRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.source), generation, shader, recipe.blend, 0, 0, extent.width, extent.height, pass, owned)
+                            renderOperands += separableBlurRender(stepIndex, views.getValue(recipe.target), views.getValue(recipe.source), generation, shader, recipe, pass, owned)
                         } else when (val operation = pass.operation) {
                             is FilterPassOperationV1.Crop -> error("Crop pass is missing its frozen native-site recipe.")
                             is FilterPassOperationV1.Offset -> error("Offset pass is missing its frozen native-site recipe.")
@@ -2350,6 +2350,26 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         return GPUPreparedNativeScopeOperand.Render(stepIndex,
             GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation), loadOperation = GPUPreparedNativeLoadOperation.Clear, clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)),
             listOf(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)), GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)), GPUPreparedNativeRenderCommand.SetScissor(0, 0, extent.width, extent.height), GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32, recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32))), w6aPassV1 = pass)
+    }
+
+    /** IIe1 translation reads every native selection from the sealed blur recipe. */
+    private fun separableBlurRender(stepIndex: Int, target: GPUTextureView, source: GPUTextureView,
+        generation: GPUDeviceGenerationID, shader: String, recipe: W6FilterSeparableBlurRecipeV1,
+        pass: PlanPass.FilterPass, owned: W6aOwnedHandles): GPUPreparedNativeScopeOperand.Render {
+        require(recipe.ownerPassId == pass.id && recipe.target == pass.output && recipe.source == pass.inputs().single() &&
+            recipe.groupZeroAbi == W6FilterSeparableBlurGroupZeroAbiV1.SourceTexture)
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout())))))
+        val pipeline = pipeline(shader, layout, w6aColorTarget(recipe.blend), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(BindGroupEntry(0u, source)))))
+        val extent = recipe.copyExtent()
+        return GPUPreparedNativeScopeOperand.Render(stepIndex, GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation),
+            loadOperation = if (recipe.load == AttachmentLoadPlan.ClearTransparent) GPUPreparedNativeLoadOperation.Clear else GPUPreparedNativeLoadOperation.Load,
+            clearColor = if (recipe.load == AttachmentLoadPlan.ClearTransparent) GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0) else null), listOf(
+            GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+            GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+            GPUPreparedNativeRenderCommand.SetScissor(0, 0, extent.width, extent.height),
+            GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32, recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32)),
+        ), w6aPassV1 = pass)
     }
 
     private fun textureRender(

@@ -45,6 +45,7 @@ public enum class NativeSiteRecipeFamilyV1 {
 
 /** IIe1's backend-neutral fullscreen blur selection; X/Y and image/mask phases remain distinct. */
 public enum class W6FilterSeparableBlurShaderFamilyV1 { GaussianTextureLoad }
+public enum class W6FilterSeparableBlurGroupZeroAbiV1 { SourceTexture }
 public class W6FilterSeparableBlurRecipeV1 internal constructor(
     public val ownerPassId: PlanPassId, public val target: PlanResourceId, public val source: PlanResourceId,
     public val kind: FilterImplementationKindV1, public val axis: FilterAxisV1, public val sigmaF32: Float,
@@ -53,6 +54,7 @@ public class W6FilterSeparableBlurRecipeV1 internal constructor(
     public val targetFormat: PlanLogicalColorFormat, public val sourceFormat: PlanLogicalColorFormat,
     public val sampleCountI32: Int, public val sourceSampleCountI32: Int,
     public val shaderFamily: W6FilterSeparableBlurShaderFamilyV1 = W6FilterSeparableBlurShaderFamilyV1.GaussianTextureLoad,
+    public val groupZeroAbi: W6FilterSeparableBlurGroupZeroAbiV1 = W6FilterSeparableBlurGroupZeroAbiV1.SourceTexture,
     public val load: AttachmentLoadPlan = AttachmentLoadPlan.ClearTransparent, public val store: AttachmentStorePlan = AttachmentStorePlan.Store,
     public val blend: BlendPlan = BlendPlan.LegacySrcOverV1, public val draw: W6FullscreenEmptyDrawV1 = W6FullscreenEmptyDrawV1(),
 ) {
@@ -63,7 +65,7 @@ public class W6FilterSeparableBlurRecipeV1 internal constructor(
 }
 public class W6FilterSeparableBlurNativeSiteRecipeV1 internal constructor(public val host: W6FilterSeparableBlurRecipeV1) : NativeSiteRecipeV1 {
     override val versionI32 = 1; override val owner = NativeSiteOwnerV1(host.ownerPassId, 0, 0); override val family = NativeSiteRecipeFamilyV1.W6FilterSeparableBlur
-    override val canonicalLogicalEncodingV1 = nativeSiteEncodingV1(family) { text("owner", host.ownerPassId.value); text("target", host.target.value); text("source", host.source.value); enum("kind", host.kind); enum("axis", host.axis); float("sigma", host.sigmaF32); enum("tileMode", host.tileMode); int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); int("sourceExtentWidth", host.copySourceExtent().width); int("sourceExtentHeight", host.copySourceExtent().height); rect("known", host.copyKnownContentTargetLocalI32()); point("offset", host.copyOutputToInputOffsetTargetLocalI32()); enum("targetFormat", host.targetFormat); enum("sourceFormat", host.sourceFormat); int("sampleCount", host.sampleCountI32); int("sourceSampleCount", host.sourceSampleCountI32); enum("shaderFamily", host.shaderFamily); enum("load", host.load); enum("store", host.store); blend("blend", host.blend); int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32) }
+    override val canonicalLogicalEncodingV1 = nativeSiteEncodingV1(family) { text("owner", host.ownerPassId.value); text("target", host.target.value); text("source", host.source.value); enum("kind", host.kind); enum("axis", host.axis); float("sigma", host.sigmaF32); enum("tileMode", host.tileMode); int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); int("sourceExtentWidth", host.copySourceExtent().width); int("sourceExtentHeight", host.copySourceExtent().height); rect("known", host.copyKnownContentTargetLocalI32()); point("offset", host.copyOutputToInputOffsetTargetLocalI32()); enum("targetFormat", host.targetFormat); enum("sourceFormat", host.sourceFormat); int("sampleCount", host.sampleCountI32); int("sourceSampleCount", host.sourceSampleCountI32); enum("shaderFamily", host.shaderFamily); enum("groupZeroAbi", host.groupZeroAbi); enum("load", host.load); enum("store", host.store); blend("blend", host.blend); int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32); int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32) }
 }
 
 /** IId2 keeps background and foreground in public order, even if their resource ids match. */
