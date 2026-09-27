@@ -236,9 +236,17 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
             minOf(graph.budget.maxFrameLocalBytes, request.rendererAggregateMemoryBudgetBytes ?: Long.MAX_VALUE), requireNotNull(request.capabilities.limits)))
         require(memory.diagnostic == null && memory.targetResidentBytes + memory.peakFrameTransientBytes ==
             graph.peakFrameLocalBytes)
+        val colorFilterUniformIds = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
+            (pass.operation as? FilterPassOperationV1.ColorFilter)?.let {
+                val recipe = physical.nativeSiteRecipeCatalogV1().recipe(NativeSiteOwnerV1(pass.id, 0, 0))
+                    as? W6FilterColorFilterNativeSiteRecipeV1
+                    ?: error("ColorFilter preparation lacks its frozen native-site recipe.")
+                recipe.host.uniformResource
+            }
+        }.toSet()
         val preparations = graph.resources().filter { it.kind == PlanResourceKind.Texture2D && it.lifetime == PlanResourceLifetime.FrameLocal ||
             it.role in setOf(PlanResourceRole.ReadbackStaging, PlanResourceRole.MaskTableData) || physical.w4eGeometryBindings().any { binding ->
-                it.id in setOf(binding.payload.vertexResourceId, binding.payload.indexResourceId, binding.payload.uniformResourceId) } }
+                it.id in setOf(binding.payload.vertexResourceId, binding.payload.indexResourceId, binding.payload.uniformResourceId) } || it.id in colorFilterUniformIds }
             .map { resource -> GPUResourcePreparationRequest(refs.getValue(resource.id),
                 resource.copyExtent()?.let { GPUFrameTextureDescriptor(GPUPixelBounds(0, 0, it.width, it.height),
                     when (resource.format) {
@@ -259,7 +267,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                     PlanResourceRole.CoverageMaskMultisampleScratch -> GPUFrameResourceRole.ClipMask
                     PlanResourceRole.VertexData -> GPUFrameResourceRole.VertexData
                     PlanResourceRole.IndexData -> GPUFrameResourceRole.IndexData
-                    PlanResourceRole.UniformData -> GPUFrameResourceRole.UniformData
+                    PlanResourceRole.UniformData, PlanResourceRole.SourceUniformData -> GPUFrameResourceRole.UniformData
                     PlanResourceRole.MaskTableData -> GPUFrameResourceRole.StorageData
                     else -> GPUFrameResourceRole.ReadbackStaging
                 }, resource.usages().map { usage -> when (usage) {
@@ -544,8 +552,14 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                                 GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false) })
                             is PlanPass.PictureComposite -> listOf(GPUFrameResourceUse(refs.getValue(pass.source),
                                 GPUFrameResourceRole.FilterTarget, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false))
-                            is PlanPass.FilterPass -> pass.inputs().map { input -> GPUFrameResourceUse(refs.getValue(input),
-                                GPUFrameResourceRole.FilterTarget, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false) }
+                            is PlanPass.FilterPass -> buildList {
+                                pass.inputs().forEach { input -> add(GPUFrameResourceUse(refs.getValue(input),
+                                    GPUFrameResourceRole.FilterTarget, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false)) }
+                                (pass.operation as? FilterPassOperationV1.ColorFilter)?.let { operation ->
+                                    add(GPUFrameResourceUse(refs.getValue(requireNotNull(operation.uniformResource)),
+                                        GPUFrameResourceRole.UniformData, GPUFrameResourceUsage.Uniform, GPUFrameResourceLifetime.FrameLocal, false))
+                                }
+                            }
                             is PlanPass.FilterComposite -> listOf(GPUFrameResourceUse(refs.getValue(pass.source),
                                 GPUFrameResourceRole.FilterTarget, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false))
                             is PlanPass.FilterCoverageSourcePass -> buildList {

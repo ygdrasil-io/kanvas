@@ -448,7 +448,10 @@ private fun preflightW6FilterColorFilters(frame: GPUW6aLayerFramePlan, framePlan
         val pass = frame.graph.passes().single { it.id == id } as? PlanPass.FilterPass ?: error("W6 ColorFilter owner is not FilterPass.")
         val operation = pass.operation as? FilterPassOperationV1.ColorFilter ?: error("W6 ColorFilter operation changed after seal.")
         val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == id }
-        val uses = listOf(org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.source), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false))
+        val uses = listOf(
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.source), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false),
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.uniformResource), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.UniformData, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.Uniform, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false),
+        )
         val target = frame.physical.resource(actual.target); val source = frame.physical.resource(actual.source); val uniform = frame.physical.resource(actual.uniformResource)
         require(actual.ownerPassId == pass.id && actual.target == pass.output && actual.source == pass.inputs().single() && actual.execution === operation.execution && actual.uniformResource == operation.uniformResource && actual.uniformOffsetBytesI64 == operation.uniformOffsetBytesI64 && actual.uniformCapacityBytesI64 == operation.uniformCapacityBytesI64 && actual.copyOutputToInputOffsetTargetLocalI32() == operation.sampling.copyOutputToInputOffsetTargetLocalI32() && target.copyExtent() == actual.copyExtent() && target.format == PlanTextureFormat.Color(actual.targetFormat) && target.sampleCountI32 == actual.sampleCountI32 && PlanResourceUsage.RenderAttachment in target.usages() && source.copyExtent() == actual.copySourceExtent() && source.format == PlanTextureFormat.Color(actual.sourceFormat) && source.sampleCountI32 == actual.sourceSampleCountI32 && PlanResourceUsage.Sampled in source.usages() && uniform.role == PlanResourceRole.SourceUniformData && uniform.kind == PlanResourceKind.Buffer && uniform.byteSize == actual.uniformCapacityBytesI64 && uniform.usages() == setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination) && render.target == frame.refs.getValue(actual.target) && render.resourceUses == uses && render.drawPackets.isEmpty() && render.loadStore.loadOp == "clear" && render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan is GPUSamplePlan.SingleSampleFrame && render.depthStencilLoadStore == null)
     }
@@ -591,8 +594,12 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 .mapNotNull { it.graphTextureOperand?.uniformResource }.distinct()
             val maskMaterialsByUniform = maskShaderMaterials.values.groupBy { it.binding.uniformResource }
             val colorFiltersByUniform = graph.passes().filterIsInstance<PlanPass.FilterPass>().mapNotNull { pass ->
-                (pass.operation as? FilterPassOperationV1.ColorFilter)?.let { operation ->
-                    requireNotNull(operation.uniformResource) to operation
+                (pass.operation as? FilterPassOperationV1.ColorFilter)?.let {
+                    val recipe = frame.physical.nativeSiteRecipeCatalogV1().recipe(NativeSiteOwnerV1(pass.id, 0, 0))
+                        as? W6FilterColorFilterNativeSiteRecipeV1
+                        ?: error("ColorFilter source-uniform staging lacks its frozen native-site recipe.")
+                    require(recipe.host === frame.physical.w6FilterColorFilterRecipe(pass.id))
+                    recipe.host.uniformResource to recipe.host
                 }
             }.groupBy({ it.first }, { it.second })
             val sourceUniformBuffers = (graphTextureUniformIds + maskMaterialsByUniform.keys + colorFiltersByUniform.keys).distinct().associateWith { id ->
@@ -2093,7 +2100,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             BindGroupLayoutEntry(1u, GPUShaderStage.Fragment, buffer = BufferBindingLayout(
                 type = GPUBufferBindingType.Uniform, minBindingSize = recipe.uniformCapacityBytesI64.toULong())),
         ))))
-        val pipeline = pipeline(shader, layout, w6aColorTarget(BlendPlan.LegacySrcOverV1), owned)
+        val pipeline = pipeline(shader, layout, w6aColorTarget(recipe.blend), owned)
         val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(
             BindGroupEntry(0u, source), BindGroupEntry(1u, BufferBinding(uniform, 0uL,
                 recipe.uniformCapacityBytesI64.toULong())),
