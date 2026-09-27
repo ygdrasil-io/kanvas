@@ -24,6 +24,28 @@ import org.graphiks.math.vector.Vector3F32
 import org.junit.jupiter.api.Test
 
 class W6dPictureFilterSurfacePixelTest {
+    /** IIIb2b1: a layer-owned W6 frame applies the outer Picture color filter at its graph composite. */
+    @Test
+    fun layerOwnedDrawPictureWithColorFilterUsesGraphComposite() {
+        val expected = ubyteArrayOf(0u, 0u, 255u, 255u)
+        val pictureBounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(pictureBounds).drawRect(pictureBounds, Paint(ColorARGB.Red, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val surface = Surface(1, 1)
+
+        surface.canvas {
+            saveLayer(SaveLayerRec())
+            drawRect(pictureBounds, Paint(ColorARGB.Red, antiAlias = false))
+            restore()
+            drawPicture(picture, Paint(colorFilter = ColorFilter.Blend(ColorARGB.Blue, BlendMode.SRC), antiAlias = false))
+        }
+
+        val result = surface.render()
+        assertContentEquals(expected, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
     /** Interleaved direct and filter-owned Pictures must retain distinct physical occurrences. */
     @Test
     fun interleavedDirectAndFilterPicturesRetainOrderAfterWireReplay() {

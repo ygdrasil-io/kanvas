@@ -751,6 +751,20 @@ private fun preflightW6PictureCompositeGraphs(frame: GPUW6aLayerFramePlan, frame
     }
 }
 
+private fun preflightW6PictureCompositeGraphFiltered(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = freezeW6PictureCompositeGraphFilteredRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6PictureCompositeGraphFilteredRecipes().keys == expected.keys)
+    expected.forEach { (id, frozen) ->
+        val actual = requireNotNull(frame.physical.w6PictureCompositeGraphFilteredRecipeOrNull(id)); val pass = frame.graph.passes().single { it.id == id } as PlanPass.PictureComposite
+        val sourcePass = frame.graph.passes().filterIsInstance<PlanPass.PictureSourcePass>().single { it.output == actual.source }; val operand = requireNotNull(sourcePass.graphTextureOperand)
+        val target = frame.physical.resource(actual.destination); val source = frame.physical.resource(actual.source); val uniform = frame.physical.resource(actual.uniformResource)
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == id }
+        val uses = listOf(org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.source), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.uniformResource), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.UniformData, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.Uniform, org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false))
+        val catalog = frame.physical.nativeSiteRecipeCatalogV1().recipe(actual.nativeSiteOwnerV1()) as? W6PictureCompositeGraphFilteredNativeSiteRecipeV1
+        require(catalog?.host === actual && actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1() && actual.source == pass.source && actual.destination == pass.destination && pass.operands?.blend !is BlendPlan.DestinationReadV1 && operand.sealedSourceId == actual.graphSealedSource && operand.sealedSourceGenerationI64 == actual.graphSealedSourceGenerationI64 && operand.colorFilter?.structuralIdentity == actual.filter.structuralIdentity && operand.colorFilter?.canonicalIdentity == actual.filter.canonicalIdentity && operand.uniformResource == actual.uniformResource && operand.colorFilterUniformOffsetI64 == actual.uniformOffsetBytesI64 && operand.colorFilterUniformByteCountI64 == actual.uniformCapacityBytesI64 && target.copyExtent() == actual.copyTargetExtentI32() && source.copyExtent() == actual.copySourceExtentI32() && target.format == PlanTextureFormat.Color(actual.targetFormat) && source.format == PlanTextureFormat.Color(actual.sourceFormat) && target.sampleCountI32 == actual.targetSampleCountI32 && source.sampleCountI32 == actual.sourceSampleCountI32 && PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in source.usages() && uniform.kind == PlanResourceKind.Buffer && uniform.role == PlanResourceRole.SourceUniformData && uniform.byteSize == actual.uniformCapacityBytesI64 && uniform.usages() == setOf(PlanResourceUsage.Uniform, PlanResourceUsage.CopyDestination) && render.target == frame.refs.getValue(actual.destination) && render.resourceUses == uses && render.loadStore.loadOp == "load" && render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan == GPUSamplePlan.SingleSampleFrame && render.drawPackets.isEmpty() && render.depthStencilLoadStore == null) { "Filtered graph PictureComposite preflight differs from frozen recipe." }
+    }
+}
+
 private fun recipeDepthAttachmentPreflight(
     host: W6bCoverageRasterHostRecipeV1,
     depthUses: List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse>,
@@ -823,6 +837,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             preflightW6FilterDropShadowComposites(frame, framePlan)
             preflightW6FilteredLayerComposites(frame, framePlan)
             preflightW6PictureCompositeGraphs(frame, framePlan)
+            preflightW6PictureCompositeGraphFiltered(frame, framePlan)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
@@ -1766,6 +1781,20 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 pictureCompositeGraphRender(stepIndex, views.getValue(recipe.destination),
                                     views.getValue(recipe.source), generation, recipe, pass, owned)
                             }
+                            is W6PictureCompositeGraphFilteredNativeSiteRecipeV1 -> {
+                                val recipe = catalogRecipe.host
+                                val operand = requireNotNull(graphTextureOperandsBySource[pass.source])
+                                require(scissor != null && operands.blend !is BlendPlan.DestinationReadV1 &&
+                                    frame.physical.w6PictureCompositeGraphFilteredRecipeOrNull(pass.id) === recipe &&
+                                    operand.colorFilter?.structuralIdentity == recipe.filter.structuralIdentity &&
+                                    operand.colorFilter?.canonicalIdentity == recipe.filter.canonicalIdentity &&
+                                    operand.sealedSourceId == recipe.graphSealedSource && operand.sealedSourceGenerationI64 == recipe.graphSealedSourceGenerationI64 &&
+                                    operand.uniformResource == recipe.uniformResource && operand.colorFilterUniformOffsetI64 == recipe.uniformOffsetBytesI64 && operand.colorFilterUniformByteCountI64 == recipe.uniformCapacityBytesI64) { "Filtered graph PictureComposite differs from its catalog recipe." }
+                                val buffer = graphTextureUniformBuffers.getValue(recipe.uniformResource)
+                                if (recipe.filter.dynamicByteCountI64 > 0L) queue.writeBuffer(buffer, recipe.uniformOffsetBytesI64.toULong(), ArrayBuffer.of(recipe.filter.copyDynamicBytes()))
+                                pictureCompositeGraphFilteredRender(stepIndex, views.getValue(recipe.destination), views.getValue(recipe.source),
+                                    buffer, generation, recipe, pass, owned)
+                            }
                             null -> {
                                 val sampleOffset = operands.copySourceSampleOffsetTargetLocalI32()
                                 val operand = requireNotNull(graphTextureOperandsBySource[pass.source]) {
@@ -2036,6 +2065,63 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             operationKindOverride = if (pass is PlanPass.LayerComposite) GPUEncoderOperationKind.LayerComposite else null,
             w6aPassV1 = pass,
         )
+    }
+
+    /** IIIb2b1 mechanically translates the frozen graph-filter terminal; it never selects from operands. */
+    private fun pictureCompositeGraphFilteredRender(
+        stepIndex: Int, target: GPUTextureView, source: GPUTextureView, uniform: GPUBuffer,
+        generation: GPUDeviceGenerationID, recipe: W6PictureCompositeGraphFilteredRecipeV1,
+        pass: PlanPass.PictureComposite, owned: W6aOwnedHandles,
+    ): GPUPreparedNativeScopeOperand.Render {
+        require(recipe.source == pass.source && recipe.destination == pass.destination &&
+            recipe.shaderFamily == W6PictureCompositeGraphFilteredShaderFamilyV1.GraphTextureColorFilter &&
+            recipe.groupZeroAbi == W6PictureCompositeGraphFilteredGroupZeroAbiV1.SourceTextureThenColorFilterUniform &&
+            recipe.load == AttachmentLoadPlan.Load && recipe.store == AttachmentStorePlan.Store &&
+            recipe.blend !is BlendPlan.DestinationReadV1) { "Frozen IIIb2b1 recipe changed before native allocation." }
+        val targetExtent = recipe.copyTargetExtentI32(); val sourceExtent = recipe.copySourceExtentI32()
+        val sourceBounds = recipe.copySourceBoundsTargetI32()
+        val offset = recipe.copySourceSampleOffsetTargetLocalI32(); val scissor = recipe.copyCompositeScissorTargetLocalI32()
+        val bindingBytes = recipe.uniformCapacityBytesI64
+        val dynamicBytes = maxOf(16L, recipe.filter.dynamicByteCountI64)
+        require(targetExtent.width > 0 && targetExtent.height > 0 && sourceExtent.width > 0 && sourceExtent.height > 0 &&
+            !sourceBounds.isEmpty && scissor.width() > 0 && scissor.height() > 0 && recipe.alphaF32.isFinite() &&
+            recipe.uniformOffsetBytesI64 >= 0L && bindingBytes >= dynamicBytes &&
+            recipe.uniformOffsetBytesI64 + dynamicBytes <= bindingBytes) {
+            "Frozen IIIb2b1 recipe has an invalid physical or W5f uniform window."
+        }
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(
+            BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
+            BindGroupLayoutEntry(1u, GPUShaderStage.Fragment, buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform, minBindingSize = bindingBytes.toULong())),
+        ))))
+        val declaration = "struct W5fMaterialBlock { words: array<vec4<u32>, ${maxOf(1L, (bindingBytes + 15L) / 16L)}>, }\n" +
+            "@group(0) @binding(1) var<uniform> w5fMaterial: W5fMaterialBlock;\n" +
+            "fn w6_picture_graph_filter(input: vec4<f32>) -> vec4<f32> {\n" +
+            W5fColorOperationEmitterV1.emit(recipe.filter.copyOperationGraph(), "input", recipe.uniformOffsetBytesI64 / 4L) + "}\n"
+        val shader = W6A_VERTEX_SHADER + """
+            @group(0) @binding(0) var graph_source: texture_2d<f32>;
+            $declaration
+            @fragment fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+                let alpha_applied = textureLoad(graph_source, vec2<i32>(position.xy) + vec2<i32>(${offset.x}, ${offset.y}), 0) * ${recipe.alphaF32};
+                return w6_picture_graph_filter(alpha_applied);
+            }
+        """
+        val pipeline = pipeline(shader, layout, w6aColorTarget(recipe.blend), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(
+            BindGroupEntry(0u, source), BindGroupEntry(1u, BufferBinding(uniform, 0uL, bindingBytes.toULong())),
+        ))))
+        val load = when (recipe.load) {
+            AttachmentLoadPlan.Load -> GPUPreparedNativeLoadOperation.Load
+            AttachmentLoadPlan.ClearTransparent -> GPUPreparedNativeLoadOperation.Clear
+        }
+        val clear = if (recipe.load == AttachmentLoadPlan.ClearTransparent) GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0) else null
+        val store = when (recipe.store) { AttachmentStorePlan.Store -> GPUPreparedNativeStoreOperation.Store }
+        return GPUPreparedNativeScopeOperand.Render(stepIndex, GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation),
+            loadOperation = load, storeOperation = store, clearColor = clear),
+            listOf(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+                GPUPreparedNativeRenderCommand.SetScissor(scissor.left, scissor.top, scissor.width(), scissor.height()),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32, recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32))),
+            w6aPassV1 = pass)
     }
 
     /** Materializes one published graph-texture source and, when present, its frozen W5 filter row. */
