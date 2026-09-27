@@ -330,7 +330,7 @@ public class W4eClipPlanCompiler internal constructor(
             }
         }
         val maskStacks = selected.stacks.filter { it.realization == Realization.Mask }
-        capabilityRefusal(capabilities, maskStacks)?.let { return it }
+        capabilityRefusal(capabilities, maskStacks, selected.inverseMaskGeometryCommands().isNotEmpty())?.let { return it }
         val basePreview = when (val result = selected.constructionSeam.preflightFrame(selected.base, capabilities, budget)) {
             is RenderPlanResult.Ready -> result.plan
             is RenderPlanResult.GapNotMigrated -> return constructionGap(listOf(
@@ -393,7 +393,8 @@ public class W4eClipPlanCompiler internal constructor(
         if (selected.owner !== this || !selected.matches()) return invalidCandidate()
         if (selected.capabilityId == W5A_AA_CAPABILITY_ID)
             return promoted("W5b final blending requires the admitted single-sample W4e topology")
-        capabilityRefusal(capabilities,selected.stacks.filter { it.realization == Realization.Mask })?.let { return it }
+        capabilityRefusal(capabilities,selected.stacks.filter { it.realization == Realization.Mask },
+            selected.inverseMaskGeometryCommands().isNotEmpty())?.let { return it }
         val basePreview = when (val result = selected.constructionSeam.preflightFrame(selected.base,capabilities,budget)) {
             is RenderPlanResult.Ready -> result.plan
             is RenderPlanResult.GapNotMigrated -> return result
@@ -526,11 +527,34 @@ public class W4eClipPlanCompiler internal constructor(
                 sealedInverseDrawsByConstructionSource,
             ).withClipStrategies(strategyByCommand, clippedGeneralBySource)
         }
+        val inverseMaskCommands = selected.inverseMaskGeometryCommands()
+        fun inverseMaskPath(pass: PlanPass): Boolean = (pass as? PlanPass.PathRenderPass)?.let { path ->
+            path.phase == PathRenderPhase.SingleSampleDirectColor && path.draw.commandIndex in inverseMaskCommands
+        } == true
+        val inverseMaskDepth = inverseMaskCommands.takeIf { it.isNotEmpty() }?.let {
+            planResourceId(PlanResourceRole.DepthStencil,
+                (baseResources.filter { resource -> resource.role == PlanResourceRole.DepthStencil }
+                    .maxOfOrNull(PlanResource::ordinal) ?: -1) + 1)
+        }
+        var pathOrdinalI32 = 0
+        fun pathCopy(source: PlanPass.PathRenderPass, phase: PathRenderPhase, depth: PlanResourceId?, load: AttachmentLoadPlan,
+            access: PlanDepthStencilAccess?, loadStore: PlanDepthStencilLoadStore?): PlanPass.PathRenderPass =
+            PlanPass.PathRenderPass(pathOrdinalI32++, source.target, source.draw, phase, source.drawDataResources,
+                source.atomicGroup, depth, load, AttachmentStorePlan.Store, access, loadStore, source.resolveTarget)
+        val phasedPasses = clippedPasses.flatMap { pass ->
+            val path = pass as? PlanPass.PathRenderPass
+            if (path == null) listOf(pass) else if (inverseMaskPath(path)) listOf(
+                pathCopy(path, PathRenderPhase.SingleSampleStencilProducer, requireNotNull(inverseMaskDepth), path.load,
+                    PlanDepthStencilAccess.Write, PlanDepthStencilLoadStore.ClearZeroStore),
+                pathCopy(path, PathRenderPhase.SingleSampleStencilColorCover, requireNotNull(inverseMaskDepth), AttachmentLoadPlan.Load,
+                    PlanDepthStencilAccess.ReadWrite, PlanDepthStencilLoadStore.LoadStoreTestReset),
+            ) else listOf(pathCopy(path, path.phase, path.depthStencil, path.load, path.depthStencilAccess, path.depthStencilLoadStore))
+        }
         // `InverseDomain.Geometry` is a W4e scene operation, not a W4d.2 path-phase
         // side effect.  A direct triangle therefore still needs a declared scene D24S8 to
         // rasterize its finite interior before the domain cover.  Reuse an exact W4d scene
         // attachment when one exists; otherwise declare one here with its real lifetime.
-        val inverseInteriorPaths = clippedPasses.mapIndexedNotNull { index, pass ->
+        val inverseInteriorPaths = phasedPasses.mapIndexedNotNull { index, pass ->
             val path = pass as? PlanPass.PathRenderPass ?: return@mapIndexedNotNull null
             val inverse = path.draw.clipStrategyOrNullForW4e() as? ClipPlanStrategy.InverseDomain
                 ?: return@mapIndexedNotNull null
@@ -567,21 +591,35 @@ public class W4eClipPlanCompiler internal constructor(
             }
         }
         val sceneDepthForSample = existingSceneDepthBySamples.mapValues { (_, resource) -> resource.id } + newSceneDepthBySamples
-        val transformedPasses = clippedPasses.map { pass ->
+        val transformedPasses = phasedPasses.map { pass ->
             pass.withW4eInverseDomainSceneDepth(sceneDepthForSample)
         }
         val allPasses = prefix + transformedPasses
+        inverseMaskDepth?.let { depth ->
+            val uses = allPasses.mapIndexedNotNull { indexI32, pass ->
+                indexI32.takeIf { pass is PlanPass.PathRenderPass && pass.depthStencil == depth }
+            }
+            resources += PlanResource.of(PlanResourceRole.DepthStencil, depth.value.substringAfter(':').toInt(),
+                PlanResourceKind.Texture2D, PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8), extent,
+                checkedTextureBytesI64(4, extent.width, extent.height, 1), setOf(PlanResourceUsage.DepthStencilAttachment),
+                PlanResourceLifetime.FrameLocal, uses.min(), Math.addExact(uses.max(), 1), 1)
+        }
         // Retain exactly the scene D24S8 resources used by the source geometry.  A genuinely
         // empty inverse source has no such pass and therefore no D24S8 allocation.
         val retainedSceneDepthIds = transformedPasses
             .filterIsInstance<PlanPass.PathRenderPass>()
             .mapNotNull(PlanPass.PathRenderPass::depthStencil)
             .toSet()
+        fun remap(indexI32: Int): Int = Math.addExact(indexI32, inverseMaskCommands.count { command ->
+            requireNotNull(basePasses.indexOfFirst { pass ->
+                (pass as? PlanPass.PathRenderPass)?.draw?.commandIndex == command
+            }.takeIf { it >= 0 }) < indexI32
+        })
         val shiftedResources = baseResources
             .filterNot { resource ->
                 resource.role == PlanResourceRole.DepthStencil && resource.id !in retainedSceneDepthIds
             }
-            .map { resource -> resource.shifted(prefixCount) }
+            .map { resource -> resource.remapped(prefixCount, ::remap) }
         val unsealedResources = resources + shiftedResources
         val nativePayload = if (deferredSources != null) W4eNativePayloadPlan.fromDeferred(
             allPasses,unsealedResources,extent,capabilities,deferredSources)
@@ -695,20 +733,30 @@ public class W4eClipPlanCompiler internal constructor(
         var firstPassIndex = 0
         selected.stacks.forEachIndexed { ordinal, stack ->
             if (stack.realization !== Realization.Mask) return@forEachIndexed
-            val layout = preflightMaskResources(stack, ordinal, firstPassIndex, prefixPassCount, base)
+            val layout = preflightMaskResources(selected, stack, ordinal, firstPassIndex, prefixPassCount, base)
             layouts[ordinal] = layout
             firstPassIndex = Math.addExact(firstPassIndex, 1 + stack.emittedEntries.size * 2)
         }
         require(firstPassIndex == prefixPassCount) { "W4e clip prefix accounting drifted" }
-        val totalPassCount = Math.addExact(prefixPassCount, base.passCount)
+        val inverseMaskCommands = selected.inverseMaskGeometryCommands()
+        fun remap(indexI32: Int): Int = Math.addExact(indexI32, inverseMaskCommands.count { command ->
+            requireNotNull(base.colorConsumerPassByCommand[command]) < indexI32
+        })
+        val inverseCountI32 = inverseMaskCommands.size
+        val totalPassCount = Math.addExact(Math.addExact(prefixPassCount, base.passCount), inverseCountI32)
         val spans = buildList {
             layouts.values.forEach { addAll(it.resourceSpans()) }
             base.resources.forEach { span ->
                 add(FrameResourceSpan(
                     span.byteSize,
-                    Math.addExact(span.firstPassIndex, prefixPassCount),
-                    Math.addExact(span.lastPassIndexExclusive, prefixPassCount),
+                    Math.addExact(remap(span.firstPassIndex), prefixPassCount),
+                    Math.addExact(remap(span.lastPassIndexExclusive), prefixPassCount),
                 ))
+            }
+            if (inverseCountI32 > 0) {
+                val uses = inverseMaskCommands.map { command -> remap(requireNotNull(base.colorConsumerPassByCommand[command])) }
+                add(FrameResourceSpan(ClipPlanBudget.checkedMaskTextureBytesI64(base.extent.width, base.extent.height, 1),
+                    Math.addExact(prefixPassCount, uses.min()), Math.addExact(Math.addExact(prefixPassCount, uses.max()), 2)))
             }
         }
         return W4eFramePreview(
@@ -720,6 +768,7 @@ public class W4eClipPlanCompiler internal constructor(
     }
 
     private fun preflightMaskResources(
+        selected: Candidate,
         stack: PreparedStack,
         ordinal: Int,
         firstPassIndex: Int,
@@ -758,7 +807,10 @@ public class W4eClipPlanCompiler internal constructor(
             val baseConsumerPass = requireNotNull(base.colorConsumerPassByCommand[commandIndex]) {
                 "W4d.2 preflight omitted a clipped consumer"
             }
-            use(accumulator, Math.addExact(prefixPassCount, baseConsumerPass))
+            val extra = selected.inverseMaskGeometryCommands().count { command ->
+                requireNotNull(base.colorConsumerPassByCommand[command]) <= baseConsumerPass
+            }
+            use(accumulator, Math.addExact(Math.addExact(prefixPassCount, baseConsumerPass), extra))
         }
         val oneSampleBytes = ClipPlanBudget.checkedMaskTextureBytesI64(
             base.extent.width,
@@ -788,6 +840,7 @@ public class W4eClipPlanCompiler internal constructor(
     private fun capabilityRefusal(
         capabilities: PlanCapabilitySnapshot,
         stacks: List<PreparedStack>,
+        inverseMaskGeometry: Boolean = false,
     ): RenderPlanResult.GapOnPromotedScope? {
         if (stacks.isEmpty()) return null
         val one = setOf(PlanResourceUsage.RenderAttachment, PlanResourceUsage.Sampled)
@@ -801,10 +854,10 @@ public class W4eClipPlanCompiler internal constructor(
             return promoted(W4ePlanDiagnostics.SampleCountUnavailable, "W4e AA clip producer support is unavailable")
         }
         val hardPath = stacks.any { stack -> stack.emittedEntries.any { !it.antiAlias && it.geometryF32 is ClipGeometryF32.Path } }
-        return if (hardPath && !capabilities.supportsTexture(
+        return if ((hardPath || inverseMaskGeometry) && !capabilities.supportsTexture(
                 PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8), 1,
                 setOf(PlanResourceUsage.DepthStencilAttachment),
-            )) promoted(W4ePlanDiagnostics.SampleCountUnavailable, "W4e hard path clip depth-stencil support is unavailable") else null
+            )) promoted(W4ePlanDiagnostics.SampleCountUnavailable, "W4e hard path or inverse-mask depth-stencil support is unavailable") else null
     }
 
     private fun prepare(
@@ -1022,6 +1075,11 @@ public class W4eClipPlanCompiler internal constructor(
     private fun PlanResource.shifted(offset: Int): PlanResource = PlanResource.of(
         role, ordinal, kind, format, copyExtent(), byteSize, usages(), lifetime,
         Math.addExact(firstPassIndex, offset), Math.addExact(lastPassIndexExclusive, offset), sampleCountI32,
+    )
+
+    private fun PlanResource.remapped(offset: Int, map: (Int) -> Int): PlanResource = PlanResource.of(
+        role, ordinal, kind, format, copyExtent(), byteSize, usages(), lifetime,
+        Math.addExact(map(firstPassIndex), offset), Math.addExact(map(lastPassIndexExclusive), offset), sampleCountI32,
     )
 
     /**
@@ -1326,6 +1384,12 @@ public class W4eClipPlanCompiler internal constructor(
         private val targetFingerprint = target.canonicalId
         fun matches(): Boolean = sceneCanonicalId == sceneFingerprint && target.canonicalId == targetFingerprint && isW5aMaterialCapabilityId(capabilityId)
     }
+
+    private fun Candidate.inverseMaskGeometryCommands(): Set<Int> = stacks.asSequence()
+        .filter { it.realization === Realization.Mask && !it.isZeroCoverage }
+        .flatMap { it.consumerIndexes.asSequence() }
+        .filter { inverseByCommand[it]?.interiorCoverageF32 is InverseInteriorCoverageF32.Geometry }
+        .toSet()
 
     private fun Boolean.thenId(role: PlanResourceRole, ordinal: Int): PlanResourceId? =
         if (this) planResourceId(role, ordinal) else null

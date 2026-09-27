@@ -2059,17 +2059,23 @@ public class RenderGraph private constructor(
                 producer.depthStencil == cover.depthStencil && producer.atomicGroup == cover.atomicGroup) {
                 "Explicit stencil producer and cover must share draw, data, target, depth, and group"
             }
+            val inverseMask = (producer.draw as? ClippedGeneralPathDraw)?.clip as? ClipPlanStrategy.InverseMask
             val draw = producer.draw.generalSourceOrNull()
                 ?: throw IllegalArgumentException("Explicit stencil producers require general path draws")
+            val inverseMaskGeometry = inverseMask?.geometryF32?.interiorCoverageF32 is
+                org.graphiks.math.geometry.InverseInteriorCoverageF32.Geometry
             require(draw.coverage == coverage && draw.sample == sample &&
-                draw.strategy == PathFillStrategy.StencilCover) {
+                (draw.strategy == PathFillStrategy.StencilCover ||
+                    inverseMaskGeometry && draw.strategy == PathFillStrategy.DirectTriangle)) {
                 "Explicit stencil pairs require a typed stencil path draw"
             }
-            val group = requireNotNull(producer.atomicGroup) {
-                "Explicit stencil pairs require an atomic group"
-            }
-            require(group == canonicalGeneralPathAtomicGroup(draw)) {
-                "Explicit stencil pairs require the canonical atomic group"
+            if (!inverseMaskGeometry) {
+                val group = requireNotNull(producer.atomicGroup) {
+                    "Explicit stencil pairs require an atomic group"
+                }
+                require(group == canonicalGeneralPathAtomicGroup(draw)) {
+                    "Explicit stencil pairs require the canonical atomic group"
+                }
             }
             require(producer.resolveTarget == null &&
                 producer.depthStencilAccess == PlanDepthStencilAccess.Write &&
