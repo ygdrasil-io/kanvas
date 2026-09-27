@@ -105,6 +105,19 @@ private fun preflightW4eClipMaskInitializes(
             (it.copyGeometryF32() as? org.graphiks.math.geometry.ClipGeometryF32.Path)?.copyPathGeometryF32()?.copyDirectTriangleF32OrNull() != null
         }
         require(directTriangleRecipes.keys == directTriangles.map { it.id.value }.toSet())
+        entries.forEach { entry -> frame.w4eClipMaskProducerDirectTriangleRecipeOrNull(entry.packet)?.let { recipe ->
+            val producer = entry.packet.w4ePreparedClipPass as? org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipPassAuthority.Producer
+            val payload = binding.payload
+            val slice = requireNotNull(payload.geometrySlice(recipe.passId.value, W4eNativePayloadPlan.PRODUCER_PATH))
+            require(producer != null && entry.render.w6aPassV1?.id == recipe.passId && entry.render.w6aPassV1?.ordinal == recipe.packetOrdinalI32 &&
+                producer.targetResourceId == recipe.target.id.value && producer.resolveTargetResourceId == recipe.resolveTarget?.id?.value && producer.depthStencilResourceId == recipe.depthStencil.id.value &&
+                producer.sampleCount == recipe.sampleCountI32 && producer.inverseCoverage == recipe.inverseCoverage && producer.antiAlias == recipe.antiAlias &&
+                slice.firstIndex == recipe.indexFirstI32 && slice.indexCount == recipe.indexCountI32 && slice.baseVertex == recipe.baseVertexI32 && slice.vertexCount == recipe.vertexCountI32 && slice.maxLocalIndex == recipe.maxLocalIndexI32 &&
+                entry.render.resourceUses.any { it.resource == frame.refs.getValue(recipe.target.id) && it.usage == org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.RenderAttachment && it.write } &&
+                entry.render.resourceUses.any { it.resource == frame.refs.getValue(recipe.depthStencil.id) && it.usage == org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.RenderAttachment && it.write }) {
+                "W4e direct-triangle recipe differs from its final packet, physical payload, or recorded attachments."
+            }
+        } }
         val foldRecipes = entries.mapNotNull { entry -> frame.w4eClipMaskFoldRecipeOrNull(entry.packet)?.let { recipe ->
             require(recipe.passId.value == entry.packet.passId)
             recipe.passId.value to recipe

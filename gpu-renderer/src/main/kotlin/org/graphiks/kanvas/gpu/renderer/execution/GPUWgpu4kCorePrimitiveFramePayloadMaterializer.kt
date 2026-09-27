@@ -533,11 +533,11 @@ internal fun encodeW4eNativePasses(
             is GPUW4ePreparedClipPassAuthority.Producer -> {
                 val frozenRecipe = clipMaskProducerRecipesByPassId[pass.passId]
                 val frozenDirectTriangleRecipe = clipMaskProducerDirectTriangleRecipesByPassId[pass.passId]
-                val targetResourceId = frozenRecipe?.target?.id?.value ?: pass.targetResourceId
-                val resolveTargetResourceId = frozenRecipe?.resolveTarget?.id?.value ?: pass.resolveTargetResourceId
-                val depthStencilResourceId = frozenRecipe?.depthStencil?.id?.value ?: pass.depthStencilResourceId
-                val sampleCount = frozenRecipe?.sampleCountI32 ?: pass.sampleCount
-                val inverseCoverage = frozenRecipe?.inverseCoverage ?: pass.inverseCoverage
+                val targetResourceId = frozenRecipe?.target?.id?.value ?: frozenDirectTriangleRecipe?.target?.id?.value ?: pass.targetResourceId
+                val resolveTargetResourceId = frozenRecipe?.resolveTarget?.id?.value ?: frozenDirectTriangleRecipe?.resolveTarget?.id?.value ?: pass.resolveTargetResourceId
+                val depthStencilResourceId = frozenRecipe?.depthStencil?.id?.value ?: frozenDirectTriangleRecipe?.depthStencil?.id?.value ?: pass.depthStencilResourceId
+                val sampleCount = frozenRecipe?.sampleCountI32 ?: frozenDirectTriangleRecipe?.sampleCountI32 ?: pass.sampleCount
+                val inverseCoverage = frozenRecipe?.inverseCoverage ?: frozenDirectTriangleRecipe?.inverseCoverage ?: pass.inverseCoverage
                 val depthTarget = depthStencilResourceId?.let(attachment)
                 val frozenDepthStencilState = frozenRecipe?.depthStencilState
                 val producerCommands = when {
@@ -562,7 +562,7 @@ internal fun encodeW4eNativePasses(
                     pass.geometry is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipGeometry.Path -> {
                         val geometry = pass.geometry as org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipGeometry.Path
                         val pathGeometry = geometry.copyPathGeometryF32()
-                        val scissor = pathGeometry.copyConservativeScissorI32()
+                        val scissor = frozenDirectTriangleRecipe?.copyScissorI32() ?: pathGeometry.copyConservativeScissorI32()
                         val direct = pathGeometry.copyDirectTriangleF32OrNull()
                         if (direct != null) {
                             require(frozenDirectTriangleRecipe == null ||
@@ -573,6 +573,12 @@ internal fun encodeW4eNativePasses(
                                 frozenDirectTriangleRecipe.inverseCoverage == inverseCoverage &&
                                 frozenDirectTriangleRecipe.indexCountI32 == 3 && frozenDirectTriangleRecipe.vertexCountI32 == 3) {
                                 "W4e direct triangle packet differs from its frozen planner recipe."
+                            }
+                            frozenDirectTriangleRecipe?.let { recipe ->
+                                val slice = requireNotNull(nativePayload.geometrySlice(recipe.passId.value, W4eNativePayloadPlan.PRODUCER_PATH))
+                                require(slice.firstIndex == recipe.indexFirstI32 && slice.indexCount == recipe.indexCountI32 &&
+                                    slice.baseVertex == recipe.baseVertexI32 && slice.vertexCount == recipe.vertexCountI32 &&
+                                    slice.maxLocalIndex == recipe.maxLocalIndexI32)
                             }
                             val pipeline = createW4ePathGeometryPipeline(
                                 device, GPUTextureFormat.RGBA8Unorm, sampleCount,

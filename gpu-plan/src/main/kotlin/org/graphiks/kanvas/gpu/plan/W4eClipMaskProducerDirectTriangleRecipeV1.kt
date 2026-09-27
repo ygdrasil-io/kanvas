@@ -3,6 +3,12 @@ package org.graphiks.kanvas.gpu.plan
 import org.graphiks.math.geometry.ClipGeometryF32
 import org.graphiks.math.geometry.RectI32
 
+public enum class W4eDirectTriangleLoadV1 { Clear }
+public enum class W4eDirectTriangleStoreV1 { Store }
+public enum class W4eDirectTriangleShaderFamilyV1 { PathGeometry }
+public enum class W4eDirectTriangleTopologyV1 { TriangleList }
+public enum class W4eDirectTriangleGroupZeroAbiV1 { NoBindGroup }
+
 /** Frozen W6-bound hard Path producer whose sealed math geometry is exactly one direct triangle. */
 public class W4eClipMaskProducerDirectTriangleRecipeV1 internal constructor(
     public val passId: PlanPassId,
@@ -20,6 +26,11 @@ public class W4eClipMaskProducerDirectTriangleRecipeV1 internal constructor(
     public val inverseCoverage: Boolean,
     public val antiAlias: Boolean,
     public val sampleCountI32: Int,
+    public val load: W4eDirectTriangleLoadV1 = W4eDirectTriangleLoadV1.Clear,
+    public val store: W4eDirectTriangleStoreV1 = W4eDirectTriangleStoreV1.Store,
+    public val shaderFamily: W4eDirectTriangleShaderFamilyV1 = W4eDirectTriangleShaderFamilyV1.PathGeometry,
+    public val topology: W4eDirectTriangleTopologyV1 = W4eDirectTriangleTopologyV1.TriangleList,
+    public val groupZeroAbi: W4eDirectTriangleGroupZeroAbiV1 = W4eDirectTriangleGroupZeroAbiV1.NoBindGroup,
 ) {
     private val path = geometry.copyPathGeometryF32()
     public fun copyGeometryF32(): ClipGeometryF32.Path = ClipGeometryF32.Path(path)
@@ -43,12 +54,12 @@ public class W4eClipMaskProducerDirectTriangleNativeSiteRecipeV1 internal constr
     override val family: NativeSiteRecipeFamilyV1 = NativeSiteRecipeFamilyV1.W4eClipMaskProducerDirectTriangle
     override val canonicalLogicalEncodingV1: String = nativeSiteEncodingV1(family) {
         text("owner", host.passId.value); int("packet", host.packetOrdinalI32); int("bundle", 0)
-        fun operand(n: String, v: W4eClipMaskProducerPhysicalOperandV1) { text("$n.id", v.id.value); enum("$n.role", v.role); text("$n.format", v.format.toString()); int("$n.samples", v.sampleCountI32); long("$n.bytes", v.byteSizeI64); enum("$n.lifetime", v.lifetime); v.usages().sortedBy { it.name }.forEachIndexed { i, u -> enum("$n.use.$i", u) } }
+        fun operand(n: String, v: W4eClipMaskProducerPhysicalOperandV1) { text("$n.id", v.id.value); enum("$n.role", v.role); text("$n.format", v.format.toString()); v.copyExtentI32()?.let { int("$n.width", it.width); int("$n.height", it.height) }; int("$n.samples", v.sampleCountI32); long("$n.bytes", v.byteSizeI64); enum("$n.lifetime", v.lifetime); v.usages().sortedBy { it.name }.forEachIndexed { i, u -> enum("$n.use.$i", u) } }
         operand("target", host.target); host.resolveTarget?.let { operand("resolve", it) } ?: text("resolve.present", "false"); operand("depth", host.depthStencil)
         val geometry = host.copyGeometryF32().copyPathGeometryF32(); enum("fill", geometry.fillRule); rect("scissor", host.copyScissorI32())
         geometry.copyDirectTriangleF32OrNull()!!.copyVerticesF32().forEachIndexed { i, v -> float("triangle.$i", v) }
         int("vertex.first", host.vertexFirstI32); int("vertex.count", host.vertexCountI32); int("index.first", host.indexFirstI32); int("index.count", host.indexCountI32); int("baseVertex", host.baseVertexI32); int("maxLocalIndex", host.maxLocalIndexI32); int("inverse", if (host.inverseCoverage) 1 else 0); int("antiAlias", if (host.antiAlias) 1 else 0); int("samples", host.sampleCountI32)
-        text("shader", "PathGeometry"); text("topology", "TriangleList"); text("stencil", "NoopD24S8"); text("blend", "CoverageReplace"); text("abi", "NoBindGroup"); text("load", "Clear"); text("store", "Store"); float("depth.clear", 1f); int("stencil.clear", 0); int("depth.readOnly", 0); int("stencil.readOnly", 0)
+        enum("shader", host.shaderFamily); enum("topology", host.topology); text("stencil", "NoopD24S8"); text("blend", "CoverageReplace"); enum("abi", host.groupZeroAbi); enum("load", host.load); enum("store", host.store); float("depth.clear", 1f); int("stencil.clear", 0); int("depth.readOnly", 0); int("stencil.readOnly", 0)
     }
 }
 
