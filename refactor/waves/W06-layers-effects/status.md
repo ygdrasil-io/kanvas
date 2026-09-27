@@ -961,3 +961,22 @@ publiques donnent `13/0/0/0` et `5/0/0/0` en XML. L'exécuteur natif sort 133
 (**UNKNOWN**). Relecture Sol **Approved**, aucun Critical/Important.
 IIIc2b2, IIIc3, IIIa2 et les gates W4e/W5a, budget/leases et 2B restent
 ouverts.
+
+### 2A0b.IIIc2b2 — FilterComposite.Layer W5f avec snapshot
+
+Le commit `cfe7eda` fige la dernière variante active de
+`FilterComposite.Layer` dans une recette propre : identité et fenêtre W5f,
+snapshot/version du parent, ressources physiques, alpha/blend, coordonnées,
+ABI source→uniform→snapshot et draw. L'uniform est préparé ; le pass enregistre
+les trois usages dans cet ordre. Le préflight contrôle copie causale, fenêtre
+uniforme et pass enregistré avant allocation. Le renderer sélectionne les
+cinq formes `Layer` depuis le catalogue (`Empty` compris) sans bridge actif,
+puis applique alpha→W5f→blend via un helper dédié.
+
+Le témoin cyan public porte `imageFilter`, `colorFilter` de restore et
+`DIFFERENCE`; l'attendu est fixé avant `Surface`, puis pixels, `Render` et
+`Readback` sont contrôlés. Trois compilations ciblées réussissent ; les trois
+classes publiques ciblées donnent `13/0/0/0`, `5/0/0/0` et `24/0/0/0`
+dans leurs XML. L'exécuteur natif sort 133 (**UNKNOWN**). Relecture Sol
+**Approved**, aucun Critical/Important. IIIc2 est review-clean ; IIIc3,
+IIIa2 et les gates W4e/W5a, budget/leases et 2B restent ouverts.
