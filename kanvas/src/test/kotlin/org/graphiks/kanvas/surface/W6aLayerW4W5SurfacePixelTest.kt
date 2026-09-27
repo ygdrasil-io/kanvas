@@ -42,10 +42,10 @@ class W6aLayerW4W5SurfacePixelTest {
         val clear = rgba(0, 0, 0, 0)
         val blue = rgba(17, 61, 211)
         val expected = listOf(
-            blue, blue, blue, blue, clear,
-            blue, clear, clear, clear, clear,
-            blue, clear, clear, clear, clear,
-            blue, clear, clear, clear, clear,
+            clear, blue, blue, blue, blue,
+            clear, blue, clear, clear, clear,
+            clear, blue, clear, clear, clear,
+            clear, blue, clear, clear, clear,
             clear, clear, clear, clear, clear,
         ).flatten().toUByteArray()
         val concave = Path().apply {
@@ -56,6 +56,7 @@ class W6aLayerW4W5SurfacePixelTest {
         val surface = Surface(5, 5)
         surface.canvas {
             saveLayer()
+            translate(1f, 0f)
             clipPath(concave, antiAlias = false)
             drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), opaque(BLUE))
             restore()

@@ -628,11 +628,19 @@ internal fun encodeW4eNativePasses(
                             if (edge != null) require(edge.passId.value == pass.passId && edge.packetOrdinalI32 == entry.render.w6aPassV1?.ordinal &&
                                 edge.vertexCountI32 == nativePayload.geometrySlice(edge.passId.value, W4eNativePayloadPlan.PRODUCER_PATH)?.vertexCount &&
                                 edge.indexCountI32 == nativePayload.geometrySlice(edge.passId.value, W4eNativePayloadPlan.PRODUCER_PATH)?.indexCount &&
-                                edge.depthStencil.id.value == depthStencilResourceId && edge.target.id.value == targetResourceId) {
+                                edge.depthStencil.id.value == depthStencilResourceId && edge.target.id.value == targetResourceId &&
+                                edge.shaderFamily == org.graphiks.kanvas.gpu.plan.W4eStencilEdgeShaderFamilyV1.PathGeometry &&
+                                edge.topology == org.graphiks.kanvas.gpu.plan.W4eStencilEdgeTopologyV1.TriangleList &&
+                                edge.groupZeroAbi == org.graphiks.kanvas.gpu.plan.W4eStencilEdgeGroupZeroAbiV1.NoBindGroup &&
+                                edge.colorWrite == org.graphiks.kanvas.gpu.plan.W4eStencilEdgeColorWriteV1.Disabled &&
+                                edge.load == org.graphiks.kanvas.gpu.plan.W4eStencilEdgeLoadV1.Clear && edge.store == org.graphiks.kanvas.gpu.plan.W4eStencilEdgeStoreV1.Store) {
                                 "W4e stencil-edge bundle-0 must use its exact frozen V/I and attachments."
                             }
-                            val evenOdd = (edge?.fillRule ?: pathGeometry.fillRule) == org.graphiks.math.geometry.FillRule.EVEN_ODD ||
-                                (edge?.fillRule ?: pathGeometry.fillRule) == org.graphiks.math.geometry.FillRule.INVERSE_EVEN_ODD
+                            val evenOdd = when (edge?.stencilMode) {
+                                org.graphiks.kanvas.gpu.plan.W4eStencilEdgeStencilModeV1.EvenOddInvert -> true
+                                org.graphiks.kanvas.gpu.plan.W4eStencilEdgeStencilModeV1.WindingIncrementDecrement -> false
+                                null -> pathGeometry.fillRule == org.graphiks.math.geometry.FillRule.EVEN_ODD || pathGeometry.fillRule == org.graphiks.math.geometry.FillRule.INVERSE_EVEN_ODD
+                            }
                             val stencilPipeline = createW4ePathGeometryPipeline(
                                 device, GPUTextureFormat.RGBA8Unorm, sampleCount, 0f,
                                 stencil = w4ePathStencilProducerState(evenOdd), colorWrite = false,

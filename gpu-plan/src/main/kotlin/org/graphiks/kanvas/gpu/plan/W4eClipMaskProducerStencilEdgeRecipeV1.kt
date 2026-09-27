@@ -4,6 +4,14 @@ import org.graphiks.math.geometry.ClipGeometryF32
 import org.graphiks.math.geometry.FillRule
 import org.graphiks.math.geometry.RectI32
 
+public enum class W4eStencilEdgeShaderFamilyV1 { PathGeometry }
+public enum class W4eStencilEdgeTopologyV1 { TriangleList }
+public enum class W4eStencilEdgeGroupZeroAbiV1 { NoBindGroup }
+public enum class W4eStencilEdgeColorWriteV1 { Disabled }
+public enum class W4eStencilEdgeStencilModeV1 { WindingIncrementDecrement, EvenOddInvert }
+public enum class W4eStencilEdgeLoadV1 { Clear }
+public enum class W4eStencilEdgeStoreV1 { Store }
+
 /**
  * Bundle zero of a W6-bound Path stencil producer.  The following cover draw is deliberately
  * not represented here: IIb2 owns that second native bundle.
@@ -21,6 +29,13 @@ public class W4eClipMaskProducerStencilEdgeRecipeV1 internal constructor(
     public val indexFirstI32: Int, public val indexCountI32: Int,
     public val baseVertexI32: Int, public val maxLocalIndexI32: Int,
     public val inverseCoverage: Boolean, public val antiAlias: Boolean, public val sampleCountI32: Int,
+    public val shaderFamily: W4eStencilEdgeShaderFamilyV1 = W4eStencilEdgeShaderFamilyV1.PathGeometry,
+    public val topology: W4eStencilEdgeTopologyV1 = W4eStencilEdgeTopologyV1.TriangleList,
+    public val groupZeroAbi: W4eStencilEdgeGroupZeroAbiV1 = W4eStencilEdgeGroupZeroAbiV1.NoBindGroup,
+    public val colorWrite: W4eStencilEdgeColorWriteV1 = W4eStencilEdgeColorWriteV1.Disabled,
+    public val stencilMode: W4eStencilEdgeStencilModeV1 = if (geometry.copyPathGeometryF32().fillRule in setOf(FillRule.EVEN_ODD, FillRule.INVERSE_EVEN_ODD)) W4eStencilEdgeStencilModeV1.EvenOddInvert else W4eStencilEdgeStencilModeV1.WindingIncrementDecrement,
+    public val load: W4eStencilEdgeLoadV1 = W4eStencilEdgeLoadV1.Clear,
+    public val store: W4eStencilEdgeStoreV1 = W4eStencilEdgeStoreV1.Store,
 ) {
     private val path = geometry.copyPathGeometryF32()
     private val fan = requireNotNull(path.copyStencilEdgeFanF32OrNull())
@@ -53,7 +68,7 @@ public class W4eClipMaskProducerStencilEdgeNativeSiteRecipeV1 internal construct
         operand("target", host.target); host.resolveTarget?.let { operand("resolve", it) } ?: text("resolve.present", "false"); operand("depth", host.depthStencil); operand("vertex", host.vertex); operand("index", host.index)
         enum("fill", host.fillRule); rect("scissor", host.copyScissorI32()); host.copyVerticesF32().forEachIndexed { i, v -> float("geometry.vertex.$i", v) }; host.copyIndicesI32().forEachIndexed { i, v -> int("geometry.index.$i", v) }; host.copyContourStartsI32().forEachIndexed { i, v -> int("geometry.contourStart.$i", v) }
         int("vertex.first", host.vertexFirstI32); int("vertex.count", host.vertexCountI32); int("index.first", host.indexFirstI32); int("index.count", host.indexCountI32); int("baseVertex", host.baseVertexI32); int("maxLocalIndex", host.maxLocalIndexI32); int("inverse", if (host.inverseCoverage) 1 else 0); int("antiAlias", if (host.antiAlias) 1 else 0); int("samples", host.sampleCountI32)
-        text("shader", "PathGeometry"); text("topology", "TriangleList"); text("abi", "NoBindGroup"); text("colorWrite", "false"); enum("load", W4eDirectTriangleLoadV1.Clear); enum("store", W4eDirectTriangleStoreV1.Store)
+        enum("shader", host.shaderFamily); enum("topology", host.topology); enum("abi", host.groupZeroAbi); enum("colorWrite", host.colorWrite); enum("stencil", host.stencilMode); enum("load", host.load); enum("store", host.store)
         float("depth.clear", host.depthStencilState.depthClearValueF32); enum("depth.load", host.depthStencilState.depthLoad); enum("depth.store", host.depthStencilState.depthStore); int("stencil.clear", host.depthStencilState.stencilClearValueU32.toInt()); enum("stencil.load", host.depthStencilState.stencilLoad); enum("stencil.store", host.depthStencilState.stencilStore)
     }
 }
