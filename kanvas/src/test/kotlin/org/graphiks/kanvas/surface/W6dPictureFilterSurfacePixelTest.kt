@@ -24,6 +24,27 @@ import org.graphiks.math.vector.Vector3F32
 import org.junit.jupiter.api.Test
 
 class W6dPictureFilterSurfacePixelTest {
+    /** IIIc3c1: an external Picture filter supplies the graph operand, not the carrier Picture pixels. */
+    @Test
+    fun externalPictureFilterOnDrawPictureUsesGraphOperand() {
+        val expected = ubyteArrayOf(255u, 0u, 0u, 255u)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        fun picture(color: ColorARGB) = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(color, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val source = picture(ColorARGB.Red)
+        val carrier = picture(ColorARGB.Blue)
+        val surface = Surface(1, 1)
+
+        surface.canvas {
+            drawPicture(carrier, Paint(imageFilter = ImageFilter.Picture(source), blendMode = BlendMode.SRC, antiAlias = false))
+        }
+
+        val result = surface.render()
+        assertContentEquals(expected, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
     /** IIIc3a: an inner filtered Picture restores its sealed source without a graph-texture operand. */
     @Test
     fun filteredInnerPictureRestoresWithoutGraphOperand() {

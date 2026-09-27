@@ -1006,6 +1006,9 @@ natif sort ensuite 133 (**UNKNOWN**). IIIc3a est commitée à `3e9e7a1` et la
 relecture finale Sol est **Approved**, sans finding Critical/Important/Minor.
 IIIc3b/c/d, IIIa2, les budgets et 2B ne sont pas clos.
 
+IIIc3b est ensuite commitée dans `5c2d54f` puis corrigée par le témoin causal
+de destination dans `9be726b`; la relecture Sol est **Approved**, sans finding.
+
 ### 2A0b.IIIc3b — FilterComposite.Picture direct destination-read
 
 Le témoin public direct construit d'abord un parent vert
@@ -1025,3 +1028,21 @@ fallback. Les trois compilations ciblées réussissent ; W6d redonne
 `26/0/0/0` dans son XML après correction, puis
 l'exécuteur natif sort 133 (**UNKNOWN**). IIIc3c/d, IIIa2, budgets et 2B
 restent ouverts.
+
+### 2A0b.IIIc3c1 — FilterComposite.Picture graph operand b0
+
+Provenance confirmée : `Canvas.drawPicture` publie `DisplayOp.DrawPicture`,
+capturé par `PictureStreamAggregateV1.build` comme filtre du root Picture ; la
+construction publie ensuite `GraphTextureSourceRequestV1`/`appendStreamSource`
+avant `FilterCompositeOperationV1.Picture`. Le témoin rouge-vs-bleu est donc
+causal pour l'ABI graph b0, pas pour `PictureComposite`.
+
+La recette planner distincte, le catalogue, le seal, les usages enregistrés et
+le préflight avant la première allocation couvrent le seul binding b0
+`pass.source`; `graphSealedSource` reste une provenance physique validée, déjà
+consommée par `PictureSourcePass`. Le dispatch catalog-first et son helper
+traduisent la recette sans choisir shader/layout depuis l'operand ; le bridge
+temporaire conserve uniquement les variantes graph W5f/snapshot c2/d. Les trois
+compilations ciblées réussissent ; le témoin causal donne `1/0/0/0` XML et la
+classe W6d `27/0/0/0`, puis chaque worker natif sort 133 (**UNKNOWN**).
+IIIc3c1 attend sa revue Sol ; IIIc3c2/d, IIIa2, budgets et 2B restent ouverts.
