@@ -75,8 +75,14 @@ private fun preflightW6PathRenderDirectColors(
         val catalog = frame.physical.nativeSiteRecipeCatalogV1().recipe(
             NativeSiteOwnerV1(recipe.passId, recipe.packetOrdinalI32, 0),
         ) as? W6PathRenderDirectColorNativeSiteRecipeV1
+        val maskConsumer = packet.w4ePreparedClipConsumer
         require(catalog?.host === recipe && pass.phase == PathRenderPhase.SingleSampleDirectColor &&
-            pass.id.value == id && pass.ordinal == recipe.packetOrdinalI32 && packet.w4ePreparedClipConsumer == null &&
+            pass.id.value == id && pass.ordinal == recipe.packetOrdinalI32 &&
+            when (val mask = recipe.mask) {
+                null -> maskConsumer == null && recipe.groupZeroAbi == W6PathRenderDirectColorGroupZeroAbiV1.W4eConsumerUniform
+                else -> maskConsumer is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.Mask &&
+                    maskConsumer.maskResourceId == mask.id.value && recipe.groupZeroAbi == W6PathRenderDirectColorGroupZeroAbiV1.W4eMaskedConsumer
+            } &&
             prepared.phase == pass.phase && prepared.targetResourceId == recipe.target.id.value &&
             prepared.resolveTargetResourceId == null && prepared.depthStencilResourceId == null &&
             prepared.vertexResourceId == recipe.vertex.id.value && prepared.indexResourceId == recipe.index.id.value &&
@@ -135,7 +141,10 @@ private fun preflightW6PathRenderDirectColors(
                 org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.UniformData,
                 org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.Uniform,
                 org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false),
-        )
+        ) + recipe.mask?.let { mask -> listOf(org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(
+            frame.refs.getValue(mask.id), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.ClipMask,
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding,
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false)) } .orEmpty()
         require(slice.firstIndex == recipe.indexFirstI32 && slice.indexCount == recipe.indexCountI32 &&
             slice.baseVertex == recipe.baseVertexI32 && slice.vertexCount == recipe.vertexCountI32 &&
             slice.maxLocalIndex == recipe.maxLocalIndexI32 && uniform.offsetBytes == recipe.uniformOffsetBytesI64 &&

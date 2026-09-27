@@ -93,6 +93,43 @@ class W6aLayerW4W5SurfacePixelTest {
     }
 
     @Test
+    fun `hard path mask clips an offset direct fill triangle in a W6 layer`() {
+        // At pixel centres, the L clip keeps its top row and first column; the direct fill
+        // triangle otherwise also covers pixels to that column's right.
+        // This literal intersection is distinct from both the unmasked fill and the clip bounds.
+        // Keep the public oracle before Surface construction.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            clear, clear, clear, clear, clear, clear,
+            clear, blue, blue, blue, clear, clear,
+            clear, blue, clear, clear, clear, clear,
+            clear, blue, clear, clear, clear, clear,
+            clear, clear, clear, clear, clear, clear,
+            clear, clear, clear, clear, clear, clear,
+        ).flatten().toUByteArray()
+        val clip = Path().apply {
+            moveTo(1f, 1f); lineTo(5f, 1f); lineTo(5f, 2f)
+            lineTo(2f, 2f); lineTo(2f, 5f); lineTo(1f, 5f); close()
+        }
+        val triangle = Path().apply {
+            moveTo(1f, 1f); lineTo(5f, 1f); lineTo(1f, 5f); close()
+        }
+
+        val surface = Surface(6, 6)
+        surface.canvas {
+            saveLayer()
+            clipPath(clip, antiAlias = false)
+            drawPath(triangle, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
     fun `even odd path clip preserves its stencil cover hole in a W6 layer`() {
         // The inner contour has the same winding as the exterior.  Only the frozen EVEN_ODD
         // stencil edge plus its non-zero cover test leaves this center pixel transparent.

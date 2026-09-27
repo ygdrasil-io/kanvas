@@ -1282,18 +1282,24 @@ internal fun encodeW4eNativePasses(
                 val frozenDirectColor = pathRenderDirectColorsByPassId[entry.packet.passId]
                 val pipeline = when {
                     frozenDirectColor != null -> {
-                        require(commonSource && maskConsumer == null && directPath &&
+                        val frozenMask = frozenDirectColor.mask
+                        require(commonSource && directPath &&
                             frozenDirectColor.passId.value == entry.packet.passId &&
                             frozenDirectColor.packetOrdinalI32 == entry.render.w6aPassV1?.ordinal &&
                             frozenDirectColor.sampleCountI32 == 1 && frozenDirectColor.resolveTarget == null &&
                             frozenDirectColor.depthStencil == null && frozenDirectColor.shaderFamily == W6PathRenderDirectColorShaderFamilyV1.W4ePathMaterial &&
                             frozenDirectColor.topology == W6PathRenderDirectColorTopologyV1.TriangleList &&
-                            frozenDirectColor.groupZeroAbi == W6PathRenderDirectColorGroupZeroAbiV1.W4eConsumerUniform &&
+                            ((frozenMask == null && maskConsumer == null &&
+                                frozenDirectColor.groupZeroAbi == W6PathRenderDirectColorGroupZeroAbiV1.W4eConsumerUniform) ||
+                                (frozenMask != null && maskConsumer is org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipConsumerAuthority.Mask &&
+                                    maskConsumer.maskResourceId == frozenMask.id.value &&
+                                    frozenDirectColor.groupZeroAbi == W6PathRenderDirectColorGroupZeroAbiV1.W4eMaskedConsumer)) &&
                             frozenDirectColor.load == AttachmentLoadPlan.Load && frozenDirectColor.store == AttachmentStorePlan.Store) {
                             "W6 direct-colour native packet has no matching frozen IIIa recipe."
                         }
-                        createW4eUnmaskedPathPipeline(device, GPUTextureFormat.RGBA8UnormSrgb,
+                        if (frozenMask == null) createW4eUnmaskedPathPipeline(device, GPUTextureFormat.RGBA8UnormSrgb,
                             frozenDirectColor.sampleCountI32, owned, finalBlend = entry.packet.blendPlan)
+                        else maskedPathPipeline(GPUTextureFormat.RGBA8UnormSrgb, frozenDirectColor.sampleCountI32, entry.packet.blendPlan)
                     }
                     maskConsumer == null && directPath -> createW4eUnmaskedPathPipeline(
                         device, GPUTextureFormat.RGBA8UnormSrgb, pathSampleCount, owned,

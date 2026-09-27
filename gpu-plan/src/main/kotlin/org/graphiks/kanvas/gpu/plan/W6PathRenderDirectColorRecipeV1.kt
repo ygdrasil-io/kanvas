@@ -6,7 +6,7 @@ import org.graphiks.math.geometry.RectI32
 /** Frozen native axes for the one W6 single-sample direct path-color packet. */
 public enum class W6PathRenderDirectColorShaderFamilyV1 { W4ePathMaterial }
 public enum class W6PathRenderDirectColorTopologyV1 { TriangleList }
-public enum class W6PathRenderDirectColorGroupZeroAbiV1 { W4eConsumerUniform }
+public enum class W6PathRenderDirectColorGroupZeroAbiV1 { W4eConsumerUniform, W4eMaskedConsumer }
 /** Source authority retained by the final direct-colour packet. */
 public enum class W6PathRenderDirectColorGeometryKindV1 { Fill, Stroke }
 
@@ -24,6 +24,8 @@ public class W6PathRenderDirectColorRecipeV1 internal constructor(
     public val vertex: W4eClipMaskProducerPhysicalOperandV1,
     public val index: W4eClipMaskProducerPhysicalOperandV1,
     public val uniform: W4eClipMaskProducerPhysicalOperandV1,
+    /** The terminal hard-clip mask for the distinct IIIa4a consumer variant. */
+    public val mask: W4eClipMaskProducerPhysicalOperandV1?,
     public val uniformOffsetBytesI64: Long,
     public val uniformByteSizeI64: Long,
     public val geometryKind: W6PathRenderDirectColorGeometryKindV1,
@@ -57,7 +59,12 @@ public class W6PathRenderDirectColorRecipeV1 internal constructor(
         require(vertex.role == PlanResourceRole.VertexData && PlanResourceUsage.Vertex in vertex.usages())
         require(index.role == PlanResourceRole.IndexData && PlanResourceUsage.Index in index.usages())
         require(uniform.role == PlanResourceRole.UniformData && PlanResourceUsage.Uniform in uniform.usages())
-        require(uniformOffsetBytesI64 >= 0L && uniformByteSizeI64 == 16L)
+        require(uniformOffsetBytesI64 >= 0L && uniformByteSizeI64 == if (mask == null) 16L else 32L)
+        if (mask == null) require(groupZeroAbi == W6PathRenderDirectColorGroupZeroAbiV1.W4eConsumerUniform)
+        else {
+            require(groupZeroAbi == W6PathRenderDirectColorGroupZeroAbiV1.W4eMaskedConsumer)
+            require(mask.format == PlanTextureFormat.CoverageMask && PlanResourceUsage.Sampled in mask.usages())
+        }
     }
 }
 
@@ -77,6 +84,7 @@ public class W6PathRenderDirectColorNativeSiteRecipeV1 internal constructor(
         text("owner", host.passId.value); int("packet", host.packetOrdinalI32); int("bundle", 0)
         operand("target", host.target); text("resolve.present", "false"); text("depth.present", "false")
         operand("vertex", host.vertex); operand("index", host.index); operand("uniform", host.uniform)
+        host.mask?.let { operand("mask", it) } ?: text("mask.present", "false")
         long("uniform.offset", host.uniformOffsetBytesI64); long("uniform.bytes", host.uniformByteSizeI64)
         val geometry = host.copyGeometryF32()
         // Preserve IIIa1 Fill's version-one encoding byte-for-byte; Stroke is the new tagged arm.
@@ -96,7 +104,14 @@ public fun freezeW6PathRenderDirectColorRecipesV1(bindings: List<PlanW4eGeometry
         bindings.forEach { binding -> binding.nativePasses().forEach { candidate ->
             val pass = candidate as? PlanPass.PathRenderPass ?: return@forEach
             if (pass.phase != PathRenderPhase.SingleSampleDirectColor) return@forEach
-            val draw = pass.draw as? GeneralPathDraw ?: return@forEach
+            val clipped = pass.draw as? ClippedGeneralPathDraw
+            val draw = clipped?.source ?: pass.draw as? GeneralPathDraw ?: return@forEach
+            val mask = when (val clip = clipped?.clip) {
+                null -> null
+                is ClipPlanStrategy.Mask -> operand(rows.getValue(clip.resource))
+                is ClipPlanStrategy.InverseMask -> return@forEach
+                else -> return@forEach
+            }
             val (geometry, geometryKind) = when (val source = draw.copyPathGeometry()) {
                 is PathDrawGeometry.Fill -> source.valueF32 to W6PathRenderDirectColorGeometryKindV1.Fill
                 is PathDrawGeometry.Stroke -> source.valueF32.copyFillGeometryF32() to W6PathRenderDirectColorGeometryKindV1.Stroke
@@ -105,7 +120,7 @@ public fun freezeW6PathRenderDirectColorRecipesV1(bindings: List<PlanW4eGeometry
             if (geometry.copyDirectTriangleF32OrNull() == null) return@forEach
             val geometrySlice = requireNotNull(binding.payload.geometrySlice(pass.id.value, W4eNativePayloadPlan.CONSUMER_DIRECT))
             val uniformSlice = requireNotNull(binding.payload.uniformSlice(pass.id.value, W4eNativePayloadPlan.CONSUMER_UNIFORM))
-            require(put(pass.id, W6PathRenderDirectColorRecipeV1(pass.id, pass.ordinal, operand(rows.getValue(pass.target)), pass.resolveTarget?.let { operand(rows.getValue(it)) }, pass.depthStencil?.let { operand(rows.getValue(it)) }, operand(rows.getValue(binding.payload.vertexResourceId)), operand(rows.getValue(binding.payload.indexResourceId)), operand(rows.getValue(binding.payload.uniformResourceId)), uniformSlice.offsetBytes, uniformSlice.byteSize, geometryKind, geometry, pass.draw.copyScissorI32(), geometrySlice.baseVertex, geometrySlice.vertexCount, geometrySlice.firstIndex, geometrySlice.indexCount, geometrySlice.baseVertex, geometrySlice.maxLocalIndex, pass.draw.sample == SamplePlan.Multisample4, 1, pass.load, pass.store, pass.draw.blend)) == null)
+            require(put(pass.id, W6PathRenderDirectColorRecipeV1(pass.id, pass.ordinal, operand(rows.getValue(pass.target)), pass.resolveTarget?.let { operand(rows.getValue(it)) }, pass.depthStencil?.let { operand(rows.getValue(it)) }, operand(rows.getValue(binding.payload.vertexResourceId)), operand(rows.getValue(binding.payload.indexResourceId)), operand(rows.getValue(binding.payload.uniformResourceId)), mask, uniformSlice.offsetBytes, uniformSlice.byteSize, geometryKind, geometry, pass.draw.copyScissorI32(), geometrySlice.baseVertex, geometrySlice.vertexCount, geometrySlice.firstIndex, geometrySlice.indexCount, geometrySlice.baseVertex, geometrySlice.maxLocalIndex, pass.draw.sample == SamplePlan.Multisample4, 1, pass.load, pass.store, pass.draw.blend, groupZeroAbi = if (mask == null) W6PathRenderDirectColorGroupZeroAbiV1.W4eConsumerUniform else W6PathRenderDirectColorGroupZeroAbiV1.W4eMaskedConsumer)) == null)
         } }
     })
 }
