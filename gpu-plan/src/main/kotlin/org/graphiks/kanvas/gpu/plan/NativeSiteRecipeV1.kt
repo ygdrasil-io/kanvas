@@ -32,6 +32,7 @@ public enum class NativeSiteRecipeFamilyV1 {
     W4eClipMaskProducer,
     W4eClipMaskProducerDirectTriangle,
     W4eClipMaskProducerStencilEdge,
+    W4eClipMaskProducerStencilCover,
     W4eClipMaskFold,
     W6bCoverageRaster,
     W6FullscreenEmpty,
@@ -73,6 +74,37 @@ public enum class NativeSiteRecipeFamilyV1 {
     W6FilterCompositePictureGraphFilteredDestination,
     W6FilterCompositePictureDestination,
 }
+
+public enum class W4eStencilCoverShaderFamilyV1 { FullscreenCoverage }
+public enum class W4eStencilCoverTopologyV1 { FullscreenTriangle }
+public enum class W4eStencilCoverGroupZeroAbiV1 { NoBindGroup }
+public enum class W4eStencilCoverStencilTestV1 { NonZero }
+public enum class W4eStencilCoverBlendV1 { CoverageReplace }
+public enum class W4eStencilCoverColorWriteV1 { Enabled }
+public enum class W4eStencilCoverLoadV1 { Clear }
+public enum class W4eStencilCoverStoreV1 { Store }
+public class W4eClipMaskProducerStencilCoverRecipeV1 internal constructor(public val edge: W4eClipMaskProducerStencilEdgeRecipeV1) {
+    public val passId get() = edge.passId; public val packetOrdinalI32 get() = edge.packetOrdinalI32; public val target get() = edge.target; public val resolveTarget get() = edge.resolveTarget; public val depthStencil get() = edge.depthStencil
+    public val fillRule get() = edge.fillRule; public val inverseCoverage get() = edge.inverseCoverage; public val antiAlias get() = edge.antiAlias; public val sampleCountI32 get() = edge.sampleCountI32
+    public val shaderFamily = W4eStencilCoverShaderFamilyV1.FullscreenCoverage; public val topology = W4eStencilCoverTopologyV1.FullscreenTriangle; public val groupZeroAbi = W4eStencilCoverGroupZeroAbiV1.NoBindGroup; public val stencilTest = W4eStencilCoverStencilTestV1.NonZero; public val blend = W4eStencilCoverBlendV1.CoverageReplace; public val colorWrite = W4eStencilCoverColorWriteV1.Enabled; public val load = W4eStencilCoverLoadV1.Clear; public val store = W4eStencilCoverStoreV1.Store; public val fullscreenVertexCountI32 = 3
+    public fun copyScissorI32() = edge.copyScissorI32()
+}
+public class W4eClipMaskProducerStencilCoverNativeSiteRecipeV1 internal constructor(public val host: W4eClipMaskProducerStencilCoverRecipeV1) : NativeSiteRecipeV1 {
+    override val versionI32 = 1; override val owner = NativeSiteOwnerV1(host.passId, host.packetOrdinalI32, 1); override val family = NativeSiteRecipeFamilyV1.W4eClipMaskProducerStencilCover
+    override val canonicalLogicalEncodingV1 = nativeSiteEncodingV1(family) {
+        text("owner", host.passId.value); int("packet", host.packetOrdinalI32); int("bundle", 1)
+        fun operand(name: String, value: W4eClipMaskProducerPhysicalOperandV1) {
+            text("$name.id", value.id.value); enum("$name.role", value.role); text("$name.format", value.format.toString())
+            value.copyExtentI32()?.let { int("$name.width", it.width); int("$name.height", it.height) }
+            int("$name.samples", value.sampleCountI32); long("$name.bytes", value.byteSizeI64); enum("$name.lifetime", value.lifetime)
+            value.usages().sortedBy { it.name }.forEachIndexed { index, use -> enum("$name.use.$index", use) }
+        }
+        operand("target", host.target); host.resolveTarget?.let { operand("resolve", it) } ?: text("resolve.present", "false"); operand("depth", host.depthStencil)
+        enum("fill", host.fillRule); rect("scissor", host.copyScissorI32()); int("inverse", if (host.inverseCoverage) 1 else 0); int("antiAlias", if (host.antiAlias) 1 else 0); int("samples", host.sampleCountI32)
+        enum("shader", host.shaderFamily); enum("topology", host.topology); enum("abi", host.groupZeroAbi); enum("stencil", host.stencilTest); enum("blend", host.blend); enum("colorWrite", host.colorWrite); enum("load", host.load); enum("store", host.store); int("vertices", host.fullscreenVertexCountI32)
+    }
+}
+public fun W4eClipMaskProducerStencilEdgeRecipeV1.stencilCoverRecipeV1() = W4eClipMaskProducerStencilCoverRecipeV1(this)
 
 public class W6FilteredLayerCompositeNativeSiteRecipeV1 internal constructor(public val host: W6FilteredLayerCompositeRecipeV1) : NativeSiteRecipeV1 {
     override val versionI32 = 1
@@ -1246,6 +1278,8 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
             is W4eClipMaskProducerNativeSiteRecipeV1 -> clipMaskProducers[recipe.host.passId] === recipe.host
             is W4eClipMaskProducerDirectTriangleNativeSiteRecipeV1 -> clipMaskProducerDirectTriangles[recipe.host.passId] === recipe.host
             is W4eClipMaskProducerStencilEdgeNativeSiteRecipeV1 -> clipMaskProducerStencilEdges[recipe.host.passId] === recipe.host
+            is W4eClipMaskProducerStencilCoverNativeSiteRecipeV1 ->
+                clipMaskProducerStencilEdges[recipe.host.passId] === recipe.host.edge
             is W4eClipMaskFoldNativeSiteRecipeV1 -> clipMaskFolds[recipe.host.passId] === recipe.host
             is W6bCoverageRasterNativeSiteRecipeV1 -> coverageRasters[recipe.host.ownerPassId]?.bundle(recipe.host.bundleOrdinalI32) === recipe.host
             is W6FullscreenEmptyNativeSiteRecipeV1 -> fullscreenEmpties[recipe.host.ownerPassId] === recipe.host
@@ -1441,7 +1475,10 @@ public fun freezeNativeSiteRecipeCatalogV1(
             is PlanPass.ClipMaskProducer -> remainingClipProducers.remove(pass.id)?.let {
                 add(W4eClipMaskProducerNativeSiteRecipeV1(it))
             } ?: remainingClipProducerDirectTriangles.remove(pass.id)?.let { add(W4eClipMaskProducerDirectTriangleNativeSiteRecipeV1(it)) }
-                ?: remainingClipProducerStencilEdges.remove(pass.id)?.let { add(W4eClipMaskProducerStencilEdgeNativeSiteRecipeV1(it)) }
+                ?: remainingClipProducerStencilEdges.remove(pass.id)?.let {
+                    add(W4eClipMaskProducerStencilEdgeNativeSiteRecipeV1(it))
+                    add(W4eClipMaskProducerStencilCoverNativeSiteRecipeV1(it.stencilCoverRecipeV1()))
+                }
             is PlanPass.ClipMaskFold -> remainingClipFolds.remove(pass.id)?.let {
                 add(W4eClipMaskFoldNativeSiteRecipeV1(it))
             }

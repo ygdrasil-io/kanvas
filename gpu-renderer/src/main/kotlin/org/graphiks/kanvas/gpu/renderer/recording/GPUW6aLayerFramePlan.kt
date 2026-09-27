@@ -195,8 +195,9 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     /** Each final analytic W4e producer packet retains its planner owner and packet ordinal. */
     private val clipMaskProducerRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskProducerRecipeV1>()
     private val clipMaskProducerDirectTriangleRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskProducerDirectTriangleRecipeV1>()
-    /** Only native bundle 0 is frozen here; the path cover remains IIb2 fallback. */
     private val clipMaskProducerStencilEdgeRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskProducerStencilEdgeRecipeV1>()
+    /** The same producer packet owns bundle 1; native encoding must never rediscover this cover. */
+    private val clipMaskProducerStencilCoverRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskProducerStencilCoverRecipeV1>()
     /** I2 folds keep their planner owner/packet through W6 recording into native encoding. */
     private val clipMaskFoldRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskFoldRecipeV1>()
     private val analyticUniforms = mutableMapOf<GPUDrawPacketID, ByteArray>()
@@ -391,6 +392,13 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                                 edge.depthStencil.id == native.depthStencil && edge.sampleCountI32 == native.sampleCountI32 &&
                                 edge.inverseCoverage == native.inverseCoverage && edge.antiAlias == native.antiAlias)
                             require(clipMaskProducerStencilEdgeRecipesByPacket.put(packet, edge) == null)
+                            val cover = physical.w4eClipMaskProducerStencilCoverRecipe(native.id)
+                            require(cover.passId == native.id && cover.packetOrdinalI32 == native.ordinal &&
+                                cover.target.id == native.target && cover.resolveTarget?.id == native.resolveTarget &&
+                                cover.depthStencil.id == native.depthStencil && cover.sampleCountI32 == native.sampleCountI32 &&
+                                cover.inverseCoverage == native.inverseCoverage && cover.antiAlias == native.antiAlias &&
+                                cover.edge === edge)
+                            require(clipMaskProducerStencilCoverRecipesByPacket.put(packet, cover) == null)
                         }
                     }
                     if (native is PlanPass.ClipMaskFold) {
@@ -881,6 +889,12 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
         require(clipMaskProducerStencilEdgeRecipesByPacket.values.map { it.passId }.toSet() ==
             physical.w4eClipMaskProducerStencilEdgeRecipes().keys &&
             clipMaskProducerStencilEdgeRecipesByPacket.size == physical.w4eClipMaskProducerStencilEdgeRecipes().size)
+        require(clipMaskProducerStencilCoverRecipesByPacket.values.map { it.passId }.toSet() ==
+            physical.w4eClipMaskProducerStencilEdgeRecipes().keys &&
+            clipMaskProducerStencilCoverRecipesByPacket.size == physical.w4eClipMaskProducerStencilEdgeRecipes().size &&
+            clipMaskProducerStencilCoverRecipesByPacket.all { (packet, cover) ->
+                clipMaskProducerStencilEdgeRecipesByPacket[packet] === cover.edge
+            }) { "Every frozen W4e stencil cover must project beside edge bundle 0 on the same packet." }
         require(clipMaskFoldRecipesByPacket.values.map { it.passId }.toSet() ==
             physical.w4eClipMaskFoldRecipes().keys &&
             clipMaskFoldRecipesByPacket.size == physical.w4eClipMaskFoldRecipes().size) {
@@ -902,6 +916,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
         clipMaskProducerDirectTriangleRecipesByPacket[packet]
     internal fun w4eClipMaskProducerStencilEdgeRecipeOrNull(packet: GPUDrawPacket): W4eClipMaskProducerStencilEdgeRecipeV1? =
         clipMaskProducerStencilEdgeRecipesByPacket[packet]
+    internal fun w4eClipMaskProducerStencilCoverRecipeOrNull(packet: GPUDrawPacket): W4eClipMaskProducerStencilCoverRecipeV1? =
+        clipMaskProducerStencilCoverRecipesByPacket[packet]
 
     internal fun w4eClipMaskFoldRecipeOrNull(packet: GPUDrawPacket): W4eClipMaskFoldRecipeV1? =
         clipMaskFoldRecipesByPacket[packet]

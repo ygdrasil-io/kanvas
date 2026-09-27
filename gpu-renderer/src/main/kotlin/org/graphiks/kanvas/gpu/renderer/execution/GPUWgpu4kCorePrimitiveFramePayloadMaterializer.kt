@@ -69,6 +69,15 @@ import org.graphiks.kanvas.gpu.plan.W4eClipMaskInitializeRecipeV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerRecipeV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerDirectTriangleRecipeV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerStencilEdgeRecipeV1
+import org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerStencilCoverRecipeV1
+import org.graphiks.kanvas.gpu.plan.W4eStencilCoverShaderFamilyV1
+import org.graphiks.kanvas.gpu.plan.W4eStencilCoverTopologyV1
+import org.graphiks.kanvas.gpu.plan.W4eStencilCoverGroupZeroAbiV1
+import org.graphiks.kanvas.gpu.plan.W4eStencilCoverStencilTestV1
+import org.graphiks.kanvas.gpu.plan.W4eStencilCoverBlendV1
+import org.graphiks.kanvas.gpu.plan.W4eStencilCoverColorWriteV1
+import org.graphiks.kanvas.gpu.plan.W4eStencilCoverLoadV1
+import org.graphiks.kanvas.gpu.plan.W4eStencilCoverStoreV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskFoldRecipeV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskFoldGroupZeroAbiV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskFoldLoadV1
@@ -387,6 +396,7 @@ internal fun encodeW4eNativePasses(
     clipMaskProducerRecipesByPassId: Map<String, W4eClipMaskProducerRecipeV1> = emptyMap(),
     clipMaskProducerDirectTriangleRecipesByPassId: Map<String, W4eClipMaskProducerDirectTriangleRecipeV1> = emptyMap(),
     clipMaskProducerStencilEdgeRecipesByPassId: Map<String, W4eClipMaskProducerStencilEdgeRecipeV1> = emptyMap(),
+    clipMaskProducerStencilCoverRecipesByPassId: Map<String, W4eClipMaskProducerStencilCoverRecipeV1> = emptyMap(),
     clipMaskFoldRecipesByPassId: Map<String, W4eClipMaskFoldRecipeV1> = emptyMap(),
 ): List<GPUPreparedNativeScopeOperand.Render> {
     requireW4eClipMaskInitializeRecipes(entries, clipMaskInitializeRecipesByPassId)
@@ -542,6 +552,7 @@ internal fun encodeW4eNativePasses(
                 val frozenRecipe = clipMaskProducerRecipesByPassId[pass.passId]
                 val frozenDirectTriangleRecipe = clipMaskProducerDirectTriangleRecipesByPassId[pass.passId]
                 val frozenStencilEdgeRecipe = clipMaskProducerStencilEdgeRecipesByPassId[pass.passId]
+                val frozenStencilCoverRecipe = clipMaskProducerStencilCoverRecipesByPassId[pass.passId]
                 val targetResourceId = frozenRecipe?.target?.id?.value ?: frozenDirectTriangleRecipe?.target?.id?.value ?: frozenStencilEdgeRecipe?.target?.id?.value ?: pass.targetResourceId
                 val resolveTargetResourceId = frozenRecipe?.resolveTarget?.id?.value ?: frozenDirectTriangleRecipe?.resolveTarget?.id?.value ?: frozenStencilEdgeRecipe?.resolveTarget?.id?.value ?: pass.resolveTargetResourceId
                 val depthStencilResourceId = frozenRecipe?.depthStencil?.id?.value ?: frozenDirectTriangleRecipe?.depthStencil?.id?.value ?: frozenStencilEdgeRecipe?.depthStencil?.id?.value ?: pass.depthStencilResourceId
@@ -625,6 +636,26 @@ internal fun encodeW4eNativePasses(
                                 "invalid.native-core-primitive.w4e-path-depth", "W4e path stencil producer lacks its sealed D24S8 attachment.",
                             )
                             val edge = frozenStencilEdgeRecipe
+                            val cover = edge?.let {
+                                requireNotNull(frozenStencilCoverRecipe) {
+                                    "W4e stencil-edge bundle-0 requires its frozen bundle-1 cover recipe."
+                                }
+                            }
+                            if (cover != null) require(cover.edge === edge && cover.passId.value == pass.passId &&
+                                cover.packetOrdinalI32 == entry.render.w6aPassV1?.ordinal &&
+                                cover.target.id.value == targetResourceId &&
+                                cover.resolveTarget?.id?.value == resolveTargetResourceId &&
+                                cover.depthStencil.id.value == depthStencilResourceId &&
+                                cover.sampleCountI32 == sampleCount && cover.inverseCoverage == inverseCoverage &&
+                                cover.shaderFamily == W4eStencilCoverShaderFamilyV1.FullscreenCoverage &&
+                                cover.topology == W4eStencilCoverTopologyV1.FullscreenTriangle &&
+                                cover.groupZeroAbi == W4eStencilCoverGroupZeroAbiV1.NoBindGroup &&
+                                cover.stencilTest == W4eStencilCoverStencilTestV1.NonZero &&
+                                cover.blend == W4eStencilCoverBlendV1.CoverageReplace &&
+                                cover.colorWrite == W4eStencilCoverColorWriteV1.Enabled &&
+                                cover.fullscreenVertexCountI32 == 3) {
+                                "W4e stencil-cover bundle-1 must select its exact frozen axes before native creation."
+                            }
                             if (edge != null) require(edge.passId.value == pass.passId && edge.packetOrdinalI32 == entry.render.w6aPassV1?.ordinal &&
                                 edge.vertexCountI32 == nativePayload.geometrySlice(edge.passId.value, W4eNativePayloadPlan.PRODUCER_PATH)?.vertexCount &&
                                 edge.indexCountI32 == nativePayload.geometrySlice(edge.passId.value, W4eNativePayloadPlan.PRODUCER_PATH)?.indexCount &&
@@ -657,10 +688,21 @@ internal fun encodeW4eNativePasses(
                                     }
                                 }
                             }
-                            val coverPipeline = createW4ePathCoverPipeline(
+                            val coverPipeline = if (cover == null) createW4ePathCoverPipeline(
                                 device, GPUTextureFormat.RGBA8Unorm, sampleCount,
                                 if (inverseCoverage) 0f else 1f, owned,
-                            )
+                            ) else when (cover.shaderFamily) {
+                                W4eStencilCoverShaderFamilyV1.FullscreenCoverage -> when (cover.topology) {
+                                    W4eStencilCoverTopologyV1.FullscreenTriangle -> when (cover.groupZeroAbi) {
+                                        W4eStencilCoverGroupZeroAbiV1.NoBindGroup -> when (cover.stencilTest) {
+                                            W4eStencilCoverStencilTestV1.NonZero -> createW4ePathCoverPipeline(
+                                                device, GPUTextureFormat.RGBA8Unorm, cover.sampleCountI32,
+                                                if (cover.inverseCoverage) 0f else 1f, owned,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                             buildList {
                                 add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(stencilPipeline, generation)))
                                 addAll(indexedGeometryCommands(
@@ -669,7 +711,7 @@ internal fun encodeW4eNativePasses(
                                     edge?.copyScissorI32()?.let { GPUPixelBounds(it.left, it.top, it.right, it.bottom) } ?: GPUPixelBounds(scissor.left, scissor.top, scissor.right, scissor.bottom),
                                 ))
                                 add(GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand.noBindings(coverPipeline, generation)))
-                                add(GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)))
+                                add(GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(cover?.fullscreenVertexCountI32 ?: 3)))
                             }
                         }
                     }

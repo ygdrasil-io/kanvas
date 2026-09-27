@@ -13,8 +13,8 @@ public enum class W4eStencilEdgeLoadV1 { Clear }
 public enum class W4eStencilEdgeStoreV1 { Store }
 
 /**
- * Bundle zero of a W6-bound Path stencil producer.  The following cover draw is deliberately
- * not represented here: IIb2 owns that second native bundle.
+ * Bundle zero of a W6-bound Path stencil producer. Bundle one is frozen separately by IIb2
+ * under the same packet owner.
  */
 public class W4eClipMaskProducerStencilEdgeRecipeV1 internal constructor(
     public val passId: PlanPassId, public val packetOrdinalI32: Int,

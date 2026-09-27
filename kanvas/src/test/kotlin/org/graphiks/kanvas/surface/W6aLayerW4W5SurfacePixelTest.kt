@@ -6,6 +6,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.Canvas
+import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Image
@@ -35,6 +36,37 @@ import org.junit.jupiter.api.Test
  * renderer, fallback route, or internal counter.
  */
 class W6aLayerW4W5SurfacePixelTest {
+    @Test
+    fun `even odd path clip preserves its stencil cover hole in a W6 layer`() {
+        // The inner contour has the same winding as the exterior.  Only the frozen EVEN_ODD
+        // stencil edge plus its non-zero cover test leaves this center pixel transparent.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            blue, blue, blue, blue,
+            blue, clear, clear, blue,
+            blue, clear, clear, blue,
+            blue, blue, blue, blue,
+        ).flatten().toUByteArray()
+        val donut = Path().apply {
+            moveTo(0f, 0f); lineTo(4f, 0f); lineTo(4f, 4f); lineTo(0f, 4f); close()
+            moveTo(1f, 1f); lineTo(3f, 1f); lineTo(3f, 3f); lineTo(1f, 3f); close()
+            fillType = FillType.EVEN_ODD
+        }
+
+        val surface = Surface(4, 4)
+        surface.canvas {
+            saveLayer()
+            clipPath(donut, antiAlias = false)
+            drawRect(RectF32.ofLTRB(0f, 0f, 4f, 4f), opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
     @Test
     fun `concave path clip keeps its stencil edge fan coverage in a W6 layer`() {
         // An L is neither its bounds nor a direct triangle.  Its public pixels are fixed before

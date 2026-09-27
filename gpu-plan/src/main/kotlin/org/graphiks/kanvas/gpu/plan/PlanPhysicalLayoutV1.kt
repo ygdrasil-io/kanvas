@@ -373,6 +373,13 @@ public class PlanPhysicalLayoutV1 private constructor(
             ?.host ?: error("Missing frozen W4e direct-triangle ClipMaskProducer recipe for ${passId.value}.")
     public fun w4eClipMaskProducerDirectTriangleRecipes(): Map<PlanPassId, W4eClipMaskProducerDirectTriangleRecipeV1> = clipMaskProducerDirectTriangles
     public fun w4eClipMaskProducerStencilEdgeRecipes(): Map<PlanPassId, W4eClipMaskProducerStencilEdgeRecipeV1> = clipMaskProducerStencilEdges
+    /** Bundle one is frozen beside edge bundle zero under the same packet owner. */
+    public fun w4eClipMaskProducerStencilCoverRecipe(passId: PlanPassId): W4eClipMaskProducerStencilCoverRecipeV1 {
+        val edge = clipMaskProducerStencilEdges.getValue(passId)
+        return (nativeSiteRecipes.recipe(NativeSiteOwnerV1(passId, edge.packetOrdinalI32, 1))
+            as? W4eClipMaskProducerStencilCoverNativeSiteRecipeV1)?.host
+            ?: error("Missing frozen W4e stencil-cover recipe for ${passId.value}.")
+    }
     public fun w4eClipMaskFoldRecipe(passId: PlanPassId): W4eClipMaskFoldRecipeV1 =
         (nativeSiteRecipes.recipe(NativeSiteOwnerV1(passId, clipMaskFolds.getValue(passId).packetOrdinalI32, 0)) as? W4eClipMaskFoldNativeSiteRecipeV1)
             ?.host ?: error("Missing frozen W4e ClipMaskFold native-site recipe for ${passId.value}.")
