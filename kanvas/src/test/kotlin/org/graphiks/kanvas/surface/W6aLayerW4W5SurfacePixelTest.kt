@@ -37,6 +37,33 @@ import org.junit.jupiter.api.Test
  */
 class W6aLayerW4W5SurfacePixelTest {
     @Test
+    fun `hard rect clipped direct triangle keeps its asymmetric W6 wedge`() {
+        // Literal oracle is neither the unclipped triangle nor the clip rectangle's bounding box.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            clear, blue, blue, blue, clear,
+            clear, blue, blue, clear, clear,
+            clear, blue, clear, clear, clear,
+            clear, clear, clear, clear, clear,
+            clear, clear, clear, clear, clear,
+        ).flatten().toUByteArray()
+        val triangle = Path().apply { moveTo(0f, 0f); lineTo(5f, 0f); lineTo(0f, 5f); close() }
+
+        val surface = Surface(5, 5)
+        surface.canvas {
+            saveLayer()
+            clipRect(RectF32.ofLTRB(1f, 0f, 4f, 3f), antiAlias = false)
+            drawPath(triangle, opaque(BLUE))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
     fun `precision collapsed butt stroke remains a public W6 direct path witness`() {
         // The F64 outline has four corners; at 2^24 its two terminal F32 corners coincide,
         // leaving Winding's line-only direct triangle.  The literal oracle precedes Surface.

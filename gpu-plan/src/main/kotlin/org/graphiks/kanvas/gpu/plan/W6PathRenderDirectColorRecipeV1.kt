@@ -9,6 +9,7 @@ public enum class W6PathRenderDirectColorTopologyV1 { TriangleList }
 public enum class W6PathRenderDirectColorGroupZeroAbiV1 { W4eConsumerUniform }
 /** Source authority retained by the final direct-colour packet. */
 public enum class W6PathRenderDirectColorGeometryKindV1 { Fill, Stroke }
+public enum class W6PathRenderDirectColorClipKindV1 { Plain, Scissor }
 
 /**
  * The final, physical W4e direct-color draw.  This is deliberately limited to the ordinary
@@ -27,6 +28,8 @@ public class W6PathRenderDirectColorRecipeV1 internal constructor(
     public val uniformOffsetBytesI64: Long,
     public val uniformByteSizeI64: Long,
     public val geometryKind: W6PathRenderDirectColorGeometryKindV1,
+    public val clipKind: W6PathRenderDirectColorClipKindV1 = W6PathRenderDirectColorClipKindV1.Plain,
+    clipDomainI32: RectI32? = null,
     geometry: PathFillGeometryF32,
     scissor: RectI32,
     public val vertexFirstI32: Int,
@@ -46,8 +49,10 @@ public class W6PathRenderDirectColorRecipeV1 internal constructor(
 ) {
     private val geometrySnapshot = geometry
     private val scissorSnapshot = scissor.copy()
+    private val clipDomainSnapshot = clipDomainI32?.copy()
     public fun copyGeometryF32(): PathFillGeometryF32 = geometrySnapshot
     public fun copyScissorI32(): RectI32 = scissorSnapshot.copy()
+    public fun copyClipDomainI32OrNull(): RectI32? = clipDomainSnapshot?.copy()
     init {
         val triangle = geometry.copyDirectTriangleF32OrNull()
         require(packetOrdinalI32 >= 0 && triangle != null && vertexFirstI32 >= 0 && indexFirstI32 >= 0 && baseVertexI32 >= 0)
@@ -58,6 +63,7 @@ public class W6PathRenderDirectColorRecipeV1 internal constructor(
         require(index.role == PlanResourceRole.IndexData && PlanResourceUsage.Index in index.usages())
         require(uniform.role == PlanResourceRole.UniformData && PlanResourceUsage.Uniform in uniform.usages())
         require(uniformOffsetBytesI64 >= 0L && uniformByteSizeI64 == 16L)
+        require((clipKind == W6PathRenderDirectColorClipKindV1.Scissor) == (clipDomainSnapshot != null))
     }
 }
 
@@ -81,6 +87,9 @@ public class W6PathRenderDirectColorNativeSiteRecipeV1 internal constructor(
         val geometry = host.copyGeometryF32()
         // Preserve IIIa1 Fill's version-one encoding byte-for-byte; Stroke is the new tagged arm.
         if (host.geometryKind == W6PathRenderDirectColorGeometryKindV1.Stroke) enum("source.geometry", host.geometryKind)
+        if (host.clipKind == W6PathRenderDirectColorClipKindV1.Scissor) {
+            enum("clip.kind", host.clipKind); rect("clip.domain", requireNotNull(host.copyClipDomainI32OrNull()))
+        }
         enum("fill", geometry.fillRule); rect("scissor", host.copyScissorI32())
         geometry.copyDirectTriangleF32OrNull()!!.copyVerticesF32().forEachIndexed { i, value -> float("triangle.$i", value) }
         geometry.copyDirectTriangleF32OrNull()!!.copyIndicesI32().forEachIndexed { i, value -> int("index.$i", value) }
@@ -96,16 +105,25 @@ public fun freezeW6PathRenderDirectColorRecipesV1(bindings: List<PlanW4eGeometry
         bindings.forEach { binding -> binding.nativePasses().forEach { candidate ->
             val pass = candidate as? PlanPass.PathRenderPass ?: return@forEach
             if (pass.phase != PathRenderPhase.SingleSampleDirectColor) return@forEach
-            val draw = pass.draw as? GeneralPathDraw ?: return@forEach
+            val (draw, clipKind, clipDomain) = when (val renderDraw = pass.draw) {
+                is GeneralPathDraw -> Triple(renderDraw, W6PathRenderDirectColorClipKindV1.Plain, null)
+                is ClippedGeneralPathDraw -> {
+                    val clip = renderDraw.clip as? ClipPlanStrategy.Scissor ?: return@forEach
+                    if (clip.child != null) return@forEach
+                    Triple(renderDraw.source, W6PathRenderDirectColorClipKindV1.Scissor, clip.copyDomainI32())
+                }
+                else -> return@forEach
+            }
             val (geometry, geometryKind) = when (val source = draw.copyPathGeometry()) {
                 is PathDrawGeometry.Fill -> source.valueF32 to W6PathRenderDirectColorGeometryKindV1.Fill
                 is PathDrawGeometry.Stroke -> source.valueF32.copyFillGeometryF32() to W6PathRenderDirectColorGeometryKindV1.Stroke
                 is PathDrawGeometry.InverseDomainSource, PathDrawGeometry.Empty -> return@forEach
             }
+            if (clipKind == W6PathRenderDirectColorClipKindV1.Scissor && geometryKind != W6PathRenderDirectColorGeometryKindV1.Fill) return@forEach
             if (geometry.copyDirectTriangleF32OrNull() == null) return@forEach
             val geometrySlice = requireNotNull(binding.payload.geometrySlice(pass.id.value, W4eNativePayloadPlan.CONSUMER_DIRECT))
             val uniformSlice = requireNotNull(binding.payload.uniformSlice(pass.id.value, W4eNativePayloadPlan.CONSUMER_UNIFORM))
-            require(put(pass.id, W6PathRenderDirectColorRecipeV1(pass.id, pass.ordinal, operand(rows.getValue(pass.target)), pass.resolveTarget?.let { operand(rows.getValue(it)) }, pass.depthStencil?.let { operand(rows.getValue(it)) }, operand(rows.getValue(binding.payload.vertexResourceId)), operand(rows.getValue(binding.payload.indexResourceId)), operand(rows.getValue(binding.payload.uniformResourceId)), uniformSlice.offsetBytes, uniformSlice.byteSize, geometryKind, geometry, pass.draw.copyScissorI32(), geometrySlice.baseVertex, geometrySlice.vertexCount, geometrySlice.firstIndex, geometrySlice.indexCount, geometrySlice.baseVertex, geometrySlice.maxLocalIndex, pass.draw.sample == SamplePlan.Multisample4, 1, pass.load, pass.store, pass.draw.blend)) == null)
+            require(put(pass.id, W6PathRenderDirectColorRecipeV1(pass.id, pass.ordinal, operand(rows.getValue(pass.target)), pass.resolveTarget?.let { operand(rows.getValue(it)) }, pass.depthStencil?.let { operand(rows.getValue(it)) }, operand(rows.getValue(binding.payload.vertexResourceId)), operand(rows.getValue(binding.payload.indexResourceId)), operand(rows.getValue(binding.payload.uniformResourceId)), uniformSlice.offsetBytes, uniformSlice.byteSize, geometryKind, clipKind, clipDomain, geometry, pass.draw.copyScissorI32(), geometrySlice.baseVertex, geometrySlice.vertexCount, geometrySlice.firstIndex, geometrySlice.indexCount, geometrySlice.baseVertex, geometrySlice.maxLocalIndex, pass.draw.sample == SamplePlan.Multisample4, 1, pass.load, pass.store, pass.draw.blend)) == null)
         } }
     })
 }

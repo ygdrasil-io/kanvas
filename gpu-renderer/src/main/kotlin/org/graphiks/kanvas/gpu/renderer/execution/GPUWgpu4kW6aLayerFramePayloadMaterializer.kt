@@ -72,6 +72,14 @@ private fun preflightW6PathRenderDirectColors(
         val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == recipe.passId }
         val packet = render.drawPackets.single()
         val prepared = requireNotNull(packet.w4ePreparedPath)
+        when (recipe.clipKind) {
+            W6PathRenderDirectColorClipKindV1.Plain -> require(pass.draw is GeneralPathDraw)
+            W6PathRenderDirectColorClipKindV1.Scissor -> {
+                val clipped = pass.draw as? ClippedGeneralPathDraw ?: error("W6 scissor direct-colour owner is not clipped.")
+                val clip = clipped.clip as? ClipPlanStrategy.Scissor ?: error("W6 direct-colour clip is not a scissor.")
+                require(clip.child == null && clip.copyDomainI32() == recipe.copyClipDomainI32OrNull())
+            }
+        }
         val catalog = frame.physical.nativeSiteRecipeCatalogV1().recipe(
             NativeSiteOwnerV1(recipe.passId, recipe.packetOrdinalI32, 0),
         ) as? W6PathRenderDirectColorNativeSiteRecipeV1
