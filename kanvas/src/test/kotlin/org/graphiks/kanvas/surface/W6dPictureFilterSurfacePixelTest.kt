@@ -369,6 +369,33 @@ class W6dPictureFilterSurfacePixelTest {
         assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
     }
 
+    /** W6 PictureComposite admits a nonempty root clip disjoint from its source as an Empty site. */
+    @Test
+    fun pictureCompositeNullScissorKeepsLayerSibling() {
+        val expected = ubyteArrayOf(
+            0u, 0u, 255u, 255u,
+            0u, 0u, 255u, 255u,
+        )
+        val bounds = RectF32.ofLTRB(0f, 0f, 2f, 1f)
+        val rootOutside = RectF32.ofLTRB(2f, 0f, 3f, 1f)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(ColorARGB.Red, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val surface = Surface(2, 1)
+        surface.canvas {
+            saveLayer(SaveLayerRec())
+            drawRect(bounds, Paint(ColorARGB.Blue, antiAlias = false))
+            restore()
+            clipRect(rootOutside, ClipOp.INTERSECT, antiAlias = false)
+            drawPicture(picture, Paint(antiAlias = false))
+        }
+
+        val result = surface.render()
+
+        assertContentEquals(expected, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
     /**
      * The inner ColorFilter is deliberately materialized before the outer Picture leaf. Its
      * sealed source then contains a filtered blue child, so a flat/non-reentrant schedule either
