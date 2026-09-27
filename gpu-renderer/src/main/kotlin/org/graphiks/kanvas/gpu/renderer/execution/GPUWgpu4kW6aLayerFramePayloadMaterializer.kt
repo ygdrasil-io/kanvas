@@ -1800,8 +1800,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                                 val operand = requireNotNull(graphTextureOperandsBySource[pass.source]) {
                                     "PictureComposite without a catalog recipe is not an active graph bridge."
                                 }
-                                require(scissor != null && (operand.colorFilter != null || operands.blend is BlendPlan.DestinationReadV1)) {
-                                    "Only IIIb2b graph filter or destination-snapshot variants may bypass IIIb2a's catalog recipe."
+                                require(scissor != null && operands.blend is BlendPlan.DestinationReadV1) {
+                                    "Only IIIb2b2 destination-snapshot variants may bypass frozen PictureComposite graph recipes."
                                 }
                                 require(operand.finalBlend.canonicalLabel == operands.blend.canonicalLabel) {
                                     "W6b Picture composite blend differs from its frozen graph-texture operand."
