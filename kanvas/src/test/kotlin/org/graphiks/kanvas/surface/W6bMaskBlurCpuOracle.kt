@@ -86,6 +86,14 @@ internal object W6bMaskBlurCpuOracle {
         return pictureMaskSource(childCoverage, blur(innerMask))
     }
 
+    /** A Picture-owned source carries paint alpha in coverage; MaterializedSource keeps its source support. */
+    fun renderPictureOwnedMultiplyMaskBlur(): UByteArray {
+        val sourceAlpha = FloatArray(widthI32 * heightI32)
+        fillRect(sourceAlpha, 3, 2, 7, 6, 0.5f)
+        val mask = blur(sourceAlpha)
+        return pictureMaskWithSourceSupport(sourceAlpha, mask)
+    }
+
     private fun translatedRectCoverage(): FloatArray = FloatArray(widthI32 * heightI32).also { coverage ->
         // The public draw is local [3,6)×[3,6) after translate(1, 0).
         fillRect(coverage, 4, 3, 7, 6, 1f)
@@ -270,6 +278,19 @@ internal object W6bMaskBlurCpuOracle {
             pixels[offsetI32 + 1] = encoded
             pixels[offsetI32 + 2] = encoded
             pixels[offsetI32 + 3] = encodeAlpha(alphaF32)
+        }
+    }
+
+    private fun pictureMaskWithSourceSupport(sourceAlpha: FloatArray, mask: FloatArray): UByteArray = UByteArray(mask.size * 4).also { pixels ->
+        mask.indices.forEach { pixelI32 ->
+            if (sourceAlpha[pixelI32] > 0f) {
+                val offsetI32 = pixelI32 * 4
+                val encoded = encodePremul(mask[pixelI32])
+                pixels[offsetI32] = encoded
+                pixels[offsetI32 + 1] = encoded
+                pixels[offsetI32 + 2] = encoded
+                pixels[offsetI32 + 3] = encodeAlpha(mask[pixelI32])
+            }
         }
     }
 

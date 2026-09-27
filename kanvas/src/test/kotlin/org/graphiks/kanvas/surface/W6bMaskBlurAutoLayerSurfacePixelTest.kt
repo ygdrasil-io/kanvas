@@ -96,6 +96,27 @@ class W6bMaskBlurAutoLayerSurfacePixelTest {
     }
 
     @Test
+    fun `Picture owned masked source multiplies its retained alpha by frozen coverage`() {
+        // A child Picture routes its masked draw through appendPlannedDraw: it has coverage but
+        // no RenderPass W6b raster binding, so MaterializedSource must retain and multiply alpha.
+        val expected = W6bMaskBlurCpuOracle.renderPictureOwnedMultiplyMaskBlur()
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(fullBounds()).drawRect(RectF32.ofLTRB(3f, 2f, 7f, 6f), Paint(
+                ColorARGB.of(128, 255, 255, 255),
+                maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, 1f),
+                antiAlias = false,
+            ))
+        }.finishRecordingAsPicture()
+        val result = Surface(W6bMaskBlurCpuOracle.widthI32, W6bMaskBlurCpuOracle.heightI32).also { surface ->
+            surface.canvas { drawPicture(picture) }
+        }.render()
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            result.nativeEvidenceScopeKinds.toString())
+
+        W6bMaskBlurCpuOracle.assertNear(expected, result.pixels)
+    }
+
+    @Test
     fun `explicit W6a layer keeps its masked auto-layer in parent child parent restore order`() {
         // This non-AA rect takes the planner-owned CoverageSolidRect fullscreen branch.
         val expected = W6bMaskBlurCpuOracle.renderLayerOverBlue()
