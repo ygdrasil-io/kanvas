@@ -295,11 +295,15 @@ public class W6FullscreenPictureSourceLayerRecipeV1 internal constructor(
     public val groupZeroAbi: W6FullscreenPictureSourceLayerGroupZeroAbiV1 = W6FullscreenPictureSourceLayerGroupZeroAbiV1.Texture,
     public val shaderFamily: W6FullscreenPictureSourceLayerShaderFamilyV1 = W6FullscreenPictureSourceLayerShaderFamilyV1.SampledLayerTextureLoad,
     public val draw: W6FullscreenEmptyDrawV1 = W6FullscreenEmptyDrawV1(),
+    scissorTargetLocalI32: org.graphiks.math.geometry.RectI32,
+    public val clearColor: W6CanonicalColorF32V1 = W6CanonicalColorF32V1.of(0f, 0f, 0f, 0f),
 ) : W6FullscreenRecipeV1 {
     override val variant = W6FullscreenRecipeVariantV1.PictureSourceLayer
     private val frozenExtent = extent.copy(); private val frozenOffset = org.graphiks.math.geometry.Point2I32(outputToInputOffsetTargetLocalI32.x, outputToInputOffsetTargetLocalI32.y)
-    init { require(target != source && sampleCountI32 == 1) }
+    private val frozenScissor = org.graphiks.math.geometry.RectI32(scissorTargetLocalI32.left, scissorTargetLocalI32.top, scissorTargetLocalI32.right, scissorTargetLocalI32.bottom)
+    init { require(target != source && sampleCountI32 == 1 && frozenScissor == org.graphiks.math.geometry.RectI32(0, 0, frozenExtent.width, frozenExtent.height)) }
     public fun copyExtent() = frozenExtent.copy(); public fun copyOutputToInputOffsetTargetLocalI32() = org.graphiks.math.geometry.Point2I32(frozenOffset.x, frozenOffset.y)
+    public fun copyScissorTargetLocalI32() = org.graphiks.math.geometry.RectI32(frozenScissor.left, frozenScissor.top, frozenScissor.right, frozenScissor.bottom)
     public fun nativeSiteOwnerV1() = NativeSiteOwnerV1(ownerPassId, 0, 0)
     public fun canonicalLogicalEncodingV1() = W6FullscreenPictureSourceLayerNativeSiteRecipeV1(this).canonicalLogicalEncodingV1
 }
@@ -307,7 +311,7 @@ public class W6FullscreenPictureSourceLayerNativeSiteRecipeV1 internal construct
     override val versionI32 = 1; override val owner = host.nativeSiteOwnerV1(); override val family = NativeSiteRecipeFamilyV1.W6FullscreenPictureSourceLayer
     override val canonicalLogicalEncodingV1 = nativeSiteEncodingV1(family) {
         enum("variant", host.variant); text("owner", host.ownerPassId.value); int("ordinal", owner.drawOrPacketOrdinalI32); int("bundle", owner.bundleOrdinalI32); text("target", host.target.value); text("input.0", host.source.value); int("inputCount", 1)
-        int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); point("outputToInputOffsetTargetLocal", host.copyOutputToInputOffsetTargetLocalI32()); enum("load", host.load); enum("store", host.store); enum("targetFormat", host.targetFormat); int("sampleCount", host.sampleCountI32); blend("blend", host.blend); enum("topology", host.topology); enum("groupZeroAbi", host.groupZeroAbi); enum("shaderFamily", host.shaderFamily); int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32); int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32)
+        int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); point("outputToInputOffsetTargetLocal", host.copyOutputToInputOffsetTargetLocalI32()); rect("scissor", host.copyScissorTargetLocalI32()); color("clearColor", host.clearColor); enum("load", host.load); enum("store", host.store); enum("targetFormat", host.targetFormat); int("sampleCount", host.sampleCountI32); blend("blend", host.blend); enum("topology", host.topology); enum("groupZeroAbi", host.groupZeroAbi); enum("shaderFamily", host.shaderFamily); int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32); int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32)
     }
 }
 
@@ -617,7 +621,8 @@ public fun freezeW6FullscreenPictureSourceLayerRecipesV1(passes: List<PlanPass>,
         val source = requireNotNull(pass.layerInput); val sampling = requireNotNull(pass.sourceSampling); val target = resources.single { it.id == pass.output }
         val format = (target.format as? PlanTextureFormat.Color)?.value ?: error("W6 PictureSourceLayer requires color attachment.")
         require(PlanResourceUsage.Sampled in resources.single { it.id == source }.usages())
-        require(put(pass.id, W6FullscreenPictureSourceLayerRecipeV1(pass.id, pass.output, source, requireNotNull(target.copyExtent()), sampling.copyOutputToInputOffsetTargetLocalI32(), format, target.sampleCountI32)) == null)
+        val extent = requireNotNull(target.copyExtent())
+        require(put(pass.id, W6FullscreenPictureSourceLayerRecipeV1(pass.id, pass.output, source, extent, sampling.copyOutputToInputOffsetTargetLocalI32(), format, target.sampleCountI32, scissorTargetLocalI32 = org.graphiks.math.geometry.RectI32(0, 0, extent.width, extent.height))) == null)
     }
 }
 

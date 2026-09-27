@@ -291,10 +291,34 @@ private fun preflightW6FullscreenPictureSourceLayers(frame: GPUW6aLayerFramePlan
     val expected = freezeW6FullscreenPictureSourceLayerRecipesV1(frame.graph.passes(), frame.graph.resources())
     require(frame.physical.w6FullscreenPictureSourceLayerRecipes().keys == expected.keys)
     expected.forEach { (id, frozen) ->
-        val actual = frame.physical.w6FullscreenPictureSourceLayerRecipe(id); require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1())
-        val pass = frame.graph.passes().single { it.id == id } as PlanPass.PictureSourcePass
+        val actual = frame.physical.w6FullscreenPictureSourceLayerRecipe(id)
+        require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1())
+        val pass = frame.graph.passes().single { it.id == id } as? PlanPass.PictureSourcePass
+            ?: error("W6 PictureSourceLayer owner is not a picture source pass.")
         val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == id }
-        require(pass.graphTextureOperand == null && pass.layerInput == actual.source && requireNotNull(pass.sourceSampling).copyOutputToInputOffsetTargetLocalI32() == actual.copyOutputToInputOffsetTargetLocalI32() && render.target == frame.refs.getValue(actual.target) && render.resourceUses.size == 1 && render.resourceUses.single().resource == frame.refs.getValue(actual.source) && render.loadStore.loadOp == "clear" && render.drawPackets.isEmpty())
+        val expectedUses = listOf(org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(
+            frame.refs.getValue(actual.source), org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget,
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding,
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false,
+        ))
+        val catalogRecipe = frame.physical.nativeSiteRecipeCatalogV1().recipe(actual.nativeSiteOwnerV1())
+            as? W6FullscreenPictureSourceLayerNativeSiteRecipeV1
+            ?: error("W6 PictureSourceLayer is absent from the frozen native-site catalog.")
+        val target = frame.physical.resource(actual.target)
+        val source = frame.physical.resource(actual.source)
+        require(catalogRecipe.host === actual && frame.physical.slot(actual.target).resourceId == actual.target &&
+            frame.physical.slot(actual.source).resourceId == actual.source && pass.graphTextureOperand == null &&
+            pass.layerInput == actual.source && requireNotNull(pass.sourceSampling).copyOutputToInputOffsetTargetLocalI32() ==
+                actual.copyOutputToInputOffsetTargetLocalI32() && actual.ownerPassId == pass.id && actual.target == pass.output &&
+            target.copyExtent() == actual.copyExtent() && target.format == PlanTextureFormat.Color(actual.targetFormat) &&
+            target.sampleCountI32 == actual.sampleCountI32 && PlanResourceUsage.RenderAttachment in target.usages() &&
+            source.copyExtent() != null && PlanResourceUsage.Sampled in source.usages() &&
+            render.target == frame.refs.getValue(actual.target) && render.resourceUses == expectedUses &&
+            render.drawPackets.isEmpty() && render.loadStore.loadOp == "clear" &&
+            render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan is GPUSamplePlan.SingleSampleFrame &&
+            render.depthStencilLoadStore == null) {
+            "W6 PictureSourceLayer recorded resource use or attachment differs from its frozen recipe."
+        }
     }
 }
 
@@ -1042,14 +1066,19 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         renderOperands += emptyRender(stepIndex, views.getValue(pass.aggregateTarget), generation, pass, frame.physical.w6FullscreenEmptyRecipe(pass.id), owned)
                     }
                     is PlanPass.PictureSourcePass -> {
-                        val operand = pass.graphTextureOperand
-                        val sampleOffset = pass.sourceSampling?.copyOutputToInputOffsetTargetLocalI32()
-                        if (operand == null) {
-                            val recipe = frame.physical.nativeSiteRecipeCatalogV1().recipe(NativeSiteOwnerV1(pass.id, 0, 0)) as? W6FullscreenPictureSourceLayerNativeSiteRecipeV1 ?: error("PictureSourceLayer lacks frozen recipe")
-                            val host = recipe.host; require(pass.layerInput == host.source)
-                            val offset = host.copyOutputToInputOffsetTargetLocalI32(); val extent = host.copyExtent()
-                            renderOperands += textureRender(stepIndex, views.getValue(host.target), views.getValue(host.source), generation, sampledCompositeShader(offset.x, offset.y, 1f), host.blend, 0, 0, extent.width, extent.height, pass, owned)
-                        } else {
+                        when (val recipe = frame.physical.nativeSiteRecipeCatalogV1().recipeOrNull(NativeSiteOwnerV1(pass.id, 0, 0))) {
+                            is W6FullscreenPictureSourceLayerNativeSiteRecipeV1 -> {
+                                val host = frame.physical.w6FullscreenPictureSourceLayerRecipe(pass.id)
+                                require(recipe.host === host)
+                                renderOperands += pictureSourceLayerRender(stepIndex, views.getValue(host.target), views.getValue(host.source),
+                                    generation, host, pass, owned)
+                            }
+                            null -> {
+                            // Ic2 remains an explicit temporary bridge until its graph recipe is frozen.
+                            val operand = requireNotNull(pass.graphTextureOperand) {
+                                "PictureSource pass without a frozen recipe is not an Ic2 graph-texture bridge."
+                            }
+                            val sampleOffset = pass.sourceSampling?.copyOutputToInputOffsetTargetLocalI32()
                             val offset = requireNotNull(sampleOffset) {
                                 "W6b Picture graph texture source has no sealed target-local sampling."
                             }
@@ -1067,6 +1096,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             """
                             renderOperands += pictureSourceRender(stepIndex, views.getValue(pass.output), views.getValue(operand.sealedSourceId),
                                 null, null, generation, shader, 0, 0, extent.width, extent.height, pass, owned)
+                        }
+                            else -> error("PictureSource pass has an incompatible frozen native-site recipe.")
                         }
                     }
                     is PlanPass.FilterPass -> {
@@ -1964,6 +1995,52 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 GPUPreparedNativeRenderCommand.SetScissor(0, 0, widthI32, heightI32),
                 GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3, 1, 0, 0)),
             ), w6aPassV1 = pass)
+    }
+
+    /** Mechanical Ic1 translation of the frozen layer-input PictureSource recipe. */
+    private fun pictureSourceLayerRender(
+        stepIndex: Int,
+        target: GPUTextureView,
+        source: GPUTextureView,
+        generation: GPUDeviceGenerationID,
+        recipe: W6FullscreenPictureSourceLayerRecipeV1,
+        pass: PlanPass.PictureSourcePass,
+        owned: W6aOwnedHandles,
+    ): GPUPreparedNativeScopeOperand.Render {
+        val sampling = requireNotNull(pass.sourceSampling)
+        require(recipe.ownerPassId == pass.id && recipe.target == pass.output && recipe.source == pass.layerInput &&
+            pass.graphTextureOperand == null && recipe.load == AttachmentLoadPlan.ClearTransparent &&
+            recipe.store == AttachmentStorePlan.Store && recipe.targetFormat == PlanLogicalColorFormat.RGBA8_UNORM_SRGB_LINEAR_PREMUL &&
+            recipe.sampleCountI32 == 1 && recipe.topology == W6FullscreenEmptyTopologyV1.FullscreenTriangle &&
+            recipe.groupZeroAbi == W6FullscreenPictureSourceLayerGroupZeroAbiV1.Texture &&
+            recipe.shaderFamily == W6FullscreenPictureSourceLayerShaderFamilyV1.SampledLayerTextureLoad &&
+            recipe.copyOutputToInputOffsetTargetLocalI32() == sampling.copyOutputToInputOffsetTargetLocalI32())
+        val offset = recipe.copyOutputToInputOffsetTargetLocalI32()
+        val scissor = recipe.copyScissorTargetLocalI32()
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(
+            BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
+        ))))
+        val pipeline = pipeline(sampledCompositeShader(offset.x, offset.y, 1f), layout, w6aColorTarget(recipe.blend), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(
+            BindGroupEntry(0u, source),
+        ))))
+        return GPUPreparedNativeScopeOperand.Render(
+            stepIndex,
+            GPUPreparedNativeRenderPassConfig(
+                GPUPreparedNativeTextureViewOperand(target, generation),
+                loadOperation = GPUPreparedNativeLoadOperation.Clear,
+                clearColor = GPUPreparedNativeClearColor(recipe.clearColor.redF32.toDouble(), recipe.clearColor.greenF32.toDouble(),
+                    recipe.clearColor.blueF32.toDouble(), recipe.clearColor.alphaF32.toDouble()),
+            ),
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+                GPUPreparedNativeRenderCommand.SetScissor(scissor.left, scissor.top, scissor.width(), scissor.height()),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32,
+                    recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32)),
+            ),
+            w6aPassV1 = pass,
+        )
     }
 
     private fun textureRender(
