@@ -407,6 +407,12 @@ internal fun encodeW4eNativePasses(
     fun frozenDepthStencilStore(operation: org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerDepthStencilStoreV1) = when (operation) {
         org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerDepthStencilStoreV1.Store -> GPUPreparedNativeStoreOperation.Store
     }
+    fun frozenFoldLoad(operation: W4eClipMaskFoldLoadV1) = when (operation) {
+        W4eClipMaskFoldLoadV1.Clear -> GPUPreparedNativeLoadOperation.Clear
+    }
+    fun frozenFoldStore(operation: W4eClipMaskFoldStoreV1) = when (operation) {
+        W4eClipMaskFoldStoreV1.Store -> GPUPreparedNativeStoreOperation.Store
+    }
     fun foldPipeline(operation: org.graphiks.kanvas.gpu.plan.ClipCombineOperation) =
         foldPipelines.getOrPut(operation) { createW4eFoldPipeline(device, operation, owned) }
     fun consumerPipeline(format: GPUTextureFormat, sampleCount: Int, finalBlend: GPUBlendPlan?) = consumerPipelines.getOrPut(Triple(format, sampleCount, finalBlend)) {
@@ -630,10 +636,12 @@ internal fun encodeW4eNativePasses(
                 val previous = frozenRecipe?.previous?.id?.value ?: pass.previousResourceId
                 val source = frozenRecipe?.source?.id?.value ?: pass.sourceResourceId
                 val output = frozenRecipe?.output?.id?.value ?: pass.outputResourceId
+                val load = frozenRecipe?.load?.let(::frozenFoldLoad) ?: GPUPreparedNativeLoadOperation.Clear
+                val store = frozenRecipe?.store?.let(::frozenFoldStore) ?: GPUPreparedNativeStoreOperation.Store
+                val clear = frozenRecipe?.clearColorF32 ?: 0f
                 if (frozenRecipe != null) require(frozenRecipe.packetOrdinalI32 == entry.render.w6aPassV1?.ordinal &&
                     frozenRecipe.groupZeroAbi == W4eClipMaskFoldGroupZeroAbiV1.PreviousThenSourceTexture &&
                     frozenRecipe.shaderFamily == W4eClipMaskFoldShaderFamilyV1.ClipCombine &&
-                    frozenRecipe.load == W4eClipMaskFoldLoadV1.Clear && frozenRecipe.store == W4eClipMaskFoldStoreV1.Store &&
                     frozenRecipe.fullscreenVertexCountI32 == 3) { "W4e ClipMaskFold must select only frozen I2 axes." }
                 val pipeline = foldPipeline(operation)
                 val bindGroup = owned.own(device.createBindGroup(BindGroupDescriptor(
@@ -641,8 +649,8 @@ internal fun encodeW4eNativePasses(
                     entries = listOf(BindGroupEntry(0u, attachment(previous).view), BindGroupEntry(1u, attachment(source).view)),
                 )))
                 GPUPreparedNativeScopeOperand.Render(entry.index,
-                    GPUPreparedNativeRenderPassConfig(attachment(output), loadOperation = GPUPreparedNativeLoadOperation.Clear,
-                        clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)), listOf(
+                    GPUPreparedNativeRenderPassConfig(attachment(output), loadOperation = load, storeOperation = store,
+                        clearColor = GPUPreparedNativeClearColor(clear.toDouble(), clear.toDouble(), clear.toDouble(), clear.toDouble())), listOf(
                         GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline.pipeline, generation)),
                         GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(bindGroup, generation)),
                         GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(frozenRecipe?.fullscreenVertexCountI32 ?: 3)),
