@@ -225,7 +225,9 @@ public class PlanPhysicalLayoutV1 private constructor(
                     "W6 CorePrimitive host recipe changed after final pass binding."
                 }
             }
-            val expectedPreparedVerticesHosts = freezeW6PreparedVerticesHostsV1(graph.passes(), requireNotNull(graph.materialTable))
+            val expectedPreparedVerticesHosts = if (graph.passes().asSequence().filterIsInstance<PlanPass.RenderPass>()
+                    .any { render -> render.draws().any { it is W5bVerticesDraw } })
+                freezeW6PreparedVerticesHostsV1(graph.passes(), requireNotNull(graph.materialTable)) else emptyMap()
             require(source.w6PreparedVerticesHostRecipes.keys == expectedPreparedVerticesHosts.keys)
             source.w6PreparedVerticesHostRecipes.forEach { (site, recipe) ->
                 require(recipe.site == site && recipe == expectedPreparedVerticesHosts.getValue(site)) {

@@ -3212,7 +3212,9 @@ internal class W6aLayerGraphConstruction(
         }
         val solidRectHostRecipes = freezeW6SolidRectHostsV1(passes)
         val corePrimitiveHostRecipes = freezeW6CorePrimitiveHostsV1(passes)
-        val preparedVerticesHostRecipes = freezeW6PreparedVerticesHostsV1(passes, requireNotNull(table))
+        val preparedVerticesHostRecipes = if (passes.asSequence().filterIsInstance<PlanPass.RenderPass>()
+                .any { render -> render.draws().any { it is W5bVerticesDraw } })
+            freezeW6PreparedVerticesHostsV1(passes, requireNotNull(table)) else emptyMap()
         val plainLayerCompositeRecipes = freezeW6PlainLayerCompositeRecipesV1(passes)
         val clipMaskInitializeRecipes = freezeW4eClipMaskInitializeRecipesV1(finalW4eBindings)
         val w6bCoverageRasterGeometry = freezeW6bCoverageRasterGeometryV1(passes, resources + source.resources, caps)
