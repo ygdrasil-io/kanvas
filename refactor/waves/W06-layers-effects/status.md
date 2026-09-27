@@ -1063,4 +1063,28 @@ comme preuve ni remplacé par `PictureComposite`.
 Les trois compilations ciblées réussissent ; le témoin exact donne
 `1/0/0/0` et la classe W6d complète `28/0/0/0` dans les XML. Gradle termine
 sur l'exécuteur natif 133 (**UNKNOWN**), et non sur un échec JUnit.
-IIIc3c2 attend sa revue Sol ; IIIc3d, IIIa2, budgets et 2B restent ouverts.
+IIIc3c2 est revue Sol **Approved** à `dab4281` ; IIIc3d, IIIa2, budgets et
+2B restent ouverts.
+
+### 2A0b.IIIc3d1 — FilterComposite.Picture graph operand b0 + destination snapshot b2
+
+La variante externe sans W5f est maintenant une recette distincte
+`W6FilterCompositePictureGraphDestinationRecipeV1`. Elle scelle le source
+graph et sa génération, le snapshot de destination et sa version, les quatre
+descriptions physiques source/cible/graph/snapshot, offset/scissor,
+load/store, blend et l’ABI `GraphTextureThenDestinationSnapshot` (b0+b2).
+Le catalogue, `PlanPhysicalLayoutV1`, les usages enregistrés, le préflight de
+la `TextureCopy` causale avant le render et la traduction catalog-first la
+transportent de bout en bout; aucun uniform W5f n’est accepté dans cette
+variante. Le bridge W5f+snapshot reste exclusivement réservé à IIIc3d2.
+
+Le témoin public
+`externalPictureFilterDifferenceReadsDestinationSnapshotFromGraphOperand`
+fixe le jaune avant `PictureRecorder`/`Surface`: source graph rouge
+`DIFFERENCE` parent vert, le carrier bleu n’étant qu’un contre-factuel cyan.
+Il passe avec les scopes `Render` et `Readback`. `:gpu-plan:compileKotlin`,
+`:gpu-renderer:compileKotlin` et `:kanvas:compileTestKotlin` sortent 0. Le
+sélecteur public donne XML `1/0/0/0` et la classe W6d entière `29/0/0/0`,
+puis l’exécuteur natif sort 133 :
+**UNKNOWN**, non assimilé à un succès Gradle. La revue Sol de IIIc3d1 est
+requise; IIIc3d2, IIIa2, budgets et 2B restent ouverts.

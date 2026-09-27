@@ -618,7 +618,15 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                                         GPUFrameResourceRole.StorageData, GPUFrameResourceUsage.Storage, GPUFrameResourceLifetime.FrameLocal, false))
                                 }
                             }
-                            is PlanPass.FilterComposite -> physical.w6FilterCompositePictureDestinationRecipeOrNull(pass.id)?.let { recipe ->
+                            is PlanPass.FilterComposite -> physical.w6FilterCompositePictureGraphDestinationRecipeOrNull(pass.id)?.let { recipe ->
+                                require(recipe.ownerPassId == pass.id && recipe.source == pass.source && recipe.destination == pass.destination)
+                                listOf(
+                                    GPUFrameResourceUse(refs.getValue(recipe.source), GPUFrameResourceRole.FilterTarget,
+                                        GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false),
+                                    GPUFrameResourceUse(refs.getValue(recipe.destinationSnapshot), GPUFrameResourceRole.DestinationSnapshot,
+                                        GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false),
+                                )
+                            } ?: physical.w6FilterCompositePictureDestinationRecipeOrNull(pass.id)?.let { recipe ->
                                 require(recipe.ownerPassId == pass.id && recipe.source == pass.source && recipe.destination == pass.destination)
                                 listOf(
                                     GPUFrameResourceUse(refs.getValue(recipe.source), GPUFrameResourceRole.FilterTarget,

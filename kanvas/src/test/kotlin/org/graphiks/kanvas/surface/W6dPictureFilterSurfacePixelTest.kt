@@ -24,6 +24,36 @@ import org.graphiks.math.vector.Vector3F32
 import org.junit.jupiter.api.Test
 
 class W6dPictureFilterSurfacePixelTest {
+    /** IIIc3d1: the external graph source, rather than its blue carrier, reads the prior green Picture destination. */
+    @Test
+    fun externalPictureFilterDifferenceReadsDestinationSnapshotFromGraphOperand() {
+        val expectedGraphSource = ubyteArrayOf(255u, 255u, 0u, 255u)
+        // Blue carrier DIFFERENCE green would be cyan; a stale/transparent snapshot would leave red.
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        fun picture(color: ColorARGB) = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(color, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val source = picture(ColorARGB.Red)
+        val carrier = picture(ColorARGB.Blue)
+        val filteredParent = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                drawRect(bounds, Paint(ColorARGB.Green, antiAlias = false))
+                drawPicture(carrier, Paint(
+                    imageFilter = ImageFilter.Picture(source),
+                    blendMode = BlendMode.DIFFERENCE,
+                    antiAlias = false,
+                ))
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(1, 1)
+
+        surface.canvas { drawPicture(filteredParent, Paint(blendMode = BlendMode.SRC, antiAlias = false)) }
+
+        val result = surface.render()
+        assertContentEquals(expectedGraphSource, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
     /** IIIc3c2: b0 red plus dynamic W5f SCREEN green is yellow; c1 without b1 remains red.
      * A standalone blue carrier plus SCREEN would be cyan, but that direct Picture topology is
      * intentionally outside Prepared Surface and is not substituted with PictureComposite. */
