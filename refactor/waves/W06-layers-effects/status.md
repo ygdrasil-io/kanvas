@@ -810,3 +810,25 @@ XML vert `21/0/0/0` ne prouvait pas IIIb1. Aucun changement IIIb1 ne demeure
 dans la production ; IIIb2 doit geler la vraie variante active et retirer ou
 refuser le fallback direct tardif. Cette preuve de reachability ne ferme ni
 IIIb2, ni III, ni le budget/lease/2B.
+
+### 2A0b.IIIb2a — PictureComposite graph-texture simple
+
+`W6PictureCompositeGraphRecipeV1` scelle uniquement le terminal actif dont
+`PictureSourcePass.graphTextureOperand` est présent, sans color filter ni
+destination-read. Elle encode owner/ordinal, source composite et source graph
+scellée avec génération, alpha, blend, formats/extents physiques, bounds,
+offset, scissor, load/store, ABI texture-only et draw fullscreen. Le scissor
+nul demeure la recette `Empty` existante.
+
+La recette entre dans le catalogue et `PlanPhysicalLayoutV1`. Avant toute
+allocation, le préflight reconstruit la recette et compare ressources physiques
+source/destination ainsi que le `GPUFrameResourceUse` enregistré. Le renderer
+relit offset/alpha/blend depuis la recette et authentifie le bridge graph. Les
+futures variantes color filter ou destination snapshot restent explicitement
+hors de cette tranche (IIIb2b).
+
+Vérification : `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin` et
+`:kanvas:compileTestKotlin` sortent 0. `W6dPictureFilterSurfacePixelTest`
+rapporte 21 tests JUnit passés (pixels et scopes `Render` + `Readback`), puis
+le worker natif termine 133 : native **UNKNOWN**, non assimilée à un succès
+Gradle. Aucun budget, lease ou authentification 2B n'est revendiqué.

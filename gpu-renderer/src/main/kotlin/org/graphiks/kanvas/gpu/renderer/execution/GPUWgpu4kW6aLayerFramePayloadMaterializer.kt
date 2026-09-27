@@ -711,6 +711,46 @@ private fun preflightW6FilteredLayerComposites(frame: GPUW6aLayerFramePlan, fram
     }
 }
 
+/** IIIb2a validates the graph-texture operand and its recorded texture use before device.create*. */
+private fun preflightW6PictureCompositeGraphs(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = freezeW6PictureCompositeGraphRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6PictureCompositeGraphRecipes().keys == expected.keys)
+    expected.forEach { (passId, frozen) ->
+        val actual = requireNotNull(frame.physical.w6PictureCompositeGraphRecipeOrNull(passId))
+        val pass = frame.graph.passes().single { it.id == passId } as? PlanPass.PictureComposite
+            ?: error("PictureComposite graph recipe owner changed after seal.")
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == passId }
+        val target = frame.physical.resource(actual.destination)
+        val source = frame.physical.resource(actual.source)
+        val sourcePass = frame.graph.passes().filterIsInstance<PlanPass.PictureSourcePass>().single { it.output == actual.source }
+        val operand = requireNotNull(sourcePass.graphTextureOperand)
+        val sourceRender = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == sourcePass.id }
+        val uses = listOf(org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.source),
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget,
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding,
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false))
+        val catalogRecipe = frame.physical.nativeSiteRecipeCatalogV1().recipe(actual.nativeSiteOwnerV1())
+            as? W6PictureCompositeGraphNativeSiteRecipeV1
+            ?: error("PictureComposite graph is absent from the frozen native-site catalog.")
+        require(catalogRecipe.host === actual && actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1() &&
+            actual.source == pass.source && actual.destination == pass.destination &&
+            operand.colorFilter == null && pass.operands?.blend !is BlendPlan.DestinationReadV1 &&
+            actual.graphSealedSource == operand.sealedSourceId && actual.graphSealedSourceGenerationI64 == operand.sealedSourceGenerationI64 &&
+            actual.alphaF32 == operand.alphaF32 && actual.blend.canonicalLabel == operand.finalBlend.canonicalLabel &&
+            target.copyExtent() == actual.copyTargetExtentI32() && source.copyExtent() == actual.copySourceExtentI32() &&
+            target.format == PlanTextureFormat.Color(actual.targetFormat) && source.format == PlanTextureFormat.Color(actual.sourceFormat) &&
+            target.sampleCountI32 == actual.targetSampleCountI32 && source.sampleCountI32 == actual.sourceSampleCountI32 &&
+            PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in source.usages() &&
+            render.target == frame.refs.getValue(actual.destination) && render.resourceUses == uses &&
+            render.loadStore.loadOp == "load" && render.loadStore.storePlan == GPUStorePlan.Store &&
+            render.samplePlan == GPUSamplePlan.SingleSampleFrame && render.drawPackets.isEmpty() && render.depthStencilLoadStore == null &&
+            sourceRender.resourceUses.any { it.resource == frame.refs.getValue(actual.graphSealedSource) &&
+                it.usage == org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding }) {
+            "W6 PictureComposite graph physical or recorded preflight differs from its frozen recipe."
+        }
+    }
+}
+
 private fun recipeDepthAttachmentPreflight(
     host: W6bCoverageRasterHostRecipeV1,
     depthUses: List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse>,
@@ -782,6 +822,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             preflightW6FilterDropShadowColorizes(frame, framePlan)
             preflightW6FilterDropShadowComposites(frame, framePlan)
             preflightW6FilteredLayerComposites(frame, framePlan)
+            preflightW6PictureCompositeGraphs(frame, framePlan)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
@@ -1707,7 +1748,21 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                             textureRender(stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
                                 sampledCompositeShader(sampleOffset.x, sampleOffset.y, 1f), operands.blend,
                                 scissor.left, scissor.top, scissor.width(), scissor.height(), pass, owned)
+                        } else if (operand.colorFilter == null && operands.blend !is BlendPlan.DestinationReadV1) {
+                            val recipe = requireNotNull(frame.physical.w6PictureCompositeGraphRecipeOrNull(pass.id)) {
+                                "Missing frozen plain graph PictureComposite recipe."
+                            }
+                            require(recipe.graphSealedSource == operand.sealedSourceId &&
+                                recipe.graphSealedSourceGenerationI64 == operand.sealedSourceGenerationI64 &&
+                                recipe.alphaF32 == operand.alphaF32 && recipe.blend.canonicalLabel == operand.finalBlend.canonicalLabel) {
+                                "W6 PictureComposite plain graph bridge differs from its frozen recipe."
+                            }
+                            pictureCompositeGraphRender(stepIndex, views.getValue(recipe.destination),
+                                views.getValue(recipe.source), generation, recipe, pass, owned)
                         } else {
+                            require(frame.physical.w6PictureCompositeGraphRecipeOrNull(pass.id) == null) {
+                                "IIIb2b bridge must not select the plain graph PictureComposite recipe."
+                            }
                             require(operand.finalBlend.canonicalLabel == operands.blend.canonicalLabel) {
                                 "W6b Picture composite blend differs from its frozen graph-texture operand."
                             }
@@ -1856,6 +1911,39 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             return GPUPreparedNativeFramePayloadMaterialization.Refused("w6a.layer.native_materialization",
                 "Layer native materialization failed: ${failure.message.orEmpty()}", retainedCloseOwner = retained)
         }
+    }
+
+    /** IIIb2a's catalog-first mechanical translation; filter and destination snapshot belong to IIIb2b. */
+    private fun pictureCompositeGraphRender(
+        stepIndex: Int,
+        target: GPUTextureView,
+        source: GPUTextureView,
+        generation: GPUDeviceGenerationID,
+        recipe: W6PictureCompositeGraphRecipeV1,
+        pass: PlanPass.PictureComposite,
+        owned: W6aOwnedHandles,
+    ): GPUPreparedNativeScopeOperand.Render {
+        require(recipe.ownerPassId == pass.id && recipe.source == pass.source && recipe.destination == pass.destination &&
+            recipe.shaderFamily == W6PictureCompositeGraphShaderFamilyV1.GraphTextureAlpha &&
+            recipe.groupZeroAbi == W6PictureCompositeGraphGroupZeroAbiV1.OneTexture &&
+            recipe.load == AttachmentLoadPlan.Load && recipe.store == AttachmentStorePlan.Store &&
+            recipe.blend !is BlendPlan.DestinationReadV1)
+        val offset = recipe.copySourceSampleOffsetTargetLocalI32()
+        val scissor = recipe.copyCompositeScissorTargetLocalI32()
+        val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(
+            BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout()),
+        ))))
+        val pipeline = pipeline(sampledCompositeShader(offset.x, offset.y, recipe.alphaF32), layout, w6aColorTarget(recipe.blend), owned)
+        val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(BindGroupEntry(0u, source)))))
+        return GPUPreparedNativeScopeOperand.Render(stepIndex,
+            GPUPreparedNativeRenderPassConfig(GPUPreparedNativeTextureViewOperand(target, generation), loadOperation = GPUPreparedNativeLoadOperation.Load),
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline, generation)),
+                GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(group, generation)),
+                GPUPreparedNativeRenderCommand.SetScissor(scissor.left, scissor.top, scissor.width(), scissor.height()),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(recipe.draw.vertexCountI32,
+                    recipe.draw.instanceCountI32, recipe.draw.firstVertexI32, recipe.draw.firstInstanceI32)),
+            ), w6aPassV1 = pass)
     }
 
     /**
