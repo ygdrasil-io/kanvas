@@ -88,8 +88,14 @@ private fun preflightW6PathRenderDirectColors(
             "W6 direct-colour packet differs from its frozen owner, phase, or attachment recipe."
         }
         val geometry = when (val source = prepared.copyGeometry()) {
-            is PathDrawGeometry.Fill -> source.valueF32
-            is PathDrawGeometry.Stroke -> source.valueF32.copyFillGeometryF32()
+            is PathDrawGeometry.Fill -> {
+                require(recipe.geometryKind == W6PathRenderDirectColorGeometryKindV1.Fill)
+                source.valueF32
+            }
+            is PathDrawGeometry.Stroke -> {
+                require(recipe.geometryKind == W6PathRenderDirectColorGeometryKindV1.Stroke)
+                source.valueF32.copyFillGeometryF32()
+            }
             is PathDrawGeometry.InverseDomainSource, PathDrawGeometry.Empty -> error("W6 direct-colour prepared path has no fill geometry.")
         }
         val frozen = recipe.copyGeometryF32()

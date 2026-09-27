@@ -37,6 +37,32 @@ import org.junit.jupiter.api.Test
  */
 class W6aLayerW4W5SurfacePixelTest {
     @Test
+    fun `precision collapsed butt stroke remains a public W6 direct path witness`() {
+        // The F64 outline has four corners; at 2^24 its two terminal F32 corners coincide,
+        // leaving Winding's line-only direct triangle.  The literal oracle precedes Surface.
+        val clear = rgba(0, 0, 0, 0)
+        val blue = rgba(17, 61, 211)
+        val expected = listOf(
+            blue, clear, clear, clear,
+            clear, blue, clear, clear,
+            clear, clear, blue, clear,
+            clear, clear, clear, blue,
+        ).flatten().toUByteArray()
+        val diagonal = Path().apply { moveTo(0f, 0f); lineTo(16_777_216f, 16_777_216f) }
+
+        val surface = Surface(4, 4)
+        surface.canvas {
+            saveLayer()
+            drawPath(diagonal, opaque(BLUE).copy(style = PaintStyle.STROKE, strokeWidth = 1f))
+            restore()
+        }
+        val actual = surface.render()
+        assertContentEquals(expected, actual.pixels)
+        assertTrue(actual.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")),
+            actual.nativeEvidenceScopeKinds.toString())
+    }
+
+    @Test
     fun `unclipped direct triangle path keeps its translated asymmetric pixels in a W6 layer`() {
         // This is a drawPath, not a clipPath: it reaches the W6-final DirectColor packet.
         // Keep the public pixel oracle before Surface construction.

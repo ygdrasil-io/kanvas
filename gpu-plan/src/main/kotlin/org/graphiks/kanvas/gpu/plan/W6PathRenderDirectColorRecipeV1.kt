@@ -7,6 +7,8 @@ import org.graphiks.math.geometry.RectI32
 public enum class W6PathRenderDirectColorShaderFamilyV1 { W4ePathMaterial }
 public enum class W6PathRenderDirectColorTopologyV1 { TriangleList }
 public enum class W6PathRenderDirectColorGroupZeroAbiV1 { W4eConsumerUniform }
+/** Source authority retained by the final direct-colour packet. */
+public enum class W6PathRenderDirectColorGeometryKindV1 { Fill, Stroke }
 
 /**
  * The final, physical W4e direct-color draw.  This is deliberately limited to the ordinary
@@ -24,6 +26,7 @@ public class W6PathRenderDirectColorRecipeV1 internal constructor(
     public val uniform: W4eClipMaskProducerPhysicalOperandV1,
     public val uniformOffsetBytesI64: Long,
     public val uniformByteSizeI64: Long,
+    public val geometryKind: W6PathRenderDirectColorGeometryKindV1,
     geometry: PathFillGeometryF32,
     scissor: RectI32,
     public val vertexFirstI32: Int,
@@ -75,7 +78,10 @@ public class W6PathRenderDirectColorNativeSiteRecipeV1 internal constructor(
         operand("target", host.target); text("resolve.present", "false"); text("depth.present", "false")
         operand("vertex", host.vertex); operand("index", host.index); operand("uniform", host.uniform)
         long("uniform.offset", host.uniformOffsetBytesI64); long("uniform.bytes", host.uniformByteSizeI64)
-        val geometry = host.copyGeometryF32(); enum("fill", geometry.fillRule); rect("scissor", host.copyScissorI32())
+        val geometry = host.copyGeometryF32()
+        // Preserve IIIa1 Fill's version-one encoding byte-for-byte; Stroke is the new tagged arm.
+        if (host.geometryKind == W6PathRenderDirectColorGeometryKindV1.Stroke) enum("source.geometry", host.geometryKind)
+        enum("fill", geometry.fillRule); rect("scissor", host.copyScissorI32())
         geometry.copyDirectTriangleF32OrNull()!!.copyVerticesF32().forEachIndexed { i, value -> float("triangle.$i", value) }
         geometry.copyDirectTriangleF32OrNull()!!.copyIndicesI32().forEachIndexed { i, value -> int("index.$i", value) }
         int("vertex.first", host.vertexFirstI32); int("vertex.count", host.vertexCountI32); int("index.first", host.indexFirstI32); int("index.count", host.indexCountI32); int("baseVertex", host.baseVertexI32); int("maxLocalIndex", host.maxLocalIndexI32)
@@ -90,15 +96,16 @@ public fun freezeW6PathRenderDirectColorRecipesV1(bindings: List<PlanW4eGeometry
         bindings.forEach { binding -> binding.nativePasses().forEach { candidate ->
             val pass = candidate as? PlanPass.PathRenderPass ?: return@forEach
             if (pass.phase != PathRenderPhase.SingleSampleDirectColor) return@forEach
-            // IIIa1 owns only the un-clipped Fill direct-triangle packet.  Other DirectColor
-            // forms (stroke, clipped/masked, and non-triangle fill) deliberately keep the
-            // established W4e fallback until their own site recipes are introduced.
             val draw = pass.draw as? GeneralPathDraw ?: return@forEach
-            val geometry = (draw.copyPathGeometry() as? PathDrawGeometry.Fill)?.valueF32 ?: return@forEach
+            val (geometry, geometryKind) = when (val source = draw.copyPathGeometry()) {
+                is PathDrawGeometry.Fill -> source.valueF32 to W6PathRenderDirectColorGeometryKindV1.Fill
+                is PathDrawGeometry.Stroke -> source.valueF32.copyFillGeometryF32() to W6PathRenderDirectColorGeometryKindV1.Stroke
+                is PathDrawGeometry.InverseDomainSource, PathDrawGeometry.Empty -> return@forEach
+            }
             if (geometry.copyDirectTriangleF32OrNull() == null) return@forEach
             val geometrySlice = requireNotNull(binding.payload.geometrySlice(pass.id.value, W4eNativePayloadPlan.CONSUMER_DIRECT))
             val uniformSlice = requireNotNull(binding.payload.uniformSlice(pass.id.value, W4eNativePayloadPlan.CONSUMER_UNIFORM))
-            require(put(pass.id, W6PathRenderDirectColorRecipeV1(pass.id, pass.ordinal, operand(rows.getValue(pass.target)), pass.resolveTarget?.let { operand(rows.getValue(it)) }, pass.depthStencil?.let { operand(rows.getValue(it)) }, operand(rows.getValue(binding.payload.vertexResourceId)), operand(rows.getValue(binding.payload.indexResourceId)), operand(rows.getValue(binding.payload.uniformResourceId)), uniformSlice.offsetBytes, uniformSlice.byteSize, geometry, pass.draw.copyScissorI32(), geometrySlice.baseVertex, geometrySlice.vertexCount, geometrySlice.firstIndex, geometrySlice.indexCount, geometrySlice.baseVertex, geometrySlice.maxLocalIndex, pass.draw.sample == SamplePlan.Multisample4, 1, pass.load, pass.store, pass.draw.blend)) == null)
+            require(put(pass.id, W6PathRenderDirectColorRecipeV1(pass.id, pass.ordinal, operand(rows.getValue(pass.target)), pass.resolveTarget?.let { operand(rows.getValue(it)) }, pass.depthStencil?.let { operand(rows.getValue(it)) }, operand(rows.getValue(binding.payload.vertexResourceId)), operand(rows.getValue(binding.payload.indexResourceId)), operand(rows.getValue(binding.payload.uniformResourceId)), uniformSlice.offsetBytes, uniformSlice.byteSize, geometryKind, geometry, pass.draw.copyScissorI32(), geometrySlice.baseVertex, geometrySlice.vertexCount, geometrySlice.firstIndex, geometrySlice.indexCount, geometrySlice.baseVertex, geometrySlice.maxLocalIndex, pass.draw.sample == SamplePlan.Multisample4, 1, pass.load, pass.store, pass.draw.blend)) == null)
         } }
     })
 }

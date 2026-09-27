@@ -1290,7 +1290,7 @@ internal fun encodeW4eNativePasses(
                             frozenDirectColor.topology == W6PathRenderDirectColorTopologyV1.TriangleList &&
                             frozenDirectColor.groupZeroAbi == W6PathRenderDirectColorGroupZeroAbiV1.W4eConsumerUniform &&
                             frozenDirectColor.load == AttachmentLoadPlan.Load && frozenDirectColor.store == AttachmentStorePlan.Store) {
-                            "W6 direct-colour native packet has no matching frozen IIIa1 recipe."
+                            "W6 direct-colour native packet has no matching frozen IIIa recipe."
                         }
                         createW4eUnmaskedPathPipeline(device, GPUTextureFormat.RGBA8UnormSrgb,
                             frozenDirectColor.sampleCountI32, owned, finalBlend = entry.packet.blendPlan)
