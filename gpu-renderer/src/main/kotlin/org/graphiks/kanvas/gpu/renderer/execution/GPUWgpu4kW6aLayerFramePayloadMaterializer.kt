@@ -287,6 +287,16 @@ private fun preflightW6FullscreenCoverageRetains(frame: GPUW6aLayerFramePlan, fr
             render.loadStore.loadOp == "load" && render.loadStore.storePlan == GPUStorePlan.Store && render.samplePlan is GPUSamplePlan.SingleSampleFrame)
     }
 }
+private fun preflightW6FullscreenPictureSourceLayers(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = freezeW6FullscreenPictureSourceLayerRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6FullscreenPictureSourceLayerRecipes().keys == expected.keys)
+    expected.forEach { (id, frozen) ->
+        val actual = frame.physical.w6FullscreenPictureSourceLayerRecipe(id); require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1())
+        val pass = frame.graph.passes().single { it.id == id } as PlanPass.PictureSourcePass
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == id }
+        require(pass.graphTextureOperand == null && pass.layerInput == actual.source && requireNotNull(pass.sourceSampling).copyOutputToInputOffsetTargetLocalI32() == actual.copyOutputToInputOffsetTargetLocalI32() && render.target == frame.refs.getValue(actual.target) && render.resourceUses.size == 1 && render.resourceUses.single().resource == frame.refs.getValue(actual.source) && render.loadStore.loadOp == "clear" && render.drawPackets.isEmpty())
+    }
+}
 
 private fun recipeDepthAttachmentPreflight(
     host: W6bCoverageRasterHostRecipeV1,
@@ -341,6 +351,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             preflightW6FullscreenCoverageAlphas(frame, framePlan)
             preflightW6FullscreenCoverageSolidRects(frame, framePlan)
             preflightW6FullscreenCoverageRetains(frame, framePlan)
+            preflightW6FullscreenPictureSourceLayers(frame, framePlan)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
@@ -1034,16 +1045,10 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                         val operand = pass.graphTextureOperand
                         val sampleOffset = pass.sourceSampling?.copyOutputToInputOffsetTargetLocalI32()
                         if (operand == null) {
-                            val layerInput = requireNotNull(pass.layerInput) {
-                                "W6b non-graph Picture source must retain its frozen layer input."
-                            }
-                            val offset = requireNotNull(sampleOffset) {
-                                "W6b Picture layer source has no sealed target-local sampling."
-                            }
-                            val extent = requireNotNull(graph.resources().single { it.id == pass.output }.copyExtent())
-                            renderOperands += textureRender(stepIndex, views.getValue(pass.output), views.getValue(layerInput), generation,
-                                sampledCompositeShader(offset.x, offset.y, 1f),
-                                BlendPlan.LegacySrcOverV1, 0, 0, extent.width, extent.height, pass, owned)
+                            val recipe = frame.physical.nativeSiteRecipeCatalogV1().recipe(NativeSiteOwnerV1(pass.id, 0, 0)) as? W6FullscreenPictureSourceLayerNativeSiteRecipeV1 ?: error("PictureSourceLayer lacks frozen recipe")
+                            val host = recipe.host; require(pass.layerInput == host.source)
+                            val offset = host.copyOutputToInputOffsetTargetLocalI32(); val extent = host.copyExtent()
+                            renderOperands += textureRender(stepIndex, views.getValue(host.target), views.getValue(host.source), generation, sampledCompositeShader(offset.x, offset.y, 1f), host.blend, 0, 0, extent.width, extent.height, pass, owned)
                         } else {
                             val offset = requireNotNull(sampleOffset) {
                                 "W6b Picture graph texture source has no sealed target-local sampling."

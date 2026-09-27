@@ -29,6 +29,7 @@ public enum class NativeSiteRecipeFamilyV1 {
     W6FullscreenCoverageAlpha,
     W6FullscreenCoverageSolidRect,
     W6FullscreenCoverageRetain,
+    W6FullscreenPictureSourceLayer,
 }
 
 /**
@@ -283,6 +284,33 @@ public class W6FullscreenCoverageRetainNativeSiteRecipeV1 internal constructor(p
     }
 }
 
+public enum class W6FullscreenPictureSourceLayerGroupZeroAbiV1 { Texture }
+public enum class W6FullscreenPictureSourceLayerShaderFamilyV1 { SampledLayerTextureLoad }
+public class W6FullscreenPictureSourceLayerRecipeV1 internal constructor(
+    override val ownerPassId: PlanPassId, public val target: PlanResourceId, public val source: PlanResourceId,
+    extent: org.graphiks.math.geometry.SizeI32, outputToInputOffsetTargetLocalI32: org.graphiks.math.geometry.Point2I32,
+    public val targetFormat: PlanLogicalColorFormat, public val sampleCountI32: Int,
+    public val load: AttachmentLoadPlan = AttachmentLoadPlan.ClearTransparent, public val store: AttachmentStorePlan = AttachmentStorePlan.Store,
+    public val blend: BlendPlan = BlendPlan.LegacySrcOverV1, public val topology: W6FullscreenEmptyTopologyV1 = W6FullscreenEmptyTopologyV1.FullscreenTriangle,
+    public val groupZeroAbi: W6FullscreenPictureSourceLayerGroupZeroAbiV1 = W6FullscreenPictureSourceLayerGroupZeroAbiV1.Texture,
+    public val shaderFamily: W6FullscreenPictureSourceLayerShaderFamilyV1 = W6FullscreenPictureSourceLayerShaderFamilyV1.SampledLayerTextureLoad,
+    public val draw: W6FullscreenEmptyDrawV1 = W6FullscreenEmptyDrawV1(),
+) : W6FullscreenRecipeV1 {
+    override val variant = W6FullscreenRecipeVariantV1.PictureSourceLayer
+    private val frozenExtent = extent.copy(); private val frozenOffset = org.graphiks.math.geometry.Point2I32(outputToInputOffsetTargetLocalI32.x, outputToInputOffsetTargetLocalI32.y)
+    init { require(target != source && sampleCountI32 == 1) }
+    public fun copyExtent() = frozenExtent.copy(); public fun copyOutputToInputOffsetTargetLocalI32() = org.graphiks.math.geometry.Point2I32(frozenOffset.x, frozenOffset.y)
+    public fun nativeSiteOwnerV1() = NativeSiteOwnerV1(ownerPassId, 0, 0)
+    public fun canonicalLogicalEncodingV1() = W6FullscreenPictureSourceLayerNativeSiteRecipeV1(this).canonicalLogicalEncodingV1
+}
+public class W6FullscreenPictureSourceLayerNativeSiteRecipeV1 internal constructor(public val host: W6FullscreenPictureSourceLayerRecipeV1) : NativeSiteRecipeV1 {
+    override val versionI32 = 1; override val owner = host.nativeSiteOwnerV1(); override val family = NativeSiteRecipeFamilyV1.W6FullscreenPictureSourceLayer
+    override val canonicalLogicalEncodingV1 = nativeSiteEncodingV1(family) {
+        enum("variant", host.variant); text("owner", host.ownerPassId.value); int("ordinal", owner.drawOrPacketOrdinalI32); int("bundle", owner.bundleOrdinalI32); text("target", host.target.value); text("input.0", host.source.value); int("inputCount", 1)
+        int("extentWidth", host.copyExtent().width); int("extentHeight", host.copyExtent().height); point("outputToInputOffsetTargetLocal", host.copyOutputToInputOffsetTargetLocalI32()); enum("load", host.load); enum("store", host.store); enum("targetFormat", host.targetFormat); int("sampleCount", host.sampleCountI32); blend("blend", host.blend); enum("topology", host.topology); enum("groupZeroAbi", host.groupZeroAbi); enum("shaderFamily", host.shaderFamily); int("draw.vertexCount", host.draw.vertexCountI32); int("draw.instanceCount", host.draw.instanceCountI32); int("draw.firstVertex", host.draw.firstVertexI32); int("draw.firstInstance", host.draw.firstInstanceI32)
+    }
+}
+
 public class W6SolidRectNativeSiteRecipeV1 internal constructor(
     public val host: W6SolidRectHostRecipeV1,
 ) : NativeSiteRecipeV1 {
@@ -489,6 +517,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
         coverageAlphas: Map<PlanPassId, W6FullscreenCoverageAlphaRecipeV1>,
         coverageSolidRects: Map<PlanPassId, W6FullscreenCoverageSolidRectRecipeV1>,
         coverageRetains: Map<PlanPassId, W6FullscreenCoverageRetainRecipeV1>,
+        pictureSourceLayers: Map<PlanPassId, W6FullscreenPictureSourceLayerRecipeV1>,
     ): Boolean = orderedRecipes.all { recipe ->
         when (recipe) {
             is W6SolidRectNativeSiteRecipeV1 -> solidRects[recipe.host.site] === recipe.host
@@ -501,6 +530,7 @@ public class NativeSiteRecipeCatalogV1 internal constructor(recipes: List<Native
             is W6FullscreenCoverageAlphaNativeSiteRecipeV1 -> coverageAlphas[recipe.host.ownerPassId] === recipe.host
             is W6FullscreenCoverageSolidRectNativeSiteRecipeV1 -> coverageSolidRects[recipe.host.ownerPassId] === recipe.host
             is W6FullscreenCoverageRetainNativeSiteRecipeV1 -> coverageRetains[recipe.host.ownerPassId] === recipe.host
+            is W6FullscreenPictureSourceLayerNativeSiteRecipeV1 -> pictureSourceLayers[recipe.host.ownerPassId] === recipe.host
         }
     }
 
@@ -522,6 +552,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     coverageAlphas: Map<PlanPassId, W6FullscreenCoverageAlphaRecipeV1> = emptyMap(),
     coverageSolidRects: Map<PlanPassId, W6FullscreenCoverageSolidRectRecipeV1> = emptyMap(),
     coverageRetains: Map<PlanPassId, W6FullscreenCoverageRetainRecipeV1> = emptyMap(),
+    pictureSourceLayers: Map<PlanPassId, W6FullscreenPictureSourceLayerRecipeV1> = emptyMap(),
 ): NativeSiteRecipeCatalogV1 = NativeSiteRecipeCatalogV1(buildList {
     solidRects.forEach { (site, recipe) -> require(site == recipe.site) }
     corePrimitives.forEach { (site, recipe) -> require(site == recipe.site) }
@@ -533,6 +564,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     coverageAlphas.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     coverageSolidRects.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     coverageRetains.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
+    pictureSourceLayers.forEach { (passId, recipe) -> require(passId == recipe.ownerPassId) }
     val remainingSolidRects = solidRects.toMutableMap()
     val remainingCorePrimitives = corePrimitives.toMutableMap()
     val remainingPreparedVertices = preparedVertices.toMutableMap()
@@ -543,6 +575,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
     val remainingCoverageAlphas = coverageAlphas.toMutableMap()
     val remainingCoverageSolidRects = coverageSolidRects.toMutableMap()
     val remainingCoverageRetains = coverageRetains.toMutableMap()
+    val remainingPictureSourceLayers = pictureSourceLayers.toMutableMap()
     passes.forEach { pass ->
         when (pass) {
             is PlanPass.RenderPass -> pass.draws().indices.forEach { drawOrdinalI32 ->
@@ -564,6 +597,7 @@ public fun freezeNativeSiteRecipeCatalogV1(
                 remainingCoverageSolidRects.remove(pass.id)?.let { add(W6FullscreenCoverageSolidRectNativeSiteRecipeV1(it)) }
             }
             is PlanPass.FilterCoverageRetainPass -> remainingCoverageRetains.remove(pass.id)?.let { add(W6FullscreenCoverageRetainNativeSiteRecipeV1(it)) }
+            is PlanPass.PictureSourcePass -> remainingPictureSourceLayers.remove(pass.id)?.let { add(W6FullscreenPictureSourceLayerNativeSiteRecipeV1(it)) }
             is PlanPass.PictureAggregateBeginPass, is PlanPass.FilterSourceClear,
             is PlanPass.PictureAggregateSealPass, is PlanPass.PictureComposite,
             is PlanPass.FilterComposite -> remainingEmpties.remove(pass.id)?.let { add(W6FullscreenEmptyNativeSiteRecipeV1(it)) }
@@ -572,10 +606,20 @@ public fun freezeNativeSiteRecipeCatalogV1(
     }
     require(remainingSolidRects.isEmpty() && remainingCorePrimitives.isEmpty() && remainingPreparedVertices.isEmpty() &&
         remainingPlainComposites.isEmpty() && remainingClipInitializes.isEmpty() && remainingCoverageRasters.isEmpty() &&
-        remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty()) {
+        remainingEmpties.isEmpty() && remainingCoverageAlphas.isEmpty() && remainingCoverageSolidRects.isEmpty() && remainingCoverageRetains.isEmpty() && remainingPictureSourceLayers.isEmpty()) {
         "Native-site recipes must all be owned by final planner passes."
     }
 })
+
+public fun freezeW6FullscreenPictureSourceLayerRecipesV1(passes: List<PlanPass>, resources: List<PlanResource>): Map<PlanPassId, W6FullscreenPictureSourceLayerRecipeV1> = LinkedHashMap<PlanPassId, W6FullscreenPictureSourceLayerRecipeV1>().apply {
+    passes.filterIsInstance<PlanPass.PictureSourcePass>().forEach { pass ->
+        if (pass.graphTextureOperand != null) return@forEach
+        val source = requireNotNull(pass.layerInput); val sampling = requireNotNull(pass.sourceSampling); val target = resources.single { it.id == pass.output }
+        val format = (target.format as? PlanTextureFormat.Color)?.value ?: error("W6 PictureSourceLayer requires color attachment.")
+        require(PlanResourceUsage.Sampled in resources.single { it.id == source }.usages())
+        require(put(pass.id, W6FullscreenPictureSourceLayerRecipeV1(pass.id, pass.output, source, requireNotNull(target.copyExtent()), sampling.copyOutputToInputOffsetTargetLocalI32(), format, target.sampleCountI32)) == null)
+    }
+}
 
 public fun freezeW6FullscreenCoverageRetainRecipesV1(passes: List<PlanPass>, resources: List<PlanResource>): Map<PlanPassId, W6FullscreenCoverageRetainRecipeV1> =
     LinkedHashMap<PlanPassId, W6FullscreenCoverageRetainRecipeV1>().apply {

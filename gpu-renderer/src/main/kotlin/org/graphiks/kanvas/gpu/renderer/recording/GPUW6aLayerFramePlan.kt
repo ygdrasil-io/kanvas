@@ -539,9 +539,9 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                         val sampled = when (pass) {
                             is PlanPass.LayerComposite -> listOf(GPUFrameResourceUse(refs.getValue(pass.source),
                                 GPUFrameResourceRole.LayerTarget, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false))
-                            is PlanPass.PictureSourcePass -> pass.graphTextureOperand?.let { operand -> listOf(GPUFrameResourceUse(
-                                refs.getValue(operand.sealedSourceId), GPUFrameResourceRole.FilterTarget,
-                                GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false)) }.orEmpty()
+                            is PlanPass.PictureSourcePass -> listOfNotNull((pass.graphTextureOperand?.sealedSourceId ?: pass.layerInput)?.let { source -> GPUFrameResourceUse(
+                                refs.getValue(source), GPUFrameResourceRole.FilterTarget,
+                                GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false) })
                             is PlanPass.PictureComposite -> listOf(GPUFrameResourceUse(refs.getValue(pass.source),
                                 GPUFrameResourceRole.FilterTarget, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false))
                             is PlanPass.FilterPass -> pass.inputs().map { input -> GPUFrameResourceUse(refs.getValue(input),

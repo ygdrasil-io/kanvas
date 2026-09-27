@@ -3223,12 +3223,14 @@ internal class W6aLayerGraphConstruction(
         val w6FullscreenCoverageAlphaRecipes = freezeW6FullscreenCoverageAlphaRecipesV1(passes, resources + source.resources)
         val w6FullscreenCoverageSolidRectRecipes = freezeW6FullscreenCoverageSolidRectRecipesV1(passes, resources + source.resources)
         val w6FullscreenCoverageRetainRecipes = freezeW6FullscreenCoverageRetainRecipesV1(passes, resources + source.resources)
+        val w6FullscreenPictureSourceLayerRecipes = freezeW6FullscreenPictureSourceLayerRecipesV1(passes, resources + source.resources)
         val nativeSiteRecipeCatalog = freezeNativeSiteRecipeCatalogV1(
             passes, solidRectHostRecipes, corePrimitiveHostRecipes, preparedVerticesHostRecipes,
             plainLayerCompositeRecipes, clipMaskInitializeRecipes, w6bCoverageRasterHostRecipes, w6FullscreenEmptyRecipes,
             w6FullscreenCoverageAlphaRecipes,
             w6FullscreenCoverageSolidRectRecipes,
             w6FullscreenCoverageRetainRecipes,
+            w6FullscreenPictureSourceLayerRecipes,
         )
         val finalSource = SourcePhysicalConstructionV1(
             resources = source.resources,
@@ -3247,6 +3249,7 @@ internal class W6aLayerGraphConstruction(
             w6FullscreenCoverageAlphaRecipes = w6FullscreenCoverageAlphaRecipes,
             w6FullscreenCoverageSolidRectRecipes = w6FullscreenCoverageSolidRectRecipes,
             w6FullscreenCoverageRetainRecipes = w6FullscreenCoverageRetainRecipes,
+            w6FullscreenPictureSourceLayerRecipes = w6FullscreenPictureSourceLayerRecipes,
             nativeSiteRecipeCatalogV1 = nativeSiteRecipeCatalog,
         )
         val allResources = resources + finalSource.resources
