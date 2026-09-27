@@ -2357,7 +2357,9 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
         generation: GPUDeviceGenerationID, shader: String, recipe: W6FilterSeparableBlurRecipeV1,
         pass: PlanPass.FilterPass, owned: W6aOwnedHandles): GPUPreparedNativeScopeOperand.Render {
         require(recipe.ownerPassId == pass.id && recipe.target == pass.output && recipe.source == pass.inputs().single() &&
-            recipe.groupZeroAbi == W6FilterSeparableBlurGroupZeroAbiV1.SourceTexture)
+            recipe.groupZeroAbi == W6FilterSeparableBlurGroupZeroAbiV1.SourceTexture &&
+            recipe.shaderFamily == W6FilterSeparableBlurShaderFamilyV1.GaussianTextureLoad &&
+            recipe.store == AttachmentStorePlan.Store)
         val layout = owned.own(device.createBindGroupLayout(BindGroupLayoutDescriptor(entries = listOf(BindGroupLayoutEntry(0u, GPUShaderStage.Fragment, texture = TextureBindingLayout())))))
         val pipeline = pipeline(shader, layout, w6aColorTarget(recipe.blend), owned)
         val group = owned.own(device.createBindGroup(BindGroupDescriptor(layout = layout, entries = listOf(BindGroupEntry(0u, source)))))
