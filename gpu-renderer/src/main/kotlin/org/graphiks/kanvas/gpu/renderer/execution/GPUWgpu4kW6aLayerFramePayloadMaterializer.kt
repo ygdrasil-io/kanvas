@@ -110,6 +110,8 @@ private fun preflightW4eClipMaskInitializes(
         entries.forEach { entry -> frame.w4eClipMaskProducerStencilEdgeRecipeOrNull(entry.packet)?.let { recipe ->
             val producer = entry.packet.w4ePreparedClipPass as? org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipPassAuthority.Producer
             val slice = requireNotNull(binding.payload.geometrySlice(recipe.passId.value, W4eNativePayloadPlan.PRODUCER_PATH))
+            val preparedPath = (producer?.geometry as? org.graphiks.kanvas.gpu.renderer.passes.GPUW4ePreparedClipGeometry.Path)?.copyPathGeometryF32()
+            val preparedFan = preparedPath?.copyStencilEdgeFanF32OrNull()
             fun exact(row: PlanResource, frozen: W4eClipMaskProducerPhysicalOperandV1): Boolean =
                 row.id == frozen.id && row.role == frozen.role && row.format == frozen.format &&
                     row.copyExtent() == frozen.copyExtentI32() && row.sampleCountI32 == frozen.sampleCountI32 &&
@@ -124,6 +126,8 @@ private fun preflightW4eClipMaskInitializes(
             val catalog = frame.physical.nativeSiteRecipeCatalogV1().recipe(NativeSiteOwnerV1(recipe.passId, recipe.packetOrdinalI32, 0)) as? W4eClipMaskProducerStencilEdgeNativeSiteRecipeV1
             require(recipe.target.format == PlanTextureFormat.CoverageMask && recipe.depthStencil.format == PlanTextureFormat.DepthStencil(PlanDepthStencilFormat.Depth24PlusStencil8) &&
                 recipe.vertexCountI32 == recipe.copyVerticesF32().size / 2 && recipe.indexCountI32 == recipe.copyIndicesI32().size &&
+                preparedFan != null && preparedPath.fillRule == recipe.fillRule && preparedPath.copyConservativeScissorI32() == recipe.copyScissorI32() &&
+                preparedFan.copyVerticesF32().contentEquals(recipe.copyVerticesF32()) && preparedFan.copyIndicesI32().contentEquals(recipe.copyIndicesI32()) && preparedFan.copyContourStartsI32().contentEquals(recipe.copyContourStartsI32()) &&
                 slice.firstIndex == recipe.indexFirstI32 && slice.indexCount == recipe.indexCountI32 && slice.baseVertex == recipe.baseVertexI32 &&
                 slice.vertexCount == recipe.vertexCountI32 && slice.maxLocalIndex == recipe.maxLocalIndexI32 && producer != null &&
                 entry.render.w6aPassV1?.id == recipe.passId && entry.render.w6aPassV1?.ordinal == recipe.packetOrdinalI32 &&
