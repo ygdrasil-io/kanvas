@@ -796,3 +796,24 @@ La branche prérequis est `codex/w6e-filter-bounds-recipe`, stackée sur
 aucun test d'infrastructure, GM, dashboard/render/rebaseline,
 `jpg-color-cube`, font ou codec externe n'a été exécuté. Aucun merge ni claim
 ISO n'est déduit de ces résultats.
+
+## 2A0b.IIIb1 — PictureComposite direct actif
+
+Cette tranche ajoute `W6PictureCompositeRecipeV1` pour chaque
+`PlanPass.PictureComposite` actif sans `graphTextureOperand`. La recette
+canonique versionnée scelle owner/ordinal, source/destination, extents et
+formats physiques, bounds, sample offset, scissor, blend, snapshot éventuel,
+load/store, shader, ABI et draw fullscreen. Le no-op scissor nul demeure la
+recette `Empty`; la variante graph-texture est explicitement réservée à IIIb2.
+Le catalogue et le layout scellent l'exhaustivité, et le materializer valide
+recette, ressources physiques et usages enregistrés avant toute allocation.
+Le renderer lit offset/scissor/blend dans la recette directe plutôt que dans
+les operands du pass. Aucun budget, lease ni fermeture 2B n'est revendiqué.
+
+Vérification : `:gpu-plan:compileKotlin`, `:gpu-renderer:compileKotlin` et
+`:kanvas:compileTestKotlin` sortent 0. Le XML de
+`W6dPictureFilterSurfacePixelTest` est `21/0/0/0`, dont le témoin causal
+`interleavedDirectAndFilterPicturesRetainOrderAfterWireReplay` (pixels et
+scopes `Render` + `Readback`) et le contrôle no-op scissor nul. L'exécutable
+Gradle termine néanmoins avec le worker natif 133 après JUnit : native
+**UNKNOWN**, non assimilée à un succès de l'exit process.

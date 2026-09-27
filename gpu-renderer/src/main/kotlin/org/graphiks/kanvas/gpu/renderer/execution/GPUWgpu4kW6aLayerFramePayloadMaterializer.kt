@@ -711,6 +711,34 @@ private fun preflightW6FilteredLayerComposites(frame: GPUW6aLayerFramePlan, fram
     }
 }
 
+/** IIIb1 validates every direct active PictureComposite before the first device allocation. */
+private fun preflightW6PictureComposites(frame: GPUW6aLayerFramePlan, framePlan: GPUFramePlan) {
+    val expected = freezeW6PictureCompositeRecipesV1(frame.graph.passes(), frame.graph.resources())
+    require(frame.physical.w6PictureCompositeRecipes().keys == expected.keys)
+    expected.forEach { (passId, frozen) ->
+        val actual = frame.physical.w6PictureCompositeRecipe(passId)
+        val pass = frame.graph.passes().single { it.id == passId } as? PlanPass.PictureComposite
+            ?: error("PictureComposite recipe owner changed after seal.")
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single { it.w6aPassV1?.id == passId }
+        val target = frame.physical.resource(actual.destination); val source = frame.physical.resource(actual.source)
+        val uses = listOf(org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(frame.refs.getValue(actual.source),
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.FilterTarget,
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding,
+            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal, false))
+        require(actual.canonicalLogicalEncodingV1() == frozen.canonicalLogicalEncodingV1() &&
+            actual.source == pass.source && actual.destination == pass.destination &&
+            target.copyExtent() == actual.copyTargetExtentI32() && source.copyExtent() == actual.copySourceExtentI32() &&
+            target.format == PlanTextureFormat.Color(actual.targetFormat) && source.format == PlanTextureFormat.Color(actual.sourceFormat) &&
+            target.sampleCountI32 == actual.targetSampleCountI32 && source.sampleCountI32 == actual.sourceSampleCountI32 &&
+            PlanResourceUsage.RenderAttachment in target.usages() && PlanResourceUsage.Sampled in source.usages() &&
+            render.target == frame.refs.getValue(actual.destination) && render.resourceUses == uses &&
+            render.loadStore.loadOp == "load" && render.loadStore.storePlan == GPUStorePlan.Store &&
+            render.drawPackets.isEmpty() && render.depthStencilLoadStore == null) {
+            "W6 PictureComposite physical or recorded preflight differs from its frozen recipe."
+        }
+    }
+}
+
 private fun recipeDepthAttachmentPreflight(
     host: W6bCoverageRasterHostRecipeV1,
     depthUses: List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse>,
@@ -782,6 +810,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
             preflightW6FilterDropShadowColorizes(frame, framePlan)
             preflightW6FilterDropShadowComposites(frame, framePlan)
             preflightW6FilteredLayerComposites(frame, framePlan)
+            preflightW6PictureComposites(frame, framePlan)
             preflightW6bCoverageRasters(frame, framePlan)
             val w4eClipMaskInitializePreflights = preflightW4eClipMaskInitializes(frame, framePlan)
             // Consume only the exact program leases that were frozen and budgeted before this
@@ -1699,13 +1728,14 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     }
                     is PlanPass.PictureComposite -> {
                         val operands = requireNotNull(pass.operands) { "W6b Picture composite needs frozen operands." }
-                        val scissor = operands.copyCompositeScissorTargetLocalI32()
-                        val sampleOffset = operands.copySourceSampleOffsetTargetLocalI32()
+                        val directRecipe = frame.physical.w6PictureCompositeRecipeOrNull(pass.id)
+                        val scissor = directRecipe?.copyCompositeScissorTargetLocalI32() ?: operands.copyCompositeScissorTargetLocalI32()
+                        val sampleOffset = directRecipe?.copySourceSampleOffsetTargetLocalI32() ?: operands.copySourceSampleOffsetTargetLocalI32()
                         val operand = graphTextureOperandsBySource[pass.source]
                         renderOperands += if (scissor == null) emptyRender(stepIndex, views.getValue(pass.destination), generation,
                             pass, frame.physical.w6FullscreenEmptyRecipe(pass.id), owned) else if (operand == null) {
                             textureRender(stepIndex, views.getValue(pass.destination), views.getValue(pass.source), generation,
-                                sampledCompositeShader(sampleOffset.x, sampleOffset.y, 1f), operands.blend,
+                                sampledCompositeShader(sampleOffset.x, sampleOffset.y, 1f), directRecipe?.blend ?: operands.blend,
                                 scissor.left, scissor.top, scissor.width(), scissor.height(), pass, owned)
                         } else {
                             require(operand.finalBlend.canonicalLabel == operands.blend.canonicalLabel) {
