@@ -1002,6 +1002,22 @@ Le commit `4dcbd9f` verrouille les quatre modules transitifs sur le build
 compatible de juillet ; sa revue Sol est **Approved**. Sans init script,
 le témoin IIIc3a donne `1/0/0/0`, puis W6d `25/0/0/0`, W6a restore
 `13/0/0/0` et W6c compose `5/0/0/0` dans leurs XML ciblés. Chaque exécuteur
-natif sort ensuite 133 (**UNKNOWN**). IIIc3a est review-clean au niveau de
-son témoin et de sa recette, mais IIIc3b/c/d, IIIa2, les budgets et 2B ne
-sont pas clos.
+natif sort ensuite 133 (**UNKNOWN**). IIIc3a est commitée à `3e9e7a1` et la
+relecture finale Sol est **Approved**, sans finding Critical/Important/Minor.
+IIIc3b/c/d, IIIa2, les budgets et 2B ne sont pas clos.
+
+### 2A0b.IIIc3b — FilterComposite.Picture direct destination-read
+
+Le témoin public direct construit d'abord un parent vert
+dans le `Picture`, puis un draw rouge avec `ImageFilter.ColorFilter(Luma)` et
+`DIFFERENCE`; l'attendu vert opaque est fixé avant `PictureRecorder`/`Surface`
+et contrôle pixels, `Render` et `Readback`. La nouvelle recette distincte
+scelle source/snapshot, provenance directe, versions, copie causale,
+descriptions physiques, load/store, ABI b0+b2 et draw. Le renderer la lit
+catalog-first, préflight les uses source/snapshot et la copie avant toute
+allocation, puis utilise une traduction dédiée sans fallback direct.
+Ce témoin préservait déjà les pixels sur le fallback ; la sélection gelée est
+donc vérifiée structurellement, sans prétendre à un RED causal. Les trois
+compilations ciblées réussissent ; W6d donne `26/0/0/0` dans son XML, puis
+l'exécuteur natif sort 133 (**UNKNOWN**). IIIc3c/d, IIIa2, budgets et 2B
+restent ouverts.

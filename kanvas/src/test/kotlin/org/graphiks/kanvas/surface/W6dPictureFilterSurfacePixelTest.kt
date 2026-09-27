@@ -49,6 +49,33 @@ class W6dPictureFilterSurfacePixelTest {
         assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
     }
 
+    /** IIIc3b: an inner filtered Picture reads its preceding Picture destination for DIFFERENCE. */
+    @Test
+    fun filteredInnerPictureDifferenceReadsDestinationSnapshotWithoutGraphOperand() {
+        val expected = ubyteArrayOf(0u, 255u, 0u, 255u)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        val picture = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                drawRect(bounds, Paint(ColorARGB.Green, antiAlias = false))
+                drawRect(bounds, Paint(
+                    ColorARGB.Red,
+                    imageFilter = ImageFilter.ColorFilter(ColorFilter.Luma),
+                    blendMode = BlendMode.DIFFERENCE,
+                    antiAlias = false,
+                ))
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(1, 1)
+
+        surface.canvas {
+            drawPicture(picture, Paint(blendMode = BlendMode.SRC, antiAlias = false))
+        }
+
+        val result = surface.render()
+        assertContentEquals(expected, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
     /** IIIb2b2: the graph Picture terminal reads a snapshot of its colored parent for DIFFERENCE. */
     @Test
     fun layerOwnedDrawPictureDifferenceReadsDestinationSnapshot() {
