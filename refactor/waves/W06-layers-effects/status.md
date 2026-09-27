@@ -899,3 +899,24 @@ compilations ciblées réussissent ; `W6cComposeSurfaceTest` donne `5/0/0/0`
 dans le XML, mais le worker natif sort 133 (**UNKNOWN**). Relecture Sol
 **Approved**, aucun défaut Critical/Important. IIIc2/IIIc3, IIIa2,
 W4e/W5a, leases/budget et 2B restent ouverts.
+
+### 2A0b.IIIc2a1 — FilterComposite.Layer sans filtre de restore
+
+Le commit `4737e09` fige le restore `FilterComposite.Layer` actif sans
+`colorFilter` de restore ni lecture de destination dans une recette propre à
+ce pass, distincte de `LayerComposite`. Elle porte source/cible et leurs
+descriptions physiques, layer remplacée, versions parent, alpha/blend,
+coordonnées, `Load`/`Store`, ABI texture seule et draw. Le catalogue et le
+seal la réauthentifient ; le préflight confronte ressources et usage enregistré
+avant allocation. Le renderer choisit depuis le catalogue `Empty` ou cette
+recette, puis la traduit via un helper dédié. Le bridge sans recette reste
+strictement réservé aux variantes W5f/destination-read des sous-lots suivants.
+
+Deux témoins publics `saveLayer(imageFilter=...)` sont ajoutés avec attendu
+fixé avant `Surface`, pixels et `Render` + `Readback` : seul celui sans filtre
+de restore prouve IIIc2a1 ; l'autre garde la future variante W5f. Trois
+compilations ciblées réussissent ; les XML de
+`W6aLayerRestoreSurfacePixelTest` et `W6cComposeSurfaceTest` sont
+respectivement `11/0/0/0` et `5/0/0/0`. L'exécuteur natif sort 133
+(**UNKNOWN**). Relecture Sol **Approved**, aucun Critical/Important.
+IIIc2a2, IIIc2b, IIIc3, IIIa2, W4e/W5a, budget/leases et 2B restent ouverts.
