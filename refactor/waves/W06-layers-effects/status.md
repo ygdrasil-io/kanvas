@@ -1087,4 +1087,18 @@ Il passe avec les scopes `Render` et `Readback`. `:gpu-plan:compileKotlin`,
 sélecteur public donne XML `1/0/0/0` et la classe W6d entière `29/0/0/0`,
 puis l’exécuteur natif sort 133 :
 **UNKNOWN**, non assimilé à un succès Gradle. La revue Sol de IIIc3d1 est
-requise; IIIc3d2, IIIa2, budgets et 2B restent ouverts.
+**Approved** à `47c8104` ; IIIc3d2, IIIa2, budgets et 2B restent ouverts.
+
+### 2A0b.IIIc3d2 — FilterComposite.Picture graph operand b0 + W5f b1 + destination snapshot b2
+
+La recette planner-owned `W6FilterCompositePictureGraphFilteredDestinationRecipeV1`
+publie l’ABI ordonnée b0+b1+b2, le filtre W5f et sa fenêtre uniforme, le
+graph source et le snapshot causal. Le renderer prépare et préflighte les
+trois ressources avant allocation, puis traduit catalog-first l’ordre
+alpha → W5f → blend destination. Le fallback actif `FilterComposite.Picture`
+est retiré ; seul `Empty` reste admis pour un scissor nul. Le témoin public
+fixe le blanc avant `PictureRecorder`/`Surface` : sans W5f, magenta ; sans
+snapshot, jaune ; avec la carrier bleue au lieu du graph source, vert. Les
+trois compilations ciblées réussissent. Le témoin donne XML `1/0/0/0`, W6d
+entière `30/0/0/0`, puis l'exécuteur natif sort 133 (**UNKNOWN**). La revue
+Sol de d2 reste ouverte ; IIIa2, W4e/W5a, budget/leases et 2B ne sont pas clos.

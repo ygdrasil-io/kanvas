@@ -24,6 +24,37 @@ import org.graphiks.math.vector.Vector3F32
 import org.junit.jupiter.api.Test
 
 class W6dPictureFilterSurfacePixelTest {
+    /** IIIc3d2: graph red SCREEN green is yellow, then DIFFERENCE against the prior blue Picture is white. */
+    @Test
+    fun externalPictureFilterWithColorFilterDifferenceReadsDestinationSnapshotFromGraphOperand() {
+        // Removing b1 gives magenta, removing b2 gives yellow, and sampling the blue carrier gives green.
+        val expected = ubyteArrayOf(255u, 255u, 255u, 255u)
+        val bounds = RectF32.ofLTRB(0f, 0f, 1f, 1f)
+        fun picture(color: ColorARGB) = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).drawRect(bounds, Paint(color, antiAlias = false))
+        }.finishRecordingAsPicture()
+        val source = picture(ColorARGB.Red)
+        val carrier = picture(ColorARGB.Blue)
+        val filteredParent = PictureRecorder().also { recorder ->
+            recorder.beginRecording(bounds).apply {
+                drawRect(bounds, Paint(ColorARGB.Blue, antiAlias = false))
+                drawPicture(carrier, Paint(
+                    imageFilter = ImageFilter.Picture(source),
+                    colorFilter = ColorFilter.Blend(ColorARGB.Green, BlendMode.SCREEN),
+                    blendMode = BlendMode.DIFFERENCE,
+                    antiAlias = false,
+                ))
+            }
+        }.finishRecordingAsPicture()
+        val surface = Surface(1, 1)
+
+        surface.canvas { drawPicture(filteredParent, Paint(blendMode = BlendMode.SRC, antiAlias = false)) }
+
+        val result = surface.render()
+        assertContentEquals(expected, result.pixels)
+        assertTrue(result.nativeEvidenceScopeKinds.containsAll(listOf("Render", "Readback")))
+    }
+
     /** IIIc3d1: the external graph source, rather than its blue carrier, reads the prior green Picture destination. */
     @Test
     fun externalPictureFilterDifferenceReadsDestinationSnapshotFromGraphOperand() {
