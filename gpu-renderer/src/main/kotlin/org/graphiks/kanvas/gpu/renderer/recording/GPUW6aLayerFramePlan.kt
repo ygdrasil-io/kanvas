@@ -194,6 +194,8 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     private val clipMaskInitializeRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskInitializeRecipeV1>()
     /** Each final analytic W4e producer packet retains its planner owner and packet ordinal. */
     private val clipMaskProducerRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskProducerRecipeV1>()
+    /** I2 folds keep their planner owner/packet through W6 recording into native encoding. */
+    private val clipMaskFoldRecipesByPacket = java.util.IdentityHashMap<GPUDrawPacket, W4eClipMaskFoldRecipeV1>()
     private val analyticUniforms = mutableMapOf<GPUDrawPacketID, ByteArray>()
     private val geometryPipelines = mutableMapOf<GPUDrawPacketID, GPUWgpu4kCorePrimitivePipelineMapping.Mapped>()
     /** W6b owns a distinct recipe-derived projection; it must never alias lowerer mappings. */
@@ -370,6 +372,17 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                             require(clipMaskProducerRecipesByPacket.put(packet, recipe) == null) {
                                 "W4e ClipMaskProducer recipe projected more than once."
                             }
+                        }
+                    }
+                    if (native is PlanPass.ClipMaskFold) {
+                        val recipe = physical.w4eClipMaskFoldRecipe(native.id)
+                        require(recipe.passId == native.id && recipe.packetOrdinalI32 == native.ordinal &&
+                            recipe.previous.id == native.previous && recipe.source.id == native.source && recipe.output.id == native.output &&
+                            recipe.operation == native.operation && recipe.copyDomainI32() == native.copyDomainI32()) {
+                            "W4e ClipMaskFold recipe differs from the final bound pass."
+                        }
+                        require(clipMaskFoldRecipesByPacket.put(packet, recipe) == null) {
+                            "W4e ClipMaskFold recipe projected more than once."
                         }
                     }
                     color?.let { draw -> packet.attachW5aSourceStageV2(org.graphiks.kanvas.gpu.renderer.materials.W5aPacketMaterialSourceV2.issue(
@@ -837,6 +850,11 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
             clipMaskProducerRecipesByPacket.size == physical.w4eClipMaskProducerRecipes().size) {
             "Every frozen W4e analytic ClipMaskProducer recipe must project to exactly one packet."
         }
+        require(clipMaskFoldRecipesByPacket.values.map { it.passId }.toSet() ==
+            physical.w4eClipMaskFoldRecipes().keys &&
+            clipMaskFoldRecipesByPacket.size == physical.w4eClipMaskFoldRecipes().size) {
+            "Every frozen W4e ClipMaskFold recipe must project to exactly one packet."
+        }
     }
 
     internal fun taskList(): GPUTaskList = GPUTaskList(request.frameId, seal, listOf(recording), graph.id.value,
@@ -849,6 +867,9 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
     /** Returns only the analytic producer recipe attached during W6 recording. */
     internal fun w4eClipMaskProducerRecipeOrNull(packet: GPUDrawPacket): W4eClipMaskProducerRecipeV1? =
         clipMaskProducerRecipesByPacket[packet]
+
+    internal fun w4eClipMaskFoldRecipeOrNull(packet: GPUDrawPacket): W4eClipMaskFoldRecipeV1? =
+        clipMaskFoldRecipesByPacket[packet]
 
     /** Exact plan-owned snapshot consumer, with coordinates in its target's local space. */
     internal fun destinationCopy(packet: GPUDrawPacket): PlanPass.TextureCopy? {

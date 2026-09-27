@@ -41,6 +41,7 @@ private data class W4eClipMaskInitializeNativePreflight(
     val entries: List<GPUW4eNativePassEntry>,
     val recipesByPassId: Map<String, W4eClipMaskInitializeRecipeV1>,
     val producerRecipesByPassId: Map<String, W4eClipMaskProducerRecipeV1>,
+    val foldRecipesByPassId: Map<String, W4eClipMaskFoldRecipeV1>,
 )
 
 /** Authenticates the final W4e binding and its recorded initialize packets before any device.create*. */
@@ -98,7 +99,19 @@ private fun preflightW4eClipMaskInitializes(
         }
         requireW4eClipMaskProducerRecipes(entries, producerRecipes,
             frame.graph.resources().associateBy { it.id.value }, frame.refs.mapKeys { it.key.value }) { binding.payload }
-        binding to W4eClipMaskInitializeNativePreflight(entries, recipes, producerRecipes)
+        val foldRecipes = entries.mapNotNull { entry -> frame.w4eClipMaskFoldRecipeOrNull(entry.packet)?.let { recipe ->
+            require(recipe.passId.value == entry.packet.passId)
+            recipe.passId.value to recipe
+        } }.toMap()
+        val folds = binding.nativePasses().filterIsInstance<PlanPass.ClipMaskFold>()
+        require(foldRecipes.keys == folds.map { it.id.value }.toSet()) { "W4e ClipMaskFold recording recipes must cover exactly one final binding." }
+        folds.forEach { fold ->
+            val recipe = foldRecipes.getValue(fold.id.value)
+            require(recipe.passId == fold.id && recipe.packetOrdinalI32 == fold.ordinal && recipe.previous.id == fold.previous &&
+                recipe.source.id == fold.source && recipe.output.id == fold.output && recipe.operation == fold.operation &&
+                recipe.copyDomainI32() == fold.copyDomainI32())
+        }
+        binding to W4eClipMaskInitializeNativePreflight(entries, recipes, producerRecipes, foldRecipes)
     }.toMap()
 
 /** Exhaustively authenticates W6b recipes, packet order, meshes and V/I/U windows before any device.create*. */
@@ -1652,6 +1665,7 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                 val entries = preflight.entries
                 val clipMaskInitializeRecipes = preflight.recipesByPassId
                 val clipMaskProducerRecipes = preflight.producerRecipesByPassId
+                val clipMaskFoldRecipes = preflight.foldRecipesByPassId
                 val extent = binding.copyExtentI32()
                 val childOwned = owned.own(GPUW4eNativeOwnedHandles())
                 encodeW4eNativePasses(device, generation, entries, payload, buffer(payload.vertexResourceId),
@@ -1662,7 +1676,8 @@ internal class GPUWgpu4kW6aLayerFramePayloadMaterializer(
                     org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, extent.width, extent.height),
                     commonSource = true, authority::consumerFor, { code, message -> IllegalArgumentException("$code: $message") },
                     clipMaskInitializeRecipesByPassId = clipMaskInitializeRecipes,
-                    clipMaskProducerRecipesByPassId = clipMaskProducerRecipes)
+                    clipMaskProducerRecipesByPassId = clipMaskProducerRecipes,
+                    clipMaskFoldRecipesByPassId = clipMaskFoldRecipes)
                     .map { native ->
                         val pass = graph.passes()[native.sourceStepIndex - 1]
                         native.pass.depthStencilTarget?.let { pathViews[native.sourceStepIndex] = it.view }

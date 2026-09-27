@@ -61,6 +61,11 @@ import org.graphiks.kanvas.gpu.plan.PlanDepthStencilLoadStore
 import org.graphiks.kanvas.gpu.plan.PlanResourceRole
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskInitializeRecipeV1
 import org.graphiks.kanvas.gpu.plan.W4eClipMaskProducerRecipeV1
+import org.graphiks.kanvas.gpu.plan.W4eClipMaskFoldRecipeV1
+import org.graphiks.kanvas.gpu.plan.W4eClipMaskFoldGroupZeroAbiV1
+import org.graphiks.kanvas.gpu.plan.W4eClipMaskFoldLoadV1
+import org.graphiks.kanvas.gpu.plan.W4eClipMaskFoldShaderFamilyV1
+import org.graphiks.kanvas.gpu.plan.W4eClipMaskFoldStoreV1
 import org.graphiks.kanvas.gpu.plan.W4eNativePayloadPlan
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
@@ -372,6 +377,7 @@ internal fun encodeW4eNativePasses(
     refusal: (String, String) -> RuntimeException,
     clipMaskInitializeRecipesByPassId: Map<String, W4eClipMaskInitializeRecipeV1> = emptyMap(),
     clipMaskProducerRecipesByPassId: Map<String, W4eClipMaskProducerRecipeV1> = emptyMap(),
+    clipMaskFoldRecipesByPassId: Map<String, W4eClipMaskFoldRecipeV1> = emptyMap(),
 ): List<GPUPreparedNativeScopeOperand.Render> {
     requireW4eClipMaskInitializeRecipes(entries, clipMaskInitializeRecipesByPassId)
     val clearPipelines = mutableMapOf<Float, GPURenderPipeline>()
@@ -619,17 +625,27 @@ internal fun encodeW4eNativePasses(
                     stencilReadOnly = frozenDepthStencilState?.stencilReadOnly ?: depthTarget == null), producerCommands)
             }
             is GPUW4ePreparedClipPassAuthority.Fold -> {
-                val pipeline = foldPipeline(pass.operation)
+                val frozenRecipe = clipMaskFoldRecipesByPassId[pass.passId]
+                val operation = frozenRecipe?.operation ?: pass.operation
+                val previous = frozenRecipe?.previous?.id?.value ?: pass.previousResourceId
+                val source = frozenRecipe?.source?.id?.value ?: pass.sourceResourceId
+                val output = frozenRecipe?.output?.id?.value ?: pass.outputResourceId
+                if (frozenRecipe != null) require(frozenRecipe.packetOrdinalI32 == entry.render.w6aPassV1?.ordinal &&
+                    frozenRecipe.groupZeroAbi == W4eClipMaskFoldGroupZeroAbiV1.PreviousThenSourceTexture &&
+                    frozenRecipe.shaderFamily == W4eClipMaskFoldShaderFamilyV1.ClipCombine &&
+                    frozenRecipe.load == W4eClipMaskFoldLoadV1.Clear && frozenRecipe.store == W4eClipMaskFoldStoreV1.Store &&
+                    frozenRecipe.fullscreenVertexCountI32 == 3) { "W4e ClipMaskFold must select only frozen I2 axes." }
+                val pipeline = foldPipeline(operation)
                 val bindGroup = owned.own(device.createBindGroup(BindGroupDescriptor(
-                    label = "Kanvas.frame.w4e.foldBindGroup.${pass.operation.name.lowercase()}", layout = pipeline.layout,
-                    entries = listOf(BindGroupEntry(0u, attachment(pass.previousResourceId).view), BindGroupEntry(1u, attachment(pass.sourceResourceId).view)),
+                    label = "Kanvas.frame.w4e.foldBindGroup.${operation.name.lowercase()}", layout = pipeline.layout,
+                    entries = listOf(BindGroupEntry(0u, attachment(previous).view), BindGroupEntry(1u, attachment(source).view)),
                 )))
                 GPUPreparedNativeScopeOperand.Render(entry.index,
-                    GPUPreparedNativeRenderPassConfig(attachment(pass.outputResourceId), loadOperation = GPUPreparedNativeLoadOperation.Clear,
+                    GPUPreparedNativeRenderPassConfig(attachment(output), loadOperation = GPUPreparedNativeLoadOperation.Clear,
                         clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)), listOf(
                         GPUPreparedNativeRenderCommand.SetPipeline(GPUPreparedNativeRenderPipelineOperand(pipeline.pipeline, generation)),
                         GPUPreparedNativeRenderCommand.SetBindGroup(0, GPUPreparedNativeBindGroupOperand(bindGroup, generation)),
-                        GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)),
+                        GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(frozenRecipe?.fullscreenVertexCountI32 ?: 3)),
                     ))
             }
             null -> {
