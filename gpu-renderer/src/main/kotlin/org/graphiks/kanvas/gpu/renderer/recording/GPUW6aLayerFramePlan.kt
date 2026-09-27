@@ -258,6 +258,11 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                 require(recipe.source == pass.source && recipe.destination == pass.destination)
             }?.uniformResource
         }.toSet()
+        val filteredFilterCompositeLayerUniformIds = graph.passes().filterIsInstance<PlanPass.FilterComposite>().mapNotNull { pass ->
+            physical.w6FilterCompositeLayerFilteredRecipeOrNull(pass.id)?.also { recipe ->
+                require(recipe.source == pass.source && recipe.destination == pass.destination)
+            }?.uniformResource
+        }.toSet()
         val filteredPictureCompositeUniformIds = graph.passes().filterIsInstance<PlanPass.PictureComposite>().mapNotNull { pass ->
             physical.w6PictureCompositeGraphFilteredRecipeOrNull(pass.id)?.also { recipe ->
                 require(recipe.source == pass.source && recipe.destination == pass.destination)
@@ -265,7 +270,7 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
         }.toSet()
         val preparations = graph.resources().filter { it.kind == PlanResourceKind.Texture2D && it.lifetime == PlanResourceLifetime.FrameLocal ||
             it.role in setOf(PlanResourceRole.ReadbackStaging, PlanResourceRole.MaskTableData) || physical.w4eGeometryBindings().any { binding ->
-                it.id in setOf(binding.payload.vertexResourceId, binding.payload.indexResourceId, binding.payload.uniformResourceId) } || it.id in colorFilterUniformIds || it.id in maskShaderUniformIds || it.id in filteredLayerCompositeUniformIds || it.id in filteredPictureCompositeUniformIds }
+                it.id in setOf(binding.payload.vertexResourceId, binding.payload.indexResourceId, binding.payload.uniformResourceId) } || it.id in colorFilterUniformIds || it.id in maskShaderUniformIds || it.id in filteredLayerCompositeUniformIds || it.id in filteredFilterCompositeLayerUniformIds || it.id in filteredPictureCompositeUniformIds }
             .map { resource -> GPUResourcePreparationRequest(refs.getValue(resource.id),
                 resource.copyExtent()?.let { GPUFrameTextureDescriptor(GPUPixelBounds(0, 0, it.width, it.height),
                     when (resource.format) {
@@ -603,7 +608,15 @@ class GPUW6aLayerFramePlan internal constructor(private val request: GpuPlanLowe
                                         GPUFrameResourceRole.StorageData, GPUFrameResourceUsage.Storage, GPUFrameResourceLifetime.FrameLocal, false))
                                 }
                             }
-                            is PlanPass.FilterComposite -> listOf(GPUFrameResourceUse(refs.getValue(pass.source),
+                            is PlanPass.FilterComposite -> physical.w6FilterCompositeLayerFilteredRecipeOrNull(pass.id)?.let { recipe ->
+                                require(recipe.ownerPassId == pass.id && recipe.source == pass.source && recipe.destination == pass.destination)
+                                listOf(
+                                    GPUFrameResourceUse(refs.getValue(recipe.source), GPUFrameResourceRole.FilterTarget,
+                                        GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false),
+                                    GPUFrameResourceUse(refs.getValue(recipe.uniformResource), GPUFrameResourceRole.UniformData,
+                                        GPUFrameResourceUsage.Uniform, GPUFrameResourceLifetime.FrameLocal, false),
+                                )
+                            } ?: listOf(GPUFrameResourceUse(refs.getValue(pass.source),
                                 GPUFrameResourceRole.FilterTarget, GPUFrameResourceUsage.TextureBinding, GPUFrameResourceLifetime.FrameLocal, false))
                             is PlanPass.FilterCoverageSourcePass -> buildList {
                                 pass.sealedAlphaSource?.let { alpha -> add(GPUFrameResourceUse(refs.getValue(alpha.sealedSourceId),

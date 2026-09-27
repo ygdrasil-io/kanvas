@@ -3222,6 +3222,7 @@ internal class W6aLayerGraphConstruction(
         val pictureCompositeGraphDestinationRecipes = freezeW6PictureCompositeGraphDestinationRecipesV1(passes, resources + source.resources)
         val filterCompositeDrawRecipes = freezeW6FilterCompositeDrawRecipesV1(passes, resources + source.resources)
         val filterCompositeLayerPlainRecipes = freezeW6FilterCompositeLayerPlainRecipesV1(passes, resources + source.resources)
+        val filterCompositeLayerFilteredRecipes = freezeW6FilterCompositeLayerFilteredRecipesV1(passes, resources + source.resources)
         val clipMaskInitializeRecipes = freezeW4eClipMaskInitializeRecipesV1(finalW4eBindings)
         val w6bCoverageRasterGeometry = freezeW6bCoverageRasterGeometryV1(passes, resources + source.resources, caps)
         val w6bCoverageRasterHostRecipes = freezeW6bCoverageRasterHostsV1(passes, resources + source.resources, w6bCoverageRasterGeometry)
@@ -3249,7 +3250,7 @@ internal class W6aLayerGraphConstruction(
         val w6FilterDropShadowCompositeRecipes = freezeW6FilterDropShadowCompositeRecipesV1(passes, resources + source.resources)
         val nativeSiteRecipeCatalog = freezeNativeSiteRecipeCatalogV1(
             passes, solidRectHostRecipes, corePrimitiveHostRecipes, preparedVerticesHostRecipes,
-            plainLayerCompositeRecipes, filteredLayerCompositeRecipes, pictureCompositeGraphRecipes, pictureCompositeGraphFilteredRecipes, pictureCompositeGraphDestinationRecipes, filterCompositeDrawRecipes, filterCompositeLayerPlainRecipes, clipMaskInitializeRecipes, w6bCoverageRasterHostRecipes, w6FullscreenEmptyRecipes,
+            plainLayerCompositeRecipes, filteredLayerCompositeRecipes, pictureCompositeGraphRecipes, pictureCompositeGraphFilteredRecipes, pictureCompositeGraphDestinationRecipes, filterCompositeDrawRecipes, filterCompositeLayerPlainRecipes, filterCompositeLayerFilteredRecipes, clipMaskInitializeRecipes, w6bCoverageRasterHostRecipes, w6FullscreenEmptyRecipes,
             w6FullscreenCoverageAlphaRecipes,
             w6FullscreenCoverageSolidRectRecipes,
             w6FullscreenCoverageRetainRecipes,
@@ -3273,6 +3274,7 @@ internal class W6aLayerGraphConstruction(
             w6PictureCompositeGraphDestinationRecipes = pictureCompositeGraphDestinationRecipes,
             w6FilterCompositeDrawRecipes = filterCompositeDrawRecipes,
             w6FilterCompositeLayerPlainRecipes = filterCompositeLayerPlainRecipes,
+            w6FilterCompositeLayerFilteredRecipes = filterCompositeLayerFilteredRecipes,
             w4eClipMaskInitializeRecipes = clipMaskInitializeRecipes,
             w6bCoverageRasterGeometry = w6bCoverageRasterGeometry,
             w6bCoverageRasterHostRecipes = w6bCoverageRasterHostRecipes,
